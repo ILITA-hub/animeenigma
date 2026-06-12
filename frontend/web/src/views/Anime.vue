@@ -102,15 +102,18 @@
             </div>
             <template v-else>
               <Button
-                @click="activatePlayer"
+                @click="onWatchCtaClick"
                 type="button"
                 variant="default"
                 size="md"
                 radius="lg"
+                :disabled="rewatchPending"
                 class="shadow-lg shadow-cyan-500/20"
               >
-                <Play class="size-5" fill="currentColor" aria-hidden="true" />
-                <span>{{ lastEpisode ? $t('anime.continueEp', { n: resumeStartEpisode ?? lastEpisode }) : $t('anime.watchNow') }}</span>
+                <Check v-if="watchCta.action === 'mark-watched'" class="size-5" aria-hidden="true" />
+                <RefreshCw v-else-if="watchCta.action === 'rewatch'" class="size-5" aria-hidden="true" />
+                <Play v-else class="size-5" fill="currentColor" aria-hidden="true" />
+                <span>{{ watchCtaLabel }}</span>
               </Button>
               <!-- Workstream watch-together — discovery-stage Invite mount.
                    Anonymous users don't see it (creating a room requires JWT).
@@ -195,6 +198,15 @@
                 </div>
               </Transition>
             </div>
+
+            <!-- Rewatch tally — muted ↻ N beside the status badge; editable
+                 stepper, hidden entirely until the entry exists (design 2026-06-05). -->
+            <RewatchCounter
+              v-if="authStore.isAuthenticated && currentListStatus"
+              :count="currentRewatchCount"
+              editable
+              @update:count="setRewatchCount"
+            />
 
             <!-- Next Episode Info — sits between the status dropdown and the
                  admin kebab; shown to everyone (incl. anonymous), not auth-gated. -->
@@ -524,9 +536,9 @@
           <button
             v-else-if="!playerActivated"
             type="button"
-            @click="activatePlayer"
+            @click="onPlaceholderCtaClick"
             class="relative w-full aspect-video rounded-lg overflow-hidden group focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            :aria-label="lastEpisode ? $t('anime.continueEp', { n: resumeStartEpisode ?? lastEpisode }) : $t('anime.watchNow')"
+            :aria-label="placeholderCtaLabel"
           >
             <img
               :src="anime.coverImage"
@@ -540,7 +552,7 @@
                 <Play class="size-8 sm:size-10 ml-1" fill="currentColor" aria-hidden="true" />
               </span>
               <span class="text-base sm:text-lg font-semibold">
-                {{ lastEpisode ? $t('anime.continueEp', { n: resumeStartEpisode ?? lastEpisode }) : $t('anime.watchNow') }}
+                {{ placeholderCtaLabel }}
               </span>
             </div>
           </button>
@@ -1047,6 +1059,8 @@ import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
+import { computeWatchCta, type WatchCta } from '@/composables/watchCta'
+import RewatchCounter from '@/components/anime/RewatchCounter.vue'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useSiteRatings } from '@/composables/useSiteRatings'
 import { useUserTimezone } from '@/composables/useUserTimezone'
@@ -1203,6 +1217,92 @@ async function activatePlayer() {
   playerActivated.value = true
   await nextTick()
   playerSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// --- Watched-aware play button + tracked rewatch (design 2026-06-05) -------
+// The verb comes from actual episode progress; list status only disambiguates
+// the fully-watched terminal: not-completed → mark-watched, completed → rewatch.
+const currentRewatchCount = ref(0)
+const rewatchPending = ref(false)
+
+const watchCta = computed<WatchCta>(() => computeWatchCta({
+  isAuthenticated: authStore.isAuthenticated,
+  lastWatched: resumeAuth.value && resume.loaded.value
+    ? resume.lastWatched.value
+    : (lastEpisode.value ?? 0),
+  totalEpisodes: anime.value?.totalEpisodes ?? 0,
+  listStatus: currentListStatus.value,
+}))
+
+const watchCtaLabel = computed(() => t(watchCta.value.labelKey, watchCta.value.labelParams ?? {}))
+
+// The click-to-load player placeholder is a playback surface — clicking it must
+// never mutate the list, so the mark-watched terminal degrades to plain watch.
+const placeholderCta = computed<WatchCta>(() => {
+  const cta = watchCta.value
+  return cta.action === 'mark-watched'
+    ? { action: 'watch', startEpisode: 1, labelKey: 'anime.watchNow' }
+    : cta
+})
+const placeholderCtaLabel = computed(() => t(placeholderCta.value.labelKey, placeholderCta.value.labelParams ?? {}))
+
+// startRewatchFlow — server-side cycle reset (status→watching, episodes=0,
+// watch_progress reset, is_rewatching=true; the count bumps on the new finale),
+// then re-init the resume machine and mount the player at ep. 1.
+async function startRewatchFlow() {
+  if (!anime.value || rewatchPending.value) return
+  rewatchPending.value = true
+  const animeId = anime.value.id
+  try {
+    await userApi.startRewatch(animeId)
+    currentListStatus.value = 'watching'
+    resumeOverrideEpisode.value = 1
+    await resume.init()
+    void viewerCtxStore.load(animeId, true).then((ctx) => { if (ctx) applyViewerContext(ctx) })
+    void activatePlayer()
+  } catch (err) {
+    console.error('Failed to start rewatch:', err)
+    toast.push(t('watchlist.errors.updateFailed'))
+  } finally {
+    rewatchPending.value = false
+  }
+}
+
+async function dispatchWatchCta(cta: WatchCta) {
+  if (cta.action === 'mark-watched') {
+    await setListStatus('completed')
+    return
+  }
+  if (cta.action === 'rewatch') {
+    await startRewatchFlow()
+    return
+  }
+  if (cta.action === 'start-from-1') {
+    resumeOverrideEpisode.value = cta.startEpisode
+  }
+  void activatePlayer()
+}
+
+const onWatchCtaClick = () => dispatchWatchCta(watchCta.value)
+const onPlaceholderCtaClick = () => dispatchWatchCta(placeholderCta.value)
+
+// Manual rewatch-count stepper (RewatchCounter beside the status badge).
+// Optimistic; the PUT carries the current status so the entry isn't moved.
+async function setRewatchCount(n: number) {
+  if (!anime.value || !currentListStatus.value) return
+  const prior = currentRewatchCount.value
+  currentRewatchCount.value = n
+  try {
+    await userApi.updateWatchlistEntry({
+      anime_id: anime.value.id,
+      status: currentListStatus.value,
+      rewatch_count: n,
+    })
+  } catch (err) {
+    console.error('Failed to update rewatch count:', err)
+    currentRewatchCount.value = prior
+    toast.push(t('watchlist.errors.updateFailed'))
+  }
 }
 
 
@@ -1810,8 +1910,10 @@ const fetchWatchlistStatus = async () => {
 
     if (entry) {
       currentListStatus.value = entry.status
+      currentRewatchCount.value = (entry as { rewatch_count?: number }).rewatch_count ?? 0
     } else {
       currentListStatus.value = null
+      currentRewatchCount.value = 0
     }
   } catch (err) {
     console.error('Failed to fetch watchlist status:', err)
@@ -1877,6 +1979,7 @@ const applyViewerContext = (ctx: ViewerContextData) => {
       myReview.value = null
     }
     currentListStatus.value = ctx.watchlist_entry?.status ?? null
+    currentRewatchCount.value = ctx.watchlist_entry?.rewatch_count ?? 0
   }
 }
 
@@ -2258,14 +2361,17 @@ const removeFromList = async () => {
   if (!anime.value) return
   const animeId = anime.value.id
   const prior = currentListStatus.value
+  const priorCount = currentRewatchCount.value
   // Optimistic: clear the visible status + close the dropdown immediately.
   currentListStatus.value = null
+  currentRewatchCount.value = 0
   showStatusDropdown.value = false
   try {
     await watchlistStore.removeEntryOptimistic(animeId)
   } catch (err) {
     console.error('Failed to remove from list:', err)
     currentListStatus.value = prior
+    currentRewatchCount.value = priorCount
     toast.push(t('watchlist.errors.removeFailed'))
   }
 }
@@ -2347,6 +2453,7 @@ const loadAnimeData = async (animeId: string) => {
   resumeLoadedEpisodes.value = 0
   resumeOverrideEpisode.value = null
   currentListStatus.value = null
+  currentRewatchCount.value = 0
   reviews.value = []
   myReview.value = null
   siteRating.value = null

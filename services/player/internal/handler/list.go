@@ -208,6 +208,28 @@ func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request)
 	httputil.OK(w, entry)
 }
 
+// Rewatch starts a fresh rewatch cycle for a completed entry: status back to
+// 'watching', episodes/watch_progress reset, is_rewatching=true. The count
+// bumps later, when the rewatch reaches the finale. Design 2026-06-05.
+func (h *ListHandler) Rewatch(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	entry, err := h.listService.Rewatch(r.Context(), claims.UserID, animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	metrics.WatchlistOperationsTotal.WithLabelValues("rewatch").Inc()
+	httputil.OK(w, entry)
+}
+
 // MigrateListEntry migrates a list entry from one anime_id to another.
 // Used when resolving mal_XXXXX entries to real UUIDs.
 func (h *ListHandler) MigrateListEntry(w http.ResponseWriter, r *http.Request) {

@@ -1,8 +1,8 @@
 // Pure decision function for the anime-page primary play button.
 //
-// SIGNATURE STUB (TDD red phase) — intentionally unimplemented. The contract
-// is pinned by src/composables/__tests__/watchCta.spec.ts. Implementation
-// (GREEN) follows the design at docs/superpowers/specs/2026-06-05-*.
+// The contract is pinned by src/composables/__tests__/watchCta.spec.ts;
+// design: docs/superpowers/specs/2026-06-05-rewatch-and-watched-button-design.md.
+// Consumed by views/Anime.vue (hero button + player placeholder).
 
 export type WatchCtaAction =
   | 'watch'

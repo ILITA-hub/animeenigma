@@ -92,6 +92,7 @@ func NewRouter(
 			r.Get("/watchlist/{animeId}", listHandler.GetUserAnimeEntry)
 			r.Delete("/watchlist/{animeId}", listHandler.DeleteListEntry)
 			r.Post("/watchlist/{animeId}/episode", listHandler.MarkEpisodeWatched)
+			r.Post("/watchlist/{animeId}/rewatch", listHandler.Rewatch)
 
 			// Progress routes
 			r.Post("/progress", progressHandler.UpdateProgress)

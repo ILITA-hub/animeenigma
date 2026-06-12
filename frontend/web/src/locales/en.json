@@ -89,6 +89,11 @@
       "comments": "Comments"
     },
     "continueEp": "Continue ep. {n}",
+    "startFromEp1": "Start from ep. 1",
+    "markAsWatched": "Mark as watched",
+    "rewatchCount": "Rewatched: {n}",
+    "rewatchDec": "Decrease rewatch count",
+    "rewatchInc": "Increase rewatch count",
     "resume": {
       "justFinished": "You finished episode {n}.",
       "rewatch": "Rewatch from ep. 1",

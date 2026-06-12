@@ -437,7 +437,12 @@ export const userApi = {
     score?: number
     episodes?: number
     notes?: string
+    rewatch_count?: number
+    is_rewatching?: boolean
   }) => apiClient.put('/users/watchlist', data),
+  // Rewatch lifecycle (design 2026-06-05): resets a completed entry to a fresh
+  // watching cycle server-side (episodes=0, progress reset, is_rewatching=true).
+  startRewatch: (animeId: string) => apiClient.post(`/users/watchlist/${animeId}/rewatch`),
   removeFromWatchlist: (animeId: string) => apiClient.delete(`/users/watchlist/${animeId}`),
   markEpisodeWatched: (animeId: string, episode: number, combo?: Partial<WatchCombo>, sessionId?: string) =>
     apiClient.post(`/users/watchlist/${animeId}/episode`, {

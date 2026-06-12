@@ -170,6 +170,7 @@
                   :status-options="statusOptions"
                   @edit-score="(v: string) => finishEditScore(anime.anime_id, v)"
                   @update-episodes="(n: number) => updateAnimeEpisodes(anime.anime_id, n)"
+                  @update-rewatch-count="(n: number) => updateAnimeRewatchCount(anime.anime_id, n)"
                   @update-date="(f: 'started_at' | 'completed_at', v: string) => updateAnimeDate(anime.anime_id, f, v)"
                   @update-status="(s: string) => updateAnimeStatus(anime.anime_id, s)"
                   @remove="removeFromWatchlist(anime.anime_id)"
@@ -807,6 +808,7 @@ interface WatchlistEntry {
   status: string
   score?: number
   episodes?: number
+  rewatch_count?: number
   started_at?: string | null
   completed_at?: string | null
 }
@@ -1579,6 +1581,26 @@ const updateAnimeEpisodes = async (animeId: string, episodes: number) => {
     watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update episodes:', err)
+  }
+}
+
+const updateAnimeRewatchCount = async (animeId: string, count: number) => {
+  const anime = watchlist.value.find(a => a.anime_id === animeId)
+  if (!anime) return
+
+  const clamped = Math.max(0, count)
+
+  try {
+    await userApi.updateWatchlistEntry({
+      anime_id: animeId,
+      status: anime.status,
+      rewatch_count: clamped,
+    })
+    anime.rewatch_count = clamped
+    clearPageCache()
+    watchlistStore.invalidate()
+  } catch (err) {
+    console.error('Failed to update rewatch count:', err)
   }
 }
 

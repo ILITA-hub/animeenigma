@@ -25,6 +25,8 @@ export interface ViewerWatchlistEntry {
   status: string
   episodes?: number
   score?: number
+  rewatch_count?: number
+  is_rewatching?: boolean
 }
 
 export interface ViewerCombo {

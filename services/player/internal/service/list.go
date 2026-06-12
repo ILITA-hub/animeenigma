@@ -158,8 +158,13 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID, username stri
 		entry.Tags = *req.Tags
 	}
 
+	// IsRewatching: apply when provided, else preserve existing so a PATCH that
+	// omits it can't silently end an in-progress rewatch (which would also skip
+	// the finale rewatch_count bump).
 	if req.IsRewatching != nil {
 		entry.IsRewatching = *req.IsRewatching
+	} else if existingEntry != nil {
+		entry.IsRewatching = existingEntry.IsRewatching
 	}
 
 	// RewatchCount: apply (clamped) when provided, else preserve existing so a
@@ -168,6 +173,18 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID, username stri
 		entry.RewatchCount = clampRewatchCount(*req.RewatchCount)
 	} else if existingEntry != nil {
 		entry.RewatchCount = existingEntry.RewatchCount
+	}
+
+	// Manually completing an in-progress rewatch mirrors the IncrementEpisodes
+	// finale branch: bump the tally once and clear the flag. Fires only on the
+	// non-completed → completed transition; an explicit rewatch_count in the
+	// same request is authoritative (imports) and suppresses the auto-bump.
+	if req.Status == "completed" && entry.IsRewatching &&
+		(existingEntry == nil || existingEntry.Status != "completed") {
+		if req.RewatchCount == nil {
+			entry.RewatchCount = clampRewatchCount(entry.RewatchCount + 1)
+		}
+		entry.IsRewatching = false
 	}
 
 	if req.Priority != nil {
@@ -263,8 +280,14 @@ func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID strin
 // increments when the rewatch reaches the finale (watching→completed while
 // is_rewatching).
 func (s *ListService) Rewatch(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
-	if _, err := s.listRepo.StartRewatch(ctx, userID, animeID); err != nil {
+	reset, err := s.listRepo.StartRewatch(ctx, userID, animeID)
+	if err != nil {
 		return nil, err
+	}
+	if !reset {
+		// Not in the list or not completed — refuse rather than wiping the
+		// watch_progress of an in-flight first watch.
+		return nil, errors.NotFound("no completed list entry to rewatch")
 	}
 	// Reset per-episode progress so the resume state machine sees a fresh cycle
 	// (0 → partial → full). Best-effort: a reset failure must not strand the
