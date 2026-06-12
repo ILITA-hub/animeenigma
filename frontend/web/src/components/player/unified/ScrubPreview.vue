@@ -78,9 +78,14 @@ const CACHE_MAX = 150
 /** pointer-rest debounce before issuing a real (network) seek */
 const SETTLE_MS = 180
 /** evenly-spaced timeline points prefetched in the background */
-const PREFETCH_POINTS = 9
+const PREFETCH_POINTS = 10
 /** a stuck seek (failed fragment) must not wedge the prefetch pump */
 const SEEK_WATCHDOG_MS = 8000
+/** eager-init delay after a stream loads — the MAIN player wins startup
+ *  bandwidth, then the preview warms its 10 thumbnails in the background */
+const EAGER_INIT_DELAY_MS = 3500
+/** pump retry cadence while the user's hover blocks background prefetch */
+const PUMP_RETRY_MS = 500
 
 const shadowRef = ref<HTMLVideoElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -101,6 +106,8 @@ let pendingBucket: number | null = null
 let seekBusy = false
 let settleTimer: ReturnType<typeof setTimeout> | null = null
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null
+let eagerTimer: ReturnType<typeof setTimeout> | null = null
+let pumpTimer: ReturnType<typeof setTimeout> | null = null
 let prefetchQueue: number[] = []
 let prefetchArmed = false
 
@@ -205,8 +212,12 @@ function onHover(t: number) {
   }, SETTLE_MS)
 }
 
-// ── Background prefetch: seed the timeline so the first sweep already shows
-//    distinct frames. Runs only while no user seek is pending/in-flight.
+// ── Background prefetch: seed the timeline with PREFETCH_POINTS thumbnails so
+//    hovering ANY position shows a frame from roughly the right part of the
+//    video. The pump is TIMER-DRIVEN: if the user's hover blocks it (their
+//    seek always wins), it retries on its own instead of waiting for the next
+//    capture — a capture-driven pump stalls forever the moment one slot is
+//    skipped, which is exactly the "only shows the last cached pic" bug.
 
 function armPrefetch() {
   if (prefetchArmed) return
@@ -219,14 +230,32 @@ function armPrefetch() {
   }
 }
 
+function schedulePump(delayMs: number = PUMP_RETRY_MS) {
+  if (pumpTimer) return
+  pumpTimer = setTimeout(() => {
+    pumpTimer = null
+    pumpPrefetch()
+  }, delayMs)
+}
+
 function pumpPrefetch() {
-  if (seekBusy || settleTimer) return // the user's hover always wins
+  if (prefetchQueue.length === 0) return
+  if (seekBusy || settleTimer) {
+    schedulePump() // busy with the user's hover — come back, don't stall
+    return
+  }
   let next: number | undefined
   while ((next = prefetchQueue.shift()) !== undefined) {
     if (!cache.has(next)) break
   }
   if (next === undefined) return
   seekTo(bucketTime(next))
+}
+
+/** loadedmetadata — duration is known; arm and start the background warm-up. */
+function onMeta() {
+  armPrefetch()
+  pumpPrefetch()
 }
 
 // ── Engine lifecycle ─────────────────────────────────────────────────────────
@@ -257,6 +286,14 @@ function destroyEngine() {
     clearTimeout(watchdogTimer)
     watchdogTimer = null
   }
+  if (pumpTimer) {
+    clearTimeout(pumpTimer)
+    pumpTimer = null
+  }
+  if (eagerTimer) {
+    clearTimeout(eagerTimer)
+    eagerTimer = null
+  }
 }
 
 async function ensureEngine() {
@@ -271,6 +308,7 @@ async function ensureEngine() {
 
   v.addEventListener('loadeddata', capture)
   v.addEventListener('seeked', capture)
+  v.addEventListener('loadedmetadata', onMeta)
 
   if (streamType === 'mp4') {
     v.src = streamUrl
@@ -310,14 +348,25 @@ watch(
   },
 )
 
-// New stream — tear down (cache frames belong to the old video); if the
-// bubble is showing right now, re-arm against the new URL immediately.
+// New stream — tear down (cache frames belong to the old video). Re-arm
+// immediately if the bubble is showing; otherwise EAGERLY after a short
+// delay, so the 10-point thumbnail warm-up runs before the first hover
+// instead of being gated on it. `immediate` covers the initial mount.
 watch(
   () => props.streamUrl,
   () => {
     destroyEngine()
-    if (props.visible) void ensureEngine()
+    if (!props.streamUrl) return
+    if (props.visible) {
+      void ensureEngine()
+      return
+    }
+    eagerTimer = setTimeout(() => {
+      eagerTimer = null
+      void ensureEngine()
+    }, EAGER_INIT_DELAY_MS)
   },
+  { immediate: true },
 )
 
 onUnmounted(() => {
@@ -325,6 +374,7 @@ onUnmounted(() => {
   if (v) {
     v.removeEventListener('loadeddata', capture)
     v.removeEventListener('seeked', capture)
+    v.removeEventListener('loadedmetadata', onMeta)
   }
   destroyEngine()
 })

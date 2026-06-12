@@ -54,10 +54,60 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
     )
   })
 
-  it('does NOT initialize the shadow video while never hovered (lazy)', () => {
+  it('initializes EAGERLY after a startup-grace delay, without any hover', async () => {
     const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
     const video = w.find('[data-test="preview-video"]').element as HTMLVideoElement
+    // Immediately after mount: not yet — the main player wins startup bandwidth.
     expect(video.getAttribute('src')).toBeNull()
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(video.getAttribute('src')).toBe('https://x/ep.mp4')
+  })
+
+  it('warms 10 spread thumbnails in the background with zero hovering', async () => {
+    const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
+    await vi.advanceTimersByTimeAsync(4000) // eager init
+    const { video, writes } = instrument(w)
+    Object.defineProperty(video, 'duration', { get: () => 1100, configurable: true })
+
+    // Duration known → prefetch arms and pumps the first point on its own.
+    video.dispatchEvent(new Event('loadedmetadata'))
+    await w.vm.$nextTick()
+    expect(writes.length).toBe(1)
+    expect(writes[0]).toBe(100) // 1100 × 1/11 → bucket 20 → t=100
+
+    // Each decoded thumbnail pumps the next point — chain runs to completion.
+    for (let i = 2; i <= 10; i++) {
+      video.dispatchEvent(new Event('seeked'))
+      await w.vm.$nextTick()
+      expect(writes[writes.length - 1]).toBe(i * 100)
+    }
+    video.dispatchEvent(new Event('seeked'))
+    await w.vm.$nextTick()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(writes.length).toBe(10) // queue exhausted — no runaway seeking
+  })
+
+  it('a pump blocked by an active hover RETRIES on a timer instead of stalling', async () => {
+    const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
+    await vi.advanceTimersByTimeAsync(4000)
+    const { video, writes } = instrument(w)
+    Object.defineProperty(video, 'duration', { get: () => 1100, configurable: true })
+
+    // User starts hovering an uncached spot → settle timer active.
+    await w.setProps({ visible: true, timeSec: 42 })
+    video.dispatchEvent(new Event('loadedmetadata')) // pump blocked by settle
+    await w.vm.$nextTick()
+    expect(writes.length).toBe(0)
+
+    // Settle fires (user seek), its frame decodes…
+    await vi.advanceTimersByTimeAsync(200)
+    expect(writes[0]).toBe(40) // bucket 8 — user's hover seek
+    video.dispatchEvent(new Event('seeked'))
+    await w.vm.$nextTick()
+    // …and the pump self-recovers: prefetch continues without further input.
+    await vi.advanceTimersByTimeAsync(600)
+    expect(writes.length).toBeGreaterThanOrEqual(2)
+    expect(writes[1]).toBe(100)
   })
 
   it('sets the mp4 src on first hover', async () => {
@@ -134,49 +184,6 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
       (w.find('[data-test="preview-canvas"]').element as HTMLElement).style.display,
     ).not.toBe('none')
     expect(w.find('[data-test="preview-still"]').exists()).toBe(false)
-  })
-
-  it('prefetches evenly-spaced timeline points in the background once idle', async () => {
-    const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
-    await w.setProps({ visible: true, timeSec: 0 })
-    await vi.advanceTimersByTimeAsync(0)
-    const { video, writes } = instrument(w)
-    Object.defineProperty(video, 'duration', { get: () => 1000, configurable: true })
-
-    await vi.advanceTimersByTimeAsync(300)
-    expect(writes.length).toBe(1) // settle seek for bucket 0
-
-    // Frame decodes → capture arms the prefetch queue and pumps the first point.
-    video.dispatchEvent(new Event('seeked'))
-    await w.vm.$nextTick()
-    expect(writes.length).toBe(2)
-    expect(writes[1]).toBe(100) // duration*1/10 → bucket 20 → t=100
-
-    // Each completed prefetch pumps the next point.
-    video.dispatchEvent(new Event('seeked'))
-    await w.vm.$nextTick()
-    expect(writes.length).toBe(3)
-    expect(writes[2]).toBe(200)
-  })
-
-  it('user hover interrupts the prefetch pump (hover always wins)', async () => {
-    const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
-    await w.setProps({ visible: true, timeSec: 0 })
-    await vi.advanceTimersByTimeAsync(0)
-    const { video, writes } = instrument(w)
-    Object.defineProperty(video, 'duration', { get: () => 1000, configurable: true })
-    await vi.advanceTimersByTimeAsync(300)
-    video.dispatchEvent(new Event('seeked')) // arms prefetch, pumps t=100
-    await w.vm.$nextTick()
-    expect(writes[writes.length - 1]).toBe(100)
-
-    // User hovers an uncached spot — settle pending blocks the pump.
-    await w.setProps({ timeSec: 700 })
-    video.dispatchEvent(new Event('seeked')) // the t=100 prefetch completes
-    await w.vm.$nextTick()
-    // Pump must NOT fire (settle timer active); next write is the user's seek.
-    await vi.advanceTimersByTimeAsync(300)
-    expect(writes[writes.length - 1]).toBe(700)
   })
 
   it('tears down, clears the cache, and re-arms when the stream URL changes', async () => {
