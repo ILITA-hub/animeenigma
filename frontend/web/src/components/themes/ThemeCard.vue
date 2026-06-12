@@ -3,7 +3,14 @@
     class="glass-card rounded-xl overflow-hidden transition-all duration-200 hover:ring-1 hover:ring-cyan-500/30"
   >
     <!-- Card Header -->
-    <div class="flex gap-3 p-4 cursor-pointer" @click="expanded = !expanded">
+    <div
+      class="flex gap-3 p-4 cursor-pointer"
+      role="button"
+      tabindex="0"
+      :aria-expanded="expanded"
+      @click="expanded = !expanded"
+      @keydown.enter.space="onHeaderKey($event)"
+    >
       <!-- Poster -->
       <div class="w-16 h-22 flex-shrink-0 rounded-lg overflow-hidden bg-white/5">
         <img
@@ -137,6 +144,13 @@ defineEmits<{
 
 const expanded = ref(false)
 const videoEl = ref<HTMLVideoElement | null>(null)
+
+function onHeaderKey(e: KeyboardEvent) {
+  // Enter on the nested anime router-link must keep navigating.
+  if ((e.target as HTMLElement).closest('a')) return
+  e.preventDefault()
+  expanded.value = !expanded.value
+}
 </script>
 
 <style scoped>
