@@ -295,7 +295,7 @@ func (s *ListService) Rewatch(ctx context.Context, userID, animeID string) (*dom
 	if !reset {
 		// Not in the list or not completed — refuse rather than wiping the
 		// watch_progress of an in-flight first watch.
-		return nil, errors.NotFound("no completed list entry to rewatch")
+		return nil, errors.NotFound("completed list entry to rewatch")
 	}
 	// Reset per-episode progress so the resume state machine sees a fresh cycle
 	// (0 → partial → full). Best-effort: a reset failure must not strand the
