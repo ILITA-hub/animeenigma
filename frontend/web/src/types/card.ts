@@ -19,6 +19,7 @@ export interface AnimeCardModel {
   primaryGenre?: string        // already localized
   malScore?: number            // ★ amber  (Shikimori/MAL)
   siteScore?: number           // ◆ diamond cyan (AnimeEnigma reviews)
+  userScore?: number           // ◆ diamond cyan — viewer's own list rating (My List surfaces)
   quality?: string             // e.g. "1080p" — neutral overlay badge
   hasDub?: boolean             // DUB overlay badge
   listStatus?: ListStatus | null

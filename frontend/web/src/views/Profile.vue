@@ -157,257 +157,61 @@
 
               <!-- Table or Grid (only when the current filter has items) -->
               <template v-if="watchlist.length > 0">
-              <!-- Table View -->
-              <div v-if="viewMode === 'table'" class="overflow-x-auto">
-                <table class="w-full text-sm">
-                  <thead>
-                    <tr class="text-left text-white/60 border-b border-white/10">
-                      <th class="pb-3 pr-2 w-8">#</th>
-                      <th class="pb-3 px-2 w-16">{{ $t('profile.table.poster') }}</th>
-                      <th class="pb-3 px-2">{{ $t('profile.table.title') }}</th>
-                      <th class="pb-3 px-2 w-16 text-center">{{ $t('profile.table.score') }}</th>
-                      <th class="pb-3 px-2 w-32">{{ $t('profile.table.progress') }}</th>
-                      <th class="pb-3 px-2 w-28 text-center hidden sm:table-cell">{{ $t('profile.table.startDate') }}</th>
-                      <th class="pb-3 px-2 w-28 text-center hidden sm:table-cell">{{ $t('profile.table.endDate') }}</th>
-                      <th class="pb-3 pl-2 w-32 text-center">{{ $t('profile.table.status') }}</th>
-                      <th v-if="isOwnProfile" class="pb-3 pl-2 w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="(anime, index) in filteredWatchlist"
-                      :key="anime.anime_id"
-                      class="border-b border-white/5 hover:bg-white/5 transition-colors"
-                    >
-                      <td class="py-3 pr-2 text-white/60">{{ (watchlistPage - 1) * watchlistPerPage + index + 1 }}</td>
-                      <td class="py-3 px-2">
-                        <router-link :to="`/anime/${anime.anime_id}`" class="block w-12 h-16 rounded overflow-hidden bg-surface">
-                          <img
-                            v-if="animeCover(anime)"
-                            :src="animeCover(anime)"
-                            :alt="animeTitle(anime)"
-                            class="w-full h-full object-cover"
-                            @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime.anime?.poster_url || '') } }"
-                          />
-                        </router-link>
-                      </td>
-                      <td class="py-3 px-2">
-                        <router-link :to="`/anime/${anime.anime_id}`" class="text-white hover:text-cyan-400 transition-colors font-medium">
-                          {{ animeTitle(anime) }}
-                        </router-link>
-                      </td>
-                      <!-- Score (inline edit) -->
-                      <td class="py-3 px-2 text-center">
-                        <template v-if="isOwnProfile">
-                          <div v-if="editingScore === anime.anime_id" class="w-14">
-                            <Input
-                              type="number"
-                              size="sm"
-                              min="0" max="10"
-                              :model-value="String(anime.score || 0)"
-                              @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
-                              @keydown.enter="(e: KeyboardEvent) => { (e.target as HTMLInputElement).blur(); }"
-                              @keydown.escape="editingScore = null"
-                              class="text-center text-cyan-400"
-                            />
-                          </div>
-                          <button
-                            v-else
-                            @click="editingScore = anime.anime_id"
-                            class="inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors cursor-pointer"
-                            :class="anime.score && anime.score > 0 ? 'bg-cyan-500/20 text-cyan-400 font-bold hover:bg-cyan-500/30' : 'text-white/30 hover:bg-white/10 hover:text-white/60'"
-                          >
-                            {{ anime.score && anime.score > 0 ? anime.score : '-' }}
-                          </button>
-                        </template>
-                        <template v-else>
-                          <span v-if="anime.score && anime.score > 0" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 font-bold">
-                            {{ anime.score }}
-                          </span>
-                          <span v-else class="text-white/30">-</span>
-                        </template>
-                      </td>
-                      <!-- Progress (inline edit) -->
-                      <td class="py-3 px-2">
-                        <div v-if="isOwnProfile" class="flex items-center gap-1">
-                          <button
-                            @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) - 1)"
-                            class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors"
-                            :disabled="(anime.episodes || 0) <= 0"
-                          >-</button>
-                          <div class="w-12">
-                            <Input
-                              type="number"
-                              size="sm"
-                              :model-value="String(anime.episodes || 0)"
-                              min="0"
-                              :max="animeTotalEpisodes(anime) || 9999"
-                              class="h-6 py-0 text-center text-xs bg-white/10"
-                              @blur="(e: Event) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
-                              @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
-                            />
-                          </div>
-                          <span class="text-white/60">/</span>
-                          <span class="text-white/60">{{ animeTotalEpisodes(anime) || '?' }}</span>
-                          <button
-                            @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) + 1)"
-                            class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors"
-                            :disabled="animeTotalEpisodes(anime) ? (anime.episodes || 0) >= animeTotalEpisodes(anime) : false"
-                          >+</button>
-                        </div>
-                        <div v-else class="flex items-center gap-1">
-                          <span class="text-white">{{ anime.episodes || 0 }}</span>
-                          <span class="text-white/60">/</span>
-                          <span class="text-white/60">{{ animeTotalEpisodes(anime) || '?' }}</span>
-                        </div>
-                      </td>
-                      <td class="py-3 px-2 text-center hidden sm:table-cell">
-                        <Input
-                          v-if="isOwnProfile"
-                          type="date"
-                          size="sm"
-                          :model-value="formatDateForInput(anime.started_at)"
-                          @change="(e: Event) => updateAnimeDate(anime.anime_id, 'started_at', (e.target as HTMLInputElement).value)"
-                          class="text-xs py-1"
-                        />
-                        <span v-else class="text-white/60 text-xs">
-                          {{ formatDateDisplay(anime.started_at) }}
-                        </span>
-                      </td>
-                      <td class="py-3 px-2 text-center hidden sm:table-cell">
-                        <Input
-                          v-if="isOwnProfile"
-                          type="date"
-                          size="sm"
-                          :model-value="formatDateForInput(anime.completed_at)"
-                          @change="(e: Event) => updateAnimeDate(anime.anime_id, 'completed_at', (e.target as HTMLInputElement).value)"
-                          class="text-xs py-1"
-                        />
-                        <span v-else class="text-white/60 text-xs">
-                          {{ formatDateDisplay(anime.completed_at) }}
-                        </span>
-                      </td>
-                      <td class="py-3 pl-2">
-                        <div v-if="isOwnProfile" class="w-28">
-                          <Select
-                            :model-value="anime.status"
-                            :options="statusOptions"
-                            size="xs"
-                            @change="(val: string | number) => updateAnimeStatus(anime.anime_id, String(val))"
-                          />
-                        </div>
-                        <span v-else class="text-xs px-2 py-1 rounded-full" :class="statusColors[anime.status]">
-                          {{ statusLabels[anime.status] }}
-                        </span>
-                      </td>
-                      <!-- Remove button -->
-                      <td v-if="isOwnProfile" class="py-3 pl-2">
-                        <button
-                          @click="removeFromWatchlist(anime.anime_id)"
-                          class="p-1.5 rounded hover:bg-destructive/20 text-white/30 hover:text-destructive transition-colors"
-                          :title="$t('profile.actions.removeFromList')"
-                        >
-                          <Trash2 class="size-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+              <!-- Compact list view (rebuilt 2026-06-12: responsive rows replace the
+                   fixed 9-column table — controls wrap under the title on mobile
+                   instead of forcing a horizontal page scroll) -->
+              <div v-if="viewMode === 'table'" class="flex flex-col">
+                <WatchlistRow
+                  v-for="(anime, index) in filteredWatchlist"
+                  :key="anime.anime_id"
+                  :entry="anime"
+                  :index="(watchlistPage - 1) * watchlistPerPage + index + 1"
+                  :is-own="!!isOwnProfile"
+                  :status-options="statusOptions"
+                  @edit-score="(v: string) => finishEditScore(anime.anime_id, v)"
+                  @update-episodes="(n: number) => updateAnimeEpisodes(anime.anime_id, n)"
+                  @update-date="(f: 'started_at' | 'completed_at', v: string) => updateAnimeDate(anime.anime_id, f, v)"
+                  @update-status="(s: string) => updateAnimeStatus(anime.anime_id, s)"
+                  @remove="removeFromWatchlist(anime.anime_id)"
+                />
               </div>
 
-              <!-- Grid View -->
+              <!-- Grid View — unified PosterCard (spec 2026-06-05 migration item 11).
+                   Status / remove / mark-next live in the kebab context menu;
+                   the viewer's own score badge is click-to-edit on own profile. -->
               <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 <div
                   v-for="anime in filteredWatchlist"
                   :key="anime.anime_id"
-                  class="relative group"
+                  class="relative"
                   @touchstart="(e) => onProfileTouchstart(e, anime)"
                   @touchmove="onProfileTouchmove"
                   @touchend="onProfileTouchend"
                 >
-                  <router-link :to="`/anime/${anime.anime_id}`" class="block">
-                    <div class="aspect-[2/3] rounded-xl overflow-hidden bg-surface relative">
-                      <img
-                        v-if="animeCover(anime)"
-                        :src="animeCover(anime)"
-                        :alt="animeTitle(anime)"
-                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime.anime?.poster_url || '') } }"
-                      />
-                      <div v-else class="w-full h-full flex items-center justify-center text-white/20">
-                        <Film class="size-12" />
-                      </div>
-
-                      <!-- Score Badge — fades on hover so the kebab owns top-right.
-                           Click-to-edit on own profile still works after mouse-leave. -->
-                      <div
-                        v-if="anime.score && anime.score > 0"
-                        class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-cyan-400 text-sm font-bold transition-opacity duration-200 group-hover:opacity-0 flex items-center gap-1"
-                        :class="{ 'cursor-pointer hover:bg-black/80': isOwnProfile }"
-                        @click.prevent="isOwnProfile && (editingScoreGrid = anime.anime_id)"
-                      >
-                        <ScoreDiamond class="size-3" />
-                        {{ anime.score }}
-                      </div>
-                      <!-- Score edit popover for grid (z-40 keeps it above the kebab) -->
-                      <div
-                        v-if="isOwnProfile && editingScoreGrid === anime.anime_id"
-                        class="absolute top-2 right-2 z-40 w-14"
-                        @click.prevent.stop
-                      >
-                        <Input
-                          type="number"
-                          size="sm"
-                          min="0" max="10"
-                          :model-value="String(anime.score || 0)"
-                          @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
-                          @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
-                          @keydown.escape="editingScoreGrid = null"
-                          class="text-center text-warning"
-                        />
-                      </div>
-
-                      <!-- Status Badge -->
-                      <div class="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                        <span class="text-xs px-2 py-0.5 rounded-full" :class="statusColors[anime.status]">
-                          {{ statusLabels[anime.status] }}
-                        </span>
-                      </div>
-
-                      <!-- Kebab affordance: hover/focus only, opens custom context menu -->
-                      <AnimeKebab
-                        :menu-open="profileContextMenu.visible && String(profileContextMenu.anime?.id) === String(anime.anime_id)"
-                        @open="(el) => openProfileMenuAt(el, anime)"
-                      />
-                    </div>
-                    <h2 class="mt-2 text-sm font-medium text-white line-clamp-2 group-hover:text-cyan-400 transition-colors">
-                      {{ animeTitle(anime) }}
-                    </h2>
-                  </router-link>
-                  <div class="flex items-center gap-1 mt-1">
-                    <p class="text-xs text-white/50">
-                      {{ anime.episodes || 0 }} / {{ animeTotalEpisodes(anime) || '?' }} {{ $t('profile.ep') }}
-                    </p>
+                  <PosterCard
+                    :model="watchlistCardModel(anime)"
+                    :menu-open="profileContextMenu.visible && String(profileContextMenu.anime?.id) === String(anime.anime_id)"
+                    :score-editable="!!isOwnProfile"
+                    @open-menu="(el: HTMLElement) => openProfileMenuAt(el, anime)"
+                    @edit-score="editingScoreGrid = anime.anime_id"
+                  />
+                  <!-- Score edit popover (own profile) -->
+                  <div
+                    v-if="isOwnProfile && editingScoreGrid === anime.anime_id"
+                    class="absolute top-2 right-2 z-40 w-14"
+                    @click.prevent.stop
+                  >
+                    <Input
+                      type="number"
+                      size="sm"
+                      min="0" max="10"
+                      :model-value="String(anime.score || 0)"
+                      @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
+                      @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
+                      @keydown.escape="editingScoreGrid = null"
+                      class="text-center text-cyan-400"
+                    />
                   </div>
-                  <p v-if="anime.started_at || anime.completed_at" class="text-xs text-white/60 mt-0.5">
-                    <span v-if="anime.started_at">{{ formatDateDisplay(anime.started_at) }}</span>
-                    <span v-if="anime.started_at && anime.completed_at"> - </span>
-                    <span v-if="anime.completed_at">{{ formatDateDisplay(anime.completed_at) }}</span>
-                  </p>
-
-                  <!-- Quick actions for own profile -->
-                  <template v-if="isOwnProfile">
-                    <div class="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity z-10" @click.stop>
-                      <div class="w-24">
-                        <Select
-                          :model-value="anime.status"
-                          :options="statusOptions"
-                          size="xs"
-                          @change="(val: string | number) => updateAnimeStatus(anime.anime_id, String(val))"
-                        />
-                      </div>
-                    </div>
-                  </template>
                 </div>
               </div>
 
@@ -941,7 +745,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Trash2, Film, Archive, Download, Link, Copy, Check, Image as ImageIcon } from 'lucide-vue-next'
+import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Archive, Download, Link, Copy, Check, Image as ImageIcon } from 'lucide-vue-next'
 import { useDebounceFn } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -952,12 +756,14 @@ import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import TimezoneCard from '@/components/profile/TimezoneCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
-import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
+import { AnimeContextMenu, PosterCard } from '@/components/anime'
+import WatchlistRow from '@/components/profile/WatchlistRow.vue'
+import { fromWatchlistEntry } from '@/utils/toCardModel'
 import { userApi, publicApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { getLocalizedTitle } from '@/utils/title'
-import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
+import { getImageUrl } from '@/composables/useImageProxy'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useSkipIntroSettings } from '@/composables/useSkipIntroSettings'
 
@@ -1017,7 +823,7 @@ interface ProfileUser {
 
 const router = useRouter()
 const route = useRoute()
-const { t, te, locale } = useI18n()
+const { t, te } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const toast = useToast()
@@ -1059,6 +865,9 @@ function openProfileMenuAt(el: HTMLElement, entry: WatchlistEntry) {
   openProfileCtxAt(el, ctxAnimeFromEntry(entry), ctxOptsFromEntry(entry))
 }
 
+// Unified PosterCard view-model for the grid (spec 2026-06-05 item 11).
+const watchlistCardModel = (entry: WatchlistEntry) => fromWatchlistEntry(entry)
+
 function onProfileTouchstart(event: TouchEvent, entry: WatchlistEntry) {
   onProfileCtxTouchstart(event, ctxAnimeFromEntry(entry), ctxOptsFromEntry(entry))
 }
@@ -1070,12 +879,6 @@ const animeCover = (entry: WatchlistEntry): string =>
   getImageUrl(entry.anime?.poster_url) || ''
 const animeTotalEpisodes = (entry: WatchlistEntry): number =>
   entry.anime?.episodes_count || 0
-
-const localeMap: Record<string, string> = {
-  ru: 'ru-RU',
-  en: 'en-US',
-  ja: 'ja-JP',
-}
 
 // Profile state
 const profileUser = ref<ProfileUser | null>(null)
@@ -1219,8 +1022,7 @@ function clearPageCache() {
   pageCache.clear()
 }
 
-// Inline editing
-const editingScore = ref<string | null>(null)
+// Inline editing (grid score popover; compact-list rows manage their own edit state)
 const editingScoreGrid = ref<string | null>(null)
 
 // Sorting
@@ -1258,14 +1060,6 @@ const statusLabels = computed<Record<string, string>>(() => ({
   on_hold: t('profile.watchlist.onHold'),
   dropped: t('profile.watchlist.dropped'),
 }))
-
-const statusColors: Record<string, string> = {
-  watching: 'bg-success/80 text-white',
-  completed: 'bg-info/80 text-white',
-  plan_to_watch: 'bg-brand-violet/80 text-white',
-  on_hold: 'bg-warning/80 text-black',
-  dropped: 'bg-destructive/80 text-white'
-}
 
 const statusOptions = computed<SelectOption[]>(() => [
   { value: 'watching', label: t('profile.watchlist.watching') },
@@ -1705,26 +1499,6 @@ watch(searchQuery, () => {
   debouncedSearchRefetch()
 })
 
-const formatDateForInput = (dateStr: string | null | undefined): string => {
-  if (!dateStr) return ''
-  try {
-    const date = new Date(dateStr)
-    return date.toISOString().split('T')[0]
-  } catch {
-    return ''
-  }
-}
-
-const formatDateDisplay = (dateStr: string | null | undefined): string => {
-  if (!dateStr) return '-'
-  try {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString(localeMap[locale.value] || 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  } catch {
-    return '-'
-  }
-}
-
 const updateAnimeStatus = async (animeId: string, newStatus: string) => {
   const animeRow = watchlist.value.find(a => a.anime_id === animeId)
   const priorStatus = animeRow?.status ?? null
@@ -1775,7 +1549,6 @@ const debouncedCommitScore = useDebounceFn(async (animeId: string, score: number
 }, 500)
 
 const finishEditScore = async (animeId: string, rawValue: string) => {
-  editingScore.value = null
   const score = Math.max(0, Math.min(10, parseInt(rawValue) || 0))
   const anime = watchlist.value.find(a => a.anime_id === animeId)
   if (!anime) return
@@ -2268,8 +2041,8 @@ watch(() => profileUser.value?.username, (newUsername) => {
   }
 })
 
-// Focus score input when editing starts
-watch(editingScore, (id) => {
+// Focus score input when editing starts (grid popover)
+watch(editingScoreGrid, (id) => {
   if (id) {
     nextTick(() => {
       const input = document.querySelector('input[type="number"][min="0"][max="10"]') as HTMLInputElement

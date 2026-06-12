@@ -44,6 +44,21 @@ interface HomeAnimeLike {
   next_episode_at?: string
 }
 
+interface WatchlistEntryLike {
+  anime_id: string | number
+  anime?: {
+    name?: string
+    name_ru?: string
+    name_jp?: string
+    poster_url?: string
+    episodes_count?: number
+    genres?: Array<{ name?: string; name_ru?: string }>
+  }
+  status?: string
+  score?: number
+  episodes?: number
+}
+
 interface ContinueWatchingLike {
   anime: HomeAnimeLike
   episode_number: number
@@ -107,6 +122,27 @@ export function fromHomeAnime(a: HomeAnimeLike, extras?: CardExtras): AnimeCardM
       airing && a.next_episode_at
         ? { ep: (a.episodes_aired || 0) + 1, when: a.next_episode_at }
         : null,
+  }
+}
+
+// Profile "My List" entries — the per-user list row IS the data source, so the
+// score is the viewer's own rating (userScore), not a community average.
+export function fromWatchlistEntry(e: WatchlistEntryLike): AnimeCardModel {
+  const id = String(e.anime_id)
+  const g = e.anime?.genres?.[0]
+  return {
+    id,
+    href: `/anime/${id}`,
+    title: getLocalizedTitle(e.anime?.name, e.anime?.name_ru, e.anime?.name_jp, titleLang.value) || '',
+    coverImage: e.anime?.poster_url || PLACEHOLDER,
+    episodes: e.anime?.episodes_count || undefined,
+    primaryGenre: g ? getLocalizedGenre(g.name, g.name_ru) || undefined : undefined,
+    userScore: e.score || undefined,
+    listStatus: (e.status as AnimeCardModel['listStatus']) ?? null,
+    progress: e.episodes
+      ? { current: e.episodes, total: e.anime?.episodes_count || null }
+      : null,
+    airing: false,
   }
 }
 

@@ -79,6 +79,32 @@ describe('PosterCard', () => {
     expect(w.text()).toContain('profile.watchlist.dropped')
   })
 
+  it('renders the user-score badge as a plain integer', () => {
+    const w = mountCard({ malScore: undefined, siteScore: undefined, userScore: 7 })
+    const badge = w.find('[data-testid="user-score"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('7')
+    expect(badge.text()).not.toContain('7.0')
+  })
+
+  it('user-score badge emits editScore on click only when scoreEditable', async () => {
+    const editable = mountCard({ userScore: 7 })
+    await editable.setProps({ scoreEditable: true })
+    await editable.find('[data-testid="user-score"]').trigger('click')
+    expect(editable.emitted('editScore')).toBeTruthy()
+
+    const readonly = mountCard({ userScore: 7 })
+    await readonly.find('[data-testid="user-score"]').trigger('click')
+    expect(readonly.emitted('editScore')).toBeFalsy()
+    expect(readonly.find('[data-testid="user-score"]').attributes('role')).toBeUndefined()
+  })
+
+  it('hides the user-score badge when no score is set', () => {
+    const w = mountCard({ malScore: undefined, siteScore: undefined, userScore: undefined })
+    expect(w.find('[data-testid="user-score"]').exists()).toBe(false)
+    expect(w.find('[data-testid="score-cluster"]').exists()).toBe(false)
+  })
+
   it('progress badge shows when in-progress and suppressed when completed', () => {
     const inProgress = mountCard({ listStatus: 'watching', progress: { current: 5, total: 12 } })
     expect(inProgress.text()).toContain('card.episodeProgress')

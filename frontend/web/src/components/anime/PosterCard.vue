@@ -33,7 +33,7 @@
 
         <!-- Top-right: score cluster — STAYS visible on hover (no opacity-0) -->
         <div
-          v-if="model.malScore || model.siteScore"
+          v-if="model.malScore || model.siteScore || model.userScore"
           data-testid="score-cluster"
           class="absolute top-2 right-2 flex flex-col items-end gap-1"
         >
@@ -58,6 +58,24 @@
           >
             <ScoreDiamond class="size-3" />
             {{ model.siteScore.toFixed(1) }}
+          </Badge>
+          <!-- Viewer's own list rating (My List surfaces). Optionally click-to-edit:
+               pointer-events-auto lifts it above the full-card link's hit area. -->
+          <Badge
+            v-if="model.userScore"
+            variant="primary"
+            size="sm"
+            :overlay="true"
+            data-testid="user-score"
+            class="gap-1 tabular-nums"
+            :class="scoreEditable ? 'pointer-events-auto cursor-pointer hover:ring-cyan-400/40' : ''"
+            :role="scoreEditable ? 'button' : undefined"
+            :tabindex="scoreEditable ? 0 : undefined"
+            @click.prevent.stop="scoreEditable && emit('editScore')"
+            @keydown.enter.prevent="scoreEditable && emit('editScore')"
+          >
+            <ScoreDiamond class="size-3" />
+            {{ model.userScore }}
           </Badge>
         </div>
 
@@ -122,9 +140,11 @@ import type { AnimeCardModel } from '@/types/card'
 const props = defineProps<{
   model: AnimeCardModel
   menuOpen?: boolean
+  /** Makes the userScore badge a click target emitting `editScore` (own-profile lists). */
+  scoreEditable?: boolean
 }>()
 
-const emit = defineEmits<{ openMenu: [el: HTMLElement] }>()
+const emit = defineEmits<{ openMenu: [el: HTMLElement]; editScore: [] }>()
 
 const { t } = useI18n()
 
