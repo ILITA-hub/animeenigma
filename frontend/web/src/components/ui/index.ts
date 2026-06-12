@@ -41,6 +41,7 @@ export {
 export { default as Tooltip } from './Tooltip.vue'
 export { default as Spinner } from './Spinner.vue'
 export { spinnerVariants, type SpinnerVariants } from './spinner-variants'
+export { default as Stepper } from './Stepper.vue'
 export { default as LoadingState } from './LoadingState.vue'
 export { default as Alert } from './Alert.vue'
 export { alertVariants, type AlertVariants } from './alert-variants'

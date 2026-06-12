@@ -25,71 +25,50 @@
 
     <!-- Controls: same line on md+, wrapped second line (indented under the title) on mobile -->
     <div class="flex items-center gap-2 basis-full md:basis-auto pl-14 md:pl-0">
-      <!-- Score -->
+      <!-- Score — ONE circle for own + public rows (own adds click-to-edit),
+           so the two variants can't drift apart visually. -->
       <div class="w-10 shrink-0 flex justify-center">
-        <template v-if="isOwn">
-          <Input
-            v-if="editingScore"
-            type="number"
-            size="sm"
-            min="0" max="10"
-            :model-value="String(entry.score || 0)"
-            class="text-center text-cyan-400"
-            data-testid="score-input"
-            @blur="(e: Event) => { editingScore = false; emit('editScore', (e.target as HTMLInputElement).value) }"
-            @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
-            @keydown.escape="editingScore = false"
-          />
-          <button
-            v-else
-            type="button"
-            data-testid="score-button"
-            :title="t('profile.table.score')"
-            class="inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors cursor-pointer"
-            :class="entry.score && entry.score > 0 ? 'bg-cyan-500/20 text-cyan-400 font-semibold hover:bg-cyan-500/30' : 'text-white/30 hover:bg-white/10 hover:text-white/60'"
-            @click="editingScore = true"
-          >
-            {{ entry.score && entry.score > 0 ? entry.score : '-' }}
-          </button>
-        </template>
-        <span
-          v-else-if="entry.score && entry.score > 0"
-          class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 font-semibold"
-        >{{ entry.score }}</span>
-        <span v-else class="text-white/30">-</span>
+        <Input
+          v-if="isOwn && editingScore"
+          type="number"
+          size="sm"
+          min="0" max="10"
+          :model-value="String(entry.score || 0)"
+          class="text-center text-cyan-400"
+          data-testid="score-input"
+          @blur="(e: Event) => { editingScore = false; emit('editScore', (e.target as HTMLInputElement).value) }"
+          @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
+          @keydown.escape="editingScore = false"
+        />
+        <component
+          :is="isOwn ? 'button' : 'span'"
+          v-else
+          :type="isOwn ? 'button' : undefined"
+          data-testid="score-button"
+          :title="isOwn ? t('profile.table.score') : undefined"
+          class="inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors"
+          :class="[
+            entry.score && entry.score > 0 ? 'bg-cyan-500/20 text-cyan-400 font-semibold' : 'text-white/30',
+            isOwn ? 'cursor-pointer ' + (entry.score && entry.score > 0 ? 'hover:bg-cyan-500/30' : 'hover:bg-white/10 hover:text-white/60') : '',
+          ]"
+          @click="isOwn && (editingScore = true)"
+        >
+          {{ entry.score && entry.score > 0 ? entry.score : '-' }}
+        </component>
       </div>
 
-      <!-- Progress -->
-      <div class="flex items-center gap-1 shrink-0">
-        <template v-if="isOwn">
-          <button
-            type="button"
-            data-testid="ep-minus"
-            class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
-            :disabled="(entry.episodes || 0) <= 0"
-            @click="emit('updateEpisodes', (entry.episodes || 0) - 1)"
-          >-</button>
-          <div class="w-12">
-            <Input
-              type="number"
-              size="sm"
-              :model-value="String(entry.episodes || 0)"
-              min="0"
-              :max="totalEpisodes || 9999"
-              class="h-6 py-0 text-center text-xs bg-white/10"
-              @blur="(e: Event) => emit('updateEpisodes', parseInt((e.target as HTMLInputElement).value) || 0)"
-              @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
-            />
-          </div>
-          <span class="text-white/60 text-sm">/ {{ totalEpisodes || '?' }}</span>
-          <button
-            type="button"
-            data-testid="ep-plus"
-            class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors disabled:opacity-40"
-            :disabled="totalEpisodes ? (entry.episodes || 0) >= totalEpisodes : false"
-            @click="emit('updateEpisodes', (entry.episodes || 0) + 1)"
-          >+</button>
-        </template>
+      <!-- Progress — DS Stepper primitive (own); read-only text (public) -->
+      <div class="shrink-0">
+        <Stepper
+          v-if="isOwn"
+          :model-value="entry.episodes || 0"
+          :min="0"
+          :max="totalEpisodes || 9999"
+          :suffix="`/ ${totalEpisodes || '?'}`"
+          :label="t('profile.table.progress')"
+          input-width="32px"
+          @update:model-value="(n: number) => emit('updateEpisodes', n)"
+        />
         <span v-else class="text-sm whitespace-nowrap">
           <span class="text-white">{{ entry.episodes || 0 }}</span>
           <span class="text-white/60"> / {{ totalEpisodes || '?' }}</span>
@@ -138,17 +117,19 @@
       </div>
       <Badge v-else :variant="statusVariant" size="sm" class="shrink-0">{{ statusLabel }}</Badge>
 
-      <!-- Remove -->
-      <button
+      <!-- Remove — DS Button, ghost/icon (border dropped: this is a quiet row action) -->
+      <Button
         v-if="isOwn"
-        type="button"
+        variant="ghost"
+        size="icon-sm"
         data-testid="row-remove"
-        class="p-1.5 rounded hover:bg-destructive/20 text-white/30 hover:text-destructive transition-colors shrink-0"
+        class="shrink-0 border-transparent bg-transparent text-white/30 hover:text-destructive hover:bg-destructive/20 hover:border-transparent"
         :title="t('profile.actions.removeFromList')"
+        :aria-label="t('profile.actions.removeFromList')"
         @click="emit('remove')"
       >
         <Trash2 class="size-4" />
-      </button>
+      </Button>
     </div>
   </div>
 </template>
@@ -157,7 +138,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Trash2 } from 'lucide-vue-next'
-import { Badge, DatePicker, Input, Select, type SelectOption } from '@/components/ui'
+import { Badge, Button, DatePicker, Input, Select, Stepper, type SelectOption } from '@/components/ui'
 import PosterImage from '@/components/anime/PosterImage.vue'
 import RewatchCounter from '@/components/anime/RewatchCounter.vue'
 import { getLocalizedTitle } from '@/utils/title'

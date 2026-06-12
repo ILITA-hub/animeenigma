@@ -134,13 +134,16 @@
                     size="sm"
                   />
                 </div>
-                <button
-                  class="p-2 rounded-lg bg-white/5 text-white/60 hover:text-white transition-colors"
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  class="text-white/60 hover:text-white"
+                  :title="sortDirection === 'asc' ? $t('profile.sort.asc') : $t('profile.sort.desc')"
+                  :aria-label="sortDirection === 'asc' ? $t('profile.sort.asc') : $t('profile.sort.desc')"
                   @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'"
-                  :title="sortDirection === 'asc' ? 'Ascending' : 'Descending'"
                 >
-                  <ArrowUpDown class="size-5 transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" />
-                </button>
+                  <ArrowUpDown class="size-5! transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" />
+                </Button>
                 <SegmentedControl
                   :model-value="viewMode"
                   :options="viewModeOptions"
@@ -223,10 +226,10 @@
                 <div v-if="watchlistPageLoading" class="flex justify-center py-12">
                   <Spinner size="lg" />
                 </div>
-                <div v-else class="text-center py-12">
-                  <Archive class="size-16 mx-auto text-white/20 mb-4" />
-                  <p class="text-white/50">{{ $t('profile.empty.filter') }}</p>
-                </div>
+                <EmptyState v-else class="py-12">
+                  <template #icon><Archive class="size-16" /></template>
+                  {{ $t('profile.empty.filter') }}
+                </EmptyState>
               </template>
 
               </div><!-- end relative wrapper -->
@@ -240,13 +243,15 @@
               />
             </div>
 
-            <div v-else class="text-center py-12">
-              <Archive class="size-16 mx-auto text-white/20 mb-4" />
-              <p class="text-white/50 mb-4">{{ isOwnProfile ? $t('profile.empty.watchlist') : $t('profile.listEmpty') }}</p>
-              <Button v-if="isOwnProfile" variant="outline" @click="$router.push('/browse')">
-                {{ $t('profile.actions.browseCatalog') }}
-              </Button>
-            </div>
+            <EmptyState v-else class="py-12">
+              <template #icon><Archive class="size-16" /></template>
+              {{ isOwnProfile ? $t('profile.empty.watchlist') : $t('profile.listEmpty') }}
+              <template v-if="isOwnProfile" #action>
+                <Button variant="outline" @click="$router.push('/browse')">
+                  {{ $t('profile.actions.browseCatalog') }}
+                </Button>
+              </template>
+            </EmptyState>
           </template>
 
           <!-- Settings Tab (own profile only) -->
@@ -1013,10 +1018,10 @@ const loadingWatchlist = ref(false)
 const watchlistFilter = ref('all')
 const searchQuery = ref('')
 const viewMode = ref<'table' | 'grid'>('grid')
-const viewModeOptions = [
-  { value: 'table', label: 'Table view', icon: List },
-  { value: 'grid', label: 'Grid view', icon: LayoutGrid },
-]
+const viewModeOptions = computed(() => [
+  { value: 'table', label: t('profile.view.table'), icon: List },
+  { value: 'grid', label: t('profile.view.grid'), icon: LayoutGrid },
+])
 
 // Pagination
 const watchlistPage = ref(1)
@@ -1055,8 +1060,10 @@ const editingScoreGrid = ref<string | null>(null)
 const sortKey = ref<string>(localStorage.getItem('profile_sortKey') || 'title')
 const sortDirection = ref<'asc' | 'desc'>((localStorage.getItem('profile_sortDir') as 'asc' | 'desc') || 'asc')
 
-watch(sortKey, (v) => localStorage.setItem('profile_sortKey', v))
-watch(sortDirection, (v) => localStorage.setItem('profile_sortDir', v))
+// Persist only for the own profile — sort changes made while browsing someone
+// else's list must not overwrite the owner's saved preference.
+watch(sortKey, (v) => { if (isOwnProfile.value) localStorage.setItem('profile_sortKey', v) })
+watch(sortDirection, (v) => { if (isOwnProfile.value) localStorage.setItem('profile_sortDir', v) })
 
 const sortOptions = computed<SelectOption[]>(() => [
   { value: 'title', label: t('profile.sort.title') },
@@ -1460,6 +1467,16 @@ const fetchWatchlist = async (isOwn: boolean) => {
   // This means sorting (e.g. by score) produces different results because
   // the underlying datasets differ — own shows one status, public shows all.
   watchlistFilter.value = isOwn ? 'watching' : 'all'
+  // Someone else's profile defaults to score-first (best-rated on top); the
+  // own profile keeps the persisted sort preference. Applied here (while
+  // _watchlistInitialized is false) so the sort watchers don't double-fetch.
+  if (isOwn) {
+    sortKey.value = localStorage.getItem('profile_sortKey') || 'title'
+    sortDirection.value = (localStorage.getItem('profile_sortDir') as 'asc' | 'desc') || 'asc'
+  } else {
+    sortKey.value = 'score'
+    sortDirection.value = 'desc'
+  }
   if (isOwn) {
     // Also fetch lightweight statuses for badge map and per-status counts
     await watchlistStore.fetchStatuses(true)

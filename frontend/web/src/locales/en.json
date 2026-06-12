@@ -629,7 +629,9 @@
       "score": "Score",
       "progress": "Progress",
       "status": "Status",
-      "genre": "Genre"
+      "genre": "Genre",
+      "asc": "Ascending",
+      "desc": "Descending"
     },
     "genreFilter": {
       "all": "All genres",
@@ -647,6 +649,10 @@
       "formats": "JPEG, PNG or WebP, max 2MB",
       "upload": "Upload",
       "uploading": "Uploading..."
+    },
+    "view": {
+      "table": "List view",
+      "grid": "Grid view"
     }
   },
   "rooms": {

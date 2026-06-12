@@ -629,7 +629,9 @@
       "score": "評価",
       "progress": "進捗",
       "status": "状態",
-      "genre": "ジャンル"
+      "genre": "ジャンル",
+      "asc": "昇順",
+      "desc": "降順"
     },
     "genreFilter": {
       "all": "全ジャンル",
@@ -647,6 +649,10 @@
       "formats": "JPEG、PNGまたはWebP、最大2MB",
       "upload": "アップロード",
       "uploading": "アップロード中..."
+    },
+    "view": {
+      "table": "リスト表示",
+      "grid": "グリッド表示"
     }
   },
   "rooms": {

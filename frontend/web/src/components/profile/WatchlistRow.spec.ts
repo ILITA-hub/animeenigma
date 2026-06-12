@@ -65,17 +65,18 @@ describe('WatchlistRow', () => {
     expect(w.emitted('editScore')![0][0]).toBe('9')
   })
 
-  it('episode steppers emit updateEpisodes with the adjusted count', async () => {
+  it('DS Stepper emits updateEpisodes with the adjusted count', async () => {
     const w = mountRow()
-    await w.find('[data-testid="ep-plus"]').trigger('click')
+    await w.find('[data-test="stepper-inc"]').trigger('click')
     expect(w.emitted('updateEpisodes')![0][0]).toBe(6)
-    await w.find('[data-testid="ep-minus"]').trigger('click')
+    await w.find('[data-test="stepper-dec"]').trigger('click')
     expect(w.emitted('updateEpisodes')![1][0]).toBe(4)
   })
 
-  it('plus stepper is disabled at the episode cap', () => {
+  it('stepper clamps at the episode cap', async () => {
     const w = mountRow({ episodes: 28 })
-    expect(w.find('[data-testid="ep-plus"]').attributes('disabled')).toBeDefined()
+    await w.find('[data-test="stepper-inc"]').trigger('click')
+    expect(w.emitted('updateEpisodes')![0][0]).toBe(28)
   })
 
   it('remove button emits remove', async () => {
@@ -86,8 +87,10 @@ describe('WatchlistRow', () => {
 
   it('public profile hides all editors and shows a status badge instead', () => {
     const w = mountRow({}, { isOwn: false })
-    expect(w.find('[data-testid="score-button"]').exists()).toBe(false)
-    expect(w.find('[data-testid="ep-plus"]').exists()).toBe(false)
+    // score circle is the SAME element, just inert (span, not button)
+    const score = w.find('[data-testid="score-button"]')
+    expect(score.element.tagName).toBe('SPAN')
+    expect(w.find('[data-test="stepper"]').exists()).toBe(false)
     expect(w.find('[data-testid="row-remove"]').exists()).toBe(false)
     expect(w.text()).toContain('profile.watchlist.watching')
     // progress is still visible read-only
