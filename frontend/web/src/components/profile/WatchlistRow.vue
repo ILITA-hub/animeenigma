@@ -109,21 +109,19 @@
       <!-- Dates: editable inputs (own) / text (public), lg+ only -->
       <div class="hidden lg:flex items-center gap-1.5 shrink-0">
         <template v-if="isOwn">
-          <Input
-            type="date"
-            size="sm"
-            :title="t('profile.table.startDate')"
+          <DatePicker
             :model-value="formatDateForInput(entry.started_at)"
-            class="text-xs py-1 w-32"
-            @change="(e: Event) => emit('updateDate', 'started_at', (e.target as HTMLInputElement).value)"
+            :placeholder="t('profile.table.startDate')"
+            :title="t('profile.table.startDate')"
+            class="w-32"
+            @update:model-value="(v: string) => emit('updateDate', 'started_at', v)"
           />
-          <Input
-            type="date"
-            size="sm"
-            :title="t('profile.table.endDate')"
+          <DatePicker
             :model-value="formatDateForInput(entry.completed_at)"
-            class="text-xs py-1 w-32"
-            @change="(e: Event) => emit('updateDate', 'completed_at', (e.target as HTMLInputElement).value)"
+            :placeholder="t('profile.table.endDate')"
+            :title="t('profile.table.endDate')"
+            class="w-32"
+            @update:model-value="(v: string) => emit('updateDate', 'completed_at', v)"
           />
         </template>
         <span v-else class="text-xs text-white/60 whitespace-nowrap">{{ datesLine || '-' }}</span>
@@ -159,7 +157,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Trash2 } from 'lucide-vue-next'
-import { Badge, Input, Select, type SelectOption } from '@/components/ui'
+import { Badge, DatePicker, Input, Select, type SelectOption } from '@/components/ui'
 import PosterImage from '@/components/anime/PosterImage.vue'
 import RewatchCounter from '@/components/anime/RewatchCounter.vue'
 import { getLocalizedTitle } from '@/utils/title'

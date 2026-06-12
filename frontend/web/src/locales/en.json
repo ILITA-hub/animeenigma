@@ -1646,5 +1646,9 @@
       "reset": "Reset"
     },
     "history": "Status history ({n})"
+  },
+  "datePicker": {
+    "today": "Today",
+    "clear": "Clear"
   }
 }
