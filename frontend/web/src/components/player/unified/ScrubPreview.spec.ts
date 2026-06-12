@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ScrubPreview from './ScrubPreview.vue'
+import { scrubDebug, sreset } from '@/composables/unifiedPlayer/scrubPreviewDebug'
 
 // hls.js is dynamically imported only on the hls path — mock it so the mp4
 // tests never pull the real module.
@@ -18,7 +19,10 @@ vi.mock('hls.js', () => ({
 }))
 
 describe('ScrubPreview (thumbnail-cache v2)', () => {
-  beforeEach(() => vi.useFakeTimers())
+  beforeEach(() => {
+    vi.useFakeTimers()
+    sreset()
+  })
   afterEach(() => vi.useRealTimers())
 
   function make(props: Partial<InstanceType<typeof ScrubPreview>['$props']> = {}) {
@@ -184,6 +188,52 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
       (w.find('[data-test="preview-canvas"]').element as HTMLElement).style.display,
     ).not.toBe('none')
     expect(w.find('[data-test="preview-still"]').exists()).toBe(false)
+  })
+
+  it('records the seek→capture pipeline in the scrubDebug channel', async () => {
+    const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
+    await w.setProps({ visible: true, timeSec: 5 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(scrubDebug.engine).toBe('loading')
+    expect(scrubDebug.streamType).toBe('mp4')
+    expect(scrubDebug.events.some((e) => e.includes('init mp4'))).toBe(true)
+
+    const { video } = instrument(w)
+    await vi.advanceTimersByTimeAsync(300) // settle seek
+    expect(scrubDebug.seeks).toBe(1)
+    expect(scrubDebug.events.some((e) => e.includes('seek →5s b1 (hover)'))).toBe(true)
+
+    video.dispatchEvent(new Event('seeked'))
+    await w.vm.$nextTick()
+    expect(scrubDebug.captures).toBe(1)
+    expect(scrubDebug.engine).toBe('ready')
+    expect(scrubDebug.lastCaptureMs).not.toBeNull()
+    expect(scrubDebug.cacheSize).toBe(1)
+  })
+
+  it('counts a watchdog timeout when the provider never answers a seek', async () => {
+    const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
+    await w.setProps({ visible: true, timeSec: 5 })
+    await vi.advanceTimersByTimeAsync(0)
+    instrument(w)
+    await vi.advanceTimersByTimeAsync(300) // settle seek issued — never decodes
+    expect(scrubDebug.seeks).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(8100)
+    expect(scrubDebug.watchdogs).toBe(1)
+    expect(scrubDebug.captures).toBe(0)
+    expect(scrubDebug.events.some((e) => e.includes('WATCHDOG'))).toBe(true)
+  })
+
+  it('a media error marks the engine dead — visibly, not silently', async () => {
+    const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
+    await w.setProps({ visible: true, timeSec: 5 })
+    await vi.advanceTimersByTimeAsync(0)
+    const { video } = instrument(w)
+    video.dispatchEvent(new Event('error'))
+    expect(scrubDebug.engine).toBe('error')
+    expect(scrubDebug.errors).toBe(1)
+    expect(scrubDebug.events.some((e) => e.includes('media error'))).toBe(true)
   })
 
   it('tears down, clears the cache, and re-arms when the stream URL changes', async () => {

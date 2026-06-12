@@ -318,6 +318,7 @@ import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
 import { useSkipTimes } from '@/composables/useSkipTimes'
 import { usePlayerState } from '@/composables/unifiedPlayer/usePlayerState'
 import { usePlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
+import { scrubDebug } from '@/composables/unifiedPlayer/scrubPreviewDebug'
 import { segmentsToChapters, activeSkipSegment } from '@/composables/unifiedPlayer/skipSegments'
 import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
 import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/unifiedPlayer/useProviderResolver'
@@ -1012,6 +1013,16 @@ watch(engine.fatal, (f) => {
 
 const statsEnabled = computed(() => state.hackerMode.value)
 const { stats: playbackStats } = usePlaybackStats(videoRef, statsEnabled)
+
+// Hacker mode also mirrors the scrub-preview engine log to the console
+// (prefix [ScrubPreview]) — frontend pump health vs provider fetch latency.
+watch(
+  () => state.hackerMode.value,
+  (v) => {
+    scrubDebug.console = v
+  },
+  { immediate: true },
+)
 
 // Seek pipeline trace — what actually happens between releasing the scrubber
 // and playback resuming: buffer check (hit = instant, no network), pipeline

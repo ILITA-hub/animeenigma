@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DebugHud from './DebugHud.vue'
+import { scrubDebug, sreset, slog } from '@/composables/unifiedPlayer/scrubPreviewDebug'
 
 const baseProps = {
   stats: {
@@ -22,6 +23,37 @@ const baseProps = {
 }
 
 describe('DebugHud', () => {
+  beforeEach(() => sreset())
+
+  it('hides the PREVIEW section while the thumbnail engine is idle', () => {
+    const w = mount(DebugHud, { props: baseProps })
+    expect(w.find('[data-test="hud-preview-head"]').exists()).toBe(false)
+  })
+
+  it('shows thumbnail-engine gauges, errors and recent events once active', () => {
+    scrubDebug.engine = 'ready'
+    scrubDebug.cacheSize = 7
+    scrubDebug.queueLen = 3
+    scrubDebug.seeks = 5
+    scrubDebug.captures = 4
+    scrubDebug.watchdogs = 1
+    scrubDebug.lastCaptureMs = 1840
+    scrubDebug.errors = 2
+    scrubDebug.lastError = 'networkError/fragLoadError FATAL http=502'
+    slog('seek →100s b20 (prefetch) rs=2')
+
+    const w = mount(DebugHud, { props: baseProps })
+    expect(w.find('[data-test="hud-preview-head"]').text()).toContain(
+      'PREVIEW ready · cache 7 · queue 3',
+    )
+    expect(w.find('[data-test="hud-preview-stats"]').text()).toContain('seek 5 → cap 4 · wd 1')
+    expect(w.text()).toContain('1840ms')
+    expect(w.find('[data-test="hud-preview-error"]').text()).toContain(
+      'ERR×2 networkError/fragLoadError FATAL http=502',
+    )
+    expect(w.find('[data-test="hud-preview-event"]').text()).toContain('seek →100s b20 (prefetch)')
+  })
+
   it('renders provider, type and level in the header row', () => {
     const w = mount(DebugHud, { props: baseProps })
     const head = w.find('.pl-hud-head').text()

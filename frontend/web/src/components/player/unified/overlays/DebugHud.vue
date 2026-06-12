@@ -58,6 +58,28 @@
     </template>
     <div v-else class="pl-hud-row pl-hud-dim">no fragments (mp4 / not loaded)</div>
 
+    <!-- Scrub-preview thumbnail engine — frontend pump health vs provider cost -->
+    <template v-if="scrub.engine !== 'idle'">
+      <div class="pl-hud-row pl-hud-head" data-test="hud-preview-head">
+        PREVIEW {{ scrub.engine }} · cache {{ scrub.cacheSize }} · queue {{ scrub.queueLen }}
+      </div>
+      <div class="pl-hud-row" data-test="hud-preview-stats">
+        PRV  seek {{ scrub.seeks }} → cap {{ scrub.captures }} · wd {{ scrub.watchdogs }} · hover {{ scrub.hoverHits }}✓/{{ scrub.hoverMisses }}✗
+      </div>
+      <div class="pl-hud-row">
+        PRV  cap {{ scrub.lastCaptureMs ?? '—' }}ms (avg {{ scrub.avgCaptureMs || '—' }}) · frag {{ scrub.lastFragKb ?? '—' }}KB/{{ scrub.lastFragMs ?? '—' }}ms
+      </div>
+      <div v-if="scrub.lastError" class="pl-hud-row" data-test="hud-preview-error">
+        PRV  ERR×{{ scrub.errors }} {{ scrub.lastError }}
+      </div>
+      <div
+        v-for="(ev, i) in lastScrubEvents"
+        :key="scrub.seeks + ':' + i"
+        class="pl-hud-row pl-hud-dim"
+        data-test="hud-preview-event"
+      >{{ ev }}</div>
+    </template>
+
     <!-- "?" — condensed tech reference of the seek pipeline -->
     <div v-if="helpOpen" class="pl-hud-ref" data-test="hud-reference">
       <div class="pl-hud-ref-title">WHAT A SEEK ACTUALLY DOES</div>
@@ -77,6 +99,7 @@ import { Pin } from 'lucide-vue-next'
 import Spinner from '@/components/ui/Spinner.vue'
 import type { PlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
 import type { FragStat } from '@/composables/unifiedPlayer/useVideoEngine'
+import { scrubDebug as scrub } from '@/composables/unifiedPlayer/scrubPreviewDebug'
 
 /** One user seek, traced through the pipeline. Mutated in place as events land. */
 export interface SeekTrace {
@@ -123,6 +146,9 @@ const emit = defineEmits<{
 const helpOpen = ref(false)
 
 const lastFrags = computed(() => props.frags.slice(-5).reverse())
+
+/** Newest 4 thumbnail-engine events, newest first. */
+const lastScrubEvents = computed(() => scrub.events.slice(-4).reverse())
 
 const bw = computed(() =>
   props.bandwidth > 0 ? `${(props.bandwidth / 1_000_000).toFixed(1)} Mbit/s` : '—',
