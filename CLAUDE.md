@@ -323,8 +323,8 @@ Gateway service specific (WV3-T3 — per-user rate limit):
 ```
 RATE_LIMIT_RPS               # per-IP RPS, default 100   (existing)
 RATE_LIMIT_BURST             # per-IP burst, default 200 (existing)
-USER_RATE_LIMIT_PER_MINUTE   # per-authenticated-user GCRA rate, default 60
-USER_RATE_LIMIT_BURST        # per-authenticated-user GCRA burst, default 10
+USER_RATE_LIMIT_PER_MINUTE   # per-authenticated-user GCRA rate, default 240 (was 60; resized 2026-06-12 — profile-page tab prefetch tripped it)
+USER_RATE_LIMIT_BURST        # per-authenticated-user GCRA burst, default 40 (was 10)
 REDIS_ADDR                   # default redis:6379 — gateway now uses Redis for the per-user limiter
 NOTIFICATIONS_SERVICE_URL    # default http://notifications:8090 — gateway proxies /api/notifications/* here
 ```

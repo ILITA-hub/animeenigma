@@ -459,6 +459,14 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Resolved Issues
 
+### ISS-031: Profile-page reload 429'd watchlist requests — per-user rate limit burst (10) smaller than one page load's authenticated request count
+- **Date:** 2026-06-12
+- **Severity:** Medium (3 of 6 watchlist tab prefetches 429'd on profile reload — status tabs показывали пусто until retry; no outage).
+- **Symptom:** Reloading `/user/{username}` produced `429 Too Many Requests` on `GET /api/users/watchlist?...status=on_hold|plan_to_watch|dropped`. Gateway log: `per-user rate limit exceeded {user_id: …, path: /api/users/watchlist, remaining: 0}`; `gateway_rate_limit_user_blocked_total` incremented. (Same reload also saw transient 502s on fonts/favicon — that was an unrelated `redeploy-web` race: web container restarted at 07:48:06Z, the reload hit 07:47:19Z. Self-healed, no action.)
+- **Root cause:** The WV3-T3 per-user GCRA limiter defaulted to **60/min, burst 10**. One profile load legitimately fires ~10 authenticated gateway requests: `Profile.vue` prefetches page 1 of all 6 status tabs (`all/watching/plan_to_watch/completed/on_hold/dropped`) for instant tab switching, plus `/watchlist/statuses`, `/sync/status`, `/notifications`. With refill at only 1 token/sec, a reload within seconds of the prior load found a partially drained bucket → last prefetches rejected. Same failure mode that earlier forced the `/admin` group exemption (`router.go:150`, Grafana sub-request storm). Note: `/api/streaming/image-proxy` traffic does NOT count — it's registered outside JWT groups, so the limiter passes it through claimless.
+- **Fix applied:** Defaults resized in `services/gateway/internal/config/config.go`: `USER_RATE_LIMIT_PER_MINUTE` 60 → **240**, `USER_RATE_LIMIT_BURST` 10 → **40**. Burst 40 absorbs several rapid page loads; 240/min still blocks scripted abuse. No env overrides existed, so the code defaults are live. CLAUDE.md env docs updated.
+- **Status:** Fixed (2026-06-12).
+
 ### ISS-026: `rec_watched_total` never observed — recommendation→watch conversions not reported by the frontend
 - **Date:** 2026-06-03
 - **Severity:** Low (observability gap, not an outage — recommendations still work; only the closed-loop CTR/conversion metric is blind).

@@ -103,8 +103,8 @@ type RateLimitConfig struct {
 	// Layered on top of the existing per-IP limiter above. Applied at
 	// the gateway AFTER auth so the bucket key is user_id (not IP).
 	// Anonymous traffic is unaffected by these knobs.
-	UserPerMinute int // default 60 — env USER_RATE_LIMIT_PER_MINUTE
-	UserBurst     int // default 10 — env USER_RATE_LIMIT_BURST
+	UserPerMinute int // default 240 — env USER_RATE_LIMIT_PER_MINUTE
+	UserBurst     int // default 40 — env USER_RATE_LIMIT_BURST
 }
 
 func Load() (*Config, error) {
@@ -150,11 +150,15 @@ func Load() (*Config, error) {
 		RateLimit: RateLimitConfig{
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),
 			BurstSize:         getEnvInt("RATE_LIMIT_BURST", 200),
-			// WV3-T3 defaults. 60 req/min, burst 10 — generous enough that
-			// well-behaved authenticated UIs (page loads, prefetch) stay
-			// under the limit; tight enough to neuter targeted abuse.
-			UserPerMinute: getEnvInt("USER_RATE_LIMIT_PER_MINUTE", 60),
-			UserBurst:     getEnvInt("USER_RATE_LIMIT_BURST", 10),
+			// WV3-T3 defaults, resized 2026-06-12. The original 60/min
+			// burst-10 429'd legitimate SPA navigation: one profile load
+			// fires ~10 authenticated calls (6 watchlist-tab prefetches +
+			// statuses + sync + notifications), so a reload within the
+			// 1-token/sec refill window tripped the bucket. 240/min with
+			// burst 40 absorbs several rapid page loads while still
+			// neutering scripted abuse (hundreds of req/min).
+			UserPerMinute: getEnvInt("USER_RATE_LIMIT_PER_MINUTE", 240),
+			UserBurst:     getEnvInt("USER_RATE_LIMIT_BURST", 40),
 		},
 		CORSOrigins: httputil.ParseCommaList(getEnv("CORS_ORIGINS", "")),
 		Environment: strings.ToLower(getEnv("ENVIRONMENT", "")),
