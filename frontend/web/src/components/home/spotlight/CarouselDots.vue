@@ -33,15 +33,18 @@
   <div
     class="relative mt-3 flex items-center justify-center gap-2 px-12 flex-wrap"
     data-testid="spotlight-dots"
+    :style="{ '--menu-edge': `${edgeOffset + 32}px` }"
   >
-    <!-- Chevrons are PINNED to the row's edges (absolute), not part of the
-         centered flex flow: the active pill changes width per card, and a
-         flow-positioned arrow would drift under the cursor on every flip —
-         «зафиксируй стрелочки» lock, 2026-06-11. DOM order stays
-         prev → anchors → next for the tab sequence. -->
+    <!-- Chevrons are PINNED (absolute), not part of the centered flex
+         flow: the active pill changes width per card, and a flow-positioned
+         arrow would drift under the cursor on every flip («зафиксируй
+         стрелочки», 2026-06-11). They sit at a FIXED offset from center —
+         just past the widest possible menu width for THIS card set (edge
+         pinning was «не удобно», 2026-06-12) — so they're close to the
+         cluster yet never move. DOM order stays prev → anchors → next. -->
     <button
       type="button"
-      class="menu-item menu-nav absolute left-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full border w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors duration-200"
+      class="menu-item menu-nav menu-nav-prev absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full border w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors duration-200"
       :aria-label="t('spotlight.prevSlide')"
       data-testid="menu-prev"
       @click="$emit('prev')"
@@ -79,7 +82,7 @@
 
     <button
       type="button"
-      class="menu-item menu-nav absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full border w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors duration-200"
+      class="menu-item menu-nav menu-nav-next absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full border w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors duration-200"
       :aria-label="t('spotlight.nextSlide')"
       data-testid="menu-next"
       @click="$emit('next')"
@@ -90,13 +93,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import type { SpotlightCard } from '@/types/spotlight'
 import { cardTokens, accentMenuPill, type CardToken, type SpotlightCardType } from './tokens'
 import SpotlightIcon from './SpotlightIcon.vue'
 
-defineProps<{
+const props = defineProps<{
   currentIndex: number
   cards: SpotlightCard[]
 }>()
@@ -108,6 +112,24 @@ defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+// Fixed chevron offset from the row's CENTER: half of the widest possible
+// menu width for this card set (the pill open on the longest label), plus
+// a breathing gap. Constant within a mount → the arrows never move, while
+// sitting right next to the cluster instead of at the frame edges
+// (2026-06-12: «по краям — не удобно»). Char width ≈7.2px is JetBrains
+// Mono 10px uppercase + 0.1em tracking; the +12 safety pad absorbs the
+// estimate error.
+const edgeOffset = computed<number>(() => {
+  const n = props.cards.length
+  if (n === 0) return 0
+  const maxChars = Math.max(
+    ...props.cards.map((c) => t(tokenFor(c.type).kickerKey).length),
+  )
+  const pillMax = 16 + 8 + Math.ceil(maxChars * 7.2) + 24 // icon + gap + text + px-3
+  const rowMax = (n - 1) * (32 + 8) + pillMax // (n-1) circles with gaps + pill
+  return Math.ceil(rowMax / 2) + 12 + 12 // half row + gap + safety pad
+})
 
 // Forward-compat fallback for the "backend ships unknown variant" case.
 // Mirrors the HeroSpotlightBlock.spec.ts contract that an unknown type
@@ -135,6 +157,15 @@ function tokenFor(type: string): CardToken {
    absolute positioning must be (re)declared here. */
 .menu-item.menu-nav {
   position: absolute;
+}
+/* Fixed offset from center (--menu-edge = half the widest possible menu
+   width + arrow, computed per card set) — near the cluster, never moving.
+   max(0px, …) clamps to the row edge on narrow viewports. */
+.menu-nav-prev {
+  left: max(0px, calc(50% - var(--menu-edge)));
+}
+.menu-nav-next {
+  right: max(0px, calc(50% - var(--menu-edge)));
 }
 .menu-item::after {
   content: '';

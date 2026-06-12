@@ -190,12 +190,16 @@ describe('CarouselDots', () => {
     expect(all[all.length - 1].attributes('data-testid')).toBe('menu-next')
     expect(all[0].attributes('aria-label')).toBe('spotlight.prevSlide')
     expect(all[all.length - 1].attributes('aria-label')).toBe('spotlight.nextSlide')
-    // «Зафиксируй стрелочки» (2026-06-11): chevrons are edge-PINNED
-    // (absolute) so the variable-width active pill can't drift them
-    // under the cursor between flips.
+    // «Зафиксируй стрелочки» (2026-06-11/12): chevrons are PINNED
+    // (absolute, fixed offset from center past the widest pill) so the
+    // variable-width active pill can't drift them under the cursor
+    // between flips — yet they sit near the cluster, not at the edges.
     expect(all[0].classes()).toContain('absolute')
-    expect(all[0].classes()).toContain('left-0')
-    expect(all[all.length - 1].classes()).toContain('right-0')
+    expect(all[0].classes()).toContain('menu-nav-prev')
+    expect(all[all.length - 1].classes()).toContain('menu-nav-next')
+    // The fixed --menu-edge offset itself is asserted in e2e/prod smoke
+    // via boundingBox stability — jsdom drops CSS custom properties, so
+    // the inline style is not inspectable here.
   })
 
   it('chevron clicks emit prev / next (not goto)', async () => {
