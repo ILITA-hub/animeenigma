@@ -16,6 +16,9 @@
     "drawerTitle": "ナビゲーションメニュー",
     "about": "サイトについて"
   },
+  "a11y": {
+    "skipToContent": "コンテンツへスキップ"
+  },
   "hero": {
     "tagline": "あなただけのアニメ体験",
     "browse": "カタログ",
@@ -604,6 +607,15 @@
     "privacyLabel": "公開するリスト",
     "savePrivacy": "プライバシー設定を保存",
     "privacySaved": "設定を保存しました",
+    "activityVisibility": {
+      "label": "アクティビティの公開範囲",
+      "all": "すべてのアクティビティを表示",
+      "allHint": "アクティビティフィードと公開リストは通常どおり",
+      "nonHentai": "18+（ヘンタイ）を隠す",
+      "nonHentaiHint": "18+作品はフィードと公開リストに表示されません",
+      "none": "すべてのアクティビティを隠す",
+      "noneHint": "アクティビティと公開リストは誰にも表示されません"
+    },
     "copied": "コピーしました！",
     "share": "共有",
     "userProfile": "ユーザープロフィール",
