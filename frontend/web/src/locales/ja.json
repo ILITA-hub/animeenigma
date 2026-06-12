@@ -805,6 +805,7 @@
     "activeFilters": "適用中:",
     "noFilters": "フィルターなし",
     "resetAll": "すべてリセット",
+    "removeFilter": "フィルターを解除",
     "countOf": "{total}件中{n}件",
     "empty": "見つかりませんでした",
     "col": {
