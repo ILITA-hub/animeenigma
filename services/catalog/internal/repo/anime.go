@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
@@ -71,12 +72,41 @@ func (r *AnimeRepository) Update(ctx context.Context, anime *domain.Anime) error
 	return nil
 }
 
+// normalizeSearchQuery lowercases the query and drops every rune that is
+// not a letter or digit, mirroring the regexp_replace expression applied to
+// the name columns in Search. Returns "" when the query carries no
+// alphanumeric content (the caller then falls back to a literal match).
+func normalizeSearchQuery(q string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(q) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilters) ([]*domain.Anime, int64, error) {
 	query := r.db.WithContext(ctx).Model(&domain.Anime{}).Where("hidden = ? OR hidden IS NULL", false)
 
 	if filters.Query != "" {
-		query = query.Where("name ILIKE ? OR name_ru ILIKE ? OR name_jp ILIKE ?",
-			"%"+filters.Query+"%", "%"+filters.Query+"%", "%"+filters.Query+"%")
+		if norm := normalizeSearchQuery(filters.Query); norm != "" {
+			// Punctuation-insensitive match: both sides are lowercased and
+			// stripped of everything non-alphanumeric, so "re zero" finds
+			// "Re:Zero" and "fate zero" finds "Fate/Zero". [[:alnum:]] is
+			// UTF-8-aware in Postgres, covering Cyrillic and Japanese.
+			// Stripping also removes LIKE wildcards from the user input.
+			const colNorm = "regexp_replace(lower(%s), '[^[:alnum:]]+', '', 'g') LIKE ?"
+			pat := "%" + norm + "%"
+			query = query.Where(
+				fmt.Sprintf(colNorm, "name")+" OR "+fmt.Sprintf(colNorm, "name_ru")+" OR "+fmt.Sprintf(colNorm, "name_jp"),
+				pat, pat, pat)
+		} else {
+			// Query had no letters/digits at all — normalized form would
+			// match everything, so keep the literal substring behavior.
+			query = query.Where("name ILIKE ? OR name_ru ILIKE ? OR name_jp ILIKE ?",
+				"%"+filters.Query+"%", "%"+filters.Query+"%", "%"+filters.Query+"%")
+		}
 	}
 	if filters.Year != nil {
 		query = query.Where("year = ?", *filters.Year)
