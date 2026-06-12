@@ -1,23 +1,31 @@
 <template>
   <div class="pl-scrub-preview" data-test="scrub-preview">
-    <!-- Shadow video — always mounted once initialized so seeks reuse the
-         same decoder/buffer; shown only after the first frame decodes AND
-         the frame is fresh (not awaiting a new HLS segment download). -->
+    <!-- Hidden shadow video — never displayed; it only decodes frames that get
+         captured into the thumbnail cache below. -->
     <video
       ref="shadowRef"
-      v-show="frameReady && !frameStale"
-      class="pl-scrub-preview-video"
+      class="pl-scrub-preview-shadow"
       muted
       playsinline
       preload="metadata"
       data-test="preview-video"
       aria-hidden="true"
     />
-    <!-- Static still fallback until a real fresh frame is available.
-         Also shown while seeking on HLS (segment download in progress) so the
-         user sees the anime thumbnail instead of a frozen stale frame. -->
+    <!-- Thumbnail canvas — shows the nearest CACHED frame for the hovered
+         time instantly (no network), refined to the exact frame once the
+         settle-seek decodes it. -->
+    <canvas
+      v-show="hasFrame"
+      ref="canvasRef"
+      width="192"
+      height="108"
+      class="pl-scrub-preview-canvas"
+      data-test="preview-canvas"
+      aria-hidden="true"
+    />
+    <!-- Static still fallback only until the very first frame is cached. -->
     <div
-      v-if="(!frameReady || frameStale) && stillUrl"
+      v-if="!hasFrame && stillUrl"
       class="pl-scrub-preview-still"
       :style="{ backgroundImage: `url(${stillUrl})` }"
       data-test="preview-still"
@@ -30,14 +38,24 @@
 import { ref, watch, onUnmounted } from 'vue'
 
 /**
- * Real frame previews for the scrub-bar hover bubble.
+ * Real frame previews for the scrub-bar hover bubble — thumbnail-cache design.
  *
- * A muted shadow <video> plays nothing — it only seeks to the hovered time so
- * its current frame can be shown in the bubble. HLS streams get a dedicated
- * minimal hls.js instance pinned to the LOWEST level with a tiny buffer
- * (preview frames, not playback); MP4 uses the proxied URL directly (the
- * backend serves byte ranges). The engine is created lazily on the first
- * hover so users who never hover pay zero bandwidth.
+ * v1 of this component live-seeked a shadow <video> on every hover move. That
+ * was network-bound end to end: each position needed a fragment/byte-range
+ * fetch through the HLS proxy (0.5–3s), the next throttled seek aborted the
+ * previous fetch while the pointer moved, and `backBufferLength: 0` evicted
+ * every decoded frame immediately — so no frame ever survived and the bubble
+ * showed one fallback image everywhere ("laggy, single frame" bug).
+ *
+ * v2 decouples display from the network:
+ *  - every frame the shadow video decodes is CAPTURED into a tiny canvas,
+ *    keyed by a 5-second time bucket (LRU, ~150 entries ≈ 12 min of video);
+ *  - hovering renders the nearest cached thumbnail instantly — zero network;
+ *  - the shadow video seeks only when the pointer SETTLES (180ms), so moving
+ *    across the bar no longer abort-storms the loader;
+ *  - after init, ~9 evenly-spaced timeline points are prefetched in the
+ *    background (lowest HLS level, ~100-300KB each), so the whole bar has
+ *    distinct frames within seconds of the first hover.
  */
 
 const props = defineProps<{
@@ -51,22 +69,167 @@ const props = defineProps<{
   stillUrl?: string
 }>()
 
-const shadowRef = ref<HTMLVideoElement | null>(null)
-const frameReady = ref(false)
-// True while an HLS seek is in-flight (segment not yet decoded). We show the
-// still image during this window instead of the frozen stale frame.
-const frameStale = ref(false)
+const THUMB_W = 192
+const THUMB_H = 108
+/** thumbnail granularity — one cached frame per 5s of video */
+const BUCKET_SEC = 5
+/** LRU cap — 150 × 192×108×4B ≈ 12 MB worst case */
+const CACHE_MAX = 150
+/** pointer-rest debounce before issuing a real (network) seek */
+const SETTLE_MS = 180
+/** evenly-spaced timeline points prefetched in the background */
+const PREFETCH_POINTS = 9
+/** a stuck seek (failed fragment) must not wedge the prefetch pump */
+const SEEK_WATCHDOG_MS = 8000
 
-const SEEK_THROTTLE_MS = 150
+const shadowRef = ref<HTMLVideoElement | null>(null)
+const canvasRef = ref<HTMLCanvasElement | null>(null)
+const hasFrame = ref(false)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let hls: any = null
 let initializedFor: string | null = null
 let initToken = 0
 
-let seekTimer: ReturnType<typeof setTimeout> | null = null
-let targetTime = 0
-let lastSeekedTime = -1
+/** bucket → captured thumbnail. Map iteration order doubles as LRU order. */
+let cache = new Map<number, HTMLCanvasElement>()
+let currentBucket = 0
+/** bucket a seek was issued FOR — decoded frames alias-cache under it, since
+ *  HLS keyframe snapping can land currentTime in a neighbouring bucket and a
+ *  miss there would refetch the same spot forever. */
+let pendingBucket: number | null = null
+let seekBusy = false
+let settleTimer: ReturnType<typeof setTimeout> | null = null
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null
+let prefetchQueue: number[] = []
+let prefetchArmed = false
+
+function bucketOf(t: number): number {
+  return Math.max(0, Math.round(t / BUCKET_SEC))
+}
+
+function bucketTime(b: number): number {
+  return Math.max(0.1, b * BUCKET_SEC)
+}
+
+function nearestCached(b: number): HTMLCanvasElement | null {
+  const exact = cache.get(b)
+  if (exact) return exact
+  let best: HTMLCanvasElement | null = null
+  let bestDist = Infinity
+  for (const [k, c] of cache) {
+    const d = Math.abs(k - b)
+    if (d < bestDist) {
+      bestDist = d
+      best = c
+    }
+  }
+  return best
+}
+
+/** Draw the best available thumbnail for the hovered bucket. No network. */
+function render() {
+  const thumb = nearestCached(currentBucket)
+  if (!thumb) {
+    hasFrame.value = false
+    return
+  }
+  const ctx = canvasRef.value?.getContext('2d')
+  if (ctx) ctx.drawImage(thumb, 0, 0, THUMB_W, THUMB_H)
+  hasFrame.value = true
+}
+
+/** Capture the shadow video's current frame into the bucket cache. */
+function capture() {
+  const v = shadowRef.value
+  if (!v || v.readyState < 2) return
+  const b = bucketOf(v.currentTime)
+  let c = cache.get(b)
+  if (c) {
+    cache.delete(b) // refresh LRU position
+  } else {
+    c = document.createElement('canvas')
+    c.width = THUMB_W
+    c.height = THUMB_H
+  }
+  const ctx = c.getContext('2d')
+  if (ctx && v.videoWidth > 0) ctx.drawImage(v, 0, 0, THUMB_W, THUMB_H)
+  cache.set(b, c)
+  if (pendingBucket !== null && pendingBucket !== b) {
+    cache.set(pendingBucket, c) // keyframe-snap alias (same thumbnail)
+  }
+  pendingBucket = null
+  while (cache.size > CACHE_MAX) {
+    const oldest = cache.keys().next().value
+    if (oldest === undefined) break
+    cache.delete(oldest)
+  }
+  seekBusy = false
+  if (watchdogTimer) {
+    clearTimeout(watchdogTimer)
+    watchdogTimer = null
+  }
+  render()
+  armPrefetch()
+  pumpPrefetch()
+}
+
+/** Issue a real seek on the shadow video (network-bound). */
+function seekTo(t: number) {
+  const v = shadowRef.value
+  if (!v || !initializedFor) return
+  pendingBucket = bucketOf(t)
+  seekBusy = true
+  if (watchdogTimer) clearTimeout(watchdogTimer)
+  watchdogTimer = setTimeout(() => {
+    // Failed/stalled fragment — unblock the pump rather than wedge forever.
+    seekBusy = false
+    watchdogTimer = null
+    pumpPrefetch()
+  }, SEEK_WATCHDOG_MS)
+  v.currentTime = t
+}
+
+/** Hover handler: instant cached render + settle-debounced refinement. */
+function onHover(t: number) {
+  currentBucket = bucketOf(t)
+  render()
+  if (settleTimer) {
+    clearTimeout(settleTimer)
+    settleTimer = null
+  }
+  if (cache.has(currentBucket)) return // exact frame already on screen
+  settleTimer = setTimeout(() => {
+    settleTimer = null
+    seekTo(bucketTime(currentBucket))
+  }, SETTLE_MS)
+}
+
+// ── Background prefetch: seed the timeline so the first sweep already shows
+//    distinct frames. Runs only while no user seek is pending/in-flight.
+
+function armPrefetch() {
+  if (prefetchArmed) return
+  const dur = shadowRef.value?.duration
+  if (!dur || !Number.isFinite(dur) || dur < BUCKET_SEC * 4) return
+  prefetchArmed = true
+  for (let i = 1; i <= PREFETCH_POINTS; i++) {
+    const b = bucketOf((dur * i) / (PREFETCH_POINTS + 1))
+    if (!cache.has(b)) prefetchQueue.push(b)
+  }
+}
+
+function pumpPrefetch() {
+  if (seekBusy || settleTimer) return // the user's hover always wins
+  let next: number | undefined
+  while ((next = prefetchQueue.shift()) !== undefined) {
+    if (!cache.has(next)) break
+  }
+  if (next === undefined) return
+  seekTo(bucketTime(next))
+}
+
+// ── Engine lifecycle ─────────────────────────────────────────────────────────
 
 function destroyEngine() {
   initToken++
@@ -80,12 +243,19 @@ function destroyEngine() {
     v.load()
   }
   initializedFor = null
-  frameReady.value = false
-  frameStale.value = false
-  lastSeekedTime = -1
-  if (seekTimer) {
-    clearTimeout(seekTimer)
-    seekTimer = null
+  hasFrame.value = false
+  seekBusy = false
+  pendingBucket = null
+  prefetchArmed = false
+  prefetchQueue = []
+  cache = new Map()
+  if (settleTimer) {
+    clearTimeout(settleTimer)
+    settleTimer = null
+  }
+  if (watchdogTimer) {
+    clearTimeout(watchdogTimer)
+    watchdogTimer = null
   }
 }
 
@@ -99,8 +269,8 @@ async function ensureEngine() {
   const token = initToken
   initializedFor = streamUrl
 
-  v.addEventListener('loadeddata', onFrame)
-  v.addEventListener('seeked', onFrame)
+  v.addEventListener('loadeddata', capture)
+  v.addEventListener('seeked', capture)
 
   if (streamType === 'mp4') {
     v.src = streamUrl
@@ -116,7 +286,7 @@ async function ensureEngine() {
   }
   hls = new Hls({
     enableWorker: true,
-    // Preview frames only — keep the footprint tiny
+    // Tiny live buffer is fine — decoded frames persist in the canvas cache.
     maxBufferLength: 4,
     maxMaxBufferLength: 6,
     backBufferLength: 0,
@@ -127,38 +297,8 @@ async function ensureEngine() {
   hls.on(Hls.Events.MANIFEST_PARSED, () => {
     // Pin the LOWEST quality — disables ABR for the shadow instance
     if (hls) hls.currentLevel = 0
-    hls?.startLoad(targetTime)
+    hls?.startLoad(0)
   })
-}
-
-function onFrame() {
-  const v = shadowRef.value
-  if (v && v.readyState >= 2) {
-    frameReady.value = true
-    frameStale.value = false
-  }
-}
-
-function doSeek(t: number) {
-  const v = shadowRef.value
-  if (!v || !initializedFor) return
-  if (Math.abs(t - lastSeekedTime) < 0.5) return
-  lastSeekedTime = t
-  // For HLS, segment download takes time — mark the current frame stale so the
-  // still image shows instead of a frozen frame from a different timestamp.
-  if (props.streamType === 'hls') frameStale.value = true
-  v.currentTime = t
-}
-
-/** Trailing throttle — seek now, then at most once per SEEK_THROTTLE_MS. */
-function requestSeek(t: number) {
-  targetTime = t
-  if (seekTimer) return
-  doSeek(targetTime)
-  seekTimer = setTimeout(() => {
-    seekTimer = null
-    if (Math.abs(targetTime - lastSeekedTime) >= 0.5) requestSeek(targetTime)
-  }, SEEK_THROTTLE_MS)
 }
 
 watch(
@@ -166,13 +306,12 @@ watch(
   ([visible, t]) => {
     if (!visible) return
     void ensureEngine()
-    requestSeek(t)
+    onHover(t)
   },
 )
 
-// New stream — tear down; if the bubble is showing right now, re-arm against
-// the new URL immediately (watcher order vs the hover watcher is not
-// guaranteed, so this must not leave a destroyed engine behind).
+// New stream — tear down (cache frames belong to the old video); if the
+// bubble is showing right now, re-arm against the new URL immediately.
 watch(
   () => props.streamUrl,
   () => {
@@ -184,8 +323,8 @@ watch(
 onUnmounted(() => {
   const v = shadowRef.value
   if (v) {
-    v.removeEventListener('loadeddata', onFrame)
-    v.removeEventListener('seeked', onFrame)
+    v.removeEventListener('loadeddata', capture)
+    v.removeEventListener('seeked', capture)
   }
   destroyEngine()
 })
@@ -196,9 +335,14 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   background: black; /* video letterbox — theme-independent */
+  position: relative;
 }
 
-.pl-scrub-preview-video {
+.pl-scrub-preview-shadow {
+  display: none;
+}
+
+.pl-scrub-preview-canvas {
   width: 100%;
   height: 100%;
   object-fit: cover;
