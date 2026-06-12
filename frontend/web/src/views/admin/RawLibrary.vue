@@ -229,8 +229,11 @@
                   <li
                     v-for="anime in pendingLinkResults[job.id]"
                     :key="anime.id"
+                    tabindex="0"
+                    role="button"
                     class="px-3 py-2 hover:bg-white/10 cursor-pointer flex items-center gap-2 text-sm"
                     @click="linkJob(job, anime)"
+                    @keydown.enter.prevent="linkJob(job, anime)"
                   >
                     <img
                       v-if="anime.poster_url"

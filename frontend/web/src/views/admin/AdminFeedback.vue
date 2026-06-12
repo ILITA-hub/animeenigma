@@ -121,8 +121,10 @@
             <tr
               v-for="r in items"
               :key="r.id"
+              tabindex="0"
               class="border-t border-white/10 hover:bg-white/5 cursor-pointer transition"
               @click="openReport(r.id)"
+              @keydown.enter="(e) => { if (!(e.target as HTMLElement).closest('select, button, a')) openReport(r.id) }"
             >
               <td class="px-3 py-2 whitespace-nowrap border-l-4" :class="statusAccentBorder(r.status)">
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(r.category)">
@@ -197,11 +199,14 @@
               v-for="r in col.items"
               :key="r.id"
               draggable="true"
+              tabindex="0"
+              role="button"
               class="rounded-lg bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 p-3 cursor-grab active:cursor-grabbing transition"
               :class="draggingId === r.id ? 'opacity-40' : ''"
               @dragstart="onDragStart(r.id, $event)"
               @dragend="onDragEnd"
               @click="openReport(r.id)"
+              @keydown.enter.prevent="openReport(r.id)"
             >
               <div class="flex items-center justify-between gap-2 mb-1.5">
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(r.category)">
