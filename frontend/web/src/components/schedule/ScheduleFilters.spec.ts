@@ -1,7 +1,7 @@
 // frontend/web/src/components/schedule/ScheduleFilters.spec.ts
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { reactive, ref } from 'vue'
+import { reactive, ref, nextTick } from 'vue'
 import ScheduleFilters from './ScheduleFilters.vue'
 import { emptyFilters } from '@/composables/schedule/types'
 
@@ -32,5 +32,23 @@ describe('ScheduleFilters', () => {
   it('hides My List for guests', () => {
     const { w } = mountFilters({ loggedIn: false })
     expect(w.text()).not.toContain('myList')
+  })
+  it('chip remove is a native button and clears the filter', async () => {
+    const { filters, w } = mountFilters()
+    filters.myList = true
+    await nextTick()
+    const removeBtn = w.findAll('button').filter((b) => b.text() === '✕')
+    expect(removeBtn.length).toBe(1)
+    await removeBtn[0].trigger('click')
+    expect(filters.myList).toBe(false)
+  })
+  it('reset-all is a native button', async () => {
+    const { filters, w } = mountFilters()
+    filters.myList = true
+    await nextTick()
+    const reset = w.findAll('button').filter((b) => b.text().includes('resetAll'))
+    expect(reset.length).toBe(1)
+    await reset[0].trigger('click')
+    expect(w.emitted('reset')).toBeTruthy()
   })
 })

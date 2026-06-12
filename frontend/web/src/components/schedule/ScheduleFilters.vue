@@ -25,9 +25,9 @@
       <template v-if="activeChips.length">
         <span class="text-[11px] text-muted-foreground">{{ $t('schedule.activeFilters') }}</span>
         <span v-for="chip in activeChips" :key="chip.key" class="flex items-center gap-1.5 text-xs text-primary bg-primary/15 border border-primary/35 rounded-full px-2.5 py-1">
-          {{ chip.label }}<span class="cursor-pointer opacity-70" @click="chip.remove()">✕</span>
+          {{ chip.label }}<button type="button" class="cursor-pointer opacity-70 hover:opacity-100" :aria-label="$t('schedule.removeFilter')" @click="chip.remove()">✕</button>
         </span>
-        <span class="text-xs text-muted-foreground underline cursor-pointer" @click="$emit('reset')">{{ $t('schedule.resetAll') }}</span>
+        <button type="button" class="text-xs text-muted-foreground underline cursor-pointer hover:text-foreground" @click="$emit('reset')">{{ $t('schedule.resetAll') }}</button>
       </template>
       <span v-else class="text-[11px] text-muted-foreground">{{ $t('schedule.noFilters') }}</span>
       <span class="text-[11px] text-white/35 ml-auto">{{ $t('schedule.countOf', { n: matchCount, total }) }}</span>

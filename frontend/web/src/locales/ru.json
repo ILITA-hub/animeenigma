@@ -804,6 +804,7 @@
     "type": "Тип",
     "activeFilters": "Активно:",
     "noFilters": "Фильтры не выбраны",
+    "removeFilter": "Убрать фильтр",
     "resetAll": "Сбросить всё",
     "countOf": "{n} из {total} тайтлов",
     "empty": "Ничего не найдено",

@@ -804,6 +804,7 @@
     "type": "Type",
     "activeFilters": "Active:",
     "noFilters": "No filters",
+    "removeFilter": "Remove filter",
     "resetAll": "Reset all",
     "countOf": "{n} of {total} titles",
     "empty": "Nothing found",
