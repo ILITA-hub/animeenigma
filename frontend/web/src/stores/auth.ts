@@ -11,6 +11,8 @@ export interface User {
   role: string
   public_id?: string
   public_statuses?: string[]
+  /** What of the user's activity other users can see (server-enforced). */
+  activity_visibility?: 'all' | 'non_hentai' | 'none'
   created_at?: string
   timezone?: string
 }

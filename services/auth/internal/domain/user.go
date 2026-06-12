@@ -8,6 +8,21 @@ import (
 	"gorm.io/gorm"
 )
 
+// ActivityVisibility values — what of the user's activity other users can
+// see (global activity feed + public watchlist/stats). The value itself is
+// NEVER exposed on PublicUser: revealing "non_hentai" would reveal that the
+// user watches hentai, defeating the setting.
+const (
+	ActivityVisibilityAll       = "all"        // default — current behaviour
+	ActivityVisibilityNonHentai = "non_hentai" // 18+ titles excluded from public activity
+	ActivityVisibilityNone      = "none"       // no publicly visible activity at all
+)
+
+// ValidActivityVisibility reports whether v is one of the allowed values.
+func ValidActivityVisibility(v string) bool {
+	return v == ActivityVisibilityAll || v == ActivityVisibilityNonHentai || v == ActivityVisibilityNone
+}
+
 // User represents a user in the system
 type User struct {
 	ID             string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
@@ -16,6 +31,10 @@ type User struct {
 	TelegramID     *int64         `gorm:"uniqueIndex" json:"telegram_id,omitempty"`
 	PublicID       string         `gorm:"size:32;uniqueIndex" json:"public_id"`
 	PublicStatuses pq.StringArray `gorm:"type:text[]" json:"public_statuses"`
+	// ActivityVisibility is enforced server-side by the player service
+	// (activity feed + public watchlist reads) — see
+	// docs/superpowers/specs/2026-06-12-activity-visibility-design.md.
+	ActivityVisibility string `gorm:"size:20;default:'all'" json:"activity_visibility"`
 	Avatar         string         `gorm:"type:text" json:"avatar,omitempty"`
 	Timezone       string         `gorm:"size:64" json:"timezone,omitempty"`
 	ApiKeyHash     *string        `gorm:"size:64;uniqueIndex" json:"-"`
@@ -119,6 +138,11 @@ type UpdatePrivacyRequest struct {
 	PublicStatuses []string `json:"public_statuses" validate:"required"`
 }
 
+// UpdateActivityVisibilityRequest represents a request to change activity_visibility
+type UpdateActivityVisibilityRequest struct {
+	ActivityVisibility string `json:"activity_visibility" validate:"required"`
+}
+
 // UpdateAvatarRequest represents a request to change the user's avatar
 type UpdateAvatarRequest struct {
 	Avatar string `json:"avatar" validate:"required"`
@@ -149,13 +173,19 @@ type PublicUser struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-// ToPublic converts a User to PublicUser
+// ToPublic converts a User to PublicUser. When the user hid all activity,
+// public_statuses comes back empty so the profile page renders its existing
+// "no public lists" state — without exposing the setting value itself.
 func (u *User) ToPublic() *PublicUser {
+	statuses := []string(u.PublicStatuses)
+	if u.ActivityVisibility == ActivityVisibilityNone {
+		statuses = []string{}
+	}
 	return &PublicUser{
 		ID:             u.ID,
 		Username:       u.Username,
 		PublicID:       u.PublicID,
-		PublicStatuses: u.PublicStatuses,
+		PublicStatuses: statuses,
 		Avatar:         u.Avatar,
 		CreatedAt:      u.CreatedAt,
 	}

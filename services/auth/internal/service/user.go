@@ -174,3 +174,10 @@ func (s *UserService) UpdatePublicStatuses(ctx context.Context, userID string, s
 
 	return s.userRepo.UpdatePublicStatuses(ctx, userID, statuses)
 }
+
+func (s *UserService) UpdateActivityVisibility(ctx context.Context, userID, visibility string) error {
+	if !domain.ValidActivityVisibility(visibility) {
+		return errors.InvalidInput("invalid activity_visibility: " + visibility)
+	}
+	return s.userRepo.UpdateActivityVisibility(ctx, userID, visibility)
+}

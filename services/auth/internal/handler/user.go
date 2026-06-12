@@ -179,6 +179,29 @@ func (h *UserHandler) UpdateTimezone(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, map[string]string{"timezone": req.Timezone})
 }
 
+// UpdateActivityVisibility updates the current user's activity_visibility
+// (all | non_hentai | none) — what of their activity other users can see.
+func (h *UserHandler) UpdateActivityVisibility(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	var req domain.UpdateActivityVisibilityRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if err := h.userService.UpdateActivityVisibility(r.Context(), claims.UserID, req.ActivityVisibility); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]string{"activity_visibility": req.ActivityVisibility})
+}
+
 // UpdatePrivacy updates the current user's public_statuses
 func (h *UserHandler) UpdatePrivacy(w http.ResponseWriter, r *http.Request) {
 	claims, ok := authz.ClaimsFromContext(r.Context())

@@ -24,6 +24,7 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	user.PublicID = generatePublicID()
 	user.PublicStatuses = pq.StringArray{"watching", "completed", "plan_to_watch"}
+	user.ActivityVisibility = domain.ActivityVisibilityAll
 
 	if err := r.db.WithContext(ctx).Create(user).Error; err != nil {
 		if isUniqueViolation(err) {
@@ -128,6 +129,17 @@ func (r *UserRepository) UpdatePublicStatuses(ctx context.Context, userID string
 	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("public_statuses", pq.StringArray(statuses))
 	if result.Error != nil {
 		return fmt.Errorf("update public_statuses: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return liberrors.NotFound("user")
+	}
+	return nil
+}
+
+func (r *UserRepository) UpdateActivityVisibility(ctx context.Context, userID, visibility string) error {
+	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("activity_visibility", visibility)
+	if result.Error != nil {
+		return fmt.Errorf("update activity_visibility: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return liberrors.NotFound("user")
