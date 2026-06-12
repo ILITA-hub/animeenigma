@@ -42,14 +42,15 @@ Rejected alternatives:
 | # | File | Fix |
 |---|------|-----|
 | 1 | `src/App.vue` | Skip-link «Перейти к контенту» as the very first focusable element; visually hidden until focused (`sr-only focus:not-sr-only` pattern); targets `#main-content` anchor on the router-view container. i18n key `a11y.skipToContent`. |
-| 2 | `components/home/RecsRow.vue` | Card tile `div @click` → `<router-link>`. |
+| 2 | ~~`components/home/RecsRow.vue`~~ | NO CHANGE NEEDED (audit 2026-06-12): the inner `MediaTile` is already a `router-link`; Enter on it bubbles a click into the analytics wrapper. |
 | 3 | `components/gacha/PullSummary.vue` | `.rcard` clickable div → `<button type="button">`. |
 | 4 | `components/schedule/ScheduleFilters.vue` | Filter-chip remove `span @click` → `<button>` with `aria-label`. |
 | 5 | `components/schedule/DayCell.vue` + `WeekView.vue` | Clickable day cells: contain nested interactive episode rows → `tabindex="0"` + `role="button"` + Enter/Space keydown. |
 | 6 | `components/themes/ThemeCard.vue` | Accordion header div (contains nested `router-link`): `tabindex="0"` + `role="button"` + `aria-expanded` + Enter/Space. |
 | 7 | `components/player/unified/PlayerScrubBar.vue` | Track gets `role="slider"`, `tabindex="0"`, `aria-valuemin/max/now` (+ `aria-valuetext` mm:ss), ←/→ seek ±5 s. |
 | 8 | `views/admin/AdminFeedback.vue` | Clickable table rows (contain nested select/buttons) and kanban cards: `tabindex="0"` + Enter. |
-| 9 | `views/Browse.vue`, `views/Profile.vue`, `views/admin/RawLibrary.vue`, `components/player/unified/BrowseSubsModal.vue` | Same rule applied to the 1–3 clickable non-focusable elements each (exact elements enumerated at implementation time; same decision tree: native swap first, tabindex fallback). |
+| 9 | `views/admin/RawLibrary.vue` | Link-result `<li @click>` rows: `tabindex="0"` + `role="button"` + Enter. (`views/Browse.vue` and `views/Profile.vue` audited clean — all their click targets are already native buttons.) |
+| 10 | `components/player/unified/BrowseSubsModal.vue` | All inner controls are already buttons, but the custom dialog lacks Escape-to-close → window keydown listener. |
 
 Known-good (verified, no changes): PosterCard/MediaTile (already
 `router-link`), Navbar (semantic buttons + FocusTrap drawer), shadcn/reka-ui
