@@ -65,6 +65,7 @@ vi.mock('@/utils/title', () => ({
 
 vi.mock('@/composables/useImageProxy', () => ({
   getImageFallbackUrl: (url: string) => url,
+  cardPosterUrl: (url: string) => url,
 }))
 
 // SUT — imported AFTER all vi.mock calls.

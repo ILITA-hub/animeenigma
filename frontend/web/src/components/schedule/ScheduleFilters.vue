@@ -11,22 +11,27 @@
           @input="setSearch(($event.target as HTMLInputElement).value)"
         />
       </div>
-      <button
+      <Chip
         v-if="loggedIn"
-        type="button"
-        class="flex items-center gap-1.5 text-xs rounded-lg border px-2.5 py-1.5 transition-colors"
-        :class="filters.myList ? 'bg-primary/15 border-primary/50 text-primary' : 'bg-white/[0.06] border-white/10 text-foreground/80 hover:bg-white/10'"
+        :active="filters.myList"
+        size="sm"
         @click="toggleMyList()"
-      >★ {{ $t('schedule.myList') }}</button>
+      >★ {{ $t('schedule.myList') }}</Chip>
       <FilterDropdown :label="$t('schedule.genre')" :options="genreOptions" :selected="filters.genres" searchable :search-placeholder="$t('schedule.searchPlaceholder')" :empty-text="$t('schedule.empty')" @toggle="toggleSet(filters.genres, $event)" />
     </div>
 
     <div class="flex items-center gap-2 flex-wrap mb-3 min-h-6">
       <template v-if="activeChips.length">
         <span class="text-[11px] text-muted-foreground">{{ $t('schedule.activeFilters') }}</span>
-        <span v-for="chip in activeChips" :key="chip.key" class="flex items-center gap-1.5 text-xs text-primary bg-primary/15 border border-primary/35 rounded-full px-2.5 py-1">
-          {{ chip.label }}<button type="button" class="cursor-pointer opacity-70 hover:opacity-100" :aria-label="$t('schedule.removeFilter')" @click="chip.remove()">✕</button>
-        </span>
+        <Chip
+          v-for="chip in activeChips"
+          :key="chip.key"
+          active
+          removable
+          size="sm"
+          :remove-label="$t('schedule.removeFilter')"
+          @remove="chip.remove()"
+        >{{ chip.label }}</Chip>
         <button type="button" class="text-xs text-muted-foreground underline cursor-pointer hover:text-foreground" @click="$emit('reset')">{{ $t('schedule.resetAll') }}</button>
       </template>
       <span v-else class="text-[11px] text-muted-foreground">{{ $t('schedule.noFilters') }}</span>
@@ -39,6 +44,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FilterDropdown from './FilterDropdown.vue'
+import { Chip } from '@/components/ui'
 import type { ScheduleFilterState, ScheduleGenre } from '@/composables/schedule/types'
 
 const props = defineProps<{

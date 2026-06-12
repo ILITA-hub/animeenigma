@@ -7,6 +7,10 @@ import { mount } from '@vue/test-utils'
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  // The ui-index import chain reaches src/router/index.ts, which builds the
+  // real router at module scope — give it inert factories.
+  createRouter: () => ({ install: () => {}, beforeEach: () => {}, afterEach: () => {}, onError: () => {} }),
+  createWebHistory: () => ({}),
 }))
 
 vi.mock('vue-i18n', async (importOriginal) => {

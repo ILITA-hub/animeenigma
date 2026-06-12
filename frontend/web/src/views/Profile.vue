@@ -103,22 +103,17 @@
                 </div>
               </div>
 
-              <!-- Filter Pills -->
+              <!-- Filter Pills — DS Chip primitive -->
               <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide" role="group" :aria-label="$t('profile.watchlist.statusFilter')">
-                <button
+                <Chip
                   v-for="filter in watchlistFilters"
                   :key="filter.value"
-                  type="button"
-                  :aria-pressed="watchlistFilter === filter.value"
-                  class="flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors"
-                  :class="watchlistFilter === filter.value
-                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                    : 'bg-white/5 text-white/80 border border-transparent hover:text-white'"
+                  :active="watchlistFilter === filter.value"
+                  :count="filter.count"
                   @click="watchlistFilter = filter.value"
                 >
                   {{ filter.label }}
-                  <span class="ml-1 opacity-80">({{ filter.count }})</span>
-                </button>
+                </Chip>
               </div>
 
               <!-- View Toggle + Sort -->
@@ -781,7 +776,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Avatar, Badge, Button, Checkbox, Input, Modal, Tabs, Select, PaginationBar, ScoreDiamond, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
+import { Avatar, Badge, Button, Checkbox, Chip, EmptyState, Input, Modal, Tabs, Select, PaginationBar, ScoreDiamond, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import TimezoneCard from '@/components/profile/TimezoneCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'

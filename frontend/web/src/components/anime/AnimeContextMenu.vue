@@ -10,8 +10,10 @@
     <div v-if="anime" class="p-3">
       <!-- Header: poster + info -->
       <div class="flex gap-3 mb-3">
+        <!-- w=384 matches the card surfaces (PosterCard / WatchlistRow), so the
+             menu thumb is a browser-cache hit instead of a full-size download. -->
         <img
-          :src="anime.coverImage"
+          :src="cardPosterUrl(anime.coverImage, 384)"
           :alt="localizedTitle"
           class="w-12 h-16 rounded object-cover flex-shrink-0"
           @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime!.coverImage) } }"
@@ -97,7 +99,7 @@ import { useWatchlistStore } from '@/stores/watchlist'
 import { userApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { getLocalizedTitle } from '@/utils/title'
-import { getImageFallbackUrl } from '@/composables/useImageProxy'
+import { cardPosterUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 
 interface Anime {
   id: string | number

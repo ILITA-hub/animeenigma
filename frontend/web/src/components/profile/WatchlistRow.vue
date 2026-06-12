@@ -8,7 +8,10 @@
     <span class="hidden md:block w-6 shrink-0 text-right text-xs text-white/40 tabular-nums">{{ index }}</span>
 
     <router-link :to="href" class="block w-11 shrink-0" tabindex="-1" aria-hidden="true">
-      <PosterImage :src="entry.anime?.poster_url || ''" :alt="title" ratio="2/3" rounded="lg" :proxy-width="88" />
+      <!-- proxy-width MUST match PosterCard's 384: the grid and this list show
+           the same posters, and a different `w` bucket = a different URL =
+           a full re-download on every grid↔list switch. -->
+      <PosterImage :src="entry.anime?.poster_url || ''" :alt="title" ratio="2/3" rounded="lg" :proxy-width="384" />
     </router-link>
 
     <div class="flex-1 min-w-0">

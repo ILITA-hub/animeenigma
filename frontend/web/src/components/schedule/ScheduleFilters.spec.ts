@@ -5,7 +5,15 @@ import { reactive, ref, nextTick } from 'vue'
 import ScheduleFilters from './ScheduleFilters.vue'
 import { emptyFilters } from '@/composables/schedule/types'
 
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (k: string) => k, locale: ref('ru') }) }))
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k, locale: ref('ru') }),
+  // The ui-index import chain (Chip) reaches src/i18n.ts, which calls
+  // createI18n at module scope — give it an inert instance.
+  createI18n: () => ({
+    install: () => {},
+    global: { t: (k: string) => k, locale: { value: 'ru' }, availableLocales: ['ru'] },
+  }),
+}))
 
 function mountFilters(over = {}) {
   const filters = reactive(emptyFilters())
@@ -37,7 +45,7 @@ describe('ScheduleFilters', () => {
     const { filters, w } = mountFilters()
     filters.myList = true
     await nextTick()
-    const removeBtn = w.findAll('button').filter((b) => b.text() === '✕')
+    const removeBtn = w.findAll('[data-testid="chip-remove"]')
     expect(removeBtn.length).toBe(1)
     await removeBtn[0].trigger('click')
     expect(filters.myList).toBe(false)
