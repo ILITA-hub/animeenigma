@@ -5,6 +5,10 @@
        second line indented under the title instead of forcing a horizontal
        page scroll. -->
   <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-2 py-2.5 rounded-xl border-b border-white/5 transition-colors hover:bg-white/[0.03]">
+    <label v-if="selectable" class="flex items-center pr-2 self-center cursor-pointer" @click.stop>
+      <Checkbox :model-value="!!selected" @update:model-value="() => emit('toggleSelect')" />
+    </label>
+
     <span class="hidden md:block w-6 shrink-0 text-right text-xs text-white/40 tabular-nums">{{ index }}</span>
 
     <router-link :to="href" class="block w-11 shrink-0" tabindex="-1" aria-hidden="true">
@@ -142,6 +146,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Trash2 } from 'lucide-vue-next'
 import { Badge, Button, DatePicker, Input, Select, Stepper, type SelectOption } from '@/components/ui'
+import Checkbox from '@/components/ui/Checkbox.vue'
 import PosterImage from '@/components/anime/PosterImage.vue'
 import RewatchCounter from '@/components/anime/RewatchCounter.vue'
 import { getLocalizedTitle } from '@/utils/title'
@@ -169,6 +174,8 @@ const props = defineProps<{
   index: number
   isOwn: boolean
   statusOptions: SelectOption[]
+  selectable?: boolean
+  selected?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -178,6 +185,7 @@ const emit = defineEmits<{
   updateDate: [field: 'started_at' | 'completed_at', value: string]
   updateStatus: [status: string]
   remove: []
+  toggleSelect: []
 }>()
 
 const { t, locale } = useI18n()
