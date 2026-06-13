@@ -388,6 +388,27 @@ func (h *ListHandler) GetPublicWatchlistFacets(w http.ResponseWriter, r *http.Re
 	httputil.OK(w, facets)
 }
 
+// BulkUpdateList applies a bulk status change or removal to the authenticated
+// user's own watchlist entries. Returns {updated, failed}.
+func (h *ListHandler) BulkUpdateList(w http.ResponseWriter, r *http.Request) {
+	var req domain.BulkUpdateRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+	updated, failed, err := h.listService.BulkUpdate(r.Context(), claims.UserID, claims.Username, &req)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]int{"updated": updated, "failed": failed})
+}
+
 func parsePaginationParams(r *http.Request) *domain.PaginationParams {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
