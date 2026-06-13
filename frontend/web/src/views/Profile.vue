@@ -214,7 +214,7 @@
                   :index="(watchlistPage - 1) * watchlistPerPage + index + 1"
                   :is-own="!!isOwnProfile"
                   :status-options="statusOptions"
-                  :selectable="isOwnProfile && selectionMode"
+                  :selectable="!!isOwnProfile && selectionMode"
                   :selected="selectedIds.has(anime.anime_id)"
                   @toggle-select="toggleSelect(anime.anime_id)"
                   @edit-score="(v: string) => finishEditScore(anime.anime_id, v)"
