@@ -441,6 +441,27 @@
     "page": "Page {n}"
   },
   "profile": {
+    "filters": {
+      "button": "Filters",
+      "genres": "Genres",
+      "genresHint": "match all",
+      "searchGenres": "Search genres…",
+      "types": "Type",
+      "typesHint": "match any",
+      "year": "Year",
+      "clear": "Clear all",
+      "kind": {
+        "tv": "TV series",
+        "movie": "Movie",
+        "ova": "OVA",
+        "ona": "ONA",
+        "special": "Special",
+        "tv_special": "TV Special",
+        "music": "Music",
+        "cm": "Commercial",
+        "pv": "Promo"
+      }
+    },
     "memberSince": "Member since",
     "uploadAvatar": "Upload avatar",
     "tabs": {
