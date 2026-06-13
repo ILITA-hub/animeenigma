@@ -99,3 +99,39 @@ func TestGetByUserPaginated_GenreSingle(t *testing.T) {
 	assert.EqualValues(t, 2, total)
 	assert.ElementsMatch(t, []string{"a-tv-2020", "a-movie-2010"}, idsOfEntries(entries))
 }
+
+func TestGetListFacets(t *testing.T) {
+	repo := setupFilterTestDB(t)
+	facets, err := repo.GetListFacets(context.Background(), "u1", false)
+	require.NoError(t, err)
+
+	gotGenre := map[string]int64{}
+	for _, g := range facets.Genres {
+		gotGenre[g.ID] = g.Count
+	}
+	assert.EqualValues(t, 2, gotGenre["g-action"])
+	assert.EqualValues(t, 2, gotGenre["g-comedy"])
+
+	gotKind := map[string]int64{}
+	for _, k := range facets.Kinds {
+		gotKind[k.Kind] = k.Count
+	}
+	assert.EqualValues(t, 1, gotKind["tv"])
+	assert.EqualValues(t, 1, gotKind["movie"])
+	assert.EqualValues(t, 1, gotKind["ova"])
+
+	require.NotNil(t, facets.Years.Min)
+	require.NotNil(t, facets.Years.Max)
+	assert.Equal(t, 2010, *facets.Years.Min)
+	assert.Equal(t, 2024, *facets.Years.Max)
+}
+
+func TestGetListFacets_EmptyList(t *testing.T) {
+	repo := setupFilterTestDB(t)
+	facets, err := repo.GetListFacets(context.Background(), "nobody", false)
+	require.NoError(t, err)
+	assert.Empty(t, facets.Genres)
+	assert.Empty(t, facets.Kinds)
+	assert.Nil(t, facets.Years.Min)
+	assert.Nil(t, facets.Years.Max)
+}

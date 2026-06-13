@@ -851,3 +851,66 @@ func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, user
 
 	return entries, total, err
 }
+
+// GetListFacets aggregates the distinct genres / kinds / release-year-range
+// present in a user's entire anime_list, each with a count. Used to populate
+// the profile watchlist filter UI with only-relevant, counted options.
+// Computed over the WHOLE list (ignores status/search/other filters) so the
+// option set stays stable as the user toggles filters. excludeHentai mirrors
+// the public-watchlist activity-visibility rule.
+func (r *ListRepository) GetListFacets(ctx context.Context, userID string, excludeHentai bool) (*domain.ListFacets, error) {
+	facets := &domain.ListFacets{Genres: []domain.FacetGenre{}, Kinds: []domain.FacetKind{}}
+
+	hentaiClause := ""
+	if excludeHentai {
+		hentaiClause = " AND NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "al.anime_id")
+	}
+
+	// Genres present, with counts, most-used first.
+	genreSQL := `
+SELECT g.id AS id, g.name AS name, g.name_ru AS name_ru, COUNT(DISTINCT al.anime_id) AS count
+FROM anime_list al
+JOIN anime_genres ag ON ag.anime_id = al.anime_id
+JOIN genres g ON g.id = ag.genre_id
+WHERE al.user_id = ?` + hentaiClause + `
+GROUP BY g.id, g.name, g.name_ru
+ORDER BY count DESC, g.name ASC`
+	if err := r.db.WithContext(ctx).Raw(genreSQL, userID).Scan(&facets.Genres).Error; err != nil {
+		return nil, err
+	}
+
+	// Kinds present, with counts. Skip blank kind.
+	kindSQL := `
+SELECT a.kind AS kind, COUNT(*) AS count
+FROM anime_list al
+JOIN animes a ON a.id = al.anime_id
+WHERE al.user_id = ? AND a.kind IS NOT NULL AND a.kind <> ''` + hentaiClause + `
+GROUP BY a.kind
+ORDER BY count DESC, a.kind ASC`
+	if err := r.db.WithContext(ctx).Raw(kindSQL, userID).Scan(&facets.Kinds).Error; err != nil {
+		return nil, err
+	}
+
+	// Year range (ignore 0/unknown).
+	yearSQL := `
+SELECT MIN(NULLIF(a.year, 0)) AS min, MAX(NULLIF(a.year, 0)) AS max
+FROM anime_list al
+JOIN animes a ON a.id = al.anime_id
+WHERE al.user_id = ?` + hentaiClause
+	var yr struct {
+		Min *int
+		Max *int
+	}
+	if err := r.db.WithContext(ctx).Raw(yearSQL, userID).Scan(&yr).Error; err != nil {
+		return nil, err
+	}
+	facets.Years = domain.FacetYearRange{Min: yr.Min, Max: yr.Max}
+
+	if facets.Genres == nil {
+		facets.Genres = []domain.FacetGenre{}
+	}
+	if facets.Kinds == nil {
+		facets.Kinds = []domain.FacetKind{}
+	}
+	return facets, nil
+}
