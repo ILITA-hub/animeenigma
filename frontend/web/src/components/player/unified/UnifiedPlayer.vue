@@ -1387,7 +1387,7 @@ function togglePlay() {
 function onSeekRel(delta: number) {
   const v = videoRef.value
   if (!v) return
-  const target = Math.max(0, Math.min(v.duration || 0, v.currentTime + delta))
+  const target = Math.max(0, Math.min(isFinite(v.duration) ? v.duration : Infinity, v.currentTime + delta))
   traceSeekStart(target)
   v.currentTime = target
 }
