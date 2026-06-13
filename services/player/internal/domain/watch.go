@@ -378,3 +378,53 @@ type AnimeStatusEntry struct {
 	Score    int    `json:"score" gorm:"column:score"`
 	Episodes int    `json:"episodes" gorm:"column:episodes"`
 }
+
+// ListFilters holds the optional watchlist filter dimensions added 2026-06-13.
+// All fields are zero-value-safe: an empty ListFilters applies no filtering.
+type ListFilters struct {
+	GenreIDs []string // AND semantics — an anime must carry ALL listed genres
+	Kinds    []string // OR semantics — animes.kind IN (Kinds)
+	YearMin  *int     // nil = open lower bound
+	YearMax  *int     // nil = open upper bound
+}
+
+// IsEmpty reports whether no filter dimension is set.
+func (f ListFilters) IsEmpty() bool {
+	return len(f.GenreIDs) == 0 && len(f.Kinds) == 0 && f.YearMin == nil && f.YearMax == nil
+}
+
+// KnownKinds is the validation whitelist for the `kind` filter param. Mirrors
+// the distinct animes.kind values present in the catalog.
+var KnownKinds = map[string]bool{
+	"tv": true, "movie": true, "ova": true, "ona": true, "special": true,
+	"tv_special": true, "music": true, "cm": true, "pv": true,
+}
+
+// FacetGenre is one genre option for the watchlist filter UI, with the count of
+// the user's list entries carrying that genre.
+type FacetGenre struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	NameRU string `json:"name_ru"`
+	Count  int64  `json:"count"`
+}
+
+// FacetKind is one type/kind option with its count.
+type FacetKind struct {
+	Kind  string `json:"kind"`
+	Count int64  `json:"count"`
+}
+
+// FacetYearRange is the min/max release year present in the user's list.
+// Both nil when the list has no entries with a known (non-zero) year.
+type FacetYearRange struct {
+	Min *int `json:"min"`
+	Max *int `json:"max"`
+}
+
+// ListFacets is the response of the watchlist facets endpoint.
+type ListFacets struct {
+	Genres []FacetGenre   `json:"genres"`
+	Kinds  []FacetKind    `json:"kinds"`
+	Years  FacetYearRange `json:"years"`
+}
