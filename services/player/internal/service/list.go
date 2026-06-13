@@ -55,9 +55,9 @@ func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([
 
 // GetUserListPaginated returns user's anime list with pagination.
 // search filters entries by anime title (name / name_ru / name_jp, case-insensitive). Empty = no filter.
-func (s *ListService) GetUserListPaginated(ctx context.Context, userID, status, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+func (s *ListService) GetUserListPaginated(ctx context.Context, userID, status, search string, filters domain.ListFilters, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate()
-	return s.listRepo.GetByUserPaginated(ctx, userID, status, search, false, domain.ListFilters{}, params)
+	return s.listRepo.GetByUserPaginated(ctx, userID, status, search, false, filters, params)
 }
 
 // GetUserStatuses returns lightweight anime_id+status pairs for the entire list
@@ -98,7 +98,7 @@ func (s *ListService) GetUserListByStatusesWithProgress(
 // Enforces the target user's activity_visibility server-side: 'none' returns
 // an empty page, 'non_hentai' drops 18+ entries. The output for 'non_hentai'
 // must stay indistinguishable from 'all' minus those rows — no hints.
-func (s *ListService) GetPublicWatchlistPaginated(ctx context.Context, userID string, statuses []string, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+func (s *ListService) GetPublicWatchlistPaginated(ctx context.Context, userID string, statuses []string, search string, filters domain.ListFilters, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate()
 	visibility := s.listRepo.GetUserActivityVisibility(ctx, userID)
 	if visibility == repo.ActivityVisibilityNone {
@@ -106,9 +106,9 @@ func (s *ListService) GetPublicWatchlistPaginated(ctx context.Context, userID st
 	}
 	excludeHentai := visibility == repo.ActivityVisibilityNonHentai
 	if len(statuses) == 0 {
-		return s.listRepo.GetByUserPaginated(ctx, userID, "", search, excludeHentai, domain.ListFilters{}, params)
+		return s.listRepo.GetByUserPaginated(ctx, userID, "", search, excludeHentai, filters, params)
 	}
-	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, search, excludeHentai, domain.ListFilters{}, params)
+	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, search, excludeHentai, filters, params)
 }
 
 // GetUserAnimeEntry returns a single anime entry from user's list
@@ -506,4 +506,28 @@ func (s *ListService) GetPublicWatchlist(ctx context.Context, userID string, sta
 		return s.listRepo.GetByUser(ctx, userID, excludeHentai)
 	}
 	return s.listRepo.GetByUserAndStatuses(ctx, userID, statuses, excludeHentai)
+}
+
+// GetListFacets returns the filter facets for the caller's own list.
+func (s *ListService) GetListFacets(ctx context.Context, userID string) (*domain.ListFacets, error) {
+	facets, err := s.listRepo.GetListFacets(ctx, userID, false)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "GetListFacets: query")
+	}
+	return facets, nil
+}
+
+// GetPublicListFacets returns filter facets for a public profile, honoring the
+// target user's activity_visibility (none → empty; non_hentai → 18+ excluded).
+func (s *ListService) GetPublicListFacets(ctx context.Context, userID string) (*domain.ListFacets, error) {
+	visibility := s.listRepo.GetUserActivityVisibility(ctx, userID)
+	if visibility == repo.ActivityVisibilityNone {
+		return &domain.ListFacets{Genres: []domain.FacetGenre{}, Kinds: []domain.FacetKind{}}, nil
+	}
+	excludeHentai := visibility == repo.ActivityVisibilityNonHentai
+	facets, err := s.listRepo.GetListFacets(ctx, userID, excludeHentai)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "GetPublicListFacets: query")
+	}
+	return facets, nil
 }
