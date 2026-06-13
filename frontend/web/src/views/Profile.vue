@@ -139,13 +139,6 @@
                 >
                   <ArrowUpDown class="size-5! transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" />
                 </Button>
-                <WatchlistFilters
-                  v-model:genre-ids="filterState.genreIds"
-                  v-model:kinds="filterState.kinds"
-                  v-model:year-min="filterState.yearMin"
-                  v-model:year-max="filterState.yearMax"
-                  :facets="facets"
-                />
                 <SegmentedControl
                   :model-value="viewMode"
                   :options="viewModeOptions"
@@ -153,6 +146,15 @@
                   @update:model-value="viewMode = $event as 'table' | 'grid'"
                 />
               </div>
+
+              <!-- Filters: trigger + separate expandable block (full width) -->
+              <WatchlistFilters
+                v-model:genre-ids="filterState.genreIds"
+                v-model:kinds="filterState.kinds"
+                v-model:year-min="filterState.yearMin"
+                v-model:year-max="filterState.yearMax"
+                :facets="facets"
+              />
 
               <!-- Table/Grid Content with Loading Overlay -->
               <div class="relative">
