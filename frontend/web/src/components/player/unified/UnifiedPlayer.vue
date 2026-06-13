@@ -37,7 +37,6 @@
       @click="togglePlay"
       @volumechange="onVolumeChange"
       @waiting="onBufferStart"
-      @seeking="onBufferStart"
       @canplay="onBufferEnd"
       @playing="onBufferEnd"
       @seeked="onSeeked"
