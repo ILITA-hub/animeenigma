@@ -120,12 +120,18 @@ type serversEnvelope struct {
 	} `json:"data"`
 }
 
-// streamEnvelope is the /scraper/stream wire shape: {success, data:{stream:{url,headers,...},meta:{tried,gated?}}}.
+// streamEnvelope is the /scraper/stream wire shape:
+// {success, data:{stream:{sources:[{url,...}],headers,...},meta:{tried,gated?}}}.
+// sources matches domain.Stream — the URL lives at sources[0].url, NOT at
+// stream.url. The old flat stream.url shape never existed in production; the
+// test stub was also wrong, which is why the mismatch went undetected (AUTO-460).
 type streamEnvelope struct {
 	Success bool `json:"success"`
 	Data    struct {
 		Stream struct {
-			URL     string            `json:"url"`
+			Sources []struct {
+				URL string `json:"url"`
+			} `json:"sources"`
 			Headers map[string]string `json:"headers,omitempty"`
 		} `json:"stream"`
 	} `json:"data"`
@@ -648,7 +654,10 @@ func (j *ScraperPlayabilityCanaryJob) fetchStream(ctx context.Context, a canaryA
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
 		return "", nil, fmt.Errorf("decode /scraper/stream: %w", err)
 	}
-	return env.Data.Stream.URL, env.Data.Stream.Headers, nil
+	if len(env.Data.Stream.Sources) == 0 {
+		return "", env.Data.Stream.Headers, nil
+	}
+	return env.Data.Stream.Sources[0].URL, env.Data.Stream.Headers, nil
 }
 
 // hdrsToHeader converts the map shape the scraper returns into an

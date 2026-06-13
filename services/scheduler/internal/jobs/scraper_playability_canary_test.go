@@ -140,7 +140,9 @@ func newFakeScraper(t *testing.T, cfg fakeScraperConfig) *httptest.Server {
 			"success": true,
 			"data": map[string]any{
 				"stream": map[string]any{
-					"url":     cfg.streamURL + "?server=" + server,
+					"sources": []map[string]any{
+						{"url": cfg.streamURL + "?server=" + server, "type": "hls"},
+					},
 					"headers": map[string]string{"Referer": "https://example.test/"},
 				},
 				"meta": map[string]any{"tried": []string{"gogoanime"}, "gated": true},
