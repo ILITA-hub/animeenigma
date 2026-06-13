@@ -21,6 +21,8 @@ const facets: WatchlistFacets = {
   years: { min: 2010, max: 2024 },
 }
 
+// Panel-only component: the trigger + open state live in Profile.vue, so the
+// panel content renders immediately on mount here.
 function mountWith(props: Record<string, unknown> = {}) {
   return mount(WatchlistFilters, {
     props: {
@@ -37,31 +39,23 @@ function mountWith(props: Record<string, unknown> = {}) {
   })
 }
 
-// The filter panel is collapsed by default; click the trigger (the first
-// button) to reveal the separate inline block before asserting on its content.
-async function openPanel(wrapper: ReturnType<typeof mountWith>) {
-  await wrapper.find('button').trigger('click')
-}
-
 describe('WatchlistFilters', () => {
-  it('keeps the filter block hidden until the trigger is clicked', async () => {
+  it('renders a genre row per facet genre with its count', () => {
     const wrapper = mountWith()
-    expect(wrapper.text()).not.toContain('Action')
-    await openPanel(wrapper)
-    expect(wrapper.text()).toContain('Action')
-  })
-
-  it('renders a genre row per facet genre with its count when open', async () => {
-    const wrapper = mountWith()
-    await openPanel(wrapper)
     expect(wrapper.text()).toContain('Action')
     expect(wrapper.text()).toContain('5')
     expect(wrapper.text()).toContain('Comedy')
   })
 
+  it('renders a row per kind with its count', () => {
+    const wrapper = mountWith()
+    expect(wrapper.text()).toContain('profile.filters.kind.tv')
+    expect(wrapper.text()).toContain('7')
+    expect(wrapper.text()).toContain('profile.filters.kind.movie')
+  })
+
   it('emits update:genreIds when a genre is toggled on', async () => {
     const wrapper = mountWith()
-    await openPanel(wrapper)
     const checkbox = wrapper.findAllComponents({ name: 'Checkbox' })[0]
     await checkbox.vm.$emit('update:modelValue', true)
     expect(wrapper.emitted('update:genreIds')?.[0]).toEqual([['g-action']])
@@ -69,20 +63,20 @@ describe('WatchlistFilters', () => {
 
   it('removes a genre when toggled off', async () => {
     const wrapper = mountWith({ genreIds: ['g-action'] })
-    await openPanel(wrapper)
     const checkbox = wrapper.findAllComponents({ name: 'Checkbox' })[0]
     await checkbox.vm.$emit('update:modelValue', false)
     expect(wrapper.emitted('update:genreIds')?.[0]).toEqual([[]])
   })
 
-  it('shows the active-filter count badge on the trigger without opening (1 genre + 1 kind + 1 year range = 3)', () => {
-    const wrapper = mountWith({ genreIds: ['g-action'], kinds: ['tv'], yearMin: 2015 })
-    expect(wrapper.text()).toContain('3')
+  it('disables clear-all when no filter is active', () => {
+    const wrapper = mountWith()
+    const clearBtn = wrapper.findAll('button').find((b) => b.text().includes('profile.filters.clear'))
+    expect(clearBtn).toBeTruthy()
+    expect(clearBtn!.attributes('disabled')).toBeDefined()
   })
 
-  it('clear-all emits resets for every dimension', async () => {
+  it('clear-all emits resets for every dimension when filters are active', async () => {
     const wrapper = mountWith({ genreIds: ['g-action'], kinds: ['tv'], yearMin: 2015, yearMax: 2020 })
-    await openPanel(wrapper)
     const clearBtn = wrapper.findAll('button').find((b) => b.text().includes('profile.filters.clear'))
     expect(clearBtn).toBeTruthy()
     await clearBtn!.trigger('click')
@@ -92,9 +86,8 @@ describe('WatchlistFilters', () => {
     expect(wrapper.emitted('update:yearMax')?.[0]).toEqual([null])
   })
 
-  it('renders AND hint for genres and OR hint for types when open', async () => {
+  it('renders AND hint for genres and OR hint for types', () => {
     const wrapper = mountWith()
-    await openPanel(wrapper)
     expect(wrapper.text()).toContain('profile.filters.genresHint')
     expect(wrapper.text()).toContain('profile.filters.typesHint')
   })

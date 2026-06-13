@@ -139,6 +139,19 @@
                 >
                   <ArrowUpDown class="size-5! transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" />
                 </Button>
+                <!-- Filters trigger — inline, one line with search/sort/view -->
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="gap-1.5 text-white/70 hover:text-white"
+                  :aria-expanded="filtersOpen"
+                  @click="filtersOpen = !filtersOpen"
+                >
+                  <SlidersHorizontal class="size-4" />
+                  <span>{{ $t('profile.filters.button') }}</span>
+                  <Badge v-if="filterCount > 0" variant="primary" size="sm">{{ filterCount }}</Badge>
+                  <ChevronDown class="size-4 transition-transform duration-200" :class="filtersOpen ? 'rotate-180' : ''" />
+                </Button>
                 <SegmentedControl
                   :model-value="viewMode"
                   :options="viewModeOptions"
@@ -147,14 +160,24 @@
                 />
               </div>
 
-              <!-- Filters: trigger + separate expandable block (full width) -->
-              <WatchlistFilters
-                v-model:genre-ids="filterState.genreIds"
-                v-model:kinds="filterState.kinds"
-                v-model:year-min="filterState.yearMin"
-                v-model:year-max="filterState.yearMax"
-                :facets="facets"
-              />
+              <!-- Separate full-width filter block, toggled by the trigger above -->
+              <Transition
+                enter-active-class="transition duration-150 ease-out"
+                enter-from-class="opacity-0 -translate-y-1"
+                enter-to-class="opacity-100 translate-y-0"
+                leave-active-class="transition duration-100 ease-in"
+                leave-from-class="opacity-100 translate-y-0"
+                leave-to-class="opacity-0 -translate-y-1"
+              >
+                <WatchlistFilters
+                  v-if="filtersOpen"
+                  v-model:genre-ids="filterState.genreIds"
+                  v-model:kinds="filterState.kinds"
+                  v-model:year-min="filterState.yearMin"
+                  v-model:year-max="filterState.yearMax"
+                  :facets="facets"
+                />
+              </Transition>
 
               <!-- Table/Grid Content with Loading Overlay -->
               <div class="relative">
@@ -779,7 +802,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Archive, Download, Link, Copy, Check, Image as ImageIcon } from 'lucide-vue-next'
+import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Archive, Download, Link, Copy, Check, Image as ImageIcon, SlidersHorizontal, ChevronDown } from 'lucide-vue-next'
 import { useDebounceFn } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -794,7 +817,7 @@ import { AnimeContextMenu, PosterCard } from '@/components/anime'
 import WatchlistRow from '@/components/profile/WatchlistRow.vue'
 import WatchlistFilters from '@/components/profile/WatchlistFilters.vue'
 import type { WatchlistFacets, WatchlistFilterState } from '@/types/watchlist-facets'
-import { EMPTY_FILTER_STATE, filterParams, filterKey } from '@/types/watchlist-facets'
+import { EMPTY_FILTER_STATE, filterParams, filterKey, activeFilterCount } from '@/types/watchlist-facets'
 import { fromWatchlistEntry } from '@/utils/toCardModel'
 import { userApi, publicApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
@@ -1026,6 +1049,8 @@ const watchlistFilter = ref('all')
 const searchQuery = ref('')
 const facets = ref<WatchlistFacets>({ genres: [], kinds: [], years: { min: null, max: null } })
 const filterState = ref<WatchlistFilterState>({ ...EMPTY_FILTER_STATE })
+const filtersOpen = ref(false)
+const filterCount = computed(() => activeFilterCount(filterState.value))
 const viewMode = ref<'table' | 'grid'>('grid')
 const viewModeOptions = computed(() => [
   { value: 'table', label: t('profile.view.table'), icon: List },
