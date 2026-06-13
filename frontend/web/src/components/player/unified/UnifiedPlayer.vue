@@ -1774,14 +1774,11 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* Keyboard focus ring on the player shell (tabindex=0 for hotkeys). */
-.pl:focus {
-  outline: none;
-}
-
+/* Player shell is tabindex=0 for hotkeys — suppress all focus rings;
+   play/pause state and control bar visibility are sufficient feedback. */
+.pl:focus,
 .pl:focus-visible {
-  outline: 2px solid var(--brand-cyan);
-  outline-offset: -2px;
+  outline: none;
 }
 
 /* Floating menu cards (source / settings / subtitles) — anchored over the
