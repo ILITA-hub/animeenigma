@@ -425,6 +425,8 @@ export const userApi = {
     apiClient.get('/users/watchlist', { params }),
   getWatchlistStatuses: () => apiClient.get('/users/watchlist/statuses'),
   getWatchlistFacets: () => apiClient.get('/users/watchlist/facets'),
+  bulkWatchlist: (body: { anime_ids: string[]; action: 'set_status' | 'remove'; status?: string }) =>
+    apiClient.post('/users/watchlist/bulk', body),
   getWatchlistEntry: (animeId: string) => apiClient.get(`/users/watchlist/${animeId}`),
   addToWatchlist: (animeId: string, status: string = 'plan_to_watch') =>
     apiClient.post('/users/watchlist', { anime_id: animeId, status }),
