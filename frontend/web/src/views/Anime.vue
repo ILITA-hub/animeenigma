@@ -102,16 +102,15 @@
             </div>
             <template v-else>
               <Button
+                v-if="watchCta.action !== 'rewatch'"
                 @click="onWatchCtaClick"
                 type="button"
                 variant="default"
                 size="md"
                 radius="lg"
-                :disabled="rewatchPending"
                 class="shadow-lg shadow-cyan-500/20"
               >
                 <Check v-if="watchCta.action === 'mark-watched'" class="size-5" aria-hidden="true" />
-                <RefreshCw v-else-if="watchCta.action === 'rewatch'" class="size-5" aria-hidden="true" />
                 <Play v-else class="size-5" fill="currentColor" aria-hidden="true" />
                 <span>{{ watchCtaLabel }}</span>
               </Button>
