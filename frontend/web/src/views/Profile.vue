@@ -152,6 +152,18 @@
                   <Badge v-if="filterCount > 0" variant="primary" size="sm">{{ filterCount }}</Badge>
                   <ChevronDown class="size-4 transition-transform duration-200" :class="filtersOpen ? 'rotate-180' : ''" />
                 </Button>
+                <Button
+                  v-if="isOwnProfile"
+                  variant="ghost"
+                  size="sm"
+                  class="gap-1.5"
+                  :class="selectionMode ? 'text-cyan-400' : 'text-white/70 hover:text-white'"
+                  :aria-pressed="selectionMode"
+                  @click="selectionMode ? exitSelectionMode() : (selectionMode = true)"
+                >
+                  <CheckSquare class="size-4" />
+                  <span>{{ $t('profile.bulk.select') }}</span>
+                </Button>
                 <SegmentedControl
                   :model-value="viewMode"
                   :options="viewModeOptions"
@@ -190,6 +202,10 @@
               <!-- Compact list view (rebuilt 2026-06-12: responsive rows replace the
                    fixed 9-column table — controls wrap under the title on mobile
                    instead of forcing a horizontal page scroll) -->
+              <label v-if="isOwnProfile && selectionMode && viewMode === 'table'" class="flex items-center gap-2 px-1 py-2 cursor-pointer">
+                <Checkbox :model-value="allOnPageSelected" @update:model-value="toggleSelectAllOnPage" />
+                <span class="text-xs text-muted-foreground">{{ $t('profile.bulk.selectAllPage') }}</span>
+              </label>
               <div v-if="viewMode === 'table'" class="flex flex-col">
                 <WatchlistRow
                   v-for="(anime, index) in filteredWatchlist"
@@ -198,6 +214,9 @@
                   :index="(watchlistPage - 1) * watchlistPerPage + index + 1"
                   :is-own="!!isOwnProfile"
                   :status-options="statusOptions"
+                  :selectable="isOwnProfile && selectionMode"
+                  :selected="selectedIds.has(anime.anime_id)"
+                  @toggle-select="toggleSelect(anime.anime_id)"
                   @edit-score="(v: string) => finishEditScore(anime.anime_id, v)"
                   @update-episodes="(n: number) => updateAnimeEpisodes(anime.anime_id, n)"
                   @update-rewatch-count="(n: number) => updateAnimeRewatchCount(anime.anime_id, n)"
@@ -243,6 +262,16 @@
                       class="text-center text-cyan-400"
                     />
                   </div>
+                  <template v-if="isOwnProfile && selectionMode">
+                    <div
+                      class="absolute inset-0 z-30 rounded-xl cursor-pointer"
+                      :class="selectedIds.has(anime.anime_id) ? 'ring-2 ring-cyan-400 bg-cyan-400/10' : ''"
+                      @click.prevent.stop="toggleSelect(anime.anime_id)"
+                    />
+                    <label class="absolute top-2 left-2 z-40" @click.stop>
+                      <Checkbox :model-value="selectedIds.has(anime.anime_id)" @update:model-value="() => toggleSelect(anime.anime_id)" />
+                    </label>
+                  </template>
                 </div>
               </div>
 
@@ -260,6 +289,15 @@
               </template>
 
               </div><!-- end relative wrapper -->
+
+              <WatchlistBulkBar
+                v-if="isOwnProfile && selectionMode && selectedIds.size > 0"
+                :count="selectedIds.size"
+                :status-options="statusOptions"
+                @set-status="bulkSetStatus"
+                @remove="bulkRemove"
+                @clear="exitSelectionMode"
+              />
 
               <!-- Pagination -->
               <PaginationBar
@@ -802,7 +840,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Archive, Download, Link, Copy, Check, Image as ImageIcon, SlidersHorizontal, ChevronDown } from 'lucide-vue-next'
+import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Archive, Download, Link, Copy, Check, Image as ImageIcon, SlidersHorizontal, ChevronDown, CheckSquare } from 'lucide-vue-next'
 import { useDebounceFn } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -816,6 +854,7 @@ import { useGachaVisible } from '@/utils/gachaGate'
 import { AnimeContextMenu, PosterCard } from '@/components/anime'
 import WatchlistRow from '@/components/profile/WatchlistRow.vue'
 import WatchlistFilters from '@/components/profile/WatchlistFilters.vue'
+import WatchlistBulkBar from '@/components/profile/WatchlistBulkBar.vue'
 import type { WatchlistFacets, WatchlistFilterState } from '@/types/watchlist-facets'
 import { EMPTY_FILTER_STATE, filterParams, filterKey, activeFilterCount } from '@/types/watchlist-facets'
 import { fromWatchlistEntry } from '@/utils/toCardModel'
@@ -1050,6 +1089,31 @@ const searchQuery = ref('')
 const facets = ref<WatchlistFacets>({ genres: [], kinds: [], years: { min: null, max: null } })
 const filterState = ref<WatchlistFilterState>({ ...EMPTY_FILTER_STATE })
 const filtersOpen = ref(false)
+
+// --- Bulk selection mode (own profile only) ---
+const selectionMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+
+const allOnPageSelected = computed(() =>
+  watchlist.value.length > 0 && watchlist.value.every((a) => selectedIds.value.has(a.anime_id)),
+)
+
+function toggleSelect(animeId: string) {
+  const next = new Set(selectedIds.value)
+  if (next.has(animeId)) next.delete(animeId)
+  else next.add(animeId)
+  selectedIds.value = next
+}
+
+function toggleSelectAllOnPage() {
+  if (allOnPageSelected.value) selectedIds.value = new Set()
+  else selectedIds.value = new Set(watchlist.value.map((a) => a.anime_id))
+}
+
+function exitSelectionMode() {
+  selectionMode.value = false
+  selectedIds.value = new Set()
+}
 const filterCount = computed(() => activeFilterCount(filterState.value))
 const viewMode = ref<'table' | 'grid'>('grid')
 const viewModeOptions = computed(() => [
@@ -1577,6 +1641,11 @@ const fetchWatchlist = async (isOwn: boolean) => {
   }
 }
 
+// Clear bulk selection whenever the visible page / filter / search changes.
+watch([watchlistPage, watchlistFilter, searchQuery, filterState], () => {
+  selectedIds.value = new Set()
+}, { deep: true })
+
 // Server-side pagination watchers (defined after fetchWatchlistPage)
 watch(watchlistFilter, () => {
   if (!_watchlistInitialized.value) return
@@ -1727,6 +1796,46 @@ const removeFromWatchlist = async (animeId: string) => {
       watchlist.value.splice(restoreAt >= 0 ? restoreAt : 0, 0, priorRow)
     }
     toast.push(t('watchlist.errors.removeFailed'))
+  }
+}
+
+// --- Bulk actions ---
+async function bulkSetStatus(status: string) {
+  const ids = [...selectedIds.value]
+  if (!ids.length) return
+  for (const a of watchlist.value) if (selectedIds.value.has(a.anime_id)) a.status = status
+  clearPageCache()
+  try {
+    await userApi.bulkWatchlist({ anime_ids: ids, action: 'set_status', status })
+    exitSelectionMode()
+    await fetchWatchlistPage()
+  } catch (err) {
+    console.error('bulk set status failed', err)
+    toast.push(t('profile.bulk.error'))
+    await fetchWatchlistPage()
+  }
+}
+
+async function bulkRemove() {
+  const ids = [...selectedIds.value]
+  if (!ids.length) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('profile.bulk.removeConfirm', { n: ids.length }),
+    confirmText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
+  watchlist.value = watchlist.value.filter((a) => !selectedIds.value.has(a.anime_id))
+  clearPageCache()
+  try {
+    await userApi.bulkWatchlist({ anime_ids: ids, action: 'remove' })
+    exitSelectionMode()
+    await fetchWatchlistPage()
+  } catch (err) {
+    console.error('bulk remove failed', err)
+    toast.push(t('profile.bulk.error'))
+    await fetchWatchlistPage()
   }
 }
 
