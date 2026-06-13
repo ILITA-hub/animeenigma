@@ -363,7 +363,7 @@
                aria-pressed to its selected state. -->
           <!-- Hidden for not-yet-released titles: no sources exist to switch
                between, so the language/provider toggles are noise. -->
-          <div v-if="!notReleasedYet" class="flex flex-wrap gap-2">
+          <div v-if="!notReleasedYet" class="flex flex-wrap gap-2 player-tabs">
             <ButtonGroup
               :label="$t('anime.languageSwitchLabel')"
               container-class="flex gap-1 bg-white/5 rounded-lg p-1"
@@ -2691,6 +2691,12 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Player tab buttons have their own active visual state (bg + border).
+   The global :focus-visible box-shadow ring is distracting during fullscreen. */
+.player-tabs button:focus-visible {
+  box-shadow: none;
+}
+
 :deep(.shiki-link) {
   color: rgb(34 211 238);
   text-decoration: none;
