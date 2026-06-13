@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -186,6 +187,13 @@ type service struct {
 	workChan    chan workItem
 	fb          *feedback.Client
 	mu          sync.Mutex
+
+	// interrupts maps a 👁️ "watching" bot message ID → *interruptEntry. Each
+	// long-running Claude invocation sends a 👁️ message and registers its
+	// context.CancelFunc here; an admin can abort the computation by replying
+	// 💔 to that message (detected in the Telegram poller, AUTO-456). Entries
+	// are removed on completion, on interrupt, or by the 10-minute TTL sweeper.
+	interrupts sync.Map // map[int]*interruptEntry
 }
 
 // workItem carries either Telegram updates, Grafana alerts, HTTP reports, or webhook events to the processor.
@@ -223,6 +231,22 @@ func (s *service) run(ctx context.Context) {
 					}
 				}
 				s.state.UpdateOffset(maxID)
+
+				// Intercept 💔-reply-to-👁️ abort commands HERE, in the poller,
+				// before queueing or classifying. The processor goroutine is
+				// blocked inside the analysis we want to cancel, so the abort
+				// must act out-of-band; and an admin 💔 reply would otherwise be
+				// classified as an admin message and spawn a NEW analysis.
+				kept := updates[:0]
+				for _, u := range updates {
+					if watchMsgID, ok := isInterruptReply(u); ok {
+						s.handleInterrupt(watchMsgID, u)
+						continue
+					}
+					kept = append(kept, u)
+				}
+				updates = kept
+
 				// Send updates grouped by media_group_id (Telegram album), one
 				// group per workItem, so an album reaches ClassifyBatch as a
 				// unit and merges into a single relevant message.
@@ -300,6 +324,20 @@ func (s *service) run(ctx context.Context) {
 					log.Infow("grafana reconcile detected missed alerts", "count", len(newAlerts))
 					workChan <- workItem{grafanaAlerts: newAlerts}
 				}
+			}
+		}
+	}()
+
+	// Goroutine 2b: interrupt-registry TTL sweeper (AUTO-456 safety net).
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				s.sweepInterrupts(now)
 			}
 		}
 	}()
@@ -583,8 +621,18 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 		)
 		s.fb.TrySetStatus(msg.FeedbackID, feedback.StatusInProgress)
 		analyzeStart := time.Now()
-		result, err := s.disp.Analyze(ctx, msg)
+		result, err := s.runInterruptible(ctx, msg.MessageID, "Analyzing "+messageLabel(msg), func(c context.Context) (*domain.AnalysisResult, error) {
+			return s.disp.Analyze(c, msg)
+		})
 		elapsed := time.Since(analyzeStart).Round(time.Second)
+
+		if errors.Is(err, errInterrupted) {
+			// Admin aborted via 💔 — the poller already confirmed. Return the
+			// entry to "new" and skip the failure reply (no double message).
+			log.Infow("analysis interrupted by admin", "message_id", msg.MessageID, "duration", elapsed)
+			s.fb.TrySetStatus(msg.FeedbackID, feedback.StatusNew)
+			continue
+		}
 
 		if err != nil {
 			log.Errorw("claude analysis failed",
@@ -756,8 +804,16 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 	log.Infow("analyzing report", "message_id", msgID, "category", report.Category)
 	s.fb.TrySetStatus(feedbackID, feedback.StatusInProgress)
 	analyzeStart := time.Now()
-	result, err := s.disp.Analyze(ctx, msg)
+	result, err := s.runInterruptible(ctx, msgID, "Analyzing report from @"+report.Username, func(c context.Context) (*domain.AnalysisResult, error) {
+		return s.disp.Analyze(c, msg)
+	})
 	elapsed := time.Since(analyzeStart).Round(time.Second)
+
+	if errors.Is(err, errInterrupted) {
+		log.Infow("report analysis interrupted by admin", "message_id", msgID, "duration", elapsed)
+		s.fb.TrySetStatus(feedbackID, feedback.StatusNew)
+		return
+	}
 
 	if err != nil {
 		log.Errorw("claude report analysis failed",
@@ -1125,7 +1181,9 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 	}
 	log.Infow("executing fix", "issue_id", issueID, "approver", approver, "target", fix.FixPlan.Target, "fix_type", fix.FixPlan.Type)
 	analyzeStart := time.Now()
-	result, err := s.disp.ExecuteFix(ctx, fix)
+	result, err := s.runInterruptible(ctx, replyToID, "Applying fix "+issueID, func(c context.Context) (*domain.AnalysisResult, error) {
+		return s.disp.ExecuteFix(c, fix)
+	})
 	elapsed := time.Since(analyzeStart).Round(time.Second)
 
 	reply := func(html string) {
@@ -1134,6 +1192,17 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 		} else {
 			s.tg.SendMessage(html)
 		}
+	}
+
+	if errors.Is(err, errInterrupted) {
+		// Admin aborted the fix mid-flight; poller already confirmed. Leave the
+		// feedback entry open and reset the reaction so it's visibly not-done.
+		log.Infow("fix execution interrupted by admin", "issue_id", issueID, "duration", elapsed)
+		if replyToID != 0 {
+			s.tg.SetReaction(replyToID, "💔")
+		}
+		s.fb.TrySetStatus(fix.FeedbackID, feedback.StatusInProgress)
+		return
 	}
 
 	if err != nil {
@@ -1388,4 +1457,172 @@ func truncateForTelegram(s string) string {
 		return s[:497] + "..."
 	}
 	return s
+}
+
+// --- Emoji interrupt protocol (AUTO-456) ---
+//
+// A long-running Claude invocation is fronted by a 👁️ "watching" message. The
+// admin aborts it by replying 💔 to that message. Detection happens in the
+// Telegram poller (NOT the processor), because the processor goroutine is
+// blocked inside the very analysis we want to cancel — so a reply queued behind
+// it could never reach a busy processor in time.
+const (
+	// eyeBase is the bare eye codepoint U+1F441. Telegram echoes the sent
+	// "👁️" (eye + VS16) back in reply_to_message.text; matching the bare
+	// codepoint as a substring catches both the VS16 and non-VS16 forms.
+	eyeBase    = "\U0001F441" // 👁
+	heartBreak = "\U0001F494" // 💔
+	// interruptTTL bounds how long a cancel func lingers in the registry if a
+	// computation neither completes nor is interrupted (safety net only —
+	// runInterruptible always deregisters on return).
+	interruptTTL = 10 * time.Minute
+)
+
+// errInterrupted is returned by runInterruptible when the computation's context
+// was cancelled by an admin 💔 reply (as opposed to a timeout or shutdown).
+// Callers skip their normal failure reply for it — the poller already sent the
+// abort confirmation.
+var errInterrupted = errors.New("computation interrupted by admin")
+
+// interruptEntry pairs a computation's cancel func with its expiry for TTL sweep.
+type interruptEntry struct {
+	cancel  context.CancelFunc
+	expires time.Time
+}
+
+// registerInterrupt records the cancel func for a 👁️ watch message.
+func (s *service) registerInterrupt(watchMsgID int, cancel context.CancelFunc) {
+	s.interrupts.Store(watchMsgID, &interruptEntry{
+		cancel:  cancel,
+		expires: time.Now().Add(interruptTTL),
+	})
+}
+
+// clearInterrupt removes a registry entry (idempotent). Does NOT call cancel —
+// the owning runInterruptible defers its own cancel().
+func (s *service) clearInterrupt(watchMsgID int) {
+	s.interrupts.Delete(watchMsgID)
+}
+
+// tryInterrupt cancels the computation registered under watchMsgID and removes
+// the entry. Returns false if nothing was registered (already finished/unknown).
+func (s *service) tryInterrupt(watchMsgID int) bool {
+	v, ok := s.interrupts.LoadAndDelete(watchMsgID)
+	if !ok {
+		return false
+	}
+	if e, ok := v.(*interruptEntry); ok && e.cancel != nil {
+		e.cancel()
+	}
+	return true
+}
+
+// sweepInterrupts cancels and drops registry entries past their TTL. A pure
+// safety net against a leaked entry; the happy path deregisters on return.
+func (s *service) sweepInterrupts(now time.Time) {
+	s.interrupts.Range(func(k, v any) bool {
+		if e, ok := v.(*interruptEntry); ok && now.After(e.expires) {
+			if e.cancel != nil {
+				e.cancel()
+			}
+			s.interrupts.Delete(k)
+		}
+		return true
+	})
+}
+
+// runInterruptible sends a 👁️ watch message (threaded under replyTo when > 0),
+// runs fn under a cancellable context registered against that message, and
+// cleans up on return. Replying 💔 to the watch message cancels fn's context,
+// SIGKILLing the Claude subprocess. If fn was cancelled by an admin interrupt
+// (and not by service shutdown), it returns errInterrupted so the caller can
+// suppress its normal failure reply.
+func (s *service) runInterruptible(ctx context.Context, replyTo int, label string, fn func(context.Context) (*domain.AnalysisResult, error)) (*domain.AnalysisResult, error) {
+	aCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	watchHTML := fmt.Sprintf("👁️ <i>%s…</i>\nReply 💔 to this message to abort.", escTelegram(label))
+	var watchID int
+	var sendErr error
+	if replyTo > 0 {
+		watchID, sendErr = s.tg.SendReply(replyTo, watchHTML)
+	} else {
+		watchID, sendErr = s.tg.SendMessage(watchHTML)
+	}
+	if sendErr != nil || watchID == 0 {
+		// Watch message failed to post — degrade gracefully and run without an
+		// abort handle rather than refusing to do the work.
+		log.Warnw("interrupt watch message failed — running without abort path", "error", sendErr)
+		return fn(aCtx)
+	}
+
+	s.registerInterrupt(watchID, cancel)
+	defer s.clearInterrupt(watchID)
+
+	result, err := fn(aCtx)
+
+	// Distinguish an admin interrupt (only aCtx cancelled) from a shutdown
+	// (parent ctx cancelled too). Only the former gets the dedicated sentinel.
+	if err != nil && aCtx.Err() != nil && ctx.Err() == nil {
+		return nil, errInterrupted
+	}
+	return result, err
+}
+
+// messageLabel renders a short human description of a message for the 👁️ watch
+// message (e.g. "alert HighErrorRate", "report from @user", "admin request").
+func messageLabel(msg domain.ClassifiedMessage) string {
+	switch msg.Type {
+	case domain.MessageAlertFiring:
+		if len(msg.Alerts) > 0 {
+			return "alert " + msg.Alerts[0].Name
+		}
+		return "alert"
+	case domain.MessageAdminMessage:
+		return "admin request"
+	case domain.MessageUserIssue, domain.MessageErrorReport:
+		if msg.From.Username != "" {
+			return "report from @" + msg.From.Username
+		}
+		return "user report"
+	default:
+		return "message"
+	}
+}
+
+// isInterruptReply reports whether update u is a "💔 reply to a 👁️ bot message"
+// abort command, returning the watch message ID being aborted. The bot operates
+// in a single trusted chat (TELEGRAM_ADMIN_CHAT_ID) and cancellation is a
+// fail-safe action (it only stops work — it cannot start, escalate, or exfil),
+// so this is intentionally not gated beyond the structural match.
+func isInterruptReply(u telegram.Update) (watchMsgID int, ok bool) {
+	m := u.Message
+	if m == nil || m.ReplyTo == nil || m.ReplyTo.From == nil {
+		return 0, false
+	}
+	if !m.ReplyTo.From.IsBot {
+		return 0, false
+	}
+	if !strings.Contains(m.ReplyTo.Text, eyeBase) {
+		return 0, false
+	}
+	if !strings.Contains(m.Text, heartBreak) {
+		return 0, false
+	}
+	return m.ReplyTo.MessageID, true
+}
+
+// handleInterrupt cancels the computation behind a 👁️ message and confirms.
+func (s *service) handleInterrupt(watchMsgID int, u telegram.Update) {
+	replyTo := 0
+	if u.Message != nil {
+		replyTo = u.Message.MessageID
+	}
+	if s.tryInterrupt(watchMsgID) {
+		log.Infow("computation interrupted by admin reply", "watch_msg_id", watchMsgID)
+		s.tg.SendReply(replyTo, "💔 Вычисление прервано.")
+		return
+	}
+	log.Infow("interrupt reply for unknown/finished computation", "watch_msg_id", watchMsgID)
+	s.tg.SendReply(replyTo, "ℹ️ Нечего прерывать — вычисление уже завершено.")
 }
