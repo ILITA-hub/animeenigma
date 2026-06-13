@@ -61,6 +61,22 @@ type envelope struct {
 	Data    *EpisodeResponse `json:"data"`
 }
 
+// EpisodeListItem is one entry in the List response (episode number +
+// playlist URL). Mirrors services/library/internal/handler.episodeListItem.
+type EpisodeListItem struct {
+	EpisodeNumber int    `json:"episode_number"`
+	MinIOURL      string `json:"minio_url"`
+	DurationSec   int    `json:"duration_sec"`
+}
+
+// listEnvelope wraps the {episodes:[...]} list payload.
+type listEnvelope struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Episodes []EpisodeListItem `json:"episodes"`
+	} `json:"data"`
+}
+
 // NewClient constructs a Client from a Config. Empty timeout falls
 // back to 2 seconds (SPEC-locked per-request cap). Trailing slash on
 // APIURL is trimmed so URL composition never produces a double slash.
@@ -139,6 +155,48 @@ func (c *Client) GetEpisode(ctx context.Context, shikimoriID string, episode int
 		return nil, fmt.Errorf("library: upstream %d", resp.StatusCode)
 	default:
 		return nil, fmt.Errorf("library: unexpected status %d", resp.StatusCode)
+	}
+}
+
+// ListEpisodes fetches every locally-encoded episode for an anime via
+// GET /api/library/episodes/{shikimoriID}. Behavior mirrors GetEpisode:
+//
+//   - 200 → returns the (possibly empty) slice. An empty list is a
+//     legitimate "nothing local yet" state, NOT an error.
+//   - 5xx → (nil, wrapped error) — transient; caller should not cache.
+//   - other non-2xx → (nil, wrapped error).
+//   - transport / decode error / timeout → (nil, wrapped error).
+//
+// Empty shikimoriID is rejected before any request is issued.
+func (c *Client) ListEpisodes(ctx context.Context, shikimoriID string) ([]EpisodeListItem, error) {
+	if shikimoriID == "" {
+		return nil, fmt.Errorf("library: empty shikimori_id")
+	}
+	u := fmt.Sprintf("%s/api/library/episodes/%s", c.cfg.APIURL, url.PathEscape(shikimoriID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("library: build list request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("library: do list request: %w", err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		var env listEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+			return nil, fmt.Errorf("library: decode list 200 body: %w", err)
+		}
+		return env.Data.Episodes, nil
+	case resp.StatusCode >= 500:
+		return nil, fmt.Errorf("library: list upstream %d", resp.StatusCode)
+	default:
+		return nil, fmt.Errorf("library: list unexpected status %d", resp.StatusCode)
 	}
 }
 

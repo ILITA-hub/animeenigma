@@ -15,6 +15,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
 )
 
 // Cache key prefixes. Kept as exported constants so the
@@ -91,6 +92,12 @@ type RawEpisode struct {
 // Existing cached entries from before the field existed deserialize
 // with Source == "" — the resolver normalizes that to "allanime" on
 // read for backward compatibility.
+// Exp/Sig (added 2026-06-13, workstream first-party / ae provider) carry the
+// HLS-proxy provenance signature for a self-hosted MinIO URL. MinIO is on the
+// internal docker network and is NOT in the proxy allowlist, so a library/ae
+// master-playlist request must arrive pre-signed; the proxy then mints child
+// segment tokens during m3u8 rewrite. Empty for AllAnime URLs (those pass via
+// the static allowlist / their own provenance seed).
 type RawStream struct {
 	URL       string        `json:"url"`
 	Type      string        `json:"type"`
@@ -98,6 +105,8 @@ type RawStream struct {
 	Subtitles []RawSubtitle `json:"subtitles,omitempty"`
 	ExpiresAt time.Time     `json:"expires_at"`
 	Source    string        `json:"source"`
+	Exp       string        `json:"exp,omitempty"`
+	Sig       string        `json:"sig,omitempty"`
 }
 
 // RawSubtitle is an embedded subtitle track from the AllAnime source.
@@ -234,14 +243,7 @@ func (r *RawResolver) GetStream(ctx context.Context, animeID string, episodeNumb
 			// path — MinIO URLs derive from a stable path and the
 			// webhook invalidation handles structural changes.
 			_ = r.cache.Set(ctx, sourceCacheKey, "library", time.Hour)
-			out := &RawStream{
-				URL:       resp.MinIOURL,
-				Type:      "hls",
-				Quality:   quality,
-				Subtitles: nil,
-				ExpiresAt: time.Now().Add(time.Hour),
-				Source:    "library",
-			}
+			out := newLibraryStream(resp.MinIOURL, quality)
 			if !anime.HasRaw {
 				_ = r.animeRepo.SetHasRaw(ctx, anime.ID, true)
 			}
@@ -298,6 +300,97 @@ func (r *RawResolver) GetStream(ctx context.Context, animeID string, episodeNumb
 		_ = r.animeRepo.SetHasRaw(ctx, anime.ID, true)
 	}
 	return out, nil
+}
+
+// newLibraryStream builds a RawStream for a self-hosted MinIO HLS URL,
+// signing it with the HLS-proxy provenance HMAC so the (un-allowlisted)
+// minio host is trusted on the master-playlist request. Shared by the
+// auto raw path and the first-party ("ae") path.
+func newLibraryStream(minioURL, quality string) *RawStream {
+	exp, sig := streamsign.Sign(minioURL)
+	return &RawStream{
+		URL:       minioURL,
+		Type:      "hls",
+		Quality:   quality,
+		Subtitles: nil,
+		ExpiresAt: time.Now().Add(time.Hour),
+		Source:    "library",
+		Exp:       exp,
+		Sig:       sig,
+	}
+}
+
+// GetLibraryEpisodes lists the episodes for an anime that are present in
+// the self-hosted library (MinIO). This is the first-party ("ae")
+// provider's episode source — it never touches AllAnime, so it works for
+// titles AllAnime has never heard of (e.g. Chinese donghua). Returns an
+// empty list (Available=false) when the library is unconfigured, the
+// anime has no shikimori_id, or nothing is encoded yet.
+func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*EpisodesResponse, error) {
+	empty := &EpisodesResponse{Episodes: []RawEpisode{}, Available: false, Source: "library"}
+	if r.library == nil {
+		return empty, nil
+	}
+	anime, err := r.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+	if anime == nil {
+		return nil, errors.NotFound("anime")
+	}
+	if anime.ShikimoriID == "" {
+		return empty, nil
+	}
+
+	items, err := r.library.ListEpisodes(ctx, anime.ShikimoriID)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeUnavailable, "library unavailable")
+	}
+	if len(items) == 0 {
+		return empty, nil
+	}
+	out := make([]RawEpisode, 0, len(items))
+	for _, it := range items {
+		out = append(out, RawEpisode{
+			ID:     fmt.Sprintf("%d", it.EpisodeNumber),
+			Number: it.EpisodeNumber,
+			Title:  "",
+		})
+	}
+	return &EpisodesResponse{Episodes: out, Available: true, Source: "library"}, nil
+}
+
+// GetLibraryStream resolves an episode's playable HLS stream STRICTLY from
+// the self-hosted library — no AllAnime fallback. This backs the
+// first-party ("ae") provider, which must reflect on-prem availability
+// only (that's the whole point of the latency/load comparison). Returns
+// errors.NotFound when the episode is not encoded locally.
+func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string) (*RawStream, error) {
+	if r.library == nil {
+		return nil, errors.NotFound("library not configured")
+	}
+	anime, err := r.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+	if anime == nil {
+		return nil, errors.NotFound("anime")
+	}
+	if anime.ShikimoriID == "" {
+		return nil, errors.NotFound("episode not in library")
+	}
+
+	resp, err := r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeUnavailable, "library unavailable")
+	}
+	if resp == nil {
+		return nil, errors.NotFound("episode not in library")
+	}
+	if !anime.HasRaw {
+		_ = r.animeRepo.SetHasRaw(ctx, anime.ID, true)
+	}
+	return newLibraryStream(resp.MinIOURL, quality), nil
 }
 
 // resolveShowID maps an anime to its AllAnime show ID, with a singleflight

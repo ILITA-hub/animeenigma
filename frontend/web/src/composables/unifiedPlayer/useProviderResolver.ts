@@ -17,6 +17,9 @@
  *   getStream (resp.data?.data || resp.data envelope).
  * • kodikAdapter    — covers 'kodik' (RU ad-free HLS path) using kodikApi.getTranslations /
  *   getStream; stream URLs are wrapped through the HLS proxy for CORS (resp.data?.data ?? resp.data).
+ * • aeAdapter       — covers 'ae' (first-party AnimeEnigma / self-hosted MinIO HLS) using
+ *   aeApi.getEpisodes / getStream. Episodes/stream come STRICTLY from the on-prem library;
+ *   the stream URL is proxy-signed (exp/sig) so the un-allowlisted minio host is trusted.
  *
  * NOT wired (throw NotAvailableError)
  * ─────────────────────────────────────
@@ -24,10 +27,9 @@
  * • 'hanime'    — hanimeApi.getStream(animeId, slug) needs the episode slug, not
  *                 a number, and the resolver contract uses a number-keyed EpisodeOption;
  *                 kept as NotAvailableError until a slug-keyed adapter is wired.
- * • 'ae'        — first-party / admin-only path, not yet exposed to this layer.
  */
 
-import { scraperApi, rawApi, anime18Api, kodikApi } from '@/api/client'
+import { scraperApi, rawApi, anime18Api, kodikApi, aeApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, Combo } from '@/types/unifiedPlayer'
 
@@ -84,6 +86,9 @@ interface RawStream {
   url: string
   type: 'hls' | 'mp4'
   quality?: string
+  // First-party (ae) / library URLs carry the HLS-proxy provenance signature.
+  exp?: string
+  sig?: string
 }
 
 // ─── Anime18 types (mirrored from Anime18Player) ────────────────────────────
@@ -153,6 +158,7 @@ export interface ResolverDeps {
   rawApi?: typeof rawApi
   anime18Api?: typeof anime18Api
   kodikApi?: typeof kodikApi
+  aeApi?: typeof aeApi
 }
 
 // ─── Set of provider IDs that route through the scraper microservice ─────────
@@ -252,9 +258,44 @@ function makeRawAdapter(api: typeof rawApi): ProviderAdapter {
       }
       const type: 'hls' | 'mp4' = stream.type ?? 'hls'
       // AllAnime's fast4speed.rsvp CDN requires Referer: https://allmanga.to/
-      // (mirrors the legacy RawPlayer). The proxy injects it.
+      // (mirrors the legacy RawPlayer). The proxy injects it. When the raw
+      // resolver served this from the self-hosted library instead, the URL is
+      // a signed minio one — forward exp/sig so the proxy trusts it.
       return {
-        url: buildProxyUrl(stream.url, 'https://allmanga.to/', type),
+        url: buildProxyUrl(stream.url, 'https://allmanga.to/', type, {
+          exp: stream.exp,
+          sig: stream.sig,
+        }),
+        type,
+      }
+    },
+  }
+}
+
+function makeAeAdapter(api: typeof aeApi): ProviderAdapter {
+  return {
+    async listEpisodes(animeId: string): Promise<EpisodeOption[]> {
+      const resp = await api.getEpisodes(animeId)
+      const data: RawEpisodesResponse = resp.data?.data ?? resp.data
+      // available=false (nothing encoded on-prem yet) → empty list; the
+      // player then shows the provider as having no episodes.
+      return (data?.episodes ?? []).map((ep) => ({
+        key: ep.number, // ae episode id IS the number (library is number-keyed)
+        label: ep.number,
+        number: ep.number,
+      }))
+    },
+
+    async resolveStream(animeId: string, ep: EpisodeOption): Promise<StreamResult> {
+      const resp = await api.getStream(animeId, ep.number)
+      const stream: RawStream = resp.data?.data ?? resp.data
+      if (!stream?.url) {
+        throw new NotAvailableError('ae', 'has no local copy of this episode')
+      }
+      const type: 'hls' | 'mp4' = stream.type ?? 'hls'
+      // Self-hosted MinIO needs no Referer; it DOES need the proxy signature.
+      return {
+        url: buildProxyUrl(stream.url, '', type, { exp: stream.exp, sig: stream.sig }),
         type,
       }
     },
@@ -303,11 +344,23 @@ function makeAnime18Adapter(api: typeof anime18Api): ProviderAdapter {
  * `streamType === 'mp4'` adds the `type=mp4` marker the proxy uses to pick its
  * progressive-MP4 (range-passthrough) code path instead of m3u8 rewriting.
  */
-function buildProxyUrl(url: string, referer: string, streamType?: 'hls' | 'mp4'): string {
+function buildProxyUrl(
+  url: string,
+  referer: string,
+  streamType?: 'hls' | 'mp4',
+  sign?: { exp?: string; sig?: string },
+): string {
   const params = new URLSearchParams()
   params.set('url', url)
   if (referer) params.set('referer', referer)
   if (streamType === 'mp4') params.set('type', 'mp4')
+  // Provenance signature for self-hosted MinIO (first-party / library) URLs:
+  // the minio host is NOT in the proxy allowlist, so the master-playlist
+  // request must carry exp/sig; the proxy then mints child segment tokens.
+  if (sign?.exp && sign?.sig) {
+    params.set('exp', sign.exp)
+    params.set('sig', sign.sig)
+  }
   return `/api/streaming/hls-proxy?${params.toString()}`
 }
 
@@ -382,7 +435,6 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
   const UNAVAILABLE_PROVIDERS = new Set<string>([
     'animelib', // upstream went Kodik-only
     'hanime',   // needs slug-based episode key; deferred
-    'ae',       // first-party admin path; not exposed here
   ])
 
   function getAdapter(provider: string): ProviderAdapter {
@@ -409,6 +461,13 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
         throw new NotAvailableError(provider, 'not available (rawApi dep missing)')
       }
       return makeRawAdapter(deps.rawApi)
+    }
+
+    if (provider === 'ae') {
+      if (!deps.aeApi) {
+        throw new NotAvailableError(provider, 'not available (aeApi dep missing)')
+      }
+      return makeAeAdapter(deps.aeApi)
     }
 
     if (provider === '18anime') {
@@ -443,5 +502,5 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
  * Call this inside a Vue setup context.
  */
 export function useProviderResolver(): ProviderResolver {
-  return makeResolver({ scraperApi, rawApi, anime18Api, kodikApi })
+  return makeResolver({ scraperApi, rawApi, anime18Api, kodikApi, aeApi })
 }

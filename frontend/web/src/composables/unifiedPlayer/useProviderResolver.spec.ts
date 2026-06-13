@@ -115,6 +115,51 @@ describe('useProviderResolver', () => {
     await expect(resolver.listEpisodes('animelib', 'x')).rejects.toThrow(/not available/i)
   })
 
+  it('wires the first-party ae provider: library episodes + signed minio stream', async () => {
+    const aeApi = {
+      getEpisodes: vi.fn().mockResolvedValue({
+        data: { data: { episodes: [{ id: '1', number: 1, title: '' }, { id: '2', number: 2, title: '' }], available: true, source: 'library' } },
+      }),
+      getStream: vi.fn().mockResolvedValue({
+        data: { data: {
+          url: 'http://minio:9000/raw-library/54974/1/playlist.m3u8',
+          type: 'hls', source: 'library', exp: '1799999999', sig: 'deadbeef',
+        } },
+      }),
+    }
+    const resolver = makeResolver({ aeApi } as any)
+    const eps = await resolver.listEpisodes('ae', 'uuid')
+    expect(aeApi.getEpisodes).toHaveBeenCalledWith('uuid')
+    expect(eps.length).toBe(2)
+    expect(eps[0].number).toBe(1)
+
+    const stream = await resolver.resolveStream('ae', 'uuid', eps[0], {
+      audio: 'sub', lang: 'ja', provider: 'ae', server: '', team: null,
+    })
+    expect(aeApi.getStream).toHaveBeenCalledWith('uuid', 1)
+    expect(stream.type).toBe('hls')
+    const params = proxyParams(stream.url)
+    expect(params.get('url')).toBe('http://minio:9000/raw-library/54974/1/playlist.m3u8')
+    // The proxy signature MUST be forwarded — minio is not allowlisted.
+    expect(params.get('exp')).toBe('1799999999')
+    expect(params.get('sig')).toBe('deadbeef')
+    // MinIO needs no Referer.
+    expect(params.get('referer')).toBeNull()
+  })
+
+  it('ae: surfaces a typed error when the episode has no local copy', async () => {
+    const aeApi = {
+      getEpisodes: vi.fn(),
+      getStream: vi.fn().mockResolvedValue({ data: { data: { url: '' } } }),
+    }
+    const resolver = makeResolver({ aeApi } as any)
+    await expect(
+      resolver.resolveStream('ae', 'uuid', { key: 5, label: 5, number: 5 }, {
+        audio: 'sub', lang: 'ja', provider: 'ae', server: '', team: null,
+      }),
+    ).rejects.toThrow(/local copy/i)
+  })
+
   it('routes 18anime to the anime18 adapter (NOT the scraper)', async () => {
     const scraperApi = { getEpisodes: vi.fn(), getServers: vi.fn(), getStream: vi.fn() }
     const anime18Api = {

@@ -76,6 +76,11 @@ func NewRouter(
 		// gateway prefix; no additional server-side enforcement needed.
 		if episodesHandler != nil {
 			r.Get("/episodes/{shikimori_id}/{episode}", episodesHandler.Get)
+			// List every locally-encoded episode for an anime — consumed by
+			// the catalog's first-party ("ae") provider resolver. Internal
+			// (catalog→library over the docker network); admin-gated like the
+			// rest of /api/library/* at the gateway.
+			r.Get("/episodes/{shikimori_id}", episodesHandler.List)
 		}
 	})
 

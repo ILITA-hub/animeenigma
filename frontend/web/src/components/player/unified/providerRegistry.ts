@@ -4,10 +4,12 @@ import type { ProviderDef } from '@/types/unifiedPlayer'
 // Identity hues are the design-system "brand-exempt" hues (NOT the lint-forbidden
 // palette): cyan/orange/pink/rose. Keep hex here (allowlisted in DS task).
 export const PROVIDER_REGISTRY: ProviderDef[] = [
-  // First-party — WIP, always inactive for now.
+  // First-party — self-hosted library (MinIO HLS). Episodes/stream resolve
+  // straight from on-prem storage; the in-player provider shows no episodes
+  // until a title has been encoded into the library. Broad audio/lang
+  // coverage so it stays selectable as a first-party source under any filter.
   { id: 'ae', name: 'AnimeEnigma', hue: '#00d4ff', group: 'first-party',
-    audios: ['sub', 'dub'], langs: ['en', 'ru'], content: ['common'], scraper: false,
-    staticDisabled: { reason: 'WIP', description: 'We are working on our own hosting', wip: true } },
+    audios: ['sub', 'dub'], langs: ['en', 'ru', 'ja'], content: ['common'], scraper: false },
 
   // EN scraper providers (live health from backend).
   { id: 'allanime',   name: 'AllAnime',   hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true },

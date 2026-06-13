@@ -221,3 +221,65 @@ func TestNewClient_DefaultsTimeoutTo2s(t *testing.T) {
 		t.Errorf("default Timeout = %s, want 2s", c.httpClient.Timeout)
 	}
 }
+
+func TestListEpisodes_HappyPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/library/episodes/54974" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[{"episode_number":1,"minio_url":"http://minio:9000/raw-library/54974/1/playlist.m3u8","duration_sec":1450},{"episode_number":2,"minio_url":"http://minio:9000/raw-library/54974/2/playlist.m3u8"}]}}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	got, err := c.ListEpisodes(context.Background(), "54974")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].EpisodeNumber != 1 || got[0].MinIOURL == "" || got[0].DurationSec != 1450 {
+		t.Errorf("ep0 = %+v", got[0])
+	}
+	if got[1].EpisodeNumber != 2 {
+		t.Errorf("ep1 number = %d, want 2", got[1].EpisodeNumber)
+	}
+}
+
+func TestListEpisodes_EmptyOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[]}}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	got, err := c.ListEpisodes(context.Background(), "54974")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len = %d, want 0", len(got))
+	}
+}
+
+func TestListEpisodes_5xxErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	if _, err := c.ListEpisodes(context.Background(), "54974"); err == nil {
+		t.Fatal("expected error on 5xx, got nil")
+	}
+}
+
+func TestListEpisodes_EmptyShikimoriID(t *testing.T) {
+	c := NewClient(Config{APIURL: "http://unused", Timeout: time.Second})
+	if _, err := c.ListEpisodes(context.Background(), ""); err == nil {
+		t.Fatal("expected error on empty shikimori_id")
+	}
+}

@@ -37,9 +37,10 @@ describe('computeProviderRows', () => {
     expect(rows.find(r => r.def.id === 'animelib')!.state).toBe('disabled')
   })
 
-  it('marks AnimeEnigma wip', () => {
+  it('marks AnimeEnigma (first-party) active on a relevant common title', () => {
+    // ae is a non-scraper, non-disabled provider — relevant sub/en/common ⇒ active.
     const rows = computeProviderRows([], { audio: 'sub', lang: 'en', content: 'common' })
-    expect(rows.find(r => r.def.id === 'ae')!.state).toBe('wip')
+    expect(rows.find(r => r.def.id === 'ae')!.state).toBe('active')
   })
 
   it('marks 18anime irrelevant on a common title', () => {

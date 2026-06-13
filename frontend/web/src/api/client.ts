@@ -766,6 +766,21 @@ export const rawApi = {
 }
 
 /**
+ * First-party "AnimeEnigma" provider — self-hosted library (MinIO HLS).
+ * Episodes/stream resolve STRICTLY from what's encoded on-prem; the stream
+ * URL arrives proxy-signed (exp/sig) so the un-allowlisted minio host is
+ * trusted on the master-playlist request.
+ */
+export const aeApi = {
+  getEpisodes: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/ae/episodes`),
+  getStream: (animeId: string, episode: number, quality?: string) =>
+    apiClient.get(`/anime/${animeId}/ae/stream`, {
+      params: { episode, ...(quality && { quality }) },
+    }),
+}
+
+/**
  * workstream raw-jp / Phase 02 — aggregated subtitle sources.
  * `byLang` filters to a CSV of ISO 639-1 codes. `all` returns every track.
  */

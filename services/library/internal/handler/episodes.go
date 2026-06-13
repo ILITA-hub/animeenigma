@@ -18,6 +18,7 @@ import (
 // spinning up Postgres.
 type EpisodeStoreReader interface {
 	GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int) (*domain.Episode, error)
+	List(ctx context.Context, shikimoriID string) ([]domain.Episode, error)
 }
 
 // URLBuilder is the slice of *minio.Writer the handler needs (the
@@ -49,6 +50,53 @@ type episodeResponse struct {
 	MinioURL    string `json:"minio_url"`
 	DurationSec int    `json:"duration_sec,omitempty"`
 	SizeBytes   int64  `json:"size_bytes,omitempty"`
+}
+
+// episodeListItem is one entry in the List response — episode number +
+// its playlist URL, so the first-party ("ae") provider can render an
+// episode list straight from what's actually in MinIO (no upstream
+// metadata source needed).
+type episodeListItem struct {
+	EpisodeNumber int    `json:"episode_number"`
+	MinioURL      string `json:"minio_url"`
+	DurationSec   int    `json:"duration_sec,omitempty"`
+}
+
+// listResponse wraps the episode array under "episodes" (consistent
+// with the jobs list envelope).
+type listResponse struct {
+	Episodes []episodeListItem `json:"episodes"`
+}
+
+// List handles GET /api/library/episodes/{shikimori_id} — every
+// episode present in MinIO for that anime, ordered by number. Returns
+// 200 with an empty array when none exist (NOT 404): "no local copies
+// yet" is a legitimate empty state the caller renders as an empty
+// provider, distinct from a bad request.
+func (h *EpisodesHandler) List(w http.ResponseWriter, r *http.Request) {
+	shikimoriID := chi.URLParam(r, "shikimori_id")
+	if shikimoriID == "" {
+		httputil.BadRequest(w, "shikimori_id is required")
+		return
+	}
+	eps, err := h.episodeRepo.List(r.Context(), shikimoriID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	items := make([]episodeListItem, 0, len(eps))
+	for i := range eps {
+		ep := &eps[i]
+		item := episodeListItem{
+			EpisodeNumber: ep.EpisodeNumber,
+			MinioURL:      h.urlBuilder.URLFor(ep.MinioPath + "playlist.m3u8"),
+		}
+		if ep.DurationSec != nil {
+			item.DurationSec = *ep.DurationSec
+		}
+		items = append(items, item)
+	}
+	httputil.OK(w, listResponse{Episodes: items})
 }
 
 // Get handles GET /api/library/episodes/{shikimori_id}/{episode}.

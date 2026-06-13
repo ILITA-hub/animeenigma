@@ -527,3 +527,99 @@ func TestRawResolver_LibraryHit_SetsHasRaw(t *testing.T) {
 		t.Errorf("has_raw = %d, want 1 (lazy backfill on library hit)", hasRaw)
 	}
 }
+
+func TestRawResolver_GetLibraryEpisodes_HappyPath(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/library/episodes/"+testShikimoriID {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[{"episode_number":1,"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8"},{"episode_number":2,"minio_url":"http://minio:9000/raw-library/57466/2/playlist.m3u8"}]}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryEpisodes(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("GetLibraryEpisodes: %v", err)
+	}
+	if !got.Available || got.Source != "library" {
+		t.Errorf("got Available=%v Source=%q, want true/library", got.Available, got.Source)
+	}
+	if len(got.Episodes) != 2 || got.Episodes[0].Number != 1 || got.Episodes[1].Number != 2 {
+		t.Errorf("episodes = %+v", got.Episodes)
+	}
+}
+
+func TestRawResolver_GetLibraryEpisodes_EmptyNotAvailable(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[]}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryEpisodes(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("GetLibraryEpisodes: %v", err)
+	}
+	if got.Available {
+		t.Errorf("Available = true, want false for empty library")
+	}
+	if got.Episodes == nil {
+		t.Errorf("Episodes must be a non-nil empty slice (JSON [])")
+	}
+}
+
+func TestRawResolver_GetLibraryStream_SignedAndLibraryOnly(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8","duration_sec":10,"size_bytes":100}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	if err != nil {
+		t.Fatalf("GetLibraryStream: %v", err)
+	}
+	if got.Source != "library" || got.Type != "hls" {
+		t.Errorf("got Source=%q Type=%q", got.Source, got.Type)
+	}
+	if got.Exp == "" || got.Sig == "" {
+		t.Errorf("expected signed minio URL (exp/sig), got exp=%q sig=%q", got.Exp, got.Sig)
+	}
+}
+
+func TestRawResolver_GetLibraryStream_404WhenAbsent(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+
+	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 99, "")
+	if err == nil {
+		t.Fatal("expected NotFound error when episode absent from library")
+	}
+}
