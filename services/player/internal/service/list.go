@@ -531,3 +531,49 @@ func (s *ListService) GetPublicListFacets(ctx context.Context, userID string) (*
 	}
 	return facets, nil
 }
+
+// MaxBulkAnimeIDs bounds a single bulk operation (defensive; the UI selects
+// at most one page of entries).
+const MaxBulkAnimeIDs = 200
+
+// BulkUpdate applies a status change or removal to many of the user's own
+// watchlist entries in one call. It loops over the existing per-item service
+// methods so every side effect (completed_at/episodes auto-set, gacha credit,
+// activity event, rewatch-finale bump) stays identical to single-item edits.
+// Per-item failures are logged and counted into `failed`; only a request-level
+// validation problem returns a non-nil error.
+func (s *ListService) BulkUpdate(ctx context.Context, userID, username string, req *domain.BulkUpdateRequest) (updated int, failed int, err error) {
+	if req == nil || len(req.AnimeIDs) == 0 {
+		return 0, 0, errors.New(errors.CodeInvalidInput, "anime_ids is required")
+	}
+	if len(req.AnimeIDs) > MaxBulkAnimeIDs {
+		return 0, 0, errors.New(errors.CodeInvalidInput, "too many anime_ids")
+	}
+
+	switch req.Action {
+	case "set_status":
+		if !domain.ValidListStatuses[req.Status] {
+			return 0, 0, errors.New(errors.CodeInvalidInput, "invalid status")
+		}
+		for _, id := range req.AnimeIDs {
+			if _, e := s.UpdateListEntry(ctx, userID, username, &domain.UpdateListRequest{AnimeID: id, Status: req.Status}); e != nil {
+				failed++
+				s.log.Errorw("bulk set_status: item failed", "user_id", userID, "anime_id", id, "error", e)
+				continue
+			}
+			updated++
+		}
+	case "remove":
+		for _, id := range req.AnimeIDs {
+			if e := s.DeleteListEntry(ctx, userID, id); e != nil {
+				failed++
+				s.log.Errorw("bulk remove: item failed", "user_id", userID, "anime_id", id, "error", e)
+				continue
+			}
+			updated++
+		}
+	default:
+		return 0, 0, errors.New(errors.CodeInvalidInput, "invalid action")
+	}
+	return updated, failed, nil
+}
