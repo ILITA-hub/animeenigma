@@ -39,7 +39,8 @@ func (h *ListHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
 	search := strings.TrimSpace(r.URL.Query().Get("q"))
 	params := parsePaginationParams(r)
 
-	entries, total, err := h.listService.GetUserListPaginated(r.Context(), claims.UserID, status, search, params)
+	filters := parseListFilters(r)
+	entries, total, err := h.listService.GetUserListPaginated(r.Context(), claims.UserID, status, search, filters, params)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -287,7 +288,8 @@ func (h *ListHandler) GetPublicWatchlist(w http.ResponseWriter, r *http.Request)
 	search := strings.TrimSpace(r.URL.Query().Get("q"))
 	params := parsePaginationParams(r)
 
-	entries, total, err := h.listService.GetPublicWatchlistPaginated(r.Context(), userID, statuses, search, params)
+	filters := parseListFilters(r)
+	entries, total, err := h.listService.GetPublicWatchlistPaginated(r.Context(), userID, statuses, search, filters, params)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -355,6 +357,37 @@ func (h *ListHandler) GetWatchersCount(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, map[string]int64{"count": count})
 }
 
+// GetWatchlistFacets returns filter facets (genres/kinds/year-range with
+// counts) for the authenticated user's own list.
+func (h *ListHandler) GetWatchlistFacets(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+	facets, err := h.listService.GetListFacets(r.Context(), claims.UserID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, facets)
+}
+
+// GetPublicWatchlistFacets returns filter facets for a public profile.
+func (h *ListHandler) GetPublicWatchlistFacets(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "userId")
+	if userID == "" {
+		httputil.BadRequest(w, "user ID is required")
+		return
+	}
+	facets, err := h.listService.GetPublicListFacets(r.Context(), userID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, facets)
+}
+
 func parsePaginationParams(r *http.Request) *domain.PaginationParams {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
@@ -368,6 +401,36 @@ func parsePaginationParams(r *http.Request) *domain.PaginationParams {
 	}
 	params.Validate()
 	return params
+}
+
+// parseListFilters reads the optional genre/kind/year filter query params.
+// genres + kind are comma-separated; invalid kinds are dropped (validated
+// against domain.KnownKinds); year_min/year_max parse to *int (nil if absent
+// or non-numeric).
+func parseListFilters(r *http.Request) domain.ListFilters {
+	var f domain.ListFilters
+
+	if g := r.URL.Query().Get("genres"); g != "" {
+		for _, id := range splitAndTrim(g, ",") {
+			if id != "" {
+				f.GenreIDs = append(f.GenreIDs, id)
+			}
+		}
+	}
+	if k := r.URL.Query().Get("kind"); k != "" {
+		for _, kind := range splitAndTrim(k, ",") {
+			if domain.KnownKinds[kind] {
+				f.Kinds = append(f.Kinds, kind)
+			}
+		}
+	}
+	if v, err := strconv.Atoi(r.URL.Query().Get("year_min")); err == nil {
+		f.YearMin = &v
+	}
+	if v, err := strconv.Atoi(r.URL.Query().Get("year_max")); err == nil {
+		f.YearMax = &v
+	}
+	return f
 }
 
 func splitAndTrim(s, sep string) []string {

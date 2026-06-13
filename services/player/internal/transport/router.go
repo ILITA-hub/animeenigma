@@ -89,6 +89,7 @@ func NewRouter(
 			r.Put("/watchlist", listHandler.UpdateListEntry)
 			r.Post("/watchlist/migrate", listHandler.MigrateListEntry)
 			r.Get("/watchlist/statuses", listHandler.GetWatchlistStatuses)
+			r.Get("/watchlist/facets", listHandler.GetWatchlistFacets)
 			r.Get("/watchlist/{animeId}", listHandler.GetUserAnimeEntry)
 			r.Delete("/watchlist/{animeId}", listHandler.DeleteListEntry)
 			r.Post("/watchlist/{animeId}/episode", listHandler.MarkEpisodeWatched)
@@ -187,6 +188,7 @@ func NewRouter(
 		// Public user watchlist
 		r.Get("/users/{userId}/watchlist/public", listHandler.GetPublicWatchlist)
 		r.Get("/users/{userId}/watchlist/public/stats", listHandler.GetPublicWatchlistStats)
+		r.Get("/users/{userId}/watchlist/facets", listHandler.GetPublicWatchlistFacets)
 
 		// Public activity feed
 		r.Get("/activity/feed", activityHandler.GetFeed)
