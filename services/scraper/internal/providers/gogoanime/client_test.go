@@ -387,6 +387,66 @@ func TestListServers_DoodstreamSkipped(t *testing.T) {
 	}
 }
 
+// TestListServers_UnextractableHostsSkipped verifies AUTO-459: embed hosts
+// with no registered extractor (vidmoly.biz/.net, filemoon.sx,
+// bysesayeveum.com) are filtered out at ListServers time so they never reach
+// GetStream and never burn the cold-path budget as cdn_unreachable noise. A
+// co-located extractable host (vibeplayer.site) must still survive the filter.
+func TestListServers_UnextractableHostsSkipped(t *testing.T) {
+	t.Parallel()
+	// Inline episode page: one extractable host + every unextractable host,
+	// plus a strict-subdomain of one to exercise the suffix match.
+	const page = `<html><body><div class="anime_muti_link"><ul class="muti_link">
+<li><a data-video="https://vibeplayer.site/e/keep1" rel="1">Vidstreaming Choose this server</a></li>
+<li><a data-video="https://vidmoly.biz/embed-abc.html" rel="1">Vidmoly</a></li>
+<li><a data-video="https://vidmoly.net/embed-def.html" rel="1">Vidmoly</a></li>
+<li><a data-video="https://filemoon.sx/e/ghi" rel="1">Filemoon</a></li>
+<li><a data-video="https://bysesayeveum.com/e/jkl" rel="1">Streamwish</a></li>
+<li><a data-video="https://cdn.vidmoly.biz/embed-sub.html" rel="1">Vidmoly sub</a></li>
+</ul></div></body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+	p, _, _, _ := newTestProvider(t, srv)
+
+	servers, err := p.ListServers(context.Background(), "demo", "demo-episode-1")
+	if err != nil {
+		t.Fatalf("ListServers err = %v", err)
+	}
+	banned := []string{"vidmoly.biz", "vidmoly.net", "filemoon.sx", "bysesayeveum.com"}
+	for _, s := range servers {
+		u, perr := url.Parse(s.ID)
+		if perr != nil {
+			t.Errorf("server.ID %q not parseable: %v", s.ID, perr)
+			continue
+		}
+		host := strings.ToLower(u.Hostname())
+		for _, b := range banned {
+			if host == b || strings.HasSuffix(host, "."+b) {
+				t.Errorf("unextractable host %q leaked through filter: %s", b, s.ID)
+			}
+		}
+	}
+	// The one extractable host must survive (filter must not over-match).
+	if len(servers) != 1 {
+		t.Fatalf("len(servers) = %d; want 1 (only vibeplayer.site survives)", len(servers))
+	}
+	if got := strings.ToLower(mustHost(t, servers[0].ID)); got != "vibeplayer.site" {
+		t.Errorf("surviving server host = %q; want vibeplayer.site", got)
+	}
+}
+
+// mustHost parses rawURL and returns its hostname, failing the test on error.
+func mustHost(t *testing.T, rawURL string) string {
+	t.Helper()
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("parse %q: %v", rawURL, err)
+	}
+	return u.Hostname()
+}
+
 // TestGetStream_DispatchesToRegistry verifies SCRAPER-9ANI-04: GetStream
 // looks up the embed URL via embeds.Registry.Find(serverID) and returns the
 // extractor's *Stream. No extraction logic in this provider.

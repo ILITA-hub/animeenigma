@@ -19,8 +19,9 @@
 //     domain.CategoryDub. Cached 6 hours at episodes:gogoanime:<base_slug>.
 //   - ListServers scrapes <div class="anime_muti_link"> li a[data-video] from
 //     the episode page; protocol-relative URLs are normalized to https://;
-//     myvidplay.com / playmogo.com hosts (Cloudflare Turnstile) are filtered;
-//     duplicates by URL are removed.
+//     myvidplay.com / playmogo.com hosts (Cloudflare Turnstile) AND embed hosts
+//     we have no registered extractor for (vidmoly / filemoon / bysesayeveum)
+//     are filtered; duplicates by URL are removed.
 //   - GetStream delegates to the embeds.Registry; no extraction logic lives
 //     in this provider. Streams cached at stream:gogoanime:<slug>:<epID>:<hash>
 //     with TTL = min(parsedExpiry-30s, 5min) via computeStreamTTL.
@@ -125,6 +126,40 @@ var episodeHrefRe = regexp.MustCompile(`^/(.+)-episode-(\d+)$`)
 // reach GetStream. List is suffix-matched (case-insensitive) so subdomains
 // (e.g. *.myvidplay.com) are caught too.
 var turnstileHosts = []string{"myvidplay.com", "playmogo.com"}
+
+// unextractableHosts are embed players that appear in the
+// gogoanime.me.uk episode-page server list but have NO registered
+// embeds.Registry extractor, so GetStream can never resolve a stream from
+// them — every attempt just burns the cold-path budget and emits
+// parser_unplayable_total{reason="cdn_unreachable"} canary noise (AUTO-459).
+// We skip them at ListServers time, mirroring turnstileHosts. Suffix-matched
+// (case-insensitive) so subdomains are caught too. If/when an extractor is
+// added for one of these, drop it from this list. RESEARCH.md Pitfall 9.
+var unextractableHosts = []string{
+	"vidmoly.biz",
+	"vidmoly.net",
+	"filemoon.sx",
+	"bysesayeveum.com",
+}
+
+// isFilteredEmbedHost reports whether host (already lowercased) is one we
+// skip at ListServers time — either Cloudflare-Turnstile-gated
+// (turnstileHosts) or served by an embed player we have no registered
+// extractor for (unextractableHosts). Both lists are host-equality OR
+// strict-subdomain matched.
+func isFilteredEmbedHost(host string) bool {
+	for _, blocked := range turnstileHosts {
+		if host == blocked || strings.HasSuffix(host, "."+blocked) {
+			return true
+		}
+	}
+	for _, blocked := range unextractableHosts {
+		if host == blocked || strings.HasSuffix(host, "."+blocked) {
+			return true
+		}
+	}
+	return false
+}
 
 // malSyncClient is the malsync lookup contract — abstracted so tests can
 // inject a fake without standing up a real malsync HTTP server.
@@ -780,11 +815,11 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		if host == "" {
 			return
 		}
-		// Cloudflare Turnstile skip-list per RESEARCH.md Pitfall 9.
-		for _, blocked := range turnstileHosts {
-			if host == blocked || strings.HasSuffix(host, "."+blocked) {
-				return
-			}
+		// Skip Turnstile-gated AND no-registered-extractor embed hosts per
+		// RESEARCH.md Pitfall 9 / AUTO-459 — they can never resolve a stream,
+		// so returning them only burns the cold-path budget.
+		if isFilteredEmbedHost(host) {
+			return
 		}
 		if seenURL[dv] {
 			return
