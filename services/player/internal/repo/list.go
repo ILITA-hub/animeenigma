@@ -69,6 +69,37 @@ func isGenreSort(sort string) bool {
 	return sort == "genre"
 }
 
+// filtersNeedAnimesJoin reports whether the filter set references columns on
+// the animes table (kind / year) and therefore requires the LEFT JOIN animes.
+func filtersNeedAnimesJoin(f domain.ListFilters) bool {
+	return len(f.Kinds) > 0 || f.YearMin != nil || f.YearMax != nil
+}
+
+// applyListFilters appends the genre (AND) / kind (OR) / year-range WHERE
+// clauses to a query that already has (or will have) the animes join when
+// filtersNeedAnimesJoin is true. Genre AND is expressed as an anime_id IN
+// (subquery) with a HAVING count so it composes with the Count + Find sessions.
+func applyListFilters(q *gorm.DB, f domain.ListFilters) *gorm.DB {
+	if len(f.Kinds) > 0 {
+		q = q.Where("animes.kind IN ?", f.Kinds)
+	}
+	switch {
+	case f.YearMin != nil && f.YearMax != nil:
+		q = q.Where("animes.year BETWEEN ? AND ?", *f.YearMin, *f.YearMax)
+	case f.YearMin != nil:
+		q = q.Where("animes.year >= ?", *f.YearMin)
+	case f.YearMax != nil:
+		q = q.Where("animes.year <= ?", *f.YearMax)
+	}
+	if len(f.GenreIDs) > 0 {
+		q = q.Where(
+			"anime_list.anime_id IN (SELECT ag.anime_id FROM anime_genres ag WHERE ag.genre_id IN ? GROUP BY ag.anime_id HAVING COUNT(DISTINCT ag.genre_id) = ?)",
+			f.GenreIDs, len(f.GenreIDs),
+		)
+	}
+	return q
+}
+
 type ListRepository struct {
 	db *gorm.DB
 }
@@ -239,7 +270,7 @@ func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string
 
 // excludeHentai drops 18+ entries (activity_visibility='non_hentai' public
 // reads). Own-list callers always pass false — the owner sees everything.
-func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status, search string, excludeHentai bool, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status, search string, excludeHentai bool, filters domain.ListFilters, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate() // defense in depth
 
 	var entries []*domain.AnimeListEntry
@@ -253,7 +284,7 @@ func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status,
 		base = base.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
 	}
 
-	needsAnimesJoin := isTitleSort(params.Sort) || search != ""
+	needsAnimesJoin := isTitleSort(params.Sort) || search != "" || filtersNeedAnimesJoin(filters)
 	if needsAnimesJoin {
 		base = base.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
 	}
@@ -267,6 +298,7 @@ func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status,
 			like, like, like,
 		)
 	}
+	base = applyListFilters(base, filters)
 
 	if err := base.Session(&gorm.Session{}).Model(&domain.AnimeListEntry{}).Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -779,7 +811,7 @@ func (r *ListRepository) GetReactionCounts(ctx context.Context, reviewIDs []stri
 }
 
 // excludeHentai — see GetByUserPaginated.
-func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, search string, excludeHentai bool, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, search string, excludeHentai bool, filters domain.ListFilters, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate() // defense in depth
 
 	var entries []*domain.AnimeListEntry
@@ -790,7 +822,7 @@ func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, user
 		base = base.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
 	}
 
-	needsAnimesJoin := isTitleSort(params.Sort) || search != ""
+	needsAnimesJoin := isTitleSort(params.Sort) || search != "" || filtersNeedAnimesJoin(filters)
 	if needsAnimesJoin {
 		base = base.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
 	}
@@ -804,6 +836,7 @@ func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, user
 			like, like, like,
 		)
 	}
+	base = applyListFilters(base, filters)
 
 	if err := base.Session(&gorm.Session{}).Model(&domain.AnimeListEntry{}).Count(&total).Error; err != nil {
 		return nil, 0, err

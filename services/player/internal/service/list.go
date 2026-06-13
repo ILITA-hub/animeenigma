@@ -57,7 +57,7 @@ func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([
 // search filters entries by anime title (name / name_ru / name_jp, case-insensitive). Empty = no filter.
 func (s *ListService) GetUserListPaginated(ctx context.Context, userID, status, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate()
-	return s.listRepo.GetByUserPaginated(ctx, userID, status, search, false, params)
+	return s.listRepo.GetByUserPaginated(ctx, userID, status, search, false, domain.ListFilters{}, params)
 }
 
 // GetUserStatuses returns lightweight anime_id+status pairs for the entire list
@@ -106,9 +106,9 @@ func (s *ListService) GetPublicWatchlistPaginated(ctx context.Context, userID st
 	}
 	excludeHentai := visibility == repo.ActivityVisibilityNonHentai
 	if len(statuses) == 0 {
-		return s.listRepo.GetByUserPaginated(ctx, userID, "", search, excludeHentai, params)
+		return s.listRepo.GetByUserPaginated(ctx, userID, "", search, excludeHentai, domain.ListFilters{}, params)
 	}
-	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, search, excludeHentai, params)
+	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, search, excludeHentai, domain.ListFilters{}, params)
 }
 
 // GetUserAnimeEntry returns a single anime entry from user's list

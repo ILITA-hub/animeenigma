@@ -79,13 +79,13 @@ func TestGetByUserPaginated_ExcludeHentai(t *testing.T) {
 	ctx := context.Background()
 	params := &domain.PaginationParams{Page: 1, PerPage: 20}
 
-	entries, total, err := r.GetByUserPaginated(ctx, "u1", "", "", true, params)
+	entries, total, err := r.GetByUserPaginated(ctx, "u1", "", "", true, domain.ListFilters{}, params)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, total)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "anime-sfw", entries[0].AnimeID)
 
-	entries, total, err = r.GetByUserPaginated(ctx, "u1", "", "", false, params)
+	entries, total, err = r.GetByUserPaginated(ctx, "u1", "", "", false, domain.ListFilters{}, params)
 	require.NoError(t, err)
 	assert.EqualValues(t, 3, total, "owner path (excludeHentai=false) sees everything")
 	assert.Len(t, entries, 3)
@@ -96,7 +96,7 @@ func TestGetByUserAndStatusesPaginated_ExcludeHentai(t *testing.T) {
 	ctx := context.Background()
 	params := &domain.PaginationParams{Page: 1, PerPage: 20}
 
-	entries, total, err := r.GetByUserAndStatusesPaginated(ctx, "u1", []string{"completed", "watching"}, "", true, params)
+	entries, total, err := r.GetByUserAndStatusesPaginated(ctx, "u1", []string{"completed", "watching"}, "", true, domain.ListFilters{}, params)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, total)
 	require.Len(t, entries, 1)
