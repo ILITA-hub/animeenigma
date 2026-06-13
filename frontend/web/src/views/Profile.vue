@@ -139,6 +139,13 @@
                 >
                   <ArrowUpDown class="size-5! transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" />
                 </Button>
+                <WatchlistFilters
+                  v-model:genre-ids="filterState.genreIds"
+                  v-model:kinds="filterState.kinds"
+                  v-model:year-min="filterState.yearMin"
+                  v-model:year-max="filterState.yearMax"
+                  :facets="facets"
+                />
                 <SegmentedControl
                   :model-value="viewMode"
                   :options="viewModeOptions"
@@ -783,6 +790,9 @@ import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
 import { AnimeContextMenu, PosterCard } from '@/components/anime'
 import WatchlistRow from '@/components/profile/WatchlistRow.vue'
+import WatchlistFilters from '@/components/profile/WatchlistFilters.vue'
+import type { WatchlistFacets, WatchlistFilterState } from '@/types/watchlist-facets'
+import { EMPTY_FILTER_STATE, filterParams, filterKey } from '@/types/watchlist-facets'
 import { fromWatchlistEntry } from '@/utils/toCardModel'
 import { userApi, publicApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
@@ -1012,6 +1022,8 @@ const watchlist = ref<WatchlistEntry[]>([])
 const loadingWatchlist = ref(false)
 const watchlistFilter = ref('all')
 const searchQuery = ref('')
+const facets = ref<WatchlistFacets>({ genres: [], kinds: [], years: { min: null, max: null } })
+const filterState = ref<WatchlistFilterState>({ ...EMPTY_FILTER_STATE })
 const viewMode = ref<'table' | 'grid'>('grid')
 const viewModeOptions = computed(() => [
   { value: 'table', label: t('profile.view.table'), icon: List },
@@ -1042,7 +1054,7 @@ function pageCacheKey(status: string, page: number): string {
   // in-memory pageCache Map — cannot serve one user's cached data to another user.
   const uid = profileUser.value?.id || 'anon'
   const q = searchQuery.value.trim().toLowerCase()
-  return `${uid}:${status}:${page}:${sortKey.value}:${sortDirection.value}:${q}`
+  return `${uid}:${status}:${page}:${sortKey.value}:${sortDirection.value}:${q}:${filterKey(filterState.value)}`
 }
 function clearPageCache() {
   pageCache.clear()
@@ -1402,6 +1414,7 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
         sort: backendSortKey.value,
         order: sortDirection.value,
         ...(trimmedQuery && { q: trimmedQuery }),
+        ...filterParams(filterState.value),
       })
       data = response.data?.data || response.data || []
       meta = response.data?.meta
@@ -1417,6 +1430,7 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
         sort: backendSortKey.value,
         order: sortDirection.value,
         ...(trimmedQuery && { q: trimmedQuery }),
+        ...filterParams(filterState.value),
       })
       data = response.data?.data || response.data || []
       meta = response.data?.meta
@@ -1454,6 +1468,17 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
   }
 }
 
+async function loadFacets() {
+  try {
+    const resp = _isOwnProfile.value
+      ? await userApi.getWatchlistFacets()
+      : await publicApi.getPublicWatchlistFacets(profileUser.value!.id)
+    facets.value = resp.data?.data || resp.data || { genres: [], kinds: [], years: { min: null, max: null } }
+  } catch {
+    facets.value = { genres: [], kinds: [], years: { min: null, max: null } }
+  }
+}
+
 const fetchWatchlist = async (isOwn: boolean) => {
   _isOwnProfile.value = isOwn
   _watchlistInitialized.value = false
@@ -1487,6 +1512,10 @@ const fetchWatchlist = async (isOwn: boolean) => {
       fetchPublicStatusCounts(profileUser.value.id, visibleStatuses)
     }
   }
+  // Reset filters so switching profiles starts clean, and load this profile's
+  // facet options (fire-and-forget — loadFacets handles its own errors).
+  filterState.value = { ...EMPTY_FILTER_STATE }
+  loadFacets()
   watchlistPage.value = 1
   await fetchWatchlistPage()
   _watchlistInitialized.value = true
@@ -1534,6 +1563,12 @@ watch([sortKey, sortDirection], () => {
   watchlistPage.value = 1
   fetchWatchlistPage()
 })
+
+// Re-fetch when watchlist filters (genres / kinds / year range) change
+watch(filterState, () => {
+  watchlistPage.value = 1
+  fetchWatchlistPage()
+}, { deep: true })
 
 // Re-fetch when search query changes (server-side search across full watchlist).
 // Debounced so we don't hammer the API on every keystroke.
