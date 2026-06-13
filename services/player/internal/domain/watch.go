@@ -428,3 +428,18 @@ type ListFacets struct {
 	Kinds  []FacetKind    `json:"kinds"`
 	Years  FacetYearRange `json:"years"`
 }
+
+// ValidListStatuses is the whitelist of watchlist status values accepted by
+// bulk operations. Mirrors the per-status filter pills in the profile UI.
+var ValidListStatuses = map[string]bool{
+	"watching": true, "plan_to_watch": true, "completed": true,
+	"on_hold": true, "dropped": true,
+}
+
+// BulkUpdateRequest is the body of POST /users/watchlist/bulk.
+// Action is "set_status" (requires Status) or "remove".
+type BulkUpdateRequest struct {
+	AnimeIDs []string `json:"anime_ids"`
+	Action   string   `json:"action"`
+	Status   string   `json:"status,omitempty"`
+}
