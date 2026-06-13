@@ -674,6 +674,16 @@
     "view": {
       "table": "List view",
       "grid": "Grid view"
+    },
+    "bulk": {
+      "select": "Select",
+      "selectAllPage": "Select all on this page",
+      "selected": "{n} selected",
+      "setStatus": "Change status",
+      "remove": "Remove",
+      "clear": "Clear",
+      "removeConfirm": "Remove {n} anime from your list? This cannot be undone.",
+      "error": "Bulk action failed. Please try again."
     }
   },
   "rooms": {
