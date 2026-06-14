@@ -228,13 +228,15 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
+	providerID, idWinner, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
 	}
 
-	eps, winner, err := h.svc.ListEpisodesNamed(r.Context(), providerID, qp.prefer)
+	// Pin ListEpisodes to the provider that resolved the ID — the providerID
+	// is opaque and only that provider can parse it (see resolveProviderID).
+	eps, winner, err := h.svc.ListEpisodesNamed(r.Context(), providerID, pinPrefer(idWinner, qp.prefer))
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -268,13 +270,13 @@ func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
+	providerID, idWinner, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
 	}
 
-	srvs, err := h.svc.ListServers(r.Context(), providerID, qp.episode, qp.prefer)
+	srvs, err := h.svc.ListServers(r.Context(), providerID, qp.episode, pinPrefer(idWinner, qp.prefer))
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -315,13 +317,13 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 		cat = domain.CategorySub
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
+	providerID, idWinner, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
 	}
 
-	stream, gated, err := h.svc.GetStreamGated(r.Context(), providerID, qp.episode, qp.server, cat, qp.prefer)
+	stream, gated, err := h.svc.GetStreamGated(r.Context(), providerID, qp.episode, qp.server, cat, pinPrefer(idWinner, qp.prefer))
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -518,9 +520,28 @@ func (h *ScraperHandler) GetAdminHealth(w http.ResponseWriter, r *http.Request) 
 // provider-internal ID via the orchestrator's FindID chain. The catalog
 // already mapped catalog-UUID → MAL/Shikimori ID before forwarding, so we
 // pass the value as ShikimoriID (project memory: Shikimori IDs == MAL IDs).
-func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, title string, altTitles []string, prefer string) (string, error) {
+//
+// Returns the opaque providerID AND the name of the provider that resolved
+// it. Callers MUST pass the winner (via pinPrefer) as `prefer` to the
+// subsequent ListEpisodes/ListServers/GetStream stage so the provider-specific
+// ID is handed to the provider that produced it — otherwise the next stage's
+// failover restarts at the head of the order and a wrong provider can return
+// an empty-but-no-error result that short-circuits failover. See
+// Orchestrator.FindIDNamed.
+func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, title string, altTitles []string, prefer string) (string, string, error) {
 	ref := domain.AnimeRef{ShikimoriID: malID, Title: title, AltTitles: altTitles}
-	return h.svc.FindID(ctx, ref, prefer)
+	return h.svc.FindIDNamed(ctx, ref, prefer)
+}
+
+// pinPrefer chooses the effective `prefer` for a post-FindID stage: the
+// provider that resolved the ID (winner) when known, else the caller's
+// original prefer. Pinning to the winner keeps the opaque providerID on its
+// origin provider while leaving the rest of the chain as a failover safety net.
+func pinPrefer(winner, prefer string) string {
+	if winner != "" {
+		return winner
+	}
+	return prefer
 }
 
 // writeSuccess writes 200 with the standard envelope {success:true,

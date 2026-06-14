@@ -307,6 +307,56 @@ func TestScraperHandler_GetEpisodes_NotFound(t *testing.T) {
 	}
 }
 
+// TestScraperHandler_GetEpisodes_PinsToFindIDWinner reproduces the "English
+// sources show 0 episodes" bug (e.g. "91 Days"): the first provider in the
+// failover order cannot resolve the title (FindID → ErrNotFound), so FindID
+// fails over and a LATER provider resolves the opaque, provider-specific ID.
+// The episode IDs are provider-specific, so the subsequent ListEpisodes stage
+// MUST be pinned to the provider that won FindID — otherwise the chain
+// restarts at the head, hands the foreign ID to the first provider, and that
+// provider returns ([], nil) (empty, no error), which short-circuits failover
+// and yields a bogus 0-episode "success" attributed to the wrong provider.
+func TestScraperHandler_GetEpisodes_PinsToFindIDWinner(t *testing.T) {
+	t.Parallel()
+	// "gogo": head of the chain. Cannot find the title; returns empty (no
+	// error) for any ListEpisodes call (mimics gogoanime handed a foreign ID).
+	gogo := &fakeProvider{
+		name:               "gogo",
+		findIDErr:          domain.WrapNotFound(errors.New("0 search results"), "gogo: not found"),
+		listEpisodesResult: []domain.Episode{}, // empty, nil error
+	}
+	// "alla": resolves the title and has the real episodes.
+	alla := &fakeProvider{
+		name:               "alla",
+		findIDResult:       "alla-show-id",
+		listEpisodesResult: []domain.Episode{{ID: "alla-show-id:1", Number: 1, Title: "Ep 1"}},
+	}
+	h := newTestHandler(t, gogo, alla)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?mal_id=32998", nil)
+	h.GetEpisodes(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	body := requireJSON(t, resp)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data missing: %v", body)
+	}
+	eps, _ := data["episodes"].([]any)
+	if len(eps) != 1 {
+		t.Fatalf("episodes = %d; want 1 (must fail over to FindID winner, not return gogo's empty list)", len(eps))
+	}
+	meta, _ := data["meta"].(map[string]any)
+	if prov, _ := meta["provider"].(string); prov != "alla" {
+		t.Errorf("meta.provider = %q; want \"alla\" (the provider that resolved the ID)", prov)
+	}
+}
+
 // TestScraperHandler_GetEpisodes_ProviderDown — ErrProviderDown → 502.
 func TestScraperHandler_GetEpisodes_ProviderDown(t *testing.T) {
 	t.Parallel()

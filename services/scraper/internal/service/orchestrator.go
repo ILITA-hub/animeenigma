@@ -361,7 +361,23 @@ func (o *Orchestrator) OrderedProviderNames(prefer string) []string {
 // per-method business calls so the catalog can pass `mal_id` and the
 // orchestrator resolves it through the registered provider chain.
 func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer string) (string, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+	id, _, err := o.FindIDNamed(ctx, ref, prefer)
+	return id, err
+}
+
+// FindIDNamed is FindID that also returns the name of the provider that
+// resolved the ID. The returned providerID is opaque and provider-specific,
+// so the caller MUST pin the subsequent ListEpisodes/ListServers/GetStream
+// stage to this provider (pass the winner as `prefer`). Otherwise the next
+// stage's failover chain restarts at the head of the order and hands the
+// foreign ID to the wrong provider — which may return an empty-but-no-error
+// result that short-circuits failover and yields a bogus "0 episodes" success
+// attributed to the wrong provider (the "English sources show 0 episodes for
+// titles only allanime/miruro can resolve" bug, e.g. "91 Days": gogoanime's
+// search misses, so allanime wins FindID, but gogoanime.ListEpisodes returns
+// ([],nil) for the allanime ID).
+func (o *Orchestrator) FindIDNamed(ctx context.Context, ref domain.AnimeRef, prefer string) (string, string, error) {
+	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
 		func(c context.Context, p domain.Provider) (string, error) {
 			return p.FindID(c, ref)
 		})
