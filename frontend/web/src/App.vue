@@ -111,6 +111,7 @@ import Toaster from '@/components/ui/Toaster.vue'
 import ConfirmDialogHost from '@/components/ui/ConfirmDialogHost.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
+import { reportFeError } from '@/utils/feErrorLog'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -178,6 +179,11 @@ onErrorCaptured((err) => {
     return false
   }
   appError.value = err instanceof Error ? err : new Error(String(err))
+  reportFeError({
+    kind: 'vue',
+    message: appError.value.message,
+    stack: appError.value.stack,
+  })
   console.error('[App Error]', err)
   return false // prevent propagation
 })

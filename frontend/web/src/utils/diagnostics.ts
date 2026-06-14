@@ -4,6 +4,7 @@
  * comprehensive diagnostic data when users report issues.
  */
 import type { AxiosInstance, AxiosResponse } from 'axios'
+import { reportFeError } from './feErrorLog'
 
 interface ConsoleEntry {
   time: string
@@ -183,15 +184,30 @@ export function hookAxiosDiagnostics(axiosInstance: AxiosInstance) {
       return response
     },
     (error: AxiosLikeError) => {
+      const method = error.config?.method?.toUpperCase() || 'GET'
+      const url = (error.config?.url || '').slice(0, 500)
+      const status = error.response?.status || 0
       addNetworkEntry({
         time: new Date().toISOString(),
-        method: error.config?.method?.toUpperCase() || 'GET',
-        url: (error.config?.url || '').slice(0, 500),
-        status: error.response?.status || 0,
+        method,
+        url,
+        status,
         duration: 0,
         size: 0,
         error: error.message?.slice(0, 500),
       })
+      // Ship every failed HTTP response (4xx/5xx) and genuine network failures
+      // to the backend log. Skip request cancellations — they aren't errors.
+      // Volume control + the own-traffic loop guard live in feErrorLog.
+      if ((error as { code?: string }).code !== 'ERR_CANCELED') {
+        reportFeError({
+          kind: 'http',
+          message: error.message || `HTTP ${status}`,
+          url,
+          method,
+          status,
+        })
+      }
       return Promise.reject(error)
     },
   )

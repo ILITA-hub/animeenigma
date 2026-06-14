@@ -110,6 +110,10 @@ func main() {
 	batcher.Start()
 
 	collectHandler := handler.NewCollectHandler(countingSink{batcher}, cfg.IPSalt)
+	// Log-only FE error sink — one structured Warnw line per accepted frontend
+	// error (→ ClickHouse otel_logs via the OTel filelog receiver) + a
+	// kind-labelled Prometheus counter. No DB write, no event-store enqueue.
+	clientErrorHandler := handler.NewClientErrorHandler(handler.NewLoggingClientErrorSink(log), cfg.IPSalt)
 	// The effects handler shares the same batcher Sink — effect rows flow
 	// through the identical InsertBatch write path as clickstream rows.
 	effectsHandler := handler.NewEffectsHandler(countingSink{batcher})
@@ -139,7 +143,7 @@ func main() {
 	defer c.Stop()
 
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, effectsHandler, adminHandler, readThresholdHandler, log, collector)
+	router := transport.NewRouter(collectHandler, clientErrorHandler, effectsHandler, adminHandler, readThresholdHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {

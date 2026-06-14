@@ -19,11 +19,13 @@ import (
 //	POST /api/analytics/collect    (public — anonymous users tracked; gateway
 //	                                forwards the full path UNCHANGED, same as
 //	                                every other service serves /api/<name>/...)
+//	POST /api/analytics/client-errors (public — FE error log sink, log-only)
 //	POST /internal/effects         (internal — BE egress producer sink)
 //	POST /internal/erase           (internal — gateway never proxies /internal/*)
 //	POST /internal/read-thresholds/recompute (internal — scheduler daily trigger)
 func NewRouter(
 	collect *handler.CollectHandler,
+	clientError *handler.ClientErrorHandler,
 	effects *handler.EffectsHandler,
 	admin *handler.AdminHandler,
 	readThresholds *handler.ReadThresholdHandler,
@@ -57,6 +59,9 @@ func NewRouter(
 	// notifications serves /api/notifications/...). /internal/* is hit
 	// directly inside the Docker network and is never gateway-proxied.
 	r.Post("/api/analytics/collect", collect.ServeHTTP)
+	// /api/analytics/client-errors is the public FE error log sink (log-only,
+	// no DB write). Same anonymous trust model as /collect; gateway-proxied.
+	r.Post("/api/analytics/client-errors", clientError.ServeHTTP)
 	// /internal/effects ingests BE egress/db/cache effect batches from the
 	// libs/tracing producer. Like /internal/erase it lives only here and is
 	// never gateway-proxied (Docker-network-only; T-02-INT).

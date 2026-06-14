@@ -4,16 +4,29 @@ import router from './router'
 import i18n from './i18n'
 import App from './App.vue'
 import { tryReloadOnChunkError } from './utils/chunk-reload'
+import { reportFeError, installFeErrorTraps } from './utils/feErrorLog'
 
 // Styles
 import './styles/main.css'
 
 const app = createApp(App)
 
+// app.config.errorHandler catches Vue errors NOT intercepted by the App.vue
+// onErrorCaptured boundary (e.g. errors during the boundary's own render).
+app.config.errorHandler = (err, _instance, info) => {
+  const e = err instanceof Error ? err : new Error(String(err))
+  if (tryReloadOnChunkError(e)) return
+  reportFeError({ kind: 'vue', message: e.message, stack: e.stack, source: String(info) })
+  console.error('[Vue Error]', err, info)
+}
+
 app.use(createPinia())
 app.use(router)
 app.use(i18n)
 app.mount('#app')
+
+// Uncaught window errors → backend log (gated + volume-capped inside the util).
+installFeErrorTraps()
 
 window.addEventListener('unhandledrejection', (event) => {
   // defineAsyncComponent failures after a deploy surface here as
@@ -23,6 +36,12 @@ window.addEventListener('unhandledrejection', (event) => {
     event.preventDefault()
     return
   }
+  const reason = event.reason
+  reportFeError({
+    kind: 'unhandledrejection',
+    message: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  })
   console.error('[Unhandled Promise Rejection]', event.reason)
 })
 
