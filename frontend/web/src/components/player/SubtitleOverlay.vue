@@ -1,9 +1,9 @@
 <template>
-  <Teleport :to="fullscreenEl || 'body'" :disabled="!fullscreenEl">
+  <Teleport :to="teleportTarget || 'body'" :disabled="!teleportTarget">
     <div
       v-if="visible && activeCues.length > 0"
       class="absolute inset-0 pointer-events-none overflow-hidden"
-      :class="fullscreenEl ? 'z-[2147483647]' : 'z-20'"
+      :class="teleportTarget ? 'z-[2147483647]' : 'z-20'"
     >
       <div
         v-for="(cue, index) in activeCues"
@@ -32,10 +32,22 @@ const props = withDefaults(defineProps<{
   format: 'ass' | 'srt' | 'vtt' | null
   visible: boolean
   fullscreenContainer?: HTMLElement | null
+  /**
+   * When set, the overlay is teleported into this element in WINDOWED mode too
+   * (not just fullscreen), rendered as the container's last child at max
+   * z-index. Opt-in for players whose in-place render is defeated by a child
+   * component's stacking context (UnifiedPlayer): the in-place `z-20` overlay
+   * is invisible there even though it out-numbers every player layer, but
+   * teleporting into the player root — the exact path that already works in
+   * fullscreen — puts it reliably on top. Legacy players omit this prop and
+   * keep their unchanged in-place windowed behavior.
+   */
+  windowedContainer?: HTMLElement | null
   /** Timing offset in seconds. Positive = show subtitles later, negative = earlier. */
   offset?: number
 }>(), {
   fullscreenContainer: null,
+  windowedContainer: null,
   offset: 0,
 })
 
@@ -58,6 +70,12 @@ function updateBaseFontSize() {
 
 // Fullscreen detection for Teleport
 const fullscreenEl = ref<Element | null>(null)
+
+// Where the overlay's DOM is teleported. Fullscreen element wins; otherwise the
+// opt-in windowedContainer (UnifiedPlayer) so the overlay renders as that
+// container's last child at max z-index in windowed mode too. Null → Teleport
+// disabled → in-place render at z-20 (legacy players' unchanged behavior).
+const teleportTarget = computed<Element | null>(() => fullscreenEl.value || props.windowedContainer || null)
 
 function onFullscreenChange() {
   const el = document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement || null

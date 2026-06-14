@@ -51,6 +51,8 @@
       :subtitle-url="chosenSubUrl"
       :format="chosenSubFormat"
       :visible="state.subLang.value !== 'off' && !!chosenSubUrl"
+      :fullscreen-container="rootRef"
+      :windowed-container="rootRef"
       :offset="state.subOffset.value"
     />
 
