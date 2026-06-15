@@ -196,6 +196,14 @@ func (p ProvidersConfig) toDegradedConfig() DegradedProvidersConfig {
 	return DegradedProvidersConfig{Names: m}
 }
 
+// ToDegradedConfig projects disabled providers into the legacy
+// DegradedProvidersConfig shape so boot-time provider registration (which gates
+// on DegradedProviders.IsDegraded) honors this config. Exported wrapper of the
+// internal projection — used by main.go when the DB-backed remote config wins.
+func (p ProvidersConfig) ToDegradedConfig() DegradedProvidersConfig {
+	return p.toDegradedConfig()
+}
+
 // LoadProviders reads + validates the YAML provider config at path.
 func LoadProviders(path string) (ProvidersConfig, error) {
 	raw, err := os.ReadFile(path)

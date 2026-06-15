@@ -217,6 +217,23 @@ func main() {
 	orchestrator.SetProviderTimeout(cfg.ProviderTimeout)
 	log.Infow("per-provider failover budget configured", "timeout", cfg.ProviderTimeout.String())
 
+	// Prefer DB-backed provider config from catalog (the runtime source of truth);
+	// fall back to the YAML/env config already in cfg if catalog is unreachable at
+	// boot. Set BOTH cfg.Providers (handler/health display) AND cfg.DegradedProviders
+	// (which gates provider registration below) so the DB is authoritative at boot.
+	// NOTE: this only re-gates registration at BOOT. Runtime hot enable/disable of the
+	// failover roster would require orchestrator re-registration (future work); the
+	// periodic refresher currently hot-updates the /health display only.
+	if cfg.CatalogURL != "" {
+		if pc, err := config.LoadProvidersRemote(context.Background(), cfg.CatalogURL, nil, 5*time.Second); err != nil {
+			log.Warnw("remote provider config unavailable; using YAML/env fallback", "error", err, "catalog_url", cfg.CatalogURL)
+		} else {
+			cfg.Providers = pc
+			cfg.DegradedProviders = pc.ToDegradedConfig()
+			log.Infow("loaded provider config from catalog", "source", pc.Source, "disabled", pc.DisabledNames())
+		}
+	}
+
 	// Gogoanime/Anitaku — PRIMARY EN provider (Phase 18 + 2026-05-13 reorder).
 	// Pivoted from "9anime" since the entire 9anime mirror chain is dead per
 	// 2026-05-12 research (.planning/phases/18-9anime/18-RESEARCH.md).
@@ -579,17 +596,6 @@ func main() {
 	// per-stage snapshot.
 	// Task 3 (unified player plan): attach the operator ProvidersConfig so
 	// GetHealth can surface enabled/reason/description per provider.
-
-	// Prefer DB-backed provider config from catalog; fall back to the YAML/env
-	// config already in cfg.Providers if catalog is unreachable at boot.
-	if cfg.CatalogURL != "" {
-		if pc, err := config.LoadProvidersRemote(context.Background(), cfg.CatalogURL, nil, 5*time.Second); err != nil {
-			log.Warnw("remote provider config unavailable; using YAML/env fallback", "error", err, "catalog_url", cfg.CatalogURL)
-		} else {
-			cfg.Providers = pc
-			log.Infow("loaded provider config from catalog", "source", pc.Source, "disabled", pc.DisabledNames())
-		}
-	}
 
 	scraperHandler := handler.NewScraperHandler(orchestrator, cache, log)
 	scraperHandler.WithProvidersConfig(&cfg.Providers)

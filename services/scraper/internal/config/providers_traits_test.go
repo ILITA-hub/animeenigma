@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+func TestProvidersConfig_ToDegradedConfig(t *testing.T) {
+	pc := NewProvidersConfigForTest([]ProviderMeta{
+		{Name: "allanime", Enabled: true},
+		{Name: "animepahe", Enabled: false},
+	})
+	d := pc.ToDegradedConfig()
+	if d.IsDegraded("allanime") {
+		t.Error("allanime is enabled; should NOT be degraded")
+	}
+	if !d.IsDegraded("animepahe") {
+		t.Error("animepahe is disabled; should be degraded")
+	}
+}
+
 func TestLoadProviders_ParsesTraits(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "providers.yaml")
