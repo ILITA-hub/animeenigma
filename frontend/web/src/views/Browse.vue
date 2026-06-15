@@ -116,21 +116,12 @@
             <!-- Title-language toggle: read English/romaji titles when RU names aren't recognizable -->
             <div class="mb-4 flex items-center justify-end gap-2">
               <span class="text-xs text-white/40">{{ $t('browse.titleLang.label') }}</span>
-              <div
-                class="inline-flex rounded-md border border-white/10 overflow-hidden"
-                role="group"
+              <SegmentedControl
+                :model-value="titleLang"
+                :options="titleLangOptions.map((opt) => ({ value: opt, label: $t('browse.titleLang.' + opt) }))"
                 :aria-label="$t('browse.titleLang.label')"
-              >
-                <button
-                  v-for="opt in titleLangOptions"
-                  :key="opt"
-                  type="button"
-                  class="px-2.5 py-1 text-xs font-medium transition-colors"
-                  :class="titleLang === opt ? 'bg-cyan-500/20 text-cyan-300' : 'text-white/50 hover:text-white hover:bg-white/5'"
-                  :aria-pressed="titleLang === opt"
-                  @click="setTitleLang(opt)"
-                >{{ $t('browse.titleLang.' + opt) }}</button>
-              </div>
+                @update:model-value="setTitleLang($event as TitleLang)"
+              />
             </div>
 
             <!-- Results Grid -->
@@ -222,6 +213,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Button, PaginationBar, SearchAutocomplete, Spinner } from '@/components/ui'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { PosterCard, AnimeContextMenu } from '@/components/anime'
 import { fromCatalogAnime } from '@/utils/toCardModel'
 import type { ListStatus } from '@/types/card'
