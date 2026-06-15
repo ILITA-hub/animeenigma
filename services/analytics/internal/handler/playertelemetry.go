@@ -47,9 +47,14 @@ type wirePlayerEvent struct {
 	// Stall fields
 	StallMS int `json:"stall_ms"`
 
-	// Shared metadata (can also come from the envelope below)
-	Audio string `json:"audio,omitempty"`
-	Lang  string `json:"lang,omitempty"`
+	// Shared metadata (can also come from the envelope below). The frontend
+	// beacon (playerTelemetry.ts) sends these PER EVENT — a buffered batch can
+	// span episode/anime switches — so they are read here first and only fall
+	// back to the envelope values when absent.
+	AnimeID string `json:"anime_id,omitempty"`
+	Episode int    `json:"episode,omitempty"`
+	Audio   string `json:"audio,omitempty"`
+	Lang    string `json:"lang,omitempty"`
 }
 
 // wirePlayerBatch is the top-level wire payload for /api/analytics/player-events.
@@ -98,7 +103,9 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			continue // skip unknown kinds
 		}
 
-		// Resolve envelope-level audio/lang if not on the individual event.
+		// Per-event value first, envelope-level fallback. The FE sends
+		// anime_id/episode/audio/lang on each event; older/envelope-style
+		// senders (and our smoke tests) put them on the batch.
 		audio := we.Audio
 		if audio == "" {
 			audio = batch.Audio
@@ -107,6 +114,14 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		if lang == "" {
 			lang = batch.Lang
 		}
+		animeID := we.AnimeID
+		if animeID == "" {
+			animeID = batch.AnimeID
+		}
+		episode := we.Episode
+		if episode == 0 {
+			episode = batch.Episode
+		}
 
 		// Pack contextual dimensions into Properties JSON.
 		propMap := map[string]any{
@@ -114,7 +129,7 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			"reached_playback": we.ReachedPlayback,
 			"audio":            audio,
 			"lang":             lang,
-			"episode":          batch.Episode,
+			"episode":          episode,
 		}
 		if we.ErrorKind != "" {
 			propMap["error_kind"] = we.ErrorKind
@@ -131,7 +146,7 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			EffectKind: effectKind,
 			Target:     capString(we.Provider),
 			TargetKind: "provider",
-			AnimeID:    batch.AnimeID,
+			AnimeID:    animeID,
 			DurationMS: durationMS,
 
 			// Attribution

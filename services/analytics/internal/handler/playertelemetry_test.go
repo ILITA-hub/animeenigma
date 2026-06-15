@@ -106,6 +106,87 @@ func TestPlayerTelemetry(t *testing.T) {
 	}
 }
 
+// TestPlayerTelemetry_PerEventAnimeID mirrors the REAL frontend wire shape:
+// playerTelemetry.ts flushes { events: [...] } with NO top-level envelope —
+// anime_id/episode/audio/lang ride on each event. This is the regression test
+// for the bug where every analytics.events row had a NULL anime_id (and
+// episode=0) because the handler only read the (never-sent) envelope fields.
+func TestPlayerTelemetry_PerEventAnimeID(t *testing.T) {
+	sink := &effectSink{}
+	h := NewPlayerTelemetryHandler(sink)
+
+	// No envelope-level anime_id/episode — exactly what the FE sends. A single
+	// batch can also span two different episodes (buffered across a switch).
+	body := `{"events":[
+		{"kind":"resolve","provider":"kodik","anime_id":"uuid-1","episode":7,"audio":"sub","lang":"ru","latency_ms":1200,"outcome":"ok","reached_playback":true},
+		{"kind":"stall","provider":"allanime","anime_id":"uuid-2","episode":8,"stall_ms":400}
+	]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sink.count() != 2 {
+		t.Fatalf("expected 2 events enqueued, got %d", sink.count())
+	}
+
+	row0 := sink.at(0)
+	if row0.AnimeID != "uuid-1" {
+		t.Errorf("row0 AnimeID = %q, want uuid-1 (per-event, no envelope)", row0.AnimeID)
+	}
+	var p0 map[string]any
+	if err := json.Unmarshal([]byte(row0.Properties), &p0); err != nil {
+		t.Fatalf("row0 Properties invalid JSON: %v", err)
+	}
+	if p0["episode"] != float64(7) {
+		t.Errorf("row0 Properties episode = %v, want 7", p0["episode"])
+	}
+	if p0["audio"] != "sub" || p0["lang"] != "ru" {
+		t.Errorf("row0 audio/lang = %v/%v, want sub/ru", p0["audio"], p0["lang"])
+	}
+
+	row1 := sink.at(1)
+	if row1.AnimeID != "uuid-2" {
+		t.Errorf("row1 AnimeID = %q, want uuid-2 (distinct per-event anime in same batch)", row1.AnimeID)
+	}
+	var p1 map[string]any
+	if err := json.Unmarshal([]byte(row1.Properties), &p1); err != nil {
+		t.Fatalf("row1 Properties invalid JSON: %v", err)
+	}
+	if p1["episode"] != float64(8) {
+		t.Errorf("row1 Properties episode = %v, want 8", p1["episode"])
+	}
+}
+
+// TestPlayerTelemetry_EnvelopeFallback verifies the envelope still works when an
+// event omits anime_id/episode (smoke-test / older-sender compatibility).
+func TestPlayerTelemetry_EnvelopeFallback(t *testing.T) {
+	sink := &effectSink{}
+	h := NewPlayerTelemetryHandler(sink)
+
+	body := `{"anime_id":"env-anime","episode":5,"audio":"dub","lang":"en","events":[
+		{"kind":"resolve","provider":"miruro","latency_ms":800,"outcome":"ok","reached_playback":true}
+	]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+	row0 := sink.at(0)
+	if row0.AnimeID != "env-anime" {
+		t.Errorf("row0 AnimeID = %q, want env-anime (envelope fallback)", row0.AnimeID)
+	}
+	var p0 map[string]any
+	_ = json.Unmarshal([]byte(row0.Properties), &p0)
+	if p0["episode"] != float64(5) {
+		t.Errorf("row0 episode = %v, want 5 (envelope fallback)", p0["episode"])
+	}
+}
+
 // TestPlayerTelemetry_SkipsEmptyProvider: events with empty provider are dropped.
 func TestPlayerTelemetry_SkipsEmptyProvider(t *testing.T) {
 	sink := &effectSink{}
