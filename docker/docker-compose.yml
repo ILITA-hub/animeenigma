@@ -189,6 +189,8 @@ services:
       # effects (per-provider host/bytes) to analytics /internal/effects via this
       # Docker-network-only URL. Non-secret service-discovery URL (T-02-ENV).
       ANALYTICS_INTERNAL_URL: ${ANALYTICS_INTERNAL_URL:-http://analytics:8092}
+      CATALOG_URL: http://catalog:8081
+      SCRAPER_PROVIDERS_REFRESH: 60s
     volumes:
       # Provider management source of truth (ISS-023). Edit on host + restart.
       - ./scraper-providers.yaml:/config/providers.yaml:ro
@@ -589,6 +591,9 @@ services:
       # analytics /internal/effects via this Docker-network-only URL. Non-secret
       # service-discovery URL (T-02-ENV).
       ANALYTICS_INTERNAL_URL: ${ANALYTICS_INTERNAL_URL:-http://analytics:8092}
+      SCRAPER_PROVIDERS_SEED_FILE: /config/scraper-providers.yaml
+    volumes:
+      - ./scraper-providers.yaml:/config/scraper-providers.yaml:ro
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:

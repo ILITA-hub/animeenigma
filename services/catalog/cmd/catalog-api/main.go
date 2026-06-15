@@ -28,6 +28,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/scraperprovider"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/client"
@@ -110,6 +111,16 @@ func main() {
 	// underlying table already exists.
 	if err := db.SetupJoinTable(&domain.Anime{}, "Tags", &domain.AnimeTag{}); err != nil {
 		log.Fatalw("failed to register AnimeTag join model", "error", err)
+	}
+
+	// Seed scraper_providers from the bundled YAML (insert-if-absent; the DB is
+	// the runtime source of truth, YAML is seed + scraper offline fallback).
+	if seedPath := os.Getenv("SCRAPER_PROVIDERS_SEED_FILE"); seedPath != "" {
+		if err := scraperprovider.SeedFromYAML(db.DB, seedPath); err != nil {
+			log.Errorw("scraper provider seed failed (continuing)", "error", err, "path", seedPath)
+		} else {
+			log.Infow("scraper provider seed applied", "path", seedPath)
+		}
 	}
 
 	// Initialize cache
