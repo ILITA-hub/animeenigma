@@ -64,6 +64,31 @@ func TestSeedFromYAML_InsertsRows(t *testing.T) {
 	}
 }
 
+func TestSeedFromYAML_IntrinsicGroupForAdult(t *testing.T) {
+	db := newDB(t)
+	dir := t.TempDir()
+	p := filepath.Join(dir, "providers.yaml")
+	// 18anime WITHOUT an explicit group: must still be stored as "adult".
+	y := `providers:
+  - name: 18anime
+    enabled: true
+    supports_raw: true
+`
+	if err := os.WriteFile(p, []byte(y), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := scraperprovider.SeedFromYAML(db, p); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	var row domain.ScraperProvider
+	if err := db.First(&row, "name = ?", "18anime").Error; err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if row.Group != "adult" {
+		t.Errorf("18anime group = %q, want adult (intrinsic)", row.Group)
+	}
+}
+
 func TestSeedFromYAML_IdempotentDoesNotOverwrite(t *testing.T) {
 	db := newDB(t)
 	path := writeYAML(t)

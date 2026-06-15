@@ -34,6 +34,21 @@ type seedFile struct {
 
 func deref(p *bool) bool { return p != nil && *p }
 
+// intrinsicGroups mirrors services/scraper/internal/config/providers.go's
+// providerGroups: group is INTRINSIC to a provider (a hentai source is always
+// "adult"), so a missing/typo'd YAML group can never move 18anime into the EN
+// failover chain. Absent entries default to "en".
+var intrinsicGroups = map[string]string{
+	"18anime": "adult",
+}
+
+func intrinsicGroup(name string) string {
+	if g, ok := intrinsicGroups[name]; ok {
+		return g
+	}
+	return "en"
+}
+
 // SeedFromYAML reads path and inserts any provider rows not already present.
 // Returns nil (no-op) if path is empty so a missing seed file never blocks boot.
 func SeedFromYAML(db *gorm.DB, path string) error {
@@ -59,10 +74,9 @@ func SeedFromYAML(db *gorm.DB, path string) error {
 		if count > 0 {
 			continue // insert-if-absent: never overwrite an existing row
 		}
-		group := e.Group
-		if group == "" {
-			group = "en"
-		}
+		// Group is intrinsic — always derive from the provider name, never trust
+		// the YAML value (defense-in-depth for the 18+/EN separation).
+		group := intrinsicGroup(e.Name)
 		subDelivery := e.SubDelivery
 		if subDelivery == "" {
 			subDelivery = "hard"
