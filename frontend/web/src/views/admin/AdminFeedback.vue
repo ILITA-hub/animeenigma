@@ -10,24 +10,14 @@
         </div>
         <div class="flex items-center gap-3">
           <!-- View toggle: table / kanban -->
-          <div class="inline-flex rounded-md border border-white/10 overflow-hidden">
-            <button
-              type="button"
-              class="px-3 py-2 text-sm font-medium transition"
-              :class="viewMode === 'table' ? 'bg-cyan-500/80 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'"
-              @click="setViewMode('table')"
-            >
-              {{ $t('admin.feedback.viewTable') }}
-            </button>
-            <button
-              type="button"
-              class="px-3 py-2 text-sm font-medium transition"
-              :class="viewMode === 'kanban' ? 'bg-cyan-500/80 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'"
-              @click="setViewMode('kanban')"
-            >
-              {{ $t('admin.feedback.viewKanban') }}
-            </button>
-          </div>
+          <SegmentedControl
+            :model-value="viewMode"
+            :options="[
+              { value: 'table', label: $t('admin.feedback.viewTable') },
+              { value: 'kanban', label: $t('admin.feedback.viewKanban') },
+            ]"
+            @update:model-value="setViewMode($event as ViewMode)"
+          />
           <span class="text-white/50 text-sm">{{ $t('admin.feedback.total', { n: total }) }}</span>
           <button
             type="button"
@@ -408,6 +398,7 @@ import { Check, Link as LinkIcon } from 'lucide-vue-next'
 import { adminApi } from '@/api/client'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { Spinner, DatePicker, Badge } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
 import type { FeedbackStatus } from '@/types/feedback'
