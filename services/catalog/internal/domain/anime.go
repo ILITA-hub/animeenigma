@@ -23,6 +23,7 @@ type Anime struct {
 	Kind            string         `gorm:"size:20;index" json:"kind,omitempty"`
 	Rating          string         `gorm:"size:20" json:"rating,omitempty"`
 	MaterialSource  string         `gorm:"size:50;column:material_source" json:"material_source,omitempty"`
+	Franchise       string         `gorm:"size:200;index" json:"franchise,omitempty"`
 	EpisodesCount   int            `json:"episodes_count"`
 	EpisodesAired   int            `json:"episodes_aired,omitempty"`
 	EpisodeDuration int            `json:"episode_duration,omitempty"`
