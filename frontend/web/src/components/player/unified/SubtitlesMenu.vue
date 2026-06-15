@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col" style="min-width: 264px;">
+  <div class="flex flex-col min-w-[264px]">
     <!-- Header -->
     <div class="px-[10px] pt-[8px] pb-[4px]">
       <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
@@ -50,7 +50,7 @@
       {{ hardsubNote }}
     </div>
 
-    <div class="h-px mx-1 my-[6px]" style="background: var(--border);"/>
+    <div class="h-px mx-1 my-[6px] bg-[var(--border)]"/>
 
     <!-- Subtitle settings sub-section -->
     <div class="px-[10px] pb-[4px] pt-[2px]">
@@ -118,7 +118,7 @@
       </div>
     </div>
 
-    <div class="h-px mx-1 my-[6px]" style="background: var(--border);"/>
+    <div class="h-px mx-1 my-[6px] bg-[var(--border)]"/>
 
     <!-- Browse all subtitles -->
     <button

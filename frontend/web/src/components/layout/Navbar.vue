@@ -87,8 +87,7 @@
                 <Transition name="dropdown">
                   <div
                     v-if="searchResults.length > 0"
-                    class="absolute top-full left-0 mt-2 rounded-xl overflow-hidden z-50 bg-background/95 backdrop-blur-xl border border-white/10 shadow-2xl"
-                    style="min-width: 320px"
+                    class="absolute top-full left-0 mt-2 min-w-[320px] rounded-xl overflow-hidden z-50 bg-background/95 backdrop-blur-xl border border-white/10 shadow-2xl"
                   >
                     <router-link
                       v-for="(result, index) in searchResults"

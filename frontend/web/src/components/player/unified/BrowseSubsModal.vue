@@ -1,14 +1,13 @@
 <template>
   <!-- Scrim -->
   <div
-    class="absolute inset-0 z-20 flex items-center justify-center p-6"
-    style="background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);"
+    class="absolute inset-0 z-20 flex items-center justify-center p-6 bg-black/60 backdrop-blur-[6px]"
     @click.self="emit('close')"
   >
     <!-- Dialog -->
     <div
-      class="flex flex-col rounded-[var(--r-xl)] overflow-hidden w-[540px] max-w-full"
-      style="max-height: 100%; box-shadow: 0 30px 70px rgba(0,0,0,0.6); background: var(--elevated);"
+      class="flex flex-col rounded-[var(--r-xl)] overflow-hidden w-[540px] max-w-full max-h-full bg-[var(--elevated)]"
+      style="box-shadow: 0 30px 70px rgba(0,0,0,0.6);"
       role="dialog"
       aria-modal="true"
       aria-labelledby="browse-subs-title"
@@ -48,15 +47,14 @@
             data-test="search"
             type="text"
             placeholder="Search by label or provider…"
-            class="w-full py-[10px] pl-9 pr-9 rounded-[var(--r-md)] text-[14px] text-white placeholder-white/35 transition-all border focus:outline-none"
-            style="background: rgba(255,255,255,0.06); border-color: var(--border);"
+            class="w-full py-[10px] pl-9 pr-9 rounded-[var(--r-md)] text-[14px] text-white placeholder-white/35 transition-all border focus:outline-none bg-white/[0.06]"
+            style="border-color: var(--border);"
             @focus="($event.target as HTMLInputElement).style.borderColor = 'var(--brand-cyan)'"
             @blur="($event.target as HTMLInputElement).style.borderColor = 'var(--border)'"
           />
           <button
             v-if="q"
-            class="absolute right-2 w-6 h-6 grid place-items-center rounded-full border-0 text-white"
-            style="background: rgba(255,255,255,0.1);"
+            class="absolute right-2 w-6 h-6 grid place-items-center rounded-full border-0 text-white bg-white/10"
             aria-label="Clear search"
             @click="q = ''"
           >

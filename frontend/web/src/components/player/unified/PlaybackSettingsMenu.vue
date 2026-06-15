@@ -1,6 +1,6 @@
 <template>
   <!-- Root menu or sub-view -->
-  <div class="flex flex-col" style="min-width: 250px;">
+  <div class="flex flex-col min-w-[250px]">
 
     <!-- Sub-view: Quality -->
     <template v-if="view === 'quality'">
@@ -69,7 +69,7 @@
         </span>
       </div>
 
-      <div class="h-px mx-1 my-[6px]" style="background: var(--border);"/>
+      <div class="h-px mx-1 my-[6px] bg-[var(--border)]"/>
 
       <!-- Quality row -->
       <button
@@ -97,7 +97,7 @@
         </span>
       </button>
 
-      <div class="h-px mx-1 my-[6px]" style="background: var(--border);"/>
+      <div class="h-px mx-1 my-[6px] bg-[var(--border)]"/>
 
       <!-- Autoplay next toggle -->
       <div class="flex items-center gap-[10px] px-[10px] py-[9px]">
@@ -131,7 +131,7 @@
 
       <!-- Live debug mini-stats (hacker mode only) -->
       <template v-if="hackerMode && debugStats">
-        <div class="h-px mx-1 my-[6px]" style="background: var(--border);"/>
+        <div class="h-px mx-1 my-[6px] bg-[var(--border)]"/>
         <div class="px-[10px] pb-[8px] font-mono text-[11px] leading-[1.8] text-[var(--success)]" data-test="debug-stats">
           <div>BW   {{ debugStats.bw }}</div>
           <div>BUF  {{ debugStats.buffer }}</div>

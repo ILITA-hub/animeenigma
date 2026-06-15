@@ -52,7 +52,7 @@
   </div>
   <!-- Loading skeleton — mirrors ContinueWatchingRow.vue's pattern. -->
   <div v-else-if="isLoading" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-    <div class="h-8 w-48 rounded animate-pulse mb-4" style="background: var(--line-strong);" />
+    <div class="h-8 w-48 rounded animate-pulse mb-4 bg-[var(--line-strong)]" />
     <div class="flex gap-3 overflow-hidden">
       <div
         v-for="i in 6"

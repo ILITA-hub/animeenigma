@@ -38,18 +38,18 @@
         doesn't model these. Keeping avoids a visible diff.
       -->
       <div class="flex items-center justify-between gap-2">
-        <button type="button" data-test="nudge-minus-1" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60" @click="nudge(-1)">−1s</button>
-        <button type="button" data-test="nudge-minus-01" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60" @click="nudge(-0.1)">−0.1s</button>
+        <button type="button" data-test="nudge-minus-1" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50" @click="nudge(-1)">−1s</button>
+        <button type="button" data-test="nudge-minus-01" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50" @click="nudge(-0.1)">−0.1s</button>
         <span data-test="readout" class="min-w-[3.5rem] text-center text-cyan-200 text-sm font-semibold tabular-nums">{{ readout }}</span>
-        <button type="button" data-test="nudge-plus-01" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60" @click="nudge(0.1)">+0.1s</button>
-        <button type="button" data-test="nudge-plus-1" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60" @click="nudge(1)">+1s</button>
+        <button type="button" data-test="nudge-plus-01" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50" @click="nudge(0.1)">+0.1s</button>
+        <button type="button" data-test="nudge-plus-1" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50" @click="nudge(1)">+1s</button>
       </div>
       <!--
         Kept bespoke (07-02): bare underlined text link (no bg/border). The Button
         primitive has no text-only variant — `ghost`/`outline` add a filled/bordered
         box → visible diff. Documented governance-only keep.
       -->
-      <button type="button" data-test="reset" class="mt-3 text-xs text-white/50 hover:text-white/80 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60" @click="reset()">
+      <button type="button" data-test="reset" class="mt-3 text-xs text-white/50 hover:text-white/80 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50" @click="reset()">
         {{ t('player.subtitleSettings.reset') }}
       </button>
     </div>
