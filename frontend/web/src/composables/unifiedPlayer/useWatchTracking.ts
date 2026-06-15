@@ -3,6 +3,7 @@ import { userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchSession } from '@/composables/useWatchSession'
 import { postKeepalive } from '@/utils/authBeacon'
+import type { WatchCombo } from '@/types/preference'
 
 /**
  * useWatchTracking — server + localStorage watch-progress tracking for the
@@ -35,6 +36,7 @@ export function useWatchTracking(
   animeId: () => string,
   episodeNumber: () => number | null,
   hooks: WatchTrackingHooks = {},
+  comboGetter?: () => WatchCombo | null,
 ) {
   const auth = useAuthStore()
   const { sessionId } = useWatchSession()
@@ -52,6 +54,21 @@ export function useWatchTracking(
     marking.value = false
     lastSavedMediaTime = 0
     lastKnown = { time: 0, dur: 0 }
+  }
+
+  // ── combo helper ──────────────────────────────────────────────────────────
+
+  function comboFields(): Partial<WatchCombo> {
+    const c = comboGetter?.()
+    return c
+      ? {
+          player: c.player,
+          language: c.language,
+          watch_type: c.watch_type,
+          translation_id: c.translation_id,
+          translation_title: c.translation_title,
+        }
+      : {}
   }
 
   // ── persistence ───────────────────────────────────────────────────────────
@@ -79,6 +96,7 @@ export function useWatchTracking(
         progress: Math.floor(time),
         duration: Math.floor(maxTime.value) || null,
         session_id: sessionId.value,
+        ...comboFields(),
       })
       .catch(() => {
         /* heartbeat save is best-effort */
@@ -107,6 +125,7 @@ export function useWatchTracking(
       progress: Math.floor(lastKnown.time),
       duration: Math.floor(maxTime.value) || null,
       session_id: sessionId.value,
+      ...comboFields(),
     })
   }
 
@@ -117,7 +136,7 @@ export function useWatchTracking(
     if (!ep || !auth.isAuthenticated || episodeMarked.value || marking.value) return false
     marking.value = true
     try {
-      await userApi.markEpisodeWatched(animeId(), ep, undefined, sessionId.value)
+      await userApi.markEpisodeWatched(animeId(), ep, comboGetter?.() ?? undefined, sessionId.value)
       episodeMarked.value = true
       hooks.onMarked?.(ep)
       return true

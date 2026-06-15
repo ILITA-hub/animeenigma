@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { WatchCombo } from '@/types/preference'
 
 const updateProgress = vi.fn().mockResolvedValue({})
 const markEpisodeWatched = vi.fn().mockResolvedValue({})
@@ -25,8 +26,20 @@ vi.mock('@/utils/authBeacon', () => ({
 
 import { useWatchTracking } from './useWatchTracking'
 
+const TEST_COMBO: WatchCombo = {
+  player: 'kodik',
+  language: 'ru',
+  watch_type: 'dub',
+  translation_id: 'team-42',
+  translation_title: 'AniLibria',
+}
+
 function makeTracking(ep: number | null = 3, hooks = {}) {
   return useWatchTracking(() => 'anime-1', () => ep, hooks)
+}
+
+function makeTrackingWithCombo(ep: number | null = 3, combo: WatchCombo | null = TEST_COMBO) {
+  return useWatchTracking(() => 'anime-1', () => ep, {}, () => combo)
 }
 
 beforeEach(() => {
@@ -145,5 +158,88 @@ describe('useWatchTracking', () => {
     t.saveNow()
     expect(updateProgress).not.toHaveBeenCalled()
     expect(localStorage.getItem('watch_progress:anime-1')).toBeNull()
+  })
+
+  // ── combo-getter tests ────────────────────────────────────────────────────
+
+  it('heartbeat save includes combo fields when a comboGetter is supplied', () => {
+    const t = makeTrackingWithCombo()
+    t.onTick(31, 1440)
+    expect(updateProgress).toHaveBeenCalledTimes(1)
+    expect(updateProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anime_id: 'anime-1',
+        episode_number: 3,
+        progress: 31,
+        player: 'kodik',
+        language: 'ru',
+        watch_type: 'dub',
+        translation_title: 'AniLibria',
+      }),
+    )
+  })
+
+  it('saveNow includes combo fields when a comboGetter is supplied', () => {
+    const t = makeTrackingWithCombo()
+    t.onTick(12, 1440)
+    t.saveNow()
+    expect(updateProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        player: 'kodik',
+        language: 'ru',
+        watch_type: 'dub',
+        translation_id: 'team-42',
+        translation_title: 'AniLibria',
+      }),
+    )
+  })
+
+  it('beaconSave includes combo fields when a comboGetter is supplied', () => {
+    const t = makeTrackingWithCombo()
+    t.onTick(42, 1440)
+    t.beaconSave()
+    expect(postKeepalive).toHaveBeenCalledWith(
+      '/users/progress',
+      expect.objectContaining({
+        player: 'kodik',
+        language: 'ru',
+        watch_type: 'dub',
+        translation_id: 'team-42',
+        translation_title: 'AniLibria',
+      }),
+    )
+  })
+
+  it('markWatched passes the combo to markEpisodeWatched when a comboGetter is supplied', async () => {
+    const t = makeTrackingWithCombo()
+    await t.markWatched()
+    expect(markEpisodeWatched).toHaveBeenCalledWith(
+      'anime-1',
+      3,
+      expect.objectContaining({ player: 'kodik', language: 'ru', watch_type: 'dub' }),
+      expect.any(String),
+    )
+  })
+
+  it('markWatched passes undefined combo when no comboGetter is supplied (backward compat)', async () => {
+    const t = makeTracking()
+    await t.markWatched()
+    expect(markEpisodeWatched).toHaveBeenCalledWith('anime-1', 3, undefined, expect.any(String))
+  })
+
+  it('combo fields are omitted when comboGetter returns null', () => {
+    const t = makeTrackingWithCombo(3, null)
+    t.onTick(31, 1440)
+    expect(updateProgress).toHaveBeenCalledWith(
+      expect.not.objectContaining({ player: expect.anything() }),
+    )
+  })
+
+  it('no combo fields are sent when no comboGetter is provided (3-arg call backward compat)', () => {
+    const t = makeTracking()
+    t.onTick(31, 1440)
+    expect(updateProgress).toHaveBeenCalledWith(
+      expect.not.objectContaining({ player: expect.anything() }),
+    )
   })
 })
