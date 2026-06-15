@@ -19,6 +19,7 @@
           <component :is="tab.icon" class="w-4 h-4" />
         </span>
         {{ tab.label }}
+        <!-- bespoke-keep: inline tab count bubble; nesting the Badge primitive inside this UI primitive isn't worth the coupling -->
         <span v-if="tab.count !== undefined" class="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-white/10">
           {{ tab.count }}
         </span>

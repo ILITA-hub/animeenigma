@@ -21,6 +21,7 @@
         >
           <Filter class="size-4" aria-hidden="true" />
           {{ $t('browse.filters.mobileToggle') }}
+          <!-- bespoke-keep: circular numeric counter (min-w + rounded-full); the Badge primitive is label-shaped (rounded, padded) and can't model the count bubble -->
           <span
             v-if="filters.activeCount.value"
             class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-semibold"

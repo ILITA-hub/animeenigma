@@ -6,12 +6,14 @@
       </Badge>
       <span class="text-muted-foreground" aria-hidden="true">→</span>
     </template>
-    <span
-      class="new-chip inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-pink-500/20 text-pink-400"
+    <Badge
+      variant="secondary"
+      size="sm"
+      class="new-chip rounded-full px-2.5 font-semibold"
       data-testid="stepper-new"
     >
       {{ t('spotlight.continueWatchingNew.epChipNew', { n: newEpisode }) }}
-    </span>
+    </Badge>
   </div>
 </template>
 
