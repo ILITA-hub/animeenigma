@@ -15,7 +15,7 @@ type ScraperProvider struct {
 	Enabled bool `json:"enabled"`
 	// Group is intrinsic: "en" (default) or "adult". `group` is a reserved word
 	// in some SQL dialects — keep the column name explicit via the tag.
-	Group string `gorm:"column:group;size:16;default:en" json:"group"`
+	Group string `gorm:"column:group;size:16;default:'en'" json:"group"`
 	// Reason is a short dashboard label; Description is the full why.
 	Reason      string `json:"reason"`
 	Description string `json:"description"`
@@ -23,7 +23,7 @@ type ScraperProvider struct {
 	SupportsSub      bool      `json:"supports_sub"`
 	SupportsDub      bool      `json:"supports_dub"`
 	SupportsRaw      bool      `json:"supports_raw"`
-	SubDelivery      string    `gorm:"size:8;default:hard" json:"sub_delivery"` // soft|hard|none
+	SubDelivery      string    `gorm:"size:8;default:'hard'" json:"sub_delivery"` // soft|hard|none
 	QualityCeiling   string    `gorm:"size:8" json:"quality_ceiling"`
 	PreferenceWeight int       `json:"preference_weight"`
 	UpdatedAt        time.Time `json:"updated_at"`
