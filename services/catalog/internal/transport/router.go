@@ -25,6 +25,7 @@ func NewRouter(
 	internalCacheHandler *handler.InternalCacheHandler,
 	internalEpisodesHandler *handler.InternalEpisodesHandler,
 	internalEpisodesValidateHandler *handler.InternalEpisodesValidateHandler,
+	internalScraperProvidersHandler *handler.InternalScraperProvidersHandler,
 	spotlightHandler *handler.SpotlightHandler,
 	cfg *config.Config,
 	log *logger.Logger,
@@ -80,6 +81,12 @@ func NewRouter(
 	// /episodes contract is NOT modified.
 	if internalEpisodesValidateHandler != nil {
 		r.Get("/internal/anime/{shikimoriId}/episodes/validate", internalEpisodesValidateHandler.Validate)
+	}
+
+	// Scraper provider config + capability traits (spec 2026-06-15).
+	// Same gateway-non-routing security model as the internal endpoints above.
+	if internalScraperProvidersHandler != nil {
+		r.Get("/internal/scraper/providers", internalScraperProvidersHandler.List)
 	}
 
 	// API routes

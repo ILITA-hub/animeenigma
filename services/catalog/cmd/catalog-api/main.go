@@ -271,6 +271,12 @@ func main() {
 	episodesValidateService := service.NewEpisodesValidateService(episodesLookupService, animeRepo, log)
 	internalEpisodesValidateHandler := handler.NewInternalEpisodesValidateHandler(episodesValidateService, log)
 
+	// Scraper provider config + capability traits (spec 2026-06-15).
+	// Serves GET /internal/scraper/providers — consumed by the scraper
+	// microservice at boot + on a refresh interval. Same gateway-non-routing
+	// security model as the other /internal/* endpoints above.
+	internalScraperProvidersHandler := handler.NewInternalScraperProvidersHandler(db.DB)
+
 	// Workstream raw-jp, Phase 02 — multi-provider subtitle aggregator.
 	// Fans out to Jimaku (JP) + OpenSubtitles (everything else, keyed by
 	// IMDb/TMDB) and merges results. Mounts /api/anime/{id}/subtitles[/all].
@@ -347,7 +353,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, spotlightHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
