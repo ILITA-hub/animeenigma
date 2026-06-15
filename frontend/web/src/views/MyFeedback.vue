@@ -14,10 +14,22 @@
 
       <div class="flex items-end gap-3 flex-wrap mb-6">
         <div class="w-40">
-          <Input v-model="dateFrom" size="sm" type="date" :label="$t('myFeedback.filter.from')" />
+          <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('myFeedback.filter.from') }}</label>
+          <DatePicker
+            v-model="dateFrom"
+            class="w-full h-9"
+            :placeholder="$t('myFeedback.filter.from')"
+            :title="$t('myFeedback.filter.from')"
+          />
         </div>
         <div class="w-40">
-          <Input v-model="dateTo" size="sm" type="date" :label="$t('myFeedback.filter.to')" />
+          <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('myFeedback.filter.to') }}</label>
+          <DatePicker
+            v-model="dateTo"
+            class="w-full h-9"
+            :placeholder="$t('myFeedback.filter.to')"
+            :title="$t('myFeedback.filter.to')"
+          />
         </div>
         <Button v-if="dateFrom || dateTo" variant="ghost" size="sm" class="mb-0.5" @click="resetDates">
           {{ $t('myFeedback.filter.reset') }}
@@ -80,8 +92,7 @@ import { useI18n } from 'vue-i18n'
 import { userApi } from '@/api/client'
 import { dayStartISO, dayEndISO } from '@/utils/time'
 import type { MyFeedbackItem, MyFeedbackResponse, FeedbackStatus } from '@/types/feedback'
-import { Badge, Button, Spinner } from '@/components/ui'
-import Input from '@/components/ui/Input.vue'
+import { Badge, Button, DatePicker, Spinner } from '@/components/ui'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PaginationBar from '@/components/ui/PaginationBar.vue'
 

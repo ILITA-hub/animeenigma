@@ -207,10 +207,12 @@ body {
   background-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Focus visible for accessibility */
+/* Focus visible for accessibility — unified thin neon ring (matches the
+   focus-visible:ring-2 ring-cyan-500/50 standard used by Input/Select/DatePicker
+   and the other ui primitives). Single 2px cyan ring, no fat outer gap. */
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-cyan-400), 0 0 0 4px var(--color-base);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-cyan-500) 50%, transparent);
 }
 
 /* Glassmorphism utilities */

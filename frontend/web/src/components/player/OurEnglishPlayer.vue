@@ -81,7 +81,7 @@
           </label>
           <select
             v-model="preferredProvider"
-            class="bg-white/10 hover:bg-white/15 text-white text-sm rounded-md px-3 py-1.5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+            class="bg-white/10 hover:bg-white/15 text-white text-sm rounded-md px-3 py-1.5 border border-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
           >
             <option value="">{{ $t('player.ourenglish.sourceAuto') }}</option>
             <option v-for="p in availableProviders" :key="p" :value="p">
@@ -96,7 +96,7 @@
             </label>
             <select
               v-model="selectedServerId"
-              class="bg-white/10 hover:bg-white/15 text-white text-sm rounded-md px-3 py-1.5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+              class="bg-white/10 hover:bg-white/15 text-white text-sm rounded-md px-3 py-1.5 border border-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
             >
               <option v-for="s in servers" :key="s.id" :value="s.id">
                 {{ s.name }}{{ s.type ? ` (${s.type})` : '' }}
@@ -111,7 +111,7 @@
           </label>
           <select
             v-model="selectedSubKey"
-            class="bg-white/10 hover:bg-white/15 text-white text-sm rounded-md px-3 py-1.5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+            class="bg-white/10 hover:bg-white/15 text-white text-sm rounded-md px-3 py-1.5 border border-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
             :disabled="availableSubChoices.length === 0"
           >
             <option value="">{{ $t('player.subtitlePicker.none') }}</option>

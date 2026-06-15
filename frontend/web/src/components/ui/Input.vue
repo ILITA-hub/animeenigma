@@ -92,7 +92,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 const wrapperClasses = computed(() => 'w-full')
 
 const inputClasses = computed(() => {
-  const base = 'w-full bg-white/5 border text-white placeholder-white/30 transition-all duration-200 focus:outline-none'
+  const base = 'w-full bg-white/5 border text-white placeholder-white/30 transition-all duration-200 focus:outline-none focus-visible:outline-none'
 
   const sizes = {
     sm: 'px-3 py-2 text-sm rounded-lg',
@@ -100,9 +100,11 @@ const inputClasses = computed(() => {
     lg: 'px-5 py-4 text-lg rounded-xl',
   }
 
+  // Standardized focus outline: thin cyan-500/50 ring on focus-visible (keyboard +
+  // text-field focus), neutral border — same as Select.vue / DatePicker.vue.
   const states = props.error
-    ? 'border-destructive focus:border-destructive focus:ring-2 focus:ring-destructive/20'
-    : 'border-white/10 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20'
+    ? 'border-destructive focus-visible:ring-2 focus-visible:ring-destructive/50'
+    : 'border-white/10 focus-visible:ring-2 focus-visible:ring-cyan-500/50'
 
   return cn(
     base,

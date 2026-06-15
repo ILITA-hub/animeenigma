@@ -133,9 +133,9 @@
               @keydown.enter="(e) => { if (!(e.target as HTMLElement).closest('select, button, a')) openReport(r.id) }"
             >
               <td class="px-3 py-2 whitespace-nowrap border-l-4" :class="statusAccentBorder(r.status)">
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(r.category)">
+                <Badge size="sm" :variant="categoryVariant(r.category)" class="text-[10px] font-mono uppercase">
                   {{ categoryLabel(r.category) }}
-                </span>
+                </Badge>
                 <span v-if="r.player_type && r.player_type !== 'feedback'" class="ml-2 text-white/40 text-xs">
                   {{ r.player_type }}
                 </span>
@@ -190,9 +190,9 @@
           @drop="onDrop(col.status)"
         >
           <div class="flex items-center justify-between mb-3 px-1">
-            <span class="px-2 py-0.5 rounded text-xs font-semibold uppercase" :class="statusClass(col.status)">
+            <Badge size="sm" :variant="statusBadgeVariant(col.status)" class="font-semibold uppercase">
               {{ statusLabel(col.status) }}
-            </span>
+            </Badge>
             <span class="text-white/40 text-xs font-mono">{{ col.items.length }}</span>
           </div>
 
@@ -211,9 +211,9 @@
               @keydown.enter.prevent="openReport(r.id)"
             >
               <div class="flex items-center justify-between gap-2 mb-1.5">
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(r.category)">
+                <Badge size="sm" :variant="categoryVariant(r.category)" class="text-[10px] font-mono uppercase">
                   {{ categoryLabel(r.category) }}
-                </span>
+                </Badge>
                 <span class="text-white/40 text-[10px] whitespace-nowrap">{{ formatDate(r.timestamp, r.id) }}</span>
               </div>
               <p class="text-white/80 text-xs line-clamp-3 break-words">{{ r.description || '—' }}</p>
@@ -274,12 +274,12 @@
 
         <div v-else-if="detail" class="space-y-4 text-sm">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(detail.category)">
+            <Badge size="sm" :variant="categoryVariant(detail.category)" class="text-[10px] font-mono uppercase">
               {{ categoryLabel(detail.category) }}
-            </span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="statusClass(detail.status)">
+            </Badge>
+            <Badge size="sm" :variant="statusBadgeVariant(detail.status)" class="text-[10px] font-mono uppercase">
               {{ statusLabel(detail.status) }}
-            </span>
+            </Badge>
             <span class="text-white/50 text-xs">{{ formatDate(detail.timestamp, detail.id) }}</span>
           </div>
 
@@ -408,7 +408,7 @@ import { Check, Link as LinkIcon } from 'lucide-vue-next'
 import { adminApi } from '@/api/client'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
-import { Spinner, DatePicker } from '@/components/ui'
+import { Spinner, DatePicker, Badge } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
 import type { FeedbackStatus } from '@/types/feedback'
 
@@ -610,44 +610,35 @@ function statusLabel(s: string): string {
   return s
 }
 
-function categoryClass(c: string): string {
-  switch (c) {
-    case 'bug': return 'bg-destructive/20 text-destructive'
-    case 'issue': return 'bg-warning/20 text-warning'
-    case 'feature': return 'bg-success/20 text-success'
-    default: return 'bg-info/20 text-info'
-  }
+// Single source of truth for per-status styling (kills drift across the three
+// places status colour was previously duplicated):
+//   - `badge`  → Badge variant for the status pill. Mirrors MyFeedback's
+//                STATUS_VARIANT so both feedback pages render identical pills.
+//   - `select` → tints the status-dropdown trigger (overrides its neutral base).
+//   - `accent` → left border colour on each table row.
+// ai_done uses cyan (= Badge `primary`) so pill, dropdown and accent all agree.
+type StatusBadge = 'default' | 'primary' | 'success' | 'warning' | 'info'
+const STATUS_META: Record<FeedbackStatus, { badge: StatusBadge; select: string; accent: string }> = {
+  new:          { badge: 'info',    select: 'bg-info/20 text-info border border-info/40',                        accent: 'border-info' },
+  in_progress:  { badge: 'warning', select: 'bg-warning/20 text-warning border border-warning/40',               accent: 'border-warning' },
+  ai_done:      { badge: 'primary', select: 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40',            accent: 'border-cyan-400' },
+  resolved:     { badge: 'success', select: 'bg-success/20 text-success border border-success/40',               accent: 'border-success' },
+  not_relevant: { badge: 'default', select: 'bg-muted text-muted-foreground border border-muted-foreground/40',  accent: 'border-muted-foreground' },
 }
-function statusClass(s: string): string {
-  switch (s) {
-    case 'resolved': return 'bg-success/20 text-success'
-    case 'ai_done': return 'bg-indigo-500/20 text-indigo-300'
-    case 'in_progress': return 'bg-warning/20 text-warning'
-    case 'not_relevant': return 'bg-muted text-muted-foreground'
-    default: return 'bg-info/20 text-info'
-  }
+const statusMeta = (s: string) => STATUS_META[s as FeedbackStatus] ?? STATUS_META.new
+const statusBadgeVariant = (s: string): StatusBadge => statusMeta(s).badge
+const statusSelectClass = (s: string): string => statusMeta(s).select
+const statusAccentBorder = (s: string): string => statusMeta(s).accent
+
+// Category → Badge variant. Admin keeps colour-coded categories (richer than the
+// user-facing MyFeedback view, which renders all categories as a neutral badge).
+type CategoryBadge = 'destructive' | 'warning' | 'success' | 'info'
+const CATEGORY_VARIANT: Record<string, CategoryBadge> = {
+  bug: 'destructive',
+  issue: 'warning',
+  feature: 'success',
 }
-// Per-status color passed as the Select trigger class, reflecting the current
-// status at a glance (overrides the trigger's neutral base via tailwind-merge).
-function statusSelectClass(s: string): string {
-  switch (s) {
-    case 'resolved': return 'bg-success/20 text-success border border-success/40'
-    case 'ai_done': return 'bg-indigo-500/20 text-indigo-300 border border-indigo-400/40'
-    case 'in_progress': return 'bg-warning/20 text-warning border border-warning/40'
-    case 'not_relevant': return 'bg-muted text-muted-foreground border border-muted-foreground/40'
-    default: return 'bg-info/20 text-info border border-info/40'
-  }
-}
-// Left accent border on each list row, colored by status.
-function statusAccentBorder(s: string): string {
-  switch (s) {
-    case 'resolved': return 'border-success'
-    case 'ai_done': return 'border-indigo-400'
-    case 'in_progress': return 'border-warning'
-    case 'not_relevant': return 'border-muted-foreground'
-    default: return 'border-info'
-  }
-}
+const categoryVariant = (c: string): CategoryBadge => CATEGORY_VARIANT[c] ?? 'info'
 
 // Render the report timestamp; fall back to the id's leading timestamp segment.
 function formatDate(iso: string, id: string): string {

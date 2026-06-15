@@ -74,6 +74,16 @@ describe('Input.vue', () => {
     expect(clean.find('input').classes()).toContain('border-white/10')
   })
 
+  it('uses the standardized thin cyan-500/50 focus-visible ring (normal) / destructive (error)', () => {
+    const clean = mount(Input)
+    const cls = clean.find('input').classes()
+    expect(cls).toContain('focus-visible:ring-cyan-500/50')
+    expect(cls).not.toContain('focus:ring-cyan-400/20')
+
+    const errored = mount(Input, { props: { error: 'x' } })
+    expect(errored.find('input').classes()).toContain('focus-visible:ring-destructive/50')
+  })
+
   it('renders the label when provided', () => {
     const w = mount(Input, { props: { label: 'Email' } })
     expect(w.find('label').exists()).toBe(true)

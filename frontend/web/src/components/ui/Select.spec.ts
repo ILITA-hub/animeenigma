@@ -80,6 +80,12 @@ describe('Select.vue', () => {
     expect(cls).not.toContain('bg-white/5')
   })
 
+  it('applies ariaLabel to the trigger when no visible label is set', () => {
+    const w = mount(Select, { props: { options, modelValue: 'a', ariaLabel: 'Sort by' } })
+    const trigger = w.find('button[aria-haspopup="listbox"]')
+    expect(trigger.attributes('aria-label')).toBe('Sort by')
+  })
+
   it('renders the label when provided', () => {
     const w = mount(Select, { props: { options, modelValue: 'a', label: 'Sort by' } })
     expect(w.find('label').exists()).toBe(true)

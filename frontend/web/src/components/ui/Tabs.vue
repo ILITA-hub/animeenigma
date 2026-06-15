@@ -84,7 +84,7 @@ const getTabClasses = (value: string) => {
   const tab = props.tabs.find(t => t.value === value)
   const isDisabled = tab?.disabled
 
-  const base = 'px-4 py-2 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400'
+  const base = 'px-4 py-2 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50'
 
   const variants = {
     default: {

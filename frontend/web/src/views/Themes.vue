@@ -51,24 +51,22 @@
         </ButtonGroup>
 
         <!-- Sort -->
-        <select
+        <Select
           v-model="sortBy"
+          size="sm"
+          :options="sortOptions"
           :aria-label="$t('themes.sortAriaLabel')"
-          class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
-        >
-          <option value="rating">{{ $t('themes.sortRating') }}</option>
-          <option value="name">{{ $t('themes.sortName') }}</option>
-          <option value="newest">{{ $t('themes.sortNewest') }}</option>
-        </select>
+          trigger-class="w-auto"
+        />
 
         <!-- Season selector -->
-        <select
+        <Select
           v-model="selectedSeason"
+          size="sm"
+          :options="seasonOptions"
           :aria-label="$t('themes.seasonAriaLabel')"
-          class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
-        >
-          <option v-for="s in seasonOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
-        </select>
+          trigger-class="w-auto"
+        />
       </div>
 
       <!-- Loading -->
@@ -110,7 +108,7 @@ import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount } from 'v
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { themesApi, adminThemesApi } from '@/api/client'
-import { ButtonGroup, Spinner } from '@/components/ui'
+import { ButtonGroup, Select, Spinner } from '@/components/ui'
 import ThemeCard from '@/components/themes/ThemeCard.vue'
 
 const { t } = useI18n()
@@ -168,6 +166,12 @@ const typeOptions = [
   { value: 'OP', label: 'Openings' },
   { value: 'ED', label: 'Endings' },
 ]
+
+const sortOptions = computed(() => [
+  { value: 'rating', label: t('themes.sortRating') },
+  { value: 'name', label: t('themes.sortName') },
+  { value: 'newest', label: t('themes.sortNewest') },
+])
 
 const seasonOptions = computed(() => {
   const options = []

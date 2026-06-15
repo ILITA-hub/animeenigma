@@ -11,6 +11,7 @@
       <SelectTrigger
         :class="triggerClasses"
         :aria-labelledby="label ? labelId : undefined"
+        :aria-label="!label ? ariaLabel : undefined"
         aria-haspopup="listbox"
       >
         <SelectValue :placeholder="placeholder">
@@ -83,6 +84,8 @@ interface Props {
   size?: 'xs' | 'sm' | 'md' | 'lg'
   /** Extra classes merged onto the trigger (e.g. per-status color). Wins over base via tailwind-merge. */
   triggerClass?: string
+  /** Accessible name for label-less selects (filters). Ignored when `label` is set. */
+  ariaLabel?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
