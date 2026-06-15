@@ -14,6 +14,11 @@ func TestValidateCombo_NewEnumValues(t *testing.T) {
 		{"bogus", "en", "sub", false},
 		{"ae", "klingon", "sub", false},
 		{"", "", "", true}, // empty = no combo, valid
+		// EN scraper (unified player posts player='english')
+		{"english", "en", "sub", true},
+		{"english", "en", "dub", true},
+		// 18+ / adult player
+		{"hanime", "ru", "dub", true},
 	}
 	for _, c := range cases {
 		if got := ValidateCombo(c.player, c.language, c.watchType); got != c.want {
