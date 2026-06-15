@@ -29,6 +29,7 @@ func NewRouter(
 	spotlightHandler *handler.SpotlightHandler,
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
 	capabilitiesHandler *handler.CapabilitiesHandler,
+	sourceRankingHandler *handler.SourceRankingHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -161,6 +162,12 @@ func NewRouter(
 			// Public, no auth — same as the scraper routes above.
 			if capabilitiesHandler != nil {
 				r.Get("/{animeId}/capabilities", capabilitiesHandler.Get)
+			}
+			// Stage 2b learned provider-reliability ranking (global + per-anime).
+			// Public, no auth — advisory data the player merges into its smart
+			// default. Reads the Redis ranking analytics publishes.
+			if sourceRankingHandler != nil {
+				r.Get("/{animeId}/source-ranking", sourceRankingHandler.Get)
 			}
 			// Raw JP video source (workstream raw-jp, Phase 01). AllAnime
 			// GraphQL persisted-query API resolves original Japanese audio

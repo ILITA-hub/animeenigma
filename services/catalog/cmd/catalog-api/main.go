@@ -30,11 +30,24 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/capability"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/scraperprovider"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/sourceranking"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/client"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/transport"
 )
+
+// rankCacheAdapter adapts *cache.RedisCache to the narrow sourceranking.stringGetter
+// surface (a raw string GET with a found flag) the Stage 2b ranking reader needs.
+type rankCacheAdapter struct{ c *cache.RedisCache }
+
+func (a rankCacheAdapter) GetString(ctx context.Context, key string) (string, bool) {
+	v, err := a.c.Client().Get(ctx, key).Result()
+	if err != nil {
+		return "", false
+	}
+	return v, true
+}
 
 func main() {
 	log := logger.Default()
@@ -372,11 +385,17 @@ func main() {
 	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log)
 	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
 
+	// Stage 2b learned source-reliability ranking. Reads the Redis keys
+	// (player_ranking:global / player_ranking:anime:{id}) the analytics service
+	// publishes and serves them at GET /api/anime/{id}/source-ranking.
+	sourceRankingReader := sourceranking.NewReader(rankCacheAdapter{c: redisCache})
+	sourceRankingHandler := handler.NewSourceRankingHandler(sourceRankingReader, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, sourceRankingHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
