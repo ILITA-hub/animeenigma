@@ -408,10 +408,76 @@ watch(() => props.animeId, () => { aeAvailableCache = null })
 // probe (see isProviderAvailable). Only first-party `ae` today.
 const AE_NEEDS_CHECK = new Set(['ae'])
 
+// ─── Saved-combo restore (Stage 1b) ──────────────────────────────────────────
+// Resolve the user's saved watch combo first; the Stage 1a smart default is
+// gated on `preferenceSettled` so the saved pick always wins when present.
+
+const preferenceSettled = ref(false)
+const { resolve: resolvePreference, resolvedCombo, preferredScraperProvider } = useWatchPreferences(props.animeId)
+
+function applyResolvedCombo() {
+  const rc = resolvedCombo.value
+  if (!rc || state.combo.value.provider) return
+  const { audio, lang, team } = watchComboToPartialCombo(rc)
+  let providerId: string | null = null
+  if (rc.player === 'english') {
+    providerId = preferredScraperProvider.value && rows.value.some(r => r.def.id === preferredScraperProvider.value && r.state === 'active')
+      ? preferredScraperProvider.value
+      : null
+  } else {
+    const match = rows.value.find(r => r.state === 'active' && providerToLegacyPlayer(r.def.id) === rc.player)
+    providerId = match?.def.id ?? null
+  }
+  // setAudio/setLang each reset team → null, so setTeam must come AFTER them.
+  state.setAudio(audio)
+  state.setLang(lang)
+  if (team) state.setTeam(team)
+  if (providerId) state.setProvider(providerId, '')
+}
+
+// evaluated exactly once at first-active rows (resolveAttempted guards re-run)
+const buildAvailable = (): WatchCombo[] => {
+  const combos: WatchCombo[] = []
+  const seen = new Set<string>()
+  for (const r of rows.value) {
+    if (r.state !== 'active') continue
+    const player = providerToLegacyPlayer(r.def.id)
+    if (!player) continue
+    for (const audio of r.def.audios) {
+      const key = `${player}:${audio}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      combos.push({
+        player,
+        language: (r.def.langs.includes(state.combo.value.lang) ? state.combo.value.lang : r.def.langs[0]) as WatchCombo['language'],
+        watch_type: audio,
+        translation_id: '',
+        translation_title: '',
+      })
+    }
+  }
+  return combos
+}
+
+// one-shot latch (non-reactive on purpose — read/written only inside the watcher)
+let resolveAttempted = false
+watch(rows, () => {
+  if (resolveAttempted) return
+  const available = buildAvailable()
+  if (available.length === 0) return
+  resolveAttempted = true
+  resolvePreference(available).finally(() => {
+    applyResolvedCombo()
+    preferenceSettled.value = true
+  })
+}, { immediate: true })
+
+
 watch(
-  rows,
+  [rows, preferenceSettled],
   () => {
     if (state.combo.value.provider) return
+    if (!preferenceSettled.value) return // let the saved-combo restore go first
     void pickSmartDefault(rows.value, CURATED_TIER, {
       needsCheck: AE_NEEDS_CHECK,
       isAvailable: isProviderAvailable,
