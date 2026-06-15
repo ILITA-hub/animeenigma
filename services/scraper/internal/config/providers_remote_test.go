@@ -15,10 +15,11 @@ func TestLoadProvidersRemote_ParsesAndBuilds(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"providers":[
+		_, _ = w.Write([]byte(`{"success":true,"data":{"providers":[
 			{"name":"allanime","enabled":true,"group":"en","supports_sub":true,"supports_dub":true,"sub_delivery":"hard","quality_ceiling":"1080p","preference_weight":90},
 			{"name":"animepahe","enabled":false,"group":"en","supports_sub":true,"supports_dub":true,"sub_delivery":"hard","preference_weight":30}
-		]}`))
+		]}}`))
+
 	}))
 	defer srv.Close()
 
@@ -40,7 +41,7 @@ func TestLoadProvidersRemote_ParsesAndBuilds(t *testing.T) {
 
 func TestLoadProvidersRemote_RejectsUnknownProvider(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"providers":[{"name":"bogus","enabled":true}]}`))
+		_, _ = w.Write([]byte(`{"success":true,"data":{"providers":[{"name":"bogus","enabled":true}]}}`))
 	}))
 	defer srv.Close()
 	_, err := LoadProvidersRemote(context.Background(), srv.URL, srv.Client(), 2*time.Second)

@@ -25,8 +25,11 @@ type remoteProvider struct {
 	PreferenceWeight int    `json:"preference_weight"`
 }
 
+// remoteResponse decodes catalog's standard {success,data:{...}} envelope.
 type remoteResponse struct {
-	Providers []remoteProvider `json:"providers"`
+	Data struct {
+		Providers []remoteProvider `json:"providers"`
+	} `json:"data"`
 }
 
 // LoadProvidersRemote fetches provider config from catalog's internal endpoint
@@ -63,8 +66,8 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 	for _, n := range KnownProviders {
 		known[n] = true
 	}
-	metas := make(map[string]ProviderMeta, len(rr.Providers))
-	for _, p := range rr.Providers {
+	metas := make(map[string]ProviderMeta, len(rr.Data.Providers))
+	for _, p := range rr.Data.Providers {
 		if p.Name == "" {
 			return ProvidersConfig{}, fmt.Errorf("provider config: entry with empty name")
 		}
