@@ -55,11 +55,11 @@ func KnownProvidersInGroup(group string) []string {
 
 // ProviderMeta is one resolved provider entry.
 type ProviderMeta struct {
-	Name        string
-	Enabled     bool
-	Reason      string
-	Description string
-	Group       string // "en" (default) or "adult" — intrinsic, from GroupOf(name)
+	Name             string
+	Enabled          bool
+	Reason           string
+	Description      string
+	Group            string // "en" (default) or "adult" — intrinsic, from GroupOf(name)
 	SupportsSub      bool
 	SupportsDub      bool
 	SupportsRaw      bool
@@ -71,17 +71,17 @@ type ProviderMeta struct {
 // providerEntry is the raw YAML shape. Enabled is a pointer so an omitted
 // `enabled:` is distinguishable from an explicit `false` (we require it).
 type providerEntry struct {
-	Name        string  `yaml:"name"`
-	Enabled     *bool   `yaml:"enabled"`
-	Reason      string  `yaml:"reason"`
-	Description string  `yaml:"description"`
-	Group       *string `yaml:"group"` // optional; if present MUST equal GroupOf(name)
-	SupportsSub      *bool  `yaml:"supports_sub"`
-	SupportsDub      *bool  `yaml:"supports_dub"`
-	SupportsRaw      *bool  `yaml:"supports_raw"`
-	SubDelivery      string `yaml:"sub_delivery"`
-	QualityCeiling   string `yaml:"quality_ceiling"`
-	PreferenceWeight *int   `yaml:"preference_weight"`
+	Name             string  `yaml:"name"`
+	Enabled          *bool   `yaml:"enabled"`
+	Reason           string  `yaml:"reason"`
+	Description      string  `yaml:"description"`
+	Group            *string `yaml:"group"` // optional; if present MUST equal GroupOf(name)
+	SupportsSub      *bool   `yaml:"supports_sub"`
+	SupportsDub      *bool   `yaml:"supports_dub"`
+	SupportsRaw      *bool   `yaml:"supports_raw"`
+	SubDelivery      string  `yaml:"sub_delivery"`
+	QualityCeiling   string  `yaml:"quality_ceiling"`
+	PreferenceWeight *int    `yaml:"preference_weight"`
 }
 
 type providersFile struct {
@@ -167,6 +167,7 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 	for _, n := range KnownProviders {
 		known[n] = true
 	}
+	derefBool := func(p *bool) bool { return p != nil && *p }
 	metas := make(map[string]ProviderMeta, len(pf.Providers))
 	for _, e := range pf.Providers {
 		if e.Name == "" {
@@ -186,7 +187,6 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 		if e.Group != nil && *e.Group != GroupOf(e.Name) {
 			return ProvidersConfig{}, fmt.Errorf("providers file: provider %q group %q != intrinsic %q", e.Name, *e.Group, GroupOf(e.Name))
 		}
-		deref := func(p *bool) bool { return p != nil && *p }
 		subDelivery := e.SubDelivery
 		if subDelivery == "" {
 			subDelivery = "hard"
@@ -201,9 +201,9 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 			Reason:           e.Reason,
 			Description:      e.Description,
 			Group:            GroupOf(e.Name),
-			SupportsSub:      deref(e.SupportsSub),
-			SupportsDub:      deref(e.SupportsDub),
-			SupportsRaw:      deref(e.SupportsRaw),
+			SupportsSub:      derefBool(e.SupportsSub),
+			SupportsDub:      derefBool(e.SupportsDub),
+			SupportsRaw:      derefBool(e.SupportsRaw),
 			SubDelivery:      subDelivery,
 			QualityCeiling:   e.QualityCeiling,
 			PreferenceWeight: weight,

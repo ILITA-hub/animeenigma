@@ -39,4 +39,8 @@ func TestLoadProviders_ParsesTraits(t *testing.T) {
 	if nine.SupportsSub || nine.SubDelivery != "hard" {
 		t.Errorf("nineanime defaults = sub %v delivery %q, want false/hard", nine.SupportsSub, nine.SubDelivery)
 	}
+	if nine.SupportsDub || nine.SupportsRaw || nine.QualityCeiling != "" || nine.PreferenceWeight != 0 {
+		t.Errorf("nineanime unexpected defaults: dub=%v raw=%v ceiling=%q weight=%d",
+			nine.SupportsDub, nine.SupportsRaw, nine.QualityCeiling, nine.PreferenceWeight)
+	}
 }
