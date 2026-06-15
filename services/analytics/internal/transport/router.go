@@ -24,6 +24,7 @@ import (
 //	POST /internal/effects         (internal — BE egress producer sink)
 //	POST /internal/erase           (internal — gateway never proxies /internal/*)
 //	POST /internal/read-thresholds/recompute (internal — scheduler daily trigger)
+//	POST /internal/player-ranking/recompute (internal — scheduler daily trigger)
 func NewRouter(
 	collect *handler.CollectHandler,
 	clientError *handler.ClientErrorHandler,
@@ -31,6 +32,7 @@ func NewRouter(
 	effects *handler.EffectsHandler,
 	admin *handler.AdminHandler,
 	readThresholds *handler.ReadThresholdHandler,
+	playerRanking *handler.PlayerRankingHandler,
 	log *logger.Logger,
 	collector *metrics.Collector,
 ) http.Handler {
@@ -79,6 +81,13 @@ func NewRouter(
 	// only — never gateway-proxied (T-03-15).
 	if readThresholds != nil {
 		r.Post("/internal/read-thresholds/recompute", readThresholds.ServeHTTP)
+	}
+	// /internal/player-ranking/recompute triggers the daily provider-reliability
+	// compute (Stage 2b) + player_ranking Redis publish. The scheduler service
+	// (no ClickHouse connection) POSTs here on its daily cron. Docker-network
+	// only — never gateway-proxied.
+	if playerRanking != nil {
+		r.Post("/internal/player-ranking/recompute", playerRanking.ServeHTTP)
 	}
 
 	return r

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -11,6 +12,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/ingest"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/observ"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/repo"
+	svc "github.com/ILITA-hub/animeenigma/services/analytics/internal/service"
 )
 
 // countingSink bumps the received counter, then enqueues.
@@ -80,4 +82,30 @@ func (w redisThresholdWriter) HSetThresholds(ctx context.Context, key string, fi
 	pipe.Expire(ctx, key, ttl)
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+// redisRankingWriter adapts *cache.RedisCache to service.rankingWriter. It SETs
+// the global ranking key and one key per anime as JSON with a 48h TTL. Per-anime
+// keys are written individually (only popular titles clear the min-sample gate,
+// so cardinality stays bounded). Marshalling failures for a single anime are
+// skipped, not fatal.
+type redisRankingWriter struct{ cache *cache.RedisCache }
+
+func (w redisRankingWriter) PublishRanking(ctx context.Context, global []svc.ProviderRank, perAnime map[string][]svc.ProviderRank) error {
+	cl := w.cache.Client()
+	if b, err := json.Marshal(global); err == nil {
+		if err := cl.Set(ctx, "player_ranking:global", b, 48*time.Hour).Err(); err != nil {
+			return err
+		}
+	}
+	for id, ranks := range perAnime {
+		b, err := json.Marshal(ranks)
+		if err != nil {
+			continue
+		}
+		if err := cl.Set(ctx, "player_ranking:anime:"+id, b, 48*time.Hour).Err(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
