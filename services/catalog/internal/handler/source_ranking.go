@@ -11,7 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/sourceranking"
 )
 
-// rankReader is the slice of *sourceranking.Reader the handler needs.
+// rankReader is the subset of *sourceranking.Reader the handler needs.
 type rankReader interface {
 	Read(ctx context.Context, animeID string) sourceranking.Ranking
 }

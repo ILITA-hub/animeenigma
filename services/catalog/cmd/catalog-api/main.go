@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
@@ -39,11 +42,20 @@ import (
 
 // rankCacheAdapter adapts *cache.RedisCache to the narrow sourceranking.stringGetter
 // surface (a raw string GET with a found flag) the Stage 2b ranking reader needs.
-type rankCacheAdapter struct{ c *cache.RedisCache }
+type rankCacheAdapter struct {
+	c   *cache.RedisCache
+	log *logger.Logger
+}
 
 func (a rankCacheAdapter) GetString(ctx context.Context, key string) (string, bool) {
 	v, err := a.c.Client().Get(ctx, key).Result()
 	if err != nil {
+		// redis.Nil is the normal cold-cache key-miss; only surface unexpected
+		// errors (e.g. a real Redis outage) so they're distinguishable in logs.
+		// Contract is preserved: any error still yields an empty ranking.
+		if !errors.Is(err, redis.Nil) {
+			a.log.Warnw("source-ranking redis read failed", "key", key, "error", err)
+		}
 		return "", false
 	}
 	return v, true
@@ -388,7 +400,7 @@ func main() {
 	// Stage 2b learned source-reliability ranking. Reads the Redis keys
 	// (player_ranking:global / player_ranking:anime:{id}) the analytics service
 	// publishes and serves them at GET /api/anime/{id}/source-ranking.
-	sourceRankingReader := sourceranking.NewReader(rankCacheAdapter{c: redisCache})
+	sourceRankingReader := sourceranking.NewReader(rankCacheAdapter{c: redisCache, log: log})
 	sourceRankingHandler := handler.NewSourceRankingHandler(sourceRankingReader, log)
 
 	// Initialize metrics collector
