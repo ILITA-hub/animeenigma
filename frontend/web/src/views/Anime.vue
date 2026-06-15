@@ -153,7 +153,12 @@
                 <ChevronDown class="size-4 transition-transform" :class="{ 'rotate-180': showStatusDropdown }" aria-hidden="true" />
               </button>
 
-              <!-- Dropdown Menu -->
+              <!-- bespoke-keep: single-select status picker with radio semantics
+                   (role=menuitemradio + aria-checked) and inline (non-portaled)
+                   positioning. The ui DropdownMenu wrapper is action-menu-only
+                   (Item/Separator/Label, no radio variant); migrating would lose
+                   the radio a11y or require extending a shared primitive. The
+                   admin kebab below DOES use the DropdownMenu primitive. -->
               <Transition
                 enter-active-class="transition ease-out duration-100"
                 enter-from-class="transform opacity-0 scale-95"

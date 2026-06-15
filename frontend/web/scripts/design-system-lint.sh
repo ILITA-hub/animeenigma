@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 # design-system-lint — build-failing color/token-discipline gate (DS-GOV-01).
 #
-# Enforces EXACTLY 3 color/token rules over frontend/web/src/**/*.vue
+# Enforces 5 color/token/typography/primitive rules over frontend/web/src/**/*.vue
 # (excluding *.spec.* and __tests__), mirroring scripts/i18n-lint.sh:
 #
-#   RULE 1 — Zero off-palette Tailwind color classes (ERROR).
+#   RULE 1 — Zero off-palette Tailwind color classes (ERROR). Scans *.vue AND
+#            *.ts (component class-strings leak via cva variant files etc.),
+#            excluding *-variants.ts (the canonical semantic-variant defs).
 #   RULE 2 — Zero hardcoded hex outside scripts/design-system-allowlist.txt (ERROR).
+#            *.vue only — *.ts hex is intentional brand/provider color data
+#            (e.g. providerRegistry.ts) not subject to the class palette.
 #   RULE 3 — Zero deprecated-alias var(--ink|--accent|--pink|--violet|--f-display|
 #            --f-ui|--f-mono|--f-jp) usages (ERROR).
+#   RULE 4 — Zero off-scale font weights font-(bold|extrabold|black|light|thin)
+#            (ERROR; DS allows only font-medium/font-semibold). Scans *.vue + *.ts.
+#   RULE 5 — Zero bare <select> / <input type="date"> (ERROR; use the Select /
+#            DatePicker primitives). Exempts components/player/ (reka portals
+#            break in fullscreen) and type="datetime-local".
 #
 # Brand-exemption (DS-GOV-02): cyan|pink|orange|rose|indigo|teal|lime are NOT
 # treated as off-palette — cyan/pink are the Neon-Tokyo brand primitives and
@@ -39,6 +48,8 @@ NC='\033[0m'
 RULE1_ERRORS=0
 RULE2_ERRORS=0
 RULE3_ERRORS=0
+RULE4_ERRORS=0
+RULE5_ERRORS=0
 
 # Off-palette palette set (Phase-4 verbatim). Brand/provider hues
 # (cyan|pink|orange|rose|indigo|teal|lime) are deliberately ABSENT.
@@ -52,6 +63,11 @@ OFF_PALETTE_RE='(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|
 # --brand-violet) are NOT matched.
 ALIAS_RE='var\(--(ink|accent|pink|violet|f-display|f-ui|f-mono|f-jp)\b'
 ALIAS_SURVIVORS='ink-2|ink-4|accent-soft|accent-line|accent-glow|pink-soft'
+
+# Off-scale Tailwind font-weight utilities. DS allows only font-medium /
+# font-semibold; bold/extrabold/black (too heavy) and light/thin (too light)
+# are forbidden. \b end-anchor avoids matching e.g. a hypothetical font-boldish.
+FONT_RE='\bfont-(bold|extrabold|black|light|thin)\b'
 
 # List the in-scope .vue files (exclude *.spec.* and __tests__).
 list_vue_files() {
@@ -72,8 +88,8 @@ relpath() {
 run_rule1() {
   echo "=== RULE 1: off-palette Tailwind color classes ==="
   local hits
-  hits=$(grep -rnE "$OFF_PALETTE_RE" "$SRC_DIR" --include='*.vue' \
-    | grep -v '\.spec\.' | grep -v '__tests__' || true)
+  hits=$(grep -rnE "$OFF_PALETTE_RE" "$SRC_DIR" --include='*.vue' --include='*.ts' \
+    | grep -v '\.spec\.' | grep -v '__tests__' | grep -v -- '-variants.ts' || true)
   if [ -z "$hits" ]; then
     echo -e "  ${GREEN}OK${NC} No off-palette Tailwind color classes"
     return 0
@@ -173,6 +189,59 @@ run_rule3() {
 }
 
 # ============================================================================
+# RULE 4 — off-scale font weights (font-bold|extrabold|black|light|thin)
+# ============================================================================
+run_rule4() {
+  echo ""
+  echo "=== RULE 4: off-scale font weights (only font-medium/font-semibold allowed) ==="
+  local hits
+  hits=$(grep -rnE "$FONT_RE" "$SRC_DIR" --include='*.vue' --include='*.ts' \
+    | grep -v '\.spec\.' | grep -v '__tests__' || true)
+  if [ -z "$hits" ]; then
+    echo -e "  ${GREEN}OK${NC} No off-scale font weights"
+    return 0
+  fi
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    local file rest
+    file="${line%%:*}"
+    rest="${line#*:}"
+    echo -e "  ${RED}ERROR${NC} $(relpath "$file"):${rest}"
+    RULE4_ERRORS=$((RULE4_ERRORS + 1))
+    ERRORS=$((ERRORS + 1))
+  done <<< "$hits"
+}
+
+# ============================================================================
+# RULE 5 — bare <select> / <input type="date"> outside ui primitives + players
+# ============================================================================
+# Use the Select / DatePicker primitives instead. Players (components/player/)
+# are EXEMPT: reka Select/Popover portal to <body> and break inside the
+# fullscreen element, so player source/quality pickers stay native. NOTE:
+# type="datetime-local" does NOT match `type="date"` (closing quote anchors it),
+# so AdminGacha's banner schedule inputs are intentionally allowed.
+run_rule5() {
+  echo ""
+  echo "=== RULE 5: bare <select>/<input type=date> outside ui+players (use Select/DatePicker) ==="
+  local hits
+  hits=$(grep -rnE '<select(\s|>)|type="date"' "$SRC_DIR" --include='*.vue' \
+    | grep -v '\.spec\.' | grep -v '__tests__' | grep -v 'components/player/' || true)
+  if [ -z "$hits" ]; then
+    echo -e "  ${GREEN}OK${NC} No bare <select>/date inputs (Select/DatePicker used)"
+    return 0
+  fi
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    local file rest
+    file="${line%%:*}"
+    rest="${line#*:}"
+    echo -e "  ${RED}ERROR${NC} $(relpath "$file"):${rest}"
+    RULE5_ERRORS=$((RULE5_ERRORS + 1))
+    ERRORS=$((ERRORS + 1))
+  done <<< "$hits"
+}
+
+# ============================================================================
 # --selftest — provable fail-path (SC#3)
 # ============================================================================
 run_selftest() {
@@ -208,10 +277,12 @@ EOF
   rm -f "$scratch"
   trap - EXIT
 
-  ERRORS=0; RULE1_ERRORS=0; RULE2_ERRORS=0; RULE3_ERRORS=0
+  ERRORS=0; RULE1_ERRORS=0; RULE2_ERRORS=0; RULE3_ERRORS=0; RULE4_ERRORS=0; RULE5_ERRORS=0
   run_rule1 >/dev/null
   run_rule2 >/dev/null
   run_rule3 >/dev/null
+  run_rule4 >/dev/null
+  run_rule5 >/dev/null
   if [ "$ERRORS" -gt 0 ]; then
     echo -e "  ${RED}SELFTEST FAIL${NC} — clean tree did NOT pass ($ERRORS errors)"
     exit 1
@@ -231,12 +302,16 @@ fi
 run_rule1
 run_rule2
 run_rule3
+run_rule4
+run_rule5
 
 echo ""
 echo "=== Summary ==="
 echo -e "  Off-palette classes (RULE 1): ${RULE1_ERRORS}"
 echo -e "  Non-allowlisted hex (RULE 2): ${RULE2_ERRORS}"
 echo -e "  Deprecated aliases  (RULE 3): ${RULE3_ERRORS}"
+echo -e "  Off-scale font wts  (RULE 4): ${RULE4_ERRORS}"
+echo -e "  Bare select/date    (RULE 5): ${RULE5_ERRORS}"
 
 if [ "$ERRORS" -gt 0 ]; then
   echo ""

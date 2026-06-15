@@ -40,7 +40,7 @@
 
   UI-SPEC contract (CLAUDE.md):
     - Tailwind utility classes only.
-    - Font weights: font-medium / font-semibold only (NO font-bold).
+    - Font weights: font-medium / font-semibold only (no heavier weights).
     - Padding: p-4 md:p-6 lg:p-8 on the outer container.
 
   Deviation noted in SUMMARY:
