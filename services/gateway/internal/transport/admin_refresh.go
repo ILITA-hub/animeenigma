@@ -4,7 +4,7 @@
 // Why this exists:
 //
 // The /admin group is gated by JWTValidationMiddleware, which authenticates
-// browser navigation via the short-lived `access_token` cookie (15-min JWT;
+// browser navigation via the short-lived `access_token` cookie (~1h JWT;
 // see libs/httputil.BearerToken). Those admin tools are served by their own
 // containers (Grafana etc.) via full-page navigation, so the Vue SPA — and its
 // axios /api/auth/refresh interceptor — is NOT running. Once the access_token
@@ -122,18 +122,37 @@ func (a *adminRefresher) doRefresh(refreshToken string) refreshResult {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		// A non-200 here is a real refresh failure (dead/revoked session, auth
+		// outage). Log it — silence made the original envelope-decode bug
+		// invisible: admin sessions 401'd with no trace for weeks.
+		a.log.Warnw("admin session refresh: auth returned non-200", "status", resp.StatusCode)
 		return refreshResult{}
 	}
 
+	// The auth service wraps its payload in the httputil.OK envelope
+	// ({success, data:{access_token,...}}). Decode the nested field; a flat
+	// top-level access_token (legacy/defensive) is accepted as a fallback.
 	var body struct {
 		AccessToken string `json:"access_token"`
+		Data        struct {
+			AccessToken string `json:"access_token"`
+		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || body.AccessToken == "" {
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		a.log.Warnw("admin session refresh: decode auth response failed", "error", err)
+		return refreshResult{}
+	}
+	accessToken := body.Data.AccessToken
+	if accessToken == "" {
+		accessToken = body.AccessToken
+	}
+	if accessToken == "" {
+		a.log.Warnw("admin session refresh: auth response had no access_token")
 		return refreshResult{}
 	}
 
 	return refreshResult{
-		accessToken: body.AccessToken,
+		accessToken: accessToken,
 		setCookies:  resp.Header.Values("Set-Cookie"),
 		ok:          true,
 	}

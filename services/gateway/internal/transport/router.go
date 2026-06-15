@@ -142,9 +142,9 @@ func NewRouterWithCleanup(
 		if !cfg.DevMode {
 			// AdminSessionRefreshMiddleware runs FIRST: browser-driven admin
 			// tools (Grafana etc.) run outside the Vue SPA, so nothing renews
-			// the 15-min access_token cookie. This transparently refreshes it
+			// the ~1h access_token cookie. This transparently refreshes it
 			// from the refresh_token cookie so admin sessions last as long as
-			// the login, instead of 401ing every ~15 min.
+			// the login, instead of 401ing once the access token expires.
 			r.Use(AdminSessionRefreshMiddleware(cfg.JWT, cfg.Services.AuthService, log))
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			// NOTE: the per-user GCRA limiter (userRateLimit) is deliberately

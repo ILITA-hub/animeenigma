@@ -4,6 +4,15 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-032: Admin tools (Grafana/Prometheus/admin SPA) 401'd ~daily — `AdminSessionRefreshMiddleware` decoded a flat `{access_token}` but auth returns the `{success,data:{access_token}}` envelope
+- **Date:** 2026-06-15
+- **Severity:** Medium (admin-only; no user impact). Persistent UX papercut for the two admin accounts since the middleware shipped (a9f74775, 2026-06-04).
+- **Symptom:** Navigating to `/admin/grafana/*`, `/admin/feedback`, `/admin/` returned `{"code":"UNAUTHORIZED"}` (401) after the ~1h access token expired (i.e. "the next day"). Reloading `https://animeenigma.ru/` restored all `/admin/*` routes. No gateway warning was logged.
+- **Root cause:** The gateway's `AdminSessionRefreshMiddleware.doRefresh` (services/gateway/internal/transport/admin_refresh.go) is supposed to top up an expired `access_token` server-side from the `refresh_token` cookie by calling `POST http://auth:8080/api/auth/refresh`. It decoded the response into a flat `struct{ AccessToken string \`json:"access_token"\` }`, but the auth service wraps every response in the `httputil.OK` envelope `{"success":true,"data":{"access_token":...}}`. So `body.AccessToken` was **always** empty → `doRefresh` returned `ok=false` via a SILENT path (the only logged failure was a transport error) → the middleware fell through and `JWTValidationMiddleware` 401'd. The SPA worked because `client.ts` unwraps the envelope (`response.data?.data || response.data`); reloading `/` minted a fresh `access_token` cookie the browser then sent to `/admin`, masking the server-side defect.
+- **Why tests missed it:** `admin_refresh_test.go`'s `stubAuthServer` mocked the **flat** shape `{"access_token":"..."}`, so the unit test exercised a response auth never actually produces. Test fixture diverged from the real contract.
+- **Fix (this change):** Decode the `data.access_token` envelope (with flat top-level as a defensive fallback); corrected the stub to emit the real enveloped shape (red→green); added `Warnw` on the non-200 / decode-error / empty-token paths so a future refresh failure is never silent again. Verified live: refresh-only cookie on `/admin/grafana/dashboards` went 401→403 (non-admin test user) with a relayed fresh `access_token` Set-Cookie.
+- **Status:** ✅ Resolved 2026-06-15 (gateway redeployed). Generalizable lesson: any gateway/internal service-to-service call that reads another AE service's JSON must decode the `{success,data}` envelope, and stubs must mirror it.
+
 ### ISS-030: Worktree deploys without `docker/.env` shipped a dev JWT secret — two ~3-min windows of universal 401s; branch divergence made it hard to see
 - **Date:** 2026-06-10
 - **Severity:** High (all authenticated player requests 401'd during two short windows, ~12:07–12:10 and ~12:13–12:16 local), self-inflicted during AUTO-422 deployment work.

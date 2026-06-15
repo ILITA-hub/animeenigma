@@ -34,7 +34,11 @@ func stubAuthServer(t *testing.T, status int, accessToken string, calls *int32) 
 		http.SetCookie(w, &http.Cookie{Name: "access_token", Value: accessToken, Path: "/"})
 		http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "rt_rotated", Path: "/"})
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"` + accessToken + `"}`))
+		// Mirror the REAL auth service response, which wraps the payload in the
+		// httputil.OK envelope ({success, data:{...}}) — NOT a flat
+		// {access_token}. The flat stub previously here masked a decode bug in
+		// doRefresh that 401'd every browser-driven admin session.
+		_, _ = w.Write([]byte(`{"success":true,"data":{"access_token":"` + accessToken + `"}}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
