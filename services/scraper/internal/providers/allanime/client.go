@@ -378,7 +378,11 @@ func materializeServers(sources []sourceURL, cat domain.Category) []domain.Serve
 		if name == "" {
 			name = "Default"
 		}
-		out = append(out, domain.Server{ID: name, Name: name, Type: cat})
+		id := name
+		if cat != domain.CategorySub {
+			id = name + "-" + string(cat) // keep sub IDs backward-compatible; disambiguate dub/raw
+		}
+		out = append(out, domain.Server{ID: id, Name: name, Type: cat})
 	}
 	return out
 }
@@ -414,13 +418,22 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		p.cache.setServers(ctx, showID, ep, tt, sources)
 	}
 
+	// pinID strips the category suffix added by materializeServers for non-sub
+	// categories (e.g. "Default-dub" → "Default") so orderCandidates can match
+	// the upstream SourceName. The original serverID is preserved for cache keys
+	// (getStream/setStream) so the cache stays unique per category.
+	pinID := serverID
+	if category != domain.CategorySub {
+		pinID = strings.TrimSuffix(serverID, "-"+string(category))
+	}
+
 	// Build the candidate order: the caller-pinned serverID first (a hint), then
 	// the remaining sources by priority. Probe each candidate's actual content
 	// and use the first that is a real stream — skipping HTML embed pages
 	// (ok.ru, uns.bio, vidnest.io, …) DYNAMICALLY, with no host list. If the
 	// pinned server turns out to be an embed, we transparently fall back to the
 	// best playable source rather than dead-ending.
-	candidates := orderCandidates(sources, serverID)
+	candidates := orderCandidates(sources, pinID)
 	var pick *sourceURL
 	var streamURL string
 	for i := range candidates {

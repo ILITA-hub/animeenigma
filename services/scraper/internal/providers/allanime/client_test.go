@@ -331,14 +331,18 @@ func TestGetStream_SkipsEmbedPicksStream(t *testing.T) {
 
 // TestListServers_SubAndDub verifies that ListServers returns both sub-tagged
 // and dub-tagged servers when the categories cache records both "sub" and "dub"
-// for the show.
+// for the show, makes exactly 2 distinct upstream fetches, and returns no
+// duplicate server IDs.
 func TestListServers_SubAndDub(t *testing.T) {
+	var subHits, dubHits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.RawQuery, "%22dub%22") {
+			dubHits++
 			_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"https://cdn.allanime.day/dub-ep1.mp4","sourceName":"Default","type":"player","priority":9,"fileExtenstion":"mp4","subtitles":[]}]}}}`))
 			return
 		}
+		subHits++
 		_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"https://cdn.allanime.day/sub-ep1.mp4","sourceName":"Default","type":"player","priority":9,"fileExtenstion":"mp4","subtitles":[]}]}}}`))
 	}))
 	defer srv.Close()
@@ -361,6 +365,19 @@ func TestListServers_SubAndDub(t *testing.T) {
 	}
 	if !sawSub || !sawDub {
 		t.Errorf("want both sub and dub servers; got sub=%v dub=%v (%+v)", sawSub, sawDub, servers)
+	}
+	if subHits != 1 || dubHits != 1 {
+		t.Errorf("want exactly 1 sub + 1 dub upstream fetch; got sub=%d dub=%d", subHits, dubHits)
+	}
+	// IDs must be unique across categories (no duplicate "Default").
+	ids := map[string]int{}
+	for _, s := range servers {
+		ids[s.ID]++
+	}
+	for id, n := range ids {
+		if n > 1 {
+			t.Errorf("duplicate server ID %q (%d times)", id, n)
+		}
 	}
 }
 
