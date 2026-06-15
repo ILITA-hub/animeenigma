@@ -17,11 +17,18 @@ const (
 	EventTypeHeartbeat EventType = "heartbeat"
 	EventTypeIdentify  EventType = "identify"
 	EventTypeCustom    EventType = "custom"
+	// EventTypePlayer is used by the /api/analytics/player-events endpoint to
+	// record player telemetry (resolve outcomes + stalls). These rows are NOT
+	// clickstream events — they carry effect dimensions (EffectKind, Target,
+	// DurationMS) and bypass Validate() in the handler, but the type is declared
+	// here so it can be used as a typed constant.
+	EventTypePlayer EventType = "player"
 )
 
 func (t EventType) valid() bool {
 	switch t {
-	case EventTypePageview, EventTypeClick, EventTypeHeartbeat, EventTypeIdentify, EventTypeCustom:
+	case EventTypePageview, EventTypeClick, EventTypeHeartbeat, EventTypeIdentify, EventTypeCustom,
+		EventTypePlayer:
 		return true
 	default:
 		return false

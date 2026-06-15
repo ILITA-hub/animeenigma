@@ -114,6 +114,10 @@ func main() {
 	// error (→ ClickHouse otel_logs via the OTel filelog receiver) + a
 	// kind-labelled Prometheus counter. No DB write, no event-store enqueue.
 	clientErrorHandler := handler.NewClientErrorHandler(handler.NewLoggingClientErrorSink(log), cfg.IPSalt)
+	// Player telemetry handler shares the same batcher Sink — player resolve/stall
+	// rows flow through the identical InsertBatch write path as clickstream rows,
+	// stored under effect_kind "player_resolve" / "player_stall".
+	playerTelemetryHandler := handler.NewPlayerTelemetryHandler(countingSink{batcher})
 	// The effects handler shares the same batcher Sink — effect rows flow
 	// through the identical InsertBatch write path as clickstream rows.
 	effectsHandler := handler.NewEffectsHandler(countingSink{batcher})
@@ -143,7 +147,7 @@ func main() {
 	defer c.Stop()
 
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, clientErrorHandler, effectsHandler, adminHandler, readThresholdHandler, log, collector)
+	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {

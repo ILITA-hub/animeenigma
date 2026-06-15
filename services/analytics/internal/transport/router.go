@@ -20,12 +20,14 @@ import (
 //	                                forwards the full path UNCHANGED, same as
 //	                                every other service serves /api/<name>/...)
 //	POST /api/analytics/client-errors (public — FE error log sink, log-only)
+//	POST /api/analytics/player-events (public — player resolve/stall telemetry)
 //	POST /internal/effects         (internal — BE egress producer sink)
 //	POST /internal/erase           (internal — gateway never proxies /internal/*)
 //	POST /internal/read-thresholds/recompute (internal — scheduler daily trigger)
 func NewRouter(
 	collect *handler.CollectHandler,
 	clientError *handler.ClientErrorHandler,
+	playerTelemetry *handler.PlayerTelemetryHandler,
 	effects *handler.EffectsHandler,
 	admin *handler.AdminHandler,
 	readThresholds *handler.ReadThresholdHandler,
@@ -62,6 +64,10 @@ func NewRouter(
 	// /api/analytics/client-errors is the public FE error log sink (log-only,
 	// no DB write). Same anonymous trust model as /collect; gateway-proxied.
 	r.Post("/api/analytics/client-errors", clientError.ServeHTTP)
+	// /api/analytics/player-events ingests frontend player telemetry (resolve
+	// outcomes + stalls) into the events table via the shared batcher Sink,
+	// using effect_kind "player_resolve" / "player_stall". Gateway-proxied.
+	r.Post("/api/analytics/player-events", playerTelemetry.ServeHTTP)
 	// /internal/effects ingests BE egress/db/cache effect batches from the
 	// libs/tracing producer. Like /internal/erase it lives only here and is
 	// never gateway-proxied (Docker-network-only; T-02-INT).
