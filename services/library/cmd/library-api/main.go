@@ -23,6 +23,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/library/migrations"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/animetosho"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/filename"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/jackett"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/nyaa"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/service"
@@ -123,6 +124,10 @@ func main() {
 	}
 	if err := db.DB.Exec(migrations.LibraryFilenamePatternsSQL).Error; err != nil {
 		log.Fatalw("failed to apply library_filename_patterns migration", "error", err)
+	}
+	// 004: extend job_source enum with 'jackett' (idempotent ADD VALUE).
+	if err := db.DB.Exec(migrations.JackettSourceSQL).Error; err != nil {
+		log.Fatalw("failed to apply jackett_source migration", "error", err)
 	}
 
 	// Start DB pool metrics collector.
@@ -305,15 +310,39 @@ func main() {
 		UserAgent:   cfg.AnimeTosho.UserAgent,
 	})
 
-	// Aggregator + search handler.
+	// Legacy two-provider aggregator (Nyaa + AnimeTosho) — now the FALLBACK
+	// tier behind Jackett.
 	aggregator := service.NewAggregator(nyaaClient, animeToshoAdapter{c: atClient}, log)
+
+	// Jackett primary tier. Constructed only when an API key is configured;
+	// a nil client makes the TieredSearcher a transparent pass-through to
+	// the aggregator (identical to the pre-Jackett behaviour), so the
+	// feature dark-ships safely behind JACKETT_API_KEY.
+	var jackettSearcher service.JackettSearcher
+	if cfg.Jackett.Enabled {
+		jackettSearcher = jackett.NewClient(jackett.Config{
+			BaseURL:     cfg.Jackett.BaseURL,
+			APIKey:      cfg.Jackett.APIKey,
+			Categories:  cfg.Jackett.Categories,
+			HTTPTimeout: cfg.Jackett.HTTPTimeout,
+			UserAgent:   cfg.Jackett.UserAgent,
+		})
+		log.Infow("jackett primary search tier enabled",
+			"base_url", cfg.Jackett.BaseURL,
+			"categories", cfg.Jackett.Categories,
+			"timeout", cfg.Jackett.HTTPTimeout,
+		)
+	} else {
+		log.Infow("jackett disabled (no JACKETT_API_KEY) — search uses Nyaa+AnimeTosho only")
+	}
+	tieredSearcher := service.NewTieredSearcher(jackettSearcher, aggregator, log)
 
 	// Initialize handlers.
 	// Phase 5 (LIB-09): health handler now exposes /health/extended for
 	// the admin UI stats strip. It needs disk + active-torrent + active-
 	// job-count sources.
 	healthHandler := handler.NewHealthHandlerExtended(diskGuard, pool, jobRepo)
-	searchHandler := handler.NewSearchHandler(aggregator, log)
+	searchHandler := handler.NewSearchHandler(tieredSearcher, log)
 	// Phase 5 (LIB-09): jobs handler now drives Link + Retry as well as
 	// the Phase-3 CRUD. Needs the minio writer (Move + ListObjectsByPrefix)
 	// + the EpisodeRepository.

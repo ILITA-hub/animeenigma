@@ -357,7 +357,8 @@
         "queue": "В очередь",
         "providers": {
           "nyaa": "Nyaa",
-          "animetosho": "AnimeTosho"
+          "animetosho": "AnimeTosho",
+          "jackett": "Jackett"
         }
       },
       "jobs": {

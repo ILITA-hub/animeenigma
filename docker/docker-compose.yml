@@ -1010,6 +1010,13 @@ services:
       LIBRARY_FFMPEG_BIN: /usr/bin/ffmpeg
       LIBRARY_FFPROBE_BIN: /usr/bin/ffprobe
       LIBRARY_ENCODE_MAX_BITRATE_KBPS: ${LIBRARY_ENCODE_MAX_BITRATE_KBPS:-5000}
+      # Jackett primary search tier. The library container reaches Jackett by
+      # its docker-network DNS name (NOT the host-bound 127.0.0.1:9117). An
+      # empty JACKETT_API_KEY disables the tier → search falls back to
+      # Nyaa+AnimeTosho (dark-ship safe). Key lives in docker/.env (gitignored).
+      JACKETT_BASE_URL: ${JACKETT_BASE_URL:-http://jackett:9117}
+      JACKETT_API_KEY: ${JACKETT_API_KEY:-}
+      JACKETT_CATEGORIES: ${JACKETT_CATEGORIES:-}
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8089:8089"
@@ -1020,6 +1027,8 @@ services:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      jackett:
         condition: service_healthy
     deploy:
       resources:
@@ -1049,7 +1058,28 @@ services:
     depends_on:
       - gateway
 
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: animeenigma-jackett
+    restart: unless-stopped
+    environment:
+      - PUID=911
+      - PGID=911
+      - TZ=Europe/Berlin
+      - AUTO_UPDATE=true
+    ports:
+      - "127.0.0.1:9117:9117"
+    volumes:
+      - jackett_config:/config
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:9117/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 volumes:
+  jackett_config:
   postgres_data:
   redis_data:
   minio_data:

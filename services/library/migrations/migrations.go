@@ -37,3 +37,10 @@ var LibraryEpisodesSQL string
 //
 //go:embed 003_library_filename_patterns.sql
 var LibraryFilenamePatternsSQL string
+
+// JackettSourceSQL is migrations/004_jackett_source.sql embedded as a
+// string. Applied AFTER the three Phase-3/4 migrations; it only extends
+// the job_source enum with 'jackett' (idempotent ADD VALUE IF NOT EXISTS).
+//
+//go:embed 004_jackett_source.sql
+var JackettSourceSQL string

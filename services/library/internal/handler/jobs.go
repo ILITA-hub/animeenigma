@@ -136,6 +136,7 @@ var allowedSources = map[domain.JobSource]bool{
 	domain.JobSourceNyaa:       true,
 	domain.JobSourceAnimeTosho: true,
 	domain.JobSourceManual:     true,
+	domain.JobSourceJackett:    true,
 }
 
 var allowedStatuses = map[domain.JobStatus]bool{

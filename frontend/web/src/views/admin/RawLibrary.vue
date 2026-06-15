@@ -78,6 +78,7 @@
                 <th class="px-3 py-2 text-left">Uploader</th>
                 <th class="px-3 py-2 text-left">Title</th>
                 <th class="px-3 py-2 text-left">Quality</th>
+                <th class="px-3 py-2 text-right">Seeders</th>
                 <th class="px-3 py-2 text-right">Size</th>
                 <th class="px-3 py-2 text-left">Magnet</th>
                 <th class="px-3 py-2"></th>
@@ -90,13 +91,20 @@
                 class="border-t border-white/10 hover:bg-white/5"
               >
                 <td class="px-3 py-2">
-                  <Badge :variant="release.source === 'animetosho' ? 'primary' : 'info'" size="sm">
+                  <Badge :variant="providerBadgeVariant(release.source)" size="sm">
                     {{ $t('player.adminLibrary.search.providers.' + release.source) }}
                   </Badge>
                 </td>
                 <td class="px-3 py-2 text-white/70">{{ release.uploader || '—' }}</td>
                 <td class="px-3 py-2 truncate max-w-md" :title="release.title">{{ release.title }}</td>
                 <td class="px-3 py-2 text-white/70">{{ release.quality || '—' }}</td>
+                <td
+                  class="px-3 py-2 text-right font-mono"
+                  :class="release.seeders === undefined ? 'text-white/40'
+                    : release.seeders > 0 ? 'text-success' : 'text-destructive'"
+                >
+                  {{ release.seeders === undefined ? '—' : release.seeders }}
+                </td>
                 <td class="px-3 py-2 text-right font-mono text-white/70">{{ formatBytes(release.size_bytes) }}</td>
                 <td class="px-3 py-2 text-white/40 font-mono text-xs">{{ truncateMagnet(release.magnet) }}</td>
                 <td class="px-3 py-2 text-right">
@@ -310,6 +318,14 @@ const totalActiveJobs = computed(() => {
 })
 
 // ---- Helpers ----
+// Provider chip colour: jackett (primary multi-indexer tier) = success
+// green, animetosho = cyan primary, nyaa (+ any fallback) = purple info.
+function providerBadgeVariant(source: Release['source']): 'success' | 'primary' | 'info' {
+  if (source === 'jackett') return 'success'
+  if (source === 'animetosho') return 'primary'
+  return 'info'
+}
+
 function formatBytes(n: number): string {
   if (!n || n <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']

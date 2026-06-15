@@ -27,6 +27,7 @@ type Config struct {
 	JWT           authz.JWTConfig
 	Nyaa          NyaaConfig
 	AnimeTosho    AnimeToshoConfig
+	Jackett       JackettConfig
 	LibrarySearch LibrarySearchConfig
 	Torrent       TorrentConfig
 	Worker        WorkerConfig
@@ -119,6 +120,23 @@ type AnimeToshoConfig struct {
 	UserAgent   string
 }
 
+// JackettConfig drives the Jackett primary-tier client
+// (services/library/internal/parser/jackett). Enabled is derived: an empty
+// APIKey leaves the primary tier off and the search falls back to the
+// legacy Nyaa+AnimeTosho aggregator (dark-ship safe). Categories is an
+// optional Torznab category allow-list (e.g. "5070" for TV/Anime); empty
+// means all categories. BaseURL defaults to the docker-network DNS name —
+// the host-bound 127.0.0.1:9117 is only reachable from the operator's
+// browser, not from inside the library container.
+type JackettConfig struct {
+	BaseURL     string
+	APIKey      string
+	Categories  []string
+	HTTPTimeout time.Duration
+	UserAgent   string
+	Enabled     bool
+}
+
 // LibrarySearchConfig holds limits documented for the operator; the
 // aggregator currently enforces these via package-level constants in
 // internal/service/search.go. The struct is informational — Phase 3+
@@ -174,6 +192,18 @@ func Load() (*Config, error) {
 			BaseURL:     getEnv("ANIMETOSHO_BASE_URL", "https://feed.animetosho.org"),
 			HTTPTimeout: searchTimeout,
 			UserAgent:   searchUA,
+		},
+		Jackett: JackettConfig{
+			BaseURL: getEnv("JACKETT_BASE_URL", "http://jackett:9117"),
+			APIKey:  getEnv("JACKETT_API_KEY", ""),
+			// CSV → slice; empty env yields nil (all categories).
+			Categories: splitCSV(getEnv("JACKETT_CATEGORIES", "")),
+			// Jackett's aggregated `all` query fans out across ~20 indexers
+			// and routinely takes ~20s — far longer than a single indexer,
+			// hence a dedicated 30s default rather than the shared 15s.
+			HTTPTimeout: getEnvDuration("JACKETT_TIMEOUT", 30*time.Second),
+			UserAgent:   searchUA,
+			Enabled:     getEnv("JACKETT_API_KEY", "") != "",
 		},
 		LibrarySearch: LibrarySearchConfig{
 			DefaultLimit: getEnvInt("LIBRARY_SEARCH_DEFAULT_LIMIT", 50),
@@ -231,6 +261,24 @@ func getEnvBool(key string, defaultVal bool) bool {
 		return false
 	}
 	return defaultVal
+}
+
+// splitCSV parses a comma-separated env value into a trimmed, non-empty
+// slice. Returns nil for an empty/whitespace input so callers can treat
+// "unset" and "empty" identically.
+func splitCSV(v string) []string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getEnv(key, defaultVal string) string {

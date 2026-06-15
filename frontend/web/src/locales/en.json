@@ -357,7 +357,8 @@
         "queue": "Queue",
         "providers": {
           "nyaa": "Nyaa",
-          "animetosho": "AnimeTosho"
+          "animetosho": "AnimeTosho",
+          "jackett": "Jackett"
         }
       },
       "jobs": {

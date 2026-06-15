@@ -34,5 +34,11 @@ type Release struct {
 	SizeBytes int64     `json:"size_bytes,omitempty"`
 	Source    string    `json:"source"`
 	MALID     int       `json:"mal_id,omitempty"`
-	FoundAt   time.Time `json:"found_at"`
+	// Seeders is the live swarm-health signal. Only the Jackett provider
+	// populates it today (Nyaa/AnimeTosho leave it 0); the Jackett client
+	// ranks its results by this field DESC so dead swarms sink, and the
+	// admin search UI renders it so an operator never queues a peerless
+	// torrent. omitempty so older providers' rows stay byte-for-byte the same.
+	Seeders int       `json:"seeders,omitempty"`
+	FoundAt time.Time `json:"found_at"`
 }

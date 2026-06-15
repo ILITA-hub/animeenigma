@@ -16,7 +16,7 @@ export type JobStatus =
   | 'failed'
   | 'cancelled'
 
-export type JobSource = 'nyaa' | 'animetosho' | 'manual'
+export type JobSource = 'nyaa' | 'animetosho' | 'manual' | 'jackett'
 
 export interface Job {
   id: string
@@ -36,9 +36,10 @@ export interface Job {
 }
 
 /**
- * Release is the unified search-result row from the library aggregator
- * (Nyaa + AnimeTosho). The `source` field tags origin so the UI can
- * render the provider chip in the right colour.
+ * Release is the unified search-result row from the library search.
+ * `source` tags origin so the UI can render the provider chip in the right
+ * colour: `jackett` is the multi-indexer primary tier (carries `seeders`),
+ * `nyaa`/`animetosho` are the fallback tier.
  */
 export interface Release {
   title: string
@@ -46,8 +47,10 @@ export interface Release {
   uploader?: string
   quality?: string
   size_bytes: number
-  source: 'nyaa' | 'animetosho'
+  source: 'nyaa' | 'animetosho' | 'jackett'
   mal_id?: number
+  /** Live swarm seeders — only Jackett populates this (omitted otherwise). */
+  seeders?: number
   found_at: string
 }
 

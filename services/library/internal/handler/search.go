@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -11,6 +12,14 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/library/internal/service"
 )
 
+// Searcher is the search contract the handler depends on. Both the legacy
+// *service.SearchAggregator (Nyaa+AnimeTosho) and the *service.TieredSearcher
+// (Jackett primary + aggregator fallback) satisfy it, so main.go can inject
+// either without the handler caring which tier is live.
+type Searcher interface {
+	FetchAll(ctx context.Context, p service.SearchParams) (service.Result, error)
+}
+
 // SearchHandler serves GET /api/library/search, the admin-only search
 // endpoint that fans out across Nyaa + AnimeTosho via the
 // SearchAggregator. Auth is enforced by the gateway's
@@ -18,13 +27,13 @@ import (
 // prefix (services/gateway/internal/transport/router.go); the library
 // service itself trusts what the gateway forwards.
 type SearchHandler struct {
-	agg *service.SearchAggregator
+	agg Searcher
 	log *logger.Logger
 }
 
 // NewSearchHandler constructs a SearchHandler with no dependencies
-// beyond the aggregator + logger.
-func NewSearchHandler(agg *service.SearchAggregator, log *logger.Logger) *SearchHandler {
+// beyond the searcher + logger.
+func NewSearchHandler(agg Searcher, log *logger.Logger) *SearchHandler {
 	return &SearchHandler{agg: agg, log: log}
 }
 

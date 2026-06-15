@@ -11,6 +11,10 @@ const (
 	JobSourceNyaa       JobSource = "nyaa"
 	JobSourceAnimeTosho JobSource = "animetosho"
 	JobSourceManual     JobSource = "manual"
+	// JobSourceJackett tags rows whose magnet came via the Jackett
+	// multi-indexer aggregator (the primary search tier). Added to the
+	// `job_source` enum by migrations/004_jackett_source.sql.
+	JobSourceJackett JobSource = "jackett"
 )
 
 // JobStatus is the locked state machine for a library_jobs row:
