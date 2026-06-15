@@ -330,9 +330,12 @@ import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
 import { providerById, CURATED_TIER } from './providerRegistry'
 import { pickSmartDefault } from '@/composables/unifiedPlayer/smartDefault'
 import { aeApi } from '@/api/client'
+import { useWatchPreferences } from '@/composables/useWatchPreferences'
+import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer } from '@/composables/unifiedPlayer/comboMapping'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult } from '@/types/unifiedPlayer'
+import type { WatchCombo } from '@/types/preference'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -472,7 +475,6 @@ watch(rows, () => {
   })
 }, { immediate: true })
 
-
 watch(
   [rows, preferenceSettled],
   () => {
@@ -585,6 +587,7 @@ const tracking = useWatchTracking(
       void loadEpisodeProgress()
     },
   },
+  () => comboToWatchCombo(state.combo.value),
 )
 
 /** Whether the user already has this episode marked watched (drawer data). */
