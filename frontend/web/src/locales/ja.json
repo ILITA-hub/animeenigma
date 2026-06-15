@@ -444,6 +444,37 @@
   "profile": {
     "memberSince": "登録日",
     "uploadAvatar": "アバターをアップロード",
+    "bulk": {
+      "select": "選択",
+      "selectAllPage": "このページをすべて選択",
+      "selected": "{n}件選択中",
+      "setStatus": "ステータスを変更",
+      "remove": "削除",
+      "clear": "クリア",
+      "removeConfirm": "{n}件のアニメをリストから削除しますか？元に戻せません。",
+      "error": "一括操作に失敗しました。もう一度お試しください。"
+    },
+    "filters": {
+      "button": "フィルター",
+      "genres": "ジャンル",
+      "genresHint": "すべて一致",
+      "searchGenres": "ジャンルを検索…",
+      "types": "種類",
+      "typesHint": "いずれか一致",
+      "year": "年",
+      "clear": "すべてクリア",
+      "kind": {
+        "tv": "TVシリーズ",
+        "movie": "映画",
+        "ova": "OVA",
+        "ona": "ONA",
+        "special": "スペシャル",
+        "tv_special": "TVスペシャル",
+        "music": "ミュージック",
+        "cm": "CM",
+        "pv": "PV"
+      }
+    },
     "tabs": {
       "watchlist": "マイリスト",
       "settings": "設定",
