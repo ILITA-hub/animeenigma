@@ -44,8 +44,11 @@ RUN cd services/library && go mod download
 COPY libs/ ./libs/
 COPY services/library/ ./services/library/
 
-# Build
+# Build the API server + the one-shot batch-ingest operator tool
+# (cmd/library-batchingest — used via `docker compose run` to wire a
+# multi-file season pack into MinIO; see its package doc).
 RUN cd services/library && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /library-api ./cmd/library-api
+RUN cd services/library && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /library-batchingest ./cmd/library-batchingest
 
 # Runtime stage
 FROM alpine:3.19
@@ -60,6 +63,7 @@ RUN apk add --no-cache ca-certificates tzdata ffmpeg
 WORKDIR /app
 
 COPY --from=builder /library-api .
+COPY --from=builder /library-batchingest /app/library-batchingest
 
 EXPOSE 8089
 
