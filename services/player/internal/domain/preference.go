@@ -13,11 +13,11 @@ type WatchCombo struct {
 
 // ValidPlayers is the set of allowed player values
 var ValidPlayers = map[string]bool{
-	"kodik": true, "animelib": true,
+	"kodik": true, "animelib": true, "raw": true, "ae": true,
 }
 
 // ValidLanguages is the set of allowed language values
-var ValidLanguages = map[string]bool{"ru": true, "en": true}
+var ValidLanguages = map[string]bool{"ru": true, "en": true, "ja": true}
 
 // ValidWatchTypes is the set of allowed watch type values
 var ValidWatchTypes = map[string]bool{"dub": true, "sub": true}
