@@ -107,12 +107,25 @@ func hashDate(date string) uint32 {
 
 const modeDaily = "daily"
 
-// VisibleAnime is the guessed anime's public fields echoed back to the client.
+// VisibleAnime is the guessed/answer anime with ALL comparable attributes —
+// public, because the player chose this known title, so the frontend can render
+// each comparison cell's value (year/studio/genres…) next to the server's
+// per-column status. The SECRET is still only ever sent as `answer` on
+// solve/give-up.
 type VisibleAnime struct {
-	ID        string `json:"id"`
-	NameRU    string `json:"name_ru"`
-	NameEN    string `json:"name_en"`
-	PosterURL string `json:"poster_url"`
+	ID        string         `json:"id"`
+	NameRU    string         `json:"name_ru"`
+	NameEN    string         `json:"name_en"`
+	NameJP    string         `json:"name_jp"`
+	PosterURL string         `json:"poster_url"`
+	Year      int            `json:"year"`
+	Episodes  int            `json:"episodes"`
+	Score     float64        `json:"score"`
+	Status    string         `json:"status"`
+	Rating    string         `json:"rating"`
+	Genres    []domain.Taxon `json:"genres"`
+	Studios   []domain.Taxon `json:"studios"`
+	Tags      []domain.Taxon `json:"tags"`
 }
 
 // GuessOutcome is the per-guess response (no secret unless solved).
@@ -137,7 +150,11 @@ type DailyState struct {
 }
 
 func visible(a domain.PoolAnime) VisibleAnime {
-	return VisibleAnime{ID: a.ID, NameRU: a.NameRU, NameEN: a.NameEN, PosterURL: a.PosterURL}
+	return VisibleAnime{
+		ID: a.ID, NameRU: a.NameRU, NameEN: a.NameEN, NameJP: a.NameJP, PosterURL: a.PosterURL,
+		Year: a.Year, Episodes: a.Episodes, Score: a.Score, Status: a.Status, Rating: a.Rating,
+		Genres: a.Genres, Studios: a.Studios, Tags: a.Tags,
+	}
 }
 
 // Guess scores one guess. userID == "" means an anonymous guest (no persistence).
