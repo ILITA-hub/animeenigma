@@ -968,14 +968,9 @@
 
             <!-- Load more -->
             <div v-if="commentsHasMore" class="mt-4 flex justify-center">
-              <button
-                type="button"
-                @click="loadMoreComments"
-                :disabled="commentsLoadingMore"
-                class="text-white/70 hover:text-white px-4 py-2 rounded-lg glass-card transition-colors disabled:opacity-50"
-              >
+              <Button variant="soft" size="sm" :disabled="commentsLoadingMore" @click="loadMoreComments">
                 {{ commentsLoadingMore ? $t('anime.ugc.loading') : $t('anime.ugc.loadMore') }}
-              </button>
+              </Button>
             </div>
           </template>
         </Tabs>

@@ -401,10 +401,10 @@
                   {{ cardById(cid)!.rarity }}
                 </span>
               </div>
-              <!-- Remove button -->
+              <!-- Remove button — bespoke-keep: 20px circular black→red image-overlay affordance; Button (32px, rounded-xl, solid-bg variants) can't model it -->
               <button
                 type="button"
-                class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive/80 flex items-center justify-center transition-colors"
+                class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive/80 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
                 :aria-label="`Remove ${cardNameById(cid)}`"
                 @click="removeGroupCard(cid)"
               >
@@ -598,10 +598,10 @@
                   {{ cardById(cid)!.rarity }}
                 </span>
               </div>
-              <!-- Remove button -->
+              <!-- Remove button — bespoke-keep: 20px circular black→red image-overlay affordance; Button (32px, rounded-xl, solid-bg variants) can't model it -->
               <button
                 type="button"
-                class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive/80 flex items-center justify-center transition-colors"
+                class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive/80 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
                 :aria-label="`Remove ${cardNameById(cid)}`"
                 @click="removeBannerCard(cid)"
               >
