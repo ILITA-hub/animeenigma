@@ -87,9 +87,11 @@
         >
           {{ $t('common.cancel') }}
         </Button>
-        <button
+        <Button
           v-if="!submitted"
-          class="px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 bg-brand-violet/20 text-brand-violet hover:bg-brand-violet/30"
+          variant="soft"
+          size="sm"
+          class="bg-brand-violet/20 text-brand-violet hover:bg-brand-violet/30"
           :disabled="submitting"
           @click="submitReport"
         >
@@ -98,7 +100,7 @@
             {{ $t('footer.feedback.sending') }}
           </span>
           <span v-else>{{ $t('footer.feedback.submit') }}</span>
-        </button>
+        </Button>
         <Button
           v-if="submitted"
           variant="soft"
