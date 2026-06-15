@@ -820,6 +820,7 @@ async function loadEpisodesAndStream() {
   const token = ++resolveToken
   resolveStartedAt = performance.now()
   reachedReported = false
+  stallStartedAt = 0
 
   try {
     // Load episode list
@@ -1433,6 +1434,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
   const token = ++resolveToken
   resolveStartedAt = performance.now()
   reachedReported = false
+  stallStartedAt = 0
   try {
     const stream = await resolver.resolveStream(
       provider,
