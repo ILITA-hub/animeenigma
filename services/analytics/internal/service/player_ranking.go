@@ -8,7 +8,6 @@ package service
 import (
 	"context"
 	"sort"
-	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
@@ -20,7 +19,6 @@ const (
 	rankLookbackDays = 7
 	rankMinGlobal    = 20 // global per-provider min resolves
 	rankMinPerAnime  = 10 // per-(anime,provider) min resolves (sparser)
-	rankHashTTL      = 48 * time.Hour
 
 	// Composite score weights/penalties (see plan §"Composite score").
 	wReached = 0.65
