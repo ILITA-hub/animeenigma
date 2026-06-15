@@ -97,6 +97,7 @@ func scoreProviders(rows []repo.ProviderReliabilityRow) []ProviderRank {
 			Samples:     r.Resolves,
 		})
 	}
+	// scores derive from integer ratios; exact compare is fine, tie-break falls through to Samples.
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Score != out[j].Score {
 			return out[i].Score > out[j].Score

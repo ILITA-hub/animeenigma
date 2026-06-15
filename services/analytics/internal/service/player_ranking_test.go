@@ -40,6 +40,34 @@ func TestScoreAndSort(t *testing.T) {
 	}
 }
 
+func TestScoreProviders_SkipsZeroResolves(t *testing.T) {
+	// A row with Resolves==0 must be skipped; only the normal row should appear.
+	rows := []repo.ProviderReliabilityRow{
+		{Provider: "zero", Resolves: 0},
+		{Provider: "ok", Resolves: 50, Reached: 50, OK: 50, Stalls: 0, P95MS: 500},
+	}
+	ranks := scoreProviders(rows)
+	if len(ranks) != 1 {
+		t.Fatalf("want 1 rank (zero-resolves row skipped), got %d", len(ranks))
+	}
+	if ranks[0].Provider != "ok" {
+		t.Errorf("want provider %q, got %q", "ok", ranks[0].Provider)
+	}
+}
+
+func TestPlayerRanking_Recompute_NilConnOrWriterIsNoOp(t *testing.T) {
+	// Degraded boot: nil ClickHouse conn or nil writer must be a no-op success,
+	// not a panic — the 48h Redis TTL carries the last good ranking.
+	s := NewPlayerRankingService(nil, &fakeRankingWriter{})
+	if err := s.Recompute(context.Background()); err != nil {
+		t.Fatalf("nil conn Recompute should be a no-op success, got %v", err)
+	}
+	s2 := NewPlayerRankingService(nil, nil)
+	if err := s2.Recompute(context.Background()); err != nil {
+		t.Fatalf("nil conn+writer Recompute should be a no-op success, got %v", err)
+	}
+}
+
 func TestPublishSplitsGlobalAndPerAnime(t *testing.T) {
 	w := &fakeRankingWriter{}
 	s := NewPlayerRankingService(nil, w)
