@@ -4,7 +4,7 @@
        friendly because content is always in the DOM). -->
   <div class="max-w-3xl mx-auto px-4 py-12">
     <header class="mb-8">
-      <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">
+      <h1 class="text-3xl md:text-4xl font-semibold text-white mb-2">
         {{ t('about.title') }}
       </h1>
       <p class="text-white/60 text-lg">

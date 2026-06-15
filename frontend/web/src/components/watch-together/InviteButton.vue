@@ -32,7 +32,7 @@
 
   UI-SPEC contract (CLAUDE.md):
     - Tailwind utility classes only
-    - Font weights: font-medium / font-semibold only (no font-bold)
+    - Font weights: font-medium / font-semibold only (no font-semibold)
     - Padding: px-4 py-2 for the button itself
 -->
 

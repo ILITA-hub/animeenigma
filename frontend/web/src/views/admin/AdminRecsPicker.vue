@@ -2,7 +2,7 @@
   <div class="min-h-screen pt-24 pb-16 px-4">
     <div class="max-w-md mx-auto">
       <div class="glass-card rounded-2xl p-8">
-        <h1 class="text-2xl font-bold text-white mb-2">{{ $t('admin.recs.title') }}</h1>
+        <h1 class="text-2xl font-semibold text-white mb-2">{{ $t('admin.recs.title') }}</h1>
         <p class="text-white/60 text-sm mb-6">{{ $t('admin.recs.pickerHelp') }}</p>
 
         <!-- Phase 12 (UA-090/091/092/097/101): the picker is a single-input

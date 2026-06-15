@@ -59,7 +59,7 @@
       <div class="max-w-2xl">
         <!-- Title -->
         <h1
-          class="text-4xl md:text-5xl lg:text-6xl font-bold mb-4 text-white"
+          class="text-4xl md:text-5xl lg:text-6xl font-semibold mb-4 text-white"
           :class="{ 'animate-fade-in': mounted }"
         >
           <span class="text-glow-cyan">{{ $t('hero.tagline') }}</span>

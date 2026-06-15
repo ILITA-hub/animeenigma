@@ -5,7 +5,7 @@
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 class="text-3xl font-bold text-white">{{ $t('admin.feedback.title') }}</h1>
+          <h1 class="text-3xl font-semibold text-white">{{ $t('admin.feedback.title') }}</h1>
           <p class="text-white/60 text-sm mt-1">{{ $t('admin.feedback.subtitle') }}</p>
         </div>
         <div class="flex items-center gap-3">

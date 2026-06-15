@@ -4,7 +4,7 @@
     <div class="container mx-auto px-4 py-8">
       <div class="flex items-center justify-between gap-3 flex-wrap mb-5">
         <div class="flex items-center gap-3 flex-wrap">
-          <h1 class="text-2xl font-bold text-foreground font-display min-w-[130px]">{{ headerTitle }}</h1>
+          <h1 class="text-2xl font-semibold text-foreground font-display min-w-[130px]">{{ headerTitle }}</h1>
           <div class="flex gap-1.5">
             <button class="h-8 w-8 rounded-lg bg-white/[0.06] hover:bg-white/12 flex items-center justify-center" @click="cal.shift(-1)">‹</button>
             <button class="h-8 w-8 rounded-lg bg-white/[0.06] hover:bg-white/12 flex items-center justify-center" @click="cal.shift(1)">›</button>

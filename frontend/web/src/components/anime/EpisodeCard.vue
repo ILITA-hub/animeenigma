@@ -16,7 +16,7 @@
       v-else
       class="w-full h-full bg-gradient-to-br from-white/5 to-white/10 flex items-center justify-center"
     >
-      <span class="text-3xl font-bold text-white/20">{{ episodeNumber }}</span>
+      <span class="text-3xl font-semibold text-white/20">{{ episodeNumber }}</span>
     </div>
 
     <!-- Overlay -->

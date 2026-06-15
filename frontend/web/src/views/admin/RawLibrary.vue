@@ -3,7 +3,7 @@
     <div class="container mx-auto px-4 py-8 max-w-7xl">
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 class="text-3xl font-bold text-white">{{ $t('player.adminLibrary.title') }}</h1>
+        <h1 class="text-3xl font-semibold text-white">{{ $t('player.adminLibrary.title') }}</h1>
       </div>
 
       <!-- Error banner -->
@@ -17,7 +17,7 @@
           <div class="text-white/60 text-xs uppercase tracking-wide mb-1">
             {{ $t('player.adminLibrary.stats.diskFree') }}
           </div>
-          <div class="text-2xl font-bold text-cyan-300">
+          <div class="text-2xl font-semibold text-cyan-300">
             <template v-if="health">
               {{ formatPct(health.disk_free_bytes, health.disk_total_bytes) }}%
             </template>
@@ -31,13 +31,13 @@
           <div class="text-white/60 text-xs uppercase tracking-wide mb-1">
             {{ $t('player.adminLibrary.stats.activeTorrents') }}
           </div>
-          <div class="text-2xl font-bold text-cyan-300">{{ health?.active_torrents ?? '—' }}</div>
+          <div class="text-2xl font-semibold text-cyan-300">{{ health?.active_torrents ?? '—' }}</div>
         </div>
         <div class="glass-card p-4">
           <div class="text-white/60 text-xs uppercase tracking-wide mb-1">
             {{ $t('player.adminLibrary.stats.activeJobs') }}
           </div>
-          <div class="text-2xl font-bold text-cyan-300">{{ totalActiveJobs }}</div>
+          <div class="text-2xl font-semibold text-cyan-300">{{ totalActiveJobs }}</div>
         </div>
       </section>
 

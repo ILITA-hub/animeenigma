@@ -6,7 +6,7 @@
           <User class="size-10 text-cyan-400" />
         </div>
 
-        <h1 class="text-2xl font-bold text-white mb-2">{{ $t('profileSetup.title') }}</h1>
+        <h1 class="text-2xl font-semibold text-white mb-2">{{ $t('profileSetup.title') }}</h1>
         <p class="text-white/60 mb-6">{{ $t('profileSetup.description') }}</p>
 
         <div class="space-y-4">

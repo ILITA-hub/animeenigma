@@ -3,7 +3,7 @@
     <!-- Header -->
     <div v-if="title || $slots.header" class="flex items-center justify-between mb-4 px-4 lg:px-0">
       <slot name="header">
-        <h2 class="text-xl md:text-2xl font-bold text-white">{{ title }}</h2>
+        <h2 class="text-xl md:text-2xl font-semibold text-white">{{ title }}</h2>
       </slot>
       <router-link
         v-if="seeAllLink"

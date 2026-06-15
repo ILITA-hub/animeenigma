@@ -4,7 +4,7 @@
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 class="text-3xl font-bold text-white">{{ $t('admin.recs.title') }}</h1>
+          <h1 class="text-3xl font-semibold text-white">{{ $t('admin.recs.title') }}</h1>
           <p class="text-white/60 text-sm mt-1">
             <span class="font-mono">{{ $t('admin.recs.breadcrumb') }}: {{ userId }}</span>
             <span v-if="computedAt" class="ml-3 text-white/40">

@@ -5,7 +5,7 @@
       <!-- Header + actions -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 class="text-3xl font-bold text-white">
+          <h1 class="text-3xl font-semibold text-white">
             {{ isNew ? $t('admin.collections.createNew') : $t('admin.collections.editTitle') }}
           </h1>
           <p v-if="!isNew && form.slug" class="text-white/40 text-xs font-mono mt-1">

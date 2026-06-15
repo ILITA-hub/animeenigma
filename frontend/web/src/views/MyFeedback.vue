@@ -7,7 +7,7 @@
   <div class="min-h-screen bg-background pt-20">
     <div class="container mx-auto px-4 py-8 max-w-3xl">
       <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
-        <h1 class="text-2xl font-bold text-foreground font-display">{{ $t('myFeedback.title') }}</h1>
+        <h1 class="text-2xl font-semibold text-foreground font-display">{{ $t('myFeedback.title') }}</h1>
         <span v-if="total > 0" class="text-sm text-muted-foreground">{{ $t('myFeedback.total', { n: total }) }}</span>
       </div>
       <p class="text-sm text-muted-foreground mb-4">{{ $t('myFeedback.subtitle') }}</p>

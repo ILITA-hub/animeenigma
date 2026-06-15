@@ -8,7 +8,7 @@
 
     <!-- 404 -->
     <div v-else-if="notFound" class="pt-32 max-w-3xl mx-auto px-4 text-center">
-      <h1 class="text-3xl font-bold text-white mb-4">{{ $t('collections.notFound') }}</h1>
+      <h1 class="text-3xl font-semibold text-white mb-4">{{ $t('collections.notFound') }}</h1>
       <router-link to="/" class="text-cyan-400 hover:underline">← {{ $t('nav.home') }}</router-link>
     </div>
 
@@ -21,7 +21,7 @@
       >
         <div class="absolute inset-0 bg-gradient-to-b from-black/30 via-black/50 to-base"></div>
         <div class="relative max-w-7xl mx-auto px-4 lg:px-8 py-20 md:py-28">
-          <h1 class="text-4xl md:text-5xl font-bold text-white mb-4 drop-shadow-lg">
+          <h1 class="text-4xl md:text-5xl font-semibold text-white mb-4 drop-shadow-lg">
             {{ localizedTitle }}
           </h1>
           <p v-if="localizedDescription" class="text-white/80 text-lg max-w-3xl drop-shadow whitespace-pre-line">

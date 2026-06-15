@@ -5,7 +5,7 @@
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 class="text-3xl font-bold text-white">{{ $t('admin.collections.title') }}</h1>
+          <h1 class="text-3xl font-semibold text-white">{{ $t('admin.collections.title') }}</h1>
         </div>
         <div class="flex items-center gap-3">
           <router-link

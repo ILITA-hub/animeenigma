@@ -10,7 +10,7 @@
     <div class="w-full max-w-md">
       <!-- Logo -->
       <div class="text-center mb-8">
-        <router-link to="/" class="inline-flex items-center gap-2 text-2xl font-bold">
+        <router-link to="/" class="inline-flex items-center gap-2 text-2xl font-semibold">
           <span class="text-cyan-400">Anime</span>
           <span class="text-white">Enigma</span>
         </router-link>

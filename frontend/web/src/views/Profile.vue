@@ -42,7 +42,7 @@
 
             <!-- User Info -->
             <div class="text-center sm:text-left flex-1">
-              <h1 class="text-2xl sm:text-3xl font-bold text-white mb-1">
+              <h1 class="text-2xl sm:text-3xl font-semibold text-white mb-1">
                 {{ profileUser.username }}
               </h1>
               <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
@@ -83,22 +83,22 @@
               <!-- Stats Bar -->
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div class="glass-card p-3 text-center">
-                  <div class="text-2xl font-bold text-cyan-400">{{ watchlistStats.total }}</div>
+                  <div class="text-2xl font-semibold text-cyan-400">{{ watchlistStats.total }}</div>
                   <div class="text-xs text-white/50">{{ $t('profile.stats.totalAnime') }}</div>
                 </div>
                 <div class="glass-card p-3 text-center">
-                  <div class="text-2xl font-bold text-cyan-400 flex items-center justify-center gap-1">
+                  <div class="text-2xl font-semibold text-cyan-400 flex items-center justify-center gap-1">
                     <ScoreDiamond class="size-4" />
                     {{ watchlistStats.avgScore }}
                   </div>
                   <div class="text-xs text-white/50">{{ $t('profile.stats.avgScore') }}</div>
                 </div>
                 <div class="glass-card p-3 text-center">
-                  <div class="text-2xl font-bold text-success">{{ watchlistStats.totalEpisodes }}</div>
+                  <div class="text-2xl font-semibold text-success">{{ watchlistStats.totalEpisodes }}</div>
                   <div class="text-xs text-white/50">{{ $t('profile.stats.episodesWatched') }}</div>
                 </div>
                 <div class="glass-card p-3 text-center">
-                  <div class="text-2xl font-bold text-info">{{ watchlistStats.completed }}</div>
+                  <div class="text-2xl font-semibold text-info">{{ watchlistStats.completed }}</div>
                   <div class="text-xs text-white/50">{{ $t('profile.stats.completed') }}</div>
                 </div>
               </div>

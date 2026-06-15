@@ -30,7 +30,7 @@
         <!-- Info -->
         <div class="flex-1 pt-2">
           <!-- Title -->
-          <h1 class="text-2xl md:text-4xl font-bold text-white mb-2">
+          <h1 class="text-2xl md:text-4xl font-semibold text-white mb-2">
             {{ anime.title }}
           </h1>
           <p v-if="(anime as AnimeWithExtras).japaneseTitle" class="text-lg text-white/50 mb-4">
@@ -66,7 +66,7 @@
             <div v-if="anime.rating" class="flex items-center gap-2">
               <div class="flex items-center gap-1 text-warning">
                 <Star class="size-5" fill="currentColor" />
-                <span class="font-bold text-lg">{{ anime.rating.toFixed(1) }}</span>
+                <span class="font-semibold text-lg">{{ anime.rating.toFixed(1) }}</span>
               </div>
               <span class="text-white/60 text-sm">Shikimori</span>
             </div>
@@ -75,7 +75,7 @@
             <div v-if="siteRating && siteRating.total_reviews > 0" class="flex items-center gap-2">
               <div class="flex items-center gap-1 text-cyan-400">
                 <ScoreDiamond class="size-5" />
-                <span class="font-bold text-lg">{{ siteRating.average_score.toFixed(1) }}</span>
+                <span class="font-semibold text-lg">{{ siteRating.average_score.toFixed(1) }}</span>
               </div>
               <span class="text-white/60 text-sm">AnimeEnigma ({{ siteRating.total_reviews }})</span>
             </div>
@@ -95,7 +95,7 @@
                  so show a non-actionable premiere indicator instead. -->
             <div
               v-if="notReleasedYet"
-              class="flex items-center gap-2 px-6 py-3 rounded-lg font-bold bg-white/5 text-white/70 border border-white/10 cursor-default"
+              class="flex items-center gap-2 px-6 py-3 rounded-lg font-semibold bg-white/5 text-white/70 border border-white/10 cursor-default"
             >
               <Clock class="size-5" aria-hidden="true" />
               <span>{{ premiereDate ? $t('anime.notReleased.cta', { date: premiereDate }) : $t('anime.notReleased.ctaNoDate') }}</span>
@@ -782,7 +782,7 @@
               </div>
               <div class="flex items-center gap-1 text-cyan-400">
                 <ScoreDiamond class="size-5" />
-                <span class="font-bold">{{ review.score }}</span>
+                <span class="font-semibold">{{ review.score }}</span>
               </div>
             </div>
             <p v-if="review.review_text" class="text-white/70 whitespace-pre-wrap">{{ review.review_text }}</p>

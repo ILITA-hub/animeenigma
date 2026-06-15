@@ -3,7 +3,7 @@
     <div class="max-w-7xl mx-auto px-4">
       <!-- Header -->
       <div class="mb-8">
-        <h1 class="text-2xl md:text-3xl font-bold text-white mb-2">{{ $t('rooms.title') }}</h1>
+        <h1 class="text-2xl md:text-3xl font-semibold text-white mb-2">{{ $t('rooms.title') }}</h1>
         <p class="text-white/60">{{ $t('rooms.description') }}</p>
       </div>
 
@@ -95,7 +95,7 @@
                     </div>
                     <span class="text-white text-sm">{{ player.username }}</span>
                   </div>
-                  <span class="text-warning font-bold">{{ player.score || 0 }}</span>
+                  <span class="text-warning font-semibold">{{ player.score || 0 }}</span>
                 </div>
               </div>
 
@@ -112,7 +112,7 @@
                       {{ index + 1 }}
                     </span>
                     <span class="flex-1 text-white/70 truncate">{{ player.username }}</span>
-                    <span class="text-warning font-bold">{{ player.score }}</span>
+                    <span class="text-warning font-semibold">{{ player.score }}</span>
                   </div>
                 </div>
               </div>

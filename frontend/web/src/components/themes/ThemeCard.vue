@@ -41,7 +41,7 @@
             <h2 v-else class="text-white/90 font-medium text-sm leading-tight truncate">{{ theme.anime_name }}</h2>
             <div class="flex items-center gap-2 mt-1">
               <span
-                class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold"
+                class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
                 :class="theme.theme_type === 'OP'
                   ? 'bg-cyan-500/20 text-cyan-400'
                   : 'bg-brand-violet/20 text-brand-violet'"

@@ -13,7 +13,7 @@
   >
     <div
       class="text-xs mb-1.5 font-display"
-      :class="cell.isToday ? 'text-primary font-bold' : cell.inCurrentMonth ? 'text-muted-foreground' : 'text-white/20'"
+      :class="cell.isToday ? 'text-primary font-semibold' : cell.inCurrentMonth ? 'text-muted-foreground' : 'text-white/20'"
     >
       {{ cell.date.getDate() }}
     </div>
