@@ -275,6 +275,21 @@ type ProviderReliabilityRow struct {
 // for the global ranking; when true it groups by (anime_id, provider). Keys with
 // fewer than minResolves player_resolve rows are dropped (HAVING) so a handful of
 // plays can't manufacture a misleading score. READS the events table only.
+//
+// Injection-safety: the two ? bounds are parameterized (same pattern as
+// QueryReadThresholdP95). The only string-concatenated fragments (groupCols,
+// selectAnime) are derived solely from the perAnime bool — never from external or
+// user input — so the concatenation is injection-safe.
+//
+// Per-anime NULL semantics: when perAnime is false, AnimeID=="" signals a global
+// aggregate row. When perAnime is true, AnimeID=="" means the underlying event had
+// a NULL anime_id (collapsed by ifNull); treat such rows as uncorrelated rather
+// than as belonging to any specific anime.
+//
+// Stall correlation caveat: Stalls counts all player_stall events for the provider
+// in the window regardless of anime_id. In per-anime mode, stall events with a
+// NULL anime_id won't share the anime grouping key, so per-anime stall counts may
+// be conservative (understated).
 func QueryProviderReliability(ctx context.Context, conn driver.Conn, lookbackDays, minResolves int, perAnime bool) ([]ProviderReliabilityRow, error) {
 	groupCols := "target"
 	selectAnime := "'' AS anime_id"
