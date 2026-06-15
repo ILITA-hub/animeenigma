@@ -16,6 +16,7 @@ use (
 	./libs/tracing
 	./libs/videoutils
 	./services/analytics
+	./services/anidle
 	./services/auth
 	./services/catalog
 	./services/gacha
