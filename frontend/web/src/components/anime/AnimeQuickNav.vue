@@ -26,7 +26,7 @@
 
   <!-- Mobile: sticky horizontal pill row -->
   <nav
-    class="md:hidden sticky top-16 z-30 -mx-4 px-4 py-2 bg-gray-950/80 backdrop-blur-md border-b border-white/5 overflow-x-auto scrollbar-hide"
+    class="md:hidden sticky top-16 z-30 -mx-4 px-4 py-2 bg-background/80 backdrop-blur-md border-b border-white/5 overflow-x-auto scrollbar-hide"
     :aria-label="$t('anime.nav.heading')"
   >
     <div class="flex gap-2 whitespace-nowrap">

@@ -182,7 +182,7 @@
         <!-- Backdrop -->
         <div class="absolute inset-0 bg-black/60" @click="drawerOpen = false" />
         <!-- Panel -->
-        <div class="relative w-[85%] max-w-[320px] h-full bg-slate-950 border-r border-white/10 overflow-y-auto p-4">
+        <div class="relative w-[85%] max-w-[320px] h-full bg-background border-r border-white/10 overflow-y-auto p-4">
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-lg font-semibold text-white">{{ $t('browse.filters.title') }}</h2>
             <!-- KEPT bespoke: bare icon-only close (p-1 ~28px hit area, no bg/border). Button size="icon" is 40x40 and ghost adds bg+border — a visible enlargement/box diff for an inline header close affordance. -->

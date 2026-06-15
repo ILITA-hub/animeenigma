@@ -14,7 +14,7 @@
       @mouseleave="onHoverEnd"
     >
       <div
-        class="bg-gray-950/95 backdrop-blur-xl border border-cyan-400/30 shadow-2xl rounded-xl overflow-hidden"
+        class="bg-background/95 backdrop-blur-xl border border-cyan-400/30 shadow-2xl rounded-xl overflow-hidden"
       >
         <component
           :is="resolveRenderer(currentNotification.type)"

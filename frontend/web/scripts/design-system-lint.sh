@@ -42,7 +42,7 @@ RULE3_ERRORS=0
 
 # Off-palette palette set (Phase-4 verbatim). Brand/provider hues
 # (cyan|pink|orange|rose|indigo|teal|lime) are deliberately ABSENT.
-OFF_PALETTE_RE='(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|outline|decoration|shadow)-(red|amber|yellow|emerald|green|blue|sky|purple|violet|gray|slate|zinc)-(50|100|200|300|400|500|600|700|800|900)'
+OFF_PALETTE_RE='(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|outline|decoration|shadow)-(red|amber|yellow|emerald|green|blue|sky|purple|violet|gray|slate|zinc)-(50|100|200|300|400|500|600|700|800|900|925|950|975)'
 
 # Deprecated-alias var() usages, EXCLUDING the literal-alias survivors
 # (--ink-2, --ink-4, --accent-soft, --accent-line, --accent-glow, --pink-soft).

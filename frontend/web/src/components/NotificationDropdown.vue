@@ -3,7 +3,7 @@
     role="dialog"
     aria-modal="false"
     :aria-label="$t('notifications.dropdown.title')"
-    class="bg-gray-950/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl w-[380px] max-w-[calc(100vw-1.5rem)] overflow-hidden flex flex-col"
+    class="bg-background/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl w-[380px] max-w-[calc(100vw-1.5rem)] overflow-hidden flex flex-col"
   >
     <!-- Body: list region (scrolls) -->
     <div class="max-h-[420px] overflow-y-auto" role="region">
