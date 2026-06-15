@@ -34,7 +34,7 @@
       @play="onVideoPlay"
       @pause="onVideoPause"
       @ended="onEnded"
-      @click="togglePlay"
+      @click="onVideoClick"
       @volumechange="onVolumeChange"
       @waiting="onBufferStart"
       @canplay="onBufferEnd"
@@ -205,7 +205,7 @@
     />
 
     <!-- Source panel (floating, top-right) -->
-    <div v-if="openMenu === 'source'" class="pl-floating pl-floating--source" @click.stop>
+    <div v-if="openMenu === 'source'" ref="sourceMenuEl" class="pl-floating pl-floating--source" @click.stop>
       <SourcePanel
         :rows="rows"
         :audio="state.combo.value.audio"
@@ -224,7 +224,7 @@
     </div>
 
     <!-- Episodes sheet (V2b — bottom sheet above the control bar) -->
-    <div v-if="openMenu === 'episodes'" class="pl-floating pl-floating--sheet" @click.stop>
+    <div v-if="openMenu === 'episodes'" ref="episodesMenuEl" class="pl-floating pl-floating--sheet" @click.stop>
       <EpisodesPanel
         :episodes="episodes"
         :selected-number="selectedEpisode?.number ?? null"
@@ -239,7 +239,7 @@
     </div>
 
     <!-- Playback settings menu (floating, above control bar) -->
-    <div v-if="openMenu === 'settings'" class="pl-floating pl-floating--btnmenu" @click.stop>
+    <div v-if="openMenu === 'settings'" ref="settingsMenuEl" class="pl-floating pl-floating--btnmenu" @click.stop>
       <PlaybackSettingsMenu
         :quality="state.quality.value"
         :qualities="qualities"
@@ -259,7 +259,7 @@
     </div>
 
     <!-- Subtitles menu (floating, above control bar) -->
-    <div v-if="openMenu === 'subs'" class="pl-floating pl-floating--btnmenu" @click.stop>
+    <div v-if="openMenu === 'subs'" ref="subsMenuEl" class="pl-floating pl-floating--btnmenu" @click.stop>
       <SubtitlesMenu
         :sub-lang="state.subLang.value"
         :sub-langs="subLangsAvailable"
@@ -295,6 +295,7 @@ import {
   onMounted,
   onUnmounted,
 } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import { CircleAlert, ChevronDown, Play, X } from 'lucide-vue-next'
 
 import { userApi } from '@/api/client'
@@ -1264,6 +1265,35 @@ type MenuKind = 'source' | 'settings' | 'subs' | 'episodes' | null
 const openMenu = ref<MenuKind>(null)
 const browseOpen = ref(false)
 
+// One floating dropdown is open at a time (mutually-exclusive v-if), so the
+// active element resolves from whichever menu `openMenu` selects.
+const sourceMenuEl = ref<HTMLElement | null>(null)
+const episodesMenuEl = ref<HTMLElement | null>(null)
+const settingsMenuEl = ref<HTMLElement | null>(null)
+const subsMenuEl = ref<HTMLElement | null>(null)
+const activeMenuEl = computed<HTMLElement | null>(() => {
+  switch (openMenu.value) {
+    case 'source': return sourceMenuEl.value
+    case 'episodes': return episodesMenuEl.value
+    case 'settings': return settingsMenuEl.value
+    case 'subs': return subsMenuEl.value
+    default: return null
+  }
+})
+
+// Click-outside dismiss: a click anywhere outside the open dropdown closes it.
+// Ignore the trigger regions — the control bar (source/subs/settings pills) and
+// top bar (EP trigger) own their own toggle, so letting click-outside fire there
+// too would race the trigger and reopen-then-close. The <video> is also ignored
+// because onVideoClick handles it (and suppresses the play/pause side effect);
+// without this the pointerdown-phase click-outside would close the menu first,
+// leaving onVideoClick's click to fall through to togglePlay.
+onClickOutside(
+  activeMenuEl,
+  () => { if (openMenu.value !== null) closeMenus() },
+  { ignore: ['.pl-controls', '.pl-top', videoRef] },
+)
+
 function toggleMenu(menu: MenuKind) {
   openMenu.value = openMenu.value === menu ? null : menu
   if (openMenu.value !== null) browseOpen.value = false
@@ -1374,6 +1404,17 @@ const resumeKind = computed<
 >(() => 'first-time')
 
 // ─── Playback helpers ─────────────────────────────────────────────────────────
+
+// A tap on the video acts as a backdrop dismiss while any settings menu /
+// modal is open — close it WITHOUT also toggling play/pause (the dismiss must
+// not have a side effect). With nothing open it's the normal play/pause tap.
+function onVideoClick() {
+  if (openMenu.value !== null || browseOpen.value) {
+    closeMenus()
+    return
+  }
+  togglePlay()
+}
 
 function togglePlay() {
   const v = videoRef.value
