@@ -381,6 +381,56 @@ func TestListServers_SubAndDub(t *testing.T) {
 	}
 }
 
+// TestListServers_ColdCats_DiscoversDub verifies the gap fix: when the
+// categories cache is COLD (ListEpisodes was never called for this show, or its
+// result was served from the episodes-list cache), ListServers must NOT default
+// to sub-only. Instead it must call fetchShowDetail (EpisodesByID query) to
+// derive categories from availableEpisodesDetail, then probe both sub and dub.
+//
+// The httptest server discriminates the two operation types by the presence of
+// "translationType" in the URL query string (SourceUrls variables always
+// include it; EpisodesByID variables only contain "_id" and never do).
+func TestListServers_ColdCats_DiscoversDub(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		q := r.URL.RawQuery
+		isSourcesQuery := strings.Contains(q, "translationType") || strings.Contains(q, "%22translationType%22")
+		switch {
+		case isSourcesQuery && (strings.Contains(q, "%22dub%22") || strings.Contains(q, `"dub"`)):
+			// SourceUrls query for dub.
+			_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"https://cdn.allanime.day/dub-ep1.mp4","sourceName":"Default","type":"player","priority":9,"fileExtenstion":"mp4","subtitles":[]}]}}}`))
+		case isSourcesQuery:
+			// SourceUrls query for sub.
+			_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"https://cdn.allanime.day/sub-ep1.mp4","sourceName":"Default","type":"player","priority":9,"fileExtenstion":"mp4","subtitles":[]}]}}}`))
+		default:
+			// EpisodesByID show-detail query (variables only contain "_id") →
+			// return a show that has both sub and dub so categoriesFor can discover dub.
+			_, _ = w.Write([]byte(`{"data":{"show":{"_id":"SHOW123","availableEpisodesDetail":{"sub":["1"],"dub":["1"],"raw":[]}}}}`))
+		}
+	}))
+	defer srv.Close()
+
+	// Cold cache: do NOT pre-seed categories. The bug was that ListServers
+	// defaulted to sub-only on a cold cats miss instead of fetching show detail.
+	p := newTestProvider(t, srv)
+	servers, err := p.ListServers(context.Background(), "", "SHOW123:1")
+	if err != nil {
+		t.Fatalf("ListServers: %v", err)
+	}
+	var sawSub, sawDub bool
+	for _, s := range servers {
+		if s.Type == domain.CategorySub {
+			sawSub = true
+		}
+		if s.Type == domain.CategoryDub {
+			sawDub = true
+		}
+	}
+	if !sawSub || !sawDub {
+		t.Errorf("cold-cats ListServers should discover dub via show detail; sub=%v dub=%v (%+v)", sawSub, sawDub, servers)
+	}
+}
+
 // --- doGraphQL transport semantics ---------------------------------------
 
 func TestDoGraphQL_5xxIsProviderDown(t *testing.T) {

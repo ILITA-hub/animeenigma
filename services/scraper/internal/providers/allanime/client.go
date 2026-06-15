@@ -209,6 +209,53 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 	return pick.ID, nil
 }
 
+// categoriesFromDetail returns the EN categories ("sub"/"dub") the show has.
+// Raw is excluded — that's the Raw player's domain, not OurEnglish.
+func categoriesFromDetail(d availableEpisodesDetail) []string {
+	cats := make([]string, 0, 2)
+	if len(d.Sub) > 0 {
+		cats = append(cats, "sub")
+	}
+	if len(d.Dub) > 0 {
+		cats = append(cats, "dub")
+	}
+	return cats
+}
+
+// fetchShowDetail runs the EpisodesByID show query and returns the show's
+// availableEpisodesDetail. Shared by ListEpisodes and categoriesFor.
+func (p *Provider) fetchShowDetail(ctx context.Context, showID string) (availableEpisodesDetail, error) {
+	vars, err := buildEpisodesVariables(showID)
+	if err != nil {
+		return availableEpisodesDetail{}, domain.WrapExtractFailed(err, "allanime: buildEpisodesVariables")
+	}
+	ext := buildExtensions(SHAEpisodesFallback)
+	var resp showResponse
+	if doErr := p.doGraphQL(ctx, EpisodesQuery, vars, ext, &resp); doErr != nil {
+		return availableEpisodesDetail{}, doErr
+	}
+	return resp.Data.Show.AvailableEpisodesDetail, nil
+}
+
+// categoriesFor returns the show's EN categories, cache-first. On a miss it
+// does one show-detail query and caches the result. Any failure or an
+// empty/unknown detail degrades to sub-only (conservative) and is NOT cached.
+func (p *Provider) categoriesFor(ctx context.Context, showID string) []string {
+	if cats, ok := p.cache.getCategories(ctx, showID); ok && len(cats) > 0 {
+		return cats
+	}
+	detail, err := p.fetchShowDetail(ctx, showID)
+	if err != nil {
+		return []string{"sub"}
+	}
+	cats := categoriesFromDetail(detail)
+	if len(cats) == 0 {
+		return []string{"sub"}
+	}
+	p.cache.setCategories(ctx, showID, cats)
+	return cats
+}
+
 // ListEpisodes returns the episode list for one AllAnime show ID. EpisodeIDs
 // are formatted as "<showID>:<episodeString>" so downstream calls can split
 // the original episodeString back out (matches the catalog-side convention
@@ -225,34 +272,16 @@ func (p *Provider) ListEpisodes(ctx context.Context, showID string) ([]domain.Ep
 		return materializeEpisodes(showID, hit), nil
 	}
 
-	vars, err := buildEpisodesVariables(showID)
-	if err != nil {
-		err = domain.WrapExtractFailed(err, "allanime: buildEpisodesVariables")
-		p.markStage(health.StageEpisodes, err)
-		return nil, err
+	detail, derr := p.fetchShowDetail(ctx, showID)
+	if derr != nil {
+		p.markStage(health.StageEpisodes, derr)
+		return nil, derr
 	}
-	ext := buildExtensions(SHAEpisodesFallback)
-
-	var resp showResponse
-	if doErr := p.doGraphQL(ctx, EpisodesQuery, vars, ext, &resp); doErr != nil {
-		p.markStage(health.StageEpisodes, doErr)
-		return nil, doErr
-	}
-	raw := resp.Data.Show.AvailableEpisodesDetail.Sub
-
 	// Cache which EN categories the show actually has, so ListServers probes
 	// only those (raw excluded — that's the Raw player's domain, not OurEnglish).
-	{
-		detail := resp.Data.Show.AvailableEpisodesDetail
-		cats := make([]string, 0, 2)
-		if len(detail.Sub) > 0 {
-			cats = append(cats, "sub")
-		}
-		if len(detail.Dub) > 0 {
-			cats = append(cats, "dub")
-		}
-		p.cache.setCategories(ctx, showID, cats)
-	}
+	// setCategories no-ops on empty so a sub-only or not-yet-aired show is fine.
+	p.cache.setCategories(ctx, showID, categoriesFromDetail(detail))
+	raw := detail.Sub
 
 	if len(raw) == 0 {
 		// Real-empty (anime exists, no episodes aired yet) is `([], nil)`.
@@ -299,11 +328,10 @@ func materializeEpisodes(showID string, raw []string) []domain.Episode {
 // upstream's sourceName ("Default", "S-mp4", "Yt-mp4", etc.); the orchestrator
 // picks the first server whose GetStream succeeds.
 //
-// When the categories cache (populated by ListEpisodes) records that the show
-// has a dub, both sub-tagged AND dub-tagged servers are returned. Sub-only
-// titles make a single upstream call — identical to the pre-dub behaviour.
-// A cold categories cache (ListEpisodes not yet called) defaults to ["sub"] so
-// existing callers that skip ListEpisodes are unaffected.
+// When the show has a dub (determined via categoriesFor, which is cache-first
+// and falls back to a single show-detail fetch on a cold miss), both sub-tagged
+// AND dub-tagged servers are returned. Sub-only titles make a single upstream
+// call — identical to the pre-dub behaviour.
 func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string) ([]domain.Server, error) {
 	showID, ep := splitEpisodeID(episodeID)
 	if showID == "" || ep == "" {
@@ -314,13 +342,11 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		return nil, err
 	}
 
-	// Probe only the categories the show actually has (cached by ListEpisodes).
-	// Cold miss → sub only (conservative; ListEpisodes precedes ListServers in
-	// the normal flow).
-	cats, ok := p.cache.getCategories(ctx, showID)
-	if !ok || len(cats) == 0 {
-		cats = []string{"sub"}
-	}
+	// Probe only the categories the show actually has. categoriesFor returns a
+	// cached result when ListEpisodes already ran; on a cold miss it fetches
+	// availableEpisodesDetail from the upstream and caches it, so dub is
+	// advertised even when ListEpisodes was skipped (e.g. episodes-list cache hit).
+	cats := p.categoriesFor(ctx, showID)
 
 	var all []domain.Server
 	var subErr error
