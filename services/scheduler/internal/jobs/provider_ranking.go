@@ -16,6 +16,9 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/config"
 )
 
+// providerRankingReqTimeout caps the recompute POST. Analytics' handler itself
+// bounds the ClickHouse query at 60s; this client timeout is slightly larger so
+// the server-side timeout is the one that fires (cleaner error semantics).
 const providerRankingReqTimeout = 70 * time.Second
 
 // ProviderRankingJob triggers the analytics daily provider-reliability recompute.

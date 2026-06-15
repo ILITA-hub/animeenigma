@@ -210,6 +210,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 				metrics.SchedulerJobDuration.WithLabelValues("provider_ranking_recompute").Observe(time.Since(start).Seconds())
 				metrics.SchedulerJobLastSuccess.WithLabelValues("provider_ranking_recompute").SetToCurrentTime()
 				s.lastProviderRankingRun = time.Now()
+				s.log.Info("provider-ranking recompute completed successfully")
 			}
 		})
 		if err != nil {
