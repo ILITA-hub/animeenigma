@@ -45,6 +45,14 @@ type Config struct {
 	// Providers is the resolved provider-management config (scraper-providers.yaml,
 	// or env fallback). Source of truth for enable/disable + reason/description.
 	Providers ProvidersConfig
+
+	// CatalogURL is the base URL of the catalog service, used to fetch provider
+	// config from /internal/scraper/providers. Empty disables remote config.
+	CatalogURL string
+
+	// ProvidersRefresh is how often to re-fetch remote provider config. 0 = no
+	// periodic refresh (boot-only).
+	ProvidersRefresh time.Duration
 }
 
 // DegradedProvidersConfig is the global kill-switch for providers known to be
@@ -240,6 +248,10 @@ func Load() (*Config, error) {
 			BaseURL: getEnv("SCRAPER_NINEANIME_BASE_URL", "https://9anime.me.uk"),
 		},
 		ProviderTimeout: getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
+	}
+	cfg.CatalogURL = getEnv("CATALOG_URL", "")
+	if d, err := time.ParseDuration(getEnv("SCRAPER_PROVIDERS_REFRESH", "60s")); err == nil {
+		cfg.ProvidersRefresh = d
 	}
 	// Provider management config: scraper-providers.yaml is the source of truth.
 	// Falls back to the legacy SCRAPER_DEGRADED_PROVIDERS env when the file path

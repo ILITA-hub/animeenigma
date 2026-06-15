@@ -579,6 +579,18 @@ func main() {
 	// per-stage snapshot.
 	// Task 3 (unified player plan): attach the operator ProvidersConfig so
 	// GetHealth can surface enabled/reason/description per provider.
+
+	// Prefer DB-backed provider config from catalog; fall back to the YAML/env
+	// config already in cfg.Providers if catalog is unreachable at boot.
+	if cfg.CatalogURL != "" {
+		if pc, err := config.LoadProvidersRemote(context.Background(), cfg.CatalogURL, nil, 5*time.Second); err != nil {
+			log.Warnw("remote provider config unavailable; using YAML/env fallback", "error", err, "catalog_url", cfg.CatalogURL)
+		} else {
+			cfg.Providers = pc
+			log.Infow("loaded provider config from catalog", "source", pc.Source, "disabled", pc.DisabledNames())
+		}
+	}
+
 	scraperHandler := handler.NewScraperHandler(orchestrator, cache, log)
 	scraperHandler.WithProvidersConfig(&cfg.Providers)
 	anime18Handler := handler.NewScraperHandler(adultOrch, cache, log)
