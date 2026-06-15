@@ -20,6 +20,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/anidle/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/anidle/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/anidle/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/anidle/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/anidle/internal/transport"
 )
 
@@ -65,7 +66,6 @@ func main() {
 	}
 
 	gameRepo := repo.NewGameRepo(db.DB)
-	_ = gameRepo // wired into services in Task 7
 
 	redisCache, err := cache.New(cfg.Redis)
 	if err != nil {
@@ -73,9 +73,19 @@ func main() {
 	}
 	defer redisCache.Close()
 
+	poolClient := service.NewPoolClient(cfg.CatalogURL, 60*time.Second, log)
+	poolStore := service.NewPoolStore(redisCache, poolClient, cfg.PoolTTL, log)
+
+	statsSvc := service.NewStatsService(gameRepo)
+	lbSvc := service.NewLeaderboardService(service.NewRedisZSet(redisCache.Client(), 48*time.Hour))
+	dailySvc := service.NewDailyService(gameRepo, poolStore, nil /*realClock*/, gameRepo, statsSvc)
+	endlessSvc := service.NewEndlessService(poolStore, service.NewRedisTokenStore(redisCache.Client(), time.Hour), nil)
+
 	healthHandler := handler.NewHealthHandler()
+	anidleHandler := handler.NewAnidleHandler(dailySvc, endlessSvc, statsSvc, lbSvc, poolStore)
+
 	mc := metrics.NewCollector("anidle")
-	router := transport.NewRouter(healthHandler, log, mc)
+	router := transport.NewRouter(healthHandler, anidleHandler, cfg.JWT, log, mc)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
