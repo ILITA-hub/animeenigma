@@ -53,6 +53,14 @@ func TestPresignURL_HostScope(t *testing.T) {
 		t.Fatalf("NewStorage: %v", err)
 	}
 
+	// IsOwnHost recognizes own endpoint vs foreign hosts.
+	if !s.IsOwnHost("http://minio:9000/raw-library/x/1/playlist.m3u8") {
+		t.Error("IsOwnHost should be true for own endpoint")
+	}
+	if s.IsOwnHost("https://cdn.example.com/a/b.m3u8") {
+		t.Error("IsOwnHost should be false for a foreign host")
+	}
+
 	// Different host → not claimed.
 	if _, ok := s.PresignURL("https://cdn.example.com/a/b.m3u8"); ok {
 		t.Error("foreign host must not be claimed")

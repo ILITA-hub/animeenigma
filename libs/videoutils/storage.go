@@ -73,6 +73,14 @@ const presignTTL = 15 * time.Minute
 // library (`ae` provider) HLS from a PRIVATE MinIO bucket: the proxy still
 // gates entry on our own HMAC signature / provenance tokens, then presigns
 // the actual upstream MinIO read here.
+// IsOwnHost reports whether rawURL points at THIS MinIO server. Used by the
+// HLS proxy to label self-hosted (`ae` provider) playback traffic distinctly
+// from external-CDN traffic in metrics.
+func (s *Storage) IsOwnHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	return err == nil && u.Host == s.endpoint
+}
+
 func (s *Storage) PresignURL(rawURL string) (string, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Host != s.endpoint {
