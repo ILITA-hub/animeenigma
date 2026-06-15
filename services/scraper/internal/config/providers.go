@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"sync/atomic"
 
 	"gopkg.in/yaml.v3"
 )
@@ -90,22 +91,59 @@ type providersFile struct {
 
 // ProvidersConfig is the resolved provider management config. Source is one of
 // "file", "env-fallback" (file path set but missing), or "env".
+//
+// The metas field is a pointer to an atomic.Pointer so ProvidersConfig can be
+// copied by value (e.g. assigned to a struct field) while all copies share the
+// same atomic slot — a refresher calling Replace on any copy atomically updates
+// what every reader (IsEnabled, Meta, Rows, …) sees. The pointer-to-atomic
+// approach avoids the go vet copylocks diagnostic that would fire if the
+// atomic.Pointer were embedded directly as a value.
 type ProvidersConfig struct {
-	metas  map[string]ProviderMeta
+	metas  *atomic.Pointer[map[string]ProviderMeta]
 	Source string
+}
+
+// newProvidersConfig wraps a metas map in an atomic pointer.
+func newProvidersConfig(metas map[string]ProviderMeta, source string) ProvidersConfig {
+	ap := &atomic.Pointer[map[string]ProviderMeta]{}
+	ap.Store(&metas)
+	return ProvidersConfig{metas: ap, Source: source}
+}
+
+// load returns the current metas map (nil-safe).
+func (p ProvidersConfig) load() map[string]ProviderMeta {
+	if p.metas == nil {
+		return nil
+	}
+	if m := p.metas.Load(); m != nil {
+		return *m
+	}
+	return nil
+}
+
+// Replace atomically swaps the provider metadata (used by the refresher).
+func (p ProvidersConfig) Replace(entries []ProviderMeta) {
+	if p.metas == nil {
+		return
+	}
+	m := make(map[string]ProviderMeta, len(entries))
+	for _, e := range entries {
+		m[e.Name] = e
+	}
+	p.metas.Store(&m)
 }
 
 // IsEnabled reports whether a provider is enabled. Absent names default to
 // enabled — forgetting to list a provider never silently disables it.
 func (p ProvidersConfig) IsEnabled(name string) bool {
-	if m, ok := p.metas[name]; ok {
+	if m, ok := p.load()[name]; ok {
 		return m.Enabled
 	}
 	return true
 }
 
 // Meta returns the metadata for a provider (zero value if absent).
-func (p ProvidersConfig) Meta(name string) ProviderMeta { return p.metas[name] }
+func (p ProvidersConfig) Meta(name string) ProviderMeta { return p.load()[name] }
 
 // NewProvidersConfigForTest constructs a ProvidersConfig from a slice of
 // ProviderMeta entries. Intended only for unit tests that need to drive the
@@ -115,7 +153,7 @@ func NewProvidersConfigForTest(entries []ProviderMeta) ProvidersConfig {
 	for _, m := range entries {
 		metas[m.Name] = m
 	}
-	return ProvidersConfig{metas: metas, Source: "test"}
+	return newProvidersConfig(metas, "test")
 }
 
 // ProviderRow is a flattened row for metric emission / display.
@@ -128,9 +166,10 @@ type ProviderRow struct {
 
 // Rows returns one row per candidate provider, in the given order.
 func (p ProvidersConfig) Rows(candidates []string) []ProviderRow {
+	metas := p.load()
 	rows := make([]ProviderRow, 0, len(candidates))
 	for _, name := range candidates {
-		m := p.metas[name]
+		m := metas[name]
 		rows = append(rows, ProviderRow{
 			Name:        name,
 			Enabled:     p.IsEnabled(name),
@@ -145,7 +184,7 @@ func (p ProvidersConfig) Rows(candidates []string) []ProviderRow {
 // DegradedProvidersConfig shape so main.go's IsDegraded checks work unchanged.
 func (p ProvidersConfig) toDegradedConfig() DegradedProvidersConfig {
 	m := make(map[string]bool)
-	for name, meta := range p.metas {
+	for name, meta := range p.load() {
 		if !meta.Enabled {
 			m[name] = true
 		}
@@ -209,7 +248,7 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 			PreferenceWeight: weight,
 		}
 	}
-	return ProvidersConfig{metas: metas, Source: "file"}, nil
+	return newProvidersConfig(metas, "file"), nil
 }
 
 // providersFromDegraded builds a ProvidersConfig from the legacy degraded set
@@ -219,13 +258,13 @@ func providersFromDegraded(d DegradedProvidersConfig, source string) ProvidersCo
 	for _, name := range KnownProviders {
 		metas[name] = ProviderMeta{Name: name, Enabled: !d.IsDegraded(name), Group: GroupOf(name)}
 	}
-	return ProvidersConfig{metas: metas, Source: source}
+	return newProvidersConfig(metas, source)
 }
 
 // DisabledNames returns the sorted names of disabled providers (for logging).
 func (p ProvidersConfig) DisabledNames() []string {
 	out := []string{}
-	for name, m := range p.metas {
+	for name, m := range p.load() {
 		if !m.Enabled {
 			out = append(out, name)
 		}

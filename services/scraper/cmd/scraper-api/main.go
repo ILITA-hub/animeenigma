@@ -595,6 +595,10 @@ func main() {
 	scraperHandler.WithProvidersConfig(&cfg.Providers)
 	anime18Handler := handler.NewScraperHandler(adultOrch, cache, log)
 	anime18Handler.WithProvidersConfig(&cfg.Providers)
+
+	// Hot-reload provider config from catalog (enable/disable without restart).
+	config.StartProvidersRefresher(context.Background(), &cfg.Providers, cfg.CatalogURL, cfg.ProvidersRefresh, log)
+
 	router := transport.NewRouter(scraperHandler, anime18Handler, cfg, log, metricsCollector)
 
 	// Create HTTP server

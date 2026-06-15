@@ -92,5 +92,5 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 			PreferenceWeight: p.PreferenceWeight,
 		}
 	}
-	return ProvidersConfig{metas: metas, Source: "remote"}, nil
+	return newProvidersConfig(metas, "remote"), nil
 }
