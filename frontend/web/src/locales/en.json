@@ -956,6 +956,7 @@
         "genres": "Genres",
         "format": "Format",
         "status": "Status",
+        "season": "Season",
         "year": "Year",
         "provider": "Available on",
         "sort": "Sort",
@@ -974,6 +975,13 @@
         "released": "Released",
         "ongoing": "Ongoing",
         "anons": "Announced"
+      },
+      "season": {
+        "any": "Any season",
+        "winter": "Winter",
+        "spring": "Spring",
+        "summer": "Summer",
+        "fall": "Fall"
       },
       "year": {
         "from": "From",

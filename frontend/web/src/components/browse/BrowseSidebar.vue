@@ -40,6 +40,14 @@
       <RadioGroup :model-value="filters.status.value" :options="statusOptions" @update:model-value="onStatusChange" />
     </FilterSection>
 
+    <!-- Season — single-select radio -->
+    <FilterSection
+      :label="$t('browse.filters.section.season')"
+      :count="filters.season.value ? 1 : 0"
+    >
+      <RadioGroup :model-value="filters.season.value" :options="seasonOptions" @update:model-value="onSeasonChange" />
+    </FilterSection>
+
     <!-- Year range -->
     <FilterSection
       :label="$t('browse.filters.section.year')"
@@ -186,6 +194,14 @@ const statusOptions = computed(() => [
   { value: 'announced', label: t('browse.filters.status.anons') },
 ])
 
+const seasonOptions = computed(() => [
+  { value: '', label: t('browse.filters.season.any') },
+  { value: 'winter', label: t('browse.filters.season.winter') },
+  { value: 'spring', label: t('browse.filters.season.spring') },
+  { value: 'summer', label: t('browse.filters.season.summer') },
+  { value: 'fall', label: t('browse.filters.season.fall') },
+])
+
 // Per-provider Tailwind accent classes (locked in CONTEXT.md "specifics").
 const providerOptions = computed<{ value: Provider; label: string; accent: string }[]>(() => [
   {
@@ -243,6 +259,11 @@ function onKindChange(v: Kind) {
 function onStatusChange(v: string) {
   // Composable's status ref accepts the same whitelisted string set.
   props.filters.status.value = v as typeof props.filters.status.value
+  props.filters.writeUrl()
+}
+
+function onSeasonChange(v: string) {
+  props.filters.season.value = v as typeof props.filters.season.value
   props.filters.writeUrl()
 }
 
