@@ -528,8 +528,10 @@ func detectSeason(month int) string {
 		return "spring"
 	case month >= 7 && month <= 9:
 		return "summer"
-	default:
+	case month >= 10 && month <= 12:
 		return "fall"
+	default:
+		return ""
 	}
 }
 
