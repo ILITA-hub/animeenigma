@@ -169,10 +169,14 @@ func (p ProvidersConfig) Rows(candidates []string) []ProviderRow {
 	metas := p.load()
 	rows := make([]ProviderRow, 0, len(candidates))
 	for _, name := range candidates {
-		m := metas[name]
+		m, ok := metas[name]
+		enabled := true
+		if ok {
+			enabled = m.Enabled
+		}
 		rows = append(rows, ProviderRow{
 			Name:        name,
-			Enabled:     p.IsEnabled(name),
+			Enabled:     enabled,
 			Reason:      m.Reason,
 			Description: m.Description,
 		})

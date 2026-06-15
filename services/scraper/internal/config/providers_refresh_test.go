@@ -27,6 +27,7 @@ func TestProvidersConfig_ReplaceIsAtomic(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		pc.Replace([]ProviderMeta{{Name: "allanime", Enabled: i%2 == 0}})
 	}
+	pc.Replace([]ProviderMeta{{Name: "allanime", Enabled: false}})
 	close(stop)
 	wg.Wait()
 	if pc.IsEnabled("allanime") {
