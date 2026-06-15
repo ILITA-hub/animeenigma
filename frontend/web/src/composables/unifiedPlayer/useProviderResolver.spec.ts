@@ -272,3 +272,24 @@ describe('useProviderResolver', () => {
     expect(eps[23].number).toBe(24)
   })
 })
+
+describe('ProviderResolver.listTeams', () => {
+  const kodikApi = {
+    getTranslations: async () => ({ data: { data: [
+      { id: 1, title: 'AniLibria', type: 'voice', episodes_count: 12 },
+      { id: 2, title: 'AniDUB',    type: 'voice', episodes_count: 12 },
+      { id: 3, title: 'AniLibria', type: 'voice', episodes_count: 8 }, // dup title
+    ] } }),
+    getStream: async () => ({ data: { data: {} } }),
+  } as never
+
+  it('returns unique Kodik translation titles as teams', async () => {
+    const resolver = makeResolver({ kodikApi })
+    expect(await resolver.listTeams('kodik', 'anime-1')).toEqual(['AniLibria', 'AniDUB'])
+  })
+
+  it('returns [] for providers without team support', async () => {
+    const resolver = makeResolver({})
+    expect(await resolver.listTeams('allanime', 'anime-1')).toEqual([])
+  })
+})

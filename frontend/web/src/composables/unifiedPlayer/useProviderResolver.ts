@@ -149,6 +149,13 @@ export interface ProviderAdapter {
    * opaque `id`, raw's `id`, anime18's `slug`).
    */
   resolveStream(animeId: string, ep: EpisodeOption, combo: Combo): Promise<StreamResult>
+
+  /**
+   * Optional: provider-native selectable "teams" (e.g. Kodik translation
+   * titles) for the Source panel Team chips. Adapters without sub-teams omit
+   * this; the resolver returns [] for them.
+   */
+  listTeams?(animeId: string): Promise<string[]>
 }
 
 // ─── Deps injected by makeResolver / useProviderResolver ────────────────────
@@ -410,6 +417,19 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
         qualityLabel: stream.quality ? `${stream.quality}p` : undefined,
       }
     },
+
+    async listTeams(animeId: string): Promise<string[]> {
+      const resp = await api.getTranslations(animeId)
+      const translations: KodikTranslation[] = resp.data?.data ?? resp.data ?? []
+      if (!Array.isArray(translations)) return []
+      // Unique titles, preserving first-seen order.
+      const seen = new Set<string>()
+      const out: string[] = []
+      for (const t of translations) {
+        if (t.title && !seen.has(t.title)) { seen.add(t.title); out.push(t.title) }
+      }
+      return out
+    },
   }
 }
 
@@ -418,6 +438,7 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
 export interface ProviderResolver {
   listEpisodes(provider: string, animeId: string): Promise<EpisodeOption[]>
   resolveStream(provider: string, animeId: string, ep: EpisodeOption, combo: Combo): Promise<StreamResult>
+  listTeams(provider: string, animeId: string): Promise<string[]>
 }
 
 /**
@@ -493,6 +514,15 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
       combo: Combo,
     ): Promise<StreamResult> {
       return getAdapter(provider).resolveStream(animeId, ep, combo)
+    },
+    async listTeams(provider: string, animeId: string): Promise<string[]> {
+      let adapter: ProviderAdapter
+      try {
+        adapter = getAdapter(provider)
+      } catch {
+        return [] // unwired / dep-missing provider has no teams
+      }
+      return adapter.listTeams ? adapter.listTeams(animeId) : []
     },
   }
 }
