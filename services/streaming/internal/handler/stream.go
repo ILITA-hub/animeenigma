@@ -45,6 +45,16 @@ func NewStreamHandlerWithSessions(streamingService *service.StreamingService, hl
 	// Create video proxy with default config for HLS proxying
 	proxyCfg := videoutils.DefaultProxyConfig()
 	proxyCfg.AllowedDomains = videoutils.HLSProxyAllowedDomains
+	// Self-hosted library (`ae` provider) HLS lives in a PRIVATE MinIO
+	// bucket. The proxy gates entry on our HMAC sig / provenance tokens,
+	// then presigns the actual MinIO read here so the bucket never needs to
+	// be public. Only URLs whose host is our MinIO endpoint are rewritten;
+	// every external-CDN fetch is left untouched.
+	if streamingService != nil {
+		if st := streamingService.Storage(); st != nil {
+			proxyCfg.UpstreamSigner = st.PresignURL
+		}
+	}
 
 	return &StreamHandler{
 		streamingService: streamingService,
