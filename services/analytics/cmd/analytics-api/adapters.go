@@ -87,16 +87,25 @@ func (w redisThresholdWriter) HSetThresholds(ctx context.Context, key string, fi
 // redisRankingWriter adapts *cache.RedisCache to service.rankingWriter. It SETs
 // the global ranking key and one key per anime as JSON with a 48h TTL. Per-anime
 // keys are written individually (only popular titles clear the min-sample gate,
-// so cardinality stays bounded). Marshalling failures for a single anime are
-// skipped, not fatal.
+// so cardinality stays bounded).
+//
+// Error semantics:
+//   - A Redis SET error (global or per-anime) aborts and is returned — it
+//     signals Redis is down, so the whole publish is unreliable.
+//   - A per-anime MARSHAL failure is skipped (best-effort per item — a single
+//     bad item shouldn't sink the others).
+//   - A GLOBAL marshal failure is fatal and returned: the global key is the
+//     catalog's default ranking, so a missing/blank global output must surface.
 type redisRankingWriter struct{ cache *cache.RedisCache }
 
 func (w redisRankingWriter) PublishRanking(ctx context.Context, global []svc.ProviderRank, perAnime map[string][]svc.ProviderRank) error {
 	cl := w.cache.Client()
-	if b, err := json.Marshal(global); err == nil {
-		if err := cl.Set(ctx, "player_ranking:global", b, 48*time.Hour).Err(); err != nil {
-			return err
-		}
+	gb, err := json.Marshal(global)
+	if err != nil {
+		return err
+	}
+	if err := cl.Set(ctx, "player_ranking:global", gb, 48*time.Hour).Err(); err != nil {
+		return err
 	}
 	for id, ranks := range perAnime {
 		b, err := json.Marshal(ranks)
