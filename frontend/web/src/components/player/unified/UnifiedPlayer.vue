@@ -400,12 +400,20 @@ function isProviderAvailable(id: string): Promise<boolean> {
   return aeAvailableCache
 }
 
+// props.animeId can change without a remount (no :key on the player), so the
+// per-anime ae availability probe must be invalidated when the title changes.
+watch(() => props.animeId, () => { aeAvailableCache = null })
+
+// Providers whose default-selection eligibility needs a runtime availability
+// probe (see isProviderAvailable). Only first-party `ae` today.
+const AE_NEEDS_CHECK = new Set(['ae'])
+
 watch(
   rows,
   () => {
     if (state.combo.value.provider) return
     void pickSmartDefault(rows.value, CURATED_TIER, {
-      needsCheck: new Set(['ae']),
+      needsCheck: AE_NEEDS_CHECK,
       isAvailable: isProviderAvailable,
     }).then((id) => {
       // Guard against a race: only apply if still unset and the chosen row is
