@@ -59,5 +59,9 @@ func (c *PoolClient) Fetch(ctx context.Context) ([]domain.PoolAnime, error) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		return nil, fmt.Errorf("decode pool envelope: %w", err)
 	}
+	if !env.Success {
+		// Catalog signalled failure with HTTP 200 — do NOT cache an empty pool.
+		return nil, fmt.Errorf("pool endpoint reported success=false")
+	}
 	return env.Data, nil
 }

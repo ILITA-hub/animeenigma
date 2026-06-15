@@ -42,3 +42,14 @@ func TestPoolClient_Fetch_ErrorOnNon200(t *testing.T) {
 	_, err := NewPoolClient(srv.URL, 5*time.Second, nil).Fetch(context.Background())
 	require.Error(t, err)
 }
+
+func TestPoolClient_Fetch_ErrorOnSuccessFalse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// HTTP 200 but catalog reports failure — must NOT yield an empty pool.
+		_, _ = w.Write([]byte(`{"success":false,"data":null}`))
+	}))
+	defer srv.Close()
+
+	_, err := NewPoolClient(srv.URL, 5*time.Second, nil).Fetch(context.Background())
+	require.Error(t, err)
+}
