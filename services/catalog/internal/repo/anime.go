@@ -440,3 +440,30 @@ func (r *AnimeRepository) UnpinTranslation(ctx context.Context, animeID string, 
 	}
 	return nil
 }
+
+// ListGuessPoolCandidates returns non-hidden anime with score strictly greater
+// than minScore, ordered earliest-aired first (NULLs last) so a franchise's
+// first member is encountered first during collapse. Genres/Studios/Tags are
+// preloaded for attribute comparison.
+func (r *AnimeRepository) ListGuessPoolCandidates(ctx context.Context, minScore float64) ([]*domain.Anime, error) {
+	var animes []*domain.Anime
+	err := r.db.WithContext(ctx).
+		Where("score > ? AND (hidden = ? OR hidden IS NULL)", minScore, false).
+		Preload("Genres").
+		Preload("Studios").
+		Preload("Tags").
+		Order("aired_on ASC NULLS LAST").
+		Find(&animes).Error
+	if err != nil {
+		return nil, fmt.Errorf("list guess pool candidates: %w", err)
+	}
+	return animes, nil
+}
+
+// SetFranchise persists a backfilled franchise slug onto an anime row.
+func (r *AnimeRepository) SetFranchise(ctx context.Context, id, franchise string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Anime{}).
+		Where("id = ?", id).
+		Update("franchise", franchise).Error
+}
