@@ -740,6 +740,7 @@ async function loadEpisodesAndStream() {
 
     // Provider-native teams (e.g. Kodik translation titles) for the Source
     // panel. Best-effort — never blocks the stream resolve.
+    teams.value = [] // clear stale chips immediately on provider switch
     resolver
       .listTeams(provider, props.animeId)
       .then((t) => { if (token === resolveToken) teams.value = t })
@@ -801,7 +802,7 @@ watch(
   },
 )
 
-// Audio / language / server change, or episode selection → re-resolve stream
+// Audio / language / server / team change, or episode selection → re-resolve stream
 // only (no need to re-list episodes). The token inside resolveStreamForEpisode
 // ensures a concurrent provider-change full-resolve wins if they race.
 // Skip when loadEpisodesAndStream is in-flight: it sets selectedEpisode itself
