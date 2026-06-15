@@ -102,11 +102,14 @@ func buildEpisodesVariables(showID string) (string, error) {
 }
 
 // buildSourcesVariables encodes the variables payload for the sources query.
-// translationType=sub for the scraper-side EN catalog.
-func buildSourcesVariables(showID, episodeString string) (string, error) {
+// translationType is one of "sub" | "dub" | "raw" (empty defaults to "sub").
+func buildSourcesVariables(showID, episodeString, translationType string) (string, error) {
+	if translationType == "" {
+		translationType = "sub"
+	}
 	v := map[string]any{
 		"showId":          showID,
-		"translationType": "sub",
+		"translationType": translationType,
 		"episodeString":   episodeString,
 	}
 	b, err := json.Marshal(v)

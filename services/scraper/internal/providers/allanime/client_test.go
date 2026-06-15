@@ -60,7 +60,7 @@ func (c *inMemoryCache) Exists(ctx context.Context, key string) (bool, error) {
 	return ok, nil
 }
 
-func (c *inMemoryCache) Close() error                                       { return nil }
+func (c *inMemoryCache) Close() error                                         { return nil }
 func (c *inMemoryCache) Invalidate(ctx context.Context, pattern string) error { return nil }
 func (c *inMemoryCache) GetOrSet(ctx context.Context, key string, dest interface{}, ttl time.Duration, fn func() (interface{}, error)) error {
 	if err := c.Get(ctx, key, dest); err == nil {
@@ -402,6 +402,35 @@ func TestDecodeSourceURL_Passthrough(t *testing.T) {
 	in := "https://cdn.example.com/abc.m3u8"
 	if out := decodeSourceURL(in); out != in {
 		t.Fatalf("expected passthrough, got %q", out)
+	}
+}
+
+// TestGetStream_HonorsDubCategory verifies that GetStream sends translationType=dub
+// upstream when called with domain.CategoryDub.
+func TestGetStream_HonorsDubCategory(t *testing.T) {
+	var gotDub bool
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, ".m3u8"):
+			// Probe hit: return a real HLS manifest so sourceprobe classifies as Stream.
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-VERSION:3\n"))
+		default:
+			// GraphQL API call: capture whether translationType=dub appears.
+			raw := r.URL.RawQuery
+			if strings.Contains(raw, "dub") || strings.Contains(raw, "%22dub%22") {
+				gotDub = true
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"` + srv.URL + `/dub-ep1.m3u8","sourceName":"Default","type":"player","priority":9,"fileExtenstion":"m3u8","subtitles":[]}]}}}`))
+		}
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	_, _ = p.GetStream(context.Background(), "", "SHOW123:1", "Default", domain.CategoryDub)
+	if !gotDub {
+		t.Error("GetStream(dub) did not send translationType=dub upstream")
 	}
 }
 

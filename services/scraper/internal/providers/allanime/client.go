@@ -293,12 +293,12 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		return nil, err
 	}
 
-	if hit, ok := p.cache.getServers(ctx, showID, ep); ok {
+	if hit, ok := p.cache.getServers(ctx, showID, ep, "sub"); ok {
 		p.markStage(health.StageServers, nil)
-		return materializeServers(hit), nil
+		return materializeServers(hit, domain.CategorySub), nil
 	}
 
-	sources, err := p.fetchSources(ctx, showID, ep)
+	sources, err := p.fetchSources(ctx, showID, ep, "sub")
 	if err != nil {
 		p.markStage(health.StageServers, err)
 		return nil, err
@@ -311,23 +311,31 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		return nil, err
 	}
 
-	p.cache.setServers(ctx, showID, ep, sources)
+	p.cache.setServers(ctx, showID, ep, "sub", sources)
 	p.markStage(health.StageServers, nil)
-	return materializeServers(sources), nil
+	return materializeServers(sources, domain.CategorySub), nil
 }
 
-func materializeServers(sources []sourceURL) []domain.Server {
+// translationTypeFor maps a domain.Category to AllAnime's translationType enum.
+func translationTypeFor(c domain.Category) string {
+	switch c {
+	case domain.CategoryDub:
+		return "dub"
+	case domain.CategoryRaw:
+		return "raw"
+	default:
+		return "sub"
+	}
+}
+
+func materializeServers(sources []sourceURL, cat domain.Category) []domain.Server {
 	out := make([]domain.Server, 0, len(sources))
 	for _, s := range sources {
 		name := s.SourceName
 		if name == "" {
 			name = "Default"
 		}
-		out = append(out, domain.Server{
-			ID:   name,
-			Name: name,
-			Type: domain.CategorySub, // we query translationType=sub
-		})
+		out = append(out, domain.Server{ID: name, Name: name, Type: cat})
 	}
 	return out
 }
@@ -345,20 +353,22 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		return nil, err
 	}
 
-	if hit, ok := p.cache.getStream(ctx, showID, ep, serverID); ok {
+	tt := translationTypeFor(category)
+
+	if hit, ok := p.cache.getStream(ctx, showID, ep, tt, serverID); ok {
 		p.markStage(health.StageStream, nil)
 		return cachedToStream(hit), nil
 	}
 
-	sources, ok := p.cache.getServers(ctx, showID, ep)
+	sources, ok := p.cache.getServers(ctx, showID, ep, tt)
 	if !ok {
 		var ferr error
-		sources, ferr = p.fetchSources(ctx, showID, ep)
+		sources, ferr = p.fetchSources(ctx, showID, ep, tt)
 		if ferr != nil {
 			p.markStage(health.StageStream, ferr)
 			return nil, ferr
 		}
-		p.cache.setServers(ctx, showID, ep, sources)
+		p.cache.setServers(ctx, showID, ep, tt, sources)
 	}
 
 	// Build the candidate order: the caller-pinned serverID first (a hint), then
@@ -422,7 +432,7 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 			URL: sub.SourceURL, Lang: sub.Lang, Label: sub.Label,
 		})
 	}
-	p.cache.setStream(ctx, showID, ep, serverID, cached)
+	p.cache.setStream(ctx, showID, ep, tt, serverID, cached)
 
 	p.markStage(health.StageStream, nil)
 	return stream, nil
@@ -492,8 +502,8 @@ func (p *Provider) classify(ctx context.Context, rawURL string) sourceprobe.Kind
 
 // fetchSources POSTs the SourceUrls APQ and returns the (decrypted, if
 // needed) sourceUrls array.
-func (p *Provider) fetchSources(ctx context.Context, showID, ep string) ([]sourceURL, error) {
-	vars, err := buildSourcesVariables(showID, ep)
+func (p *Provider) fetchSources(ctx context.Context, showID, ep, translationType string) ([]sourceURL, error) {
+	vars, err := buildSourcesVariables(showID, ep, translationType)
 	if err != nil {
 		return nil, domain.WrapExtractFailed(err, "allanime: buildSourcesVariables")
 	}

@@ -74,29 +74,29 @@ func (l *cacheLayer) setEpisodes(ctx context.Context, showID string, eps []strin
 
 // --- servers list (one episode) ------------------------------------------
 
-func keyServers(showID, ep string) string {
-	return fmt.Sprintf("scraper:allanime:servers:%s:%s", showID, ep)
+func keyServers(showID, ep, tt string) string {
+	return fmt.Sprintf("scraper:allanime:servers:%s:%s:%s", showID, ep, tt)
 }
 
-func (l *cacheLayer) getServers(ctx context.Context, showID, ep string) ([]sourceURL, bool) {
+func (l *cacheLayer) getServers(ctx context.Context, showID, ep, tt string) ([]sourceURL, bool) {
 	var out []sourceURL
-	if err := l.c.Get(ctx, keyServers(showID, ep), &out); err == nil && len(out) > 0 {
+	if err := l.c.Get(ctx, keyServers(showID, ep, tt), &out); err == nil && len(out) > 0 {
 		return out, true
 	}
 	return nil, false
 }
 
-func (l *cacheLayer) setServers(ctx context.Context, showID, ep string, src []sourceURL) {
+func (l *cacheLayer) setServers(ctx context.Context, showID, ep, tt string, src []sourceURL) {
 	if len(src) == 0 {
 		return
 	}
-	_ = l.c.Set(ctx, keyServers(showID, ep), src, serversCacheTTL)
+	_ = l.c.Set(ctx, keyServers(showID, ep, tt), src, serversCacheTTL)
 }
 
 // --- stream URL (one server, one episode) --------------------------------
 
-func keyStream(showID, ep, server string) string {
-	return fmt.Sprintf("scraper:allanime:stream:%s:%s:%s", showID, ep, server)
+func keyStream(showID, ep, tt, server string) string {
+	return fmt.Sprintf("scraper:allanime:stream:%s:%s:%s:%s", showID, ep, tt, server)
 }
 
 // cachedStream is what we persist in Redis for a resolved stream URL.
@@ -114,19 +114,19 @@ type cachedSubtitle struct {
 	Label string `json:"label"`
 }
 
-func (l *cacheLayer) getStream(ctx context.Context, showID, ep, server string) (*cachedStream, bool) {
+func (l *cacheLayer) getStream(ctx context.Context, showID, ep, tt, server string) (*cachedStream, bool) {
 	var out cachedStream
-	if err := l.c.Get(ctx, keyStream(showID, ep, server), &out); err == nil && out.URL != "" {
+	if err := l.c.Get(ctx, keyStream(showID, ep, tt, server), &out); err == nil && out.URL != "" {
 		return &out, true
 	}
 	return nil, false
 }
 
-func (l *cacheLayer) setStream(ctx context.Context, showID, ep, server string, s *cachedStream) {
+func (l *cacheLayer) setStream(ctx context.Context, showID, ep, tt, server string, s *cachedStream) {
 	if s == nil || s.URL == "" {
 		return
 	}
-	_ = l.c.Set(ctx, keyStream(showID, ep, server), s, streamTTLCap)
+	_ = l.c.Set(ctx, keyStream(showID, ep, tt, server), s, streamTTLCap)
 }
 
 // --- source classification (stream vs embed page) ------------------------
