@@ -47,7 +47,7 @@ func TestBuildENFamily_RanksAndFiltersDisabled(t *testing.T) {
 	svc := capability.NewService(db, fakeHealth{
 		up:       map[string]bool{"allanime": true, "nineanime": true},
 		playable: map[string]bool{"allanime": true},
-	}, nil, nil)
+	}, nil, nil, nil)
 
 	fam, err := svc.BuildENFamily(context.Background())
 	if err != nil {

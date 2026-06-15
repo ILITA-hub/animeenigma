@@ -369,7 +369,7 @@ func main() {
 	// Ranked capability report (spec 2026-06-15 P4).
 	// ScraperHealth adapts catalogService.GetScraperHealth (which forwards to
 	// the scraper microservice at cfg.Scraper.APIURL) as a HealthSource.
-	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), redisCache, log)
+	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log)
 	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
 
 	// Initialize metrics collector

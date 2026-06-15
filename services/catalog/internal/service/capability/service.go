@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
@@ -26,46 +27,87 @@ type HealthSource interface {
 	ProviderHealth(ctx context.Context) (map[string]HealthInfo, error)
 }
 
-// Service assembles capability reports. EN family in P4a; RU/Hanime in P4b.
+// Service assembles capability reports. EN family (trait+health) plus the
+// per-title RU (kodik/animelib) and Hanime families when a CatalogSource is wired.
 type Service struct {
-	db     *gorm.DB
-	health HealthSource
-	cache  cache.Cache // may be nil (skips caching)
-	log    *logger.Logger
+	db      *gorm.DB
+	health  HealthSource
+	catalog CatalogSource // may be nil (skips RU/Hanime families)
+	cache   cache.Cache   // may be nil (skips caching)
+	log     *logger.Logger
 }
 
-// NewService constructs a capability Service. cache and log may be nil.
-func NewService(db *gorm.DB, health HealthSource, c cache.Cache, log *logger.Logger) *Service {
-	return &Service{db: db, health: health, cache: c, log: log}
+// NewService constructs a capability Service. catalog, cache and log may be nil.
+func NewService(db *gorm.DB, health HealthSource, catalog CatalogSource, c cache.Cache, log *logger.Logger) *Service {
+	return &Service{db: db, health: health, catalog: catalog, cache: c, log: log}
 }
 
-// Report assembles the (P4a: EN-only) capability report for an anime, cache-first.
+// Report assembles the full per-anime capability report, cache-first. The report
+// now carries per-title signals (RU translation teams, Hanime quality), so the
+// cache key is per-anime — NOT the P4a global key.
 func (s *Service) Report(ctx context.Context, animeID string) (domain.CapabilityReport, error) {
-	// EN family is anime-AGNOSTIC in P4a (a global trait+health ranking, not
-	// per-title), so one cache entry serves all anime; the caller's AnimeID is
-	// stamped onto the result on read. P4b adds per-title signals — it MUST switch
-	// to a per-anime key (e.g. "capabilities:<animeID>") to avoid stale cross-anime data.
-	key := "capabilities:en:global"
+	key := "capabilities:" + animeID
 	if s.cache != nil {
 		var cached domain.CapabilityReport
 		if err := s.cache.Get(ctx, key, &cached); err == nil {
-			cached.AnimeID = animeID
 			return cached, nil
 		} else if !errors.Is(err, cache.ErrNotFound) && s.log != nil {
 			s.log.Warnw("capability cache get failed", "error", err)
 		}
 	}
-	fam, err := s.BuildENFamily(ctx)
+	families, err := s.buildFamilies(ctx, animeID)
 	if err != nil {
 		return domain.CapabilityReport{}, err
 	}
-	report := domain.CapabilityReport{AnimeID: animeID, Families: []domain.SourceFamily{fam}}
+	report := domain.CapabilityReport{AnimeID: animeID, Families: families}
 	if s.cache != nil {
 		if err := s.cache.Set(ctx, key, report, reportTTL); err != nil && s.log != nil {
 			s.log.Warnw("capability cache set failed", "error", err)
 		}
 	}
 	return report, nil
+}
+
+// buildFamilies assembles every family concurrently. The EN family is required
+// (its error fails the report); the RU/Hanime families are best-effort (omitted
+// on error or when the anime isn't on that provider). Order is stable:
+// ourenglish, kodik, animelib, hanime.
+func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.SourceFamily, error) {
+	type slot struct {
+		fam domain.SourceFamily
+		ok  bool
+	}
+	var (
+		en                      domain.SourceFamily
+		enErr                   error
+		kodik, animelib, hanime slot
+		wg                      sync.WaitGroup
+	)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		en, enErr = s.BuildENFamily(ctx)
+	}()
+
+	if s.catalog != nil {
+		wg.Add(3)
+		go func() { defer wg.Done(); kodik.fam, kodik.ok = s.kodikFamily(ctx, animeID) }()
+		go func() { defer wg.Done(); animelib.fam, animelib.ok = s.animelibFamily(ctx, animeID) }()
+		go func() { defer wg.Done(); hanime.fam, hanime.ok = s.hanimeFamily(ctx, animeID) }()
+	}
+	wg.Wait()
+
+	if enErr != nil {
+		return nil, enErr
+	}
+	families := []domain.SourceFamily{en}
+	for _, sl := range []slot{kodik, animelib, hanime} {
+		if sl.ok {
+			families = append(families, sl.fam)
+		}
+	}
+	return families, nil
 }
 
 // BuildENFamily reads enabled EN providers, joins live health, ranks, returns
