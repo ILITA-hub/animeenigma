@@ -476,6 +476,7 @@ services:
       ANALYTICS_SERVICE_URL: http://analytics:8092
       GACHA_SERVICE_URL: http://gacha:8093
       RECS_SERVICE_URL: http://recs:8094
+      ANIDLE_SERVICE_URL: http://anidle:8095
       # Dark-ship admin-gate (spec §12). While true, /api/gacha/* requires the
       # admin role — regular users get 403, the лудка is invisible to them.
       # The global-update release flips this to "false" (env change +
@@ -516,6 +517,7 @@ services:
       - notifications
       - grafana
       - prometheus
+      - anidle
 
   auth:
     build:
@@ -851,6 +853,39 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8094/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # anidle guessing game service (spec 2026-06-15) — port 8095.
+  anidle:
+    build:
+      context: ..
+      dockerfile: services/anidle/Dockerfile
+    container_name: animeenigma-anidle
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8095
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: animeenigma
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      REDIS_HOST: redis
+      CATALOG_URL: http://catalog:8081
+      TRACING_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8095:8095"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      catalog:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8095/health"]
       interval: 30s
       timeout: 5s
       retries: 3
