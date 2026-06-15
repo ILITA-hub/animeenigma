@@ -38,6 +38,7 @@ COPY services/watch-together/go.mod services/watch-together/go.sum* ./services/w
 COPY services/analytics/go.mod services/analytics/go.sum* ./services/analytics/
 COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/
 COPY services/recs/go.mod services/recs/go.sum* ./services/recs/
+COPY services/anidle/go.mod services/anidle/go.sum* ./services/anidle/
 
 # Download dependencies
 RUN cd services/gateway && go mod download
