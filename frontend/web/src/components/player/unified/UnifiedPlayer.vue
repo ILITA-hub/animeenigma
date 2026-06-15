@@ -333,6 +333,7 @@ import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer } from '@/composables/unifiedPlayer/comboMapping'
 import { useToast } from '@/composables/useToast'
+import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult } from '@/types/unifiedPlayer'
@@ -675,6 +676,12 @@ const isResolving = ref(false)
 // provider-change full re-list+resolve that started after it.
 let resolveToken = 0
 
+// ─── Telemetry timing state ───────────────────────────────────────────────────
+// Best-effort; never influences playback logic.
+let resolveStartedAt = 0
+let reachedReported = false
+let stallStartedAt = 0
+
 // ─── Quality ladder ──────────────────────────────────────────────────────────
 // HLS: data-driven from hls.js levels. MP4: only when the provider returned
 // multiple URL-valued qualities. Per-URL HLS (Kodik: one manifest per quality,
@@ -811,6 +818,8 @@ async function loadEpisodesAndStream() {
   isResolving.value = true
   hasStarted.value = false
   const token = ++resolveToken
+  resolveStartedAt = performance.now()
+  reachedReported = false
 
   try {
     // Load episode list
@@ -861,6 +870,19 @@ async function loadEpisodesAndStream() {
     if (token !== resolveToken) return // superseded
     const isNotAvailable =
       err instanceof Error && err.name === 'NotAvailableError'
+    // Telemetry: resolve failure (best-effort, never throws)
+    recordPlayerEvent({
+      kind: 'resolve',
+      provider: state.combo.value.provider,
+      anime_id: props.animeId,
+      episode: selectedEpisode.value?.number,
+      outcome: 'fail',
+      reached_playback: false,
+      error_kind: isNotAvailable ? 'not_available' : 'stream_error',
+      latency_ms: resolveStartedAt ? Math.round(performance.now() - resolveStartedAt) : undefined,
+      audio: state.combo.value.audio,
+      lang: state.combo.value.lang,
+    })
     if (isNotAvailable) {
       if (!savedSourceFallbackDone && providerWasFromSavedCombo) {
         savedSourceFallbackDone = true
@@ -1101,11 +1123,27 @@ function setBuffering(on: boolean) {
 
 function onBufferStart() {
   setBuffering(true)
+  // Telemetry: mid-playback stall — capture start time (only after first frame)
+  if (reachedReported && !stallStartedAt) {
+    stallStartedAt = performance.now()
+  }
 }
 
 function onBufferEnd() {
   setBuffering(false)
   markSeekResumed()
+  // Telemetry: stall resolved — emit duration (best-effort, never throws)
+  if (stallStartedAt) {
+    const stallMs = Math.round(performance.now() - stallStartedAt)
+    stallStartedAt = 0
+    recordPlayerEvent({
+      kind: 'stall',
+      provider: state.combo.value.provider,
+      anime_id: props.animeId,
+      episode: selectedEpisode.value?.number,
+      stall_ms: stallMs,
+    })
+  }
 }
 
 function onSeeked() {
@@ -1127,6 +1165,21 @@ function onTimeUpdate() {
   // poster for a black frame. Require real (unpaused) progress.
   if (!hasStarted.value && v && v.currentTime > 0 && !v.paused) {
     hasStarted.value = true
+    // Telemetry: first real frame — resolve ok + reached_playback (best-effort)
+    if (!reachedReported) {
+      reachedReported = true
+      recordPlayerEvent({
+        kind: 'resolve',
+        provider: state.combo.value.provider,
+        anime_id: props.animeId,
+        episode: selectedEpisode.value?.number,
+        outcome: 'ok',
+        reached_playback: true,
+        latency_ms: resolveStartedAt ? Math.round(performance.now() - resolveStartedAt) : undefined,
+        audio: state.combo.value.audio,
+        lang: state.combo.value.lang,
+      })
+    }
   }
   if (isBuffering.value && v && v.readyState >= 3 && !v.seeking) {
     setBuffering(false)
@@ -1150,6 +1203,19 @@ watch(engine.fatal, (f) => {
   if (f) {
     setBuffering(false)
     sourceError.value = 'Stream unavailable'
+    // Telemetry: HLS fatal (best-effort, never throws)
+    recordPlayerEvent({
+      kind: 'resolve',
+      provider: state.combo.value.provider,
+      anime_id: props.animeId,
+      episode: selectedEpisode.value?.number,
+      outcome: 'fail',
+      reached_playback: reachedReported,
+      error_kind: 'media_fatal',
+      latency_ms: resolveStartedAt ? Math.round(performance.now() - resolveStartedAt) : undefined,
+      audio: state.combo.value.audio,
+      lang: state.combo.value.lang,
+    })
   }
 })
 
@@ -1365,6 +1431,8 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
   isResolving.value = true
   hasStarted.value = false
   const token = ++resolveToken
+  resolveStartedAt = performance.now()
+  reachedReported = false
   try {
     const stream = await resolver.resolveStream(
       provider,
@@ -1381,6 +1449,19 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
     if (token !== resolveToken) return // superseded
     const isNotAvailable =
       err instanceof Error && err.name === 'NotAvailableError'
+    // Telemetry: resolve failure (best-effort, never throws)
+    recordPlayerEvent({
+      kind: 'resolve',
+      provider: state.combo.value.provider,
+      anime_id: props.animeId,
+      episode: ep.number,
+      outcome: 'fail',
+      reached_playback: false,
+      error_kind: isNotAvailable ? 'not_available' : 'stream_error',
+      latency_ms: resolveStartedAt ? Math.round(performance.now() - resolveStartedAt) : undefined,
+      audio: state.combo.value.audio,
+      lang: state.combo.value.lang,
+    })
     sourceError.value = isNotAvailable
       ? "This source isn't available yet"
       : 'Stream unavailable'
