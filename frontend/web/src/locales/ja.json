@@ -956,6 +956,7 @@
         "genres": "ジャンル",
         "format": "種別",
         "status": "状態",
+        "season": "シーズン",
         "year": "年",
         "provider": "配信元",
         "sort": "並び替え",
@@ -974,6 +975,13 @@
         "released": "完結",
         "ongoing": "放送中",
         "anons": "予定"
+      },
+      "season": {
+        "any": "すべてのシーズン",
+        "winter": "冬",
+        "spring": "春",
+        "summer": "夏",
+        "fall": "秋"
       },
       "year": {
         "from": "から",
