@@ -72,6 +72,29 @@ func (l *cacheLayer) setEpisodes(ctx context.Context, showID string, eps []strin
 	_ = l.c.Set(ctx, keyEpisodes(showID), eps, episodesCacheTTL)
 }
 
+// --- available categories (which of sub/dub exist for a show) -------------
+// Populated by ListEpisodes (free — it already fetches availableEpisodesDetail)
+// and read by ListServers so it probes only categories that actually exist.
+
+func keyCategories(showID string) string {
+	return fmt.Sprintf("scraper:allanime:cats:%s", showID)
+}
+
+func (l *cacheLayer) getCategories(ctx context.Context, showID string) ([]string, bool) {
+	var out []string
+	if err := l.c.Get(ctx, keyCategories(showID), &out); err == nil && len(out) > 0 {
+		return out, true
+	}
+	return nil, false
+}
+
+func (l *cacheLayer) setCategories(ctx context.Context, showID string, cats []string) {
+	if len(cats) == 0 {
+		return
+	}
+	_ = l.c.Set(ctx, keyCategories(showID), cats, episodesCacheTTL)
+}
+
 // --- servers list (one episode) ------------------------------------------
 
 func keyServers(showID, ep, tt string) string {

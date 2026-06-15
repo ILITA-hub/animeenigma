@@ -239,6 +239,21 @@ func (p *Provider) ListEpisodes(ctx context.Context, showID string) ([]domain.Ep
 		return nil, doErr
 	}
 	raw := resp.Data.Show.AvailableEpisodesDetail.Sub
+
+	// Cache which EN categories the show actually has, so ListServers probes
+	// only those (raw excluded — that's the Raw player's domain, not OurEnglish).
+	{
+		detail := resp.Data.Show.AvailableEpisodesDetail
+		cats := make([]string, 0, 2)
+		if len(detail.Sub) > 0 {
+			cats = append(cats, "sub")
+		}
+		if len(detail.Dub) > 0 {
+			cats = append(cats, "dub")
+		}
+		p.cache.setCategories(ctx, showID, cats)
+	}
+
 	if len(raw) == 0 {
 		// Real-empty (anime exists, no episodes aired yet) is `([], nil)`.
 		p.markStage(health.StageEpisodes, nil)
@@ -283,6 +298,12 @@ func materializeEpisodes(showID string, raw []string) []domain.Episode {
 // EpisodeID format: "<showID>:<episodeString>". Each server name is the
 // upstream's sourceName ("Default", "S-mp4", "Yt-mp4", etc.); the orchestrator
 // picks the first server whose GetStream succeeds.
+//
+// When the categories cache (populated by ListEpisodes) records that the show
+// has a dub, both sub-tagged AND dub-tagged servers are returned. Sub-only
+// titles make a single upstream call — identical to the pre-dub behaviour.
+// A cold categories cache (ListEpisodes not yet called) defaults to ["sub"] so
+// existing callers that skip ListEpisodes are unaffected.
 func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string) ([]domain.Server, error) {
 	showID, ep := splitEpisodeID(episodeID)
 	if showID == "" || ep == "" {
@@ -293,27 +314,49 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		return nil, err
 	}
 
-	if hit, ok := p.cache.getServers(ctx, showID, ep, "sub"); ok {
-		p.markStage(health.StageServers, nil)
-		return materializeServers(hit, domain.CategorySub), nil
+	// Probe only the categories the show actually has (cached by ListEpisodes).
+	// Cold miss → sub only (conservative; ListEpisodes precedes ListServers in
+	// the normal flow).
+	cats, ok := p.cache.getCategories(ctx, showID)
+	if !ok || len(cats) == 0 {
+		cats = []string{"sub"}
 	}
 
-	sources, err := p.fetchSources(ctx, showID, ep, "sub")
-	if err != nil {
+	var all []domain.Server
+	var subErr error
+	for _, tt := range cats {
+		cat := domain.CategorySub
+		if tt == "dub" {
+			cat = domain.CategoryDub
+		}
+		srcs, hit := p.cache.getServers(ctx, showID, ep, tt)
+		if !hit {
+			fetched, ferr := p.fetchSources(ctx, showID, ep, tt)
+			if ferr != nil || len(fetched) == 0 {
+				if tt == "sub" && ferr != nil {
+					subErr = ferr
+				}
+				continue // a dub probe that errors/empties is non-fatal
+			}
+			p.cache.setServers(ctx, showID, ep, tt, fetched)
+			srcs = fetched
+		}
+		all = append(all, materializeServers(srcs, cat)...)
+	}
+
+	if len(all) == 0 {
+		err := subErr
+		if err == nil {
+			err = domain.WrapExtractFailed(
+				fmt.Errorf("empty sourceUrls for %s ep %s", showID, ep),
+				"allanime: ListServers")
+		}
 		p.markStage(health.StageServers, err)
 		return nil, err
 	}
-	if len(sources) == 0 {
-		err := domain.WrapExtractFailed(
-			fmt.Errorf("empty sourceUrls for %s ep %s", showID, ep),
-			"allanime: ListServers")
-		p.markStage(health.StageServers, err)
-		return nil, err
-	}
 
-	p.cache.setServers(ctx, showID, ep, "sub", sources)
 	p.markStage(health.StageServers, nil)
-	return materializeServers(sources, domain.CategorySub), nil
+	return all, nil
 }
 
 // translationTypeFor maps a domain.Category to AllAnime's translationType enum.

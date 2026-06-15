@@ -329,6 +329,41 @@ func TestGetStream_SkipsEmbedPicksStream(t *testing.T) {
 	}
 }
 
+// TestListServers_SubAndDub verifies that ListServers returns both sub-tagged
+// and dub-tagged servers when the categories cache records both "sub" and "dub"
+// for the show.
+func TestListServers_SubAndDub(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.RawQuery, "%22dub%22") {
+			_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"https://cdn.allanime.day/dub-ep1.mp4","sourceName":"Default","type":"player","priority":9,"fileExtenstion":"mp4","subtitles":[]}]}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"https://cdn.allanime.day/sub-ep1.mp4","sourceName":"Default","type":"player","priority":9,"fileExtenstion":"mp4","subtitles":[]}]}}}`))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	p.cache.setCategories(context.Background(), "SHOW123", []string{"sub", "dub"})
+
+	servers, err := p.ListServers(context.Background(), "", "SHOW123:1")
+	if err != nil {
+		t.Fatalf("ListServers: %v", err)
+	}
+	var sawSub, sawDub bool
+	for _, s := range servers {
+		if s.Type == domain.CategorySub {
+			sawSub = true
+		}
+		if s.Type == domain.CategoryDub {
+			sawDub = true
+		}
+	}
+	if !sawSub || !sawDub {
+		t.Errorf("want both sub and dub servers; got sub=%v dub=%v (%+v)", sawSub, sawDub, servers)
+	}
+}
+
 // --- doGraphQL transport semantics ---------------------------------------
 
 func TestDoGraphQL_5xxIsProviderDown(t *testing.T) {
