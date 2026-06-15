@@ -89,7 +89,6 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { cardPosterUrl } from '@/composables/useImageProxy'
 import { anidleApi } from '@/api/anidle'
 import type { SearchResultItem } from '@/api/anidle'
@@ -103,8 +102,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [id: string]
 }>()
-
-const { t: _t } = useI18n()
 
 const query = ref('')
 const results = ref<SearchResultItem[]>([])
@@ -136,13 +133,14 @@ async function doSearch(q: string) {
   isOpen.value = true
   try {
     const res = await anidleApi.search(q)
+    if (query.value !== q) return // a newer query superseded this one — drop the stale result
     const data = res.data?.data ?? res.data
     results.value = (data as SearchResultItem[]) ?? []
     activeIndex.value = -1
   } catch {
-    results.value = []
+    if (query.value === q) results.value = []
   } finally {
-    isSearching.value = false
+    if (query.value === q) isSearching.value = false
   }
 }
 
