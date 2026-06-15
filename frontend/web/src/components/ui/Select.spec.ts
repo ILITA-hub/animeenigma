@@ -61,6 +61,25 @@ describe('Select.vue', () => {
     expect(cls).toContain('rounded-lg')
   })
 
+  it('trigger uses the standardized thin cyan-500/50 focus + open ring (matches DatePicker)', () => {
+    const w = mount(Select, { props: { options, modelValue: 'a' } })
+    const cls = w.find('button[aria-haspopup="listbox"]').classes()
+    expect(cls).toContain('focus-visible:ring-cyan-500/50')
+    expect(cls).toContain('data-[state=open]:ring-cyan-500/50')
+    // The old fat-ring inheritance / cyan-400/20 open ring is gone.
+    expect(cls).not.toContain('data-[state=open]:ring-cyan-400/20')
+  })
+
+  it('triggerClass merges onto the trigger and overrides base color (tailwind-merge)', () => {
+    const w = mount(Select, {
+      props: { options, modelValue: 'a', triggerClass: 'bg-success/20 text-success' },
+    })
+    const cls = w.find('button[aria-haspopup="listbox"]').classes()
+    expect(cls).toContain('bg-success/20')
+    expect(cls).toContain('text-success')
+    expect(cls).not.toContain('bg-white/5')
+  })
+
   it('renders the label when provided', () => {
     const w = mount(Select, { props: { options, modelValue: 'a', label: 'Sort by' } })
     expect(w.find('label').exists()).toBe(true)

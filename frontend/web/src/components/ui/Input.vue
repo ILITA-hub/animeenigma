@@ -32,7 +32,7 @@
         <X class="size-4" aria-hidden="true" />
       </button>
     </div>
-    <p v-if="error" class="mt-1 text-sm text-pink-400">{{ error }}</p>
+    <p v-if="error" class="mt-1 text-sm text-destructive">{{ error }}</p>
     <p v-else-if="hint" class="mt-1 text-sm text-white/50">{{ hint }}</p>
   </div>
 </template>
@@ -101,7 +101,7 @@ const inputClasses = computed(() => {
   }
 
   const states = props.error
-    ? 'border-pink-500 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20'
+    ? 'border-destructive focus:border-destructive focus:ring-2 focus:ring-destructive/20'
     : 'border-white/10 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20'
 
   return cn(

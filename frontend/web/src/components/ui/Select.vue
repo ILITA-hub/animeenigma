@@ -81,6 +81,8 @@ interface Props {
   label?: string
   disabled?: boolean
   size?: 'xs' | 'sm' | 'md' | 'lg'
+  /** Extra classes merged onto the trigger (e.g. per-status color). Wins over base via tailwind-merge. */
+  triggerClass?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -102,7 +104,10 @@ const selectedLabel = computed(() => {
 })
 
 const triggerClasses = computed(() => {
-  const base = 'w-full flex items-center justify-between bg-white/5 border text-white transition-all duration-200 focus:outline-none cursor-pointer data-[state=open]:border-cyan-400 data-[state=open]:ring-2 data-[state=open]:ring-cyan-400/20 data-[state=closed]:border-white/10 data-[state=closed]:hover:border-white/20'
+  // Standardized focus/selected outline: thin cyan-500/50 ring matching DatePicker.
+  // focus-visible:* neutralizes the global :focus-visible fat double-ring; the same
+  // ring shows on open so the selected state matches the date picker exactly.
+  const base = 'w-full flex items-center justify-between bg-white/5 border border-white/10 text-white transition-all duration-200 cursor-pointer hover:border-white/20 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 data-[state=open]:ring-2 data-[state=open]:ring-cyan-500/50'
 
   const sizes = {
     xs: 'px-2 py-1 text-xs rounded-lg gap-1',
@@ -115,6 +120,7 @@ const triggerClasses = computed(() => {
     base,
     sizes[props.size],
     props.disabled ? 'opacity-50 cursor-not-allowed' : '',
+    props.triggerClass,
   )
 })
 

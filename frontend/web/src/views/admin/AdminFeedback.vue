@@ -72,18 +72,24 @@
           :label="$t('admin.feedback.filters.username')"
           :placeholder="$t('admin.feedback.filters.usernamePlaceholder')"
         />
-        <Input
-          v-model="filterDateFrom"
-          size="sm"
-          type="date"
-          :label="$t('admin.feedback.filters.dateFrom')"
-        />
-        <Input
-          v-model="filterDateTo"
-          size="sm"
-          type="date"
-          :label="$t('admin.feedback.filters.dateTo')"
-        />
+        <div>
+          <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('admin.feedback.filters.dateFrom') }}</label>
+          <DatePicker
+            v-model="filterDateFrom"
+            class="w-full h-9"
+            :placeholder="$t('admin.feedback.filters.dateFrom')"
+            :title="$t('admin.feedback.filters.dateFrom')"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('admin.feedback.filters.dateTo') }}</label>
+          <DatePicker
+            v-model="filterDateTo"
+            class="w-full h-9"
+            :placeholder="$t('admin.feedback.filters.dateTo')"
+            :title="$t('admin.feedback.filters.dateTo')"
+          />
+        </div>
       </div>
 
       <!-- Error states -->
@@ -141,17 +147,13 @@
               </td>
               <td class="px-3 py-2 whitespace-nowrap text-white/50 text-xs">{{ formatDate(r.timestamp, r.id) }}</td>
               <td class="px-3 py-2 whitespace-nowrap" @click.stop>
-                <select
-                  :value="r.status"
-                  :class="['rounded px-2 py-1 text-[11px] font-medium cursor-pointer outline-none transition-colors', statusSelectClass(r.status)]"
-                  @change="setStatus(r.id, ($event.target as HTMLSelectElement).value as FeedbackStatus)"
-                >
-                  <option class="bg-popover text-white" value="new">{{ statusLabel('new') }}</option>
-                  <option class="bg-popover text-white" value="in_progress">{{ statusLabel('in_progress') }}</option>
-                  <option class="bg-popover text-white" value="ai_done">{{ statusLabel('ai_done') }}</option>
-                  <option class="bg-popover text-white" value="resolved">{{ statusLabel('resolved') }}</option>
-                  <option class="bg-popover text-white" value="not_relevant">{{ statusLabel('not_relevant') }}</option>
-                </select>
+                <Select
+                  :model-value="r.status"
+                  size="xs"
+                  :options="rowStatusOptions"
+                  :trigger-class="'w-auto ' + statusSelectClass(r.status)"
+                  @change="(v) => setStatus(r.id, v as FeedbackStatus)"
+                />
               </td>
               <td class="px-3 py-2 text-right whitespace-nowrap">
                 <button
@@ -356,16 +358,13 @@
           <!-- Change status -->
           <div class="flex items-center gap-3 pt-2">
             <span class="text-white/50 text-xs uppercase">{{ $t('admin.feedback.columns.status') }}</span>
-            <select
-              :value="detail.status"
-              :class="['rounded px-3 py-1.5 text-xs font-medium cursor-pointer outline-none transition-colors', statusSelectClass(detail.status)]"
-              @change="setStatus(detail!.id, ($event.target as HTMLSelectElement).value as FeedbackStatus)"
-            >
-              <option class="bg-popover text-white" value="new">{{ statusLabel('new') }}</option>
-              <option class="bg-popover text-white" value="in_progress">{{ statusLabel('in_progress') }}</option>
-              <option class="bg-popover text-white" value="resolved">{{ statusLabel('resolved') }}</option>
-              <option class="bg-popover text-white" value="not_relevant">{{ statusLabel('not_relevant') }}</option>
-            </select>
+            <Select
+              :model-value="detail.status"
+              size="sm"
+              :options="rowStatusOptions"
+              :trigger-class="'w-auto ' + statusSelectClass(detail.status)"
+              @change="(v) => setStatus(detail!.id, v as FeedbackStatus)"
+            />
           </div>
 
           <!-- Status history (append-only triage log; starts 2026-06-10) -->
@@ -409,7 +408,7 @@ import { Check, Link as LinkIcon } from 'lucide-vue-next'
 import { adminApi } from '@/api/client'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
-import { Spinner } from '@/components/ui'
+import { Spinner, DatePicker } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
 import type { FeedbackStatus } from '@/types/feedback'
 
@@ -591,6 +590,17 @@ const statusOptions = computed(() => [
   { value: 'not_relevant', label: statusLabel('not_relevant') },
 ])
 
+// Per-report status control options (no 'all' pseudo-status). Shared by the
+// table-row picker and the detail-modal picker so both expose every status
+// (the detail modal previously omitted 'ai_done').
+const rowStatusOptions = computed(() => [
+  { value: 'new', label: statusLabel('new') },
+  { value: 'in_progress', label: statusLabel('in_progress') },
+  { value: 'ai_done', label: statusLabel('ai_done') },
+  { value: 'resolved', label: statusLabel('resolved') },
+  { value: 'not_relevant', label: statusLabel('not_relevant') },
+])
+
 function categoryLabel(c: string): string {
   if (c === 'bug' || c === 'issue' || c === 'feature') return t(`admin.feedback.category.${c}`)
   return t('admin.feedback.category.other')
@@ -617,7 +627,8 @@ function statusClass(s: string): string {
     default: return 'bg-info/20 text-info'
   }
 }
-// Colored <select> control reflecting the current status at a glance.
+// Per-status color passed as the Select trigger class, reflecting the current
+// status at a glance (overrides the trigger's neutral base via tailwind-merge).
 function statusSelectClass(s: string): string {
   switch (s) {
     case 'resolved': return 'bg-success/20 text-success border border-success/40'

@@ -29,11 +29,11 @@ describe('Input.vue', () => {
     expect(w.find('button').exists()).toBe(false)
   })
 
-  it('error prop renders a pink-400 error <p>', () => {
+  it('error prop renders a destructive-token error <p>', () => {
     const w = mount(Input, { props: { error: 'Bad' } })
     const p = w.find('p')
     expect(p.exists()).toBe(true)
-    expect(p.classes()).toContain('text-pink-400')
+    expect(p.classes()).toContain('text-destructive')
     expect(p.text()).toContain('Bad')
   })
 
@@ -66,9 +66,9 @@ describe('Input.vue', () => {
     expect(cls).toContain('rounded-xl')
   })
 
-  it('error state input contains border-pink-500; non-error contains border-white/10', () => {
+  it('error state input contains border-destructive; non-error contains border-white/10', () => {
     const errored = mount(Input, { props: { error: 'x' } })
-    expect(errored.find('input').classes()).toContain('border-pink-500')
+    expect(errored.find('input').classes()).toContain('border-destructive')
 
     const clean = mount(Input)
     expect(clean.find('input').classes()).toContain('border-white/10')
