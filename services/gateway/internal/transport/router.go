@@ -219,6 +219,9 @@ func NewRouterWithCleanup(
 		// FE error log sink (log-only, no DB). PUBLIC — same trust model as
 		// /collect; per-IP rate limiting already applies to all /api/* paths.
 		r.Post("/analytics/client-errors", proxyHandler.ProxyToAnalytics)
+		// Player telemetry beacon (resolve/stall outcomes). PUBLIC — anonymous,
+		// same trust model as /collect; per-IP rate limiting already applies.
+		r.Post("/analytics/player-events", proxyHandler.ProxyToAnalytics)
 
 		// Player service routes - reviews (must be before /anime/* catch-all)
 		r.Post("/anime/ratings/batch", proxyHandler.ProxyToPlayer)
