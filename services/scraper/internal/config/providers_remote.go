@@ -36,7 +36,7 @@ type remoteResponse struct {
 // derived from the intrinsic GroupOf(name), never trusting the remote value.
 func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Client, timeout time.Duration) (ProvidersConfig, error) {
 	if client == nil {
-		client = &http.Client{Timeout: timeout}
+		client = &http.Client{}
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -70,6 +70,9 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 		}
 		if !known[p.Name] {
 			return ProvidersConfig{}, fmt.Errorf("provider config: unknown provider %q", p.Name)
+		}
+		if _, dup := metas[p.Name]; dup {
+			return ProvidersConfig{}, fmt.Errorf("provider config: duplicate provider %q", p.Name)
 		}
 		subDelivery := p.SubDelivery
 		if subDelivery == "" {

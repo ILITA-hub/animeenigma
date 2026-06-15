@@ -48,3 +48,13 @@ func TestLoadProvidersRemote_RejectsUnknownProvider(t *testing.T) {
 		t.Fatal("expected error for unknown provider name, got nil")
 	}
 }
+
+func TestLoadProvidersRemote_Non200IsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	if _, err := LoadProvidersRemote(context.Background(), srv.URL, srv.Client(), 2*time.Second); err == nil {
+		t.Fatal("expected error on non-200 response, got nil")
+	}
+}
