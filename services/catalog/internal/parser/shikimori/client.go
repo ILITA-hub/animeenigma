@@ -784,6 +784,42 @@ func (c *Client) GetSimilarAnime(ctx context.Context, shikimoriID string) ([]dom
 	return result, nil
 }
 
+// GetAnimeFranchise fetches the franchise slug for an anime from the Shikimori
+// REST API (GET /api/animes/{id}). Shikimori's GraphQL schema does NOT expose
+// `franchise`, so this single-anime REST call is the only source. Returns an
+// empty string when the anime has no franchise or does not exist (404).
+func (c *Client) GetAnimeFranchise(ctx context.Context, shikimoriID string) (string, error) {
+	c.rateLimiter.acquire()
+
+	url := fmt.Sprintf("%s/api/animes/%s", c.config.BaseURL, shikimoriID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", errors.ExternalAPI("shikimori", err)
+	}
+	req.Header.Set("User-Agent", c.config.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", errors.ExternalAPI("shikimori", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.ExternalAPI("shikimori", fmt.Errorf("anime detail returned status %d", resp.StatusCode))
+	}
+
+	var detail struct {
+		Franchise string `json:"franchise"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil {
+		return "", errors.ExternalAPI("shikimori", fmt.Errorf("decode anime detail: %w", err))
+	}
+	return detail.Franchise, nil
+}
+
 // shikimoriIDRe pulls the numeric anime ID out of the `/animes/<id>` path
 // segment of a Shikimori URL, or out of a bare slugged id. Shikimori prefixes
 // some ids with a literal "z" (e.g. z5114) and appends a "-slug" — both are
