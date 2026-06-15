@@ -5,6 +5,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"gorm.io/gorm"
 )
@@ -17,12 +18,13 @@ import (
 // The gateway does NOT proxy /internal/*, so the route is reachable only from
 // within the Docker network (spec 2026-06-15-scraper-capability-api).
 type InternalScraperProvidersHandler struct {
-	db *gorm.DB
+	db  *gorm.DB
+	log *logger.Logger
 }
 
 // NewInternalScraperProvidersHandler constructs the handler.
-func NewInternalScraperProvidersHandler(db *gorm.DB) *InternalScraperProvidersHandler {
-	return &InternalScraperProvidersHandler{db: db}
+func NewInternalScraperProvidersHandler(db *gorm.DB, log *logger.Logger) *InternalScraperProvidersHandler {
+	return &InternalScraperProvidersHandler{db: db, log: log}
 }
 
 // List handles GET /internal/scraper/providers.
@@ -31,6 +33,7 @@ func NewInternalScraperProvidersHandler(db *gorm.DB) *InternalScraperProvidersHa
 func (h *InternalScraperProvidersHandler) List(w http.ResponseWriter, r *http.Request) {
 	var rows []domain.ScraperProvider
 	if err := h.db.WithContext(r.Context()).Order("name asc").Find(&rows).Error; err != nil {
+		h.log.Errorw("failed to load scraper providers", "error", err)
 		httputil.Error(w, errors.Internal("failed to load scraper providers"))
 		return
 	}

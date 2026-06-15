@@ -275,7 +275,7 @@ func main() {
 	// Serves GET /internal/scraper/providers — consumed by the scraper
 	// microservice at boot + on a refresh interval. Same gateway-non-routing
 	// security model as the other /internal/* endpoints above.
-	internalScraperProvidersHandler := handler.NewInternalScraperProvidersHandler(db.DB)
+	internalScraperProvidersHandler := handler.NewInternalScraperProvidersHandler(db.DB, log)
 
 	// Workstream raw-jp, Phase 02 — multi-provider subtitle aggregator.
 	// Fans out to Jimaku (JP) + OpenSubtitles (everything else, keyed by

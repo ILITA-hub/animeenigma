@@ -6,8 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
+	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -20,10 +22,15 @@ func TestInternalScraperProviders_List(t *testing.T) {
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
 		t.Fatal(err)
 	}
-	db.Create(&domain.ScraperProvider{Name: "nineanime", Enabled: true, Group: "en", SupportsSub: true, SubDelivery: "hard", PreferenceWeight: 40})
-	db.Create(&domain.ScraperProvider{Name: "allanime", Enabled: true, Group: "en", SupportsSub: true, SupportsDub: true, SubDelivery: "hard", PreferenceWeight: 90})
+	if err := db.Create(&domain.ScraperProvider{Name: "nineanime", Enabled: true, Group: "en", SupportsSub: true, SubDelivery: "hard", PreferenceWeight: 40}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{Name: "allanime", Enabled: true, Group: "en", SupportsSub: true, SupportsDub: true, SubDelivery: "hard", PreferenceWeight: 90}).Error; err != nil {
+		t.Fatal(err)
+	}
 
-	h := handler.NewInternalScraperProvidersHandler(db)
+	nopLog := &logger.Logger{SugaredLogger: zap.NewNop().Sugar()}
+	h := handler.NewInternalScraperProvidersHandler(db, nopLog)
 	req := httptest.NewRequest(http.MethodGet, "/internal/scraper/providers", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
