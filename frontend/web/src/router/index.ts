@@ -232,6 +232,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Collections.vue'),
     meta: { titleKey: 'collections.title' }
   },
+  // ── Anidle anime-guessing game ──────────────────────────────────────────────
+  {
+    path: '/anidle',
+    name: 'anidle',
+    component: () => import('@/views/Anidle.vue'),
+    meta: { titleKey: 'anidle.nav_item' }
+  },
   // ── Gacha «Лудка» routes (dark-shipped via VITE_GACHA_ADMIN_ONLY) ──────────
   {
     path: '/gacha',
