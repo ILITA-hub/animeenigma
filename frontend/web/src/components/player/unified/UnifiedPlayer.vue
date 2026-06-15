@@ -327,7 +327,9 @@ import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/unifi
 import { useProviderHealth } from '@/composables/unifiedPlayer/useProviderHealth'
 import { useWatchTracking } from '@/composables/unifiedPlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
-import { providerById } from './providerRegistry'
+import { providerById, CURATED_TIER } from './providerRegistry'
+import { pickSmartDefault } from '@/composables/unifiedPlayer/smartDefault'
+import { aeApi } from '@/api/client'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult } from '@/types/unifiedPlayer'
@@ -379,15 +381,40 @@ const { rows, start } = useProviderHealth(filter)
 
 // ─── Provider defaults ────────────────────────────────────────────────────────
 
+// First-party (ae) availability — cached single probe per mount. The library
+// only has a subset of titles encoded, so `ae` (top of CURATED_TIER) must be
+// skipped when this anime isn't on-prem. aeApi.getEpisodes returns
+// { episodes, available }; treat available=false OR an empty list as "no".
+let aeAvailableCache: Promise<boolean> | null = null
+function isProviderAvailable(id: string): Promise<boolean> {
+  if (id !== 'ae') return Promise.resolve(true)
+  if (!aeAvailableCache) {
+    aeAvailableCache = aeApi
+      .getEpisodes(props.animeId)
+      .then((resp) => {
+        const data = resp.data?.data ?? resp.data
+        return Boolean(data?.available) && (data?.episodes?.length ?? 0) > 0
+      })
+      .catch(() => false)
+  }
+  return aeAvailableCache
+}
+
 watch(
   rows,
   () => {
-    if (!state.combo.value.provider) {
-      const first = rows.value.find((r) => r.state === 'active')
-      if (first) {
-        state.setProvider(first.def.id, '')
+    if (state.combo.value.provider) return
+    void pickSmartDefault(rows.value, CURATED_TIER, {
+      needsCheck: new Set(['ae']),
+      isAvailable: isProviderAvailable,
+    }).then((id) => {
+      // Guard against a race: only apply if still unset and the chosen row is
+      // still active in the latest rows (filter may have changed mid-probe).
+      if (id && !state.combo.value.provider &&
+          rows.value.some((r) => r.def.id === id && r.state === 'active')) {
+        state.setProvider(id, '')
       }
-    }
+    })
   },
   { immediate: true },
 )
