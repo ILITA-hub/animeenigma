@@ -60,6 +60,12 @@ type ProviderMeta struct {
 	Reason      string
 	Description string
 	Group       string // "en" (default) or "adult" — intrinsic, from GroupOf(name)
+	SupportsSub      bool
+	SupportsDub      bool
+	SupportsRaw      bool
+	SubDelivery      string // "soft" | "hard" | "none" (default "hard")
+	QualityCeiling   string
+	PreferenceWeight int
 }
 
 // providerEntry is the raw YAML shape. Enabled is a pointer so an omitted
@@ -70,6 +76,12 @@ type providerEntry struct {
 	Reason      string  `yaml:"reason"`
 	Description string  `yaml:"description"`
 	Group       *string `yaml:"group"` // optional; if present MUST equal GroupOf(name)
+	SupportsSub      *bool  `yaml:"supports_sub"`
+	SupportsDub      *bool  `yaml:"supports_dub"`
+	SupportsRaw      *bool  `yaml:"supports_raw"`
+	SubDelivery      string `yaml:"sub_delivery"`
+	QualityCeiling   string `yaml:"quality_ceiling"`
+	PreferenceWeight *int   `yaml:"preference_weight"`
 }
 
 type providersFile struct {
@@ -174,12 +186,27 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 		if e.Group != nil && *e.Group != GroupOf(e.Name) {
 			return ProvidersConfig{}, fmt.Errorf("providers file: provider %q group %q != intrinsic %q", e.Name, *e.Group, GroupOf(e.Name))
 		}
+		deref := func(p *bool) bool { return p != nil && *p }
+		subDelivery := e.SubDelivery
+		if subDelivery == "" {
+			subDelivery = "hard"
+		}
+		weight := 0
+		if e.PreferenceWeight != nil {
+			weight = *e.PreferenceWeight
+		}
 		metas[e.Name] = ProviderMeta{
-			Name:        e.Name,
-			Enabled:     *e.Enabled,
-			Reason:      e.Reason,
-			Description: e.Description,
-			Group:       GroupOf(e.Name),
+			Name:             e.Name,
+			Enabled:          *e.Enabled,
+			Reason:           e.Reason,
+			Description:      e.Description,
+			Group:            GroupOf(e.Name),
+			SupportsSub:      deref(e.SupportsSub),
+			SupportsDub:      deref(e.SupportsDub),
+			SupportsRaw:      deref(e.SupportsRaw),
+			SubDelivery:      subDelivery,
+			QualityCeiling:   e.QualityCeiling,
+			PreferenceWeight: weight,
 		}
 	}
 	return ProvidersConfig{metas: metas, Source: "file"}, nil
