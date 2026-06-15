@@ -66,7 +66,7 @@
         :aria-label="t('watch_together.chat_input_aria')"
         rows="2"
         maxlength="500"
-        class="w-full rounded-md bg-foreground/5 border border-foreground/10 p-2 text-sm font-medium resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+        class="w-full rounded-md bg-foreground/5 border border-foreground/10 p-2 text-sm font-medium resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
         @keydown="onKeydown"
       />
 

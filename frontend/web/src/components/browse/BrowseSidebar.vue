@@ -85,7 +85,7 @@
           step="0.5"
           :value="filters.scoreMin.value ?? 0"
           :aria-label="$t('browse.filters.section.score')"
-          class="w-full h-1.5 rounded-full appearance-none bg-white/10 accent-cyan-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+          class="w-full h-1.5 rounded-full appearance-none bg-white/10 accent-cyan-500 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
           @input="onScoreMinChange(($event.target as HTMLInputElement).valueAsNumber)"
         />
       </div>
@@ -125,7 +125,7 @@
     <div class="pt-3">
       <button
         type="button"
-        class="w-full px-3 py-2 rounded-md bg-pink-500/10 border border-pink-400/20 text-pink-300 hover:text-pink-200 hover:bg-pink-500/20 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-pink-400/50"
+        class="w-full px-3 py-2 rounded-md bg-pink-500/10 border border-pink-400/20 text-pink-300 hover:text-pink-200 hover:bg-pink-500/20 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
         @click="onReset"
       >
         {{ $t('browse.filters.reset') }}

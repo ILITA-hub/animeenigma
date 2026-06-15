@@ -536,7 +536,7 @@
             v-else-if="!playerActivated"
             type="button"
             @click="onPlaceholderCtaClick"
-            class="relative w-full aspect-video rounded-lg overflow-hidden group focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            class="relative w-full aspect-video rounded-lg overflow-hidden group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
             :aria-label="placeholderCtaLabel"
           >
             <img
@@ -717,7 +717,7 @@
             <textarea
               v-model="reviewForm.text"
               rows="4"
-              class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+              class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 transition-colors resize-none"
               :placeholder="$t('anime.reviewPlaceholder')"
             ></textarea>
           </div>
@@ -810,7 +810,7 @@
                 rows="3"
                 :placeholder="$t('anime.ugc.commentPlaceholder')"
                 :disabled="posting"
-                class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+                class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 transition-colors resize-none"
                 :class="posting ? 'opacity-50 pointer-events-none' : ''"
               ></textarea>
               <div
@@ -924,7 +924,7 @@
                     rows="3"
                     :placeholder="$t('anime.ugc.editPlaceholder')"
                     :disabled="editSaving"
-                    class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+                    class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 transition-colors resize-none"
                   ></textarea>
                   <div class="flex items-center gap-2 mt-2">
                     <Button

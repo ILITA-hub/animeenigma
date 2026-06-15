@@ -526,7 +526,7 @@
           <input
             v-model="bannerForm.active_from"
             type="datetime-local"
-            class="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 transition-all duration-200 focus:outline-none px-4 py-3 text-base rounded-xl focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+            class="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 px-4 py-3 text-base rounded-xl"
           />
         </div>
         <div>
@@ -534,7 +534,7 @@
           <input
             v-model="bannerForm.active_to"
             type="datetime-local"
-            class="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 transition-all duration-200 focus:outline-none px-4 py-3 text-base rounded-xl focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+            class="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 px-4 py-3 text-base rounded-xl"
           />
         </div>
       </div>

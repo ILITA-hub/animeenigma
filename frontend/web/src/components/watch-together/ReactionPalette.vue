@@ -61,7 +61,7 @@ function onClick(emoji: string) {
         v-for="emoji in REACTION_WHITELIST"
         :key="emoji"
         type="button"
-        class="text-2xl p-2 rounded hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition select-none"
+        class="text-2xl p-2 rounded hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 transition select-none"
         :aria-label="emoji"
         @click="onClick(emoji)"
       >

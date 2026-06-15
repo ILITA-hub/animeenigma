@@ -14,7 +14,7 @@
         <button
           ref="toggleButtonRef"
           type="button"
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-white/5 border border-white/10 text-white/80 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-white/5 border border-white/10 text-white/80 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
           :aria-expanded="drawerOpen"
           aria-controls="browse-filter-drawer"
           @click="drawerOpen = true"
@@ -188,7 +188,7 @@
             <!-- KEPT bespoke: bare icon-only close (p-1 ~28px hit area, no bg/border). Button size="icon" is 40x40 and ghost adds bg+border — a visible enlargement/box diff for an inline header close affordance. -->
             <button
               type="button"
-              class="p-1 rounded text-white/60 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+              class="p-1 rounded text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
               :aria-label="$t('common.close')"
               @click="drawerOpen = false"
             >

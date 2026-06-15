@@ -227,7 +227,6 @@
                   size="sm"
                   :placeholder="$t('player.adminLibrary.jobs.pendingLink.searchPlaceholder')"
                   :aria-label="$t('player.adminLibrary.jobs.pendingLink.searchPlaceholder')"
-                  class="focus:ring-warning"
                   @input="onPendingLinkInput(job.id)"
                 />
                 <ul
