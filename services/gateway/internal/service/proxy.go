@@ -249,6 +249,8 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.GachaService, nil
 	case "recs":
 		return s.serviceURLs.RecsService, nil
+	case "anidle":
+		return s.serviceURLs.AnidleService, nil
 	case "analytics":
 		return s.serviceURLs.AnalyticsService, nil
 	case "watch-together":

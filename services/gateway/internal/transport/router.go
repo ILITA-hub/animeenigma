@@ -397,6 +397,13 @@ func NewRouterWithCleanup(
 			r.HandleFunc("/events/rec", proxyHandler.ProxyToRecs)
 		})
 
+		// Anidle guessing game (spec 2026-06-15) — guest-friendly, JWT optional.
+		r.Group(func(r chi.Router) {
+			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
+			r.HandleFunc("/anidle/*", proxyHandler.ProxyToAnidle)
+		})
+
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))

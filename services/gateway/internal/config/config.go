@@ -84,6 +84,8 @@ type ServiceURLs struct {
 	// RecsService — recommendation engine, extracted from player (spec
 	// 2026-06-11). Port 8094.
 	RecsService string
+	// AnidleService — anime guessing game service (spec 2026-06-15). Port 8095.
+	AnidleService string
 	WebService           string
 	// Admin panel services
 	GrafanaService    string
@@ -137,6 +139,7 @@ func Load() (*Config, error) {
 			AnalyticsService:     getEnv("ANALYTICS_SERVICE_URL", "http://analytics:8092"),
 			GachaService:         getEnv("GACHA_SERVICE_URL", "http://gacha:8093"),
 			RecsService:          getEnv("RECS_SERVICE_URL", "http://recs:8094"),
+			AnidleService:        getEnv("ANIDLE_SERVICE_URL", "http://anidle:8095"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),

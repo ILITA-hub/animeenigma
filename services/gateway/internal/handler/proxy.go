@@ -43,6 +43,11 @@ func (h *ProxyHandler) ProxyToRecs(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "recs")
 }
 
+// ProxyToAnidle proxies requests to the anidle guessing game service (spec 2026-06-15).
+func (h *ProxyHandler) ProxyToAnidle(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "anidle")
+}
+
 // ProxyToRooms proxies requests to rooms service
 func (h *ProxyHandler) ProxyToRooms(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "rooms")
