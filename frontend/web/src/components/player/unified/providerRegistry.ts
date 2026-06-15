@@ -35,3 +35,23 @@ export const PROVIDER_REGISTRY: ProviderDef[] = [
 
 export const providerById = (id: string): ProviderDef | undefined =>
   PROVIDER_REGISTRY.find(p => p.id === id)
+
+// Hand-ranked default-selection order, best-first. The smart default walks
+// this list and picks the first provider whose row is `active` (and, for
+// availability-gated providers like first-party `ae`, that actually has a
+// local copy). Brand-exempt: order is reliability/quality judgement, not the
+// registry array order. Tune as real telemetry lands (Stage 2).
+export const CURATED_TIER: string[] = [
+  'ae',         // first-party self-hosted — preferred WHEN the title is in the library
+  'allanime',   // direct-MP4 / robust HLS
+  'gogoanime',  // megaplay, ~78% popular coverage
+  'miruro',
+  'animepahe',
+  'animefever',
+  'nineanime',
+  'kodik',      // RU
+  'raw',        // JP
+  '18anime',    // adult
+  'animelib',
+  'hanime',
+]
