@@ -258,6 +258,59 @@ HAVING count() >= ?`
 	return out, rows.Err()
 }
 
+// ProviderReliabilityRow is one (anime_id, provider) reliability aggregate over
+// the player_resolve / player_stall telemetry. AnimeID is "" for global rows.
+type ProviderReliabilityRow struct {
+	AnimeID  string
+	Provider string
+	Resolves uint64
+	Reached  uint64
+	OK       uint64
+	Stalls   uint64
+	P95MS    float64
+}
+
+// QueryProviderReliability aggregates Stage 2a player telemetry over the last
+// lookbackDays. When perAnime is false it groups by provider only (anime_id="")
+// for the global ranking; when true it groups by (anime_id, provider). Keys with
+// fewer than minResolves player_resolve rows are dropped (HAVING) so a handful of
+// plays can't manufacture a misleading score. READS the events table only.
+func QueryProviderReliability(ctx context.Context, conn driver.Conn, lookbackDays, minResolves int, perAnime bool) ([]ProviderReliabilityRow, error) {
+	groupCols := "target"
+	selectAnime := "'' AS anime_id"
+	if perAnime {
+		groupCols = "anime_id, target"
+		selectAnime = "ifNull(anime_id, '') AS anime_id"
+	}
+	q := `SELECT ` + selectAnime + `, target AS provider,
+       countIf(effect_kind='player_resolve') AS resolves,
+       countIf(effect_kind='player_resolve' AND JSONExtractBool(properties,'reached_playback')) AS reached,
+       countIf(effect_kind='player_resolve' AND JSONExtractString(properties,'outcome')='ok') AS ok,
+       countIf(effect_kind='player_stall') AS stalls,
+       quantileIf(0.95)(duration_ms, effect_kind='player_resolve') AS p95_ms
+FROM events
+WHERE effect_kind IN ('player_resolve','player_stall')
+  AND timestamp >= now() - INTERVAL ? DAY
+  AND target != ''
+GROUP BY ` + groupCols + `
+HAVING resolves >= ?`
+	rows, err := conn.Query(ctx, q, lookbackDays, minResolves)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ProviderReliabilityRow
+	for rows.Next() {
+		var r ProviderReliabilityRow
+		if err := rows.Scan(&r.AnimeID, &r.Provider, &r.Resolves, &r.Reached, &r.OK, &r.Stalls, &r.P95MS); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // PurgeOlderThanCH is a no-op: ClickHouse retention is handled declaratively by
 // the events table's native `TTL ... DELETE`, so the Go purge cron is retired
 // for the ClickHouse backend (RESEARCH §Don't Hand-Roll). cutoff is accepted
