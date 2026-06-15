@@ -24,6 +24,10 @@ type Anime struct {
 	Rating          string         `gorm:"size:20" json:"rating,omitempty"`
 	MaterialSource  string         `gorm:"size:50;column:material_source" json:"material_source,omitempty"`
 	Franchise       string         `gorm:"size:200;index" json:"franchise,omitempty"`
+	// FranchiseChecked records that franchise backfill ran for this row, so a
+	// genuinely standalone anime (empty franchise) is not re-fetched on every
+	// guess-pool build. Internal bookkeeping — not exposed in the API.
+	FranchiseChecked bool          `gorm:"default:false;index" json:"-"`
 	EpisodesCount   int            `json:"episodes_count"`
 	EpisodesAired   int            `json:"episodes_aired,omitempty"`
 	EpisodeDuration int            `json:"episode_duration,omitempty"`

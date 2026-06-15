@@ -91,6 +91,11 @@ func TestBuildPool_BackfillsAndCollapses(t *testing.T) {
 	if repo.setCalls["jjk2"] != "jujutsu_kaisen" {
 		t.Fatalf("expected jjk2 franchise persisted, got %v", repo.setCalls)
 	}
+	// frieren is standalone (empty franchise) but must STILL be persisted so it
+	// is marked checked and not re-fetched on the next build.
+	if _, ok := repo.setCalls["frieren"]; !ok {
+		t.Fatalf("expected frieren marked checked via SetFranchise, got %v", repo.setCalls)
+	}
 	// attribute mapping check on jjk1
 	e := entries[0]
 	if e.Status != "released" || e.Rating != "pg_13" || e.Score != 8.6 {
@@ -104,5 +109,27 @@ func TestBuildPool_BackfillsAndCollapses(t *testing.T) {
 	}
 	if len(e.Tags) != 1 || e.Tags[0].Name != "Магия" {
 		t.Fatalf("bad tag mapping: %+v", e.Tags)
+	}
+}
+
+// TestBuildPool_SkipsAlreadyChecked ensures a standalone anime that was already
+// checked (FranchiseChecked=true, empty franchise) is NOT re-fetched, so the
+// pool build does not hammer Shikimori on every call.
+func TestBuildPool_SkipsAlreadyChecked(t *testing.T) {
+	repo := &fakePoolRepo{candidates: []*domain.Anime{
+		{ID: "s1", ShikimoriID: "111", Franchise: "", FranchiseChecked: true, NameRU: "Standalone checked"},
+	}}
+	fetcher := &fakeFranchiseFetcher{byShikimori: map[string]string{}}
+	svc := NewGuessPoolService(repo, fetcher, nil)
+
+	entries, err := svc.BuildPool(context.Background())
+	if err != nil {
+		t.Fatalf("BuildPool: %v", err)
+	}
+	if fetcher.calls != 0 {
+		t.Fatalf("expected 0 fetcher calls for an already-checked anime, got %d", fetcher.calls)
+	}
+	if len(entries) != 1 || entries[0].ID != "s1" {
+		t.Fatalf("expected the checked standalone in the pool, got %+v", entries)
 	}
 }

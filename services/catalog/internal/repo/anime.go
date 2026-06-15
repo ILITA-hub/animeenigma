@@ -460,10 +460,16 @@ func (r *AnimeRepository) ListGuessPoolCandidates(ctx context.Context, minScore 
 	return animes, nil
 }
 
-// SetFranchise persists a backfilled franchise slug onto an anime row.
+// SetFranchise persists a backfilled franchise slug onto an anime row and marks
+// it checked, so standalone anime (empty franchise) are not re-fetched on every
+// guess-pool build. Uses a map so franchise_checked is written even when the
+// franchise itself is the empty string (GORM struct updates skip zero values).
 func (r *AnimeRepository) SetFranchise(ctx context.Context, id, franchise string) error {
 	return r.db.WithContext(ctx).
 		Model(&domain.Anime{}).
 		Where("id = ?", id).
-		Update("franchise", franchise).Error
+		Updates(map[string]interface{}{
+			"franchise":         franchise,
+			"franchise_checked": true,
+		}).Error
 }

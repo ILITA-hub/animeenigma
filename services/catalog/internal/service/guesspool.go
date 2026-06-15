@@ -81,20 +81,19 @@ func (s *GuessPoolService) BuildPool(ctx context.Context) ([]GuessPoolEntry, err
 	}
 
 	for _, a := range candidates {
-		if a.Franchise != "" || a.ShikimoriID == "" {
+		if a.FranchiseChecked || a.Franchise != "" || a.ShikimoriID == "" {
 			continue
 		}
 		fr, ferr := s.fetcher.GetAnimeFranchise(ctx, a.ShikimoriID)
 		if ferr != nil {
 			if s.log != nil {
-				s.log.Debugw("franchise backfill failed; treating as standalone",
+				s.log.Debugw("franchise backfill failed; will retry next build",
 					"anime_id", a.ID, "shikimori_id", a.ShikimoriID, "error", ferr)
 			}
-			continue // leave standalone
+			continue // not marked checked -> retried on the next build
 		}
-		if fr == "" {
-			continue
-		}
+		// Persist the franchise (possibly empty for a standalone) AND mark the
+		// row checked, so a standalone anime is not re-fetched on every build.
 		a.Franchise = fr
 		if serr := s.repo.SetFranchise(ctx, a.ID, fr); serr != nil {
 			if s.log != nil {
