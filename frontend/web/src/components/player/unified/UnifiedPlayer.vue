@@ -214,7 +214,7 @@
         :provider="state.combo.value.provider"
         :server="state.combo.value.server"
         :servers="resolvedServers"
-        :teams="[]"
+        :teams="teams"
         @update:audio="state.setAudio"
         @update:lang="state.setLang"
         @update:team="state.setTeam"
@@ -585,6 +585,7 @@ function onResumeFromSaved() {
 }
 const sourceError = ref<string | null>(null)
 const resolvedServers = ref<{ id: string; label: string }[]>([])
+const teams = ref<string[]>([])
 const currentStream = ref<StreamResult | null>(null)
 const isResolving = ref(false)
 
@@ -737,6 +738,13 @@ async function loadEpisodesAndStream() {
 
     episodes.value = eps
 
+    // Provider-native teams (e.g. Kodik translation titles) for the Source
+    // panel. Best-effort — never blocks the stream resolve.
+    resolver
+      .listTeams(provider, props.animeId)
+      .then((t) => { if (token === resolveToken) teams.value = t })
+      .catch(() => { if (token === resolveToken) teams.value = [] })
+
     // Preserve the selected episode number across provider changes
     const targetNum =
       selectedEpisode.value?.number ?? props.initialEpisode ?? props.anime.ep ?? 1
@@ -803,6 +811,7 @@ watch(
     state.combo.value.audio,
     state.combo.value.lang,
     state.combo.value.server,
+    state.combo.value.team,
     selectedEpisode.value,
   ] as const,
   (newVal, oldVal) => {
@@ -818,7 +827,7 @@ watch(
     // ?episode=N deep links). loadEpisodesAndStream reconciles the selection
     // and resolves the stream itself once the real list arrives. Combo
     // (audio/lang/server) changes are NOT gated on the list.
-    if (newVal[3] !== oldVal[3] && episodes.value.length === 0) return
+    if (newVal[4] !== oldVal[4] && episodes.value.length === 0) return
     void resolveStreamForCurrentEpisode()
   },
 )
