@@ -27,6 +27,7 @@ func NewRouter(
 	internalEpisodesValidateHandler *handler.InternalEpisodesValidateHandler,
 	internalScraperProvidersHandler *handler.InternalScraperProvidersHandler,
 	spotlightHandler *handler.SpotlightHandler,
+	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -87,6 +88,11 @@ func NewRouter(
 	// Same gateway-non-routing security model as the internal endpoints above.
 	if internalScraperProvidersHandler != nil {
 		r.Get("/internal/scraper/providers", internalScraperProvidersHandler.List)
+	}
+
+	// Anidle guess-game pool (spec 2026-06-15) — Docker-network only.
+	if internalGuessPoolHandler != nil {
+		r.Get("/internal/guessgame/pool", internalGuessPoolHandler.GetPool)
 	}
 
 	// API routes

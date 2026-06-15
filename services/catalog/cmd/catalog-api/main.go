@@ -288,6 +288,11 @@ func main() {
 	// security model as the other /internal/* endpoints above.
 	internalScraperProvidersHandler := handler.NewInternalScraperProvidersHandler(db.DB, log)
 
+	// Anidle guess-game pool (spec 2026-06-15) — Docker-network only.
+	// Serves GET /internal/guessgame/pool for the anidle guessing-game service.
+	guessPoolService := service.NewGuessPoolService(animeRepo, shikimoriClient, log)
+	internalGuessPoolHandler := handler.NewInternalGuessPoolHandler(guessPoolService, log)
+
 	// Workstream raw-jp, Phase 02 — multi-provider subtitle aggregator.
 	// Fans out to Jimaku (JP) + OpenSubtitles (everything else, keyed by
 	// IMDb/TMDB) and merges results. Mounts /api/anime/{id}/subtitles[/all].
@@ -364,7 +369,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, internalGuessPoolHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
