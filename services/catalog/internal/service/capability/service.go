@@ -41,7 +41,11 @@ func NewService(db *gorm.DB, health HealthSource, c cache.Cache, log *logger.Log
 
 // Report assembles the (P4a: EN-only) capability report for an anime, cache-first.
 func (s *Service) Report(ctx context.Context, animeID string) (domain.CapabilityReport, error) {
-	key := "capabilities:en"
+	// EN family is anime-AGNOSTIC in P4a (a global trait+health ranking, not
+	// per-title), so one cache entry serves all anime; the caller's AnimeID is
+	// stamped onto the result on read. P4b adds per-title signals — it MUST switch
+	// to a per-anime key (e.g. "capabilities:<animeID>") to avoid stale cross-anime data.
+	key := "capabilities:en:global"
 	if s.cache != nil {
 		var cached domain.CapabilityReport
 		if err := s.cache.Get(ctx, key, &cached); err == nil {

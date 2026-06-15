@@ -59,13 +59,15 @@ func TestCapabilitiesHandler_OK(t *testing.T) {
 }
 
 func TestCapabilitiesHandler_ServiceError(t *testing.T) {
+	// The handler wraps any service error via errors.Internal → httputil.Error,
+	// which maps CodeInternal → 500 regardless of the underlying error type.
 	h := handler.NewCapabilitiesHandler(fakeCapSvc{err: context.DeadlineExceeded}, nil)
 	r := chi.NewRouter()
 	r.Get("/api/anime/{animeId}/capabilities", h.Get)
 	req := httptest.NewRequest(http.MethodGet, "/api/anime/abc/capabilities", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
-	if rec.Code == http.StatusOK {
-		t.Fatalf("expected non-200 on error, got 200 body=%s", rec.Body.String())
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

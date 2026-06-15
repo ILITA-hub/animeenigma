@@ -14,10 +14,10 @@ type scraperHealthClient interface {
 }
 
 // ScraperHealth adapts the scraper /scraper/health body to HealthSource.
-type ScraperHealth struct{ Client scraperHealthClient }
+type ScraperHealth struct{ client scraperHealthClient }
 
 // NewScraperHealth wraps a scraperHealthClient as a HealthSource.
-func NewScraperHealth(c scraperHealthClient) ScraperHealth { return ScraperHealth{Client: c} }
+func NewScraperHealth(c scraperHealthClient) ScraperHealth { return ScraperHealth{client: c} }
 
 // ProviderHealth calls the scraper health endpoint and decodes the response.
 // The scraper response shape is:
@@ -33,7 +33,7 @@ func NewScraperHealth(c scraperHealthClient) ScraperHealth { return ScraperHealt
 // The `up` field is a top-level bool per provider entry (Task 3 enrichment).
 // Providers absent from `playable` get a nil Playable pointer (unknown).
 func (s ScraperHealth) ProviderHealth(ctx context.Context) (map[string]HealthInfo, error) {
-	status, body, err := s.Client.GetScraperHealth(ctx)
+	status, body, err := s.client.GetScraperHealth(ctx)
 	if err != nil {
 		return nil, err
 	}
