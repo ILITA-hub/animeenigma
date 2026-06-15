@@ -332,6 +332,7 @@ import { pickSmartDefault } from '@/composables/unifiedPlayer/smartDefault'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer } from '@/composables/unifiedPlayer/comboMapping'
+import { useToast } from '@/composables/useToast'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult } from '@/types/unifiedPlayer'
@@ -371,6 +372,7 @@ const isPointerInside = ref(false)
 const state = usePlayerState()
 const engine = useVideoEngine(videoRef)
 const resolver = useProviderResolver()
+const toast = useToast()
 
 // ─── Provider health filter ───────────────────────────────────────────────────
 
@@ -405,7 +407,14 @@ function isProviderAvailable(id: string): Promise<boolean> {
 
 // props.animeId can change without a remount (no :key on the player), so the
 // per-anime ae availability probe must be invalidated when the title changes.
-watch(() => props.animeId, () => { aeAvailableCache = null })
+// Also reset saved-combo fallback state so the new title gets a fresh attempt.
+let providerWasFromSavedCombo = false
+let savedSourceFallbackDone = false
+watch(() => props.animeId, () => {
+  aeAvailableCache = null
+  providerWasFromSavedCombo = false
+  savedSourceFallbackDone = false
+})
 
 // Providers whose default-selection eligibility needs a runtime availability
 // probe (see isProviderAvailable). Only first-party `ae` today.
@@ -435,7 +444,10 @@ function applyResolvedCombo() {
   state.setAudio(audio)
   state.setLang(lang)
   if (team) state.setTeam(team)
-  if (providerId) state.setProvider(providerId, '')
+  if (providerId) {
+    providerWasFromSavedCombo = true
+    state.setProvider(providerId, '')
+  }
 }
 
 // evaluated exactly once at first-active rows (resolveAttempted guards re-run)
@@ -850,6 +862,21 @@ async function loadEpisodesAndStream() {
     const isNotAvailable =
       err instanceof Error && err.name === 'NotAvailableError'
     if (isNotAvailable) {
+      if (!savedSourceFallbackDone && providerWasFromSavedCombo) {
+        savedSourceFallbackDone = true
+        toast.push("The source you watched last time isn't available right now — switching.", 'info', 5000)
+        const failed = state.combo.value.provider
+        const next = await pickSmartDefault(
+          rows.value.filter((r) => r.def.id !== failed),
+          CURATED_TIER,
+          { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
+        )
+        if (next) {
+          providerWasFromSavedCombo = false
+          state.setProvider(next, '') // provider watcher re-runs loadEpisodesAndStream
+          return
+        }
+      }
       sourceError.value = "This source isn't available yet"
     } else {
       sourceError.value = 'Stream unavailable'
@@ -905,6 +932,7 @@ watch(
 // ─── Provider selection helper ────────────────────────────────────────────────
 
 function onSelectProvider(id: string) {
+  providerWasFromSavedCombo = false
   state.setProvider(id, '')
   // loadEpisodesAndStream fires via the provider watcher above
 }
