@@ -104,11 +104,16 @@ func (f *fakeResultStore) SaveUserResult(_ context.Context, r *domain.UserGameRe
 	return nil
 }
 
-type fakeStats struct{ solves []string }
+type fakeStats struct {
+	solves []string
+	losses int
+}
 
 func (f *fakeStats) RecordDailyResult(_ context.Context, userID, date string, won bool, attempts int) error {
 	if won {
 		f.solves = append(f.solves, userID)
+	} else {
+		f.losses++
 	}
 	return nil
 }
@@ -187,4 +192,34 @@ func TestDaily_Resume_ReplaysStoredGuesses(t *testing.T) {
 		assert.Nil(t, state.Answer)
 	}
 	_ = p
+}
+
+func TestDaily_ResubmitAfterSolve_NoFreshSolve(t *testing.T) {
+	svc, _, st := dailySvcWithStores("2026-06-15")
+	ctx := context.Background()
+	p, _ := svc.GetOrCreateToday(ctx)
+
+	first, err := svc.Guess(ctx, "u1", p.AnimeID)
+	require.NoError(t, err)
+	assert.True(t, first.Solved)
+	assert.True(t, first.FreshSolve, "first solving guess must be FreshSolve")
+
+	again, err := svc.Guess(ctx, "u1", p.AnimeID)
+	require.NoError(t, err)
+	assert.True(t, again.Solved)
+	assert.False(t, again.FreshSolve, "re-submitting the correct answer must NOT be a fresh solve")
+	assert.Equal(t, []string{"u1"}, st.solves, "stats win recorded exactly once")
+}
+
+func TestDaily_DoubleGiveUp_RecordsLossOnce(t *testing.T) {
+	svc, _, st := dailySvcWithStores("2026-06-15")
+	ctx := context.Background()
+	_, _ = svc.GetOrCreateToday(ctx)
+
+	_, err := svc.GiveUp(ctx, "u1")
+	require.NoError(t, err)
+	_, err = svc.GiveUp(ctx, "u1")
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, st.losses, "a second give-up must not re-record the loss")
 }

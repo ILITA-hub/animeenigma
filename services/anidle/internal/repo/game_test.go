@@ -18,7 +18,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.Exec(`CREATE TABLE anidle_daily_puzzle (
 		date TEXT PRIMARY KEY, anime_id TEXT, answer_snapshot TEXT, created_at DATETIME)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE anidle_user_game_result (
-		id TEXT PRIMARY KEY, user_id TEXT, puzzle_date TEXT, mode TEXT, solved INTEGER,
+		id TEXT PRIMARY KEY, user_id TEXT, puzzle_date TEXT, mode TEXT, solved INTEGER, gave_up INTEGER,
 		attempts INTEGER, guesses TEXT, solved_at DATETIME, created_at DATETIME, updated_at DATETIME)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE anidle_user_stats (
 		user_id TEXT PRIMARY KEY, games_played INTEGER, games_won INTEGER, current_streak INTEGER,

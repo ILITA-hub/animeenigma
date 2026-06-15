@@ -24,6 +24,7 @@ type UserGameResult struct {
 	PuzzleDate string     `gorm:"size:10;index:idx_anidle_result_user_date_mode,unique,priority:2" json:"puzzle_date"`
 	Mode       string     `gorm:"size:16;index:idx_anidle_result_user_date_mode,unique,priority:3" json:"mode"` // "daily"
 	Solved     bool       `json:"solved"`
+	GaveUp     bool       `json:"gave_up"` // finished-but-lost sentinel (distinct from "still playing")
 	Attempts   int        `json:"attempts"`
 	Guesses    []string   `gorm:"serializer:json" json:"guesses"` // ordered anime_ids
 	SolvedAt   *time.Time `json:"solved_at,omitempty"`

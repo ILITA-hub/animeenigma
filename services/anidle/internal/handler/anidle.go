@@ -80,8 +80,9 @@ func (h *AnidleHandler) DailyGuess(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
-	// leaderboard hook on a fresh solve for a logged-in user
-	if out.Solved && uid != "" && username != "" && h.lb != nil {
+	// leaderboard hook on the FIRST solve only (FreshSolve) for a logged-in user;
+	// re-submitting the correct answer must not rewrite (worsen) the rank.
+	if out.FreshSolve && uid != "" && username != "" && h.lb != nil {
 		date := time.Now().UTC().Format("2006-01-02")
 		_ = h.lb.RecordSolve(r.Context(), date, username, out.Attempt, time.Now().UTC().Unix())
 	}

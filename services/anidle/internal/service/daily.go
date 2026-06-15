@@ -122,6 +122,10 @@ type GuessOutcome struct {
 	Solved  bool                   `json:"solved"`
 	Attempt int                    `json:"attempt"`
 	Answer  *VisibleAnime          `json:"answer,omitempty"`
+	// FreshSolve is true only on the guess that first solves the day — server
+	// internal (not serialized). The handler gates the one-time leaderboard
+	// write on it so re-submitting the correct answer can't worsen the rank.
+	FreshSolve bool `json:"-"`
 }
 
 // DailyState is the resume payload (GET /daily for logged-in).
@@ -171,13 +175,14 @@ func (s *DailyService) Guess(ctx context.Context, userID, animeID string) (*Gues
 	if res == nil {
 		res = &domain.UserGameResult{UserID: userID, PuzzleDate: puzzle.Date, Mode: modeDaily}
 	}
-	if !res.Solved { // ignore extra guesses after a solve
+	if !res.Solved && !res.GaveUp { // ignore guesses once the game is finished
 		res.Guesses = append(res.Guesses, animeID)
 		res.Attempts = len(res.Guesses)
 		if solved {
 			res.Solved = true
 			now := timeNow()
 			res.SolvedAt = &now
+			out.FreshSolve = true
 		}
 		if err := s.rs.SaveUserResult(ctx, res); err != nil {
 			return nil, err
@@ -210,7 +215,8 @@ func (s *DailyService) GiveUp(ctx context.Context, userID string) (*VisibleAnime
 		if res == nil {
 			res = &domain.UserGameResult{UserID: userID, PuzzleDate: puzzle.Date, Mode: modeDaily}
 		}
-		if !res.Solved {
+		if !res.Solved && !res.GaveUp { // finalize the loss exactly once
+			res.GaveUp = true
 			res.Attempts = len(res.Guesses)
 			if err := s.rs.SaveUserResult(ctx, res); err != nil {
 				return nil, err
