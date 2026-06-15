@@ -17,7 +17,9 @@ import (
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
 
 	"github.com/ILITA-hub/animeenigma/services/anidle/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/anidle/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/anidle/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/anidle/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/anidle/internal/transport"
 )
 
@@ -54,7 +56,16 @@ func main() {
 	if sqlDB, derr := db.DB.DB(); derr == nil {
 		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
 	}
-	// Plan 2b adds db.AutoMigrate(...) for game tables.
+	if err := db.AutoMigrate(
+		&domain.DailyPuzzle{},
+		&domain.UserGameResult{},
+		&domain.UserStats{},
+	); err != nil {
+		log.Fatalw("failed to migrate database", "error", err)
+	}
+
+	gameRepo := repo.NewGameRepo(db.DB)
+	_ = gameRepo // wired into services in Task 7
 
 	redisCache, err := cache.New(cfg.Redis)
 	if err != nil {
