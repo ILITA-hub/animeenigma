@@ -22,6 +22,9 @@ const SORT_VALUES: Sort[] = ['popularity', 'rating', 'year', 'updated', 'title']
 const STATUS_VALUES = ['', 'ongoing', 'released', 'announced'] as const
 type Status = (typeof STATUS_VALUES)[number]
 
+export type Season = '' | 'winter' | 'spring' | 'summer' | 'fall'
+const SEASON_VALUES: Season[] = ['', 'winter', 'spring', 'summer', 'fall']
+
 export function useBrowseFilters() {
   const route = useRoute()
   const router = useRouter()
@@ -30,6 +33,7 @@ export function useBrowseFilters() {
   const genres = ref<string[]>([])
   const kind = ref<Kind>('')
   const status = ref<Status>('')
+  const season = ref<Season>('')
   const yearFrom = ref<number | null>(null)
   const yearTo = ref<number | null>(null)
   const providers = ref<Provider[]>([])
@@ -58,6 +62,8 @@ export function useBrowseFilters() {
     kind.value = KIND_VALUES.includes(rawKind) ? rawKind : ''
     const rawStatus = (typeof qry.status === 'string' ? qry.status : '') as Status
     status.value = (STATUS_VALUES as readonly string[]).includes(rawStatus) ? rawStatus : ''
+    const rawSeason = (typeof qry.season === 'string' ? qry.season : '') as Season
+    season.value = (SEASON_VALUES as readonly string[]).includes(rawSeason) ? rawSeason : ''
     yearFrom.value = qry.year_from ? parseInt(qry.year_from as string, 10) || null : null
     yearTo.value = qry.year_to ? parseInt(qry.year_to as string, 10) || null : null
     const newProviders = ((qry.providers as string) || '')
@@ -84,6 +90,7 @@ export function useBrowseFilters() {
     next.genre = genres.value.length ? genres.value.join(',') : undefined
     next.kind = kind.value || undefined
     next.status = status.value || undefined
+    next.season = season.value || undefined
     next.year_from = yearFrom.value ? String(yearFrom.value) : undefined
     next.year_to = yearTo.value ? String(yearTo.value) : undefined
     next.providers = providers.value.length ? providers.value.join(',') : undefined
@@ -102,6 +109,7 @@ export function useBrowseFilters() {
     if (genres.value.length) p.genre = genres.value.join(',')
     if (kind.value) p.kind = kind.value
     if (status.value) p.status = status.value
+    if (season.value) p.season = season.value
     if (yearFrom.value) p.year_from = yearFrom.value
     if (yearTo.value) p.year_to = yearTo.value
     if (providers.value.length) p.providers = providers.value.join(',')
@@ -118,6 +126,7 @@ export function useBrowseFilters() {
     if (genres.value.length) n++
     if (kind.value) n++
     if (status.value) n++
+    if (season.value) n++
     if (yearFrom.value || yearTo.value) n++
     if (providers.value.length) n++
     if (scoreMin.value) n++
@@ -129,6 +138,7 @@ export function useBrowseFilters() {
     genres.value = []
     kind.value = ''
     status.value = ''
+    season.value = ''
     yearFrom.value = null
     yearTo.value = null
     providers.value = []
@@ -158,6 +168,7 @@ export function useBrowseFilters() {
     genres,
     kind,
     status,
+    season,
     yearFrom,
     yearTo,
     providers,
