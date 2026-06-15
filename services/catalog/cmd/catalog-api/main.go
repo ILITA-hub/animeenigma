@@ -28,6 +28,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/capability"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/scraperprovider"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
@@ -365,11 +366,17 @@ func main() {
 	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)
 	spotlightHandler.SetReroller(randomTailResolver)
 
+	// Ranked capability report (spec 2026-06-15 P4).
+	// ScraperHealth adapts catalogService.GetScraperHealth (which forwards to
+	// the scraper microservice at cfg.Scraper.APIURL) as a HealthSource.
+	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), redisCache, log)
+	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, internalGuessPoolHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
