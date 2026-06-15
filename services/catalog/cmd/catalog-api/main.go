@@ -89,6 +89,8 @@ func main() {
 		// Phase 17 (UX-33) — admin-curated editorial collections.
 		&domain.Collection{},
 		&domain.CollectionItem{},
+		// Scraper provider config + capability traits (spec 2026-06-15).
+		&domain.ScraperProvider{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
