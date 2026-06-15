@@ -96,8 +96,10 @@ func (s *GuessPoolService) BuildPool(ctx context.Context) ([]GuessPoolEntry, err
 			continue
 		}
 		a.Franchise = fr
-		if serr := s.repo.SetFranchise(ctx, a.ID, fr); serr != nil && s.log != nil {
-			s.log.Warnw("persist franchise failed", "anime_id", a.ID, "error", serr)
+		if serr := s.repo.SetFranchise(ctx, a.ID, fr); serr != nil {
+			if s.log != nil {
+				s.log.Warnw("persist franchise failed", "anime_id", a.ID, "error", serr)
+			}
 		}
 	}
 
@@ -122,6 +124,9 @@ func toPoolEntry(a *domain.Anime) GuessPoolEntry {
 		Score:     a.Score,
 		Status:    string(a.Status),
 		Rating:    a.Rating,
+		Genres:    make([]PoolTaxon, 0),
+		Studios:   make([]PoolTaxon, 0),
+		Tags:      make([]PoolTaxon, 0),
 	}
 	for _, g := range a.Genres {
 		name := g.NameRU

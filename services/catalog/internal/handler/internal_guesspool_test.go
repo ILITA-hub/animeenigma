@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +17,14 @@ type fakePoolBuilder struct {
 
 func (f *fakePoolBuilder) BuildPool(_ context.Context) ([]service.GuessPoolEntry, error) {
 	return f.entries, nil
+}
+
+type failPoolBuilder struct {
+	err error
+}
+
+func (f *failPoolBuilder) BuildPool(_ context.Context) ([]service.GuessPoolEntry, error) {
+	return nil, f.err
 }
 
 func TestInternalGuessPool_GetPool(t *testing.T) {
@@ -40,5 +49,17 @@ func TestInternalGuessPool_GetPool(t *testing.T) {
 	}
 	if !resp.Success || len(resp.Data) != 1 || resp.Data[0].ID != "frieren" {
 		t.Fatalf("unexpected body: %+v", resp)
+	}
+}
+
+func TestInternalGuessPool_GetPool_ServiceError(t *testing.T) {
+	h := NewInternalGuessPoolHandler(&failPoolBuilder{err: errors.New("db down")}, nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/internal/guessgame/pool", nil)
+	h.GetPool(rec, req)
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("expected non-200 on service error, got %d", rec.Code)
 	}
 }
