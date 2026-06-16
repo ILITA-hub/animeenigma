@@ -218,6 +218,10 @@
         :server="state.combo.value.server"
         :servers="resolvedServers"
         :teams="teams"
+        :cap-map="capMap"
+        :ranked-ids="orderedProviderIds"
+        :hacker-mode="state.hackerMode.value"
+        :playback-error="Boolean(sourceError)"
         @update:audio="state.setAudio"
         @update:lang="state.setLang"
         @update:team="state.setTeam"
@@ -337,6 +341,8 @@ import { useWatchTracking } from '@/composables/unifiedPlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
 import { providerById, CURATED_TIER } from './providerRegistry'
 import { pickSmartDefault } from '@/composables/unifiedPlayer/smartDefault'
+import { useCapabilities } from '@/composables/unifiedPlayer/useCapabilities'
+import { rankedProviderIds } from '@/composables/unifiedPlayer/rankedProviderIds'
 import { pickEpisodeForProvider } from '@/composables/unifiedPlayer/episodeSelection'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
@@ -393,6 +399,16 @@ const filter = computed(() => ({
 }))
 
 const { rows, start } = useProviderHealth(filter)
+
+// Capability report → server ranking + sub/dub/quality/team labels for the
+// Source panel. orderedProviderIds merges the capability ranking with the
+// registry rows (ae/raw/18anime fall back to CURATED_TIER). Degrades to
+// CURATED_TIER order when /capabilities is absent.
+const animeIdRef = computed(() => props.animeId)
+const { capMap, rankedIds: capRankedIds } = useCapabilities(animeIdRef)
+const orderedProviderIds = computed(() =>
+  rankedProviderIds(rows.value, capRankedIds.value, CURATED_TIER),
+)
 
 // ─── Provider defaults ────────────────────────────────────────────────────────
 
@@ -503,7 +519,7 @@ watch(
   () => {
     if (state.combo.value.provider) return
     if (!preferenceSettled.value) return // let the saved-combo restore go first
-    void pickSmartDefault(rows.value, CURATED_TIER, {
+    void pickSmartDefault(rows.value, orderedProviderIds.value, {
       needsCheck: AE_NEEDS_CHECK,
       isAvailable: isProviderAvailable,
     }).then((id) => {
@@ -899,7 +915,7 @@ async function loadEpisodesAndStream() {
         const failed = state.combo.value.provider
         const next = await pickSmartDefault(
           rows.value.filter((r) => r.def.id !== failed),
-          CURATED_TIER,
+          orderedProviderIds.value,
           { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
         )
         // Hacker mode: DON'T auto-switch. Record what the resolver would have
