@@ -294,6 +294,8 @@ func NewRouterWithCleanup(
 		// is covered by the existing /admin/* admin-gated group below.
 		r.HandleFunc("/collections", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/collections/*", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/characters", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/characters/*", proxyHandler.ProxyToCatalog)
 
 		// Workstream hero-spotlight, v1.0 Phase 1 (HSB-BE-06) — hero spotlight
 		// aggregator. Public surface (anonymous allowed). Phase 3 adds 3
