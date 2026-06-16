@@ -80,6 +80,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/characters/:id',
+    name: 'character',
+    component: () => import('@/views/Character.vue'),
+    meta: { titleKey: 'characters.detailsTitle' }
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/views/ProfileSetup.vue'),
