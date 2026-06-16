@@ -1,5 +1,5 @@
 {
-  "last_id": 423,
+  "last_id": 477,
   "issues": [
     {
       "id": "AUTO-001",
@@ -498,7 +498,7 @@
         {
           "action": "docker network connect --alias catalog --alias animeenigma-catalog animeenigma-network animeenigma-catalog",
           "result": "success",
-          "details": "Re-registered both DNS aliases, exit 0, < 1s network blip"
+          "details": "Re-registered both DNS aliases, exit 0, \u003c 1s network blip"
         },
         {
           "action": "curl http://localhost:8000/status/health",
@@ -698,7 +698,7 @@
           "details": "Image built successfully as animeenigma-web-img:latest with correct /api base URL baked into Vite bundle"
         },
         {
-          "action": "docker stop animeenigma-web && docker rm animeenigma-web",
+          "action": "docker stop animeenigma-web \u0026\u0026 docker rm animeenigma-web",
           "result": "success",
           "details": "Old broken container removed"
         },
@@ -713,7 +713,7 @@
           "details": "All 33 JS asset files return 0 matches — no localhost:8000 hardcoded URLs"
         },
         {
-          "action": "curl http://localhost:3003/ && curl http://localhost:3003/health",
+          "action": "curl http://localhost:3003/ \u0026\u0026 curl http://localhost:3003/health",
           "result": "success",
           "details": "Both return HTTP 200 — nginx serving correctly"
         }
@@ -1553,7 +1553,7 @@
         {
           "action": "Edit frontend/web/src/components/LastUpdates.vue",
           "result": "success",
-          "details": "Added `SelectedEntry` interface + `selectedEntry` ref. Replaced the entry `<div>` with a `<button>` wrapping the badge + clipped paragraph, with `@click=\"selectedEntry = {...}\"`, `cursor-pointer`, `group` class, focus styles, and `group-hover:text-white transition-colors` on the message <p>. Added a modal at template root guarded by `v-if=\"selectedEntry\"`: `fixed inset-0 z-50 bg-black/60 backdrop-blur-sm` backdrop, centered glass-card panel showing the type badge, formatted date, full untruncated message with `whitespace-pre-wrap break-words select-text`, and an ✕ close button (aria-label `common.close`). Esc closes via window-level `keydown` listener (mounted/unmounted lifecycle) and `@click.self` on backdrop closes."
+          "details": "Added `SelectedEntry` interface + `selectedEntry` ref. Replaced the entry `\u003cdiv\u003e` with a `\u003cbutton\u003e` wrapping the badge + clipped paragraph, with `@click=\"selectedEntry = {...}\"`, `cursor-pointer`, `group` class, focus styles, and `group-hover:text-white transition-colors` on the message \u003cp\u003e. Added a modal at template root guarded by `v-if=\"selectedEntry\"`: `fixed inset-0 z-50 bg-black/60 backdrop-blur-sm` backdrop, centered glass-card panel showing the type badge, formatted date, full untruncated message with `whitespace-pre-wrap break-words select-text`, and an ✕ close button (aria-label `common.close`). Esc closes via window-level `keydown` listener (mounted/unmounted lifecycle) and `@click.self` on backdrop closes."
         },
         {
           "action": "bunx vue-tsc --noEmit (in frontend/web)",
@@ -2075,7 +2075,7 @@
         {
           "action": "Edited services/scraper/internal/health/probe.go",
           "result": "success",
-          "details": "Added isHLSAllowlistedHost (mirror of libs/videoutils.isHLSDomainAllowed), buildHLSProxyURL, WithProxyBaseURL option, proxyBaseURL field, and SCRAPER_PROBE_PROXY_BASE_URL env override. fetchSegment now detects HLS-allowlisted hosts and rewrites the GET to {base}/api/v1/hls-proxy?url=<encoded>&referer=<encoded>; the upstream Referer is passed via query, not the request header, to avoid double-Referer."
+          "details": "Added isHLSAllowlistedHost (mirror of libs/videoutils.isHLSDomainAllowed), buildHLSProxyURL, WithProxyBaseURL option, proxyBaseURL field, and SCRAPER_PROBE_PROXY_BASE_URL env override. fetchSegment now detects HLS-allowlisted hosts and rewrites the GET to {base}/api/v1/hls-proxy?url=\u003cencoded\u003e\u0026referer=\u003cencoded\u003e; the upstream Referer is passed via query, not the request header, to avoid double-Referer."
         },
         {
           "action": "Added TestProbe_FetchSegmentRoutesAllowlistedHostsThroughProxy + TestProbe_FetchSegmentBypassesProxyForNonAllowlistedHost",
@@ -2093,7 +2093,7 @@
           "details": "provider-health-stream-segment-down: `for: 15m` → `for: 4h`; expression changed from `provider_health_up{stage=\"stream_segment\"}` to `max by (provider) (provider_health_up{stage=~\"stream|stream_segment\"})` — alert now fires ONLY when BOTH stream AND stream_segment are DOWN for the same provider. Summary + description updated accordingly. Grafana's provisioning provider picks up the file change on its next scan (no Grafana restart — forbidden by safety rules)."
         },
         {
-          "action": "DOCKER_BUILDKIT=0 docker compose -f docker/docker-compose.yml build scraper && docker stop animeenigma-scraper && docker rm -f animeenigma-scraper && docker compose up -d --no-deps scraper",
+          "action": "DOCKER_BUILDKIT=0 docker compose -f docker/docker-compose.yml build scraper \u0026\u0026 docker stop animeenigma-scraper \u0026\u0026 docker rm -f animeenigma-scraper \u0026\u0026 docker compose up -d --no-deps scraper",
           "result": "success",
           "details": "Build succeeded after falling back to legacy builder (buildkit metadata fetch was failing under heavy host load). Container animeenigma-scraper is Up and healthy; /metrics shows provider_probe_last_tick_timestamp advancing (animefever@1779362634, nineanime@1779362632); /health returns {success:true,status:ok}."
         },
@@ -2316,7 +2316,7 @@
         {
           "action": "Edit libs/idmapping/client.go to add tcp4 DialContext",
           "result": "success",
-          "details": "Added context+net imports; wrapped http.Client with &http.Transport{DialContext: forces tcp4} in NewClient(). Single-file change, 14 insertions / 2 deletions."
+          "details": "Added context+net imports; wrapped http.Client with \u0026http.Transport{DialContext: forces tcp4} in NewClient(). Single-file change, 14 insertions / 2 deletions."
         },
         {
           "action": "Rebuild scraper image (docker build -f services/scraper/Dockerfile -t docker-scraper:latest .)",
@@ -2324,7 +2324,7 @@
           "details": "Go build inside container compiled cleanly with the new imports; image tagged docker-scraper:latest. (Note: `docker compose` wrapper was broken in this Docker v29.2.1 install — flag parsing rejected -f; bypassed by invoking /usr/libexec/docker/cli-plugins/docker-compose directly and using plain `docker build` for the build step.)"
         },
         {
-          "action": "Recreate scraper container via docker-compose plugin (stop -> rm -f -> up -d --no-deps)",
+          "action": "Recreate scraper container via docker-compose plugin (stop -\u003e rm -f -\u003e up -d --no-deps)",
           "result": "success",
           "details": "animeenigma-scraper came up healthy in ~15s. /health returned {success:true,data:{status:ok}}."
         },
@@ -2370,7 +2370,7 @@
           "details": "rc.HTTPClient.Jar = jar wired in NewBaseHTTPClient; Do() routes through retryablehttp.Client which honors the jar — cookies from prior GET propagate to POST automatically."
         },
         {
-          "action": "Manual auth-flow reproduction via curl: GET /watch/<slug>?ep=135532 → extract PHPSESSID + ctk → POST /ajax/anime/load_episodes_v2?s=tserver with both",
+          "action": "Manual auth-flow reproduction via curl: GET /watch/\u003cslug\u003e?ep=135532 → extract PHPSESSID + ctk → POST /ajax/anime/load_episodes_v2?s=tserver with both",
           "result": "success",
           "details": "Upstream returned status:true with valid am.vidstream.vip iframe URL. Confirmed AJAX auth + cookie + ctk wiring is functionally correct."
         },
@@ -4064,7 +4064,7 @@
       "telegram_message_id": 2490,
       "actions": [
         {
-          "action": "Edit OurEnglishPlayer.vue — 3-part WT-STATE-04 fix (fromRoomSync param + !fromRoomSync guard; watch(() => props.initialEpisode) reacting to room broadcasts; direct selectEpisode(startEp, true) when joining a room with initialEpisode set)",
+          "action": "Edit OurEnglishPlayer.vue — 3-part WT-STATE-04 fix (fromRoomSync param + !fromRoomSync guard; watch(() =\u003e props.initialEpisode) reacting to room broadcasts; direct selectEpisode(startEp, true) when joining a room with initialEpisode set)",
           "result": "success",
           "details": "Applied exactly per approved plan; git diff = 25 insertions, 5 deletions, single file"
         },
@@ -5579,7 +5579,7 @@
           "details": "All 3 packages ok (spotlight, cards, client). Needed serialization to dodge a transient host fork/exec EAGAIN on the auto-downloaded go1.24.0 toolchain — not a code issue (binary execs fine directly)."
         },
         {
-          "action": "Rebuild + recreate catalog (docker-compose -f docker/docker-compose.yml build catalog && up -d --no-deps catalog)",
+          "action": "Rebuild + recreate catalog (docker-compose -f docker/docker-compose.yml build catalog \u0026\u0026 up -d --no-deps catalog)",
           "result": "success",
           "details": "make redeploy-catalog failed: host lacks the docker compose v2 plugin (only standalone docker-compose present); BuildKit metadata fetch also failed, so built with DOCKER_BUILDKIT=0 classic builder. Container recreated, Up, no startup errors."
         },
@@ -5610,7 +5610,7 @@
         {
           "action": "Edit frontend/web/src/views/Home.vue — added `searchHint` computed using `navigator.platform` to return ⌘K on Mac/iOS and Ctrl K on Windows/Linux",
           "result": "success",
-          "details": "Added `computed` import, added `const searchHint = computed(() => /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K')`, updated template binding"
+          "details": "Added `computed` import, added `const searchHint = computed(() =\u003e /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K')`, updated template binding"
         },
         {
           "action": "bun lint",
@@ -6232,7 +6232,7 @@
         {
           "action": "Edit services/catalog/internal/handler/catalog.go parseFilters()",
           "result": "success",
-          "details": "Replaced direct `filters.GenreIDs = genres` with a loop that splits each query param value on comma, trimming whitespace and empty strings. Handles both ?genre=id1,id2 (comma-joined) and ?genre=id1&genre=id2 (multi-param) forms."
+          "details": "Replaced direct `filters.GenreIDs = genres` with a loop that splits each query param value on comma, trimming whitespace and empty strings. Handles both ?genre=id1,id2 (comma-joined) and ?genre=id1\u0026genre=id2 (multi-param) forms."
         },
         {
           "action": "docker-compose build + restart catalog",
@@ -6394,7 +6394,7 @@
           "result": "Root cause confirmed: numeric episode ID + missing title"
         },
         {
-          "action": "Manual verification: GET /scraper/servers?mal_id=21&title=One+Piece&episode=one-piece-episode-1",
+          "action": "Manual verification: GET /scraper/servers?mal_id=21\u0026title=One+Piece\u0026episode=one-piece-episode-1",
           "result": "Returns 2 gogoanime megaplay servers — confirms fix approach"
         },
         {
@@ -6477,15 +6477,17 @@
     {
       "id": "AUTO-400",
       "created_at": "2026-06-08T04:38:09Z",
+      "resolved_at": "2026-06-11T06:07:08Z",
       "source": "grafana_alert",
       "category": "provider_degradation",
       "priority": "P2",
-      "status": "degraded_with_compensation",
+      "status": "resolved",
       "title": "gogoanime megaplay extraction fails at 03:00 UTC — failover compensating, no user outage",
       "reporter": "grafana",
       "telegram_message_id": 2942,
       "affected_service": "gogoanime",
-      "actions": null
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
     },
     {
       "id": "AUTO-401",
@@ -6777,7 +6779,7 @@
         {
           "action": "curl -X POST http://localhost:8085/api/v1/jobs/shikimori-sync",
           "result": "success",
-          "details": "Job completed in <1s: ongoing phase refreshed 1, released phase refreshed 1, total_refreshed=2 total_failed=0. scheduler_job_last_success_timestamp{exported_job=\"shikimori_sync\"} now emitted. Alert expression evaluates to ~25s staleness — well below 90000s threshold."
+          "details": "Job completed in \u003c1s: ongoing phase refreshed 1, released phase refreshed 1, total_refreshed=2 total_failed=0. scheduler_job_last_success_timestamp{exported_job=\"shikimori_sync\"} now emitted. Alert expression evaluates to ~25s staleness — well below 90000s threshold."
         }
       ],
       "resolution": "Alert resolved (webhook notification from Grafana)"
@@ -6800,11 +6802,12 @@
       "source": "admin_request",
       "category": "feature",
       "priority": "P1",
-      "status": "pending_approval",
+      "status": "escalated",
       "title": "Feedback status notification loop for users",
       "reporter": "@tNeymik",
       "telegram_message_id": 2986,
-      "actions": null
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour"
     },
     {
       "id": "AUTO-418",
@@ -6857,11 +6860,12 @@
       "source": "error_report",
       "category": "feature",
       "priority": "P2",
-      "status": "pending_deploy",
+      "status": "escalated",
       "title": "AUTO-417 feedback loop: implemented, not deployed",
       "reporter": "player_service",
       "telegram_message_id": 2992,
-      "actions": null
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour"
     },
     {
       "id": "AUTO-421",
@@ -6944,7 +6948,7 @@
         {
           "action": "Edit OurEnglishPlayer.vue",
           "result": "success",
-          "details": "Imported OtherSubsPanel + SubtitleTrack type; added otherSubsOpen ref, extraSubChoices merge into availableSubChoices, onOtherSubSelected handler (injects synthetic SubChoice w/ explicit format, pins selectedSubKey), cleared injected subs on episode switch; added 'Other subs' toolbar button + wired <OtherSubsPanel> with :anime-id/:episode/:current-track-url/@select-track."
+          "details": "Imported OtherSubsPanel + SubtitleTrack type; added otherSubsOpen ref, extraSubChoices merge into availableSubChoices, onOtherSubSelected handler (injects synthetic SubChoice w/ explicit format, pins selectedSubKey), cleared injected subs on episode switch; added 'Other subs' toolbar button + wired \u003cOtherSubsPanel\u003e with :anime-id/:episode/:current-track-url/@select-track."
         },
         {
           "action": "Update OurEnglishPlayer.spec.ts",
@@ -6964,10 +6968,1204 @@
         {
           "action": "git commit + push to main via maintenance worktree (path-scoped, rebased over concurrent push, changelog conflict resolved keeping both entries)",
           "result": "success",
-          "details": "09de86d7..8391bc62 main -> main"
+          "details": "09de86d7..8391bc62 main -\u003e main"
         }
       ],
       "resolution": "Fix applied by auto(risk=medium,bug)"
+    },
+    {
+      "id": "AUTO-424",
+      "created_at": "2026-06-10T12:15:03Z",
+      "resolved_at": "2026-06-10T12:17:37Z",
+      "source": "grafana_alert",
+      "category": "stability",
+      "priority": "P0",
+      "status": "resolved",
+      "title": "Scheduler Sync Stale — post-redeploy metric gap",
+      "reporter": "grafana",
+      "telegram_message_id": 3007,
+      "affected_service": "scheduler",
+      "actions": [
+        {
+          "action": "POST http://localhost:8085/api/v1/jobs/shikimori-sync",
+          "result": "success",
+          "details": "Job triggered at 12:14:09, completed at 12:14:17. scheduler_job_last_success_timestamp{job='shikimori_sync'} now emitted. Alert will clear on next Grafana evaluation."
+        }
+      ],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-425",
+      "created_at": "2026-06-10T16:00:22Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "User-facing feedback history page",
+      "reporter": "player_service",
+      "telegram_message_id": 3010,
+      "actions": [],
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-10T15-59-40_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-426",
+      "created_at": "2026-06-10T16:25:59Z",
+      "source": "error_report",
+      "category": "smoke_test",
+      "priority": "P2",
+      "status": "not_relevant",
+      "title": "Smoke test probe — My Reports page feedback submission",
+      "reporter": "player_service",
+      "telegram_message_id": 3012,
+      "actions": [
+        {
+          "action": "bin/feedback-status 2026-06-10T16-25-32_ui_audit_bot_feedback not_relevant maintenance_bot",
+          "result": "success",
+          "details": "Report marked not_relevant — smoke probe, not a real submission."
+        }
+      ],
+      "feedback_id": "2026-06-10T16-25-32_ui_audit_bot_feedback"
+    },
+    {
+      "id": "AUTO-427",
+      "created_at": "2026-06-10T22:14:35Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Feature request: expand hentai content catalog",
+      "reporter": "player_service",
+      "telegram_message_id": 3014,
+      "actions": [
+        {
+          "action": "bin/feedback-status 2026-06-10T22-13-57_Oronemu_feedback ai_done maintenance-bot",
+          "result": "success",
+          "details": "Feedback triaged and status set to ai_done — awaiting admin decision on scope."
+        }
+      ],
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-10T22-13-57_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-428",
+      "created_at": "2026-06-10T22:25:39Z",
+      "source": "error_report",
+      "category": "regression",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "OP/ED tab missing from navbar",
+      "reporter": "player_service",
+      "telegram_message_id": 3016,
+      "actions": [
+        {
+          "action": "Edit frontend/web/src/components/layout/Navbar.vue — added { to: '/themes', label: 'nav.themes' } back to navLinks array",
+          "result": "success",
+          "details": "Single-line insertion at line 375"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Build passed: i18n-lint OK, design-system lint OK, type-check OK, Docker image built in 16.9s, container restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 12 services healthy (gateway, auth, catalog, streaming, player, rooms, scheduler, scraper, library, notifications, watch-together, gacha)"
+        },
+        {
+          "action": "Update changelog.json with 2026-06-11 entry",
+          "result": "success",
+          "details": "Prepended new date group with fix entry"
+        },
+        {
+          "action": "git commit + push to feat/ds-primitives-lucide",
+          "result": "success",
+          "details": "Commits a3934feb (fix) and 179c1d4f (changelog) pushed to origin"
+        }
+      ],
+      "feedback_id": "2026-06-10T22-20-16_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-429",
+      "created_at": "2026-06-10T22:42:35Z",
+      "source": "error_report",
+      "category": "regression",
+      "priority": "P2",
+      "status": "ai_fixed",
+      "title": "Страница «Мои обращения» пропала из футера",
+      "reporter": "player_service",
+      "telegram_message_id": 3018,
+      "actions": [
+        {
+          "action": "Created frontend/web/src/views/MyFeedback.vue",
+          "result": "success",
+          "details": "Full user-facing feedback history view ported from origin/main"
+        },
+        {
+          "action": "Added /my-feedback route to router/index.ts",
+          "result": "success",
+          "details": "requiresAuth: true, lazy-loaded component"
+        },
+        {
+          "action": "Restored footer link in App.vue",
+          "result": "success",
+          "details": "v-if=authStore.isAuthenticated + Inbox icon import"
+        },
+        {
+          "action": "Restored goToMyFeedback + Inbox button in FeedbackButton.vue",
+          "result": "success",
+          "details": "Modal footer now has 'Мои обращения' button"
+        },
+        {
+          "action": "Added MyFeedbackItem/MyFeedbackResponse/StatusTransition to types/feedback.ts",
+          "result": "success"
+        },
+        {
+          "action": "Added listMyReports to userApi in api/client.ts",
+          "result": "success"
+        },
+        {
+          "action": "Added dayStartISO/dayEndISO to utils/time.ts",
+          "result": "success"
+        },
+        {
+          "action": "Added 'date' to Input.vue type prop union",
+          "result": "success",
+          "details": "Blocked type-check; matched origin/main definition"
+        },
+        {
+          "action": "Added myFeedback namespace + footer.feedback.viewMine to en/ru/ja locales",
+          "result": "success"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Build passed, container restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "12/12 services healthy"
+        },
+        {
+          "action": "git commit + git push",
+          "result": "success",
+          "details": "0d6c8451 → feat/ds-primitives-lucide"
+        },
+        {
+          "action": "bin/feedback-status ai_done",
+          "result": "success",
+          "details": "Report 2026-06-10T22-30-53_Oronemu_feedback marked ai_done"
+        }
+      ],
+      "feedback_id": "2026-06-10T22-30-53_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-430",
+      "created_at": "2026-06-10T22:46:07Z",
+      "source": "error_report",
+      "category": "regression",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "Footer 'Мои обращения' link missing after branch deploy gap",
+      "reporter": "player_service",
+      "telegram_message_id": 3020,
+      "actions": [
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Built docker-web:latest from HEAD (includes 0d6c8451), restarted animeenigma-web. Container is Up healthy at StartedAt=2026-06-10T22:45:28Z, serving HTTP 200 on :3003."
+        },
+        {
+          "action": "bin/feedback-status 2026-06-10T22-40-19_Oronemu_feedback ai_done maintenance-bot",
+          "result": "success",
+          "details": "Feedback status set to ai_done."
+        }
+      ],
+      "feedback_id": "2026-06-10T22-40-19_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-431",
+      "created_at": "2026-06-10T22:47:12Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Announcement banner for upcoming major feature",
+      "reporter": "player_service",
+      "telegram_message_id": 3022,
+      "actions": [],
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-10T22-44-50_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-432",
+      "created_at": "2026-06-10T22:54:44Z",
+      "source": "error_report",
+      "category": "security",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Unverified identity claim — fabricated VORTEX project / ad banner",
+      "reporter": "player_service",
+      "telegram_message_id": 3024,
+      "actions": [
+        {
+          "action": "bin/feedback-status 2026-06-10T22-53-09_Oronemu_feedback not_relevant maintenance_bot",
+          "result": "success",
+          "details": "Feedback marked not_relevant — fabricated project reference, unverifiable identity claim, no actionable bug present."
+        }
+      ],
+      "feedback_id": "2026-06-10T22-53-09_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-433",
+      "created_at": "2026-06-10T23:13:04Z",
+      "source": "error_report",
+      "category": "security",
+      "priority": "P1",
+      "status": "escalated",
+      "title": "Admin access request from unverified identity + deployed navbar missing /themes tab",
+      "reporter": "player_service",
+      "telegram_message_id": 3026,
+      "actions": [],
+      "feedback_id": "2026-06-10T23-08-44_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-434",
+      "created_at": "2026-06-11T00:10:06Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P1",
+      "status": "escalated",
+      "title": "Feature flags — per-user UI rollout mechanism",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3028,
+      "actions": [],
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-11T00-09-19_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-435",
+      "created_at": "2026-06-11T04:08:52Z",
+      "resolved_at": "2026-06-11T05:00:39Z",
+      "source": "grafana_alert",
+      "category": "stability",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Activity Register: scraper/stream volume anomaly — organic traffic spike",
+      "reporter": "grafana",
+      "telegram_message_id": 3034,
+      "affected_service": "unknown",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-436",
+      "created_at": "2026-06-11T05:54:55Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Footer missing 'Мои обращения' link",
+      "reporter": "player_service",
+      "telegram_message_id": 3038,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-11T05-53-59_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-437",
+      "created_at": "2026-06-11T13:13:19Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Search query normalization — re zero → Re:Zero",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3046,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-11T13-10-27_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-438",
+      "created_at": "2026-06-11T15:48:45Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P3",
+      "status": "escalated",
+      "title": "OP/ED navbar tab reported missing by Oronemu",
+      "reporter": "player_service",
+      "telegram_message_id": 3048,
+      "actions": [],
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-11T15-47-55_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-439",
+      "created_at": "2026-06-11T15:52:07Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Bulk list management — clear all / multi-select delete",
+      "reporter": "player_service",
+      "telegram_message_id": 3050,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-11T15-51-16_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-440",
+      "created_at": "2026-06-11T17:36:06Z",
+      "resolved_at": "2026-06-11T20:06:31Z",
+      "source": "grafana_alert",
+      "category": "parser_failure",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "18anime search broken — DLE POST endpoint removed by upstream",
+      "reporter": "grafana",
+      "telegram_message_id": 3052,
+      "affected_service": "anime18",
+      "actions": [
+        {
+          "action": "Edit services/scraper/internal/providers/eighteenanime/provider.go — changed searchHTML() from DLE POST to GET /?s=",
+          "result": "success",
+          "details": "Replaced http.MethodPost + form body with http.MethodGet + url.Values{\"s\": {query}}; removed Content-Type header"
+        },
+        {
+          "action": "Edit services/scraper/internal/providers/eighteenanime/provider_test.go — updated fixture server route from /index.php to /?s=\u003cq\u003e",
+          "result": "success",
+          "details": "Changed case from strings.Contains(path, \"/index.php\") to r.URL.Path == \"/\" \u0026\u0026 r.URL.Query().Get(\"s\") != \"\""
+        },
+        {
+          "action": "go test -count=1 ./internal/providers/eighteenanime/...",
+          "result": "success",
+          "details": "PASS in 0.564s — all 6 tests passed"
+        },
+        {
+          "action": "make redeploy-scraper",
+          "result": "success",
+          "details": "Image rebuilt, container recreated, Docker-network alias verified OK"
+        },
+        {
+          "action": "Live health probe via GET /anime18/episodes?title=boku+no+pico",
+          "result": "success",
+          "details": "episodes=1 returned; health admin shows search.up=true, last_ok=2026-06-11T17:35:17Z"
+        },
+        {
+          "action": "git commit + push (main)",
+          "result": "success",
+          "details": "Commit 8b3683a6 pushed to main — fix(scraper): restore 18anime search — DLE POST → GET /?s= migration"
+        }
+      ],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-441",
+      "created_at": "2026-06-11T20:33:41Z",
+      "resolved_at": "2026-06-11T20:36:30Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "AnimeFever CDN (static-cdn-ca1.mofl.pro) Cloudflare 403 block",
+      "reporter": "grafana",
+      "telegram_message_id": 3054,
+      "affected_service": "streaming",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-442",
+      "created_at": "2026-06-11T21:11:22Z",
+      "resolved_at": "2026-06-12T08:37:37Z",
+      "source": "grafana_alert",
+      "category": "parser_failure",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "18anime parser — Cloudflare 525 TLS fingerprint block",
+      "reporter": "grafana",
+      "telegram_message_id": 3057,
+      "affected_service": "anime18",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-443",
+      "created_at": "2026-06-12T01:38:00Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P1",
+      "status": "escalated",
+      "title": "Admin task bundle: spotlight arrows / a11y / hide-activity / card UI / contact list",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3059,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-12T01-34-43_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-444",
+      "created_at": "2026-06-12T01:51:49Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P1",
+      "status": "escalated",
+      "title": "Rewatch UI not wired — backend complete, frontend missing",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3061,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-12T01-45-29_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-445",
+      "created_at": "2026-06-12T02:03:07Z",
+      "source": "admin_request",
+      "category": "bug",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "Scrub preview: stale frame shown at all positions",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3062,
+      "actions": [
+        {
+          "action": "Add frameStale ref to ScrubPreview.vue; set true in doSeek (HLS only), cleared in onFrame",
+          "result": "success",
+          "details": "ScrubPreview.vue: +const frameStale = ref(false); doSeek sets frameStale=true for HLS before seeking; onFrame clears it when a fresh frame decodes"
+        },
+        {
+          "action": "Update template: v-show=\"frameReady \u0026\u0026 !frameStale\"; v-if=\"(!frameReady || frameStale) \u0026\u0026 stillUrl\"",
+          "result": "success",
+          "details": "Still image now shows while HLS segment is in-flight; video shows only when a fresh frame is ready at the seeked position"
+        },
+        {
+          "action": "Reduce SEEK_THROTTLE_MS from 250 to 150",
+          "result": "success",
+          "details": "Shaves 100ms off MP4 seek latency where byte-range seeking is fast"
+        },
+        {
+          "action": "Fix pre-existing EpisodesPanel.vue lint error (literal NBSP →  )",
+          "result": "success",
+          "details": "eslint no-irregular-whitespace was blocking lint gate"
+        },
+        {
+          "action": "bun lint",
+          "result": "success",
+          "details": "0 errors, 19 pre-existing warnings (unchanged)"
+        },
+        {
+          "action": "bash frontend/web/scripts/design-system-lint.sh",
+          "result": "success",
+          "details": "PASS — 0 violations"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Built and restarted animeenigma-web"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 13 services healthy"
+        },
+        {
+          "action": "Update changelog.json + git commit baa0035e + git push main",
+          "result": "success",
+          "details": "Pushed to origin/main"
+        }
+      ],
+      "feedback_id": "2026-06-12T01-51-50_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-446",
+      "created_at": "2026-06-12T03:07:36Z",
+      "resolved_at": "2026-06-13T04:01:34Z",
+      "source": "grafana_alert",
+      "category": "parser_failure",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "gogoanime.me.uk megaplay→vidwish.live player migration breaks EN stream extraction",
+      "reporter": "grafana",
+      "telegram_message_id": 3065,
+      "affected_service": "gogoanime",
+      "actions": [
+        {
+          "action": "Edit megaplay.go (3 changes)",
+          "result": "success",
+          "details": "(1) added vidwish.live to megaplaySubdomainHosts; (2) broadened megaplayNestedIframeRegex to (?:megaplay\\.buzz|vidwish\\.live); (3) derive Referer per-request from resolved player origin (pu.Scheme+\"://\"+pu.Host+\"/\") for the player-page fetch, getSources XHR, and returned stream headers. For the megaplay.buzz path the derived value is byte-identical to the old megaplayReferer constant — zero regression."
+        },
+        {
+          "action": "go test -count=1 ./internal/embeds/... -run TestMegaplay",
+          "result": "success",
+          "details": "All pass incl. new TestMegaplay_Extract_VidwishWrapper, which proves the vidwish wrapper resolves a master.m3u8 and derives Referer=https://vidwish.live/ (not hardcoded megaplay.buzz). Added vidwish Matches cases (subdomain + impostor rejects). go vet clean."
+        },
+        {
+          "action": "make redeploy-scraper",
+          "result": "success",
+          "details": "Image rebuilt, container recreated, scraper /health=200, Docker-net short alias 'scraper' resolves (alias-check OK)."
+        },
+        {
+          "action": "Verify metrics + provider health",
+          "result": "success",
+          "details": "parser_zero_match_total{...megaplay...} has NO series present — wrapper-iframe selector not incrementing (criterion #3 satisfied). allanime/miruro/nineanime all up; EN player healthy via failover."
+        },
+        {
+          "action": "git commit + push (path-scoped)",
+          "result": "success",
+          "details": "66321eef on main, pushed main-\u003emain. Files: megaplay.go, megaplay_test.go, changelog.json (Russian Trump-mode entry). Standard co-authors."
+        },
+        {
+          "action": "Live gogoanime canary tuple",
+          "result": "blocked-upstream",
+          "details": "Could NOT re-confirm a passing gogoanime tuple: gogoanimes.fi mirror is currently DOWN at search/episodes stages (context deadline exceeded on /search.html and /category/) — a stage UPSTREAM of the embed extractor, independent of this fix. Post-redeploy cold-cache episodes latency (~16s) also exceeds the canary's 12s per-request budget. Not a fix failure; recommend re-running the canary once gogoanime upstream recovers."
+        }
+      ],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-447",
+      "created_at": "2026-06-12T10:29:31Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Feature: Jira-like issue tracking in /admin/feedback",
+      "reporter": "player_service",
+      "telegram_message_id": 3069,
+      "actions": [],
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-12T10-28-54_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-448",
+      "created_at": "2026-06-12T10:30:31Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Bulk watchlist editing in profile",
+      "reporter": "player_service",
+      "telegram_message_id": 3071,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-12T10-29-44_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-449",
+      "created_at": "2026-06-12T10:31:36Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Profile watchlist: additional filter dimensions (genre / score / type)",
+      "reporter": "player_service",
+      "telegram_message_id": 3073,
+      "actions": [],
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-12T10-29-59_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-450",
+      "created_at": "2026-06-12T10:45:31Z",
+      "resolved_at": "2026-06-12T10:58:30Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Streaming High Error Rate — AnimeFever CDN Cloudflare 403 + Kodik client-cancel false 502s",
+      "reporter": "grafana",
+      "telegram_message_id": 3075,
+      "affected_service": "streaming",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-451",
+      "created_at": "2026-06-13T02:13:58Z",
+      "source": "admin_request",
+      "category": "bug",
+      "priority": "P1",
+      "status": "auto_fixed",
+      "title": "Remove rewatch button from anime card",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3078,
+      "actions": [
+        {
+          "action": "Edit frontend/web/src/views/Anime.vue — added v-if=\"watchCta.action !== 'rewatch'\" to the Watch CTA Button; removed now-unreachable RefreshCw icon branch and :disabled=\"rewatchPending\" binding",
+          "result": "success",
+          "details": "Button no longer renders when user has completed the anime (watchCta.action === 'rewatch'). Other CTA states (watch, continue, mark-watched) unaffected."
+        },
+        {
+          "action": "bun lint",
+          "result": "success",
+          "details": "0 errors, 19 pre-existing warnings"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Image rebuilt, container restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 13 services healthy"
+        },
+        {
+          "action": "Update changelog.json with 2026-06-13 entry",
+          "result": "success",
+          "details": "Prepended new date group"
+        },
+        {
+          "action": "git commit a1ba818f + git push",
+          "result": "success",
+          "details": "main -\u003e main pushed to origin"
+        }
+      ],
+      "feedback_id": "2026-06-13T02-07-30_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-452",
+      "created_at": "2026-06-13T02:19:46Z",
+      "source": "admin_request",
+      "category": "bug",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "Player tab buttons show blue outline on click (fullscreen)",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3079,
+      "actions": [
+        {
+          "action": "Added `player-tabs` class to the player tabs container div in Anime.vue:366",
+          "result": "success",
+          "details": "Enables the scoped CSS selector to target only player tab buttons"
+        },
+        {
+          "action": "Added `.player-tabs button:focus-visible { box-shadow: none; }` to Anime.vue scoped style block",
+          "result": "success",
+          "details": "Scoped selector has specificity (0,2,1+attr) vs global (0,1,0) — wins cleanly without !important. Keyboard nav unaffected; active bg+border state serves as visual indicator."
+        },
+        {
+          "action": "bun lint — 0 errors",
+          "result": "success",
+          "details": "19 pre-existing warnings, unchanged"
+        },
+        {
+          "action": "design-system-lint.sh — PASS",
+          "result": "success",
+          "details": "0 violations across all 3 rules"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Image rebuilt and container restarted"
+        },
+        {
+          "action": "make health — all 13 services",
+          "result": "success",
+          "details": "gateway auth catalog streaming player rooms scheduler scraper library notifications watch-together gacha recs all healthy"
+        },
+        {
+          "action": "git commit 0daeea48 + git push main",
+          "result": "success",
+          "details": "fix(ui): remove focus ring from player tab buttons on click"
+        }
+      ],
+      "feedback_id": "2026-06-13T02-13-59_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-453",
+      "created_at": "2026-06-13T02:21:19Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P1",
+      "status": "escalated",
+      "title": "Player UX: provider capability metadata + quality ladder + hacker mode",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3081,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-13T02-19-47_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-454",
+      "created_at": "2026-06-13T02:29:36Z",
+      "source": "admin_request",
+      "category": "bug",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Backward seek always jumps to t=0 when video.duration is NaN",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3084,
+      "actions": [
+        {
+          "action": "Edit UnifiedPlayer.vue:1390 — v.duration || 0 → isFinite(v.duration) ? v.duration : Infinity",
+          "result": "success",
+          "details": "Single-line change in onSeekRel"
+        },
+        {
+          "action": "cd frontend/web \u0026\u0026 bun lint",
+          "result": "success",
+          "details": "0 errors, 19 pre-existing 'any' warnings (none on changed line)"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Image docker-web built, container animeenigma-web recreated and started"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 13 services healthy (gateway, auth, catalog, streaming, player, rooms, scheduler, scraper, library, notifications, watch-together, gacha, recs)"
+        },
+        {
+          "action": "Update changelog.json (2026-06-13 group) + git commit + git push",
+          "result": "success",
+          "details": "Commit be8eba3a, pushed main -\u003e main; path-scoped to UnifiedPlayer.vue + changelog.json"
+        }
+      ],
+      "resolution": "Fix applied by auto(risk=low)",
+      "feedback_id": "2026-06-13T02-22-28_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-455",
+      "created_at": "2026-06-13T02:39:15Z",
+      "source": "admin_request",
+      "category": "degradation",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "Buffering spinner shown on all seeks, even into cached data",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3085,
+      "actions": [
+        {
+          "action": "Edit UnifiedPlayer.vue — removed `@seeking=\"onBufferStart\"`",
+          "result": "success",
+          "details": "frontend/web/src/components/player/unified/UnifiedPlayer.vue line 40 removed"
+        },
+        {
+          "action": "bun lint",
+          "result": "success",
+          "details": "0 errors, 19 pre-existing warnings"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Docker image rebuilt, container restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 13 services healthy"
+        },
+        {
+          "action": "changelog.json updated",
+          "result": "success",
+          "details": "New fix entry prepended to 2026-06-13 group"
+        },
+        {
+          "action": "git commit b19be972 + git push",
+          "result": "success",
+          "details": "main -\u003e main pushed to github.com:ILITA-hub/animeenigma.git"
+        }
+      ],
+      "feedback_id": "2026-06-13T02-32-35_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-456",
+      "created_at": "2026-06-13T02:40:21Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "Emoji interrupt: 💔 reply to 👁️ bot message kills background compute",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3086,
+      "actions": [
+        {
+          "action": "Edit services/maintenance/cmd/maintenance/main.go",
+          "result": "success",
+          "details": "Added interrupts sync.Map, register/clear/try/sweep helpers, runInterruptible wrapper (👁️ watch message + cancellable ctx), isInterruptReply/handleInterrupt, poller interception, TTL sweeper goroutine, errInterrupted handling at all 3 Claude call sites (processWork, processReport, applyFix)."
+        },
+        {
+          "action": "Write interrupt_test.go + go test ./... -count=1 -race",
+          "result": "success",
+          "details": "5 new tests (isInterruptReply table, registry lifecycle, clearInterrupt-no-cancel, TTL sweep, tryInterrupt-cancels-context) all pass; full maintenance suite green under -race; go vet clean."
+        },
+        {
+          "action": "make build-maintenance",
+          "result": "success",
+          "details": "Rebuilt host-native bin/maintenance; confirmed new string literals ('to this message to abort.', 'Вычисление прервано', 'interrupted by admin') present in the stripped binary."
+        },
+        {
+          "action": "git commit + push (path-scoped, standard co-authors)",
+          "result": "success",
+          "details": "Committed only main.go + interrupt_test.go + bin/maintenance as 8e1b7de9; pushed main -\u003e main. Did not touch other agents' uncommitted files in the shared tree."
+        },
+        {
+          "action": "systemctl restart animeenigma-maintenance.service",
+          "result": "deferred to admin",
+          "details": "Not executed: the running process is inside the service control-group (KillMode=control-group), so any restart kills this fix process mid-report. The systemd-run deferred-restart workaround was blocked by the auto-mode classifier as an off-path deploy. New binary is on disk + committed; one manual restart loads it."
+        }
+      ],
+      "resolution": "Fix applied by @tNeymik",
+      "feedback_id": "2026-06-13T02-39-19_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-457",
+      "created_at": "2026-06-13T02:46:19Z",
+      "source": "admin_request",
+      "category": "bug",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "Cyan focus ring around full player on spacebar press",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3089,
+      "actions": [
+        {
+          "action": "Edit UnifiedPlayer.vue: merged .pl:focus and .pl:focus-visible into single rule with outline: none",
+          "result": "success",
+          "details": "Removed outline: 2px solid var(--brand-cyan) from .pl:focus-visible; consolidated with .pl:focus { outline: none }"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Web container rebuilt and restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 13 services healthy"
+        },
+        {
+          "action": "git commit + push (97809215)",
+          "result": "success",
+          "details": "fix(ui): remove focus ring from player container on spacebar press → main"
+        }
+      ],
+      "feedback_id": "2026-06-13T02-40-21_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-458",
+      "created_at": "2026-06-13T03:05:07Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P2",
+      "status": "button_fix",
+      "title": "Player menus don't close on click-outside",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3092,
+      "actions": null,
+      "feedback_id": "2026-06-13T02-59-29_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-459",
+      "created_at": "2026-06-13T04:09:55Z",
+      "resolved_at": "2026-06-13T04:26:21Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "Gogoanime scraper: missing extractors + megaplay empty stream",
+      "reporter": "grafana",
+      "telegram_message_id": 3098,
+      "affected_service": "gogoanime",
+      "actions": [
+        {
+          "action": "Edit services/scraper/internal/providers/gogoanime/client.go — add unextractableHosts list (vidmoly.biz/.net, filemoon.sx, bysesayeveum.com) + isFilteredEmbedHost helper; ListServers now skips Turnstile AND no-extractor hosts",
+          "result": "success",
+          "details": "smallest-change root-cause fix; honestly named separate list rather than mislabelling these as Turnstile"
+        },
+        {
+          "action": "Add TestListServers_UnextractableHostsSkipped + go test ./internal/providers/gogoanime/...",
+          "result": "success",
+          "details": "ok 1.081s — new test + all existing pass; go build ./... and go vet clean"
+        },
+        {
+          "action": "make redeploy-scraper",
+          "result": "success",
+          "details": "image rebuilt, container recreated, alias-check OK (gateway-\u003escraper DNS resolves), /health 200, RestartCount 0"
+        },
+        {
+          "action": "POST /api/v1/jobs/scraper_playability_canary (verify live)",
+          "result": "success",
+          "details": "results 16 -\u003e 9; ZERO unextractable hosts leaked through the filter"
+        },
+        {
+          "action": "git commit f2e181a6 (path-scoped: client.go, client_test.go, changelog.json) + git push",
+          "result": "success",
+          "details": "main -\u003e main pushed; web NOT redeployed (not a permitted maintenance auto-fix action + shared tree had unrelated uncommitted frontend changes) — changelog ships on next clean web deploy"
+        }
+      ],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-460",
+      "created_at": "2026-06-13T04:39:39Z",
+      "resolved_at": "2026-06-14T05:21:35Z",
+      "source": "grafana_alert",
+      "category": "monitoring_bug",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "ScraperPlayabilityRegression: gogoanime empty_response (false positive)",
+      "reporter": "grafana",
+      "telegram_message_id": 3101,
+      "affected_service": "gogoanime",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-461",
+      "created_at": "2026-06-13T09:57:48Z",
+      "source": "admin_request",
+      "category": "config",
+      "priority": "P3",
+      "status": "acknowledged",
+      "title": "Admin format preference: use Telegram Markdown",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3103,
+      "actions": [],
+      "feedback_id": "2026-06-13T09-57-19_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-462",
+      "created_at": "2026-06-14T05:12:29Z",
+      "resolved_at": "2026-06-14T05:35:30Z",
+      "source": "grafana_alert",
+      "category": "stability",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Activity Register Volume Anomaly — scraper-health-probe 3.4σ spike at 04:00 UTC",
+      "reporter": "grafana",
+      "telegram_message_id": 3105,
+      "affected_service": "unknown",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-463",
+      "created_at": "2026-06-14T05:31:19Z",
+      "resolved_at": "2026-06-14T05:41:35Z",
+      "source": "grafana_alert",
+      "category": "stability",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "gogoanime cdn_unreachable — transient rotating CDN blip",
+      "reporter": "grafana",
+      "telegram_message_id": 3108,
+      "affected_service": "gogoanime",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-464",
+      "created_at": "2026-06-14T05:49:01Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "gogoanime canary status_403: streamprobe HEAD false-negative on fxpy7.watching.onl (AUTO-459 Part 2)",
+      "reporter": "grafana",
+      "telegram_message_id": 3112,
+      "affected_service": "gogoanime",
+      "actions": []
+    },
+    {
+      "id": "AUTO-465",
+      "created_at": "2026-06-14T08:43:06Z",
+      "resolved_at": "2026-06-14T08:46:31Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "AnimeFever CDN returning 403 — HLS proxy 502s",
+      "reporter": "grafana",
+      "telegram_message_id": 3114,
+      "affected_service": "streaming",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-466",
+      "created_at": "2026-06-14T11:54:59Z",
+      "resolved_at": "2026-06-14T13:32:36Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "AnimeFever CDN returning 403 — 76% of streaming HLS proxy errors",
+      "reporter": "grafana",
+      "telegram_message_id": 3117,
+      "affected_service": "streaming",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-467",
+      "created_at": "2026-06-14T14:29:58Z",
+      "resolved_at": "2026-06-14T16:57:35Z",
+      "source": "grafana_alert",
+      "category": "outage",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Upstream CDN 403 block — AnimeFever static-cdn-ca1.mofl.pro",
+      "reporter": "grafana",
+      "telegram_message_id": 3120,
+      "affected_service": "streaming",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-468",
+      "created_at": "2026-06-14T17:31:35Z",
+      "resolved_at": "2026-06-14T17:59:37Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "AnimeFever CDN returning 403 on HLS segments",
+      "reporter": "grafana",
+      "telegram_message_id": 3124,
+      "affected_service": "streaming",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-469",
+      "created_at": "2026-06-15T02:04:26Z",
+      "resolved_at": "2026-06-15T11:06:52Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "nineanime stream/stream_segment probe DOWN — youtube_stub content gap",
+      "reporter": "grafana",
+      "telegram_message_id": 3127,
+      "affected_service": "nineanime",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-470",
+      "created_at": "2026-06-15T05:15:30Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Feature: Anime guessing game (Wordle/dle-style)",
+      "reporter": "player_service",
+      "telegram_message_id": 3129,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour",
+      "feedback_id": "2026-06-15T05-14-51_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-471",
+      "created_at": "2026-06-15T10:08:38Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "pending_admin",
+      "title": "Feature: Steam-style editable user profile",
+      "reporter": "player_service",
+      "telegram_message_id": 3131,
+      "actions": [],
+      "feedback_id": "2026-06-15T10-07-43_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-472",
+      "created_at": "2026-06-15T11:12:10Z",
+      "resolved_at": "2026-06-15T14:03:32Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "HLS proxy 502s: AnimeFever + nineanime CDN returning 403",
+      "reporter": "grafana",
+      "telegram_message_id": 3134,
+      "affected_service": "streaming",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-473",
+      "created_at": "2026-06-15T14:36:09Z",
+      "resolved_at": "2026-06-15T14:49:30Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Upstream CDN Cloudflare IP block causing streaming 502s",
+      "reporter": "grafana",
+      "telegram_message_id": 3137,
+      "affected_service": "streaming",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-474",
+      "created_at": "2026-06-15T15:23:53Z",
+      "resolved_at": "2026-06-15T15:23:53Z",
+      "source": "grafana_alert",
+      "category": "outage",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "EN scraper: 4 provider failures exhausting failover chain (allanime/miruro/nineanime/gogoanime CDN)",
+      "reporter": "grafana",
+      "telegram_message_id": 3140,
+      "affected_service": "scraper",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-475",
+      "created_at": "2026-06-15T15:27:10Z",
+      "resolved_at": "2026-06-15T16:42:31Z",
+      "source": "grafana_alert",
+      "category": "outage",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Multi-CDN Cloudflare 403 — egress IP block degrading EN streaming",
+      "reporter": "grafana",
+      "telegram_message_id": 3143,
+      "affected_service": "streaming",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-476",
+      "created_at": "2026-06-15T18:13:58Z",
+      "resolved_at": "2026-06-16T10:08:39Z",
+      "source": "grafana_alert",
+      "category": "parser_failure",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "nineanime: 9anime.me.uk theme redesign broke episode listing",
+      "reporter": "grafana",
+      "telegram_message_id": 3146,
+      "affected_service": "nineanime",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-477",
+      "created_at": "2026-06-16T07:09:55Z",
+      "resolved_at": "2026-06-16T10:20:00Z",
+      "source": "admin_request",
+      "category": "frontend_layout",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Profile watchlist toolbar buttons overlap on mobile (Фильтры/Выделить)",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3149,
+      "actions": [],
+      "feedback_id": "2026-06-16T07-08-33_tNeymik_telegram",
+      "attachments": [
+        "/data/animeenigma/.claude/maintenance-attachments/2026-06-16T07-08-33_tNeymik_telegram/photo_3149.jpg"
+      ],
+      "resolution": "Empty-text admin message; screenshot showed the «Мои списки» toolbar with the Фильтры/Выделить buttons overlapping on a narrow phone. Already fixed in commit 47c1e881 (07:19Z, ~10min after this 07:09Z report): toolbar row got flex-wrap, sort select w-28→sm:w-36, and hidden sm:inline icon-only labels on the Filter/Select buttons. flex-wrap makes the controls wrap to a new line instead of overflowing/overlapping. Fix is an ancestor of HEAD and is live (web container rebuilt 12:06Z, after the fix). The reported screenshot predates the fix."
     }
   ]
 }
