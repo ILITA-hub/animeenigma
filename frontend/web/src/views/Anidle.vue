@@ -174,7 +174,7 @@ async function onEndlessGuess(id: string) {
 }
 
 // Load stats + leaderboard
-;(async () => {
+void (async () => {
   if (auth.isAuthenticated) {
     void fetchStats()
   }
