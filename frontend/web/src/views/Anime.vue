@@ -1012,6 +1012,23 @@
           </template>
         </Carousel>
       </section>
+      <div ref="characterSentinelEl" aria-hidden="true" />
+      <section
+        v-if="characters.length > 0"
+        id="section-characters"
+        class="mt-8 non-player-content"
+      >
+        <Carousel
+          :items="characters"
+          :title="$t('characters.heading')"
+          item-key="id"
+          :item-width="{ mobile: 110, tablet: 128, desktop: 140, large: 150 }"
+        >
+          <template #default="{ item }">
+            <CharacterCard :model="item as CharacterCardModel" />
+          </template>
+        </Carousel>
+      </section>
     </div>
   </div>
 
@@ -1054,6 +1071,7 @@ import { useAuthStore } from '@/stores/auth'
 import { Avatar, Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
 import { GenreChip, PosterCard, AnimeContextMenu } from '@/components/anime'
 import ReviewReactions from '@/components/anime/ReviewReactions.vue'
+import CharacterCard from '@/components/anime/CharacterCard.vue'
 import Carousel from '@/components/carousel/Carousel.vue'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
@@ -1065,7 +1083,9 @@ import { useSiteRatings } from '@/composables/useSiteRatings'
 import { useUserTimezone } from '@/composables/useUserTimezone'
 import { wallClockDate, formatUtcOffset } from '@/composables/schedule/timezone'
 import { fromCatalogAnime } from '@/utils/toCardModel'
+import { useCharacters } from '@/composables/useCharacters'
 import type { AnimeCardModel } from '@/types/card'
+import type { CharacterCardModel } from '@/types/character'
 import type { WatchCombo } from '@/types/preference'
 
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
@@ -2005,6 +2025,9 @@ const fetchReviewsList = async () => {
 const ugcSectionEl = ref<HTMLElement | null>(null)
 const relatedSentinelEl = ref<HTMLElement | null>(null)
 const relatedFetched = ref(false)
+const { characters, fetchCharacters } = useCharacters()
+const characterSentinelEl = ref<HTMLElement | null>(null)
+const charactersFetched = ref(false)
 let lazySectionObserver: IntersectionObserver | null = null
 
 function disarmLazySections() {
@@ -2021,6 +2044,10 @@ function armLazySections() {
       relatedFetched.value = true
       void fetchRelatedAnime()
     }
+    if (!charactersFetched.value) {
+      charactersFetched.value = true
+      void fetchCharacters(String(anime.value?.id))
+    }
     return
   }
   lazySectionObserver = new IntersectionObserver(
@@ -2036,6 +2063,12 @@ function armLazySections() {
             void fetchRelatedAnime()
           }
           lazySectionObserver?.unobserve(entry.target)
+        } else if (entry.target === characterSentinelEl.value) {
+          if (!charactersFetched.value) {
+            charactersFetched.value = true
+            void fetchCharacters(String(anime.value?.id))
+          }
+          lazySectionObserver?.unobserve(entry.target)
         }
       }
     },
@@ -2045,6 +2078,7 @@ function armLazySections() {
   )
   if (ugcSectionEl.value) lazySectionObserver.observe(ugcSectionEl.value)
   if (relatedSentinelEl.value) lazySectionObserver.observe(relatedSentinelEl.value)
+  if (characterSentinelEl.value) lazySectionObserver.observe(characterSentinelEl.value)
 }
 
 onBeforeUnmount(disarmLazySections)
@@ -2458,8 +2492,10 @@ const loadAnimeData = async (animeId: string) => {
   siteRating.value = null
   watchersCount.value = 0
   relatedAnime.value = []
+  characters.value = []
   reviewsFetched.value = false
   relatedFetched.value = false
+  charactersFetched.value = false
   disarmLazySections()
   // Comments — reset cache for new anime so a stale list doesn't leak across
   // navigations. Per-anime fetch is gated on tab activation (or deep-link
