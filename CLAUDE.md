@@ -499,7 +499,7 @@ After completing any implementation work (features, bug fixes, refactoring), **a
 1. Lints and builds the affected code
 2. Redeploys changed services via `make redeploy-<service>`
 3. Runs health checks
-4. Updates `frontend/web/public/changelog.json` with user-facing changelog entries in **Russian Trump-mode** — bombastic, self-aggrandizing, ALL-CAPS emphasis on key words, signature closers ("Поверьте мне." / "Никто другой так не делает!" / "ВЕЛИКОЛЕПНО."), emojis kept, factual claims preserved. This is what `LastUpdates.vue` loads in the Changelog tab. Full style spec + examples live in `.claude/commands/animeenigma-after-update.md` step 4; the 2026-05-19 group in `changelog.json` is the gold-standard reference.
+4. Updates the changelog with user-facing entries in **Russian Trump-mode** — bombastic, self-aggrandizing, ALL-CAPS emphasis on key words, signature closers ("Поверьте мне." / "Никто другой так не делает!" / "ВЕЛИКОЛЕПНО."), emojis kept, factual claims preserved. Entries are prepended to `frontend/web/changelog.full.json` (full-history source of truth); the served file `frontend/web/public/changelog.json` is **generated** from it (latest 30 entries only) via `frontend/web/scripts/changelog-trim.mjs` — it's fetched whole on every page load, so we ship only the newest entries. This is what `LastUpdates.vue` loads in the Changelog tab. Full style spec + examples live in `.claude/commands/animeenigma-after-update.md` step 4; the 2026-05-19 group in `changelog.full.json` is the gold-standard reference.
 5. Commits all changes with co-authors and pushes to remote
 
 **Do not skip this step.** It ensures every implementation is deployed, verified, documented for users, and pushed.

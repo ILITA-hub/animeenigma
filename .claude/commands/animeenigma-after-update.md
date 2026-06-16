@@ -76,11 +76,11 @@ After all deployments:
 make health
 ```
 
-### 4. Update changelog.json for LastUpdates.vue
+### 4. Update the changelog for LastUpdates.vue
 
-Generate user-facing changelog entries for `frontend/web/public/changelog.json`.
+Generate user-facing changelog entries and prepend them to **`frontend/web/changelog.full.json`** (the full-history source of truth — NOT the served file).
 
-This file is loaded by the `LastUpdates.vue` Changelog tab to show users what's new.
+The served file `frontend/web/public/changelog.json` is **generated** from the full history (latest 30 entries only) and is what `LastUpdates.vue`'s Changelog tab + the backend spotlight "Latest News" card actually fetch. We trim it because it's downloaded whole on every page load — the full history is hundreds of KB while consumers render only the newest handful. Always edit `changelog.full.json`, then regenerate the served file (see Rules below). Never hand-edit `public/changelog.json`.
 
 **Format:**
 ```json
@@ -104,7 +104,7 @@ This file is loaded by the `LastUpdates.vue` Changelog tab to show users what's 
 Trump-mode signature elements (use 2-4 per entry, not all at once — keep it punchy, not parody-soup):
 
 - **ALL-CAPS emphasis** on one or two key adjectives/nouns per entry: `ВЕЛИКОЛЕПНАЯ архитектура`, `ОГРОМНАЯ перемотка`, `КАТАСТРОФА была`, `НИКОГДА больше`, `БОЛЬШАЯ починка`, `ВСЁ работает`.
-- **Signature closers**, pick one per entry: `Поверьте мне.` · `Никто другой так не делает!` · `МЫ сделали. Никто другой не сделал!` · `Лучший X. Лучший!` · `ВЕЛИКОЛЕПНО.` · `Грандиозно.`
+- **Signature closers**, pick one per entry: `Поверьте мне.` · `Никто другой так не делает!` · `МЫ сделали. Никто другой не сделал!` · `Лучший X. Лучший!` · `ВЕЛИКОЛЕПНО.` · `Грандиозно.` · `Нигде в мире такого нет.`
 - **Self-aggrandizing claim**: `МЫ это нашли. Никто другой не заметил.` / `Многие просили — МЫ сделали.` / `Только МЫ можем.`
 - **Bombastic comparatives**: `лучшая защита`, `лучшая перемотка`, `грандиозный фильтр`.
 - **Drama-then-fix arc** for `fix` entries: name the disaster ("КАТАСТРОФА была"), then the heroic resolution ("Теперь — ВЕЛИКОЛЕПНО").
@@ -130,10 +130,11 @@ Anti-examples (do NOT ship these — old "informative + enthusiastic" tone):
 If a change is too small to bear Trump-mode (one-line config tweak), prefer a short Trump-mode entry over no entry — never silently fall back to a friendly tone.
 
 **Rules:**
+- Edit `frontend/web/changelog.full.json` (the full-history source). Read it first, update it, write back.
 - If today's date group already exists at the top, merge new entries into it
 - Otherwise, prepend a new date group
-- Keep total entry count under ~50 (trim oldest groups if needed)
-- Read the existing file first, update it, write back
+- Never trim `changelog.full.json` — it keeps the complete history
+- After editing, regenerate the served file: `cd frontend/web && node scripts/changelog-trim.mjs` (writes the latest 30 entries to `public/changelog.json`). Commit BOTH files.
 
 ### 5. Commit & push
 
