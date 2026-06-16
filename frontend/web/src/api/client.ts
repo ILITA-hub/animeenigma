@@ -777,6 +777,13 @@ export const jimakuApi = {
     }),
 }
 
+export const charactersApi = {
+  getAnimeCharacters: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/characters`),
+  getCharacter: (id: string) =>
+    apiClient.get(`/characters/${id}`),
+}
+
 /**
  * workstream raw-jp / Phase 01 — AllAnime raw-JP provider.
  * Returns Japanese-audio HLS streams.
