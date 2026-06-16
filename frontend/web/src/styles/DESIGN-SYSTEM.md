@@ -59,13 +59,16 @@ A build-failing custom bash gate, `frontend/web/scripts/design-system-lint.sh` (
 already use: it is a prerequisite of **`make lint-frontend`** (→ `make lint` / `all` / CI) AND of
 **`make redeploy-web`** (the deploy gate), via the `make lint-design` sub-target. No new dependency.
 
-**It enforces EXACTLY these 3 rules** over `frontend/web/src/**/*.vue` (excluding `*.spec.*` /
-`__tests__`). Each violation is an ERROR; `ERRORS>0` ⇒ `exit 1`.
+**It enforces EXACTLY these 5 rules** over `frontend/web/src/**/*.vue` (excluding `*.spec.*` /
+`__tests__`; **Rules 1 & 4 also scan `*.ts`**, since class-strings leak via `cva` variant files).
+Each violation is an ERROR; `ERRORS>0` ⇒ `exit 1`.
 
-1. **Off-palette Tailwind color classes** — `(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|outline|decoration|shadow)-(red|amber|yellow|emerald|green|blue|sky|purple|violet|gray|slate|zinc)-(50…900)`.
-   Migrate to a semantic token (`text-destructive`, `bg-warning`, `text-success`, `text-info`, `text-brand-violet`, `text-muted-foreground`, …).
-2. **Hardcoded hex outside the allowlist** — any raw `#[0-9a-fA-F]{3,8}` in a `.vue` (CSS `<style>` hex or Tailwind arbitrary `*-[#…]`) that is NOT listed in `scripts/design-system-allowlist.txt`. Allowance is per-`(file,hex)`: a hex is allowed only in the file that lists it.
+1. **Off-palette Tailwind color classes** — `(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|outline|decoration|shadow)-(red|amber|yellow|emerald|green|blue|sky|purple|violet|gray|slate|zinc)-(50…975)` (the shade group now includes `925|950|975`).
+   Migrate to a semantic token (`text-destructive`, `bg-warning`, `text-success`, `text-info`, `text-brand-violet`, `text-muted-foreground`, …). Also scans `*.ts`, **excluding `*-variants.ts`** (the canonical semantic-variant defs).
+2. **Hardcoded hex outside the allowlist** — any raw `#[0-9a-fA-F]{3,8}` in a `.vue` (CSS `<style>` hex or Tailwind arbitrary `*-[#…]`) that is NOT listed in `scripts/design-system-allowlist.txt`. Allowance is per-`(file,hex)`: a hex is allowed only in the file that lists it. `.vue` only — `.ts` hex is intentional brand/provider color data (e.g. `providerRegistry.ts`).
 3. **Deprecated-alias `var()` usages** — `var(--ink)` / `var(--accent)` / `var(--pink)` (after the Wave-2 flip, brand `--accent` usage is itself a violation), plus `var(--violet)` → `--brand-violet` and the font aliases `var(--f-display|f-ui|f-mono|f-jp)` → `--font-display`/`--font-sans`/`--font-mono`/`--font-jp` (migrated + locked in slice #2). EXCLUDES the literal-alias survivors `--ink-2`, `--ink-4`, `--accent-soft`, `--accent-line`, `--accent-glow`, `--pink-soft`.
+4. **Off-scale font weights** — `font-(bold|extrabold|black|light|thin)`; the DS allows ONLY `font-medium` / `font-semibold`. Scans `*.vue` + `*.ts`. (**Promoted 2026-06-15 from governance-only to build-enforced.**)
+5. **Bare `<select>` / `<input type="date">`** — use the `Select` / `DatePicker` primitives. Exempts `components/player/` (Reka portals break in fullscreen, so player pickers stay native) and `type="datetime-local"`.
 
 **Brand-exemption rationale (why some hues are NOT "off-palette").** `cyan` and `pink` are the
 Neon-Tokyo BRAND primitives, and `orange` / `rose` (plus `indigo` / `teal` / `lime`) are per-provider
@@ -95,11 +98,13 @@ bash frontend/web/scripts/design-system-lint.sh --selftest   # → SELFTEST PASS
 make lint-design                                              # → PASS on the clean tree
 ```
 
-> Scope is intentionally narrow (color/token discipline only). Structural conventions
-> (use-the-primitives, font-weight scale, padding scale, `cva` variants) are Phase-6 governance
-> documentation, NOT build-enforced — a grep cannot reliably distinguish a hand-rolled button from a
-> primitive without AST analysis. The docs above match the enforced rules exactly (no
-> documented-but-unenforced rule).
+> Scope covers color/token discipline (Rules 1–3), the font-weight scale (Rule 4), and native
+> form-primitive bypass (Rule 5). The **font-weight scale and native `<select>`/`date` checks were
+> promoted out of Phase-6 governance into build-enforcement** (Rule 4 on 2026-06-15). What REMAINS
+> governance-only (human/AI-followed, NOT build-enforced — a grep cannot reliably distinguish these
+> without AST analysis): **reuse-the-primitives** (hand-rolled button vs `<Button>`), the **padding
+> scale** (`p-4 md:p-6 lg:p-8`), and **`cva` variants for component variation**. The docs above match
+> the enforced rules exactly (no documented-but-unenforced rule).
 
 ## Deprecated aliases (migrate away over P2–P5)
 
