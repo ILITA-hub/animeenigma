@@ -48,6 +48,24 @@ describe('PlayerControlBar', () => {
     expect(pill.text()).toContain('Sub')
   })
 
+  it('emits toggle-episodes when the episodes pill is clicked', async () => {
+    const w = mount(PlayerControlBar, { props: baseProps })
+    await w.find('[data-test="episodes-pill"]').trigger('click')
+    expect(w.emitted('toggle-episodes')).toBeTruthy()
+  })
+
+  it('renders the episodes pill with the current episode label', () => {
+    const w = mount(PlayerControlBar, { props: { ...baseProps, episodeLabel: 7 } })
+    const pill = w.find('[data-test="episodes-pill"]')
+    expect(pill.exists()).toBe(true)
+    expect(pill.text()).toContain('EP 7')
+  })
+
+  it('highlights the episodes pill when its menu is open', () => {
+    const w = mount(PlayerControlBar, { props: { ...baseProps, openMenu: 'episodes' } })
+    expect(w.find('[data-test="episodes-pill"]').classes()).toContain('is-open')
+  })
+
   it('emits seek-rel with -5 when back button is clicked', async () => {
     const w = mount(PlayerControlBar, { props: baseProps })
     await w.find('[data-test="seek-back"]').trigger('click')

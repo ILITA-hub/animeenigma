@@ -96,6 +96,20 @@
       <!-- Spacer -->
       <span class="pl-spacer" aria-hidden="true" />
 
+      <!-- Episodes pill (second access path; the top-left EP eyebrow is the other) -->
+      <button
+        class="pl-epbtn"
+        :class="{ 'is-open': openMenu === 'episodes' }"
+        data-test="episodes-pill"
+        :aria-expanded="openMenu === 'episodes'"
+        aria-label="Episodes"
+        @click="emit('toggle-episodes')"
+      >
+        <ListVideo class="size-4" aria-hidden="true" />
+        <span class="pl-epbtn-text">EP {{ episodeLabel }}</span>
+        <ChevronDown class="size-3" aria-hidden="true" />
+      </button>
+
       <!-- Source pill -->
       <button
         class="pl-srcbtn"
@@ -162,7 +176,7 @@
 <script setup lang="ts">
 import PlayerScrubBar from './PlayerScrubBar.vue'
 import PlayerIconButton from './PlayerIconButton.vue'
-import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize } from 'lucide-vue-next'
+import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize, ListVideo } from 'lucide-vue-next'
 
 interface Chapter {
   kind: 'intro' | 'outro'
@@ -180,6 +194,8 @@ withDefaults(
     providerName: string
     providerHue: string
     audioLabel: string
+    /** current episode number/label, shown on the bottom episodes pill */
+    episodeLabel?: string | number
     /** 0..100 playback progress for the scrub fill */
     progress?: number
     /** 0..100 buffered for the scrub bar */
@@ -194,7 +210,7 @@ withDefaults(
     previewUrl?: string | null
     previewType?: 'hls' | 'mp4' | null
   }>(),
-  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null },
+  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null, episodeLabel: '' },
 )
 
 const emit = defineEmits<{
@@ -204,6 +220,7 @@ const emit = defineEmits<{
   (e: 'set-volume', v: number): void
   (e: 'toggle-mute'): void
   (e: 'toggle-source'): void
+  (e: 'toggle-episodes'): void
   (e: 'toggle-subs'): void
   (e: 'toggle-settings'): void
   (e: 'toggle-pip'): void
@@ -306,6 +323,41 @@ function onVolumeInput(event: Event) {
   color: rgba(255, 255, 255, 0.65);
 }
 
+/* Episodes pill — same geometry/affordance as the source pill */
+.pl-epbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  margin-right: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.pl-epbtn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--accent-line);
+}
+
+.pl-epbtn.is-open {
+  background: rgba(0, 212, 255, 0.16);
+  border-color: var(--accent-line);
+  color: var(--brand-cyan);
+}
+
+.pl-epbtn-text {
+  white-space: nowrap;
+}
+
 /* Source pill */
 .pl-srcbtn {
   display: inline-flex;
@@ -360,6 +412,11 @@ function onVolumeInput(event: Event) {
 
   .pl-vol:hover .pl-vol-range {
     width: 52px;
+  }
+
+  /* Episodes pill stays (it's the second chooser) but trims to icon + chevron */
+  .pl-epbtn-text {
+    display: none;
   }
 }
 </style>
