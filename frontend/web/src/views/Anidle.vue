@@ -17,12 +17,31 @@
         <template v-if="mode === 'daily'">
           <!-- Already played notice (solved but modal closed) -->
           <Alert
-            v-if="(dailySolved || dailyGaveUp) && !showResult"
+            v-if="dailySolved && !showResult"
             variant="info"
             class="mb-4"
           >
             {{ $t('anidle.daily_complete_played') }}
           </Alert>
+
+          <!-- Give-up reveal: anime info shown inline on the page (no modal) -->
+          <div
+            v-if="dailyGaveUp && dailyAnswer"
+            class="mb-6 flex items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-4"
+          >
+            <img
+              :src="answerPoster"
+              :alt="dailyAnswer.name_ru"
+              class="w-16 h-24 rounded-lg object-cover flex-shrink-0 bg-white/10"
+            />
+            <div class="min-w-0">
+              <p class="text-xs text-muted-foreground mb-1">{{ $t('anidle.give_up_revealed') }}</p>
+              <p class="text-lg font-semibold text-white truncate">{{ dailyAnswer.name_ru }}</p>
+              <p class="text-sm text-muted-foreground truncate">{{ dailyAnswer.name_en }}</p>
+              <p class="text-sm text-white/70 mt-1">{{ dailyAnswer.year }} · {{ dailyAnswer.episodes }} · ★ {{ dailyAnswer.score }}</p>
+              <p class="text-xs text-muted-foreground truncate">{{ answerGenres }}</p>
+            </div>
+          </div>
 
           <!-- Search + Give Up row (only when game is active) -->
           <div v-if="!dailySolved && !dailyGaveUp" class="flex gap-3 mb-6">
@@ -108,7 +127,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import { useAnidle } from '@/composables/useAnidle'
 import { useAuthStore } from '@/stores/auth'
 import LoadingState from '@/components/ui/LoadingState.vue'
@@ -149,24 +169,29 @@ const {
 const showResult = ref(false)
 const loadingLeaderboard = ref(false)
 
-// Auto-open result modal when game ends
-watch([dailySolved, dailyGaveUp], ([solved, gaveUp]) => {
-  if (solved || gaveUp) {
-    showResult.value = true
-  }
+// The result modal is for a WIN only; a give-up reveals the answer inline.
+const answerPoster = computed(() =>
+  dailyAnswer.value ? cardPosterUrl(dailyAnswer.value.poster_url, 256) : '',
+)
+const answerGenres = computed(() =>
+  dailyAnswer.value ? dailyAnswer.value.genres.map(g => g.name).join(', ') : '',
+)
+
+// Auto-open result modal only on a win
+watch(dailySolved, (solved) => {
+  if (solved) showResult.value = true
 })
 
-// Fetch stats and leaderboard on mount (non-blocking)
 async function onDailyGuess(id: string) {
   await submitDailyGuess(id)
-  if (dailySolved.value || dailyGaveUp.value) {
+  if (dailySolved.value) {
     showResult.value = true
   }
 }
 
 async function onGiveUp() {
   await submitGiveUp()
-  showResult.value = true
+  // no modal — the inline reveal block handles the give-up case
 }
 
 async function onEndlessGuess(id: string) {

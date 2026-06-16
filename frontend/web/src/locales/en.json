@@ -212,11 +212,6 @@
     }
   },
   "player": {
-    "sourceFallback": {
-      "resolve": "The source you picked isn't available right now — switching to the best working one.",
-      "playback": "This source stopped working — switching to another.",
-      "unavailable": "This source isn't available yet."
-    },
     "theaterModeEnter": "Theater mode",
     "theaterModeExit": "Exit theater mode",
     "quality": "Quality",
@@ -1722,7 +1717,8 @@
     "endless_new_round": "New round",
     "endless_win_title": "Correct! Start a new round?",
     "loading": "Loading game…",
-    "error_generic": "Something went wrong. Try refreshing."
+    "error_generic": "Something went wrong. Try refreshing.",
+    "give_up_revealed": "The answer was"
   },
   "myFeedback": {
     "title": "My feedback",
