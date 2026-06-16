@@ -3,18 +3,23 @@
     :class="[
       'flex items-center justify-center text-center rounded-lg px-1.5 text-xs font-medium leading-tight transition-colors w-[72px] h-[44px] overflow-hidden',
       statusClass,
-      full ? 'cursor-help' : '',
     ]"
     :aria-label="ariaLabel"
-    :title="full || undefined"
   >
-    <span class="line-clamp-2 break-words">{{ displayValue }}<span v-if="hint === 'higher'" aria-hidden="true"> ↑</span><span v-else-if="hint === 'lower'" aria-hidden="true"> ↓</span></span>
+    <Tooltip v-if="full" :delay-duration="120" class="max-w-[260px] text-center">
+      <template #trigger>
+        <span class="line-clamp-2 break-words cursor-help">{{ displayValue }}</span>
+      </template>
+      {{ full }}
+    </Tooltip>
+    <span v-else class="line-clamp-2 break-words">{{ displayValue }}<span v-if="hint === 'higher'" aria-hidden="true"> ↑</span><span v-else-if="hint === 'lower'" aria-hidden="true"> ↓</span></span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Tooltip from '@/components/ui/Tooltip.vue'
 
 const props = defineProps<{
   status: 'correct' | 'partial' | 'wrong'
