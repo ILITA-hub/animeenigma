@@ -2,15 +2,12 @@ package main
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
@@ -33,37 +30,11 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/capability"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/scraperprovider"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/sourceranking"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/client"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/transport"
 )
-
-// rankCacheAdapter adapts *cache.RedisCache to the narrow sourceranking.stringGetter
-// surface (a raw string GET with a found flag) the Stage 2b ranking reader needs.
-type rankCacheAdapter struct {
-	c   *cache.RedisCache
-	log *logger.Logger
-}
-
-func (a rankCacheAdapter) GetString(ctx context.Context, key string) (string, bool) {
-	v, err := a.c.Client().Get(ctx, key).Result()
-	if err != nil {
-		// redis.Nil is the normal cold-cache key-miss; only surface unexpected
-		// errors (e.g. a real Redis outage) so they're distinguishable in logs.
-		// Contract is preserved: any error still yields an empty ranking.
-		if !errors.Is(err, redis.Nil) {
-			a.log.Warnw("source-ranking redis read failed", "key", key, "error", err)
-		}
-		return "", false
-	}
-	return v, true
-}
-
-func (a rankCacheAdapter) SetString(ctx context.Context, key, val string, ttl time.Duration) error {
-	return a.c.Client().Set(ctx, key, val, ttl).Err()
-}
 
 func main() {
 	log := logger.Default()
@@ -122,6 +93,8 @@ func main() {
 		&domain.CollectionItem{},
 		// Scraper provider config + capability traits (spec 2026-06-15).
 		&domain.ScraperProvider{},
+		&domain.Character{},
+		&domain.AnimeCharacter{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
@@ -209,6 +182,7 @@ func main() {
 	animeRepo := repo.NewAnimeRepository(db.DB)
 	genreRepo := repo.NewGenreRepository(db.DB)
 	videoRepo := repo.NewVideoRepository(db.DB)
+	characterRepo := repo.NewCharacterRepository(db.DB)
 	// Phase 17 (UX-33) — editorial collections repo.
 	collectionRepo := repo.NewCollectionRepository(db.DB)
 
@@ -233,6 +207,8 @@ func main() {
 		},
 	)
 
+	characterService := service.NewCharacterService(animeRepo, characterRepo, shikimoriClient, redisCache, log)
+
 	// Start Kodik liveness probe (reports via shared provider-health metrics).
 	healthChecker := service.NewPlayerHealthChecker(
 		catalogService.KodikClient(),
@@ -248,6 +224,7 @@ func main() {
 
 	// Initialize handlers
 	catalogHandler := handler.NewCatalogHandler(catalogService, log)
+	characterHandler := handler.NewCharacterHandler(characterService, log)
 	adminHandler := handler.NewAdminHandler(catalogService, log)
 	newsHandler := handler.NewNewsHandler(telegramClient, redisCache, log)
 	// Phase 17 (UX-33) — editorial collections service + handler.
@@ -401,18 +378,11 @@ func main() {
 	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log)
 	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
 
-	// Stage 2b learned source-reliability ranking. Reads the Redis keys
-	// (player_ranking:global / player_ranking:anime:{id}) the analytics service
-	// publishes and serves them at GET /api/anime/{id}/source-ranking.
-	sourceRankingReader := sourceranking.NewReader(rankCacheAdapter{c: redisCache, log: log})
-	sourceRankingWriter := sourceranking.NewWriter(rankCacheAdapter{c: redisCache, log: log})
-	sourceRankingHandler := handler.NewSourceRankingHandler(sourceRankingReader, sourceRankingWriter, log)
-
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, sourceRankingHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

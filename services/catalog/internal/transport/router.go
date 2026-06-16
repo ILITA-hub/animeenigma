@@ -16,6 +16,7 @@ import (
 
 func NewRouter(
 	catalogHandler *handler.CatalogHandler,
+	characterHandler *handler.CharacterHandler,
 	adminHandler *handler.AdminHandler,
 	newsHandler *handler.NewsHandler,
 	collectionHandler *handler.CollectionHandler,
@@ -29,7 +30,6 @@ func NewRouter(
 	spotlightHandler *handler.SpotlightHandler,
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
 	capabilitiesHandler *handler.CapabilitiesHandler,
-	sourceRankingHandler *handler.SourceRankingHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -163,13 +163,6 @@ func NewRouter(
 			if capabilitiesHandler != nil {
 				r.Get("/{animeId}/capabilities", capabilitiesHandler.Get)
 			}
-			// Stage 2b learned provider-reliability ranking (global + per-anime).
-			// Public, no auth — advisory data the player merges into its smart
-			// default. Reads the Redis ranking analytics publishes.
-			if sourceRankingHandler != nil {
-				r.Get("/{animeId}/source-ranking", sourceRankingHandler.Get)
-				r.Post("/{animeId}/source-fix", sourceRankingHandler.Post)
-			}
 			// Raw JP video source (workstream raw-jp, Phase 01). AllAnime
 			// GraphQL persisted-query API resolves original Japanese audio
 			// HLS streams. Public, no auth.
@@ -195,6 +188,8 @@ func NewRouter(
 			r.Get("/{animeId}/anime18/stream", catalogHandler.GetAnime18Stream)
 			// Jimaku Japanese subtitles
 			r.Get("/{animeId}/jimaku/subtitles", catalogHandler.GetJimakuSubtitles)
+			// Character roster for an anime
+			r.Get("/{animeId}/characters", characterHandler.GetAnimeCharacters)
 		})
 
 		// Kodik search (for finding anime not in our DB)
@@ -219,6 +214,11 @@ func NewRouter(
 		r.Route("/collections", func(r chi.Router) {
 			r.Get("/", collectionHandler.ListPublic)
 			r.Get("/{slug}", collectionHandler.GetBySlug)
+		})
+
+		// Public character routes
+		r.Route("/characters", func(r chi.Router) {
+			r.Get("/{characterId}", characterHandler.GetCharacter)
 		})
 
 		// Admin routes (require authentication)
