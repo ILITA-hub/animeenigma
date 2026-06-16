@@ -79,11 +79,11 @@ const CACHE_MAX = 150
 /** pointer-rest debounce before issuing a real (network) seek */
 const SETTLE_MS = 180
 /** evenly-spaced timeline points prefetched in the background */
-const PREFETCH_POINTS = 10
+const PREFETCH_POINTS = 50
 /** a stuck seek (failed fragment) must not wedge the prefetch pump */
 const SEEK_WATCHDOG_MS = 8000
 /** eager-init delay after a stream loads — the MAIN player wins startup
- *  bandwidth, then the preview warms its 10 thumbnails in the background */
+ *  bandwidth, then the preview warms its 50 thumbnails in the background */
 const EAGER_INIT_DELAY_MS = 3500
 /** pump retry cadence while the user's hover blocks background prefetch */
 const PUMP_RETRY_MS = 500
@@ -433,7 +433,7 @@ watch(
 
 // New stream — tear down (cache frames belong to the old video). Re-arm
 // immediately if the bubble is showing; otherwise EAGERLY after a short
-// delay, so the 10-point thumbnail warm-up runs before the first hover
+// delay, so the 50-point thumbnail warm-up runs before the first hover
 // instead of being gated on it. `immediate` covers the initial mount.
 watch(
   () => props.streamUrl,

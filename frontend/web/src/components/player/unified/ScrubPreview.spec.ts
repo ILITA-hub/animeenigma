@@ -67,28 +67,35 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
     expect(video.getAttribute('src')).toBe('https://x/ep.mp4')
   })
 
-  it('warms 10 spread thumbnails in the background with zero hovering', async () => {
+  it('warms 50 spread thumbnails in the background with zero hovering', async () => {
     const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
     await vi.advanceTimersByTimeAsync(4000) // eager init
     const { video, writes } = instrument(w)
-    Object.defineProperty(video, 'duration', { get: () => 1100, configurable: true })
+    const DUR = 1100
+    const POINTS = 50 // mirrors PREFETCH_POINTS in ScrubPreview.vue
+    Object.defineProperty(video, 'duration', { get: () => DUR, configurable: true })
+
+    // Evenly-spaced prefetch points, each snapped to the 5s bucket grid.
+    const expected = Array.from({ length: POINTS }, (_, i) =>
+      Math.max(0, Math.round((DUR * (i + 1)) / (POINTS + 1) / 5)) * 5,
+    )
 
     // Duration known → prefetch arms and pumps the first point on its own.
     video.dispatchEvent(new Event('loadedmetadata'))
     await w.vm.$nextTick()
     expect(writes.length).toBe(1)
-    expect(writes[0]).toBe(100) // 1100 × 1/11 → bucket 20 → t=100
+    expect(writes[0]).toBe(expected[0])
 
     // Each decoded thumbnail pumps the next point — chain runs to completion.
-    for (let i = 2; i <= 10; i++) {
+    for (let i = 1; i < POINTS; i++) {
       video.dispatchEvent(new Event('seeked'))
       await w.vm.$nextTick()
-      expect(writes[writes.length - 1]).toBe(i * 100)
+      expect(writes[writes.length - 1]).toBe(expected[i])
     }
     video.dispatchEvent(new Event('seeked'))
     await w.vm.$nextTick()
     await vi.advanceTimersByTimeAsync(2000)
-    expect(writes.length).toBe(10) // queue exhausted — no runaway seeking
+    expect(writes.length).toBe(POINTS) // queue exhausted — no runaway seeking
   })
 
   it('a pump blocked by an active hover RETRIES on a timer instead of stalling', async () => {
@@ -111,7 +118,8 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
     // …and the pump self-recovers: prefetch continues without further input.
     await vi.advanceTimersByTimeAsync(600)
     expect(writes.length).toBeGreaterThanOrEqual(2)
-    expect(writes[1]).toBe(100)
+    // First background prefetch point: 1100 × 1/51 → bucket 4 → t=20.
+    expect(writes[1]).toBe(20)
   })
 
   it('sets the mp4 src on first hover', async () => {

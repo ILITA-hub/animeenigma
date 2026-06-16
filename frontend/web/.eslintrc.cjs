@@ -49,6 +49,12 @@ module.exports = {
     {
       files: ['src/locales/*.json'],
       parser: 'jsonc-eslint-parser'
+    },
+    // Build/maintenance scripts run under Node, not the browser — give them the
+    // node env so globals like `process` resolve (else no-undef fails the gate).
+    {
+      files: ['scripts/**/*.{js,mjs,cjs}'],
+      env: { node: true }
     }
   ]
 }
