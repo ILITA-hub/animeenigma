@@ -243,6 +243,13 @@
     "off": "オフ",
     "sub": "字幕",
     "dub": "吹替",
+    "sources": {
+      "best": "ベスト",
+      "tryAnother": "別のソースを試す",
+      "raw": "RAW",
+      "subBurnedIn": "焼き込み",
+      "subSelectable": "選択可能"
+    },
     "pin": "固定",
     "unpin": "固定解除",
     "native": "ネイティブ",
