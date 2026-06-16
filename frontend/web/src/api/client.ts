@@ -747,6 +747,15 @@ export const scraperApi = {
 }
 
 /**
+ * Assembled, ranked per-anime capability report (catalog P4). Families:
+ * ourenglish (EN scrapers), kodik, animelib, hanime. The catalog wraps the
+ * payload in the {success,data} envelope — callers read res.data.data.
+ */
+export const capabilitiesApi = {
+  get: (animeId: string) => apiClient.get(`/anime/${animeId}/capabilities`),
+}
+
+/**
  * Smart Source Selection — learned-reliability ranking + same-day override.
  * `getSourceRanking` feeds rankingToOrder → pickSmartDefault; `postSourceFix`
  * records a same-day override provider after a client-side fallback rescued a
