@@ -72,6 +72,20 @@
     "dubBadge": "DUB",
     "episodeProgress": "第{n}話 / {total}"
   },
+  "characters": {
+    "detailsTitle": "キャラクター",
+    "heading": "キャラクター",
+    "showAll": "すべて表示",
+    "showLess": "折りたたむ",
+    "main": "主要",
+    "supporting": "脇役",
+    "synonyms": "別名",
+    "description": "説明",
+    "noDescription": "説明はありません。",
+    "empty": "キャラクターがありません",
+    "back": "戻る",
+    "fetchError": "キャラクターの読み込みに失敗しました"
+  },
   "anime": {
     "detailsTitle": "アニメ詳細",
     "watch": "視聴する",

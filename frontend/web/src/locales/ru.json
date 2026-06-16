@@ -72,6 +72,20 @@
     "dubBadge": "DUB",
     "episodeProgress": "Серия {n} / {total}"
   },
+  "characters": {
+    "detailsTitle": "Персонаж",
+    "heading": "Персонажи",
+    "showAll": "Показать всех",
+    "showLess": "Свернуть",
+    "main": "Главный",
+    "supporting": "Второстепенный",
+    "synonyms": "Также известен как",
+    "description": "Описание",
+    "noDescription": "Описание отсутствует.",
+    "empty": "Список персонажей пуст",
+    "back": "Назад",
+    "fetchError": "Не удалось загрузить персонажа"
+  },
   "anime": {
     "detailsTitle": "Детали аниме",
     "watch": "Смотреть",
