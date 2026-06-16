@@ -47,6 +47,7 @@ const (
 	PrefixVideo        = "video:"
 	PrefixGenre        = "genre:"
 	PrefixStudio       = "studio:"
+	PrefixCharacter    = "character:"
 	PrefixExternalID   = "extid:"
 	PrefixRateLimit    = "ratelimit:"
 	PrefixRoom         = "room:"
@@ -114,4 +115,16 @@ func KeyRelatedAnime(shikimoriID string) string {
 // Phase 13 (REC-SIG-06) — sibling of KeyRelatedAnime. TTL = TTLAnimeDetails (6h).
 func KeySimilarAnime(shikimoriID string) string {
 	return PrefixAnime + "similar:" + shikimoriID
+}
+
+// KeyAnimeCharacters is the cache key for an anime's character list.
+// TTL = TTLAnimeDetails (6h). Mirrors KeyRelatedAnime / KeySimilarAnime.
+func KeyAnimeCharacters(animeID string) string {
+	return PrefixAnime + "characters:" + animeID
+}
+
+// KeyCharacter is the cache key for a single character's detail row,
+// keyed by Shikimori character id. TTL = TTLAnimeDetails (6h).
+func KeyCharacter(shikimoriID string) string {
+	return PrefixCharacter + shikimoriID
 }
