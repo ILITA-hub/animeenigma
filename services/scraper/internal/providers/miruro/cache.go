@@ -127,8 +127,8 @@ func (l *cacheLayer) setServers(ctx context.Context, aniListID, episodeID string
 
 // --- stream URL (one server, one episode) ---------------------------------
 
-func keyStream(aniListID, episodeID, server string) string {
-	return fmt.Sprintf("scraper:miruro:stream:%s:%s:%s", aniListID, episodeID, server)
+func keyStream(aniListID, episodeID, server, category string) string {
+	return fmt.Sprintf("scraper:miruro:stream:%s:%s:%s:%s", aniListID, episodeID, server, category)
 }
 
 // cachedStream is what we persist for a resolved stream URL.
@@ -139,17 +139,17 @@ type cachedStream struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-func (l *cacheLayer) getStream(ctx context.Context, aniListID, episodeID, server string) (*cachedStream, bool) {
+func (l *cacheLayer) getStream(ctx context.Context, aniListID, episodeID, server, category string) (*cachedStream, bool) {
 	var out cachedStream
-	if err := l.c.Get(ctx, keyStream(aniListID, episodeID, server), &out); err == nil && out.URL != "" {
+	if err := l.c.Get(ctx, keyStream(aniListID, episodeID, server, category), &out); err == nil && out.URL != "" {
 		return &out, true
 	}
 	return nil, false
 }
 
-func (l *cacheLayer) setStream(ctx context.Context, aniListID, episodeID, server string, s *cachedStream) {
+func (l *cacheLayer) setStream(ctx context.Context, aniListID, episodeID, server, category string, s *cachedStream) {
 	if s == nil || s.URL == "" {
 		return
 	}
-	_ = l.c.Set(ctx, keyStream(aniListID, episodeID, server), s, streamTTLCap)
+	_ = l.c.Set(ctx, keyStream(aniListID, episodeID, server, category), s, streamTTLCap)
 }

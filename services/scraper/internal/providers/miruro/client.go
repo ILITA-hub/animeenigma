@@ -500,7 +500,7 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		serverID = defaultEpisodePreference[0]
 	}
 
-	if hit, ok := p.cache.getStream(ctx, aniListID, episodeID, serverID); ok {
+	if hit, ok := p.cache.getStream(ctx, aniListID, episodeID, serverID, string(category)); ok {
 		p.markStage(health.StageStream, nil)
 		return cachedToStream(hit), nil
 	}
@@ -577,8 +577,10 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		stream.Headers["Referer"] = pick.Referer
 	}
 
-	// Cache the resolved stream.
-	p.cache.setStream(ctx, aniListID, episodeID, serverID, &cachedStream{
+	// Cache the resolved stream. category is part of the key — sub and dub
+	// share a serverID (inner-provider name), so without it they collide and
+	// the first-fetched audio is served for both (selected SUB → got DUB).
+	p.cache.setStream(ctx, aniListID, episodeID, serverID, string(category), &cachedStream{
 		URL:     stream.Sources[0].URL,
 		Type:    stream.Sources[0].Type,
 		Quality: stream.Sources[0].Quality,
