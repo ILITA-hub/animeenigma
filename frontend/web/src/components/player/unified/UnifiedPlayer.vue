@@ -418,11 +418,16 @@ function isProviderAvailable(id: string): Promise<boolean> {
 let providerWasFromSavedCombo = false
 let savedSourceFallbackDone = false
 let playbackFallbackDone = false
+// Cumulative set of providers that have already failed for the CURRENT episode.
+// fallbackToNextSource excludes the whole set so auto-switch is monotonic and
+// can never revisit a failed source (no A↔B oscillation). Re-armed per-episode.
+const failedProviders = new Set<string>()
 watch(() => props.animeId, () => {
   aeAvailableCache = null
   providerWasFromSavedCombo = false
   savedSourceFallbackDone = false
   playbackFallbackDone = false
+  failedProviders.clear()
 })
 
 // Providers whose default-selection eligibility needs a runtime availability
@@ -522,8 +527,9 @@ watch(
 // other viewers of this anime get it first. Returns true if it switched.
 async function fallbackToNextSource(reason: 'resolve' | 'playback'): Promise<boolean> {
   const failed = state.combo.value.provider
+  if (failed) failedProviders.add(failed)
   const next = await pickSmartDefault(
-    rows.value.filter((r) => r.def.id !== failed),
+    rows.value.filter((r) => !failedProviders.has(r.def.id)),
     [...rankingOrder.value, ...CURATED_TIER],
     { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
   )
@@ -851,7 +857,6 @@ async function loadEpisodesAndStream() {
   const token = ++resolveToken
   resolveStartedAt = performance.now()
   reachedReported = false
-  playbackFallbackDone = false
   stallStartedAt = 0
 
   try {
@@ -993,6 +998,11 @@ function onSelectEpisode(ep: EpisodeOption) {
   if (selectedEpisode.value?.number === ep.number) return
   tracking.saveNow() // persist the outgoing episode's position
   selectedEpisode.value = ep
+  // Fresh episode → fresh auto-switch budget: re-arm the per-episode latches so
+  // resolve/playback fallback can fire once more and may revisit any provider.
+  savedSourceFallbackDone = false
+  playbackFallbackDone = false
+  failedProviders.clear()
   tracking.resetEpisode(isEpisodeWatched(ep.number))
   resumeChipDismissed.value = false
   resumeChipUsed.value = false
@@ -1445,6 +1455,10 @@ function goToNextEpisode() {
   if (next) {
     tracking.saveNow()
     selectedEpisode.value = next
+    // Fresh episode → fresh auto-switch budget (mirrors onSelectEpisode).
+    savedSourceFallbackDone = false
+    playbackFallbackDone = false
+    failedProviders.clear()
     tracking.resetEpisode(isEpisodeWatched(next.number))
     resumeChipDismissed.value = false
     resumeChipUsed.value = false
@@ -1461,7 +1475,6 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
   const token = ++resolveToken
   resolveStartedAt = performance.now()
   reachedReported = false
-  playbackFallbackDone = false
   stallStartedAt = 0
   try {
     const stream = await resolver.resolveStream(
