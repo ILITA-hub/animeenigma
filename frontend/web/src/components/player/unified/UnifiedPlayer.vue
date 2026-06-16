@@ -331,11 +331,14 @@ import { useWatchTracking } from '@/composables/unifiedPlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
 import { providerById, CURATED_TIER } from './providerRegistry'
 import { pickSmartDefault } from '@/composables/unifiedPlayer/smartDefault'
-import { aeApi } from '@/api/client'
+import { aeApi, sourceRankingApi } from '@/api/client'
+import { rankingToOrder } from '@/composables/unifiedPlayer/rankingOrder'
+import type { SourceRanking } from '@/types/sourceRanking'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer } from '@/composables/unifiedPlayer/comboMapping'
 import { useToast } from '@/composables/useToast'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
+import { useI18n } from 'vue-i18n'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult } from '@/types/unifiedPlayer'
@@ -376,6 +379,7 @@ const state = usePlayerState()
 const engine = useVideoEngine(videoRef)
 const resolver = useProviderResolver()
 const toast = useToast()
+const { t } = useI18n()
 
 // ─── Provider health filter ───────────────────────────────────────────────────
 
@@ -413,10 +417,12 @@ function isProviderAvailable(id: string): Promise<boolean> {
 // Also reset saved-combo fallback state so the new title gets a fresh attempt.
 let providerWasFromSavedCombo = false
 let savedSourceFallbackDone = false
+let playbackFallbackDone = false
 watch(() => props.animeId, () => {
   aeAvailableCache = null
   providerWasFromSavedCombo = false
   savedSourceFallbackDone = false
+  playbackFallbackDone = false
 })
 
 // Providers whose default-selection eligibility needs a runtime availability
@@ -428,6 +434,7 @@ const AE_NEEDS_CHECK = new Set(['ae'])
 // gated on `preferenceSettled` so the saved pick always wins when present.
 
 const preferenceSettled = ref(false)
+const rankingOrder = ref<string[]>([])
 const { resolve: resolvePreference, resolvedCombo, preferredScraperProvider } = useWatchPreferences(props.animeId)
 
 function applyResolvedCombo() {
@@ -491,11 +498,11 @@ watch(rows, () => {
 }, { immediate: true })
 
 watch(
-  [rows, preferenceSettled],
+  [rows, preferenceSettled, rankingOrder],
   () => {
     if (state.combo.value.provider) return
     if (!preferenceSettled.value) return // let the saved-combo restore go first
-    void pickSmartDefault(rows.value, CURATED_TIER, {
+    void pickSmartDefault(rows.value, [...rankingOrder.value, ...CURATED_TIER], {
       needsCheck: AE_NEEDS_CHECK,
       isAvailable: isProviderAvailable,
     }).then((id) => {
@@ -509,6 +516,28 @@ watch(
   },
   { immediate: true },
 )
+
+// Switches to the next-best still-active source after the current one failed, at
+// most once per trigger. Records the rescued provider as a same-day srcfix so
+// other viewers of this anime get it first. Returns true if it switched.
+async function fallbackToNextSource(reason: 'resolve' | 'playback'): Promise<boolean> {
+  const failed = state.combo.value.provider
+  const next = await pickSmartDefault(
+    rows.value.filter((r) => r.def.id !== failed),
+    [...rankingOrder.value, ...CURATED_TIER],
+    { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
+  )
+  if (!next) return false
+  toast.push(
+    reason === 'resolve' ? t('player.sourceFallback.resolve') : t('player.sourceFallback.playback'),
+    'info',
+    5000,
+  )
+  providerWasFromSavedCombo = false
+  state.setProvider(next, '') // provider watcher re-runs loadEpisodesAndStream
+  sourceRankingApi.postSourceFix(props.animeId, next).catch(() => undefined) // fire-and-forget
+  return true
+}
 
 // ─── Active provider display info ────────────────────────────────────────────
 
@@ -822,6 +851,7 @@ async function loadEpisodesAndStream() {
   const token = ++resolveToken
   resolveStartedAt = performance.now()
   reachedReported = false
+  playbackFallbackDone = false
   stallStartedAt = 0
 
   try {
@@ -889,20 +919,9 @@ async function loadEpisodesAndStream() {
     if (isNotAvailable) {
       if (!savedSourceFallbackDone && providerWasFromSavedCombo) {
         savedSourceFallbackDone = true
-        toast.push("The source you watched last time isn't available right now — switching.", 'info', 5000)
-        const failed = state.combo.value.provider
-        const next = await pickSmartDefault(
-          rows.value.filter((r) => r.def.id !== failed),
-          CURATED_TIER,
-          { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
-        )
-        if (next) {
-          providerWasFromSavedCombo = false
-          state.setProvider(next, '') // provider watcher re-runs loadEpisodesAndStream
-          return
-        }
+        if (await fallbackToNextSource('resolve')) return
       }
-      sourceError.value = "This source isn't available yet"
+      sourceError.value = t('player.sourceFallback.unavailable')
     } else {
       sourceError.value = 'Stream unavailable'
     }
@@ -1219,6 +1238,12 @@ watch(engine.fatal, (f) => {
       audio: state.combo.value.audio,
       lang: state.combo.value.lang,
     })
+    // It was actually playing then died (reachedReported) — auto-switch to the
+    // next-best source once. The never-started case is handled at resolve time.
+    if (reachedReported && !playbackFallbackDone) {
+      playbackFallbackDone = true
+      void fallbackToNextSource('playback')
+    }
   }
 })
 
@@ -1436,6 +1461,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
   const token = ++resolveToken
   resolveStartedAt = performance.now()
   reachedReported = false
+  playbackFallbackDone = false
   stallStartedAt = 0
   try {
     const stream = await resolver.resolveStream(
@@ -1814,6 +1840,15 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('pagehide', onPageHide)
   document.addEventListener('visibilitychange', onVisibilityChange)
+  // Learned source ranking — advisory only, never blocks playback.
+  void (async () => {
+    try {
+      const resp = await sourceRankingApi.getSourceRanking(props.animeId)
+      rankingOrder.value = rankingToOrder((resp.data?.data ?? null) as SourceRanking | null)
+    } catch {
+      rankingOrder.value = [] // advisory only — never block playback
+    }
+  })()
 })
 
 onUnmounted(() => {
