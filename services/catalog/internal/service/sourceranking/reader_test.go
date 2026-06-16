@@ -28,6 +28,17 @@ func TestReadRanking_GlobalAndAnime(t *testing.T) {
 	}
 }
 
+func TestReadRanking_Fix(t *testing.T) {
+	f := fakeGetter{vals: map[string]string{
+		"srcfix:uuid-1": "allanime",
+	}}
+	r := NewReader(f)
+	out := r.Read(context.Background(), "uuid-1")
+	if out.Fix != "allanime" {
+		t.Errorf("fix = %q, want allanime", out.Fix)
+	}
+}
+
 func TestReadRanking_MissingKeysAreEmpty(t *testing.T) {
 	r := NewReader(fakeGetter{vals: map[string]string{}})
 	out := r.Read(context.Background(), "nope")

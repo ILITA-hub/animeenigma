@@ -168,6 +168,7 @@ func NewRouter(
 			// default. Reads the Redis ranking analytics publishes.
 			if sourceRankingHandler != nil {
 				r.Get("/{animeId}/source-ranking", sourceRankingHandler.Get)
+				r.Post("/{animeId}/source-fix", sourceRankingHandler.Post)
 			}
 			// Raw JP video source (workstream raw-jp, Phase 01). AllAnime
 			// GraphQL persisted-query API resolves original Japanese audio

@@ -61,6 +61,10 @@ func (a rankCacheAdapter) GetString(ctx context.Context, key string) (string, bo
 	return v, true
 }
 
+func (a rankCacheAdapter) SetString(ctx context.Context, key, val string, ttl time.Duration) error {
+	return a.c.Client().Set(ctx, key, val, ttl).Err()
+}
+
 func main() {
 	log := logger.Default()
 	defer func() { _ = log.Sync() }()
@@ -401,7 +405,8 @@ func main() {
 	// (player_ranking:global / player_ranking:anime:{id}) the analytics service
 	// publishes and serves them at GET /api/anime/{id}/source-ranking.
 	sourceRankingReader := sourceranking.NewReader(rankCacheAdapter{c: redisCache, log: log})
-	sourceRankingHandler := handler.NewSourceRankingHandler(sourceRankingReader, log)
+	sourceRankingWriter := sourceranking.NewWriter(rankCacheAdapter{c: redisCache, log: log})
+	sourceRankingHandler := handler.NewSourceRankingHandler(sourceRankingReader, sourceRankingWriter, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")

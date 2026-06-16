@@ -25,6 +25,9 @@ type Record struct {
 type Ranking struct {
 	Global   []Record `json:"global"`
 	PerAnime []Record `json:"perAnime"`
+	// Fix is a same-day per-anime override provider (srcfix:{id}, 24h TTL),
+	// written when a client-side fallback rescued a failed resolve. Empty = none.
+	Fix string `json:"fix"`
 }
 
 // stringGetter is the narrow cache surface the reader needs (a string GET with a
@@ -48,6 +51,9 @@ func (r *Reader) Read(ctx context.Context, animeID string) Ranking {
 	if animeID != "" {
 		if s, ok := r.cache.GetString(ctx, "player_ranking:anime:"+animeID); ok {
 			_ = json.Unmarshal([]byte(s), &out.PerAnime)
+		}
+		if s, ok := r.cache.GetString(ctx, "srcfix:"+animeID); ok {
+			out.Fix = s
 		}
 	}
 	if out.Global == nil {
