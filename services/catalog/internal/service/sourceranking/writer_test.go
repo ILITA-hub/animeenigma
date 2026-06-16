@@ -20,14 +20,16 @@ func (f *fakeSetter) SetString(_ context.Context, key, val string, ttl time.Dura
 	return nil
 }
 
+const testAnimeUUID = "123e4567-e89b-12d3-a456-426614174000"
+
 func TestSetFix_Valid(t *testing.T) {
 	f := &fakeSetter{}
 	w := NewWriter(f)
-	if err := w.SetFix(context.Background(), "uuid-1", "allanime"); err != nil {
+	if err := w.SetFix(context.Background(), testAnimeUUID, "allanime"); err != nil {
 		t.Fatalf("SetFix err = %v", err)
 	}
-	if f.key != "srcfix:uuid-1" {
-		t.Errorf("key = %q, want srcfix:uuid-1", f.key)
+	if f.key != "srcfix:"+testAnimeUUID {
+		t.Errorf("key = %q, want srcfix:%s", f.key, testAnimeUUID)
 	}
 	if f.val != "allanime" {
 		t.Errorf("val = %q, want allanime", f.val)
@@ -40,8 +42,21 @@ func TestSetFix_Valid(t *testing.T) {
 func TestSetFix_UnknownProvider(t *testing.T) {
 	f := &fakeSetter{}
 	w := NewWriter(f)
-	if err := w.SetFix(context.Background(), "uuid-1", "bogus"); err == nil {
+	if err := w.SetFix(context.Background(), testAnimeUUID, "bogus"); err == nil {
 		t.Fatal("want error for unknown provider, got nil")
+	}
+	if f.calls != 0 {
+		t.Errorf("expected no write, got %d calls", f.calls)
+	}
+}
+
+func TestWriter_RejectsNonUUIDAnimeID(t *testing.T) {
+	f := &fakeSetter{}
+	w := NewWriter(f)
+	// A valid provider but a non-UUID animeID must be rejected with no write,
+	// capping the srcfix key namespace to plausible catalog PKs (key-flood guard).
+	if err := w.SetFix(context.Background(), "not-a-uuid", "allanime"); err == nil {
+		t.Fatal("want error for non-UUID animeID, got nil")
 	}
 	if f.calls != 0 {
 		t.Errorf("expected no write, got %d calls", f.calls)
