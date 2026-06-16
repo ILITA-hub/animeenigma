@@ -2,15 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Wire the live player's Source menu to `GET /api/anime/{uuid}/capabilities` — server-driven ranking, declutter-to-top-1 (reveal via hacker mode + a playback-error escape hatch), and sub/dub/quality/team chip labels.
+**Goal:** Enrich the live player's Source menu with `GET /api/anime/{uuid}/capabilities` data — declutter the provider list to the selected (best) source with hacker-mode reveal + a playback-error escape hatch, and decorate provider/team chips with sub/dub/quality/team labels.
 
-**Architecture:** An enrichment layer over the existing `useProviderHealth` pipeline. A new `useCapabilities` composable fetches the report and yields a `Map<providerId, ProviderCap>` + a ranked id list. Pure helpers (`flattenCapabilities`, `rankedProviderIds`, `deriveCapLabels`) do the logic and are unit-tested in isolation. `SourcePanel` merges the capability data into the chip list (sort + collapse + labels); `UnifiedPlayer` owns the wiring. If `/capabilities` is absent the map is empty and everything degrades to today's `CURATED_TIER` behaviour.
+**Architecture:** A pure **labels + collapse** enrichment layer over the existing `useProviderHealth` rows. A `useCapabilities` composable fetches the report and yields a `Map<providerId, ProviderCap>`. Pure helpers (`flattenCapabilities`, `deriveCapLabels`) do the logic, unit-tested in isolation. `SourcePanel` collapses the chip list and decorates each chip from `capMap`; `UnifiedPlayer` wires the composable + three props. If `/capabilities` is absent the map is empty and every chip renders exactly as today.
+
+**RECONCILIATION (2026-06-16) — ordering is NOT ours.** A concurrent "Smart Source Selection Stage 2" effort already owns provider ORDERING on origin/main: it fetches `/api/anime/{id}/source-ranking` (telemetry: global + per-anime reliability + same-day srcfix), flattens it via `rankingToOrder()`, passes `[...rankingOrder, ...CURATED_TIER]` to `pickSmartDefault`, and auto-switches providers on playback failure (`fallbackToNextSource`). Telemetry is a better ordering signal than the capability `rank` field, so **this plan does NOT touch ordering**: no `rankedProviderIds`, no `pickSmartDefault` edits, no `orderedProviderIds`. The collapse's "top-1" is simply the already-**selected** provider (the one Stage-2's smart default chose), so we inherit Stage-2's ordering for free. Our footprint in the actively-churned `UnifiedPlayer.vue` shrinks to one composable call + three `SourcePanel` props — orthogonal to the ranking code.
 
 **Tech Stack:** Vue 3 `<script setup>`, TypeScript, Vitest (`@vue/test-utils`), vue-i18n. Frontend uses `bun`/`bunx`. DS lint exemption applies to `components/player/`.
 
-**Spec:** `docs/superpowers/specs/2026-06-16-player-capabilities-source-menu-design.md`
+**Spec:** `docs/superpowers/specs/2026-06-16-player-capabilities-source-menu-design.md` (the spec's §4.3 ranking and the ranking half of §5.1 are superseded by the reconciliation above; labels §5.2/§5.3 and the collapse/try-another UX of §5.1 stand).
 
-**Convention:** every commit includes the co-author trailer (Claude Opus 4.6 / 0neymik0 / NANDIorg). Path-scope every `git add`; no `git add -A`. The controller lands commits on origin/main (worktree cherry-pick) — task commits are local.
+**Convention:** every commit includes the co-author trailer (Claude Opus 4.6 / 0neymik0 / NANDIorg). **Commit with an explicit pathspec — `git commit <paths> -m …` — NEVER `git add` + bare `git commit`** (the shared index holds other agents' staged work; a bare commit captures it). Run `git show --stat HEAD` after every commit and confirm ONLY your files are present. The controller lands commits on origin/main (worktree cherry-pick).
+
+**Base:** branch off the latest **origin/main** (it has Stage-2; the local tree may be mid-churn). Find edit anchors by CONTENT (quoted strings below), not line numbers — they will have drifted.
 
 ---
 
@@ -20,8 +24,6 @@
 - `frontend/web/src/types/capabilities.ts` — TS mirror of the Go `CapabilityReport`.
 - `frontend/web/src/composables/unifiedPlayer/useCapabilities.ts` — fetch + `flattenCapabilities` pure helper + composable.
 - `frontend/web/src/composables/unifiedPlayer/useCapabilities.spec.ts`
-- `frontend/web/src/composables/unifiedPlayer/rankedProviderIds.ts` — pure ordering merge.
-- `frontend/web/src/composables/unifiedPlayer/rankedProviderIds.spec.ts`
 - `frontend/web/src/composables/unifiedPlayer/capLabels.ts` — pure label derivation.
 - `frontend/web/src/composables/unifiedPlayer/capLabels.spec.ts`
 - `frontend/web/src/components/player/unified/ProviderChip.spec.ts`
@@ -31,7 +33,7 @@
 - `frontend/web/src/api/client.ts` — add `capabilitiesApi`.
 - `frontend/web/src/components/player/unified/ProviderChip.vue` — optional `cap`/`best` props + label row.
 - `frontend/web/src/components/player/unified/SourcePanel.vue` — collapse, labels, team tags, try-another disclosure.
-- `frontend/web/src/components/player/unified/UnifiedPlayer.vue` — wire `useCapabilities`, compute ordered ids, pass new props, swap the two `pickSmartDefault` array args.
+- `frontend/web/src/components/player/unified/UnifiedPlayer.vue` — wire `useCapabilities`, pass three props to `SourcePanel`. NO ordering edits.
 - `frontend/web/src/locales/{en,ru,ja}.json` — `player.sources.*` keys.
 
 **Working dir for all commands:** `cd /data/animeenigma/frontend/web`
@@ -42,7 +44,7 @@
 
 **Files:**
 - Create: `frontend/web/src/types/capabilities.ts`
-- Modify: `frontend/web/src/api/client.ts` (add `capabilitiesApi` next to `scraperApi`, ~line 746)
+- Modify: `frontend/web/src/api/client.ts` (add `capabilitiesApi` right after the `scraperApi` object closes)
 
 - [ ] **Step 1: Create the types file**
 
@@ -83,7 +85,7 @@ export interface CapVariant {
 
 - [ ] **Step 2: Add the API client method**
 
-In `frontend/web/src/api/client.ts`, immediately after the `scraperApi` object closes (the `getHealth: () => apiClient.get(\`/anime/_/scraper/health\`),` line and its closing `}` near line 746), add:
+In `frontend/web/src/api/client.ts`, find the `scraperApi` object (it ends with `getHealth: () => apiClient.get(\`/anime/_/scraper/health\`),` then `}`). Immediately after its closing `}`, add:
 ```ts
 /**
  * Assembled, ranked per-anime capability report (catalog P4). Families:
@@ -98,17 +100,17 @@ export const capabilitiesApi = {
 - [ ] **Step 3: Type-check**
 
 Run: `bunx tsc --noEmit`
-Expected: PASS (no errors). The new export is unused so far — that's fine.
+Expected: PASS. The new export is unused so far — fine.
 
 - [ ] **Step 4: Commit**
 ```bash
-git add src/types/capabilities.ts src/api/client.ts
-git commit -m "feat(player): capability report types + capabilitiesApi client
+git commit src/types/capabilities.ts src/api/client.ts -m "feat(player): capability report types + capabilitiesApi client
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
 Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
 ```
+Then: `git show --stat HEAD` — confirm ONLY these two files are in the commit.
 
 ---
 
@@ -118,7 +120,7 @@ Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
 - Create: `frontend/web/src/composables/unifiedPlayer/useCapabilities.ts`
 - Test: `frontend/web/src/composables/unifiedPlayer/useCapabilities.spec.ts`
 
-The pure `flattenCapabilities(report)` does all the testable logic; the composable is a thin fetch wrapper. We unit-test the pure function (no Vue reactivity needed).
+The pure `flattenCapabilities(report)` returns the provider→cap map (labels only — NO ranking). The composable is a thin fetch wrapper.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -149,22 +151,15 @@ const report: CapabilityReport = {
 
 describe('flattenCapabilities', () => {
   it('flattens every family into a provider map', () => {
-    const { capMap } = flattenCapabilities(report)
+    const capMap = flattenCapabilities(report)
     expect(capMap.size).toBe(3)
     expect(capMap.get('gogoanime')?.rank).toBe(120)
     expect(capMap.get('kodik')?.display_name).toBe('Kodik')
   })
 
-  it('ranks ids by rank desc with name tiebreak', () => {
-    const { rankedIds } = flattenCapabilities(report)
-    expect(rankedIds).toEqual(['gogoanime', 'allanime', 'kodik'])
-  })
-
-  it('degrades to empty on null/malformed report', () => {
-    expect(flattenCapabilities(null).capMap.size).toBe(0)
-    expect(flattenCapabilities(null).rankedIds).toEqual([])
-    // missing families array
-    expect(flattenCapabilities({ anime_id: 'x' } as unknown as CapabilityReport).rankedIds).toEqual([])
+  it('degrades to an empty map on null/malformed report', () => {
+    expect(flattenCapabilities(null).size).toBe(0)
+    expect(flattenCapabilities({ anime_id: 'x' } as unknown as CapabilityReport).size).toBe(0)
   })
 })
 ```
@@ -172,7 +167,7 @@ describe('flattenCapabilities', () => {
 - [ ] **Step 2: Run, confirm fail**
 
 Run: `bunx vitest run src/composables/unifiedPlayer/useCapabilities.spec.ts`
-Expected: FAIL — `flattenCapabilities` is not exported / module missing.
+Expected: FAIL — `flattenCapabilities` not exported / module missing.
 
 - [ ] **Step 3: Create the composable**
 
@@ -183,32 +178,25 @@ import { capabilitiesApi } from '@/api/client'
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 
 /**
- * Flatten a capability report into a providerId→ProviderCap map plus a
- * best-first ranked id list (rank desc, name tiebreak — mirrors the backend
- * stable sort). Pure + defensive: a null/malformed report yields empties.
+ * Flatten a capability report into a providerId→ProviderCap map (for chip
+ * labels). Pure + defensive: a null/malformed report yields an empty map.
+ * Ordering is intentionally NOT derived here — Stage-2 owns provider order.
  */
-export function flattenCapabilities(report: CapabilityReport | null): {
-  capMap: Map<string, ProviderCap>
-  rankedIds: string[]
-} {
+export function flattenCapabilities(report: CapabilityReport | null): Map<string, ProviderCap> {
   const capMap = new Map<string, ProviderCap>()
-  if (!report || !Array.isArray(report.families)) return { capMap, rankedIds: [] }
+  if (!report || !Array.isArray(report.families)) return capMap
   for (const fam of report.families) {
     for (const p of fam.providers ?? []) capMap.set(p.provider, p)
   }
-  const rankedIds = [...capMap.values()]
-    .sort((a, b) => b.rank - a.rank || a.provider.localeCompare(b.provider))
-    .map((p) => p.provider)
-  return { capMap, rankedIds }
+  return capMap
 }
 
 /**
  * Fetch the capability report for an anime id (re-fetches when the id changes).
- * Decoration + ordering only — every failure degrades to empty, never throws.
+ * Decoration only — every failure degrades to an empty map, never throws.
  */
 export function useCapabilities(animeId: Ref<string>) {
   const capMap = ref<Map<string, ProviderCap>>(new Map())
-  const rankedIds = ref<string[]>([])
   const loaded = ref(false)
   const error = ref(false)
 
@@ -222,12 +210,9 @@ export function useCapabilities(animeId: Ref<string>) {
       const res = await capabilitiesApi.get(id)
       // catalog {success,data} envelope
       const report = (res.data?.data ?? res.data ?? null) as CapabilityReport | null
-      const flat = flattenCapabilities(report)
-      capMap.value = flat.capMap
-      rankedIds.value = flat.rankedIds
+      capMap.value = flattenCapabilities(report)
     } catch {
       capMap.value = new Map()
-      rankedIds.value = []
       error.value = true
     } finally {
       loaded.value = true
@@ -236,130 +221,28 @@ export function useCapabilities(animeId: Ref<string>) {
 
   watch(animeId, (id) => { void load(id) }, { immediate: true })
 
-  return { capMap, rankedIds, loaded, error }
+  return { capMap, loaded, error }
 }
 ```
 
 - [ ] **Step 4: Run, confirm pass**
 
 Run: `bunx vitest run src/composables/unifiedPlayer/useCapabilities.spec.ts`
-Expected: PASS (3 tests).
+Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 ```bash
-git add src/composables/unifiedPlayer/useCapabilities.ts src/composables/unifiedPlayer/useCapabilities.spec.ts
-git commit -m "feat(player): useCapabilities composable + flattenCapabilities
+git commit src/composables/unifiedPlayer/useCapabilities.ts src/composables/unifiedPlayer/useCapabilities.spec.ts -m "feat(player): useCapabilities composable (capMap for chip labels)
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
 Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
 ```
+Then `git show --stat HEAD` — confirm ONLY these two files.
 
 ---
 
-## Task 3: `rankedProviderIds` (merge ordering)
-
-**Files:**
-- Create: `frontend/web/src/composables/unifiedPlayer/rankedProviderIds.ts`
-- Test: `frontend/web/src/composables/unifiedPlayer/rankedProviderIds.spec.ts`
-
-- [ ] **Step 1: Write the failing test**
-
-`frontend/web/src/composables/unifiedPlayer/rankedProviderIds.spec.ts`:
-```ts
-import { describe, it, expect } from 'vitest'
-import { rankedProviderIds } from './rankedProviderIds'
-import type { ProviderRow, ProviderDef } from '@/types/unifiedPlayer'
-
-function row(id: string, state: ProviderRow['state'] = 'active'): ProviderRow {
-  return { def: { id } as ProviderDef, state }
-}
-
-const CURATED = ['ae', 'allanime', 'gogoanime', 'raw', '18anime']
-
-describe('rankedProviderIds', () => {
-  it('puts capability-ranked rows first, in ranked order', () => {
-    const rows = [row('allanime'), row('gogoanime'), row('ae'), row('raw')]
-    const out = rankedProviderIds(rows, ['gogoanime', 'allanime'], CURATED)
-    // ranked first (gogo, allanime), then registry-only by CURATED order (ae, raw)
-    expect(out).toEqual(['gogoanime', 'allanime', 'ae', 'raw'])
-  })
-
-  it('appends rows absent from the ranking in CURATED order then alpha', () => {
-    const rows = [row('raw'), row('ae'), row('zzz')]
-    const out = rankedProviderIds(rows, [], CURATED)
-    expect(out).toEqual(['ae', 'raw', 'zzz']) // ae<raw by CURATED, zzz unknown→alpha last
-  })
-
-  it('ignores ranked ids that are not present as rows', () => {
-    const rows = [row('ae')]
-    const out = rankedProviderIds(rows, ['gogoanime', 'allanime'], CURATED)
-    expect(out).toEqual(['ae'])
-  })
-})
-```
-
-- [ ] **Step 2: Run, confirm fail**
-
-Run: `bunx vitest run src/composables/unifiedPlayer/rankedProviderIds.spec.ts`
-Expected: FAIL — module missing.
-
-- [ ] **Step 3: Create the file**
-
-`frontend/web/src/composables/unifiedPlayer/rankedProviderIds.ts`:
-```ts
-import type { ProviderRow } from '@/types/unifiedPlayer'
-
-/**
- * Merge the server capability ranking with the registry rows into one ordered
- * id list for the smart default and the panel sort:
- *   1. capability-ranked ids that exist as rows (best first),
- *   2. rows absent from the ranking (ae/raw/18anime…), in `curated` order,
- *      with unknown ids alphabetised last.
- */
-export function rankedProviderIds(
-  rows: ProviderRow[],
-  rankedIds: string[],
-  curated: string[],
-): string[] {
-  const rowIds = new Set(rows.map((r) => r.def.id))
-  const out: string[] = []
-  const seen = new Set<string>()
-  for (const id of rankedIds) {
-    if (rowIds.has(id) && !seen.has(id)) {
-      out.push(id)
-      seen.add(id)
-    }
-  }
-  const curatedPos = (id: string) => {
-    const i = curated.indexOf(id)
-    return i === -1 ? Number.MAX_SAFE_INTEGER : i
-  }
-  const remaining = [...rowIds].filter((id) => !seen.has(id))
-  remaining.sort((a, b) => curatedPos(a) - curatedPos(b) || a.localeCompare(b))
-  out.push(...remaining)
-  return out
-}
-```
-
-- [ ] **Step 4: Run, confirm pass**
-
-Run: `bunx vitest run src/composables/unifiedPlayer/rankedProviderIds.spec.ts`
-Expected: PASS (3 tests).
-
-- [ ] **Step 5: Commit**
-```bash
-git add src/composables/unifiedPlayer/rankedProviderIds.ts src/composables/unifiedPlayer/rankedProviderIds.spec.ts
-git commit -m "feat(player): rankedProviderIds merge ordering
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
-Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
-Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
-```
-
----
-
-## Task 4: `deriveCapLabels` (chip label derivation)
+## Task 3: `deriveCapLabels` (chip label derivation)
 
 **Files:**
 - Create: `frontend/web/src/composables/unifiedPlayer/capLabels.ts`
@@ -464,23 +347,23 @@ Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 ```bash
-git add src/composables/unifiedPlayer/capLabels.ts src/composables/unifiedPlayer/capLabels.spec.ts
-git commit -m "feat(player): deriveCapLabels for provider chip labels
+git commit src/composables/unifiedPlayer/capLabels.ts src/composables/unifiedPlayer/capLabels.spec.ts -m "feat(player): deriveCapLabels for provider chip labels
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
 Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
 ```
+Then `git show --stat HEAD` — confirm ONLY these two files.
 
 ---
 
-## Task 5: `ProviderChip.vue` — capability label row
+## Task 4: `ProviderChip.vue` — capability label row
 
 **Files:**
 - Modify: `frontend/web/src/components/player/unified/ProviderChip.vue`
 - Test: `frontend/web/src/components/player/unified/ProviderChip.spec.ts`
 
-Add optional `cap` + `best` props. When `cap` resolves labels, render a second line under the name with category tags (`data-test="cap-cat"`), a quality tag (`data-test="cap-quality"`), and a "best" pill (`data-test="cap-best"`). i18n via the global `$t` (stubbed in tests).
+Add optional `cap` + `best` props. When `cap` resolves labels, render a second line under the name: category tags (`data-test="cap-cat"`), a quality tag (`data-test="cap-quality"`), and a "best" pill (`data-test="cap-best"`). i18n via the global `$t` (stubbed in tests).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -526,7 +409,7 @@ describe('ProviderChip', () => {
 - [ ] **Step 2: Run, confirm fail**
 
 Run: `bunx vitest run src/components/player/unified/ProviderChip.spec.ts`
-Expected: FAIL — no `cap-cat`/`cap-best` elements (props ignored).
+Expected: FAIL — no `cap-cat`/`cap-best` elements.
 
 - [ ] **Step 3: Edit the component**
 
@@ -558,7 +441,7 @@ In `frontend/web/src/components/player/unified/ProviderChip.vue`, replace the si
       </span>
 ```
 
-Then update the `<script setup>` block. Replace the existing imports + `defineProps` with:
+Then update the `<script setup>` block — replace the imports + `defineProps` + the `isSelected` computed with:
 ```ts
 import { computed } from 'vue'
 import { Check } from 'lucide-vue-next'
@@ -586,8 +469,7 @@ function onClick() {
   }
 }
 ```
-
-> Note: the button is `inline-flex items-center`; the name span changing to `flex-col` is fine — it stays vertically centred. The wip/down badges and the selected check remain after this span, unchanged.
+> The button is `inline-flex items-center`; the name span changing to `flex-col` stays vertically centred. The wip/down badges + selected check remain after this span, unchanged.
 
 - [ ] **Step 4: Run, confirm pass**
 
@@ -596,23 +478,23 @@ Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 ```bash
-git add src/components/player/unified/ProviderChip.vue src/components/player/unified/ProviderChip.spec.ts
-git commit -m "feat(player): ProviderChip capability label row (sub/dub/quality/best)
+git commit src/components/player/unified/ProviderChip.vue src/components/player/unified/ProviderChip.spec.ts -m "feat(player): ProviderChip capability label row (sub/dub/quality/best)
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
 Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
 ```
+Then `git show --stat HEAD` — confirm ONLY these two files.
 
 ---
 
-## Task 6: `SourcePanel.vue` — collapse, labels, team tags, try-another
+## Task 5: `SourcePanel.vue` — collapse, labels, team tags, try-another
 
 **Files:**
 - Modify: `frontend/web/src/components/player/unified/SourcePanel.vue`
 - Test: `frontend/web/src/components/player/unified/SourcePanel.spec.ts`
 
-Add three props (`capMap`, `rankedIds`, `hackerMode`, `playbackError`), compute `visibleRows` (collapse), pass `cap`/`best` to each chip, tag team chips, and render the try-another disclosure.
+Add three props (`capMap`, `hackerMode`, `playbackError`). Collapse the provider list to the **selected** provider (Stage-2 already picked the best into `provider`), fall back to first-active when none selected. Hacker mode → full list; playback error → a `Try another source ▾` disclosure expands the active rows. Decorate chips from `capMap`; tag team chips.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -629,37 +511,36 @@ function row(id: string, state: ProviderRow['state'] = 'active'): ProviderRow {
   return { def: { id, name: id, hue: '#00d4ff' } as ProviderDef, state }
 }
 const base = {
-  audio: 'sub' as const, lang: 'en' as const, team: null, provider: '', server: '',
+  audio: 'sub' as const, lang: 'en' as const, team: null, server: '',
   servers: [] as { id: string; label: string }[], teams: [] as string[],
-  capMap: new Map<string, ProviderCap>(), rankedIds: ['gogoanime', 'allanime', 'miruro'],
+  capMap: new Map<string, ProviderCap>(),
 }
 const rows = [row('gogoanime'), row('allanime'), row('miruro')]
 
 describe('SourcePanel collapse', () => {
-  it('default (hacker off) shows only the top active provider', () => {
-    const w = mount(SourcePanel, { props: { ...base, rows, hackerMode: false, playbackError: false }, ...mountOpts })
+  it('default shows only the selected provider', () => {
+    const w = mount(SourcePanel, { props: { ...base, rows, provider: 'allanime', hackerMode: false, playbackError: false }, ...mountOpts })
+    expect(w.findAll('[data-test="provider-chip"]').length).toBe(1)
+    expect(w.find('[data-test="provider-chip"]').attributes('data-id')).toBe('allanime')
+  })
+
+  it('falls back to the first active provider when none selected', () => {
+    const w = mount(SourcePanel, { props: { ...base, rows, provider: '', hackerMode: false, playbackError: false }, ...mountOpts })
     expect(w.findAll('[data-test="provider-chip"]').length).toBe(1)
     expect(w.find('[data-test="provider-chip"]').attributes('data-id')).toBe('gogoanime')
   })
 
-  it('hacker mode shows the full ranked list', () => {
-    const w = mount(SourcePanel, { props: { ...base, rows, hackerMode: true, playbackError: false }, ...mountOpts })
+  it('hacker mode shows the full list', () => {
+    const w = mount(SourcePanel, { props: { ...base, rows, provider: 'gogoanime', hackerMode: true, playbackError: false }, ...mountOpts })
     expect(w.findAll('[data-test="provider-chip"]').length).toBe(3)
   })
 
   it('shows try-another only on playback error, and expands on click', async () => {
-    const w = mount(SourcePanel, { props: { ...base, rows, hackerMode: false, playbackError: true }, ...mountOpts })
+    const w = mount(SourcePanel, { props: { ...base, rows, provider: 'gogoanime', hackerMode: false, playbackError: true }, ...mountOpts })
     const btn = w.find('[data-test="try-another"]')
     expect(btn.exists()).toBe(true)
     await btn.trigger('click')
     expect(w.findAll('[data-test="provider-chip"]').length).toBe(3)
-  })
-
-  it('promotes the next active provider when the top one is down', () => {
-    const downTop = [row('gogoanime', 'down'), row('allanime'), row('miruro')]
-    const w = mount(SourcePanel, { props: { ...base, rows: downTop, hackerMode: false, playbackError: false }, ...mountOpts })
-    expect(w.findAll('[data-test="provider-chip"]').length).toBe(1)
-    expect(w.find('[data-test="provider-chip"]').attributes('data-id')).toBe('allanime')
   })
 })
 ```
@@ -671,20 +552,20 @@ Expected: FAIL — panel renders all rows / unknown props.
 
 - [ ] **Step 3: Edit the template — provider list**
 
-In `frontend/web/src/components/player/unified/SourcePanel.vue`, replace the entire "Provider list" block (the `<div class="flex flex-col gap-1">` containing the header span and the `ProviderChip` `v-for`, lines ~112–126) with:
+In `frontend/web/src/components/player/unified/SourcePanel.vue`, replace the entire "Provider list" block (the `<div class="flex flex-col gap-1">` containing the "Provider" header span and the `ProviderChip` `v-for`) with:
 ```vue
-    <!-- Provider list (collapsed to top-1 unless hacker mode or error-expanded) -->
+    <!-- Provider list (collapsed to the selected source unless hacker mode / error-expanded) -->
     <div class="flex flex-col gap-1">
       <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-[2px]">
         Provider
       </span>
       <div class="flex flex-col gap-1">
         <ProviderChip
-          v-for="(r, i) in visibleRows"
+          v-for="r in visibleRows"
           :key="r.def.id"
           :row="r"
           :cap="capMap.get(r.def.id)"
-          :best="!hackerMode && !expanded && i === 0"
+          :best="!hackerMode && !expanded && r.def.id === topRow?.def.id"
           :selected="r.def.id === provider"
           @select="emit('select-provider', r.def.id)"
         />
@@ -703,7 +584,7 @@ In `frontend/web/src/components/player/unified/SourcePanel.vue`, replace the ent
 
 - [ ] **Step 4: Edit the template — team chip tag**
 
-In the team-chips `<button v-for="t in teams">` (lines ~94–108), replace the chip's inner `{{ t }}` text with a name + optional category tag:
+In the team-chips `<button v-for="t in teams">`, replace the chip's inner `{{ t }}` text with a name + optional category tag:
 ```vue
           <span>{{ t }}</span>
           <span
@@ -714,7 +595,7 @@ In the team-chips `<button v-for="t in teams">` (lines ~94–108), replace the c
 
 - [ ] **Step 5: Edit the `<script setup>` block**
 
-Replace the imports + `defineProps` + `computed` section. New script:
+Replace the imports + `defineProps` + `computed` section with:
 ```ts
 import { computed, ref, watch } from 'vue'
 import type { AudioKind, TrackLang, ProviderRow } from '@/types/unifiedPlayer'
@@ -731,7 +612,6 @@ const props = defineProps<{
   servers: { id: string; label: string }[]
   teams: string[]
   capMap: Map<string, ProviderCap>
-  rankedIds: string[]
   hackerMode: boolean
   playbackError: boolean
 }>()
@@ -758,27 +638,25 @@ const langOptions: { value: TrackLang; label: string }[] = [
 const audioIndex = computed(() => audioOptions.findIndex((o) => o.value === props.audio))
 const langIndex = computed(() => langOptions.findIndex((o) => o.value === props.lang))
 
-// Rows sorted by the merged capability ranking (registry order for unranked).
-const sortedRows = computed(() => {
-  const pos = (id: string) => {
-    const i = props.rankedIds.indexOf(id)
-    return i === -1 ? Number.MAX_SAFE_INTEGER : i
-  }
-  return [...props.rows].sort((a, b) => pos(a.def.id) - pos(b.def.id))
-})
-const activeRows = computed(() => sortedRows.value.filter((r) => r.state === 'active'))
+const activeRows = computed(() => props.rows.filter((r) => r.state === 'active'))
 const activeCount = computed(() => activeRows.value.length)
 
-// Collapse: top-1 playable by default; hacker mode → full list; error-expanded → all active.
+// Collapse: by default show only the selected provider (Stage-2's smart default
+// already picked the best into `provider`); fall back to the first active row
+// while nothing is selected. Hacker mode → full list; error-expanded → all active.
+const topRow = computed(
+  () =>
+    activeRows.value.find((r) => r.def.id === props.provider) ?? activeRows.value[0] ?? null,
+)
 const expanded = ref(false)
 watch(() => props.provider, () => { expanded.value = false })
 
 const visibleRows = computed(() => {
-  if (props.hackerMode) return sortedRows.value
+  if (props.hackerMode) return props.rows
   if (expanded.value) return activeRows.value
-  return activeRows.value.slice(0, 1)
+  return topRow.value ? [topRow.value] : []
 })
-const hiddenCount = computed(() => activeRows.value.length - 1)
+const hiddenCount = computed(() => Math.max(0, activeCount.value - 1))
 
 // Team → category tag from the selected provider's capability variants.
 function teamCategory(name: string): 'sub' | 'dub' | null {
@@ -789,8 +667,7 @@ function teamCategory(name: string): 'sub' | 'dub' | null {
   return v.category === 'dub' ? 'dub' : v.category === 'sub' ? 'sub' : null
 }
 ```
-
-> `activeCount` now counts active rows (was all-rows length before, but the header reads "{{ activeCount }} available" which is the active count — semantics preserved). The `team`/`server` props are still used in the template (team-chip selected styling, server list); keep them.
+> The header still reads `{{ activeCount }} available` — `activeCount` now counts active rows (was `rows.filter(active).length` before — identical). The `team`/`server` props stay used in the template (team-chip selected styling + server list).
 
 - [ ] **Step 6: Run, confirm pass**
 
@@ -799,112 +676,69 @@ Expected: PASS (4 tests).
 
 - [ ] **Step 7: Commit**
 ```bash
-git add src/components/player/unified/SourcePanel.vue src/components/player/unified/SourcePanel.spec.ts
-git commit -m "feat(player): SourcePanel collapse + cap labels + team tags + try-another
+git commit src/components/player/unified/SourcePanel.vue src/components/player/unified/SourcePanel.spec.ts -m "feat(player): SourcePanel collapse + cap labels + team tags + try-another
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
 Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
 ```
+Then `git show --stat HEAD` — confirm ONLY these two files.
 
 ---
 
-## Task 7: `UnifiedPlayer.vue` — wire it together
+## Task 6: `UnifiedPlayer.vue` — wire `useCapabilities` + pass props
 
 **Files:**
 - Modify: `frontend/web/src/components/player/unified/UnifiedPlayer.vue`
 
-No new test (integration is covered by the component specs + Task 9 build). Five edits.
+Minimal footprint: construct the composable, pass three props to `SourcePanel`. **Do NOT touch** `pickSmartDefault`, `rankingOrder`, `fallbackToNextSource`, or any ordering code — that's Stage-2's.
 
-- [ ] **Step 1: Add imports**
+- [ ] **Step 1: Add the import**
 
-After the existing `import { pickSmartDefault } from '@/composables/unifiedPlayer/smartDefault'` (line ~333), add:
+After the existing `useProviderHealth` import line (`import { useProviderHealth } from '@/composables/unifiedPlayer/useProviderHealth'`), add:
 ```ts
 import { useCapabilities } from '@/composables/unifiedPlayer/useCapabilities'
-import { rankedProviderIds } from '@/composables/unifiedPlayer/rankedProviderIds'
 ```
-Confirm `computed` is already imported from `vue` at the top of the script (it is — used widely). If not, add it.
+Confirm `computed` is already imported from `vue` (it is). 
 
-- [ ] **Step 2: Construct the composable + ordered ids**
+- [ ] **Step 2: Construct the composable**
 
-Immediately after the `const { rows, start } = useProviderHealth(filter)` line (line ~388), add:
+Immediately after the `const { rows, start } = useProviderHealth(filter)` line, add:
 ```ts
-// Capability report (server ranking + sub/dub/quality/team labels). Decoration
-// + ordering only — degrades to CURATED_TIER when absent.
+// Capability report → per-provider sub/dub/quality/team labels for the Source
+// panel. Decoration only (ordering stays with Stage-2); degrades to empty.
 const animeIdRef = computed(() => props.animeId)
-const { capMap, rankedIds: capRankedIds } = useCapabilities(animeIdRef)
-// Merged order: capability-ranked first, registry-only (ae/raw/18anime) in CURATED order.
-const orderedProviderIds = computed(() =>
-  rankedProviderIds(rows.value, capRankedIds.value, CURATED_TIER),
-)
+const { capMap } = useCapabilities(animeIdRef)
 ```
 
-- [ ] **Step 3: Swap the two `pickSmartDefault` array args**
+- [ ] **Step 3: Pass the new props to `SourcePanel`**
 
-At line ~498, change:
-```ts
-    void pickSmartDefault(rows.value, CURATED_TIER, {
-```
-to:
-```ts
-    void pickSmartDefault(rows.value, orderedProviderIds.value, {
-```
-
-At line ~894–897, change:
-```ts
-        const next = await pickSmartDefault(
-          rows.value.filter((r) => r.def.id !== failed),
-          CURATED_TIER,
-          { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
-        )
-```
-to:
-```ts
-        const next = await pickSmartDefault(
-          rows.value.filter((r) => r.def.id !== failed),
-          orderedProviderIds.value,
-          { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
-        )
-```
-> Leave the `import { providerById, CURATED_TIER } from './providerRegistry'` import as-is — `CURATED_TIER` is still referenced by `rankedProviderIds` as the fallback order.
-
-- [ ] **Step 4: Pass the new props to `SourcePanel`**
-
-In the `<SourcePanel ... />` usage (lines ~211–225), add four bindings (e.g. after `:teams="teams"`):
+In the `<SourcePanel ... />` usage, add three bindings after the existing `:teams="teams"` line:
 ```vue
         :cap-map="capMap"
-        :ranked-ids="orderedProviderIds"
         :hacker-mode="state.hackerMode.value"
-        :playback-error="!!sourceError"
+        :playback-error="Boolean(sourceError)"
 ```
-> `sourceError` is the existing string ref (set in the resolve catch); `!!sourceError` would always be true since it's a ref object. Bind the unwrapped value: use `:playback-error="Boolean(sourceError)"` only if `sourceError` is auto-unwrapped in template — it is (top-level ref in `<script setup>` is unwrapped in template), so `!!sourceError` evaluates the string. Confirm in template `sourceError` renders as the message elsewhere; if it's referenced as `sourceError` (not `sourceError.value`) in the template, then `:playback-error="!!sourceError"` is correct.
+> `sourceError` is the existing error ref (a string, set in the resolve catch). In the template it is auto-unwrapped, so `Boolean(sourceError)` is `true` whenever a message is set. Grep `sourceError` in the file to confirm the name; if the template references it as `sourceError` elsewhere (e.g. an error banner), reuse that exact identifier.
 
-- [ ] **Step 5: Clear `sourceError` on successful load**
-
-Find where a resolve succeeds. In `loadEpisodesAndStream` (the `try` block starting ~line 827), add a reset at the very top of the `try` (right after `try {`):
-```ts
-    sourceError.value = ''
-```
-> This clears a stale error when a new provider resolve begins, so the try-another disclosure and `playbackError` flag reset on every fresh attempt. Verify `sourceError` is a `ref('')` (string) — it is (assigned string literals throughout). If the variable is named differently, grep `sourceError` and use the actual name.
-
-- [ ] **Step 6: Type-check + build**
+- [ ] **Step 4: Type-check**
 
 Run: `bunx tsc --noEmit`
-Expected: PASS. If vue-tsc flags `sourceError` unwrap or a missing `computed` import, fix per the notes above.
+Expected: PASS. If vue-tsc flags `sourceError` unwrap, bind an explicit computed `const hasSourceError = computed(() => Boolean(sourceError.value))` and pass `:playback-error="hasSourceError"`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 ```bash
-git add src/components/player/unified/UnifiedPlayer.vue
-git commit -m "feat(player): wire UnifiedPlayer to /capabilities (ranking + collapse + labels)
+git commit src/components/player/unified/UnifiedPlayer.vue -m "feat(player): wire UnifiedPlayer to useCapabilities (chip labels + collapse props)
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
 Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
 ```
+Then `git show --stat HEAD` — confirm ONLY `UnifiedPlayer.vue` is in the commit (the file is actively edited by another agent — a wrong file count here is the disaster signal).
 
 ---
 
-## Task 8: i18n keys (en / ru / ja)
+## Task 7: i18n keys (en / ru / ja)
 
 **Files:**
 - Modify: `frontend/web/src/locales/en.json`, `ru.json`, `ja.json`
@@ -913,7 +747,7 @@ All three MUST get the keys (i18n-lint hard-fails `make redeploy-web` on any mis
 
 - [ ] **Step 1: Add the `player.sources` sub-namespace**
 
-In each locale file, inside the existing `"player": { ... }` object, add a `"sources"` key. Use the values below.
+In each locale file, inside the existing `"player": { ... }` object (adjacent to the `"sub"`/`"dub"` keys), add a `"sources"` key:
 
 `en.json`:
 ```json
@@ -947,31 +781,31 @@ In each locale file, inside the existing `"player": { ... }` object, add a `"sou
       "subSelectable": "選択可能"
     }
 ```
-> Place it adjacent to the existing `player.sub` / `player.dub` keys. Mind JSON commas — add a trailing comma to the preceding sibling key if needed.
+> Mind JSON commas — add a trailing comma to the preceding sibling key if needed.
 
 - [ ] **Step 2: Run the i18n lint**
 
-Run: `bash frontend/web/scripts/i18n-lint.sh` (from repo root) — or `cd /data/animeenigma && bash frontend/web/scripts/i18n-lint.sh`
+Run (from repo root): `bash frontend/web/scripts/i18n-lint.sh`
 Expected: PASS (no missing keys across en/ru/ja).
 
-- [ ] **Step 3: Type-check (locales are typed via the i18n schema if present)**
+- [ ] **Step 3: Type-check**
 
 Run (from `frontend/web`): `bunx tsc --noEmit`
 Expected: PASS.
 
 - [ ] **Step 4: Commit**
 ```bash
-git add src/locales/en.json src/locales/ru.json src/locales/ja.json
-git commit -m "i18n(player): player.sources keys (best/tryAnother/raw/sub delivery) en+ru+ja
+git commit src/locales/en.json src/locales/ru.json src/locales/ja.json -m "i18n(player): player.sources keys (best/tryAnother/raw/sub delivery) en+ru+ja
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
 Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>"
 ```
+Then `git show --stat HEAD` — confirm ONLY the three locale files.
 
 ---
 
-## Task 9: Full verification + deploy
+## Task 8: Full verification + deploy
 
 **Files:** none (gates only).
 
@@ -986,7 +820,7 @@ Expected: all specs PASS, tsc clean.
 - [ ] **Step 2: DS lint**
 
 Run (from repo root): `bash frontend/web/scripts/design-system-lint.sh`
-Expected: `ERRORS: 0`. The new chip/panel markup uses tokens + brand-exempt hues only; player components are exempt from the Select-primitive rule. If a new hardcoded hex slipped in, migrate it to a token (do not edit the allowlist).
+Expected: `ERRORS: 0`. New chip/panel markup uses tokens + brand-exempt hues only; player components are exempt from the Select-primitive rule. If a hardcoded hex slipped in, migrate it to a token (don't edit the allowlist).
 
 - [ ] **Step 3: Build**
 
@@ -996,17 +830,18 @@ Expected: build succeeds (Vite + vue-tsc).
 - [ ] **Step 4: Deploy (controller / owner)**
 
 Run (from repo root): `make redeploy-web && make health`
-Expected: web rebuilt (brotli + manualChunks), `web` healthy. i18n-lint + DS-lint run as redeploy prerequisites — both must pass.
+Expected: web rebuilt, `web` healthy. i18n-lint + DS-lint run as redeploy prerequisites — both must pass.
 
 - [ ] **Step 5: Live smoke (optional — owner opt-in per feedback_chrome_smoke_opt_in)**
 
-This is a non-small visual change in cascade-sensitive player chrome. OFFER the owner a Chrome checkup (don't run automatically): open a watch page, open the Source panel, confirm (a) only the top-ranked provider shows by default with SUB/DUB/quality labels + "Best", (b) enabling hacker mode reveals the full ranked list, (c) forcing a stream error surfaces "Try another source" which expands the list, (d) a Kodik/AniLib title shows team chips with SUB/DUB tags. Caveat: jsdom/vitest can't catch Tailwind-v4 cascade bugs, so the label row's flex-col layout is worth an eyeball.
+Non-small visual change in cascade-sensitive player chrome. OFFER the owner a Chrome checkup (don't run automatically): open a watch page, open the Source panel, confirm (a) only the selected provider shows by default with SUB/DUB/quality labels + "Best", (b) hacker mode reveals the full list, (c) forcing a stream error surfaces "Try another source" which expands the list, (d) a Kodik/AniLib title shows team chips with SUB/DUB tags. Caveat: jsdom/vitest can't catch Tailwind-v4 cascade bugs, so the label row's flex-col layout is worth an eyeball.
 
 ---
 
-## Self-Review (completed during authoring)
+## Self-Review (completed during authoring + reconciliation)
 
-- **Spec coverage:** server ranking ✔ (T2 `flattenCapabilities` + T3 `rankedProviderIds` + T7 swap), declutter/collapse tied to hacker mode + top-1 + dead-source promote ✔ (T6 `visibleRows`/`activeRows.slice(0,1)`), try-another escape hatch ✔ (T6), sub/dub/quality/sub-delivery labels ✔ (T4 + T5), team tags ✔ (T6 `teamCategory`), graceful degradation ✔ (empty `capMap` ⇒ `orderedProviderIds` falls back to CURATED via T3), i18n 3 locales ✔ (T8), tests ✔ (T2–T6), coverage-gap providers (ae/raw/18anime) ✔ (T3 appends them, T5 `capMap.get` returns undefined → no labels).
-- **Type consistency:** `ProviderCap`/`CapVariant`/`CapabilityReport` (T1) used identically in `flattenCapabilities` (T2), `deriveCapLabels` (T4), `ProviderChip` (T5), `SourcePanel` (T6). `flattenCapabilities` returns `{ capMap, rankedIds }` consumed by `useCapabilities` (T2) and surfaced as `capMap`/`capRankedIds` in T7. `rankedProviderIds(rows, rankedIds, curated)` signature (T3) matches the T7 call. `deriveCapLabels` returns `CapLabels{categories,quality,subDelivery}` rendered in T5.
-- **Placeholder scan:** none — every step has concrete code/commands. The two integration-boundary checks (`sourceError` unwrap in the SourcePanel binding; `computed` already imported in UnifiedPlayer) are flagged with explicit verify-and-adjust notes, as they depend on the exact current file state.
-- **Risk:** `sourceError` is a string ref; `!!sourceError` in the template evaluates the unwrapped string (truthy when a message is set). If a future refactor makes it an object, switch to an explicit boolean computed. Documented in T7 Step 4.
+- **Spec coverage (reconciled):** sub/dub/quality/sub-delivery labels ✔ (T3+T4), team tags ✔ (T5 `teamCategory`), declutter/collapse to the selected source + hacker reveal ✔ (T5 `visibleRows`/`topRow`), try-another escape hatch ✔ (T5), graceful degradation ✔ (empty `capMap` ⇒ chips render as today, collapse still works off `state`), i18n 3 locales ✔ (T7), tests ✔ (T2–T5). **Ordering deliberately NOT implemented** — superseded by Stage-2 (documented in the reconciliation header); the spec's §4.3 + ranking half of §5.1 are explicitly out of scope.
+- **Type consistency:** `ProviderCap`/`CapVariant`/`CapabilityReport` (T1) used identically in `flattenCapabilities` (T2), `deriveCapLabels` (T3), `ProviderChip` (T4), `SourcePanel` (T5). `flattenCapabilities` returns `Map<string,ProviderCap>` surfaced as `capMap` in T2 and threaded through T6→T5. `deriveCapLabels` returns `CapLabels{categories,quality,subDelivery}` rendered in T4. No `rankedProviderIds`/`orderedProviderIds`/`pickSmartDefault` references remain anywhere in this plan.
+- **Conflict surface:** T6 adds 4 lines to `UnifiedPlayer.vue` (1 import, 2 composable lines, 3 props) and touches NO ranking/fallback code — minimal overlap with the concurrent Stage-2 churn. Each commit is pathspec-explicit + `git show --stat`-verified to avoid re-capturing the shared index (the 2026-06-16 incident).
+- **Placeholder scan:** none — every step has concrete code/commands. The single integration-boundary check (`sourceError` unwrap in the SourcePanel binding) is flagged with an explicit fallback in T6 Step 4.
+- **Risk:** the collapse shows the selected provider; during the brief window before Stage-2's smart default selects one, `topRow` falls back to the first active row (T5) — never empty when an active provider exists. If Stage-2's ranking churn lands a `rows` reordering, the collapse still shows the correct selected chip (it keys off `provider`, not row position).
