@@ -18,14 +18,13 @@
     <link rel="dns-prefetch" href="https://shikimori.io">
     <link rel="preconnect" href="https://shikimori.io">
     <!-- inter 500/600 are the DS-mandated font-medium/font-semibold weights and
-         700/manrope-cyr render above-the-fold headings — without preload they
-         are only discovered via CSS one RTT after first render. -->
+         manrope-800/manrope-cyr render above-the-fold headings — without preload
+         they are only discovered via CSS one RTT after first render. -->
     <link rel="preload" href="/fonts/manrope-800.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/manrope-cyr.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="/fonts/inter-700.woff2" as="font" type="font/woff2" crossorigin>
     <title>AnimeEnigma - Anime Streaming Platform</title>
     <meta name="description" content="Watch anime for free with subtitles. Stream the latest episodes and classic series in English and Russian.">
     <meta property="og:type" content="website">
@@ -46,6 +45,26 @@
       // back/forward via savedPosition; only the browser's auto-restore is
       // turned off here.
       if ('scrollRestoration' in history) { history.scrollRestoration = 'manual' }
+    </script>
+    <script>
+      // RU static-edge asset routing (decide-once + cached). The probe in
+      // utils/assetEdge.ts measures origin vs the edge and stores the winning
+      // asset base in localStorage; this inline script applies it BEFORE any
+      // module loads, so Vite's renderBuiltUrl runtime calls resolve dynamic
+      // chunk URLs to it. No-op (origin) when nothing is cached / feature off.
+      (function () {
+        var base = ''
+        try {
+          var c = JSON.parse(localStorage.getItem('ae.assetEdge') || 'null')
+          if (c && typeof c.base === 'string' && typeof c.exp === 'number' && c.exp > Date.now()) {
+            base = c.base
+          }
+        } catch (e) { /* ignore */ }
+        window.__AE_ASSET_BASE__ = base
+        window.__assetHost = function (f) {
+          return (window.__AE_ASSET_BASE__ || '') + '/' + String(f).replace(/^\/+/, '')
+        }
+      })()
     </script>
   </head>
   <body>

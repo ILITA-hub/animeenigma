@@ -7,6 +7,8 @@
 //   - "Unable to preload CSS for /assets/Foo.css"     (CSS modulepreload)
 // Webpack-era phrasings ("Loading chunk N failed", "Loading CSS chunk ...
 // failed") are kept in the pattern for safety even though this app uses Vite.
+import { demoteAssetEdgeToOrigin } from './assetEdge'
+
 const CHUNK_ERROR_RE =
   /Loading (CSS )?chunk [\w-]+ failed|Failed to fetch dynamically imported module|error loading dynamically imported module|Unable to preload CSS/i
 
@@ -58,6 +60,11 @@ export function tryReloadOnChunkError(err: unknown, targetUrl?: string): boolean
   } catch {
     // sessionStorage unavailable (private mode, etc.) — fall through and reload anyway.
   }
+
+  // If the failed chunk was being served from the RU edge, the edge may be
+  // unreachable or missing the new hash — demote to origin so the recovery
+  // load fetches from origin instead of failing again.
+  demoteAssetEdgeToOrigin()
 
   if (targetUrl) {
     window.location.assign(targetUrl)

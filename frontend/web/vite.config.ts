@@ -3,8 +3,30 @@ import vue from '@vitejs/plugin-vue'
 import compression from 'vite-plugin-compression'
 import { fileURLToPath, URL } from 'node:url'
 
+// RU static-edge (Maskanya) asset routing — dark-shipped. When
+// VITE_MSK_ASSET_HOST is set at build time, JS chunk URLs are emitted as a
+// runtime window.__assetHost() call so a per-user probe (utils/assetEdge.ts)
+// can serve dynamic-import chunks from the geographically-closer edge. Empty
+// (the default) => byte-identical to today: origin-relative URLs, no indirection.
+const MSK_ASSET_HOST = process.env.VITE_MSK_ASSET_HOST || ''
+
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Runtime host only for JS chunk refs (dynamic imports). The index.html
+  // bootstrap (entry + preloaded vendors) and CSS-referenced assets stay
+  // origin-relative, so first paint is unchanged.
+  ...(MSK_ASSET_HOST
+    ? {
+        experimental: {
+          renderBuiltUrl(filename: string, { hostType }: { hostType: string }) {
+            if (hostType === 'js') {
+              return { runtime: `window.__assetHost(${JSON.stringify(filename)})` }
+            }
+            return undefined
+          },
+        },
+      }
+    : {}),
   plugins: [
     vue(),
     compression({

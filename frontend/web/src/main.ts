@@ -5,6 +5,7 @@ import i18n from './i18n'
 import App from './App.vue'
 import { tryReloadOnChunkError } from './utils/chunk-reload'
 import { reportFeError, installFeErrorTraps } from './utils/feErrorLog'
+import { initAssetEdge } from './utils/assetEdge'
 
 // Styles
 import './styles/main.css'
@@ -27,6 +28,11 @@ app.mount('#app')
 
 // Uncaught window errors → backend log (gated + volume-capped inside the util).
 installFeErrorTraps()
+
+// RU static-edge asset routing: probe origin vs edge once and cache the
+// decision (applied by the inline bootstrap in index.html on the next load).
+// No-op unless VITE_MSK_ASSET_HOST was set at build time.
+initAssetEdge()
 
 window.addEventListener('unhandledrejection', (event) => {
   // defineAsyncComponent failures after a deploy surface here as
