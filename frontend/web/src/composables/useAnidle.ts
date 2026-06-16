@@ -190,7 +190,9 @@ export function useAnidle(): UseAnidleReturn {
     error.value = null
     try {
       const res = await anidleApi.dailyGiveUp()
-      const revealed = (res.data?.data ?? res.data) as VisibleAnime
+      const body = (res.data?.data ?? res.data) as VisibleAnime | { answer?: VisibleAnime }
+      // tolerate both shapes: data = VisibleAnime, or data = { answer: VisibleAnime }
+      const revealed = ((body as { answer?: VisibleAnime })?.answer ?? body) as VisibleAnime
       dailyGaveUp.value = true
       // answer comes only from server — no-cheat enforced
       dailyAnswer.value = revealed

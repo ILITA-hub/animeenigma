@@ -3,8 +3,10 @@
     :class="[
       'flex items-center justify-center text-center rounded-lg px-1.5 text-xs font-medium leading-tight transition-colors w-[72px] h-[44px] overflow-hidden',
       statusClass,
+      full ? 'cursor-help' : '',
     ]"
     :aria-label="ariaLabel"
+    :title="full || undefined"
   >
     <span class="line-clamp-2 break-words">{{ displayValue }}<span v-if="hint === 'higher'" aria-hidden="true"> ↑</span><span v-else-if="hint === 'lower'" aria-hidden="true"> ↓</span></span>
   </div>
@@ -18,6 +20,8 @@ const props = defineProps<{
   status: 'correct' | 'partial' | 'wrong'
   value: string | number
   hint?: 'higher' | 'lower' | null
+  /** Full, untruncated text shown as a native tooltip on hover (e.g. all genres). */
+  full?: string
 }>()
 
 const { t } = useI18n()

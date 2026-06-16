@@ -20,6 +20,7 @@
         <GuessCell
           :status="guess.result.genres.status"
           :value="genreNames"
+          :full="allGenres"
         />
       </div>
       <div class="space-y-1">
@@ -27,6 +28,7 @@
         <GuessCell
           :status="guess.result.studios.status"
           :value="studioNames"
+          :full="allStudios"
         />
       </div>
       <div class="space-y-1">
@@ -84,4 +86,6 @@ const props = defineProps<{
 const posterSrc = computed(() => cardPosterUrl(props.guess.anime.poster_url, 128))
 const genreNames = computed(() => props.guess.anime.genres.slice(0, 2).map(g => g.name).join(', ') || '—')
 const studioNames = computed(() => props.guess.anime.studios.slice(0, 1).map(s => s.name).join(', ') || '—')
+const allGenres = computed(() => props.guess.anime.genres.map(g => g.name).join(', '))
+const allStudios = computed(() => props.guess.anime.studios.map(s => s.name).join(', '))
 </script>

@@ -37,12 +37,14 @@
               <GuessCell
                 :status="guess.result.genres.status"
                 :value="genreNames(guess)"
+                :full="allGenres(guess)"
               />
             </td>
             <td class="py-2 px-2 text-center">
               <GuessCell
                 :status="guess.result.studios.status"
                 :value="studioNames(guess)"
+                :full="allStudios(guess)"
               />
             </td>
             <td class="py-2 px-2 text-center">
@@ -122,12 +124,21 @@ function posterFor(guess: GuessOutcome) {
   return cardPosterUrl(guess.anime.poster_url, 128)
 }
 
-// Cap genres/studios to keep the fixed-width cells uniform and readable.
+// Cap genres/studios to keep the fixed-width cells uniform and readable;
+// the full list is shown on hover via the cell's `full` tooltip.
 function genreNames(guess: GuessOutcome) {
   return guess.anime.genres.slice(0, 2).map(g => g.name).join(', ') || '—'
 }
 
 function studioNames(guess: GuessOutcome) {
   return guess.anime.studios.slice(0, 1).map(s => s.name).join(', ') || '—'
+}
+
+function allGenres(guess: GuessOutcome) {
+  return guess.anime.genres.map(g => g.name).join(', ')
+}
+
+function allStudios(guess: GuessOutcome) {
+  return guess.anime.studios.map(s => s.name).join(', ')
 }
 </script>
