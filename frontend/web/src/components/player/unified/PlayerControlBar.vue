@@ -93,10 +93,7 @@
         <span data-test="time-duration">{{ fmt(duration) }}</span>
       </span>
 
-      <!-- Spacer -->
-      <span class="pl-spacer" aria-hidden="true" />
-
-      <!-- Episodes pill (second access path; the top-left EP eyebrow is the other) -->
+      <!-- Episodes pill (left cluster; second access path — the top-left EP eyebrow is the other) -->
       <button
         class="pl-epbtn"
         :class="{ 'is-open': openMenu === 'episodes' }"
@@ -109,6 +106,9 @@
         <span class="pl-epbtn-text">EP {{ episodeLabel }}</span>
         <ChevronDown class="size-3" aria-hidden="true" />
       </button>
+
+      <!-- Spacer -->
+      <span class="pl-spacer" aria-hidden="true" />
 
       <!-- Source pill -->
       <button
