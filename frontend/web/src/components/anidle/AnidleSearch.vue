@@ -95,7 +95,7 @@ import type { SearchResultItem } from '@/api/anidle'
 import Input from '@/components/ui/Input.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 
-const props = defineProps<{
+defineProps<{
   disabled?: boolean
 }>()
 

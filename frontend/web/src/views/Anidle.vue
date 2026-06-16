@@ -18,7 +18,7 @@
           <!-- Already played notice (solved but modal closed) -->
           <Alert
             v-if="(dailySolved || dailyGaveUp) && !showResult"
-            variant="default"
+            variant="info"
             class="mb-4"
           >
             {{ $t('anidle.daily_complete_played') }}
@@ -67,7 +67,7 @@
             </div>
 
             <div v-if="endlessSolved" class="mb-4">
-              <Alert variant="default">
+              <Alert variant="info">
                 {{ $t('anidle.endless_win_title') }}
               </Alert>
             </div>

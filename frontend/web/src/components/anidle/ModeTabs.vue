@@ -12,7 +12,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Tabs from '@/components/ui/Tabs.vue'
 
-const props = defineProps<{
+defineProps<{
   modelValue: 'daily' | 'endless'
 }>()
 
