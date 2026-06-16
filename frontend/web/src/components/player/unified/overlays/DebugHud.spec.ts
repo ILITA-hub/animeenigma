@@ -149,6 +149,29 @@ describe('DebugHud', () => {
     expect(w.find('[data-test="debug-hud"]').classes()).toContain('pl-hud--fading')
   })
 
+  it('hides the SOURCE FALLBACK section when there are no intents', () => {
+    const w = mount(DebugHud, { props: baseProps })
+    expect(w.find('[data-test="hud-fallback-head"]').exists()).toBe(false)
+  })
+
+  it('renders source-fallback intents, marking logged-only vs switched', () => {
+    const w = mount(DebugHud, {
+      props: {
+        ...baseProps,
+        intents: [
+          { at: 1.2, from: 'ae', to: 'allanime', reason: 'saved source unavailable', acted: false },
+          { at: 2.5, from: 'kodik', to: 'miruro', reason: 'saved source unavailable', acted: true },
+        ],
+      },
+    })
+    expect(w.find('[data-test="hud-fallback-head"]').exists()).toBe(true)
+    const rows = w.findAll('[data-test="hud-fallback-intent"]')
+    expect(rows).toHaveLength(2)
+    // newest first
+    expect(rows[0].text()).toContain('switched kodik → miruro')
+    expect(rows[1].text()).toContain('intent ae → allanime')
+  })
+
   it('toggles the seek-pipeline tech reference via the "?" button', async () => {
     const w = mount(DebugHud, { props: baseProps })
     expect(w.find('[data-test="hud-reference"]').exists()).toBe(false)

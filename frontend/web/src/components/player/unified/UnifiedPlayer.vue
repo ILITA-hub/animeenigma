@@ -136,6 +136,7 @@
       :stream-type="currentStream?.type ?? '—'"
       :level-label="engine.currentLevelLabel.value"
       :seek="lastSeek"
+      :intents="sourceFallbackDebug.intents"
       :pinned="state.hudPinned.value"
       :fading="hudFading"
       @update:pinned="v => { state.hudPinned.value = v }"
@@ -323,6 +324,11 @@ import { useSkipTimes } from '@/composables/useSkipTimes'
 import { usePlayerState } from '@/composables/unifiedPlayer/usePlayerState'
 import { usePlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
 import { scrubDebug } from '@/composables/unifiedPlayer/scrubPreviewDebug'
+import {
+  sourceFallbackDebug,
+  recordFallbackIntent,
+  resetFallbackIntents,
+} from '@/composables/unifiedPlayer/sourceFallbackDebug'
 import { segmentsToChapters, activeSkipSegment } from '@/composables/unifiedPlayer/skipSegments'
 import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
 import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/unifiedPlayer/useProviderResolver'
@@ -418,6 +424,7 @@ watch(() => props.animeId, () => {
   aeAvailableCache = null
   providerWasFromSavedCombo = false
   savedSourceFallbackDone = false
+  resetFallbackIntents()
 })
 
 // Providers whose default-selection eligibility needs a runtime availability
@@ -889,20 +896,36 @@ async function loadEpisodesAndStream() {
     if (isNotAvailable) {
       if (!savedSourceFallbackDone && providerWasFromSavedCombo) {
         savedSourceFallbackDone = true
-        toast.push("The source you watched last time isn't available right now — switching.", 'info', 5000)
         const failed = state.combo.value.provider
         const next = await pickSmartDefault(
           rows.value.filter((r) => r.def.id !== failed),
           CURATED_TIER,
           { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
         )
-        if (next) {
+        // Hacker mode: DON'T auto-switch. Record what the resolver would have
+        // done so the fallback choice can be inspected manually before it's
+        // trusted to act. With hacker mode off, the switch is performed and the
+        // same record is written with acted=true.
+        const willSwitch = !state.hackerMode.value && !!next
+        recordFallbackIntent({
+          from: failed,
+          to: next,
+          reason: 'saved source unavailable',
+          acted: willSwitch,
+        })
+        if (willSwitch) {
+          toast.push("The source you watched last time isn't available right now — switching.", 'info', 5000)
           providerWasFromSavedCombo = false
-          state.setProvider(next, '') // provider watcher re-runs loadEpisodesAndStream
+          state.setProvider(next as string, '') // provider watcher re-runs loadEpisodesAndStream
           return
         }
+        if (state.hackerMode.value) {
+          sourceError.value = next
+            ? `Hacker mode: auto-switch suppressed — would switch ${failed} → ${next} (saved source unavailable). Pick a source manually.`
+            : `Hacker mode: auto-switch suppressed — saved source "${failed}" unavailable, no fallback candidate.`
+        }
       }
-      sourceError.value = "This source isn't available yet"
+      if (!sourceError.value) sourceError.value = "This source isn't available yet"
     } else {
       sourceError.value = 'Stream unavailable'
     }

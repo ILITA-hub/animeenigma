@@ -80,6 +80,19 @@
       >{{ ev }}</div>
     </template>
 
+    <!-- Source auto-fallback ledger — what the resolver switched to (or, in
+         hacker mode, what it WOULD switch to without acting). -->
+    <template v-if="intents && intents.length">
+      <div class="pl-hud-row pl-hud-head" data-test="hud-fallback-head">SOURCE FALLBACK</div>
+      <div
+        v-for="(it, i) in lastIntents"
+        :key="it.at + ':' + i"
+        class="pl-hud-row"
+        :class="{ 'pl-hud-dim': it.acted }"
+        data-test="hud-fallback-intent"
+      >{{ it.acted ? '→ switched' : '✗ intent' }} {{ it.from }} → {{ it.to ?? '—' }} · {{ it.reason }}</div>
+    </template>
+
     <!-- "?" — condensed tech reference of the seek pipeline -->
     <div v-if="helpOpen" class="pl-hud-ref" data-test="hud-reference">
       <div class="pl-hud-ref-title">WHAT A SEEK ACTUALLY DOES</div>
@@ -100,6 +113,7 @@ import Spinner from '@/components/ui/Spinner.vue'
 import type { PlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
 import type { FragStat } from '@/composables/unifiedPlayer/useVideoEngine'
 import { scrubDebug as scrub } from '@/composables/unifiedPlayer/scrubPreviewDebug'
+import type { FallbackIntent } from '@/composables/unifiedPlayer/sourceFallbackDebug'
 
 /** One user seek, traced through the pipeline. Mutated in place as events land. */
 export interface SeekTrace {
@@ -133,6 +147,8 @@ const props = defineProps<{
   streamType: string
   levelLabel: string
   seek?: SeekTrace | null
+  /** source auto-fallback ledger (newest last) */
+  intents?: FallbackIntent[]
   /** keep the HUD on screen during playback */
   pinned?: boolean
   /** linger fade-out in progress */
@@ -146,6 +162,9 @@ const emit = defineEmits<{
 const helpOpen = ref(false)
 
 const lastFrags = computed(() => props.frags.slice(-5).reverse())
+
+/** Newest 4 source-fallback decisions, newest first. */
+const lastIntents = computed(() => (props.intents ?? []).slice(-4).reverse())
 
 /** Newest 4 thumbnail-engine events, newest first. */
 const lastScrubEvents = computed(() => scrub.events.slice(-4).reverse())
