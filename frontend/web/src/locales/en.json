@@ -1718,7 +1718,8 @@
     "endless_win_title": "Correct! Start a new round?",
     "loading": "Loading game…",
     "error_generic": "Something went wrong. Try refreshing.",
-    "give_up_revealed": "The answer was"
+    "give_up_revealed": "The answer was",
+    "watch_button": "Watch"
   },
   "myFeedback": {
     "title": "My feedback",

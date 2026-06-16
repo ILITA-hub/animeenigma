@@ -40,6 +40,12 @@
               <p class="text-sm text-muted-foreground truncate">{{ dailyAnswer.name_en }}</p>
               <p class="text-sm text-white/70 mt-1">{{ dailyAnswer.year }} · {{ dailyAnswer.episodes }} · ★ {{ dailyAnswer.score }}</p>
               <p class="text-xs text-muted-foreground truncate">{{ answerGenres }}</p>
+              <router-link
+                :to="`/anime/${dailyAnswer.id}`"
+                class="inline-block mt-3 px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors"
+              >
+                {{ $t('anidle.watch_button') }}
+              </router-link>
             </div>
           </div>
 
