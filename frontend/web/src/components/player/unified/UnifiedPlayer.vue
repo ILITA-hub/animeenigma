@@ -922,6 +922,13 @@ async function loadEpisodesAndStream() {
       lang: state.combo.value.lang,
     })
     if (isNotAvailable) {
+      // Resolve-time auto-fallback fires only for a SAVED-combo source going
+      // dead (the "your last source isn't available" case). A smart-default
+      // pick that fails to resolve is NOT auto-switched here — the default
+      // already walked the ranked+curated order, so we surface the error and
+      // let the user pick from the Source menu. (Broadening this to all
+      // resolve failures is a deliberate future step, kept narrow per the
+      // "ship fallback gradually" directive.)
       if (!savedSourceFallbackDone && providerWasFromSavedCombo) {
         savedSourceFallbackDone = true
         if (await fallbackToNextSource('resolve')) return
