@@ -675,7 +675,7 @@
               {{ ugcTab === 'comments' ? $t('anime.ugc.commentsTab') : $t('anime.reviews') }}
             </span>
           </h2>
-          <span v-if="ugcTab === 'reviews' && reviews.length > 0" class="text-white/60 text-sm">{{ $t('anime.reviewsCount', { count: reviews.length }) }}</span>
+          <span v-if="ugcTab === 'reviews' && reviews.length > 0" class="text-white/60 text-sm">{{ $t('anime.reviewsCount', { count: reviews.length }, reviews.length) }}</span>
         </div>
 
         <Tabs

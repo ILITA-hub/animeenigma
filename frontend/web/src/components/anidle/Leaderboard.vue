@@ -22,7 +22,7 @@
         </span>
         <span class="text-white font-medium flex-1 truncate">{{ entry.username }}</span>
         <span class="text-muted-foreground">
-          {{ $t('anidle.leaderboard_attempts', { n: entry.attempts }) }}
+          {{ $t('anidle.leaderboard_attempts', { n: entry.attempts }, entry.attempts) }}
         </span>
       </div>
     </div>

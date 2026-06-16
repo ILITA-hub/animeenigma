@@ -1,6 +1,6 @@
 <template>
   <div class="font-mono text-sm space-y-1">
-    <p class="font-semibold text-white">Anidle {{ date }} — {{ $t('anidle.result_attempts', { n: guesses.length }) }}</p>
+    <p class="font-semibold text-white">Anidle {{ date }} — {{ $t('anidle.result_attempts', { n: guesses.length }, guesses.length) }}</p>
     <div class="space-y-0.5">
       <p v-for="(guess, i) in reversedGuesses" :key="i" class="tracking-widest">
         <span v-for="(col, j) in columns" :key="j">{{ emojiFor(guess, col) }}</span>

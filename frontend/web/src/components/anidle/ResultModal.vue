@@ -23,7 +23,7 @@
 
       <!-- Attempt count -->
       <p class="text-center text-muted-foreground text-sm">
-        {{ $t('anidle.result_attempts', { n: guesses.length }) }}
+        {{ $t('anidle.result_attempts', { n: guesses.length }, guesses.length) }}
       </p>
 
       <!-- Emoji share grid preview -->

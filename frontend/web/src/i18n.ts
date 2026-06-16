@@ -11,6 +11,28 @@ import ru from './locales/ru.json'
 
 export const SUPPORTED_LOCALES = ['ru', 'en', 'ja'] as const
 
+// Russian pluralization (one / few / many). vue-i18n's built-in rule is
+// English-style (singular vs. plural), which mis-picks branches for Russian
+// — e.g. it would render "1 отзывов" instead of "1 отзыв". Russian count
+// strings must carry three branches in this exact order:
+//   one  → "{n} отзыв"    (1, 21, 31, … but NOT 11)
+//   few  → "{n} отзыва"   (2–4, 22–24, … but NOT 12–14)
+//   many → "{n} отзывов"  (0, 5–20, 25–30, …)
+// Returns the zero-based branch index. Two-branch messages (rare in ru)
+// fall back to one/other so they never throw.
+function russianPlural(choice: number, choicesLength: number): number {
+  const n = Math.abs(choice)
+  const mod10 = n % 10
+  const mod100 = n % 100
+
+  if (choicesLength < 3) {
+    return n === 1 ? 0 : 1
+  }
+  if (mod10 === 1 && mod100 !== 11) return 0 // one
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 1 // few
+  return 2 // many
+}
+
 // Lazy loaders — explicit map (not a template-string import) so Vite doesn't
 // also emit a duplicate chunk for ru.json, which stays statically bundled.
 const localeLoaders: Record<string, () => Promise<{ default: unknown }>> = {
@@ -46,6 +68,9 @@ const i18n = createI18n({
   locale: 'ru',
   fallbackLocale: 'ru',
   messages: { ru },
+  // Per-locale plural-branch selection. Only ru needs a custom rule; en/ja
+  // keep vue-i18n's default (en: singular/plural, ja: no plurals).
+  pluralRules: { ru: russianPlural },
 })
 
 const loadedLocales = new Set<string>(['ru'])

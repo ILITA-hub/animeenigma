@@ -25,7 +25,7 @@
           <span
             v-if="filters.activeCount.value"
             class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-semibold"
-            :aria-label="$t('browse.filters.activeCount', { count: filters.activeCount.value })"
+            :aria-label="$t('browse.filters.activeCount', { count: filters.activeCount.value }, filters.activeCount.value)"
           >{{ filters.activeCount.value }}</span>
         </button>
       </div>
