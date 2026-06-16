@@ -36,7 +36,7 @@
           <button
             v-for="room in rooms"
             :key="room.id"
-            class="text-left p-5 rounded-xl glass-card card-hover border border-white/10 hover:border-cyan-500/30 transition-all"
+            class="text-left p-4 md:p-6 rounded-xl glass-card card-hover border border-white/10 hover:border-cyan-500/30 transition-all"
             @click="joinRoom(room.id)"
           >
             <div class="flex items-start justify-between mb-3">

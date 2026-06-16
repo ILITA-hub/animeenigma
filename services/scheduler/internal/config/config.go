@@ -63,14 +63,6 @@ type JobsConfig struct {
 	//   the docker-compose service name + the shared ANALYTICS_INTERNAL_URL env.
 	ReadThresholdCron    string
 	AnalyticsInternalURL string
-
-	// Stage 2b (Smart Source Selection) — daily provider-reliability ranking
-	// recompute trigger. ProviderRankingCron: cron for the daily trigger
-	//   (default `30 5 * * *`, 05:30 — after the read-threshold recompute at
-	//   05:00 so the two analytics aggregates don't contend). Like the
-	//   read-threshold job, the scheduler only POSTs analytics' /internal
-	//   recompute endpoint; analytics owns the compute + Redis publish.
-	ProviderRankingCron string
 }
 
 func Load() (*Config, error) {
@@ -112,8 +104,6 @@ func Load() (*Config, error) {
 			// Phase 03 (v4.0) — daily read-threshold recompute trigger.
 			ReadThresholdCron:    getEnv("READ_THRESHOLD_CRON", "0 5 * * *"),
 			AnalyticsInternalURL: getEnv("ANALYTICS_INTERNAL_URL", "http://analytics:8092"),
-			// Stage 2b — daily provider-ranking recompute trigger.
-			ProviderRankingCron: getEnv("PROVIDER_RANKING_CRON", "30 5 * * *"), // Daily 05:30 (after read-threshold 05:00)
 		},
 	}, nil
 }

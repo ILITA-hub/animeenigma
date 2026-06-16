@@ -41,29 +41,6 @@ type ProxyConfig struct {
 	MaxBufferSize   int64         `json:"max_buffer_size" yaml:"max_buffer_size"`
 	AllowedDomains  []string      `json:"allowed_domains" yaml:"allowed_domains"`
 	RefererOverride string        `json:"referer_override" yaml:"referer_override"`
-
-	// UpstreamSigner, when set, gets a chance to rewrite each upstream URL
-	// just before the proxy fetches it. It returns (signedURL, true) to
-	// substitute the fetch URL, or ("", false) to leave it unchanged. This
-	// is the seam used to presign self-hosted MinIO reads (private bucket)
-	// without making the proxy MinIO-aware: only URLs the signer claims are
-	// rewritten, so every external-CDN path is untouched. The ORIGINAL URL
-	// is still used for allow-list checks, M3U8 rewriting, and provenance —
-	// the signer only affects the actual outbound GET. Not serialized.
-	UpstreamSigner func(rawURL string) (string, bool) `json:"-" yaml:"-"`
-}
-
-// fetchURLFor returns the URL the proxy should actually GET for sourceURL:
-// the UpstreamSigner's rewrite when it claims the URL, otherwise sourceURL
-// unchanged. Allow-list / rewrite / provenance logic always uses the
-// original sourceURL — only the outbound request target changes.
-func (p *VideoProxy) fetchURLFor(sourceURL string) string {
-	if p.config.UpstreamSigner != nil {
-		if signed, ok := p.config.UpstreamSigner(sourceURL); ok {
-			return signed
-		}
-	}
-	return sourceURL
 }
 
 // DefaultProxyConfig returns sensible defaults
@@ -190,9 +167,8 @@ func (p *VideoProxy) ProxyStreamCounted(ctx context.Context, sourceURL string, w
 		return 0, 0, fmt.Errorf("domain not allowed: %s", parsed.Host)
 	}
 
-	// Create upstream request (fetch URL may be a presigned rewrite of
-	// sourceURL for self-hosted MinIO; sourceURL itself is unchanged).
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.fetchURLFor(sourceURL), nil)
+	// Create upstream request
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return 0, 0, fmt.Errorf("create request: %w", err)
 	}
@@ -556,10 +532,8 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 		return 0, 0, &DomainNotAllowedError{Domain: parsed.Host}
 	}
 
-	// Create upstream request (fetch URL may be a presigned rewrite of
-	// sourceURL for self-hosted MinIO; sourceURL itself stays the base for
-	// M3U8 rewriting + provenance below).
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.fetchURLFor(sourceURL), nil)
+	// Create upstream request
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return 0, 0, fmt.Errorf("create request: %w", err)
 	}

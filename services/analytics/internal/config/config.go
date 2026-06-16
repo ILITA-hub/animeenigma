@@ -66,19 +66,14 @@ func Load() (*Config, error) {
 			Database: getEnv("DB_NAME", "animeenigma"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
-		// Redis carries the cross-service hashes analytics publishes for OTHER
-		// services to read: the read_thresholds hash (daily db_read P95, D-03)
-		// and the player_ranking:* keys (Stage 2b provider reliability). DB 0 is
-		// the fleet convention — the readers (catalog, library, themes,
-		// notifications) all default to REDIS_DB=0, so analytics MUST publish to
-		// DB 0 or the keys land on an unread DB. (A prior default of 2 silently
-		// stranded them; the read_thresholds gate masked it via its cold-start
-		// fallback, but player_ranking has none — its ranking just came up empty.)
+		// Redis carries the read_thresholds hash that the daily db_read P95
+		// recompute publishes (D-03). DB 2 matches the scheduler/catalog shared
+		// instance so the GORM services read the same hash.
 		Redis: cache.Config{
 			Host:     getEnv("REDIS_HOST", "redis"),
 			Port:     getEnvInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASSWORD", ""),
-			DB:       getEnvInt("REDIS_DB", 0),
+			DB:       getEnvInt("REDIS_DB", 2),
 		},
 		IPSalt:        getEnv("ANALYTICS_IP_SALT", "change-me-in-production"),
 		RetentionDays: getEnvInt("ANALYTICS_RETENTION_DAYS", 90),

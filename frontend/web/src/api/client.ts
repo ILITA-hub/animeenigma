@@ -4,7 +4,6 @@ import { getOrCreateAnonId } from '@/utils/anonId'
 import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/preference'
 import type { CreateJobPayload } from '@/types/library'
 import type { FeedbackListResponse, FeedbackDetail, FeedbackStatus } from '@/types/feedback'
-import type { SourceRanking } from '@/types/sourceRanking'
 import { consumePrefetch } from '@/utils/pagePrefetch'
 import { newTraceparent } from '@/analytics/traceparent'
 import { stampTrace } from '@/analytics/traceContext'
@@ -744,21 +743,6 @@ export const scraperApi = {
   // touching animeId for the health path. Pass any UUID (e.g. an underscore
   // placeholder).
   getHealth: () => apiClient.get(`/anime/_/scraper/health`),
-}
-
-/**
- * Smart Source Selection — learned-reliability ranking + same-day override.
- * `getSourceRanking` feeds rankingToOrder → pickSmartDefault; `postSourceFix`
- * records a same-day override provider after a client-side fallback rescued a
- * failed resolve (fire-and-forget; the player never blocks on it).
- */
-export const sourceRankingApi = {
-  getSourceRanking: (animeId: string) =>
-    apiClient.get<{ success: boolean; data: SourceRanking }>(
-      `/anime/${animeId}/source-ranking`,
-    ),
-  postSourceFix: (animeId: string, provider: string) =>
-    apiClient.post(`/anime/${animeId}/source-fix`, { provider }),
 }
 
 export const jimakuApi = {

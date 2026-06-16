@@ -129,7 +129,6 @@ func main() {
 	// a no-op (nil writer) and the GORM services keep their last good 48h hash —
 	// analytics' core ingestion must never depend on Redis being up.
 	var readThresholdHandler *handler.ReadThresholdHandler
-	var playerRankingHandler *handler.PlayerRankingHandler
 	redisCache, rerr := cache.New(cfg.Redis)
 	if rerr != nil {
 		log.Warnw("redis unavailable — read-threshold recompute disabled this boot", "error", rerr)
@@ -137,14 +136,6 @@ func main() {
 		defer redisCache.Close()
 		readThresholdSvc := svc.NewReadThresholdService(chConn, redisThresholdWriter{cache: redisCache})
 		readThresholdHandler = handler.NewReadThresholdHandler(readThresholdSvc)
-		// Stage 2b daily provider-reliability recompute + player_ranking Redis
-		// publish. Needs ClickHouse for the telemetry aggregates, so it is only
-		// wired when the CH backend is active (chConn != nil); the service's own
-		// Recompute also nil-guards conn/redis defensively.
-		if chConn != nil {
-			playerRankingSvc := svc.NewPlayerRankingService(chConn, redisRankingWriter{cache: redisCache})
-			playerRankingHandler = handler.NewPlayerRankingHandler(playerRankingSvc)
-		}
 	}
 
 	purgeJob := job.NewPurgeJob(repoPurger{db: db}, cfg.RetentionDays, log)
@@ -156,7 +147,7 @@ func main() {
 	defer c.Stop()
 
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, log, collector)
+	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {

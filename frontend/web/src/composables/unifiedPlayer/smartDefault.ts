@@ -23,18 +23,10 @@ export async function pickSmartDefault(
 ): Promise<string | null> {
   const activeIds = new Set(rows.filter(r => r.state === 'active').map(r => r.def.id))
 
-  // Dedup while preserving first-seen order: callers may now pass
-  // [...rankingOrder, ...CURATED_TIER], which can repeat ids. Curated/ranked
-  // ids (that are active) come first in the given order, then any remaining
-  // active rows absent from `curated`, in row order.
-  const seen = new Set<string>()
-  const ordered: string[] = []
-  for (const id of curated) {
-    if (activeIds.has(id) && !seen.has(id)) { seen.add(id); ordered.push(id) }
-  }
-  for (const r of rows) {
-    if (r.state === 'active' && !seen.has(r.def.id)) { seen.add(r.def.id); ordered.push(r.def.id) }
-  }
+  const ordered = [
+    ...curated.filter(id => activeIds.has(id)),
+    ...rows.filter(r => r.state === 'active' && !curated.includes(r.def.id)).map(r => r.def.id),
+  ]
 
   for (const id of ordered) {
     if (opts.needsCheck.has(id)) {

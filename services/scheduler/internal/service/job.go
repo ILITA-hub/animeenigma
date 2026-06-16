@@ -18,7 +18,6 @@ type JobService struct {
 	calendarJob                 *jobs.CalendarSyncJob
 	scraperPlayabilityCanaryJob *jobs.ScraperPlayabilityCanaryJob
 	readThresholdJob            *jobs.ReadThresholdJob
-	providerRankingJob          *jobs.ProviderRankingJob
 	log                         *logger.Logger
 	lastShikimoriRun            time.Time
 	lastCleanupRun              time.Time
@@ -26,7 +25,6 @@ type JobService struct {
 	lastCalendarRun             time.Time
 	lastCanaryRun               time.Time
 	lastReadThresholdRun        time.Time
-	lastProviderRankingRun      time.Time
 }
 
 func NewJobService(
@@ -36,7 +34,6 @@ func NewJobService(
 	calendarJob *jobs.CalendarSyncJob,
 	scraperPlayabilityCanaryJob *jobs.ScraperPlayabilityCanaryJob,
 	readThresholdJob *jobs.ReadThresholdJob,
-	providerRankingJob *jobs.ProviderRankingJob,
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
@@ -47,13 +44,12 @@ func NewJobService(
 		calendarJob:                 calendarJob,
 		scraperPlayabilityCanaryJob: scraperPlayabilityCanaryJob,
 		readThresholdJob:            readThresholdJob,
-		providerRankingJob:          providerRankingJob,
 		log:                         log,
 	}
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron, readThresholdCron, providerRankingCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron, readThresholdCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -191,34 +187,6 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		s.log.Info("registered job: read_threshold_recompute")
 	}
 
-	// Schedule daily provider-ranking recompute trigger (Stage 2b — Smart
-	// Source Selection). Like the read-threshold job, the scheduler has no
-	// ClickHouse connection — this job POSTs analytics' /internal recompute
-	// endpoint, which runs the aggregate and publishes the player_ranking:*
-	// Redis keys the catalog serves. Skipped if no job was wired.
-	if s.providerRankingJob != nil {
-		_, err = s.cron.AddFunc(providerRankingCron, func() {
-			ctx := context.Background()
-			s.log.Info("starting scheduled provider-ranking recompute")
-			start := time.Now()
-			if err := s.providerRankingJob.Run(ctx); err != nil {
-				metrics.SchedulerJobExecutionsTotal.WithLabelValues("provider_ranking_recompute", "error").Inc()
-				metrics.SchedulerJobDuration.WithLabelValues("provider_ranking_recompute").Observe(time.Since(start).Seconds())
-				s.log.Errorw("provider-ranking recompute failed", "error", err)
-			} else {
-				metrics.SchedulerJobExecutionsTotal.WithLabelValues("provider_ranking_recompute", "success").Inc()
-				metrics.SchedulerJobDuration.WithLabelValues("provider_ranking_recompute").Observe(time.Since(start).Seconds())
-				metrics.SchedulerJobLastSuccess.WithLabelValues("provider_ranking_recompute").SetToCurrentTime()
-				s.lastProviderRankingRun = time.Now()
-				s.log.Info("provider-ranking recompute completed successfully")
-			}
-		})
-		if err != nil {
-			return err
-		}
-		s.log.Info("registered job: provider_ranking_recompute")
-	}
-
 	s.cron.Start()
 	s.log.Info("job scheduler started")
 	return nil
@@ -315,9 +283,6 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"read_threshold_recompute": map[string]interface{}{
 			"last_run": s.lastReadThresholdRun,
-		},
-		"provider_ranking_recompute": map[string]interface{}{
-			"last_run": s.lastProviderRankingRun,
 		},
 	}
 }

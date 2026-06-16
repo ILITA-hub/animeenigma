@@ -49,16 +49,4 @@ describe('pickSmartDefault', () => {
     expect(await pickSmartDefault(rows, CURATED, { needsCheck: new Set(), isAvailable: alwaysAvailable }))
       .toBe('exotic')
   })
-
-  it('does not probe a gated id twice when curated has duplicates', async () => {
-    // Callers now pass [...rankingOrder, ...CURATED_TIER], which can repeat ids.
-    let probes = 0
-    const rows = [row('ae', 'active'), row('allanime', 'active')]
-    const id = await pickSmartDefault(rows, ['ae', 'allanime', 'ae'], {
-      needsCheck: new Set(['ae']),
-      isAvailable: async () => { probes++; return false },
-    })
-    expect(probes).toBe(1)      // ae probed once despite appearing twice
-    expect(id).toBe('allanime') // ae unavailable → next
-  })
 })

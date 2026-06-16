@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/url"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -27,7 +26,6 @@ type StorageConfig struct {
 type Storage struct {
 	client     *minio.Client
 	bucketName string
-	endpoint   string // host:port of the MinIO server, used to recognize own URLs
 }
 
 // Client returns the underlying MinIO client
@@ -54,56 +52,7 @@ func NewStorage(cfg StorageConfig) (*Storage, error) {
 	return &Storage{
 		client:     client,
 		bucketName: cfg.BucketName,
-		endpoint:   cfg.Endpoint,
 	}, nil
-}
-
-// presignTTL bounds how long a presigned GET stays valid. The proxy
-// re-presigns on EVERY upstream fetch (manifest + each segment), so this
-// only needs to outlive a single request round-trip; 15m is generous.
-const presignTTL = 15 * time.Minute
-
-// PresignURL recognizes URLs that point at THIS MinIO server and rewrites
-// them into short-lived presigned GET URLs so a credential-less HTTP client
-// (the HLS proxy) can fetch private-bucket objects without the bucket being
-// public. URLs for any other host are left untouched: it returns ("", false)
-// so the caller fetches them unchanged.
-//
-// This is the seam that lets the streaming HLS proxy serve self-hosted
-// library (`ae` provider) HLS from a PRIVATE MinIO bucket: the proxy still
-// gates entry on our own HMAC signature / provenance tokens, then presigns
-// the actual upstream MinIO read here.
-// IsOwnHost reports whether rawURL points at THIS MinIO server. Used by the
-// HLS proxy to label self-hosted (`ae` provider) playback traffic distinctly
-// from external-CDN traffic in metrics.
-func (s *Storage) IsOwnHost(rawURL string) bool {
-	u, err := url.Parse(rawURL)
-	return err == nil && u.Host == s.endpoint
-}
-
-func (s *Storage) PresignURL(rawURL string) (string, bool) {
-	u, err := url.Parse(rawURL)
-	if err != nil || u.Host != s.endpoint {
-		return "", false
-	}
-	// Path is /{bucket}/{object...}; split off the first segment as bucket.
-	p := strings.TrimPrefix(u.Path, "/")
-	slash := strings.IndexByte(p, '/')
-	if slash <= 0 || slash == len(p)-1 {
-		return "", false
-	}
-	bucket, object := p[:slash], p[slash+1:]
-	object, err = url.PathUnescape(object)
-	if err != nil {
-		return "", false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	signed, err := s.client.PresignedGetObject(ctx, bucket, object, presignTTL, nil)
-	if err != nil {
-		return "", false
-	}
-	return signed.String(), true
 }
 
 // EnsureBucket creates the bucket if it doesn't exist
