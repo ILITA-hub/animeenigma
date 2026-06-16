@@ -212,6 +212,11 @@
     }
   },
   "player": {
+    "sourceFallback": {
+      "resolve": "選択したソースは現在利用できません。最適なソースに切り替えます。",
+      "playback": "このソースが停止しました。別のソースに切り替えます。",
+      "unavailable": "このソースはまだ利用できません。"
+    },
     "theaterModeEnter": "シアターモード",
     "theaterModeExit": "シアターモード終了",
     "quality": "画質",
