@@ -21,7 +21,6 @@ export {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from 'reka-ui'
-export { default as GenreFilterPopup } from './GenreFilterPopup.vue'
 export { default as Input } from './Input.vue'
 export { default as Modal } from './Modal.vue'
 export { default as Dialog } from './Modal.vue'
