@@ -96,7 +96,8 @@ func (h *AnidleHandler) DailyGiveUp(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, map[string]any{"answer": ans})
+	// data IS the revealed anime (matches the frontend contract: data: VisibleAnime)
+	httputil.OK(w, ans)
 }
 
 func (h *AnidleHandler) Search(w http.ResponseWriter, r *http.Request) {

@@ -145,6 +145,7 @@ type GuessOutcome struct {
 type DailyState struct {
 	Date    string         `json:"date"`
 	Solved  bool           `json:"solved"`
+	GaveUp  bool           `json:"gave_up"`
 	Guesses []GuessOutcome `json:"guesses"`
 	Answer  *VisibleAnime  `json:"answer,omitempty"`
 }
@@ -265,6 +266,7 @@ func (s *DailyService) Resume(ctx context.Context, userID string) (*DailyState, 
 		return state, nil
 	}
 	state.Solved = res.Solved
+	state.GaveUp = res.GaveUp
 	for _, gid := range res.Guesses {
 		g, ok := s.pool.Lookup(gid)
 		if !ok {
@@ -276,7 +278,7 @@ func (s *DailyService) Resume(ctx context.Context, userID string) (*DailyState, 
 			Solved: gid == puzzle.AnimeID,
 		})
 	}
-	if res.Solved {
+	if res.Solved || res.GaveUp { // reveal the answer once the game is finished
 		a := visible(puzzle.AnswerSnapshot)
 		state.Answer = &a
 	}
