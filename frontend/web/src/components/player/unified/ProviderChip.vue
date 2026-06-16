@@ -26,8 +26,30 @@
         aria-hidden="true"
       />
 
-      <!-- Provider name -->
-      <span class="flex-1 font-semibold truncate">{{ row.def.name }}</span>
+      <!-- Provider name + capability labels -->
+      <span class="flex-1 min-w-0 flex flex-col gap-[2px]">
+        <span class="font-semibold truncate">{{ row.def.name }}</span>
+        <span v-if="labels" class="flex items-center gap-[5px] flex-wrap">
+          <span
+            v-for="c in labels.categories"
+            :key="c"
+            data-test="cap-cat"
+            class="text-[9px] font-semibold font-mono uppercase tracking-wide px-[4px] py-px rounded bg-white/[0.08] text-[var(--muted-foreground)]"
+          >
+            {{ c === 'sub' ? $t('player.sub') : c === 'dub' ? $t('player.dub') : $t('player.sources.raw') }}<template v-if="c === 'sub' && labels.subDelivery"> · {{ labels.subDelivery === 'hard' ? $t('player.sources.subBurnedIn') : $t('player.sources.subSelectable') }}</template>
+          </span>
+          <span
+            v-if="labels.quality"
+            data-test="cap-quality"
+            class="text-[9px] font-semibold font-mono text-[var(--muted-foreground)]"
+          >{{ labels.quality }}</span>
+          <span
+            v-if="best"
+            data-test="cap-best"
+            class="text-[9px] font-semibold font-mono uppercase tracking-wide text-[var(--brand-cyan)]"
+          >{{ $t('player.sources.best') }}</span>
+        </span>
+      </span>
 
       <!-- Selected check affordance -->
       <span
@@ -55,10 +77,14 @@
 import { computed } from 'vue'
 import { Check } from 'lucide-vue-next'
 import type { ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderCap } from '@/types/capabilities'
+import { deriveCapLabels } from '@/composables/unifiedPlayer/capLabels'
 
 const props = defineProps<{
   row: ProviderRow
   selected?: boolean
+  cap?: ProviderCap
+  best?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -66,6 +92,7 @@ const emit = defineEmits<{
 }>()
 
 const isSelected = computed(() => props.selected === true)
+const labels = computed(() => deriveCapLabels(props.cap))
 
 function onClick() {
   if (props.row.state === 'active') {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ProviderChip from './ProviderChip.vue'
 import type { ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderCap } from '@/types/capabilities'
 
 const row = (over: Partial<ProviderRow>): ProviderRow => ({
   def: { id: 'allanime', name: 'AllAnime', hue: '#00d4ff', group: 'en', audios: ['sub'], langs: ['en'], content: ['common'], scraper: true },
@@ -30,5 +31,31 @@ describe('ProviderChip', () => {
   it('marks the active selection', () => {
     const w = mount(ProviderChip, { props: { row: row({}), selected: true } })
     expect(w.classes().join(' ')).toMatch(/is-active|is-selected/)
+  })
+
+  // --- capability label row ---
+  const capMountOpts = { global: { mocks: { $t: (k: string) => k } } }
+  const cap: ProviderCap = {
+    provider: 'allanime', display_name: 'AllAnime', enabled: true, health: 'up', rank: 90,
+    variants: [
+      { category: 'sub', sub_delivery: 'hard', qualities: ['1080p'], quality_source: 'trait', source: 'trait' },
+      { category: 'dub', sub_delivery: 'none', qualities: ['1080p'], quality_source: 'trait', source: 'trait' },
+    ],
+  }
+
+  it('renders category + quality tags when cap is present', () => {
+    const w = mount(ProviderChip, { props: { row: row({}), cap }, ...capMountOpts })
+    expect(w.findAll('[data-test="cap-cat"]').length).toBe(2)
+    expect(w.find('[data-test="cap-quality"]').text()).toContain('1080p')
+  })
+
+  it('renders no label row without cap', () => {
+    const w = mount(ProviderChip, { props: { row: row({}) }, ...capMountOpts })
+    expect(w.find('[data-test="cap-cat"]').exists()).toBe(false)
+  })
+
+  it('shows the best pill when best=true', () => {
+    const w = mount(ProviderChip, { props: { row: row({}), cap, best: true }, ...capMountOpts })
+    expect(w.find('[data-test="cap-best"]').exists()).toBe(true)
   })
 })
