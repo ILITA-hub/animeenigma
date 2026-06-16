@@ -45,6 +45,16 @@ func NewStreamHandlerWithSessions(streamingService *service.StreamingService, hl
 	// Create video proxy with default config for HLS proxying
 	proxyCfg := videoutils.DefaultProxyConfig()
 	proxyCfg.AllowedDomains = videoutils.HLSProxyAllowedDomains
+	// Self-hosted library (`ae` provider) HLS lives in a PRIVATE MinIO
+	// bucket. The proxy gates entry on our HMAC sig / provenance tokens,
+	// then presigns the actual MinIO read here so the bucket never needs to
+	// be public. Only URLs whose host is our MinIO endpoint are rewritten;
+	// every external-CDN fetch is left untouched.
+	if streamingService != nil {
+		if st := streamingService.Storage(); st != nil {
+			proxyCfg.UpstreamSigner = st.PresignURL
+		}
+	}
 
 	return &StreamHandler{
 		streamingService: streamingService,
@@ -187,10 +197,21 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Label self-hosted (`ae` provider) playback distinctly from external-CDN
+	// traffic: a request whose upstream host is our own MinIO is "hls_minio",
+	// everything else stays "hls". This is the on-prem playback load signal
+	// used by the Playback dashboard's AnimeEnigma row.
+	proxyType := "hls"
+	if h.streamingService != nil {
+		if st := h.streamingService.Storage(); st != nil && st.IsOwnHost(sourceURL) {
+			proxyType = "hls_minio"
+		}
+	}
+
 	// Track active connections
 	hlsActiveConnections.Add(1)
 	metrics.ProxyActiveConnections.Inc()
-	metrics.ProxyRequestsTotal.WithLabelValues("hls").Inc()
+	metrics.ProxyRequestsTotal.WithLabelValues(proxyType).Inc()
 	defer func() {
 		hlsProxySemaphore.Release(1)
 		hlsActiveConnections.Add(-1)
@@ -203,10 +224,11 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 		"active_connections", hlsActiveConnections.Load(),
 	)
 
-	// Wrap writer to count bytes transferred
+	// Wrap writer to count bytes transferred (same hls/hls_minio split as the
+	// request counter above, so on-prem egress load is measurable on its own).
 	cw := &metrics.CountingResponseWriter{
 		ResponseWriter: w,
-		Counter:        metrics.ProxyBytesTransferredTotal.WithLabelValues("hls"),
+		Counter:        metrics.ProxyBytesTransferredTotal.WithLabelValues(proxyType),
 	}
 
 	// Proxy the request with the provided referer, capturing per-call byte

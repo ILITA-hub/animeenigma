@@ -121,9 +121,11 @@ func main() {
 	scraperPlayabilityCanaryJob := jobs.NewScraperPlayabilityCanaryJob(db.DB, &cfg.Jobs, log)
 	// Phase 03 (v4.0) — daily read-threshold recompute trigger (D-03).
 	readThresholdJob := jobs.NewReadThresholdJob(&cfg.Jobs, log)
+	// Stage 2b — daily provider-ranking recompute trigger.
+	providerRankingJob := jobs.NewProviderRankingJob(&cfg.Jobs, log)
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, scraperPlayabilityCanaryJob, readThresholdJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, scraperPlayabilityCanaryJob, readThresholdJob, providerRankingJob, log)
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler
@@ -134,6 +136,7 @@ func main() {
 		cfg.Jobs.CalendarSyncCron,
 		cfg.Jobs.ScraperPlayabilityCanaryCron,
 		cfg.Jobs.ReadThresholdCron,
+		cfg.Jobs.ProviderRankingCron,
 	); err != nil {
 		log.Fatalw("failed to start job scheduler", "error", err)
 	}

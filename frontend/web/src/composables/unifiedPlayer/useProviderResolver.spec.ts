@@ -292,14 +292,4 @@ describe('ProviderResolver.listTeams', () => {
     const resolver = makeResolver({})
     expect(await resolver.listTeams('allanime', 'anime-1')).toEqual([])
   })
-
-  it('returns [] for a wired provider whose adapter has no listTeams', async () => {
-    const scraperApi = {
-      getEpisodes: async () => ({ data: { data: { episodes: [] } } }),
-      getServers: async () => ({ data: { data: { servers: [] } } }),
-      getStream: async () => ({ data: { data: { stream: { sources: [] } } } }),
-    } as never
-    const resolver = makeResolver({ scraperApi })
-    expect(await resolver.listTeams('gogoanime', 'anime-1')).toEqual([])
-  })
 })

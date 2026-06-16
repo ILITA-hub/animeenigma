@@ -39,6 +39,10 @@ type StreamingService struct {
 	log              *logger.Logger
 }
 
+// Storage exposes the MinIO storage handle so the HLS-proxy handler can use
+// its PresignURL seam to authenticate self-hosted (private-bucket) reads.
+func (s *StreamingService) Storage() *videoutils.Storage { return s.storage }
+
 // NewStreamingService creates a new streaming service with external provider support
 func NewStreamingService(
 	storage *videoutils.Storage,
