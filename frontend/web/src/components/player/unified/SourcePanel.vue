@@ -104,25 +104,40 @@
           style="background: rgba(255,255,255,0.07);"
           @click="emit('update:team', t)"
         >
-          {{ t }}
+          <span>{{ t }}</span>
+          <span
+            v-if="teamCategory(t)"
+            class="ml-[5px] text-[9px] font-semibold font-mono uppercase tracking-wide opacity-80"
+          >{{ teamCategory(t) === 'dub' ? $t('player.dub') : $t('player.sub') }}</span>
         </button>
       </div>
     </div>
 
-    <!-- Provider list -->
+    <!-- Provider list (collapsed to the best/selected source unless hacker mode / error-expanded) -->
     <div class="flex flex-col gap-1">
       <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-[2px]">
         Provider
       </span>
       <div class="flex flex-col gap-1">
         <ProviderChip
-          v-for="r in rows"
+          v-for="r in visibleRows"
           :key="r.def.id"
           :row="r"
+          :cap="capMap.get(r.def.id)"
+          :best="!hackerMode && !expanded && r.def.id === topRow?.def.id"
           :selected="r.def.id === provider"
           @select="emit('select-provider', r.def.id)"
         />
       </div>
+      <!-- Error escape hatch: reveal the rest without full hacker mode -->
+      <button
+        v-if="playbackError && !hackerMode && !expanded && hiddenCount > 0"
+        data-test="try-another"
+        class="mt-1 self-start text-[12px] font-semibold text-[var(--brand-cyan)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)] rounded px-1"
+        @click="expanded = true"
+      >
+        {{ $t('player.sources.tryAnother') }} ({{ hiddenCount }})
+      </button>
     </div>
 
     <!-- Server list -->
@@ -157,20 +172,33 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { AudioKind, TrackLang, ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderCap } from '@/types/capabilities'
 import ProviderChip from './ProviderChip.vue'
 
-const props = defineProps<{
-  rows: ProviderRow[]
-  audio: AudioKind
-  lang: TrackLang
-  team: string | null
-  provider: string
-  server: string
-  servers: { id: string; label: string }[]
-  teams: string[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    rows: ProviderRow[]
+    audio: AudioKind
+    lang: TrackLang
+    team: string | null
+    provider: string
+    server: string
+    servers: { id: string; label: string }[]
+    teams: string[]
+    capMap?: Map<string, ProviderCap>
+    rankedIds?: string[]
+    hackerMode?: boolean
+    playbackError?: boolean
+  }>(),
+  {
+    capMap: () => new Map<string, ProviderCap>(),
+    rankedIds: () => [],
+    hackerMode: false,
+    playbackError: false,
+  },
+)
 
 const emit = defineEmits<{
   (e: 'update:audio', v: AudioKind): void
@@ -199,7 +227,40 @@ const langIndex = computed(() =>
   langOptions.findIndex(o => o.value === props.lang),
 )
 
-const activeCount = computed(() =>
-  props.rows.filter(r => r.state === 'active').length,
+// Rows sorted by the merged capability ranking (registry order for unranked).
+const sortedRows = computed(() => {
+  const pos = (id: string) => {
+    const i = props.rankedIds.indexOf(id)
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i
+  }
+  return [...props.rows].sort((a, b) => pos(a.def.id) - pos(b.def.id))
+})
+const activeRows = computed(() => sortedRows.value.filter(r => r.state === 'active'))
+const activeCount = computed(() => activeRows.value.length)
+
+// Collapse: by default show only the best playable source — the selected
+// provider when set (the smart default already picked the top-ranked one),
+// else the first active row. Hacker mode → full ranked list; error-expanded
+// → all active rows.
+const topRow = computed(
+  () => activeRows.value.find(r => r.def.id === props.provider) ?? activeRows.value[0] ?? null,
 )
+const expanded = ref(false)
+watch(() => props.provider, () => { expanded.value = false })
+
+const visibleRows = computed(() => {
+  if (props.hackerMode) return sortedRows.value
+  if (expanded.value) return activeRows.value
+  return topRow.value ? [topRow.value] : []
+})
+const hiddenCount = computed(() => Math.max(0, activeCount.value - 1))
+
+// Team → category tag from the selected provider's capability variants.
+function teamCategory(name: string): 'sub' | 'dub' | null {
+  const cap = props.capMap.get(props.provider)
+  if (!cap) return null
+  const v = cap.variants.find(x => x.team?.name === name)
+  if (!v) return null
+  return v.category === 'dub' ? 'dub' : v.category === 'sub' ? 'sub' : null
+}
 </script>
