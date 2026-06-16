@@ -749,9 +749,10 @@ export const scraperApi = {
 /**
  * Smart Source Selection — learned-reliability ranking + same-day override.
  * `getSourceRanking` feeds rankingToOrder → pickSmartDefault; `postSourceFix`
- * pins a same-day override provider for this anime (admin/owner action).
+ * records a same-day override provider after a client-side fallback rescued a
+ * failed resolve (fire-and-forget; the player never blocks on it).
  */
-export const catalogApi = {
+export const sourceRankingApi = {
   getSourceRanking: (animeId: string) =>
     apiClient.get<{ success: boolean; data: SourceRanking }>(
       `/anime/${animeId}/source-ranking`,
