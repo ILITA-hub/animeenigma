@@ -6,7 +6,7 @@
         data-testid="datepicker-trigger"
         :title="title"
         :class="cn(
-          'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-white/5 border border-white/10 text-xs transition-colors',
+          'inline-flex items-center gap-1.5 h-11 px-3 rounded-lg bg-white/5 border border-white/10 text-sm transition-colors',
           'hover:bg-white/10 hover:border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50',
           modelValue ? 'text-white' : 'text-white/40',
           props.class,

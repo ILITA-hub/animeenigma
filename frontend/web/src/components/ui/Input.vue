@@ -95,7 +95,7 @@ const inputClasses = computed(() => {
   const base = 'w-full bg-white/5 border text-white placeholder-white/30 transition-all duration-200 focus:outline-none focus-visible:outline-none'
 
   const sizes = {
-    sm: 'px-3 py-2 text-sm rounded-lg',
+    sm: 'px-3 py-2 text-sm rounded-lg touch-target',
     md: 'px-4 py-3 text-base rounded-xl',
     lg: 'px-5 py-4 text-lg rounded-xl',
   }

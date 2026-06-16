@@ -119,7 +119,7 @@
               <!-- View Toggle + Sort -->
               <div class="flex items-center justify-end gap-2">
                 <div class="flex-shrink-0 w-48 mr-auto">
-                  <Input v-model="searchQuery" type="text" size="sm" :placeholder="$t('profile.watchlist.searchPlaceholder')" class="h-11" />
+                  <Input v-model="searchQuery" type="text" size="sm" :placeholder="$t('profile.watchlist.searchPlaceholder')" />
                 </div>
                 <!-- Sort -->
                 <div class="w-36">
@@ -127,7 +127,6 @@
                     v-model="sortKey"
                     :options="sortOptions"
                     size="sm"
-                    trigger-class="h-11"
                   />
                 </div>
                 <Button

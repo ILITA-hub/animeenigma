@@ -114,7 +114,7 @@ const triggerClasses = computed(() => {
 
   const sizes = {
     xs: 'px-2 py-1 text-xs rounded-lg gap-1',
-    sm: 'px-3 py-2 text-sm rounded-lg gap-2',
+    sm: 'px-3 py-2 text-sm rounded-lg gap-2 touch-target',
     md: 'px-4 py-3 text-base rounded-xl gap-2',
     lg: 'px-5 py-4 text-lg rounded-xl gap-3',
   }
