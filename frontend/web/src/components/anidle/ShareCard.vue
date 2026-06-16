@@ -21,7 +21,7 @@ const props = defineProps<{
 }>()
 
 const columns: Array<keyof GuessComparison> = [
-  'genres', 'studios', 'year', 'episodes', 'score', 'status', 'rating', 'tags',
+  'genres', 'studios', 'year', 'episodes', 'score', 'status', 'rating',
 ]
 
 const reversedGuesses = computed(() => props.guesses.slice().reverse())

@@ -67,13 +67,6 @@
           :value="guess.anime.rating"
         />
       </div>
-      <div class="space-y-1">
-        <p class="text-xs text-muted-foreground text-center truncate">{{ $t('anidle.column_tags') }}</p>
-        <GuessCell
-          :status="guess.result.tags.status"
-          :value="tagNames"
-        />
-      </div>
     </div>
   </div>
 </template>
@@ -89,7 +82,6 @@ const props = defineProps<{
 }>()
 
 const posterSrc = computed(() => cardPosterUrl(props.guess.anime.poster_url, 128))
-const genreNames = computed(() => props.guess.anime.genres.map(g => g.name).join(', ') || '—')
-const studioNames = computed(() => props.guess.anime.studios.map(s => s.name).join(', ') || '—')
-const tagNames = computed(() => props.guess.anime.tags.map(t => t.name).join(', ') || '—')
+const genreNames = computed(() => props.guess.anime.genres.slice(0, 2).map(g => g.name).join(', ') || '—')
+const studioNames = computed(() => props.guess.anime.studios.slice(0, 1).map(s => s.name).join(', ') || '—')
 </script>

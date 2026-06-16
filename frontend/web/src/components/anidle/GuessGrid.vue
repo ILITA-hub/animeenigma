@@ -2,7 +2,7 @@
   <div v-if="guesses.length > 0">
     <!-- Desktop: horizontal-scroll table (≥md) -->
     <div class="hidden md:block overflow-x-auto">
-      <table class="w-full text-sm border-collapse min-w-[640px]">
+      <table class="w-full text-sm border-collapse min-w-[560px]">
         <thead>
           <tr class="border-b border-white/10">
             <th class="text-left py-2 px-3 text-muted-foreground font-medium min-w-[160px]">
@@ -11,7 +11,7 @@
             <th
               v-for="col in columns"
               :key="col.key"
-              class="py-2 px-2 text-muted-foreground font-medium text-center min-w-[72px]"
+              class="py-2 px-2 text-muted-foreground font-medium text-center w-[80px]"
             >
               {{ $t(col.labelKey) }}
             </th>
@@ -78,12 +78,6 @@
                 :value="guess.anime.rating"
               />
             </td>
-            <td class="py-2 px-2 text-center">
-              <GuessCell
-                :status="guess.result.tags.status"
-                :value="tagNames(guess)"
-              />
-            </td>
           </tr>
         </tbody>
       </table>
@@ -122,22 +116,18 @@ const columns = [
   { key: 'score', labelKey: 'anidle.column_score' },
   { key: 'status', labelKey: 'anidle.column_status' },
   { key: 'rating', labelKey: 'anidle.column_rating' },
-  { key: 'tags', labelKey: 'anidle.column_tags' },
 ] as const
 
 function posterFor(guess: GuessOutcome) {
   return cardPosterUrl(guess.anime.poster_url, 128)
 }
 
+// Cap genres/studios to keep the fixed-width cells uniform and readable.
 function genreNames(guess: GuessOutcome) {
-  return guess.anime.genres.map(g => g.name).join(', ') || '—'
+  return guess.anime.genres.slice(0, 2).map(g => g.name).join(', ') || '—'
 }
 
 function studioNames(guess: GuessOutcome) {
-  return guess.anime.studios.map(s => s.name).join(', ') || '—'
-}
-
-function tagNames(guess: GuessOutcome) {
-  return guess.anime.tags.map(t => t.name).join(', ') || '—'
+  return guess.anime.studios.slice(0, 1).map(s => s.name).join(', ') || '—'
 }
 </script>

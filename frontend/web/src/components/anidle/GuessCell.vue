@@ -1,14 +1,12 @@
 <template>
   <div
     :class="[
-      'rounded-lg p-2 text-sm font-medium text-center transition-colors min-w-[64px]',
+      'flex items-center justify-center text-center rounded-lg px-1.5 text-xs font-medium leading-tight transition-colors w-[72px] h-[44px] overflow-hidden',
       statusClass,
     ]"
     :aria-label="ariaLabel"
   >
-    {{ displayValue }}
-    <span v-if="hint === 'higher'" aria-hidden="true"> ↑</span>
-    <span v-else-if="hint === 'lower'" aria-hidden="true"> ↓</span>
+    <span class="line-clamp-2 break-words">{{ displayValue }}<span v-if="hint === 'higher'" aria-hidden="true"> ↑</span><span v-else-if="hint === 'lower'" aria-hidden="true"> ↓</span></span>
   </div>
 </template>
 
