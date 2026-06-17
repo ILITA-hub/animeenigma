@@ -58,6 +58,7 @@ func newPlayerRouter(t *testing.T, internalListHandler *handler.InternalListHand
 		nil, // historyHandler
 		nil, // reviewHandler
 		nil, // commentHandler
+		nil, // showcaseHandler
 		nil, // malImportHandler
 		nil, // malExportHandler
 		nil, // shikimoriImportHandler

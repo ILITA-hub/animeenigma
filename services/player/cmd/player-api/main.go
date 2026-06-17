@@ -81,6 +81,9 @@ func main() {
 		// New `comments` table for the comments feature; domain struct in
 		// services/player/internal/domain/comment.go.
 		&domain.Comment{},
+		// Profile showcase (Steam-style wall). Pure config store; content
+		// resolved on the frontend. Dark-shipped via gateway PROFILE_WALL_ADMIN_ONLY.
+		&domain.ProfileShowcase{},
 		// AUTO-408 — emoji reactions on reviews. FK to anime_list(id) with
 		// ON DELETE CASCADE is added via raw SQL below (GORM doesn't infer FKs
 		// from struct tags alone).
@@ -346,6 +349,12 @@ func main() {
 	commentService := service.NewCommentService(commentRepo, activityRepo, log)
 	commentHandler := handler.NewCommentHandler(commentService, log)
 
+	// Profile showcase (Steam-style wall, dark-shipped via gateway
+	// PROFILE_WALL_ADMIN_ONLY). Pure config store; content resolved on FE.
+	showcaseRepo := repo.NewShowcaseRepository(db.DB)
+	showcaseService := service.NewShowcaseService(showcaseRepo, log)
+	showcaseHandler := handler.NewShowcaseHandler(showcaseService, log)
+
 	// Initialize MAL export service
 	malExportService := service.NewMALExportService(log)
 
@@ -389,7 +398,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, adminReportsHandler, internalListHandler, viewerContextHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, showcaseHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, adminReportsHandler, internalListHandler, viewerContextHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

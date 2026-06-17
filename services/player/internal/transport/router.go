@@ -18,6 +18,7 @@ func NewRouter(
 	historyHandler *handler.HistoryHandler,
 	reviewHandler *handler.ReviewHandler,
 	commentHandler *handler.CommentHandler,
+	showcaseHandler *handler.ShowcaseHandler,
 	malImportHandler *handler.MALImportHandler,
 	malExportHandler *handler.MALExportHandler,
 	shikimoriImportHandler *handler.ShikimoriImportHandler,
@@ -95,6 +96,10 @@ func NewRouter(
 			r.Delete("/watchlist/{animeId}", listHandler.DeleteListEntry)
 			r.Post("/watchlist/{animeId}/episode", listHandler.MarkEpisodeWatched)
 			r.Post("/watchlist/{animeId}/rewatch", listHandler.Rewatch)
+
+			// Profile showcase (Steam-style wall) — owner write. "me" resolves
+			// to the JWT claims user id in the handler.
+			r.Put("/me/showcase", showcaseHandler.SaveShowcase)
 
 			// Progress routes
 			r.Post("/progress", progressHandler.UpdateProgress)
@@ -190,6 +195,11 @@ func NewRouter(
 		r.Get("/users/{userId}/watchlist/public", listHandler.GetPublicWatchlist)
 		r.Get("/users/{userId}/watchlist/public/stats", listHandler.GetPublicWatchlistStats)
 		r.Get("/users/{userId}/watchlist/facets", listHandler.GetPublicWatchlistFacets)
+
+		// Profile showcase public read (mirrors watchlist/public — lives
+		// OUTSIDE the JWT-protected /users group so anonymous viewers can
+		// read a profile's showcase once the dark-ship gate is lifted).
+		r.Get("/users/{userId}/showcase", showcaseHandler.GetShowcase)
 
 		// Public activity feed
 		r.Get("/activity/feed", activityHandler.GetFeed)
