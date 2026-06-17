@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Auto Torrent Population (watch-driven first-party RAW cache)
-status: planning
-last_updated: "2026-06-17T04:52:24.298Z"
+status: roadmapped
+last_updated: "2026-06-17T05:10:00.000Z"
 last_activity: 2026-06-17
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -15,40 +15,67 @@ progress:
 
 # Project State
 
+## Project Reference
+
+**Core value:** A logged-in user hits play on the first-party "ae" provider and the RAW (JP-audio) episode is already there — pre-downloaded by the platform's prediction of what they're about to watch, served from a self-managing ~100 GB pool with zero admin action.
+
+**Current focus:** Roadmap approved (Phases 7-11). Next: `/gsd:plan-phase 7`.
+
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started — roadmap complete, Phase 7 next
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-17 — Milestone v4.1 started
+Status: Roadmapped (5 phases, 23/23 requirements mapped)
+Last activity: 2026-06-17 — v4.1 roadmap created
 
 ## Progress
 
-**Phases Complete:** 6 / 6
+**Milestone phases:** 0 / 5 complete
 **Current Plan:** Not started
+`[          ]` 0%
+
+## Phase Map (v4.1, Phases 7-11)
+
+| Phase | Name | Requirements | Depends on |
+|-------|------|--------------|------------|
+| 7 | Pool Foundation, Config & Migration | POOL-01..05 | — |
+| 8 | Serving & Fetch Signal | SERVE-01..03 | 7 |
+| 9 | Download Triggers | TRIG-01..05 | 7, 8 |
+| 10 | Eviction & Budget | EVICT-01..05 | 7, 8, 9 |
+| 11 | Observability & Prediction | OBS-01..05 | 7, 8, 9, 10 |
 
 ## Session Continuity
 
-**Stopped At:** Completed 06-03-PLAN.md
-**Resume File:** None
+**Stopped At:** v4.1 roadmap written (ROADMAP.md, REQUIREMENTS.md traceability, STATE.md)
+**Resume File:** None — next action is `/gsd:plan-phase 7`
 
 ## Performance Metrics
 
 | Phase | Plan | Duration | Tasks | Files |
 | ----- | ---- | -------- | ----- | ----- |
-| 06    | 03   | ~8 min   | 4     | 6     |
+| —     | —    | —        | —     | —     |
 
-## Decisions
+## Accumulated Context
 
-- [Phase 06]: 06-03 — Topology A complete: ClickHouse is the single event/trace/log plane; the OTel Collector spanmetrics/servicegraph connectors are the sole span-metrics writer to Prometheus (Tempo/Loki/Promtail retired).
-- [Phase 06]: 06-03 — Used `deleteDatasources` provisioning to prune the `editable:false` Tempo+Loki datasources; block removal alone leaves them in Grafana's DB and the API refuses read-only deletes.
+### Decisions (carried from design spec)
 
-## Notes
+- **D1**: Build into `services/library` as new `internal/autocache/` — reuse `download_worker`, `encoder_worker`, Jackett/Nyaa tier, `minio.Writer`, `DiskGuard`, `library_jobs`. No new microservice.
+- **D2/D3**: RAW-only in v1; one RAW object serves both RAW- and SUB-preferring demand (SUB via client-side overlay); DUB demand ignored.
+- **D5/D6/D7**: Unified metered pool (admin + auto, one budget, default 100 GB); admin content is "more fresh" (longer window, evicted only after all auto-Stale); reject when full.
+- **Sequencing invariant**: the §3.3 admin-content migration (Phase 7) MUST complete before the evictor (Phase 10) goes live — unmigrated admin content on old paths is invisible to the Accountant and the budget math is wrong (spec §10).
+- **Metric ownership**: each phase emits its own counters/gauges (serve hit/miss in P8, downloads-by-trigger in P9, eviction/rejection + byte accounting in P10); Phase 11 builds the Grafana dashboard + daily prediction-table heuristic on top.
 
-- Phase 1 artifacts live in the repo, not in this workstream's `phases/` dir (it was built before the workstream existed). Plan: `docs/superpowers/plans/2026-06-02-design-system-consolidation-p1.md`. Spec: `docs/superpowers/specs/2026-06-02-design-system-consolidation-design.md`.
-- Phase 1 commits (6, `ba8e4e83`..`d2baa16d` — non-contiguous) are on `main` and **already pushed to `origin/main`** (verified 2026-06-02; a parallel session's push swept them up). The workstream-seed commit is the only local-unpushed design-system commit at creation time.
-- `--accent` semantic flip is deferred to Phase 5 (DS-MIGRATE-05) — do not flip earlier.
+### Open todos / risks (from spec §10)
+
+- **Combo enumeration for Logic A** needs an internal way to list "active JP-audio watchers per anime" — likely a new internal catalog/player endpoint; confirm data ownership during Phase 9 planning.
+- **`avg_raw_ep_size`** for the prediction table bootstraps from observed downloads; before any downloads exist, fall back to a configured ~1.2 GB constant (Phase 11).
+- **Migration audit**: the Phase 7 migration task must audit `services/catalog/internal/service/raw_resolver.go` and `services/catalog/internal/parser/library/client.go` for hardcoded old-prefix assumptions.
+
+### Blockers
+
+None.
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first phase with `/gsd:plan-phase 7`
+</content>

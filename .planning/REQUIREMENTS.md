@@ -82,35 +82,38 @@ Which phases cover which requirements. **Filled by the roadmapper.**
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| POOL-01 | TBD | Pending |
-| POOL-02 | TBD | Pending |
-| POOL-03 | TBD | Pending |
-| POOL-04 | TBD | Pending |
-| POOL-05 | TBD | Pending |
-| TRIG-01 | TBD | Pending |
-| TRIG-02 | TBD | Pending |
-| TRIG-03 | TBD | Pending |
-| TRIG-04 | TBD | Pending |
-| TRIG-05 | TBD | Pending |
-| EVICT-01 | TBD | Pending |
-| EVICT-02 | TBD | Pending |
-| EVICT-03 | TBD | Pending |
-| EVICT-04 | TBD | Pending |
-| EVICT-05 | TBD | Pending |
-| SERVE-01 | TBD | Pending |
-| SERVE-02 | TBD | Pending |
-| SERVE-03 | TBD | Pending |
-| OBS-01 | TBD | Pending |
-| OBS-02 | TBD | Pending |
-| OBS-03 | TBD | Pending |
-| OBS-04 | TBD | Pending |
-| OBS-05 | TBD | Pending |
+| POOL-01 | Phase 7 | Pending |
+| POOL-02 | Phase 7 | Pending |
+| POOL-03 | Phase 7 | Pending |
+| POOL-04 | Phase 7 | Pending |
+| POOL-05 | Phase 7 | Pending |
+| SERVE-01 | Phase 8 | Pending |
+| SERVE-02 | Phase 8 | Pending |
+| SERVE-03 | Phase 8 | Pending |
+| TRIG-01 | Phase 9 | Pending |
+| TRIG-02 | Phase 9 | Pending |
+| TRIG-03 | Phase 9 | Pending |
+| TRIG-04 | Phase 9 | Pending |
+| TRIG-05 | Phase 9 | Pending |
+| EVICT-01 | Phase 10 | Pending |
+| EVICT-02 | Phase 10 | Pending |
+| EVICT-03 | Phase 10 | Pending |
+| EVICT-04 | Phase 10 | Pending |
+| EVICT-05 | Phase 10 | Pending |
+| OBS-01 | Phase 11 | Pending |
+| OBS-02 | Phase 11 | Pending |
+| OBS-03 | Phase 11 | Pending |
+| OBS-04 | Phase 11 | Pending |
+| OBS-05 | Phase 11 | Pending |
 
 **Coverage:**
 - v1 requirements: 23 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 23 ⚠️
+- Mapped to phases: 23 ✓
+- Unmapped: 0 ✓
+
+Phase distribution: Phase 7 (5: POOL-01..05) · Phase 8 (3: SERVE-01..03) · Phase 9 (5: TRIG-01..05) · Phase 10 (5: EVICT-01..05) · Phase 11 (5: OBS-01..05).
 
 ---
 *Requirements defined: 2026-06-17*
-*Last updated: 2026-06-17 at milestone v4.1 start*
+*Last updated: 2026-06-17 — roadmap mapped all 23 v1 requirements to Phases 7-11*
+</content>
