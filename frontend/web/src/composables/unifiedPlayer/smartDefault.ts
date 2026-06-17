@@ -5,6 +5,13 @@ export interface SmartDefaultOpts {
   needsCheck: Set<string>
   /** Async availability probe for gated providers. Resolves true ⇒ pickable. */
   isAvailable: (id: string) => Promise<boolean>
+  /**
+   * Optional synchronous playability gate. Return false to exclude a provider
+   * the server's capability stats marked unplayable (e.g. allanime with
+   * `playable:false`) — it stays manually selectable, just never auto-defaulted.
+   * Providers absent from the capability report (ae/raw/kodik) return true.
+   */
+  isPlayable?: (id: string) => boolean
 }
 
 /**
@@ -37,6 +44,7 @@ export async function pickSmartDefault(
   }
 
   for (const id of ordered) {
+    if (opts.isPlayable && !opts.isPlayable(id)) continue
     if (opts.needsCheck.has(id)) {
       if (await opts.isAvailable(id)) return id
       continue

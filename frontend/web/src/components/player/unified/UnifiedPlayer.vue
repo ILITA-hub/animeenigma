@@ -434,12 +434,12 @@ function isProviderAvailable(id: string): Promise<boolean> {
 // props.animeId can change without a remount (no :key on the player), so the
 // per-anime ae availability probe must be invalidated when the title changes.
 // Also reset saved-combo fallback state so the new title gets a fresh attempt.
-let providerWasFromSavedCombo = false
-let savedSourceFallbackDone = false
+let providerAutoSelected = false
+let autoFallbackDone = false
 watch(() => props.animeId, () => {
   aeAvailableCache = null
-  providerWasFromSavedCombo = false
-  savedSourceFallbackDone = false
+  providerAutoSelected = false
+  autoFallbackDone = false
   resetFallbackIntents()
 })
 
@@ -447,34 +447,35 @@ watch(() => props.animeId, () => {
 // probe (see isProviderAvailable). Only first-party `ae` today.
 const AE_NEEDS_CHECK = new Set(['ae'])
 
+// A provider the capability stats explicitly mark `playable: false` must never
+// be the auto-default / BEST badge (it stays manually selectable in hacker
+// mode). Providers absent from the report (ae/raw/kodik) are treated as
+// playable. This makes the BEST a deterministic function of first-party
+// availability + third-party stats, never a stale/unplayable source.
+function isCapPlayable(id: string): boolean {
+  const c = capMap.value.get(id)
+  return !c || c.playable !== false
+}
+
 // ─── Saved-combo restore (Stage 1b) ──────────────────────────────────────────
 // Resolve the user's saved watch combo first; the Stage 1a smart default is
 // gated on `preferenceSettled` so the saved pick always wins when present.
 
 const preferenceSettled = ref(false)
-const { resolve: resolvePreference, resolvedCombo, preferredScraperProvider } = useWatchPreferences(props.animeId)
+const { resolve: resolvePreference, resolvedCombo } = useWatchPreferences(props.animeId)
 
 function applyResolvedCombo() {
   const rc = resolvedCombo.value
   if (!rc || state.combo.value.provider) return
+  // Restore the user's saved audio/lang/team PREFERENCES only — NOT the source.
+  // Per product rule, the selected source (BEST) is a deterministic function of
+  // first-party availability + third-party stats, so the smart default (below)
+  // always picks it; a previously-watched source must not override it.
   const { audio, lang, team } = watchComboToPartialCombo(rc)
-  let providerId: string | null = null
-  if (rc.player === 'english') {
-    providerId = preferredScraperProvider.value && rows.value.some(r => r.def.id === preferredScraperProvider.value && r.state === 'active')
-      ? preferredScraperProvider.value
-      : null
-  } else {
-    const match = rows.value.find(r => r.state === 'active' && providerToLegacyPlayer(r.def.id) === rc.player)
-    providerId = match?.def.id ?? null
-  }
   // setAudio/setLang each reset team → null, so setTeam must come AFTER them.
   state.setAudio(audio)
   state.setLang(lang)
   if (team) state.setTeam(team)
-  if (providerId) {
-    providerWasFromSavedCombo = true
-    state.setProvider(providerId, '')
-  }
 }
 
 // evaluated exactly once at first-active rows (resolveAttempted guards re-run)
@@ -515,18 +516,20 @@ watch(rows, () => {
 }, { immediate: true })
 
 watch(
-  [rows, preferenceSettled],
+  [rows, preferenceSettled, orderedProviderIds],
   () => {
     if (state.combo.value.provider) return
-    if (!preferenceSettled.value) return // let the saved-combo restore go first
+    if (!preferenceSettled.value) return // let the saved prefs (audio/lang) settle first
     void pickSmartDefault(rows.value, orderedProviderIds.value, {
       needsCheck: AE_NEEDS_CHECK,
       isAvailable: isProviderAvailable,
+      isPlayable: isCapPlayable,
     }).then((id) => {
       // Guard against a race: only apply if still unset and the chosen row is
       // still active in the latest rows (filter may have changed mid-probe).
       if (id && !state.combo.value.provider &&
           rows.value.some((r) => r.def.id === id && r.state === 'active')) {
+        providerAutoSelected = true
         state.setProvider(id, '')
       }
     })
@@ -910,13 +913,16 @@ async function loadEpisodesAndStream() {
       lang: state.combo.value.lang,
     })
     if (isNotAvailable) {
-      if (!savedSourceFallbackDone && providerWasFromSavedCombo) {
-        savedSourceFallbackDone = true
+      // The BEST (auto-selected) source came up unavailable — switch to the
+      // next-best deterministic pick once. Manual picks are left alone (the
+      // user chose them on purpose). One-shot to avoid a switch loop.
+      if (!autoFallbackDone && providerAutoSelected) {
+        autoFallbackDone = true
         const failed = state.combo.value.provider
         const next = await pickSmartDefault(
           rows.value.filter((r) => r.def.id !== failed),
           orderedProviderIds.value,
-          { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
+          { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable, isPlayable: isCapPlayable },
         )
         // Hacker mode: DON'T auto-switch. Record what the resolver would have
         // done so the fallback choice can be inspected manually before it's
@@ -926,19 +932,18 @@ async function loadEpisodesAndStream() {
         recordFallbackIntent({
           from: failed,
           to: next,
-          reason: 'saved source unavailable',
+          reason: 'best source unavailable',
           acted: willSwitch,
         })
         if (willSwitch) {
-          toast.push("The source you watched last time isn't available right now — switching.", 'info', 5000)
-          providerWasFromSavedCombo = false
-          state.setProvider(next as string, '') // provider watcher re-runs loadEpisodesAndStream
+          toast.push("That source isn't available right now — switching to the next best.", 'info', 5000)
+          state.setProvider(next as string, '') // stays auto-selected; provider watcher re-runs loadEpisodesAndStream
           return
         }
         if (state.hackerMode.value) {
           sourceError.value = next
-            ? `Hacker mode: auto-switch suppressed — would switch ${failed} → ${next} (saved source unavailable). Pick a source manually.`
-            : `Hacker mode: auto-switch suppressed — saved source "${failed}" unavailable, no fallback candidate.`
+            ? `Hacker mode: auto-switch suppressed — would switch ${failed} → ${next} (best source unavailable). Pick a source manually.`
+            : `Hacker mode: auto-switch suppressed — best source "${failed}" unavailable, no fallback candidate.`
         }
       }
       if (!sourceError.value) sourceError.value = "This source isn't available yet"
@@ -996,7 +1001,7 @@ watch(
 // ─── Provider selection helper ────────────────────────────────────────────────
 
 function onSelectProvider(id: string) {
-  providerWasFromSavedCombo = false
+  providerAutoSelected = false
   state.setProvider(id, '')
   // loadEpisodesAndStream fires via the provider watcher above
 }

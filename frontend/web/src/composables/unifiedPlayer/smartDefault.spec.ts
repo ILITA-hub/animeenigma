@@ -38,6 +38,17 @@ describe('pickSmartDefault', () => {
       .toBe('ae')
   })
 
+  it('skips a provider the capability report marks unplayable, picks next playable', async () => {
+    const rows = [row('allanime', 'active'), row('gogoanime', 'active')]
+    // allanime precedes gogoanime in CURATED, but stats mark it unplayable.
+    const id = await pickSmartDefault(rows, CURATED, {
+      needsCheck: new Set(),
+      isAvailable: alwaysAvailable,
+      isPlayable: (pid) => pid !== 'allanime',
+    })
+    expect(id).toBe('gogoanime')
+  })
+
   it('returns null when no rows are active', async () => {
     const rows = [row('ae', 'down'), row('allanime', 'irrelevant')]
     expect(await pickSmartDefault(rows, CURATED, { needsCheck: new Set(), isAvailable: alwaysAvailable }))
