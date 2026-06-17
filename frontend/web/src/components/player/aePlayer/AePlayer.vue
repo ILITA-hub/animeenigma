@@ -435,7 +435,6 @@ function isProviderAvailable(id: string): Promise<boolean> {
 // per-anime ae availability probe must be invalidated when the title changes.
 // Also reset saved-combo fallback state so the new title gets a fresh attempt.
 let providerAutoSelected = false
-let autoFallbackDone = false
 // Dynamic-BEST source switching: when an AUTO-selected source fails to actually
 // play (a dead playlist at playback — e.g. a megaplay CDN host that 403/502s our
 // IP), advance through candidate sources — untried servers of the current
@@ -451,7 +450,6 @@ function resetSourceSwitching() {
 watch(() => props.animeId, () => {
   aeAvailableCache = null
   providerAutoSelected = false
-  autoFallbackDone = false
   resetSourceSwitching()
   resetFallbackIntents()
 })
@@ -964,44 +962,17 @@ async function loadEpisodesAndStream() {
       audio: state.combo.value.audio,
       lang: state.combo.value.lang,
     })
-    if (isNotAvailable) {
-      // The BEST (auto-selected) source came up unavailable — switch to the
-      // next-best deterministic pick once. Manual picks are left alone (the
-      // user chose them on purpose). One-shot to avoid a switch loop.
-      if (!autoFallbackDone && providerAutoSelected) {
-        autoFallbackDone = true
-        const failed = state.combo.value.provider
-        const next = await pickSmartDefault(
-          rows.value.filter((r) => r.def.id !== failed),
-          orderedProviderIds.value,
-          { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable, isPlayable: isCapPlayable },
-        )
-        // Hacker mode: DON'T auto-switch. Record what the resolver would have
-        // done so the fallback choice can be inspected manually before it's
-        // trusted to act. With hacker mode off, the switch is performed and the
-        // same record is written with acted=true.
-        const willSwitch = !state.hackerMode.value && !!next
-        recordFallbackIntent({
-          from: failed,
-          to: next,
-          reason: 'best source unavailable',
-          acted: willSwitch,
-        })
-        if (willSwitch) {
-          toast.push("That source isn't available right now — switching to the next best.", 'info', 5000)
-          state.setProvider(next as string, '') // stays auto-selected; provider watcher re-runs loadEpisodesAndStream
-          return
-        }
-        if (state.hackerMode.value) {
-          sourceError.value = next
-            ? `Hacker mode: auto-switch suppressed — would switch ${failed} → ${next} (best source unavailable). Pick a source manually.`
-            : `Hacker mode: auto-switch suppressed — best source "${failed}" unavailable, no fallback candidate.`
-        }
-      }
-      if (!sourceError.value) sourceError.value = "This source isn't available yet"
-    } else {
-      sourceError.value = 'Stream unavailable'
+    // Any resolve failure (not-available OR HTTP/stream error like allanime's
+    // 500) advances the dynamic-BEST chain to the next candidate, so it keeps
+    // going until a source actually resolves AND plays — never strands on a
+    // dead provider.
+    const failed = state.combo.value.provider
+    if (await advanceToNextSource()) {
+      recordFallbackIntent({ from: failed, to: state.combo.value.provider, reason: 'resolve failed', acted: true })
+      toast.push("That source isn't available — switching to the next best…", 'info', 4000)
+      return
     }
+    sourceError.value = isNotAvailable ? "This source isn't available yet" : 'Stream unavailable'
   } finally {
     if (token === resolveToken) {
       isResolving.value = false
@@ -1573,6 +1544,12 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
       audio: state.combo.value.audio,
       lang: state.combo.value.lang,
     })
+    const failed = state.combo.value.provider
+    if (await advanceToNextSource()) {
+      recordFallbackIntent({ from: failed, to: state.combo.value.provider, reason: 'resolve failed', acted: true })
+      toast.push("That source isn't available — switching to the next best…", 'info', 4000)
+      return
+    }
     sourceError.value = isNotAvailable
       ? "This source isn't available yet"
       : 'Stream unavailable'
