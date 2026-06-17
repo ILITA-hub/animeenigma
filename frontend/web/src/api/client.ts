@@ -5,6 +5,7 @@ import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/prefere
 import type { CreateJobPayload } from '@/types/library'
 import type { FeedbackListResponse, FeedbackDetail, FeedbackStatus } from '@/types/feedback'
 import type { SourceRanking } from '@/types/sourceRanking'
+import type { ShowcaseBlock } from '@/types/showcase'
 import { consumePrefetch } from '@/utils/pagePrefetch'
 import { newTraceparent } from '@/analytics/traceparent'
 import { stampTrace } from '@/analytics/traceContext'
@@ -563,6 +564,20 @@ export const publicApi = {
     apiClient.get(`/users/${userId}/watchlist/public/stats`, { params: statuses?.length ? { statuses: statuses.join(',') } : undefined }),
   getPublicWatchlistFacets: (userId: string) =>
     apiClient.get(`/users/${userId}/watchlist/facets`),
+}
+
+export const showcaseApi = {
+  // Public read of a user's profile showcase blocks.
+  getShowcase: (userId: string) =>
+    apiClient.get<{ blocks: ShowcaseBlock[] } | { data: { blocks: ShowcaseBlock[] } }>(
+      `/users/${userId}/showcase`,
+    ),
+  // Owner save (replaces the whole block array). "me" resolves to the JWT user.
+  saveShowcase: (blocks: ShowcaseBlock[]) =>
+    apiClient.put<{ blocks: ShowcaseBlock[] } | { data: { blocks: ShowcaseBlock[] } }>(
+      `/users/me/showcase`,
+      { blocks },
+    ),
 }
 
 export const adminApi = {
