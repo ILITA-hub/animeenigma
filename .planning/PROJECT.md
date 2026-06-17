@@ -16,24 +16,23 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 - ✅ **v3.1 Scraper Self-Healing** — shipped + closed 2026-06-04 (Phases 21-28, tagged `v3.1`; reopened 24-28 + `18anime` group) — see `.planning/MILESTONES.md`
 - ✅ **v4.0 Activity Register (ClickHouse unified event plane)** — shipped 2026-06-08 (Phases 1-6) — a pivotable register of every platform action and its egress/DB/cache effects on a ClickHouse wide-event store, surfaced as Grafana reports; FE→BE causation joins on one `trace_id` (live-verified, 15,904 effect↔span matches). Phase 6 consolidated trace/log/event onto ClickHouse and retired Tempo + Loki (Prometheus + Grafana kept). 16/16 requirements satisfied — see `.planning/milestones/v4.0-ROADMAP.md`
 
-## Current Milestone: v4.0 Activity Register (ClickHouse unified event plane)
+## Current Milestone: v4.1 Auto Torrent Population (watch-driven first-party RAW cache)
 
-**Goal:** A multidimensional, pivotable register of every platform action and its effects (egress / DB / cache), unifying frontend + backend causation on a ClickHouse-backed wide-event store, surfaced as human-readable Grafana reports. **Awareness first**; optimization insight is a derived perk.
+**Goal:** Autonomously predict and pre-download the RAW (JP-audio) episodes users are about to watch into a self-evicting ~100 GB first-party cache, so the "ae" provider is already populated when they hit play — with zero admin action.
 
-**Design spec:** `docs/superpowers/specs/2026-06-04-analytics-activity-register-design.md`
+**Design spec:** `docs/superpowers/specs/2026-06-17-auto-torrent-population-design.md`
 
 **Target features:**
-- ClickHouse as the unified event store (activity register + traces + logs); `EventStore` interface swap from Postgres; retire Tempo + Loki (keep Prometheus + Grafana).
-- Wide-event model: **one row per effect** — dimensions (origin / operation / effect_kind / target / correlation) + measures (requests / bytes_in / bytes_out / duration_ms / rows).
-- BE egress recorder at the `libs/tracing` `WrapTransport` seam + baggage propagation; retrofit non-shared HTTP clients (Kodik extractor, scraper `BaseHTTPClient`, OpenSubtitles, idmapping); per-(session,host) HLS aggregation.
-- DB/cache effects (otel-GORM) + **automatic operation discovery** (service-frame stack attribution + Tempo span-metrics + service graph).
-- FE causation: wire `trace_id` into analytics events, axios route/action tagging, `PerformanceObserver` browser→3rd-party RUM (marked approximate).
-- Grafana wide-event pivot tables (template vars = any dimension), the "from → choke-point → effects" report, anomaly flagging, awareness overview.
+- Watch-driven download triggers: Logic A (ongoing push) + Logic B (next-episode pull) + backfill-on-miss, gated on active JP-audio-combo watchers (status=watching AND progress within 30d).
+- Unified metered pool under `aeProvider/<MALID>/RAW/<ep>` (admin + auto) sharing one budget (default 100 GB), plus a one-time migration of existing admin-ingested content into the new layout.
+- Fresh/Stale, source-ranked eviction — admin content "more fresh" (longer window + evicted only after all auto-Stale) — with reject-when-full once the Stale queue is drained.
+- DB-backed, admin-editable config (budget, freshness windows, quality cap, sweep cadence, min seeders).
+- Grafana: storage allocation/usage by Fresh/Stale + source, preload hit-rate (cache-hit style), and a storage-need prediction table.
 
-**Out of v4.0 scope:**
-- Exhaustive ClickHouse pre-aggregation tuning (AggregatingMergeTree rollups added only as the dashboards need them).
-- Per-segment HLS fact rows (aggregated per stream-session by design).
-- Replacing Prometheus or Grafana alerting (they stay).
+**Out of v4.1 scope (captured as future TODOs in the design spec):**
+- SUB and DUB/team track population (RAW-only v1; SUB served by the same JP video via client-side subtitle overlay; DUB demand ignored).
+- AI-prediction-driven prefetch (v1 uses predefined Logic A/B heuristics).
+- 2160p+ acquisition and upscaling (quality capped at 1080p).
 
 ## Requirements
 
@@ -60,9 +59,9 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 
 ### Active
 
-<!-- v3.0 milestone — items defined here are tracked in REQUIREMENTS.md and mapped to phases by ROADMAP.md. -->
+<!-- v4.1 milestone — items defined here are tracked in REQUIREMENTS.md and mapped to phases by ROADMAP.md. -->
 
-_v3.0 requirements are being defined; see `.planning/REQUIREMENTS.md` once written._
+_v4.1 requirements are being defined; see `.planning/REQUIREMENTS.md` once written._
 
 <details>
 <summary>✅ v2.0 Recommendations Engine — 23/23 requirements shipped 2026-05-07 (see <code>.planning/milestones/v2.0-REQUIREMENTS.md</code>)</summary>
@@ -192,4 +191,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-08 — v4.0 Activity Register milestone SHIPPED (Phases 1-6); ClickHouse is the single trace/log/event plane, Tempo + Loki retired, FE→BE trace_id causation join live-verified.*
+*Last updated: 2026-06-17 — v4.1 Auto Torrent Population milestone STARTED; watch-driven first-party RAW cache in `services/library` (autocache subsystem), unified 100 GB metered pool with Fresh/Stale source-ranked eviction. Design spec: `docs/superpowers/specs/2026-06-17-auto-torrent-population-design.md`.*

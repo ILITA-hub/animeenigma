@@ -1,28 +1,26 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: Activity Register (ClickHouse unified event plane)
-current_plan: Not started
-status: Awaiting next milestone
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-06-08T03:20:49.371Z"
-last_activity: 2026-06-08 — Milestone v4.0 completed and archived
+milestone: v4.1
+milestone_name: Auto Torrent Population (watch-driven first-party RAW cache)
+status: planning
+last_updated: "2026-06-17T04:52:24.298Z"
+last_activity: 2026-06-17
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 23
-  completed_plans: 24
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: Milestone v4.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-08 — Milestone v4.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-17 — Milestone v4.1 started
 
 ## Progress
 
