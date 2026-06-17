@@ -52,7 +52,9 @@ func anime18Titles(a *domain.Anime) (string, []string) {
 // the player shows a plain "no episodes" state instead of a hard error.
 func (s *CatalogService) Get18AnimeEpisodes(ctx context.Context, animeID string) (_ []domain.Anime18Episode, retErr error) {
 	start := time.Now()
-	defer metrics.ObserveParser("anime18", "get_episodes", start, &retErr)
+	// Metric label is the canonical provider name "18anime" (matches the
+	// management metrics / scraper / DB), NOT the "/anime18/*" route slug.
+	defer metrics.ObserveParser("18anime", "get_episodes", start, &retErr)
 
 	anime, err := s.animeRepo.GetByID(ctx, animeID)
 	if err != nil {
@@ -105,8 +107,8 @@ func (s *CatalogService) Get18AnimeEpisodes(ctx context.Context, animeID string)
 // it returns a typed ServiceUnavailable (-> 503), never an empty success.
 func (s *CatalogService) Get18AnimeStream(ctx context.Context, animeID, episodeSlug string) (_ *domain.Anime18Stream, retErr error) {
 	start := time.Now()
-	defer metrics.ObserveParser("anime18", "get_stream", start, &retErr)
-	metrics.EpisodeStreamRequestsTotal.WithLabelValues("anime18").Inc()
+	defer metrics.ObserveParser("18anime", "get_stream", start, &retErr)
+	metrics.EpisodeStreamRequestsTotal.WithLabelValues("18anime").Inc()
 
 	anime, err := s.animeRepo.GetByID(ctx, animeID)
 	if err != nil {

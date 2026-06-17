@@ -305,7 +305,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Catalog-parser request success rate per provider (success / total) over a 5m window. Providers: allanime, anime18, animelib, hanime, kodik. NOT the EN scraper provider set.",
+      "description": "Catalog-parser request success rate per provider (success / total) over a 5m window. Providers: allanime, 18anime, animelib, hanime, kodik. NOT the EN scraper provider set.",
       "fieldConfig": {
         "defaults": {
           "color": {
