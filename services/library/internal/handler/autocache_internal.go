@@ -48,9 +48,11 @@ type autocacheInternalDeps interface {
 	// BumpFetch bumps the episode ledger (last_fetch_at=now, fetch_count++);
 	// a no-op on an absent row (at-least-once acceptable — popularity, not money).
 	BumpFetch(ctx context.Context, malID string, episode int) error
-	// RecordDemand upserts a wanted (mal_id, episode) demand row. Phase 08
-	// always passes domain.DemandReasonBackfill.
-	RecordDemand(ctx context.Context, malID string, episode int, reason domain.DemandReason) error
+	// RecordDemand upserts a wanted (mal_id, episode) demand row, carrying the
+	// ordered title list (name_jp → romaji → name_en) the producer supplied so the
+	// Planner can search trackers by title. Phase 08 passed only backfill + no
+	// titles; v4.1 threads titles from all three producers.
+	RecordDemand(ctx context.Context, malID string, episode int, reason domain.DemandReason, titles []string) error
 	// ConfigEnabled reports the master autocache `enabled` switch.
 	ConfigEnabled(ctx context.Context) (bool, error)
 }
@@ -78,6 +80,11 @@ type autocacheSignalBody struct {
 	MALID   string `json:"mal_id"`
 	Episode int    `json:"episode"`
 	Reason  string `json:"reason"`
+	// Titles is the ordered, fallback-ranked anime title list (name_jp → romaji →
+	// name_en) the producer supplies on a demand POST. The library has no anime
+	// titles of its own, so without this the Planner can only search "<mal> <ep>".
+	// Optional + ignored by the fetch endpoint; producers send non-empty + deduped.
+	Titles []string `json:"titles,omitempty"`
 }
 
 // maxEpisode bounds the accepted episode number (WR-02). Go decodes JSON
@@ -166,7 +173,7 @@ func (h *AutocacheInternalHandler) Demand(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.deps.RecordDemand(ctx, body.MALID, body.Episode, validateDemandReason(body.Reason)); err != nil {
+	if err := h.deps.RecordDemand(ctx, body.MALID, body.Episode, validateDemandReason(body.Reason), body.Titles); err != nil {
 		h.log.Warnw("autocache demand record failed (non-fatal)",
 			"mal_id", body.MALID, "episode", body.Episode, "error", err)
 	}
@@ -190,7 +197,7 @@ type episodeBumper interface {
 
 // demandRecorder is the narrow slice of *repo.DemandRepository the handler needs.
 type demandRecorder interface {
-	Record(ctx context.Context, malID string, episode int, reason domain.DemandReason) error
+	Record(ctx context.Context, malID string, episode int, reason domain.DemandReason, titles []string) error
 }
 
 // NewGormAutocacheInternalDeps wires the production autocacheInternalDeps from
@@ -203,8 +210,8 @@ func (g *gormAutocacheInternalDeps) BumpFetch(ctx context.Context, malID string,
 	return g.episodes.BumpFetch(ctx, malID, episode)
 }
 
-func (g *gormAutocacheInternalDeps) RecordDemand(ctx context.Context, malID string, episode int, reason domain.DemandReason) error {
-	return g.demand.Record(ctx, malID, episode, reason)
+func (g *gormAutocacheInternalDeps) RecordDemand(ctx context.Context, malID string, episode int, reason domain.DemandReason, titles []string) error {
+	return g.demand.Record(ctx, malID, episode, reason, titles)
 }
 
 func (g *gormAutocacheInternalDeps) ConfigEnabled(ctx context.Context) (bool, error) {

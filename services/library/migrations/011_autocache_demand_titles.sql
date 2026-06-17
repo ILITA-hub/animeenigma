@@ -1,0 +1,18 @@
+-- 011_autocache_demand_titles.sql — carry the anime titles on each demand row.
+--
+-- Phase 09 follow-up (v4.1 fix, 2026-06-17): the library service runs on its own
+-- DB and has NO anime titles, so the Planner could only build a torrent search
+-- query from "<mal_id> <episode>" (e.g. "59708 12") — which matches no release
+-- on Jackett/Nyaa (releases are named by anime TITLE). Every autocache search
+-- therefore returned no_release and nothing ever downloaded.
+--
+-- Fix: the producers (scheduler Logic A, player Logic B, catalog backfill) all
+-- DO know the title, so they now thread an ordered, newline-delimited title list
+-- — name_jp, then romaji (name), then name_en — through the demand. The Planner
+-- searches each title in order until a qualifying RAW release is found.
+--
+-- Newline-delimited TEXT (not text[] / JSON) keeps Postgres (prod) + SQLite
+-- (tests) parity; anime titles never contain a newline. ADD COLUMN IF NOT EXISTS
+-- is idempotent across restarts. DEFAULT '' so any pre-existing rows (legacy,
+-- title-less) are well-formed and fall back to the mal_id query.
+ALTER TABLE autocache_demand ADD COLUMN IF NOT EXISTS titles TEXT NOT NULL DEFAULT '';

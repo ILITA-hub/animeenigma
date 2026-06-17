@@ -278,26 +278,49 @@ func (p *Planner) plan(ctx context.Context, d domain.AutocacheDemand, cfg *domai
 		return false
 	}
 
-	// 4. Search + RAW/quality/seeder filter (TRIG-05).
-	res, err := p.search.FetchAll(ctx, SearchQuery{
-		Query: searchQueryFor(d.MALID, d.Episode),
-		MALID: malIDInt(d.MALID),
-		Limit: 50,
-	})
-	if err != nil {
-		if p.log != nil {
-			p.log.Warnw("autocache planner: search failed", "mal", d.MALID, "ep", d.Episode, "error", err)
-		}
-		p.metrics.IncDownloadsTotal(trigger, "error")
-		p.markSearched(k)
-		return true
+	// 4. Search + RAW/quality/seeder filter (TRIG-05). The library has no anime
+	// titles of its own, so it tries each producer-supplied title in fallback
+	// order (name_jp → romaji → name_en); the first title that yields a qualifying
+	// RAW wins. MALID is passed on every query so AnimeTosho's MAL-keyed search
+	// contributes regardless of the keyword. A legacy/title-less row falls back to
+	// the bare mal_id keyword (the old, near-useless behavior — better than not
+	// searching).
+	queries := d.SearchTitles()
+	if len(queries) == 0 {
+		queries = []string{d.MALID}
 	}
-
-	rel, ok := selectRAW(res.Releases, cfg.QualityCap, cfg.MinSeeders)
+	var (
+		rel      domain.Release
+		ok       bool
+		sawError bool
+	)
+	for _, title := range queries {
+		res, err := p.search.FetchAll(ctx, SearchQuery{
+			Query: searchQueryFor(title, d.Episode),
+			MALID: malIDInt(d.MALID),
+			Limit: 50,
+		})
+		if err != nil {
+			sawError = true
+			if p.log != nil {
+				p.log.Warnw("autocache planner: search failed", "mal", d.MALID, "ep", d.Episode, "title", title, "error", err)
+			}
+			continue
+		}
+		if rel, ok = selectRAW(res.Releases, cfg.QualityCap, cfg.MinSeeders); ok {
+			break
+		}
+	}
 	if !ok {
-		// No qualifying release — LEAVE the demand row (retry next tick, "as soon
-		// as on torrents") and arm the backoff so it isn't re-searched every tick.
-		p.metrics.IncDownloadsTotal(trigger, "no_release")
+		// No qualifying release across all titles — LEAVE the demand row (retry next
+		// tick, "as soon as on torrents") and arm the backoff so it isn't re-searched
+		// every tick. Distinguish a transport error from a genuine no-result for the
+		// OBS-04 metric.
+		result := "no_release"
+		if sawError {
+			result = "error"
+		}
+		p.metrics.IncDownloadsTotal(trigger, result)
 		p.markSearched(k)
 		return true
 	}
@@ -390,8 +413,11 @@ func triggerForReason(r domain.DemandReason) string {
 // as both the keyword query and (via SearchQuery.MALID) the AnimeTosho MAL-feed
 // key. Targeting the specific episode keeps the top hit a single episode rather
 // than a season pack (RESEARCH Pitfall 2).
-func searchQueryFor(malID string, episode int) string {
-	return malID + " " + strconv.Itoa(episode)
+// searchQueryFor builds the tracker keyword query for one candidate title and
+// episode, e.g. ("Youkoso Jitsuryoku...", 12) → "Youkoso Jitsuryoku... 12". The
+// title-less fallback passes the mal_id as the "title" (the old "59708 12" form).
+func searchQueryFor(title string, episode int) string {
+	return title + " " + strconv.Itoa(episode)
 }
 
 // malIDInt converts the string mal_id to the int SearchQuery.MALID expects.

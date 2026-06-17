@@ -14,13 +14,14 @@ type fakeLogicB struct {
 	shikimoriID   string
 	episodesAired int
 	watching      bool
+	titles        []string
 	err           error
 	calls         int
 }
 
-func (f *fakeLogicB) LogicBContext(_ context.Context, _, _ string) (string, int, bool, error) {
+func (f *fakeLogicB) LogicBContext(_ context.Context, _, _ string) (string, int, bool, []string, error) {
 	f.calls++
-	return f.shikimoriID, f.episodesAired, f.watching, f.err
+	return f.shikimoriID, f.episodesAired, f.watching, f.titles, f.err
 }
 
 // fakeDemand captures Want() calls.
@@ -28,14 +29,16 @@ type fakeDemand struct {
 	malID   string
 	episode int
 	reason  string
+	titles  []string
 	calls   int
 }
 
-func (f *fakeDemand) Want(malID string, episode int, reason string) {
+func (f *fakeDemand) Want(malID string, episode int, reason string, titles []string) {
 	f.calls++
 	f.malID = malID
 	f.episode = episode
 	f.reason = reason
+	f.titles = titles
 }
 
 // fakeUpserter is a no-op progress upserter so UpdateProgress's persistence
@@ -91,7 +94,7 @@ func TestUpdateProgress_FiresNextEpForRawAudioWatcher(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			lb := &fakeLogicB{shikimoriID: "57466", episodesAired: 12, watching: true}
+			lb := &fakeLogicB{shikimoriID: "57466", episodesAired: 12, watching: true, titles: []string{"JP", "Romaji", "EN"}}
 			d := &fakeDemand{}
 			s := newTestProgressService(&fakeUpserter{}, lb, d)
 
@@ -104,6 +107,11 @@ func TestUpdateProgress_FiresNextEpForRawAudioWatcher(t *testing.T) {
 			}
 			if d.malID != "57466" || d.episode != 6 || d.reason != "next_ep" {
 				t.Errorf("Want(%q,%d,%q), want (57466,6,next_ep)", d.malID, d.episode, d.reason)
+			}
+			// Titles from LogicBContext must propagate to the demand (so the library
+			// Planner can search trackers by title).
+			if len(d.titles) != 3 || d.titles[0] != "JP" || d.titles[1] != "Romaji" || d.titles[2] != "EN" {
+				t.Errorf("demand titles = %#v, want [JP Romaji EN]", d.titles)
 			}
 		})
 	}

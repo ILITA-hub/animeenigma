@@ -113,3 +113,12 @@ var LibraryJobsEpisodeSQL string
 //
 //go:embed 010_autocache_demand_ongoing.sql
 var AutocacheDemandOngoingSQL string
+
+// AutocacheDemandTitlesSQL is migrations/011_autocache_demand_titles.sql embedded
+// as a string. Adds the newline-delimited `titles TEXT` column to autocache_demand
+// so the Planner can search trackers by anime TITLE (name_jp → romaji → name_en)
+// instead of the useless "<mal_id> <episode>" query. Idempotent ADD COLUMN IF NOT
+// EXISTS; must run after 007 (which created autocache_demand). Applied by main.go.
+//
+//go:embed 011_autocache_demand_titles.sql
+var AutocacheDemandTitlesSQL string

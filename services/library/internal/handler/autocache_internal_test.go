@@ -28,6 +28,7 @@ type stubInternalDeps struct {
 	recordMAL     string
 	recordEpisode int
 	recordReason  domain.DemandReason
+	recordTitles  []string
 	recordErr     error
 
 	enabled    bool
@@ -41,11 +42,12 @@ func (s *stubInternalDeps) BumpFetch(_ context.Context, malID string, episode in
 	return s.bumpErr
 }
 
-func (s *stubInternalDeps) RecordDemand(_ context.Context, malID string, episode int, reason domain.DemandReason) error {
+func (s *stubInternalDeps) RecordDemand(_ context.Context, malID string, episode int, reason domain.DemandReason, titles []string) error {
 	s.recordCalls++
 	s.recordMAL = malID
 	s.recordEpisode = episode
 	s.recordReason = reason
+	s.recordTitles = titles
 	return s.recordErr
 }
 

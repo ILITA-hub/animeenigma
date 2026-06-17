@@ -187,6 +187,12 @@ func main() {
 	if err := db.DB.Exec(migrations.AutocacheDemandOngoingSQL).Error; err != nil {
 		log.Fatalw("failed to apply autocache_demand_ongoing migration", "error", err)
 	}
+	// 011 (v4.1 fix): add the newline-delimited `titles` column to autocache_demand
+	// so the Planner searches trackers by anime title, not "<mal_id> <episode>".
+	// Idempotent ADD COLUMN IF NOT EXISTS; must follow 007 (autocache_demand).
+	if err := db.DB.Exec(migrations.AutocacheDemandTitlesSQL).Error; err != nil {
+		log.Fatalw("failed to apply autocache_demand_titles migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {

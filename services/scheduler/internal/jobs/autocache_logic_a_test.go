@@ -51,7 +51,10 @@ func newLogicATestDB(t *testing.T) *gorm.DB {
 			id TEXT PRIMARY KEY,
 			shikimori_id TEXT,
 			status TEXT,
-			episodes_aired INTEGER
+			episodes_aired INTEGER,
+			name_jp TEXT,
+			name TEXT,
+			name_en TEXT
 		)
 	`).Error)
 	return db
@@ -59,9 +62,11 @@ func newLogicATestDB(t *testing.T) *gorm.DB {
 
 func seedAnimeRow(t *testing.T, db *gorm.DB, id, shikimoriID, status string, episodesAired int) {
 	t.Helper()
+	// Derive distinguishable titles from the id so the demand-title assertion can
+	// check the name_jp → romaji → name_en order.
 	require.NoError(t, db.Exec(
-		`INSERT INTO animes (id, shikimori_id, status, episodes_aired) VALUES (?, ?, ?, ?)`,
-		id, shikimoriID, status, episodesAired).Error)
+		`INSERT INTO animes (id, shikimori_id, status, episodes_aired, name_jp, name, name_en) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, shikimoriID, status, episodesAired, "JP "+shikimoriID, "Romaji "+shikimoriID, "EN "+shikimoriID).Error)
 }
 
 func seedListRow(t *testing.T, db *gorm.DB, userID, animeID, status string, updatedAt time.Time) {
@@ -87,9 +92,10 @@ func seedWatchRowWT(t *testing.T, db *gorm.DB, userID, animeID, player, language
 // capturingLibrary returns an httptest server that records every demand POST body
 // to the demand endpoint, plus a function returning the captured bodies.
 type capturedDemand struct {
-	MalID   string `json:"mal_id"`
-	Episode int    `json:"episode"`
-	Reason  string `json:"reason"`
+	MalID   string   `json:"mal_id"`
+	Episode int      `json:"episode"`
+	Reason  string   `json:"reason"`
+	Titles  []string `json:"titles"`
 }
 
 func capturingLibrary(t *testing.T, status int) (*httptest.Server, func() []capturedDemand) {
@@ -176,6 +182,25 @@ func TestLogicA_SubCombosQualify(t *testing.T) {
 	j := NewAutocacheLogicAJob(db, srv.URL, 30, logger.Default())
 	require.NoError(t, j.Run(context.Background()))
 	require.Len(t, captured(), 2)
+}
+
+// TestLogicA_DemandCarriesTitles verifies the demand POST carries the ordered
+// title list (name_jp → romaji → name_en) so the library Planner can search
+// trackers by title instead of the useless "<mal_id> <episode>" query.
+func TestLogicA_DemandCarriesTitles(t *testing.T) {
+	db := newLogicATestDB(t)
+	seedAnimeRow(t, db, "a1", "111", "ongoing", 7)
+	seedListRow(t, db, "u1", "a1", "watching", time.Now())
+	seedWatchRowWT(t, db, "u1", "a1", "kodik", "ru", "sub")
+
+	srv, captured := capturingLibrary(t, http.StatusOK)
+	defer srv.Close()
+
+	j := NewAutocacheLogicAJob(db, srv.URL, 30, logger.Default())
+	require.NoError(t, j.Run(context.Background()))
+	got := captured()
+	require.Len(t, got, 1)
+	require.Equal(t, []string{"JP 111", "Romaji 111", "EN 111"}, got[0].Titles)
 }
 
 // TestLogicA_DubFiresNothing verifies dub combos (replaced audio) produce no

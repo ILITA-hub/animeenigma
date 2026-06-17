@@ -159,16 +159,22 @@ func (r *ProgressRepository) MarkDropOff(ctx context.Context, userID, animeID st
 // to animes mirrors the existing animes JOINs in this file.
 func (r *ProgressRepository) LogicBContext(
 	ctx context.Context, userID, animeID string,
-) (shikimoriID string, episodesAired int, watching bool, err error) {
+) (shikimoriID string, episodesAired int, watching bool, titles []string, err error) {
 	type scanRow struct {
 		ShikimoriID   string `gorm:"column:shikimori_id"`
 		EpisodesAired int    `gorm:"column:episodes_aired"`
+		NameJP        string `gorm:"column:name_jp"`
+		Name          string `gorm:"column:name"`
+		NameEN        string `gorm:"column:name_en"`
 	}
 
 	sqlStr := `
         SELECT
             a.shikimori_id                AS shikimori_id,
-            COALESCE(a.episodes_aired, 0) AS episodes_aired
+            COALESCE(a.episodes_aired, 0) AS episodes_aired,
+            COALESCE(a.name_jp, '')       AS name_jp,
+            COALESCE(a.name, '')          AS name,
+            COALESCE(a.name_en, '')       AS name_en
         FROM anime_list al
         JOIN animes a ON a.id = al.anime_id AND a.deleted_at IS NULL
         WHERE al.user_id = ?
@@ -178,13 +184,16 @@ func (r *ProgressRepository) LogicBContext(
 
 	var rows []scanRow
 	if err := r.db.WithContext(ctx).Raw(sqlStr, userID, animeID).Scan(&rows).Error; err != nil {
-		return "", 0, false, err
+		return "", 0, false, nil, err
 	}
 	if len(rows) == 0 {
 		// No watching-list row → not a watching anime for this user. Not an error.
-		return "", 0, false, nil
+		return "", 0, false, nil, nil
 	}
-	return rows[0].ShikimoriID, rows[0].EpisodesAired, true, nil
+	// Ordered fallback titles (name_jp → romaji → name_en) for the library Planner
+	// to search trackers with; the library JoinTitles drops empties/dups.
+	t := []string{rows[0].NameJP, rows[0].Name, rows[0].NameEN}
+	return rows[0].ShikimoriID, rows[0].EpisodesAired, true, t, nil
 }
 
 func (r *ProgressRepository) GetByUserAndAnime(ctx context.Context, userID, animeID string) ([]*domain.WatchProgress, error) {

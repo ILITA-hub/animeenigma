@@ -29,9 +29,9 @@ func TestDemandRepository_Record_Signature(t *testing.T) {
 	if !ok {
 		t.Fatal("DemandRepository.Record missing")
 	}
-	// (recv, ctx, malID, episode, reason) → error
-	if got := m.Type.NumIn(); got != 5 {
-		t.Fatalf("Record NumIn = %d, want 5 (recv, ctx, malID, episode, reason)", got)
+	// (recv, ctx, malID, episode, reason, titles) → error
+	if got := m.Type.NumIn(); got != 6 {
+		t.Fatalf("Record NumIn = %d, want 6 (recv, ctx, malID, episode, reason, titles)", got)
 	}
 	if m.Type.In(2).Kind() != reflect.String {
 		t.Fatalf("Record malID arg must be string, got %s", m.Type.In(2))
@@ -41,6 +41,9 @@ func TestDemandRepository_Record_Signature(t *testing.T) {
 	}
 	if m.Type.In(4) != reflect.TypeOf(domain.DemandReason("")) {
 		t.Fatalf("Record reason arg must be domain.DemandReason, got %s", m.Type.In(4))
+	}
+	if m.Type.In(5) != reflect.TypeOf([]string(nil)) {
+		t.Fatalf("Record titles arg must be []string, got %s", m.Type.In(5))
 	}
 	if m.Type.NumOut() != 1 || !m.Type.Out(0).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 		t.Fatal("Record must return a single error")
@@ -62,7 +65,7 @@ func TestDemandRepository_Record_UpsertTripwire(t *testing.T) {
 	if !strings.Contains(s, "clause.OnConflict") {
 		t.Fatal("demand.go Record must use clause.OnConflict (dedup upsert tripwire)")
 	}
-	if !strings.Contains(s, `AssignmentColumns([]string{"reason"})`) {
+	if !strings.Contains(s, `[]string{"reason"}`) {
 		t.Fatal("demand.go Record must refresh reason on conflict (WR-02 trigger-attribution tripwire)")
 	}
 	// WR-01: requested_at must NOT be reassigned in the DoUpdates set — a re-assert

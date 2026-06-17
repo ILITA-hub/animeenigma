@@ -56,14 +56,20 @@ func NewDemandRepository(db *gorm.DB) *DemandRepository {
 // this the FIRST insert would land a zero-value 0001-01-01 timestamp and break
 // the Planner's recency ordering. The ON CONFLICT path no longer touches
 // requested_at (WR-01), so the first-seen time is the durable FIFO key.
-func (r *DemandRepository) Record(ctx context.Context, malID string, episode int, reason domain.DemandReason) error {
-	row := &domain.AutocacheDemand{MALID: malID, Episode: episode, Reason: reason, RequestedAt: time.Now()}
+func (r *DemandRepository) Record(ctx context.Context, malID string, episode int, reason domain.DemandReason, titles []string) error {
+	joined := domain.JoinTitles(titles)
+	row := &domain.AutocacheDemand{MALID: malID, Episode: episode, Reason: reason, RequestedAt: time.Now(), Titles: joined}
+	// WR-02: refresh reason (last-writer-wins). Refresh titles too — but only when
+	// the incoming set is non-empty, so a later title-less re-assert (e.g. a legacy
+	// caller) can't blank a populated column. WR-01: never refresh requested_at.
+	updateCols := []string{"reason"}
+	if joined != "" {
+		updateCols = append(updateCols, "titles")
+	}
 	err := r.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "mal_id"}, {Name: "episode"}},
-			// WR-02: refresh reason (last-writer-wins). WR-01: do NOT refresh
-			// requested_at — the original first-seen time is the stable FIFO key.
-			DoUpdates: clause.AssignmentColumns([]string{"reason"}),
+			Columns:   []clause.Column{{Name: "mal_id"}, {Name: "episode"}},
+			DoUpdates: clause.AssignmentColumns(updateCols),
 		}).
 		Create(row).Error
 	if err != nil {

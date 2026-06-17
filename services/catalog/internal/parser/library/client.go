@@ -250,16 +250,18 @@ func (c *Client) RecordFetch(ctx context.Context, malID string, episode int) err
 }
 
 // RecordDemand fires the MISS serve-signal: POST /internal/library/
-// autocache/demand {mal_id, episode, reason}. Best-effort — the library
-// side records a wanted item (reason forced server-side) + counts
-// serve_total{miss}. The caller drops the returned error; a non-2xx/
-// transport error never fails the playback resolution + failover.
-// Docker-network-only (NOT gateway-proxied).
-func (c *Client) RecordDemand(ctx context.Context, malID string, episode int, reason string) error {
+// autocache/demand {mal_id, episode, reason, titles}. Best-effort — the library
+// side records a wanted item + counts serve_total{miss}. titles is the ordered
+// fallback title list (name_jp → romaji → name_en) the library Planner searches
+// trackers with (the library has no anime titles of its own); empty entries are
+// dropped server-side. The caller drops the returned error; a non-2xx/transport
+// error never fails the playback resolution + failover. Docker-network-only.
+func (c *Client) RecordDemand(ctx context.Context, malID string, episode int, reason string, titles []string) error {
 	return c.postInternal(ctx, "/internal/library/autocache/demand", map[string]any{
 		"mal_id":  malID,
 		"episode": episode,
 		"reason":  reason,
+		"titles":  titles,
 	})
 }
 

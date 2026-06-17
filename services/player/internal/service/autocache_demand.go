@@ -18,11 +18,14 @@ const demandChanCap = 256
 
 // demandMsg is the work item queued on the producer's channel. JSON tags match
 // the library /internal/library/autocache/demand wire contract {mal_id, episode,
-// reason}; the handler (Plan 09-01 Task 4) validates-and-honors the reason.
+// reason, titles}; the handler (Plan 09-01 Task 4) validates-and-honors the
+// reason. Titles is the ordered fallback title list (name_jp → romaji → name_en)
+// the library Planner searches trackers with.
 type demandMsg struct {
-	MalID   string `json:"mal_id"`
-	Episode int    `json:"episode"`
-	Reason  string `json:"reason"`
+	MalID   string   `json:"mal_id"`
+	Episode int      `json:"episode"`
+	Reason  string   `json:"reason"`
+	Titles  []string `json:"titles,omitempty"`
 }
 
 // DemandProducer is a fire-and-forget producer that POSTs autocache demands to
@@ -88,11 +91,11 @@ func (p *DemandProducer) Stop() {
 // because main.go calls srv.Shutdown() (draining all in-flight HTTP handlers,
 // the only callers) BEFORE the deferred Stop() closes the channel. If you add
 // a non-HTTP caller or reorder shutdown, guard sends with an atomic closed flag.
-func (p *DemandProducer) Want(malID string, episode int, reason string) {
+func (p *DemandProducer) Want(malID string, episode int, reason string, titles []string) {
 	if p == nil || !p.enabled {
 		return
 	}
-	msg := demandMsg{MalID: malID, Episode: episode, Reason: reason}
+	msg := demandMsg{MalID: malID, Episode: episode, Reason: reason, Titles: titles}
 	select {
 	case p.ch <- msg:
 	default:

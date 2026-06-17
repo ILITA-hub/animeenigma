@@ -30,7 +30,7 @@ func TestDemandProducer_PostsDemand(t *testing.T) {
 
 	p := NewDemandProducer(srv.URL, true, logger.Default())
 	p.Start()
-	p.Want("57466", 13, "next_ep")
+	p.Want("57466", 13, "next_ep", nil)
 	p.Stop() // Stop drains the channel before returning
 
 	mu.Lock()
@@ -61,13 +61,13 @@ func TestDemandProducer_NilAndDisabledAreNoops(t *testing.T) {
 	defer srv.Close()
 
 	var p *DemandProducer
-	p.Want("57466", 13, "next_ep") // nil receiver must not panic
+	p.Want("57466", 13, "next_ep", nil) // nil receiver must not panic
 	p.Start()
 	p.Stop()
 
 	p2 := NewDemandProducer(srv.URL, false, logger.Default())
 	p2.Start()
-	p2.Want("57466", 13, "next_ep")
+	p2.Want("57466", 13, "next_ep", nil)
 	p2.Stop()
 
 	if posted {
@@ -81,7 +81,7 @@ func TestDemandProducer_DropOnFull(t *testing.T) {
 	// demandChanCap sends the buffer is full and further Want calls drop.
 	p := NewDemandProducer("http://library:8089", true, logger.Default())
 	for i := 0; i < demandChanCap+50; i++ {
-		p.Want("57466", i, "next_ep") // must never block or panic
+		p.Want("57466", i, "next_ep", nil) // must never block or panic
 	}
 }
 
@@ -95,6 +95,6 @@ func TestDemandProducer_Non2xxDoesNotError(t *testing.T) {
 
 	p := NewDemandProducer(srv.URL, true, logger.Default())
 	p.Start()
-	p.Want("57466", 13, "next_ep")
+	p.Want("57466", 13, "next_ep", nil)
 	p.Stop() // must drain and return cleanly despite the 500
 }

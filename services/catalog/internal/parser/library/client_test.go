@@ -347,7 +347,7 @@ func TestRecordDemand_PostsDemandPathWithReason(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	if err := c.RecordDemand(context.Background(), "57466", 7, "backfill"); err != nil {
+	if err := c.RecordDemand(context.Background(), "57466", 7, "backfill", []string{"JP", "Romaji", "EN"}); err != nil {
 		t.Fatalf("RecordDemand returned %v, want nil on 200", err)
 	}
 	if seenPath != "/internal/library/autocache/demand" {
@@ -361,6 +361,12 @@ func TestRecordDemand_PostsDemandPathWithReason(t *testing.T) {
 	}
 	if body["reason"] != "backfill" {
 		t.Errorf("reason = %v, want backfill", body["reason"])
+	}
+	// titles must be carried on the wire (ordered name_jp → romaji → name_en) so
+	// the library Planner can search trackers by title.
+	titles, ok := body["titles"].([]any)
+	if !ok || len(titles) != 3 || titles[0] != "JP" || titles[1] != "Romaji" || titles[2] != "EN" {
+		t.Errorf("titles = %v, want [JP Romaji EN]", body["titles"])
 	}
 }
 
@@ -387,7 +393,7 @@ func TestRecordDemand_500ReturnsWrappedError(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	err := c.RecordDemand(context.Background(), "57466", 1, "backfill")
+	err := c.RecordDemand(context.Background(), "57466", 1, "backfill", nil)
 	if err == nil {
 		t.Fatal("expected wrapped error on 503")
 	}

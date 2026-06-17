@@ -20,13 +20,13 @@ type progressUpserter interface {
 // *repo.ProgressRepository): one query returning the anime's shikimori_id,
 // episodes_aired, and whether the user is actively watching it.
 type logicBLookup interface {
-	LogicBContext(ctx context.Context, userID, animeID string) (shikimoriID string, episodesAired int, watching bool, err error)
+	LogicBContext(ctx context.Context, userID, animeID string) (shikimoriID string, episodesAired int, watching bool, titles []string, err error)
 }
 
 // demandFirer is the fire-and-forget autocache-demand seam (satisfied by
 // *DemandProducer). Kept narrow so UpdateProgress's Logic-B branch is testable.
 type demandFirer interface {
-	Want(malID string, episode int, reason string)
+	Want(malID string, episode int, reason string, titles []string)
 }
 
 type ProgressService struct {
@@ -116,7 +116,7 @@ func (s *ProgressService) maybeFireNextEpDemand(ctx context.Context, userID stri
 		return
 	}
 
-	shikimoriID, episodesAired, watching, err := s.logicB.LogicBContext(ctx, userID, req.AnimeID)
+	shikimoriID, episodesAired, watching, titles, err := s.logicB.LogicBContext(ctx, userID, req.AnimeID)
 	if err != nil {
 		s.log.Warnw("logic-b: next_ep gating lookup failed; skipping demand",
 			"user_id", userID, "anime_id", req.AnimeID, "error", err)
@@ -142,8 +142,9 @@ func (s *ProgressService) maybeFireNextEpDemand(ctx context.Context, userID stri
 		return
 	}
 
-	// Fire-and-forget; nil-safe on the producer side.
-	s.demand.Want(shikimoriID, next, "next_ep")
+	// Fire-and-forget; nil-safe on the producer side. titles (name_jp → romaji →
+	// name_en) let the library Planner search trackers by title.
+	s.demand.Want(shikimoriID, next, "next_ep", titles)
 }
 
 // GetProgress returns watch progress for an anime

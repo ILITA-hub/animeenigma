@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // DemandReason is the Go-side mirror of the autocache_demand_reason pg enum
 // (migrations/007_autocache_demand.sql). The named-string convention matches
@@ -42,8 +45,47 @@ type AutocacheDemand struct {
 	Episode     int          `gorm:"primaryKey;column:episode" json:"episode"`
 	Reason      DemandReason `gorm:"not null;column:reason;type:autocache_demand_reason" json:"reason"`
 	RequestedAt time.Time    `gorm:"not null;column:requested_at" json:"requested_at"`
+	// Titles is the newline-delimited, ordered list of anime titles the producer
+	// supplied (name_jp → romaji → name_en, non-empty + deduped). The library has
+	// no anime table of its own, so this is the ONLY way the Planner can build a
+	// real tracker search query (migration 011). Empty for legacy/title-less rows.
+	Titles string `gorm:"not null;column:titles;default:''" json:"titles"`
 }
 
 // TableName pins the table name (GORM would otherwise pluralize). The migration
 // uses "autocache_demand".
 func (AutocacheDemand) TableName() string { return "autocache_demand" }
+
+// titleSep is the in-column delimiter for AutocacheDemand.Titles. Anime titles
+// never contain a newline, so this round-trips losslessly on Postgres + SQLite.
+const titleSep = "\n"
+
+// SearchTitles returns the ordered title list (name_jp → romaji → name_en) the
+// Planner tries in turn. Empty slice for a legacy/title-less row (the Planner
+// then falls back to the mal_id query).
+func (d AutocacheDemand) SearchTitles() []string {
+	if d.Titles == "" {
+		return nil
+	}
+	return strings.Split(d.Titles, titleSep)
+}
+
+// JoinTitles normalizes an ordered title list into the column form: trims each,
+// drops empties, dedups (preserving order), and joins with titleSep. Producers
+// pass [name_jp, name, name_en]; this guards against blank/duplicate fields.
+func JoinTitles(titles []string) string {
+	seen := make(map[string]struct{}, len(titles))
+	out := make([]string, 0, len(titles))
+	for _, t := range titles {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if _, dup := seen[t]; dup {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	return strings.Join(out, titleSep)
+}

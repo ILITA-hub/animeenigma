@@ -67,13 +67,26 @@ func NewAutocacheLogicAJob(db *gorm.DB, libraryURL string, activeWatcherDays int
 type logicARow struct {
 	ShikimoriID   string `gorm:"column:shikimori_id"`
 	EpisodesAired int    `gorm:"column:episodes_aired"`
+	NameJP        string `gorm:"column:name_jp"`
+	Name          string `gorm:"column:name"`
+	NameEN        string `gorm:"column:name_en"`
 }
 
-// demandBody is the wire shape of POST /internal/library/autocache/demand.
+// titles returns the ordered, fallback-ranked title list for the demand
+// (name_jp → romaji → name_en). The library JoinTitles drops empties/dups, but
+// building the slice in producer order here keeps the fallback intent explicit.
+func (r logicARow) titles() []string {
+	return []string{r.NameJP, r.Name, r.NameEN}
+}
+
+// demandBody is the wire shape of POST /internal/library/autocache/demand. Titles
+// is the ordered title list the library Planner searches trackers with (the
+// library has no anime titles of its own).
 type demandBody struct {
-	MalID   string `json:"mal_id"`
-	Episode int    `json:"episode"`
-	Reason  string `json:"reason"`
+	MalID   string   `json:"mal_id"`
+	Episode int      `json:"episode"`
+	Reason  string   `json:"reason"`
+	Titles  []string `json:"titles,omitempty"`
 }
 
 // Run executes the adapted hotcombos DISTINCT join and fires one ongoing demand
@@ -104,7 +117,10 @@ func (j *AutocacheLogicAJob) Run(ctx context.Context) error {
 	const q = `
 		SELECT DISTINCT
 		    a.shikimori_id   AS shikimori_id,
-		    a.episodes_aired AS episodes_aired
+		    a.episodes_aired AS episodes_aired,
+		    a.name_jp        AS name_jp,
+		    a.name           AS name,
+		    a.name_en        AS name_en
 		FROM watch_history wh
 		JOIN anime_list al ON al.user_id = wh.user_id AND al.anime_id = wh.anime_id
 		JOIN animes a ON a.id = wh.anime_id
@@ -126,7 +142,7 @@ func (j *AutocacheLogicAJob) Run(ctx context.Context) error {
 			skipped++
 			continue
 		}
-		if err := j.fireDemand(ctx, r.ShikimoriID, r.EpisodesAired); err != nil {
+		if err := j.fireDemand(ctx, r.ShikimoriID, r.EpisodesAired, r.titles()); err != nil {
 			demandsFailed++
 			if j.log != nil {
 				j.log.Warnw("autocache Logic A demand POST failed; continuing sweep",
@@ -156,11 +172,12 @@ func (j *AutocacheLogicAJob) Run(ctx context.Context) error {
 // honor the wire reason on this Docker-network-only path, so an `ongoing` demand
 // is recorded as ongoing (no server-side override). Returns an error on a
 // transport failure or a non-2xx response.
-func (j *AutocacheLogicAJob) fireDemand(ctx context.Context, shikimoriID string, episode int) error {
+func (j *AutocacheLogicAJob) fireDemand(ctx context.Context, shikimoriID string, episode int, titles []string) error {
 	body, err := json.Marshal(demandBody{
 		MalID:   shikimoriID,
 		Episode: episode,
 		Reason:  "ongoing",
+		Titles:  titles,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal demand: %w", err)

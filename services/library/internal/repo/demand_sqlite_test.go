@@ -44,7 +44,7 @@ func TestDemandRepository_Record_FirstInsertRequestedAtIsRecent(t *testing.T) {
 	r := NewDemandRepository(db)
 
 	before := time.Now().Add(-2 * time.Second)
-	if err := r.Record(context.Background(), "12345", 7, domain.DemandReasonBackfill); err != nil {
+	if err := r.Record(context.Background(), "12345", 7, domain.DemandReasonBackfill, nil); err != nil {
 		t.Fatalf("Record (first insert): %v", err)
 	}
 
@@ -77,10 +77,10 @@ func TestDemandRepository_Record_ReAssertUpdatesReason(t *testing.T) {
 	r := NewDemandRepository(db)
 	ctx := context.Background()
 
-	if err := r.Record(ctx, "555", 3, domain.DemandReasonBackfill); err != nil {
+	if err := r.Record(ctx, "555", 3, domain.DemandReasonBackfill, nil); err != nil {
 		t.Fatalf("Record backfill: %v", err)
 	}
-	if err := r.Record(ctx, "555", 3, domain.DemandReasonOngoing); err != nil {
+	if err := r.Record(ctx, "555", 3, domain.DemandReasonOngoing, nil); err != nil {
 		t.Fatalf("Record ongoing (re-assert): %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestDemandRepository_Record_ReAssertKeepsFirstSeenRequestedAt(t *testing.T)
 	r := NewDemandRepository(db)
 	ctx := context.Background()
 
-	if err := r.Record(ctx, "777", 5, domain.DemandReasonOngoing); err != nil {
+	if err := r.Record(ctx, "777", 5, domain.DemandReasonOngoing, nil); err != nil {
 		t.Fatalf("Record first: %v", err)
 	}
 	var first domain.AutocacheDemand
@@ -121,7 +121,7 @@ func TestDemandRepository_Record_ReAssertKeepsFirstSeenRequestedAt(t *testing.T)
 	// timestamp would be strictly newer and detectable.
 	time.Sleep(1100 * time.Millisecond)
 
-	if err := r.Record(ctx, "777", 5, domain.DemandReasonOngoing); err != nil {
+	if err := r.Record(ctx, "777", 5, domain.DemandReasonOngoing, nil); err != nil {
 		t.Fatalf("Record re-assert: %v", err)
 	}
 	var second domain.AutocacheDemand
@@ -146,19 +146,19 @@ func TestDemandRepository_Drain_FifoNoStarvation(t *testing.T) {
 	ctx := context.Background()
 
 	// Ongoing demand seen FIRST (oldest first-seen time).
-	if err := r.Record(ctx, "100", 1, domain.DemandReasonOngoing); err != nil {
+	if err := r.Record(ctx, "100", 1, domain.DemandReasonOngoing, nil); err != nil {
 		t.Fatalf("record ongoing: %v", err)
 	}
 	time.Sleep(1100 * time.Millisecond)
 	// Backfill demand seen later.
-	if err := r.Record(ctx, "200", 1, domain.DemandReasonBackfill); err != nil {
+	if err := r.Record(ctx, "200", 1, domain.DemandReasonBackfill, nil); err != nil {
 		t.Fatalf("record backfill: %v", err)
 	}
 	time.Sleep(1100 * time.Millisecond)
 	// Re-assert the ongoing demand a few times (Logic A every sweep). Pre-fix this
 	// would re-stamp it newer than the backfill row and reorder the FIFO.
 	for i := 0; i < 3; i++ {
-		if err := r.Record(ctx, "100", 1, domain.DemandReasonOngoing); err != nil {
+		if err := r.Record(ctx, "100", 1, domain.DemandReasonOngoing, nil); err != nil {
 			t.Fatalf("re-assert ongoing #%d: %v", i, err)
 		}
 	}
@@ -175,5 +175,56 @@ func TestDemandRepository_Drain_FifoNoStarvation(t *testing.T) {
 	if rows[0].MALID != "100" {
 		t.Fatalf("FIFO starvation (WR-01): re-asserted ongoing demand drained at position %d, expected first; order=[%s, %s]",
 			1, rows[0].MALID, rows[1].MALID)
+	}
+}
+
+// TestDemandRepository_Record_PersistsTitles is the v4.1 fix regression: the
+// ordered title list a producer supplies must round-trip through the column so
+// the Planner can search trackers by title (name_jp → romaji → name_en) instead
+// of the useless "<mal_id> <episode>" query.
+func TestDemandRepository_Record_PersistsTitles(t *testing.T) {
+	db := newSQLiteDemandDB(t)
+	r := NewDemandRepository(db)
+	ctx := context.Background()
+
+	titles := []string{"よ", "Youkoso Jitsuryoku", "Classroom of the Elite"}
+	if err := r.Record(ctx, "59708", 12, domain.DemandReasonOngoing, titles); err != nil {
+		t.Fatalf("Record with titles: %v", err)
+	}
+
+	var got domain.AutocacheDemand
+	if err := db.Where("mal_id = ? AND episode = ?", "59708", 12).First(&got).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	st := got.SearchTitles()
+	if len(st) != 3 || st[0] != "よ" || st[1] != "Youkoso Jitsuryoku" || st[2] != "Classroom of the Elite" {
+		t.Fatalf("SearchTitles() = %#v, want ordered [jp, romaji, en]", st)
+	}
+}
+
+// TestDemandRepository_Record_ReAssertEmptyTitlesKeepsExisting verifies a later
+// title-less re-assert does NOT blank a populated titles column (a legacy/empty
+// caller must not erase a good title set the Planner needs).
+func TestDemandRepository_Record_ReAssertEmptyTitlesKeepsExisting(t *testing.T) {
+	db := newSQLiteDemandDB(t)
+	r := NewDemandRepository(db)
+	ctx := context.Background()
+
+	if err := r.Record(ctx, "59708", 12, domain.DemandReasonNextEp, []string{"Youkoso"}); err != nil {
+		t.Fatalf("Record with titles: %v", err)
+	}
+	if err := r.Record(ctx, "59708", 12, domain.DemandReasonOngoing, nil); err != nil {
+		t.Fatalf("Record re-assert no titles: %v", err)
+	}
+
+	var got domain.AutocacheDemand
+	if err := db.Where("mal_id = ? AND episode = ?", "59708", 12).First(&got).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if got.Titles != "Youkoso" {
+		t.Fatalf("titles after empty re-assert = %q, want preserved %q", got.Titles, "Youkoso")
+	}
+	if got.Reason != domain.DemandReasonOngoing {
+		t.Fatalf("reason should still refresh = %q, want ongoing", got.Reason)
 	}
 }

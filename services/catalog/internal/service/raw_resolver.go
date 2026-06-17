@@ -439,9 +439,12 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		// drop-on-full via fireSignal (WR-01) so a slow library can't leak
 		// goroutines under a request burst.
 		mal, ep := anime.ShikimoriID, episodeNumber
+		// Ordered fallback titles (name_jp → romaji → name_en) so the library
+		// Planner can search trackers by title; empties are dropped server-side.
+		titles := []string{anime.NameJP, anime.Name, anime.NameEN}
 		sigCtx := context.WithoutCancel(ctx)
 		r.fireSignal(func() {
-			_ = r.library.RecordDemand(sigCtx, mal, ep, "backfill")
+			_ = r.library.RecordDemand(sigCtx, mal, ep, "backfill", titles)
 		})
 		return nil, errors.NotFound("episode not in library")
 	}
