@@ -377,6 +377,10 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		return nil, errors.NotFound("anime")
 	}
 	if anime.ShikimoriID == "" {
+		// No MALID → no serve-signal can be fired (the library keys on
+		// mal_id). Intentionally un-instrumented: this early NotFound is
+		// NOT a genuine ae-pool MISS, so firing a backfill demand here
+		// would record a row with no usable mal_id. (Phase 08-03.)
 		return nil, errors.NotFound("episode not in library")
 	}
 
@@ -385,10 +389,30 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		return nil, errors.Wrap(err, errors.CodeUnavailable, "library unavailable")
 	}
 	if resp == nil {
+		// MISS: ae pool does not have this episode. Fire a non-blocking
+		// best-effort backfill demand so it's cached next time, then
+		// return the existing NotFound UNCHANGED — the caller's
+		// AllAnime-raw failover is untouched (SERVE-03 no regression).
+		// context.WithoutCancel so a client disconnect can't cancel the
+		// in-flight signal; the error is dropped (best-effort).
+		if r.library != nil {
+			go func(mal string, ep int) {
+				_ = r.library.RecordDemand(context.WithoutCancel(ctx), mal, ep, "backfill")
+			}(anime.ShikimoriID, episodeNumber)
+		}
 		return nil, errors.NotFound("episode not in library")
 	}
 	if !anime.HasRaw {
 		_ = r.animeRepo.SetHasRaw(ctx, anime.ID, true)
+	}
+	// HIT: serving from the ae pool. Fire a non-blocking best-effort
+	// fetch signal (bumps last_fetch_at/fetch_count + serve_total{hit}
+	// on the library side) BEFORE returning the stream. drop-on-failure;
+	// the resolution never fails because this side effect errored.
+	if r.library != nil {
+		go func(mal string, ep int) {
+			_ = r.library.RecordFetch(context.WithoutCancel(ctx), mal, ep)
+		}(anime.ShikimoriID, episodeNumber)
 	}
 	return newLibraryStream(resp.MinIOURL, quality), nil
 }

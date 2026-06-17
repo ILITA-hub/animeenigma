@@ -623,3 +623,107 @@ func TestRawResolver_GetLibraryStream_404WhenAbsent(t *testing.T) {
 		t.Fatal("expected NotFound error when episode absent from library")
 	}
 }
+
+// ---- Phase 08-03: best-effort serve-signal fire on HIT / MISS ----
+
+// waitForPath blocks up to a deadline for a path to arrive on the signal
+// channel, asserting the expected internal endpoint was hit by the
+// fire-and-forget goroutine (which races the synchronous return).
+func waitForPath(t *testing.T, ch <-chan string, want string) {
+	t.Helper()
+	select {
+	case got := <-ch:
+		if got != want {
+			t.Errorf("internal call path = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for internal call to %q", want)
+	}
+}
+
+func TestRawResolver_GetLibraryStream_HIT_FiresRecordFetch(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	internalCalls := make(chan string, 4)
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/internal/library/autocache/") {
+			internalCalls <- r.URL.Path
+			fmt.Fprint(w, `{"ok":true}`)
+			return
+		}
+		// GetEpisode HIT
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8","duration_sec":10,"size_bytes":100}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	if err != nil {
+		t.Fatalf("GetLibraryStream HIT: %v", err)
+	}
+	if got == nil || got.Source != "library" {
+		t.Fatalf("HIT must still return the library stream unchanged, got %+v", got)
+	}
+	waitForPath(t, internalCalls, "/internal/library/autocache/fetch")
+}
+
+func TestRawResolver_GetLibraryStream_MISS_FiresRecordDemand(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	internalCalls := make(chan string, 4)
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/internal/library/autocache/") {
+			internalCalls <- r.URL.Path
+			fmt.Fprint(w, `{"ok":true}`)
+			return
+		}
+		// GetEpisode MISS
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+
+	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 99, "")
+	if err == nil {
+		t.Fatal("MISS must still return NotFound unchanged")
+	}
+	waitForPath(t, internalCalls, "/internal/library/autocache/demand")
+}
+
+// TestRawResolver_GetLibraryStream_SignalFailureDoesNotAffectResult proves
+// the resolution result is byte-for-byte unchanged even when the internal
+// serve-signal call fails (500) — best-effort, drop-on-failure.
+func TestRawResolver_GetLibraryStream_SignalFailureDoesNotAffectResult(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/internal/library/autocache/") {
+			w.WriteHeader(http.StatusInternalServerError) // signal call fails
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8","duration_sec":10,"size_bytes":100}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	if err != nil {
+		t.Fatalf("a failing serve-signal must not fail the resolution, got err %v", err)
+	}
+	if got == nil || got.Source != "library" || got.Type != "hls" {
+		t.Fatalf("resolution result changed under signal failure: %+v", got)
+	}
+	// Give the goroutine a moment to run+fail without affecting anything.
+	time.Sleep(50 * time.Millisecond)
+}
