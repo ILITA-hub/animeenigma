@@ -69,6 +69,28 @@ func TestClient_CreateStatusUpload(t *testing.T) {
 	}
 }
 
+// "resolved" is human-only — the client must hard-downgrade any resolved
+// write to "ai_done" before it reaches the wire (CLAUDE.md feedback-triage).
+func TestClient_SetStatusResolvedDowngradedToAIDone(t *testing.T) {
+	var sent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var m map[string]string
+		json.Unmarshal(body, &m)
+		sent = m["status"]
+		w.Write([]byte(`{"success":true,"data":{"id":"abc","status":"ai_done"}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, logger.Default())
+	if err := c.SetStatus("abc", StatusResolved, "maintenance-bot"); err != nil {
+		t.Fatalf("set status: %v", err)
+	}
+	if sent != StatusAIDone {
+		t.Fatalf("resolved must be downgraded to ai_done on the wire, got %q", sent)
+	}
+}
+
 func TestClient_TrySetStatusEmptyIDNoop(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

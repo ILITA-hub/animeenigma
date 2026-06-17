@@ -93,7 +93,20 @@ func (c *Client) Create(req CreateRequest) (string, error) {
 
 // SetStatus updates the triage status of an entry. updatedBy defaults to
 // "maintenance-bot" server-side when empty.
+//
+// "resolved" is HUMAN-ONLY (see CLAUDE.md feedback-triage section): only a
+// person promotes an entry to resolved after verifying it. The bot is an AI,
+// so this guard hard-downgrades any resolved write to "ai_done" — the
+// AI-allowed "I believe this is done, awaiting human verification" terminal.
+// This enforces the invariant at the lowest layer, regardless of caller (the
+// player service's internal route does NOT refuse resolved server-side).
 func (c *Client) SetStatus(id, status, updatedBy string) error {
+	if status == StatusResolved {
+		c.log.Warnw("refusing to auto-set human-only 'resolved'; downgrading to ai_done",
+			"feedback_id", id,
+		)
+		status = StatusAIDone
+	}
 	body, _ := json.Marshal(map[string]string{"status": status, "updated_by": updatedBy})
 	req, err := http.NewRequest(http.MethodPatch,
 		c.baseURL+"/internal/feedback/"+id+"/status", bytes.NewReader(body))

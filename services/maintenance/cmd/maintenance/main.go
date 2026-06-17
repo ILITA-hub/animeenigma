@@ -985,18 +985,41 @@ func sanitizeLocalFilename(s string) string {
 	return s
 }
 
-// feedbackStatusForTier maps an analysis outcome onto the feedback-store
-// lifecycle: applied fixes are "ai_done" (await human verification), answered
-// info requests are "resolved", anything still needing work stays "in_progress".
-func feedbackStatusForTier(tier domain.FixTier) string {
-	switch tier {
+// feedbackStatusFor maps an analysis outcome onto the feedback-store
+// lifecycle. The bot is an AI, so it NEVER sets "resolved" — that is
+// human-only (CLAUDE.md): a person promotes ai_done → resolved after
+// verifying. The terminal the bot may set is "ai_done".
+//
+// Special case: an admin "add to todo / capture for later" request (e.g.
+// «Добавь в туду: …») only RECORDS future work — it is NOT done. Such a
+// captured backlog item stays a single OPEN ("new") task on the board; the
+// bot must not split it into a "done" acknowledgement plus the task itself.
+func feedbackStatusFor(result *domain.AnalysisResult) string {
+	switch result.Tier {
 	case domain.TierAutoFix:
+		// Fix applied — AI believes done, human verifies.
 		return feedback.StatusAIDone
 	case domain.TierInfoOnly, domain.TierResolved:
-		return feedback.StatusResolved
+		if isCapturedTodo(result.Issue.Status) {
+			// Recorded-but-not-done future work → one open task.
+			return feedback.StatusNew
+		}
+		// Answered/confirmed — AI believes done, human promotes to resolved.
+		return feedback.StatusAIDone
 	default: // button_fix (pending), escalate, unknown
 		return feedback.StatusInProgress
 	}
+}
+
+// isCapturedTodo reports whether the LLM recorded the request as a backlog /
+// todo item to be worked on later (issue status the analyzer emits for
+// "captured this for the future" rather than a completed action).
+func isCapturedTodo(issueStatus string) bool {
+	switch strings.ToLower(strings.TrimSpace(issueStatus)) {
+	case "captured", "backlog", "todo":
+		return true
+	}
+	return false
 }
 
 func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage, result *domain.AnalysisResult) {
@@ -1109,7 +1132,7 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 	switch result.Tier {
 	case domain.TierAutoFix, domain.TierEscalate, domain.TierInfoOnly, domain.TierResolved:
 		sendFunc(replyHTML)
-		s.fb.TrySetStatus(msg.FeedbackID, feedbackStatusForTier(result.Tier))
+		s.fb.TrySetStatus(msg.FeedbackID, feedbackStatusFor(result))
 
 	case domain.TierButtonFix:
 		// Active auto-fix: when the risk gate allows (see decideAutoApply), apply the
