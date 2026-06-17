@@ -449,6 +449,116 @@ func TestListObjectsByPrefix_SortsDeterministically(t *testing.T) {
 	}
 }
 
+// TestDeletePrefix_RemovesAllKeys asserts DeletePrefix removes every object
+// under the prefix (the Plan-10 evict-MinIO half).
+func TestDeletePrefix_RemovesAllKeys(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"aeProvider/123/RAW/3/": {
+				{Key: "aeProvider/123/RAW/3/playlist.m3u8"},
+				{Key: "aeProvider/123/RAW/3/segment_000.ts"},
+				{Key: "aeProvider/123/RAW/3/segment_001.ts"},
+			},
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	if err := w.DeletePrefix(context.Background(), "aeProvider/123/RAW/3/"); err != nil {
+		t.Fatalf("DeletePrefix: %v", err)
+	}
+	if len(fake.removeCalls) != 3 {
+		t.Fatalf("removeCalls = %d, want 3 (all keys deleted)", len(fake.removeCalls))
+	}
+}
+
+// TestDeletePrefix_NormalizesPrefixSlash verifies a prefix passed WITHOUT a
+// trailing slash is normalized before listing.
+func TestDeletePrefix_NormalizesPrefixSlash(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"aeProvider/123/RAW/3/": {
+				{Key: "aeProvider/123/RAW/3/playlist.m3u8"},
+			},
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	// No trailing slash — DeletePrefix must normalize to hit the listResults key.
+	if err := w.DeletePrefix(context.Background(), "aeProvider/123/RAW/3"); err != nil {
+		t.Fatalf("DeletePrefix: %v", err)
+	}
+	if len(fake.removeCalls) != 1 {
+		t.Fatalf("removeCalls = %d, want 1", len(fake.removeCalls))
+	}
+}
+
+// TestDeletePrefix_EmptyPrefix_ReturnsNil asserts an empty prefix (0 keys) is a
+// nil no-op — evicting an already-gone prefix is idempotent, NOT an error
+// (unlike Move, which errors on empty src).
+func TestDeletePrefix_EmptyPrefix_ReturnsNil(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"aeProvider/999/RAW/1/": nil,
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	if err := w.DeletePrefix(context.Background(), "aeProvider/999/RAW/1/"); err != nil {
+		t.Fatalf("DeletePrefix on empty prefix must return nil, got %v", err)
+	}
+	if len(fake.removeCalls) != 0 {
+		t.Fatalf("removeCalls = %d, want 0 on empty prefix", len(fake.removeCalls))
+	}
+}
+
+// TestDeletePrefix_RemoveError_PropagatesImmediately is the critical T-10-02
+// guard: on the FIRST RemoveObject error DeletePrefix returns that error and
+// does NOT continue (a half-deleted prefix must never report success, so the
+// caller leaves the row for the next sweep). Keys are listed sorted, so the
+// failure on segment_000 stops before segment_001 is attempted.
+func TestDeletePrefix_RemoveError_PropagatesImmediately(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"aeProvider/123/RAW/3/": {
+				{Key: "aeProvider/123/RAW/3/playlist.m3u8"},
+				{Key: "aeProvider/123/RAW/3/segment_000.ts"},
+				{Key: "aeProvider/123/RAW/3/segment_001.ts"},
+			},
+		},
+		removeErr: map[string]error{
+			"aeProvider/123/RAW/3/segment_000.ts": errors.New("simulated remove fail"),
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	err := w.DeletePrefix(context.Background(), "aeProvider/123/RAW/3/")
+	if err == nil {
+		t.Fatal("DeletePrefix must propagate the first RemoveObject error")
+	}
+	// ListObjectsByPrefix sorts: playlist.m3u8 < segment_000.ts < segment_001.ts.
+	// playlist removed OK, segment_000 fails → segment_001 never attempted.
+	if len(fake.removeCalls) != 1 {
+		t.Fatalf("removeCalls = %d, want 1 (hard-fail stops at first error, leaving segment_001 untouched)", len(fake.removeCalls))
+	}
+	if fake.removeCalls[0] != "aeProvider/123/RAW/3/playlist.m3u8" {
+		t.Fatalf("first remove = %q, want the sorted-first key playlist.m3u8", fake.removeCalls[0])
+	}
+}
+
+// TestDeletePrefix_ListError_Propagates asserts a list failure is wrapped and
+// returned (no removes attempted).
+func TestDeletePrefix_ListError_Propagates(t *testing.T) {
+	fake := &fakeUploader{listErr: errors.New("simulated list fail")}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	if err := w.DeletePrefix(context.Background(), "aeProvider/123/RAW/3/"); err == nil {
+		t.Fatal("DeletePrefix must propagate a list error")
+	}
+	if len(fake.removeCalls) != 0 {
+		t.Fatalf("removeCalls = %d, want 0 on list error", len(fake.removeCalls))
+	}
+}
+
 func TestContentTypeFor_Cases(t *testing.T) {
 	cases := []struct{ name, want string }{
 		{"playlist.m3u8", "application/vnd.apple.mpegurl"},

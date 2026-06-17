@@ -368,6 +368,38 @@ func (w *Writer) Move(ctx context.Context, srcPrefix, dstPrefix string) error {
 	return nil
 }
 
+// DeletePrefix hard-deletes every object under prefix (recursive). It is the
+// MinIO half of an eviction (Plan 02): the Evictor calls DeletePrefix(minioPath)
+// and ONLY on success deletes the library_episodes row, so a row never points at
+// missing data.
+//
+// Semantics (the inverse of Move's remove-loop, but HARD-fail):
+//   - prefix is normalized to end with "/".
+//   - On the FIRST RemoveObject error, return that error immediately. The caller
+//     leaves the row intact so the next sweep retries — a half-deleted prefix
+//     must never be reported as success (T-10-02). (Move soft-fails its removes;
+//     DeletePrefix must not, to avoid an orphaned serving pointer.)
+//   - An empty prefix (0 keys) returns nil — the objects are already gone, so an
+//     evict of an already-evicted/never-written prefix is idempotent, NOT an
+//     error (unlike Move, which errors on empty src).
+//   - A list error is wrapped and returned.
+func (w *Writer) DeletePrefix(ctx context.Context, prefix string) error {
+	if !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
+	keys, err := w.ListObjectsByPrefix(ctx, prefix)
+	if err != nil {
+		return fmt.Errorf("delete list: %w", err)
+	}
+	// Empty prefix → nil (idempotent; objects already gone).
+	for _, k := range keys {
+		if rmErr := w.uploader.RemoveObject(ctx, w.cfg.Bucket, k, minio.RemoveObjectOptions{}); rmErr != nil {
+			return fmt.Errorf("delete %s: %w", k, rmErr)
+		}
+	}
+	return nil
+}
+
 // sortStrings is a tiny in-place ascending sort used by
 // ListObjectsByPrefix. Avoids importing "sort" twice in the file.
 func sortStrings(s []string) {
