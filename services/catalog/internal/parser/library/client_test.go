@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -281,5 +282,116 @@ func TestListEpisodes_EmptyShikimoriID(t *testing.T) {
 	c := NewClient(Config{APIURL: "http://unused", Timeout: time.Second})
 	if _, err := c.ListEpisodes(context.Background(), ""); err == nil {
 		t.Fatal("expected error on empty shikimori_id")
+	}
+}
+
+// ---- Phase 08-03: best-effort serve-signal producers ----
+
+// decodeJSONBody is a tiny helper for the internal-endpoint tests: reads
+// the POST body into a generic map so assertions can inspect mal_id /
+// episode / reason without a typed struct.
+func decodeJSONBody(t *testing.T, r *http.Request) map[string]any {
+	t.Helper()
+	var got map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	return got
+}
+
+func TestRecordFetch_PostsFetchPathWithBody(t *testing.T) {
+	var seenPath, seenMethod, seenCT string
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		seenMethod = r.Method
+		seenCT = r.Header.Get("Content-Type")
+		body = decodeJSONBody(t, r)
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	if err := c.RecordFetch(context.Background(), "57466", 3); err != nil {
+		t.Fatalf("RecordFetch returned %v, want nil on 200", err)
+	}
+	if seenPath != "/internal/library/autocache/fetch" {
+		t.Errorf("path = %q, want /internal/library/autocache/fetch", seenPath)
+	}
+	if seenMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", seenMethod)
+	}
+	if !strings.Contains(seenCT, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", seenCT)
+	}
+	if body["mal_id"] != "57466" {
+		t.Errorf("mal_id = %v, want 57466", body["mal_id"])
+	}
+	// JSON numbers decode to float64.
+	if ep, ok := body["episode"].(float64); !ok || int(ep) != 3 {
+		t.Errorf("episode = %v, want 3", body["episode"])
+	}
+	if _, present := body["reason"]; present {
+		t.Errorf("fetch body should not carry a reason, got %v", body["reason"])
+	}
+}
+
+func TestRecordDemand_PostsDemandPathWithReason(t *testing.T) {
+	var seenPath string
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		body = decodeJSONBody(t, r)
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	if err := c.RecordDemand(context.Background(), "57466", 7, "backfill"); err != nil {
+		t.Fatalf("RecordDemand returned %v, want nil on 200", err)
+	}
+	if seenPath != "/internal/library/autocache/demand" {
+		t.Errorf("path = %q, want /internal/library/autocache/demand", seenPath)
+	}
+	if body["mal_id"] != "57466" {
+		t.Errorf("mal_id = %v, want 57466", body["mal_id"])
+	}
+	if ep, ok := body["episode"].(float64); !ok || int(ep) != 7 {
+		t.Errorf("episode = %v, want 7", body["episode"])
+	}
+	if body["reason"] != "backfill" {
+		t.Errorf("reason = %v, want backfill", body["reason"])
+	}
+}
+
+func TestRecordFetch_500ReturnsWrappedError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	err := c.RecordFetch(context.Background(), "57466", 1)
+	if err == nil {
+		t.Fatal("expected wrapped error on 500 so the caller can log it")
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("error = %q, want substring '500'", err.Error())
+	}
+}
+
+func TestRecordDemand_500ReturnsWrappedError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	err := c.RecordDemand(context.Background(), "57466", 1, "backfill")
+	if err == nil {
+		t.Fatal("expected wrapped error on 503")
+	}
+	if !strings.Contains(err.Error(), "503") {
+		t.Errorf("error = %q, want substring '503'", err.Error())
 	}
 }

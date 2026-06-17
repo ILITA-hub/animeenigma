@@ -19,6 +19,7 @@
 package library
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -198,6 +199,68 @@ func (c *Client) ListEpisodes(ctx context.Context, shikimoriID string) ([]Episod
 	default:
 		return nil, fmt.Errorf("library: list unexpected status %d", resp.StatusCode)
 	}
+}
+
+// postInternal POSTs a JSON body to a Docker-network-only library
+// /internal/* endpoint on the existing cfg.APIURL base (reusing the
+// bounded httpClient.Timeout). It drains+closes the body — the
+// endpoints reply {ok:true}, so only the status code is inspected — and
+// returns a wrapped error on any non-2xx so a best-effort caller can
+// log+drop it. NO response-body parsing.
+//
+// Phase 08-03 (workstream auto-torrent / serve-signal): the serve-signal
+// producers (RecordFetch / RecordDemand) are best-effort — the caller in
+// raw_resolver.go discards the returned error and never fails a playback
+// resolution because this call errored.
+func (c *Client) postInternal(ctx context.Context, path string, body map[string]any) error {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("library: marshal %s body: %w", path, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.APIURL+path, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("library: build %s request: %w", path, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("library: do %s request: %w", path, err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("library: %s non-2xx %d", path, resp.StatusCode)
+	}
+	return nil
+}
+
+// RecordFetch fires the HIT serve-signal: POST /internal/library/
+// autocache/fetch {mal_id, episode}. Best-effort — the library side
+// bumps last_fetch_at/fetch_count + counts serve_total{hit}. The caller
+// drops the returned error; a non-2xx/transport error never fails the
+// playback resolution. Docker-network-only (NOT gateway-proxied).
+func (c *Client) RecordFetch(ctx context.Context, malID string, episode int) error {
+	return c.postInternal(ctx, "/internal/library/autocache/fetch", map[string]any{
+		"mal_id":  malID,
+		"episode": episode,
+	})
+}
+
+// RecordDemand fires the MISS serve-signal: POST /internal/library/
+// autocache/demand {mal_id, episode, reason}. Best-effort — the library
+// side records a wanted item (reason forced server-side) + counts
+// serve_total{miss}. The caller drops the returned error; a non-2xx/
+// transport error never fails the playback resolution + failover.
+// Docker-network-only (NOT gateway-proxied).
+func (c *Client) RecordDemand(ctx context.Context, malID string, episode int, reason string) error {
+	return c.postInternal(ctx, "/internal/library/autocache/demand", map[string]any{
+		"mal_id":  malID,
+		"episode": episode,
+		"reason":  reason,
+	})
 }
 
 // Ping issues a GET /health on the configured library APIURL. Returns
