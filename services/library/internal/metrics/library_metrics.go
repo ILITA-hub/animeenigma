@@ -51,6 +51,14 @@ type LibraryMetrics struct {
 	//   ae serve-path resolution (HIT = served from pool, MISS = absent →
 	//   failover + backfill demand). Phase 11 charts the serve-hit-rate.
 	autocacheServeTotal *prometheus.CounterVec
+
+	// Phase 09 (workstream auto-torrent-population / v4.1) addition:
+	//   autocacheDownloadsTotal{trigger,result} — incremented once per Planner
+	//   drain decision (OBS-04). trigger ∈ {A (ongoing), B (next_ep), backfill}
+	//   derived from the demand reason; result ∈ {enqueued, present, no_release,
+	//   dedup, error}. Low cardinality — no mal_id/episode, so /metrics leaks no
+	//   per-title data. Phase 11 charts download volume by trigger.
+	autocacheDownloadsTotal *prometheus.CounterVec
 }
 
 // NewLibraryMetrics registers the collectors against the default
@@ -151,6 +159,15 @@ func NewLibraryMetricsWithRegisterer(reg prometheus.Registerer) *LibraryMetrics 
 				Help: "ae serve-path resolutions, labeled by result (hit|miss).",
 			},
 			[]string{"result"},
+		),
+
+		// Phase 09 (workstream auto-torrent-population / v4.1).
+		autocacheDownloadsTotal: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "library_autocache_downloads_total",
+				Help: "Planner download decisions, labeled by trigger (A=ongoing|B=next_ep|backfill) and result (enqueued|present|no_release|dedup|error).",
+			},
+			[]string{"trigger", "result"},
 		),
 	}
 }
@@ -313,4 +330,23 @@ func (m *LibraryMetrics) IncServeTotal(result string) {
 // library_autocache_serve_total.
 func (m *LibraryMetrics) GetServeTotalForTest(result string) prometheus.Counter {
 	return m.autocacheServeTotal.WithLabelValues(result)
+}
+
+// IncDownloadsTotal increments library_autocache_downloads_total{trigger,result}.
+// The Phase-09 Planner calls this once per drain decision: trigger derived from
+// the demand reason (ongoing→"A", next_ep→"B", backfill→"backfill") and result in
+// {enqueued, present, no_release, dedup, error}. Only low-cardinality labels — no
+// mal_id/episode, so /metrics leaks no per-title data. Nil-guarded so a Planner
+// with metrics disabled never panics.
+func (m *LibraryMetrics) IncDownloadsTotal(trigger, result string) {
+	if m == nil {
+		return
+	}
+	m.autocacheDownloadsTotal.WithLabelValues(trigger, result).Inc()
+}
+
+// GetDownloadsTotalForTest is the test-seam analogue for
+// library_autocache_downloads_total.
+func (m *LibraryMetrics) GetDownloadsTotalForTest(trigger, result string) prometheus.Counter {
+	return m.autocacheDownloadsTotal.WithLabelValues(trigger, result)
 }

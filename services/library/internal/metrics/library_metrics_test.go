@@ -253,3 +253,50 @@ func TestLibraryMetrics_ServeTotalRegistered(t *testing.T) {
 	}
 	t.Fatal("library_autocache_serve_total not registered")
 }
+
+// TestLibraryMetrics_IncDownloadsTotal — Phase 09 Planner counter: distinct
+// (trigger,result) pairs stay in distinct labelsets, and the nil-guard makes Inc
+// safe on a nil receiver (so a Planner with metrics disabled never panics).
+func TestLibraryMetrics_IncDownloadsTotal(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+
+	m.IncDownloadsTotal("A", "enqueued")
+	m.IncDownloadsTotal("A", "enqueued")
+	m.IncDownloadsTotal("B", "present")
+	m.IncDownloadsTotal("backfill", "no_release")
+
+	if v := testutil.ToFloat64(m.GetDownloadsTotalForTest("A", "enqueued")); v != 2 {
+		t.Fatalf("downloads_total{trigger=A,result=enqueued} = %v, want 2", v)
+	}
+	if v := testutil.ToFloat64(m.GetDownloadsTotalForTest("B", "present")); v != 1 {
+		t.Fatalf("downloads_total{trigger=B,result=present} = %v, want 1", v)
+	}
+	if v := testutil.ToFloat64(m.GetDownloadsTotalForTest("backfill", "no_release")); v != 1 {
+		t.Fatalf("downloads_total{trigger=backfill,result=no_release} = %v, want 1", v)
+	}
+
+	// nil-receiver guard — must not panic.
+	var nilM *LibraryMetrics
+	nilM.IncDownloadsTotal("A", "enqueued")
+}
+
+// TestLibraryMetrics_DownloadsTotalRegistered — the new counter appears under its
+// exact SPEC name with the {trigger,result} labelset so the Phase-11 download
+// panel finds the series.
+func TestLibraryMetrics_DownloadsTotalRegistered(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+	m.IncDownloadsTotal("A", "enqueued") // touch so the CounterVec renders
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, f := range families {
+		if f.GetName() == "library_autocache_downloads_total" {
+			return
+		}
+	}
+	t.Fatal("library_autocache_downloads_total not registered")
+}
