@@ -69,6 +69,14 @@
         </div>
       </div>
 
+      <!-- Profile Showcase (dark-ship gate: VITE_PROFILE_WALL_ADMIN_ONLY) -->
+      <ProfileShowcase
+        v-if="profileWallVisible && profileUser?.id"
+        :user-id="profileUser.id"
+        :is-owner="!!isOwnProfile"
+        class="mt-6"
+      />
+
       <!-- Tabs -->
       <div class="max-w-4xl mx-auto px-4">
         <Tabs v-model="activeTab" :tabs="tabs" variant="underline" full-width class="mb-6">
@@ -117,12 +125,12 @@
               </div>
 
               <!-- View Toggle + Sort -->
-              <div class="flex items-center justify-end gap-2">
+              <div class="flex flex-wrap items-center justify-end gap-2">
                 <div class="flex-shrink-0 w-48 mr-auto">
                   <Input v-model="searchQuery" type="text" size="sm" :placeholder="$t('profile.watchlist.searchPlaceholder')" />
                 </div>
                 <!-- Sort -->
-                <div class="w-36">
+                <div class="w-28 sm:w-36">
                   <Select
                     v-model="sortKey"
                     :options="sortOptions"
@@ -148,7 +156,7 @@
                   @click="filtersOpen = !filtersOpen"
                 >
                   <SlidersHorizontal class="size-4" />
-                  <span>{{ $t('profile.filters.button') }}</span>
+                  <span class="hidden sm:inline">{{ $t('profile.filters.button') }}</span>
                   <Badge v-if="filterCount > 0" variant="primary" size="sm">{{ filterCount }}</Badge>
                   <ChevronDown class="size-4 transition-transform duration-200" :class="filtersOpen ? 'rotate-180' : ''" />
                 </Button>
@@ -162,7 +170,7 @@
                   @click="selectionMode ? exitSelectionMode() : (selectionMode = true)"
                 >
                   <CheckSquare class="size-4" />
-                  <span>{{ $t('profile.bulk.select') }}</span>
+                  <span class="hidden sm:inline">{{ $t('profile.bulk.select') }}</span>
                 </Button>
                 <SegmentedControl
                   :model-value="viewMode"
@@ -851,6 +859,8 @@ import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import TimezoneCard from '@/components/profile/TimezoneCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
+import ProfileShowcase from '@/components/profile/showcase/ProfileShowcase.vue'
+import { useProfileWallVisible } from '@/utils/profileWallGate'
 import { AnimeContextMenu, PosterCard } from '@/components/anime'
 import WatchlistRow from '@/components/profile/WatchlistRow.vue'
 import WatchlistFilters from '@/components/profile/WatchlistFilters.vue'
@@ -929,6 +939,7 @@ const watchlistStore = useWatchlistStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 const gachaVisible = useGachaVisible()
+const profileWallVisible = useProfileWallVisible()
 
 const siteOrigin = window.location.origin
 
