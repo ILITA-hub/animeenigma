@@ -131,9 +131,13 @@ func main() {
 	if cfg.Jobs.LibraryInternalURL != "" {
 		autocacheLogicAJob = jobs.NewAutocacheLogicAJob(db.DB, cfg.Jobs.LibraryInternalURL, cfg.Jobs.AutocacheActiveWatcherDays, log)
 	}
+	// Phase 11 — daily autocache storage-need prediction producer (OBS-05). Reads
+	// the shared animeenigma DB only (no external URL), so it is constructed
+	// UNCONDITIONALLY (always on, unlike Logic A's nil-on-empty-URL guard).
+	autocachePredictionJob := jobs.NewAutocachePredictionJob(db.DB, cfg.Jobs.AutocacheActiveWatcherDays, cfg.Jobs.AutocacheAvgRawEpBytes, log)
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, scraperPlayabilityCanaryJob, readThresholdJob, providerRankingJob, autocacheLogicAJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, scraperPlayabilityCanaryJob, readThresholdJob, providerRankingJob, autocacheLogicAJob, autocachePredictionJob, log)
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler
@@ -146,6 +150,7 @@ func main() {
 		cfg.Jobs.ReadThresholdCron,
 		cfg.Jobs.ProviderRankingCron,
 		cfg.Jobs.AutocacheLogicACron,
+		cfg.Jobs.AutocachePredictionCron,
 	); err != nil {
 		log.Fatalw("failed to start job scheduler", "error", err)
 	}

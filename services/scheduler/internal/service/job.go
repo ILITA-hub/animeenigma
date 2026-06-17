@@ -20,6 +20,7 @@ type JobService struct {
 	readThresholdJob            *jobs.ReadThresholdJob
 	providerRankingJob          *jobs.ProviderRankingJob
 	autocacheLogicAJob          *jobs.AutocacheLogicAJob
+	autocachePredictionJob      *jobs.AutocachePredictionJob
 	log                         *logger.Logger
 	lastShikimoriRun            time.Time
 	lastCleanupRun              time.Time
@@ -29,6 +30,7 @@ type JobService struct {
 	lastReadThresholdRun        time.Time
 	lastProviderRankingRun      time.Time
 	lastAutocacheLogicARun      time.Time
+	lastAutocachePredictionRun  time.Time
 }
 
 func NewJobService(
@@ -40,6 +42,7 @@ func NewJobService(
 	readThresholdJob *jobs.ReadThresholdJob,
 	providerRankingJob *jobs.ProviderRankingJob,
 	autocacheLogicAJob *jobs.AutocacheLogicAJob,
+	autocachePredictionJob *jobs.AutocachePredictionJob,
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
@@ -52,12 +55,13 @@ func NewJobService(
 		readThresholdJob:            readThresholdJob,
 		providerRankingJob:          providerRankingJob,
 		autocacheLogicAJob:          autocacheLogicAJob,
+		autocachePredictionJob:      autocachePredictionJob,
 		log:                         log,
 	}
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron, readThresholdCron, providerRankingCron, autocacheLogicACron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron, readThresholdCron, providerRankingCron, autocacheLogicACron, autocachePredictionCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -251,6 +255,33 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		s.log.Info("registered job: autocache_logic_a")
 	}
 
+	// Schedule autocache prediction producer (Phase 11 — OBS-05). Unlike Logic A
+	// it has NO external dependency (it only reads the shared animeenigma DB the
+	// scheduler already owns and sets a Prometheus gauge), so it is registered
+	// UNCONDITIONALLY (always on) and constructed unconditionally in main.go.
+	if s.autocachePredictionJob != nil {
+		_, err = s.cron.AddFunc(autocachePredictionCron, func() {
+			ctx := context.Background()
+			s.log.Info("starting scheduled autocache prediction sweep")
+			start := time.Now()
+			if err := s.autocachePredictionJob.Run(ctx); err != nil {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("autocache_prediction", "error").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("autocache_prediction").Observe(time.Since(start).Seconds())
+				s.log.Errorw("autocache prediction sweep failed", "error", err)
+			} else {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("autocache_prediction", "success").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("autocache_prediction").Observe(time.Since(start).Seconds())
+				metrics.SchedulerJobLastSuccess.WithLabelValues("autocache_prediction").SetToCurrentTime()
+				s.lastAutocachePredictionRun = time.Now()
+				s.log.Info("autocache prediction sweep completed successfully")
+			}
+		})
+		if err != nil {
+			return err
+		}
+		s.log.Info("registered job: autocache_prediction")
+	}
+
 	s.cron.Start()
 	s.log.Info("job scheduler started")
 	return nil
@@ -353,6 +384,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"autocache_logic_a": map[string]interface{}{
 			"last_run": s.lastAutocacheLogicARun,
+		},
+		"autocache_prediction": map[string]interface{}{
+			"last_run": s.lastAutocachePredictionRun,
 		},
 	}
 }

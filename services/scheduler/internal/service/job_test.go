@@ -25,8 +25,9 @@ func TestJobService_RegistersAutocacheLogicA(t *testing.T) {
 	require.NoError(t, err)
 
 	logicA := jobs.NewAutocacheLogicAJob(db, "http://library:8089", 30, logger.Default())
+	prediction := jobs.NewAutocachePredictionJob(db, 30, 1288490188, logger.Default())
 
-	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, logicA, logger.Default())
+	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, logicA, prediction, logger.Default())
 
 	err = svc.Start(
 		farFutureCron, // shikimori
@@ -37,6 +38,7 @@ func TestJobService_RegistersAutocacheLogicA(t *testing.T) {
 		farFutureCron, // readThreshold (nil job → skipped)
 		farFutureCron, // providerRanking (nil job → skipped)
 		farFutureCron, // autocacheLogicA
+		farFutureCron, // autocachePrediction
 	)
 	require.NoError(t, err)
 	defer svc.Stop()
@@ -46,15 +48,40 @@ func TestJobService_RegistersAutocacheLogicA(t *testing.T) {
 	assert.True(t, ok, "GetStatus must expose autocache_logic_a")
 }
 
+// TestJobService_RegistersAutocachePrediction verifies the Phase-11 prediction job
+// is wired into the cron harness via the new NewJobService/Start arity and surfaces
+// in GetStatus. Unlike Logic A it is always constructed (no optional URL).
+func TestJobService_RegistersAutocachePrediction(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+
+	prediction := jobs.NewAutocachePredictionJob(db, 30, 1288490188, logger.Default())
+
+	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, prediction, logger.Default())
+
+	err = svc.Start(
+		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
+		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
+		farFutureCron, // autocachePrediction
+	)
+	require.NoError(t, err)
+	defer svc.Stop()
+
+	status := svc.GetStatus()
+	_, ok := status["autocache_prediction"]
+	assert.True(t, ok, "GetStatus must expose autocache_prediction")
+}
+
 // TestJobService_NilAutocacheLogicASkipped verifies a nil Logic A job (no library
 // URL configured) is skipped cleanly — Start succeeds and GetStatus still exposes
 // the key (zero last_run) without panicking.
 func TestJobService_NilAutocacheLogicASkipped(t *testing.T) {
-	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, logger.Default())
+	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, nil, logger.Default())
 
 	err := svc.Start(
 		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
 		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
+		farFutureCron, // autocachePrediction (nil job → skipped)
 	)
 	require.NoError(t, err)
 	defer svc.Stop()
