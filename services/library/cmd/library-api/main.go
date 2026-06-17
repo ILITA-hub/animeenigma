@@ -142,6 +142,13 @@ func main() {
 	if err := db.DB.Exec(migrations.AutocacheConfigSQL).Error; err != nil {
 		log.Fatalw("failed to apply autocache_config migration", "error", err)
 	}
+	// 007 (Phase 08): autocache_demand intake table + autocache_demand_reason
+	// enum — the durable backfill-demand sink the ae serve MISS path writes
+	// into. Idempotent (enum guard + CREATE TABLE IF NOT EXISTS). Independent
+	// of 005/006.
+	if err := db.DB.Exec(migrations.AutocacheDemandSQL).Error; err != nil {
+		log.Fatalw("failed to apply autocache_demand migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {
@@ -398,6 +405,20 @@ func main() {
 	autocacheConfigRepo := repo.NewAutocacheConfigRepository(db.DB)
 	autocacheConfigHandler := handler.NewAutocacheConfigHandler(autocacheConfigRepo, log)
 
+	// Phase 08 (SERVE-01/02/03): Docker-network-only serve-signal handler. The
+	// ae-resolution producer (catalog, Plan 03) POSTs HIT → /internal/library/
+	// autocache/fetch (BumpFetch + serve_total{hit}) and MISS → .../demand
+	// (records a backfill demand + serve_total{miss}, gated by the master
+	// `enabled` switch). Reuses the already-constructed episodeRepo (BumpFetch),
+	// the new demandRepo, the autocacheConfigRepo (enabled switch), and the
+	// existing libMetrics — no reconstruction.
+	demandRepo := repo.NewDemandRepository(db.DB)
+	autocacheInternalHandler := handler.NewAutocacheInternalHandler(
+		handler.NewGormAutocacheInternalDeps(episodeRepo, demandRepo, autocacheConfigRepo),
+		libMetrics,
+		log,
+	)
+
 	// Initialize metrics collector (HTTP middleware).
 	metricsCollector := metrics.NewCollector("library")
 
@@ -408,6 +429,7 @@ func main() {
 		jobsHandler,
 		episodesHandler,
 		autocacheConfigHandler,
+		autocacheInternalHandler,
 		cfg.JWT,
 		log,
 		metricsCollector,

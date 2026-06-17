@@ -28,6 +28,7 @@ func NewRouter(
 	jobsHandler *handler.JobsHandler,
 	episodesHandler *handler.EpisodesHandler,
 	autocacheConfigHandler *handler.AutocacheConfigHandler,
+	autocacheInternalHandler *handler.AutocacheInternalHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -51,6 +52,18 @@ func NewRouter(
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metrics.Handler().ServeHTTP(w, r)
 	})
+
+	// Phase 08 (SERVE-01/02/03): Docker-network-only serve-signal endpoints
+	// the catalog ae-resolution producer (Plan 03) calls. Mounted at the TOP
+	// LEVEL — siblings of /health + /metrics, NOT inside the /api/library group
+	// — because the gateway does NOT proxy /internal/* (same rule as recs'
+	// /internal/recs/recompute-hint + notifications' /internal/notifications),
+	// so /internal/library/* is unreachable from the gateway/public by
+	// construction. Do NOT add a gateway HandleFunc for these.
+	if autocacheInternalHandler != nil {
+		r.Post("/internal/library/autocache/fetch", autocacheInternalHandler.Fetch)
+		r.Post("/internal/library/autocache/demand", autocacheInternalHandler.Demand)
+	}
 
 	// API routes. Phase 2 adds /search; Phase 3 adds the job-control
 	// group. Gateway-side admin gate covers all /api/library/*
