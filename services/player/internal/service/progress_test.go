@@ -60,6 +60,10 @@ func newTestProgressService(up progressUpserter, lb logicBLookup, d demandFirer)
 }
 
 func jpReq(player, lang string, ep int) *domain.UpdateProgressRequest {
+	return subReq(player, lang, "sub", ep)
+}
+
+func subReq(player, lang, watchType string, ep int) *domain.UpdateProgressRequest {
 	return &domain.UpdateProgressRequest{
 		AnimeID:       "anime-uuid",
 		EpisodeNumber: ep,
@@ -67,18 +71,23 @@ func jpReq(player, lang string, ep int) *domain.UpdateProgressRequest {
 		Duration:      1400,
 		Player:        player,
 		Language:      lang,
+		WatchType:     watchType,
 	}
 }
 
-func TestUpdateProgress_FiresNextEpForJPAudioWatcher(t *testing.T) {
+func TestUpdateProgress_FiresNextEpForRawAudioWatcher(t *testing.T) {
+	// ANY sub combo carries original Japanese audio, plus the ae/raw players.
 	cases := []struct {
-		name   string
-		player string
-		lang   string
+		name      string
+		player    string
+		lang      string
+		watchType string
 	}{
-		{"ae player", "ae", "en"},
-		{"raw player", "raw", "ja"},
-		{"language ja", "kodik", "ja"},
+		{"ae player", "ae", "en", "sub"},
+		{"raw player", "raw", "ja", "sub"},
+		{"kodik ru sub", "kodik", "ru", "sub"},
+		{"english en sub (gogoanime)", "english", "en", "sub"},
+		{"hianime en sub", "hianime", "en", "sub"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -86,7 +95,7 @@ func TestUpdateProgress_FiresNextEpForJPAudioWatcher(t *testing.T) {
 			d := &fakeDemand{}
 			s := newTestProgressService(&fakeUpserter{}, lb, d)
 
-			_, err := s.UpdateProgress(context.Background(), "user-1", jpReq(tc.player, tc.lang, 5))
+			_, err := s.UpdateProgress(context.Background(), "user-1", subReq(tc.player, tc.lang, tc.watchType, 5))
 			if err != nil {
 				t.Fatalf("UpdateProgress err = %v", err)
 			}
@@ -100,25 +109,26 @@ func TestUpdateProgress_FiresNextEpForJPAudioWatcher(t *testing.T) {
 	}
 }
 
-func TestUpdateProgress_NoFireForNonJPCombo(t *testing.T) {
-	cases := []struct{ player, lang string }{
-		{"kodik", "ru"},
-		{"animelib", "ru"},
-		{"english", "en"},
+func TestUpdateProgress_NoFireForDubCombo(t *testing.T) {
+	// DUB combos carry replaced (non-Japanese) audio — never trigger a RAW prefetch.
+	cases := []struct{ player, lang, watchType string }{
+		{"kodik", "ru", "dub"},
+		{"english", "en", "dub"},
+		{"hianime", "en", "dub"},
 	}
 	for _, tc := range cases {
 		lb := &fakeLogicB{shikimoriID: "57466", episodesAired: 12, watching: true}
 		d := &fakeDemand{}
 		s := newTestProgressService(&fakeUpserter{}, lb, d)
-		_, err := s.UpdateProgress(context.Background(), "user-1", jpReq(tc.player, tc.lang, 5))
+		_, err := s.UpdateProgress(context.Background(), "user-1", subReq(tc.player, tc.lang, tc.watchType, 5))
 		if err != nil {
 			t.Fatalf("UpdateProgress err = %v", err)
 		}
 		if d.calls != 0 {
-			t.Errorf("%s/%s fired %d demands, want 0", tc.player, tc.lang, d.calls)
+			t.Errorf("%s/%s/%s fired %d demands, want 0", tc.player, tc.lang, tc.watchType, d.calls)
 		}
 		if lb.calls != 0 {
-			t.Errorf("%s/%s did %d lookups, want 0 (JP gate short-circuits)", tc.player, tc.lang, lb.calls)
+			t.Errorf("%s/%s/%s did %d lookups, want 0 (dub gate short-circuits)", tc.player, tc.lang, tc.watchType, lb.calls)
 		}
 	}
 }
@@ -187,17 +197,22 @@ func TestUpdateProgress_NilDemandIsSafe(t *testing.T) {
 	}
 }
 
-func TestIsJPAudio(t *testing.T) {
-	yes := [][2]string{{"ae", "en"}, {"raw", "en"}, {"kodik", "ja"}, {"ae", "ja"}}
-	no := [][2]string{{"kodik", "ru"}, {"animelib", "ru"}, {"english", "en"}, {"", ""}}
+func TestPrefersRawAudio(t *testing.T) {
+	// {player, watchType}. ANY sub combo qualifies (raw JP audio + subtitles),
+	// plus the always-raw ae/raw players. Only dub is excluded.
+	yes := [][2]string{
+		{"kodik", "sub"}, {"english", "sub"}, {"hianime", "sub"}, {"consumet", "sub"},
+		{"ae", "sub"}, {"raw", "sub"}, {"ae", "dub"}, {"raw", "dub"},
+	}
+	no := [][2]string{{"kodik", "dub"}, {"english", "dub"}, {"hianime", "dub"}, {"", ""}}
 	for _, c := range yes {
-		if !isJPAudio(c[0], c[1]) {
-			t.Errorf("isJPAudio(%q,%q) = false, want true", c[0], c[1])
+		if !prefersRawAudio(c[0], c[1]) {
+			t.Errorf("prefersRawAudio(%q,%q) = false, want true", c[0], c[1])
 		}
 	}
 	for _, c := range no {
-		if isJPAudio(c[0], c[1]) {
-			t.Errorf("isJPAudio(%q,%q) = true, want false", c[0], c[1])
+		if prefersRawAudio(c[0], c[1]) {
+			t.Errorf("prefersRawAudio(%q,%q) = true, want false", c[0], c[1])
 		}
 	}
 }

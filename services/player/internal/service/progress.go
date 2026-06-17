@@ -56,12 +56,17 @@ func NewProgressService(progressRepo *repo.ProgressRepository, prefService *Pref
 	}
 }
 
-// isJPAudio reports whether a resolved combo is "JP-audio" for Phase-9 Logic-B
-// purposes (CONTEXT decision 1 / RESEARCH A1): the AE or Raw players always
-// carry original Japanese audio, and any combo whose language is "ja" is
-// JP-audio regardless of player. Kodik/AniLib (ru) and English (en) are NOT.
-func isJPAudio(player, language string) bool {
-	return player == "ae" || player == "raw" || language == "ja"
+// prefersRawAudio reports whether a resolved combo wants original Japanese
+// audio — i.e. whether watching it should pre-cache the RAW pool (Phase-9
+// Logic-B / TRIG-02). ANY sub combo carries original Japanese audio (the
+// subtitles overlay on the raw JP video) regardless of the subtitle language or
+// the source provider: kodik/ru/sub, english/en/sub (gogoanime), hianime/en/sub
+// and consumet/en/sub are all raw-audio. The AE and Raw players are always raw.
+// Only DUB combos (replaced audio) are excluded — "gate on RAW and SUB-preferring
+// combos, skip DUB entirely". (Corrected 2026-06-17: the original gate keyed on
+// player∈{ae,raw}||lang=='ja', which wrongly dropped every sub combo.)
+func prefersRawAudio(player, watchType string) bool {
+	return watchType == "sub" || player == "ae" || player == "raw"
 }
 
 // UpdateProgress updates or creates watch progress (heartbeat saves).
@@ -98,12 +103,13 @@ func (s *ProgressService) UpdateProgress(ctx context.Context, userID string, req
 }
 
 // maybeFireNextEpDemand fires a next_ep autocache demand for episode N+1 iff the
-// resolved combo is JP-audio, the anime is status=watching for this user, its
-// shikimori_id is known, and N+1 has aired. Never returns/raises — the caller's
-// heartbeat result is unaffected by any failure here.
+// resolved combo prefers raw audio (any sub combo, or the ae/raw players), the
+// anime is status=watching for this user, its shikimori_id is known, and N+1 has
+// aired. Never returns/raises — the caller's heartbeat result is unaffected by
+// any failure here.
 func (s *ProgressService) maybeFireNextEpDemand(ctx context.Context, userID string, req *domain.UpdateProgressRequest) {
-	// Cheapest gate first: skip the DB lookup entirely for non-JP combos.
-	if !isJPAudio(req.Player, req.Language) {
+	// Cheapest gate first: skip the DB lookup entirely for dub-only combos.
+	if !prefersRawAudio(req.Player, req.WatchType) {
 		return
 	}
 	if s.logicB == nil || s.demand == nil {

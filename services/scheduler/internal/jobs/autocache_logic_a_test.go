@@ -73,10 +73,15 @@ func seedListRow(t *testing.T, db *gorm.DB, userID, animeID, status string, upda
 
 func seedWatchRow(t *testing.T, db *gorm.DB, userID, animeID, player, language string) {
 	t.Helper()
+	seedWatchRowWT(t, db, userID, animeID, player, language, "sub")
+}
+
+func seedWatchRowWT(t *testing.T, db *gorm.DB, userID, animeID, player, language, watchType string) {
+	t.Helper()
 	require.NoError(t, db.Exec(
 		`INSERT INTO watch_history (id, user_id, anime_id, episode_number, player, language, watch_type, watched_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		userID+":"+animeID+":"+player, userID, animeID, 1, player, language, "sub", time.Now()).Error)
+		userID+":"+animeID+":"+player+":"+watchType, userID, animeID, 1, player, language, watchType, time.Now()).Error)
 }
 
 // capturingLibrary returns an httptest server that records every demand POST body
@@ -153,16 +158,36 @@ func TestLogicA_RawPlayerAlsoQualifies(t *testing.T) {
 	require.Len(t, captured(), 1)
 }
 
-// TestLogicA_NonJPAudioFiresNothing verifies a kodik/ru-only or english/en-only
-// ongoing watcher produces no demand.
-func TestLogicA_NonJPAudioFiresNothing(t *testing.T) {
+// TestLogicA_SubCombosQualify verifies that ANY sub combo (kodik/ru/sub,
+// english/en/sub) carries original Japanese audio and therefore fires an ongoing
+// demand — two distinct ongoings → two demands.
+func TestLogicA_SubCombosQualify(t *testing.T) {
 	db := newLogicATestDB(t)
 	seedAnimeRow(t, db, "a1", "111", "ongoing", 5)
 	seedListRow(t, db, "u1", "a1", "watching", time.Now())
-	seedWatchRow(t, db, "u1", "a1", "kodik", "ru")
+	seedWatchRowWT(t, db, "u1", "a1", "kodik", "ru", "sub")
 	seedAnimeRow(t, db, "a2", "222", "ongoing", 5)
 	seedListRow(t, db, "u1", "a2", "watching", time.Now())
-	seedWatchRow(t, db, "u1", "a2", "ourenglish", "en")
+	seedWatchRowWT(t, db, "u1", "a2", "english", "en", "sub")
+
+	srv, captured := capturingLibrary(t, http.StatusOK)
+	defer srv.Close()
+
+	j := NewAutocacheLogicAJob(db, srv.URL, 30, logger.Default())
+	require.NoError(t, j.Run(context.Background()))
+	require.Len(t, captured(), 2)
+}
+
+// TestLogicA_DubFiresNothing verifies dub combos (replaced audio) produce no
+// demand, regardless of player.
+func TestLogicA_DubFiresNothing(t *testing.T) {
+	db := newLogicATestDB(t)
+	seedAnimeRow(t, db, "a1", "111", "ongoing", 5)
+	seedListRow(t, db, "u1", "a1", "watching", time.Now())
+	seedWatchRowWT(t, db, "u1", "a1", "kodik", "ru", "dub")
+	seedAnimeRow(t, db, "a2", "222", "ongoing", 5)
+	seedListRow(t, db, "u1", "a2", "watching", time.Now())
+	seedWatchRowWT(t, db, "u1", "a2", "english", "en", "dub")
 
 	srv, captured := capturingLibrary(t, http.StatusOK)
 	defer srv.Close()

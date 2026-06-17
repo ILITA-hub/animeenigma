@@ -94,9 +94,13 @@ func (j *AutocacheLogicAJob) Run(ctx context.Context) error {
 
 	// Adapted from notifications/internal/job/hotcombos.go:46 — the DISTINCT join
 	// over (watch_history × anime_list × animes) WHERE watching + ongoing, plus the
-	// Logic-A additions: JP-audio filter (Player∈{ae,raw} OR Language='ja'), the D8
-	// recency predicate (al.updated_at > cutoff), and the episodes_aired projection
-	// (the latest-aired episode target, A3). All three tables live in animeenigma.
+	// Logic-A additions: raw-audio filter (any SUB combo, plus the ae/raw players —
+	// skip DUB), the D8 recency predicate (al.updated_at > cutoff), and the
+	// episodes_aired projection (the latest-aired episode target, A3). ANY sub combo
+	// carries original Japanese audio regardless of subtitle language/provider, so
+	// kodik/ru/sub, english/en/sub, hianime/en/sub etc. all qualify. (Corrected
+	// 2026-06-17: was player∈{ae,raw} OR lang='ja', which wrongly dropped sub combos.)
+	// All three tables live in animeenigma.
 	const q = `
 		SELECT DISTINCT
 		    a.shikimori_id   AS shikimori_id,
@@ -106,7 +110,7 @@ func (j *AutocacheLogicAJob) Run(ctx context.Context) error {
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
 		  AND a.status = 'ongoing'
-		  AND (wh.player IN ('ae', 'raw') OR wh.language = 'ja')
+		  AND (wh.watch_type = 'sub' OR wh.player IN ('ae', 'raw'))
 		  AND al.updated_at > ?
 	`
 
