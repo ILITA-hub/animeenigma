@@ -61,6 +61,26 @@ func (a torrentClientAdapter) Add(ctx context.Context, magnetURI string) (libtor
 	return a.c.Add(ctx, magnetURI)
 }
 
+// plannerSearchAdapter bridges autocache.searcher (the Planner's local seam,
+// autocache.SearchQuery/SearchResult) to *service.TieredSearcher (whose FetchAll
+// takes service.SearchParams). Keeps the autocache package free of any
+// service-layer import — main.go owns the wiring, as with the other adapters.
+type plannerSearchAdapter struct {
+	t *service.TieredSearcher
+}
+
+func (a plannerSearchAdapter) FetchAll(ctx context.Context, q autocache.SearchQuery) (autocache.SearchResult, error) {
+	res, err := a.t.FetchAll(ctx, service.SearchParams{
+		Query: q.Query,
+		MALID: q.MALID,
+		Limit: q.Limit,
+	})
+	if err != nil {
+		return autocache.SearchResult{}, err
+	}
+	return autocache.SearchResult{Releases: res.Releases}, nil
+}
+
 // main is the entry point for the library service (workstream raw-jp / v0.2).
 // Phase 2 wired the Nyaa + AnimeTosho parser clients, the merger, and
 // the search HTTP handler into the chi router; Phase 3 adds the
@@ -148,6 +168,24 @@ func main() {
 	// of 005/006.
 	if err := db.DB.Exec(migrations.AutocacheDemandSQL).Error; err != nil {
 		log.Fatalw("failed to apply autocache_demand migration", "error", err)
+	}
+	// 008 (Phase 09): extend the job_source enum with 'autocache' (idempotent
+	// ADD VALUE IF NOT EXISTS) so the Planner can tag its enqueued rows. Enum
+	// extension → order-free.
+	if err := db.DB.Exec(migrations.AutocacheJobSourceSQL).Error; err != nil {
+		log.Fatalw("failed to apply autocache_job_source migration", "error", err)
+	}
+	// 009 (Phase 09): add the nullable library_jobs.episode column (intended
+	// episode persisted at enqueue) so single-flight dedup on
+	// (shikimori_id, episode) works before filename detection. Alters
+	// library_jobs → must follow 001 (already applied above).
+	if err := db.DB.Exec(migrations.LibraryJobsEpisodeSQL).Error; err != nil {
+		log.Fatalw("failed to apply library_jobs_episode migration", "error", err)
+	}
+	// 010 (Phase 09): extend the autocache_demand_reason enum with 'ongoing'
+	// (Logic A). Idempotent ADD VALUE IF NOT EXISTS → order-free.
+	if err := db.DB.Exec(migrations.AutocacheDemandOngoingSQL).Error; err != nil {
+		log.Fatalw("failed to apply autocache_demand_ongoing migration", "error", err)
 	}
 
 	// Start DB pool metrics collector.
@@ -419,6 +457,28 @@ func main() {
 		log,
 	)
 
+	// Phase 09 (TRIG-03/04/05): the autocache Planner — a config-gated ticker
+	// that drains autocache_demand and turns wanted (mal_id, episode) rows into
+	// RAW download jobs (single-flight dedup + RAW/quality/seeder gating). It
+	// reuses the already-constructed demandRepo (Drain/Delete), episodeRepo
+	// (present-check), jobRepo (HasActiveForEpisode + Create), autocacheConfigRepo
+	// (live enabled + sweep_interval_min), and the tieredSearcher (adapted to the
+	// Planner's local search seam) — no reconstruction. The master `enabled`
+	// switch is read live inside the loop, so the Planner always starts but
+	// no-ops when disabled (no boot-time gating). It owns its own ticker, so the
+	// 120s WriteTimeout doesn't apply.
+	planner := autocache.NewPlanner(
+		demandRepo,
+		episodeRepo,
+		jobRepo,
+		plannerSearchAdapter{t: tieredSearcher},
+		autocacheConfigRepo,
+		libMetrics,
+		log,
+	)
+	planner.Start(rootCtx)
+	log.Infow("autocache planner started")
+
 	// Initialize metrics collector (HTTP middleware).
 	metricsCollector := metrics.NewCollector("library")
 
@@ -466,6 +526,11 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Phase 09: stop the autocache Planner first so it enqueues no new jobs
+	// while the worker/encoder pools drain. It already observes rootCtx
+	// cancellation (issued above); Stop() waits for the loop goroutine to exit.
+	planner.Stop()
 
 	// Phase 4: stop the encoder pool FIRST so no new uploads kick off
 	// after MinIO is being torn down. Encoder workers respond to
