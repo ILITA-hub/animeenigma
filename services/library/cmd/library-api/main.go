@@ -418,12 +418,31 @@ func main() {
 	// job-count sources.
 	healthHandler := handler.NewHealthHandlerExtended(diskGuard, pool, jobRepo)
 	searchHandler := handler.NewSearchHandler(tieredSearcher, log)
+	// Phase 07 (POOL-04 + POOL-05): live-editable autocache config repo. Hoisted
+	// ABOVE the jobs handler + Planner (was constructed lower) so the Phase-10
+	// Evictor — which the jobs handler AND the Planner both need injected — can be
+	// built from it before either consumer is constructed. It only needs db.DB.
+	autocacheConfigRepo := repo.NewAutocacheConfigRepository(db.DB)
+
+	// Phase 10 (EVICT-05): the autocache Evictor — the SINGLE budget-gate instance
+	// shared by BOTH pre-admit paths (admin upload handler + autocache Planner) and
+	// the periodic Accountant/reclaim sweep. Constructed from the already-built
+	// autocacheConfigRepo (live budget + freshness windows), episodeRepo (pool
+	// bytes + Stale candidates + ListPool + DeleteByID), writer (DeletePrefix), and
+	// libMetrics — no reconstruction. Constructor arg order matches Plan 02:
+	// (config, pool, objects, metrics, log). Started for its sweep; Stopped on
+	// graceful shutdown (below).
+	evictor := autocache.NewEvictor(autocacheConfigRepo, episodeRepo, writer, libMetrics, log)
+	evictor.Start(rootCtx)
+	log.Infow("autocache evictor started")
+
 	// Phase 5 (LIB-09): jobs handler now drives Link + Retry as well as
 	// the Phase-3 CRUD. Needs the minio writer (Move + ListObjectsByPrefix)
-	// + the EpisodeRepository.
+	// + the EpisodeRepository. Phase 10: + the Evictor (second pre-admit gate).
 	jobsHandler := handler.NewJobsHandlerWithLink(
 		jobRepo,
 		diskGuard,
+		evictor,
 		pool,
 		writer,
 		episodeRepo,
@@ -438,9 +457,8 @@ func main() {
 	// Phase 07 (POOL-04 + POOL-05): live-editable autocache config —
 	// singleton GET/PATCH at /api/library/autocache/config. The typed
 	// Get/Patch accessor stores the master `enabled` switch + §3.5
-	// tunables for the future downloader/evictor (Phases 8-10); this
-	// phase persists + serves them only (no download/eviction behavior).
-	autocacheConfigRepo := repo.NewAutocacheConfigRepository(db.DB)
+	// tunables for the downloader/evictor (Phases 8-10). autocacheConfigRepo
+	// is constructed above (hoisted for the Phase-10 Evictor wiring).
 	autocacheConfigHandler := handler.NewAutocacheConfigHandler(autocacheConfigRepo, log)
 
 	// Phase 08 (SERVE-01/02/03): Docker-network-only serve-signal handler. The
@@ -473,6 +491,7 @@ func main() {
 		jobRepo,
 		plannerSearchAdapter{t: tieredSearcher},
 		autocacheConfigRepo,
+		evictor, // Phase 10: pre-admit budget gate before enqueue (EVICT-04/05).
 		libMetrics,
 		log,
 	)
@@ -531,6 +550,11 @@ func main() {
 	// while the worker/encoder pools drain. It already observes rootCtx
 	// cancellation (issued above); Stop() waits for the loop goroutine to exit.
 	planner.Stop()
+
+	// Phase 10: stop the Evictor sweep goroutine before MinIO teardown so no
+	// in-flight DeletePrefix races the writer shutdown. It observes rootCtx
+	// cancellation (issued above); Stop() waits for the loop goroutine to exit.
+	evictor.Stop()
 
 	// Phase 4: stop the encoder pool FIRST so no new uploads kick off
 	// after MinIO is being torn down. Encoder workers respond to
