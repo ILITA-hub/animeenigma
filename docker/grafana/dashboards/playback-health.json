@@ -14,7 +14,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Count of providers in the normal auto-failover chain (provider_enabled=1), including Kodik and 18anime. Degraded providers (status='degraded' in the catalog scraper_providers table — registered but manual-only) report 0 here; see the Provider Management table for full tri-state.",
+      "description": "Full player roster: 'Enabled' = providers in the normal auto-failover / always-on set (provider_enabled=1); 'Total' = every registered provider (count of provider_info). Covers the EN scraper chain, Kodik, AniLib, Hanime, Raw (JP), 18anime and the self-hosted ae library. Enabled < Total means some providers are degraded or disabled — see the Provider Management table for the per-provider tri-state.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -25,16 +25,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 4
-              },
-              {
                 "color": "green",
-                "value": 6
+                "value": null
               }
             ]
           },
@@ -50,10 +42,10 @@
       },
       "id": 2,
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
-        "orientation": "auto",
+        "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -71,11 +63,20 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(provider_enabled)",
-          "legendFormat": "Providers Enabled",
+          "legendFormat": "Enabled",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "count(provider_info)",
+          "legendFormat": "Total",
+          "refId": "B"
         }
       ],
-      "title": "Providers Enabled",
+      "title": "Providers (Enabled / Total)",
       "type": "stat"
     },
     {
@@ -441,7 +442,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Per-provider management view: tri-state status (enabled / degraded / disabled), live up/down, and the reason + description. Joins provider_health_up + provider_info (whose `status` label is the catalog scraper_providers tri-state). Includes Kodik (RU), 18anime (18+) and the EN scraper providers.",
+      "description": "Full per-provider roster with tri-state status (enabled / degraded / disabled) + reason + description, from provider_info (whose `status` label is the catalog scraper_providers tri-state for EN providers, and 'enabled' for the always-on players). Covers the EN scraper chain, Kodik (RU), AniLib (RU), Hanime (18+), Raw (JP), 18anime and the self-hosted ae library. For live per-stage up/down see the 'Provider × Stage Up' timeline below (probed providers only).",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -471,38 +472,6 @@
                       },
                       "disabled": {
                         "text": "\u26aa Disabled",
-                        "color": "red"
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Live Up"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "1": {
-                        "text": "\ud83d\udfe2 Up",
-                        "color": "green"
-                      },
-                      "0": {
-                        "text": "\ud83d\udd34 Down",
                         "color": "red"
                       }
                     }
@@ -552,76 +521,34 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "provider_enabled",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "max by (provider) (provider_health_up)",
-          "format": "table",
-          "instant": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
           "expr": "provider_info",
           "format": "table",
           "instant": true,
-          "refId": "C"
+          "refId": "A"
         }
       ],
       "transformations": [
-        {
-          "id": "joinByField",
-          "options": {
-            "byField": "provider",
-            "mode": "outer"
-          }
-        },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
-              "Time 1": true,
-              "Time 2": true,
-              "Time 3": true,
               "__name__": true,
-              "__name__ 1": true,
-              "__name__ 2": true,
-              "__name__ 3": true,
               "job": true,
-              "job 1": true,
-              "job 2": true,
-              "job 3": true,
               "instance": true,
-              "instance 1": true,
-              "instance 2": true,
-              "instance 3": true,
-              "Value #A": true,
-              "Value #C": true
+              "Value": true
             },
             "renameByName": {
               "provider": "Provider",
               "status": "Status",
-              "Value #B": "Live Up",
               "reason": "Reason",
               "description": "Description"
             },
             "indexByName": {
               "Provider": 0,
               "Status": 1,
-              "Live Up": 2,
-              "Reason": 3,
-              "Description": 4
+              "Reason": 2,
+              "Description": 3
             }
           }
         }
