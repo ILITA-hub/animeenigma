@@ -578,6 +578,13 @@ export const showcaseApi = {
       `/users/me/showcase`,
       { blocks },
     ),
+  // Compatibility score between the viewer and the profile owner.
+  // Player returns bare or {success,data} envelope — mirrored union type.
+  getCompatibility: (userId: string) =>
+    apiClient.get<
+      | { percent: number; shared_count: number; shared_sample: string[]; self?: boolean }
+      | { data: { percent: number; shared_count: number; shared_sample: string[]; self?: boolean } }
+    >(`/users/${userId}/compatibility`),
 }
 
 export const adminApi = {

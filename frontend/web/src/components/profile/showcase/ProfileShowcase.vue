@@ -9,6 +9,10 @@ import FavoriteAnimeBlock from './blocks/FavoriteAnimeBlock.vue'
 import StatsBlock from './blocks/StatsBlock.vue'
 import FavoriteCharacterBlock from './blocks/FavoriteCharacterBlock.vue'
 import CardCollectionBlock from './blocks/CardCollectionBlock.vue'
+import ContinueWatchingBlock from './blocks/ContinueWatchingBlock.vue'
+import OpEdBlock from './blocks/OpEdBlock.vue'
+import AnimeDnaBlock from './blocks/AnimeDnaBlock.vue'
+import CompatibilityBlock from './blocks/CompatibilityBlock.vue'
 import ShowcaseEditor from './ShowcaseEditor.vue'
 
 const props = defineProps<{ userId: string; isOwner: boolean }>()
@@ -76,11 +80,15 @@ onMounted(load)
         {{ $t('showcase.empty') }}
       </p>
       <template v-for="(b, i) in blocks" :key="i">
-        <AboutBlock v-if="b.type === 'about'" :config="b.config as never" />
-        <FavoriteAnimeBlock v-else-if="b.type === 'favorite_anime'" :config="b.config as never" />
-        <StatsBlock v-else-if="b.type === 'stats'" :user-id="userId" />
-        <FavoriteCharacterBlock v-else-if="b.type === 'favorite_character'" :config="b.config as never" />
-        <CardCollectionBlock v-else-if="b.type === 'card_collection'" :config="b.config as never" :user-id="userId" />
+        <AboutBlock v-if="b.type === 'about'" :config="b.config as never" :variant="b.variant" />
+        <FavoriteAnimeBlock v-else-if="b.type === 'favorite_anime'" :config="b.config as never" :variant="b.variant" :user-id="userId" />
+        <StatsBlock v-else-if="b.type === 'stats'" :user-id="userId" :variant="b.variant" />
+        <FavoriteCharacterBlock v-else-if="b.type === 'favorite_character'" :config="b.config as never" :variant="b.variant" />
+        <CardCollectionBlock v-else-if="b.type === 'card_collection'" :config="b.config as never" :user-id="userId" :variant="b.variant" />
+        <ContinueWatchingBlock v-else-if="b.type === 'continue_watching'" :user-id="userId" />
+        <OpEdBlock v-else-if="b.type === 'op_ed'" :config="b.config as never" />
+        <AnimeDnaBlock v-else-if="b.type === 'anime_dna'" :user-id="userId" />
+        <CompatibilityBlock v-else-if="b.type === 'compatibility'" :user-id="userId" :is-owner="isOwner" />
       </template>
     </template>
   </section>
