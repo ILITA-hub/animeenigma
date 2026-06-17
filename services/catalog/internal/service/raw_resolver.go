@@ -53,7 +53,22 @@ type RawResolver struct {
 
 	// Per-anime lookup deduplication for in-flight AllAnime queries.
 	lookups sync.Map // map[string]*rawLookup
+
+	// serveSignalSem bounds the in-flight fire-and-forget ae serve-signal
+	// goroutines (WR-01). Each HIT/MISS resolution spawns a best-effort
+	// signal to the library /internal endpoint; without a cap, a request
+	// burst against a slow library would accumulate ~request_rate × 2s
+	// goroutines (each holding an idle TCP conn). The buffered channel is a
+	// counting semaphore with DROP-ON-FULL: when saturated, fireSignal skips
+	// the signal rather than blocking or spawning — matching the SERVE-03
+	// best-effort contract (signals never block or fail the resolution).
+	serveSignalSem chan struct{}
 }
+
+// serveSignalConcurrency caps concurrent in-flight ae serve-signal goroutines.
+// Signals are cheap and dropping one is acceptable (popularity/observability,
+// not correctness), so a small bound is fine.
+const serveSignalConcurrency = 64
 
 type rawLookup struct {
 	done chan struct{}
@@ -68,11 +83,37 @@ type rawLookup struct {
 // defensive path for deployments without LIBRARY_API_URL set.
 func NewRawResolver(client *allanime.Client, libraryClient *library.Client, animeRepo *repo.AnimeRepository, redisCache *cache.RedisCache, log *logger.Logger) *RawResolver {
 	return &RawResolver{
-		client:    client,
-		library:   libraryClient,
-		animeRepo: animeRepo,
-		cache:     redisCache,
-		log:       log,
+		client:         client,
+		library:        libraryClient,
+		animeRepo:      animeRepo,
+		cache:          redisCache,
+		log:            log,
+		serveSignalSem: make(chan struct{}, serveSignalConcurrency),
+	}
+}
+
+// fireSignal runs fn in a bounded best-effort goroutine for the ae serve-signal
+// path (WR-01). It acquires a slot from serveSignalSem; if the semaphore is
+// saturated it DROPS the signal (returns false) rather than blocking or
+// spawning an unbounded goroutine. The signal must NEVER block or fail the
+// playback resolution, so a drop is the correct degradation. Returns true when
+// the goroutine was spawned. A nil semaphore (e.g. a zero-value resolver in a
+// test) also drops. The caller is responsible for using context.WithoutCancel
+// inside fn so a client disconnect can't cancel the in-flight signal.
+func (r *RawResolver) fireSignal(fn func()) bool {
+	if r.serveSignalSem == nil {
+		return false
+	}
+	select {
+	case r.serveSignalSem <- struct{}{}:
+		go func() {
+			defer func() { <-r.serveSignalSem }()
+			fn()
+		}()
+		return true
+	default:
+		// Saturated → drop (best-effort, matches the SERVE-03 contract).
+		return false
 	}
 }
 
@@ -394,12 +435,14 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		// return the existing NotFound UNCHANGED — the caller's
 		// AllAnime-raw failover is untouched (SERVE-03 no regression).
 		// context.WithoutCancel so a client disconnect can't cancel the
-		// in-flight signal; the error is dropped (best-effort).
-		if r.library != nil {
-			go func(mal string, ep int) {
-				_ = r.library.RecordDemand(context.WithoutCancel(ctx), mal, ep, "backfill")
-			}(anime.ShikimoriID, episodeNumber)
-		}
+		// in-flight signal; the error is dropped (best-effort). Bounded +
+		// drop-on-full via fireSignal (WR-01) so a slow library can't leak
+		// goroutines under a request burst.
+		mal, ep := anime.ShikimoriID, episodeNumber
+		sigCtx := context.WithoutCancel(ctx)
+		r.fireSignal(func() {
+			_ = r.library.RecordDemand(sigCtx, mal, ep, "backfill")
+		})
 		return nil, errors.NotFound("episode not in library")
 	}
 	if !anime.HasRaw {
@@ -408,12 +451,13 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 	// HIT: serving from the ae pool. Fire a non-blocking best-effort
 	// fetch signal (bumps last_fetch_at/fetch_count + serve_total{hit}
 	// on the library side) BEFORE returning the stream. drop-on-failure;
-	// the resolution never fails because this side effect errored.
-	if r.library != nil {
-		go func(mal string, ep int) {
-			_ = r.library.RecordFetch(context.WithoutCancel(ctx), mal, ep)
-		}(anime.ShikimoriID, episodeNumber)
-	}
+	// the resolution never fails because this side effect errored. Bounded +
+	// drop-on-full via fireSignal (WR-01).
+	mal, ep := anime.ShikimoriID, episodeNumber
+	sigCtx := context.WithoutCancel(ctx)
+	r.fireSignal(func() {
+		_ = r.library.RecordFetch(sigCtx, mal, ep)
+	})
 	return newLibraryStream(resp.MinIOURL, quality), nil
 }
 
