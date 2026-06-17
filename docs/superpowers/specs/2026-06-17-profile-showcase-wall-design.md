@@ -1,8 +1,9 @@
 # Profile Showcase Wall — Design Spec
 
 **Date:** 2026-06-17
-**Status:** Approved (design), pending implementation plan
+**Status:** v1 SHIPPED + deployed (dark-shipped admin-only). **v2 design approved** (this revision) — adds layout variants, 4 new block types, and a curation model; pending v2 implementation plan.
 **Feature:** Steam-style customizable profile showcase ("стена"), dark-shipped admin-only to release bundled with Gacha («Лудка»).
+**Visual reference (v2):** interactive mockup at `docs/superpowers/specs/assets/` is not committed; the live design exploration lived at the per-block mockup pages (hub + about/anime/stats/characters/cards/new) built in the Neon Tokyo design system. v2 layout/motion below is derived from it.
 
 ## Summary
 
@@ -189,6 +190,122 @@ the plan; prefer frontend resolution to avoid new internal coupling where cheap)
   - i18n parity for the `showcase.*` namespace if a parity spec is added (otherwise
     rely on `i18n-lint`).
 
+## v2 — Layout variants, new block types & curation model
+
+v1 (above) is shipped and deployed. v2 is an additive expansion **behind the same
+dark-ship gate** (no new flag): more block types, a per-block `variant` (layout)
+field, and an explicit content-curation model. Nothing in v2 changes the v1
+storage contract except adding the optional `variant` field to `Block`.
+
+### `variant` field (added to the Block model)
+
+```go
+type Block struct {
+    Type    string         `json:"type"`
+    Variant string         `json:"variant,omitempty"` // layout; defaults to the type's default when empty
+    Order   int            `json:"order"`
+    Config  map[string]any `json:"config"`
+}
+```
+
+- `Variant` is validated **per type** against an allowlist (below). Unknown
+  `(type, variant)` pairs are rejected at save; empty `Variant` ⇒ the type's
+  default variant. The frontend renders the variant via a sub-dispatch inside
+  each block component (one SFC per block type, a `v-if` chain on `variant`).
+- Backend stays a **structural** validator — it checks the variant string is in
+  the type's allowlist; it does NOT care what the variant looks like.
+
+### Block types (v1 + v2) — variants, curation, data source
+
+| Type | Curation | Default variant | All variants | Data source |
+|------|----------|-----------------|--------------|-------------|
+| `about` | manual | `quote` | `quote`, `bio`, `terminal`, `minimal`, `vn` | config text |
+| `favorite_anime` | manual **+ Auto button** | `row` | `row`, `podium`, `grid`, `list`, `banner` | FE: public anime API |
+| `favorite_character` | manual | `circles` | `circles`, `portraits`, `hero`, `hex` | FE: characters API |
+| `card_collection` | manual **+ Auto button** | `row` | `row`, `fan`, `grid`, `hero`, `tilt3d` | FE: gacha collection API |
+| `stats` | auto | `tiles` | `tiles`, `rings`, `bars`, `strip`, `heatmap` | BE inline (watchlist aggregates) |
+| `continue_watching` *(new)* | auto | `cards` | `cards` | FE: existing continue-watching endpoint |
+| `op_ed` *(new)* | manual | `grid` | `grid` | FE: themes service (user's voted/owned themes) |
+| `anime_dna` *(new)* | auto | `bars` | `bars` | FE: existing watchlist genre facets |
+| `compatibility` *(new)* | auto (pairwise) | `ring` | `ring` | **BE: NEW endpoint** (see below) |
+
+**Curation model (locked):**
+- **Manual** (owner curates ids in `config`): `about`, `favorite_anime`,
+  `favorite_character`, `op_ed`, `card_collection`.
+- **Manual + Auto button:** `favorite_anime` (auto = top-N by user score) and
+  `card_collection` (auto = rarest/newest owned). The "Auto" button in the editor
+  fills `config` ids; the owner can then tweak. Stored result is still plain ids.
+- **Auto** (no config, computed at render): `stats`, `anime_dna`,
+  `continue_watching`, `compatibility`.
+
+### New block: `compatibility` — the one new backend endpoint
+
+This is the only v2 block that cannot be resolved purely on the FE (it needs both
+users' full lists incl. private data + a server-side computation). It is **pairwise**
+and only renders for a **logged-in viewer on ANOTHER user's profile** (hidden on own
+profile and for anonymous viewers).
+
+- New endpoint: `GET /api/users/{userId}/compatibility` (player service), JWT
+  required; computes the viewer (from claims) vs `{userId}` (the profile owner).
+- **Blend formula (locked):** `score = 0.5·overlap + 0.4·scoreAgreement + 0.1·genreSim`
+  - `overlap` = Jaccard of the two users' list entries (titles in common / union).
+  - `scoreAgreement` = 1 − normalized mean abs. difference of scores on commonly-rated titles.
+  - `genreSim` = cosine similarity of the two users' genre-facet vectors.
+  - Returns `{ percent, shared_count, shared_sample: [animeId…] }`. Respects both
+    users' watchlist privacy (private lists ⇒ block returns "unavailable", not an error).
+- This is the only v2 item that adds a player→(watchlist) cross-read; it stays
+  within the player service (it already owns watchlists), so no new inter-service coupling.
+
+### Other new blocks (FE-resolved, no backend change)
+
+- `continue_watching` — reuses the existing continue-watching endpoint the profile
+  already has; renders landscape cards with an episode progress bar. Owner-only
+  meaningfully (a viewer sees the owner's in-progress titles subject to activity privacy).
+- `op_ed` — reuses the **themes** service; owner manually picks favorite OP/ED from
+  the themes of anime they've watched/voted; renders cover + play + song title.
+- `anime_dna` — reuses watchlist **genre facets** (already computed); renders neon
+  percentage bars per top genre.
+
+### Design & motion (v2 visual contract)
+
+- Neon Tokyo tokens only (per `DESIGN-SYSTEM.md`); glass blocks, neon accents,
+  rarity-colored gacha frames (SSR gold / SR violet / R cyan).
+- Motion follows the `12-principles-of-animation` craft rules adopted during design:
+  user-initiated transitions < 300 ms, entrances `ease-out` / exits `ease-in`, no
+  linear motion, `:active` press scale 0.95–1.05, dimmed dialog backdrop, honor
+  `prefers-reduced-motion`.
+- Card-detail **dialog**: clicking a gacha card opens a scale+fade dialog (ease-out
+  in, ease-in out, dimmed blurred backdrop, close on backdrop/✕/Esc).
+
+### Editor additions (v2)
+
+- Per-block **variant picker** (segmented control / dropdown) in `ShowcaseEditor`
+  showing the type's allowed variants.
+- **"Auto" button** on `favorite_anime` and `card_collection` block editors.
+- Pickers for the new manual block (`op_ed`) reuse existing search/list surfaces
+  (themes list). `continue_watching`/`anime_dna`/`compatibility` have no config
+  (auto) — they appear in the add-block menu but show no picker.
+
+### v2 file impact
+
+- Backend: extend `domain.ValidateBlocks` (variant allowlist + new types);
+  `stats` resolver gains the `heatmap`-needed aggregate (daily watch counts) if not
+  already available; new `compatibility` handler/service/route in `services/player`;
+  gateway routes the new `GET /users/{userId}/compatibility` under the same
+  `PROFILE_WALL_ADMIN_ONLY` gate.
+- Frontend: each block SFC gains a `variant` sub-dispatch; new SFCs
+  `ContinueWatchingBlock.vue`, `OpEdBlock.vue`, `AnimeDnaBlock.vue`,
+  `CompatibilityBlock.vue`; editor variant picker + Auto buttons; `showcase.*` i18n
+  keys for all new types/variants in en/ru/ja.
+
+### v2 testing
+
+- Go: variant allowlist validation (valid pair accepted, unknown pair rejected,
+  empty ⇒ default); `compatibility` blend math (overlap/score/genre weights,
+  privacy ⇒ unavailable, no shared titles ⇒ 0%).
+- Vitest: each new block SFC renders; variant sub-dispatch picks the right layout;
+  Auto button fills config ids; editor variant picker updates `block.variant`.
+
 ## Release plan
 
 Code lands on `main` + prod immediately but stays admin-only via the default-`true`
@@ -202,11 +319,16 @@ VITE_PROFILE_WALL_ADMIN_ONLY=false
 ```
 then `make restart-gateway` + `make redeploy-web`.
 
-## Out of scope (v1 / YAGNI)
+## Out of scope (v1 + v2 / YAGNI)
 
 - Visitor-posted comments / guestbook (this is a showcase, not a comment wall).
 - Rich text / markdown / custom HTML in `about` (plain sanitized text only).
-- Uploaded screenshot/artwork blocks (no new image storage in v1).
+- Uploaded screenshot/artwork blocks (no new image storage).
 - Per-block privacy controls beyond the existing profile/watchlist privacy.
-- Showcase themes / colors / backgrounds.
+- **Showcase-level customization (the "section C" set), explicitly deferred:**
+  per-profile accent color/theme, banner cover image, 2-column layout, and
+  "share showcase as PNG". Revisit after v2 ships.
+- **`achievements`/badges block — deferred** until real achievements exist.
+- **`watch_together` status block — deferred.**
+- (Both were mocked during design but cut from v2 scope.)
 ```
