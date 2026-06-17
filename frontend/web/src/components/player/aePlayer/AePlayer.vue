@@ -493,6 +493,39 @@ async function advanceToNextSource(): Promise<boolean> {
   return false
 }
 
+// Silent-stall watchdog. A CODECS-less HLS manifest (megaplay/owocdn) loads fine
+// but hls.js then requests ZERO fragments and emits NO error — the player just
+// hangs at 0:00 (the documented platform-wide codec stall). The fatal-driven
+// switch can't see that. So after a stream attaches, if NO fragment has loaded
+// AND playback never started within the window, treat it as a dead source and
+// advance. Guarded on fragStats.length === 0 so a merely-slow stream (fragments
+// trickling in) is NOT switched away from.
+let playbackWatchdog: ReturnType<typeof setTimeout> | null = null
+const PLAYBACK_WATCHDOG_MS = 12000
+function clearPlaybackWatchdog() {
+  if (playbackWatchdog) {
+    clearTimeout(playbackWatchdog)
+    playbackWatchdog = null
+  }
+}
+function armPlaybackWatchdog() {
+  clearPlaybackWatchdog()
+  const tok = resolveToken
+  playbackWatchdog = setTimeout(() => {
+    if (tok !== resolveToken) return            // superseded by a newer resolve
+    if (hasStarted.value) return                // already playing
+    if (sourceError.value) return               // already errored/handled
+    if (engine.fragStats.value.length > 0) return // fragments flowing — just slow
+    void (async () => {
+      if (await advanceToNextSource()) {
+        toast.push("That source won't play — switching to the next best…", 'info', 4000)
+      } else {
+        sourceError.value = 'Stream unavailable'
+      }
+    })()
+  }, PLAYBACK_WATCHDOG_MS)
+}
+
 // Providers whose default-selection eligibility needs a runtime availability
 // probe (see isProviderAvailable). Only first-party `ae` today.
 const AE_NEEDS_CHECK = new Set(['ae'])
@@ -945,6 +978,7 @@ async function loadEpisodesAndStream() {
     // winner's stream descriptor after resuming from engine.load.
     currentStream.value = stream
     await engine.load(stream)
+    armPlaybackWatchdog() // catch a silent CODECS-less stall (manifest OK, no frags)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded
     const isNotAvailable =
@@ -1238,6 +1272,7 @@ function onTimeUpdate() {
   // poster for a black frame. Require real (unpaused) progress.
   if (!hasStarted.value && v && v.currentTime > 0 && !v.paused) {
     hasStarted.value = true
+    clearPlaybackWatchdog() // real playback — cancel the stall watchdog
     resetSourceSwitching() // a source that actually plays earns a fresh budget
     // Telemetry: first real frame — resolve ok + reached_playback (best-effort)
     if (!reachedReported) {
@@ -1527,6 +1562,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
     // Set BEFORE the await — see loadEpisodesAndStream.
     currentStream.value = stream
     await engine.load(stream)
+    armPlaybackWatchdog() // catch a silent CODECS-less stall (manifest OK, no frags)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded
     const isNotAvailable =
@@ -1906,6 +1942,7 @@ onUnmounted(() => {
   clearNextEpTimer()
   clearUiIdleTimer()
   clearHudTimers()
+  clearPlaybackWatchdog()
   if (bufferingTimer) clearTimeout(bufferingTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pagehide', onPageHide)
