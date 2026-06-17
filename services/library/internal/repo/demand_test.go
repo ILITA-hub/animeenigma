@@ -48,9 +48,11 @@ func TestDemandRepository_Record_Signature(t *testing.T) {
 }
 
 // TestDemandRepository_Record_UpsertTripwire guards that Record actually performs
-// the ON CONFLICT (mal_id, episode) DO UPDATE upsert (the dedup contract). The
-// behavioral DB assertion lives behind //go:build integration; this is the no-DB
-// source tripwire so a refactor can't quietly drop the dedup clause.
+// the ON CONFLICT (mal_id, episode) DO UPDATE upsert (the dedup contract) and, on
+// conflict, refreshes `reason` (WR-02). It also guards that the conflict path does
+// NOT re-stamp requested_at (WR-01) — the original first-seen time is the stable
+// FIFO key. The behavioral DB assertions live in the sqlite tests below; this is
+// the no-DB source tripwire so a refactor can't quietly drop either invariant.
 func TestDemandRepository_Record_UpsertTripwire(t *testing.T) {
 	src, err := os.ReadFile("demand.go")
 	if err != nil {
@@ -60,8 +62,13 @@ func TestDemandRepository_Record_UpsertTripwire(t *testing.T) {
 	if !strings.Contains(s, "clause.OnConflict") {
 		t.Fatal("demand.go Record must use clause.OnConflict (dedup upsert tripwire)")
 	}
-	if !strings.Contains(s, `"requested_at"`) {
-		t.Fatal("demand.go Record must refresh requested_at on conflict (recency tripwire)")
+	if !strings.Contains(s, `AssignmentColumns([]string{"reason"})`) {
+		t.Fatal("demand.go Record must refresh reason on conflict (WR-02 trigger-attribution tripwire)")
+	}
+	// WR-01: requested_at must NOT be reassigned in the DoUpdates set — a re-assert
+	// keeps the original first-seen time so the FIFO drain ordering stays stable.
+	if strings.Contains(s, `"requested_at": gorm.Expr`) {
+		t.Fatal("demand.go Record must NOT bump requested_at on conflict (WR-01 FIFO-starvation regression)")
 	}
 }
 
