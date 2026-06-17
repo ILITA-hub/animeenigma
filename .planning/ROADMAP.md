@@ -95,8 +95,8 @@
   4. Grafana shows autocache download counts by trigger (A / B / backfill) and result. (OBS-04)
   5. Grafana renders a storage-need prediction table from a daily heuristic (ongoing + next-episode components) compared against the budget. (OBS-05)
 **Plans**: 2 plans (2 waves)
-  - [ ] 11-01-PLAN.md — Scheduler daily prediction job: AutocachePredictedBytes GaugeVec + config (cron + avg-ep-bytes int64 env) + AutocachePredictionJob (two DISTINCT-join counts x avgRawEpBytes) + cron registration + DI (OBS-05 backend)
-  - [ ] 11-02-PLAN.md — Grafana: append 6 Autocache Pool panels (ids 8..13) to library.json — storage vs budget, episodes, preload hit-rate %, eviction/rejection, downloads by trigger, prediction table (OBS-01..05)
+  - [x] 11-01-PLAN.md — Scheduler daily prediction job: AutocachePredictedBytes GaugeVec + config (cron + avg-ep-bytes int64 env) + AutocachePredictionJob (two DISTINCT-join counts x avgRawEpBytes) + cron registration + DI (OBS-05 backend)
+  - [x] 11-02-PLAN.md — Grafana: append 6 Autocache Pool panels (ids 8..13) to library.json — storage vs budget, episodes, preload hit-rate %, eviction/rejection, downloads by trigger, prediction table (OBS-01..05)
 
 <details>
 <summary>✅ v4.0 Activity Register (Phases 1-6) — SHIPPED 2026-06-08</summary>
@@ -143,6 +143,6 @@ Prior-milestone reserved ideas still on the shelf (unnumbered until committed):
 | 8. Serving & Fetch Signal | v4.1 | 3/3 | Complete    | 2026-06-17 |
 | 9. Download Triggers | v4.1 | 4/4 | Complete    | 2026-06-17 |
 | 10. Eviction & Budget | v4.1 | 3/3 | Complete    | 2026-06-17 |
-| 11. Observability & Prediction | v4.1 | 0/2 | Planned     | - |
+| 11. Observability & Prediction | v4.1 | 2/2 | Complete    | 2026-06-17 |
 </content>
 </invoke>

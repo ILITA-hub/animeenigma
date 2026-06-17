@@ -40,11 +40,11 @@ Requirements for milestone v4.1. Each maps to exactly one roadmap phase.
 
 ### Observability (OBS)
 
-- [ ] **OBS-01**: Grafana shows pool storage allocation and usage split by Fresh/Stale and by source (admin/auto), against the budget cap.
-- [ ] **OBS-02**: Grafana shows preload hit-rate (hit vs miss) as a cache-hit-style panel.
-- [ ] **OBS-03**: Grafana shows eviction counts (by source) and budget-full rejection counts.
-- [ ] **OBS-04**: Grafana shows autocache download counts by trigger (A / B / backfill) and result.
-- [ ] **OBS-05**: Grafana shows a storage-need prediction table from a daily heuristic (ongoing + next-episode components) compared to the budget.
+- [x] **OBS-01**: Grafana shows pool storage allocation and usage split by Fresh/Stale and by source (admin/auto), against the budget cap.
+- [x] **OBS-02**: Grafana shows preload hit-rate (hit vs miss) as a cache-hit-style panel.
+- [x] **OBS-03**: Grafana shows eviction counts (by source) and budget-full rejection counts.
+- [x] **OBS-04**: Grafana shows autocache download counts by trigger (A / B / backfill) and result.
+- [x] **OBS-05**: Grafana shows a storage-need prediction table from a daily heuristic (ongoing + next-episode components) compared to the budget.
 
 ## v2 Requirements
 
@@ -100,11 +100,11 @@ Which phases cover which requirements. **Filled by the roadmapper.**
 | EVICT-03 | Phase 10 | Complete |
 | EVICT-04 | Phase 10 | Complete |
 | EVICT-05 | Phase 10 | Complete |
-| OBS-01 | Phase 11 | Pending |
-| OBS-02 | Phase 11 | Pending |
-| OBS-03 | Phase 11 | Pending |
-| OBS-04 | Phase 11 | Pending |
-| OBS-05 | Phase 11 | Pending |
+| OBS-01 | Phase 11 | Complete |
+| OBS-02 | Phase 11 | Complete |
+| OBS-03 | Phase 11 | Complete |
+| OBS-04 | Phase 11 | Complete |
+| OBS-05 | Phase 11 | Complete |
 
 **Coverage:**
 - v1 requirements: 23 total
