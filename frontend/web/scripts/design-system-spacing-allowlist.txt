@@ -18,22 +18,22 @@
 # All current entries: the compact unified-player menu surfaces + the Stepper micro-
 # control, whose dense vertical rhythm uses odd-pixel padding with no 4px-scale token.
 
-src/components/player/unified/BrowseSubsModal.vue:gap-[7px]:compact subs-browser row gap, off-grid (no token between gap-1.5/gap-2)
-src/components/player/unified/BrowseSubsModal.vue:mt-[3px]:compact subs-browser optical nudge, off-grid
-src/components/player/unified/BrowseSubsModal.vue:px-[9px]:compact subs-browser chip padding, off-grid (no token between px-2/px-2.5)
-src/components/player/unified/BrowseSubsModal.vue:py-[11px]:compact subs-browser row padding, off-grid
-src/components/player/unified/BrowseSubsModal.vue:py-[3px]:compact subs-browser tight row padding, off-grid
-src/components/player/unified/BrowseSubsModal.vue:py-[5px]:compact subs-browser row padding, off-grid (no token between py-1/py-1.5)
-src/components/player/unified/BrowseSubsModal.vue:py-[7px]:compact subs-browser row padding, off-grid
-src/components/player/unified/PlaybackSettingsMenu.vue:gap-[3px]:compact settings-menu row gap, off-grid
-src/components/player/unified/PlaybackSettingsMenu.vue:py-[7px]:compact settings-menu row padding, off-grid
-src/components/player/unified/PlaybackSettingsMenu.vue:py-[9px]:compact settings-menu row padding, off-grid (dense 36px touch rows)
-src/components/player/unified/ProviderChip.vue:gap-[5px]:compact provider-chip icon/label gap, off-grid
-src/components/player/unified/ProviderChip.vue:py-[9px]:compact provider-chip padding, off-grid (matches settings-menu rows)
-src/components/player/unified/SourcePanel.vue:ml-[5px]:compact source-panel optical nudge, off-grid
-src/components/player/unified/SourcePanel.vue:px-[5px]:compact source-panel badge padding, off-grid
-src/components/player/unified/SourcePanel.vue:py-[9px]:compact source-panel row padding, off-grid (matches settings-menu rows)
-src/components/player/unified/SubtitlesMenu.vue:gap-[5px]:compact subtitles-menu gap, off-grid
-src/components/player/unified/SubtitlesMenu.vue:px-[9px]:compact subtitles-menu chip padding, off-grid
-src/components/player/unified/SubtitlesMenu.vue:py-[9px]:compact subtitles-menu row padding, off-grid (matches settings-menu rows)
+src/components/player/aePlayer/BrowseSubsModal.vue:gap-[7px]:compact subs-browser row gap, off-grid (no token between gap-1.5/gap-2)
+src/components/player/aePlayer/BrowseSubsModal.vue:mt-[3px]:compact subs-browser optical nudge, off-grid
+src/components/player/aePlayer/BrowseSubsModal.vue:px-[9px]:compact subs-browser chip padding, off-grid (no token between px-2/px-2.5)
+src/components/player/aePlayer/BrowseSubsModal.vue:py-[11px]:compact subs-browser row padding, off-grid
+src/components/player/aePlayer/BrowseSubsModal.vue:py-[3px]:compact subs-browser tight row padding, off-grid
+src/components/player/aePlayer/BrowseSubsModal.vue:py-[5px]:compact subs-browser row padding, off-grid (no token between py-1/py-1.5)
+src/components/player/aePlayer/BrowseSubsModal.vue:py-[7px]:compact subs-browser row padding, off-grid
+src/components/player/aePlayer/PlaybackSettingsMenu.vue:gap-[3px]:compact settings-menu row gap, off-grid
+src/components/player/aePlayer/PlaybackSettingsMenu.vue:py-[7px]:compact settings-menu row padding, off-grid
+src/components/player/aePlayer/PlaybackSettingsMenu.vue:py-[9px]:compact settings-menu row padding, off-grid (dense 36px touch rows)
+src/components/player/aePlayer/ProviderChip.vue:gap-[5px]:compact provider-chip icon/label gap, off-grid
+src/components/player/aePlayer/ProviderChip.vue:py-[9px]:compact provider-chip padding, off-grid (matches settings-menu rows)
+src/components/player/aePlayer/SourcePanel.vue:ml-[5px]:compact source-panel optical nudge, off-grid
+src/components/player/aePlayer/SourcePanel.vue:px-[5px]:compact source-panel badge padding, off-grid
+src/components/player/aePlayer/SourcePanel.vue:py-[9px]:compact source-panel row padding, off-grid (matches settings-menu rows)
+src/components/player/aePlayer/SubtitlesMenu.vue:gap-[5px]:compact subtitles-menu gap, off-grid
+src/components/player/aePlayer/SubtitlesMenu.vue:px-[9px]:compact subtitles-menu chip padding, off-grid
+src/components/player/aePlayer/SubtitlesMenu.vue:py-[9px]:compact subtitles-menu row padding, off-grid (matches settings-menu rows)
 src/components/ui/Stepper.vue:py-[5px]:Stepper micro-control vertical padding, off-grid (32px control height)
