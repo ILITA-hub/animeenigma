@@ -10,7 +10,8 @@
 -- Idempotency contract (re-running across restarts must be a no-op):
 --   * enum CREATE wrapped in DO $$ ... EXCEPTION WHEN duplicate_object THEN NULL
 --   * column adds use ADD COLUMN IF NOT EXISTS
---   * the backfill is guarded by WHERE downloaded_at IS NULL so re-runs touch nothing
+--   * the backfill is guarded by WHERE downloaded_at IS NULL AND source = 'admin'
+--     so re-runs touch nothing AND can never rewrite a future autocache row
 --
 -- D2 (locked): the episode_track enum carries 'sub' / 'dub' so the schema reserves
 -- them, but they are NEVER written in v1 — RAW only.
@@ -44,8 +45,13 @@ ALTER TABLE library_episodes ADD COLUMN IF NOT EXISTS last_fetch_at TIMESTAMPTZ;
 ALTER TABLE library_episodes ADD COLUMN IF NOT EXISTS fetch_count   BIGINT NOT NULL DEFAULT 0;
 
 -- One-time backfill: every pre-existing row is admin-sourced RAW content whose
--- download date is its creation date. Guarded by WHERE downloaded_at IS NULL so a
--- re-run only fills rows that have not been backfilled yet (re-run-safe no-op).
+-- download date is its creation date. The ADD COLUMN ... NOT NULL DEFAULT above
+-- already populated source='admin'/track='raw' on every pre-existing row, so the
+-- only real work here is anchoring downloaded_at. Scope to source='admin' so a
+-- re-run on every boot can NEVER touch a future autocache row: once Phase 8 starts
+-- inserting autocache content, a NULL-downloaded_at autocache row must NOT be
+-- force-rewritten to admin (D6 — source is the single admin-vs-autocache truth).
 UPDATE library_episodes
-   SET source = 'admin', track = 'raw', downloaded_at = created_at
- WHERE downloaded_at IS NULL;
+   SET downloaded_at = created_at
+ WHERE downloaded_at IS NULL
+   AND source = 'admin';
