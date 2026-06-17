@@ -2,7 +2,7 @@
  * playerHotkeys — pure keyboard-shortcut mapping for the unified player.
  *
  * Kept as a standalone pure function so the key→action contract is unit-tested
- * without mounting the player. UnifiedPlayer.vue attaches a `keydown` listener
+ * without mounting the player. AePlayer.vue attaches a `keydown` listener
  * scoped to its own root element and dispatches the returned action.
  */
 

@@ -36,7 +36,7 @@ const props = withDefaults(defineProps<{
    * When set, the overlay is teleported into this element in WINDOWED mode too
    * (not just fullscreen), rendered as the container's last child at max
    * z-index. Opt-in for players whose in-place render is defeated by a child
-   * component's stacking context (UnifiedPlayer): the in-place `z-20` overlay
+   * component's stacking context (AePlayer): the in-place `z-20` overlay
    * is invisible there even though it out-numbers every player layer, but
    * teleporting into the player root — the exact path that already works in
    * fullscreen — puts it reliably on top. Legacy players omit this prop and
@@ -72,7 +72,7 @@ function updateBaseFontSize() {
 const fullscreenEl = ref<Element | null>(null)
 
 // Where the overlay's DOM is teleported. Fullscreen element wins; otherwise the
-// opt-in windowedContainer (UnifiedPlayer) so the overlay renders as that
+// opt-in windowedContainer (AePlayer) so the overlay renders as that
 // container's last child at max z-index in windowed mode too. Null → Teleport
 // disabled → in-place render at z-20 (legacy players' unchanged behavior).
 const teleportTarget = computed<Element | null>(() => fullscreenEl.value || props.windowedContainer || null)

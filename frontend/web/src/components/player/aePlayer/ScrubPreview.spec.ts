@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ScrubPreview from './ScrubPreview.vue'
-import { scrubDebug, sreset } from '@/composables/unifiedPlayer/scrubPreviewDebug'
+import { scrubDebug, sreset } from '@/composables/aePlayer/scrubPreviewDebug'
 
 // hls.js is dynamically imported only on the hls path — mock it so the mp4
 // tests never pull the real module.

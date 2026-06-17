@@ -1,19 +1,19 @@
 <template>
-  <!-- Player-shaped placeholder shown while the UnifiedPlayer chunk loads, so
+  <!-- Player-shaped placeholder shown while the AePlayer chunk loads, so
        selecting the AnimeEnigma tab never flashes a blank gap (the existing
        player card unmounts immediately on select). Matches the `.pl` frame:
        16:9, rounded, dark, bordered. -->
   <div
     class="relative w-full aspect-video rounded-[var(--r-xl,16px)] overflow-hidden bg-black border border-[var(--border)] grid place-items-center"
     role="status"
-    :aria-label="$t('player.unified.loadingPlayer')"
-    data-test="unified-player-skeleton"
+    :aria-label="$t('player.aePlayer.loadingPlayer')"
+    data-test="ae-player-skeleton"
   >
     <div class="absolute inset-0 pl-skeleton-shimmer" aria-hidden="true" />
     <div class="relative flex flex-col items-center gap-3">
-      <Spinner size="lg" tone="signature" :label="$t('player.unified.loadingPlayer')" />
+      <Spinner size="lg" tone="signature" :label="$t('player.aePlayer.loadingPlayer')" />
       <span class="text-sm font-medium text-[var(--muted-foreground)]">
-        {{ $t('player.unified.loadingPlayer') }}
+        {{ $t('player.aePlayer.loadingPlayer') }}
       </span>
     </div>
   </div>

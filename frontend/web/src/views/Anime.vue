@@ -419,23 +419,23 @@
               >
                 {{ $t('player.raw.tab') }}
               </button>
-              <!-- Task 15 — Unified Player pill (default ON, VITE_UNIFIED_PLAYER_ENABLED=false to hide) -->
+              <!-- Task 15 — Unified Player pill (default ON, VITE_AE_PLAYER_ENABLED=false to hide) -->
               <button
-                v-if="unifiedPlayerEnabled"
-                @click="unifiedSelected = !unifiedSelected"
-                :aria-pressed="unifiedSelected"
+                v-if="aePlayerEnabled"
+                @click="aeSelected = !aeSelected"
+                :aria-pressed="aeSelected"
                 class="px-3 py-1.5 rounded-md text-sm font-medium transition-all inline-flex items-center gap-1.5"
-                :class="unifiedSelected ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/70'"
+                :class="aeSelected ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/70'"
               >
-                {{ $t('player.unified.tab') }}
-                <span class="text-[10px] px-1 rounded bg-cyan-500/20 text-cyan-400">{{ $t('player.unified.beta') }}</span>
+                {{ $t('player.aePlayer.tab') }}
+                <span class="text-[10px] px-1 rounded bg-cyan-500/20 text-cyan-400">{{ $t('player.aePlayer.beta') }}</span>
               </button>
             </ButtonGroup>
 
             <!-- Provider sub-tabs — hidden when unified player is active (it has its own source picker) -->
             <!-- UA-063 (UX-12 Phase 5): ButtonGroup wraps provider chips. -->
             <ButtonGroup
-              v-if="videoLanguage === 'ru' && !unifiedSelected"
+              v-if="videoLanguage === 'ru' && !aeSelected"
               :label="$t('anime.providerSwitchLabel')"
               container-class="contents"
             >
@@ -472,7 +472,7 @@
                 {{ $t('player.kodikAdfree.tab') }}
               </button>
             </ButtonGroup>
-            <template v-else-if="videoLanguage === 'en' && ourEnglishEnabled && !unifiedSelected">
+            <template v-else-if="videoLanguage === 'en' && ourEnglishEnabled && !aeSelected">
               <button
                 @click="videoProvider = 'ourenglish'"
                 :aria-pressed="videoProvider === 'ourenglish'"
@@ -484,7 +484,7 @@
                 {{ $t('player.ourenglish.label') }}
               </button>
             </template>
-            <template v-else-if="videoLanguage === '18+' && !unifiedSelected">
+            <template v-else-if="videoLanguage === '18+' && !aeSelected">
               <button
                 @click="videoProvider = 'hanime'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
@@ -507,7 +507,7 @@
             </template>
             <!-- Workstream raw-jp / Phase 04 — single-chip group for v0.1.
                  v0.2's hybrid resolver adds 'minio' here. -->
-            <template v-else-if="videoLanguage === 'raw' && rawProviderEnabled && !unifiedSelected">
+            <template v-else-if="videoLanguage === 'raw' && rawProviderEnabled && !aeSelected">
               <button
                 @click="onUserPickedProvider('raw')"
                 :aria-pressed="videoProvider === 'raw'"
@@ -522,7 +522,7 @@
           </div>
         </div>
         <!-- Task 15: existing player chain unmounted when unified player is selected (prevents hidden audio) -->
-        <div class="glass-card p-4 md:p-6" v-if="!unifiedSelected">
+        <div class="glass-card p-4 md:p-6" v-if="!aeSelected">
           <!-- Not-released notice: an announced/upcoming title with no sources
                yet. Replaces the player so users see "premieres on {date}"
                rather than a misleading "no available videos" error. -->
@@ -652,9 +652,9 @@
           </template>
         </div>
         <!-- Task 15: Unified player mounts as a sibling AFTER the existing chain;
-             glass-card above is v-show="!unifiedSelected" so only one renders. -->
-        <UnifiedPlayer
-          v-if="unifiedSelected && unifiedPlayerEnabled"
+             glass-card above is v-show="!aeSelected" so only one renders. -->
+        <AePlayer
+          v-if="aeSelected && aePlayerEnabled"
           :anime-id="anime.id"
           :anime="{ title: anime.title, ep: (anime.episodesAired || 1), eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage }"
           :theater="theaterMode"
@@ -1117,16 +1117,16 @@ const ourEnglishEnabled = import.meta.env.VITE_OURENGLISH_ENABLED !== 'false'
 // if upstream brings direct video back.
 const animeLibEnabled = import.meta.env.VITE_ANIMELIB_ENABLED === 'true'
 // Unified player (Task 15) — single-surface player; default ON, set
-// VITE_UNIFIED_PLAYER_ENABLED=false to disable for dark-ship.
+// VITE_AE_PLAYER_ENABLED=false to disable for dark-ship.
 // loadingComponent: selecting the tab unmounts the existing-player card
 // immediately, so render a player-shaped skeleton (not a blank gap) while the
 // chunk loads. delay:0 shows it instantly; the chunk is usually warm anyway.
-const UnifiedPlayer = defineAsyncComponent({
-  loader: () => import('@/components/player/unified/UnifiedPlayer.vue'),
-  loadingComponent: UnifiedPlayerSkeleton,
+const AePlayer = defineAsyncComponent({
+  loader: () => import('@/components/player/aePlayer/AePlayer.vue'),
+  loadingComponent: AePlayerSkeleton,
   delay: 0,
 })
-const unifiedPlayerEnabled = import.meta.env.VITE_UNIFIED_PLAYER_ENABLED !== 'false'
+const aePlayerEnabled = import.meta.env.VITE_AE_PLAYER_ENABLED !== 'false'
 // Workstream watch-together / Phase 02 Plan 02.9 (WT-SHELL-05) — lazy-loaded
 // invite button. Keeps Anime.vue's eager bundle clean — InviteButton pulls in
 // the watch-together api client + types + toast composable transitively, paid
@@ -1134,7 +1134,7 @@ const unifiedPlayerEnabled = import.meta.env.VITE_UNIFIED_PLAYER_ENABLED !== 'fa
 const InviteButton = defineAsyncComponent(() => import('@/components/watch-together/InviteButton.vue'))
 import type { PlayerKind } from '@/types/watch-together'
 import ResumePill from '@/components/player/ResumePill.vue'
-import UnifiedPlayerSkeleton from '@/components/player/unified/UnifiedPlayerSkeleton.vue'
+import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
@@ -1375,8 +1375,8 @@ const videoLanguage = ref<VideoLanguage>(
 // Persisted so a stale-chunk recovery reload (after a deploy) — or any reload —
 // restores the user's AnimeEnigma selection instead of silently dropping back
 // to the default player.
-const unifiedSelected = ref(localStorage.getItem('unified_player_selected') === '1')
-watch(unifiedSelected, (on) => {
+const aeSelected = ref(localStorage.getItem('unified_player_selected') === '1')
+watch(aeSelected, (on) => {
   if (on) localStorage.setItem('unified_player_selected', '1')
   else localStorage.removeItem('unified_player_selected')
 })
@@ -2439,7 +2439,7 @@ const retry = () => {
 // Language / provider switching
 const switchLanguage = (lang: 'ru' | 'en' | '18+' | 'raw') => {
   // Deselect unified player whenever user picks an existing language tab.
-  unifiedSelected.value = false
+  aeSelected.value = false
   videoLanguage.value = lang
   // Auto-select first provider in the group
   if (lang === 'ru') {

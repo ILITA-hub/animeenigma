@@ -1,5 +1,5 @@
 import { ref, onUnmounted, type Ref } from 'vue'
-import type { StreamResult } from '@/types/unifiedPlayer'
+import type { StreamResult } from '@/types/aePlayer'
 
 export type LoadStrategy = 'native' | 'hlsjs'
 

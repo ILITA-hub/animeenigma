@@ -1,5 +1,5 @@
-// frontend/web/src/components/player/unified/providerRegistry.ts
-import type { ProviderDef } from '@/types/unifiedPlayer'
+// frontend/web/src/components/player/aePlayer/providerRegistry.ts
+import type { ProviderDef } from '@/types/aePlayer'
 
 // Identity hues are the design-system "brand-exempt" hues (NOT the lint-forbidden
 // palette): cyan/orange/pink/rose. Keep hex here (allowlisted in DS task).

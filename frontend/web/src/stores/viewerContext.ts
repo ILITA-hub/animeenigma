@@ -10,7 +10,7 @@ import { animeApi } from '@/api/client'
  * progress / watchlist-entry / my-review / saved-combo fetches. The store
  * holds the context for the CURRENTLY VIEWED anime only (navigating to a
  * different anime replaces it) and single-flights concurrent loads so
- * Anime.vue and UnifiedPlayer share one network call on mount.
+ * Anime.vue and AePlayer share one network call on mount.
  */
 
 export interface ViewerProgressRow {

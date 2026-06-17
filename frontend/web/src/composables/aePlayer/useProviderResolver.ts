@@ -31,7 +31,7 @@
 
 import { scraperApi, rawApi, anime18Api, kodikApi, aeApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, Combo } from '@/types/unifiedPlayer'
+import type { StreamResult, Combo } from '@/types/aePlayer'
 
 // ─── Error ──────────────────────────────────────────────────────────────────
 

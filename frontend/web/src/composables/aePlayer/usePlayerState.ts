@@ -1,5 +1,5 @@
 import { ref, watch } from 'vue'
-import type { AudioKind, TrackLang, Combo } from '@/types/unifiedPlayer'
+import type { AudioKind, TrackLang, Combo } from '@/types/aePlayer'
 
 export function usePlayerState() {
   const playing = ref(false)

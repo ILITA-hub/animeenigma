@@ -1,5 +1,5 @@
-// frontend/web/src/types/unifiedPlayer.ts
-// Single source of truth for unified-player types. Imported by composables,
+// frontend/web/src/types/aePlayer.ts
+// Single source of truth for aePlayer types. Imported by composables,
 // the provider registry, and components — keep names stable across tasks.
 
 export type AudioKind = 'sub' | 'dub'

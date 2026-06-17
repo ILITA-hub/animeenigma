@@ -14,7 +14,7 @@ import { reactive } from 'vue'
  * hacker mode off the same records are written with `acted = true` the moment a
  * switch is performed, giving a uniform ledger either way.
  *
- * UnifiedPlayer.vue writes; DebugHud.vue renders the SOURCE FALLBACK section.
+ * AePlayer.vue writes; DebugHud.vue renders the SOURCE FALLBACK section.
  * Every intent is also mirrored to the console (prefix `[SourceFallback]`) so it
  * is checkable even when the HUD is hidden.
  */

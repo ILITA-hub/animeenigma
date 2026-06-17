@@ -1,5 +1,5 @@
 import type { WatchCombo, ResolvedCombo } from '@/types/preference'
-import type { Combo, AudioKind, TrackLang } from '@/types/unifiedPlayer'
+import type { Combo, AudioKind, TrackLang } from '@/types/aePlayer'
 
 type LegacyPlayer = WatchCombo['player']
 

@@ -81,9 +81,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Check } from 'lucide-vue-next'
-import type { ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderRow } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
-import { deriveCapLabels } from '@/composables/unifiedPlayer/capLabels'
+import { deriveCapLabels } from '@/composables/aePlayer/capLabels'
 
 const props = defineProps<{
   row: ProviderRow

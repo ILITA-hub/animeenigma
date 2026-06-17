@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ProviderChip from './ProviderChip.vue'
-import type { ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderRow } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
 
 const row = (over: Partial<ProviderRow>): ProviderRow => ({

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DebugHud from './DebugHud.vue'
-import { scrubDebug, sreset, slog } from '@/composables/unifiedPlayer/scrubPreviewDebug'
+import { scrubDebug, sreset, slog } from '@/composables/aePlayer/scrubPreviewDebug'
 
 const baseProps = {
   stats: {

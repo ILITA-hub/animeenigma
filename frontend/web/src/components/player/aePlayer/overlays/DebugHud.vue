@@ -110,10 +110,10 @@
 import { computed, ref } from 'vue'
 import { Pin } from 'lucide-vue-next'
 import Spinner from '@/components/ui/Spinner.vue'
-import type { PlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
-import type { FragStat } from '@/composables/unifiedPlayer/useVideoEngine'
-import { scrubDebug as scrub } from '@/composables/unifiedPlayer/scrubPreviewDebug'
-import type { FallbackIntent } from '@/composables/unifiedPlayer/sourceFallbackDebug'
+import type { PlaybackStats } from '@/composables/aePlayer/usePlaybackStats'
+import type { FragStat } from '@/composables/aePlayer/useVideoEngine'
+import { scrubDebug as scrub } from '@/composables/aePlayer/scrubPreviewDebug'
+import type { FallbackIntent } from '@/composables/aePlayer/sourceFallbackDebug'
 
 /** One user seek, traced through the pipeline. Mutated in place as events land. */
 export interface SeekTrace {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { rankedProviderIds } from './rankedProviderIds'
-import type { ProviderRow, ProviderDef } from '@/types/unifiedPlayer'
+import type { ProviderRow, ProviderDef } from '@/types/aePlayer'
 
 function row(
   id: string,

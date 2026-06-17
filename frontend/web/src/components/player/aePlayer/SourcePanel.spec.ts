@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SourcePanel from './SourcePanel.vue'
-import type { ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderRow } from '@/types/aePlayer'
 
 const rows: ProviderRow[] = [
   { def: { id: 'allanime', name: 'AllAnime', hue: '#0df', group: 'en', audios: ['sub'], langs: ['en'], content: ['common'], scraper: true }, state: 'active' },

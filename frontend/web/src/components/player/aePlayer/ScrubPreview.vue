@@ -36,7 +36,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
-import { scrubDebug, slog, srecordCapture, sreset } from '@/composables/unifiedPlayer/scrubPreviewDebug'
+import { scrubDebug, slog, srecordCapture, sreset } from '@/composables/aePlayer/scrubPreviewDebug'
 
 /**
  * Real frame previews for the scrub-bar hover bubble — thumbnail-cache design.

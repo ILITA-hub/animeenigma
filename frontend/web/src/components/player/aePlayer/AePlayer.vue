@@ -12,7 +12,7 @@
     @mouseleave="onPointerLeave"
     @mousemove="wakeUi"
     @touchstart.passive="wakeUi"
-    data-test="unified-player"
+    data-test="ae-player"
   >
     <!-- Poster / still background — only until playback first starts; a
          mid-episode pause must NOT bring the poster back (disruptive in
@@ -325,33 +325,33 @@ import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
 
 import { useSkipTimes } from '@/composables/useSkipTimes'
-import { usePlayerState } from '@/composables/unifiedPlayer/usePlayerState'
-import { usePlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
-import { scrubDebug } from '@/composables/unifiedPlayer/scrubPreviewDebug'
+import { usePlayerState } from '@/composables/aePlayer/usePlayerState'
+import { usePlaybackStats } from '@/composables/aePlayer/usePlaybackStats'
+import { scrubDebug } from '@/composables/aePlayer/scrubPreviewDebug'
 import {
   sourceFallbackDebug,
   recordFallbackIntent,
   resetFallbackIntents,
-} from '@/composables/unifiedPlayer/sourceFallbackDebug'
-import { segmentsToChapters, activeSkipSegment } from '@/composables/unifiedPlayer/skipSegments'
-import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
-import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/unifiedPlayer/useProviderResolver'
-import { useProviderHealth } from '@/composables/unifiedPlayer/useProviderHealth'
-import { useWatchTracking } from '@/composables/unifiedPlayer/useWatchTracking'
-import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
+} from '@/composables/aePlayer/sourceFallbackDebug'
+import { segmentsToChapters, activeSkipSegment } from '@/composables/aePlayer/skipSegments'
+import { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
+import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/aePlayer/useProviderResolver'
+import { useProviderHealth } from '@/composables/aePlayer/useProviderHealth'
+import { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
+import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
 import { providerById, CURATED_TIER } from './providerRegistry'
-import { pickSmartDefault } from '@/composables/unifiedPlayer/smartDefault'
-import { useCapabilities } from '@/composables/unifiedPlayer/useCapabilities'
-import { rankedProviderIds } from '@/composables/unifiedPlayer/rankedProviderIds'
-import { pickEpisodeForProvider } from '@/composables/unifiedPlayer/episodeSelection'
+import { pickSmartDefault } from '@/composables/aePlayer/smartDefault'
+import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
+import { rankedProviderIds } from '@/composables/aePlayer/rankedProviderIds'
+import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
-import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer } from '@/composables/unifiedPlayer/comboMapping'
+import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer } from '@/composables/aePlayer/comboMapping'
 import { useToast } from '@/composables/useToast'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult } from '@/types/unifiedPlayer'
+import type { StreamResult } from '@/types/aePlayer'
 import type { WatchCombo } from '@/types/preference'
 
 // ─── Types ───────────────────────────────────────────────────────────────────

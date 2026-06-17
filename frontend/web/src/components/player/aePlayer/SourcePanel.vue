@@ -174,7 +174,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AudioKind, TrackLang, ProviderRow } from '@/types/unifiedPlayer'
+import type { AudioKind, TrackLang, ProviderRow } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
 import ProviderChip from './ProviderChip.vue'
 

@@ -73,10 +73,10 @@ const routes: RouteRecordRaw[] = [
           }
         })
       }
-      // Warm the player chunk: Anime.vue async-imports UnifiedPlayer only
+      // Warm the player chunk: Anime.vue async-imports AePlayer only
       // after IT has loaded+executed; starting the download now removes that
       // serialization (the browser dedupes with the later import call).
-      void import('@/components/player/unified/UnifiedPlayer.vue').catch(() => undefined)
+      void import('@/components/player/aePlayer/AePlayer.vue').catch(() => undefined)
     }
   },
   {

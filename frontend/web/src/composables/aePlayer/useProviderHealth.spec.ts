@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { computeProviderRows } from './useProviderHealth'
-import type { ScraperProviderHealth } from '@/types/unifiedPlayer'
+import type { ScraperProviderHealth } from '@/types/aePlayer'
 
 const health = (over: Partial<ScraperProviderHealth> & { name: string }): ScraperProviderHealth =>
   ({ enabled: true, up: true, ...over })

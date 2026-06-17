@@ -1,6 +1,6 @@
 import { ref, watch, onUnmounted, type Ref } from 'vue'
 import { scraperApi } from '@/api/client'
-import { PROVIDER_REGISTRY } from '@/components/player/unified/providerRegistry'
+import { PROVIDER_REGISTRY } from '@/components/player/aePlayer/providerRegistry'
 import type {
   ProviderRow,
   ProviderDef,
@@ -8,7 +8,7 @@ import type {
   AudioKind,
   TrackLang,
   ContentKind,
-} from '@/types/unifiedPlayer'
+} from '@/types/aePlayer'
 
 export interface RowFilter { audio: AudioKind; lang: TrackLang; content: ContentKind }
 

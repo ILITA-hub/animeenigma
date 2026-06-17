@@ -1,4 +1,4 @@
-import type { ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderRow } from '@/types/aePlayer'
 
 /**
  * Merge the server capability ranking with the registry rows into one ordered

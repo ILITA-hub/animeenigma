@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { pickSmartDefault } from './smartDefault'
-import type { ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderRow } from '@/types/aePlayer'
 
 const row = (id: string, state: ProviderRow['state']): ProviderRow =>
   ({ def: { id, name: id, hue: '#000', group: 'en', audios: ['sub'], langs: ['en'], content: ['common'], scraper: true }, state })

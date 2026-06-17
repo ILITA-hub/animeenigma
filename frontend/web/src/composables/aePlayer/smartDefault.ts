@@ -1,4 +1,4 @@
-import type { ProviderRow } from '@/types/unifiedPlayer'
+import type { ProviderRow } from '@/types/aePlayer'
 
 export interface SmartDefaultOpts {
   /** Provider ids that must pass `isAvailable` before they can be picked (e.g. 'ae'). */
