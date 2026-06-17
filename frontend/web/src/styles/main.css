@@ -10,7 +10,6 @@
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/inter-400.woff2') format('woff2'); }
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/inter-500.woff2') format('woff2'); }
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/inter-600.woff2') format('woff2'); }
-@font-face { font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/inter-700.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/jetbrains-mono-400.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/jetbrains-mono-500.woff2') format('woff2'); }
 /* Cyrillic subsets (variable woff2, one file per family covers all weights).
@@ -374,6 +373,20 @@ body {
   --elevated: #1c1c2c;
   --line: rgba(255, 255, 255, 0.06);
   --line-strong: rgba(255, 255, 255, 0.12);
+  /* Alpha overlay scales — DS Rules 6/7 (curated; see specs/2026-06-17-ds-rules-hardening). */
+  --white-a4: rgba(255, 255, 255, 0.04);
+  --white-a8: rgba(255, 255, 255, 0.08);
+  --white-a20: rgba(255, 255, 255, 0.20);
+  --white-a30: rgba(255, 255, 255, 0.30);
+  --cyan-a08: rgba(0, 212, 255, 0.08);
+  --cyan-a20: rgba(0, 212, 255, 0.20);
+  --cyan-a40: rgba(0, 212, 255, 0.40);
+  --cyan-a60: rgba(0, 212, 255, 0.60);
+  --black-a40: rgba(0, 0, 0, 0.40);
+  --black-a60: rgba(0, 0, 0, 0.60);
+  --black-a80: rgba(0, 0, 0, 0.80);
+  --scrim-bg-soft: rgba(8, 8, 15, 0.40);
+  --scrim-bg-strong: rgba(8, 8, 15, 0.85);
   --ink: var(--foreground); /* deprecated → --foreground */
   --ink-2: rgba(255, 255, 255, 0.78);
   --ink-3: var(--muted-foreground); /* deprecated → --muted-foreground */
