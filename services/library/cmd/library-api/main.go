@@ -372,6 +372,14 @@ func main() {
 	// Phase 4: episodes handler (read-only).
 	episodesHandler := handler.NewEpisodesHandler(episodeRepo, writer, log)
 
+	// Phase 07 (POOL-04 + POOL-05): live-editable autocache config —
+	// singleton GET/PATCH at /api/library/autocache/config. The typed
+	// Get/Patch accessor stores the master `enabled` switch + §3.5
+	// tunables for the future downloader/evictor (Phases 8-10); this
+	// phase persists + serves them only (no download/eviction behavior).
+	autocacheConfigRepo := repo.NewAutocacheConfigRepository(db.DB)
+	autocacheConfigHandler := handler.NewAutocacheConfigHandler(autocacheConfigRepo, log)
+
 	// Initialize metrics collector (HTTP middleware).
 	metricsCollector := metrics.NewCollector("library")
 
@@ -381,6 +389,7 @@ func main() {
 		searchHandler,
 		jobsHandler,
 		episodesHandler,
+		autocacheConfigHandler,
 		cfg.JWT,
 		log,
 		metricsCollector,

@@ -27,6 +27,7 @@ func NewRouter(
 	searchHandler *handler.SearchHandler,
 	jobsHandler *handler.JobsHandler,
 	episodesHandler *handler.EpisodesHandler,
+	autocacheConfigHandler *handler.AutocacheConfigHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -81,6 +82,15 @@ func NewRouter(
 			// (catalog→library over the docker network); admin-gated like the
 			// rest of /api/library/* at the gateway.
 			r.Get("/episodes/{shikimori_id}", episodesHandler.List)
+		}
+		// Phase 07 (POOL-04 + POOL-05): live-editable autocache config —
+		// singleton GET/PATCH consumed by the admin UI; the master `enabled`
+		// switch + freshness/budget windows are read by the future
+		// downloader/evictor (Phases 8-10). Admin-gated via the gateway
+		// /api/library/* prefix; no server-side enforcement needed.
+		if autocacheConfigHandler != nil {
+			r.Get("/autocache/config", autocacheConfigHandler.Get)
+			r.Patch("/autocache/config", autocacheConfigHandler.Patch)
 		}
 	})
 
