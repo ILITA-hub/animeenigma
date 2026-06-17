@@ -230,7 +230,27 @@ func main() {
 		} else {
 			cfg.Providers = pc
 			cfg.DegradedProviders = pc.ToDegradedConfig()
-			log.Infow("loaded provider config from catalog", "source", pc.Source, "disabled", pc.DisabledNames())
+			log.Infow("loaded provider config from catalog",
+				"source", pc.Source, "disabled", pc.DisabledNames(), "degraded", pc.DegradedNames())
+		}
+	}
+
+	// registerByStatus registers p into the EN orchestrator according to its DB
+	// status (AUTO-484): enabled → auto-failover chain; degraded → registered but
+	// EXCLUDED from auto-failover (reachable only via an explicit `prefer` /
+	// hacker-mode pin, sorted last in the player); disabled → not registered.
+	registerByStatus := func(p domain.Provider) {
+		meta := cfg.Providers.Meta(p.Name())
+		switch cfg.Providers.Status(p.Name()) {
+		case config.StatusDisabled:
+			log.Warnw("provider SKIPPED (disabled in DB)", "name", p.Name(), "reason", meta.Reason)
+		case config.StatusDegraded:
+			orchestrator.RegisterDegraded(p)
+			log.Infow("registered provider (DEGRADED — manual-only, excluded from auto-failover)",
+				"name", p.Name(), "reason", meta.Reason)
+		default:
+			orchestrator.Register(p)
+			log.Infow("registered provider", "name", p.Name())
 		}
 	}
 
@@ -292,28 +312,14 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to construct Gogoanime provider", "error", err)
 	}
-	if cfg.DegradedProviders.IsDegraded(gogoanimeProvider.Name()) {
-		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
-			"name", gogoanimeProvider.Name(),
-			"reason", "global kill-switch — upstream confirmed unreachable or platform-rebranded")
-	} else {
-		orchestrator.Register(gogoanimeProvider)
-		log.Infow("registered provider", "name", gogoanimeProvider.Name())
-	}
+	registerByStatus(gogoanimeProvider)
 
 	// AnimePahe — SECOND-CHANCE EN provider. Demoted from primary on
 	// 2026-05-13 after gogoanime/Anitaku proved more reliable in real traffic
 	// (AnimePahe upstream observed timing out at ~65s on /api?m=release).
 	// Kept as the failover so a single-provider outage on Anitaku doesn't
 	// blank the English tab.
-	if cfg.DegradedProviders.IsDegraded(animePaheProvider.Name()) {
-		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
-			"name", animePaheProvider.Name(),
-			"reason", "global kill-switch — upstream confirmed unreachable or platform-rebranded")
-	} else {
-		orchestrator.Register(animePaheProvider)
-		log.Infow("registered provider", "name", animePaheProvider.Name())
-	}
+	registerByStatus(animePaheProvider)
 
 	// Phase 26 (SCRAPER-HEAL-25) — AllAnime as the THIRD live EN provider.
 	// Lifted from services/catalog/internal/parser/allanime/ (copy-with-
@@ -336,14 +342,7 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to construct AllAnime provider", "error", err)
 	}
-	if cfg.DegradedProviders.IsDegraded(allAnimeProvider.Name()) {
-		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
-			"name", allAnimeProvider.Name(),
-			"reason", "global kill-switch")
-	} else {
-		orchestrator.Register(allAnimeProvider)
-		log.Infow("registered provider", "name", allAnimeProvider.Name())
-	}
+	registerByStatus(allAnimeProvider)
 
 	// Phase 28 (SCRAPER-HEAL-36) — AnimeFever as the FOURTH live EN provider.
 	// Failover slot 4 per CONTEXT.md D5. Always-on; operator disables via
@@ -367,14 +366,7 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to construct AnimeFever provider", "error", err)
 	}
-	if cfg.DegradedProviders.IsDegraded(animeFeverProvider.Name()) {
-		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
-			"name", animeFeverProvider.Name(),
-			"reason", "global kill-switch")
-	} else {
-		orchestrator.Register(animeFeverProvider)
-		log.Infow("registered provider", "name", animeFeverProvider.Name())
-	}
+	registerByStatus(animeFeverProvider)
 
 	// Phase 28 Plan 28-04 (SCRAPER-HEAL-37) — Miruro provider. Failover
 	// slot 5 (between allanime/animefever and 9anime). Uses the pure-Go
@@ -411,14 +403,7 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to construct Miruro provider", "error", err)
 	}
-	if cfg.DegradedProviders.IsDegraded(miruroProvider.Name()) {
-		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
-			"name", miruroProvider.Name(),
-			"reason", "global kill-switch")
-	} else {
-		orchestrator.Register(miruroProvider)
-		log.Infow("registered provider", "name", miruroProvider.Name())
-	}
+	registerByStatus(miruroProvider)
 
 	// Phase 28 Plan 28-05 (SCRAPER-HEAL-39) — 9anime.me.uk as the LAST-RESORT
 	// EN provider (failover slot 6 per CONTEXT.md D5).
@@ -452,14 +437,7 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to construct NineAnime provider", "error", err)
 	}
-	if cfg.DegradedProviders.IsDegraded(nineAnimeProvider.Name()) {
-		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
-			"name", nineAnimeProvider.Name(),
-			"reason", "global kill-switch")
-	} else {
-		orchestrator.Register(nineAnimeProvider)
-		log.Infow("registered provider", "name", nineAnimeProvider.Name())
-	}
+	registerByStatus(nineAnimeProvider)
 
 	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
 	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns
@@ -491,16 +469,7 @@ func main() {
 		if err != nil {
 			log.Fatalw("failed to construct AnimeKai provider", "error", err)
 		}
-		if cfg.DegradedProviders.IsDegraded(animeKaiProvider.Name()) {
-			log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
-				"name", animeKaiProvider.Name(),
-				"reason", "global kill-switch")
-		} else {
-			orchestrator.Register(animeKaiProvider)
-			log.Infow("registered provider", "name", animeKaiProvider.Name(),
-				"flag", "SCRAPER_ANIMEKAI_ENABLED=true",
-				"mode", "escape-hatch-stub")
-		}
+		registerByStatus(animeKaiProvider)
 	} else {
 		log.Infow("AnimeKai provider SKIPPED (flag off)",
 			"flag", "SCRAPER_ANIMEKAI_ENABLED=false")

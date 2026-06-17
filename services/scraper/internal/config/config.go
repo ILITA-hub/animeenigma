@@ -253,9 +253,13 @@ func Load() (*Config, error) {
 	if d, err := time.ParseDuration(getEnv("SCRAPER_PROVIDERS_REFRESH", "60s")); err == nil {
 		cfg.ProvidersRefresh = d
 	}
-	// Provider management config: scraper-providers.yaml is the source of truth.
-	// Falls back to the legacy SCRAPER_DEGRADED_PROVIDERS env when the file path
-	// is unset or the file is missing (zero-break migration). ISS-023.
+	// Provider management config (BOOT-LOCAL ONLY): the runtime source of truth is
+	// the catalog Postgres `scraper_providers` table, fetched in main.go via
+	// LoadProvidersRemote and hot-reloaded every SCRAPER_PROVIDERS_REFRESH. This
+	// block only builds the offline fallback used until/if catalog answers at boot:
+	// the SCRAPER_DEGRADED_PROVIDERS env (default empty = all enabled). The legacy
+	// SCRAPER_PROVIDERS_FILE (scraper-providers.yaml) is retired (AUTO-484) and
+	// normally unset; the dormant file branch is kept only as a defensive override.
 	if providersPath := getEnv("SCRAPER_PROVIDERS_FILE", ""); providersPath != "" {
 		_, statErr := os.Stat(providersPath)
 		switch {

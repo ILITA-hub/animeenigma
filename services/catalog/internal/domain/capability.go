@@ -16,13 +16,17 @@ type SourceFamily struct {
 
 // ProviderCap is one provider's capability + liveness + rank within a family.
 type ProviderCap struct {
-	Provider    string    `json:"provider"`
-	DisplayName string    `json:"display_name"`
-	Enabled     bool      `json:"enabled"`
-	Health      string    `json:"health"`             // "up" | "down" | "unknown"
-	Playable    *bool     `json:"playable,omitempty"` // real-bytes oracle, if known
-	Rank        float64   `json:"rank"`
-	Variants    []Variant `json:"variants"`
+	Provider    string `json:"provider"`
+	DisplayName string `json:"display_name"`
+	Enabled     bool   `json:"enabled"`
+	// Degraded marks a soft-degraded provider: the player ranks it LAST, never
+	// auto-selects/auto-falls-back to it, and only offers it (behind a "degraded"
+	// pill) when hacker mode is on. EN family only; RU/Hanime families never set it.
+	Degraded bool      `json:"degraded"`
+	Health   string    `json:"health"`             // "up" | "down" | "unknown"
+	Playable *bool     `json:"playable,omitempty"` // real-bytes oracle, if known
+	Rank     float64   `json:"rank"`
+	Variants []Variant `json:"variants"`
 }
 
 // Variant is a watchable unit: a category (+ optional translation team for RU),

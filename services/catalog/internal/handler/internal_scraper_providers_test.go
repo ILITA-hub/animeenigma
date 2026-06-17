@@ -22,10 +22,10 @@ func TestInternalScraperProviders_List(t *testing.T) {
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&domain.ScraperProvider{Name: "nineanime", Enabled: true, Group: "en", SupportsSub: true, SubDelivery: "hard", PreferenceWeight: 40}).Error; err != nil {
+	if err := db.Create(&domain.ScraperProvider{Name: "nineanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, SubDelivery: "hard", PreferenceWeight: 40}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&domain.ScraperProvider{Name: "allanime", Enabled: true, Group: "en", SupportsSub: true, SupportsDub: true, SubDelivery: "hard", PreferenceWeight: 90}).Error; err != nil {
+	if err := db.Create(&domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, SupportsDub: true, SubDelivery: "hard", PreferenceWeight: 90}).Error; err != nil {
 		t.Fatal(err)
 	}
 

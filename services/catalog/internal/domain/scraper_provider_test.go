@@ -19,12 +19,12 @@ func TestScraperProviderSchema_AutoMigrate(t *testing.T) {
 	if !db.Migrator().HasTable("scraper_providers") {
 		t.Fatal("scraper_providers table not created")
 	}
-	for _, col := range []string{"name", "enabled", "group", "supports_sub", "supports_dub", "supports_raw", "sub_delivery", "quality_ceiling", "preference_weight"} {
+	for _, col := range []string{"name", "status", "group", "supports_sub", "supports_dub", "supports_raw", "sub_delivery", "quality_ceiling", "preference_weight"} {
 		if !db.Migrator().HasColumn(&domain.ScraperProvider{}, col) {
 			t.Errorf("missing column %q", col)
 		}
 	}
-	row := domain.ScraperProvider{Name: "allanime", Enabled: true, Group: "en", SupportsSub: true, SubDelivery: "hard", PreferenceWeight: 90}
+	row := domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, SubDelivery: "hard", PreferenceWeight: 90}
 	if err := db.Create(&row).Error; err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestScraperProviderSchema_AutoMigrate(t *testing.T) {
 	if err := db.First(&got, "name = ?", "allanime").Error; err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	if got.PreferenceWeight != 90 || got.SubDelivery != "hard" {
+	if got.PreferenceWeight != 90 || got.SubDelivery != "hard" || !got.IsEnabled() {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
 }

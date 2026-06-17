@@ -35,6 +35,10 @@ import (
 type Orchestrator struct {
 	mu        sync.RWMutex
 	providers []domain.Provider
+	// degraded holds the names of soft-degraded providers (AUTO-484): registered
+	// (so an explicit `prefer` can still reach them) but EXCLUDED from the natural
+	// auto-failover order — they are never auto-fallen-back to.
+	degraded  map[string]bool
 	registry  *domain.Registry
 	log       *logger.Logger
 	cache     *health.InMemoryHealthCache
@@ -58,6 +62,7 @@ func NewOrchestrator(log *logger.Logger, registry *domain.Registry, cache *healt
 	}
 	return &Orchestrator{
 		providers: make([]domain.Provider, 0, 4),
+		degraded:  make(map[string]bool),
 		registry:  registry,
 		log:       log,
 		cache:     cache,
@@ -71,6 +76,20 @@ func (o *Orchestrator) Register(p domain.Provider) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.providers = append(o.providers, p)
+}
+
+// RegisterDegraded registers a soft-degraded provider (AUTO-484): it is added to
+// the provider set so an explicit `prefer` (hacker-mode pin) can still reach it,
+// but it is EXCLUDED from the natural auto-failover order — the failover chain
+// never auto-falls-back to it.
+func (o *Orchestrator) RegisterDegraded(p domain.Provider) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.providers = append(o.providers, p)
+	if o.degraded == nil {
+		o.degraded = make(map[string]bool)
+	}
+	o.degraded[p.Name()] = true
 }
 
 // SetProviderTimeout sets the per-provider failover budget (ISS-022). When
@@ -119,7 +138,7 @@ func (o *Orchestrator) orderedProviders(prefer string) []domain.Provider {
 		for i, p := range o.providers {
 			if p.Name() == prefer {
 				preferredIdx = i
-				out = append(out, p)
+				out = append(out, p) // an explicit prefer reaches degraded providers too
 				break
 			}
 		}
@@ -127,6 +146,11 @@ func (o *Orchestrator) orderedProviders(prefer string) []domain.Provider {
 	for i, p := range o.providers {
 		if i == preferredIdx {
 			continue // already inserted at position 0
+		}
+		// Soft-degraded providers (AUTO-484) are excluded from the auto-failover
+		// order; they are reachable ONLY as the explicit prefer (handled above).
+		if o.degraded[p.Name()] {
+			continue
 		}
 		out = append(out, p)
 	}

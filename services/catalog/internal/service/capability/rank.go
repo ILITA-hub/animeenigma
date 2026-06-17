@@ -8,7 +8,14 @@ import (
 )
 
 // rankEN scores an EN provider for ordering (higher = better). Pure.
+// Degraded providers are forced below every enabled provider (even a down one)
+// so the player always ranks them last (AUTO-484); they stay in the list so
+// hacker mode can still offer them (preference_weight only breaks ties among
+// degraded providers).
 func rankEN(row domain.ScraperProvider, health string, playable *bool) float64 {
+	if row.IsDegraded() {
+		return -1000 + float64(row.PreferenceWeight)
+	}
 	score := float64(row.PreferenceWeight)
 	if health == "down" {
 		score -= 100

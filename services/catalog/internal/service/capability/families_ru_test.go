@@ -144,7 +144,7 @@ func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
 		t.Fatal(err)
 	}
-	db.Create(&domain.ScraperProvider{Name: "allanime", Enabled: true, Group: "en", SupportsSub: true, PreferenceWeight: 90})
+	db.Create(&domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 90})
 
 	// kodik present, animelib errors (omitted), hanime present → order en,kodik,hanime
 	s := NewService(db, nil, fakeCatalog{

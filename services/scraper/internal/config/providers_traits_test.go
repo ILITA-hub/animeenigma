@@ -8,15 +8,27 @@ import (
 
 func TestProvidersConfig_ToDegradedConfig(t *testing.T) {
 	pc := NewProvidersConfigForTest([]ProviderMeta{
-		{Name: "allanime", Enabled: true},
-		{Name: "animepahe", Enabled: false},
+		{Name: "allanime", Status: StatusEnabled},
+		{Name: "animepahe", Status: StatusDisabled},
+		{Name: "animefever", Status: StatusDegraded},
 	})
 	d := pc.ToDegradedConfig()
 	if d.IsDegraded("allanime") {
-		t.Error("allanime is enabled; should NOT be degraded")
+		t.Error("allanime is enabled; should NOT be in the disabled set")
 	}
 	if !d.IsDegraded("animepahe") {
-		t.Error("animepahe is disabled; should be degraded")
+		t.Error("animepahe is disabled; should be in the disabled set")
+	}
+	// Soft-degraded providers ARE registered, so they must NOT appear in the
+	// disabled (not-registered) projection.
+	if d.IsDegraded("animefever") {
+		t.Error("animefever is soft-degraded (registered); must NOT be in the disabled set")
+	}
+	if !pc.IsSoftDegraded("animefever") || pc.IsSoftDegraded("allanime") {
+		t.Error("IsSoftDegraded wrong: only animefever should be soft-degraded")
+	}
+	if !pc.IsRegistered("animefever") || pc.IsRegistered("animepahe") {
+		t.Error("IsRegistered wrong: animefever registered, animepahe not")
 	}
 }
 

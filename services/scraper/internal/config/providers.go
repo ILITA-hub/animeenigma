@@ -54,10 +54,22 @@ func KnownProvidersInGroup(group string) []string {
 	return out
 }
 
+// ProviderStatus mirrors catalog's domain.ProviderStatus tri-state (the DB is
+// the source of truth). enabled = in auto-failover; degraded = registered but
+// excluded from auto-failover (reachable only via explicit `prefer` / hacker-mode
+// pin, sorted last in the player); disabled = not registered at all.
+type ProviderStatus string
+
+const (
+	StatusEnabled  ProviderStatus = "enabled"
+	StatusDegraded ProviderStatus = "degraded"
+	StatusDisabled ProviderStatus = "disabled"
+)
+
 // ProviderMeta is one resolved provider entry.
 type ProviderMeta struct {
 	Name             string
-	Enabled          bool
+	Status           ProviderStatus // enabled | degraded | disabled (replaces the former Enabled bool)
 	Reason           string
 	Description      string
 	Group            string // "en" (default) or "adult" — intrinsic, from GroupOf(name)
@@ -133,13 +145,31 @@ func (p ProvidersConfig) Replace(entries []ProviderMeta) {
 	p.metas.Store(&m)
 }
 
-// IsEnabled reports whether a provider is enabled. Absent names default to
-// enabled — forgetting to list a provider never silently disables it.
-func (p ProvidersConfig) IsEnabled(name string) bool {
-	if m, ok := p.load()[name]; ok {
-		return m.Enabled
+// Status returns a provider's tri-state. Absent names default to StatusEnabled —
+// forgetting to list a provider never silently disables it.
+func (p ProvidersConfig) Status(name string) ProviderStatus {
+	if m, ok := p.load()[name]; ok && m.Status != "" {
+		return m.Status
 	}
-	return true
+	return StatusEnabled
+}
+
+// IsEnabled reports whether a provider is in the normal auto-failover chain.
+// Absent names default to enabled.
+func (p ProvidersConfig) IsEnabled(name string) bool {
+	return p.Status(name) == StatusEnabled
+}
+
+// IsRegistered reports whether a provider is registered at all (enabled OR
+// degraded). Only disabled providers are not registered.
+func (p ProvidersConfig) IsRegistered(name string) bool {
+	return p.Status(name) != StatusDisabled
+}
+
+// IsSoftDegraded reports the soft-degraded state: registered + manually
+// selectable but excluded from the auto-failover chain (AUTO-484).
+func (p ProvidersConfig) IsSoftDegraded(name string) bool {
+	return p.Status(name) == StatusDegraded
 }
 
 // Meta returns the metadata for a provider (zero value if absent).
@@ -159,7 +189,8 @@ func NewProvidersConfigForTest(entries []ProviderMeta) ProvidersConfig {
 // ProviderRow is a flattened row for metric emission / display.
 type ProviderRow struct {
 	Name        string
-	Enabled     bool
+	Enabled     bool           // true only for StatusEnabled (in the auto-failover chain)
+	Status      ProviderStatus // enabled | degraded | disabled
 	Reason      string
 	Description string
 }
@@ -170,13 +201,14 @@ func (p ProvidersConfig) Rows(candidates []string) []ProviderRow {
 	rows := make([]ProviderRow, 0, len(candidates))
 	for _, name := range candidates {
 		m, ok := metas[name]
-		enabled := true
-		if ok {
-			enabled = m.Enabled
+		status := StatusEnabled
+		if ok && m.Status != "" {
+			status = m.Status
 		}
 		rows = append(rows, ProviderRow{
 			Name:        name,
-			Enabled:     enabled,
+			Enabled:     status == StatusEnabled,
+			Status:      status,
 			Reason:      m.Reason,
 			Description: m.Description,
 		})
@@ -184,12 +216,14 @@ func (p ProvidersConfig) Rows(candidates []string) []ProviderRow {
 	return rows
 }
 
-// toDegradedConfig projects disabled providers into the existing
-// DegradedProvidersConfig shape so main.go's IsDegraded checks work unchanged.
+// toDegradedConfig projects DISABLED (not degraded) providers into the existing
+// DegradedProvidersConfig shape — i.e. the "not registered" set, so main.go's
+// boot wiring invariant (registered == non-disabled candidates) stays correct.
+// Soft-degraded providers ARE registered, so they are deliberately excluded here.
 func (p ProvidersConfig) toDegradedConfig() DegradedProvidersConfig {
 	m := make(map[string]bool)
 	for name, meta := range p.load() {
-		if !meta.Enabled {
+		if meta.Status == StatusDisabled {
 			m[name] = true
 		}
 	}
@@ -246,9 +280,15 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 		if e.PreferenceWeight != nil {
 			weight = *e.PreferenceWeight
 		}
+		// The YAML shape (retired 2026-06-17 — dormant fallback only) has no
+		// "degraded" concept: bool enabled maps to enabled|disabled.
+		status := StatusEnabled
+		if !*e.Enabled {
+			status = StatusDisabled
+		}
 		metas[e.Name] = ProviderMeta{
 			Name:             e.Name,
-			Enabled:          *e.Enabled,
+			Status:           status,
 			Reason:           e.Reason,
 			Description:      e.Description,
 			Group:            GroupOf(e.Name),
@@ -268,16 +308,33 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 func providersFromDegraded(d DegradedProvidersConfig, source string) ProvidersConfig {
 	metas := make(map[string]ProviderMeta, len(KnownProviders))
 	for _, name := range KnownProviders {
-		metas[name] = ProviderMeta{Name: name, Enabled: !d.IsDegraded(name), Group: GroupOf(name)}
+		status := StatusEnabled
+		if d.IsDegraded(name) {
+			status = StatusDisabled
+		}
+		metas[name] = ProviderMeta{Name: name, Status: status, Group: GroupOf(name)}
 	}
 	return newProvidersConfig(metas, source)
 }
 
-// DisabledNames returns the sorted names of disabled providers (for logging).
+// DisabledNames returns the sorted names of disabled (not-registered) providers
+// for logging. Soft-degraded providers are registered, so they are NOT listed.
 func (p ProvidersConfig) DisabledNames() []string {
 	out := []string{}
 	for name, m := range p.load() {
-		if !m.Enabled {
+		if m.Status == StatusDisabled {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// DegradedNames returns the sorted names of soft-degraded providers (for logging).
+func (p ProvidersConfig) DegradedNames() []string {
+	out := []string{}
+	for name, m := range p.load() {
+		if m.Status == StatusDegraded {
 			out = append(out, name)
 		}
 	}

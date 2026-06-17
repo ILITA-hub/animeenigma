@@ -168,16 +168,13 @@ services:
       # gogoanime mirror — default anitaku.to migrated to anineko.to; override to
       # the live classic-structure mirror gogoanimes.fi (set in docker/.env). 2026-06-05.
       SCRAPER_GOGOANIME_BASE_URL: ${SCRAPER_GOGOANIME_BASE_URL:-https://anitaku.to}
-      # Provider management is now config-file driven via SCRAPER_PROVIDERS_FILE
-      # below (./scraper-providers.yaml). That file is the SOURCE OF TRUTH for
-      # enable/disable + reason/description, rendered in the Grafana
-      # "Scraper / Provider Management" dashboard. ISS-023.
-      #
-      # SCRAPER_DEGRADED_PROVIDERS is DEPRECATED — used ONLY as a fallback when
-      # the providers file is absent (zero-break migration). Do not rely on it.
-      SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-gogoanime}
-      # Source of truth for provider management (mounted read-only below).
-      SCRAPER_PROVIDERS_FILE: /config/providers.yaml
+      # Provider management (enable/degrade/disable + reason/description) lives in
+      # the catalog Postgres `scraper_providers` table — the SINGLE source of truth
+      # (docker/scraper-providers.yaml was retired 2026-06-17, AUTO-484). The scraper
+      # fetches it from catalog (CATALOG_URL) at boot + every SCRAPER_PROVIDERS_REFRESH.
+      # SCRAPER_DEGRADED_PROVIDERS is a last-resort OFFLINE fallback, used ONLY if
+      # catalog is unreachable at boot (comma-separated names; empty = all enabled).
+      SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-}
       # ISS-022: per-provider failover budget. Without it, one hung provider
       # early in the chain (animepahe when animepahe.pw is down, ~55s of retries)
       # consumes the whole request budget so catalog's 15s SCRAPER_TIMEOUT kills
@@ -191,9 +188,6 @@ services:
       ANALYTICS_INTERNAL_URL: ${ANALYTICS_INTERNAL_URL:-http://analytics:8092}
       CATALOG_URL: http://catalog:8081
       SCRAPER_PROVIDERS_REFRESH: 60s
-    volumes:
-      # Provider management source of truth (ISS-023). Edit on host + restart.
-      - ./scraper-providers.yaml:/config/providers.yaml:ro
     ports:
       - "127.0.0.1:8088:8088"
     depends_on:
@@ -593,9 +587,6 @@ services:
       # analytics /internal/effects via this Docker-network-only URL. Non-secret
       # service-discovery URL (T-02-ENV).
       ANALYTICS_INTERNAL_URL: ${ANALYTICS_INTERNAL_URL:-http://analytics:8092}
-      SCRAPER_PROVIDERS_SEED_FILE: /config/scraper-providers.yaml
-    volumes:
-      - ./scraper-providers.yaml:/config/scraper-providers.yaml:ro
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:

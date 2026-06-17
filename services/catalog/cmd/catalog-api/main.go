@@ -116,14 +116,32 @@ func main() {
 		log.Fatalw("failed to register AnimeTag join model", "error", err)
 	}
 
-	// Seed scraper_providers from the bundled YAML (insert-if-absent; the DB is
-	// the runtime source of truth, YAML is seed + scraper offline fallback).
-	if seedPath := os.Getenv("SCRAPER_PROVIDERS_SEED_FILE"); seedPath != "" {
-		if err := scraperprovider.SeedFromYAML(db.DB, seedPath); err != nil {
-			log.Errorw("scraper provider seed failed (continuing)", "error", err, "path", seedPath)
-		} else {
-			log.Infow("scraper provider seed applied", "path", seedPath)
+	// One-time migration: scraper_providers.enabled (bool) → status enum
+	// (enabled|degraded|disabled), AUTO-484. AutoMigrate above added `status` with
+	// default 'enabled', so existing disabled rows (enabled=false) must be
+	// backfilled BEFORE the old column is dropped. Guarded by column presence so
+	// it is a no-op on fresh DBs and on every boot after the column is gone.
+	if db.DB.Migrator().HasColumn(&domain.ScraperProvider{}, "enabled") {
+		if err := db.DB.Exec(
+			`UPDATE scraper_providers SET status = CASE WHEN enabled THEN 'enabled' ELSE 'disabled' END`,
+		).Error; err != nil {
+			log.Fatalw("backfill scraper_providers.status from enabled failed", "error", err)
 		}
+		if err := db.DB.Migrator().DropColumn(&domain.ScraperProvider{}, "enabled"); err != nil {
+			log.Warnw("drop legacy scraper_providers.enabled column failed (non-fatal)", "error", err)
+		} else {
+			log.Infow("migrated scraper_providers.enabled bool → status enum")
+		}
+	}
+
+	// Bootstrap scraper_providers from the Go-embedded default roster
+	// (insert-if-absent; the DB is the SINGLE source of truth — the YAML was
+	// retired 2026-06-17, AUTO-484). Idempotent: operator edits are never
+	// overwritten.
+	if err := scraperprovider.SeedDefaults(db.DB); err != nil {
+		log.Errorw("scraper provider seed failed (continuing)", "error", err)
+	} else {
+		log.Infow("scraper provider defaults seeded")
 	}
 
 	// Initialize cache

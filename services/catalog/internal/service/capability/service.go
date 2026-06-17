@@ -110,14 +110,16 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 	return families, nil
 }
 
-// BuildENFamily reads enabled EN providers, joins live health, ranks, returns
-// the "ourenglish" family. Health failure degrades to "unknown" per provider.
+// BuildENFamily reads registered EN providers (enabled + degraded; disabled are
+// excluded), joins live health, ranks, returns the "ourenglish" family. Degraded
+// providers are included so the player can offer them in hacker mode, but rankEN
+// pushes them last. Health failure degrades to "unknown" per provider.
 func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error) {
 	var rows []domain.ScraperProvider
-	// Use map[string]any so GORM quotes the "group" column per-dialect
-	// (SQLite uses double-quotes; Postgres uses the same — both are SQL-standard).
+	// status <> 'disabled' keeps enabled + degraded; "group" is double-quoted so
+	// the reserved word parses on both SQLite (tests) and Postgres (prod).
 	if err := s.db.WithContext(ctx).
-		Where(map[string]any{"enabled": true, "group": "en"}).
+		Where(`status <> ? AND "group" = ?`, domain.StatusDisabled, "en").
 		Order("name asc").Find(&rows).Error; err != nil {
 		return domain.SourceFamily{}, fmt.Errorf("load scraper providers: %w", err)
 	}
@@ -148,7 +150,8 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 		caps = append(caps, domain.ProviderCap{
 			Provider:    row.Name,
 			DisplayName: displayName(row.Name),
-			Enabled:     row.Enabled,
+			Enabled:     row.IsEnabled(),
+			Degraded:    row.IsDegraded(),
 			Health:      hstatus,
 			Playable:    playable,
 			Rank:        rankEN(row, hstatus, playable),

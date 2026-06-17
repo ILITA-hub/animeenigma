@@ -1,8 +1,6 @@
 package scraperprovider_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
@@ -23,61 +21,43 @@ func newDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func writeYAML(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	p := filepath.Join(dir, "providers.yaml")
-	y := `providers:
-  - name: allanime
-    enabled: true
-    supports_sub: true
-    supports_dub: true
-    sub_delivery: hard
-    quality_ceiling: 1080p
-    preference_weight: 90
-  - name: 18anime
-    enabled: true
-    group: adult
-    supports_raw: true
-    preference_weight: 0
-`
-	if err := os.WriteFile(p, []byte(y), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
-
-func TestSeedFromYAML_InsertsRows(t *testing.T) {
+func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	db := newDB(t)
-	if err := scraperprovider.SeedFromYAML(db, writeYAML(t)); err != nil {
+	if err := scraperprovider.SeedDefaults(db); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 2 {
-		t.Fatalf("want 2 rows, got %d", count)
+	if count != 8 {
+		t.Fatalf("want 8 default rows, got %d", count)
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")
-	if !all.SupportsDub || all.PreferenceWeight != 90 || all.Group != "en" {
+	if !all.SupportsDub || all.PreferenceWeight != 90 || all.Group != "en" || !all.IsEnabled() {
 		t.Errorf("allanime seeded wrong: %+v", all)
 	}
 }
 
-func TestSeedFromYAML_IntrinsicGroupForAdult(t *testing.T) {
+func TestSeedDefaults_AnimeFeverDegradedWithReason(t *testing.T) {
 	db := newDB(t)
-	dir := t.TempDir()
-	p := filepath.Join(dir, "providers.yaml")
-	// 18anime WITHOUT an explicit group: must still be stored as "adult".
-	y := `providers:
-  - name: 18anime
-    enabled: true
-    supports_raw: true
-`
-	if err := os.WriteFile(p, []byte(y), 0o600); err != nil {
-		t.Fatal(err)
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
-	if err := scraperprovider.SeedFromYAML(db, p); err != nil {
+	var af domain.ScraperProvider
+	if err := db.First(&af, "name = ?", "animefever").Error; err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if !af.IsDegraded() {
+		t.Errorf("animefever status = %q, want degraded", af.Status)
+	}
+	if af.Reason == "" || af.Description == "" {
+		t.Errorf("animefever must carry a reason/description in the DB: %+v", af)
+	}
+}
+
+func TestSeedDefaults_IntrinsicGroupForAdult(t *testing.T) {
+	db := newDB(t)
+	if err := scraperprovider.SeedDefaults(db); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	var row domain.ScraperProvider
@@ -89,24 +69,25 @@ func TestSeedFromYAML_IntrinsicGroupForAdult(t *testing.T) {
 	}
 }
 
-func TestSeedFromYAML_IdempotentDoesNotOverwrite(t *testing.T) {
+func TestSeedDefaults_IdempotentDoesNotOverwrite(t *testing.T) {
 	db := newDB(t)
-	path := writeYAML(t)
-	if err := scraperprovider.SeedFromYAML(db, path); err != nil {
+	if err := scraperprovider.SeedDefaults(db); err != nil {
 		t.Fatalf("seed1: %v", err)
 	}
-	db.Model(&domain.ScraperProvider{}).Where("name = ?", "allanime").Update("enabled", false)
-	if err := scraperprovider.SeedFromYAML(db, path); err != nil {
+	// Operator flips allanime to disabled in the DB.
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "allanime").
+		Update("status", domain.StatusDisabled)
+	if err := scraperprovider.SeedDefaults(db); err != nil {
 		t.Fatalf("seed2: %v", err)
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 2 {
+	if count != 8 {
 		t.Fatalf("re-seed created duplicates: %d rows", count)
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")
-	if all.Enabled {
-		t.Error("re-seed overwrote operator edit (enabled flipped back to true)")
+	if all.Status != domain.StatusDisabled {
+		t.Error("re-seed overwrote operator edit (status flipped back)")
 	}
 }

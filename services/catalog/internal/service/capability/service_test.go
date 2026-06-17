@@ -39,10 +39,10 @@ func newDB(t *testing.T) *gorm.DB {
 
 func TestBuildENFamily_RanksAndFiltersDisabled(t *testing.T) {
 	db := newDB(t)
-	db.Create(&domain.ScraperProvider{Name: "allanime", Enabled: true, Group: "en", SupportsSub: true, SupportsDub: true, SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 90})
-	db.Create(&domain.ScraperProvider{Name: "nineanime", Enabled: true, Group: "en", SupportsSub: true, SubDelivery: "hard", QualityCeiling: "720p", PreferenceWeight: 40})
-	db.Create(&domain.ScraperProvider{Name: "animepahe", Enabled: false, Group: "en", SupportsSub: true, SupportsDub: true, SubDelivery: "hard", PreferenceWeight: 30})
-	db.Create(&domain.ScraperProvider{Name: "18anime", Enabled: true, Group: "adult", SupportsRaw: true, PreferenceWeight: 0})
+	db.Create(&domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, SupportsDub: true, SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 90})
+	db.Create(&domain.ScraperProvider{Name: "nineanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, SubDelivery: "hard", QualityCeiling: "720p", PreferenceWeight: 40})
+	db.Create(&domain.ScraperProvider{Name: "animepahe", Status: domain.StatusDisabled, Group: "en", SupportsSub: true, SupportsDub: true, SubDelivery: "hard", PreferenceWeight: 30})
+	db.Create(&domain.ScraperProvider{Name: "18anime", Status: domain.StatusEnabled, Group: "adult", SupportsRaw: true, PreferenceWeight: 0})
 
 	svc := capability.NewService(db, fakeHealth{
 		up:       map[string]bool{"allanime": true, "nineanime": true},

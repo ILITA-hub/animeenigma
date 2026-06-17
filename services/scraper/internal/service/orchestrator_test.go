@@ -459,6 +459,44 @@ func TestOrchestrator_HealthSnapshotReflectsLatest(t *testing.T) {
 	}
 }
 
+// TestOrchestrator_DegradedExcludedFromAutoFailover verifies the AUTO-484
+// contract: a soft-degraded provider (RegisterDegraded) is NOT in the natural
+// auto-failover order (prefer=""), but IS reachable — and tried first — when it
+// is the explicit `prefer`.
+func TestOrchestrator_DegradedExcludedFromAutoFailover(t *testing.T) {
+	t.Parallel()
+	pa := &fakeProvider{nameVal: "A_en", listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+		return []domain.Episode{{ID: "A_en"}}, nil
+	}}
+	pd := &fakeProvider{nameVal: "D_deg", listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+		return []domain.Episode{{ID: "D_deg"}}, nil
+	}}
+	log := logger.Default()
+	o := NewOrchestrator(log, domain.NewRegistry(), nil)
+	o.Register(pa)
+	o.RegisterDegraded(pd)
+
+	// No prefer → degraded provider is excluded from the auto order.
+	auto := o.orderedProviders("")
+	if len(auto) != 1 || auto[0].Name() != "A_en" {
+		t.Fatalf("auto order = %v; want [A_en] only (degraded excluded)", names(auto))
+	}
+
+	// Explicit prefer reaches the degraded provider and puts it first.
+	pref := o.orderedProviders("D_deg")
+	if len(pref) != 2 || pref[0].Name() != "D_deg" {
+		t.Fatalf("prefer order = %v; want [D_deg, A_en]", names(pref))
+	}
+}
+
+func names(ps []domain.Provider) []string {
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, p.Name())
+	}
+	return out
+}
+
 // TestOrchestrator_PreferPriority verifies the `prefer` argument moves the
 // matching provider to the front of the failover order. If A is registered
 // first and B is preferred, B is tried first.
