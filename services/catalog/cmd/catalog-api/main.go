@@ -133,12 +133,12 @@ func main() {
 		if err := db.DB.Exec(
 			`UPDATE stream_providers SET status = CASE WHEN enabled THEN 'enabled' ELSE 'disabled' END`,
 		).Error; err != nil {
-			log.Fatalw("backfill scraper_providers.status from enabled failed", "error", err)
+			log.Fatalw("backfill stream_providers.status from enabled failed", "error", err)
 		}
 		if err := db.DB.Migrator().DropColumn(&domain.ScraperProvider{}, "enabled"); err != nil {
 			log.Warnw("drop legacy scraper_providers.enabled column failed (non-fatal)", "error", err)
 		} else {
-			log.Infow("migrated scraper_providers.enabled bool → status enum")
+			log.Infow("migrated stream_providers.enabled bool → status enum")
 		}
 	}
 

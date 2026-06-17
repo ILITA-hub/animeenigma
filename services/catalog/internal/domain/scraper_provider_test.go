@@ -16,10 +16,10 @@ func TestScraperProviderSchema_AutoMigrate(t *testing.T) {
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
-	if !db.Migrator().HasTable("scraper_providers") {
-		t.Fatal("scraper_providers table not created")
+	if !db.Migrator().HasTable("stream_providers") {
+		t.Fatal("stream_providers table not created")
 	}
-	for _, col := range []string{"name", "status", "group", "supports_sub", "supports_dub", "supports_raw", "sub_delivery", "quality_ceiling", "preference_weight"} {
+	for _, col := range []string{"name", "status", "group", "supports_sub", "supports_dub", "supports_raw", "sub_delivery", "quality_ceiling", "preference_weight", "scraper_operated"} {
 		if !db.Migrator().HasColumn(&domain.ScraperProvider{}, col) {
 			t.Errorf("missing column %q", col)
 		}
