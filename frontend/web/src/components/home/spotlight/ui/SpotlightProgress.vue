@@ -41,7 +41,7 @@ const clamped = computed(() => Math.max(0, Math.min(100, props.percent)))
 const barVariants = cva('', {
   variants: {
     accent: {
-      cyan: 'bg-gradient-to-r from-cyan-500 to-cyan-400 shadow-[0_0_8px_rgba(0,212,255,0.5)]',
+      cyan: 'bg-gradient-to-r from-cyan-500 to-cyan-400 shadow-[0_0_8px_var(--cyan-a40)]',
       pink: 'bg-gradient-to-r from-pink-500 to-pink-400 shadow-[0_0_8px_rgba(255,45,124,0.5)]',
       violet: 'bg-gradient-to-r from-brand-violet/70 to-brand-violet shadow-[0_0_8px_rgba(167,139,250,0.5)]',
     },

@@ -123,10 +123,6 @@ src/components/home/spotlight/SpotlightBackdrop.vue:rgb(16,16,28):decorative bac
 src/components/home/spotlight/cards/RandomTailCard.vue:rgb(13,13,28):decorative ramp
 # --- DS Rule 7: rgba alpha-scale literals remaining after codemod (Task 5) ---
 # Tailwind arbitrary shadow values — rgb/rgba inside shadow-[...] can't use CSS var() in this syntax.
-src/components/anime/CharacterCard.vue:rgba(0,0,0,0.4):Tailwind arbitrary shadow-[...] — can't use CSS var() inside Tailwind arbitrary-value syntax
-src/components/anime/EpisodeCard.vue:rgba(0,212,255,0.5):Tailwind arbitrary shadow-[...] cyan glow — brand-cyan identity, can't use CSS var() in Tailwind arbitrary-value syntax
-src/components/anime/PosterCard.vue:rgba(0,0,0,0.4):Tailwind arbitrary shadow-[...] — can't use CSS var() inside Tailwind arbitrary-value syntax
-src/components/anime/PosterCard.vue:rgba(0,212,255,0.5):Tailwind arbitrary shadow-[...] cyan glow — brand-cyan identity, can't use CSS var() in Tailwind arbitrary-value syntax
 # Gacha rarity-tier alpha palette — alpha variants of identity hues (same rarity system as above solids).
 src/components/gacha/CardViewer3D.vue:rgba(45,212,191,0.3):gacha rarity identity (teal alpha glow)
 src/components/gacha/CardViewer3D.vue:rgba(129,140,248,0.38):gacha rarity identity (indigo alpha glow)
@@ -160,7 +156,6 @@ src/components/home/spotlight/SpotlightBackdrop.vue:rgba(255,77,141,0.25):Spotli
 src/components/home/spotlight/SpotlightBackdrop.vue:rgba(139,92,246,0.18):SpotlightBackdrop violet radial blob — identity hue (violet/indigo exempt per DS), not tokenized at this alpha
 src/components/home/spotlight/SpotlightBackdrop.vue:rgba(167,139,250,0.28):SpotlightBackdrop violet radial blob (softer) — identity hue (violet), no token at this alpha
 # SpotlightProgress pill accents — per-pill brand colors, Tailwind class strings (shadow-[...]).
-src/components/home/spotlight/ui/SpotlightProgress.vue:rgba(0,212,255,0.5):SpotlightProgress cyan pill glow — Tailwind arbitrary shadow, can't use CSS var() in this syntax
 src/components/home/spotlight/ui/SpotlightProgress.vue:rgba(255,45,124,0.5):SpotlightProgress pink pill glow — brand-pink identity, Tailwind arbitrary shadow
 src/components/home/spotlight/ui/SpotlightProgress.vue:rgba(167,139,250,0.5):SpotlightProgress violet pill glow — identity hue (violet), Tailwind arbitrary shadow
 # SpotlightStepper — brand-pink pulsing ring, CSS not tokenized at these alpha values.

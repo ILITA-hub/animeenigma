@@ -58,7 +58,7 @@
 
     <!-- Play Icon on Hover -->
     <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-      <div class="w-12 h-12 rounded-full bg-cyan-500/90 flex items-center justify-center shadow-[0_0_20px_rgba(0,212,255,0.5)]">
+      <div class="w-12 h-12 rounded-full bg-cyan-500/90 flex items-center justify-center shadow-[0_0_20px_var(--cyan-a40)]">
         <Play class="size-5 text-white ml-0.5" fill="currentColor" aria-hidden="true" />
       </div>
     </div>

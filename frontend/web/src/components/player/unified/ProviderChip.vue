@@ -13,7 +13,7 @@
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
         isSelected
           ? 'is-selected bg-[var(--cyan-a08)] border-[var(--accent-line)] text-white'
-          : row.state === 'active'
+          : selectable
             ? 'bg-white/[0.04] border-transparent text-[var(--ink-2)] hover:bg-white/[0.09] hover:text-white'
             : 'bg-white/[0.04] border-transparent text-[var(--ink-2)] opacity-40 cursor-not-allowed',
       ]"

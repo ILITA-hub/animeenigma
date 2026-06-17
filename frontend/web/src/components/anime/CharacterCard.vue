@@ -1,6 +1,6 @@
 <template>
   <router-link :to="`/characters/${model.id}`" class="group block" :aria-label="model.name">
-    <div class="rounded-xl overflow-hidden bg-white/5 border border-white/10 transition-[border-color,box-shadow] duration-200 group-hover:border-white/20 group-hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
+    <div class="rounded-xl overflow-hidden bg-white/5 border border-white/10 transition-[border-color,box-shadow] duration-200 group-hover:border-white/20 group-hover:shadow-[0_10px_30px_var(--black-a40)]">
       <div class="relative aspect-[2/3] bg-white/5">
         <img
           :src="model.image"

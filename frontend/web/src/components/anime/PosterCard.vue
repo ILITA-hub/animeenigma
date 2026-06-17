@@ -7,7 +7,7 @@
       :aria-label="model.title"
     />
 
-    <div class="rounded-xl overflow-hidden bg-white/5 border border-white/10 pointer-events-none transition-[border-color,box-shadow] duration-200 group-hover:border-white/20 group-hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
+    <div class="rounded-xl overflow-hidden bg-white/5 border border-white/10 pointer-events-none transition-[border-color,box-shadow] duration-200 group-hover:border-white/20 group-hover:shadow-[0_10px_30px_var(--black-a40)]">
       <PosterImage
         :src="model.coverImage"
         :alt="model.title"
@@ -98,7 +98,7 @@
           <router-link
             :to="model.href"
             :aria-label="model.title"
-            class="w-12 h-12 rounded-full bg-cyan-500/90 flex items-center justify-center shadow-[0_0_20px_rgba(0,212,255,0.5)] pointer-events-auto transition-all duration-200 hover:bg-cyan-500 hover:rotate-[12deg] hover:scale-110"
+            class="w-12 h-12 rounded-full bg-cyan-500/90 flex items-center justify-center shadow-[0_0_20px_var(--cyan-a40)] pointer-events-auto transition-all duration-200 hover:bg-cyan-500 hover:rotate-[12deg] hover:scale-110"
           >
             <Play class="size-5 text-white ml-0.5" fill="currentColor" aria-hidden="true" />
           </router-link>
