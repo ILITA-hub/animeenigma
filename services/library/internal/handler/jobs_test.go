@@ -154,6 +154,19 @@ func (d *fakeDiskGuard) Allow(min int) (bool, int, error) {
 	return d.allowed, d.freePct, d.err
 }
 
+// fakeBudgetGuard stubs the Phase-10 EvictorAPI seam: admitted/err returned verbatim,
+// calls records each EnsureRoom(estBytes).
+type fakeBudgetGuard struct {
+	admitted bool
+	err      error
+	calls    []int64
+}
+
+func (b *fakeBudgetGuard) EnsureRoom(_ context.Context, estBytes int64) (bool, error) {
+	b.calls = append(b.calls, estBytes)
+	return b.admitted, b.err
+}
+
 type fakeCanceller struct {
 	called bool
 	id     string
@@ -260,6 +273,126 @@ func TestJobsHandler_Create_DiskFull(t *testing.T) {
 	}
 	if len(store.created) != 0 {
 		t.Fatalf("expected 0 created on disk full, got %d", len(store.created))
+	}
+	if v := testutil.ToFloat64(m.GetEnqueueRejectedForTest("disk_full")); v != 1 {
+		t.Fatalf("disk_full count = %v, want 1", v)
+	}
+}
+
+// TestJobsHandler_Create_BudgetAdmitted: both gates pass (DiskGuard + budget) → 201.
+// Also asserts the budget estimate passed is body.SizeBytes.
+func TestJobsHandler_Create_BudgetAdmitted(t *testing.T) {
+	h, store, dg, bg, _ := newBudgetHandler(t)
+
+	body := map[string]any{
+		"magnet":     validMagnet(),
+		"title":      "x",
+		"source":     "manual",
+		"size_bytes": 4242,
+	}
+	b, _ := json.Marshal(body)
+	r := httptest.NewRequest(http.MethodPost, "/api/library/jobs", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+	h.Create(w, r)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", w.Code, w.Body.String())
+	}
+	if !dg.called {
+		t.Fatal("DiskGuard must be checked first (EVICT-05 layering)")
+	}
+	if len(bg.calls) != 1 {
+		t.Fatalf("EnsureRoom must be called once, got %d", len(bg.calls))
+	}
+	if bg.calls[0] != 4242 {
+		t.Fatalf("EnsureRoom estBytes = %d, want 4242 (body.SizeBytes)", bg.calls[0])
+	}
+	if len(store.created) != 1 {
+		t.Fatalf("both-gates-pass must create one job, got %d", len(store.created))
+	}
+}
+
+// TestJobsHandler_Create_BudgetFull: DiskGuard passes but the budget rejects → 507 +
+// rejected_total{budget_full}, no job created (EVICT-04).
+func TestJobsHandler_Create_BudgetFull(t *testing.T) {
+	h, store, _, bg, m := newBudgetHandler(t)
+	bg.admitted = false
+
+	body := map[string]any{
+		"magnet":     validMagnet(),
+		"title":      "x",
+		"source":     "manual",
+		"size_bytes": 999999,
+	}
+	b, _ := json.Marshal(body)
+	r := httptest.NewRequest(http.MethodPost, "/api/library/jobs", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+	h.Create(w, r)
+
+	if w.Code != http.StatusInsufficientStorage {
+		t.Fatalf("status = %d, want 507; body=%s", w.Code, w.Body.String())
+	}
+	if len(store.created) != 0 {
+		t.Fatalf("budget-full must create nothing, got %d", len(store.created))
+	}
+	if v := testutil.ToFloat64(m.GetRejectedTotalForTest("budget_full")); v != 1 {
+		t.Fatalf("rejected_total{budget_full} = %v, want 1", v)
+	}
+}
+
+// TestJobsHandler_Create_BudgetError: a budget-read error must NOT 507 — it fails open
+// and the upload proceeds to 201 (mirror disk-guard fail-open).
+func TestJobsHandler_Create_BudgetError(t *testing.T) {
+	h, store, _, bg, m := newBudgetHandler(t)
+	bg.admitted = false
+	bg.err = liberrors.Internal("budget read blip")
+
+	body := map[string]any{
+		"magnet": validMagnet(),
+		"title":  "x",
+		"source": "manual",
+	}
+	b, _ := json.Marshal(body)
+	r := httptest.NewRequest(http.MethodPost, "/api/library/jobs", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+	h.Create(w, r)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (fail-open); body=%s", w.Code, w.Body.String())
+	}
+	if len(store.created) != 1 {
+		t.Fatalf("budget-error must fail open and create, got %d", len(store.created))
+	}
+	if v := testutil.ToFloat64(m.GetRejectedTotalForTest("budget_full")); v != 0 {
+		t.Fatalf("budget-error must NOT increment rejected_total, got %v", v)
+	}
+}
+
+// TestJobsHandler_Create_DiskFullBeforeBudget: DiskGuard rejects FIRST — the budget
+// gate is never reached (EVICT-05 ordering: DiskGuard then budget).
+func TestJobsHandler_Create_DiskFullBeforeBudget(t *testing.T) {
+	h, store, dg, bg, m := newBudgetHandler(t)
+	dg.allowed = false
+	dg.freePct = 5
+
+	body := map[string]any{
+		"magnet": validMagnet(),
+		"title":  "x",
+		"source": "manual",
+	}
+	b, _ := json.Marshal(body)
+	r := httptest.NewRequest(http.MethodPost, "/api/library/jobs", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+	h.Create(w, r)
+
+	if w.Code != http.StatusInsufficientStorage {
+		t.Fatalf("status = %d, want 507", w.Code)
+	}
+	if len(bg.calls) != 0 {
+		t.Fatalf("DiskGuard rejection must short-circuit before the budget gate, got %d EnsureRoom calls", len(bg.calls))
+	}
+	if len(store.created) != 0 {
+		t.Fatalf("disk-full must create nothing, got %d", len(store.created))
 	}
 	if v := testutil.ToFloat64(m.GetEnqueueRejectedForTest("disk_full")); v != 1 {
 		t.Fatalf("disk_full count = %v, want 1", v)
@@ -376,18 +509,35 @@ func TestJobsHandler_Delete_NotFound(t *testing.T) {
 	}
 }
 
-// newLinkHandler wires up the Phase-5 constructor with the fakeStore + fakes.
+// newLinkHandler wires up the Phase-5 constructor with the fakeStore + fakes. The
+// budget guard defaults to admit so the Link/Retry cases (which don't exercise the
+// pre-admit gate) stay green.
 func newLinkHandler(t *testing.T) (*JobsHandler, *fakeStoreH, *fakeMover, *fakeEpisodeStore, *metrics.LibraryMetrics) {
 	t.Helper()
 	store := newFakeStoreH()
 	dg := &fakeDiskGuard{allowed: true, freePct: 50}
+	bg := &fakeBudgetGuard{admitted: true}
 	cc := &fakeCanceller{}
 	mover := &fakeMover{}
 	eps := &fakeEpisodeStore{}
 	reg := prometheus.NewRegistry()
 	m := metrics.NewLibraryMetricsWithRegisterer(reg)
-	h := NewJobsHandlerWithLink(store, dg, cc, mover, eps, m, 20, nil)
+	h := NewJobsHandlerWithLink(store, dg, bg, cc, mover, eps, m, 20, nil)
 	return h, store, mover, eps, m
+}
+
+// newBudgetHandler wires the Phase-10 pre-admit handler: NewJobsHandlerWithLink with a
+// scriptable DiskGuard + budget guard so the EVICT-05 two-gate cases can drive both.
+func newBudgetHandler(t *testing.T) (*JobsHandler, *fakeStoreH, *fakeDiskGuard, *fakeBudgetGuard, *metrics.LibraryMetrics) {
+	t.Helper()
+	store := newFakeStoreH()
+	dg := &fakeDiskGuard{allowed: true, freePct: 50}
+	bg := &fakeBudgetGuard{admitted: true}
+	cc := &fakeCanceller{}
+	reg := prometheus.NewRegistry()
+	m := metrics.NewLibraryMetricsWithRegisterer(reg)
+	h := NewJobsHandlerWithLink(store, dg, bg, cc, nil, nil, m, 20, nil)
+	return h, store, dg, bg, m
 }
 
 func TestJobsHandler_Link_HappyPath(t *testing.T) {

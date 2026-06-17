@@ -50,6 +50,14 @@ type DiskGuardAPI interface {
 	Allow(minFreePct int) (allowed bool, freePct int, err error)
 }
 
+// EvictorAPI is the Phase-10 pre-admit seam (EnsureRoom only — the *autocache.Evictor
+// method from Plan 02). The admin upload path gates the SAME EnsureRoom the Planner
+// gates (EVICT-05): the logical pool budget layered ON TOP of the physical DiskGuard.
+// nil is allowed (a handler with no evictor skips the second gate).
+type EvictorAPI interface {
+	EnsureRoom(ctx context.Context, estBytes int64) (admitted bool, err error)
+}
+
 // JobCanceller is the slice of service.WorkerPool the handler needs.
 // CancelJob flips status FIRST then signals the in-memory handle —
 // callers don't have to know that.
@@ -68,6 +76,7 @@ type JobCanceller interface {
 type JobsHandler struct {
 	jobRepo      JobStoreAPI
 	diskGuard    DiskGuardAPI
+	evictor      EvictorAPI // Phase-10 second pre-admit gate; nil → gate skipped.
 	canceller    JobCanceller
 	mover        MinioMover
 	episodeStore EpisodeStore
@@ -102,6 +111,7 @@ func NewJobsHandler(
 func NewJobsHandlerWithLink(
 	jobRepo JobStoreAPI,
 	diskGuard DiskGuardAPI,
+	evictor EvictorAPI,
 	canceller JobCanceller,
 	mover MinioMover,
 	episodeStore EpisodeStore,
@@ -112,6 +122,7 @@ func NewJobsHandlerWithLink(
 	return &JobsHandler{
 		jobRepo:      jobRepo,
 		diskGuard:    diskGuard,
+		evictor:      evictor,
 		canceller:    canceller,
 		mover:        mover,
 		episodeStore: episodeStore,
@@ -202,6 +213,31 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 				h.log.Warnw("enqueue rejected: disk full",
 					"free_pct", freePct, "min_required_pct", h.minFreePct,
 				)
+			}
+			writeInsufficientStorage(w)
+			return
+		}
+	}
+
+	// Phase 10 (EVICT-05): second pre-admit gate — the logical pool budget, layered
+	// ON TOP of the physical DiskGuard above. BOTH must pass. The admin upload gates
+	// the SAME Evictor.EnsureRoom the autocache Planner gates, so an oversized upload
+	// can't bypass the budget. nil-guarded; fails open on a budget-read blip (mirror
+	// the disk-guard fail-open — a transient config/DB read failure never 500s the
+	// upload). On reject: rejected_total{budget_full} + HTTP 507.
+	if h.evictor != nil {
+		admitted, err := h.evictor.EnsureRoom(r.Context(), body.SizeBytes)
+		if err != nil {
+			if h.log != nil {
+				h.log.Warnw("budget guard check failed, admitting (fail-open)", "error", err)
+			}
+			// Don't 507 — log and proceed.
+		} else if !admitted {
+			if h.metrics != nil {
+				h.metrics.IncRejectedTotal("budget_full")
+			}
+			if h.log != nil {
+				h.log.Warnw("enqueue rejected: budget full", "size_bytes", body.SizeBytes)
 			}
 			writeInsufficientStorage(w)
 			return
