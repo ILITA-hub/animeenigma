@@ -392,15 +392,18 @@ func TestJobRepository_Retry(t *testing.T) {
 	defer cleanup()
 	r := NewJobRepository(db)
 
-	// Create + mark failed.
+	// Create + mark failed. Carry a non-null Episode so the CR-01 preservation
+	// assertion below exercises the autocache-row path.
+	retryEpisode := 7
 	j := &domain.Job{
-		Source:      domain.JobSourceNyaa,
+		Source:      domain.JobSourceAutocache,
 		Magnet:      "magnet:?xt=urn:btih:9999999999999999999999999999999999999999&dn=r",
 		Title:       "retry-me",
 		Uploader:    "Ohys-Raws",
 		Quality:     "1080p",
 		SizeBytes:   1024,
 		ShikimoriID: "12345",
+		Episode:     &retryEpisode,
 	}
 	if err := r.Create(context.Background(), j); err != nil {
 		t.Fatalf("create: %v", err)
@@ -430,6 +433,24 @@ func TestJobRepository_Retry(t *testing.T) {
 	wantErr := "retry of " + j.ID
 	if fresh.ErrorText != wantErr {
 		t.Fatalf("retry error_text = %q, want %q", fresh.ErrorText, wantErr)
+	}
+	// CR-01: a retried autocache row MUST preserve the intended Episode so the
+	// Planner's HasActiveForEpisode(shikimori_id, episode) single-flight dedup
+	// still matches the re-enqueued row (else a duplicate download is enqueued).
+	if fresh.Episode == nil {
+		t.Fatal("retry dropped Episode (CR-01): autocache retry → episode=NULL breaks TRIG-04 single-flight dedup")
+	}
+	if *fresh.Episode != retryEpisode {
+		t.Fatalf("retry Episode = %d, want %d", *fresh.Episode, retryEpisode)
+	}
+	// Re-fetch from the DB to confirm the column actually persisted (not just
+	// set on the in-memory struct GORM returned).
+	persisted, err := r.GetByID(context.Background(), fresh.ID)
+	if err != nil {
+		t.Fatalf("re-fetch retry row: %v", err)
+	}
+	if persisted.Episode == nil || *persisted.Episode != retryEpisode {
+		t.Fatalf("persisted retry Episode = %v, want %d", persisted.Episode, retryEpisode)
 	}
 
 	// Old row still failed.

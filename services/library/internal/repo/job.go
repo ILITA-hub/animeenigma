@@ -281,6 +281,38 @@ func (r *JobRepository) ResumeInterruptedDownloads(ctx context.Context) (int64, 
 	return res.RowsAffected, nil
 }
 
+// retryRowFrom builds the fresh re-enqueue row from a failed job. Every
+// user-facing field is inherited verbatim; status resets to queued, progress to
+// 0, and error_text carries the SPEC-locked "retry of {oldID}" marker.
+//
+// Episode MUST carry over (CR-01): an autocache-sourced row stores a non-null
+// intended-episode precisely so the Phase-09 Planner's single-flight gate
+// HasActiveForEpisode(shikimori_id, episode) collapses concurrent demand to one
+// job (TRIG-04). Dropping it gave a retried autocache row episode=NULL, so the
+// next Planner sweep's in-flight check missed the retry and enqueued a SECOND
+// download for the same episode. The *int copies cleanly: nil stays nil for
+// manual/admin rows (their episode is only known post-detection), so manual
+// retries are unaffected.
+//
+// Extracted from Retry() as a pure function so the field-copy contract is
+// unit-testable without a Postgres container (the enum-typed Job table cannot
+// AutoMigrate under SQLite).
+func retryRowFrom(old *domain.Job, oldID string) *domain.Job {
+	return &domain.Job{
+		Source:      old.Source,
+		Magnet:      old.Magnet,
+		Title:       old.Title,
+		Uploader:    old.Uploader,
+		Quality:     old.Quality,
+		SizeBytes:   old.SizeBytes,
+		ShikimoriID: old.ShikimoriID,
+		Episode:     old.Episode,
+		Status:      domain.JobStatusQueued,
+		ProgressPct: 0,
+		ErrorText:   formatRetryErrorText(oldID),
+	}
+}
+
 // formatRetryErrorText returns the SPEC-locked audit string written
 // into a retried job row's error_text column. Centralized here so the
 // Phase-5 unit test pins the format.
@@ -342,18 +374,7 @@ func (r *JobRepository) Retry(ctx context.Context, oldID string) (*domain.Job, e
 		if old.Status != domain.JobStatusFailed {
 			return liberrors.InvalidInput("only failed jobs can be retried")
 		}
-		fresh := &domain.Job{
-			Source:      old.Source,
-			Magnet:      old.Magnet,
-			Title:       old.Title,
-			Uploader:    old.Uploader,
-			Quality:     old.Quality,
-			SizeBytes:   old.SizeBytes,
-			ShikimoriID: old.ShikimoriID,
-			Status:      domain.JobStatusQueued,
-			ProgressPct: 0,
-			ErrorText:   formatRetryErrorText(oldID),
-		}
+		fresh := retryRowFrom(&old, oldID)
 		if err := tx.Create(fresh).Error; err != nil {
 			return liberrors.Wrap(err, liberrors.CodeInternal, "create retry row")
 		}

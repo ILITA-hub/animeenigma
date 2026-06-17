@@ -76,6 +76,64 @@ func TestRetryErrorTextFormat(t *testing.T) {
 	}
 }
 
+// TestRetryRowFrom_PreservesEpisode is the CR-01 regression: a retried
+// autocache job MUST carry over the intended Episode so the Phase-09 Planner's
+// single-flight gate HasActiveForEpisode(shikimori_id, episode) still matches
+// the re-enqueued row. Dropping it (episode=NULL) made the in-flight check miss
+// the retry and enqueue a duplicate download. Pure-function test so it runs
+// without a Postgres container (the enum-typed Job table cannot AutoMigrate
+// under SQLite); the DB-backed equivalent lives in job_integration_test.go.
+func TestRetryRowFrom_PreservesEpisode(t *testing.T) {
+	ep := 7
+	old := &domain.Job{
+		Source:      domain.JobSourceAutocache,
+		Magnet:      "magnet:?xt=urn:btih:1234",
+		Title:       "Some Anime - 07",
+		Uploader:    "Ohys-Raws",
+		Quality:     "1080p",
+		SizeBytes:   2048,
+		ShikimoriID: "12345",
+		Episode:     &ep,
+		Status:      domain.JobStatusFailed,
+	}
+	fresh := retryRowFrom(old, "old-id-abc")
+
+	if fresh.Episode == nil {
+		t.Fatal("retryRowFrom dropped Episode (CR-01 regression): autocache retry would get episode=NULL and break TRIG-04 single-flight dedup")
+	}
+	if *fresh.Episode != ep {
+		t.Fatalf("retryRowFrom Episode = %d, want %d", *fresh.Episode, ep)
+	}
+	if fresh.Status != domain.JobStatusQueued || fresh.ProgressPct != 0 {
+		t.Fatalf("retryRowFrom must reset status=queued progress=0; got status=%q pct=%d", fresh.Status, fresh.ProgressPct)
+	}
+	if fresh.ErrorText != "retry of old-id-abc" {
+		t.Fatalf("retryRowFrom error_text = %q, want %q", fresh.ErrorText, "retry of old-id-abc")
+	}
+	if fresh.Source != old.Source || fresh.Magnet != old.Magnet || fresh.Title != old.Title ||
+		fresh.Uploader != old.Uploader || fresh.Quality != old.Quality ||
+		fresh.SizeBytes != old.SizeBytes || fresh.ShikimoriID != old.ShikimoriID {
+		t.Fatalf("retryRowFrom must inherit user-facing fields; got %+v", fresh)
+	}
+}
+
+// TestRetryRowFrom_NilEpisodeStaysNil asserts a manual/admin row (episode only
+// known post-detection) keeps episode=NULL through retry — the nil-pointer case
+// the CR-01 fix must not break.
+func TestRetryRowFrom_NilEpisodeStaysNil(t *testing.T) {
+	old := &domain.Job{
+		Source:  domain.JobSourceManual,
+		Magnet:  "magnet:?xt=urn:btih:abcd",
+		Title:   "manual upload",
+		Status:  domain.JobStatusFailed,
+		Episode: nil,
+	}
+	fresh := retryRowFrom(old, "old-id-xyz")
+	if fresh.Episode != nil {
+		t.Fatalf("retryRowFrom must keep nil Episode nil for manual rows, got %v", *fresh.Episode)
+	}
+}
+
 // TestUpdateShikimoriID_NilRepo defensively asserts UpdateShikimoriID
 // rejects empty input rather than running an unbounded UPDATE.
 func TestUpdateShikimoriID_EmptyID(t *testing.T) {
