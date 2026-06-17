@@ -35,7 +35,10 @@
   3. Querying `library_episodes` returns `source`, `track`, `downloaded_at`, `last_fetch_at`, `fetch_count`, and `size_bytes` for every pool object, so a single accountant can classify and sum the pool. (POOL-03)
   4. An admin can `GET` the autocache config and `PATCH` any field (budget, freshness windows, active-watcher window, quality cap, min seeders, sweep interval) and the new value takes effect with no redeploy. (POOL-04)
   5. Flipping the master `enabled` switch off halts all autocache downloading and eviction; flipping it on resumes them — observable in behavior, not just stored. (POOL-05)
-**Plans**: TBD
+**Plans**: 3 plans (3 waves)
+  - [ ] 07-01-PLAN.md — Schema + ledger columns (migration 005), extended Episode model, aeProvider layout helper, write-site repoints (POOL-01, POOL-03)
+  - [ ] 07-02-PLAN.md — autocache_config singleton table (migration 006), Get/Patch accessor, admin GET/PATCH /api/library/autocache/config, master enabled switch (POOL-04, POOL-05)
+  - [ ] 07-03-PLAN.md — One-time admin-content migration (Move→repoint), repo helpers, boot wiring, catalog ae-resolver audit (POOL-02)
 
 ### Phase 8: Serving & Fetch Signal
 **Goal**: When the player resolves the "ae" provider, a present episode serves from the new pool and records the "viewed by any user" fetch signal; an absent episode fails over cleanly and self-heals for next time.
@@ -124,7 +127,7 @@ Prior-milestone reserved ideas still on the shelf (unnumbered until committed):
 | 15-20 | v3.0 | — | ✅ Complete | 2026-05-11 → 2026-05-18 |
 | 21-28 | v3.1 | — | ✅ Complete | 2026-05-13 → 2026-06-04 |
 | 1-6 | v4.0 | 23/23 | ✅ Complete | 2026-06-05 → 2026-06-08 |
-| 7. Pool Foundation, Config & Migration | v4.1 | 0/? | Not started | - |
+| 7. Pool Foundation, Config & Migration | v4.1 | 0/3 | Planned | - |
 | 8. Serving & Fetch Signal | v4.1 | 0/? | Not started | - |
 | 9. Download Triggers | v4.1 | 0/? | Not started | - |
 | 10. Eviction & Budget | v4.1 | 0/? | Not started | - |
