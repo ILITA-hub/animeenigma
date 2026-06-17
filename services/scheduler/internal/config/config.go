@@ -71,6 +71,23 @@ type JobsConfig struct {
 	//   read-threshold job, the scheduler only POSTs analytics' /internal
 	//   recompute endpoint; analytics owns the compute + Redis publish.
 	ProviderRankingCron string
+
+	// Phase 09 (v4.1 download-triggers) — Logic A ongoing-push autocache producer
+	// (TRIG-01). AutocacheLogicACron: cron for the periodic sweep (default
+	//   `*/20 * * * *`, every 20 min — mirrors the library autocache_config
+	//   sweep_interval_min default; the library demand PK dedup + Planner backoff
+	//   bound the re-asserted demand). LibraryInternalURL: base URL of the
+	//   in-cluster library service whose /internal/library/autocache/demand
+	//   endpoint the Logic A job POSTs (Docker-network-only); when empty the job
+	//   is disabled (nil-guarded registration). AutocacheActiveWatcherDays: the D8
+	//   recency window for "active watcher" (default 30). The AUTHORITATIVE value
+	//   lives in library autocache_config (live-editable) — but the scheduler is on
+	//   a different DB and does NOT read library's DB, so this is a scheduler env
+	//   MIRROR (AUTOCACHE_ACTIVE_WATCHER_DAYS). Keep the two in sync if the library
+	//   default is retuned.
+	AutocacheLogicACron        string
+	LibraryInternalURL         string
+	AutocacheActiveWatcherDays int
 }
 
 func Load() (*Config, error) {
@@ -114,6 +131,10 @@ func Load() (*Config, error) {
 			AnalyticsInternalURL: getEnv("ANALYTICS_INTERNAL_URL", "http://analytics:8092"),
 			// Stage 2b — daily provider-ranking recompute trigger.
 			ProviderRankingCron: getEnv("PROVIDER_RANKING_CRON", "30 5 * * *"), // Daily 05:30 (after read-threshold 05:00)
+			// Phase 09 — Logic A ongoing-push autocache producer (TRIG-01).
+			AutocacheLogicACron:        getEnv("AUTOCACHE_LOGIC_A_CRON", "*/20 * * * *"), // Every 20 min (mirrors sweep_interval_min)
+			LibraryInternalURL:         getEnv("LIBRARY_INTERNAL_URL", getEnv("LIBRARY_SERVICE_URL", "http://library:8089")),
+			AutocacheActiveWatcherDays: getEnvInt("AUTOCACHE_ACTIVE_WATCHER_DAYS", 30),
 		},
 	}, nil
 }

@@ -123,9 +123,17 @@ func main() {
 	readThresholdJob := jobs.NewReadThresholdJob(&cfg.Jobs, log)
 	// Stage 2b — daily provider-ranking recompute trigger.
 	providerRankingJob := jobs.NewProviderRankingJob(&cfg.Jobs, log)
+	// Phase 09 — Logic A ongoing-push autocache producer (TRIG-01). Runs the
+	// shared-DB enumeration join itself and fires per-ongoing demand POSTs to the
+	// library /internal endpoint. Disabled (nil) when no library URL is configured
+	// so the nil-guarded registration in JobService.Start skips it cleanly.
+	var autocacheLogicAJob *jobs.AutocacheLogicAJob
+	if cfg.Jobs.LibraryInternalURL != "" {
+		autocacheLogicAJob = jobs.NewAutocacheLogicAJob(db.DB, cfg.Jobs.LibraryInternalURL, cfg.Jobs.AutocacheActiveWatcherDays, log)
+	}
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, scraperPlayabilityCanaryJob, readThresholdJob, providerRankingJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, scraperPlayabilityCanaryJob, readThresholdJob, providerRankingJob, autocacheLogicAJob, log)
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler
@@ -137,6 +145,7 @@ func main() {
 		cfg.Jobs.ScraperPlayabilityCanaryCron,
 		cfg.Jobs.ReadThresholdCron,
 		cfg.Jobs.ProviderRankingCron,
+		cfg.Jobs.AutocacheLogicACron,
 	); err != nil {
 		log.Fatalw("failed to start job scheduler", "error", err)
 	}

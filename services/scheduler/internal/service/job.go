@@ -19,6 +19,7 @@ type JobService struct {
 	scraperPlayabilityCanaryJob *jobs.ScraperPlayabilityCanaryJob
 	readThresholdJob            *jobs.ReadThresholdJob
 	providerRankingJob          *jobs.ProviderRankingJob
+	autocacheLogicAJob          *jobs.AutocacheLogicAJob
 	log                         *logger.Logger
 	lastShikimoriRun            time.Time
 	lastCleanupRun              time.Time
@@ -27,6 +28,7 @@ type JobService struct {
 	lastCanaryRun               time.Time
 	lastReadThresholdRun        time.Time
 	lastProviderRankingRun      time.Time
+	lastAutocacheLogicARun      time.Time
 }
 
 func NewJobService(
@@ -37,6 +39,7 @@ func NewJobService(
 	scraperPlayabilityCanaryJob *jobs.ScraperPlayabilityCanaryJob,
 	readThresholdJob *jobs.ReadThresholdJob,
 	providerRankingJob *jobs.ProviderRankingJob,
+	autocacheLogicAJob *jobs.AutocacheLogicAJob,
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
@@ -48,12 +51,13 @@ func NewJobService(
 		scraperPlayabilityCanaryJob: scraperPlayabilityCanaryJob,
 		readThresholdJob:            readThresholdJob,
 		providerRankingJob:          providerRankingJob,
+		autocacheLogicAJob:          autocacheLogicAJob,
 		log:                         log,
 	}
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron, readThresholdCron, providerRankingCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron, readThresholdCron, providerRankingCron, autocacheLogicACron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -219,6 +223,34 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		s.log.Info("registered job: provider_ranking_recompute")
 	}
 
+	// Schedule autocache Logic A ongoing-push producer (Phase 09 — TRIG-01).
+	// Unlike the analytics-trigger jobs above, this one runs the enumeration
+	// join itself (shared animeenigma DB) and fires per-ongoing demand POSTs to
+	// the library /internal endpoint. Nil-guarded: a missing library URL (empty
+	// LibraryInternalURL → nil job from main.go) disables it cleanly.
+	if s.autocacheLogicAJob != nil {
+		_, err = s.cron.AddFunc(autocacheLogicACron, func() {
+			ctx := context.Background()
+			s.log.Info("starting scheduled autocache Logic A sweep")
+			start := time.Now()
+			if err := s.autocacheLogicAJob.Run(ctx); err != nil {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("autocache_logic_a", "error").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("autocache_logic_a").Observe(time.Since(start).Seconds())
+				s.log.Errorw("autocache Logic A sweep failed", "error", err)
+			} else {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("autocache_logic_a", "success").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("autocache_logic_a").Observe(time.Since(start).Seconds())
+				metrics.SchedulerJobLastSuccess.WithLabelValues("autocache_logic_a").SetToCurrentTime()
+				s.lastAutocacheLogicARun = time.Now()
+				s.log.Info("autocache Logic A sweep completed successfully")
+			}
+		})
+		if err != nil {
+			return err
+		}
+		s.log.Info("registered job: autocache_logic_a")
+	}
+
 	s.cron.Start()
 	s.log.Info("job scheduler started")
 	return nil
@@ -318,6 +350,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"provider_ranking_recompute": map[string]interface{}{
 			"last_run": s.lastProviderRankingRun,
+		},
+		"autocache_logic_a": map[string]interface{}{
+			"last_run": s.lastAutocacheLogicARun,
 		},
 	}
 }
