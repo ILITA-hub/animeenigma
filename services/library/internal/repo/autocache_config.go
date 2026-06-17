@@ -54,11 +54,19 @@ func (r *AutocacheConfigRepository) Patch(ctx context.Context, fields map[string
 	}
 	updates["updated_at"] = gorm.Expr("now()")
 
-	if err := r.db.WithContext(ctx).
+	res := r.db.WithContext(ctx).
 		Model(&domain.AutocacheConfig{}).
 		Where("id = ?", 1).
-		Updates(updates).Error; err != nil {
-		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "update autocache config")
+		Updates(updates)
+	if res.Error != nil {
+		return nil, liberrors.Wrap(res.Error, liberrors.CodeInternal, "update autocache config")
+	}
+	// Assert the singleton invariant at the write, independent of Get's
+	// missing-row handling: if the id=1 seed row is absent (truncated table,
+	// or migration 006's seed failed while the table create succeeded) the
+	// UPDATE matches zero rows and would otherwise be a silent write-to-nowhere.
+	if res.RowsAffected == 0 {
+		return nil, liberrors.Internal("autocache config singleton row missing (broken migration 006)")
 	}
 
 	return r.Get(ctx)
