@@ -178,6 +178,70 @@ func TestEpisodeRepository_List(t *testing.T) {
 	}
 }
 
+// TestEpisodeRepository_ListAdminLegacyPath_FiltersAndRepoints exercises the
+// two Phase-7 migrator hooks end-to-end against a real DB: ListAdminLegacyPath
+// must return ONLY rows still on the legacy "{id}/{ep}/" prefix (excluding any
+// already on aeProvider/), and UpdateMinioPath must repoint a single row so a
+// subsequent list no longer returns it (idempotency / restart-safety).
+func TestEpisodeRepository_ListAdminLegacyPath_FiltersAndRepoints(t *testing.T) {
+	db, cleanup := openEpisodeTestDB(t)
+	defer cleanup()
+	// 005 adds source/track/ledger columns the migrator filter does not need,
+	// but the model maps them, so apply it for column parity. Idempotent.
+	if err := db.Exec(migrations.AutocachePoolSQL).Error; err != nil {
+		t.Fatalf("apply 005: %v", err)
+	}
+	r := NewEpisodeRepository(db)
+	ctx := context.Background()
+
+	// Two legacy rows + one already-migrated row.
+	legacy1 := &domain.Episode{ShikimoriID: "300", EpisodeNumber: 1, MinioPath: "300/1/"}
+	legacy2 := &domain.Episode{ShikimoriID: "300", EpisodeNumber: 2, MinioPath: "300/2/"}
+	migrated := &domain.Episode{ShikimoriID: "300", EpisodeNumber: 3, MinioPath: "aeProvider/300/RAW/3/"}
+	for _, ep := range []*domain.Episode{legacy1, legacy2, migrated} {
+		if err := r.Create(ctx, ep); err != nil {
+			t.Fatalf("create %s: %v", ep.MinioPath, err)
+		}
+	}
+
+	got, err := r.ListAdminLegacyPath(ctx)
+	if err != nil {
+		t.Fatalf("ListAdminLegacyPath: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ListAdminLegacyPath len = %d, want 2 (already-migrated row must be excluded)", len(got))
+	}
+	for _, ep := range got {
+		if ep.MinioPath == migrated.MinioPath {
+			t.Fatalf("aeProvider/ row leaked into legacy list: %s", ep.MinioPath)
+		}
+	}
+
+	// Repoint one legacy row; it must drop out of the legacy list.
+	newPrefix := "aeProvider/300/RAW/1/"
+	if err := r.UpdateMinioPath(ctx, legacy1.ID, newPrefix); err != nil {
+		t.Fatalf("UpdateMinioPath: %v", err)
+	}
+	after, err := r.ListAdminLegacyPath(ctx)
+	if err != nil {
+		t.Fatalf("ListAdminLegacyPath (after repoint): %v", err)
+	}
+	if len(after) != 1 {
+		t.Fatalf("after repoint len = %d, want 1", len(after))
+	}
+	if after[0].ID != legacy2.ID {
+		t.Fatalf("remaining legacy row = %s, want legacy2 (%s)", after[0].ID, legacy2.ID)
+	}
+	// Confirm the repoint actually persisted to the row.
+	reread, err := r.GetByShikimoriEpisode(ctx, "300", 1)
+	if err != nil {
+		t.Fatalf("re-read repointed row: %v", err)
+	}
+	if reread.MinioPath != newPrefix {
+		t.Fatalf("repointed minio_path = %q, want %q", reread.MinioPath, newPrefix)
+	}
+}
+
 // TestFilenamePatternRepository_LoadAll — five SPEC-locked rows seed
 // idempotently. Re-applying 003 must not multiply the row count.
 func TestFilenamePatternRepository_LoadAll(t *testing.T) {

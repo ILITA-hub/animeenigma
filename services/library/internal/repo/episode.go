@@ -72,3 +72,36 @@ func (r *EpisodeRepository) List(ctx context.Context, shikimoriID string) ([]dom
 	}
 	return eps, nil
 }
+
+// UpdateMinioPath repoints a single episode row's minio_path prefix. Used by
+// the Phase-7 one-time admin-content migrator (autocache.Migrator) AFTER the
+// MinIO objects have been server-side-Moved into the new aeProvider/<mal>/RAW/
+// layout — so the row is only repointed once the copy has already succeeded.
+// Scoped to the given id (a single-column Updates), returns nil on success.
+func (r *EpisodeRepository) UpdateMinioPath(ctx context.Context, id string, path string) error {
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Episode{}).
+		Where("id = ?", id).
+		Update("minio_path", path).Error; err != nil {
+		return liberrors.Wrap(err, liberrors.CodeInternal, "update episode minio_path")
+	}
+	return nil
+}
+
+// ListAdminLegacyPath returns the episode rows still on the legacy
+// "{shikimori_id}/{ep}/" layout — i.e. whose minio_path does NOT start with
+// the unified-pool "aeProvider/" prefix. Rows already migrated are excluded,
+// which is what makes the Phase-7 migrator idempotent + restart-safe: a re-run
+// (or a reboot mid-migration) simply re-lists whatever has not yet been
+// repointed. Ordered by created_at ASC for deterministic processing. The LIKE
+// pattern is a fixed literal (no user input), so it is GORM-safe inline.
+func (r *EpisodeRepository) ListAdminLegacyPath(ctx context.Context) ([]domain.Episode, error) {
+	var eps []domain.Episode
+	if err := r.db.WithContext(ctx).
+		Where("minio_path NOT LIKE 'aeProvider/%'").
+		Order("created_at ASC").
+		Find(&eps).Error; err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "list admin legacy-path episodes")
+	}
+	return eps, nil
+}

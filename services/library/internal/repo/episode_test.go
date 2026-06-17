@@ -2,6 +2,8 @@ package repo
 
 import (
 	"encoding/json"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -76,5 +78,61 @@ func TestEpisode_JSON_PointersIncluded(t *testing.T) {
 func TestFilenamePattern_TableName(t *testing.T) {
 	if got := (domain.FilenamePattern{}).TableName(); got != "library_filename_patterns" {
 		t.Fatalf("TableName() = %q, want library_filename_patterns", got)
+	}
+}
+
+// TestEpisodeRepository_MigratorMethods_Signatures pins the method set the
+// Phase-7 admin-content migrator depends on (07-03 Task 1). The DB-backed
+// behavior (legacy-prefix filtering, single-column repoint) is exercised in
+// episode_integration_test.go behind the `integration` build tag; this no-DB
+// test guards the signatures so a refactor can't silently drop or reshape them.
+func TestEpisodeRepository_MigratorMethods_Signatures(t *testing.T) {
+	rt := reflect.TypeOf(&EpisodeRepository{})
+
+	up, ok := rt.MethodByName("UpdateMinioPath")
+	if !ok {
+		t.Fatal("EpisodeRepository.UpdateMinioPath missing")
+	}
+	// (recv, ctx, id, path) → error
+	if got := up.Type.NumIn(); got != 4 {
+		t.Fatalf("UpdateMinioPath NumIn = %d, want 4 (recv, ctx, id, path)", got)
+	}
+	if up.Type.In(2).Kind() != reflect.String || up.Type.In(3).Kind() != reflect.String {
+		t.Fatalf("UpdateMinioPath args must be (string id, string path), got (%s, %s)",
+			up.Type.In(2), up.Type.In(3))
+	}
+	if up.Type.NumOut() != 1 || !up.Type.Out(0).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		t.Fatalf("UpdateMinioPath must return a single error")
+	}
+
+	lp, ok := rt.MethodByName("ListAdminLegacyPath")
+	if !ok {
+		t.Fatal("EpisodeRepository.ListAdminLegacyPath missing")
+	}
+	// (recv, ctx) → ([]domain.Episode, error)
+	if got := lp.Type.NumIn(); got != 2 {
+		t.Fatalf("ListAdminLegacyPath NumIn = %d, want 2 (recv, ctx)", got)
+	}
+	if lp.Type.NumOut() != 2 {
+		t.Fatalf("ListAdminLegacyPath NumOut = %d, want 2 ([]Episode, error)", lp.Type.NumOut())
+	}
+	if lp.Type.Out(0) != reflect.TypeOf([]domain.Episode(nil)) {
+		t.Fatalf("ListAdminLegacyPath first return = %s, want []domain.Episode", lp.Type.Out(0))
+	}
+}
+
+// TestEpisodeRepository_LegacyPredicate_SourceLiteral guards the exact LIKE
+// predicate the migrator relies on to exclude already-migrated rows. The
+// behavioral DB assertion (only legacy-prefix rows returned) lives in
+// episode_integration_test.go; this is the no-DB tripwire so a refactor can't
+// quietly change the filter to something that re-migrates aeProvider/ rows.
+func TestEpisodeRepository_LegacyPredicate_SourceLiteral(t *testing.T) {
+	const want = "minio_path NOT LIKE 'aeProvider/%'"
+	src, err := os.ReadFile("episode.go")
+	if err != nil {
+		t.Fatalf("read episode.go: %v", err)
+	}
+	if !strings.Contains(string(src), want) {
+		t.Fatalf("episode.go must filter legacy rows with %q (idempotency tripwire)", want)
 	}
 }
