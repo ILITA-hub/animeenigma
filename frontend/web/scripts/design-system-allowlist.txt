@@ -168,3 +168,11 @@ src/components/profile/showcase/blocks/AboutBlock.vue:#0a0a13:AboutBlock termina
 src/components/profile/showcase/blocks/AboutBlock.vue:#ff5f57:AboutBlock terminal dot red — macOS traffic-light close button; fixed decorative identity color
 src/components/profile/showcase/blocks/AboutBlock.vue:#febc2e:AboutBlock terminal dot yellow — macOS traffic-light minimise button; fixed decorative identity color
 src/components/profile/showcase/blocks/AboutBlock.vue:#28c840:AboutBlock terminal dot green — macOS traffic-light maximise button; fixed decorative identity color
+
+# FavoriteAnimeBlock podium pedestals — olympic medal gold/silver/bronze gradient ramps; no DS token within tolerance
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#ff9d00:podium gold pedestal gradient END (deep gold); no exact token within tolerance — medal identity color
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#eaf0ff:podium silver pedestal gradient START (light periwinkle); no token within tolerance — medal identity color
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#9aa6c9:podium silver pedestal gradient END (muted slate-blue); no token within tolerance — medal identity color
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#ffc7a3:podium bronze pedestal gradient START (light copper); no token within tolerance — medal identity color
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#e6703a:podium bronze pedestal gradient END (deep copper); no token within tolerance — medal identity color
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#06121a:podium pedestal rank number text-on-medal — near-black contrast on light medal surface; no token at this depth

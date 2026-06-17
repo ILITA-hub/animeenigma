@@ -37,3 +37,4 @@ src/components/player/aePlayer/SubtitlesMenu.vue:gap-[5px]:compact subtitles-men
 src/components/player/aePlayer/SubtitlesMenu.vue:px-[9px]:compact subtitles-menu chip padding, off-grid
 src/components/player/aePlayer/SubtitlesMenu.vue:py-[9px]:compact subtitles-menu row padding, off-grid (matches settings-menu rows)
 src/components/ui/Stepper.vue:py-[5px]:Stepper micro-control vertical padding, off-grid (32px control height)
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:py-[3px]:banner score chip vertical padding, off-grid (3px between py-0.5=2px and py-1=4px; compact chip on 120px banner)
