@@ -123,6 +123,16 @@ func (s *ProgressService) maybeFireNextEpDemand(ctx context.Context, userID stri
 	next := req.EpisodeNumber + 1
 	if next > episodesAired {
 		// N+1 has not aired yet — nothing to pre-download.
+		//
+		// WR-06 (Phase-09 review) — ACCEPTED as-is: episodesAired is
+		// animes.episodes_aired (catalog/Shikimori-sourced). When Shikimori lags
+		// the actual airing (common for simulcasts — an episode is on torrents
+		// hours before Shikimori bumps the count) this gate is stale-low and Logic
+		// B does not fire for the genuinely-aired N+1, so the trigger's freshness
+		// is bounded by Shikimori sync latency rather than torrent availability.
+		// This is an inherent data-source coupling (not an off-by-one — the bound
+		// admits exactly next ∈ [1, episodesAired]); treating episodes_aired as a
+		// soft hint with one episode of lookahead is a possible future enhancement.
 		return
 	}
 

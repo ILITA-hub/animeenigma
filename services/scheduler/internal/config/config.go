@@ -85,6 +85,14 @@ type JobsConfig struct {
 	//   a different DB and does NOT read library's DB, so this is a scheduler env
 	//   MIRROR (AUTOCACHE_ACTIVE_WATCHER_DAYS). Keep the two in sync if the library
 	//   default is retuned.
+	//
+	//   WR-05 (Phase-09 review) — ACCEPTED as-is: this env mirror can drift from
+	//   the live library autocache_config value (an admin lowering it there does
+	//   not take effect here until the scheduler env is also edited + redeployed).
+	//   This is a deliberate consequence of the cross-DB boundary (scheduler must
+	//   not read library's DB). A future enhancement could have Logic A read the
+	//   authoritative value via the library internal endpoint per-sweep; until then
+	//   the redeploy requirement is the documented contract.
 	AutocacheLogicACron        string
 	LibraryInternalURL         string
 	AutocacheActiveWatcherDays int
