@@ -15,6 +15,9 @@ export interface ProviderCap {
   provider: string
   display_name: string
   enabled: boolean
+  /** Soft-degraded: the player ranks it last, never auto-selects it, and only
+   *  offers it (behind a "degraded" pill) when hacker mode is on (AUTO-484). */
+  degraded?: boolean
   health: 'up' | 'down' | 'unknown'
   playable?: boolean
   rank: number

@@ -32,6 +32,16 @@ describe('computeProviderRows', () => {
     expect(rows.find(r => r.def.id === 'gogoanime')!.state).toBe('down')
   })
 
+  it('marks a status=degraded scraper provider degraded, even if enabled=false (AUTO-484)', () => {
+    const rows = computeProviderRows(
+      [health({ name: 'animefever', status: 'degraded', enabled: false, up: true, reason: 'region-walled ad substitution' })],
+      { audio: 'sub', lang: 'en', content: 'common' },
+    )
+    const r = rows.find(r => r.def.id === 'animefever')!
+    expect(r.state).toBe('degraded')
+    expect(r.reason).toContain('ad')
+  })
+
   it('marks a non-scraper hard-disabled provider disabled (animelib)', () => {
     const rows = computeProviderRows([], { audio: 'sub', lang: 'ru', content: 'common' })
     expect(rows.find(r => r.def.id === 'animelib')!.state).toBe('disabled')

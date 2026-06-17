@@ -28,5 +28,9 @@ export function rankedProviderIds(
   const remaining = [...rowIds].filter((id) => !seen.has(id))
   remaining.sort((a, b) => curatedPos(a) - curatedPos(b) || a.localeCompare(b))
   out.push(...remaining)
-  return out
+  // Degraded providers are forced to the very end regardless of capability rank
+  // or curated tier — they are last-resort, hacker-mode-only picks (AUTO-484).
+  const degraded = new Set(rows.filter((r) => r.state === 'degraded').map((r) => r.def.id))
+  if (degraded.size === 0) return out
+  return [...out.filter((id) => !degraded.has(id)), ...out.filter((id) => degraded.has(id))]
 }

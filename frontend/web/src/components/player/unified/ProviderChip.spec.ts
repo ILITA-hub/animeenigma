@@ -58,4 +58,22 @@ describe('ProviderChip', () => {
     const w = mount(ProviderChip, { props: { row: row({}), cap, best: true }, ...capMountOpts })
     expect(w.find('[data-test="cap-best"]').exists()).toBe(true)
   })
+
+  // --- degraded (AUTO-484) ---
+  it('renders the DEGRADED pill for a degraded row', () => {
+    const w = mount(ProviderChip, { props: { row: row({ state: 'degraded', reason: 'ad wall' }) }, ...capMountOpts })
+    expect(w.find('[data-test="cap-degraded"]').exists()).toBe(true)
+  })
+  it('degraded is NOT selectable without hacker mode', async () => {
+    const w = mount(ProviderChip, { props: { row: row({ state: 'degraded' }) }, ...capMountOpts })
+    expect(w.find('button').attributes('disabled')).toBeDefined()
+    await w.find('button').trigger('click')
+    expect(w.emitted('select')).toBeFalsy()
+  })
+  it('degraded IS selectable in hacker mode', async () => {
+    const w = mount(ProviderChip, { props: { row: row({ state: 'degraded' }), hackerMode: true }, ...capMountOpts })
+    expect(w.find('button').attributes('disabled')).toBeUndefined()
+    await w.find('button').trigger('click')
+    expect(w.emitted('select')).toBeTruthy()
+  })
 })

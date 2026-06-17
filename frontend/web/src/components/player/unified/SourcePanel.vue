@@ -126,6 +126,7 @@
           :cap="capMap.get(r.def.id)"
           :best="!hackerMode && !expanded && r.def.id === topRow?.def.id"
           :selected="r.def.id === provider"
+          :hacker-mode="hackerMode"
           @select="emit('select-provider', r.def.id)"
         />
       </div>

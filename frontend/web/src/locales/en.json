@@ -254,6 +254,7 @@
     "dub": "Dub",
     "sources": {
       "best": "Best",
+      "degraded": "Degraded",
       "tryAnother": "Try another source",
       "raw": "RAW",
       "subBurnedIn": "burned-in",

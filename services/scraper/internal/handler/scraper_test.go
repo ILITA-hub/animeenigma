@@ -1460,8 +1460,8 @@ func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
 
 	// Build a ProvidersConfig where animepahe is disabled with a reason.
 	pc := config.NewProvidersConfigForTest([]config.ProviderMeta{
-		{Name: "animepahe", Enabled: false, Reason: "CF challenge", Description: "Cloudflare blocks the sidecar"},
-		{Name: "allanime", Enabled: true, Description: "Primary EN source"},
+		{Name: "animepahe", Status: config.StatusDisabled, Reason: "CF challenge", Description: "Cloudflare blocks the sidecar"},
+		{Name: "allanime", Status: config.StatusEnabled, Description: "Primary EN source"},
 	})
 
 	// allanime is up (search stage UP).
@@ -1516,6 +1516,9 @@ func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
 	if enabled, _ := pahe["enabled"].(bool); enabled {
 		t.Errorf("providers[animepahe].enabled = true; want false")
 	}
+	if status, _ := pahe["status"].(string); status != "disabled" {
+		t.Errorf("providers[animepahe].status = %q; want disabled", status)
+	}
 	reason, _ := pahe["reason"].(string)
 	if reason == "" {
 		t.Errorf("providers[animepahe].reason is empty; want non-empty reason string")
@@ -1531,6 +1534,9 @@ func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
 	}
 	if enabled, _ := alla["enabled"].(bool); !enabled {
 		t.Errorf("providers[allanime].enabled = false; want true")
+	}
+	if status, _ := alla["status"].(string); status != "enabled" {
+		t.Errorf("providers[allanime].status = %q; want enabled", status)
 	}
 	if up, _ := alla["up"].(bool); !up {
 		t.Errorf("providers[allanime].up = false; want true (search stage is up)")

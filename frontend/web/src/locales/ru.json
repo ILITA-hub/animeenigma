@@ -254,6 +254,7 @@
     "dub": "Озвучка",
     "sources": {
       "best": "Лучший",
+      "degraded": "Деградирован",
       "tryAnother": "Другой источник",
       "raw": "RAW",
       "subBurnedIn": "вшитые",

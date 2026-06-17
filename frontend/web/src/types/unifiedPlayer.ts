@@ -21,7 +21,9 @@ export interface ProviderDef {
   staticDisabled?: { reason: string; description: string; wip?: boolean }
 }
 
-export type ChipState = 'active' | 'disabled' | 'down' | 'irrelevant' | 'wip'
+// 'degraded' = registered + manually selectable in hacker mode, but never
+// auto-selected/auto-fallen-back-to and sorted last in the picker (AUTO-484).
+export type ChipState = 'active' | 'degraded' | 'disabled' | 'down' | 'irrelevant' | 'wip'
 
 /** A provider as rendered in the Source panel: definition + computed state. */
 export interface ProviderRow {
@@ -35,6 +37,9 @@ export interface ProviderRow {
 export interface ScraperProviderHealth {
   name: string
   enabled: boolean
+  /** Tri-state from the DB (enabled|degraded|disabled). 'degraded' => registered
+   *  but excluded from auto-failover; surfaced as a hacker-mode-only pick. */
+  status?: 'enabled' | 'degraded' | 'disabled'
   up: boolean
   reason?: string
   description?: string

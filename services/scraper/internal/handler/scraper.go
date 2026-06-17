@@ -361,7 +361,11 @@ type providerEnriched struct {
 	Provider string                    `json:"provider"`
 	Stages   map[string]domain.StageHealth `json:"stages"`
 	// Registry metadata (Task 3).
-	Enabled     bool   `json:"enabled"`
+	Enabled bool `json:"enabled"`
+	// Status is the tri-state (enabled|degraded|disabled). The player uses it to
+	// render degraded providers (registered but excluded from auto-failover —
+	// AUTO-484) distinctly from hard-disabled ones. Enabled stays for back-compat.
+	Status      string `json:"status,omitempty"`
 	Up          bool   `json:"up"`
 	Reason      string `json:"reason,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -445,12 +449,14 @@ func (h *ScraperHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 			Provider: ph.Provider,
 			Stages:   ph.Stages,
 			Enabled:  true, // default: enabled unless registry says otherwise
+			Status:   string(config.StatusEnabled),
 			Up:       healthUp(ph),
 		}
 		if h.providersCfg != nil {
 			meta := h.providersCfg.Meta(prov)
 			// IsEnabled defaults to true for absent providers; reflect that.
 			entry.Enabled = h.providersCfg.IsEnabled(prov)
+			entry.Status = string(h.providersCfg.Status(prov))
 			entry.Reason = meta.Reason
 			entry.Description = meta.Description
 		}

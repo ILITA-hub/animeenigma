@@ -38,6 +38,11 @@ export function computeProviderRows(
     // For scraper-backed providers, consult live health.
     if (def.scraper) {
       const h = byName.get(def.id)
+      // Soft-degraded wins over enabled/up: registered + manually selectable in
+      // hacker mode, but never auto-used and ranked last (AUTO-484).
+      if (h && h.status === 'degraded') {
+        return { def, state: 'degraded', reason: h.reason || h.description }
+      }
       if (h && !h.enabled) {
         return { def, state: 'disabled', reason: h.reason || h.description }
       }
@@ -82,11 +87,12 @@ function pollShared(): Promise<void> {
       // Axios puts the parsed JSON in resp.data, so the envelope is at resp.data.data.
       const rawProviders = (resp.data?.data?.providers ?? {}) as Record<
         string,
-        { enabled?: boolean; up?: boolean; reason?: string; description?: string }
+        { enabled?: boolean; status?: string; up?: boolean; reason?: string; description?: string }
       >
       sharedHealth.value = Object.entries(rawProviders).map(([name, v]) => ({
         name,
         enabled: v.enabled ?? true,
+        status: (v.status as 'enabled' | 'degraded' | 'disabled' | undefined) ?? undefined,
         up: v.up ?? false,
         reason: v.reason,
         description: v.description,

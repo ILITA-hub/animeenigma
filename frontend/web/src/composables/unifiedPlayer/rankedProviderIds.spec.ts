@@ -26,4 +26,12 @@ describe('rankedProviderIds', () => {
     const out = rankedProviderIds(rows, ['gogoanime', 'allanime'], CURATED)
     expect(out).toEqual(['ae'])
   })
+
+  it('forces degraded rows to the very end regardless of rank/curated (AUTO-484)', () => {
+    const rows = [row('allanime'), row('gogoanime'), row('animefever', 'degraded'), row('ae')]
+    // even if the ranking lists animefever first, it must end up last
+    const out = rankedProviderIds(rows, ['animefever', 'gogoanime', 'allanime'], CURATED)
+    expect(out[out.length - 1]).toBe('animefever')
+    expect(out).toEqual(['gogoanime', 'allanime', 'ae', 'animefever'])
+  })
 })

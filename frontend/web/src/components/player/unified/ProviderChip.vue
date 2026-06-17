@@ -5,7 +5,7 @@
     :class="['w-full', isSelected ? 'is-selected' : '']"
   >
     <button
-      :disabled="row.state !== 'active'"
+      :disabled="!selectable"
       :title="row.reason"
       :class="[
         'relative inline-flex items-center gap-2 w-full px-2.5 py-[9px]',
@@ -13,7 +13,7 @@
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
         isSelected
           ? 'is-selected bg-[rgba(0,212,255,0.10)] border-[var(--accent-line)] text-white'
-          : row.state === 'active'
+          : selectable
             ? 'bg-white/[0.04] border-transparent text-[var(--ink-2)] hover:bg-white/[0.09] hover:text-white'
             : 'bg-white/[0.04] border-transparent text-[var(--ink-2)] opacity-40 cursor-not-allowed',
       ]"
@@ -69,6 +69,11 @@
         v-else-if="row.state === 'down'"
         class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--destructive)] font-mono"
       >DOWN</span>
+      <span
+        v-else-if="row.state === 'degraded'"
+        data-test="cap-degraded"
+        class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-warning font-mono"
+      >{{ $t('player.sources.degraded') }}</span>
     </button>
   </div>
 </template>
@@ -85,6 +90,8 @@ const props = defineProps<{
   selected?: boolean
   cap?: ProviderCap
   best?: boolean
+  /** When on, degraded providers become manually selectable (AUTO-484). */
+  hackerMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -94,8 +101,14 @@ const emit = defineEmits<{
 const isSelected = computed(() => props.selected === true)
 const labels = computed(() => deriveCapLabels(props.cap))
 
+// Active is always selectable; a degraded provider is selectable ONLY in hacker
+// mode (never auto-selected — that path filters on state 'active'). AUTO-484.
+const selectable = computed(
+  () => props.row.state === 'active' || (props.row.state === 'degraded' && props.hackerMode === true),
+)
+
 function onClick() {
-  if (props.row.state === 'active') {
+  if (selectable.value) {
     emit('select')
   }
 }
