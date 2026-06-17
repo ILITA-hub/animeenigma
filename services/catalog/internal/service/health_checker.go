@@ -49,6 +49,7 @@ func NewPlayerHealthChecker(
 	metrics.ProviderEnabled.WithLabelValues(providerKodik).Set(1)
 	metrics.ProviderInfo.WithLabelValues(
 		providerKodik,
+		"enabled",
 		"RU iframe player",
 		"Kodik RU iframe — liveness via Naruto search probe (catalog-side, not part of the EN failover chain)",
 	).Set(1)

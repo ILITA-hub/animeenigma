@@ -102,14 +102,18 @@ var (
 	)
 
 	// ProviderInfo is an info-style gauge (always 1) carrying per-provider
-	// management metadata (reason, description) for the Grafana table. Values
-	// change only on a config edit + scraper restart, so cardinality is bounded
-	// (~7 providers). ISS-023.
+	// management metadata (status, reason, description) for the Grafana table.
+	// `status` is the tri-state from the catalog scraper_providers table
+	// (enabled | degraded | disabled) — the management column reads it so a
+	// degraded provider renders distinctly from a fully-disabled one (the
+	// binary provider_enabled gauge can't distinguish the two). Values change
+	// only on a DB edit + scraper restart/refresh, so cardinality is bounded
+	// (~7 providers). ISS-023 / AUTO-484.
 	ProviderInfo = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "provider_info",
-			Help: "Info gauge (always 1) exposing per-provider management metadata (reason, description) for Grafana",
+			Help: "Info gauge (always 1) exposing per-provider management metadata (status, reason, description) for Grafana",
 		},
-		[]string{"provider", "reason", "description"},
+		[]string{"provider", "status", "reason", "description"},
 	)
 )

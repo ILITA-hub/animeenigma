@@ -221,8 +221,8 @@ func TestProviderEnabledAndInfo_Exist(t *testing.T) {
 		t.Errorf("provider_enabled{allanime} = %v; want 1", got)
 	}
 
-	ProviderInfo.WithLabelValues("animepahe", "Cloudflare challenge", "moved to CF").Set(1)
-	if got := testutil.ToFloat64(ProviderInfo.WithLabelValues("animepahe", "Cloudflare challenge", "moved to CF")); got != 1 {
+	ProviderInfo.WithLabelValues("animepahe", "disabled", "Cloudflare challenge", "moved to CF").Set(1)
+	if got := testutil.ToFloat64(ProviderInfo.WithLabelValues("animepahe", "disabled", "Cloudflare challenge", "moved to CF")); got != 1 {
 		t.Errorf("provider_info{...} = %v; want 1", got)
 	}
 }

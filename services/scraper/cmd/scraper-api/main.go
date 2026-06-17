@@ -649,7 +649,7 @@ func main() {
 			enabled = 1.0
 		}
 		metrics.ProviderEnabled.WithLabelValues(row.Name).Set(enabled)
-		metrics.ProviderInfo.WithLabelValues(row.Name, row.Reason, row.Description).Set(1)
+		metrics.ProviderInfo.WithLabelValues(row.Name, string(row.Status), row.Reason, row.Description).Set(1)
 	}
 	log.Infow("provider management config loaded",
 		"source", cfg.Providers.Source,

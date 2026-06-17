@@ -14,7 +14,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "All providers currently enabled (provider_enabled=1), including Kodik and 18anime. Degraded providers (SCRAPER_DEGRADED_PROVIDERS) report 0.",
+      "description": "Count of providers in the normal auto-failover chain (provider_enabled=1), including Kodik and 18anime. Degraded providers (status='degraded' in the catalog scraper_providers table — registered but manual-only) report 0 here; see the Provider Management table for full tri-state.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -441,7 +441,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Per-provider management view: enabled state, live up/down, and (for degraded providers) the reason + description. Joins provider_enabled + provider_health_up + provider_info. Includes Kodik (RU), 18anime (18+) and the EN scraper providers.",
+      "description": "Per-provider management view: tri-state status (enabled / degraded / disabled), live up/down, and the reason + description. Joins provider_health_up + provider_info (whose `status` label is the catalog scraper_providers tri-state). Includes Kodik (RU), 18anime (18+) and the EN scraper providers.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -452,7 +452,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Enabled"
+              "options": "Status"
             },
             "properties": [
               {
@@ -461,11 +461,15 @@
                   {
                     "type": "value",
                     "options": {
-                      "1": {
+                      "enabled": {
                         "text": "\ud83d\udfe2 Enabled",
                         "color": "green"
                       },
-                      "0": {
+                      "degraded": {
+                        "text": "\ud83d\udfe1 Degraded",
+                        "color": "orange"
+                      },
+                      "disabled": {
                         "text": "\u26aa Disabled",
                         "color": "red"
                       }
@@ -602,18 +606,19 @@
               "instance 1": true,
               "instance 2": true,
               "instance 3": true,
+              "Value #A": true,
               "Value #C": true
             },
             "renameByName": {
               "provider": "Provider",
-              "Value #A": "Enabled",
+              "status": "Status",
               "Value #B": "Live Up",
               "reason": "Reason",
               "description": "Description"
             },
             "indexByName": {
               "Provider": 0,
-              "Enabled": 1,
+              "Status": 1,
               "Live Up": 2,
               "Reason": 3,
               "Description": 4
@@ -884,7 +889,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Enabled/disabled history per provider (provider_enabled). Shows when a provider was degraded via SCRAPER_DEGRADED_PROVIDERS / config.",
+      "description": "Auto-failover enabled/disabled history per provider (provider_enabled). A provider drops to 0 here when set to status='degraded' or 'disabled' in the catalog scraper_providers table.",
       "fieldConfig": {
         "defaults": {
           "color": {
