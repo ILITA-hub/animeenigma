@@ -136,3 +136,48 @@ func TestEpisodeRepository_LegacyPredicate_SourceLiteral(t *testing.T) {
 		t.Fatalf("episode.go must filter legacy rows with %q (idempotency tripwire)", want)
 	}
 }
+
+// TestEpisodeRepository_BumpFetch_Signature pins the BumpFetch method shape the
+// Phase-08 ae serve HIT path depends on (SERVE-02):
+// (recv, ctx, malID string, episode int) → error. The DB-backed behavior
+// (atomic last_fetch_at/fetch_count update, no-op on absent row) is exercised
+// behind the `integration` build tag; this no-DB test guards the signature so a
+// refactor can't silently drop or reshape it.
+func TestEpisodeRepository_BumpFetch_Signature(t *testing.T) {
+	rt := reflect.TypeOf(&EpisodeRepository{})
+	m, ok := rt.MethodByName("BumpFetch")
+	if !ok {
+		t.Fatal("EpisodeRepository.BumpFetch missing")
+	}
+	// (recv, ctx, malID, episode) → error
+	if got := m.Type.NumIn(); got != 4 {
+		t.Fatalf("BumpFetch NumIn = %d, want 4 (recv, ctx, malID, episode)", got)
+	}
+	if m.Type.In(2).Kind() != reflect.String {
+		t.Fatalf("BumpFetch malID arg must be string, got %s", m.Type.In(2))
+	}
+	if m.Type.In(3).Kind() != reflect.Int {
+		t.Fatalf("BumpFetch episode arg must be int, got %s", m.Type.In(3))
+	}
+	if m.Type.NumOut() != 1 || !m.Type.Out(0).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		t.Fatal("BumpFetch must return a single error")
+	}
+}
+
+// TestEpisodeRepository_BumpFetch_AtomicIncrementTripwire guards that BumpFetch
+// uses an atomic gorm.Expr increment (no read-modify-write race) and bumps
+// last_fetch_at. The behavioral DB assertion lives behind `integration`; this is
+// the no-DB source tripwire so a refactor can't quietly change the increment.
+func TestEpisodeRepository_BumpFetch_AtomicIncrementTripwire(t *testing.T) {
+	src, err := os.ReadFile("episode.go")
+	if err != nil {
+		t.Fatalf("read episode.go: %v", err)
+	}
+	s := string(src)
+	if !strings.Contains(s, "fetch_count + 1") {
+		t.Fatal("episode.go BumpFetch must use an atomic gorm.Expr(\"fetch_count + 1\") increment")
+	}
+	if !strings.Contains(s, `"last_fetch_at"`) {
+		t.Fatal("episode.go BumpFetch must bump last_fetch_at")
+	}
+}

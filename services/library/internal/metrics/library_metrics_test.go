@@ -211,3 +211,45 @@ func TestLibraryMetrics_ObserveEncodeDuration(t *testing.T) {
 		t.Fatalf("encode_duration sample count = %d, want 2", sampleCount)
 	}
 }
+
+// TestLibraryMetrics_IncServeTotal — Phase 08 ae serve-path counter: hit / miss
+// labels stay in distinct labelsets, and the nil-guard makes Inc safe on a nil
+// receiver (so a serve path with metrics disabled never panics).
+func TestLibraryMetrics_IncServeTotal(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+
+	m.IncServeTotal("hit")
+	m.IncServeTotal("hit")
+	m.IncServeTotal("miss")
+
+	if v := testutil.ToFloat64(m.GetServeTotalForTest("hit")); v != 2 {
+		t.Fatalf("library_autocache_serve_total{result=hit} = %v, want 2", v)
+	}
+	if v := testutil.ToFloat64(m.GetServeTotalForTest("miss")); v != 1 {
+		t.Fatalf("library_autocache_serve_total{result=miss} = %v, want 1", v)
+	}
+
+	// nil-receiver guard — must not panic.
+	var nilM *LibraryMetrics
+	nilM.IncServeTotal("hit")
+}
+
+// TestLibraryMetrics_ServeTotalRegistered — the new counter appears under its
+// exact SPEC name so the Phase-11 serve-hit-rate panel finds the series.
+func TestLibraryMetrics_ServeTotalRegistered(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+	m.IncServeTotal("hit") // touch so the CounterVec renders
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, f := range families {
+		if f.GetName() == "library_autocache_serve_total" {
+			return
+		}
+	}
+	t.Fatal("library_autocache_serve_total not registered")
+}

@@ -88,6 +88,28 @@ func (r *EpisodeRepository) UpdateMinioPath(ctx context.Context, id string, path
 	return nil
 }
 
+// BumpFetch sets last_fetch_at=now() and increments fetch_count for the
+// (shikimori_id, episode_number) row — the "viewed by any user" freshness +
+// popularity signal the ae serve HIT path fires (SERVE-02). The increment uses
+// gorm.Expr so it is a single atomic SQL statement (no read-modify-write race).
+//
+// It is a NO-OP (nil error) when no row matches: an absent row is a legitimate
+// empty state, and fetch_count is a popularity counter (not money) so
+// at-least-once / a zero RowsAffected is acceptable (CONTEXT line 59/101). It
+// therefore does NOT use First/NotFound — a bare scoped Updates is intentional.
+func (r *EpisodeRepository) BumpFetch(ctx context.Context, malID string, episode int) error {
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Episode{}).
+		Where("shikimori_id = ? AND episode_number = ?", malID, episode).
+		Updates(map[string]any{
+			"last_fetch_at": gorm.Expr("now()"),
+			"fetch_count":   gorm.Expr("fetch_count + 1"),
+		}).Error; err != nil {
+		return liberrors.Wrap(err, liberrors.CodeInternal, "bump episode fetch")
+	}
+	return nil
+}
+
 // ListAdminLegacyPath returns the episode rows still on the legacy
 // "{shikimori_id}/{ep}/" layout — i.e. whose minio_path does NOT start with
 // the unified-pool "aeProvider/" prefix. Rows already migrated are excluded,

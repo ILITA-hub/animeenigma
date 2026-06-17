@@ -45,6 +45,12 @@ type LibraryMetrics struct {
 	//   once per webhook fire from the library encoder to the
 	//   catalog's /internal/cache/invalidate/raw endpoint.
 	cacheInvalidationTotal *prometheus.CounterVec
+
+	// Phase 08 (workstream auto-torrent-population / v4.1) addition:
+	//   autocacheServeTotal{result="hit"|"miss"} — incremented once per
+	//   ae serve-path resolution (HIT = served from pool, MISS = absent →
+	//   failover + backfill demand). Phase 11 charts the serve-hit-rate.
+	autocacheServeTotal *prometheus.CounterVec
 }
 
 // NewLibraryMetrics registers the collectors against the default
@@ -134,6 +140,15 @@ func NewLibraryMetricsWithRegisterer(reg prometheus.Registerer) *LibraryMetrics 
 			prometheus.CounterOpts{
 				Name: "library_cache_invalidation_total",
 				Help: "Cache-invalidation webhook fires from library to catalog, labeled by result (ok|fail).",
+			},
+			[]string{"result"},
+		),
+
+		// Phase 08 (workstream auto-torrent-population / v4.1).
+		autocacheServeTotal: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "library_autocache_serve_total",
+				Help: "ae serve-path resolutions, labeled by result (hit|miss).",
 			},
 			[]string{"result"},
 		),
@@ -280,4 +295,22 @@ func (m *LibraryMetrics) IncCacheInvalidation(result string) {
 // library_cache_invalidation_total.
 func (m *LibraryMetrics) GetCacheInvalidationForTest(result string) prometheus.Counter {
 	return m.cacheInvalidationTotal.WithLabelValues(result)
+}
+
+// IncServeTotal increments library_autocache_serve_total with result label
+// "hit" (episode served from the pool) or "miss" (episode absent → failover +
+// backfill demand). Only the low-cardinality result label — no mal_id/episode,
+// so /metrics leaks no per-title viewing data. Phase 08 (SERVE-01/03); Phase 11
+// charts this series.
+func (m *LibraryMetrics) IncServeTotal(result string) {
+	if m == nil {
+		return
+	}
+	m.autocacheServeTotal.WithLabelValues(result).Inc()
+}
+
+// GetServeTotalForTest is the test-seam analogue for
+// library_autocache_serve_total.
+func (m *LibraryMetrics) GetServeTotalForTest(result string) prometheus.Counter {
+	return m.autocacheServeTotal.WithLabelValues(result)
 }
