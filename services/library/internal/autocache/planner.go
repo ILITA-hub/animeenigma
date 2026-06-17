@@ -98,10 +98,13 @@ const (
 	// minSweepInterval floors a misconfigured/zero sweep_interval_min so the loop
 	// can never busy-spin.
 	minSweepInterval = time.Minute
-	// avgRawEpSize is the pre-admit budget estimate fallback (~1.2 GiB) used when a
-	// selected release reports SizeBytes <= 0. It is a Phase-10 const, NOT a config
-	// column (CONTEXT: avg_raw_ep_size is a const this phase, no schema change).
-	avgRawEpSize int64 = 1288490188 // ~1.2 GiB
+	// AvgRawEpSize is the pre-admit budget estimate fallback (~1.2 GiB) used when an
+	// incoming download reports SizeBytes <= 0 (a selected release with no declared
+	// size, or an admin upload that omitted size_bytes). It is a Phase-10 const, NOT a
+	// config column (CONTEXT: avg_raw_ep_size is a const this phase, no schema change).
+	// Exported (WR-03) so the admin upload handler can apply the SAME fallback the
+	// Planner uses, keeping both pre-admit paths symmetric on the unknown-size case.
+	AvgRawEpSize int64 = 1288490188 // ~1.2 GiB
 )
 
 // Planner drains autocache_demand → RAW download jobs on a config-gated ticker.
@@ -308,7 +311,7 @@ func (p *Planner) plan(ctx context.Context, d domain.AutocacheDemand, cfg *domai
 	if p.evictor != nil {
 		estBytes := rel.SizeBytes
 		if estBytes <= 0 {
-			estBytes = avgRawEpSize
+			estBytes = AvgRawEpSize
 		}
 		admitted, err := p.evictor.EnsureRoom(ctx, estBytes)
 		if err != nil {

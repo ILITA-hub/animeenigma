@@ -439,7 +439,7 @@ func TestPlannerBudgetErrorFailsOpen(t *testing.T) {
 }
 
 // TestPlannerBudgetFallbackEstimate: when a selected release reports SizeBytes <= 0,
-// the Planner passes the avgRawEpSize const to EnsureRoom (not 0).
+// the Planner passes the AvgRawEpSize const to EnsureRoom (not 0).
 func TestPlannerBudgetFallbackEstimate(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
@@ -457,7 +457,7 @@ func TestPlannerBudgetFallbackEstimate(t *testing.T) {
 	if len(ev.calls) != 1 {
 		t.Fatalf("EnsureRoom must be called once, got %d", len(ev.calls))
 	}
-	if ev.calls[0] != avgRawEpSize {
-		t.Fatalf("EnsureRoom estBytes = %d, want avgRawEpSize=%d (fallback)", ev.calls[0], avgRawEpSize)
+	if ev.calls[0] != AvgRawEpSize {
+		t.Fatalf("EnsureRoom estBytes = %d, want AvgRawEpSize=%d (fallback)", ev.calls[0], AvgRawEpSize)
 	}
 }

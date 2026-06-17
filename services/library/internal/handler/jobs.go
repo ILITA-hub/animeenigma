@@ -226,7 +226,18 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// the disk-guard fail-open — a transient config/DB read failure never 500s the
 	// upload). On reject: rejected_total{budget_full} + HTTP 507.
 	if h.evictor != nil {
-		admitted, err := h.evictor.EnsureRoom(r.Context(), body.SizeBytes)
+		// WR-03: an operator pasting a magnet without a declared size sends
+		// size_bytes=0 (json omitempty). EnsureRoom(0) would only assert "is the
+		// pool currently under budget?" and reserve NOTHING for a download whose
+		// real encoded size is ~1.2 GiB+ — weakening D7 ("admin upload rejected when
+		// the pool can't fit") for the common size-omitted case. Apply the SAME
+		// AvgRawEpSize fallback the Planner uses (planner.go) so both pre-admit paths
+		// agree on the unknown-size scenario.
+		est := body.SizeBytes
+		if est <= 0 {
+			est = autocache.AvgRawEpSize
+		}
+		admitted, err := h.evictor.EnsureRoom(r.Context(), est)
 		if err != nil {
 			if h.log != nil {
 				h.log.Warnw("budget guard check failed, admitting (fail-open)", "error", err)
@@ -237,7 +248,7 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 				h.metrics.IncRejectedTotal("budget_full")
 			}
 			if h.log != nil {
-				h.log.Warnw("enqueue rejected: budget full", "size_bytes", body.SizeBytes)
+				h.log.Warnw("enqueue rejected: budget full", "size_bytes", body.SizeBytes, "est_bytes", est)
 			}
 			writeInsufficientStorage(w)
 			return

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/autocache"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/repo"
@@ -309,6 +310,38 @@ func TestJobsHandler_Create_BudgetAdmitted(t *testing.T) {
 	}
 	if len(store.created) != 1 {
 		t.Fatalf("both-gates-pass must create one job, got %d", len(store.created))
+	}
+}
+
+// TestJobsHandler_Create_BudgetOmittedSizeUsesFallback (WR-03): an admin upload that
+// omits size_bytes (=0) must reserve the AvgRawEpSize fallback the Planner uses — NOT 0
+// — so the pre-admit gate reserves a realistic estimate for an unknown-size download.
+func TestJobsHandler_Create_BudgetOmittedSizeUsesFallback(t *testing.T) {
+	h, store, _, bg, _ := newBudgetHandler(t)
+
+	// size_bytes omitted entirely → body.SizeBytes == 0.
+	body := map[string]any{
+		"magnet": validMagnet(),
+		"title":  "x",
+		"source": "manual",
+	}
+	b, _ := json.Marshal(body)
+	r := httptest.NewRequest(http.MethodPost, "/api/library/jobs", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+	h.Create(w, r)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", w.Code, w.Body.String())
+	}
+	if len(bg.calls) != 1 {
+		t.Fatalf("EnsureRoom must be called once, got %d", len(bg.calls))
+	}
+	if bg.calls[0] != autocache.AvgRawEpSize {
+		t.Fatalf("EnsureRoom estBytes = %d, want AvgRawEpSize fallback %d (omitted size_bytes)",
+			bg.calls[0], autocache.AvgRawEpSize)
+	}
+	if len(store.created) != 1 {
+		t.Fatalf("admitted upload must create one job, got %d", len(store.created))
 	}
 }
 
