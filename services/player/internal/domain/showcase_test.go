@@ -77,3 +77,41 @@ func TestValidateBlocks_FavoriteCharacterTooMany(t *testing.T) {
 		t.Fatal("expected error when favorite_character exceeds MaxBlockItems")
 	}
 }
+
+func TestValidateBlocks_VariantOK(t *testing.T) {
+	b := []Block{{Type: BlockFavoriteAnime, Variant: "podium", Config: cfg(t, map[string][]string{"anime_ids": {"a"}})}}
+	if err := ValidateBlocks(b); err != nil {
+		t.Fatalf("expected valid variant, got %v", err)
+	}
+}
+
+func TestValidateBlocks_EmptyVariantOK(t *testing.T) {
+	b := []Block{{Type: BlockAbout, Config: cfg(t, map[string]string{"text": "hi"})}}
+	if err := ValidateBlocks(b); err != nil {
+		t.Fatalf("empty variant must be allowed (defaults), got %v", err)
+	}
+}
+
+func TestValidateBlocks_UnknownVariant(t *testing.T) {
+	b := []Block{{Type: BlockStats, Variant: "bogus", Config: cfg(t, map[string]any{})}}
+	if err := ValidateBlocks(b); err == nil {
+		t.Fatal("expected error for unknown variant")
+	}
+}
+
+func TestValidateBlocks_NewTypesAccepted(t *testing.T) {
+	for _, ty := range []string{BlockContinueWatching, BlockAnimeDNA, BlockCompatibility} {
+		if err := ValidateBlocks([]Block{{Type: ty, Config: cfg(t, map[string]any{})}}); err != nil {
+			t.Fatalf("auto type %s should validate, got %v", ty, err)
+		}
+	}
+}
+
+func TestValidateBlocks_OpEdLimit(t *testing.T) {
+	ids := make([]string, MaxBlockItems+1)
+	for i := range ids { ids[i] = "t" }
+	b := []Block{{Type: BlockOpEd, Config: cfg(t, map[string][]string{"theme_ids": ids})}}
+	if err := ValidateBlocks(b); err == nil {
+		t.Fatal("expected error: too many op_ed theme_ids")
+	}
+}
