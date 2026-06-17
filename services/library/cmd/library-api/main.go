@@ -14,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/autocache"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
@@ -256,6 +257,23 @@ func main() {
 	}
 	log.Infow("minio writer ready",
 		"endpoint", cfg.Minio.Endpoint, "bucket", cfg.Minio.Bucket, "ssl", cfg.Minio.UseSSL)
+
+	// Phase 07 (POOL-02): one-time admin-content migration into the unified
+	// pool. For every pre-existing admin episode still on the legacy
+	// "{shikimori_id}/{ep}/" prefix, server-side-Move its MinIO objects into
+	// aeProvider/<mal>/RAW/<ep>/ and repoint minio_path AFTER the copy succeeds.
+	// Runs ONCE here — after migrations 005/006 applied (above) and the writer
+	// is ready, but BEFORE the worker pools / HTTP server start (spec §10:
+	// admin rows must be in the metered pool before the Phase-10 evictor).
+	// Idempotent (skips aeProvider/ rows) + restart-safe; Warnw (never Fatalw)
+	// on error so a partial/retryable migration re-runs next boot instead of
+	// crash-looping. Mirrors the jobRepo.ResumeInterrupted* boot-once pattern.
+	poolMigrator := autocache.NewMigrator(episodeRepo, writer, log)
+	if migrated, err := poolMigrator.Migrate(rootCtx); err != nil {
+		log.Warnw("autocache pool migration failed (will retry next boot)", "error", err)
+	} else {
+		log.Infow("autocache pool migration complete", "migrated", migrated)
+	}
 
 	// Phase 4: ffmpeg transcoder.
 	transcoder := ffmpeg.NewTranscoder(ffmpeg.Config{
