@@ -230,12 +230,9 @@
             :key="group.id"
             class="inline-flex items-center gap-1.5 cursor-pointer select-none text-sm text-white/70"
           >
-            <input
-              type="checkbox"
-              :value="group.id"
-              :checked="cardForm.groupIds.includes(group.id)"
-              class="rounded border-white/20"
-              @change="toggleCardGroup(group.id)"
+            <Checkbox
+              :model-value="cardForm.groupIds.includes(group.id)"
+              @update:model-value="toggleCardGroup(group.id)"
             />
             {{ group.name }}
           </label>

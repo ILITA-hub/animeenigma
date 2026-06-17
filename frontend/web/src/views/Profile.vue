@@ -515,6 +515,7 @@
                         :key="option.value"
                         class="flex items-start gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
                       >
+                        <!-- bespoke-keep: rich card-style radio (title + hint per option); RadioGroup primitive only models flat {value,label} options -->
                         <input
                           type="radio"
                           name="activity-visibility"

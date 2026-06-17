@@ -14,9 +14,12 @@
 #            --f-ui|--f-mono|--f-jp) usages (ERROR).
 #   RULE 4 — Zero off-scale font weights font-(bold|extrabold|black|light|thin)
 #            (ERROR; DS allows only font-medium/font-semibold). Scans *.vue + *.ts.
-#   RULE 5 — Zero bare <select> / <input type="date"> (ERROR; use the Select /
-#            DatePicker primitives). Exempts components/player/ (reka portals
-#            break in fullscreen) and type="datetime-local".
+#   RULE 5 — Zero bare native form controls: <select>, <input type="date">,
+#            <input type="checkbox">, <input type="radio"> (ERROR; use the
+#            Select / DatePicker / Checkbox / Switch / RadioGroup primitives).
+#            Exempts components/player/ (reka portals break in fullscreen) and
+#            type="datetime-local". Per-site escape hatch: a `bespoke-keep`
+#            comment within 6 lines above the control (justify inline).
 #
 # Brand-exemption (DS-GOV-02): cyan|pink|orange|rose|indigo|teal|lime are NOT
 # treated as off-palette — cyan/pink are the Neon-Tokyo brand primitives and
@@ -246,32 +249,49 @@ run_rule4() {
 }
 
 # ============================================================================
-# RULE 5 — bare <select> / <input type="date"> outside ui primitives + players
+# RULE 5 — bare native form controls outside ui primitives + players
 # ============================================================================
-# Use the Select / DatePicker primitives instead. Players (components/player/)
-# are EXEMPT: reka Select/Popover portal to <body> and break inside the
-# fullscreen element, so player source/quality pickers stay native. NOTE:
+# Match <select>, <input type="date|checkbox|radio">. Use the Select /
+# DatePicker / Checkbox / Switch / RadioGroup primitives instead. Players
+# (components/player/) are EXEMPT: reka Select/Popover portal to <body> and
+# break inside the fullscreen element, so player pickers stay native. NOTE:
 # type="datetime-local" does NOT match `type="date"` (closing quote anchors it),
 # so AdminGacha's banner schedule inputs are intentionally allowed.
+#
+# Per-site escape hatch: a `bespoke-keep` comment within 6 lines above the
+# matched control exempts it (e.g. a per-provider-accent checkbox, an sr-only
+# segmented-toggle radio, a rich card-style radio the flat RadioGroup can't
+# model). The justification lives at the code site — no central allowlist.
 run_rule5() {
   echo ""
-  echo "=== RULE 5: bare <select>/<input type=date> outside ui+players (use Select/DatePicker) ==="
+  echo "=== RULE 5: bare native form controls outside ui+players (use Select/DatePicker/Checkbox/Switch/RadioGroup) ==="
   local hits
-  hits=$(grep -rnE '<select(\s|>)|type="date"' "$SRC_DIR" --include='*.vue' \
+  hits=$(grep -rnE '<select(\s|>)|type="date"|type="checkbox"|type="radio"' "$SRC_DIR" --include='*.vue' \
     | grep -v '\.spec\.' | grep -v '__tests__' | grep -v 'components/player/' || true)
   if [ -z "$hits" ]; then
-    echo -e "  ${GREEN}OK${NC} No bare <select>/date inputs (Select/DatePicker used)"
+    echo -e "  ${GREEN}OK${NC} No bare native form controls (primitives used)"
     return 0
   fi
+  local reported=0
   while IFS= read -r line; do
     [ -z "$line" ] && continue
-    local file rest
+    local file rest lineno start
     file="${line%%:*}"
     rest="${line#*:}"
+    lineno="${rest%%:*}"
+    # bespoke-keep escape hatch: a justifying comment within 6 lines above.
+    start=$(( lineno > 6 ? lineno - 6 : 1 ))
+    if sed -n "${start},${lineno}p" "$file" 2>/dev/null | grep -q 'bespoke-keep'; then
+      continue
+    fi
     echo -e "  ${RED}ERROR${NC} $(relpath "$file"):${rest}"
     RULE5_ERRORS=$((RULE5_ERRORS + 1))
     ERRORS=$((ERRORS + 1))
+    reported=1
   done <<< "$hits"
+  if [ "$reported" -eq 0 ]; then
+    echo -e "  ${GREEN}OK${NC} No bare native form controls (primitives used; exceptions carry bespoke-keep)"
+  fi
 }
 
 # ============================================================================
@@ -473,6 +493,33 @@ EOF
   fi
   echo -e "  ${GREEN}DETECTED${NC} injected rgba literal (R7) + inline-style color (R8)"
 
+  # 1d) Rule 5 — a raw checkbox must be detected; a bespoke-keep'd radio exempted.
+  cat > "$scratch" <<'EOF'
+<template>
+  <label><input type="checkbox" :value="x" /> flag-me</label>
+  <!-- bespoke-keep: selftest segmented toggle -->
+  <label><input type="radio" :value="y" /> keep-me</label>
+</template>
+EOF
+  local r5flag=0 r5keep=1 r5matches
+  r5matches=$(grep -nE 'type="(checkbox|radio)"' "$scratch")
+  while IFS= read -r r5ln; do
+    [ -z "$r5ln" ] && continue
+    local r5no r5st
+    r5no="${r5ln%%:*}"
+    r5st=$(( r5no > 6 ? r5no - 6 : 1 ))
+    if sed -n "${r5st},${r5no}p" "$scratch" | grep -q 'bespoke-keep'; then
+      grep -qE 'type="radio"' <<< "$r5ln" || r5keep=0   # only the radio should be exempt
+    else
+      grep -qE 'type="checkbox"' <<< "$r5ln" && r5flag=1
+    fi
+  done <<< "$r5matches"
+  if [ "$r5flag" -ne 1 ] || [ "$r5keep" -ne 1 ]; then
+    echo -e "  ${RED}SELFTEST FAIL${NC} — Rule 5 checkbox detect / bespoke-keep wrong (flag=$r5flag keep=$r5keep)"
+    rm -f "$scratch"; trap - EXIT; exit 1
+  fi
+  echo -e "  ${GREEN}DETECTED${NC} raw checkbox (R5) + honored bespoke-keep radio exemption"
+
   # 3) Remove the scratch file and assert the clean tree PASSES.
   rm -f "$scratch"
   trap - EXIT
@@ -517,7 +564,7 @@ echo -e "  Off-palette classes (RULE 1): ${RULE1_ERRORS}"
 echo -e "  Non-allowlisted hex (RULE 2): ${RULE2_ERRORS}"
 echo -e "  Deprecated aliases  (RULE 3): ${RULE3_ERRORS}"
 echo -e "  Off-scale font wts  (RULE 4): ${RULE4_ERRORS}"
-echo -e "  Bare select/date    (RULE 5): ${RULE5_ERRORS}"
+echo -e "  Bare form controls  (RULE 5): ${RULE5_ERRORS}"
 echo -e "  Arbitrary spacing   (RULE 6): ${RULE6_ERRORS}"
 echo -e "  Raw rgba/hsl lits   (RULE 7): ${RULE7_ERRORS}"
 echo -e "  Inline style colors (RULE 8): ${RULE8_ERRORS}"
