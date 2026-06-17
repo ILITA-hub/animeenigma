@@ -36,6 +36,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_DIR="$SCRIPT_DIR/../src"
 ALLOWLIST="$SCRIPT_DIR/design-system-allowlist.txt"
+SPACING_ALLOWLIST="$SCRIPT_DIR/design-system-spacing-allowlist.txt"
 ERRORS=0
 WARNINGS=0
 
@@ -52,6 +53,7 @@ RULE4_ERRORS=0
 RULE5_ERRORS=0
 RULE6_ERRORS=0
 RULE7_ERRORS=0
+RULE8_ERRORS=0
 
 # Off-palette palette set (Phase-4 verbatim). Brand/provider hues
 # (cyan|pink|orange|rose|indigo|teal|lime) are deliberately ABSENT.
@@ -71,9 +73,17 @@ ALIAS_SURVIVORS='ink-2|ink-4|accent-soft|accent-line|accent-glow|pink-soft'
 # are forbidden. \b end-anchor avoids matching e.g. a hypothetical font-boldish.
 FONT_RE='\bfont-(bold|extrabold|black|light|thin)\b'
 
+# Arbitrary spacing values on props that HAVE a 4px token scale (padding / margin
+# / gap / space). `p-[10px]` etc. dodge the scale; bind to a token (px-2.5) instead.
+# Matches numeric-unit brackets only (px/rem/em) — calc()/var() arbitrary values are
+# intentional computed spacing and start with a letter, so they don't match. Sizing
+# props (w/h/min-*/max-*/size) are DELIBERATELY EXCLUDED: no token scale exists for
+# arbitrary pixel dimensions, so flagging `w-[380px]` would be a false positive.
+SPACING_RE='\b(p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y)-\[[0-9][0-9.]*(px|rem|em)\]'
+
 # Raw rgba()/rgb()/hsla()/hsl() color literals (comma OR modern space/slash form).
 # var()-based forms (e.g. rgba(var(--player-accent-rgb), .3)) are token-based and
-# exempt — filtered out in run_rule6 by a grep -v 'var('.
+# exempt — filtered out in run_rule7 by a grep -v 'var('.
 RGBA_RE='(rgba?|hsla?)\([0-9 .,/%]+\)'
 
 # List the in-scope .vue files (exclude *.spec.* and __tests__).
@@ -265,11 +275,71 @@ run_rule5() {
 }
 
 # ============================================================================
-# RULE 6 — raw rgba()/rgb()/hsl() color literals in .vue (use a token)
+# RULE 6 — arbitrary spacing values outside the spacing allowlist
 # ============================================================================
+# Spacing props (padding/margin/gap/space) have a 4px token scale, so an arbitrary
+# `p-[10px]` should be `px-2.5`. On-grid values were migrated to tokens; only off-grid
+# sub-pixel tuning (odd px on the dense player menus + Stepper) is allowlisted, per
+# (file,class), in design-system-spacing-allowlist.txt. Sizing props are out of scope.
 run_rule6() {
   echo ""
-  echo "=== RULE 6: raw rgba()/hsl() literals (use a token; var() forms exempt) ==="
+  echo "=== RULE 6: arbitrary spacing values (use the 4px token scale) ==="
+
+  # Collect the non-comment spacing-allowlist lines once.
+  local allow_file
+  allow_file=$(mktemp)
+  # shellcheck disable=SC2064
+  trap "rm -f '$allow_file'" RETURN
+  if [ -f "$SPACING_ALLOWLIST" ]; then
+    grep -vE '^\s*(#|$)' "$SPACING_ALLOWLIST" > "$allow_file" 2>/dev/null || true
+  fi
+
+  # Every file:line:class across the in-scope .vue tree.
+  local hits
+  hits=$(grep -rnoE "$SPACING_RE" "$SRC_DIR" --include='*.vue' \
+    | grep -v '\.spec\.' | grep -v '__tests__' || true)
+
+  if [ -z "$hits" ]; then
+    echo -e "  ${GREEN}OK${NC} No arbitrary spacing values"
+    return 0
+  fi
+
+  local any=0
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    # line = <abs-file>:<lineno>:<class>
+    local file lineno cls rel
+    file="${line%%:*}"
+    local tail="${line#*:}"
+    lineno="${tail%%:*}"
+    cls="${tail#*:}"
+    rel="$(relpath "$file")"
+
+    # Allowed iff a non-comment allowlist line names BOTH this path AND this class.
+    # The allowlist format is `path:class:reason`; match `rel` and `cls` literally.
+    if awk -F: -v p="$rel" -v c="$cls" \
+         'index($0,p) && index($0,c) {found=1} END{exit !found}' \
+         "$allow_file"; then
+      continue
+    fi
+
+    echo -e "  ${RED}ERROR${NC} ${rel}:${lineno}: ${cls} (use the 4px token scale, or allowlist)"
+    RULE6_ERRORS=$((RULE6_ERRORS + 1))
+    ERRORS=$((ERRORS + 1))
+    any=1
+  done <<< "$hits"
+
+  if [ "$any" -eq 0 ]; then
+    echo -e "  ${GREEN}OK${NC} All arbitrary spacing values are allowlisted (path:class:reason)"
+  fi
+}
+
+# ============================================================================
+# RULE 7 — raw rgba()/rgb()/hsl() color literals in .vue (use a token)
+# ============================================================================
+run_rule7() {
+  echo ""
+  echo "=== RULE 7: raw rgba()/hsl() literals (use a token; var() forms exempt) ==="
 
   local allow_file
   allow_file=$(mktemp)
@@ -298,21 +368,23 @@ run_rule6() {
     norm="$(echo "$lit" | tr -d '[:space:]')"
     if allow_hit "$rel" "$norm" "$allow_file"; then continue; fi
     echo -e "  ${RED}ERROR${NC} ${rel}:${lineno}: ${lit} (not in allowlist)"
-    RULE6_ERRORS=$((RULE6_ERRORS + 1)); ERRORS=$((ERRORS + 1)); any=1
+    RULE7_ERRORS=$((RULE7_ERRORS + 1)); ERRORS=$((ERRORS + 1)); any=1
   done <<< "$hits"
 
-  [ "$any" -eq 0 ] && echo -e "  ${GREEN}OK${NC} All rgba()/hsl() literals are allowlisted"
+  if [ "$any" -eq 0 ]; then
+    echo -e "  ${GREEN}OK${NC} All rgba()/hsl() literals are allowlisted"
+  fi
 }
 
 # ============================================================================
-# RULE 7 — static color literal inside an inline style="…" / :style="'…'" attr
+# RULE 8 — static color literal inside an inline style="…" / :style="'…'" attr
 # ============================================================================
 # Flags ONLY hardcoded color (#hex | rgb( | hsl() inside an inline style attribute.
 # Dynamic object/array bindings (:style="{ width: pct }") and px/%/transform/layout
 # values are NOT the DS concern and are not flagged. var() forms are exempt.
-run_rule7() {
+run_rule8() {
   echo ""
-  echo "=== RULE 7: static color in inline style=/:style attr (use a class/token) ==="
+  echo "=== RULE 8: static color in inline style=/:style attr (use a class/token) ==="
 
   local allow_file
   allow_file=$(mktemp)
@@ -340,10 +412,12 @@ run_rule7() {
     norm="$(echo "$line" | tr -d '[:space:]')"
     if grep -qF "$rel" "$allow_file" 2>/dev/null && allow_hit "$rel" "$norm" "$allow_file"; then continue; fi
     echo -e "  ${RED}ERROR${NC} ${rel}:${lineno}: inline style color (use a class/token)"
-    RULE7_ERRORS=$((RULE7_ERRORS + 1)); ERRORS=$((ERRORS + 1)); any=1
+    RULE8_ERRORS=$((RULE8_ERRORS + 1)); ERRORS=$((ERRORS + 1)); any=1
   done <<< "$hits"
 
-  [ "$any" -eq 0 ] && echo -e "  ${GREEN}OK${NC} All inline style colors are allowlisted"
+  if [ "$any" -eq 0 ]; then
+    echo -e "  ${GREEN}OK${NC} All inline style colors are allowlisted"
+  fi
 }
 
 # ============================================================================
@@ -356,19 +430,16 @@ run_selftest() {
   # shellcheck disable=SC2064
   trap "rm -f '$scratch'" EXIT
 
-  # 1) Inject a deliberate off-palette violation (bg-red-500).
+  # 1) Inject a deliberate off-palette violation (bg-red-500) AND an arbitrary
+  #    spacing violation (p-[7px], off-grid + not allowlisted for this scratch file).
   cat > "$scratch" <<'EOF'
 <template>
   <!-- design-system-lint selftest marker; auto-removed -->
-  <div class="bg-red-500">selftest</div>
+  <div class="bg-red-500 p-[7px]">selftest</div>
 </template>
 EOF
 
-  # 2) Assert the gate DETECTS it (exit 1).
-  local detect_rc=0
-  ( ERRORS=0 RULE1_ERRORS=0; run_rule1 >/dev/null 2>&1
-    [ "$ERRORS" -gt 0 ] || exit 1 ) || detect_rc=$?
-  # Re-run rule1 directly to count against the scratch file.
+  # 2) Assert the gate DETECTS the off-palette class (exit 1).
   local scratch_hits
   scratch_hits=$(grep -nE "$OFF_PALETTE_RE" "$scratch" 2>/dev/null || true)
   if [ -z "$scratch_hits" ]; then
@@ -378,26 +449,35 @@ EOF
   fi
   echo -e "  ${GREEN}DETECTED${NC} injected bg-red-500 (gate would exit 1)"
 
-  # 1b) Injected rgba literal + inline-style color must be detected by Rule 6 / Rule 7.
+  # 2b) Assert RULE 6 DETECTS the injected arbitrary spacing (counts > 0).
+  ( ERRORS=0 RULE6_ERRORS=0; run_rule6 >/dev/null 2>&1
+    [ "$RULE6_ERRORS" -gt 0 ] ) || {
+    echo -e "  ${RED}SELFTEST FAIL${NC} — RULE 6 did NOT detect the injected p-[7px]"
+    rm -f "$scratch"; trap - EXIT
+    exit 1
+  }
+  echo -e "  ${GREEN}DETECTED${NC} injected p-[7px] arbitrary spacing (RULE 6 would exit 1)"
+
+  # 1c) Injected rgba literal + inline-style color must be detected by Rule 7 / Rule 8.
   cat > "$scratch" <<'EOF'
 <template>
   <div class="text-[rgba(1,2,3,0.5)]" style="background: rgba(4, 5, 6, 0.5); color:#abc">x</div>
 </template>
 EOF
-  local r6=0 r7=0
-  grep -qE "$RGBA_RE" "$scratch" && r6=1
-  grep -qE ':?style=("|'"'"')[^"'"'"']*(#[0-9a-fA-F]{3,8}|rgba?\()' "$scratch" && r7=1
-  if [ "$r6" -ne 1 ] || [ "$r7" -ne 1 ]; then
-    echo -e "  ${RED}SELFTEST FAIL${NC} — Rule 6/7 did NOT detect injected color (r6=$r6 r7=$r7)"
+  local r7=0 r8=0
+  grep -qE "$RGBA_RE" "$scratch" && r7=1
+  grep -qE ':?style=("|'"'"')[^"'"'"']*(#[0-9a-fA-F]{3,8}|rgba?\()' "$scratch" && r8=1
+  if [ "$r7" -ne 1 ] || [ "$r8" -ne 1 ]; then
+    echo -e "  ${RED}SELFTEST FAIL${NC} — Rule 7/8 did NOT detect injected color (r7=$r7 r8=$r8)"
     rm -f "$scratch"; trap - EXIT; exit 1
   fi
-  echo -e "  ${GREEN}DETECTED${NC} injected rgba literal (R6) + inline-style color (R7)"
+  echo -e "  ${GREEN}DETECTED${NC} injected rgba literal (R7) + inline-style color (R8)"
 
   # 3) Remove the scratch file and assert the clean tree PASSES.
   rm -f "$scratch"
   trap - EXIT
 
-  ERRORS=0; RULE1_ERRORS=0; RULE2_ERRORS=0; RULE3_ERRORS=0; RULE4_ERRORS=0; RULE5_ERRORS=0; RULE6_ERRORS=0; RULE7_ERRORS=0
+  ERRORS=0; RULE1_ERRORS=0; RULE2_ERRORS=0; RULE3_ERRORS=0; RULE4_ERRORS=0; RULE5_ERRORS=0; RULE6_ERRORS=0; RULE7_ERRORS=0; RULE8_ERRORS=0
   run_rule1 >/dev/null
   run_rule2 >/dev/null
   run_rule3 >/dev/null
@@ -405,6 +485,7 @@ EOF
   run_rule5 >/dev/null
   run_rule6 >/dev/null
   run_rule7 >/dev/null
+  run_rule8 >/dev/null
   if [ "$ERRORS" -gt 0 ]; then
     echo -e "  ${RED}SELFTEST FAIL${NC} — clean tree did NOT pass ($ERRORS errors)"
     exit 1
@@ -428,6 +509,7 @@ run_rule4
 run_rule5
 run_rule6
 run_rule7
+run_rule8
 
 echo ""
 echo "=== Summary ==="
@@ -436,8 +518,9 @@ echo -e "  Non-allowlisted hex (RULE 2): ${RULE2_ERRORS}"
 echo -e "  Deprecated aliases  (RULE 3): ${RULE3_ERRORS}"
 echo -e "  Off-scale font wts  (RULE 4): ${RULE4_ERRORS}"
 echo -e "  Bare select/date    (RULE 5): ${RULE5_ERRORS}"
-echo -e "  Raw rgba/hsl lits   (RULE 6): ${RULE6_ERRORS}"
-echo -e "  Inline style colors (RULE 7): ${RULE7_ERRORS}"
+echo -e "  Arbitrary spacing   (RULE 6): ${RULE6_ERRORS}"
+echo -e "  Raw rgba/hsl lits   (RULE 7): ${RULE7_ERRORS}"
+echo -e "  Inline style colors (RULE 8): ${RULE8_ERRORS}"
 
 if [ "$ERRORS" -gt 0 ]; then
   echo ""
