@@ -1319,8 +1319,10 @@ watch(engine.fatal, async (f) => {
     audio: state.combo.value.audio,
     lang: state.combo.value.lang,
   })
-  // Hacker mode: don't auto-switch — let the operator inspect and pick manually.
-  if (!state.hackerMode.value && await advanceToNextSource()) {
+  // Dynamic BEST: auto-switch to the next candidate so a blocked CDN host
+  // recovers to a working one. Runs in hacker mode too (the toast + HUD keep it
+  // inspectable) — "BEST" is only meaningful if it lands on a source that plays.
+  if (await advanceToNextSource()) {
     toast.push("That source failed — switching to the next best…", 'info', 4000)
     return
   }
