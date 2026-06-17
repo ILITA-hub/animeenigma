@@ -125,6 +125,43 @@ func (r *JobRepository) HasActiveForEpisode(ctx context.Context, shikimoriID str
 	return count > 0, nil
 }
 
+// SumInflightJobBytes returns Σ size_bytes over the NON-TERMINAL autocache jobs —
+// i.e. rows the Planner/admin path admitted that have NOT yet materialized into a
+// pool episode row (status queued|downloading|encoding|uploading). It is the
+// in-flight reservation that closes the WR-01 admit→materialize gap: a job is
+// admitted (jobs.Create) but does not become a SumPoolBytes-counted aeProvider row
+// until the encoder runs episodeRepo.Create minutes-to-hours later, so without this
+// the budget is enforced only against already-materialized rows and N concurrent /
+// sequential admits against a stale snapshot can overshoot by ΣestBytes.
+//
+// Scoped to source='autocache': admin uploads materialize via the Link handler and
+// their in-flight window is the operator's own synchronous action (and admin
+// size_bytes is the operator's declared estimate, not a torrent's), so counting only
+// autocache in-flight bytes matches the planner-driven over-admission this guards.
+// The reservation is self-releasing and CANNOT leak: a job leaving the non-terminal
+// set (done → its row now counts in SumPoolBytes; failed|cancelled → it never will)
+// drops out of this SUM automatically — there is no counter to decrement, so success
+// AND failure both release it.
+//
+// SUM over zero rows is SQL NULL, COALESCE'd to 0, so the budget math never special-
+// cases "no jobs in flight".
+func (r *JobRepository) SumInflightJobBytes(ctx context.Context) (int64, error) {
+	var total int64
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Job{}).
+		Where("source = ?", domain.JobSourceAutocache).
+		Where("status NOT IN ?", []domain.JobStatus{
+			domain.JobStatusDone,
+			domain.JobStatusFailed,
+			domain.JobStatusCancelled,
+		}).
+		Select("COALESCE(SUM(size_bytes), 0)").
+		Scan(&total).Error; err != nil {
+		return 0, liberrors.Wrap(err, liberrors.CodeInternal, "sum inflight job bytes")
+	}
+	return total, nil
+}
+
 // Claim atomically picks the oldest row whose status is in `statuses`
 // and flips it to 'downloading'. The whole thing runs in a single
 // transaction with FOR UPDATE SKIP LOCKED so two parallel workers will

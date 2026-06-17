@@ -19,18 +19,35 @@ import (
 // (already in the locked 4-tier order). deleted records each DeleteByID(id). Errors can
 // be injected per-call.
 type fakeAccountant struct {
-	sumBytes   int64
-	sumErr     error
-	candidates []domain.Episode
-	candErr    error
-	deleted    []string
-	deleteErr  map[string]error // id → error (e.g. row-delete fails)
-	pool       []domain.Episode // returned by ListPool (the Accountant sweep)
-	poolErr    error
+	sumBytes     int64
+	sumErr       error
+	inflightByte int64 // returned by SumInflightJobBytes (WR-01 reservation)
+	inflightErr  error
+	candidates   []domain.Episode
+	candErr      error
+	deleted      []string
+	deletedBytes int64            // Σ bytes of evicted rows, subtracted from SumPoolBytes (WR-04)
+	deleteErr    map[string]error // id → error (e.g. row-delete fails)
+	pool         []domain.Episode // returned by ListPool (the Accountant sweep)
+	poolErr      error
 }
 
+// SumPoolBytes returns the CURRENT materialized pool total: the initial sumBytes minus
+// the bytes of every row deleted so far. Decrementing on delete mirrors the real
+// repo (a re-query after eviction sees the smaller pool) so the WR-04 re-measure —
+// which reads SumPoolBytes again AFTER the evict loop — observes the reclaimed total
+// rather than the stale pre-loop base.
 func (f *fakeAccountant) SumPoolBytes(_ context.Context) (int64, error) {
-	return f.sumBytes, f.sumErr
+	if f.sumErr != nil {
+		return 0, f.sumErr
+	}
+	return f.sumBytes - f.deletedBytes, nil
+}
+
+// SumInflightJobBytes satisfies the jobAccountant seam (WR-01). The fake returns a
+// static reservation so a test can assert EnsureRoom counts materialized + in-flight.
+func (f *fakeAccountant) SumInflightJobBytes(_ context.Context) (int64, error) {
+	return f.inflightByte, f.inflightErr
 }
 
 func (f *fakeAccountant) ListStaleEvictionCandidates(_ context.Context, _ *domain.AutocacheConfig, _ time.Time) ([]domain.Episode, error) {
@@ -47,6 +64,15 @@ func (f *fakeAccountant) DeleteByID(_ context.Context, id string) error {
 		}
 	}
 	f.deleted = append(f.deleted, id)
+	// Reflect the row's bytes leaving the pool so a subsequent SumPoolBytes re-query
+	// (WR-04 re-measure) sees the reclaimed total. Look up the size from the scripted
+	// candidate slice (the pool the evictor is draining).
+	for i := range f.candidates {
+		if f.candidates[i].ID == id && f.candidates[i].SizeBytes != nil {
+			f.deletedBytes += *f.candidates[i].SizeBytes
+			break
+		}
+	}
 	return nil
 }
 
@@ -89,7 +115,9 @@ func evictCfg() domain.AutocacheConfig {
 }
 
 func newEvictorForTest(c *fakeConfig, a *fakeAccountant, d *fakeDeleter, m *libmetrics.LibraryMetrics) *Evictor {
-	return NewEvictor(c, a, d, m, nil)
+	// a satisfies BOTH the poolAccountant and jobAccountant seams (WR-01), so it is
+	// passed as the pool AND the jobs argument.
+	return NewEvictor(c, a, a, d, m, nil)
 }
 
 // staleEp builds a Stale autocache episode of the given size + id/path.
@@ -328,6 +356,63 @@ func TestEnsureRoomQueueExhaustedRejects(t *testing.T) {
 	// All candidates were drained in the attempt.
 	if len(a.deleted) != 2 {
 		t.Fatalf("expected all candidates drained, got %v", a.deleted)
+	}
+}
+
+// TestEnsureRoomCountsInflightReservation (WR-01): the budget numerator is
+// materialized pool bytes PLUS in-flight admitted-but-unmaterialized autocache job
+// bytes. With the materialized pool alone fitting but the in-flight reservation
+// pushing it over, EnsureRoom must evict (or reject) rather than over-admit.
+func TestEnsureRoomCountsInflightReservation(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	c := &fakeConfig{cfg: evictCfg()} // budget 1000
+	// Materialized pool = 400, in-flight reservation = 400 → used = 800. Incoming 300
+	// would fit against the materialized-only 400 (700 <= 1000) but NOT against the
+	// reservation-inclusive 800 (1100 > 1000). One Stale candidate (300) reclaims to
+	// 500 materialized → 500+400 inflight + 300 = ... wait: after evicting 300 the
+	// materialized pool is 100, +400 inflight = 500, +300 incoming = 800 <= 1000 → fits.
+	a := &fakeAccountant{
+		sumBytes:     400,
+		inflightByte: 400,
+		candidates: []domain.Episode{
+			staleEp("s1", "aeProvider/s1/", 300, domain.EpisodeSourceAutocache),
+		},
+	}
+	d := &fakeDeleter{}
+
+	ev := newEvictorForTest(c, a, d, m)
+	admitted, err := ev.EnsureRoom(context.Background(), 300)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !admitted {
+		t.Fatalf("expected admitted=true after evicting to fit the in-flight-inclusive budget")
+	}
+	if len(a.deleted) != 1 || a.deleted[0] != "s1" {
+		t.Fatalf("expected the Stale candidate evicted to make room, got %v", a.deleted)
+	}
+}
+
+// TestEnsureRoomInflightRejectsWhenUnreclaimable (WR-01): with the in-flight
+// reservation pushing the pool over budget and NO Stale candidates to reclaim, the
+// admit is rejected — the reservation prevents the multiplication-across-in-flight
+// overshoot the materialized-only check missed.
+func TestEnsureRoomInflightRejectsWhenUnreclaimable(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	c := &fakeConfig{cfg: evictCfg()} // budget 1000
+	// Materialized 300 (fits alone) + in-flight 800 = 1100 > 1000, no Stale candidates.
+	a := &fakeAccountant{sumBytes: 300, inflightByte: 800, candidates: nil}
+	d := &fakeDeleter{}
+
+	ev := newEvictorForTest(c, a, d, m)
+	admitted, err := ev.EnsureRoom(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if admitted {
+		t.Fatalf("expected admitted=false: in-flight reservation over budget, nothing to reclaim")
 	}
 }
 

@@ -37,6 +37,14 @@ type poolAccountant interface {
 	ListPool(ctx context.Context) ([]domain.Episode, error)
 }
 
+// jobAccountant reads the in-flight admitted-but-not-yet-materialized autocache job
+// bytes (*repo.JobRepository.SumInflightJobBytes — WR-01). main.go injects the concrete
+// JobRepository; nil is allowed (an Evictor built with no jobs seam enforces the budget
+// against materialized pool rows only, the pre-WR-01 behavior).
+type jobAccountant interface {
+	SumInflightJobBytes(ctx context.Context) (int64, error)
+}
+
 // objectDeleter is the MinIO seam (*minio.Writer.DeletePrefix — Plan 01). It deletes
 // every object under a row's minio_path prefix, hard-failing on the first error so the
 // Evictor can leave the row intact and retry rather than orphan a serving pointer.
@@ -102,6 +110,7 @@ func Classify(ep domain.Episode, cfg *domain.AutocacheConfig, now time.Time) Fre
 type Evictor struct {
 	config  configGetter
 	pool    poolAccountant
+	jobs    jobAccountant // in-flight reservation (WR-01); nil → materialized-only budget.
 	objects objectDeleter
 	metrics *metrics.LibraryMetrics
 	log     plannerLogger
@@ -115,11 +124,13 @@ type Evictor struct {
 	done chan struct{}
 }
 
-// NewEvictor wires the Evictor from its seams. metrics + log may be nil (the Evictor
-// is nil-guarded throughout via the metrics methods + the log nil-checks).
+// NewEvictor wires the Evictor from its seams. jobs (the WR-01 in-flight reservation),
+// metrics, and log may be nil (the Evictor is nil-guarded throughout via the metrics
+// methods, the log nil-checks, and the jobs nil-check in ensureRoomLocked).
 func NewEvictor(
 	config configGetter,
 	pool poolAccountant,
+	jobs jobAccountant,
 	objects objectDeleter,
 	libMetrics *metrics.LibraryMetrics,
 	log plannerLogger,
@@ -127,6 +138,7 @@ func NewEvictor(
 	return &Evictor{
 		config:  config,
 		pool:    pool,
+		jobs:    jobs,
 		objects: objects,
 		metrics: libMetrics,
 		log:     log,
@@ -148,18 +160,20 @@ func (e *Evictor) EnsureRoom(ctx context.Context, estBytes int64) (admitted bool
 	return e.ensureRoomLocked(ctx, estBytes)
 }
 
-// ensureRoomLocked is the lock-free reclaim core shared by EnsureRoom (which takes
-// e.mu) and Sweep (which already holds e.mu). It reads cfg + the pool byte-sum live,
+// ensureRoomLocked is the reclaim core shared by EnsureRoom (which takes e.mu) and
+// Sweep's reclaim half (which takes e.mu around just this call — WR-02). It reads cfg +
+// the used-bytes total live (materialized pool + in-flight reservation — WR-01),
 // short-circuits when the estimate already fits, then evicts Stale candidates in the
-// SQL-locked 4-tier order until the estimate fits or the queue is exhausted. The
-// caller MUST hold e.mu.
+// SQL-locked 4-tier order until the estimate fits or the queue is exhausted, and
+// re-measures the used total once more before deciding admission (WR-04). The caller
+// MUST hold e.mu for the WHOLE call.
 func (e *Evictor) ensureRoomLocked(ctx context.Context, estBytes int64) (admitted bool, err error) {
 	cfg, err := e.config.Get(ctx) // live budget + freshness windows (no boot-cache)
 	if err != nil {
 		return false, err
 	}
 
-	used, err := e.pool.SumPoolBytes(ctx) // Σ size_bytes over the aeProvider pool
+	used, err := e.usedBytesLocked(ctx) // materialized pool + in-flight reservation
 	if err != nil {
 		return false, err
 	}
@@ -192,7 +206,39 @@ func (e *Evictor) ensureRoomLocked(ctx context.Context, estBytes int64) (admitte
 		e.metrics.IncEvictedTotal(string(cands[i].Source))
 	}
 
-	return used+estBytes <= cfg.BudgetBytes, nil
+	// WR-04: the loop above decremented `used` from a base measured BEFORE the evict
+	// loop ran, so the admit decision would mix `used` from one instant with the
+	// candidate list from a later instant (a concurrent insert/delete between the two
+	// reads is not reflected). Re-measure under the still-held mutex so the boundary
+	// decision (used exactly at budget) is made off a single consistent snapshot
+	// rather than the decremented projection. We stay inside e.mu for the whole
+	// read→evict→re-measure cycle, so this introduces no new TOCTOU.
+	final, err := e.usedBytesLocked(ctx)
+	if err != nil {
+		return false, err
+	}
+	return final+estBytes <= cfg.BudgetBytes, nil
+}
+
+// usedBytesLocked returns the budget numerator: Σ materialized aeProvider pool bytes
+// PLUS the in-flight reservation (Σ size_bytes of non-terminal autocache jobs admitted
+// but not yet materialized into a pool row — WR-01). The caller MUST hold e.mu. The
+// in-flight term closes the admit→materialize gap so concurrent / sequential admits
+// against a stale snapshot cannot over-admit by ΣestBytes. The jobs seam is nil-guarded
+// (a nil seam = materialized-only budget, the pre-WR-01 behavior).
+func (e *Evictor) usedBytesLocked(ctx context.Context) (int64, error) {
+	used, err := e.pool.SumPoolBytes(ctx) // Σ size_bytes over the aeProvider pool
+	if err != nil {
+		return 0, err
+	}
+	if e.jobs != nil {
+		inflight, err := e.jobs.SumInflightJobBytes(ctx)
+		if err != nil {
+			return 0, err
+		}
+		used += inflight
+	}
+	return used, nil
 }
 
 // evictOne deletes one episode's MinIO objects FIRST, then its row only on success
@@ -272,27 +318,38 @@ func (e *Evictor) runOnce(ctx context.Context) time.Duration {
 	return cadence
 }
 
-// Sweep is the periodic Accountant + proactive reclaim. It holds e.mu (the SAME lock
-// EnsureRoom takes) so pre-admit and sweep cannot double-spend freed headroom
-// (T-10-04). It (a) proactively evicts Stale rows to keep the pool under budget by
-// reusing the EnsureRoom reclaim core with estBytes=0 ("is the pool currently within
-// budget? if not, evict Stale until it is"), then (b) refreshes the bytes_used /
-// budget_bytes / episodes gauges by listing the pool once and Classify-bucketing each
-// row. Sweep is the gauge source even when no download flows, so Phase 11 always has
-// live series.
+// Sweep is the periodic Accountant + proactive reclaim. Two halves with DIFFERENT
+// locking (WR-02): (a) the proactive reclaim mutates the pool and runs under e.mu (the
+// SAME lock EnsureRoom takes) so pre-admit and sweep cannot double-spend freed headroom
+// (T-10-04); (b) the gauge refresh is read-only and runs with NO lock held, so a slow
+// reclaim of many/large prefixes cannot head-of-line-block the synchronous admin upload
+// handler. (a) reuses the EnsureRoom reclaim core with estBytes=0 ("is the pool
+// currently within budget? if not, evict Stale until it is"); (b) refreshes the
+// bytes_used / budget_bytes / episodes gauges by listing the pool once and
+// Classify-bucketing each row. Sweep is the gauge source even when no download flows,
+// so Phase 11 always has live series.
 func (e *Evictor) Sweep(ctx context.Context) {
+	// (a) Proactive reclaim: bring the pool to/under budget (estBytes=0). This is the
+	// ONLY half that mutates the pool, so it is the ONLY half that needs e.mu (the
+	// double-spend guard vs. a concurrent pre-admit). WR-02: we hold e.mu across the
+	// reclaim ONLY — NOT across the read-only gauge refresh below — so a slow reclaim
+	// of many/large prefixes no longer head-of-line-blocks the synchronous admin
+	// upload handler (which blocks on the same e.mu inside the HTTP request, toward
+	// the 120s WriteTimeout). The reclaim itself stays fully serialized, so no
+	// double-spend / TOCTOU is introduced; only the lock's HOLD TIME shrinks.
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	// (a) Proactive reclaim: bring the pool to/under budget (estBytes=0).
-	if _, err := e.ensureRoomLocked(ctx, 0); err != nil {
-		if e.log != nil {
-			e.log.Warnw("autocache evictor: sweep reclaim failed", "error", err)
-		}
+	_, reclaimErr := e.ensureRoomLocked(ctx, 0)
+	e.mu.Unlock()
+	if reclaimErr != nil && e.log != nil {
+		e.log.Warnw("autocache evictor: sweep reclaim failed", "error", reclaimErr)
 		// Fall through — still publish the gauges from whatever state we can read.
 	}
 
-	// (b) Accountant: refresh the gauges. Read cfg live for the budget gauge.
+	// (b) Accountant: refresh the gauges with NO lock held. This half is read-only
+	// (ListPool + Set on the gauges) and needs no double-spend protection — a gauge
+	// snapshot that races a concurrent admit is self-correcting on the next sweep, and
+	// is far cheaper than pinning the lock across the pool list. Read cfg live for the
+	// budget gauge.
 	cfg, err := e.config.Get(ctx)
 	if err != nil {
 		if e.log != nil {

@@ -432,7 +432,11 @@ func main() {
 	// libMetrics — no reconstruction. Constructor arg order matches Plan 02:
 	// (config, pool, objects, metrics, log). Started for its sweep; Stopped on
 	// graceful shutdown (below).
-	evictor := autocache.NewEvictor(autocacheConfigRepo, episodeRepo, writer, libMetrics, log)
+	// WR-01: jobRepo is injected as the in-flight reservation seam (Σ size_bytes of
+	// non-terminal autocache jobs) so the budget counts materialized + in-flight,
+	// closing the admit→materialize overshoot. Arg order: (config, pool, jobs,
+	// objects, metrics, log).
+	evictor := autocache.NewEvictor(autocacheConfigRepo, episodeRepo, jobRepo, writer, libMetrics, log)
 	evictor.Start(rootCtx)
 	log.Infow("autocache evictor started")
 

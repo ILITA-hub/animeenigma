@@ -505,3 +505,61 @@ func TestJobRepository_ResumeInterruptedDownloads(t *testing.T) {
 		t.Fatalf("done row must remain done; got %q", got.Status)
 	}
 }
+
+// mustInsertSizedJob inserts a job with an explicit source/status/size_bytes so the
+// SumInflightJobBytes filter can be exercised across the (source, status) matrix.
+func mustInsertSizedJob(t *testing.T, r *JobRepository, source domain.JobSource, status domain.JobStatus, size int64, dn string) *domain.Job {
+	t.Helper()
+	j := &domain.Job{
+		Source:    source,
+		Title:     dn,
+		Magnet:    "magnet:?xt=urn:btih:8888888888888888888888888888888888888888&dn=" + dn,
+		SizeBytes: size,
+	}
+	if err := r.Create(context.Background(), j); err != nil {
+		t.Fatalf("create sized job: %v", err)
+	}
+	if status != domain.JobStatusQueued {
+		if err := r.UpdateStatus(context.Background(), j.ID, status, ""); err != nil {
+			t.Fatalf("set status %q: %v", status, err)
+		}
+	}
+	return j
+}
+
+// TestJobRepository_SumInflightJobBytes (WR-01): only NON-terminal autocache jobs count
+// toward the in-flight reservation — terminal autocache rows and non-autocache rows are
+// excluded, and an empty/all-terminal set returns 0 (COALESCE NULL→0).
+func TestJobRepository_SumInflightJobBytes(t *testing.T) {
+	db, cleanup := openTestDB(t)
+	defer cleanup()
+	r := NewJobRepository(db)
+
+	// Empty → 0.
+	if got, err := r.SumInflightJobBytes(context.Background()); err != nil || got != 0 {
+		t.Fatalf("empty SumInflightJobBytes = (%d, %v), want (0, nil)", got, err)
+	}
+
+	// Non-terminal autocache rows COUNT: queued(100) + downloading(200) + encoding(300)
+	// + uploading(400) = 1000.
+	mustInsertSizedJob(t, r, domain.JobSourceAutocache, domain.JobStatusQueued, 100, "ac-q")
+	mustInsertSizedJob(t, r, domain.JobSourceAutocache, domain.JobStatusDownloading, 200, "ac-d")
+	mustInsertSizedJob(t, r, domain.JobSourceAutocache, domain.JobStatusEncoding, 300, "ac-e")
+	mustInsertSizedJob(t, r, domain.JobSourceAutocache, domain.JobStatusUploading, 400, "ac-u")
+	// Terminal autocache rows are EXCLUDED (the reservation self-releases on done/
+	// failed/cancelled — done now counts in SumPoolBytes, the others never will).
+	mustInsertSizedJob(t, r, domain.JobSourceAutocache, domain.JobStatusDone, 1000, "ac-done")
+	mustInsertSizedJob(t, r, domain.JobSourceAutocache, domain.JobStatusFailed, 1000, "ac-fail")
+	mustInsertSizedJob(t, r, domain.JobSourceAutocache, domain.JobStatusCancelled, 1000, "ac-cancel")
+	// Non-autocache rows are EXCLUDED regardless of status (admin uploads reserve via
+	// the handler's synchronous path, not this counter).
+	mustInsertSizedJob(t, r, domain.JobSourceManual, domain.JobStatusDownloading, 5000, "manual-d")
+
+	got, err := r.SumInflightJobBytes(context.Background())
+	if err != nil {
+		t.Fatalf("SumInflightJobBytes: %v", err)
+	}
+	if got != 1000 {
+		t.Fatalf("SumInflightJobBytes = %d, want 1000 (only non-terminal autocache rows)", got)
+	}
+}
