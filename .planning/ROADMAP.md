@@ -64,10 +64,10 @@
   4. Concurrent demand for the same `(mal_id, episode)` collapses to a single download job, and an already-present episode enqueues no job. (TRIG-04)
   5. Only RAW releases at or below `quality_cap` (1080p) and at or above `min_seeders` are selected; DUB-preferring demand triggers no download. (TRIG-05)
 **Plans**: 4 plans (3 waves)
-  - [ ] 09-01-PLAN.md — Library schema + repo + metric foundation: migrations 008 (autocache source) / 009 (library_jobs.episode) / 010 (ongoing reason), Job.Episode + DemandReasonOngoing, HasActiveForEpisode + Drain/Delete, downloads_total counter (TRIG-03/04/05)
-  - [ ] 09-02-PLAN.md — Library Planner drain loop (config-gated ticker, present + in-flight dedup, RAW/quality/seeder filter, source=autocache enqueue) + migrations applied + Planner DI in main.go (TRIG-03/04/05)
-  - [ ] 09-03-PLAN.md — Player Logic B: fire-and-forget DemandProducer + UpdateProgress next_ep(N+1) fire for JP-audio active watchers + config/DI (TRIG-02)
-  - [ ] 09-04-PLAN.md — Scheduler Logic A: cron job adapting the hotcombos join (JP-audio + D8 recency + episodes_aired) firing ongoing demand per ongoing anime + cron registration + config/DI (TRIG-01)
+  - [x] 09-01-PLAN.md — Library schema + repo + metric foundation: migrations 008 (autocache source) / 009 (library_jobs.episode) / 010 (ongoing reason), Job.Episode + DemandReasonOngoing, HasActiveForEpisode + Drain/Delete, downloads_total counter (TRIG-03/04/05)
+  - [x] 09-02-PLAN.md — Library Planner drain loop (config-gated ticker, present + in-flight dedup, RAW/quality/seeder filter, source=autocache enqueue) + migrations applied + Planner DI in main.go (TRIG-03/04/05)
+  - [x] 09-03-PLAN.md — Player Logic B: fire-and-forget DemandProducer + UpdateProgress next_ep(N+1) fire for JP-audio active watchers + config/DI (TRIG-02)
+  - [x] 09-04-PLAN.md — Scheduler Logic A: cron job adapting the hotcombos join (JP-audio + D8 recency + episodes_aired) firing ongoing demand per ongoing anime + cron registration + config/DI (TRIG-01)
 
 ### Phase 10: Eviction & Budget
 **Goal**: The whole first-party pool stays self-managing under one budget — Fresh content is protected, Stale content is evicted in a fair source-ranked order, and an unfittable download is cleanly rejected rather than blowing the budget.
@@ -136,7 +136,7 @@ Prior-milestone reserved ideas still on the shelf (unnumbered until committed):
 | 1-6 | v4.0 | 23/23 | ✅ Complete | 2026-06-05 → 2026-06-08 |
 | 7. Pool Foundation, Config & Migration | v4.1 | 3/3 | Complete    | 2026-06-17 |
 | 8. Serving & Fetch Signal | v4.1 | 3/3 | Complete    | 2026-06-17 |
-| 9. Download Triggers | v4.1 | 0/4 | Planned | - |
+| 9. Download Triggers | v4.1 | 4/4 | Complete    | 2026-06-17 |
 | 10. Eviction & Budget | v4.1 | 0/? | Not started | - |
 | 11. Observability & Prediction | v4.1 | 0/? | Not started | - |
 </content>

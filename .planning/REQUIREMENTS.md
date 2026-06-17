@@ -18,11 +18,11 @@ Requirements for milestone v4.1. Each maps to exactly one roadmap phase.
 
 ### Download Triggers (TRIG)
 
-- [ ] **TRIG-01**: For each ongoing anime with ≥1 active JP-audio-combo watcher (list status `watching` AND watch progress within `active_watcher_days`), the system downloads each newly-aired episode once a ≤`quality_cap` release with ≥`min_seeders` appears on the torrent indexers (Logic A — ongoing push).
-- [ ] **TRIG-02**: When an active JP-audio-combo user begins watching episode N of a watching anime, the system ensures episode N+1 (if aired) is downloaded ahead of time (Logic B — next-episode pull).
-- [ ] **TRIG-03**: A cache miss on the "ae" provider enqueues a backfill download of that episode so subsequent requests hit.
-- [ ] **TRIG-04**: Concurrent demand for the same `(mal_id, episode)` collapses to a single download job; an already-present episode enqueues nothing.
-- [ ] **TRIG-05**: Only RAW releases at or below `quality_cap` (1080p) and at or above `min_seeders` are selected; DUB-preferring demand never triggers a download.
+- [x] **TRIG-01**: For each ongoing anime with ≥1 active JP-audio-combo watcher (list status `watching` AND watch progress within `active_watcher_days`), the system downloads each newly-aired episode once a ≤`quality_cap` release with ≥`min_seeders` appears on the torrent indexers (Logic A — ongoing push).
+- [x] **TRIG-02**: When an active JP-audio-combo user begins watching episode N of a watching anime, the system ensures episode N+1 (if aired) is downloaded ahead of time (Logic B — next-episode pull).
+- [x] **TRIG-03**: A cache miss on the "ae" provider enqueues a backfill download of that episode so subsequent requests hit.
+- [x] **TRIG-04**: Concurrent demand for the same `(mal_id, episode)` collapses to a single download job; an already-present episode enqueues nothing.
+- [x] **TRIG-05**: Only RAW releases at or below `quality_cap` (1080p) and at or above `min_seeders` are selected; DUB-preferring demand never triggers a download.
 
 ### Eviction & Budget (EVICT)
 
@@ -90,11 +90,11 @@ Which phases cover which requirements. **Filled by the roadmapper.**
 | SERVE-01 | Phase 8 | Complete |
 | SERVE-02 | Phase 8 | Complete |
 | SERVE-03 | Phase 8 | Complete |
-| TRIG-01 | Phase 9 | Pending |
-| TRIG-02 | Phase 9 | Pending |
-| TRIG-03 | Phase 9 | Pending |
-| TRIG-04 | Phase 9 | Pending |
-| TRIG-05 | Phase 9 | Pending |
+| TRIG-01 | Phase 9 | Complete |
+| TRIG-02 | Phase 9 | Complete |
+| TRIG-03 | Phase 9 | Complete |
+| TRIG-04 | Phase 9 | Complete |
+| TRIG-05 | Phase 9 | Complete |
 | EVICT-01 | Phase 10 | Pending |
 | EVICT-02 | Phase 10 | Pending |
 | EVICT-03 | Phase 10 | Pending |
