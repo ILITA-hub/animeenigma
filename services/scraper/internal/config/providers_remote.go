@@ -21,6 +21,7 @@ type remoteProvider struct {
 	Group            string `json:"group"`
 	Reason           string `json:"reason"`
 	Description      string `json:"description"`
+	ScraperOperated  bool   `json:"scraper_operated"`
 	SupportsSub      bool   `json:"supports_sub"`
 	SupportsDub      bool   `json:"supports_dub"`
 	SupportsRaw      bool   `json:"supports_raw"`
@@ -85,6 +86,13 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 	}
 	metas := make(map[string]ProviderMeta, len(rr.Data.Providers))
 	for _, p := range rr.Data.Providers {
+		// The stream_providers roster holds EVERY stream source (ae + legacy
+		// players + EN chain). The scraper operates ONLY scraper_operated rows;
+		// first-party/legacy rows are skipped here so they never enter EN
+		// failover and never trip the KnownProviders fail-fast below.
+		if !p.ScraperOperated {
+			continue
+		}
 		if p.Name == "" {
 			return ProvidersConfig{}, fmt.Errorf("provider config: entry with empty name")
 		}
