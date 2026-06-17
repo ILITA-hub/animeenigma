@@ -76,6 +76,14 @@ func main() {
 		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
 	}
 
+	// One-time migration: rename scraper_providers → stream_providers (roster
+	// unification 2026-06-17). MUST run before AutoMigrate so the new
+	// scraper_operated column lands on the renamed, data-carrying table rather
+	// than a fresh empty one. Guarded + idempotent (no-op on fresh DBs).
+	if err := scraperprovider.RenameScraperProvidersTable(db.DB); err != nil {
+		log.Fatalw("rename scraper_providers -> stream_providers failed", "error", err)
+	}
+
 	// Auto-migrate schema
 	if err := db.AutoMigrate(
 		&domain.Anime{},
@@ -123,7 +131,7 @@ func main() {
 	// it is a no-op on fresh DBs and on every boot after the column is gone.
 	if db.DB.Migrator().HasColumn(&domain.ScraperProvider{}, "enabled") {
 		if err := db.DB.Exec(
-			`UPDATE scraper_providers SET status = CASE WHEN enabled THEN 'enabled' ELSE 'disabled' END`,
+			`UPDATE stream_providers SET status = CASE WHEN enabled THEN 'enabled' ELSE 'disabled' END`,
 		).Error; err != nil {
 			log.Fatalw("backfill scraper_providers.status from enabled failed", "error", err)
 		}
@@ -142,6 +150,14 @@ func main() {
 		log.Errorw("scraper provider seed failed (continuing)", "error", err)
 	} else {
 		log.Infow("scraper provider defaults seeded")
+	}
+
+	// Backfill the intrinsic scraper_operated flag on every roster row (idempotent;
+	// the flag mirrors Group — intrinsic, not operator-editable). Ensures pre-
+	// existing rows (which AutoMigrate created the column on as default-false) and
+	// any operator-touched rows reflect the canonical scraper-operated set.
+	if err := scraperprovider.BackfillScraperOperated(db.DB); err != nil {
+		log.Errorw("backfill scraper_operated failed (continuing)", "error", err)
 	}
 
 	// Initialize cache
