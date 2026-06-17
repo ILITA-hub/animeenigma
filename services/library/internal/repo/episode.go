@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"strings"
+	"time"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
@@ -126,4 +127,108 @@ func (r *EpisodeRepository) ListAdminLegacyPath(ctx context.Context) ([]domain.E
 		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "list admin legacy-path episodes")
 	}
 	return eps, nil
+}
+
+// SumPoolBytes returns Σ size_bytes over the unified first-party aeProvider/
+// pool (admin + autocache, since both live under the same prefix). This is the
+// numerator of the EVICT-01 budget check (Σ ≤ autocache_config.budget_bytes).
+//
+// An empty pool — or a pool whose rows all have NULL size_bytes — returns 0
+// (not an error): SUM over zero rows is SQL NULL, which COALESCE folds to 0 so
+// the budget math never has to special-case "no episodes yet". The LIKE pattern
+// is a fixed literal (no user input), so it is GORM-safe inline.
+func (r *EpisodeRepository) SumPoolBytes(ctx context.Context) (int64, error) {
+	var total int64
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Episode{}).
+		Where("minio_path LIKE 'aeProvider/%'").
+		Select("COALESCE(SUM(size_bytes), 0)").
+		Scan(&total).Error; err != nil {
+		return 0, liberrors.Wrap(err, liberrors.CodeInternal, "sum pool bytes")
+	}
+	return total, nil
+}
+
+// ListStaleEvictionCandidates returns ONLY the Stale rows in the aeProvider/
+// pool, ordered in the locked EVICT-03 4-tier eviction order (oldest-first
+// within each tier). The Evictor (Plan 02) deletes from the top of this list
+// until enough room is freed; Fresh rows are excluded here so they are NEVER
+// eligible for eviction.
+//
+// Freshness (evaluated at `now`) is source-branched (CONTEXT §decisions):
+//   - autocache Fresh ⟺ downloaded_at > now-auto_fresh_download_days
+//     OR last_fetch_at > now-auto_fresh_fetch_days
+//   - admin     Fresh ⟺ downloaded_at > now-admin_fresh_days
+//     OR last_fetch_at > now-admin_fresh_days
+//
+// A row is Stale ⟺ NOT Fresh. NULL downloaded_at is treated as "very old"
+// (the `downloaded_at > cutoff` term is simply false for NULL in SQL, so the
+// row classifies by last_fetch_at only); NULL last_fetch_at = never-fetched
+// (its term is likewise false). The day-window cutoffs are computed in Go and
+// passed as BOUND `?` params — never string-interpolated into the SQL (T-10-01).
+//
+// Ordering tiers (CASE):
+//  1. autocache · never-fetched (last_fetch_at IS NULL)
+//  2. autocache · fetched
+//  3. admin · never-fetched
+//  4. admin · fetched
+//
+// within a tier: COALESCE(last_fetch_at, downloaded_at, created_at) ASC
+// (oldest-touched first; created_at is the always-present final fallback).
+func (r *EpisodeRepository) ListStaleEvictionCandidates(ctx context.Context, cfg *domain.AutocacheConfig, now time.Time) ([]domain.Episode, error) {
+	if cfg == nil {
+		return nil, liberrors.InvalidInput("autocache config is nil")
+	}
+
+	autoDownloadCutoff := now.AddDate(0, 0, -cfg.AutoFreshDownloadDays)
+	autoFetchCutoff := now.AddDate(0, 0, -cfg.AutoFreshFetchDays)
+	adminCutoff := now.AddDate(0, 0, -cfg.AdminFreshDays)
+
+	// NOT-Fresh predicate, source-branched. Each Fresh disjunct is negated:
+	// a row is a candidate when it is NOT fresh under its source's windows.
+	// Bound params (?) carry the cutoffs — no interpolation of cfg.* ints.
+	const notFresh = `
+		(
+			source = 'autocache' AND NOT (
+				(downloaded_at IS NOT NULL AND downloaded_at > ?) OR
+				(last_fetch_at IS NOT NULL AND last_fetch_at > ?)
+			)
+		) OR (
+			source = 'admin' AND NOT (
+				(downloaded_at IS NOT NULL AND downloaded_at > ?) OR
+				(last_fetch_at IS NOT NULL AND last_fetch_at > ?)
+			)
+		)`
+
+	const tierOrder = `CASE ` +
+		`WHEN source = 'autocache' AND last_fetch_at IS NULL THEN 1 ` +
+		`WHEN source = 'autocache' THEN 2 ` +
+		`WHEN source = 'admin' AND last_fetch_at IS NULL THEN 3 ` +
+		`ELSE 4 END ASC`
+
+	var eps []domain.Episode
+	if err := r.db.WithContext(ctx).
+		Where("minio_path LIKE 'aeProvider/%'").
+		Where(notFresh, autoDownloadCutoff, autoFetchCutoff, adminCutoff, adminCutoff).
+		Order(tierOrder).
+		Order("COALESCE(last_fetch_at, downloaded_at, created_at) ASC").
+		Find(&eps).Error; err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "list stale eviction candidates")
+	}
+	return eps, nil
+}
+
+// DeleteByID hard-deletes the single library_episodes row identified by id. The
+// Evictor (Plan 02) calls this AFTER the row's MinIO objects are gone, so a row
+// never points at deleted data (we tolerate orphaned objects over orphaned
+// rows). Deleting a non-existent id is a nil no-op (zero RowsAffected is a
+// legitimate "already gone" state, not a NotFound) — the evictor may race the
+// periodic sweep, and a double-delete must be harmless.
+func (r *EpisodeRepository) DeleteByID(ctx context.Context, id string) error {
+	if err := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		Delete(&domain.Episode{}).Error; err != nil {
+		return liberrors.Wrap(err, liberrors.CodeInternal, "delete episode by id")
+	}
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 )
@@ -162,6 +163,135 @@ func TestEpisodeRepository_BumpFetch_Signature(t *testing.T) {
 	if m.Type.NumOut() != 1 || !m.Type.Out(0).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 		t.Fatal("BumpFetch must return a single error")
 	}
+}
+
+// TestEpisodeRepository_EvictionMethods_Signatures pins the method set the
+// Phase-10 Evictor (Plan 02) + pre-admit gate (Plan 03) compose against:
+//
+//	SumPoolBytes(ctx) (int64, error)
+//	ListStaleEvictionCandidates(ctx, *AutocacheConfig, time.Time) ([]Episode, error)
+//	DeleteByID(ctx, string) error
+//
+// DB-backed behavior (LIKE-prefix scoping, 4-tier order, Stale filter, nil-id
+// no-op) is exercised behind the `integration` build tag; this no-DB test guards
+// the signatures so a refactor can't silently drop or reshape them.
+func TestEpisodeRepository_EvictionMethods_Signatures(t *testing.T) {
+	rt := reflect.TypeOf(&EpisodeRepository{})
+	errType := reflect.TypeOf((*error)(nil)).Elem()
+
+	sp, ok := rt.MethodByName("SumPoolBytes")
+	if !ok {
+		t.Fatal("EpisodeRepository.SumPoolBytes missing")
+	}
+	// (recv, ctx) → (int64, error)
+	if sp.Type.NumIn() != 2 {
+		t.Fatalf("SumPoolBytes NumIn = %d, want 2 (recv, ctx)", sp.Type.NumIn())
+	}
+	if sp.Type.NumOut() != 2 || sp.Type.Out(0).Kind() != reflect.Int64 || !sp.Type.Out(1).Implements(errType) {
+		t.Fatalf("SumPoolBytes must return (int64, error)")
+	}
+
+	lc, ok := rt.MethodByName("ListStaleEvictionCandidates")
+	if !ok {
+		t.Fatal("EpisodeRepository.ListStaleEvictionCandidates missing")
+	}
+	// (recv, ctx, *AutocacheConfig, time.Time) → ([]Episode, error)
+	if lc.Type.NumIn() != 4 {
+		t.Fatalf("ListStaleEvictionCandidates NumIn = %d, want 4 (recv, ctx, cfg, now)", lc.Type.NumIn())
+	}
+	if lc.Type.In(2) != reflect.TypeOf((*domain.AutocacheConfig)(nil)) {
+		t.Fatalf("ListStaleEvictionCandidates cfg arg = %s, want *domain.AutocacheConfig", lc.Type.In(2))
+	}
+	if lc.Type.In(3) != reflect.TypeOf(time.Time{}) {
+		t.Fatalf("ListStaleEvictionCandidates now arg = %s, want time.Time", lc.Type.In(3))
+	}
+	if lc.Type.NumOut() != 2 || lc.Type.Out(0) != reflect.TypeOf([]domain.Episode(nil)) || !lc.Type.Out(1).Implements(errType) {
+		t.Fatalf("ListStaleEvictionCandidates must return ([]domain.Episode, error)")
+	}
+
+	dl, ok := rt.MethodByName("DeleteByID")
+	if !ok {
+		t.Fatal("EpisodeRepository.DeleteByID missing")
+	}
+	// (recv, ctx, id) → error
+	if dl.Type.NumIn() != 3 {
+		t.Fatalf("DeleteByID NumIn = %d, want 3 (recv, ctx, id)", dl.Type.NumIn())
+	}
+	if dl.Type.In(2).Kind() != reflect.String {
+		t.Fatalf("DeleteByID id arg = %s, want string", dl.Type.In(2))
+	}
+	if dl.Type.NumOut() != 1 || !dl.Type.Out(0).Implements(errType) {
+		t.Fatalf("DeleteByID must return a single error")
+	}
+}
+
+// TestEpisodeRepository_SumPoolBytes_CoalesceTripwire guards that SumPoolBytes
+// folds an empty/all-NULL pool to 0 via COALESCE (the budget math relies on a
+// 0, never a SQL NULL) and scopes to the aeProvider/ pool prefix. The DB-backed
+// zero-pool assertion lives behind `integration`; this is the no-DB source
+// tripwire so a refactor can't quietly drop the COALESCE or the prefix scope.
+func TestEpisodeRepository_SumPoolBytes_CoalesceTripwire(t *testing.T) {
+	src := readEpisodeSource(t)
+	if !strings.Contains(src, "COALESCE(SUM(size_bytes), 0)") {
+		t.Fatal("SumPoolBytes must COALESCE(SUM(size_bytes), 0) so an empty pool yields 0, not NULL")
+	}
+	if !strings.Contains(src, "minio_path LIKE 'aeProvider/%'") {
+		t.Fatal("SumPoolBytes must scope to the aeProvider/ pool prefix")
+	}
+}
+
+// TestEpisodeRepository_StaleCandidates_OrderingTripwire guards the locked
+// 4-tier eviction CASE order + the COALESCE within-tier sort. The behavioral DB
+// assertion (only-Stale rows, tier order) lives behind `integration`; this is
+// the no-DB source tripwire so a refactor can't silently change the ordering.
+func TestEpisodeRepository_StaleCandidates_OrderingTripwire(t *testing.T) {
+	src := readEpisodeSource(t)
+	// Tier CASE: the four locked branches.
+	for _, want := range []string{
+		"WHEN source = 'autocache' AND last_fetch_at IS NULL THEN 1",
+		"WHEN source = 'autocache' THEN 2",
+		"WHEN source = 'admin' AND last_fetch_at IS NULL THEN 3",
+		"ELSE 4 END ASC",
+		"COALESCE(last_fetch_at, downloaded_at, created_at) ASC",
+	} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("ListStaleEvictionCandidates must contain ordering clause %q", want)
+		}
+	}
+}
+
+// TestEpisodeRepository_StaleCandidates_BoundParamsTripwire guards T-10-01: the
+// freshness day-windows must be passed as bound `?` params (computed from cfg
+// ints via now.AddDate), NEVER string-interpolated into the WHERE clause. A
+// quiet refactor to fmt.Sprintf(cfg.Auto*/Admin*) would reintroduce an
+// injection-shaped SQL path — this tripwire fails fast.
+func TestEpisodeRepository_StaleCandidates_BoundParamsTripwire(t *testing.T) {
+	src := readEpisodeSource(t)
+	if !strings.Contains(src, "now.AddDate(0, 0, -cfg.AutoFreshDownloadDays)") {
+		t.Fatal("freshness cutoffs must be computed via now.AddDate (then bound), not interpolated")
+	}
+	// No fmt.Sprintf of cfg windows into SQL.
+	for _, bad := range []string{
+		"Sprintf",
+		`+ cfg.AutoFreshDownloadDays`,
+		`+ cfg.AutoFreshFetchDays`,
+		`+ cfg.AdminFreshDays`,
+	} {
+		if strings.Contains(src, bad) {
+			t.Fatalf("eviction-candidate SQL must use bound ? params, found interpolation-shaped %q", bad)
+		}
+	}
+}
+
+// readEpisodeSource is a small helper that reads episode.go for the source
+// tripwire tests in this file.
+func readEpisodeSource(t *testing.T) string {
+	t.Helper()
+	src, err := os.ReadFile("episode.go")
+	if err != nil {
+		t.Fatalf("read episode.go: %v", err)
+	}
+	return string(src)
 }
 
 // TestEpisodeRepository_BumpFetch_AtomicIncrementTripwire guards that BumpFetch
