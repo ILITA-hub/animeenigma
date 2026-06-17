@@ -98,3 +98,26 @@ src/components/player/unified/UnifiedPlayer.vue:#00d4ff:brand-cyan fallback in a
 src/components/home/spotlight/ui/SpotlightChatBubble.vue:#2aabee:Telegram brand-blue gradient start — external brand identity, not a DS hue
 src/components/home/spotlight/ui/SpotlightChatBubble.vue:#229ed9:Telegram brand-blue gradient end — external brand identity, not a DS hue
 src/components/player/unified/UnifiedPlayer.vue:#08080f:resume-chip hover text-on-white fallback in var(--color-base,#08080f) — canonical-fine fallback (same as SkipIntroChip)
+
+# --- DS Rule 6: identity/decorative rgba literals (not tokenized) ---
+# Gacha rarity-tier identity palette (data-driven gradient stops; like providerRegistry.ts hex).
+src/components/gacha/CardViewer3D.vue:rgb(45,212,191):gacha rarity identity (teal)
+src/components/gacha/CardViewer3D.vue:rgb(251,146,60):gacha rarity identity (orange)
+src/components/gacha/CardViewer3D.vue:rgb(129,140,248):gacha rarity identity (indigo)
+src/components/gacha/CardViewer3D.vue:rgb(167,139,250):gacha rarity identity (violet)
+src/components/gacha/CardViewer3D.vue:rgba(40,40,60,0.5):gacha bespoke glow ramp
+src/components/gacha/CardViewer3D.vue:rgba(120,120,140,0.28):gacha bespoke glow ramp
+src/components/gacha/CardViewer3D.vue:rgba(2,2,8,0.96):gacha bespoke glow ramp endpoint
+src/components/gacha/DropsModal.vue:rgb(45,212,191):gacha rarity identity (teal)
+src/components/gacha/DropsModal.vue:rgb(251,146,60):gacha rarity identity (orange)
+src/components/gacha/DropsModal.vue:rgb(129,140,248):gacha rarity identity (indigo)
+src/components/gacha/GemCeremony.vue:rgb(45,212,191):gacha rarity identity (teal)
+src/components/gacha/GemCeremony.vue:rgb(251,146,60):gacha rarity identity (orange)
+src/components/gacha/GemCeremony.vue:rgb(129,140,248):gacha rarity identity (indigo)
+src/components/gacha/PullSummary.vue:rgb(45,212,191):gacha rarity identity (teal)
+src/components/gacha/PullSummary.vue:rgb(251,146,60):gacha rarity identity (orange)
+src/components/gacha/PullSummary.vue:rgb(129,140,248):gacha rarity identity (indigo)
+# Decorative opaque dark gradient ramps (spotlight/gacha backdrops; not part of the surface ladder).
+src/components/home/spotlight/SpotlightBackdrop.vue:rgb(11,11,24):decorative backdrop ramp
+src/components/home/spotlight/SpotlightBackdrop.vue:rgb(16,16,28):decorative backdrop ramp
+src/components/home/spotlight/cards/RandomTailCard.vue:rgb(13,13,28):decorative ramp
