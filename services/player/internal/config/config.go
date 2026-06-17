@@ -23,6 +23,25 @@ type Config struct {
 	Gacha       GachaConfig
 	Recs        RecsConfig
 	Notify      NotifyConfig
+	Autocache   AutocacheConfig
+}
+
+// AutocacheConfig controls the fire-and-forget player→library autocache demand
+// producer (Phase 9 / TRIG-02 — Logic B). When an active JP-audio watcher sends
+// the first progress heartbeat for episode N of a watching anime, the player
+// fires a next_ep demand for N+1 to the library so the autocache Planner
+// pre-downloads it. Same drop-on-full / nil-safe contract as RecsConfig — a
+// slow/down library never affects the heartbeat.
+type AutocacheConfig struct {
+	// LibraryURL is the base URL of the library service inside the Docker
+	// network. Only the path /internal/library/autocache/demand is called.
+	// Reuses the existing compose var LIBRARY_SERVICE_URL. Default:
+	// http://library:8089
+	LibraryURL string
+	// DemandEnabled toggles the demand producer; when false the producer is
+	// constructed disabled and all demands are silently dropped (library down /
+	// dark-ship). Default: true
+	DemandEnabled bool
 }
 
 // RecsConfig controls the fire-and-forget recs recompute-hint producer
@@ -166,6 +185,10 @@ func Load() (*Config, error) {
 		Notify: NotifyConfig{
 			InternalURL: getEnv("NOTIFICATIONS_INTERNAL_URL", "http://notifications:8090"),
 			Enabled:     getEnvBool("FEEDBACK_NOTIFY_ENABLED", true),
+		},
+		Autocache: AutocacheConfig{
+			LibraryURL:    getEnv("LIBRARY_SERVICE_URL", "http://library:8089"),
+			DemandEnabled: getEnvBool("AUTOCACHE_DEMAND_ENABLED", true),
 		},
 	}, nil
 }

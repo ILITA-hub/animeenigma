@@ -124,7 +124,7 @@ func setupViewerContextTestDB(t *testing.T) (*ViewerContextHandler, *gorm.DB) {
 	progressRepo := repo.NewProgressRepository(db)
 
 	prefService := service.NewPreferenceService(prefRepo, log)
-	progressService := service.NewProgressService(progressRepo, prefService, log)
+	progressService := service.NewProgressService(progressRepo, prefService, nil, log)
 	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, nil, nil, log)
 	reviewService := service.NewReviewService(listRepo, activityRepo, log)
 

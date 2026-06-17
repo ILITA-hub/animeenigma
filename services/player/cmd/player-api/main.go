@@ -310,7 +310,21 @@ func main() {
 		MaxHistoryRows: cfg.Tier2.MaxHistoryRows,
 		DurationFloor:  cfg.Tier2.DurationFloor,
 	})
-	progressService := service.NewProgressService(progressRepo, prefService, log)
+	// Phase 9 / TRIG-02 (Logic B): fire-and-forget player→library autocache
+	// demand producer. When an active JP-audio watcher starts episode N of a
+	// watching anime, UpdateProgress fires a next_ep demand for N+1 so the
+	// library autocache Planner pre-downloads it. Same drop-on-full / nil-safe
+	// contract as recsHintProducer — a slow/down library never blocks the
+	// heartbeat. Start now / defer Stop so the worker drains on shutdown.
+	demandProducer := service.NewDemandProducer(
+		cfg.Autocache.LibraryURL,
+		cfg.Autocache.DemandEnabled,
+		log,
+	)
+	demandProducer.Start()
+	defer demandProducer.Stop()
+
+	progressService := service.NewProgressService(progressRepo, prefService, demandProducer, log)
 	// Phase 4 (gacha): construct the non-blocking credit producer. Start before
 	// ListService so EpisodeWatched/TitleCompleted can fire immediately once the
 	// service is live. defer Stop so the worker drains any queued credits on
