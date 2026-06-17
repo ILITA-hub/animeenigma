@@ -436,12 +436,64 @@ function isProviderAvailable(id: string): Promise<boolean> {
 // Also reset saved-combo fallback state so the new title gets a fresh attempt.
 let providerAutoSelected = false
 let autoFallbackDone = false
+// Dynamic-BEST source switching: when an AUTO-selected source fails to actually
+// play (a dead playlist at playback — e.g. a megaplay CDN host that 403/502s our
+// IP), advance through candidate sources — untried servers of the current
+// provider (megaplay hands a different CDN host per server) then the next-ranked
+// providers — until one plays. "BEST" = the best source that actually works.
+const triedSources = new Set<string>()
+let sourceSwitchAttempts = 0
+const MAX_SOURCE_SWITCHES = 5
+function resetSourceSwitching() {
+  triedSources.clear()
+  sourceSwitchAttempts = 0
+}
 watch(() => props.animeId, () => {
   aeAvailableCache = null
   providerAutoSelected = false
   autoFallbackDone = false
+  resetSourceSwitching()
   resetFallbackIntents()
 })
+
+// Switch to the next candidate source after a playback failure. Returns true if
+// it initiated a switch (the combo/provider watcher re-resolves), false when no
+// untried candidate remains. Only an AUTO-selected source is auto-switched — a
+// manual pick is the user's deliberate choice and is left alone.
+async function advanceToNextSource(): Promise<boolean> {
+  if (!providerAutoSelected) return false
+  if (sourceSwitchAttempts >= MAX_SOURCE_SWITCHES) return false
+  const provider = state.combo.value.provider
+  const server = state.combo.value.server || resolvedServers.value[0]?.id || ''
+  triedSources.add(`${provider}:${server}`)
+
+  // 1) An untried server of the SAME provider — different CDN host, cheapest dodge.
+  const nextServer = resolvedServers.value.find(
+    (s) => !triedSources.has(`${provider}:${s.id}`),
+  )
+  if (nextServer) {
+    sourceSwitchAttempts++
+    state.setServer(nextServer.id) // combo watcher re-resolves the stream
+    return true
+  }
+
+  // 2) The next-ranked provider not yet tried. Deliberately NOT filtered on the
+  //    capability `playable` flag — that flag is a stale guess; live playback is
+  //    the real test, so give every remaining provider a shot.
+  const triedProviders = new Set([...triedSources].map((k) => k.split(':')[0]))
+  const next = await pickSmartDefault(
+    rows.value.filter((r) => !triedProviders.has(r.def.id)),
+    orderedProviderIds.value,
+    { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
+  )
+  if (next) {
+    sourceSwitchAttempts++
+    providerAutoSelected = true
+    state.setProvider(next, '') // provider watcher re-lists + re-resolves
+    return true
+  }
+  return false
+}
 
 // Providers whose default-selection eligibility needs a runtime availability
 // probe (see isProviderAvailable). Only first-party `ae` today.
@@ -1002,6 +1054,7 @@ watch(
 
 function onSelectProvider(id: string) {
   providerAutoSelected = false
+  resetSourceSwitching() // manual pick — fresh state, and don't auto-switch it
   state.setProvider(id, '')
   // loadEpisodesAndStream fires via the provider watcher above
 }
@@ -1016,6 +1069,7 @@ function onSelectProvider(id: string) {
 function onSelectEpisode(ep: EpisodeOption) {
   openMenu.value = null
   if (selectedEpisode.value?.number === ep.number) return
+  resetSourceSwitching() // new episode — fresh switch budget
   tracking.saveNow() // persist the outgoing episode's position
   selectedEpisode.value = ep
   tracking.resetEpisode(isEpisodeWatched(ep.number))
@@ -1028,6 +1082,7 @@ function onSelectEpisode(ep: EpisodeOption) {
 
 function retryResolution() {
   sourceError.value = null
+  resetSourceSwitching() // manual retry — give every candidate a fresh shot
   void loadEpisodesAndStream()
 }
 
@@ -1212,6 +1267,7 @@ function onTimeUpdate() {
   // poster for a black frame. Require real (unpaused) progress.
   if (!hasStarted.value && v && v.currentTime > 0 && !v.paused) {
     hasStarted.value = true
+    resetSourceSwitching() // a source that actually plays earns a fresh budget
     // Telemetry: first real frame — resolve ok + reached_playback (best-effort)
     if (!reachedReported) {
       reachedReported = true
@@ -1245,25 +1301,30 @@ function onVideoError() {
   sourceError.value = 'Stream unavailable'
 }
 
-// Same for the hls.js path: the engine flags unrecoverable fatals.
-watch(engine.fatal, (f) => {
-  if (f) {
-    setBuffering(false)
-    sourceError.value = 'Stream unavailable'
-    // Telemetry: HLS fatal (best-effort, never throws)
-    recordPlayerEvent({
-      kind: 'resolve',
-      provider: state.combo.value.provider,
-      anime_id: props.animeId,
-      episode: selectedEpisode.value?.number,
-      outcome: 'fail',
-      reached_playback: reachedReported,
-      error_kind: 'media_fatal',
-      latency_ms: resolveStartedAt ? Math.round(performance.now() - resolveStartedAt) : undefined,
-      audio: state.combo.value.audio,
-      lang: state.combo.value.lang,
-    })
+// hls.js fatal (dead playlist / unrecoverable). Dynamic BEST: try the next
+// candidate source so a blocked CDN host auto-recovers to a working one.
+watch(engine.fatal, async (f) => {
+  if (!f) return
+  setBuffering(false)
+  // Telemetry: HLS fatal (best-effort, never throws)
+  recordPlayerEvent({
+    kind: 'resolve',
+    provider: state.combo.value.provider,
+    anime_id: props.animeId,
+    episode: selectedEpisode.value?.number,
+    outcome: 'fail',
+    reached_playback: reachedReported,
+    error_kind: f === 'network' ? 'stream_error' : 'media_fatal',
+    latency_ms: resolveStartedAt ? Math.round(performance.now() - resolveStartedAt) : undefined,
+    audio: state.combo.value.audio,
+    lang: state.combo.value.lang,
+  })
+  // Hacker mode: don't auto-switch — let the operator inspect and pick manually.
+  if (!state.hackerMode.value && await advanceToNextSource()) {
+    toast.push("That source failed — switching to the next best…", 'info', 4000)
+    return
   }
+  sourceError.value = 'Stream unavailable'
 })
 
 // ─── Hacker mode (debug HUD) ──────────────────────────────────────────────────

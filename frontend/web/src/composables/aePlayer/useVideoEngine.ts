@@ -61,6 +61,21 @@ export function buildLevelLabels(
     .sort((a, b) => parseInt(b.label) - parseInt(a.label))
 }
 
+/**
+ * Decide whether a fatal hls.js NETWORK_ERROR should give up (→ player switches
+ * source) rather than retry via startLoad(). A dead PLAYLIST load (manifest or
+ * level — e.g. a CDN host that 403/502s our IP) is unrecoverable for this
+ * source, so bail immediately; transient fragment errors get `maxRetries`
+ * startLoad() attempts first. Pure + exported for unit testing.
+ */
+export function shouldFatalOnNetworkError(
+  playlistDead: boolean,
+  netRetries: number,
+  maxRetries = 2,
+): boolean {
+  return playlistDead || netRetries >= maxRetries
+}
+
 export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
   const fatal = ref<string | null>(null)
   const levels = ref<QualityLevel[]>([])
@@ -147,9 +162,29 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
       ]
       bandwidthEstimate.value = hls?.bandwidthEstimate ?? 0
     })
+    // Bounded network-error retries. A failed PLAYLIST load (manifest/level —
+    // e.g. a megaplay CDN host that 403/502s our IP) means this source is dead:
+    // looping startLoad() forever just freezes the player at a silent error.
+    // Signal `fatal='network'` so the player can switch to the next candidate
+    // source (the dynamic-BEST path). Transient fragment errors still get a few
+    // startLoad() retries before giving up.
+    let netRetries = 0
     hls.on(Hls.Events.ERROR, (_e: unknown, data: any) => {
       if (!data?.fatal) return
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+        const d = data.details
+        const playlistDead =
+          d === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+          d === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
+          d === Hls.ErrorDetails.MANIFEST_PARSING_ERROR ||
+          d === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
+          d === Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT
+        if (shouldFatalOnNetworkError(playlistDead, netRetries)) {
+          fatal.value = 'network'
+          destroy()
+          return
+        }
+        netRetries++
         hls.startLoad()
       } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
         hls.recoverMediaError()

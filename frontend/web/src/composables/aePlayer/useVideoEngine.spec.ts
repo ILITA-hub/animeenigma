@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { chooseLoadStrategy, buildLevelLabels } from './useVideoEngine'
+import { chooseLoadStrategy, buildLevelLabels, shouldFatalOnNetworkError } from './useVideoEngine'
+
+describe('shouldFatalOnNetworkError', () => {
+  it('bails immediately on a dead playlist (manifest/level load), no retries', () => {
+    // A CDN host that 403/502s the master.m3u8 is unrecoverable for this source —
+    // the player must switch rather than loop startLoad() forever.
+    expect(shouldFatalOnNetworkError(true, 0)).toBe(true)
+  })
+
+  it('retries transient (non-playlist) network errors up to the cap', () => {
+    expect(shouldFatalOnNetworkError(false, 0)).toBe(false)
+    expect(shouldFatalOnNetworkError(false, 1)).toBe(false)
+    expect(shouldFatalOnNetworkError(false, 2)).toBe(true) // cap reached → give up
+  })
+})
 
 describe('chooseLoadStrategy', () => {
   it('uses native src for mp4 regardless of hls.js support', () => {
