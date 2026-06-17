@@ -174,7 +174,7 @@ const nextEpLabel = computed(() =>
   content-visibility: auto;
   contain-intrinsic-size: 300px 104px;
 }
-.prow:hover { background: rgba(255, 255, 255, 0.03); }
+.prow:hover { background: var(--white-a4); }
 
 .poster-wrap {
   position: relative;
@@ -224,11 +224,11 @@ const nextEpLabel = computed(() =>
   border-radius: 4px;
   text-transform: uppercase;
 }
-.chip.airing    { background: rgba(0, 255, 157, 0.14); color: var(--color-success); }
-.chip.announced { background: rgba(0, 212, 255, 0.14); color: var(--brand-cyan); }
+.chip.airing    { background: var(--success-soft); color: var(--color-success); }
+.chip.announced { background: var(--accent-soft); color: var(--brand-cyan); }
 .chip.season    { background: rgba(167, 139, 250, 0.14); color: var(--brand-violet); }
-.chip.score { background: rgba(255, 214, 0, 0.14); color: var(--color-warning); display: inline-flex; align-items: center; gap: 4px; }
-.chip.site-score { background: rgba(0, 212, 255, 0.14); color: var(--brand-cyan); }
+.chip.score { background: var(--warning-soft); color: var(--color-warning); display: inline-flex; align-items: center; gap: 4px; }
+.chip.site-score { background: var(--accent-soft); color: var(--brand-cyan); }
 
 .next-ep {
   font-family: var(--font-mono);
@@ -249,13 +249,13 @@ const nextEpLabel = computed(() =>
   font-weight: 800;
   font-size: 56px;
   letter-spacing: -0.04em;
-  color: rgba(255, 255, 255, 0.04);
+  color: var(--white-a4);
   pointer-events: none;
   line-height: 1;
   z-index: 0;
   user-select: none;
 }
-.is-top3 .rank { color: rgba(0, 212, 255, 0.08); }
+.is-top3 .rank { color: var(--cyan-a08); }
 
 /* Centered-glass kebab — vertically centered on the right edge, hover reveal */
 .rkc {
@@ -266,7 +266,7 @@ const nextEpLabel = computed(() =>
   width: 34px;
   height: 34px;
   border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--black-a60);
   backdrop-filter: blur(6px);
   color: var(--foreground);
   display: grid;
@@ -276,5 +276,5 @@ const nextEpLabel = computed(() =>
   transition: opacity 0.18s ease, background 0.18s ease;
 }
 .prow:hover .rkc { opacity: 1; }
-.rkc:hover { background: rgba(0, 212, 255, 0.9); }
+.rkc:hover { background: var(--brand-cyan); }
 </style>

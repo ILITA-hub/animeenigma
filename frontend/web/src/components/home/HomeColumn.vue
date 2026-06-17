@@ -57,7 +57,7 @@ defineProps<{
 
 <style scoped>
 .col {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0.01) 100%);
+  background: linear-gradient(180deg, var(--white-a4) 0%, var(--white-a4) 100%);
   border: 1px solid var(--line);
   border-radius: var(--r-xl); /* ~22px */
   padding: 18px;
@@ -79,17 +79,17 @@ defineProps<{
   flex-shrink: 0;
 }
 .col-head .icon.green {
-  background: rgba(0, 255, 157, 0.12);
+  background: var(--success-soft);
   color: var(--color-success);
-  border: 1px solid rgba(0, 255, 157, 0.2);
+  border: 1px solid var(--success-soft);
 }
 .col-head .icon.gold {
-  background: rgba(255, 214, 0, 0.12);
+  background: var(--warning-soft);
   color: var(--color-warning);
-  border: 1px solid rgba(255, 214, 0, 0.2);
+  border: 1px solid var(--warning-soft);
 }
 .col-head .icon.blue {
-  background: rgba(0, 212, 255, 0.12);
+  background: var(--accent-soft);
   color: var(--brand-cyan);
   border: 1px solid var(--accent-line);
 }
@@ -141,8 +141,8 @@ defineProps<{
 /* scrollbar styling */
 .col-list::-webkit-scrollbar { width: 4px; }
 .col-list::-webkit-scrollbar-track { background: transparent; }
-.col-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
-.col-list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+.col-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.col-list::-webkit-scrollbar-thumb:hover { background: var(--white-a20); }
 
 /* Loading skeleton */
 .skeleton-row {
@@ -156,7 +156,7 @@ defineProps<{
 .skeleton-poster {
   width: 56px;
   aspect-ratio: 2 / 3;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border);
   border-radius: 8px;
   flex-shrink: 0;
 }
@@ -169,7 +169,7 @@ defineProps<{
 }
 .skeleton-line {
   height: 12px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border);
   border-radius: 4px;
 }
 .skeleton-line.w-3\/4 { width: 75%; }

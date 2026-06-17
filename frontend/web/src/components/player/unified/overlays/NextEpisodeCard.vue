@@ -59,10 +59,10 @@ const emit = defineEmits<{
   width: 300px;
   padding: 14px;
   border-radius: var(--r-lg);
-  background: rgba(8, 8, 15, 0.88);
+  background: var(--scrim-bg-strong);
   border: 1px solid var(--border);
   backdrop-filter: blur(10px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 40px var(--black-a60);
 }
 
 .pl-next-label {
@@ -84,7 +84,7 @@ const emit = defineEmits<{
   height: 44px;
   border-radius: 8px;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   background-size: cover;
   background-position: center;
 }

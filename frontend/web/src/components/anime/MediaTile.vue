@@ -62,7 +62,7 @@ const kickerLabel = computed(() =>
 .mtile:hover { box-shadow: var(--accent-glow); border-color: var(--accent-line); }
 .mtile:focus-visible { outline: 2px solid var(--brand-cyan); outline-offset: 2px; }
 
-.mtile-ovl { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); opacity: 0; transition: opacity 0.2s ease; z-index: 1; pointer-events: none; }
+.mtile-ovl { position: absolute; inset: 0; background: var(--black-a40); opacity: 0; transition: opacity 0.2s ease; z-index: 1; pointer-events: none; }
 .mtile:hover .mtile-ovl { opacity: 1; }
 
 .mtile-play {
@@ -73,13 +73,13 @@ const kickerLabel = computed(() =>
   width: 52px;
   height: 52px;
   border-radius: 999px;
-  background: rgba(0, 212, 255, 0.95);
+  background: var(--brand-cyan);
   display: grid;
   place-items: center;
   color: var(--background);
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.2s ease;
-  box-shadow: 0 0 24px rgba(0, 212, 255, 0.5);
+  box-shadow: 0 0 24px var(--cyan-a40);
   z-index: 2;
 }
 .mtile:hover .mtile-play { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
@@ -102,6 +102,6 @@ const kickerLabel = computed(() =>
   text-overflow: ellipsis;
 }
 
-.mtile-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, 0.08); z-index: 3; }
+.mtile-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--white-a8); z-index: 3; }
 .mtile-progress-fill { height: 100%; background: var(--brand-cyan); box-shadow: 0 0 8px var(--brand-cyan); transition: width 0.3s ease; }
 </style>

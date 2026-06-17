@@ -7,7 +7,7 @@
     <!-- Dialog -->
     <div
       class="flex flex-col rounded-[var(--r-xl)] overflow-hidden w-[540px] max-w-full max-h-full bg-[var(--elevated)]"
-      style="box-shadow: 0 30px 70px rgba(0,0,0,0.6);"
+      style="box-shadow: 0 30px 70px var(--black-a60);"
       role="dialog"
       aria-modal="true"
       aria-labelledby="browse-subs-title"
@@ -74,7 +74,7 @@
                 ? 'border-[var(--accent-line)] text-[var(--brand-cyan)]'
                 : 'bg-white/[0.06] border-transparent text-[var(--ink-2)] hover:bg-white/[0.12] hover:text-white',
             ]"
-            :style="activeProvider === prov ? 'background: rgba(0,212,255,0.18)' : ''"
+            :style="activeProvider === prov ? 'background: var(--cyan-a20)' : ''"
             @click="activeProvider = activeProvider === prov ? null : prov"
           >
             {{ prov }}
@@ -93,7 +93,7 @@
                 ? 'border-[var(--accent-line)] text-[var(--brand-cyan)]'
                 : 'bg-white/[0.06] border-transparent text-[var(--ink-2)] hover:bg-white/[0.12] hover:text-white',
             ]"
-            :style="activeLang === lang ? 'background: rgba(0,212,255,0.18)' : ''"
+            :style="activeLang === lang ? 'background: var(--cyan-a20)' : ''"
             @click="activeLang = activeLang === lang ? null : lang"
           >
             {{ lang.toUpperCase() }}
@@ -130,7 +130,7 @@
                   ? 'border-[var(--accent-line)]'
                   : 'bg-white/[0.05] border-transparent',
               ]"
-              :style="track.url === selectedUrl ? 'background: rgba(0,212,255,0.12)' : ''"
+              :style="track.url === selectedUrl ? 'background: var(--accent-soft)' : ''"
             >
               <!-- Provider badge -->
               <span
@@ -157,8 +157,8 @@
                     : 'text-white hover:bg-white/20',
                 ]"
                 :style="track.url === selectedUrl
-                  ? 'background: rgba(0,212,255,0.25)'
-                  : 'background: rgba(255,255,255,0.1)'"
+                  ? 'background: var(--accent-line)'
+                  : 'background: var(--border)'"
                 @click="emit('select', track)"
               >
                 {{ track.url === selectedUrl ? 'Selected' : 'Select' }}
@@ -244,11 +244,11 @@ const groupedTracks = computed<TrackGroup[]>(() => {
 
 // Simple provider → hue mapping for badges
 const PROVIDER_HUES: Record<string, string> = {
-  Jimaku: 'background: rgba(0,212,255,0.25); color: var(--brand-cyan)',
-  OpenSubtitles: 'background: rgba(255,255,255,0.12); color: var(--ink-2)',
+  Jimaku: 'background: var(--accent-line); color: var(--brand-cyan)',
+  OpenSubtitles: 'background: var(--line-strong); color: var(--ink-2)',
 }
 
 function providerBadgeStyle(provider: string): string {
-  return PROVIDER_HUES[provider] ?? 'background: rgba(255,255,255,0.10); color: var(--ink-2)'
+  return PROVIDER_HUES[provider] ?? 'background: var(--border); color: var(--ink-2)'
 }
 </script>

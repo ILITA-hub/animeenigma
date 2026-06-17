@@ -19,7 +19,7 @@
               ? 'border-[var(--accent-line)] text-[var(--brand-cyan)]'
               : 'bg-white/[0.08] border-transparent text-[var(--muted-foreground)] hover:bg-white/[0.14] hover:text-white',
           ]"
-          :style="subLang === 'off' ? 'background: rgba(0,212,255,0.18)' : ''"
+          :style="subLang === 'off' ? 'background: var(--cyan-a20)' : ''"
           @click="emit('update:subLang', 'off')"
         >
           Off
@@ -33,7 +33,7 @@
               ? 'border-[var(--accent-line)] text-[var(--brand-cyan)]'
               : 'bg-white/[0.08] border-transparent text-[var(--muted-foreground)] hover:bg-white/[0.14] hover:text-white',
           ]"
-          :style="subLang === lang ? 'background: rgba(0,212,255,0.18)' : ''"
+          :style="subLang === lang ? 'background: var(--cyan-a20)' : ''"
           @click="emit('update:subLang', lang)"
         >
           {{ langLabel(lang) }}

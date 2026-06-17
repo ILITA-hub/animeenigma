@@ -60,14 +60,14 @@
     <div
       v-if="sourceError"
       class="absolute inset-0 z-[2] flex items-center justify-center"
-      style="background: rgba(0,0,0,0.72);"
+      style="background: var(--black-a80);"
     >
       <div class="flex flex-col items-center gap-3 text-center px-8">
         <CircleAlert :size="48" :stroke-width="1.5" class="text-muted-foreground" aria-hidden="true" />
         <p class="text-sm font-medium text-foreground">{{ sourceError }}</p>
         <button
           class="px-4 py-2 rounded-md text-sm font-semibold text-foreground"
-          style="background: rgba(255,255,255,0.1);"
+          style="background: var(--border);"
           @click="retryResolution"
         >
           Retry
@@ -1889,8 +1889,8 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: stretch;
   border-radius: var(--r-md);
-  background: rgba(8, 8, 15, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: var(--scrim-bg-strong);
+  border: 1px solid var(--white-a30);
   backdrop-filter: blur(8px);
   overflow: hidden;
 }
@@ -1919,16 +1919,16 @@ onUnmounted(() => {
   align-items: center;
   padding: 0 10px;
   border: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  border-left: 1px solid var(--white-a20);
   background: transparent;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--muted-foreground);
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
 }
 
 .pl-resume-x:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--line-strong);
 }
 
 .pl--theater {
@@ -1949,7 +1949,7 @@ onUnmounted(() => {
 .pl-grain {
   position: absolute;
   inset: 0;
-  background: radial-gradient(80% 60% at 50% 38%, transparent, rgba(0, 0, 0, 0.35));
+  background: radial-gradient(80% 60% at 50% 38%, transparent, var(--black-a40));
   z-index: 1;
   pointer-events: none;
 }
@@ -1983,7 +1983,7 @@ onUnmounted(() => {
 
 .pl-ep-trigger:hover,
 .pl-ep-trigger[aria-expanded='true'] {
-  background: rgba(0, 212, 255, 0.12);
+  background: var(--accent-soft);
 }
 
 .pl-ep-chev {
@@ -2018,7 +2018,7 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 14px;
   padding: 16px 18px 40px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent);
+  background: linear-gradient(180deg, var(--black-a60), transparent);
   transition: opacity 0.2s;
 }
 
@@ -2037,7 +2037,7 @@ onUnmounted(() => {
 }
 
 .pl-icon:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--line-strong);
 }
 
 .pl-title-block {
@@ -2099,7 +2099,7 @@ onUnmounted(() => {
   border-radius: var(--r-lg, 12px);
   background: var(--card);
   border: 1px solid var(--border);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 50px var(--black-a60);
   animation: pl-pop 0.18s ease;
   overflow-y: auto;
   scrollbar-width: thin;

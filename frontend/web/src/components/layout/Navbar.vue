@@ -689,7 +689,7 @@ onUnmounted(() => {
 }
 
 .icon-btn-nt:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a4);
   color: var(--foreground);
 }
 
@@ -705,7 +705,7 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--ink-2, rgba(255, 255, 255, 0.78));
+  color: var(--ink-2, var(--ink-2));
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -714,7 +714,7 @@ onUnmounted(() => {
 }
 
 .lang-pill-nt:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a4);
   color: var(--foreground);
 }
 

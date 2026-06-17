@@ -88,7 +88,7 @@ function onChange(e: Event) {
 
 <style scoped>
 .ae-stepper {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--line);
 }
 
 .ae-stepper-btn {
@@ -96,7 +96,7 @@ function onChange(e: Event) {
   height: 26px;
   border: 0;
   border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   color: white;
   font-size: 16px;
   line-height: 1;
@@ -109,7 +109,7 @@ function onChange(e: Event) {
 }
 
 .ae-stepper-field {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--black-a40);
 }
 
 .ae-stepper-input {

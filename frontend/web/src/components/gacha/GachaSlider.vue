@@ -96,7 +96,7 @@ function go(d: number) {
   height: clamp(380px, 62vh, 560px);
   border-radius: 1.25rem 1.25rem 0 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   border-bottom: none;
 }
 .slide {
@@ -125,9 +125,9 @@ function go(d: number) {
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(8, 8, 15, 0.1),
-    rgba(8, 8, 15, 0.3) 55%,
-    rgba(8, 8, 15, 0.92)
+    var(--scrim-bg-soft),
+    var(--scrim-bg-soft) 55%,
+    var(--scrim-bg-strong)
   );
 }
 .meta {
@@ -141,7 +141,7 @@ function go(d: number) {
   font-size: 2.2rem;
   font-weight: 600;
   margin: 0.4rem 0 0.35rem;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 2px 18px var(--black-a60);
 }
 .meta p {
   font-size: 0.9rem;
@@ -155,7 +155,7 @@ function go(d: number) {
   display: inline-block;
 }
 .b-std {
-  background: rgba(0, 212, 255, 0.18);
+  background: var(--cyan-a20);
   color: var(--brand-cyan);
 }
 .b-event {
@@ -170,9 +170,9 @@ function go(d: number) {
   width: 42px;
   height: 42px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--black-a60);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--white-a20);
   color: var(--foreground);
   cursor: pointer;
   display: grid;
@@ -201,7 +201,7 @@ function go(d: number) {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--white-a30);
   cursor: pointer;
   transition: 0.25s;
   border: none;

@@ -181,8 +181,8 @@ const watchTo = computed(() =>
 .featured-bg::after {
   content: ""; position: absolute; inset: 0;
   background:
-    linear-gradient(90deg, rgba(8,8,15,.92) 0%, rgba(8,8,15,.72) 35%, rgba(8,8,15,.25) 65%, rgba(8,8,15,0) 100%),
-    linear-gradient(180deg, rgba(8,8,15,0) 50%, rgba(8,8,15,.65) 100%);
+    linear-gradient(90deg, var(--scrim-bg-strong) 0%, var(--scrim-bg-strong) 35%, var(--scrim-bg-soft) 65%, transparent 100%),
+    linear-gradient(180deg, transparent 50%, var(--scrim-bg-strong) 100%);
 }
 .pulse { width: 6px; height: 6px; border-radius: 999px; background: var(--brand-cyan); box-shadow: 0 0 8px var(--brand-cyan); animation: featured-pulse 1.6s ease-in-out infinite; }
 @keyframes featured-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .5; transform: scale(.8); } }

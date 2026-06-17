@@ -114,8 +114,8 @@ const tools: AdminTool[] = [
 }
 
 .admin-tool-card:hover {
-  border-color: rgba(255, 255, 255, 0.22);
-  background-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--white-a20);
+  background-color: var(--white-a8);
   transform: translateY(-2px);
 }
 

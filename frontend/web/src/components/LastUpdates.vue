@@ -324,7 +324,7 @@ onUnmounted(() => {
 <style scoped>
 /* Neon Tokyo .activity shell */
 .activity-shell {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--white-a4);
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   padding: 18px;
@@ -358,7 +358,7 @@ onUnmounted(() => {
 .tab-switcher {
   display: flex;
   gap: 2px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--white-a4);
   border-radius: var(--r-sm);
   padding: 2px;
 }
@@ -378,7 +378,7 @@ onUnmounted(() => {
 }
 
 .tab-btn--active {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   color: var(--foreground);
 }
 
@@ -408,7 +408,7 @@ onUnmounted(() => {
 
 .update-row:hover,
 .update-row--expanded {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--white-a4);
 }
 
 /* News thumbnail — .poster-sm from handoff: 36×48px */
@@ -501,10 +501,10 @@ onUnmounted(() => {
   margin-top: 1px;
 }
 
-.badge-feature { background: rgba(16, 185, 129, 0.2); color: var(--color-success); }
-.badge-fix { background: rgba(245, 158, 11, 0.2); color: var(--color-warning); }
-.badge-perf { background: rgba(14, 165, 233, 0.2); color: var(--info); }
-.badge-other { background: rgba(107, 114, 128, 0.2); color: var(--muted-foreground); }
+.badge-feature { background: var(--success-soft); color: var(--color-success); }
+.badge-fix { background: var(--warning-soft); color: var(--color-warning); }
+.badge-perf { background: var(--info-soft); color: var(--info); }
+.badge-other { background: var(--white-a20); color: var(--muted-foreground); }
 
 /* Entry message — inline expand/collapse */
 .entry-msg {
@@ -563,14 +563,14 @@ onUnmounted(() => {
   width: 48px;
   height: 18px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   flex-shrink: 0;
 }
 
 .skeleton-line {
   height: 12px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   flex: 1;
 }
 
@@ -585,7 +585,7 @@ onUnmounted(() => {
   width: 36px;
   height: 48px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   flex-shrink: 0;
 }
 
@@ -612,12 +612,12 @@ onUnmounted(() => {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border);
   border-radius: 2px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--white-a20);
 }
 
 @keyframes pulse {

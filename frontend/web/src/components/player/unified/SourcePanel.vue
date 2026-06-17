@@ -19,7 +19,7 @@
         </span>
         <div
           class="relative grid grid-cols-2 rounded-full p-1"
-          style="background: rgba(255,255,255,0.07);"
+          style="background: var(--white-a8);"
           :data-on="audioIndex"
         >
           <!-- Sliding thumb -->
@@ -55,7 +55,7 @@
         </span>
         <div
           class="relative rounded-full p-1"
-          style="background: rgba(255,255,255,0.07); display: grid; grid-template-columns: repeat(3, 1fr);"
+          style="background: var(--white-a8); display: grid; grid-template-columns: repeat(3, 1fr);"
           :data-on="langIndex"
         >
           <!-- Sliding thumb (3 cols) -->
@@ -98,10 +98,10 @@
             'px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all duration-150',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
             team === t
-              ? 'bg-[rgba(0,212,255,0.18)] border-[var(--accent-line)] text-[var(--brand-cyan)]'
+              ? 'bg-[var(--cyan-a20)] border-[var(--accent-line)] text-[var(--brand-cyan)]'
               : 'border-transparent text-[var(--ink-2)] hover:text-white',
           ]"
-          style="background: rgba(255,255,255,0.07);"
+          style="background: var(--white-a8);"
           @click="emit('update:team', t)"
         >
           <span>{{ t }}</span>
@@ -154,7 +154,7 @@
             'flex items-center gap-2.5 px-2.5 py-[9px] rounded-[var(--r-md)] border text-sm text-left transition-all duration-150 w-full',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
             server === s.id
-              ? 'bg-[rgba(0,212,255,0.10)] border-[var(--accent-line)] text-white'
+              ? 'bg-[var(--cyan-a08)] border-[var(--accent-line)] text-white'
               : 'bg-white/[0.04] border-transparent text-[var(--ink-2)] hover:bg-white/[0.09] hover:text-white',
           ]"
           @click="emit('select-server', s.id)"

@@ -2734,16 +2734,16 @@ onUnmounted(() => {
 }
 
 :deep(.shiki-link) {
-  color: rgb(34 211 238);
+  color: var(--brand-cyan);
   text-decoration: none;
-  border-bottom: 1px dotted rgb(34 211 238 / 0.4);
+  border-bottom: 1px dotted var(--cyan-a40);
 }
 :deep(.shiki-link:hover) {
   text-decoration: underline;
 }
 :deep(.shiki-footnote) {
   font-size: 0.75rem;
-  color: rgb(255 255 255 / 0.4);
+  color: var(--ink-4);
 }
 </style>
 

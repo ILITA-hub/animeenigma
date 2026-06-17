@@ -43,7 +43,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const TEASE: Record<Rarity, string> = {
-  N: 'rgba(255,255,255,.55)',
+  N: 'var(--muted-foreground)',
   R: 'rgb(45,212,191)',
   SR: 'rgb(129,140,248)',
   SSR: 'rgb(251,146,60)',
@@ -141,7 +141,7 @@ onBeforeUnmount(clearTimers)
   position: fixed;
   inset: 0;
   z-index: 96;
-  background: rgba(2, 2, 8, 0.93);
+  background: var(--scrim-bg-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -218,7 +218,7 @@ onBeforeUnmount(clearTimers)
   top: 50%;
   width: 3px;
   height: 0;
-  background: linear-gradient(rgb(255, 255, 255), var(--tease));
+  background: linear-gradient(var(--foreground), var(--tease));
   box-shadow: 0 0 14px var(--tease);
   transform-origin: top center;
   transform: translate(-50%, -50%) rotate(var(--sa));
@@ -242,20 +242,20 @@ onBeforeUnmount(clearTimers)
   font-size: 0.8rem;
   color: var(--ink-4);
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--white-a20);
   border-radius: 999px;
   padding: 0.35rem 1rem;
   background: none;
 }
 .skip:hover {
-  color: rgb(255, 255, 255);
-  border-color: rgba(255, 255, 255, 0.45);
+  color: var(--foreground);
+  border-color: var(--muted-foreground);
 }
 .flash {
   position: fixed;
   inset: 0;
   z-index: 97;
-  background: rgb(255, 255, 255);
+  background: var(--foreground);
   opacity: 0;
   pointer-events: none;
 }

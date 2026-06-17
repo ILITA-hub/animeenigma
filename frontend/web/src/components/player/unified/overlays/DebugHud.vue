@@ -245,7 +245,7 @@ function fmtTime(sec: number): string {
   z-index: 8;
   padding: 10px 12px;
   border-radius: var(--r-md, 8px);
-  background: rgba(0, 0, 0, 0.78);
+  background: var(--black-a80);
   border: 1px solid var(--border);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
@@ -310,7 +310,7 @@ function fmtTime(sec: number): string {
   place-items: center;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--line);
   color: var(--brand-cyan);
   font-family: inherit;
   font-size: 11px;
@@ -320,7 +320,7 @@ function fmtTime(sec: number): string {
 
 .pl-hud-btn:hover,
 .pl-hud-btn.is-on {
-  background: rgba(0, 212, 255, 0.18);
+  background: var(--cyan-a20);
 }
 
 .pl-hud-ref {

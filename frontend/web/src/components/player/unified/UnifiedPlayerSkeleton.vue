@@ -27,9 +27,9 @@ import Spinner from '@/components/ui/Spinner.vue'
 .pl-skeleton-shimmer {
   background: linear-gradient(
     100deg,
-    rgba(255, 255, 255, 0) 30%,
-    rgba(255, 255, 255, 0.04) 50%,
-    rgba(255, 255, 255, 0) 70%
+    transparent 30%,
+    var(--white-a4) 50%,
+    transparent 70%
   );
   background-size: 200% 100%;
   animation: pl-skeleton-sweep 1.4s ease-in-out infinite;

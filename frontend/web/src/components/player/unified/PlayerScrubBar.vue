@@ -178,7 +178,7 @@ function onMouseLeave() {
   right: 0;
   height: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--white-a20);
   transition: height 0.1s;
 }
 
@@ -190,7 +190,7 @@ function onMouseLeave() {
   position: absolute;
   height: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--ink-4);
   transition: height 0.1s;
 }
 
@@ -220,7 +220,7 @@ function onMouseLeave() {
   height: 13px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.3);
+  box-shadow: 0 0 0 4px var(--accent-line);
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -245,7 +245,7 @@ function onMouseLeave() {
   position: absolute;
   height: 4px;
   opacity: 0.85;
-  border-right: 1px solid rgba(0, 0, 0, 0.6);
+  border-right: 1px solid var(--black-a60);
 }
 
 .pl-track:hover .pl-frag {
@@ -280,14 +280,14 @@ function onMouseLeave() {
   width: 120px;
   height: 68px;
   border-radius: 8px;
-  border: 2px solid rgba(255, 255, 255, 0.6);
+  border: 2px solid var(--muted-foreground);
   overflow: hidden;
 }
 
 .pl-preview-time {
   font-size: 12px;
   color: #fff;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--black-a80);
   padding: 1px 6px;
   border-radius: 4px;
   font-weight: 500;

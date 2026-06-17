@@ -216,11 +216,11 @@ function cuePositionStyle(cue: SubtitleCue, stackIndex: number = 0): Record<stri
 // Text style from ASS cue styles
 function cueTextStyle(cue: SubtitleCue): Record<string, string> {
   const style: Record<string, string> = {
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'var(--black-a80)',
     color: '#ffffff',
     fontSize: `${baseFontSize.value}px`,
     lineHeight: '1.5',
-    textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+    textShadow: '1px 1px 2px var(--black-a80)',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
   }

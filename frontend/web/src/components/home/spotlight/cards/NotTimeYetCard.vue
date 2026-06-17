@@ -122,14 +122,14 @@ const stickerNote = computed<string>(() => {
    motion, but the hover-settle below is). */
 .sticker {
   transform: rotate(-1.6deg);
-  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 24px 50px var(--black-a60);
   transition: transform 0.25s ease;
 }
 .sticker:hover {
   transform: rotate(-0.4deg);
 }
 .pin {
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 4px 8px var(--black-a60));
 }
 @media (prefers-reduced-motion: reduce) {
   .sticker,

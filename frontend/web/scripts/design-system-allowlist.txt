@@ -121,3 +121,50 @@ src/components/gacha/PullSummary.vue:rgb(129,140,248):gacha rarity identity (ind
 src/components/home/spotlight/SpotlightBackdrop.vue:rgb(11,11,24):decorative backdrop ramp
 src/components/home/spotlight/SpotlightBackdrop.vue:rgb(16,16,28):decorative backdrop ramp
 src/components/home/spotlight/cards/RandomTailCard.vue:rgb(13,13,28):decorative ramp
+# --- DS Rule 7: rgba alpha-scale literals remaining after codemod (Task 5) ---
+# Tailwind arbitrary shadow values — rgb/rgba inside shadow-[...] can't use CSS var() in this syntax.
+src/components/anime/CharacterCard.vue:rgba(0,0,0,0.4):Tailwind arbitrary shadow-[...] — can't use CSS var() inside Tailwind arbitrary-value syntax
+src/components/anime/EpisodeCard.vue:rgba(0,212,255,0.5):Tailwind arbitrary shadow-[...] cyan glow — brand-cyan identity, can't use CSS var() in Tailwind arbitrary-value syntax
+src/components/anime/PosterCard.vue:rgba(0,0,0,0.4):Tailwind arbitrary shadow-[...] — can't use CSS var() inside Tailwind arbitrary-value syntax
+src/components/anime/PosterCard.vue:rgba(0,212,255,0.5):Tailwind arbitrary shadow-[...] cyan glow — brand-cyan identity, can't use CSS var() in Tailwind arbitrary-value syntax
+# Gacha rarity-tier alpha palette — alpha variants of identity hues (same rarity system as above solids).
+src/components/gacha/CardViewer3D.vue:rgba(45,212,191,0.3):gacha rarity identity (teal alpha glow)
+src/components/gacha/CardViewer3D.vue:rgba(129,140,248,0.38):gacha rarity identity (indigo alpha glow)
+src/components/gacha/CardViewer3D.vue:rgba(251,146,60,0.45):gacha rarity identity (orange alpha glow)
+src/components/gacha/CardViewer3D.vue:rgba(251,146,60,0.1):gacha rarity identity (orange subtle ramp)
+src/components/gacha/CardViewer3D.vue:rgba(251,146,60,0.55):gacha rarity identity (orange stronger glow)
+src/components/gacha/CardViewer3D.vue:rgba(129,140,248,0.4):gacha rarity identity (indigo stronger glow)
+src/components/gacha/CardViewer3D.vue:rgba(124,58,237,0.05):gacha rarity identity (violet shimmer — dark variant)
+src/components/gacha/CardViewer3D.vue:rgb(13,13,28):gacha bespoke backdrop ramp
+src/components/gacha/CardViewer3D.vue:rgb(19,19,38):gacha bespoke backdrop ramp
+src/components/gacha/CardViewer3D.vue:rgb(11,11,24):gacha bespoke backdrop ramp
+src/components/gacha/CardViewer3D.vue:rgb(0,0,0):gacha card text-on-foil — opaque black on light foil surface, functional
+src/components/gacha/GachaSlider.vue:rgba(251,113,133,0.18):gacha rarity identity (rose alpha highlight)
+src/components/gacha/GachaSlider.vue:rgb(251,113,133):gacha rarity identity (rose)
+src/components/gacha/GemCeremony.vue:rgba(124,45,18,0.45):gacha fire-glow backdrop (burnt orange radial) — bespoke ceremony identity
+src/components/gacha/GemCeremony.vue:rgba(2,2,8,0.96):gacha bespoke glow ramp endpoint (GemCeremony; matches CardViewer3D entry)
+src/components/gacha/PullSummary.vue:rgba(251,146,60,0.45):gacha rarity identity (orange alpha glow)
+src/components/gacha/PullSummary.vue:rgba(129,140,248,0.35):gacha rarity identity (indigo alpha glow)
+src/components/gacha/PullSummary.vue:rgb(16,16,28):gacha bespoke backdrop ramp
+src/components/gacha/PullSummary.vue:rgb(26,26,46):gacha bespoke backdrop ramp
+src/components/gacha/PullSummary.vue:rgb(0,0,0):gacha card text-on-foil — opaque black on light foil surface, functional
+src/components/gacha/SpinDock.vue:rgb(124,58,237):gacha rarity identity (violet — SpinDock accent)
+src/components/gacha/SpinDock.vue:rgba(22,22,35,0.65):gacha bespoke panel bg (SpinDock dark glass) — bespoke dark surface, no token within tolerance
+# Home components — decorative/identity ramps.
+src/components/home/RecsRow.vue:rgb(10,10,15):RecsRow decorative near-base gradient stop — novel dark, no token within tolerance
+# Spotlight violet-type backdrop radials — identity accent blobs, not part of the surface token ladder.
+src/components/home/spotlight/cards/RandomTailCard.vue:rgba(167,139,250,0.14):spotlight violet ambient accent blob — identity (violet; no token at this alpha)
+src/components/home/spotlight/cards/RandomTailCard.vue:rgba(167,139,250,0.3):spotlight violet ambient accent blob border — identity (violet; no token at this alpha)
+src/components/home/spotlight/SpotlightBackdrop.vue:rgba(0,184,230,0.18):SpotlightBackdrop primary-blue radial blob — identity hue (cyan-500 variant), not tokenized at this alpha
+src/components/home/spotlight/SpotlightBackdrop.vue:rgba(255,77,141,0.25):SpotlightBackdrop brand-pink radial blob — identity hue (pink exempt per DS), not tokenized at this alpha
+src/components/home/spotlight/SpotlightBackdrop.vue:rgba(139,92,246,0.18):SpotlightBackdrop violet radial blob — identity hue (violet/indigo exempt per DS), not tokenized at this alpha
+src/components/home/spotlight/SpotlightBackdrop.vue:rgba(167,139,250,0.28):SpotlightBackdrop violet radial blob (softer) — identity hue (violet), no token at this alpha
+# SpotlightProgress pill accents — per-pill brand colors, Tailwind class strings (shadow-[...]).
+src/components/home/spotlight/ui/SpotlightProgress.vue:rgba(0,212,255,0.5):SpotlightProgress cyan pill glow — Tailwind arbitrary shadow, can't use CSS var() in this syntax
+src/components/home/spotlight/ui/SpotlightProgress.vue:rgba(255,45,124,0.5):SpotlightProgress pink pill glow — brand-pink identity, Tailwind arbitrary shadow
+src/components/home/spotlight/ui/SpotlightProgress.vue:rgba(167,139,250,0.5):SpotlightProgress violet pill glow — identity hue (violet), Tailwind arbitrary shadow
+# SpotlightStepper — brand-pink pulsing ring, CSS not tokenized at these alpha values.
+src/components/home/spotlight/ui/SpotlightStepper.vue:rgba(255,77,141,0.55):SpotlightStepper brand-pink ring (inset shadow) — identity hue (pink exempt), no token at this alpha
+src/components/home/spotlight/ui/SpotlightStepper.vue:rgba(255,45,124,0.35):SpotlightStepper brand-pink outer glow — identity hue (pink exempt), no token at this alpha
+# PosterRow.vue — spotlight violet accent overlay.
+src/components/anime/PosterRow.vue:rgba(167,139,250,0.14):PosterRow violet ambient accent blob — identity hue (violet; no token at this alpha)

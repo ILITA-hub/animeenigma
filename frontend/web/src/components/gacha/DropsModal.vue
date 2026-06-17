@@ -132,7 +132,7 @@ function rarityTextClass(rarity: Rarity): string {
 .pcard {
   border-radius: 0.9rem;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--line-strong);
   background: var(--surface-2);
 }
 .pcard .img {
@@ -149,7 +149,7 @@ function rarityTextClass(rarity: Rarity): string {
 }
 .pcard.unowned {
   border-style: dashed;
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--white-a20);
 }
 .pcard .nm {
   padding: 0.4rem 0.5rem 0.15rem;

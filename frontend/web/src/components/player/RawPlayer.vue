@@ -1,5 +1,5 @@
 <template>
-  <div class="raw-player" style="--player-accent: #22d3ee; --player-accent-rgb: 34, 211, 238;">
+  <div class="raw-player">
     <!-- Loading episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
       <Spinner size="lg" />
@@ -441,8 +441,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.raw-player { --player-accent: #22d3ee; --player-accent-rgb: 34, 211, 238; }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background-color: var(--white-a20); border-radius: 3px; }
 .accent-bg { background-color: var(--player-accent); }
 .accent-border { border-color: var(--player-accent); }
 </style>

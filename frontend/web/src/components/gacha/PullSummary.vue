@@ -189,7 +189,7 @@ watch(
 .rcard.f-SSR { border-color: rgb(251, 146, 60); box-shadow: 0 0 18px rgba(251, 146, 60, 0.45); }
 .rcard.f-SR { border-color: rgb(129, 140, 248); box-shadow: 0 0 12px rgba(129, 140, 248, 0.35); }
 .rcard.f-R { border-color: rgb(45, 212, 191); }
-.rcard.f-N { border-color: rgba(255, 255, 255, 0.18); }
+.rcard.f-N { border-color: var(--white-a20); }
 .rcard .flip {
   position: relative;
   width: 100%;
@@ -228,7 +228,7 @@ watch(
   display: grid;
   place-items: center;
   font-size: 1.8rem;
-  color: rgba(0, 212, 255, 0.6);
+  color: var(--cyan-a60);
 }
 .rcard.ssr-pop {
   opacity: 1;
@@ -256,7 +256,7 @@ watch(
   position: absolute;
   top: 0.35rem;
   right: 0.35rem;
-  background: rgba(0, 0, 0, 0.66);
+  background: var(--black-a60);
   backdrop-filter: blur(4px);
   color: var(--ink-2);
   font-size: 0.62rem;

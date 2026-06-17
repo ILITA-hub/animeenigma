@@ -33,7 +33,7 @@ const emit = defineEmits<{
   width: 88px;
   height: 88px;
   border-radius: 50%;
-  background: rgba(0, 212, 255, 0.22);
+  background: var(--cyan-a20);
   backdrop-filter: blur(8px);
   border: 1px solid var(--accent-line);
   color: #fff;

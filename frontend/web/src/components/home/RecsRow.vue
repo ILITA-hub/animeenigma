@@ -96,7 +96,7 @@ function pinTitle(item: RecItem): string {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.1em;
-  color: var(--ink-4, rgba(255, 255, 255, 0.36));
+  color: var(--ink-4, var(--ink-4));
   text-transform: uppercase;
 }
 .rr-row {
@@ -108,12 +108,12 @@ function pinTitle(item: RecItem): string {
   scroll-snap-type: x mandatory;
   padding-bottom: 8px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: var(--white-a8) transparent;
 }
 .rr-row::-webkit-scrollbar { height: 6px; }
 .rr-row::-webkit-scrollbar-track { background: transparent; }
-.rr-row::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 999px; }
-.rr-row::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.16); }
+.rr-row::-webkit-scrollbar-thumb { background: var(--white-a8); border-radius: 999px; }
+.rr-row::-webkit-scrollbar-thumb:hover { background: var(--white-a20); }
 
 .rr-card-tile { position: relative; scroll-snap-align: start; }
 
@@ -147,15 +147,15 @@ function pinTitle(item: RecItem): string {
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.55);
+  color: var(--ink-2);
+  background: var(--black-a60);
 }
 
 .rr-card-skeleton {
   scroll-snap-align: start;
   border-radius: var(--r-lg, 16px);
   aspect-ratio: 16 / 9;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--line);
   animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 @keyframes pulse {

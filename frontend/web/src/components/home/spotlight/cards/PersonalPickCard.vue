@@ -211,7 +211,7 @@ const allRecsTo = computed(() =>
 .rec-scroll {
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 212, 255, 0.35) transparent;
+  scrollbar-color: var(--cyan-a40) transparent;
   padding-right: 4px;
   mask-image: linear-gradient(180deg, black 84%, transparent);
 }
@@ -219,7 +219,7 @@ const allRecsTo = computed(() =>
   width: 5px;
 }
 .rec-scroll::-webkit-scrollbar-thumb {
-  background: rgba(0, 212, 255, 0.3);
+  background: var(--accent-line);
   border-radius: 999px;
 }
 /* Mobile swipe-row: hide the scrollbar, keep the swipe. */

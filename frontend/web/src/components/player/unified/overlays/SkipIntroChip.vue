@@ -38,8 +38,8 @@ const emit = defineEmits<{
   gap: 8px;
   padding: 11px 18px;
   border-radius: var(--r-md);
-  background: rgba(8, 8, 15, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: var(--scrim-bg-strong);
+  border: 1px solid var(--white-a30);
   color: #fff;
   font-size: 14px;
   font-weight: 600;

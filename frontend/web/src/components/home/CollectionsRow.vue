@@ -122,11 +122,11 @@ onMounted(load)
   padding-bottom: 8px;
   /* hide scrollbar on webkit */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.08) transparent;
+  scrollbar-color: var(--white-a8) transparent;
 }
 .collections-scroll::-webkit-scrollbar { height: 4px; }
 .collections-scroll::-webkit-scrollbar-track { background: transparent; }
-.collections-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 999px; }
+.collections-scroll::-webkit-scrollbar-thumb { background: var(--white-a8); border-radius: 999px; }
 
 /* Card link — no text-decoration, fixed widths */
 .collection-card-link {
@@ -187,7 +187,7 @@ onMounted(load)
   inset-inline: 0;
   bottom: 0;
   padding: 12px;
-  background: linear-gradient(to top, rgba(8,8,15,0.85) 0%, rgba(8,8,15,0.4) 60%, transparent 100%);
+  background: linear-gradient(to top, var(--scrim-bg-strong) 0%, var(--scrim-bg-soft) 60%, transparent 100%);
 }
 
 .collection-card-title {
@@ -199,7 +199,7 @@ onMounted(load)
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  text-shadow: 0 1px 4px var(--black-a60);
   margin-bottom: 2px;
 }
 
@@ -209,7 +209,7 @@ onMounted(load)
 
 /* Item count meta */
 .collection-card-count {
-  color: rgba(255,255,255,0.7);
+  color: var(--ink-2);
   font-size: 11px;
   margin-top: 2px;
   font-family: var(--font-mono);

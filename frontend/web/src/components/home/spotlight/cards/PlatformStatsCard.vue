@@ -134,7 +134,7 @@ function formatBytes(n: number): string {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(700px 400px at 20% 80%, rgba(0, 212, 255, 0.1), transparent 60%),
+    radial-gradient(700px 400px at 20% 80%, var(--cyan-a08), transparent 60%),
     linear-gradient(135deg, #0d2030 0%, #050a12 100%);
 }
 .stat-tile::after {

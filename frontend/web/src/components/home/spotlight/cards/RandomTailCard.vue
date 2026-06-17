@@ -250,8 +250,8 @@ async function reroll(): Promise<void> {
   transform: rotate(-7deg) translate(-9px, 5px);
 }
 .deck-g2 {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--white-a8);
+  border: 1px solid var(--line-strong);
   transform: rotate(4deg) translate(7px, 2px);
 }
 /* Deal-in: each layer flies from a center pile and settles into the

@@ -87,13 +87,13 @@ function progressPct(item: ContinueWatchingItem): number {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.1em;
-  color: var(--ink-4, rgba(255, 255, 255, 0.36));
+  color: var(--ink-4, var(--ink-4));
   text-transform: uppercase;
 }
 
 .cw-see-all {
   font-size: 13px;
-  color: var(--muted-foreground, rgba(255, 255, 255, 0.56));
+  color: var(--muted-foreground, var(--muted-foreground));
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -116,7 +116,7 @@ function progressPct(item: ContinueWatchingItem): number {
   padding-bottom: 8px;
   /* Hide scrollbar cross-browser while keeping scroll functionality */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: var(--white-a8) transparent;
 }
 .cw-row::-webkit-scrollbar {
   height: 6px;
@@ -125,11 +125,11 @@ function progressPct(item: ContinueWatchingItem): number {
   background: transparent;
 }
 .cw-row::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   border-radius: 999px;
 }
 .cw-row::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--white-a20);
 }
 
 /* -----------------------------------------------------------------------
@@ -144,7 +144,7 @@ function progressPct(item: ContinueWatchingItem): number {
   scroll-snap-align: start;
   border-radius: var(--r-lg, 16px);
   aspect-ratio: 16 / 9;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--line);
   animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 

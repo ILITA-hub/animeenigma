@@ -310,7 +310,7 @@ onMounted(() => {
   gap: 12px;
   padding: 0 16px;
   height: 56px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--white-a4);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   color: var(--muted-foreground);
@@ -322,7 +322,7 @@ onMounted(() => {
 .search-shell:hover,
 .search-shell:focus-within {
   border-color: var(--accent-line);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--white-a4);
 }
 
 /* Allow SearchAutocomplete to flex-fill the shell */
@@ -376,7 +376,7 @@ onMounted(() => {
 }
 
 .btn-ghost-accent:hover {
-  background: rgba(0, 212, 255, 0.22);
+  background: var(--cyan-a20);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -388,11 +388,11 @@ onMounted(() => {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border);
   border-radius: 2px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--white-a20);
 }
 </style>

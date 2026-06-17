@@ -116,8 +116,8 @@ watch(blurSrc, (v) => {
 // strings at build time, so we use a static lookup table rather than
 // dynamic class composition (which would need a safelist).
 const MESH_CLASSES: Record<SpotlightAccent, string> = {
-  cyan:   'bg-[radial-gradient(at_25%_30%,rgba(0,212,255,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(0,184,230,0.18),transparent_60%)]',
-  pink:   'bg-[radial-gradient(at_25%_30%,rgba(255,77,141,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(255,45,124,0.18),transparent_60%)]',
+  cyan:   'bg-[radial-gradient(at_25%_30%,var(--accent-line),transparent_55%),radial-gradient(at_75%_70%,rgba(0,184,230,0.18),transparent_60%)]',
+  pink:   'bg-[radial-gradient(at_25%_30%,rgba(255,77,141,0.25),transparent_55%),radial-gradient(at_75%_70%,var(--brand-pink-soft),transparent_60%)]',
   violet: 'bg-[radial-gradient(at_25%_30%,rgba(167,139,250,0.28),transparent_55%),radial-gradient(at_75%_70%,rgba(139,92,246,0.18),transparent_60%)]',
 }
 

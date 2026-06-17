@@ -75,7 +75,7 @@ const pityPercent = computed(() => {
 
 <style scoped>
 .dock {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   border-top: none;
   border-radius: 0 0 1.25rem 1.25rem;
   background: rgba(22, 22, 35, 0.65);
@@ -102,7 +102,7 @@ const pityPercent = computed(() => {
 .bar {
   height: 6px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border);
   margin-top: 0.45rem;
   overflow: hidden;
 }

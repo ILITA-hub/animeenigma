@@ -35,7 +35,7 @@ exports[`SpotlightBackdrop > gradient-mesh snapshot for accent=cyan 1`] = `
          transition classes can animate it (an inline opacity on the <img>
          would beat the enter/leave classes). -->
   <transition-stub data-v-92a4d159="" name="backdrop-x" appear="false" persisted="false" css="true">
-    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(0,212,255,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(0,184,230,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
+    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,var(--accent-line),transparent_55%),radial-gradient(at_75%_70%,rgba(0,184,230,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
   </transition-stub>
   <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->
@@ -78,7 +78,7 @@ exports[`SpotlightBackdrop > gradient-mesh snapshot for accent=pink 1`] = `
          transition classes can animate it (an inline opacity on the <img>
          would beat the enter/leave classes). -->
   <transition-stub data-v-92a4d159="" name="backdrop-x" appear="false" persisted="false" css="true">
-    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(255,77,141,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(255,45,124,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
+    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(255,77,141,0.25),transparent_55%),radial-gradient(at_75%_70%,var(--brand-pink-soft),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
   </transition-stub>
   <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->

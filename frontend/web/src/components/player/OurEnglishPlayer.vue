@@ -627,7 +627,7 @@ onBeforeUnmount(() => {
   --player-accent-rgb: 34, 211, 238;
 }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background-color: var(--white-a20); border-radius: 3px; }
 .accent-bg { background-color: var(--player-accent); }
 .accent-border { border-color: var(--player-accent); }
 </style>

@@ -248,7 +248,7 @@ function onVolumeInput(event: Event) {
   bottom: 0;
   z-index: 7;
   padding: 30px 0 12px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+  background: linear-gradient(transparent, var(--black-a80));
   transition: opacity 0.2s;
 }
 
@@ -305,7 +305,7 @@ function onVolumeInput(event: Event) {
   padding: 0 12px;
   margin-left: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   border: 1px solid var(--border);
   color: #fff;
   font-size: 13px;
@@ -316,11 +316,11 @@ function onVolumeInput(event: Event) {
 }
 
 .pl-timepill-sep {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--muted-foreground);
 }
 
 .pl-timepill [data-test='time-duration'] {
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--ink-2);
 }
 
 /* Episodes pill — same geometry/affordance as the source pill */
@@ -332,7 +332,7 @@ function onVolumeInput(event: Event) {
   padding: 0 12px;
   margin-right: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   border: 1px solid var(--border);
   color: #fff;
   font-size: 13px;
@@ -344,12 +344,12 @@ function onVolumeInput(event: Event) {
 }
 
 .pl-epbtn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--line-strong);
   border-color: var(--accent-line);
 }
 
 .pl-epbtn.is-open {
-  background: rgba(0, 212, 255, 0.16);
+  background: var(--accent-soft);
   border-color: var(--accent-line);
   color: var(--brand-cyan);
 }
@@ -367,7 +367,7 @@ function onVolumeInput(event: Event) {
   padding: 0 12px;
   margin-right: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   border: 1px solid var(--border);
   color: #fff;
   font-size: 13px;
@@ -378,12 +378,12 @@ function onVolumeInput(event: Event) {
 }
 
 .pl-srcbtn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--line-strong);
   border-color: var(--accent-line);
 }
 
 .pl-srcbtn.is-open {
-  background: rgba(0, 212, 255, 0.16);
+  background: var(--accent-soft);
   border-color: var(--accent-line);
   color: var(--brand-cyan);
 }

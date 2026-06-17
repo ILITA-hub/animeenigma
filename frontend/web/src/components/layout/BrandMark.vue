@@ -11,7 +11,7 @@
   height: 28px;
   border-radius: var(--r-sm, 8px);
   background: linear-gradient(135deg, var(--brand-cyan) 0%, var(--brand-pink) 100%);
-  box-shadow: var(--accent-glow, 0 0 30px rgba(0, 212, 255, 0.28));
+  box-shadow: var(--accent-glow, 0 0 30px var(--accent-line));
   position: relative;
   flex-shrink: 0;
 }

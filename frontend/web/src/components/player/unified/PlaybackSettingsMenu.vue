@@ -51,8 +51,8 @@
               : 'text-[var(--ink-2)] hover:bg-white/[0.12] hover:text-white',
           ]"
           :style="speed === s
-            ? 'background: rgba(0,212,255,0.2)'
-            : 'background: rgba(255,255,255,0.06)'"
+            ? 'background: var(--cyan-a20)'
+            : 'background: var(--line)'"
           @click="select('speed', s)"
         >
           {{ s === 1 ? 'Normal' : `${s}×` }}

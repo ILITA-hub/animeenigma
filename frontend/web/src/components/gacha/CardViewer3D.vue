@@ -134,7 +134,7 @@ const emit = defineEmits<{
 const isInspect = computed(() => props.mode === 'inspect')
 
 const TEASE: Record<Rarity, string> = {
-  N: 'rgba(255,255,255,.55)',
+  N: 'var(--muted-foreground)',
   R: 'rgb(45,212,191)',
   SR: 'rgb(129,140,248)',
   SSR: 'rgb(251,146,60)',
@@ -409,7 +409,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.5s;
-  background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.05) 0deg 6deg, transparent 6deg 14deg);
+  background: repeating-conic-gradient(from 0deg at 50% 50%, var(--white-a4) 0deg 6deg, transparent 6deg 14deg);
 }
 .viewer.t-SSR::before,
 .viewer.t-SR::before { opacity: 1; }
@@ -452,7 +452,7 @@ onBeforeUnmount(() => {
 .card3d.f-SSR .cimg, .card3d.f-SSR .cardback { border-color: rgb(251, 146, 60); box-shadow: 0 0 60px rgba(251, 146, 60, 0.55); }
 .card3d.f-SR .cimg, .card3d.f-SR .cardback { border-color: rgb(129, 140, 248); box-shadow: 0 0 34px rgba(129, 140, 248, 0.4); }
 .card3d.f-R .cimg, .card3d.f-R .cardback { border-color: rgb(45, 212, 191); box-shadow: 0 0 20px rgba(45, 212, 191, 0.3); }
-.card3d.f-N .cimg, .card3d.f-N .cardback { border-color: rgba(255, 255, 255, 0.25); }
+.card3d.f-N .cimg, .card3d.f-N .cardback { border-color: var(--white-a20); }
 .card3d .cimg,
 .card3d .holo,
 .card3d .cname { backface-visibility: hidden; }
@@ -473,7 +473,7 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   border-radius: 0.9rem;
-  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.28) 47%, rgba(0, 212, 255, 0.18) 52%, transparent 68%);
+  background: linear-gradient(115deg, transparent 30%, var(--white-a30) 47%, var(--cyan-a20) 52%, transparent 68%);
   background-size: 240% 240%;
   background-position: var(--hx, 50%) var(--hy, 50%);
   mix-blend-mode: screen;
@@ -486,7 +486,7 @@ onBeforeUnmount(() => {
   right: 0;
   bottom: 0;
   padding: 1.6rem 0.9rem 0.8rem;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+  background: linear-gradient(transparent, var(--black-a80));
   display: flex;
   justify-content: space-between;
   align-items: end;
@@ -504,8 +504,8 @@ onBeforeUnmount(() => {
   backface-visibility: hidden;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 50% 50%, rgba(0, 212, 255, 0.12), transparent 70%),
-    repeating-linear-gradient(45deg, rgba(0, 212, 255, 0.05) 0 2px, transparent 2px 18px),
+    radial-gradient(ellipse at 50% 50%, var(--accent-soft), transparent 70%),
+    repeating-linear-gradient(45deg, var(--cyan-a08) 0 2px, transparent 2px 18px),
     repeating-linear-gradient(-45deg, rgba(124, 58, 237, 0.05) 0 2px, transparent 2px 18px),
     linear-gradient(160deg, rgb(13, 13, 28), rgb(19, 19, 38) 55%, rgb(11, 11, 24));
 }
@@ -518,9 +518,9 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: 10px;
-  border: 1px solid rgba(0, 212, 255, 0.28);
+  border: 1px solid var(--accent-line);
   border-radius: 0.6rem;
-  box-shadow: inset 0 0 24px rgba(0, 212, 255, 0.08);
+  box-shadow: inset 0 0 24px var(--cyan-a08);
 }
 .cardback .emblem {
   position: absolute;
@@ -533,14 +533,14 @@ onBeforeUnmount(() => {
 .cardback .emblem .dia {
   font-size: 3.6rem;
   color: var(--brand-cyan);
-  text-shadow: 0 0 18px rgba(0, 212, 255, 0.8), 0 0 48px rgba(0, 212, 255, 0.4);
+  text-shadow: 0 0 18px var(--brand-cyan), 0 0 48px var(--cyan-a40);
 }
 .cardback .emblem .ringb {
   position: absolute;
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 212, 255, 0.35);
+  border: 1px solid var(--cyan-a40);
   animation: backRing 3.2s ease-in-out infinite;
 }
 .cardback .emblem .ringb.b2 {
@@ -564,7 +564,7 @@ onBeforeUnmount(() => {
   font-size: 0.6rem;
   font-weight: 600;
   letter-spacing: 0.35em;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--white-a30);
 }
 /* shockwave + particle fx (created imperatively, hence :deep) */
 .stage :deep(.shock) {
@@ -626,7 +626,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 0.6rem;
   right: 0.6rem;
-  background: rgba(0, 0, 0, 0.66);
+  background: var(--black-a60);
   color: var(--ink-2);
   font-size: 0.75rem;
   font-weight: 600;

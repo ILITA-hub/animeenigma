@@ -116,8 +116,8 @@
           ep.isFiller ? 'opacity-50' : '',
         ]"
         :style="ep.number === selectedNumber
-          ? 'background: rgba(0,212,255,0.18)'
-          : 'background: rgba(255,255,255,0.07)'"
+          ? 'background: var(--cyan-a20)'
+          : 'background: var(--white-a8)'"
         :title="ep.title ? `${ep.number}. ${ep.title}` : undefined"
         :data-ep="ep.number"
         :data-test="`episode-grid-${ep.number}`"
@@ -284,7 +284,7 @@ onMounted(() => {
   display: grid;
   place-items: center;
   border: 0;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--white-a4);
   color: var(--muted-foreground);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -295,7 +295,7 @@ onMounted(() => {
 }
 
 .ep-vt .ep-vt--on {
-  background: rgba(0, 212, 255, 0.16);
+  background: var(--accent-soft);
   color: var(--brand-cyan);
 }
 
@@ -304,7 +304,7 @@ onMounted(() => {
   padding: 0 10px;
   border-radius: var(--r-sm);
   border: 0;
-  background: rgba(0, 212, 255, 0.12);
+  background: var(--accent-soft);
   color: var(--brand-cyan);
   font-size: 11.5px;
   font-weight: 600;
@@ -314,7 +314,7 @@ onMounted(() => {
 }
 
 .ep-chip:hover {
-  background: rgba(0, 212, 255, 0.2);
+  background: var(--cyan-a20);
 }
 
 .ep-jump {
@@ -322,7 +322,7 @@ onMounted(() => {
   height: 28px;
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a4);
   color: white;
   padding: 0 10px;
   font-size: 12px;
@@ -334,7 +334,7 @@ onMounted(() => {
 
 .ep-jump:focus {
   outline: none;
-  border-color: rgba(0, 212, 255, 0.5);
+  border-color: var(--cyan-a40);
 }
 
 /* ── strip view ── */
@@ -352,7 +352,7 @@ onMounted(() => {
   flex: 0 0 158px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--white-a4);
   padding: 8px 11px 9px;
   cursor: pointer;
   position: relative;
@@ -362,12 +362,12 @@ onMounted(() => {
 }
 
 .ep-card:hover {
-  background: rgba(255, 255, 255, 0.11);
+  background: var(--line-strong);
 }
 
 .ep-card--sel {
-  border-color: rgba(0, 212, 255, 0.6);
-  background: rgba(0, 212, 255, 0.1);
+  border-color: var(--cyan-a60);
+  background: var(--cyan-a08);
 }
 
 .ep-card-n {
@@ -444,7 +444,7 @@ onMounted(() => {
   0%,
   60% {
     border-color: var(--brand-cyan);
-    box-shadow: 0 0 14px rgba(0, 212, 255, 0.45);
+    box-shadow: 0 0 14px var(--cyan-a40);
   }
   100% {
     box-shadow: none;
@@ -453,18 +453,18 @@ onMounted(() => {
 
 /* mark-as-watched footer */
 .ep-mark {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--white-a8);
   color: var(--ink-2);
 }
 
 .ep-mark:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--line-strong);
   color: white;
 }
 
 .ep-mark--done {
   color: var(--brand-cyan);
-  background: rgba(0, 212, 255, 0.1);
+  background: var(--cyan-a08);
   cursor: default;
 }
 </style>

@@ -216,7 +216,7 @@ onMounted(() => {
 <style scoped>
 /* Neon Tokyo .activity shell */
 .activity-shell {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--white-a4);
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   padding: 18px;
@@ -258,8 +258,8 @@ onMounted(() => {
 /* Scrollbar — matches HomeColumn/.col-list + LastUpdates styling */
 .feed-list::-webkit-scrollbar { width: 4px; }
 .feed-list::-webkit-scrollbar-track { background: transparent; }
-.feed-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
-.feed-list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+.feed-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.feed-list::-webkit-scrollbar-thumb:hover { background: var(--white-a20); }
 
 /* .feed-item from handoff */
 .feed-item {
@@ -369,14 +369,14 @@ onMounted(() => {
   padding: 8px 0;
   font-size: 13px;
   color: var(--muted-foreground);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--white-a4);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .feed-load-more:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   color: var(--foreground);
 }
 .feed-load-more:disabled {
@@ -397,7 +397,7 @@ onMounted(() => {
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   flex-shrink: 0;
   animation: pulse 1.5s ease-in-out infinite;
 }
@@ -412,7 +412,7 @@ onMounted(() => {
 .skeleton-line {
   height: 12px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -422,7 +422,7 @@ onMounted(() => {
   height: 60px;
   flex-shrink: 0;
   border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--white-a8);
   animation: pulse 1.5s ease-in-out infinite;
 }
 

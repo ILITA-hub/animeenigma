@@ -12,8 +12,8 @@
         'rounded-[var(--r-md)] border text-sm text-left transition-all duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
         isSelected
-          ? 'is-selected bg-[rgba(0,212,255,0.10)] border-[var(--accent-line)] text-white'
-          : selectable
+          ? 'is-selected bg-[var(--cyan-a08)] border-[var(--accent-line)] text-white'
+          : row.state === 'active'
             ? 'bg-white/[0.04] border-transparent text-[var(--ink-2)] hover:bg-white/[0.09] hover:text-white'
             : 'bg-white/[0.04] border-transparent text-[var(--ink-2)] opacity-40 cursor-not-allowed',
       ]"
