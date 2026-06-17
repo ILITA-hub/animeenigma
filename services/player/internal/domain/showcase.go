@@ -72,13 +72,28 @@ func ValidateBlocks(blocks []Block) error {
 			if utf8.RuneCountInString(c.Text) > MaxAboutText {
 				return errors.InvalidInput("about text too long")
 			}
-		case BlockFavoriteAnime, BlockCardCollection, BlockFavoriteCharacter:
+		case BlockFavoriteAnime:
 			var c idListConfig
 			if err := json.Unmarshal(b.Config, &c); err != nil {
 				return errors.InvalidInput("invalid block config")
 			}
-			n := len(c.AnimeIDs) + len(c.CardIDs) + len(c.CharacterIDs)
-			if n > MaxBlockItems {
+			if len(c.AnimeIDs) > MaxBlockItems {
+				return errors.InvalidInput("too many items in showcase block")
+			}
+		case BlockCardCollection:
+			var c idListConfig
+			if err := json.Unmarshal(b.Config, &c); err != nil {
+				return errors.InvalidInput("invalid block config")
+			}
+			if len(c.CardIDs) > MaxBlockItems {
+				return errors.InvalidInput("too many items in showcase block")
+			}
+		case BlockFavoriteCharacter:
+			var c idListConfig
+			if err := json.Unmarshal(b.Config, &c); err != nil {
+				return errors.InvalidInput("invalid block config")
+			}
+			if len(c.CharacterIDs) > MaxBlockItems {
 				return errors.InvalidInput("too many items in showcase block")
 			}
 		default:

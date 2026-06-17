@@ -59,3 +59,21 @@ func TestValidateBlocks_AboutTooLong(t *testing.T) {
 		t.Fatal("expected error for over-long about text")
 	}
 }
+
+func TestValidateBlocks_AboutTitleTooLong(t *testing.T) {
+	b := []Block{{Type: BlockAbout, Order: 0, Config: cfg(t, map[string]string{"title": strings.Repeat("x", MaxAboutTitle+1)})}}
+	if err := ValidateBlocks(b); err == nil {
+		t.Fatal("expected error for over-long about title")
+	}
+}
+
+func TestValidateBlocks_FavoriteCharacterTooMany(t *testing.T) {
+	ids := make([]int, MaxBlockItems+1)
+	for i := range ids {
+		ids[i] = i + 1
+	}
+	b := []Block{{Type: BlockFavoriteCharacter, Order: 0, Config: cfg(t, map[string][]int{"character_ids": ids})}}
+	if err := ValidateBlocks(b); err == nil {
+		t.Fatal("expected error when favorite_character exceeds MaxBlockItems")
+	}
+}
