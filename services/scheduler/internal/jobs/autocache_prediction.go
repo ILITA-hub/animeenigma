@@ -12,9 +12,12 @@
 // DELIBERATELY so OBS-05's Grafana table can union it with the library-exposed
 // library_autocache_budget_bytes (see libs/metrics/scheduler.go).
 //
-// Two components, both = a distinct-anime COUNT × avg_raw_ep_size:
-//   - ongoing: distinct ONGOING anime with ≥1 active JP-audio watcher (the EXACT
-//     Logic A join).
+// Two components, both = a distinct-anime COUNT × avg_raw_ep_size. The count keys
+// on DISTINCT a.id (the non-null PK) and excludes empty shikimori_id, so it matches
+// the set of anime Logic A actually fans out demand for (Logic A skips empty
+// shikimori_id — autocache_logic_a.go:121); see the predictionOngoingQuery comment:
+//   - ongoing: distinct ONGOING anime (with a non-empty shikimori_id) with ≥1 active
+//     JP-audio watcher — the Logic A join, counted per a.id.
 //   - nextep:  distinct anime with an active JP-audio watcher in the last
 //     active_watcher_days, regardless of a.status (the same join MINUS the
 //     a.status='ongoing' clause — spec §7 "distinct JP-combo watching-anime
@@ -64,14 +67,23 @@ func NewAutocachePredictionJob(db *gorm.DB, activeWatcherDays int, avgRawEpBytes
 // so the same SQL runs on Postgres (prod) and SQLite (tests) without DB-specific
 // interval syntax. Wrapping the DISTINCT projection in a COUNT(*) subquery yields
 // the distinct-anime count for each component.
+//
+// IN-01 alignment: count DISTINCT a.id (the guaranteed-non-null PK) rather than
+// a.shikimori_id (size:50;index — nullable, non-unique), and EXCLUDE rows with an
+// empty shikimori_id (AND a.shikimori_id <> ''). This mirrors Logic A's actual
+// fan-out: it projects per-row a.id/a.shikimori_id and SKIPS empty shikimori_id
+// downstream (autocache_logic_a.go:121), so the heuristic count now equals the
+// number of distinct anime Logic A would actually fire demand for — no longer
+// collapsing all empty-shikimori_id anime into one distinct bucket.
 const predictionOngoingQuery = `
 	SELECT count(*) FROM (
-		SELECT DISTINCT a.shikimori_id
+		SELECT DISTINCT a.id
 		FROM watch_history wh
 		JOIN anime_list al ON al.user_id = wh.user_id AND al.anime_id = wh.anime_id
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
 		  AND a.status = 'ongoing'
+		  AND a.shikimori_id <> ''
 		  AND (wh.player IN ('ae', 'raw') OR wh.language = 'ja')
 		  AND al.updated_at > ?
 	) t
@@ -79,11 +91,12 @@ const predictionOngoingQuery = `
 
 const predictionNextepQuery = `
 	SELECT count(*) FROM (
-		SELECT DISTINCT a.shikimori_id
+		SELECT DISTINCT a.id
 		FROM watch_history wh
 		JOIN anime_list al ON al.user_id = wh.user_id AND al.anime_id = wh.anime_id
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
+		  AND a.shikimori_id <> ''
 		  AND (wh.player IN ('ae', 'raw') OR wh.language = 'ja')
 		  AND al.updated_at > ?
 	) t

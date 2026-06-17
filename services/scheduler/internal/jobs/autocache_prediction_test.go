@@ -146,6 +146,62 @@ func TestAutocachePrediction_FiltersExcludeNonJPAndStale(t *testing.T) {
 	require.Equal(t, float64(1*avgEpBytesTest), predictionNextep(t))
 }
 
+// TestAutocachePrediction_ExcludesEmptyShikimoriID verifies the IN-01 alignment:
+// anime with an empty shikimori_id are EXCLUDED from both counts (mirroring Logic A's
+// downstream skip, autocache_logic_a.go:121), instead of collapsing into one distinct
+// bucket. Two empty-shikimori_id anime + one real one → counts are 1, not 2 or 3.
+func TestAutocachePrediction_ExcludesEmptyShikimoriID(t *testing.T) {
+	resetPredictionGauge()
+	db := newPredictionTestDB(t)
+	now := time.Now()
+
+	// Real shikimori_id → counted (Logic A would fire demand for it).
+	seedAnimeRow(t, db, "a1", "111", "ongoing", 7)
+	seedListRow(t, db, "u1", "a1", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
+
+	// Two DISTINCT anime with EMPTY shikimori_id → both excluded (Logic A skips them).
+	// Pre-IN-01 these collapsed into a single DISTINCT '' bucket (count contribution 1);
+	// now they contribute 0.
+	seedAnimeRow(t, db, "a2", "", "ongoing", 5)
+	seedListRow(t, db, "u2", "a2", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u2", "a2", "ae", "ja")
+	seedAnimeRow(t, db, "a3", "", "ongoing", 5)
+	seedListRow(t, db, "u3", "a3", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u3", "a3", "raw", "")
+
+	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
+	require.NoError(t, j.Run(context.Background()))
+
+	require.Equal(t, float64(1*avgEpBytesTest), predictionOngoing(t))
+	require.Equal(t, float64(1*avgEpBytesTest), predictionNextep(t))
+}
+
+// TestAutocachePrediction_CountsDistinctByID verifies the count keys on a.id (the
+// non-null PK), not a.shikimori_id — so two distinct anime that happen to SHARE a
+// shikimori_id (the column is index-only, NOT uniqueIndex) are counted as 2, matching
+// Logic A's per-anime (a.id) granularity rather than collapsing under DISTINCT shikimori_id.
+func TestAutocachePrediction_CountsDistinctByID(t *testing.T) {
+	resetPredictionGauge()
+	db := newPredictionTestDB(t)
+	now := time.Now()
+
+	// Two distinct ongoing anime sharing the SAME non-empty shikimori_id.
+	seedAnimeRow(t, db, "a1", "999", "ongoing", 7)
+	seedListRow(t, db, "u1", "a1", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
+	seedAnimeRow(t, db, "a2", "999", "ongoing", 3)
+	seedListRow(t, db, "u2", "a2", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u2", "a2", "raw", "")
+
+	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
+	require.NoError(t, j.Run(context.Background()))
+
+	// Pre-IN-01 (DISTINCT shikimori_id) this would be 1; now (DISTINCT a.id) it's 2.
+	require.Equal(t, float64(2*avgEpBytesTest), predictionOngoing(t))
+	require.Equal(t, float64(2*avgEpBytesTest), predictionNextep(t))
+}
+
 // TestAutocachePrediction_ZeroRowsSetsZeroAndReturnsNil verifies a clean run with no
 // qualifying rows sets BOTH gauges to 0 and returns nil (no error contract).
 func TestAutocachePrediction_ZeroRowsSetsZeroAndReturnsNil(t *testing.T) {
