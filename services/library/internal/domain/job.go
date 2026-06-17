@@ -15,6 +15,10 @@ const (
 	// multi-indexer aggregator (the primary search tier). Added to the
 	// `job_source` enum by migrations/004_jackett_source.sql.
 	JobSourceJackett JobSource = "jackett"
+	// JobSourceAutocache tags rows the Phase-09 Planner enqueued by draining
+	// autocache_demand (provenance for OBS-04 + the admin UI). Added to the
+	// `job_source` enum by migrations/008_autocache_job_source.sql.
+	JobSourceAutocache JobSource = "autocache"
 )
 
 // JobStatus is the locked state machine for a library_jobs row:
