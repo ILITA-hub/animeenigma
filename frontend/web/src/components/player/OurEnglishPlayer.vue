@@ -199,6 +199,10 @@ interface ScraperSource {
   url: string
   type: string // "hls" | "mp4"
   quality?: string
+  // Provenance signature stamped by the catalog so the HLS proxy trusts the
+  // (non-allowlisted) scraper CDN. Must be forwarded or the proxy 502s.
+  exp?: string
+  sig?: string
 }
 
 interface ScraperTrack {
@@ -206,6 +210,8 @@ interface ScraperTrack {
   label?: string
   kind: string // "captions" | "subtitles"
   default?: boolean
+  exp?: string
+  sig?: string
 }
 
 interface ScraperStream {
@@ -314,12 +320,13 @@ const availableSubChoices = computed<SubChoice[]>(() => {
   const fromTracks = activeTracks.value
     .filter(t => t.kind === 'captions' || t.kind === 'subtitles')
     .map<SubChoice>(t => {
-      const url = t.file
-      const format = detectFormat(undefined, url)
+      // Detect format from the raw file url (extension), then route through the
+      // signed proxy so the un-allowlisted scraper subtitle CDN isn't 502'd.
+      const format = detectFormat(undefined, t.file)
       return {
-        key: url,
+        key: t.file,
         label: t.label || (format ? format.toUpperCase() : 'subtitle'),
-        url,
+        url: buildSubtitleProxyUrl(t.file, t.exp, t.sig),
         format,
       }
     })
@@ -376,11 +383,37 @@ function capitalizeProvider(name: string): string {
   }
 }
 
-function buildProxyUrl(url: string, referer: string, streamType: 'hls' | 'mp4'): string {
+function buildProxyUrl(
+  url: string,
+  referer: string,
+  streamType: 'hls' | 'mp4',
+  sign?: { exp?: string; sig?: string },
+): string {
   const params = new URLSearchParams()
   params.set('url', url)
   if (referer) params.set('referer', referer)
   if (streamType === 'mp4') params.set('type', 'mp4')
+  // The catalog signs scraper stream/subtitle URLs with the proxy's provenance
+  // HMAC; without forwarding exp/sig the proxy rejects every non-allowlisted CDN
+  // (megaplay's streamzone1.site, …) with a 502 — leaving only providers whose
+  // CDN happens to sit on the legacy allowlist (miruro) playable.
+  if (sign?.exp && sign?.sig) {
+    params.set('exp', sign.exp)
+    params.set('sig', sign.sig)
+  }
+  return `/api/streaming/hls-proxy?${params.toString()}`
+}
+
+// Build a signed proxy URL for a subtitle track file. SubtitleOverlay fetches
+// any `/`-prefixed url directly (no re-proxy), so a pre-signed proxy url loads
+// the un-allowlisted scraper subtitle CDN without a 502.
+function buildSubtitleProxyUrl(file: string, exp?: string, sig?: string): string {
+  const params = new URLSearchParams()
+  params.set('url', file)
+  if (exp && sig) {
+    params.set('exp', exp)
+    params.set('sig', sig)
+  }
   return `/api/streaming/hls-proxy?${params.toString()}`
 }
 
@@ -396,7 +429,12 @@ function disposePlayer() {
   }
 }
 
-async function attachStream(url: string, type: 'hls' | 'mp4', referer: string) {
+async function attachStream(
+  url: string,
+  type: 'hls' | 'mp4',
+  referer: string,
+  sign?: { exp?: string; sig?: string },
+) {
   // Defense-in-depth: the <video> may not be mounted yet on the first load
   // (it lives behind v-else / v-show). Wait one render tick for the ref before
   // giving up — a null ref here means the stream silently never attaches and
@@ -410,14 +448,14 @@ async function attachStream(url: string, type: 'hls' | 'mp4', referer: string) {
   mediaRecoverDone = false
 
   if (type === 'mp4') {
-    v.src = buildProxyUrl(url, referer, 'mp4')
+    v.src = buildProxyUrl(url, referer, 'mp4', sign)
     // Surface a hard MP4 failure (e.g. upstream 502) instead of a silent 0:00.
     v.addEventListener('error', () => { streamFailed.value = true }, { once: true })
     v.play().catch(() => { /* user-gesture required */ })
     return
   }
 
-  const proxyUrl = buildProxyUrl(url, referer, 'hls')
+  const proxyUrl = buildProxyUrl(url, referer, 'hls', sign)
   if (Hls.isSupported()) {
     hls = new Hls({ enableWorker: true, backBufferLength: 90 })
     hls.loadSource(proxyUrl)
@@ -567,7 +605,7 @@ async function loadStream() {
     activeTracks.value = stream.tracks ?? []
     const referer = stream.headers?.Referer || stream.headers?.referer || ''
     const type: 'hls' | 'mp4' = source.type === 'mp4' ? 'mp4' : 'hls'
-    await attachStream(source.url, type, referer)
+    await attachStream(source.url, type, referer, { exp: source.exp, sig: source.sig })
     // Auto-pick a default subtitle track if upstream marked one
     const def = activeTracks.value.find(t => t.default)
     if (def) selectedSubKey.value = def.file

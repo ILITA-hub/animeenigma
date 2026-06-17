@@ -57,6 +57,44 @@ describe('useProviderResolver', () => {
     expect(scraperApi.getEpisodes).toHaveBeenCalledWith('anime-uuid', 'allanime')
   })
 
+  it('forwards the provenance exp/sig of a scraper source to the proxy url', async () => {
+    // The catalog signs scraper stream URLs (exp/sig siblings on each source) so
+    // the HLS proxy trusts non-allowlisted CDNs (megaplay's streamzone1.site, …)
+    // WITHOUT a static allowlist entry. If the resolver drops them, the proxy
+    // 502s and only providers on the legacy allowlist (miruro) play.
+    const scraperApi = {
+      getEpisodes: vi.fn().mockResolvedValue({
+        data: { data: { episodes: [{ id: 'e1', number: 1 }], meta: { provider: 'gogoanime' } } },
+      }),
+      getServers: vi.fn().mockResolvedValue({
+        data: { data: { servers: [{ id: 's1', name: 'Server 1' }] } },
+      }),
+      getStream: vi.fn().mockResolvedValue({
+        data: {
+          data: {
+            stream: {
+              sources: [{ url: 'https://s1.streamzone1.site/master.m3u8', type: 'hls', exp: '1781731463', sig: 'deadbeef' }],
+              headers: { Referer: 'https://megaplay.buzz/' },
+            },
+          },
+        },
+      }),
+    }
+    const resolver = makeResolver({ scraperApi } as any)
+    const eps = await resolver.listEpisodes('gogoanime', 'anime-uuid')
+    const stream = await resolver.resolveStream('gogoanime', 'anime-uuid', eps[0], {
+      audio: 'sub',
+      lang: 'en',
+      provider: 'gogoanime',
+      server: 's1',
+      team: null,
+    })
+    const params = proxyParams(stream.url)
+    expect(params.get('url')).toBe('https://s1.streamzone1.site/master.m3u8')
+    expect(params.get('exp')).toBe('1781731463')
+    expect(params.get('sig')).toBe('deadbeef')
+  })
+
   it('marks scraper MP4 streams with type=mp4 in the proxy url', async () => {
     const scraperApi = {
       getEpisodes: vi.fn().mockResolvedValue({

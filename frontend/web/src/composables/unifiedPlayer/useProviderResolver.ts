@@ -61,6 +61,11 @@ interface ScraperSource {
   url: string
   type: string // "hls" | "mp4"
   quality?: string
+  // Provenance signature stamped by the catalog (streamsign.SignScraperStreamBody)
+  // so the HLS proxy trusts the (non-allowlisted) scraper CDN. Must be forwarded
+  // to the proxy url or the proxy 502s.
+  exp?: string
+  sig?: string
 }
 
 interface ScraperEnvelope {
@@ -235,7 +240,7 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
       const type: 'hls' | 'mp4' = source.type === 'mp4' ? 'mp4' : 'hls'
       const referer = stream.headers?.Referer || stream.headers?.referer || ''
       return {
-        url: buildProxyUrl(source.url, referer, type),
+        url: buildProxyUrl(source.url, referer, type, { exp: source.exp, sig: source.sig }),
         type,
         headers: stream.headers,
         servers: srvs.map((s) => ({ id: s.id, label: s.name })),
