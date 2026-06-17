@@ -9,6 +9,7 @@ import (
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/autocache"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/repo"
@@ -412,7 +413,9 @@ func (h *JobsHandler) Link(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dstPrefix := body.ShikimoriID + "/" + strconv.Itoa(episodeNum) + "/"
+	// Link a resolved episode into the unified autocache pool layout
+	// (aeProvider/<mal>/RAW/<ep>/) so new admin content needs no migration.
+	dstPrefix := autocache.RawPrefix(body.ShikimoriID, episodeNum)
 	srcEpPrefix := srcPrefix + strconv.Itoa(episodeNum) + "/"
 	if err := h.mover.Move(r.Context(), srcEpPrefix, dstPrefix); err != nil {
 		if h.log != nil {

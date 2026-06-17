@@ -129,6 +129,11 @@ func main() {
 	if err := db.DB.Exec(migrations.JackettSourceSQL).Error; err != nil {
 		log.Fatalw("failed to apply jackett_source migration", "error", err)
 	}
+	// 005 (Phase 07): autocache pool — episode_source/episode_track enums +
+	// five accounting-ledger columns on library_episodes. Runs AFTER 002.
+	if err := db.DB.Exec(migrations.AutocachePoolSQL).Error; err != nil {
+		log.Fatalw("failed to apply autocache_pool migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {

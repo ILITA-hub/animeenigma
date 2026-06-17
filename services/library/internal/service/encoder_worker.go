@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/autocache"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
 	"github.com/anacrolix/torrent/metainfo"
@@ -286,10 +287,12 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 		p.metrics.IncJobsTotal(string(domain.JobStatusUploading))
 	}
 
-	// 7. Compute MinIO prefix.
+	// 7. Compute MinIO prefix. Resolved (shikimori_id) uploads land under the
+	// unified autocache pool layout (aeProvider/<mal>/RAW/<ep>/) so NEW admin
+	// content is already migrated; the pending/ branch is unchanged.
 	var prefix string
 	if job.ShikimoriID != "" {
-		prefix = fmt.Sprintf("%s/%d/", job.ShikimoriID, episode)
+		prefix = autocache.RawPrefix(job.ShikimoriID, episode)
 	} else {
 		prefix = fmt.Sprintf("pending/%s/%d/", job.ID, episode)
 	}

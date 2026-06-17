@@ -12,6 +12,7 @@
 //   1. LibraryJobsSQL          (Phase 03 — base)
 //   2. LibraryEpisodesSQL      (Phase 04 — references library_jobs(id))
 //   3. LibraryFilenamePatternsSQL (Phase 04 — independent)
+//   4. AutocachePoolSQL        (Phase 07 — alters library_episodes; must follow 002)
 package migrations
 
 import _ "embed"
@@ -44,3 +45,14 @@ var LibraryFilenamePatternsSQL string
 //
 //go:embed 004_jackett_source.sql
 var JackettSourceSQL string
+
+// AutocachePoolSQL is migrations/005_autocache_pool.sql embedded as a
+// string. Applied AFTER the Phase-3/4 migrations; it creates the
+// episode_source / episode_track enums and adds five accounting-ledger
+// columns to library_episodes (Phase 07, POOL-01 + POOL-03). Idempotent
+// via DO $$ ... EXCEPTION blocks + ADD COLUMN IF NOT EXISTS + a guarded
+// WHERE downloaded_at IS NULL backfill. Must run after 002 (which created
+// library_episodes).
+//
+//go:embed 005_autocache_pool.sql
+var AutocachePoolSQL string
