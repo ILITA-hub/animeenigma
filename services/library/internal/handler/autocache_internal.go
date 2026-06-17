@@ -2,7 +2,7 @@
 // endpoints the catalog ae-resolution producer (Plan 03) calls.
 //
 //	POST /internal/library/autocache/fetch   HIT  → BumpFetch + serve_total{hit}
-//	POST /internal/library/autocache/demand  MISS → DemandRepository.Record(backfill)
+//	POST /internal/library/autocache/demand  MISS → DemandRepository.Record(reason)
 //	                                                + serve_total{miss}
 //
 // Both live OUTSIDE /api/library so the gateway never proxies them (same rule
@@ -10,6 +10,16 @@
 // The library service owns the library_autocache_* metrics + the ledger writes,
 // so the producer reports the resolution outcome here rather than emitting the
 // counter itself.
+//
+// Phase 09 — the demand reason is VALIDATED-AND-HONORED, no longer force-
+// overridden to backfill. The wire `reason` is validated against the
+// {backfill, next_ep, ongoing} allowlist and recorded as-is (an absent or unknown
+// value falls back to backfill). This is safe because /internal/* is Docker-
+// network-only (the gateway never proxies it — T-08-04), so the only callers are
+// the internal-trusted producers: player Logic B → next_ep, scheduler Logic A →
+// ongoing, catalog serve-miss → backfill. The original T-08-05 "spoofed next_ep"
+// concern was about an UNTRUSTED external caller, which cannot reach this route;
+// a malformed internal caller still degrades safely to backfill.
 //
 // The master `enabled` switch (Phase 07 autocache_config) gates the demand
 // side effects: when off, the demand endpoint still returns 200 but records
@@ -60,9 +70,10 @@ func NewAutocacheInternalHandler(deps autocacheInternalDeps, m *libmetrics.Libra
 }
 
 // autocacheSignalBody is the shared request body. demand also carries a
-// "reason" field on the wire, but Phase 08 only writes backfill — any
-// client-supplied reason is ignored/overridden server-side so a spoofed reason
-// can never inject next_ep (T-08-05).
+// "reason" field on the wire; Phase 09 validates it against the
+// {backfill, next_ep, ongoing} allowlist and honors it (defaulting to backfill on
+// an absent/unknown value) — safe because the /internal/* route is Docker-network-
+// only so the callers are internal-trusted producers (T-08-04). Fetch ignores it.
 type autocacheSignalBody struct {
 	MALID   string `json:"mal_id"`
 	Episode int    `json:"episode"`
@@ -110,12 +121,30 @@ func (h *AutocacheInternalHandler) Fetch(w http.ResponseWriter, r *http.Request)
 	httputil.OK(w, map[string]bool{"ok": true})
 }
 
+// validateDemandReason maps the wire `reason` to a domain.DemandReason. It returns
+// the wire value when it is one of the known enum literals
+// (backfill / next_ep / ongoing) and falls back to DemandReasonBackfill for an
+// absent ("") or unknown value. The /internal/* route is Docker-network-only so the
+// producers are internal-trusted (T-08-04); the allowlist + safe default mean a
+// malformed internal caller degrades to backfill rather than writing an invalid
+// enum value (T-09-15).
+func validateDemandReason(raw string) domain.DemandReason {
+	switch domain.DemandReason(raw) {
+	case domain.DemandReasonBackfill, domain.DemandReasonNextEp, domain.DemandReasonOngoing:
+		return domain.DemandReason(raw)
+	default:
+		return domain.DemandReasonBackfill
+	}
+}
+
 // Demand handles POST /internal/library/autocache/demand — the MISS path. It
-// reads the master `enabled` switch first; when enabled it records a backfill
-// demand (best-effort) and counts a serve_total{miss}. When disabled — or when
-// the config read errors (fail closed) — it skips BOTH the record and the miss
-// counter but still returns 200, so the serve path never regresses on a config
-// blip. The reason is forced to backfill regardless of client input.
+// reads the master `enabled` switch first; when enabled it records the demand with
+// the validated wire reason (best-effort) and counts a serve_total{miss}. When
+// disabled — or when the config read errors (fail closed) — it skips BOTH the
+// record and the miss counter but still returns 200, so the serve path never
+// regresses on a config blip. The reason is validated against
+// {backfill, next_ep, ongoing} and honored; an absent/unknown reason defaults to
+// backfill (validateDemandReason).
 func (h *AutocacheInternalHandler) Demand(w http.ResponseWriter, r *http.Request) {
 	body, ok := h.decodeSignal(w, r)
 	if !ok {
@@ -137,7 +166,7 @@ func (h *AutocacheInternalHandler) Demand(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.deps.RecordDemand(ctx, body.MALID, body.Episode, domain.DemandReasonBackfill); err != nil {
+	if err := h.deps.RecordDemand(ctx, body.MALID, body.Episode, validateDemandReason(body.Reason)); err != nil {
 		h.log.Warnw("autocache demand record failed (non-fatal)",
 			"mal_id", body.MALID, "episode", body.Episode, "error", err)
 	}
