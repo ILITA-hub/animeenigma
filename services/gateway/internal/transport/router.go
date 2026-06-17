@@ -409,6 +409,30 @@ func NewRouterWithCleanup(
 			r.HandleFunc("/anidle/*", proxyHandler.ProxyToAnidle)
 		})
 
+		// Profile showcase ("стена") — dark-shipped behind PROFILE_WALL_ADMIN_ONLY
+		// (mirror of the Gacha gate). When admin-only, BOTH read and write require
+		// JWT + admin. When open, read is public (OptionalJWT) and write falls
+		// through to the protected /users/* group below. The player handler also
+		// enforces owner-only writes from JWT claims (defense-in-depth).
+		// Registered BEFORE the protected /users/* group so chi matches the
+		// specific showcase routes first.
+		if cfg.ProfileWallAdminOnly {
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
+				r.Use(AdminRoleMiddleware)
+				r.Get("/users/{userId}/showcase", proxyHandler.ProxyToPlayer)
+				r.Put("/users/me/showcase", proxyHandler.ProxyToPlayer)
+			})
+		} else {
+			r.Group(func(r chi.Router) {
+				r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
+				r.Get("/users/{userId}/showcase", proxyHandler.ProxyToPlayer)
+			})
+			// PUT /users/me/showcase falls through to the protected /users/* group.
+		}
+
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))

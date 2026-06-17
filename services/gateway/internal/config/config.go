@@ -33,6 +33,12 @@ type Config struct {
 	// GACHA_ADMIN_ONLY=false + restart-gateway) to open it to all
 	// authenticated users. Default true.
 	GachaAdminOnly bool
+	// ProfileWallAdminOnly is the profile-showcase ("стена") dark-ship gate.
+	// When true, the /api/users/{id}/showcase routes additionally require the
+	// admin role, so the showcase is invisible to regular users until the
+	// bundled release. Flip GACHA_ADMIN_ONLY + PROFILE_WALL_ADMIN_ONLY=false
+	// together to reveal both. Default true.
+	ProfileWallAdminOnly bool
 	// PoisonClientIPs is the anti-scrape "tarpit" target list — exact IPs
 	// and/or CIDR ranges (comma-separated env POISON_CLIENT_IPS). Requests
 	// from these clients get structurally-valid but semantically-fake JSON
@@ -172,6 +178,8 @@ func Load() (*Config, error) {
 		SystemBannerMessage: getEnv("SYSTEM_BANNER_MESSAGE", ""),
 		// Gacha (Лудка) dark-ship admin-gate — default true (spec §12).
 		GachaAdminOnly: getEnvBool("GACHA_ADMIN_ONLY", true),
+		// Profile showcase ("стена") dark-ship gate — default true.
+		ProfileWallAdminOnly: getEnvBool("PROFILE_WALL_ADMIN_ONLY", true),
 		// Anti-scrape poison target list — empty = feature off.
 		PoisonClientIPs: httputil.ParseCommaList(getEnv("POISON_CLIENT_IPS", "")),
 	}

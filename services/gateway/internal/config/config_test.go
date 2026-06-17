@@ -144,3 +144,27 @@ func TestConfig_AnalyticsServiceDefault(t *testing.T) {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
+
+func TestProfileWallAdminOnly_DefaultsTrue(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
+	t.Setenv("PROFILE_WALL_ADMIN_ONLY", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !cfg.ProfileWallAdminOnly {
+		t.Fatal("expected ProfileWallAdminOnly to default true")
+	}
+}
+
+func TestProfileWallAdminOnly_FalseWhenSet(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
+	t.Setenv("PROFILE_WALL_ADMIN_ONLY", "false")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.ProfileWallAdminOnly {
+		t.Fatal("expected ProfileWallAdminOnly false when env=false")
+	}
+}
