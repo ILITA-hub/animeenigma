@@ -48,7 +48,10 @@
   1. When the episode is present in the pool, the "ae" provider serves `aeProvider/<mal>/RAW/<ep>/playlist.m3u8` and the playback is counted as a preload hit. (SERVE-01)
   2. Each "ae" playback updates that episode's `last_fetch_at` to now and increments `fetch_count` — the shared freshness + popularity signal consumed later by eviction. (SERVE-02)
   3. When the episode is absent, the player fails over to the existing providers with no regression versus today, the event is counted as a preload miss, and a backfill demand is emitted for that episode. (SERVE-03)
-**Plans**: TBD
+**Plans**: 3 plans (3 waves)
+  - [ ] 08-01-PLAN.md — Library data + metrics: migration 007 autocache_demand, AutocacheDemand model + DemandRepository.Record, EpisodeRepository.BumpFetch, library_autocache_serve_total counter (SERVE-01/02/03)
+  - [ ] 08-02-PLAN.md — Library /internal/library/autocache/{fetch,demand} handlers + enabled-gating + router mount + main.go DI (apply 007) (SERVE-01/02/03)
+  - [ ] 08-03-PLAN.md — Catalog fire-and-forget hit/miss: client RecordFetch/RecordDemand + GetLibraryStream wiring, failover unchanged (SERVE-01/02/03)
 
 ### Phase 9: Download Triggers
 **Goal**: The platform autonomously enqueues the right RAW downloads — pushing newly-aired episodes of watched ongoings, pulling the next episode ahead of an active watcher, and backfilling on a miss — without ever duplicating work or downloading the wrong track.
@@ -128,7 +131,7 @@ Prior-milestone reserved ideas still on the shelf (unnumbered until committed):
 | 21-28 | v3.1 | — | ✅ Complete | 2026-05-13 → 2026-06-04 |
 | 1-6 | v4.0 | 23/23 | ✅ Complete | 2026-06-05 → 2026-06-08 |
 | 7. Pool Foundation, Config & Migration | v4.1 | 3/3 | Complete    | 2026-06-17 |
-| 8. Serving & Fetch Signal | v4.1 | 0/? | Not started | - |
+| 8. Serving & Fetch Signal | v4.1 | 0/3 | Planned | - |
 | 9. Download Triggers | v4.1 | 0/? | Not started | - |
 | 10. Eviction & Budget | v4.1 | 0/? | Not started | - |
 | 11. Observability & Prediction | v4.1 | 0/? | Not started | - |
