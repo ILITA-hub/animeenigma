@@ -1,0 +1,80 @@
+<!DOCTYPE html><html lang="ru"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Блок «О себе» — варианты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* A quote */
+  .a-quote{padding:26px 26px 26px 30px}
+  .a-quote::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:3px;border-radius:3px;background:linear-gradient(var(--cyan),var(--pink));box-shadow:0 0 16px rgba(0,212,255,.5)}
+  .a-quote .q{font-family:var(--display);font-weight:600;font-size:19px;line-height:1.55;color:#eef}.a-quote .q b{color:var(--cyan)}
+  .a-quote .sig{margin-top:14px;font-size:13px;color:var(--faint);font-family:var(--mono)}
+  /* B bio */
+  .a-bio{padding:24px}
+  .a-bio .top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+  .a-bio .av{width:56px;height:56px;border-radius:14px;background:conic-gradient(from 180deg,var(--cyan),var(--violet),var(--pink),var(--cyan));padding:2px}
+  .a-bio .av i{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:12px;background:var(--surface-2);font-family:var(--display);font-weight:800;font-style:normal}
+  .a-bio h4{font-family:var(--display);font-weight:700;font-size:17px}.a-bio .role{font-size:12px;color:var(--cyan)}
+  .a-bio p{color:#dfe6ff;font-size:14px;line-height:1.6}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .chip{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;border:1px solid var(--border);color:var(--muted);background:rgba(255,255,255,.03)}
+  .chip.cy{color:var(--cyan);border-color:rgba(0,212,255,.35)}.chip.pk{color:var(--pink-400);border-color:rgba(255,45,124,.35)}.chip.vi{color:var(--violet);border-color:rgba(167,139,250,.35)}
+  /* C terminal */
+  .a-term{padding:0;font-family:var(--mono);background:#0a0a13}
+  .a-term .bar{display:flex;align-items:center;gap:7px;padding:11px 16px;border-bottom:1px solid var(--border)}
+  .a-term .bar .d{width:11px;height:11px;border-radius:50%}.a-term .t{margin-left:8px;font-size:12px;color:var(--faint)}
+  .a-term .body{padding:18px 20px;font-size:13.5px;line-height:1.85}
+  .a-term .p{color:var(--success)}.a-term .c{color:var(--cyan)}.a-term .o{color:#cdd6f4}.a-term .m{color:var(--faint)}
+  .a-term .cur{display:inline-block;width:8px;height:15px;background:var(--cyan);vertical-align:middle;animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  /* D minimal */
+  .a-min{background:none;border:none;box-shadow:none;text-align:center;padding:30px 20px}
+  .a-min .big{font-family:var(--display);font-weight:800;font-size:26px;line-height:1.35;letter-spacing:-.01em;max-width:680px;margin:0 auto}
+  .a-min .big b{background:linear-gradient(135deg,var(--cyan),var(--violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .a-min .u{margin-top:14px;font-size:13px;color:var(--faint);font-family:var(--mono)}
+  /* E visual novel */
+  .a-vn{position:relative;padding:0;min-height:200px;display:flex;align-items:flex-end;overflow:hidden}
+  .a-vn .bg{position:absolute;inset:0;background:linear-gradient(120deg,rgba(0,212,255,.14),rgba(167,139,250,.12),rgba(255,45,124,.14))}
+  .a-vn .por{position:absolute;left:18px;bottom:0;width:154px;height:208px;object-fit:cover;object-position:top;border-radius:10px 10px 0 0;filter:drop-shadow(0 10px 26px rgba(0,0,0,.6))}
+  .a-vn .box{position:relative;margin:0 18px 18px 192px;border:1px solid rgba(0,212,255,.45);background:rgba(8,8,15,.8);backdrop-filter:blur(6px);border-radius:14px;padding:18px 20px}
+  .a-vn .nametag{position:absolute;top:-13px;left:16px;font-family:var(--display);font-weight:700;font-size:13px;color:#06121a;background:linear-gradient(135deg,var(--cyan),#2ee6ff);padding:4px 14px;border-radius:8px;box-shadow:0 3px 12px rgba(0,212,255,.45)}
+  .a-vn .line{font-size:15px;line-height:1.65;color:#eef}
+  .a-vn .arrow{position:absolute;right:14px;bottom:9px;color:var(--cyan);animation:bob 1s ease-in-out infinite}
+  @keyframes bob{50%{transform:translateY(3px)}}
+  @media(max-width:680px){.a-vn .por{width:100px;height:140px}.a-vn .box{margin-left:124px}}
+</style></head><body>
+<div class="nav"><div class="in"><span class="brand">Anime<b>Enigma</b> · Showcase</span>
+  <a class="tab" href="index.html">Хаб</a><a class="tab" href="showcase.html">Витрина</a>
+  <a class="tab on" href="about.html">О себе</a><a class="tab" href="anime.html">Аниме</a>
+  <a class="tab" href="stats.html">Статы</a><a class="tab" href="characters.html">Персонажи</a><a class="tab" href="cards.html">Карты</a><a class="tab" href="new.html">Ещё</a></div></div>
+<div class="wrap">
+  <div class="phead"><h1>Блок «О себе»</h1><span class="k">type: about</span></div>
+  <p class="lead">Текстовый блок самопрезентации. Выбери стиль — у каждого своя подача: цитата, био-карточка, терминал или минимал.</p>
+
+  <div class="variant"><span class="tag">A</span><h2>Цитата</h2><span class="note">акцент-бар + крупный текст + mono-статус</span></div>
+  <div class="block a-quote"><div class="q">Смотрю аниме с 2009. Фанат сёненов и психологических триллеров. Собираю карты, главный по <b>Re:Zero</b>. Заходи в Watch&nbsp;Together 👋</div><div class="sig">// status: гриндю SSR-ивент</div></div>
+
+  <div class="variant"><span class="tag">B</span><h2>Био-карточка</h2><span class="note">аватар + имя + абзац + чипы-интересы</span></div>
+  <div class="block a-bio"><div class="top"><div class="av"><i>0N</i></div><div><h4>0neymik0</h4><div class="role">Коллекционер · 312 в списке</div></div></div>
+    <p>Смотрю аниме с 2009. Люблю плотный сюжет и сильных персонажей. Гриндю гачу и веду свою команду в Watch&nbsp;Together.</p>
+    <div class="chips"><span class="chip cy">Сёнен</span><span class="chip pk">Психология</span><span class="chip vi">Исекай</span><span class="chip">Сэйнен</span><span class="chip">Re:Zero</span></div></div>
+
+  <div class="variant"><span class="tag">C</span><h2>Терминал</h2><span class="note">хакерская подача в духе Neon Tokyo</span></div>
+  <div class="block a-term"><div class="bar"><span class="d" style="background:#ff5f57"></span><span class="d" style="background:#febc2e"></span><span class="d" style="background:#28c840"></span><span class="t">~/0neymik0 — zsh</span></div>
+    <div class="body"><div><span class="p">➜</span> <span class="c">whoami</span></div>
+      <div class="o">коллекционер · с 2009 · фанат Re:Zero</div>
+      <div><span class="p">➜</span> <span class="c">cat interests.txt</span></div>
+      <div class="o">сёнен / психология / исекай / гача</div>
+      <div><span class="p">➜</span> <span class="c">status</span></div>
+      <div class="o">гриндю SSR-ивент <span class="m"># 4821 эп. за плечами</span></div>
+      <div><span class="p">➜</span> <span class="cur"></span></div></div></div>
+
+  <div class="variant"><span class="tag">D</span><h2>Минимал</h2><span class="note">крупное центрированное заявление, без рамки</span></div>
+  <div class="block a-min"><div class="big">«Аниме — это не хобби. Это <b>образ жизни</b> с 2009 года.»</div><div class="u">— 0neymik0</div></div>
+
+  <div class="variant"><span class="tag">E</span><h2>Visual Novel</h2><span class="note">портрет + реплика в диалог-боксе — самый анимешный</span></div>
+  <div class="block a-vn"><div class="bg"></div><img class="por" src="img/c1.svg"><div class="box"><span class="nametag">0neymik0</span><div class="line">Смотрю аниме с 2009. Фанат сёненов и психологических триллеров. Собираю карты, главный по Re:Zero. Заходи в Watch&nbsp;Together!</div><span class="arrow">▼</span></div></div>
+
+  <div class="foot">type: about · variant ∈ {quote, bio, terminal, minimal, vn}</div>
+</div></body></html>

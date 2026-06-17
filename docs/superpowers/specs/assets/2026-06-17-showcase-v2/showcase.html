@@ -1,0 +1,124 @@
+<!DOCTYPE html><html lang="ru"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Showcase — полная витрина</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<style>
+  .phead2{display:flex;align-items:center;gap:20px;margin:24px 0 30px}
+  .avatar{width:84px;height:84px;border-radius:50%;flex-shrink:0;background:conic-gradient(from 200deg,var(--cyan),var(--violet),var(--pink),var(--cyan));padding:2px;box-shadow:0 0 0 1px rgba(0,0,0,.5),0 0 28px rgba(0,212,255,.45)}
+  .avatar i{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;background:var(--surface-2);font-family:var(--display);font-weight:800;font-size:30px;font-style:normal}
+  .pmeta h1{font-family:var(--display);font-weight:800;font-size:30px;letter-spacing:-.02em}
+  .pmeta .row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .pill{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+  .pill.cy{color:var(--cyan);border-color:rgba(0,212,255,.4);background:rgba(0,212,255,.08)}
+  .sc-head{display:flex;align-items:center;justify-content:space-between;margin:30px 0 16px}
+  .sc-title{display:flex;align-items:center;gap:12px;font-family:var(--display);font-weight:800;font-size:21px}
+  .sc-title .bar{width:4px;height:22px;border-radius:4px;background:linear-gradient(var(--cyan),var(--violet));box-shadow:0 0 14px rgba(0,212,255,.7)}
+  .edit-btn{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#06121a;background:linear-gradient(135deg,var(--cyan),#2ee6ff);padding:9px 16px;border-radius:11px;border:none;cursor:pointer;box-shadow:0 4px 20px rgba(0,212,255,.4);transition:transform .14s ease-out,box-shadow .14s ease-out}
+  .edit-btn:hover{transform:translateY(-1px);box-shadow:0 6px 26px rgba(0,212,255,.6)}.edit-btn:active{transform:scale(.97)}
+  .block{margin-bottom:18px}
+  .about{padding:26px 26px 26px 30px}
+  .about::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:3px;border-radius:3px;background:linear-gradient(var(--cyan),var(--pink));box-shadow:0 0 16px rgba(0,212,255,.5)}
+  .about .q{font-family:var(--display);font-weight:600;font-size:19px;line-height:1.55;color:#eef}.about .q b{color:var(--cyan)}
+  .about .sig{margin-top:14px;font-size:13px;color:var(--faint);font-family:var(--mono)}
+  .arow .poster{flex:0 0 132px;width:132px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .stat{border-radius:16px;padding:18px 16px;text-align:center;background:radial-gradient(120% 120% at 50% 0%,rgba(0,212,255,.10),rgba(255,255,255,.02));border:1px solid var(--border)}
+  .stat .n{font-family:var(--display);font-weight:800;font-size:30px;background:linear-gradient(180deg,#fff,var(--cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .stat.p .n{background:linear-gradient(180deg,#fff,var(--pink-400));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .stat.v .n{background:linear-gradient(180deg,#fff,var(--violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .stat.g .n{background:linear-gradient(180deg,#fff,var(--success));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .stat .l{font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .chars{display:flex;gap:18px;overflow:auto;padding:4px 2px}
+  .char{flex:0 0 92px;text-align:center;cursor:pointer}
+  .char .ph{width:92px;height:92px;border-radius:50%;padding:2px;margin:0 auto 8px;background:conic-gradient(from 150deg,var(--pink),var(--violet),var(--cyan),var(--pink));transition:transform .18s ease-out,box-shadow .18s ease-out}
+  .char:hover .ph{transform:translateY(-4px);box-shadow:0 14px 30px -12px rgba(255,45,124,.6)}.char:active .ph{transform:scale(.96)}
+  .char .ph img{width:100%;height:100%;border-radius:50%;object-fit:cover;border:2px solid var(--surface-2)}
+  .char .cn{font-size:12px;font-weight:600}.char .cr{font-size:10px;color:var(--faint);margin-top:2px}
+  .gcard{flex:0 0 150px;width:150px;aspect-ratio:5/7;border-radius:16px;position:relative;overflow:hidden;cursor:pointer;border:1.5px solid transparent;transition:transform .2s ease-out,box-shadow .2s ease-out}
+  .gcard:hover{transform:rotateY(-8deg) rotateX(4deg) translateY(-4px)}.gcard:active{transform:scale(.98)}
+  .gcard img{width:100%;height:100%;object-fit:cover}
+  .gcard .holo{position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.18) 48%,transparent 60%);mix-blend-mode:overlay;opacity:.7}
+  .gcard .cg{position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(0,0,0,.8))}
+  .gcard .frame{position:absolute;inset:0;border-radius:16px;padding:1.5px;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+  .gcard.ssr .frame{background:linear-gradient(135deg,var(--warning),#ff9d00,var(--warning))}.gcard.sr .frame{background:linear-gradient(135deg,var(--violet),var(--pink))}.gcard.r .frame{background:linear-gradient(135deg,var(--cyan),var(--cyan-600))}
+  .gcard.ssr{box-shadow:0 0 26px -4px rgba(255,214,0,.55)}.gcard.sr{box-shadow:0 0 26px -6px rgba(167,139,250,.5)}
+  .gcard .rar{position:absolute;top:7px;left:7px;font-family:var(--display);font-weight:800;font-size:11px;padding:2px 7px;border-radius:7px;color:#06121a}
+  .gcard.ssr .rar{background:var(--warning)}.gcard.sr .rar{background:var(--violet)}.gcard.r .rar{background:var(--cyan)}
+  .gcard .cap{position:absolute;left:8px;right:8px;bottom:7px;font-size:11px;font-weight:600;text-shadow:0 1px 4px #000}
+  /* dialog */
+  .dlg-back{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(4,4,10,.72);backdrop-filter:blur(8px);opacity:0;visibility:hidden;transition:opacity .2s ease-in,visibility 0s linear .2s}
+  .dlg-back.open{opacity:1;visibility:visible;transition:opacity .2s ease-out,visibility 0s}
+  .dlg{width:300px;max-width:88vw;aspect-ratio:5/7;border-radius:22px;position:relative;overflow:hidden;transform:scale(.92) translateY(8px);opacity:0;transition:transform .22s ease-in,opacity .18s ease-in;box-shadow:0 40px 120px -30px rgba(0,0,0,.95)}
+  .dlg-back.open .dlg{transform:scale(1) translateY(0);opacity:1;transition:transform .26s cubic-bezier(.2,.9,.25,1.1),opacity .2s ease-out}
+  .dlg img{width:100%;height:100%;object-fit:cover}
+  .dlg .cg{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,.85))}
+  .dlg .frame{position:absolute;inset:0;border-radius:22px;padding:1.5px;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+  .dlg .rar{position:absolute;top:12px;left:12px;font-family:var(--display);font-weight:800;font-size:13px;padding:3px 10px;border-radius:8px;color:#06121a}
+  .dlg .meta{position:absolute;left:16px;right:16px;bottom:16px}.dlg .meta .t{font-family:var(--display);font-weight:800;font-size:22px;text-shadow:0 2px 8px #000}
+  .dlg-close{position:absolute;top:10px;right:12px;z-index:2;width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:rgba(8,8,15,.6);color:#fff;font-size:18px;cursor:pointer;transition:transform .12s ease-out,background .12s}
+  .dlg-close:hover{background:rgba(255,45,124,.25)}.dlg-close:active{transform:scale(.92)}
+  @media(max-width:680px){.stats{grid-template-columns:repeat(2,1fr)}}
+</style></head><body>
+<div class="nav"><div class="in"><span class="brand">Anime<b>Enigma</b> · Showcase</span>
+  <a class="tab" href="index.html">Хаб</a><a class="tab on" href="showcase.html">Витрина</a>
+  <a class="tab" href="about.html">О себе</a><a class="tab" href="anime.html">Аниме</a>
+  <a class="tab" href="stats.html">Статы</a><a class="tab" href="characters.html">Персонажи</a><a class="tab" href="cards.html">Карты</a><a class="tab" href="new.html">Ещё</a></div></div>
+<div class="wrap">
+  <div class="phead2"><div class="avatar"><i>0N</i></div><div class="pmeta"><h1>0neymik0</h1>
+    <div class="row"><span class="pill cy">⬡ Admin</span><span class="pill">На сайте с 2024</span><span class="pill">312 в списке</span></div></div></div>
+  <div class="sc-head"><div class="sc-title"><span class="bar"></span>Витрина</div><button class="edit-btn">✦ Редактировать витрину</button></div>
+
+  <div class="block about"><div class="q">Смотрю аниме с 2009. Фанат сёненов и психологических триллеров. Собираю карты, главный по <b>Re:Zero</b>. Заходи в Watch&nbsp;Together 👋</div><div class="sig">// status: гриндю SSR-ивент</div></div>
+
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--cyan);box-shadow:0 0 10px var(--cyan)"></span><h3>Любимое аниме</h3></div><div class="bd"><div class="scroller arow">
+    <div class="poster"><img src="img/anime1.svg"><div class="grad"></div><span class="rank">1</span><span class="sc">◆ 9.2</span><div class="pt">Re:Zero</div></div>
+    <div class="poster"><img src="img/anime2.svg"><div class="grad"></div><span class="rank">2</span><span class="sc">◆ 9.0</span><div class="pt">Steins;Gate</div></div>
+    <div class="poster"><img src="img/anime3.svg"><div class="grad"></div><span class="rank">3</span><span class="sc">◆ 8.9</span><div class="pt">Monogatari</div></div>
+    <div class="poster"><img src="img/anime4.svg"><div class="grad"></div><span class="rank">4</span><span class="sc">◆ 8.8</span><div class="pt">Frieren</div></div>
+    <div class="poster"><img src="img/anime5.svg"><div class="grad"></div><span class="rank">5</span><span class="sc">◆ 8.7</span><div class="pt">Vinland Saga</div></div>
+    <div class="poster"><img src="img/anime6.svg"><div class="grad"></div><span class="rank">6</span><span class="sc">◆ 8.6</span><div class="pt">86</div></div>
+  </div></div></div>
+
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--violet);box-shadow:0 0 10px var(--violet)"></span><h3>Статистика</h3></div><div class="bd"><div class="stats">
+    <div class="stat"><div class="n">312</div><div class="l">Всего аниме</div></div>
+    <div class="stat p"><div class="n">8.4</div><div class="l">Ср. оценка</div></div>
+    <div class="stat v"><div class="n">4 821</div><div class="l">Эпизодов</div></div>
+    <div class="stat g"><div class="n">198</div><div class="l">Завершено</div></div>
+  </div></div></div>
+
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--pink);box-shadow:0 0 10px var(--pink)"></span><h3>Любимые персонажи</h3></div><div class="bd"><div class="chars">
+    <div class="char"><div class="ph"><img src="img/char1.svg"></div><div class="cn">Lelouch</div><div class="cr">Code Geass</div></div>
+    <div class="char"><div class="ph"><img src="img/char2.svg"></div><div class="cn">Okabe</div><div class="cr">Steins;Gate</div></div>
+    <div class="char"><div class="ph"><img src="img/char3.svg"></div><div class="cn">Rem</div><div class="cr">Re:Zero</div></div>
+    <div class="char"><div class="ph"><img src="img/char4.svg"></div><div class="cn">Spike</div><div class="cr">Cowboy Bebop</div></div>
+    <div class="char"><div class="ph"><img src="img/char5.svg"></div><div class="cn">Itachi</div><div class="cr">Naruto</div></div>
+    <div class="char"><div class="ph"><img src="img/char6.svg"></div><div class="cn">Frieren</div><div class="cr">Frieren</div></div>
+  </div></div></div>
+
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--warning);box-shadow:0 0 10px var(--warning)"></span><h3>Коллекция карточек</h3></div><div class="bd"><div class="scroller">
+    <div class="gcard ssr"><img src="img/card1.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Rem · Holo</div></div>
+    <div class="gcard sr"><img src="img/card2.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SR</span><div class="cap">Kurisu</div></div>
+    <div class="gcard ssr"><img src="img/card3.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Frieren · Holo</div></div>
+    <div class="gcard r"><img src="img/card4.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">R</span><div class="cap">Emilia</div></div>
+    <div class="gcard sr"><img src="img/card5.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SR</span><div class="cap">Thorfinn</div></div>
+  </div></div></div>
+
+  <div class="foot">Полная витрина · дефолтные варианты · кликни карту → диалог</div>
+</div>
+
+<div class="dlg-back" id="dlgBack"><div class="dlg" id="dlg" role="dialog" aria-modal="true">
+  <button class="dlg-close" id="dlgClose">×</button><img id="dlgImg" alt="">
+  <div class="cg"></div><div class="frame" id="dlgFrame"></div><span class="rar" id="dlgRar">SSR</span>
+  <div class="meta"><div class="t" id="dlgTitle">Card</div></div></div></div>
+<script>
+  const back=document.getElementById('dlgBack');
+  const dImg=document.getElementById('dlgImg'),dRar=document.getElementById('dlgRar'),dTitle=document.getElementById('dlgTitle'),dFrame=document.getElementById('dlgFrame');
+  const rc={SSR:'linear-gradient(135deg,#ffd600,#ff9d00,#ffd600)',SR:'linear-gradient(135deg,#a78bfa,#ff2d7c)',R:'linear-gradient(135deg,#00d4ff,#009dcc)'},rk={SSR:'#ffd600',SR:'#a78bfa',R:'#00d4ff'};
+  function open(c){const r=(c.querySelector('.rar')?.textContent||'SSR').trim();dImg.src=c.querySelector('img').src;dRar.textContent=r;dRar.style.background=rk[r];dFrame.style.background=rc[r];dTitle.textContent=(c.querySelector('.cap')?.textContent||'Card').split('·')[0].trim();back.classList.add('open')}
+  function close(){back.classList.remove('open')}
+  document.querySelectorAll('.gcard').forEach(c=>c.addEventListener('click',()=>open(c)));
+  back.addEventListener('click',e=>{if(e.target===back)close()});document.getElementById('dlgClose').addEventListener('click',close);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+</script></body></html>

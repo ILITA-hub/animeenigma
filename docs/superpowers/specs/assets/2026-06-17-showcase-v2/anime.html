@@ -1,0 +1,97 @@
+<!DOCTYPE html><html lang="ru"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Блок «Аниме» — варианты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<style>
+  .row .poster{flex:0 0 132px;width:132px}
+  /* podium — olympic */
+  .podium{display:grid;grid-template-columns:1fr 1.18fr 1fr;gap:16px;align-items:end;max-width:580px;margin:0 auto}
+  .pod{display:flex;flex-direction:column}
+  .pod .poster{width:100%}
+  .pod.first .poster{box-shadow:0 0 0 2px var(--warning),0 22px 54px -18px rgba(255,214,0,.6)}
+  .pod.second .poster{box-shadow:0 0 0 1.5px #cfd8ff,0 18px 44px -20px rgba(207,216,255,.45)}
+  .pod.third .poster{box-shadow:0 0 0 1.5px #ff9d6b,0 18px 44px -20px rgba(255,157,107,.4)}
+  .pod .crown{text-align:center;font-size:22px;margin-bottom:6px;filter:drop-shadow(0 0 8px rgba(255,214,0,.7))}
+  .pod .ped{margin-top:10px;border-radius:10px 10px 5px 5px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;color:#06121a}
+  .pod.first .ped{height:60px;background:linear-gradient(180deg,var(--warning),#ff9d00)}
+  .pod.second .ped{height:42px;background:linear-gradient(180deg,#eaf0ff,#9aa6c9)}
+  .pod.third .ped{height:30px;background:linear-gradient(180deg,#ffc7a3,#e6703a)}
+  .pod .ped .pn{font-size:24px;line-height:1}
+  /* grid */
+  .grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+  @media(max-width:680px){.grid6{grid-template-columns:repeat(3,1fr)}.podium{grid-template-columns:1fr 1fr}}
+  /* list */
+  .list{display:flex;flex-direction:column;gap:10px}
+  .lrow{display:flex;align-items:center;gap:14px;padding:9px;border-radius:14px;border:1px solid var(--border-2);background:rgba(255,255,255,.02);transition:transform .16s ease-out,background .16s}
+  .lrow:hover{background:rgba(0,212,255,.06);transform:translateX(3px)}
+  .lrow .num{width:22px;text-align:center;font-family:var(--display);font-weight:800;color:var(--cyan)}
+  .lrow .mini{width:46px;height:64px;border-radius:9px;object-fit:cover;flex-shrink:0}
+  .lrow .info{flex:1;min-width:0}.lrow .ti{font-weight:600;font-size:14px}.lrow .me{font-size:12px;color:var(--faint);margin-top:2px}
+  .lrow .bar{height:5px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:6px;overflow:hidden;max-width:200px}
+  .lrow .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--cyan),var(--violet))}
+  .lrow .dia{font-size:13px;font-weight:700;color:var(--cyan)}
+  /* E banner strip */
+  .bstrip{display:flex;flex-direction:column;gap:12px}
+  .banner{position:relative;height:120px;border-radius:14px;overflow:hidden;cursor:pointer;border:1px solid var(--border)}
+  .banner img{width:100%;height:100%;object-fit:cover;object-position:center 28%;transition:transform .45s ease-out}
+  .banner:hover img{transform:scale(1.06)}
+  .banner .ov{position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,8,15,.88) 0,rgba(8,8,15,.35) 55%,transparent)}
+  .banner .c{position:absolute;left:22px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center}
+  .banner .c .t{font-family:var(--display);font-weight:800;font-size:23px;letter-spacing:-.01em}
+  .banner .c .m{font-size:12px;color:var(--muted);margin-top:3px}
+  .banner .sc{position:absolute;right:16px;top:14px;font-size:12px;font-weight:700;color:var(--cyan);background:rgba(8,8,15,.6);padding:3px 9px;border-radius:8px;border:1px solid rgba(0,212,255,.3)}
+</style></head><body>
+<div class="nav"><div class="in"><span class="brand">Anime<b>Enigma</b> · Showcase</span>
+  <a class="tab" href="index.html">Хаб</a><a class="tab" href="showcase.html">Витрина</a>
+  <a class="tab" href="about.html">О себе</a><a class="tab on" href="anime.html">Аниме</a>
+  <a class="tab" href="stats.html">Статы</a><a class="tab" href="characters.html">Персонажи</a><a class="tab" href="cards.html">Карты</a><a class="tab" href="new.html">Ещё</a></div></div>
+<div class="wrap">
+  <div class="phead"><h1>Блок «Любимое аниме»</h1><span class="k">type: favorite_anime</span></div>
+  <p class="lead">Витрина избранных тайтлов из списка. Раскладки: горизонтальный ряд, подиум Top-3, ровная сетка или плотный список.</p>
+
+  <div class="variant"><span class="tag">A</span><h2>Ряд</h2><span class="note">скролл, ранг-чипы, ◆-оценка, hover-подъём</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--cyan);box-shadow:0 0 10px var(--cyan)"></span><h3>Любимое аниме</h3></div><div class="bd"><div class="scroller row">
+    <div class="poster"><img src="img/a1.svg"><div class="grad"></div><span class="rank">1</span><span class="sc">◆ 9.2</span><div class="pt">Re:Zero</div></div>
+    <div class="poster"><img src="img/a2.svg"><div class="grad"></div><span class="rank">2</span><span class="sc">◆ 9.0</span><div class="pt">Steins;Gate</div></div>
+    <div class="poster"><img src="img/a3.svg"><div class="grad"></div><span class="rank">3</span><span class="sc">◆ 8.9</span><div class="pt">Monogatari</div></div>
+    <div class="poster"><img src="img/a4.svg"><div class="grad"></div><span class="rank">4</span><span class="sc">◆ 8.8</span><div class="pt">Frieren</div></div>
+    <div class="poster"><img src="img/a5.svg"><div class="grad"></div><span class="rank">5</span><span class="sc">◆ 8.7</span><div class="pt">Vinland</div></div>
+    <div class="poster"><img src="img/a6.svg"><div class="grad"></div><span class="rank">6</span><span class="sc">◆ 8.6</span><div class="pt">86</div></div>
+  </div></div></div>
+
+  <div class="variant"><span class="tag">B</span><h2>Подиум Top-3</h2><span class="note">олимпийский подиум: золото в центре выше, серебро/бронза по бокам</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--warning);box-shadow:0 0 10px var(--warning)"></span><h3>Топ-3 аниме</h3></div><div class="bd">
+    <div class="podium">
+      <div class="pod second"><div class="poster"><img src="img/a2.svg"><div class="grad"></div><span class="sc">◆ 9.0</span><div class="pt">Steins;Gate</div></div><div class="ped"><span class="pn">2</span></div></div>
+      <div class="pod first"><div class="crown">👑</div><div class="poster"><img src="img/a1.svg"><div class="grad"></div><span class="sc">◆ 9.2</span><div class="pt">Re:Zero</div></div><div class="ped"><span class="pn">1</span></div></div>
+      <div class="pod third"><div class="poster"><img src="img/a3.svg"><div class="grad"></div><span class="sc">◆ 8.9</span><div class="pt">Monogatari</div></div><div class="ped"><span class="pn">3</span></div></div>
+    </div></div></div>
+
+  <div class="variant"><span class="tag">C</span><h2>Сетка</h2><span class="note">ровная решётка, одинаковые постеры</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--cyan);box-shadow:0 0 10px var(--cyan)"></span><h3>Любимое аниме</h3></div><div class="bd"><div class="grid6">
+    <div class="poster"><img src="img/a1.svg"><div class="grad"></div><div class="pt">Re:Zero</div></div>
+    <div class="poster"><img src="img/a2.svg"><div class="grad"></div><div class="pt">Steins;Gate</div></div>
+    <div class="poster"><img src="img/a3.svg"><div class="grad"></div><div class="pt">Monogatari</div></div>
+    <div class="poster"><img src="img/a4.svg"><div class="grad"></div><div class="pt">Frieren</div></div>
+    <div class="poster"><img src="img/a5.svg"><div class="grad"></div><div class="pt">Vinland</div></div>
+    <div class="poster"><img src="img/a6.svg"><div class="grad"></div><div class="pt">86</div></div>
+  </div></div></div>
+
+  <div class="variant"><span class="tag">D</span><h2>Список</h2><span class="note">мини-постер + тайтл + оценка + прогресс-бар</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--violet);box-shadow:0 0 10px var(--violet)"></span><h3>Любимое аниме</h3></div><div class="bd"><div class="list">
+    <div class="lrow"><span class="num">1</span><img class="mini" src="img/a1.svg"><div class="info"><div class="ti">Re:Zero</div><div class="me">ТВ · 50 эп · isekai</div><div class="bar"><i style="width:100%"></i></div></div><span class="dia">◆ 9.2</span></div>
+    <div class="lrow"><span class="num">2</span><img class="mini" src="img/a2.svg"><div class="info"><div class="ti">Steins;Gate</div><div class="me">ТВ · 24 эп · sci-fi</div><div class="bar"><i style="width:100%"></i></div></div><span class="dia">◆ 9.0</span></div>
+    <div class="lrow"><span class="num">3</span><img class="mini" src="img/a3.svg"><div class="info"><div class="ti">Monogatari</div><div class="me">ТВ · 15 эп · mystery</div><div class="bar"><i style="width:80%"></i></div></div><span class="dia">◆ 8.9</span></div>
+  </div></div></div>
+
+  <div class="variant"><span class="tag">E</span><h2>Лента-полоса</h2><span class="note">широкие cover-баннеры с зумом — для топ-избранного</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--pink);box-shadow:0 0 10px var(--pink)"></span><h3>Избранное</h3></div><div class="bd"><div class="bstrip">
+    <div class="banner"><img src="img/a1.svg"><div class="ov"></div><div class="c"><div class="t">Re:Zero</div><div class="m">isekai · drama · 50 эп</div></div><span class="sc">◆ 9.2</span></div>
+    <div class="banner"><img src="img/a2.svg"><div class="ov"></div><div class="c"><div class="t">Steins;Gate</div><div class="m">sci-fi · thriller · 24 эп</div></div><span class="sc">◆ 9.0</span></div>
+    <div class="banner"><img src="img/a4.svg"><div class="ov"></div><div class="c"><div class="t">Frieren</div><div class="m">adventure · drama · 28 эп</div></div><span class="sc">◆ 8.8</span></div>
+  </div></div></div>
+
+  <div class="foot">type: favorite_anime · variant ∈ {row, podium, grid, list, banner}</div>
+</div></body></html>

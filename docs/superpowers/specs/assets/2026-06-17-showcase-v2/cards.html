@@ -1,0 +1,146 @@
+<!DOCTYPE html><html lang="ru"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Блок «Карты» — варианты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<style>
+  .gcard{aspect-ratio:5/7;border-radius:16px;position:relative;overflow:hidden;cursor:pointer;border:1.5px solid transparent;transition:transform .2s ease-out,box-shadow .2s ease-out}
+  .gcard img{width:100%;height:100%;object-fit:cover}
+  .gcard .holo{position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.18) 48%,transparent 60%);mix-blend-mode:overlay;opacity:.7}
+  .gcard .cg{position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(0,0,0,.8))}
+  .gcard .frame{position:absolute;inset:0;border-radius:16px;padding:1.5px;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+  .gcard.ssr .frame{background:linear-gradient(135deg,var(--warning),#ff9d00,var(--warning))}.gcard.sr .frame{background:linear-gradient(135deg,var(--violet),var(--pink))}.gcard.r .frame{background:linear-gradient(135deg,var(--cyan),var(--cyan-600))}
+  .gcard.ssr{box-shadow:0 0 26px -4px rgba(255,214,0,.55)}.gcard.sr{box-shadow:0 0 26px -6px rgba(167,139,250,.5)}
+  .gcard .rar{position:absolute;top:7px;left:7px;font-family:var(--display);font-weight:800;font-size:11px;padding:2px 7px;border-radius:7px;color:#06121a}
+  .gcard.ssr .rar{background:var(--warning)}.gcard.sr .rar{background:var(--violet)}.gcard.r .rar{background:var(--cyan)}
+  .gcard .cap{position:absolute;left:8px;right:8px;bottom:7px;font-size:11px;font-weight:600;text-shadow:0 1px 4px #000}
+  /* A row */
+  .row .gcard{flex:0 0 150px;width:150px}.row .gcard:hover{transform:rotateY(-8deg) rotateX(4deg) translateY(-4px)}.row .gcard:active{transform:scale(.98)}
+  /* B fan */
+  .fan{display:flex;justify-content:center;align-items:center;height:280px;position:relative}
+  .fan .gcard{position:absolute;width:150px;transform-origin:bottom center;transition:transform .25s ease-out,box-shadow .25s}
+  .fan .gcard:nth-child(1){transform:rotate(-22deg) translateX(-150px) translateY(20px)}
+  .fan .gcard:nth-child(2){transform:rotate(-11deg) translateX(-75px) translateY(4px)}
+  .fan .gcard:nth-child(3){transform:rotate(0) translateY(-6px);z-index:5}
+  .fan .gcard:nth-child(4){transform:rotate(11deg) translateX(75px) translateY(4px)}
+  .fan .gcard:nth-child(5){transform:rotate(22deg) translateX(150px) translateY(20px)}
+  .fan .gcard:hover{transform:translateY(-30px) rotate(0) scale(1.08);z-index:10}
+  /* C grid */
+  .gridc{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+  .gridc .gcard:hover{transform:translateY(-5px) scale(1.03)}.gridc .gcard:active{transform:scale(.98)}
+  @media(max-width:680px){.gridc{grid-template-columns:repeat(3,1fr)}}
+  /* D hero + info panel */
+  .heror{display:grid;grid-template-columns:206px 1fr;gap:26px;align-items:center}
+  .heror .feat{width:206px}
+  .heror .panel .lab{display:inline-block;font-size:11px;font-weight:700;color:#06121a;background:linear-gradient(135deg,var(--warning),#ff9d00);padding:3px 11px;border-radius:999px;box-shadow:0 0 16px rgba(255,214,0,.45)}
+  .heror .panel .cname{font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:-.01em;margin-top:13px}
+  .heror .panel .meta{display:flex;align-items:center;gap:9px;margin-top:8px;color:var(--muted);font-size:13px;flex-wrap:wrap}
+  .heror .rchip{font-family:var(--display);font-weight:800;font-size:11px;padding:2px 9px;border-radius:7px;color:#06121a;background:var(--warning)}
+  .heror .panel .sl{font-size:12px;color:var(--faint);margin-top:10px;font-family:var(--mono)}
+  .heror .panel .olab{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;margin:18px 0 10px}
+  .heror .others{display:flex;gap:11px}
+  .heror .others .gcard{flex:0 0 66px;width:66px}.heror .others .gcard:hover{transform:translateY(-4px) scale(1.03)}.heror .others .gcard:active{transform:scale(.97)}
+  @media(max-width:680px){.heror{grid-template-columns:1fr}.heror .feat{margin:0 auto}}
+  /* dialog */
+  .dlg-back{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(4,4,10,.72);backdrop-filter:blur(8px);opacity:0;visibility:hidden;transition:opacity .2s ease-in,visibility 0s linear .2s}
+  .dlg-back.open{opacity:1;visibility:visible;transition:opacity .2s ease-out,visibility 0s}
+  .dlg{width:300px;max-width:88vw;aspect-ratio:5/7;border-radius:22px;position:relative;overflow:hidden;transform:scale(.92) translateY(8px);opacity:0;transition:transform .22s ease-in,opacity .18s ease-in;box-shadow:0 40px 120px -30px rgba(0,0,0,.95)}
+  .dlg-back.open .dlg{transform:scale(1) translateY(0);opacity:1;transition:transform .26s cubic-bezier(.2,.9,.25,1.1),opacity .2s ease-out}
+  .dlg img{width:100%;height:100%;object-fit:cover}.dlg .cg{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,.85))}
+  .dlg .frame{position:absolute;inset:0;border-radius:22px;padding:1.5px;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+  .dlg .rar{position:absolute;top:12px;left:12px;font-family:var(--display);font-weight:800;font-size:13px;padding:3px 10px;border-radius:8px;color:#06121a}
+  .dlg .meta{position:absolute;left:16px;right:16px;bottom:16px}.dlg .meta .t{font-family:var(--display);font-weight:800;font-size:22px;text-shadow:0 2px 8px #000}
+  .dlg-close{position:absolute;top:10px;right:12px;z-index:2;width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:rgba(8,8,15,.6);color:#fff;font-size:18px;cursor:pointer;transition:transform .12s ease-out,background .12s}
+  .dlg-close:hover{background:rgba(255,45,124,.25)}.dlg-close:active{transform:scale(.92)}
+  /* E 3D tilt */
+  .tilt{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;padding:14px 0;perspective:1000px}
+  .tilt .gcard{flex:0 0 170px;width:170px;transition:transform .12s ease-out;will-change:transform}
+  .tilt .gcard .sheen{position:absolute;inset:0;border-radius:16px;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.4),transparent 45%);mix-blend-mode:overlay;opacity:0;transition:opacity .2s;pointer-events:none}
+  .tilt .gcard:hover .sheen{opacity:1}
+</style></head><body>
+<div class="nav"><div class="in"><span class="brand">Anime<b>Enigma</b> · Showcase</span>
+  <a class="tab" href="index.html">Хаб</a><a class="tab" href="showcase.html">Витрина</a>
+  <a class="tab" href="about.html">О себе</a><a class="tab" href="anime.html">Аниме</a>
+  <a class="tab" href="stats.html">Статы</a><a class="tab" href="characters.html">Персонажи</a><a class="tab on" href="cards.html">Карты</a><a class="tab" href="new.html">Ещё</a></div></div>
+<div class="wrap">
+  <div class="phead"><h1>Блок «Коллекция карточек»</h1><span class="k">type: card_collection</span></div>
+  <p class="lead">Гача-карты на выбор владельца. Раскладки: ряд, веер-колода, сетка-альбом, «герой + ряд». Клик по карте → диалог. Рамка = редкость (SSR/SR/R).</p>
+
+  <div class="variant"><span class="tag">A</span><h2>Ряд</h2><span class="note">скролл, 3D-наклон на hover, рамка-редкость</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--warning);box-shadow:0 0 10px var(--warning)"></span><h3>Коллекция</h3></div><div class="bd"><div class="scroller row">
+    <div class="gcard ssr"><img src="img/k1.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Rem · Holo</div></div>
+    <div class="gcard sr"><img src="img/k2.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SR</span><div class="cap">Kurisu</div></div>
+    <div class="gcard ssr"><img src="img/k3.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Frieren · Holo</div></div>
+    <div class="gcard r"><img src="img/k4.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">R</span><div class="cap">Emilia</div></div>
+    <div class="gcard sr"><img src="img/k5.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SR</span><div class="cap">Thorfinn</div></div>
+  </div></div></div>
+
+  <div class="variant"><span class="tag">B</span><h2>Веер-колода</h2><span class="note">карты внахлёст веером, наведи — выезжает</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--warning);box-shadow:0 0 10px var(--warning)"></span><h3>Избранная колода</h3></div><div class="bd"><div class="fan">
+    <div class="gcard r"><img src="img/k4.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">R</span><div class="cap">Emilia</div></div>
+    <div class="gcard sr"><img src="img/k2.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SR</span><div class="cap">Kurisu</div></div>
+    <div class="gcard ssr"><img src="img/k1.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Rem · Holo</div></div>
+    <div class="gcard sr"><img src="img/k5.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SR</span><div class="cap">Thorfinn</div></div>
+    <div class="gcard ssr"><img src="img/k3.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Frieren</div></div>
+  </div></div></div>
+
+  <div class="variant"><span class="tag">C</span><h2>Сетка-альбом</h2><span class="note">ровная коллекция, как страница альбома</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--warning);box-shadow:0 0 10px var(--warning)"></span><h3>Альбом</h3></div><div class="bd"><div class="gridc">
+    <div class="gcard ssr"><img src="img/k1.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Rem</div></div>
+    <div class="gcard sr"><img src="img/k2.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SR</span><div class="cap">Kurisu</div></div>
+    <div class="gcard ssr"><img src="img/k3.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Frieren</div></div>
+    <div class="gcard r"><img src="img/k4.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">R</span><div class="cap">Emilia</div></div>
+    <div class="gcard sr"><img src="img/k5.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SR</span><div class="cap">Thorfinn</div></div>
+  </div></div></div>
+
+  <div class="variant"><span class="tag">D</span><h2>Герой + инфо</h2><span class="note">любимая карта крупно + панель с деталями и мини-коллекцией</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--warning);box-shadow:0 0 10px var(--warning)"></span><h3>Любимая карта</h3></div><div class="bd"><div class="heror">
+    <div class="gcard ssr feat"><img src="img/k1.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span><div class="cap">Rem · Holo</div></div>
+    <div class="panel">
+      <span class="lab">★ Любимая карта</span>
+      <div class="cname">Rem</div>
+      <div class="meta"><span class="rchip">SSR</span><span>·</span><span>Re:Zero</span><span>·</span><span>Holo-фойл</span></div>
+      <div class="sl">// получена 12.06.2026 · ×3 в коллекции</div>
+      <div class="olab">Ещё в коллекции</div>
+      <div class="others">
+        <div class="gcard sr"><img src="img/k2.svg"><div class="cg"></div><div class="frame"></div><span class="rar">SR</span></div>
+        <div class="gcard ssr"><img src="img/k3.svg"><div class="cg"></div><div class="frame"></div><span class="rar">SSR</span></div>
+        <div class="gcard r"><img src="img/k4.svg"><div class="cg"></div><div class="frame"></div><span class="rar">R</span></div>
+        <div class="gcard sr"><img src="img/k5.svg"><div class="cg"></div><div class="frame"></div><span class="rar">SR</span></div>
+      </div>
+    </div></div></div>
+
+  <div class="variant"><span class="tag">E</span><h2>3D-витрина</h2><span class="note">наклон по мышке + блик · наведи на карту</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--warning);box-shadow:0 0 10px var(--warning)"></span><h3>3D-витрина</h3></div><div class="bd"><div class="tilt">
+    <div class="gcard ssr"><img src="img/k1.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><div class="sheen"></div><span class="rar">SSR</span><div class="cap">Rem · Holo</div></div>
+    <div class="gcard sr"><img src="img/k3.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><div class="sheen"></div><span class="rar">SR</span><div class="cap">Frieren</div></div>
+    <div class="gcard ssr"><img src="img/k2.svg"><div class="holo"></div><div class="cg"></div><div class="frame"></div><div class="sheen"></div><span class="rar">SSR</span><div class="cap">Kurisu · Holo</div></div>
+  </div></div></div>
+
+  <div class="foot">type: card_collection · variant ∈ {row, fan, grid, hero, tilt3d} · клик → диалог</div>
+</div>
+
+<div class="dlg-back" id="dlgBack"><div class="dlg" id="dlg" role="dialog" aria-modal="true">
+  <button class="dlg-close" id="dlgClose">×</button><img id="dlgImg" alt="">
+  <div class="cg"></div><div class="frame" id="dlgFrame"></div><span class="rar" id="dlgRar">SSR</span>
+  <div class="meta"><div class="t" id="dlgTitle">Card</div></div></div></div>
+<script>
+  const back=document.getElementById('dlgBack');
+  const dImg=document.getElementById('dlgImg'),dRar=document.getElementById('dlgRar'),dTitle=document.getElementById('dlgTitle'),dFrame=document.getElementById('dlgFrame');
+  const rc={SSR:'linear-gradient(135deg,#ffd600,#ff9d00,#ffd600)',SR:'linear-gradient(135deg,#a78bfa,#ff2d7c)',R:'linear-gradient(135deg,#00d4ff,#009dcc)'},rk={SSR:'#ffd600',SR:'#a78bfa',R:'#00d4ff'};
+  function open(c){const r=(c.querySelector('.rar')?.textContent||'SSR').trim();dImg.src=c.querySelector('img').src;dRar.textContent=r;dRar.style.background=rk[r];dFrame.style.background=rc[r];dTitle.textContent=(c.querySelector('.cap')?.textContent||'Card').split('·')[0].trim();back.classList.add('open')}
+  function close(){back.classList.remove('open')}
+  document.querySelectorAll('.gcard').forEach(c=>c.addEventListener('click',()=>open(c)));
+  back.addEventListener('click',e=>{if(e.target===back)close()});document.getElementById('dlgClose').addEventListener('click',close);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  // 3D tilt
+  document.querySelectorAll('.tilt .gcard').forEach(card=>{
+    card.addEventListener('mousemove',e=>{
+      const r=card.getBoundingClientRect();const px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height;
+      card.style.transform=`rotateY(${(px-.5)*18}deg) rotateX(${(.5-py)*18}deg) translateY(-6px) scale(1.04)`;
+      card.style.setProperty('--mx',px*100+'%');card.style.setProperty('--my',py*100+'%');
+    });
+    card.addEventListener('mouseleave',()=>{card.style.transform=''});
+  });
+</script></body></html>

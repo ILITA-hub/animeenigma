@@ -1,0 +1,102 @@
+<!DOCTYPE html><html lang="ru"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Блок «Персонажи» — варианты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* A circles */
+  .circs{display:flex;gap:18px;overflow:auto;padding:4px 2px}
+  .circ{flex:0 0 92px;text-align:center;cursor:pointer}
+  .circ .ph{width:92px;height:92px;border-radius:50%;padding:2px;margin:0 auto 8px;background:conic-gradient(from 150deg,var(--pink),var(--violet),var(--cyan),var(--pink));transition:transform .18s ease-out,box-shadow .18s ease-out}
+  .circ:hover .ph{transform:translateY(-4px);box-shadow:0 14px 30px -12px rgba(255,45,124,.6)}.circ:active .ph{transform:scale(.96)}
+  .circ .ph img{width:100%;height:100%;border-radius:50%;object-fit:cover;border:2px solid var(--surface-2)}
+  .circ .cn{font-size:12px;font-weight:600}.circ .cr{font-size:10px;color:var(--faint);margin-top:2px}
+  /* B portrait cards */
+  .pcards{display:flex;gap:14px;overflow:auto;padding:4px 2px 8px}
+  .pcard{flex:0 0 124px;width:124px;border-radius:16px;overflow:hidden;position:relative;aspect-ratio:3/4;cursor:pointer;border:1px solid var(--border);transition:transform .18s ease-out,box-shadow .18s ease-out}
+  .pcard:hover{transform:translateY(-5px);box-shadow:0 18px 40px -16px rgba(255,45,124,.5)}.pcard:active{transform:scale(.98)}
+  .pcard img{width:100%;height:100%;object-fit:cover}
+  .pcard .g{position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(0,0,0,.88))}
+  .pcard .nm{position:absolute;left:10px;right:10px;bottom:9px}.pcard .nm .n{font-weight:700;font-size:13px;font-family:var(--display)}.pcard .nm .s{font-size:10px;color:var(--muted)}
+  .pcard .badge{position:absolute;top:8px;left:8px;font-size:9px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(255,45,124,.85);color:#fff;letter-spacing:.04em}
+  /* C hero + list */
+  .hero{display:grid;grid-template-columns:236px 1fr;gap:20px;align-items:stretch}
+  .hero .big{border-radius:18px;overflow:hidden;position:relative;aspect-ratio:3/4;border:1px solid var(--border);box-shadow:0 0 0 1px rgba(255,45,124,.22),0 24px 60px -26px rgba(255,45,124,.55);transition:transform .2s ease-out}
+  .hero .big:hover{transform:translateY(-3px)}
+  .hero .big img{width:100%;height:100%;object-fit:cover}
+  .hero .big .g{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.15),transparent 38%,rgba(0,0,0,.93))}
+  .hero .big .fav{position:absolute;top:12px;left:12px;font-size:11px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--pink),var(--violet));padding:4px 11px;border-radius:999px;box-shadow:0 4px 16px rgba(255,45,124,.5)}
+  .hero .big .info{position:absolute;left:16px;right:16px;bottom:15px}
+  .hero .big .info .n{font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:-.01em}
+  .hero .big .info .s{color:var(--cyan);font-size:13px;margin-top:2px}
+  .hero .list{display:flex;flex-direction:column;gap:8px;justify-content:center}
+  .hero .li{display:flex;align-items:center;gap:13px;padding:9px 12px;border-radius:13px;border:1px solid var(--border-2);background:rgba(255,255,255,.02);cursor:pointer;transition:transform .15s ease-out,background .15s,border-color .15s}
+  .hero .li:hover{background:rgba(255,45,124,.07);border-color:rgba(255,45,124,.3);transform:translateX(4px)}
+  .hero .li:active{transform:scale(.99)}
+  .hero .li .rk{width:18px;font-family:var(--display);font-weight:800;font-size:13px;color:var(--faint);text-align:center}
+  .hero .li .av{width:42px;height:42px;border-radius:50%;padding:1.5px;flex-shrink:0;background:conic-gradient(from 150deg,var(--pink),var(--violet),var(--cyan),var(--pink))}
+  .hero .li .av img{width:100%;height:100%;border-radius:50%;object-fit:cover;border:2px solid var(--surface-2)}
+  .hero .li .meta{flex:1;min-width:0}
+  .hero .li .meta .n{font-weight:700;font-size:14px;font-family:var(--display)}
+  .hero .li .meta .s{font-size:11px;color:var(--faint)}
+  .hero .li .heart{color:var(--pink-400);opacity:0;font-size:14px;transition:opacity .15s}
+  .hero .li:hover .heart{opacity:1}
+  /* D hex */
+  .hexes{display:flex;gap:22px;flex-wrap:wrap;padding:6px 2px}
+  .hex{text-align:center;cursor:pointer;width:92px}
+  .hex .ph{width:92px;height:104px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:linear-gradient(160deg,var(--cyan),var(--violet),var(--pink));padding:2px;margin:0 auto 8px;transition:transform .18s ease-out}
+  .hex:hover .ph{transform:translateY(-4px) scale(1.03)}.hex:active .ph{transform:scale(.96)}
+  .hex .ph img{width:100%;height:100%;object-fit:cover;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+  .hex .cn{font-size:12px;font-weight:600}.hex .cr{font-size:10px;color:var(--faint)}
+  @media(max-width:680px){.hero{grid-template-columns:1fr}}
+</style></head><body>
+<div class="nav"><div class="in"><span class="brand">Anime<b>Enigma</b> · Showcase</span>
+  <a class="tab" href="index.html">Хаб</a><a class="tab" href="showcase.html">Витрина</a>
+  <a class="tab" href="about.html">О себе</a><a class="tab" href="anime.html">Аниме</a>
+  <a class="tab" href="stats.html">Статы</a><a class="tab on" href="characters.html">Персонажи</a><a class="tab" href="cards.html">Карты</a><a class="tab" href="new.html">Ещё</a></div></div>
+<div class="wrap">
+  <div class="phead"><h1>Блок «Любимые персонажи»</h1><span class="k">type: favorite_character</span></div>
+  <p class="lead">Витрина персонажей (фича персонажей на Shikimori). Раскладки: круглые портреты, портрет-карты, «герой + мини» или соты.</p>
+
+  <div class="variant"><span class="tag">A</span><h2>Круги</h2><span class="note">конусное неон-кольцо, имя + тайтл</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--pink);box-shadow:0 0 10px var(--pink)"></span><h3>Любимые персонажи</h3></div><div class="bd"><div class="circs">
+    <div class="circ"><div class="ph"><img src="img/c1.svg"></div><div class="cn">Lelouch</div><div class="cr">Code Geass</div></div>
+    <div class="circ"><div class="ph"><img src="img/c2.svg"></div><div class="cn">Okabe</div><div class="cr">Steins;Gate</div></div>
+    <div class="circ"><div class="ph"><img src="img/c3.svg"></div><div class="cn">Rem</div><div class="cr">Re:Zero</div></div>
+    <div class="circ"><div class="ph"><img src="img/c4.svg"></div><div class="cn">Spike</div><div class="cr">Cowboy Bebop</div></div>
+    <div class="circ"><div class="ph"><img src="img/c5.svg"></div><div class="cn">Itachi</div><div class="cr">Naruto</div></div>
+    <div class="circ"><div class="ph"><img src="img/c6.svg"></div><div class="cn">Frieren</div><div class="cr">Frieren</div></div>
+  </div></div></div>
+
+  <div class="variant"><span class="tag">B</span><h2>Портрет-карты</h2><span class="note">вертикальные карты с именем-оверлеем + бейдж</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--pink);box-shadow:0 0 10px var(--pink)"></span><h3>Любимые персонажи</h3></div><div class="bd"><div class="pcards">
+    <div class="pcard"><span class="badge">★ #1</span><img src="img/c1.svg"><div class="g"></div><div class="nm"><div class="n">Lelouch</div><div class="s">Code Geass</div></div></div>
+    <div class="pcard"><img src="img/c3.svg"><div class="g"></div><div class="nm"><div class="n">Rem</div><div class="s">Re:Zero</div></div></div>
+    <div class="pcard"><img src="img/c5.svg"><div class="g"></div><div class="nm"><div class="n">Itachi</div><div class="s">Naruto</div></div></div>
+    <div class="pcard"><img src="img/c2.svg"><div class="g"></div><div class="nm"><div class="n">Okabe</div><div class="s">Steins;Gate</div></div></div>
+    <div class="pcard"><img src="img/c6.svg"><div class="g"></div><div class="nm"><div class="n">Frieren</div><div class="s">Frieren</div></div></div>
+  </div></div></div>
+
+  <div class="variant"><span class="tag">C</span><h2>Герой + список</h2><span class="note">#1 крупной картой слева, остальные — рейтинг-списком справа</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--pink);box-shadow:0 0 10px var(--pink)"></span><h3>Любимые персонажи</h3></div><div class="bd"><div class="hero">
+    <div class="big"><span class="fav">♥ #1 любимый</span><img src="img/c1.svg"><div class="g"></div><div class="info"><div class="n">Lelouch</div><div class="s">Code Geass</div></div></div>
+    <div class="list">
+      <div class="li"><span class="rk">2</span><div class="av"><img src="img/c3.svg"></div><div class="meta"><div class="n">Rem</div><div class="s">Re:Zero</div></div><span class="heart">♥</span></div>
+      <div class="li"><span class="rk">3</span><div class="av"><img src="img/c5.svg"></div><div class="meta"><div class="n">Itachi</div><div class="s">Naruto</div></div><span class="heart">♥</span></div>
+      <div class="li"><span class="rk">4</span><div class="av"><img src="img/c2.svg"></div><div class="meta"><div class="n">Okabe</div><div class="s">Steins;Gate</div></div><span class="heart">♥</span></div>
+      <div class="li"><span class="rk">5</span><div class="av"><img src="img/c4.svg"></div><div class="meta"><div class="n">Spike</div><div class="s">Cowboy Bebop</div></div><span class="heart">♥</span></div>
+      <div class="li"><span class="rk">6</span><div class="av"><img src="img/c6.svg"></div><div class="meta"><div class="n">Frieren</div><div class="s">Frieren</div></div><span class="heart">♥</span></div>
+    </div></div></div>
+
+  <div class="variant"><span class="tag">D</span><h2>Соты</h2><span class="note">гексагональные рамки — самый «игровой» вид</span></div>
+  <div class="block"><div class="bh"><span class="dot" style="background:var(--violet);box-shadow:0 0 10px var(--violet)"></span><h3>Любимые персонажи</h3></div><div class="bd"><div class="hexes">
+    <div class="hex"><div class="ph"><img src="img/c1.svg"></div><div class="cn">Lelouch</div><div class="cr">Code Geass</div></div>
+    <div class="hex"><div class="ph"><img src="img/c2.svg"></div><div class="cn">Okabe</div><div class="cr">Steins;Gate</div></div>
+    <div class="hex"><div class="ph"><img src="img/c3.svg"></div><div class="cn">Rem</div><div class="cr">Re:Zero</div></div>
+    <div class="hex"><div class="ph"><img src="img/c5.svg"></div><div class="cn">Itachi</div><div class="cr">Naruto</div></div>
+    <div class="hex"><div class="ph"><img src="img/c6.svg"></div><div class="cn">Frieren</div><div class="cr">Frieren</div></div>
+  </div></div></div>
+
+  <div class="foot">type: favorite_character · variant ∈ {circles, portraits, hero, hex}</div>
+</div></body></html>

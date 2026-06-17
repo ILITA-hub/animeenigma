@@ -1,0 +1,64 @@
+/* ===== AnimeEnigma Showcase — Neon Tokyo base ===== */
+:root{
+  --base:#08080f; --surface:#11111c; --surface-2:#161623; --elevated:#1c1c2c;
+  --cyan:#00d4ff; --cyan-600:#009dcc; --pink:#ff2d7c; --pink-400:#ff4d8d;
+  --violet:#a78bfa; --success:#00ff9d; --warning:#ffd600;
+  --fg:#fff; --muted:rgba(255,255,255,.56); --faint:rgba(255,255,255,.38);
+  --border:rgba(255,255,255,.10); --border-2:rgba(255,255,255,.06);
+  --font:'Inter',system-ui,sans-serif; --display:'Manrope',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);color:var(--fg);background:var(--base);min-height:100vh;line-height:1.5;-webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(900px 600px at 12% -8%,rgba(0,212,255,.12),transparent 60%),radial-gradient(800px 600px at 100% 0%,rgba(255,45,124,.10),transparent 55%),radial-gradient(700px 700px at 50% 120%,rgba(167,139,250,.08),transparent 60%),linear-gradient(180deg,#08080f,#0a0a14);
+  background-attachment:fixed}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.4;z-index:0;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:44px 44px;mask-image:radial-gradient(circle at 50% 30%,#000,transparent 80%)}
+.wrap{max-width:1000px;margin:0 auto;padding:28px 20px 90px;position:relative;z-index:1}
+a{color:inherit;text-decoration:none}
+
+/* top nav */
+.nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);background:rgba(8,8,15,.7);border-bottom:1px solid var(--border)}
+.nav .in{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:6px;padding:12px 20px;flex-wrap:wrap}
+.nav .brand{font-family:var(--display);font-weight:800;font-size:15px;margin-right:10px;letter-spacing:-.01em}
+.nav .brand b{color:var(--cyan)}
+.nav a.tab{font-size:13px;font-weight:600;color:var(--muted);padding:7px 12px;border-radius:9px;border:1px solid transparent;transition:.14s ease-out}
+.nav a.tab:hover{color:#fff;background:rgba(255,255,255,.05)}
+.nav a.tab.on{color:#06121a;background:linear-gradient(135deg,var(--cyan),#2ee6ff);box-shadow:0 3px 14px rgba(0,212,255,.4)}
+
+/* page heading */
+.phead{display:flex;align-items:baseline;gap:12px;margin:26px 0 6px}
+.phead h1{font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:-.02em}
+.phead .k{font-family:var(--mono);font-size:12px;color:var(--cyan)}
+.lead{color:var(--muted);font-size:14px;margin-bottom:22px;max-width:640px}
+
+/* variant label */
+.variant{margin:30px 0 14px;display:flex;align-items:center;gap:12px}
+.variant .tag{font-family:var(--mono);font-size:11px;font-weight:600;color:#06121a;background:var(--violet);padding:3px 9px;border-radius:7px;letter-spacing:.04em}
+.variant h2{font-family:var(--display);font-weight:700;font-size:17px}
+.variant .note{color:var(--faint);font-size:12px}
+
+/* block shell */
+.block{position:relative;border-radius:20px;overflow:hidden;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02));
+  border:1px solid var(--border);backdrop-filter:blur(14px);box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 18px 50px -28px rgba(0,0,0,.9)}
+.block .bh{display:flex;align-items:center;gap:10px;padding:18px 22px 0}
+.block .bh .dot{width:8px;height:8px;border-radius:3px}
+.block .bh h3{font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.block .bd{padding:14px 22px 22px}
+.scroller{display:flex;gap:14px;overflow:auto;padding:4px 2px 6px;scrollbar-width:thin}
+.scroller::-webkit-scrollbar{height:6px}.scroller::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:3px}
+
+/* reusable poster */
+.poster{position:relative;border-radius:14px;overflow:hidden;cursor:pointer;aspect-ratio:2/3;border:1px solid var(--border);transition:transform .18s ease-out,box-shadow .18s ease-out}
+.poster:hover{transform:translateY(-6px) scale(1.02);box-shadow:0 18px 40px -16px rgba(0,212,255,.55)}
+.poster:active{transform:translateY(-3px) scale(.98)}
+.poster img{width:100%;height:100%;object-fit:cover;display:block}
+.poster .grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,.85))}
+.poster .pt{position:absolute;left:9px;right:9px;bottom:8px;font-size:12px;font-weight:600;line-height:1.25}
+.poster .sc{position:absolute;top:8px;right:8px;font-size:11px;font-weight:700;color:var(--cyan);background:rgba(8,8,15,.7);padding:2px 6px;border-radius:7px;border:1px solid rgba(0,212,255,.35)}
+.poster .rank{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:13px;color:#06121a;background:linear-gradient(135deg,var(--cyan),#7ef0ff);box-shadow:0 0 14px rgba(0,212,255,.6)}
+
+.foot{margin-top:42px;text-align:center;color:var(--faint);font-size:12px;font-family:var(--mono)}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+@media(max-width:680px){.wrap{padding:20px 14px 70px}}
