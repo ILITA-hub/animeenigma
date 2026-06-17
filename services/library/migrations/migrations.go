@@ -14,6 +14,7 @@
 //   3. LibraryFilenamePatternsSQL (Phase 04 — independent)
 //   4. AutocachePoolSQL        (Phase 07 — alters library_episodes; must follow 002)
 //   5. AutocacheConfigSQL      (Phase 07 — singleton config table; independent)
+//   6. AutocacheDemandSQL      (Phase 08 — demand intake table; independent)
 package migrations
 
 import _ "embed"
@@ -67,3 +68,15 @@ var AutocachePoolSQL string
 //
 //go:embed 006_autocache_config.sql
 var AutocacheConfigSQL string
+
+// AutocacheDemandSQL is migrations/007_autocache_demand.sql embedded as
+// a string. Creates the autocache_demand_reason enum ('next_ep' reserved
+// for Phase 09, only 'backfill' written in Phase 08) and the minimal
+// autocache_demand intake table — one row per wanted (mal_id, episode),
+// deduped by the composite PK. The Phase-08 ae serve MISS path records a
+// backfill demand here so Phase 09's Planner can drain it across restarts.
+// Idempotent via the DO $$ … EXCEPTION enum guard + CREATE TABLE IF NOT
+// EXISTS. Independent of the other tables — no FK ordering constraint.
+//
+//go:embed 007_autocache_demand.sql
+var AutocacheDemandSQL string
