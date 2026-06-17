@@ -30,6 +30,12 @@ func TestLibraryMetrics_ExposesAllCollectors(t *testing.T) {
 	m.AddUploadBytes(2048)
 	m.IncFilenameDetectFallback("Ohys-Raws")
 	m.IncEncodeFailures("ffmpeg_error")
+	// Phase 10 additions — touch so the Vec collectors render a labelset:
+	m.IncEvictedTotal("autocache")
+	m.IncRejectedTotal("budget_full")
+	m.SetBytesUsed("autocache", "stale", 1)
+	m.SetBudgetBytes(107374182400)
+	m.SetEpisodes("autocache", "stale", 1)
 
 	expected := []string{
 		"library_jobs_total",
@@ -42,6 +48,11 @@ func TestLibraryMetrics_ExposesAllCollectors(t *testing.T) {
 		"library_upload_bytes_total",
 		"library_filename_detect_fallback_total",
 		"library_encode_failures_total",
+		"library_autocache_evicted_total",
+		"library_autocache_rejected_total",
+		"library_autocache_bytes_used",
+		"library_autocache_budget_bytes",
+		"library_autocache_episodes",
 	}
 
 	families, err := reg.Gather()
@@ -299,4 +310,85 @@ func TestLibraryMetrics_DownloadsTotalRegistered(t *testing.T) {
 		}
 	}
 	t.Fatal("library_autocache_downloads_total not registered")
+}
+
+// TestLibraryMetrics_IncEvictedTotal — Phase 10 eviction counter: per-source
+// labels stay distinct, and the nil-guard makes Inc safe on a nil receiver.
+func TestLibraryMetrics_IncEvictedTotal(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+
+	m.IncEvictedTotal("autocache")
+	m.IncEvictedTotal("autocache")
+	m.IncEvictedTotal("admin")
+
+	if v := testutil.ToFloat64(m.GetEvictedTotalForTest("autocache")); v != 2 {
+		t.Fatalf("library_autocache_evicted_total{source=autocache} = %v, want 2", v)
+	}
+	if v := testutil.ToFloat64(m.GetEvictedTotalForTest("admin")); v != 1 {
+		t.Fatalf("library_autocache_evicted_total{source=admin} = %v, want 1", v)
+	}
+
+	var nilM *LibraryMetrics
+	nilM.IncEvictedTotal("autocache") // must not panic
+}
+
+// TestLibraryMetrics_IncRejectedTotal — Phase 10 pre-admit reject counter
+// (EVICT-04): per-reason labels stay distinct; nil-guarded.
+func TestLibraryMetrics_IncRejectedTotal(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+
+	m.IncRejectedTotal("budget_full")
+	m.IncRejectedTotal("budget_full")
+
+	if v := testutil.ToFloat64(m.GetRejectedTotalForTest("budget_full")); v != 2 {
+		t.Fatalf("library_autocache_rejected_total{reason=budget_full} = %v, want 2", v)
+	}
+
+	var nilM *LibraryMetrics
+	nilM.IncRejectedTotal("budget_full") // must not panic
+}
+
+// TestLibraryMetrics_SetBytesUsedAndEpisodes — Phase 10 Accountant GaugeVecs are
+// last-write-wins and keep {source,freshness} labelsets distinct; nil-guarded.
+func TestLibraryMetrics_SetBytesUsedAndEpisodes(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+
+	m.SetBytesUsed("autocache", "fresh", 1000)
+	m.SetBytesUsed("autocache", "fresh", 2000) // overwrite
+	m.SetBytesUsed("admin", "stale", 50)
+	if v := testutil.ToFloat64(m.bytesUsed.WithLabelValues("autocache", "fresh")); v != 2000 {
+		t.Fatalf("bytes_used{autocache,fresh} = %v, want 2000", v)
+	}
+	if v := testutil.ToFloat64(m.bytesUsed.WithLabelValues("admin", "stale")); v != 50 {
+		t.Fatalf("bytes_used{admin,stale} = %v, want 50", v)
+	}
+
+	m.SetEpisodes("autocache", "stale", 12)
+	m.SetEpisodes("autocache", "stale", 7) // overwrite
+	if v := testutil.ToFloat64(m.episodes.WithLabelValues("autocache", "stale")); v != 7 {
+		t.Fatalf("episodes{autocache,stale} = %v, want 7", v)
+	}
+
+	var nilM *LibraryMetrics
+	nilM.SetBytesUsed("autocache", "fresh", 1) // must not panic
+	nilM.SetEpisodes("autocache", "fresh", 1)  // must not panic
+}
+
+// TestLibraryMetrics_SetBudgetBytes — Phase 10 budget gauge is last-write-wins;
+// nil-guarded.
+func TestLibraryMetrics_SetBudgetBytes(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+
+	m.SetBudgetBytes(100)
+	m.SetBudgetBytes(107374182400) // overwrite
+	if v := testutil.ToFloat64(m.budgetBytes); v != 107374182400 {
+		t.Fatalf("library_autocache_budget_bytes = %v, want 107374182400", v)
+	}
+
+	var nilM *LibraryMetrics
+	nilM.SetBudgetBytes(1) // must not panic
 }

@@ -59,6 +59,21 @@ type LibraryMetrics struct {
 	//   dedup, error}. Low cardinality — no mal_id/episode, so /metrics leaks no
 	//   per-title data. Phase 11 charts download volume by trigger.
 	autocacheDownloadsTotal *prometheus.CounterVec
+
+	// Phase 10 (workstream eviction/budget / v4.1) additions (spec §7):
+	//   evictedTotal{source}            — one increment per evicted row (EVICT-03)
+	//   rejectedTotal{reason}           — pre-admit reject, e.g. reason="budget_full" (EVICT-04)
+	//   bytesUsed{source,freshness}     — Σ size_bytes split by source × Fresh/Stale (Accountant)
+	//   budgetBytes                     — the live autocache_config.budget_bytes (EVICT-01)
+	//   episodes{source,freshness}      — episode count split by source × Fresh/Stale (Accountant)
+	// All labels are source/freshness/reason only — no mal_id/episode, so /metrics
+	// leaks no per-title viewing data (T-10-03, matches the Phase-08/09 rule).
+	// Phase 11 charts these series; Phase 10 only emits them.
+	evictedTotal  *prometheus.CounterVec
+	rejectedTotal *prometheus.CounterVec
+	bytesUsed     *prometheus.GaugeVec
+	budgetBytes   prometheus.Gauge
+	episodes      *prometheus.GaugeVec
 }
 
 // NewLibraryMetrics registers the collectors against the default
@@ -168,6 +183,42 @@ func NewLibraryMetricsWithRegisterer(reg prometheus.Registerer) *LibraryMetrics 
 				Help: "Planner download decisions, labeled by trigger (A=ongoing|B=next_ep|backfill) and result (enqueued|present|no_release|dedup|error).",
 			},
 			[]string{"trigger", "result"},
+		),
+
+		// Phase 10 (workstream eviction/budget / v4.1) — spec §7.
+		evictedTotal: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "library_autocache_evicted_total",
+				Help: "Episodes evicted from the aeProvider/ pool, labeled by source (admin|autocache).",
+			},
+			[]string{"source"},
+		),
+		rejectedTotal: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "library_autocache_rejected_total",
+				Help: "Pre-admit download rejections, labeled by reason (budget_full, ...).",
+			},
+			[]string{"reason"},
+		),
+		bytesUsed: factory.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "library_autocache_bytes_used",
+				Help: "Bytes used in the aeProvider/ pool, split by source (admin|autocache) and freshness (fresh|stale).",
+			},
+			[]string{"source", "freshness"},
+		),
+		budgetBytes: factory.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "library_autocache_budget_bytes",
+				Help: "The live autocache_config.budget_bytes ceiling for the aeProvider/ pool.",
+			},
+		),
+		episodes: factory.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "library_autocache_episodes",
+				Help: "Episode count in the aeProvider/ pool, split by source (admin|autocache) and freshness (fresh|stale).",
+			},
+			[]string{"source", "freshness"},
 		),
 	}
 }
@@ -349,4 +400,67 @@ func (m *LibraryMetrics) IncDownloadsTotal(trigger, result string) {
 // library_autocache_downloads_total.
 func (m *LibraryMetrics) GetDownloadsTotalForTest(trigger, result string) prometheus.Counter {
 	return m.autocacheDownloadsTotal.WithLabelValues(trigger, result)
+}
+
+// IncEvictedTotal increments library_autocache_evicted_total{source}. The
+// Phase-10 Evictor calls this once per evicted row; source ∈ {admin, autocache}.
+// Nil-guarded so an evictor with metrics disabled never panics.
+func (m *LibraryMetrics) IncEvictedTotal(source string) {
+	if m == nil {
+		return
+	}
+	m.evictedTotal.WithLabelValues(source).Inc()
+}
+
+// GetEvictedTotalForTest is the test-seam analogue for
+// library_autocache_evicted_total.
+func (m *LibraryMetrics) GetEvictedTotalForTest(source string) prometheus.Counter {
+	return m.evictedTotal.WithLabelValues(source)
+}
+
+// IncRejectedTotal increments library_autocache_rejected_total{reason}. The
+// Phase-10 pre-admit gate (Plan 03) calls this with reason="budget_full" when
+// draining the entire Stale queue still can't fit an incoming download
+// (EVICT-04). Distinct from library_enqueue_rejected_total{disk_full}.
+// Nil-guarded.
+func (m *LibraryMetrics) IncRejectedTotal(reason string) {
+	if m == nil {
+		return
+	}
+	m.rejectedTotal.WithLabelValues(reason).Inc()
+}
+
+// GetRejectedTotalForTest is the test-seam analogue for
+// library_autocache_rejected_total.
+func (m *LibraryMetrics) GetRejectedTotalForTest(reason string) prometheus.Counter {
+	return m.rejectedTotal.WithLabelValues(reason)
+}
+
+// SetBytesUsed sets library_autocache_bytes_used{source,freshness} to n. The
+// Accountant publishes the Σ size_bytes split by source × Fresh/Stale on each
+// sweep. Nil-guarded.
+func (m *LibraryMetrics) SetBytesUsed(source, freshness string, n int64) {
+	if m == nil {
+		return
+	}
+	m.bytesUsed.WithLabelValues(source, freshness).Set(float64(n))
+}
+
+// SetBudgetBytes sets library_autocache_budget_bytes to n — the live
+// autocache_config.budget_bytes ceiling. Nil-guarded.
+func (m *LibraryMetrics) SetBudgetBytes(n int64) {
+	if m == nil {
+		return
+	}
+	m.budgetBytes.Set(float64(n))
+}
+
+// SetEpisodes sets library_autocache_episodes{source,freshness} to n — the
+// episode count split by source × Fresh/Stale the Accountant publishes on each
+// sweep. Nil-guarded.
+func (m *LibraryMetrics) SetEpisodes(source, freshness string, n int64) {
+	if m == nil {
+		return
+	}
+	m.episodes.WithLabelValues(source, freshness).Set(float64(n))
 }
