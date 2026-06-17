@@ -82,6 +82,9 @@
         <router-link to="/status" class="text-white/60 hover:text-white/80 text-sm transition-colors">
           {{ $t('status.title') }}
         </router-link>
+        <a href="mailto:info@animeenigma.ru" class="text-white/60 hover:text-white/80 text-sm transition-colors">
+          info@animeenigma.ru
+        </a>
         <FeedbackButton />
         <router-link
           v-if="MY_FEEDBACK_ENABLED && authStore.isAuthenticated"
