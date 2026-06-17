@@ -32,8 +32,16 @@ var rawUploaderAllowlist = map[string]bool{
 
 // negativeTokenRegex rejects titles implying non-JP audio or burned-in subs.
 // Word-boundaried + case-insensitive; tolerant of the common space/dot/dash
-// separators between "dual" / "multi" / "eng" and "audio"/"dub".
-var negativeTokenRegex = regexp.MustCompile(`(?i)\b(dub|dual[ .-]?audio|multi[ .-]?audio|eng[ .-]?dub|hardsub)\b`)
+// separators between "dual" / "multi" / "eng" and "audio"/"dub". Expanded for
+// WR-04 with bare \beng\b / \benglish\b audio markers and "multi-sub" / "bd-eng"
+// forms that earlier slipped through the small denylist.
+var negativeTokenRegex = regexp.MustCompile(`(?i)\b(dub|dual[ .-]?audio|multi[ .-]?audio|multi[ .-]?subs?|eng[ .-]?dub|eng(?:lish)?[ .-]?audio|bd[ .-]?eng|hardsub)\b`)
+
+// positiveRawTokenRegex is the WR-04 positive signal: a title that explicitly
+// advertises a raw / JP-audio release. When the uploader is NOT in the
+// allowlist, isRAW REQUIRES one of these tokens rather than defaulting open —
+// see isRAW's policy comment.
+var positiveRawTokenRegex = regexp.MustCompile(`(?i)\b(raws?|web[ .-]?rip[ .-]?jp|jp[ .-]?audio)\b`)
 
 // qualityTokenRegex parses the leading resolution token. Mirrors the
 // animetosho client's qualityRegex so the parse stays consistent across the
@@ -43,8 +51,9 @@ var qualityTokenRegex = regexp.MustCompile(`(?i)\b(2160|1080|720|480)p\b`)
 
 // selectRAW iterates the (already seeder-ranked DESC) release slice and returns
 // the first release that:
-//   (a) is RAW — uploader in the allowlist OR title carries no dub/dual-audio/
-//       multi-audio/eng-dub/hardsub token,
+//   (a) is RAW — per isRAW's allowlist-gated policy (WR-04): allowlisted uploader
+//       OR an explicit positive raw token, AND no negative (dub/dual/multi/eng-
+//       audio/hardsub) token,
 //   (b) parses to a resolution ≤ qualityCap, and
 //   (c) has Seeders ≥ minSeeders.
 //
@@ -69,10 +78,25 @@ func selectRAW(releases []domain.Release, qualityCap, minSeeders int) (domain.Re
 	return domain.Release{}, false
 }
 
-// isRAW reports whether (title, uploader) looks like a JP-audio raw. A negative
-// token in the title ALWAYS disqualifies (even for an allowlisted uploader, so a
-// dub variant from a normally-raw group is still rejected); otherwise an
-// allowlisted uploader OR a title free of negative tokens qualifies.
+// isRAW reports whether (title, uploader) looks like a JP-audio raw.
+//
+// WR-04 policy (fail-CLOSED for unknown uploaders). A negative token in the
+// title ALWAYS disqualifies (even for an allowlisted uploader, so a dub variant
+// from a normally-raw group is still rejected). With no negative token, the
+// release qualifies as RAW only when there is a POSITIVE signal:
+//
+//   - the uploader is in the known RAW-uploader allowlist (the primary gate —
+//     most real raws come from these groups), OR
+//   - the title carries an explicit positive raw token (raw/raws/webrip-jp/
+//     jp-audio), which lets a legitimate raw from an unrecognized group through.
+//
+// "unknown uploader + no negative token + no positive raw token" is treated as
+// NOT RAW (skip, leave the demand for a later better-seeded allowlisted release).
+// This inverts the previous default-OPEN behavior, which admitted any title that
+// merely lacked one of a few negative tokens — the riskiest default for an
+// automated downloader, since a wrong pick burns disk budget and is served to
+// users as raw JP. The allowlist is intentionally short; expanding it is the
+// supported way to admit a new trusted RAW group (it is the documented tunable).
 func isRAW(title, uploader string) bool {
 	if negativeTokenRegex.MatchString(title) {
 		return false
@@ -80,10 +104,9 @@ func isRAW(title, uploader string) bool {
 	if rawUploaderAllowlist[strings.ToLower(strings.TrimSpace(uploader))] {
 		return true
 	}
-	// No negative token and not an explicitly-known raw group: accept as RAW.
-	// This is the best-effort heuristic — false positives are bounded by the
-	// negative-token filter above and the quality/seeder gates in selectRAW.
-	return true
+	// Unknown uploader: require an explicit positive raw token rather than
+	// defaulting open (WR-04 fail-closed).
+	return positiveRawTokenRegex.MatchString(title)
 }
 
 // resolutionOf parses the leading resolution token of a quality string (e.g.

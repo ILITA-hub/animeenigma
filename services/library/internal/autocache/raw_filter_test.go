@@ -31,12 +31,23 @@ func TestSelectRAWFilter(t *testing.T) {
 			wantTitle: "Some Anime - 01 [1080p]",
 		},
 		{
-			name: "RAW pass via no-negative-token title",
+			// WR-04: an unknown uploader with NO positive raw token no longer
+			// qualifies (fail-closed). Previously this passed by defaulting open.
+			name: "unknown uploader without positive raw token is NOT raw (WR-04 fail-closed)",
 			releases: []domain.Release{
 				{Title: "Some Anime - 01 (1080p) [JP]", Uploader: "RandomGroup", Quality: "1080p", Seeders: 5},
 			},
+			wantFound: false,
+		},
+		{
+			// WR-04: an unknown uploader WITH an explicit positive raw token does
+			// qualify — lets a legitimate raw from an unrecognized group through.
+			name: "unknown uploader with positive raw token qualifies",
+			releases: []domain.Release{
+				{Title: "Some Anime - 01 (1080p) RAW", Uploader: "RandomGroup", Quality: "1080p", Seeders: 5},
+			},
 			wantFound: true,
-			wantTitle: "Some Anime - 01 (1080p) [JP]",
+			wantTitle: "Some Anime - 01 (1080p) RAW",
 		},
 		{
 			name: "DUB token rejected even with good seeders/quality",
@@ -119,21 +130,33 @@ func TestSelectRAWFilter(t *testing.T) {
 	}
 }
 
-// TestIsRAW pins the RAW classifier directly: uploader allowlist OR no negative
-// token. Case-insensitive both ways.
+// TestIsRAW pins the WR-04 RAW classifier policy (fail-closed for unknown
+// uploaders): a negative token always disqualifies; otherwise the release is RAW
+// only when there is a positive signal — an allowlisted uploader OR an explicit
+// positive raw token. "unknown uploader + no negative + no positive" is NOT RAW.
+// Case-insensitive both ways.
 func TestIsRAW(t *testing.T) {
 	cases := []struct {
 		title    string
 		uploader string
 		want     bool
 	}{
-		{"Anything at all", "ohys-raws", true},      // allowlist (lowercased)
-		{"Anything at all", "Leopard-Raws", true},   // allowlist
-		{"Anime 01 1080p", "RandomGroup", true},     // no negative token
+		{"Anything at all", "ohys-raws", true},    // allowlist (lowercased)
+		{"Anything at all", "Leopard-Raws", true}, // allowlist
+		// WR-04: unknown uploader, no positive raw token → fail closed.
+		{"Anime 01 1080p", "RandomGroup", false},
+		// WR-04: unknown uploader WITH a positive raw token → admitted.
+		{"Anime 01 1080p RAW", "RandomGroup", true},
+		{"Anime 01 [1080p] Leopard-Raws", "RandomGroup", true}, // "Raws" token in title
+		{"Anime 01 1080p JP-Audio", "RandomGroup", true},
+		// Negative tokens still disqualify regardless of uploader/positive token.
 		{"Anime 01 1080p DUB", "RandomGroup", false},
 		{"Anime 01 1080p eng dub", "RandomGroup", false},
 		{"Anime 01 1080p multi audio", "RandomGroup", false},
-		{"Anime 01 1080p HARDSUB", "Erai-raws", false}, // negative token wins even for allowlisted uploader
+		{"Anime 01 1080p multi-sub RAW", "RandomGroup", false}, // negative wins over positive
+		{"Anime 01 1080p English Audio", "RandomGroup", false}, // WR-04 expanded denylist
+		{"Anime 01 1080p BD-ENG", "RandomGroup", false},        // WR-04 expanded denylist
+		{"Anime 01 1080p HARDSUB", "Erai-raws", false},         // negative token wins even for allowlisted uploader
 	}
 	for _, tc := range cases {
 		if got := isRAW(tc.title, tc.uploader); got != tc.want {
