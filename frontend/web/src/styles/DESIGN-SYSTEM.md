@@ -52,14 +52,14 @@ Defined as `:root` foundation vars (not in `@theme`): `--surface-2 #161623`, `--
 - Radius: chips→sm, buttons/inputs→md/lg, cards→xl, modals→2xl.
 - Elevation: `glass` (flat) → `glass-card` (resting) → `glass-elevated` (raised). Glows are accent elevation, not structural.
 
-## Lint gate (enforced) — DS-GOV-01 / DS-GOV-02
+## Lint gate (enforced) — DS-GOV-01 / DS-GOV-02 / DS-GOV-03
 
 A build-failing custom bash gate, `frontend/web/scripts/design-system-lint.sh` (mirrors
 `scripts/i18n-lint.sh`), locks the color/token migration shut. It runs on the SAME path CI/deploy
 already use: it is a prerequisite of **`make lint-frontend`** (→ `make lint` / `all` / CI) AND of
 **`make redeploy-web`** (the deploy gate), via the `make lint-design` sub-target. No new dependency.
 
-**It enforces EXACTLY these 5 rules** over `frontend/web/src/**/*.vue` (excluding `*.spec.*` /
+**It enforces EXACTLY these 6 rules** over `frontend/web/src/**/*.vue` (excluding `*.spec.*` /
 `__tests__`; **Rules 1 & 4 also scan `*.ts`**, since class-strings leak via `cva` variant files).
 Each violation is an ERROR; `ERRORS>0` ⇒ `exit 1`.
 
@@ -69,6 +69,7 @@ Each violation is an ERROR; `ERRORS>0` ⇒ `exit 1`.
 3. **Deprecated-alias `var()` usages** — `var(--ink)` / `var(--accent)` / `var(--pink)` (after the Wave-2 flip, brand `--accent` usage is itself a violation), plus `var(--violet)` → `--brand-violet` and the font aliases `var(--f-display|f-ui|f-mono|f-jp)` → `--font-display`/`--font-sans`/`--font-mono`/`--font-jp` (migrated + locked in slice #2). EXCLUDES the literal-alias survivors `--ink-2`, `--ink-4`, `--accent-soft`, `--accent-line`, `--accent-glow`, `--pink-soft`.
 4. **Off-scale font weights** — `font-(bold|extrabold|black|light|thin)`; the DS allows ONLY `font-medium` / `font-semibold`. Scans `*.vue` + `*.ts`. (**Promoted 2026-06-15 from governance-only to build-enforced.**)
 5. **Bare `<select>` / `<input type="date">`** — use the `Select` / `DatePicker` primitives. Exempts `components/player/` (Reka portals break in fullscreen, so player pickers stay native) and `type="datetime-local"`.
+6. **Arbitrary spacing values** — `(p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y)-[<n>px|rem|em]` dodge the 4px token scale; bind to a token instead (`px-[10px]` → `px-2.5`). On-grid values (2/4/6/8/10/14/18px) migrate 1:1 to tokens (`0.5/1/1.5/2/2.5/3.5/4.5`); `1px` → the bare `-px` modifier. **Sizing props (`w/h/min-*/max-*/size`) are DELIBERATELY OUT OF SCOPE** — no token scale exists for arbitrary pixel dimensions, so `w-[380px]` is fine. `calc()`/`var()` arbitrary values are allowed (computed, not magic numbers). Off-grid sub-pixel survivors (odd `3/5/7/9/11px` on the dense player menus + `Stepper`) are listed per-`(file,class)` in `scripts/design-system-spacing-allowlist.txt`. (DS-GOV-03, added 2026-06-17.)
 
 **Brand-exemption rationale (why some hues are NOT "off-palette").** `cyan` and `pink` are the
 Neon-Tokyo BRAND primitives, and `orange` / `rose` (plus `indigo` / `teal` / `lime`) are per-provider
@@ -76,12 +77,15 @@ identity hues (Kodik cyan, AniLib orange, Hanime pink, Raw rose). They are delib
 Rule-1 palette set — including them would (correctly) fail the clean tree where Anime.vue, the players,
 and the Navbar legitimately use them. Provider/brand hex go on the allowlist instead, with a reason.
 
-**Allowlist / escape-hatch** — `frontend/web/scripts/design-system-allowlist.txt`, one
-`path:hex:reason` line per justified exception (`#`-prefixed comments allowed). To add an exception:
+**Allowlist / escape-hatch (two files).** Hex exceptions → `frontend/web/scripts/design-system-allowlist.txt`
+(`path:hex:reason`); arbitrary-spacing exceptions → `frontend/web/scripts/design-system-spacing-allowlist.txt`
+(`path:class:reason`). One line per justified exception (`#`-prefixed comments allowed). To add an exception:
 **prefer migrating to a token first**; only allowlist when no token reproduces the value within
-tolerance (provider-brand identity, subtitle render default, cover/avatar gradient stop, near-base ink,
-SVG `<stop>`, functional non-theme color like a QR-code module color, or a canonical-fine
-`var(--token,#fallback)` fallback). Every line MUST carry a real reason — never a blanket wildcard.
+tolerance — for hex: provider-brand identity, subtitle render default, cover/avatar gradient stop, near-base
+ink, SVG `<stop>`, functional non-theme color like a QR-code module color, or a canonical-fine
+`var(--token,#fallback)` fallback; for spacing: an off-grid odd-pixel value (`3/5/7/9/11px`) whose
+sub-pixel tuning is load-bearing (snapping to the 4px scale would visibly shift a deliberately compact
+surface). Every line MUST carry a real reason — never a blanket wildcard.
 
 **Adjudication rule (out-of-scope hex).** Any hex discovered in a file NOT touched by the migration
 MUST be ADJUDICATED — decide migrate-to-token vs justified-allowlist and record the reason — never
@@ -89,22 +93,24 @@ blanket-allowlisted to force the gate green. (Examples on record: `Auth.vue`'s `
 justified Telegram provider-brand allowlist; `Collections.vue`'s `#0e7490`/`#6b21a8` cover gradient →
 adjudicated keep, no exact token pair.)
 
-**Prove the fail-path** — the gate ships a `--selftest` that injects a scratch `bg-red-500` file,
-asserts the gate DETECTS it (would `exit 1`), removes it (trap-guarded), and asserts the clean tree
-PASSES — leaving the tree exactly as before:
+**Prove the fail-path** — the gate ships a `--selftest` that injects a scratch file with a
+`bg-red-500` (Rule 1) AND a `p-[7px]` (Rule 6), asserts the gate DETECTS both (would `exit 1`),
+removes it (trap-guarded), and asserts the clean tree PASSES — leaving the tree exactly as before:
 
 ```bash
 bash frontend/web/scripts/design-system-lint.sh --selftest   # → SELFTEST PASS, tree clean
 make lint-design                                              # → PASS on the clean tree
 ```
 
-> Scope covers color/token discipline (Rules 1–3), the font-weight scale (Rule 4), and native
-> form-primitive bypass (Rule 5). The **font-weight scale and native `<select>`/`date` checks were
-> promoted out of Phase-6 governance into build-enforcement** (Rule 4 on 2026-06-15). What REMAINS
-> governance-only (human/AI-followed, NOT build-enforced — a grep cannot reliably distinguish these
-> without AST analysis): **reuse-the-primitives** (hand-rolled button vs `<Button>`), the **padding
-> scale** (`p-4 md:p-6 lg:p-8`), and **`cva` variants for component variation**. The docs above match
-> the enforced rules exactly (no documented-but-unenforced rule).
+> Scope covers color/token discipline (Rules 1–3), the font-weight scale (Rule 4), native
+> form-primitive bypass (Rule 5), and binding spacing to the 4px token scale (Rule 6). The
+> **font-weight scale and native `<select>`/`date` checks were promoted out of Phase-6 governance into
+> build-enforcement** (Rule 4 on 2026-06-15; Rule 6 added 2026-06-17). What REMAINS governance-only
+> (human/AI-followed, NOT build-enforced — a grep cannot reliably distinguish these without AST
+> analysis): **reuse-the-primitives** (hand-rolled button vs `<Button>`), the **contextual card-padding
+> rhythm** (`p-4 md:p-6 lg:p-8` — Rule 6 only forbids *arbitrary* `p-[…px]`; it does NOT mandate which
+> token step a card uses), and **`cva` variants for component variation**. The docs above match the
+> enforced rules exactly (no documented-but-unenforced rule).
 
 ## Deprecated aliases (migrate away over P2–P5)
 

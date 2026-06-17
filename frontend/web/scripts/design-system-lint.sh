@@ -36,6 +36,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_DIR="$SCRIPT_DIR/../src"
 ALLOWLIST="$SCRIPT_DIR/design-system-allowlist.txt"
+SPACING_ALLOWLIST="$SCRIPT_DIR/design-system-spacing-allowlist.txt"
 ERRORS=0
 WARNINGS=0
 
@@ -50,6 +51,7 @@ RULE2_ERRORS=0
 RULE3_ERRORS=0
 RULE4_ERRORS=0
 RULE5_ERRORS=0
+RULE6_ERRORS=0
 
 # Off-palette palette set (Phase-4 verbatim). Brand/provider hues
 # (cyan|pink|orange|rose|indigo|teal|lime) are deliberately ABSENT.
@@ -68,6 +70,14 @@ ALIAS_SURVIVORS='ink-2|ink-4|accent-soft|accent-line|accent-glow|pink-soft'
 # font-semibold; bold/extrabold/black (too heavy) and light/thin (too light)
 # are forbidden. \b end-anchor avoids matching e.g. a hypothetical font-boldish.
 FONT_RE='\bfont-(bold|extrabold|black|light|thin)\b'
+
+# Arbitrary spacing values on props that HAVE a 4px token scale (padding / margin
+# / gap / space). `p-[10px]` etc. dodge the scale; bind to a token (px-2.5) instead.
+# Matches numeric-unit brackets only (px/rem/em) — calc()/var() arbitrary values are
+# intentional computed spacing and start with a letter, so they don't match. Sizing
+# props (w/h/min-*/max-*/size) are DELIBERATELY EXCLUDED: no token scale exists for
+# arbitrary pixel dimensions, so flagging `w-[380px]` would be a false positive.
+SPACING_RE='\b(p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y)-\[[0-9][0-9.]*(px|rem|em)\]'
 
 # List the in-scope .vue files (exclude *.spec.* and __tests__).
 list_vue_files() {
@@ -242,6 +252,66 @@ run_rule5() {
 }
 
 # ============================================================================
+# RULE 6 — arbitrary spacing values outside the spacing allowlist
+# ============================================================================
+# Spacing props (padding/margin/gap/space) have a 4px token scale, so an arbitrary
+# `p-[10px]` should be `px-2.5`. On-grid values were migrated to tokens; only off-grid
+# sub-pixel tuning (odd px on the dense player menus + Stepper) is allowlisted, per
+# (file,class), in design-system-spacing-allowlist.txt. Sizing props are out of scope.
+run_rule6() {
+  echo ""
+  echo "=== RULE 6: arbitrary spacing values (use the 4px token scale) ==="
+
+  # Collect the non-comment spacing-allowlist lines once.
+  local allow_file
+  allow_file=$(mktemp)
+  # shellcheck disable=SC2064
+  trap "rm -f '$allow_file'" RETURN
+  if [ -f "$SPACING_ALLOWLIST" ]; then
+    grep -vE '^\s*(#|$)' "$SPACING_ALLOWLIST" > "$allow_file" 2>/dev/null || true
+  fi
+
+  # Every file:line:class across the in-scope .vue tree.
+  local hits
+  hits=$(grep -rnoE "$SPACING_RE" "$SRC_DIR" --include='*.vue' \
+    | grep -v '\.spec\.' | grep -v '__tests__' || true)
+
+  if [ -z "$hits" ]; then
+    echo -e "  ${GREEN}OK${NC} No arbitrary spacing values"
+    return 0
+  fi
+
+  local any=0
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    # line = <abs-file>:<lineno>:<class>
+    local file lineno cls rel
+    file="${line%%:*}"
+    local tail="${line#*:}"
+    lineno="${tail%%:*}"
+    cls="${tail#*:}"
+    rel="$(relpath "$file")"
+
+    # Allowed iff a non-comment allowlist line names BOTH this path AND this class.
+    # The allowlist format is `path:class:reason`; match `rel` and `cls` literally.
+    if awk -F: -v p="$rel" -v c="$cls" \
+         'index($0,p) && index($0,c) {found=1} END{exit !found}' \
+         "$allow_file"; then
+      continue
+    fi
+
+    echo -e "  ${RED}ERROR${NC} ${rel}:${lineno}: ${cls} (use the 4px token scale, or allowlist)"
+    RULE6_ERRORS=$((RULE6_ERRORS + 1))
+    ERRORS=$((ERRORS + 1))
+    any=1
+  done <<< "$hits"
+
+  if [ "$any" -eq 0 ]; then
+    echo -e "  ${GREEN}OK${NC} All arbitrary spacing values are allowlisted (path:class:reason)"
+  fi
+}
+
+# ============================================================================
 # --selftest — provable fail-path (SC#3)
 # ============================================================================
 run_selftest() {
@@ -251,19 +321,16 @@ run_selftest() {
   # shellcheck disable=SC2064
   trap "rm -f '$scratch'" EXIT
 
-  # 1) Inject a deliberate off-palette violation (bg-red-500).
+  # 1) Inject a deliberate off-palette violation (bg-red-500) AND an arbitrary
+  #    spacing violation (p-[7px], off-grid + not allowlisted for this scratch file).
   cat > "$scratch" <<'EOF'
 <template>
   <!-- design-system-lint selftest marker; auto-removed -->
-  <div class="bg-red-500">selftest</div>
+  <div class="bg-red-500 p-[7px]">selftest</div>
 </template>
 EOF
 
-  # 2) Assert the gate DETECTS it (exit 1).
-  local detect_rc=0
-  ( ERRORS=0 RULE1_ERRORS=0; run_rule1 >/dev/null 2>&1
-    [ "$ERRORS" -gt 0 ] || exit 1 ) || detect_rc=$?
-  # Re-run rule1 directly to count against the scratch file.
+  # 2) Assert the gate DETECTS the off-palette class (exit 1).
   local scratch_hits
   scratch_hits=$(grep -nE "$OFF_PALETTE_RE" "$scratch" 2>/dev/null || true)
   if [ -z "$scratch_hits" ]; then
@@ -273,16 +340,26 @@ EOF
   fi
   echo -e "  ${GREEN}DETECTED${NC} injected bg-red-500 (gate would exit 1)"
 
+  # 2b) Assert RULE 6 DETECTS the injected arbitrary spacing (counts > 0).
+  ( ERRORS=0 RULE6_ERRORS=0; run_rule6 >/dev/null 2>&1
+    [ "$RULE6_ERRORS" -gt 0 ] ) || {
+    echo -e "  ${RED}SELFTEST FAIL${NC} — RULE 6 did NOT detect the injected p-[7px]"
+    rm -f "$scratch"; trap - EXIT
+    exit 1
+  }
+  echo -e "  ${GREEN}DETECTED${NC} injected p-[7px] arbitrary spacing (RULE 6 would exit 1)"
+
   # 3) Remove the scratch file and assert the clean tree PASSES.
   rm -f "$scratch"
   trap - EXIT
 
-  ERRORS=0; RULE1_ERRORS=0; RULE2_ERRORS=0; RULE3_ERRORS=0; RULE4_ERRORS=0; RULE5_ERRORS=0
+  ERRORS=0; RULE1_ERRORS=0; RULE2_ERRORS=0; RULE3_ERRORS=0; RULE4_ERRORS=0; RULE5_ERRORS=0; RULE6_ERRORS=0
   run_rule1 >/dev/null
   run_rule2 >/dev/null
   run_rule3 >/dev/null
   run_rule4 >/dev/null
   run_rule5 >/dev/null
+  run_rule6 >/dev/null
   if [ "$ERRORS" -gt 0 ]; then
     echo -e "  ${RED}SELFTEST FAIL${NC} — clean tree did NOT pass ($ERRORS errors)"
     exit 1
@@ -304,6 +381,7 @@ run_rule2
 run_rule3
 run_rule4
 run_rule5
+run_rule6
 
 echo ""
 echo "=== Summary ==="
@@ -312,6 +390,7 @@ echo -e "  Non-allowlisted hex (RULE 2): ${RULE2_ERRORS}"
 echo -e "  Deprecated aliases  (RULE 3): ${RULE3_ERRORS}"
 echo -e "  Off-scale font wts  (RULE 4): ${RULE4_ERRORS}"
 echo -e "  Bare select/date    (RULE 5): ${RULE5_ERRORS}"
+echo -e "  Arbitrary spacing   (RULE 6): ${RULE6_ERRORS}"
 
 if [ "$ERRORS" -gt 0 ]; then
   echo ""

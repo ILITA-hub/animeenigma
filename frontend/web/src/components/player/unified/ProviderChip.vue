@@ -8,7 +8,7 @@
       :disabled="row.state !== 'active'"
       :title="row.reason"
       :class="[
-        'relative inline-flex items-center gap-2 w-full px-[10px] py-[9px]',
+        'relative inline-flex items-center gap-2 w-full px-2.5 py-[9px]',
         'rounded-[var(--r-md)] border text-sm text-left transition-all duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
         isSelected
@@ -27,14 +27,14 @@
       />
 
       <!-- Provider name + capability labels -->
-      <span class="flex-1 min-w-0 flex flex-col gap-[2px]">
+      <span class="flex-1 min-w-0 flex flex-col gap-0.5">
         <span class="font-semibold truncate">{{ row.def.name }}</span>
         <span v-if="labels" class="flex items-center gap-[5px] flex-wrap">
           <span
             v-for="c in labels.categories"
             :key="c"
             data-test="cap-cat"
-            class="text-[9px] font-semibold font-mono uppercase tracking-wide px-[4px] py-px rounded bg-white/[0.08] text-[var(--muted-foreground)]"
+            class="text-[9px] font-semibold font-mono uppercase tracking-wide px-1 py-px rounded bg-white/[0.08] text-[var(--muted-foreground)]"
           >
             {{ c === 'sub' ? $t('player.sub') : c === 'dub' ? $t('player.dub') : $t('player.sources.raw') }}<template v-if="c === 'sub' && labels.subDelivery"> · {{ labels.subDelivery === 'hard' ? $t('player.sources.subBurnedIn') : $t('player.sources.subSelectable') }}</template>
           </span>

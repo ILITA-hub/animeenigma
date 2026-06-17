@@ -14,7 +14,7 @@
     <div class="flex flex-col gap-3">
       <!-- Audio slider -->
       <div>
-        <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-[6px]">
+        <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-1.5">
           Audio
         </span>
         <div
@@ -37,7 +37,7 @@
             :key="opt.value"
             :data-test="'audio-' + opt.value"
             :class="[
-              'relative z-10 py-[9px] px-[6px] border-0 bg-transparent text-[13px] font-semibold transition-colors duration-[180ms] text-center',
+              'relative z-10 py-[9px] px-1.5 border-0 bg-transparent text-[13px] font-semibold transition-colors duration-[180ms] text-center',
               'focus-visible:outline-none',
               audio === opt.value ? 'text-white' : 'text-[var(--muted-foreground)]',
             ]"
@@ -50,7 +50,7 @@
 
       <!-- Language slider -->
       <div>
-        <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-[6px]">
+        <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-1.5">
           Language
         </span>
         <div
@@ -73,7 +73,7 @@
             :key="opt.value"
             :data-test="'lang-' + opt.value"
             :class="[
-              'relative z-10 py-[9px] px-[6px] border-0 bg-transparent text-[13px] font-semibold transition-colors duration-[180ms] text-center',
+              'relative z-10 py-[9px] px-1.5 border-0 bg-transparent text-[13px] font-semibold transition-colors duration-[180ms] text-center',
               'focus-visible:outline-none',
               lang === opt.value ? 'text-white' : 'text-[var(--muted-foreground)]',
             ]"
@@ -90,12 +90,12 @@
       <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
         Team
       </span>
-      <div class="flex flex-wrap gap-[6px]">
+      <div class="flex flex-wrap gap-1.5">
         <button
           v-for="t in teams"
           :key="t"
           :class="[
-            'px-3 py-[6px] rounded-full text-[12px] font-semibold border transition-all duration-150',
+            'px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all duration-150',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
             team === t
               ? 'bg-[rgba(0,212,255,0.18)] border-[var(--accent-line)] text-[var(--brand-cyan)]'
@@ -115,7 +115,7 @@
 
     <!-- Provider list (collapsed to the best/selected source unless hacker mode / error-expanded) -->
     <div class="flex flex-col gap-1">
-      <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-[2px]">
+      <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-0.5">
         Provider
       </span>
       <div class="flex flex-col gap-1">
@@ -150,7 +150,7 @@
           v-for="s in servers"
           :key="s.id"
           :class="[
-            'flex items-center gap-[10px] px-[10px] py-[9px] rounded-[var(--r-md)] border text-sm text-left transition-all duration-150 w-full',
+            'flex items-center gap-2.5 px-2.5 py-[9px] rounded-[var(--r-md)] border text-sm text-left transition-all duration-150 w-full',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
             server === s.id
               ? 'bg-[rgba(0,212,255,0.10)] border-[var(--accent-line)] text-white'
@@ -162,7 +162,7 @@
           <!-- 1st-party badge for SVO servers -->
           <span
             v-if="s.label.startsWith('SVO')"
-            class="text-[10px] font-semibold font-mono uppercase tracking-wide px-[5px] py-[1px] rounded"
+            class="text-[10px] font-semibold font-mono uppercase tracking-wide px-[5px] py-px rounded"
             style="background: var(--brand-cyan); color: var(--color-base);"
           >1st</span>
         </button>

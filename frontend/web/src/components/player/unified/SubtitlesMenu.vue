@@ -1,14 +1,14 @@
 <template>
   <div class="flex flex-col min-w-[264px]">
     <!-- Header -->
-    <div class="px-[10px] pt-[8px] pb-[4px]">
+    <div class="px-2.5 pt-2 pb-1">
       <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
         Subtitles
       </span>
     </div>
 
     <!-- Language selection -->
-    <div class="flex items-center gap-[10px] px-[10px] py-[9px]">
+    <div class="flex items-center gap-2.5 px-2.5 py-[9px]">
       <span class="text-[14px] text-[var(--ink-2)] flex-shrink-0">Language</span>
       <div class="flex flex-wrap gap-[5px] justify-end flex-1">
         <!-- Off option -->
@@ -44,23 +44,23 @@
     <!-- Hardsub note: no soft tracks loaded, subs are burned in by the provider -->
     <div
       v-if="hardsubNote && subLangs.length === 0"
-      class="px-[10px] pb-[6px] text-[11px] leading-snug text-[var(--muted-foreground)]"
+      class="px-2.5 pb-1.5 text-[11px] leading-snug text-[var(--muted-foreground)]"
       data-test="hardsub-note"
     >
       {{ hardsubNote }}
     </div>
 
-    <div class="h-px mx-1 my-[6px] bg-[var(--border)]"/>
+    <div class="h-px mx-1 my-1.5 bg-[var(--border)]"/>
 
     <!-- Subtitle settings sub-section -->
-    <div class="px-[10px] pb-[4px] pt-[2px]">
+    <div class="px-2.5 pb-1 pt-0.5">
       <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
         Subtitle settings
       </span>
     </div>
 
     <!-- Text size -->
-    <div class="flex items-center gap-3 px-[10px] py-2">
+    <div class="flex items-center gap-3 px-2.5 py-2">
       <label class="text-[13px] text-[var(--ink-2)] w-[86px] flex-shrink-0">Text size</label>
       <input
         type="range"
@@ -78,7 +78,7 @@
     </div>
 
     <!-- Background -->
-    <div class="flex items-center gap-3 px-[10px] py-2">
+    <div class="flex items-center gap-3 px-2.5 py-2">
       <label class="text-[13px] text-[var(--ink-2)] w-[86px] flex-shrink-0">Background</label>
       <input
         type="range"
@@ -96,9 +96,9 @@
     </div>
 
     <!-- Timing offset (DS Stepper primitive) -->
-    <div class="flex items-center gap-3 px-[10px] py-2">
+    <div class="flex items-center gap-3 px-2.5 py-2">
       <label class="text-[13px] text-[var(--ink-2)] w-[86px] flex-shrink-0">Timing</label>
-      <div class="flex flex-col items-end gap-[4px] ml-auto">
+      <div class="flex flex-col items-end gap-1 ml-auto">
         <Stepper
           :model-value="subOffset"
           :step="0.1"
@@ -118,11 +118,11 @@
       </div>
     </div>
 
-    <div class="h-px mx-1 my-[6px] bg-[var(--border)]"/>
+    <div class="h-px mx-1 my-1.5 bg-[var(--border)]"/>
 
     <!-- Browse all subtitles -->
     <button
-      class="w-full flex items-center gap-[10px] px-[10px] py-[9px] rounded-[var(--r-sm)] bg-transparent border-0 text-[14px] text-left transition-colors hover:bg-white/[0.08] hover:text-white text-[var(--brand-cyan)]"
+      class="w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-[var(--r-sm)] bg-transparent border-0 text-[14px] text-left transition-colors hover:bg-white/[0.08] hover:text-white text-[var(--brand-cyan)]"
       @click="emit('open-browse')"
     >
       <List class="size-4 flex-shrink-0" aria-hidden="true" />

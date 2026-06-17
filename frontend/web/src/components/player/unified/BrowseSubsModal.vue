@@ -13,7 +13,7 @@
       aria-labelledby="browse-subs-title"
     >
       <!-- Head -->
-      <div class="flex items-start justify-between px-5 pb-[14px] pt-[18px] border-b border-[var(--border)]">
+      <div class="flex items-start justify-between px-5 pb-3.5 pt-4.5 border-b border-[var(--border)]">
         <div>
           <h2
             id="browse-subs-title"
@@ -47,7 +47,7 @@
             data-test="search"
             type="text"
             placeholder="Search by label or provider…"
-            class="w-full py-[10px] pl-9 pr-9 rounded-[var(--r-md)] text-[14px] text-white placeholder-white/35 transition-all border focus:outline-none bg-white/[0.06]"
+            class="w-full py-2.5 pl-9 pr-9 rounded-[var(--r-md)] text-[14px] text-white placeholder-white/35 transition-all border focus:outline-none bg-white/[0.06]"
             style="border-color: var(--border);"
             @focus="($event.target as HTMLInputElement).style.borderColor = 'var(--brand-cyan)'"
             @blur="($event.target as HTMLInputElement).style.borderColor = 'var(--border)'"
@@ -64,7 +64,7 @@
 
         <!-- Provider chips -->
         <div v-if="distinctProviders.length > 1" class="flex flex-wrap items-center gap-[7px]">
-          <span class="text-[11px] uppercase tracking-[0.05em] text-[var(--muted-foreground)] mr-[2px]">Provider</span>
+          <span class="text-[11px] uppercase tracking-[0.05em] text-[var(--muted-foreground)] mr-0.5">Provider</span>
           <button
             v-for="prov in distinctProviders"
             :key="prov"
@@ -83,7 +83,7 @@
 
         <!-- Language chips -->
         <div v-if="distinctLangs.length > 1" class="flex flex-wrap items-center gap-[7px]">
-          <span class="text-[11px] uppercase tracking-[0.05em] text-[var(--muted-foreground)] mr-[2px]">Lang</span>
+          <span class="text-[11px] uppercase tracking-[0.05em] text-[var(--muted-foreground)] mr-0.5">Lang</span>
           <button
             v-for="lang in distinctLangs"
             :key="lang"
@@ -102,7 +102,7 @@
       </div>
 
       <!-- Body -->
-      <div class="overflow-y-auto px-5 py-[14px] pb-[18px]" style="scrollbar-width: thin;">
+      <div class="overflow-y-auto px-5 py-3.5 pb-4.5" style="scrollbar-width: thin;">
         <!-- Empty state -->
         <div v-if="groupedTracks.length === 0" class="text-center text-[var(--muted-foreground)] py-10 text-[14px]">
           No subtitles match your search.
@@ -141,7 +141,7 @@
               </span>
 
               <!-- Track info -->
-              <div class="flex-1 min-w-0 flex flex-col gap-[2px]">
+              <div class="flex-1 min-w-0 flex flex-col gap-0.5">
                 <span class="text-[14px] text-white truncate">{{ track.label }}</span>
                 <span class="text-[11px] text-[var(--muted-foreground)]">{{ track.format.toUpperCase() }}</span>
               </div>
@@ -151,7 +151,7 @@
                 data-test="select"
                 :disabled="track.url === selectedUrl"
                 :class="[
-                  'flex-shrink-0 px-[14px] py-[7px] rounded-[var(--r-sm)] border-0 text-[13px] font-semibold transition-all',
+                  'flex-shrink-0 px-3.5 py-[7px] rounded-[var(--r-sm)] border-0 text-[13px] font-semibold transition-all',
                   track.url === selectedUrl
                     ? 'cursor-default text-[var(--brand-cyan)]'
                     : 'text-white hover:bg-white/20',

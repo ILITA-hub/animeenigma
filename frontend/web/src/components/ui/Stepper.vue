@@ -1,6 +1,6 @@
 <template>
   <div
-    class="ae-stepper inline-flex items-center gap-[2px] rounded-[var(--r-md)] p-[2px]"
+    class="ae-stepper inline-flex items-center gap-0.5 rounded-[var(--r-md)] p-0.5"
     data-test="stepper"
   >
     <button
@@ -24,7 +24,7 @@
         data-test="stepper-input"
         @change="onChange"
       />
-      <span v-if="suffix" class="text-[12px] text-[var(--muted-foreground)] ml-[1px]">{{ suffix }}</span>
+      <span v-if="suffix" class="text-[12px] text-[var(--muted-foreground)] ml-px">{{ suffix }}</span>
     </div>
     <button
       type="button"
