@@ -145,6 +145,48 @@ func (r *ProgressRepository) MarkDropOff(ctx context.Context, userID, animeID st
 	}).Create(progress).Error
 }
 
+// LogicBContext returns the gating data the player Logic-B producer needs to
+// decide whether to fire a next_ep autocache demand for an active JP-audio
+// watcher (Phase 9 / TRIG-02), in a single query keyed by (userID, animeID):
+//
+//   - shikimoriID    — animes.shikimori_id (the library's mal_id target)
+//   - episodesAired  — animes.episodes_aired (the aired cap for N+1)
+//   - watching       — true iff anime_list.status = 'watching' for this user
+//
+// When the user has no watching-list row for the anime (or the anime row is
+// absent/soft-deleted), it returns watching=false with a nil error — "no
+// demand", NOT a failure. The fire path treats this as a no-op. The INNER JOIN
+// to animes mirrors the existing animes JOINs in this file.
+func (r *ProgressRepository) LogicBContext(
+	ctx context.Context, userID, animeID string,
+) (shikimoriID string, episodesAired int, watching bool, err error) {
+	type scanRow struct {
+		ShikimoriID   string `gorm:"column:shikimori_id"`
+		EpisodesAired int    `gorm:"column:episodes_aired"`
+	}
+
+	sqlStr := `
+        SELECT
+            a.shikimori_id                AS shikimori_id,
+            COALESCE(a.episodes_aired, 0) AS episodes_aired
+        FROM anime_list al
+        JOIN animes a ON a.id = al.anime_id AND a.deleted_at IS NULL
+        WHERE al.user_id = ?
+          AND al.anime_id = ?
+          AND al.status = 'watching'
+        LIMIT 1`
+
+	var rows []scanRow
+	if err := r.db.WithContext(ctx).Raw(sqlStr, userID, animeID).Scan(&rows).Error; err != nil {
+		return "", 0, false, err
+	}
+	if len(rows) == 0 {
+		// No watching-list row → not a watching anime for this user. Not an error.
+		return "", 0, false, nil
+	}
+	return rows[0].ShikimoriID, rows[0].EpisodesAired, true, nil
+}
+
 func (r *ProgressRepository) GetByUserAndAnime(ctx context.Context, userID, animeID string) ([]*domain.WatchProgress, error) {
 	var results []*domain.WatchProgress
 	err := r.db.WithContext(ctx).

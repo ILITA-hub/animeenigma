@@ -9,18 +9,59 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 )
 
+// progressUpserter is the heartbeat-persistence seam (satisfied by
+// *repo.ProgressRepository). Narrowed to an interface so the Logic-B fire path
+// can be unit-tested without a DB.
+type progressUpserter interface {
+	UpsertProgress(ctx context.Context, progress *domain.WatchProgress) error
+}
+
+// logicBLookup is the Phase-9 Logic-B gating seam (satisfied by
+// *repo.ProgressRepository): one query returning the anime's shikimori_id,
+// episodes_aired, and whether the user is actively watching it.
+type logicBLookup interface {
+	LogicBContext(ctx context.Context, userID, animeID string) (shikimoriID string, episodesAired int, watching bool, err error)
+}
+
+// demandFirer is the fire-and-forget autocache-demand seam (satisfied by
+// *DemandProducer). Kept narrow so UpdateProgress's Logic-B branch is testable.
+type demandFirer interface {
+	Want(malID string, episode int, reason string)
+}
+
 type ProgressService struct {
 	progressRepo *repo.ProgressRepository
 	prefService  *PreferenceService
-	log          *logger.Logger
+	// upsert is the heartbeat-persistence seam — the same concrete object as
+	// progressRepo in production, held as an interface for unit-testability.
+	upsert progressUpserter
+	// logicB resolves the (shikimori_id, episodes_aired, watching) gating tuple
+	// for the Phase-9 Logic-B next_ep demand. Same concrete object as
+	// progressRepo today; held as an interface for testability.
+	logicB logicBLookup
+	// demand is the fire-and-forget player→library autocache demand producer
+	// (Phase 9 / TRIG-02). Nil-safe: when nil/disabled, no demand is fired.
+	demand demandFirer
+	log    *logger.Logger
 }
 
-func NewProgressService(progressRepo *repo.ProgressRepository, prefService *PreferenceService, log *logger.Logger) *ProgressService {
+func NewProgressService(progressRepo *repo.ProgressRepository, prefService *PreferenceService, demand *DemandProducer, log *logger.Logger) *ProgressService {
 	return &ProgressService{
 		progressRepo: progressRepo,
 		prefService:  prefService,
+		upsert:       progressRepo,
+		logicB:       progressRepo,
+		demand:       demand,
 		log:          log,
 	}
+}
+
+// isJPAudio reports whether a resolved combo is "JP-audio" for Phase-9 Logic-B
+// purposes (CONTEXT decision 1 / RESEARCH A1): the AE or Raw players always
+// carry original Japanese audio, and any combo whose language is "ja" is
+// JP-audio regardless of player. Kodik/AniLib (ru) and English (en) are NOT.
+func isJPAudio(player, language string) bool {
+	return player == "ae" || player == "raw" || language == "ja"
 }
 
 // UpdateProgress updates or creates watch progress (heartbeat saves).
@@ -36,16 +77,57 @@ func (s *ProgressService) UpdateProgress(ctx context.Context, userID string, req
 		LastWatchedAt: time.Now(),
 	}
 
-	if err := s.progressRepo.UpsertProgress(ctx, progress); err != nil {
+	if err := s.upsert.UpsertProgress(ctx, progress); err != nil {
 		return nil, err
 	}
 
 	// Upsert anime preference if combo fields are present
-	if req.Player != "" {
+	if req.Player != "" && s.prefService != nil {
 		s.prefService.UpsertAnimePreference(ctx, userID, req)
 	}
 
+	// Phase 9 / TRIG-02 — Logic B: pull the NEXT episode (N+1) into the autocache
+	// pool ahead of an active JP-audio watcher. This is the first-heartbeat fire
+	// point (max lead time, per CONTEXT decision 2). The library demand PK-dedup
+	// collapses repeated per-heartbeat fires, so an in-memory guard is
+	// unnecessary. Best-effort throughout: a lookup error or a slow/down library
+	// must NEVER block or fail the heartbeat — log WARN and move on.
+	s.maybeFireNextEpDemand(ctx, userID, req)
+
 	return progress, nil
+}
+
+// maybeFireNextEpDemand fires a next_ep autocache demand for episode N+1 iff the
+// resolved combo is JP-audio, the anime is status=watching for this user, its
+// shikimori_id is known, and N+1 has aired. Never returns/raises — the caller's
+// heartbeat result is unaffected by any failure here.
+func (s *ProgressService) maybeFireNextEpDemand(ctx context.Context, userID string, req *domain.UpdateProgressRequest) {
+	// Cheapest gate first: skip the DB lookup entirely for non-JP combos.
+	if !isJPAudio(req.Player, req.Language) {
+		return
+	}
+	if s.logicB == nil || s.demand == nil {
+		return
+	}
+
+	shikimoriID, episodesAired, watching, err := s.logicB.LogicBContext(ctx, userID, req.AnimeID)
+	if err != nil {
+		s.log.Warnw("logic-b: next_ep gating lookup failed; skipping demand",
+			"user_id", userID, "anime_id", req.AnimeID, "error", err)
+		return
+	}
+	if !watching || shikimoriID == "" {
+		return
+	}
+
+	next := req.EpisodeNumber + 1
+	if next > episodesAired {
+		// N+1 has not aired yet — nothing to pre-download.
+		return
+	}
+
+	// Fire-and-forget; nil-safe on the producer side.
+	s.demand.Want(shikimoriID, next, "next_ep")
 }
 
 // GetProgress returns watch progress for an anime
