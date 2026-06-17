@@ -28,13 +28,26 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 8 {
-		t.Fatalf("want 8 default rows, got %d", count)
+	if count != 13 {
+		t.Fatalf("want 13 default rows, got %d", count)
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")
 	if !all.SupportsDub || all.PreferenceWeight != 90 || all.Group != "en" || !all.IsEnabled() {
 		t.Errorf("allanime seeded wrong: %+v", all)
+	}
+	if !all.ScraperOperated {
+		t.Error("allanime should be scraper_operated=true")
+	}
+	var ae domain.ScraperProvider
+	db.First(&ae, "name = ?", "ae")
+	if ae.Group != "firstparty" || !ae.IsEnabled() || ae.ScraperOperated {
+		t.Errorf("ae seeded wrong (want firstparty/enabled/not-scraper-operated): %+v", ae)
+	}
+	var kodik domain.ScraperProvider
+	db.First(&kodik, "name = ?", "kodik")
+	if kodik.Group != "ru" || kodik.ScraperOperated {
+		t.Errorf("kodik seeded wrong (want ru/not-scraper-operated): %+v", kodik)
 	}
 }
 
@@ -82,7 +95,7 @@ func TestSeedDefaults_IdempotentDoesNotOverwrite(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 8 {
+	if count != 13 {
 		t.Fatalf("re-seed created duplicates: %d rows", count)
 	}
 	var all domain.ScraperProvider

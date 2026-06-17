@@ -40,13 +40,3 @@ func BackfillScraperOperated(db *gorm.DB) error {
 	return nil
 }
 
-// scraperOperatedNameList is the canonical set of scraper-microservice-operated
-// provider names. TEMPORARY: this stub lives here so Task 1 compiles and its tests
-// pass. Task 2 moves the authoritative version to seed.go; at that point this
-// function is deleted from migrate.go.
-func scraperOperatedNameList() []string {
-	return []string{
-		"gogoanime", "animepahe", "allanime", "animefever",
-		"miruro", "nineanime", "animekai", "18anime",
-	}
-}

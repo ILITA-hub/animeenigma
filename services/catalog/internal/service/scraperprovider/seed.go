@@ -81,6 +81,40 @@ var defaultProviders = []domain.ScraperProvider{
 		SupportsSub: true, SupportsDub: false, SupportsRaw: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
+	{
+		Name: "ae", Status: domain.StatusEnabled,
+		Reason: "First-party AnimeEnigma source (survivor)",
+		Description: "Self-hosted HLS from the private raw-library MinIO bucket. The " +
+			"long-term user-facing player; all other players are being retired (2026-06-17).",
+		SupportsSub: true, SupportsRaw: true, SubDelivery: "soft",
+		QualityCeiling: "1080p", PreferenceWeight: 100,
+	},
+	{
+		Name: "kodik", Status: domain.StatusEnabled,
+		Reason:      "RU iframe player (legacy, slated for retirement)",
+		Description: "Kodik iframe embed. Retiring in favor of aePlayer (2026-06-17).",
+		SupportsDub: true, SubDelivery: "none", PreferenceWeight: 0,
+	},
+	{
+		Name: "animelib", Status: domain.StatusEnabled,
+		Reason:      "RU direct-MP4 player (legacy, slated for retirement)",
+		Description: "AniLib direct MP4. Retiring in favor of aePlayer (2026-06-17).",
+		SupportsDub: true, SubDelivery: "none",
+		QualityCeiling: "1080p", PreferenceWeight: 0,
+	},
+	{
+		Name: "hanime", Status: domain.StatusEnabled,
+		Reason:      "18+ HLS player (legacy, slated for retirement)",
+		Description: "Hanime HLS. Retiring in favor of aePlayer (2026-06-17).",
+		SubDelivery: "none", QualityCeiling: "1080p", PreferenceWeight: 0,
+	},
+	{
+		Name: "raw", Status: domain.StatusEnabled,
+		Reason:      "JP original-audio player (AllAnime raw, legacy, slated for retirement)",
+		Description: "Raw JP player (AllAnime fast4speed.rsvp + HLS). Retiring in favor of aePlayer (2026-06-17).",
+		SupportsSub: true, SupportsRaw: true, SubDelivery: "soft",
+		QualityCeiling: "1080p", PreferenceWeight: 0,
+	},
 }
 
 // intrinsicGroups mirrors services/scraper/internal/config/providers.go's
@@ -88,7 +122,12 @@ var defaultProviders = []domain.ScraperProvider{
 // "adult"), so the seed can never move 18anime into the EN failover chain.
 // Absent entries default to "en".
 var intrinsicGroups = map[string]string{
-	"18anime": "adult",
+	"18anime":  "adult",
+	"hanime":   "adult",
+	"ae":       "firstparty",
+	"kodik":    "ru",
+	"animelib": "ru",
+	"raw":      "jp",
 }
 
 func intrinsicGroup(name string) string {
@@ -96,6 +135,26 @@ func intrinsicGroup(name string) string {
 		return g
 	}
 	return "en"
+}
+
+// scraperOperatedNames is the intrinsic set of providers operated by the scraper
+// microservice (EN failover chain + 18+ orchestrator). Like Group, it is
+// intrinsic — derived from the name, never operator-editable.
+var scraperOperatedNames = map[string]bool{
+	"gogoanime": true, "animepahe": true, "allanime": true, "animefever": true,
+	"miruro": true, "nineanime": true, "animekai": true, "18anime": true,
+}
+
+func isScraperOperated(name string) bool { return scraperOperatedNames[name] }
+
+// scraperOperatedNameList returns the intrinsic scraper-operated names as a slice
+// (for the backfill UPDATE ... WHERE name IN (...)).
+func scraperOperatedNameList() []string {
+	out := make([]string, 0, len(scraperOperatedNames))
+	for n := range scraperOperatedNames {
+		out = append(out, n)
+	}
+	return out
 }
 
 // SeedDefaults inserts any default provider row not already present (insert-if-
@@ -113,8 +172,9 @@ func SeedDefaults(db *gorm.DB) error {
 			continue // insert-if-absent: never overwrite an existing row
 		}
 		row := p
-		// Group is intrinsic — always derive from the name, never trust the literal.
+		// Group + scraper_operated are intrinsic — always derive from the name.
 		row.Group = intrinsicGroup(p.Name)
+		row.ScraperOperated = isScraperOperated(p.Name)
 		if row.SubDelivery == "" {
 			row.SubDelivery = "hard"
 		}
