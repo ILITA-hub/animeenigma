@@ -177,6 +177,10 @@ func TestAutocacheInternalBadBody(t *testing.T) {
 		{"empty mal_id", `{"mal_id":"","episode":3}`},
 		{"zero episode", `{"mal_id":"57466","episode":0}`},
 		{"negative episode", `{"mal_id":"57466","episode":-1}`},
+		// WR-02: int64 episode that overflows Postgres int4 must be rejected at
+		// the edge, not silently swallowed by the DB write.
+		{"overflow episode (int4)", `{"mal_id":"57466","episode":9999999999}`},
+		{"over maxEpisode", `{"mal_id":"57466","episode":100001}`},
 	}
 	for _, tc := range cases {
 		t.Run("fetch/"+tc.name, func(t *testing.T) {

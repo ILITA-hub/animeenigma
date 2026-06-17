@@ -69,16 +69,25 @@ type autocacheSignalBody struct {
 	Reason  string `json:"reason"`
 }
 
+// maxEpisode bounds the accepted episode number (WR-02). Go decodes JSON
+// `episode` into a 64-bit int, but the autocache_demand.episode and
+// library_episodes.episode_number columns are Postgres INT (int4, max
+// 2147483647): an oversized value passes a bare `> 0` check, then overflows on
+// the DB write (numeric value out of range) and is silently swallowed. Reject
+// it at the edge instead — 100000 is generous (no anime has that many episodes)
+// and well inside int4.
+const maxEpisode = 100000
+
 // decodeSignal decodes + validates the shared body. Returns false (and writes a
-// 400) when the body is malformed or mal_id/episode are missing/invalid.
+// 400) when the body is malformed or mal_id/episode are missing/out of range.
 func (h *AutocacheInternalHandler) decodeSignal(w http.ResponseWriter, r *http.Request) (autocacheSignalBody, bool) {
 	var body autocacheSignalBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid body")
 		return autocacheSignalBody{}, false
 	}
-	if body.MALID == "" || body.Episode <= 0 {
-		httputil.BadRequest(w, "mal_id and a positive episode are required")
+	if body.MALID == "" || body.Episode <= 0 || body.Episode > maxEpisode {
+		httputil.BadRequest(w, "mal_id and a sane positive episode are required")
 		return autocacheSignalBody{}, false
 	}
 	return body, true
