@@ -30,7 +30,8 @@
     "tailwind-merge": "3.6.0",
     "vue": "^3.5.35",
     "vue-i18n": "^11.4.5",
-    "vue-router": "^4.6.4"
+    "vue-router": "^4.6.4",
+    "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",

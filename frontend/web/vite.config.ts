@@ -82,6 +82,7 @@ export default defineConfig({
           if (id.includes('hls.js')) return 'hls-vendor'
           if (id.includes('socket.io') || id.includes('engine.io')) return 'socket-vendor'
           // All lucide icons in one cached chunk instead of one request each.
+          if (id.includes('vuedraggable') || id.includes('sortablejs')) return 'showcase-editor'
           if (id.includes('lucide-vue-next')) return 'icons'
           // reka-ui (+ its floating-ui positioning dep) — shared headless-UI
           // primitives used by nearly every view.
