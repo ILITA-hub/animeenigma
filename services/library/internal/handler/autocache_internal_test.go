@@ -103,29 +103,50 @@ func TestAutocacheInternalFetch_BumpErrorStill200(t *testing.T) {
 	}
 }
 
-// (b) Demand enabled=true → Record(backfill) + serve_total{miss}++ + 200.
-func TestAutocacheInternalDemand_EnabledRecordsBackfillAndCountsMiss(t *testing.T) {
-	deps := &stubInternalDeps{enabled: true}
-	h, m := newTestInternalHandler(deps)
+// (b) Demand enabled=true → Record(validated wire reason) + serve_total{miss}++ + 200.
+//
+// Phase 09 INVERTS the Phase-8 behavior: the handler no longer force-overrides the
+// wire reason to backfill. It now VALIDATES the wire reason against the
+// {backfill, next_ep, ongoing} allowlist and HONORS it (the /internal/* surface is
+// Docker-network-only, so the producers are internal-trusted — T-08-04). An absent
+// or unknown reason still falls back to backfill so a malformed internal caller
+// degrades safely.
+func TestAutocacheInternalDemand_EnabledHonorsValidatedReason(t *testing.T) {
+	cases := []struct {
+		name       string
+		body       string
+		wantReason domain.DemandReason
+	}{
+		{"next_ep honored (Logic B)", `{"mal_id":"57466","episode":7,"reason":"next_ep"}`, domain.DemandReasonNextEp},
+		{"ongoing honored (Logic A)", `{"mal_id":"57466","episode":7,"reason":"ongoing"}`, domain.DemandReasonOngoing},
+		{"backfill honored (serve miss)", `{"mal_id":"57466","episode":7,"reason":"backfill"}`, domain.DemandReasonBackfill},
+		{"absent reason → backfill default", `{"mal_id":"57466","episode":7}`, domain.DemandReasonBackfill},
+		{"invalid reason → backfill default", `{"mal_id":"57466","episode":7,"reason":"totally_bogus"}`, domain.DemandReasonBackfill},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := &stubInternalDeps{enabled: true}
+			h, m := newTestInternalHandler(deps)
 
-	before := testutil.ToFloat64(m.GetServeTotalForTest("miss"))
-	// A spoofed reason on the wire must be overridden to backfill.
-	rec := postJSON(h.Demand, `{"mal_id":"57466","episode":7,"reason":"next_ep"}`)
+			before := testutil.ToFloat64(m.GetServeTotalForTest("miss"))
+			rec := postJSON(h.Demand, tc.body)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", rec.Code)
-	}
-	if deps.recordCalls != 1 {
-		t.Fatalf("want 1 Record call, got %d", deps.recordCalls)
-	}
-	if deps.recordMAL != "57466" || deps.recordEpisode != 7 {
-		t.Fatalf("Record args mismatch: got %q/%d", deps.recordMAL, deps.recordEpisode)
-	}
-	if deps.recordReason != domain.DemandReasonBackfill {
-		t.Fatalf("want reason forced to backfill, got %q", deps.recordReason)
-	}
-	if got := testutil.ToFloat64(m.GetServeTotalForTest("miss")) - before; got != 1 {
-		t.Fatalf("want serve_total{miss} +1, got +%v", got)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("want 200, got %d", rec.Code)
+			}
+			if deps.recordCalls != 1 {
+				t.Fatalf("want 1 Record call, got %d", deps.recordCalls)
+			}
+			if deps.recordMAL != "57466" || deps.recordEpisode != 7 {
+				t.Fatalf("Record args mismatch: got %q/%d", deps.recordMAL, deps.recordEpisode)
+			}
+			if deps.recordReason != tc.wantReason {
+				t.Fatalf("want reason %q, got %q", tc.wantReason, deps.recordReason)
+			}
+			if got := testutil.ToFloat64(m.GetServeTotalForTest("miss")) - before; got != 1 {
+				t.Fatalf("want serve_total{miss} +1, got +%v", got)
+			}
+		})
 	}
 }
 
@@ -216,14 +237,18 @@ func TestAutocacheInternalBadBody(t *testing.T) {
 	}
 }
 
-// Source tripwire: the demand body MUST force backfill regardless of any
-// client-supplied reason (T-08-05). Guards against a regression that threads
-// the wire reason through to Record.
-func TestAutocacheInternalDemand_IgnoresClientReason(t *testing.T) {
-	if !strings.Contains(autocacheInternalSourceMarker, "DemandReasonBackfill") {
-		t.Skip("marker only; real assertion is the enabled-true test")
+// Source tripwire: the demand body MUST route the wire reason through
+// validateDemandReason (Phase 09 — the reason is validated-and-honored, no longer
+// force-overridden to backfill). Guards against a regression that re-hardcodes
+// backfill and silently collapses Logic A/B attribution. The marker now names the
+// validator; the behavioral assertion is the table-driven enabled test above.
+func TestAutocacheInternalDemand_ValidatesWireReason(t *testing.T) {
+	if !strings.Contains(autocacheInternalSourceMarker, "validateDemandReason") {
+		t.Skip("marker only; real assertion is the enabled-true table test")
 	}
 }
 
-// autocacheInternalSourceMarker keeps the tripwire test self-contained.
-const autocacheInternalSourceMarker = "DemandReasonBackfill"
+// autocacheInternalSourceMarker keeps the tripwire test self-contained. It now
+// names validateDemandReason (the Phase-09 reason validator) so a future refactor
+// that drops validation and re-hardcodes backfill is caught.
+const autocacheInternalSourceMarker = "validateDemandReason"
