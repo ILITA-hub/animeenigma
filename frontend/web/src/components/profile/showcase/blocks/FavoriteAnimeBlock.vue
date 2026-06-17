@@ -104,9 +104,9 @@ const podiumItems = computed(() => {
           <div v-if="entry.rank === 1" class="mb-1.5 text-center text-2xl" style="filter:drop-shadow(0 0 8px var(--warning))">👑</div>
           <!-- poster with rank-specific ring -->
           <div class="relative w-full overflow-hidden rounded-xl" :class="{
-            'ring-2 ring-warning shadow-[0_22px_54px_-18px_var(--warning)]': entry.rank === 1,
-            'ring-[1.5px] ring-info/70 shadow-[0_18px_44px_-20px_var(--info)]': entry.rank === 2,
-            'ring-[1.5px] ring-warning/50 shadow-[0_18px_44px_-20px_var(--warning)]': entry.rank === 3,
+            'pod-ring-gold': entry.rank === 1,
+            'pod-ring-silver': entry.rank === 2,
+            'pod-ring-bronze': entry.rank === 3,
           }">
             <PosterCard :model="entry.item" />
           </div>
@@ -154,7 +154,7 @@ const podiumItems = computed(() => {
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm font-semibold text-foreground" data-testid="list-title">{{ item.title }}</div>
             <div class="mt-0.5 text-xs text-muted-foreground">
-              <span v-if="item.episodes">{{ item.episodes }} {{ $t('showcase.ep') }}</span>
+              <span v-if="item.episodes">{{ item.episodes }} {{ $t('profile.ep') }}</span>
             </div>
             <!-- score bar -->
             <div class="mt-1.5 h-[5px] max-w-[200px] overflow-hidden rounded-full bg-white/[0.08]">
@@ -194,7 +194,7 @@ const podiumItems = computed(() => {
           <div class="absolute bottom-0 left-5 top-0 flex flex-col justify-center">
             <div class="text-xl font-semibold leading-tight text-foreground" data-testid="banner-title">{{ item.title }}</div>
             <div v-if="item.episodes" class="mt-0.5 text-xs text-muted-foreground">
-              {{ item.episodes }} {{ $t('showcase.ep') }}
+              {{ item.episodes }} {{ $t('profile.ep') }}
             </div>
           </div>
           <!-- score chip -->
@@ -222,6 +222,17 @@ const podiumItems = computed(() => {
   .podium-grid {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* Podium poster rings — fixed medal identity hues; no DS token within tolerance */
+.pod-ring-gold {
+  box-shadow: 0 0 0 2px var(--warning), 0 22px 54px -18px var(--warning);
+}
+.pod-ring-silver {
+  box-shadow: 0 0 0 1.5px #cfd8ff;
+}
+.pod-ring-bronze {
+  box-shadow: 0 0 0 1.5px #ff9d6b;
 }
 
 /* Medal pedestals — gold/silver/bronze gradients; no DS token within tolerance */

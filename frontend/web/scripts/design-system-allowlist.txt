@@ -176,3 +176,5 @@ src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#9aa6c9:podium sil
 src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#ffc7a3:podium bronze pedestal gradient START (light copper); no token within tolerance — medal identity color
 src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#e6703a:podium bronze pedestal gradient END (deep copper); no token within tolerance — medal identity color
 src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#06121a:podium pedestal rank number text-on-medal — near-black contrast on light medal surface; no token at this depth
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#cfd8ff:podium silver medal ring — fixed medal identity color, no token
+src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#ff9d6b:podium bronze medal ring — fixed medal identity color, no token
