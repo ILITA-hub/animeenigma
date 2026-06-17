@@ -455,42 +455,74 @@ watch(() => props.animeId, () => {
 })
 
 // Switch to the next candidate source after a playback failure. Returns true if
-// it initiated a switch (the combo/provider watcher re-resolves), false when no
-// untried candidate remains. Only an AUTO-selected source is auto-switched — a
-// manual pick is the user's deliberate choice and is left alone.
-async function advanceToNextSource(): Promise<boolean> {
+// it actually initiated a switch (the combo/provider watcher re-resolves), false
+// otherwise. Only an AUTO-selected source is switched — a manual pick is the
+// user's deliberate choice and is left alone.
+//
+// HACKER MODE — do NOT auto-switch. The whole point of hacker mode is to verify
+// the smart-source behavior manually before trusting it to act, AND server-side
+// probing can't see what actually plays in the real user's browser (a CDN host
+// that 403s our datacenter may stream fine for a residential viewer). So in
+// hacker mode we record the fallback the resolver WOULD make (`acted: false`)
+// and stay put — letting you confirm whether the current source really plays —
+// instead of thrashing away from a source that may be working. With hacker mode
+// off the switch is performed and the same ledger records it with `acted: true`.
+async function advanceToNextSource(reason: string): Promise<boolean> {
   if (!providerAutoSelected) return false
   if (sourceSwitchAttempts >= MAX_SOURCE_SWITCHES) return false
   const provider = state.combo.value.provider
   const server = state.combo.value.server || resolvedServers.value[0]?.id || ''
-  triedSources.add(`${provider}:${server}`)
+  const curKey = `${provider}:${server}`
+
+  // Compute the next candidate WITHOUT committing to it — hacker mode only
+  // records the intent, so it must not mutate the tried-set or actually switch.
+  const triedWithCurrent = new Set(triedSources)
+  triedWithCurrent.add(curKey)
 
   // 1) An untried server of the SAME provider — different CDN host, cheapest dodge.
   const nextServer = resolvedServers.value.find(
-    (s) => !triedSources.has(`${provider}:${s.id}`),
+    (s) => !triedWithCurrent.has(`${provider}:${s.id}`),
   )
+  // 2) else the next-ranked provider not yet tried. Deliberately NOT filtered on
+  //    the capability `playable` flag — that flag is a stale server-side guess;
+  //    live playback in the user's browser is the real test, so give every
+  //    remaining provider a shot.
+  let toProvider: string | null = null
+  let switchServerId: string | null = null
   if (nextServer) {
-    sourceSwitchAttempts++
-    state.setServer(nextServer.id) // combo watcher re-resolves the stream
-    return true
+    toProvider = provider
+    switchServerId = nextServer.id
+  } else {
+    const triedProviders = new Set([...triedWithCurrent].map((k) => k.split(':')[0]))
+    toProvider = await pickSmartDefault(
+      rows.value.filter((r) => !triedProviders.has(r.def.id)),
+      orderedProviderIds.value,
+      { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
+    )
   }
 
-  // 2) The next-ranked provider not yet tried. Deliberately NOT filtered on the
-  //    capability `playable` flag — that flag is a stale guess; live playback is
-  //    the real test, so give every remaining provider a shot.
-  const triedProviders = new Set([...triedSources].map((k) => k.split(':')[0]))
-  const next = await pickSmartDefault(
-    rows.value.filter((r) => !triedProviders.has(r.def.id)),
-    orderedProviderIds.value,
-    { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
-  )
-  if (next) {
-    sourceSwitchAttempts++
-    providerAutoSelected = true
-    state.setProvider(next, '') // provider watcher re-lists + re-resolves
-    return true
+  if (state.hackerMode.value) {
+    recordFallbackIntent({ from: provider, to: toProvider, reason, acted: false })
+    const target = switchServerId ? `${provider} · server ${switchServerId}` : toProvider
+    sourceError.value = target
+      ? `Hacker mode: auto-switch suppressed — would try ${target} (${reason}). Pick a source manually.`
+      : `Hacker mode: auto-switch suppressed — ${provider} failed (${reason}), no fallback candidate.`
+    return false
   }
-  return false
+
+  if (!toProvider) return false
+
+  // Commit the switch.
+  triedSources.add(curKey)
+  sourceSwitchAttempts++
+  if (switchServerId) {
+    state.setServer(switchServerId) // combo watcher re-resolves the stream
+  } else {
+    providerAutoSelected = true
+    state.setProvider(toProvider, '') // provider watcher re-lists + re-resolves
+  }
+  recordFallbackIntent({ from: provider, to: toProvider, reason, acted: true })
+  return true
 }
 
 // Silent-stall watchdog. A CODECS-less HLS manifest (megaplay/owocdn) loads fine
@@ -517,9 +549,9 @@ function armPlaybackWatchdog() {
     if (sourceError.value) return               // already errored/handled
     if (engine.fragStats.value.length > 0) return // fragments flowing — just slow
     void (async () => {
-      if (await advanceToNextSource()) {
+      if (await advanceToNextSource('silent stall')) {
         toast.push("That source won't play — switching to the next best…", 'info', 4000)
-      } else {
+      } else if (!sourceError.value) {
         sourceError.value = 'Stream unavailable'
       }
     })()
@@ -1000,13 +1032,14 @@ async function loadEpisodesAndStream() {
     // 500) advances the dynamic-BEST chain to the next candidate, so it keeps
     // going until a source actually resolves AND plays — never strands on a
     // dead provider.
-    const failed = state.combo.value.provider
-    if (await advanceToNextSource()) {
-      recordFallbackIntent({ from: failed, to: state.combo.value.provider, reason: 'resolve failed', acted: true })
+    if (await advanceToNextSource('resolve failed')) {
       toast.push("That source isn't available — switching to the next best…", 'info', 4000)
       return
     }
-    sourceError.value = isNotAvailable ? "This source isn't available yet" : 'Stream unavailable'
+    // advanceToNextSource may have set a hacker-mode "suppressed" message — keep it.
+    if (!sourceError.value) {
+      sourceError.value = isNotAvailable ? "This source isn't available yet" : 'Stream unavailable'
+    }
   } finally {
     if (token === resolveToken) {
       isResolving.value = false
@@ -1326,13 +1359,14 @@ watch(engine.fatal, async (f) => {
     lang: state.combo.value.lang,
   })
   // Dynamic BEST: auto-switch to the next candidate so a blocked CDN host
-  // recovers to a working one. Runs in hacker mode too (the toast + HUD keep it
-  // inspectable) — "BEST" is only meaningful if it lands on a source that plays.
-  if (await advanceToNextSource()) {
+  // recovers to a working one. In hacker mode advanceToNextSource only records
+  // the intent and returns false — "BEST" is only meaningful if it lands on a
+  // source that plays, but in hacker mode we let you verify that manually.
+  if (await advanceToNextSource('playback fatal')) {
     toast.push("That source failed — switching to the next best…", 'info', 4000)
     return
   }
-  sourceError.value = 'Stream unavailable'
+  if (!sourceError.value) sourceError.value = 'Stream unavailable'
 })
 
 // ─── Hacker mode (debug HUD) ──────────────────────────────────────────────────
@@ -1580,15 +1614,15 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
       audio: state.combo.value.audio,
       lang: state.combo.value.lang,
     })
-    const failed = state.combo.value.provider
-    if (await advanceToNextSource()) {
-      recordFallbackIntent({ from: failed, to: state.combo.value.provider, reason: 'resolve failed', acted: true })
+    if (await advanceToNextSource('resolve failed')) {
       toast.push("That source isn't available — switching to the next best…", 'info', 4000)
       return
     }
-    sourceError.value = isNotAvailable
-      ? "This source isn't available yet"
-      : 'Stream unavailable'
+    if (!sourceError.value) {
+      sourceError.value = isNotAvailable
+        ? "This source isn't available yet"
+        : 'Stream unavailable'
+    }
   } finally {
     if (token === resolveToken) {
       isResolving.value = false
