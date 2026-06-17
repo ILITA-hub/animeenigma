@@ -53,20 +53,24 @@ func NewPlayerHealthChecker(
 		"RU iframe player",
 		"Kodik RU iframe — liveness via Naruto search probe (catalog-side, not part of the EN failover chain)",
 	).Set(1)
-	// Register the always-on catalog-side players as first-class rows in the
-	// unified provider-management metrics, so the Grafana table + count cover the
-	// FULL player roster — not just Kodik + the EN scraper chain. These have no
-	// catalog liveness probe (only Kodik does), so they emit no provider_health_up;
-	// they're surfaced purely for management visibility. status is always
-	// "enabled" — they're not part of any failover/degrade scheme.
-	for _, p := range []struct{ name, reason, desc string }{
-		{"animelib", "RU direct-MP4 player", "AniLib RU direct-MP4 player (catalog parser). Always-on; not part of the EN failover chain."},
-		{"hanime", "18+ HLS player", "Hanime 18+ HLS player (catalog parser). Always-on; separate adult surface."},
-		{"raw", "JP original-audio player", "Raw JP player (AllAnime HLS / fast4speed.rsvp, catalog parser). Always-on; not part of the EN failover chain."},
-		{"ae", "Self-hosted library", "AnimeEnigma self-hosted library (BitTorrent → HLS → MinIO). 200 = served on-prem, 404 = no local copy yet."},
+	// Register the catalog-side players as first-class rows in the unified
+	// provider-management metrics, so the Grafana table + count cover the FULL
+	// player roster — not just Kodik + the EN scraper chain. These have no catalog
+	// liveness probe (only Kodik does), so they emit no provider_health_up; they're
+	// surfaced purely for management visibility. animelib + hanime are marked
+	// disabled (no longer surfaced in the frontend player); raw + ae stay enabled.
+	for _, p := range []struct{ name, status, reason, desc string }{
+		{"animelib", "disabled", "RU direct-MP4 player", "AniLib RU direct-MP4 player (catalog parser). Disabled — no longer surfaced in the frontend player."},
+		{"hanime", "disabled", "18+ HLS player", "Hanime 18+ HLS player (catalog parser). Disabled — no longer surfaced in the frontend player."},
+		{"raw", "enabled", "JP original-audio player", "Raw JP player (AllAnime HLS / fast4speed.rsvp, catalog parser). Always-on; not part of the EN failover chain."},
+		{"ae", "enabled", "Self-hosted library", "AnimeEnigma self-hosted library (BitTorrent → HLS → MinIO). 200 = served on-prem, 404 = no local copy yet."},
 	} {
-		metrics.ProviderEnabled.WithLabelValues(p.name).Set(1)
-		metrics.ProviderInfo.WithLabelValues(p.name, "enabled", p.reason, p.desc).Set(1)
+		enabled := 0.0
+		if p.status == "enabled" {
+			enabled = 1.0
+		}
+		metrics.ProviderEnabled.WithLabelValues(p.name).Set(enabled)
+		metrics.ProviderInfo.WithLabelValues(p.name, p.status, p.reason, p.desc).Set(1)
 	}
 	return &PlayerHealthChecker{
 		kodikClient: kodikClient,
