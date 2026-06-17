@@ -252,14 +252,6 @@
     "off": "Off",
     "sub": "Sub",
     "dub": "Dub",
-    "sources": {
-      "best": "Best",
-      "degraded": "Degraded",
-      "tryAnother": "Try another source",
-      "raw": "RAW",
-      "subBurnedIn": "burned-in",
-      "subSelectable": "selectable"
-    },
     "pin": "Pin",
     "unpin": "Unpin",
     "native": "Native",
@@ -1769,5 +1761,26 @@
   "datePicker": {
     "today": "Today",
     "clear": "Clear"
+  },
+  "showcase": {
+    "title": "Showcase",
+    "edit": "Edit showcase",
+    "save": "Save",
+    "cancel": "Cancel",
+    "add_block": "Add block",
+    "remove_block": "Remove",
+    "empty": "Nothing here yet.",
+    "block": {
+      "about": "About me",
+      "favorite_anime": "Favorite anime",
+      "stats": "Stats",
+      "favorite_character": "Favorite characters",
+      "card_collection": "Card collection"
+    },
+    "about_placeholder": "Tell others about yourself…",
+    "about_title_placeholder": "Title",
+    "pick_anime": "Pick anime",
+    "pick_character": "Pick characters",
+    "pick_cards": "Pick cards"
   }
 }

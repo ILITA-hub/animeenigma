@@ -252,14 +252,6 @@
     "off": "Выкл",
     "sub": "Субтитры",
     "dub": "Озвучка",
-    "sources": {
-      "best": "Лучший",
-      "degraded": "Деградирован",
-      "tryAnother": "Другой источник",
-      "raw": "RAW",
-      "subBurnedIn": "вшитые",
-      "subSelectable": "отдельные"
-    },
     "pin": "Закрепить",
     "unpin": "Открепить",
     "native": "Нативный",
@@ -1769,5 +1761,26 @@
   "datePicker": {
     "today": "Сегодня",
     "clear": "Сбросить"
+  },
+  "showcase": {
+    "title": "Витрина",
+    "edit": "Редактировать витрину",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "add_block": "Добавить блок",
+    "remove_block": "Убрать",
+    "empty": "Здесь пока пусто.",
+    "block": {
+      "about": "Обо мне",
+      "favorite_anime": "Любимое аниме",
+      "stats": "Статистика",
+      "favorite_character": "Любимые персонажи",
+      "card_collection": "Коллекция карточек"
+    },
+    "about_placeholder": "Расскажите о себе…",
+    "about_title_placeholder": "Заголовок",
+    "pick_anime": "Выбрать аниме",
+    "pick_character": "Выбрать персонажей",
+    "pick_cards": "Выбрать карточки"
   }
 }
