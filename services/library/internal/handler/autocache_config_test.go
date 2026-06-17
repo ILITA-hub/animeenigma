@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
@@ -132,6 +133,79 @@ func TestAutocacheConfig_Patch_OutOfRange(t *testing.T) {
 		t.Errorf("store was written %d times on an invalid patch, want 0", store.patchCalls)
 	}
 }
+
+// TestAutocacheConfig_Patch_UpperBounds: WR-02 — every floor-only field now
+// also has an upper bound; an absurdly-large value is rejected with 400 and the
+// store is never written.
+func TestAutocacheConfig_Patch_UpperBounds(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"budget_bytes over 100 TiB", `{"budget_bytes":9223372036854775807}`},
+		{"auto_fresh_download_days over 3650", `{"auto_fresh_download_days":100000}`},
+		{"auto_fresh_fetch_days over 3650", `{"auto_fresh_fetch_days":100000}`},
+		{"admin_fresh_days over 3650", `{"admin_fresh_days":100000}`},
+		{"active_watcher_days over 3650", `{"active_watcher_days":100000}`},
+		{"min_seeders over 10000", `{"min_seeders":2000000000}`},
+		{"sweep_interval_min over 1 week", `{"sweep_interval_min":2000000000}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeConfigStore()
+			h := NewAutocacheConfigHandler(store, nil)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/library/autocache/config", bytes.NewBufferString(tc.body))
+			w := httptest.NewRecorder()
+			h.Patch(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+			}
+			if store.patchCalls != 0 {
+				t.Errorf("store written %d times on out-of-range value, want 0", store.patchCalls)
+			}
+		})
+	}
+}
+
+// TestAutocacheConfig_Patch_QualityCapLadder: WR-03 — quality_cap accepts only
+// the discrete ladder {480,720,1080,2160}; any other int is rejected with 400.
+func TestAutocacheConfig_Patch_QualityCapLadder(t *testing.T) {
+	valid := []int{480, 720, 1080, 2160}
+	for _, q := range valid {
+		store := newFakeConfigStore()
+		h := NewAutocacheConfigHandler(store, nil)
+		body := bytes.NewBufferString(`{"quality_cap":` + itoa(q) + `}`)
+		req := httptest.NewRequest(http.MethodPatch, "/api/library/autocache/config", body)
+		w := httptest.NewRecorder()
+		h.Patch(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("quality_cap=%d status = %d, want 200; body=%s", q, w.Code, w.Body.String())
+		}
+		if v, ok := store.lastFields["quality_cap"].(int); !ok || v != q {
+			t.Errorf("quality_cap field = %v, want %d", store.lastFields["quality_cap"], q)
+		}
+	}
+
+	invalid := []int{0, 137, 1081, 999999, 360, 1440}
+	for _, q := range invalid {
+		store := newFakeConfigStore()
+		h := NewAutocacheConfigHandler(store, nil)
+		body := bytes.NewBufferString(`{"quality_cap":` + itoa(q) + `}`)
+		req := httptest.NewRequest(http.MethodPatch, "/api/library/autocache/config", body)
+		w := httptest.NewRecorder()
+		h.Patch(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("quality_cap=%d status = %d, want 400; body=%s", q, w.Code, w.Body.String())
+		}
+		if store.patchCalls != 0 {
+			t.Errorf("store written on invalid quality_cap=%d, want 0 calls", q)
+		}
+	}
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }
 
 // TestAutocacheConfig_Patch_MalformedBody: a non-JSON body returns 400.
 func TestAutocacheConfig_Patch_MalformedBody(t *testing.T) {
