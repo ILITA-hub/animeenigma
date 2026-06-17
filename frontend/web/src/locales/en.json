@@ -1789,6 +1789,8 @@
     "about_title_placeholder": "Title",
     "pick_anime": "Pick anime",
     "pick_character": "Pick characters",
-    "pick_cards": "Pick cards"
+    "pick_cards": "Pick cards",
+    "saved": "Showcase saved",
+    "save_error": "Couldn't save showcase — please retry"
   }
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ShowcaseBlock } from '@/types/showcase'
 import { showcaseApi } from '@/api/client'
+import { useToast } from '@/composables/useToast'
 import AboutBlock from './blocks/AboutBlock.vue'
 import FavoriteAnimeBlock from './blocks/FavoriteAnimeBlock.vue'
 import StatsBlock from './blocks/StatsBlock.vue'
@@ -10,6 +12,9 @@ import CardCollectionBlock from './blocks/CardCollectionBlock.vue'
 import ShowcaseEditor from './ShowcaseEditor.vue'
 
 const props = defineProps<{ userId: string; isOwner: boolean }>()
+
+const { t } = useI18n()
+const toast = useToast()
 
 const blocks = ref<ShowcaseBlock[]>([])
 const editing = ref(false)
@@ -31,9 +36,14 @@ async function load() {
 }
 
 async function onSave(next: ShowcaseBlock[]) {
-  await showcaseApi.saveShowcase(next)
-  blocks.value = next
-  editing.value = false
+  try {
+    await showcaseApi.saveShowcase(next)
+    blocks.value = next
+    editing.value = false
+    toast.push(t('showcase.saved'), 'success')
+  } catch {
+    toast.push(t('showcase.save_error'), 'error')
+  }
 }
 
 onMounted(load)

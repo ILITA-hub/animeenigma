@@ -1789,6 +1789,8 @@
     "about_title_placeholder": "タイトル",
     "pick_anime": "アニメを選ぶ",
     "pick_character": "キャラクターを選ぶ",
-    "pick_cards": "カードを選ぶ"
+    "pick_cards": "カードを選ぶ",
+    "saved": "ショーケースを保存しました",
+    "save_error": "ショーケースを保存できませんでした。もう一度お試しください"
   }
 }

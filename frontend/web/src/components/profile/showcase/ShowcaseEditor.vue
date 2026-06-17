@@ -63,12 +63,14 @@ function save() {
             <input
               v-model="(element.config as { title?: string }).title"
               :placeholder="$t('showcase.about_title_placeholder')"
+              maxlength="64"
               class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             />
             <textarea
               v-model="(element.config as { text?: string }).text"
               :placeholder="$t('showcase.about_placeholder')"
               rows="4"
+              maxlength="2000"
               class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             />
           </div>
