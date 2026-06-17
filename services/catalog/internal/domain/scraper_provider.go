@@ -47,11 +47,20 @@ type ScraperProvider struct {
 	SubDelivery      string    `gorm:"size:8;default:'hard'" json:"sub_delivery"` // soft|hard|none
 	QualityCeiling   string    `gorm:"size:8" json:"quality_ceiling"`
 	PreferenceWeight int       `json:"preference_weight"`
+	// ScraperOperated marks providers operated by the scraper microservice (the
+	// EN failover chain + the 18+ orchestrator). Intrinsic (derived from name,
+	// NOT operator-editable). The scraper consumes only scraper_operated=true
+	// rows, so first-party/legacy players (ae, kodik, animelib, hanime, raw) in
+	// this table never enter EN failover. Added 2026-06-17 (roster unification).
+	ScraperOperated bool      `json:"scraper_operated"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-// TableName pins the table name for the internal endpoint contract.
-func (ScraperProvider) TableName() string { return "scraper_providers" }
+// TableName pins the physical table. Renamed scraper_providers → stream_providers
+// 2026-06-17: the table is now the roster for EVERY stream source (ae + EN chain
+// + adult + legacy players), not just scraper EN-providers. The Go type keeps its
+// ScraperProvider name (table rename only) to limit blast radius.
+func (ScraperProvider) TableName() string { return "stream_providers" }
 
 // IsEnabled reports whether the provider is in the normal auto-failover chain.
 func (p ScraperProvider) IsEnabled() bool { return p.Status == StatusEnabled }
