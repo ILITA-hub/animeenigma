@@ -411,8 +411,8 @@ func TestJobsHandler_Link_HappyPath(t *testing.T) {
 	if mover.moveCalls[0].src != "pending/job-1/3/" {
 		t.Errorf("Move src = %q, want pending/job-1/3/", mover.moveCalls[0].src)
 	}
-	if mover.moveCalls[0].dst != "57466/3/" {
-		t.Errorf("Move dst = %q, want 57466/3/", mover.moveCalls[0].dst)
+	if mover.moveCalls[0].dst != "aeProvider/57466/RAW/3/" {
+		t.Errorf("Move dst = %q, want aeProvider/57466/RAW/3/", mover.moveCalls[0].dst)
 	}
 	if len(eps.created) != 1 {
 		t.Fatalf("expected 1 episode insert, got %d", len(eps.created))
@@ -420,8 +420,8 @@ func TestJobsHandler_Link_HappyPath(t *testing.T) {
 	if eps.created[0].EpisodeNumber != 3 {
 		t.Errorf("episode num = %d, want 3", eps.created[0].EpisodeNumber)
 	}
-	if eps.created[0].MinioPath != "57466/3/" {
-		t.Errorf("episode minio_path = %q, want 57466/3/", eps.created[0].MinioPath)
+	if eps.created[0].MinioPath != "aeProvider/57466/RAW/3/" {
+		t.Errorf("episode minio_path = %q, want aeProvider/57466/RAW/3/", eps.created[0].MinioPath)
 	}
 	// Job row's shikimori_id should be flipped.
 	if store.byID["job-1"].ShikimoriID != "57466" {

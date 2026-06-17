@@ -283,11 +283,11 @@ func TestEncoder_HappyPath_WithShikimoriID(t *testing.T) {
 	if es.created[0].ShikimoriID != "123" || es.created[0].EpisodeNumber != 1 {
 		t.Fatalf("episode = %+v", es.created[0])
 	}
-	if es.created[0].MinioPath != "123/1/" {
-		t.Fatalf("MinioPath = %q, want 123/1/", es.created[0].MinioPath)
+	if es.created[0].MinioPath != "aeProvider/123/RAW/1/" {
+		t.Fatalf("MinioPath = %q, want aeProvider/123/RAW/1/", es.created[0].MinioPath)
 	}
-	// Upload called with prefix 123/1/ and 2 files.
-	if len(up.uploads) != 1 || up.uploads[0].prefix != "123/1/" {
+	// Upload called with the unified aeProvider/<mal>/RAW/<ep>/ prefix and 2 files.
+	if len(up.uploads) != 1 || up.uploads[0].prefix != "aeProvider/123/RAW/1/" {
 		t.Fatalf("upload calls = %+v", up.uploads)
 	}
 	if len(up.uploads[0].files) != 2 {
