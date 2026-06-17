@@ -1,0 +1,13 @@
+-- 008_autocache_job_source.sql — add 'autocache' to the job_source enum.
+--
+-- Phase 09 (workstream auto-torrent-population / v4.1): the library Planner
+-- (Plan 09-02) drains autocache_demand rows and enqueues library_jobs tagged
+-- source='autocache'. The enum must accept that value so OBS-04 trigger
+-- attribution + admin-UI provenance can distinguish autocache downloads from
+-- manual / nyaa / animetosho / jackett ones.
+--
+-- ALTER TYPE ... ADD VALUE is idempotent via IF NOT EXISTS (Postgres >= 12)
+-- and runs in autocommit (GORM db.Exec issues no surrounding transaction), so
+-- re-running across restarts is a safe no-op. Copied verbatim from the proven
+-- 004_jackett_source.sql pattern.
+ALTER TYPE job_source ADD VALUE IF NOT EXISTS 'autocache';

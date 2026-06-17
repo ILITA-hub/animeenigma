@@ -1,0 +1,16 @@
+-- 010_autocache_demand_ongoing.sql — add 'ongoing' to the autocache_demand_reason enum.
+--
+-- Phase 09 (workstream auto-torrent-population / v4.1): the three demand
+-- producers each tag their reason distinctly so OBS-04 can attribute downloads
+-- by trigger (CONTEXT decision 7, recommended option (a)):
+--   * Logic A  (scheduler ongoing-push)    → reason='ongoing'  (THIS migration)
+--   * Logic B  (player next-episode pull)  → reason='next_ep'  (007)
+--   * backfill (catalog ae serve MISS)     → reason='backfill' (007)
+--
+-- Without a distinct 'ongoing' label, Logic A would collapse into 'next_ep' and
+-- the downloads_total{trigger} metric could not separate A from B.
+--
+-- ALTER TYPE ... ADD VALUE is idempotent via IF NOT EXISTS (Postgres >= 12) and
+-- runs in autocommit (GORM db.Exec issues no surrounding transaction), so
+-- re-running across restarts is a safe no-op. Copied from the 004/008 pattern.
+ALTER TYPE autocache_demand_reason ADD VALUE IF NOT EXISTS 'ongoing';

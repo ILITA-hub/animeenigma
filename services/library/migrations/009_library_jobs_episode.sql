@@ -1,0 +1,19 @@
+-- 009_library_jobs_episode.sql — add the nullable episode column to library_jobs.
+--
+-- Phase 09 (workstream auto-torrent-population / v4.1): the Planner persists the
+-- INTENDED episode (from the autocache_demand row) on the library_jobs row at
+-- enqueue, BEFORE the real episode is filename-detected post-download. This is
+-- what makes the TRIG-04 single-flight dedup (a non-terminal job already targets
+-- (shikimori_id, episode)) and the OBS-04 per-trigger download metric work
+-- without waiting for filename detection.
+--
+-- The column is NULLABLE on purpose: pre-Phase-9 rows and admin/manual uploads
+-- have no intended-episode (their episode is only known after the encoder runs
+-- detector.DetectEpisode on the downloaded filename). Only autocache-sourced
+-- rows carry a non-null episode.
+--
+-- ADD COLUMN IF NOT EXISTS is the column-add analog of 004/008's idempotent
+-- ADD VALUE IF NOT EXISTS — re-running across restarts is a safe no-op (the
+-- same pattern 005_autocache_pool.sql uses for its ledger columns). Must follow
+-- 001 (which created library_jobs).
+ALTER TABLE library_jobs ADD COLUMN IF NOT EXISTS episode INT;

@@ -15,6 +15,9 @@
 //   4. AutocachePoolSQL        (Phase 07 — alters library_episodes; must follow 002)
 //   5. AutocacheConfigSQL      (Phase 07 — singleton config table; independent)
 //   6. AutocacheDemandSQL      (Phase 08 — demand intake table; independent)
+//   7. AutocacheJobSourceSQL   (Phase 09 — extends the job_source enum; independent)
+//   8. LibraryJobsEpisodeSQL   (Phase 09 — alters library_jobs; must follow 001)
+//   9. AutocacheDemandOngoingSQL (Phase 09 — extends autocache_demand_reason enum; independent)
 package migrations
 
 import _ "embed"
@@ -80,3 +83,33 @@ var AutocacheConfigSQL string
 //
 //go:embed 007_autocache_demand.sql
 var AutocacheDemandSQL string
+
+// AutocacheJobSourceSQL is migrations/008_autocache_job_source.sql embedded as
+// a string. Extends the job_source enum with 'autocache' so the Phase-09 Planner
+// can enqueue library_jobs tagged source='autocache' (OBS-04 trigger attribution
+// + admin-UI provenance). Idempotent ADD VALUE IF NOT EXISTS — independent of
+// the other tables, no FK ordering constraint. main.go apply wiring is Plan
+// 09-02's responsibility (alongside the Planner DI).
+//
+//go:embed 008_autocache_job_source.sql
+var AutocacheJobSourceSQL string
+
+// LibraryJobsEpisodeSQL is migrations/009_library_jobs_episode.sql embedded as a
+// string. Adds the nullable `episode INT` column to library_jobs — the INTENDED
+// episode persisted at enqueue (before filename detection) so the Phase-09
+// single-flight dedup on (shikimori_id, episode) + the per-trigger download
+// metric work. Idempotent ADD COLUMN IF NOT EXISTS; must run after 001 (which
+// created library_jobs). Applied by main.go in Plan 09-02.
+//
+//go:embed 009_library_jobs_episode.sql
+var LibraryJobsEpisodeSQL string
+
+// AutocacheDemandOngoingSQL is migrations/010_autocache_demand_ongoing.sql
+// embedded as a string. Extends the autocache_demand_reason enum with 'ongoing'
+// (Logic A — scheduler ongoing-push), distinct from 'next_ep' (Logic B) and
+// 'backfill', so OBS-04 can attribute downloads by trigger (CONTEXT decision 7).
+// Idempotent ADD VALUE IF NOT EXISTS — independent, no FK ordering constraint.
+// Applied by main.go in Plan 09-02.
+//
+//go:embed 010_autocache_demand_ongoing.sql
+var AutocacheDemandOngoingSQL string
