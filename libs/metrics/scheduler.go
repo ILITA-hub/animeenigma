@@ -33,4 +33,19 @@ var (
 		},
 		[]string{"job"},
 	)
+
+	// AutocachePredictedBytes is the Phase-11 (OBS-05) daily storage-need heuristic.
+	// It carries the `library_autocache_` prefix DELIBERATELY — even though it is
+	// emitted by the scheduler (the shared-DB owner that can run the Logic A watcher
+	// join), not the library — so OBS-05's Grafana table can union it with the
+	// library-exposed library_autocache_budget_bytes in a single query. Cardinality
+	// is {component}-only (exactly 2 series: ongoing, nextep); it MUST NEVER be
+	// labelled per-anime (CONTEXT pitfall — a per-anime breakdown is deferred to v2).
+	AutocachePredictedBytes = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "library_autocache_predicted_bytes",
+			Help: "Predicted RAW-pool bytes needed per heuristic component (ongoing|nextep). Emitted by the scheduler so OBS-05 can join it with the library-exposed library_autocache_budget_bytes.",
+		},
+		[]string{"component"},
+	)
 )

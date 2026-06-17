@@ -1,0 +1,175 @@
+package jobs
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+// avgEpBytesTest is the per-test avg-raw-ep multiplier. Kept small + exact so the
+// expected gauge values (count × avg) are easy to assert with no float drift.
+const avgEpBytesTest int64 = 1000
+
+// newPredictionTestDB builds the same in-memory sqlite schema the Logic A test
+// uses (watch_history × anime_list × animes), so the shared DISTINCT join runs
+// identically in tests and Postgres prod.
+func newPredictionTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`
+		CREATE TABLE watch_history (
+			id TEXT PRIMARY KEY,
+			user_id TEXT,
+			anime_id TEXT,
+			episode_number INTEGER,
+			player TEXT,
+			language TEXT,
+			watch_type TEXT,
+			watched_at DATETIME
+		)
+	`).Error)
+	require.NoError(t, db.Exec(`
+		CREATE TABLE anime_list (
+			id TEXT PRIMARY KEY,
+			user_id TEXT,
+			anime_id TEXT,
+			status TEXT,
+			updated_at DATETIME
+		)
+	`).Error)
+	require.NoError(t, db.Exec(`
+		CREATE TABLE animes (
+			id TEXT PRIMARY KEY,
+			shikimori_id TEXT,
+			status TEXT,
+			episodes_aired INTEGER
+		)
+	`).Error)
+	return db
+}
+
+// resetPredictionGauge clears the {component} series between cases so each test
+// starts from a clean gauge (promauto registers into the shared default registry,
+// so the var persists across tests in the package).
+func resetPredictionGauge() {
+	metrics.AutocachePredictedBytes.Reset()
+}
+
+func predictionOngoing(t *testing.T) float64 {
+	t.Helper()
+	return testutil.ToFloat64(metrics.AutocachePredictedBytes.WithLabelValues("ongoing"))
+}
+
+func predictionNextep(t *testing.T) float64 {
+	t.Helper()
+	return testutil.ToFloat64(metrics.AutocachePredictedBytes.WithLabelValues("nextep"))
+}
+
+// TestAutocachePrediction_OngoingCount seeds two DISTINCT ongoing anime, each with
+// an active JP-audio watching watcher in-window, and asserts the ongoing gauge is
+// 2 × avgRawEpBytes (the nextep gauge is also 2 here — both rows are ongoing).
+func TestAutocachePrediction_OngoingCount(t *testing.T) {
+	resetPredictionGauge()
+	db := newPredictionTestDB(t)
+	now := time.Now()
+	seedAnimeRow(t, db, "a1", "111", "ongoing", 7)
+	seedListRow(t, db, "u1", "a1", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
+	seedAnimeRow(t, db, "a2", "222", "ongoing", 3)
+	seedListRow(t, db, "u2", "a2", "watching", now.Add(-2*time.Hour))
+	seedWatchRow(t, db, "u2", "a2", "raw", "")
+
+	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
+	require.NoError(t, j.Run(context.Background()))
+
+	require.Equal(t, float64(2*avgEpBytesTest), predictionOngoing(t))
+	require.Equal(t, float64(2*avgEpBytesTest), predictionNextep(t))
+}
+
+// TestAutocachePrediction_NextepDropsOngoingClause seeds one ongoing + one RELEASED
+// anime, both with an active JP-audio watcher in-window. nextep drops the
+// a.status='ongoing' clause, so it counts BOTH (2); ongoing counts only the
+// ongoing one (1).
+func TestAutocachePrediction_NextepDropsOngoingClause(t *testing.T) {
+	resetPredictionGauge()
+	db := newPredictionTestDB(t)
+	now := time.Now()
+	seedAnimeRow(t, db, "a1", "111", "ongoing", 7)
+	seedListRow(t, db, "u1", "a1", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
+	seedAnimeRow(t, db, "a2", "222", "released", 12)
+	seedListRow(t, db, "u2", "a2", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u2", "a2", "ae", "ja")
+
+	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
+	require.NoError(t, j.Run(context.Background()))
+
+	require.Equal(t, float64(1*avgEpBytesTest), predictionOngoing(t))
+	require.Equal(t, float64(2*avgEpBytesTest), predictionNextep(t))
+}
+
+// TestAutocachePrediction_FiltersExcludeNonJPAndStale verifies a non-JP watcher
+// (kodik/ru) and a stale watcher (al.updated_at older than the cutoff) are excluded
+// from BOTH counts.
+func TestAutocachePrediction_FiltersExcludeNonJPAndStale(t *testing.T) {
+	resetPredictionGauge()
+	db := newPredictionTestDB(t)
+	now := time.Now()
+
+	// Qualifying ongoing JP-audio watcher → counted in both.
+	seedAnimeRow(t, db, "a1", "111", "ongoing", 5)
+	seedListRow(t, db, "u1", "a1", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
+
+	// Non-JP (kodik/ru) → excluded.
+	seedAnimeRow(t, db, "a2", "222", "ongoing", 5)
+	seedListRow(t, db, "u2", "a2", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u2", "a2", "kodik", "ru")
+
+	// Stale (updated_at older than 30d) JP-audio → excluded.
+	seedAnimeRow(t, db, "a3", "333", "ongoing", 5)
+	seedListRow(t, db, "u3", "a3", "watching", now.AddDate(0, 0, -45))
+	seedWatchRow(t, db, "u3", "a3", "ae", "ja")
+
+	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
+	require.NoError(t, j.Run(context.Background()))
+
+	require.Equal(t, float64(1*avgEpBytesTest), predictionOngoing(t))
+	require.Equal(t, float64(1*avgEpBytesTest), predictionNextep(t))
+}
+
+// TestAutocachePrediction_ZeroRowsSetsZeroAndReturnsNil verifies a clean run with no
+// qualifying rows sets BOTH gauges to 0 and returns nil (no error contract).
+func TestAutocachePrediction_ZeroRowsSetsZeroAndReturnsNil(t *testing.T) {
+	resetPredictionGauge()
+	db := newPredictionTestDB(t)
+	// Empty tables → zero rows.
+
+	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
+	require.NoError(t, j.Run(context.Background()))
+
+	require.Equal(t, float64(0), predictionOngoing(t))
+	require.Equal(t, float64(0), predictionNextep(t))
+}
+
+// TestAutocachePrediction_JoinFailureReturnsError verifies a broken schema (missing
+// tables) surfaces as a Run error so the JobService metrics wrap records a real
+// failure — Run returns an error ONLY on a query failure.
+func TestAutocachePrediction_JoinFailureReturnsError(t *testing.T) {
+	resetPredictionGauge()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	// No tables created → the counts fail.
+	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
+	if err := j.Run(context.Background()); err == nil {
+		t.Fatal("want error on join failure, got nil")
+	}
+}

@@ -96,6 +96,19 @@ type JobsConfig struct {
 	AutocacheLogicACron        string
 	LibraryInternalURL         string
 	AutocacheActiveWatcherDays int
+
+	// Phase 11 (v4.1 observability — OBS-05) — daily storage-need prediction job.
+	// AutocachePredictionCron: cron for the daily heuristic sweep (default
+	//   `0 4 * * *`, 04:00 — a single light run that COUNTS the Logic A watcher
+	//   join twice and sets a {component} gauge; far cheaper than Logic A's
+	//   per-row fan-out). AutocacheAvgRawEpBytes: a scheduler env MIRROR of spec
+	//   §7 avg_raw_ep_size — the assumed average bytes of one raw episode, used to
+	//   turn the two distinct-anime COUNTS into a predicted-bytes estimate. Default
+	//   ~1.2 GiB. Like AutocacheActiveWatcherDays this is a scheduler env mirror
+	//   (the authoritative Phase-10 constant lives in library); keep the two in
+	//   sync if the library value is retuned.
+	AutocachePredictionCron string
+	AutocacheAvgRawEpBytes  int64
 }
 
 func Load() (*Config, error) {
@@ -143,6 +156,9 @@ func Load() (*Config, error) {
 			AutocacheLogicACron:        getEnv("AUTOCACHE_LOGIC_A_CRON", "*/20 * * * *"), // Every 20 min (mirrors sweep_interval_min)
 			LibraryInternalURL:         getEnv("LIBRARY_INTERNAL_URL", getEnv("LIBRARY_SERVICE_URL", "http://library:8089")),
 			AutocacheActiveWatcherDays: getEnvInt("AUTOCACHE_ACTIVE_WATCHER_DAYS", 30),
+			// Phase 11 (OBS-05) — daily storage-need prediction job.
+			AutocachePredictionCron: getEnv("AUTOCACHE_PREDICTION_CRON", "0 4 * * *"),         // Daily 04:00
+			AutocacheAvgRawEpBytes:  getEnvInt64("AUTOCACHE_AVG_RAW_EP_BYTES", 1288490188),    // ~1.2 GiB (spec §7 avg_raw_ep_size)
 		},
 	}, nil
 }
@@ -157,6 +173,19 @@ func getEnv(key, defaultVal string) string {
 func getEnvInt(key string, defaultVal int) int {
 	if val := os.Getenv(key); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+// getEnvInt64 reads a 64-bit integer env var (e.g. a byte quantity that can
+// exceed 2^31 on a 32-bit build). Mirrors getEnvInt but parses with
+// strconv.ParseInt(..., 10, 64) so values like AUTOCACHE_AVG_RAW_EP_BYTES
+// (~1.2 GiB) are correct regardless of platform int width.
+func getEnvInt64(key string, defaultVal int64) int64 {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
 			return i
 		}
 	}
