@@ -79,7 +79,10 @@
   3. When space is needed, only Stale episodes are evicted, in the order auto-never-fetched → auto-fetched → admin-never-fetched → admin-fetched (oldest-first within each group), and a Fresh episode is never deleted. (EVICT-03)
   4. If draining the entire Stale queue still cannot fit a new download (including an admin upload), the download is rejected and `library_autocache_rejected_total{reason="budget_full"}` increments. (EVICT-04)
   5. A download proceeds only when BOTH the logical budget and the existing physical-disk `DiskGuard` pass. (EVICT-05)
-**Plans**: TBD
+**Plans**: 3 plans (3 waves)
+  - [ ] 10-01-PLAN.md — Primitives: repo SumPoolBytes/ListStaleEvictionCandidates/DeleteByID + minio DeletePrefix + 2 eviction/rejection counters + 3 byte/episode gauges (EVICT-01/02/03/04)
+  - [ ] 10-02-PLAN.md — autocache.Evictor: EnsureRoom budget arithmetic + 4-tier ordered Stale eviction + Classify + periodic Sweep + Accountant gauge publishing, one-mutex serialized (EVICT-01/02/03/04)
+  - [ ] 10-03-PLAN.md — Pre-admit wiring: Planner enqueue gate (leave-demand + backoff on reject) + admin upload gate (HTTP 507) layered on DiskGuard + main.go construct/Start/inject/Stop (EVICT-04/05)
 
 ### Phase 11: Observability & Prediction
 **Goal**: An operator can see, in Grafana, exactly how the pool is allocated, how well preloading is working, what's being evicted/rejected/downloaded, and whether predicted demand is outrunning the budget.
@@ -137,7 +140,7 @@ Prior-milestone reserved ideas still on the shelf (unnumbered until committed):
 | 7. Pool Foundation, Config & Migration | v4.1 | 3/3 | Complete    | 2026-06-17 |
 | 8. Serving & Fetch Signal | v4.1 | 3/3 | Complete    | 2026-06-17 |
 | 9. Download Triggers | v4.1 | 4/4 | Complete    | 2026-06-17 |
-| 10. Eviction & Budget | v4.1 | 0/? | Not started | - |
+| 10. Eviction & Budget | v4.1 | 0/3 | Not started | - |
 | 11. Observability & Prediction | v4.1 | 0/? | Not started | - |
 </content>
 </invoke>
