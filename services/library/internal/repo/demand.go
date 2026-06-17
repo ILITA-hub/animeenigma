@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
@@ -28,8 +29,16 @@ func NewDemandRepository(db *gorm.DB) *DemandRepository {
 // single row by the composite primary key and the row always reflects the
 // most-recent want (recency refresh). Phase 08 always passes
 // domain.DemandReasonBackfill; 'next_ep' is reserved for Phase 09.
+//
+// RequestedAt is set explicitly to time.Now() rather than relying on the SQL
+// `DEFAULT now()` (CR-01): GORM only omits a zero-value column from the INSERT
+// (letting the SQL default fire) when the field carries a `default:` tag, and
+// RequestedAt is not a magic CreatedAt/UpdatedAt name nor tagged — so without
+// this the FIRST insert would land a zero-value 0001-01-01 timestamp and break
+// the Phase-09 Planner's recency ordering. The ON CONFLICT path keeps using
+// gorm.Expr("now()") so a re-demand refreshes server-side.
 func (r *DemandRepository) Record(ctx context.Context, malID string, episode int, reason domain.DemandReason) error {
-	row := &domain.AutocacheDemand{MALID: malID, Episode: episode, Reason: reason}
+	row := &domain.AutocacheDemand{MALID: malID, Episode: episode, Reason: reason, RequestedAt: time.Now()}
 	err := r.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "mal_id"}, {Name: "episode"}},
