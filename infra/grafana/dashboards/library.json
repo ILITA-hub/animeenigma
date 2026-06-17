@@ -625,6 +625,45 @@
       ],
       "title": "Autocache downloads by trigger (24h)",
       "type": "barchart"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 48 },
+      "id": 13,
+      "options": { "showHeader": true },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "library_autocache_predicted_bytes",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{component}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(library_autocache_predicted_bytes)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "total",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "library_autocache_budget_bytes",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "budget",
+          "refId": "C"
+        }
+      ],
+      "title": "Autocache storage-need prediction vs budget",
+      "type": "table"
     }
   ],
   "refresh": "30s",
@@ -667,6 +706,7 @@
     { "type": "panel", "id": "barchart", "name": "Bar chart", "version": "" },
     { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
     { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
-    { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" }
+    { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "" }
   ]
 }
