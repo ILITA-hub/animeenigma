@@ -62,7 +62,7 @@ func NewPlayerHealthChecker(
 	for _, p := range []struct{ name, status, reason, desc string }{
 		{"animelib", "disabled", "RU direct-MP4 player", "AniLib RU direct-MP4 player (catalog parser). Disabled — no longer surfaced in the frontend player."},
 		{"hanime", "disabled", "18+ HLS player", "Hanime 18+ HLS player (catalog parser). Disabled — no longer surfaced in the frontend player."},
-		{"raw", "enabled", "JP original-audio player", "Raw JP player (AllAnime HLS / fast4speed.rsvp, catalog parser). Always-on; not part of the EN failover chain."},
+		{"allanime-raw", "enabled", "JP original-audio player", "Raw JP player (AllAnime HLS / fast4speed.rsvp, catalog parser). Always-on; not part of the EN failover chain."},
 		{"ae", "enabled", "Self-hosted library", "AnimeEnigma self-hosted library (BitTorrent → HLS → MinIO). 200 = served on-prem, 404 = no local copy yet."},
 	} {
 		enabled := 0.0
