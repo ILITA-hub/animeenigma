@@ -3,6 +3,7 @@ package autocache
 import (
 	"context"
 	"testing"
+	"time"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
@@ -277,5 +278,51 @@ func TestPlannerReasonTriggerMapping(t *testing.T) {
 				t.Fatalf("reason %q: trigger %q enqueued count = %v, want 1", tc.reason, tc.wantTrigger, got)
 			}
 		})
+	}
+}
+
+// TestPlannerGcBackoffEvictsStale is the WR-03 regression: gcBackoff drops every
+// lastSearched entry older than searchBackoff (bounding the map) while keeping
+// fresh entries (so the no-release backoff still suppresses a re-search). Pre-fix
+// the map grew without bound — entries were never deleted.
+func TestPlannerGcBackoffEvictsStale(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	pl := newPlannerForTest(&fakeDrainer{}, &fakePresence{present: map[string]bool{}}, &fakeEnqueuer{active: map[string]bool{}}, &fakeSearcher{}, &fakeConfig{cfg: enabledCfg()}, m)
+
+	// Seed a stale entry (older than searchBackoff) and a fresh one.
+	pl.lastSearched["stale:1"] = time.Now().Add(-2 * searchBackoff)
+	pl.lastSearched["fresh:2"] = time.Now()
+
+	pl.gcBackoff()
+
+	if _, ok := pl.lastSearched["stale:1"]; ok {
+		t.Fatal("gcBackoff must evict an entry older than searchBackoff (WR-03 unbounded-growth regression)")
+	}
+	if _, ok := pl.lastSearched["fresh:2"]; !ok {
+		t.Fatal("gcBackoff must keep a fresh entry so the no-release backoff still applies")
+	}
+}
+
+// TestPlannerForgetSearchedOnPresent asserts that when a demand is satisfied
+// (present → deleted), its backoff entry is dropped eagerly (WR-03) so the map
+// doesn't retain a dead key until the next gcBackoff sweep.
+func TestPlannerForgetSearchedOnPresent(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "9", Episode: 4, Reason: domain.DemandReasonOngoing}}}
+	p := &fakePresence{present: map[string]bool{"9:4": true}}
+	e := &fakeEnqueuer{active: map[string]bool{}}
+	s := &fakeSearcher{releases: winningRelease()}
+	c := &fakeConfig{cfg: enabledCfg()}
+
+	pl := newPlannerForTest(d, p, e, s, c, m)
+	// Pre-seed a backoff entry as if a prior sweep had searched it.
+	pl.lastSearched["9:4"] = time.Now()
+
+	pl.runOnce(context.Background())
+
+	if _, ok := pl.lastSearched["9:4"]; ok {
+		t.Fatal("present-delete must forget the (mal:ep) backoff entry (WR-03 eager-eviction)")
 	}
 }

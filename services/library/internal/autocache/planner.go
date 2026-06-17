@@ -186,6 +186,13 @@ func (p *Planner) runOnce(ctx context.Context) time.Duration {
 		return cadence
 	}
 
+	// WR-03: evict stale backoff entries before processing so the lastSearched
+	// map can't grow without bound over a long-running process with a churning
+	// catalog (new episodes weekly across thousands of ongoing titles). An entry
+	// older than searchBackoff no longer suppresses a re-search, so dropping it is
+	// behavior-preserving.
+	p.gcBackoff()
+
 	rows, err := p.demand.Drain(ctx, drainBatchLimit)
 	if err != nil {
 		if p.log != nil {
@@ -221,6 +228,10 @@ func (p *Planner) plan(ctx context.Context, d domain.AutocacheDemand, cfg *domai
 		if delErr := p.demand.Delete(ctx, d.MALID, d.Episode); delErr != nil && p.log != nil {
 			p.log.Warnw("autocache planner: delete present demand failed", "mal", d.MALID, "ep", d.Episode, "error", delErr)
 		}
+		// WR-03: the (mal,ep) is satisfied and no longer wanted — drop its backoff
+		// entry immediately so the lastSearched map doesn't retain a dead key until
+		// the next gcBackoff sweep.
+		p.forgetSearched(demandKey(d.MALID, d.Episode))
 		p.metrics.IncDownloadsTotal(trigger, "present")
 		return false
 	}
@@ -355,6 +366,29 @@ func (p *Planner) markSearched(k string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.lastSearched[k] = time.Now()
+}
+
+// forgetSearched drops a single (mal:ep) backoff entry. Called when the demand
+// is satisfied (present-delete) so the lastSearched map sheds dead keys eagerly
+// rather than waiting for the periodic gcBackoff sweep (WR-03).
+func (p *Planner) forgetSearched(k string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.lastSearched, k)
+}
+
+// gcBackoff evicts every lastSearched entry older than searchBackoff. Such an
+// entry can no longer suppress a re-search (inBackoff already treats it as
+// expired), so removing it is behavior-preserving — it only bounds map growth
+// (WR-03). Called once per sweep before processing rows.
+func (p *Planner) gcBackoff() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for k, t := range p.lastSearched {
+		if time.Since(t) >= searchBackoff {
+			delete(p.lastSearched, k)
+		}
+	}
 }
 
 // sleep is a ctx-aware + stop-aware sleep. Returns false when the loop must
