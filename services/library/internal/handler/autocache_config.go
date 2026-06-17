@@ -134,11 +134,18 @@ func (h *AutocacheConfigHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		fields["active_watcher_days"] = *body.ActiveWatcherDays
 	}
 	if body.QualityCap != nil {
-		if *body.QualityCap <= 0 {
-			httputil.BadRequest(w, "quality_cap must be > 0")
+		// quality_cap is a discrete vertical-resolution ladder, not a free int:
+		// the Phase-8 downloader compares it against real stream heights, so a
+		// value like 137 silently filters everything-or-nothing. v1 cap is 1080
+		// (§3.5 / D4); 2160 is reserved for the v2 TODO but accepted as a valid
+		// enum member so the table need not change when that ships.
+		switch *body.QualityCap {
+		case 480, 720, 1080, 2160:
+			fields["quality_cap"] = *body.QualityCap
+		default:
+			httputil.BadRequest(w, "quality_cap must be one of 480, 720, 1080, 2160")
 			return
 		}
-		fields["quality_cap"] = *body.QualityCap
 	}
 	if body.MinSeeders != nil {
 		if *body.MinSeeders < 0 || *body.MinSeeders > maxMinSeeders {
