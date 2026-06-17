@@ -490,7 +490,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(library_autocache_serve_total{result=\"hit\"}[1h])) / sum(rate(library_autocache_serve_total[1h]))",
+          "expr": "sum(rate(library_autocache_serve_total{result=\"hit\"}[1h])) / clamp_min(sum(rate(library_autocache_serve_total[1h])), 1)",
           "format": "time_series",
           "legendFormat": "hit-rate",
           "refId": "A"
@@ -660,6 +660,27 @@
           "instant": true,
           "legendFormat": "budget",
           "refId": "C"
+        }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "component": "Component",
+              "Value #A": "Predicted",
+              "Value #B": "Total predicted",
+              "Value #C": "Budget"
+            },
+            "excludeByName": { "Time": true, "job": true, "instance": true, "__name__": true },
+            "indexByName": {
+              "component": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3
+            }
+          }
         }
       ],
       "title": "Autocache storage-need prediction vs budget",
