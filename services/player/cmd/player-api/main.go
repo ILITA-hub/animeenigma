@@ -369,6 +369,12 @@ func main() {
 	showcaseService := service.NewShowcaseService(showcaseRepo, log)
 	showcaseHandler := handler.NewShowcaseHandler(showcaseService, log)
 
+	// Showcase v2 — compatibility score between two users' watchlists.
+	// Dark-shipped under the same PROFILE_WALL_ADMIN_ONLY gateway gate.
+	compatRepo := repo.NewCompatibilityRepository(db.DB)
+	compatService := service.NewCompatibilityService(compatRepo)
+	compatibilityHandler := handler.NewCompatibilityHandler(compatService, log)
+
 	// Initialize MAL export service
 	malExportService := service.NewMALExportService(log)
 
@@ -412,7 +418,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, showcaseHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, adminReportsHandler, internalListHandler, viewerContextHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, showcaseHandler, compatibilityHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, adminReportsHandler, internalListHandler, viewerContextHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

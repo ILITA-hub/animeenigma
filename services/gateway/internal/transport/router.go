@@ -423,6 +423,7 @@ func NewRouterWithCleanup(
 				r.Use(AdminRoleMiddleware)
 				r.Get("/users/{userId}/showcase", proxyHandler.ProxyToPlayer)
 				r.Put("/users/me/showcase", proxyHandler.ProxyToPlayer)
+				r.Get("/users/{userId}/compatibility", proxyHandler.ProxyToPlayer)
 			})
 		} else {
 			r.Group(func(r chi.Router) {
@@ -431,6 +432,9 @@ func NewRouterWithCleanup(
 				r.Get("/users/{userId}/showcase", proxyHandler.ProxyToPlayer)
 			})
 			// PUT /users/me/showcase falls through to the protected /users/* group.
+			// GET /users/{userId}/compatibility also falls through — it always requires
+			// JWT (player's AuthMiddleware enforces it) and the protected /users/* group
+			// below applies JWTValidationMiddleware, so no explicit route is needed here.
 		}
 
 		// Player service routes (protected)

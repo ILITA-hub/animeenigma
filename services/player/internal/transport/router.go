@@ -19,6 +19,7 @@ func NewRouter(
 	reviewHandler *handler.ReviewHandler,
 	commentHandler *handler.CommentHandler,
 	showcaseHandler *handler.ShowcaseHandler,
+	compatibilityHandler *handler.CompatibilityHandler,
 	malImportHandler *handler.MALImportHandler,
 	malExportHandler *handler.MALExportHandler,
 	shikimoriImportHandler *handler.ShikimoriImportHandler,
@@ -100,6 +101,11 @@ func NewRouter(
 			// Profile showcase (Steam-style wall) — owner write. "me" resolves
 			// to the JWT claims user id in the handler.
 			r.Put("/me/showcase", showcaseHandler.SaveShowcase)
+
+			// Showcase v2 — compatibility score between the viewer (JWT claims)
+			// and the profile owner ({userId}). JWT is already enforced by
+			// AuthMiddleware on this group; the handler re-checks for safety.
+			r.Get("/{userId}/compatibility", compatibilityHandler.GetCompatibility)
 
 			// Progress routes
 			r.Post("/progress", progressHandler.UpdateProgress)
