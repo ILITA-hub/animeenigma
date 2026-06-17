@@ -26,15 +26,15 @@ onMounted(async () => {
     ids.map((id) =>
       charactersApi
         .getCharacter(String(id))
-        .then((r) => {
+        .then((r): CharacterCardModel => {
           const raw = r.data as { data?: ApiCharacter } & ApiCharacter
           const c: ApiCharacter = 'data' in raw && raw.data ? raw.data : raw
           return {
             id: c.shikimori_id,
             name: getLocalizedTitle(c.name, c.name_ru, c.name_jp),
             image: getImageUrl(c.poster_url),
-            role: 'supporting' as const,
-          } satisfies CharacterCardModel
+            role: 'supporting',
+          }
         })
         .catch(() => null),
     ),

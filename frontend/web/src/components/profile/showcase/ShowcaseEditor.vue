@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import draggable from 'vuedraggable'
-import type { ShowcaseBlock, ShowcaseBlockType } from '@/types/showcase'
+import type { AboutConfig, ShowcaseBlock, ShowcaseBlockType } from '@/types/showcase'
 import { MAX_SHOWCASE_BLOCKS } from '@/types/showcase'
+
+// Narrow an 'about' block's config to AboutConfig for v-model binding. Returns
+// the SAME object reference, so v-model assignments still mutate element.config.
+// (vue-tsc cannot parse an inline `as` cast inside a v-model expression.)
+function aboutConfig(el: ShowcaseBlock): AboutConfig {
+  return el.config as AboutConfig
+}
 
 const props = defineProps<{ userId: string; modelValue: ShowcaseBlock[] }>()
 const emit = defineEmits<{ save: [ShowcaseBlock[]]; cancel: [] }>()
@@ -61,13 +68,13 @@ function save() {
           <!-- About block inline editor -->
           <div v-if="element.type === 'about'" class="space-y-2">
             <input
-              v-model="(element.config as { title?: string }).title"
+              v-model="aboutConfig(element).title"
               :placeholder="$t('showcase.about_title_placeholder')"
               maxlength="64"
               class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             />
             <textarea
-              v-model="(element.config as { text?: string }).text"
+              v-model="aboutConfig(element).text"
               :placeholder="$t('showcase.about_placeholder')"
               rows="4"
               maxlength="2000"
