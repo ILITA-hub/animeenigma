@@ -36,6 +36,8 @@ Defined as `:root` foundation vars (not in `@theme`): `--surface-2 #161623`, `--
 | `--success` / `--warning` / `--info` / `--destructive` (+ `-foreground`, `-soft`) | status colors | `bg-destructive`, `bg-success-soft` |
 | `--glow-cyan` / `--glow-pink` / `--glow-sm-cyan` | accent elevation | (custom shadow) |
 
+**Alpha overlay scale (curated; bind raw `rgba()`/`hsl()` literals to these — Rule 7).** `--white-a4 / -a8 / -a20 / -a30` (subtle fills + overlays), `--cyan-a08 / -a20 / -a40 / -a60` (brand-cyan glows/tints — `--accent-soft` .14 and `--accent-line` .28 fill the in-between steps), `--black-a40 / -a60 / -a80` (scrims/shadows), `--scrim-bg-soft / -strong` (base-color `#08080f` panel scrims). White/cyan opacities that already have a named token are reused (`--line` .06, `--border` .10, `--line-strong` .12, `--ink-4` .36, `--muted-foreground` .56, `--ink-2` .78); status tints use the `*-soft` tokens. These are a curated snap scale (near opacities collapse to the nearest step) — rationale + the full value→token map live in `docs/superpowers/specs/2026-06-17-ds-rules-hardening-rgba-inline-style-design.md`.
+
 ## Usage rules (governance)
 
 1. **Use tokens — never hardcode** hex or off-palette Tailwind colors (`red-500`, `amber-500`, `emerald-500`…). Status → `--success / --warning / --info / --destructive` (+ `-soft`).
@@ -59,7 +61,7 @@ A build-failing custom bash gate, `frontend/web/scripts/design-system-lint.sh` (
 already use: it is a prerequisite of **`make lint-frontend`** (→ `make lint` / `all` / CI) AND of
 **`make redeploy-web`** (the deploy gate), via the `make lint-design` sub-target. No new dependency.
 
-**It enforces EXACTLY these 6 rules** over `frontend/web/src/**/*.vue` (excluding `*.spec.*` /
+**It enforces EXACTLY these 8 rules** over `frontend/web/src/**/*.vue` (excluding `*.spec.*` /
 `__tests__`; **Rules 1 & 4 also scan `*.ts`**, since class-strings leak via `cva` variant files).
 Each violation is an ERROR; `ERRORS>0` ⇒ `exit 1`.
 
@@ -70,6 +72,8 @@ Each violation is an ERROR; `ERRORS>0` ⇒ `exit 1`.
 4. **Off-scale font weights** — `font-(bold|extrabold|black|light|thin)`; the DS allows ONLY `font-medium` / `font-semibold`. Scans `*.vue` + `*.ts`. (**Promoted 2026-06-15 from governance-only to build-enforced.**)
 5. **Bare `<select>` / `<input type="date">`** — use the `Select` / `DatePicker` primitives. Exempts `components/player/` (Reka portals break in fullscreen, so player pickers stay native) and `type="datetime-local"`.
 6. **Arbitrary spacing values** — `(p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y)-[<n>px|rem|em]` dodge the 4px token scale; bind to a token instead (`px-[10px]` → `px-2.5`). On-grid values (2/4/6/8/10/14/18px) migrate 1:1 to tokens (`0.5/1/1.5/2/2.5/3.5/4.5`); `1px` → the bare `-px` modifier. **Sizing props (`w/h/min-*/max-*/size`) are DELIBERATELY OUT OF SCOPE** — no token scale exists for arbitrary pixel dimensions, so `w-[380px]` is fine. `calc()`/`var()` arbitrary values are allowed (computed, not magic numbers). Off-grid sub-pixel survivors (odd `3/5/7/9/11px` on the dense player menus + `Stepper`) are listed per-`(file,class)` in `scripts/design-system-spacing-allowlist.txt`. (DS-GOV-03, added 2026-06-17.)
+7. **Raw `rgba()`/`hsl()` color literals in `.vue`** — both comma form `rgba(0,0,0,.5)` and modern space/slash form `rgb(0 0 0 / .5)`; bind to an alpha-overlay token (see the "Alpha overlay scale" note under Token tiers). `rgb*(var(--…))` is exempt; `.vue` only. Identity/decorative literals (gacha rarity hues, decorative gradient ramps) → `design-system-allowlist.txt` (`path:value:reason`). (Added 2026-06-17.)
+8. **Static color inside inline `style`** — `style="…"` / `:style="'…'"` carrying `#hex` / `rgb()` / `hsl()`; use a class or token. Dynamic `:style` object bindings and `px`/layout values are NOT flagged (color is the DS concern, layout isn't). (Added 2026-06-17.)
 
 **Brand-exemption rationale (why some hues are NOT "off-palette").** `cyan` and `pink` are the
 Neon-Tokyo BRAND primitives, and `orange` / `rose` (plus `indigo` / `teal` / `lime`) are per-provider
@@ -77,8 +81,9 @@ identity hues (Kodik cyan, AniLib orange, Hanime pink, Raw rose). They are delib
 Rule-1 palette set — including them would (correctly) fail the clean tree where Anime.vue, the players,
 and the Navbar legitimately use them. Provider/brand hex go on the allowlist instead, with a reason.
 
-**Allowlist / escape-hatch (two files).** Hex exceptions → `frontend/web/scripts/design-system-allowlist.txt`
-(`path:hex:reason`); arbitrary-spacing exceptions → `frontend/web/scripts/design-system-spacing-allowlist.txt`
+**Allowlist / escape-hatch (two files).** Hex + rgba/hsl + inline-style-color exceptions (Rules 2/7/8) →
+`frontend/web/scripts/design-system-allowlist.txt` (`path:hex:reason` or `path:value:reason`);
+arbitrary-spacing exceptions (Rule 6) → `frontend/web/scripts/design-system-spacing-allowlist.txt`
 (`path:class:reason`). One line per justified exception (`#`-prefixed comments allowed). To add an exception:
 **prefer migrating to a token first**; only allowlist when no token reproduces the value within
 tolerance — for hex: provider-brand identity, subtitle render default, cover/avatar gradient stop, near-base
@@ -94,7 +99,7 @@ justified Telegram provider-brand allowlist; `Collections.vue`'s `#0e7490`/`#6b2
 adjudicated keep, no exact token pair.)
 
 **Prove the fail-path** — the gate ships a `--selftest` that injects a scratch file with a
-`bg-red-500` (Rule 1) AND a `p-[7px]` (Rule 6), asserts the gate DETECTS both (would `exit 1`),
+`bg-red-500` (Rule 1), a `p-[7px]` (Rule 6), and an `rgba()` literal + inline-style color (Rules 7/8), asserts the gate DETECTS all (would `exit 1`),
 removes it (trap-guarded), and asserts the clean tree PASSES — leaving the tree exactly as before:
 
 ```bash
@@ -103,9 +108,10 @@ make lint-design                                              # → PASS on the 
 ```
 
 > Scope covers color/token discipline (Rules 1–3), the font-weight scale (Rule 4), native
-> form-primitive bypass (Rule 5), and binding spacing to the 4px token scale (Rule 6). The
+> form-primitive bypass (Rule 5), binding spacing to the 4px token scale (Rule 6), and binding raw
+> `rgba()`/`hsl()` + inline-style color to tokens (Rules 7–8). The
 > **font-weight scale and native `<select>`/`date` checks were promoted out of Phase-6 governance into
-> build-enforcement** (Rule 4 on 2026-06-15; Rule 6 added 2026-06-17). What REMAINS governance-only
+> build-enforcement** (Rule 4 on 2026-06-15; Rules 6–8 added 2026-06-17). What REMAINS governance-only
 > (human/AI-followed, NOT build-enforced — a grep cannot reliably distinguish these without AST
 > analysis): **reuse-the-primitives** (hand-rolled button vs `<Button>`), the **contextual card-padding
 > rhythm** (`p-4 md:p-6 lg:p-8` — Rule 6 only forbids *arbitrary* `p-[…px]`; it does NOT mandate which
