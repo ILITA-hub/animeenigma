@@ -134,6 +134,13 @@ func main() {
 	if err := db.DB.Exec(migrations.AutocachePoolSQL).Error; err != nil {
 		log.Fatalw("failed to apply autocache_pool migration", "error", err)
 	}
+	// 006 (Phase 07): singleton autocache_config table holding the
+	// live-editable §3.5 tunables + master `enabled` switch (POOL-04 +
+	// POOL-05). Idempotent (CREATE TABLE IF NOT EXISTS + seeded via
+	// ON CONFLICT DO NOTHING). Independent of 005.
+	if err := db.DB.Exec(migrations.AutocacheConfigSQL).Error; err != nil {
+		log.Fatalw("failed to apply autocache_config migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {

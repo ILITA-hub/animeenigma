@@ -13,6 +13,7 @@
 //   2. LibraryEpisodesSQL      (Phase 04 — references library_jobs(id))
 //   3. LibraryFilenamePatternsSQL (Phase 04 — independent)
 //   4. AutocachePoolSQL        (Phase 07 — alters library_episodes; must follow 002)
+//   5. AutocacheConfigSQL      (Phase 07 — singleton config table; independent)
 package migrations
 
 import _ "embed"
@@ -56,3 +57,13 @@ var JackettSourceSQL string
 //
 //go:embed 005_autocache_pool.sql
 var AutocachePoolSQL string
+
+// AutocacheConfigSQL is migrations/006_autocache_config.sql embedded as
+// a string. Creates the singleton autocache_config table (id fixed at 1
+// via PK + CHECK constraint) holding the live-editable §3.5 tunables and
+// the master `enabled` switch (Phase 07, POOL-04 + POOL-05), then seeds
+// the one row idempotently via INSERT ... ON CONFLICT (id) DO NOTHING.
+// Independent of the other tables — no FK ordering constraint.
+//
+//go:embed 006_autocache_config.sql
+var AutocacheConfigSQL string
