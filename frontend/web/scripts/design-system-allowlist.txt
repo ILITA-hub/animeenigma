@@ -163,3 +163,8 @@ src/components/home/spotlight/ui/SpotlightStepper.vue:rgba(255,77,141,0.55):Spot
 src/components/home/spotlight/ui/SpotlightStepper.vue:rgba(255,45,124,0.35):SpotlightStepper brand-pink outer glow — identity hue (pink exempt), no token at this alpha
 # PosterRow.vue — spotlight violet accent overlay.
 src/components/anime/PosterRow.vue:rgba(167,139,250,0.14):PosterRow violet ambient accent blob — identity hue (violet; no token at this alpha)
+# AboutBlock terminal variant — macOS window-chrome dots (fixed decorative colors, no semantic token exists)
+src/components/profile/showcase/blocks/AboutBlock.vue:#0a0a13:AboutBlock terminal bg — near-black decorative terminal surface, below --background scale; no token within tolerance
+src/components/profile/showcase/blocks/AboutBlock.vue:#ff5f57:AboutBlock terminal dot red — macOS traffic-light close button; fixed decorative identity color
+src/components/profile/showcase/blocks/AboutBlock.vue:#febc2e:AboutBlock terminal dot yellow — macOS traffic-light minimise button; fixed decorative identity color
+src/components/profile/showcase/blocks/AboutBlock.vue:#28c840:AboutBlock terminal dot green — macOS traffic-light maximise button; fixed decorative identity color
