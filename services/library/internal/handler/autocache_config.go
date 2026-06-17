@@ -9,6 +9,29 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 )
 
+// PATCH validation ceilings. These tunables drive the future downloader/evictor
+// budget ledger and are admin-editable live (no redeploy), so a floor-only check
+// lets an admin set absurd values (a 9.2 EB budget, a ~3800-year sweep interval)
+// with no warning. Each numeric field gets a documented upper bound; values
+// outside [floor, ceiling] are rejected with 400.
+const (
+	// maxBudgetBytes caps the pool budget at 100 TiB — three orders of magnitude
+	// above the 100 GiB default (§3.5), generous for a self-hosted deployment
+	// while still rejecting an obvious fat-finger.
+	maxBudgetBytes int64 = 100 * 1024 * 1024 * 1024 * 1024
+
+	// maxFreshDays bounds every *_fresh_*_days / active_watcher_days window at
+	// ten years — far beyond any sane freshness/recency window.
+	maxFreshDays = 3650
+
+	// maxMinSeeders bounds min_seeders; no real swarm needs a five-figure floor.
+	maxMinSeeders = 10000
+
+	// maxSweepIntervalMin caps the planner cadence at one week. Past that the
+	// evictor effectively never runs (the spec default is 20m, §3.5).
+	maxSweepIntervalMin = 7 * 24 * 60
+)
+
 // AutocacheConfigStore is the slice of *repo.AutocacheConfigRepository
 // the handler needs. Pulled out as an interface seam so tests can inject
 // a stub without spinning up Postgres.
@@ -76,36 +99,36 @@ func (h *AutocacheConfigHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		fields["enabled"] = *body.Enabled
 	}
 	if body.BudgetBytes != nil {
-		if *body.BudgetBytes <= 0 {
-			httputil.BadRequest(w, "budget_bytes must be > 0")
+		if *body.BudgetBytes <= 0 || *body.BudgetBytes > maxBudgetBytes {
+			httputil.BadRequest(w, "budget_bytes must be in 1..107374182400000 (100 TiB)")
 			return
 		}
 		fields["budget_bytes"] = *body.BudgetBytes
 	}
 	if body.AutoFreshDownloadDays != nil {
-		if *body.AutoFreshDownloadDays < 1 {
-			httputil.BadRequest(w, "auto_fresh_download_days must be >= 1")
+		if *body.AutoFreshDownloadDays < 1 || *body.AutoFreshDownloadDays > maxFreshDays {
+			httputil.BadRequest(w, "auto_fresh_download_days must be in 1..3650")
 			return
 		}
 		fields["auto_fresh_download_days"] = *body.AutoFreshDownloadDays
 	}
 	if body.AutoFreshFetchDays != nil {
-		if *body.AutoFreshFetchDays < 1 {
-			httputil.BadRequest(w, "auto_fresh_fetch_days must be >= 1")
+		if *body.AutoFreshFetchDays < 1 || *body.AutoFreshFetchDays > maxFreshDays {
+			httputil.BadRequest(w, "auto_fresh_fetch_days must be in 1..3650")
 			return
 		}
 		fields["auto_fresh_fetch_days"] = *body.AutoFreshFetchDays
 	}
 	if body.AdminFreshDays != nil {
-		if *body.AdminFreshDays < 1 {
-			httputil.BadRequest(w, "admin_fresh_days must be >= 1")
+		if *body.AdminFreshDays < 1 || *body.AdminFreshDays > maxFreshDays {
+			httputil.BadRequest(w, "admin_fresh_days must be in 1..3650")
 			return
 		}
 		fields["admin_fresh_days"] = *body.AdminFreshDays
 	}
 	if body.ActiveWatcherDays != nil {
-		if *body.ActiveWatcherDays < 1 {
-			httputil.BadRequest(w, "active_watcher_days must be >= 1")
+		if *body.ActiveWatcherDays < 1 || *body.ActiveWatcherDays > maxFreshDays {
+			httputil.BadRequest(w, "active_watcher_days must be in 1..3650")
 			return
 		}
 		fields["active_watcher_days"] = *body.ActiveWatcherDays
@@ -118,15 +141,15 @@ func (h *AutocacheConfigHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		fields["quality_cap"] = *body.QualityCap
 	}
 	if body.MinSeeders != nil {
-		if *body.MinSeeders < 0 {
-			httputil.BadRequest(w, "min_seeders must be >= 0")
+		if *body.MinSeeders < 0 || *body.MinSeeders > maxMinSeeders {
+			httputil.BadRequest(w, "min_seeders must be in 0..10000")
 			return
 		}
 		fields["min_seeders"] = *body.MinSeeders
 	}
 	if body.SweepIntervalMin != nil {
-		if *body.SweepIntervalMin < 1 {
-			httputil.BadRequest(w, "sweep_interval_min must be >= 1")
+		if *body.SweepIntervalMin < 1 || *body.SweepIntervalMin > maxSweepIntervalMin {
+			httputil.BadRequest(w, "sweep_interval_min must be in 1..10080 (1 week)")
 			return
 		}
 		fields["sweep_interval_min"] = *body.SweepIntervalMin
