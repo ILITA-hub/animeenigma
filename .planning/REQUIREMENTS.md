@@ -34,9 +34,9 @@ Requirements for milestone v4.1. Each maps to exactly one roadmap phase.
 
 ### Serving & Fetch Signal (SERVE)
 
-- [ ] **SERVE-01**: When the "ae" provider is resolved and the episode is present in the pool, it is served from `aeProvider/` and counted as a preload hit.
-- [ ] **SERVE-02**: Each "ae" playback updates the episode's `last_fetch_at` and `fetch_count` (the "viewed by any user" freshness + popularity signal).
-- [ ] **SERVE-03**: When the episode is absent, the player fails over to existing providers with no regression, and the event is counted as a preload miss.
+- [x] **SERVE-01**: When the "ae" provider is resolved and the episode is present in the pool, it is served from `aeProvider/` and counted as a preload hit.
+- [x] **SERVE-02**: Each "ae" playback updates the episode's `last_fetch_at` and `fetch_count` (the "viewed by any user" freshness + popularity signal).
+- [x] **SERVE-03**: When the episode is absent, the player fails over to existing providers with no regression, and the event is counted as a preload miss.
 
 ### Observability (OBS)
 
@@ -87,9 +87,9 @@ Which phases cover which requirements. **Filled by the roadmapper.**
 | POOL-03 | Phase 7 | Complete |
 | POOL-04 | Phase 7 | Complete |
 | POOL-05 | Phase 7 | Complete |
-| SERVE-01 | Phase 8 | Pending |
-| SERVE-02 | Phase 8 | Pending |
-| SERVE-03 | Phase 8 | Pending |
+| SERVE-01 | Phase 8 | Complete |
+| SERVE-02 | Phase 8 | Complete |
+| SERVE-03 | Phase 8 | Complete |
 | TRIG-01 | Phase 9 | Pending |
 | TRIG-02 | Phase 9 | Pending |
 | TRIG-03 | Phase 9 | Pending |
