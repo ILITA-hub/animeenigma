@@ -26,11 +26,11 @@ Requirements for milestone v4.1. Each maps to exactly one roadmap phase.
 
 ### Eviction & Budget (EVICT)
 
-- [ ] **EVICT-01**: Total bytes of the `aeProvider/` pool (admin + auto combined) are bounded by a configurable budget (default 100 GB).
-- [ ] **EVICT-02**: Each episode is classified Fresh or Stale by source-specific windows — auto: `<auto_fresh_download_days` since download OR `<auto_fresh_fetch_days` since last fetch; admin: `<admin_fresh_days` since upload OR last fetch.
-- [ ] **EVICT-03**: When space is needed, only Stale episodes are evicted, in order: auto-never-fetched → auto-fetched → admin-never-fetched → admin-fetched (oldest-first within each group); Fresh episodes are never evicted.
-- [ ] **EVICT-04**: If draining the entire Stale queue still cannot fit a new download (including an admin upload), the download is rejected and `library_autocache_rejected_total{reason="budget_full"}` is incremented.
-- [ ] **EVICT-05**: The logical budget co-exists with the existing physical-disk `DiskGuard`; both must pass before a download proceeds.
+- [x] **EVICT-01**: Total bytes of the `aeProvider/` pool (admin + auto combined) are bounded by a configurable budget (default 100 GB).
+- [x] **EVICT-02**: Each episode is classified Fresh or Stale by source-specific windows — auto: `<auto_fresh_download_days` since download OR `<auto_fresh_fetch_days` since last fetch; admin: `<admin_fresh_days` since upload OR last fetch.
+- [x] **EVICT-03**: When space is needed, only Stale episodes are evicted, in order: auto-never-fetched → auto-fetched → admin-never-fetched → admin-fetched (oldest-first within each group); Fresh episodes are never evicted.
+- [x] **EVICT-04**: If draining the entire Stale queue still cannot fit a new download (including an admin upload), the download is rejected and `library_autocache_rejected_total{reason="budget_full"}` is incremented.
+- [x] **EVICT-05**: The logical budget co-exists with the existing physical-disk `DiskGuard`; both must pass before a download proceeds.
 
 ### Serving & Fetch Signal (SERVE)
 
@@ -95,11 +95,11 @@ Which phases cover which requirements. **Filled by the roadmapper.**
 | TRIG-03 | Phase 9 | Complete |
 | TRIG-04 | Phase 9 | Complete |
 | TRIG-05 | Phase 9 | Complete |
-| EVICT-01 | Phase 10 | Pending |
-| EVICT-02 | Phase 10 | Pending |
-| EVICT-03 | Phase 10 | Pending |
-| EVICT-04 | Phase 10 | Pending |
-| EVICT-05 | Phase 10 | Pending |
+| EVICT-01 | Phase 10 | Complete |
+| EVICT-02 | Phase 10 | Complete |
+| EVICT-03 | Phase 10 | Complete |
+| EVICT-04 | Phase 10 | Complete |
+| EVICT-05 | Phase 10 | Complete |
 | OBS-01 | Phase 11 | Pending |
 | OBS-02 | Phase 11 | Pending |
 | OBS-03 | Phase 11 | Pending |
