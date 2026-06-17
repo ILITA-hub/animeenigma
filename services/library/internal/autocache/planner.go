@@ -40,6 +40,15 @@ type jobEnqueuer interface {
 	Create(ctx context.Context, job *domain.Job) error
 }
 
+// budgetEvictor is the Phase-10 pre-admit seam (EnsureRoom only — the *autocache.Evictor
+// method from Plan 02). main.go injects the concrete Evictor; nil is allowed (a Planner
+// built with no evictor skips the pre-admit gate, mirroring the nil-guarded metrics/log).
+// On the SAME EnsureRoom both the Planner and the admin upload handler gate the budget
+// (EVICT-05), so an unfittable download is rejected rather than blowing the pool budget.
+type budgetEvictor interface {
+	EnsureRoom(ctx context.Context, estBytes int64) (admitted bool, err error)
+}
+
 // SearchQuery is the Planner's local search-input shape. main.go adapts
 // *service.TieredSearcher (whose FetchAll takes service.SearchParams) to this so
 // the autocache package stays free of any service-layer import.
@@ -89,6 +98,10 @@ const (
 	// minSweepInterval floors a misconfigured/zero sweep_interval_min so the loop
 	// can never busy-spin.
 	minSweepInterval = time.Minute
+	// avgRawEpSize is the pre-admit budget estimate fallback (~1.2 GiB) used when a
+	// selected release reports SizeBytes <= 0. It is a Phase-10 const, NOT a config
+	// column (CONTEXT: avg_raw_ep_size is a const this phase, no schema change).
+	avgRawEpSize int64 = 1288490188 // ~1.2 GiB
 )
 
 // Planner drains autocache_demand → RAW download jobs on a config-gated ticker.
@@ -98,6 +111,7 @@ type Planner struct {
 	jobs     jobEnqueuer
 	search   searcher
 	config   configGetter
+	evictor  budgetEvictor // Phase-10 pre-admit gate; nil → gate skipped.
 	metrics  *metrics.LibraryMetrics
 	log      plannerLogger
 
@@ -118,6 +132,7 @@ func NewPlanner(
 	jobs jobEnqueuer,
 	search searcher,
 	config configGetter,
+	evictor budgetEvictor,
 	libMetrics *metrics.LibraryMetrics,
 	log plannerLogger,
 ) *Planner {
@@ -127,6 +142,7 @@ func NewPlanner(
 		jobs:         jobs,
 		search:       search,
 		config:       config,
+		evictor:      evictor,
 		metrics:      libMetrics,
 		log:          log,
 		lastSearched: make(map[string]time.Time),
@@ -283,7 +299,43 @@ func (p *Planner) plan(ctx context.Context, d domain.AutocacheDemand, cfg *domai
 		return true
 	}
 
-	// 5. Enqueue a source=autocache job carrying the INTENDED episode (the
+	// 5. Pre-admit budget gate (EVICT-04/05): before enqueueing, the SAME
+	// Evictor.EnsureRoom the admin upload path gates must admit the incoming
+	// download under the logical pool budget (layered ON TOP of the physical
+	// DiskGuard). estBytes = the selected release size, falling back to the
+	// avgRawEpSize const when the release reports no size. nil-guarded so a
+	// Planner with no evictor skips the gate.
+	if p.evictor != nil {
+		estBytes := rel.SizeBytes
+		if estBytes <= 0 {
+			estBytes = avgRawEpSize
+		}
+		admitted, err := p.evictor.EnsureRoom(ctx, estBytes)
+		if err != nil {
+			// Fail-open: a budget-read blip must not silently lose a download
+			// (mirror the handler/disk-guard fail-open). Proceed to enqueue.
+			if p.log != nil {
+				p.log.Warnw("autocache planner: budget check failed, admitting (fail-open)",
+					"mal", d.MALID, "ep", d.Episode, "error", err)
+			}
+		} else if !admitted {
+			// Pool can't fit even after draining the Stale queue (EVICT-04).
+			// LEAVE the demand row (do NOT Delete) so it retries once room frees,
+			// arm the existing per-(mal,ep) searchBackoff so it isn't re-searched/
+			// re-rejected every tick (T-10-08 hot-loop guard), and record the
+			// OBS-04 "rejected" result.
+			p.metrics.IncRejectedTotal("budget_full")
+			p.metrics.IncDownloadsTotal(trigger, "rejected")
+			p.markSearched(k)
+			if p.log != nil {
+				p.log.Warnw("autocache planner: enqueue rejected — budget full",
+					"mal", d.MALID, "ep", d.Episode, "est_bytes", estBytes, "trigger", trigger)
+			}
+			return true
+		}
+	}
+
+	// 6. Enqueue a source=autocache job carrying the INTENDED episode (the
 	// single-flight key for the next tick's HasActiveForEpisode dedup). LEAVE the
 	// demand row — it clears once the episode is confirmed present.
 	episode := d.Episode

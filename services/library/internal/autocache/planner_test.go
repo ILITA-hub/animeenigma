@@ -88,6 +88,19 @@ func (f *fakeConfig) Get(_ context.Context) (*domain.AutocacheConfig, error) {
 	return &c, nil
 }
 
+// fakeEvictor is a scriptable budgetEvictor seam fake: admitted/err are returned
+// verbatim and calls records each EnsureRoom(estBytes).
+type fakeEvictor struct {
+	admitted bool
+	err      error
+	calls    []int64 // estBytes per EnsureRoom call
+}
+
+func (f *fakeEvictor) EnsureRoom(_ context.Context, estBytes int64) (bool, error) {
+	f.calls = append(f.calls, estBytes)
+	return f.admitted, f.err
+}
+
 func key(malID string, ep int) string { return malID + ":" + itoa(ep) }
 
 func itoa(n int) string {
@@ -117,7 +130,15 @@ func enabledCfg() domain.AutocacheConfig {
 }
 
 func newPlannerForTest(d *fakeDrainer, p *fakePresence, e *fakeEnqueuer, s *fakeSearcher, c *fakeConfig, m *libmetrics.LibraryMetrics) *Planner {
-	return NewPlanner(d, p, e, s, c, m, nil)
+	// nil evictor → the pre-admit gate is skipped, preserving the existing cases'
+	// assertions (these tests pre-date the Phase-10 budget gate).
+	return NewPlanner(d, p, e, s, c, nil, m, nil)
+}
+
+// newPlannerWithEvictor wires a scriptable budgetEvictor so the Phase-10 pre-admit
+// gate cases can drive admit/reject/error paths.
+func newPlannerWithEvictor(d *fakeDrainer, p *fakePresence, e *fakeEnqueuer, s *fakeSearcher, c *fakeConfig, ev budgetEvictor, m *libmetrics.LibraryMetrics) *Planner {
+	return NewPlanner(d, p, e, s, c, ev, m, nil)
 }
 
 func winningRelease() []domain.Release {
@@ -324,5 +345,119 @@ func TestPlannerForgetSearchedOnPresent(t *testing.T) {
 
 	if _, ok := pl.lastSearched["9:4"]; ok {
 		t.Fatal("present-delete must forget the (mal:ep) backoff entry (WR-03 eager-eviction)")
+	}
+}
+
+// TestPlannerBudgetAdmittedEnqueues: when the Evictor admits the incoming download,
+// the Planner proceeds to the existing Create path (EVICT-05 gate passes). It also
+// asserts the estimate passed to EnsureRoom is the selected release size.
+func TestPlannerBudgetAdmittedEnqueues(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	p := &fakePresence{present: map[string]bool{}}
+	e := &fakeEnqueuer{active: map[string]bool{}}
+	s := &fakeSearcher{releases: winningRelease()} // SizeBytes: 123
+	c := &fakeConfig{cfg: enabledCfg()}
+	ev := &fakeEvictor{admitted: true}
+
+	pl := newPlannerWithEvictor(d, p, e, s, c, ev, m)
+	pl.runOnce(context.Background())
+
+	if len(e.created) != 1 {
+		t.Fatalf("budget-admitted must enqueue exactly one job, got %d", len(e.created))
+	}
+	if len(ev.calls) != 1 {
+		t.Fatalf("EnsureRoom must be called once, got %d", len(ev.calls))
+	}
+	if ev.calls[0] != 123 {
+		t.Fatalf("EnsureRoom estBytes = %d, want 123 (selected release size)", ev.calls[0])
+	}
+	if got := promValue(t, m.GetDownloadsTotalForTest("B", "enqueued")); got != 1 {
+		t.Fatalf("enqueued count = %v, want 1", got)
+	}
+}
+
+// TestPlannerBudgetRejectedLeavesDemandAndBacksOff is the EVICT-04 reject-path
+// regression: a budget-rejected demand enqueues NOTHING, increments
+// rejected_total{budget_full} + downloads_total{rejected}, LEAVES the demand row,
+// and arms the searchBackoff (T-10-08 hot-loop guard).
+func TestPlannerBudgetRejectedLeavesDemandAndBacksOff(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	p := &fakePresence{present: map[string]bool{}}
+	e := &fakeEnqueuer{active: map[string]bool{}}
+	s := &fakeSearcher{releases: winningRelease()}
+	c := &fakeConfig{cfg: enabledCfg()}
+	ev := &fakeEvictor{admitted: false} // pool can't fit
+
+	pl := newPlannerWithEvictor(d, p, e, s, c, ev, m)
+	pl.runOnce(context.Background())
+
+	if len(e.created) != 0 {
+		t.Fatalf("budget-rejected must enqueue nothing, got %d", len(e.created))
+	}
+	if len(d.deletes) != 0 {
+		t.Fatalf("budget-rejected must LEAVE the demand row, got %d deletes", len(d.deletes))
+	}
+	if got := promValue(t, m.GetRejectedTotalForTest("budget_full")); got != 1 {
+		t.Fatalf("rejected_total{budget_full} = %v, want 1", got)
+	}
+	if got := promValue(t, m.GetDownloadsTotalForTest("B", "rejected")); got != 1 {
+		t.Fatalf("downloads_total{B,rejected} = %v, want 1", got)
+	}
+	if !pl.inBackoff(demandKey("42", 5)) {
+		t.Fatal("budget-rejected must arm the searchBackoff (T-10-08 hot-loop guard)")
+	}
+}
+
+// TestPlannerBudgetErrorFailsOpen: a budget-read error must NOT drop the download —
+// the Planner fails open and proceeds to enqueue (mirrors disk-guard fail-open).
+func TestPlannerBudgetErrorFailsOpen(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	p := &fakePresence{present: map[string]bool{}}
+	e := &fakeEnqueuer{active: map[string]bool{}}
+	s := &fakeSearcher{releases: winningRelease()}
+	c := &fakeConfig{cfg: enabledCfg()}
+	ev := &fakeEvictor{admitted: false, err: liberrors.Internal("budget read blip")}
+
+	pl := newPlannerWithEvictor(d, p, e, s, c, ev, m)
+	pl.runOnce(context.Background())
+
+	if len(e.created) != 1 {
+		t.Fatalf("budget-error must fail open and enqueue, got %d jobs", len(e.created))
+	}
+	if got := promValue(t, m.GetRejectedTotalForTest("budget_full")); got != 0 {
+		t.Fatalf("budget-error must NOT increment rejected_total, got %v", got)
+	}
+	if got := promValue(t, m.GetDownloadsTotalForTest("B", "enqueued")); got != 1 {
+		t.Fatalf("enqueued count = %v, want 1", got)
+	}
+}
+
+// TestPlannerBudgetFallbackEstimate: when a selected release reports SizeBytes <= 0,
+// the Planner passes the avgRawEpSize const to EnsureRoom (not 0).
+func TestPlannerBudgetFallbackEstimate(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	p := &fakePresence{present: map[string]bool{}}
+	e := &fakeEnqueuer{active: map[string]bool{}}
+	// A qualifying release (allowlisted RAW uploader) with no reported size.
+	s := &fakeSearcher{releases: []domain.Release{{Title: "Anime - 05 [1080p]", Magnet: "magnet:?xt=urn:btih:abc", Uploader: "Ohys-Raws", Quality: "1080p", SizeBytes: 0, Seeders: 9}}}
+	c := &fakeConfig{cfg: enabledCfg()}
+	ev := &fakeEvictor{admitted: true}
+
+	pl := newPlannerWithEvictor(d, p, e, s, c, ev, m)
+	pl.runOnce(context.Background())
+
+	if len(ev.calls) != 1 {
+		t.Fatalf("EnsureRoom must be called once, got %d", len(ev.calls))
+	}
+	if ev.calls[0] != avgRawEpSize {
+		t.Fatalf("EnsureRoom estBytes = %d, want avgRawEpSize=%d (fallback)", ev.calls[0], avgRawEpSize)
 	}
 }
