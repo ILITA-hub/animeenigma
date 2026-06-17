@@ -1,6 +1,9 @@
 package repo
 
 import (
+	"os"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
@@ -80,5 +83,51 @@ func TestUpdateShikimoriID_EmptyID(t *testing.T) {
 	err := r.UpdateShikimoriID(nil, "", "12345")
 	if err == nil {
 		t.Fatalf("UpdateShikimoriID with empty job id must error")
+	}
+}
+
+// TestJobRepository_HasActiveForEpisode_Signature pins the Phase-09 single-flight
+// gate's method shape so a refactor can't silently reshape it. The DB-backed
+// behavioral assertion is integration-gated (the repo's query tests run behind
+// //go:build integration); this no-DB test guards the signature
+// (recv, ctx, shikimoriID string, episode int) → (bool, error).
+func TestJobRepository_HasActiveForEpisode_Signature(t *testing.T) {
+	rt := reflect.TypeOf(&JobRepository{})
+	m, ok := rt.MethodByName("HasActiveForEpisode")
+	if !ok {
+		t.Fatal("JobRepository.HasActiveForEpisode missing")
+	}
+	if got := m.Type.NumIn(); got != 4 {
+		t.Fatalf("HasActiveForEpisode NumIn = %d, want 4 (recv, ctx, shikimoriID, episode)", got)
+	}
+	if m.Type.In(2).Kind() != reflect.String {
+		t.Fatalf("HasActiveForEpisode shikimoriID arg must be string, got %s", m.Type.In(2))
+	}
+	if m.Type.In(3).Kind() != reflect.Int {
+		t.Fatalf("HasActiveForEpisode episode arg must be int, got %s", m.Type.In(3))
+	}
+	if m.Type.NumOut() != 2 || m.Type.Out(0).Kind() != reflect.Bool {
+		t.Fatal("HasActiveForEpisode must return (bool, error)")
+	}
+	if !m.Type.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		t.Fatal("HasActiveForEpisode second return must be error")
+	}
+}
+
+// TestJobRepository_HasActiveForEpisode_TerminalExclusionTripwire guards that the
+// single-flight gate excludes terminal statuses (a done/failed/cancelled job must
+// NOT block a re-enqueue) and keys on both shikimori_id and episode. The
+// behavioral assertion is integration-gated; this is the no-DB source tripwire.
+func TestJobRepository_HasActiveForEpisode_TerminalExclusionTripwire(t *testing.T) {
+	src, err := os.ReadFile("job.go")
+	if err != nil {
+		t.Fatalf("read job.go: %v", err)
+	}
+	s := string(src)
+	if !strings.Contains(s, "status NOT IN") {
+		t.Fatal("HasActiveForEpisode must exclude terminal statuses via `status NOT IN ?` (single-flight tripwire)")
+	}
+	if !strings.Contains(s, "shikimori_id = ? AND episode = ?") {
+		t.Fatal("HasActiveForEpisode must key on (shikimori_id, episode)")
 	}
 }

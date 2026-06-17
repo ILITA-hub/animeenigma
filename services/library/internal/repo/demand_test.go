@@ -64,3 +64,69 @@ func TestDemandRepository_Record_UpsertTripwire(t *testing.T) {
 		t.Fatal("demand.go Record must refresh requested_at on conflict (recency tripwire)")
 	}
 }
+
+// TestDemandRepository_Drain_Signature pins the Phase-09 drain primitive shape:
+// (recv, ctx, limit int) → ([]domain.AutocacheDemand, error). DB-backed ordering
+// behavior is integration-gated; this guards the signature the Planner imports.
+func TestDemandRepository_Drain_Signature(t *testing.T) {
+	rt := reflect.TypeOf(&DemandRepository{})
+	m, ok := rt.MethodByName("Drain")
+	if !ok {
+		t.Fatal("DemandRepository.Drain missing")
+	}
+	if got := m.Type.NumIn(); got != 3 {
+		t.Fatalf("Drain NumIn = %d, want 3 (recv, ctx, limit)", got)
+	}
+	if m.Type.In(2).Kind() != reflect.Int {
+		t.Fatalf("Drain limit arg must be int, got %s", m.Type.In(2))
+	}
+	if m.Type.NumOut() != 2 {
+		t.Fatalf("Drain NumOut = %d, want 2 ([]AutocacheDemand, error)", m.Type.NumOut())
+	}
+	if m.Type.Out(0) != reflect.TypeOf([]domain.AutocacheDemand(nil)) {
+		t.Fatalf("Drain first return must be []domain.AutocacheDemand, got %s", m.Type.Out(0))
+	}
+	if !m.Type.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		t.Fatal("Drain second return must be error")
+	}
+}
+
+// TestDemandRepository_Delete_Signature pins the drain-companion delete primitive:
+// (recv, ctx, malID string, episode int) → error. Deleting an absent row is a
+// no-op (integration-tested); this guards the signature.
+func TestDemandRepository_Delete_Signature(t *testing.T) {
+	rt := reflect.TypeOf(&DemandRepository{})
+	m, ok := rt.MethodByName("Delete")
+	if !ok {
+		t.Fatal("DemandRepository.Delete missing")
+	}
+	if got := m.Type.NumIn(); got != 4 {
+		t.Fatalf("Delete NumIn = %d, want 4 (recv, ctx, malID, episode)", got)
+	}
+	if m.Type.In(2).Kind() != reflect.String {
+		t.Fatalf("Delete malID arg must be string, got %s", m.Type.In(2))
+	}
+	if m.Type.In(3).Kind() != reflect.Int {
+		t.Fatalf("Delete episode arg must be int, got %s", m.Type.In(3))
+	}
+	if m.Type.NumOut() != 1 || !m.Type.Out(0).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		t.Fatal("Delete must return a single error")
+	}
+}
+
+// TestDemandRepository_Drain_OrderTripwire guards that Drain orders oldest-first by
+// requested_at (the Planner FIFO contract) and bounds the result with a Limit. The
+// behavioral DB assertion is integration-gated; this is the no-DB source tripwire.
+func TestDemandRepository_Drain_OrderTripwire(t *testing.T) {
+	src, err := os.ReadFile("demand.go")
+	if err != nil {
+		t.Fatalf("read demand.go: %v", err)
+	}
+	s := string(src)
+	if !strings.Contains(s, `Order("requested_at ASC")`) {
+		t.Fatal("demand.go Drain must Order by requested_at ASC (FIFO drain tripwire)")
+	}
+	if !strings.Contains(s, "Limit(limit)") {
+		t.Fatal("demand.go Drain must bound the batch with Limit(limit) (DoS guard T-09-02)")
+	}
+}
