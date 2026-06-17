@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Auto Torrent Population (watch-driven first-party RAW cache)
 current_plan: Not started
-status: executing
-stopped_at: v4.1 roadmap written (ROADMAP.md, REQUIREMENTS.md traceability, STATE.md)
-last_updated: "2026-06-17T05:21:54.061Z"
+status: ready_to_plan
+stopped_at: Phase 7 complete (3/3) — ready to discuss Phase 8
+last_updated: 2026-06-17T06:14:35.682Z
 last_activity: 2026-06-17 -- Phase 7 planning complete
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 
 **Core value:** A logged-in user hits play on the first-party "ae" provider and the RAW (JP-audio) episode is already there — pre-downloaded by the platform's prediction of what they're about to watch, served from a self-managing ~100 GB pool with zero admin action.
 
-**Current focus:** Roadmap approved (Phases 7-11). Next: `/gsd:plan-phase 7`.
+**Current focus:** Phase 8 — serving & fetch signal
 
 ## Current Position
 
-Phase: Not started — roadmap complete, Phase 7 next
+Phase: 8
 Plan: —
-Status: Ready to execute
-Last activity: 2026-06-17 -- Phase 7 planning complete
+Status: Ready to plan
+Last activity: 2026-06-17
 
 ## Progress
 

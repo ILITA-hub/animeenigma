@@ -10,11 +10,11 @@ Requirements for milestone v4.1. Each maps to exactly one roadmap phase.
 
 ### Storage Pool & Config (POOL)
 
-- [ ] **POOL-01**: First-party HLS is stored under `aeProvider/<MALID>/RAW/<episode>/playlist.m3u8` (RAW track only in v1; SUB/DUB branches reserved but unused).
-- [ ] **POOL-02**: Existing admin-ingested episodes are migrated one-time from `{shikimori_id}/{ep}/` into the new `aeProvider/<MALID>/RAW/<ep>/` layout without interrupting playback (copy → repoint `minio_path` → delete old).
-- [ ] **POOL-03**: `library_episodes` carries `source` (admin|autocache), `track`, `downloaded_at`, `last_fetch_at`, `fetch_count`, and `size_bytes` so one evictor can classify and account for every pool object.
-- [ ] **POOL-04**: An admin can view and edit autocache config (budget, freshness windows, active-watcher window, quality cap, min seeders, sweep interval) live via `GET/PATCH /api/admin/library/autocache/config` with no redeploy.
-- [ ] **POOL-05**: A master `enabled` switch turns all autocache downloading and eviction on/off.
+- [x] **POOL-01**: First-party HLS is stored under `aeProvider/<MALID>/RAW/<episode>/playlist.m3u8` (RAW track only in v1; SUB/DUB branches reserved but unused).
+- [x] **POOL-02**: Existing admin-ingested episodes are migrated one-time from `{shikimori_id}/{ep}/` into the new `aeProvider/<MALID>/RAW/<ep>/` layout without interrupting playback (copy → repoint `minio_path` → delete old).
+- [x] **POOL-03**: `library_episodes` carries `source` (admin|autocache), `track`, `downloaded_at`, `last_fetch_at`, `fetch_count`, and `size_bytes` so one evictor can classify and account for every pool object.
+- [x] **POOL-04**: An admin can view and edit autocache config (budget, freshness windows, active-watcher window, quality cap, min seeders, sweep interval) live via `GET/PATCH /api/admin/library/autocache/config` with no redeploy.
+- [x] **POOL-05**: A master `enabled` switch turns all autocache downloading and eviction on/off.
 
 ### Download Triggers (TRIG)
 
@@ -82,11 +82,11 @@ Which phases cover which requirements. **Filled by the roadmapper.**
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| POOL-01 | Phase 7 | Pending |
-| POOL-02 | Phase 7 | Pending |
-| POOL-03 | Phase 7 | Pending |
-| POOL-04 | Phase 7 | Pending |
-| POOL-05 | Phase 7 | Pending |
+| POOL-01 | Phase 7 | Complete |
+| POOL-02 | Phase 7 | Complete |
+| POOL-03 | Phase 7 | Complete |
+| POOL-04 | Phase 7 | Complete |
+| POOL-05 | Phase 7 | Complete |
 | SERVE-01 | Phase 8 | Pending |
 | SERVE-02 | Phase 8 | Pending |
 | SERVE-03 | Phase 8 | Pending |
