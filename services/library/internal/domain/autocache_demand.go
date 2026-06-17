@@ -7,18 +7,24 @@ import "time"
 // EpisodeSource / EpisodeTrack from migration 005 — the value is stored as the
 // enum literal, so the strings MUST match the SQL labels exactly.
 //
-// 'next_ep' is RESERVED for Phase 09's next-episode predictor: it is present in
-// the enum so no schema change is needed later, but Phase 08 only ever writes
-// 'backfill' (the serve MISS path).
+// Phase 08 only ever wrote 'backfill' (the serve MISS path). Phase 09 adds the
+// two watch-driven producers: Logic B (player next-episode pull) writes
+// 'next_ep' and Logic A (scheduler ongoing-push) writes 'ongoing' — three
+// distinct reasons so OBS-04 can attribute downloads by trigger.
 type DemandReason string
 
 const (
-	// DemandReasonNextEp is reserved for Phase 09 (next-episode prediction) —
-	// declared now, never written in this milestone phase.
+	// DemandReasonNextEp is Logic B (Phase 09): the player fired a demand for
+	// episode N+1 ahead of an active JP-audio watcher.
 	DemandReasonNextEp DemandReason = "next_ep"
-	// DemandReasonBackfill is the only reason written in Phase 08: the ae serve
-	// path missed the pool, so the episode is wanted for backfill.
+	// DemandReasonBackfill is the ae serve MISS path (Phase 08): the episode was
+	// absent from the pool, so it is wanted for backfill.
 	DemandReasonBackfill DemandReason = "backfill"
+	// DemandReasonOngoing is Logic A (Phase 09): the scheduler ongoing-push
+	// re-asserts demand for the latest-aired episode of an ongoing anime that has
+	// ≥1 active JP-audio watcher. Stored as the 'ongoing' enum literal added by
+	// migrations/010_autocache_demand_ongoing.sql.
+	DemandReasonOngoing DemandReason = "ongoing"
 )
 
 // AutocacheDemand is the Go-side mirror of an autocache_demand row defined in

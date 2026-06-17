@@ -50,3 +50,39 @@ func (r *DemandRepository) Record(ctx context.Context, malID string, episode int
 	}
 	return nil
 }
+
+// Drain returns up to `limit` autocache_demand rows ordered by requested_at ASC
+// (oldest first), the FIFO order the Phase-09 Planner consumes. The `limit` bound
+// is load-bearing (T-09-02): the Planner caps the batch so an unbounded
+// autocache_demand table can never be loaded into memory in one sweep. The repo
+// method is lifecycle-agnostic — Drain only READS; the Planner decides when to
+// Delete a satisfied row (per RESEARCH Pitfall 6, on confirmed presence, not
+// speculatively). A non-positive limit returns no rows. Errors wrap CodeInternal.
+func (r *DemandRepository) Drain(ctx context.Context, limit int) ([]domain.AutocacheDemand, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var rows []domain.AutocacheDemand
+	err := r.db.WithContext(ctx).
+		Order("requested_at ASC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "drain demand")
+	}
+	return rows, nil
+}
+
+// Delete removes the (mal_id, episode) demand row. Deleting an absent row is a
+// no-op (returns nil) — the Planner calls this once an episode is confirmed
+// present in the pool so the demand stops being re-drained. Errors wrap
+// CodeInternal.
+func (r *DemandRepository) Delete(ctx context.Context, malID string, episode int) error {
+	err := r.db.WithContext(ctx).
+		Where("mal_id = ? AND episode = ?", malID, episode).
+		Delete(&domain.AutocacheDemand{}).Error
+	if err != nil {
+		return liberrors.Wrap(err, liberrors.CodeInternal, "delete demand")
+	}
+	return nil
+}

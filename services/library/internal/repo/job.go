@@ -96,6 +96,35 @@ func (r *JobRepository) List(ctx context.Context, f JobFilter) ([]domain.Job, er
 	return jobs, nil
 }
 
+// HasActiveForEpisode is the TRIG-04 single-flight gate. It reports whether a
+// NON-TERMINAL library_jobs row already targets the given (shikimori_id,
+// episode) — i.e. a job for that episode is queued / downloading / encoding /
+// uploading and has not yet reached done|failed|cancelled. The Phase-09 Planner
+// calls this before enqueueing so a concurrent demand for the same episode
+// collapses to one job: the second drain sees the in-flight row and skips.
+//
+// Terminal rows are EXCLUDED so a previously-failed job never permanently blocks
+// a re-enqueue (a failed job goes terminal → the next drain re-attempts). The
+// episode argument keys on the intended-episode column added by migration 009.
+// Returns (false, nil) when no active row exists; non-not-found DB errors are
+// wrapped CodeInternal.
+func (r *JobRepository) HasActiveForEpisode(ctx context.Context, shikimoriID string, episode int) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.Job{}).
+		Where("shikimori_id = ? AND episode = ? AND status NOT IN ?", shikimoriID, episode, []domain.JobStatus{
+			domain.JobStatusDone,
+			domain.JobStatusFailed,
+			domain.JobStatusCancelled,
+		}).
+		Limit(1).
+		Count(&count).Error
+	if err != nil {
+		return false, liberrors.Wrap(err, liberrors.CodeInternal, "check active job for episode")
+	}
+	return count > 0, nil
+}
+
 // Claim atomically picks the oldest row whose status is in `statuses`
 // and flips it to 'downloading'. The whole thing runs in a single
 // transaction with FOR UPDATE SKIP LOCKED so two parallel workers will

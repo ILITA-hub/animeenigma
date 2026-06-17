@@ -62,6 +62,13 @@ type Job struct {
 	Quality      string     `gorm:"type:text;column:quality" json:"quality,omitempty"`
 	SizeBytes    int64      `gorm:"type:bigint;not null;default:0;column:size_bytes" json:"size_bytes"`
 	ShikimoriID  string     `gorm:"type:text;column:shikimori_id" json:"shikimori_id,omitempty"`
+	// Episode is the INTENDED episode persisted at enqueue (migration 009,
+	// Phase 09). Nullable pointer: absent (NULL) for admin/manual rows whose
+	// episode is only known after detector.DetectEpisode runs post-download;
+	// set by the Planner for autocache rows so single-flight dedup on
+	// (shikimori_id, episode) + the per-trigger download metric work before
+	// filename detection.
+	Episode      *int       `gorm:"type:int;column:episode" json:"episode,omitempty"`
 	Status       JobStatus  `gorm:"type:job_status;not null;default:queued;column:status" json:"status"`
 	ProgressPct  int        `gorm:"type:int;not null;default:0;column:progress_pct" json:"progress_pct"`
 	ErrorText    string     `gorm:"type:text;column:error_text" json:"error_text,omitempty"`
