@@ -464,3 +464,21 @@ func (m *LibraryMetrics) SetEpisodes(source, freshness string, n int64) {
 	}
 	m.episodes.WithLabelValues(source, freshness).Set(float64(n))
 }
+
+// GetBytesUsedForTest is the test-seam analogue for
+// library_autocache_bytes_used{source,freshness}.
+func (m *LibraryMetrics) GetBytesUsedForTest(source, freshness string) prometheus.Gauge {
+	return m.bytesUsed.WithLabelValues(source, freshness)
+}
+
+// GetBudgetBytesForTest is the test-seam analogue for
+// library_autocache_budget_bytes.
+func (m *LibraryMetrics) GetBudgetBytesForTest() prometheus.Gauge {
+	return m.budgetBytes
+}
+
+// GetEpisodesForTest is the test-seam analogue for
+// library_autocache_episodes{source,freshness}.
+func (m *LibraryMetrics) GetEpisodesForTest(source, freshness string) prometheus.Gauge {
+	return m.episodes.WithLabelValues(source, freshness)
+}

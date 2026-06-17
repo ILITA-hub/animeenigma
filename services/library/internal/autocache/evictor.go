@@ -32,6 +32,9 @@ type poolAccountant interface {
 	SumPoolBytes(ctx context.Context) (int64, error)
 	ListStaleEvictionCandidates(ctx context.Context, cfg *domain.AutocacheConfig, now time.Time) ([]domain.Episode, error)
 	DeleteByID(ctx context.Context, id string) error
+	// ListPool returns every aeProvider/ pool row so the Accountant sweep can bucket
+	// bytes_used + episode count per (source, freshness) via Classify (Plan 02).
+	ListPool(ctx context.Context) ([]domain.Episode, error)
 }
 
 // objectDeleter is the MinIO seam (*minio.Writer.DeletePrefix — Plan 01). It deletes
@@ -211,4 +214,150 @@ func (e *Evictor) evictOne(ctx context.Context, ep domain.Episode) error {
 		return err
 	}
 	return nil
+}
+
+// --- ticker lifecycle (mirrors planner.go:138-215, 394-407) ---
+
+// Start launches the sweep-loop goroutine. It returns immediately; the loop runs
+// until Stop() is called or ctx is cancelled. Mirrors the Planner lifecycle.
+func (e *Evictor) Start(ctx context.Context) {
+	go e.loop(ctx)
+}
+
+// Stop signals the loop to exit and waits for it (bounded by the in-flight sleep).
+// Idempotent — safe to call once or more.
+func (e *Evictor) Stop() {
+	select {
+	case <-e.stop:
+		// already stopped
+	default:
+		close(e.stop)
+	}
+	<-e.done
+}
+
+// loop is the ctx-aware sweep loop. Each iteration re-reads config live, sweeps if
+// enabled, and re-reads the cadence (sweep_interval_min) every tick so an admin PATCH
+// takes effect without a redeploy. Mirrors planner.go's loop.
+func (e *Evictor) loop(ctx context.Context) {
+	defer close(e.done)
+	for {
+		cadence := e.runOnce(ctx)
+		if !e.sleep(ctx, cadence) {
+			return
+		}
+	}
+}
+
+// runOnce performs one sweep and returns the cadence to sleep before the next. The
+// unit drives runOnce directly so it never has to wait on a ticker. When the master
+// switch is off it evicts nothing and publishes nothing (POOL-05 / T-10-06 — the
+// disabled switch halts eviction too, matching the Planner's guard).
+func (e *Evictor) runOnce(ctx context.Context) time.Duration {
+	cfg, err := e.config.Get(ctx)
+	if err != nil {
+		if e.log != nil {
+			e.log.Warnw("autocache evictor: config read failed, skipping sweep", "error", err)
+		}
+		return minSweepInterval
+	}
+	cadence := time.Duration(cfg.SweepIntervalMin) * time.Minute
+	if cadence < minSweepInterval {
+		cadence = minSweepInterval
+	}
+	if !cfg.Enabled {
+		return cadence
+	}
+	e.Sweep(ctx)
+	return cadence
+}
+
+// Sweep is the periodic Accountant + proactive reclaim. It holds e.mu (the SAME lock
+// EnsureRoom takes) so pre-admit and sweep cannot double-spend freed headroom
+// (T-10-04). It (a) proactively evicts Stale rows to keep the pool under budget by
+// reusing the EnsureRoom reclaim core with estBytes=0 ("is the pool currently within
+// budget? if not, evict Stale until it is"), then (b) refreshes the bytes_used /
+// budget_bytes / episodes gauges by listing the pool once and Classify-bucketing each
+// row. Sweep is the gauge source even when no download flows, so Phase 11 always has
+// live series.
+func (e *Evictor) Sweep(ctx context.Context) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// (a) Proactive reclaim: bring the pool to/under budget (estBytes=0).
+	if _, err := e.ensureRoomLocked(ctx, 0); err != nil {
+		if e.log != nil {
+			e.log.Warnw("autocache evictor: sweep reclaim failed", "error", err)
+		}
+		// Fall through — still publish the gauges from whatever state we can read.
+	}
+
+	// (b) Accountant: refresh the gauges. Read cfg live for the budget gauge.
+	cfg, err := e.config.Get(ctx)
+	if err != nil {
+		if e.log != nil {
+			e.log.Warnw("autocache evictor: sweep config read failed, skipping gauge refresh", "error", err)
+		}
+		return
+	}
+	e.metrics.SetBudgetBytes(cfg.BudgetBytes)
+
+	pool, err := e.pool.ListPool(ctx)
+	if err != nil {
+		if e.log != nil {
+			e.log.Warnw("autocache evictor: sweep pool list failed, skipping gauge refresh", "error", err)
+		}
+		return
+	}
+	e.publishAccountantGauges(pool, cfg)
+}
+
+// publishAccountantGauges buckets the pool by (source, freshness) and Sets the
+// bytes_used + episodes GaugeVecs. It always writes ALL four (source × freshness)
+// buckets — including the zero buckets — so a bucket that emptied since the last sweep
+// resets to 0 rather than retaining a stale value. now is read once so every row is
+// classified against the same instant.
+func (e *Evictor) publishAccountantGauges(pool []domain.Episode, cfg *domain.AutocacheConfig) {
+	now := time.Now()
+	type bucket struct{ bytes, count int64 }
+	buckets := map[domain.EpisodeSource]map[Freshness]*bucket{
+		domain.EpisodeSourceAdmin:     {FreshnessFresh: {}, FreshnessStale: {}},
+		domain.EpisodeSourceAutocache: {FreshnessFresh: {}, FreshnessStale: {}},
+	}
+	for i := range pool {
+		ep := pool[i]
+		src := ep.Source
+		if _, ok := buckets[src]; !ok {
+			// Unknown source defaults to the admin bucket (Classify already treats it
+			// as admin) so its bytes/count are still published.
+			src = domain.EpisodeSourceAdmin
+		}
+		fr := Classify(ep, cfg, now)
+		b := buckets[src][fr]
+		if ep.SizeBytes != nil {
+			b.bytes += *ep.SizeBytes
+		}
+		b.count++
+	}
+	for src, byFresh := range buckets {
+		for fr, b := range byFresh {
+			e.metrics.SetBytesUsed(string(src), string(fr), b.bytes)
+			e.metrics.SetEpisodes(string(src), string(fr), b.count)
+		}
+	}
+}
+
+// sleep is a ctx-aware + stop-aware sleep. Returns false when the loop must exit (ctx
+// cancelled or Stop signalled). Mirrors planner.go's sleep.
+func (e *Evictor) sleep(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-e.stop:
+		return false
+	case <-t.C:
+		return true
+	}
 }

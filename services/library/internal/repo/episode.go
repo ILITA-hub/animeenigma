@@ -232,3 +232,21 @@ func (r *EpisodeRepository) DeleteByID(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// ListPool returns every row in the unified first-party aeProvider/ pool (admin +
+// autocache). The Evictor's periodic Accountant sweep (Plan 02) lists the pool once
+// and Classify-buckets each row in Go to publish the per-(source,freshness)
+// bytes_used / episodes gauges — so the freshness math stays in ONE pure Go helper
+// (Classify) rather than being duplicated in SQL. The LIKE pattern is a fixed literal
+// (no user input), so it is GORM-safe inline. Ordered by created_at ASC for
+// deterministic processing.
+func (r *EpisodeRepository) ListPool(ctx context.Context) ([]domain.Episode, error) {
+	var eps []domain.Episode
+	if err := r.db.WithContext(ctx).
+		Where("minio_path LIKE 'aeProvider/%'").
+		Order("created_at ASC").
+		Find(&eps).Error; err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "list pool episodes")
+	}
+	return eps, nil
+}
