@@ -45,6 +45,27 @@ datasources:
       password: postgres
     editable: false
 
+  # The library service runs on its OWN database ("library") on the same Postgres
+  # server — the autocache pool (library_episodes/library_jobs/autocache_demand)
+  # lives there, NOT in animeenigma, so a Postgres connection is per-database and
+  # the "Latest Autocache Downloads" table panel needs this second datasource.
+  # Fixed uid (library dashboard panel binds to it); a new uid (never reuse
+  # aenigma-postgres — reusing a uid orphaned 14 alert rules before).
+  - name: PostgreSQL Library
+    uid: aenigma-postgres-library
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: postgres
+    jsonData:
+      database: library
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: postgres
+    editable: false
+
   # Phase 6 (06-03) — the Tempo datasource was REMOVED at the Topology-A cutover.
   # Traces now render from the ClickHouse datasource below (analytics.otel_traces,
   # OTel trace builder). The Tempo serviceMap / tracesToMetrics convenience config
