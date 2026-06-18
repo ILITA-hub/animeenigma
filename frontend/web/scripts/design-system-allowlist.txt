@@ -15,13 +15,7 @@
 # (migrate-to-token vs justified-allowlist) — see DESIGN-SYSTEM.md.
 
 # --- Per-provider / player accent identity hues (Phase-4 documented) -----------
-src/components/player/OurEnglishPlayer.vue:#22d3ee:OurEnglish player-accent (cyan-400) provider-identity hue declared as --player-accent CSS var on root, not a token
-src/components/player/RawPlayer.vue:#22d3ee:Raw player-accent (cyan-400) provider-identity hue declared as --player-accent CSS var on root
 src/components/player/KodikPlayer.vue:#06b6d4:Kodik player-accent (cyan) provider-identity hue, not a token
-src/components/player/KodikAdFreePlayer.vue:#06b6d4:Kodik ad-free player-accent (same cyan as KodikPlayer) provider-identity hue, not a token
-src/components/player/AnimeLibPlayer.vue:#f97316:AniLib player-accent (orange) provider-identity hue, not a token
-src/components/player/HanimePlayer.vue:#ec4899:Hanime player-accent (pink) provider-identity hue, not a token
-src/components/player/Anime18Player.vue:#f43f5e:18anime player-accent (rose) provider-identity hue, not a token
 src/components/browse/BrowseSidebar.vue:#f97316:AniLib provider-identity hue (orange) — decorative accent, mirrors --player-accent seed
 
 # --- Subtitle render defaults (SubtitleOverlay) --------------------------------
