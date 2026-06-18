@@ -610,6 +610,8 @@ function applyInitialProvider() {
   if (!id) return
   providerAutoSelected = false // user-intent pin, not an auto-selection
   state.setProvider(id, '')
+  // audio/lang intentionally left as-resolved (saved prefs / defaults); the team
+  // title is matched best-effort within them by the downstream resolver.
   if (props.initialTeam) state.setTeam(props.initialTeam)
 }
 
