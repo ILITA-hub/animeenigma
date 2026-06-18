@@ -191,3 +191,4 @@ src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(255,214,0,0.
 src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(167,139,250,0.5):SR card shadow glow — gacha rarity identity; no token at this alpha
 src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(255,255,255,0.4):tilt3d sheen radial — interactive highlight on 3D card hover; no alpha token
 src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(4,4,10,0.72):dialog backdrop — near-black scrim for card detail modal; no token at this depth
+src/components/profile/showcase/blocks/CompatibilityBlock.vue:#fff:gradient-text stop — #fff→success conic percent display; pure white gradient stop, no DS token at this anchor

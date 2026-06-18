@@ -1785,7 +1785,9 @@
       "favorite_character": "お気に入りのキャラクター",
       "card_collection": "カードコレクション",
       "continue_watching": "視聴中",
-      "anime_dna": "Anime DNA"
+      "anime_dna": "Anime DNA",
+      "op_ed": "お気に入りのOP/ED",
+      "compatibility": "相性"
     },
     "about_placeholder": "自己紹介を書いてください…",
     "about_title_placeholder": "タイトル",
@@ -1798,6 +1800,11 @@
       "others": "コレクション内",
       "favCard": "★ お気に入りカード",
       "holoFoil": "ホロフォイル"
+    },
+    "compat": {
+      "match": "一致",
+      "heading": "共通点が多いです",
+      "in_common": "共通タイトル"
     }
   }
 }

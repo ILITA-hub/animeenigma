@@ -1785,7 +1785,9 @@
       "favorite_character": "Любимые персонажи",
       "card_collection": "Коллекция карточек",
       "continue_watching": "Сейчас смотрю",
-      "anime_dna": "Anime DNA"
+      "anime_dna": "Anime DNA",
+      "op_ed": "Любимые OP/ED",
+      "compatibility": "Совместимость"
     },
     "about_placeholder": "Расскажите о себе…",
     "about_title_placeholder": "Заголовок",
@@ -1798,6 +1800,11 @@
       "others": "Ещё в коллекции",
       "favCard": "★ Любимая карта",
       "holoFoil": "Holo-фойл"
+    },
+    "compat": {
+      "match": "совпало",
+      "heading": "У вас много общего",
+      "in_common": "общих тайтлов"
     }
   }
 }

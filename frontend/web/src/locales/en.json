@@ -1785,7 +1785,9 @@
       "favorite_character": "Favorite characters",
       "card_collection": "Card collection",
       "continue_watching": "Continue watching",
-      "anime_dna": "Anime DNA"
+      "anime_dna": "Anime DNA",
+      "op_ed": "Favorite OP/ED",
+      "compatibility": "Compatibility"
     },
     "about_placeholder": "Tell others about yourself…",
     "about_title_placeholder": "Title",
@@ -1798,6 +1800,11 @@
       "others": "Also in collection",
       "favCard": "★ Favorite card",
       "holoFoil": "Holo-foil"
+    },
+    "compat": {
+      "match": "match",
+      "heading": "You have a lot in common",
+      "in_common": "titles in common"
     }
   }
 }
