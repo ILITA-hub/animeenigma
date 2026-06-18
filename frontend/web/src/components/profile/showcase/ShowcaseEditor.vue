@@ -215,8 +215,8 @@ defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes, o
           <ShowcaseBlockView :block="element" :user-id="userId" :is-owner="true" />
         </div>
 
-        <!-- Top-left controls: configure + remove (corner icons, like the design mock) -->
-        <div class="absolute left-1.5 top-1.5 z-20 flex items-center gap-1.5">
+        <!-- Top-right controls: configure + remove (in line with the block title) -->
+        <div class="absolute right-1.5 top-1.5 z-20 flex items-center gap-1.5">
           <button
             type="button"
             :data-test="`showcase-config-${index}`"
