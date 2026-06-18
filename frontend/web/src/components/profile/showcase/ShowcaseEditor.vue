@@ -9,6 +9,7 @@ import { MAX_SHOWCASE_BLOCKS, SHOWCASE_VARIANTS, defaultVariant, sizeFor, clampS
 import { userApi } from '@/api/client'
 import { gachaApi } from '@/api/gacha'
 import ShowcaseBlockView from './ShowcaseBlockView.vue'
+import ShowcaseConfigDialog from './ShowcaseConfigDialog.vue'
 
 // Narrow an 'about' block's config to AboutConfig for v-model binding. Returns
 // the SAME object reference, so v-model assignments still mutate element.config.
@@ -189,6 +190,16 @@ const pickerOpen = ref(false)
 function usedTypes(): Set<string> { return new Set(local.value.map((b) => b.type)) }
 function pick(type: ShowcaseBlockType) { addBlock(type); pickerOpen.value = false }
 
+// ── Config dialog ─────────────────────────────────────────────────
+const configIdx = ref<number | null>(null)
+function openConfig(i: number) { configIdx.value = i }
+function closeConfig() { configIdx.value = null }
+function onBlockUpdate(updated: ShowcaseBlock) {
+  if (configIdx.value !== null) {
+    local.value[configIdx.value] = updated
+  }
+}
+
 // Drag-to-swap state (native HTML5 drag events — no new packages)
 const dragSrcIdx = ref<number | null>(null)
 
@@ -216,7 +227,7 @@ function blockSpanClasses(el: ShowcaseBlock): string {
   return spanClasses(el.w || s.defW, el.h || s.defH)
 }
 
-defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes })
+defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes, openConfig, closeConfig, configIdx })
 </script>
 
 <template>
@@ -294,14 +305,22 @@ defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes })
             <span class="showcase-drag-handle cursor-grab text-xs font-semibold text-foreground">
               ⠿ {{ $t(`showcase.block.${element.type}`) }}
             </span>
-            <button
-              type="button"
-              :data-test="`showcase-remove-${index}`"
-              class="text-xs font-medium text-destructive"
-              @click="removeBlock(index)"
-            >
-              {{ $t('showcase.remove_block') }}
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                :data-test="`showcase-config-${index}`"
+                class="text-xs font-medium text-brand-cyan hover:text-foreground"
+                @click.stop="openConfig(index)"
+              >⚙</button>
+              <button
+                type="button"
+                :data-test="`showcase-remove-${index}`"
+                class="text-xs font-medium text-destructive"
+                @click="removeBlock(index)"
+              >
+                {{ $t('showcase.remove_block') }}
+              </button>
+            </div>
           </div>
 
           <!-- Variant picker — only for types with >1 variant -->
@@ -434,6 +453,17 @@ defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes })
         {{ $t('showcase.cancel') }}
       </button>
     </div>
+
+    <!-- Per-block config dialog — teleport to body to escape overflow clips -->
+    <Teleport to="body">
+      <ShowcaseConfigDialog
+        v-if="configIdx !== null && local[configIdx]"
+        :block="local[configIdx]"
+        :user-id="userId"
+        @update:block="onBlockUpdate"
+        @close="closeConfig"
+      />
+    </Teleport>
   </div>
 </template>
 
