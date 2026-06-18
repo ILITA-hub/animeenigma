@@ -268,10 +268,9 @@ async function bootstrap() {
     const snap = await getRoom(roomId, auth.isAuthenticated ? undefined : auth.wtGuestToken)
     lastAnimeId.value = snap.room.anime_id
     // Fetch the anime detail aePlayer needs (best-effort; does not block the
-    // room connect or gate the live view). Only aePlayer rooms consume it,
-    // but fetching unconditionally keeps the flow simple and the result
-    // cheap (a single cached GET /anime/{id}).
-    void loadAeAnimeMeta(snap.room.anime_id)
+    // room connect or gate the live view). Only aePlayer rooms consume it, so
+    // skip the GET for legacy-player rooms.
+    if (snap.room.player === 'aeplayer') void loadAeAnimeMeta(snap.room.anime_id)
     // Plan 05.5: persist for WS-only room:closed events that may arrive
     // after the composable resets its `room` ref. Privacy modes throw on
     // sessionStorage; silent failure is OK — the in-memory ref still
