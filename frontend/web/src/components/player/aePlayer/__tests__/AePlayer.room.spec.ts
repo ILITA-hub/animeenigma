@@ -264,3 +264,88 @@ describe('AePlayer — WT room sync (Sub-Part B: pin to room combo)', () => {
     expect(combo.server).toBe('kiwi')
   })
 })
+
+// Invoke the exposed __setProvider seam to simulate a genuine local user pick.
+function setProvider(wrapper: ReturnType<typeof mountPlayer>, id: string, server: string) {
+  ;(wrapper.vm as unknown as { __setProvider: (id: string, server: string) => void }).__setProvider(
+    id,
+    server,
+  )
+}
+
+describe('AePlayer — WT room sync (Sub-Part C: broadcast combo + episode)', () => {
+  it('does NOT echo the combo back to the room when applied FROM the room (join)', async () => {
+    const token = comboToToken({
+      provider: 'allanime', audio: 'sub', lang: 'en', team: null, server: 'wixmp',
+    })
+    const room = makeRoom({ player: 'aeplayer', translation_id: token })
+    const wrapper = mountPlayer(room)
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    // The combo is now 'allanime' (applied from the room) — but the player must
+    // not have broadcast it back (no echo on join).
+    expect(readCombo(wrapper).provider).toBe('allanime')
+    expect(room.emitChangeTranslation).not.toHaveBeenCalled()
+
+    // A remote source switch also must not echo.
+    room.room.value!.translation_id = comboToToken({
+      provider: 'miruro', audio: 'sub', lang: 'en', team: null, server: 'kiwi',
+    })
+    await nextTick()
+    await flushPromises()
+    expect(room.emitChangeTranslation).not.toHaveBeenCalled()
+  })
+
+  it('broadcasts a genuine LOCAL combo change to the room', async () => {
+    const token = comboToToken({
+      provider: 'allanime', audio: 'sub', lang: 'en', team: null, server: 'wixmp',
+    })
+    const room = makeRoom({ player: 'aeplayer', translation_id: token })
+    const wrapper = mountPlayer(room)
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    room.emitChangeTranslation.mockClear()
+
+    // User picks a different provider locally.
+    setProvider(wrapper, 'gogoanime', '')
+    await nextTick()
+    await flushPromises()
+
+    expect(room.emitChangeTranslation).toHaveBeenCalledTimes(1)
+    const sent = room.emitChangeTranslation.mock.calls[0][0] as string
+    expect(comboToToken(readCombo(wrapper) as never)).toBe(sent)
+    const parsed = JSON.parse(sent) as { provider: string }
+    expect(parsed.provider).toBe('gogoanime')
+  })
+
+  it('emits a local episode change to the room and applies a remote episode change', async () => {
+    const token = comboToToken({
+      provider: 'allanime', audio: 'sub', lang: 'en', team: null, server: 'wixmp',
+    })
+    const room = makeRoom({ player: 'aeplayer', translation_id: token, episode_id: '' })
+    const wrapper = mountPlayer(room)
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    // Local episode pick → emitChangeEpisode with the episode NUMBER as string.
+    const vm = wrapper.vm as unknown as {
+      onSelectEpisode: (ep: { key: number; label: number; number: number }) => void
+    }
+    vm.onSelectEpisode({ key: 4, label: 4, number: 4 })
+    await nextTick()
+    await flushPromises()
+    expect(room.emitChangeEpisode).toHaveBeenCalledWith('4')
+
+    // Remote episode change → room.episode_id mutates; the player adopts it
+    // WITHOUT re-emitting (no echo).
+    room.emitChangeEpisode.mockClear()
+    room.room.value!.episode_id = '7'
+    await nextTick()
+    await flushPromises()
+    expect(room.emitChangeEpisode).not.toHaveBeenCalled()
+  })
+})

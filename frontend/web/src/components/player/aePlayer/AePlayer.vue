@@ -299,6 +299,7 @@ import {
   ref,
   computed,
   watch,
+  nextTick,
   onMounted,
   onUnmounted,
 } from 'vue'
@@ -347,7 +348,7 @@ import { rankedProviderIds } from '@/composables/aePlayer/rankedProviderIds'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
-import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo } from '@/composables/aePlayer/comboMapping'
+import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
 import { useToast } from '@/composables/useToast'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
@@ -416,6 +417,15 @@ if (props.room) {
 // saved-combo restore) is suppressed.
 const roomPinned = computed(() => !!props.room)
 
+// Guard so the combo-broadcast watcher does not echo a combo we applied FROM
+// the room back TO the room. Set true around every applyRoomCombo, cleared on
+// the next tick once the deep combo watcher has observed the change.
+let applyingRoomCombo = false
+
+// Guard so a room-driven episode switch does not re-emit the episode change to
+// the room (which would loop forever). Mirrors OurEnglishPlayer's fromRoomSync.
+let applyingRoomEpisode = false
+
 // Parse a WT room token (carried in `translation_id`) and apply it wholesale to
 // the player's combo. The room is the single source of truth for the source, so
 // every field (audio/lang/team/provider/server) is set from the token.
@@ -423,6 +433,7 @@ function applyRoomCombo(token: string | undefined | null) {
   if (!token) return
   const fields = tokenToCombo(token)
   if (!fields) return
+  applyingRoomCombo = true
   state.combo.value = {
     audio: fields.audio,
     lang: fields.lang,
@@ -430,22 +441,72 @@ function applyRoomCombo(token: string | undefined | null) {
     provider: fields.provider,
     server: fields.server,
   }
+  // Release after Vue flushes the deep combo watcher for this change so the
+  // broadcast watcher sees applyingRoomCombo===true and skips the echo.
+  void nextTick(() => {
+    applyingRoomCombo = false
+  })
 }
 
 // Apply the room's combo on mount and on every remote source switch. immediate
-// so a joiner adopts the room's source before its own auto-select can run.
+// so a joiner adopts the room's source before its own (non-immediate) broadcast
+// watcher can fire — guaranteeing no echo of the room's own combo on join.
 if (props.room) {
   watch(
     () => props.room?.room.value?.translation_id,
     (tid) => applyRoomCombo(tid),
     { immediate: true },
   )
+
+  // Broadcast a genuine LOCAL source change to the room. NOT immediate, so the
+  // initial (room-applied) combo is the watcher's baseline and never echoes.
+  // Skipped while applyingRoomCombo (a remote apply) or when no real provider
+  // is picked yet (provider==='' is the un-resolved initial state).
+  watch(
+    () => state.combo.value,
+    (combo) => {
+      if (!props.room || applyingRoomCombo || !combo.provider) return
+      props.room.emitChangeTranslation(
+        comboToToken({
+          provider: combo.provider,
+          audio: combo.audio,
+          lang: combo.lang,
+          team: combo.team,
+          server: combo.server,
+        }),
+      )
+    },
+    { deep: true },
+  )
+
+  // Adopt a remote episode change. The room's episode_id carries the episode
+  // NUMBER as a string for aeplayer rooms. Switch the local episode under the
+  // applyingRoomEpisode guard so onSelectEpisode does not re-emit it.
+  watch(
+    () => props.room?.room.value?.episode_id,
+    (epId) => {
+      if (!epId) return
+      const num = Number(epId)
+      if (!Number.isFinite(num)) return
+      if (selectedEpisode.value?.number === num) return
+      const ep =
+        episodes.value.find((e) => e.number === num) ??
+        ({ key: num, label: num, number: num } as EpisodeOption)
+      applyingRoomEpisode = true
+      try {
+        onSelectEpisode(ep)
+      } finally {
+        applyingRoomEpisode = false
+      }
+    },
+  )
 }
 
-// Test seam: expose the live combo ref so WT room-sync specs can assert the
-// applied/pinned combo without mocking usePlayerState (which hands every caller
-// an independent instance). No production consumer reads this.
-defineExpose({ __combo: state.combo })
+// Test seam: expose the live combo ref + a setter so WT room-sync specs can
+// assert the applied/pinned combo and simulate a genuine local source change
+// without mocking usePlayerState (which hands every caller an independent
+// instance). No production consumer reads these.
+defineExpose({ __combo: state.combo, __setProvider: state.setProvider, onSelectEpisode })
 
 // ─── Provider health filter ───────────────────────────────────────────────────
 
@@ -1185,6 +1246,12 @@ function onSelectProvider(id: string) {
 function onSelectEpisode(ep: EpisodeOption) {
   openMenu.value = null
   if (selectedEpisode.value?.number === ep.number) return
+  // WT: broadcast a genuine local episode pick to the room. Skipped when this
+  // switch was itself driven by a remote room change (applyingRoomEpisode) so
+  // the echo doesn't loop. The room's episode_id carries the episode number.
+  if (props.room && !applyingRoomEpisode) {
+    props.room.emitChangeEpisode(String(ep.number))
+  }
   resetSourceSwitching() // new episode — fresh switch budget
   tracking.saveNow() // persist the outgoing episode's position
   selectedEpisode.value = ep
