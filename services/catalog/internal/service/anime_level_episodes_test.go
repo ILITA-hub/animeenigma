@@ -72,11 +72,27 @@ func TestAnimeLevel_EnglishSub_MaxEpisode(t *testing.T) {
 	}
 }
 
-func TestAnimeLevel_EnglishDub_NotSupportedYet(t *testing.T) {
-	r := newResolver(fakeFinder{anime: &domain.Anime{ID: "uuid-1"}}, fakeScraper{status: 200, body: []byte(`{"data":{"episodes":[{"number":1}]}}`)}, fakeRaw{})
+func TestAnimeLevel_EnglishDub_MaxWhereHasDub(t *testing.T) {
+	r := newResolver(
+		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
+		fakeScraper{status: 200, body: []byte(`{"data":{"episodes":[{"number":1,"has_dub":true},{"number":2,"has_dub":true},{"number":3,"has_dub":false}]}}`)},
+		fakeRaw{},
+	)
+	latest, _, err := r.Latest(context.Background(), "57466", "english", "dub")
+	if err != nil || latest != 2 {
+		t.Fatalf("english dub latest = %d, err = %v; want 2, nil", latest, err)
+	}
+}
+
+func TestAnimeLevel_EnglishDub_NoneIsNotFound(t *testing.T) {
+	r := newResolver(
+		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
+		fakeScraper{status: 200, body: []byte(`{"data":{"episodes":[{"number":1,"has_dub":false},{"number":2}]}}`)},
+		fakeRaw{},
+	)
 	_, _, err := r.Latest(context.Background(), "57466", "english", "dub")
 	if err == nil || !isNotFoundLike(err) {
-		t.Fatalf("english dub err = %v, want a NotFound-like error", err)
+		t.Fatalf("english dub (no dub eps) err = %v; want NotFound-like", err)
 	}
 }
 

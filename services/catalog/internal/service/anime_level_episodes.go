@@ -56,13 +56,7 @@ func (r *animeLevelResolver) Latest(ctx context.Context, shikimoriID, player, wa
 
 	switch player {
 	case "english":
-		if watchType == "dub" {
-			// Phase 2 resolves dub via the scraper has_dub flags. Until then,
-			// report "no episode" so the detector skips dub combos silently
-			// rather than claiming the sub count for dub.
-			return 0, "", apperrors.NotFound("no english dub episode lookup yet")
-		}
-		return r.latestEnglishSub(ctx, anime.ID)
+		return r.latestEnglish(ctx, anime.ID, watchType)
 	case "ae":
 		return maxRawEpisode(r.raw.GetLibraryEpisodes(ctx, anime.ID))
 	case "raw":
@@ -72,9 +66,11 @@ func (r *animeLevelResolver) Latest(ctx context.Context, shikimoriID, player, wa
 	}
 }
 
-// latestEnglishSub takes the max episode number from the scraper's merged
-// episode list (sub-complete; sub is the reliable floor for an ongoing title).
-func (r *animeLevelResolver) latestEnglishSub(ctx context.Context, animeID string) (int, string, error) {
+// latestEnglish resolves the latest episode for the english (EN-scraper) family.
+// Sub = max episode number in the merged list. Dub = max number among episodes
+// the scraper tagged has_dub (none ⇒ NotFound, so the detector skips silently
+// rather than claiming the sub count for dub).
+func (r *animeLevelResolver) latestEnglish(ctx context.Context, animeID, watchType string) (int, string, error) {
 	status, body, err := r.scraper.GetScraperEpisodes(ctx, animeID, "")
 	if err != nil {
 		return 0, "", apperrors.Wrap(err, apperrors.CodeUnavailable, "scraper episodes lookup failed")
@@ -85,14 +81,28 @@ func (r *animeLevelResolver) latestEnglishSub(ctx context.Context, animeID strin
 	var resp struct {
 		Data struct {
 			Episodes []struct {
-				Number int `json:"number"`
+				Number int  `json:"number"`
+				HasDub bool `json:"has_dub"`
 			} `json:"episodes"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return 0, "", apperrors.Wrap(err, apperrors.CodeInternal, "decode scraper episodes")
 	}
-	max := maxEpisodeNum(len(resp.Data.Episodes), func(i int) int { return resp.Data.Episodes[i].Number })
+	eps := resp.Data.Episodes
+	if watchType == "dub" {
+		max := 0
+		for _, e := range eps {
+			if e.HasDub && e.Number > max {
+				max = e.Number
+			}
+		}
+		if max == 0 {
+			return 0, "", apperrors.NotFound("no english dub episodes returned")
+		}
+		return max, "", nil
+	}
+	max := maxEpisodeNum(len(eps), func(i int) int { return eps[i].Number })
 	if max == 0 {
 		return 0, "", apperrors.NotFound("no english episodes returned")
 	}
