@@ -96,16 +96,18 @@ var defaultProviders = []domain.ScraperProvider{
 		SupportsDub: true, SubDelivery: "none", PreferenceWeight: 0,
 	},
 	{
-		Name: "animelib", Status: domain.StatusEnabled,
-		Reason:      "RU direct-MP4 player (legacy, slated for retirement)",
-		Description: "AniLib direct MP4. Retiring in favor of aePlayer (2026-06-17).",
+		Name: "animelib", Status: domain.StatusDisabled,
+		Reason:      "RU direct-MP4 player retired (Plan B)",
+		Description: "AniLib direct MP4. Player surface retired in favor of aePlayer; " +
+			"content dropped (2026-06-18, Plan B).",
 		SupportsDub: true, SubDelivery: "none",
 		QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
 	{
-		Name: "hanime", Status: domain.StatusEnabled,
-		Reason:      "18+ HLS player (legacy, slated for retirement)",
-		Description: "Hanime HLS. Retiring in favor of aePlayer (2026-06-17).",
+		Name: "hanime", Status: domain.StatusDisabled,
+		Reason:      "18+ HLS player retired (Plan B)",
+		Description: "Hanime HLS. Player surface retired in favor of aePlayer; " +
+			"content dropped (2026-06-18, Plan B).",
 		SubDelivery: "none", QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
 	{

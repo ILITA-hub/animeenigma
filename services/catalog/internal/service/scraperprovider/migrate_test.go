@@ -53,6 +53,62 @@ func TestRenameScraperProvidersTable_IdempotentOnFreshDB(t *testing.T) {
 	}
 }
 
+func TestRetireHanimeAnimelib_DisablesExactlyThoseTwo(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := scraperprovider.RetireHanimeAnimelib(db); err != nil {
+		t.Fatalf("retire: %v", err)
+	}
+
+	var hanime, animelib, kodik domain.ScraperProvider
+	db.First(&hanime, "name = ?", "hanime")
+	db.First(&animelib, "name = ?", "animelib")
+	db.First(&kodik, "name = ?", "kodik")
+
+	if hanime.Status != domain.StatusDisabled {
+		t.Errorf("hanime status = %q, want disabled", hanime.Status)
+	}
+	if animelib.Status != domain.StatusDisabled {
+		t.Errorf("animelib status = %q, want disabled", animelib.Status)
+	}
+	// Control: a sibling legacy row must NOT be touched.
+	if kodik.Status == domain.StatusDisabled {
+		t.Errorf("kodik status = %q, must NOT be disabled by RetireHanimeAnimelib", kodik.Status)
+	}
+}
+
+func TestRetireHanimeAnimelib_GuardedDoesNotClobberReEnable(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := scraperprovider.RetireHanimeAnimelib(db); err != nil {
+		t.Fatalf("retire1: %v", err)
+	}
+	// Operator manually re-enables hanime later.
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "hanime").
+		Update("status", domain.StatusEnabled)
+
+	// Second boot: the guarded migration must NOT clobber the operator's re-enable.
+	if err := scraperprovider.RetireHanimeAnimelib(db); err != nil {
+		t.Fatalf("retire2: %v", err)
+	}
+	var hanime domain.ScraperProvider
+	db.First(&hanime, "name = ?", "hanime")
+	if hanime.Status != domain.StatusEnabled {
+		t.Errorf("hanime status = %q, want enabled (guarded migration clobbered operator re-enable)", hanime.Status)
+	}
+}
+
 func TestBackfillScraperOperated_SetsIntrinsicFlag(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

@@ -2,6 +2,7 @@ package scraperprovider
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"gorm.io/gorm"
@@ -19,6 +20,53 @@ func RenameScraperProvidersTable(db *gorm.DB) error {
 		if err := db.Exec("ALTER TABLE scraper_providers RENAME TO stream_providers").Error; err != nil {
 			return fmt.Errorf("rename scraper_providers -> stream_providers: %w", err)
 		}
+	}
+	return nil
+}
+
+// migrationGuard is a tiny key→applied ledger that records one-time data
+// migrations so they don't re-run on every boot. Kept in its OWN table (not a
+// sentinel row inside stream_providers) so it can never leak into a roster read /
+// served provider list / Prometheus series. Mirrors the schema-state guard
+// philosophy of RenameScraperProvidersTable, but for a status-flip that has no
+// schema signal of its own.
+type migrationGuard struct {
+	Key       string    `gorm:"primaryKey;size:64"`
+	AppliedAt time.Time `gorm:"autoCreateTime"`
+}
+
+func (migrationGuard) TableName() string { return "catalog_migration_guards" }
+
+// retireHanimeAnimelibGuardKey marks RetireHanimeAnimelib as applied.
+const retireHanimeAnimelibGuardKey = "retire_hanime_animelib"
+
+// RetireHanimeAnimelib disables the hanime + animelib roster rows exactly once
+// (Plan B: those player surfaces are retired and their content dropped). RUN-ONCE
+// guarded via the catalog_migration_guards ledger, so on every subsequent boot it
+// is a no-op and an operator who later re-enables either row in the DB is NOT
+// clobbered. All other rows (ae, kodik, raw, 18anime, the EN scraper chain) are
+// untouched. Idempotent; safe to call every boot.
+func RetireHanimeAnimelib(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", retireHanimeAnimelibGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check retire-hanime-animelib guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber later operator re-enables
+	}
+
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("name IN ?", []string{"hanime", "animelib"}).
+		Update("status", domain.StatusDisabled).Error; err != nil {
+		return fmt.Errorf("retire hanime+animelib (status=disabled): %w", err)
+	}
+
+	if err := db.Create(&migrationGuard{Key: retireHanimeAnimelibGuardKey}).Error; err != nil {
+		return fmt.Errorf("write retire-hanime-animelib guard: %w", err)
 	}
 	return nil
 }

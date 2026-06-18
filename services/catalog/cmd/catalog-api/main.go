@@ -160,6 +160,13 @@ func main() {
 		log.Errorw("backfill scraper_operated failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) retirement of the hanime + animelib roster rows (Plan B:
+	// those player surfaces are retired, content dropped). Run-once via a sentinel
+	// guard row, so a later operator re-enable in the DB is never clobbered.
+	if err := scraperprovider.RetireHanimeAnimelib(db.DB); err != nil {
+		log.Errorw("retire hanime+animelib failed (continuing)", "error", err)
+	}
+
 	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
 	// provider_info/provider_enabled management metrics. Runs after the roster is
 	// fully migrated/seeded/backfilled so names + flags are authoritative. The
