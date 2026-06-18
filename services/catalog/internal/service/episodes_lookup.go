@@ -49,6 +49,7 @@ type EpisodesLookupService struct {
 	animelibClient *animelib.Client
 	animeRepo      *repo.AnimeRepository
 	catalogService *CatalogService // for ResolveAnimeLibID
+	animeLevel     *animeLevelResolver
 	log            *logger.Logger
 }
 
@@ -62,6 +63,7 @@ func NewEpisodesLookupService(
 	animelibClient *animelib.Client,
 	animeRepo *repo.AnimeRepository,
 	catalogService *CatalogService,
+	rawResolver *RawResolver,
 	log *logger.Logger,
 ) *EpisodesLookupService {
 	return &EpisodesLookupService{
@@ -70,6 +72,7 @@ func NewEpisodesLookupService(
 		animelibClient: animelibClient,
 		animeRepo:      animeRepo,
 		catalogService: catalogService,
+		animeLevel:     &animeLevelResolver{finder: animeRepo, scraper: catalogService, raw: rawResolver},
 		log:            log,
 	}
 }
@@ -94,7 +97,8 @@ func (s *EpisodesLookupService) LatestAvailable(
 	if shikimoriID == "" {
 		return EpisodesLookupResult{}, apperrors.InvalidInput("shikimori_id required")
 	}
-	if translationID == "" {
+	animeLevel := isAnimeLevelPlayer(player)
+	if !animeLevel && translationID == "" {
 		return EpisodesLookupResult{}, apperrors.InvalidInput("translation_id required")
 	}
 
@@ -113,15 +117,17 @@ func (s *EpisodesLookupService) LatestAvailable(
 		err              error
 	)
 
-	switch player {
-	case "kodik":
+	switch {
+	case animeLevel:
+		latest, translationTitle, err = s.animeLevel.Latest(ctx, shikimoriID, player, watchType)
+	case player == "kodik":
 		tid, parseErr := strconv.Atoi(translationID)
 		if parseErr != nil {
 			return EpisodesLookupResult{}, apperrors.InvalidInput(
 				fmt.Sprintf("translation_id must be numeric for kodik: %v", parseErr))
 		}
 		latest, translationTitle, err = s.kodikClient.LatestEpisodeForTranslation(shikimoriID, tid)
-	case "animelib":
+	case player == "animelib":
 		if watchType != "sub" && watchType != "dub" {
 			return EpisodesLookupResult{}, apperrors.InvalidInput(
 				"watch_type must be sub or dub for animelib")

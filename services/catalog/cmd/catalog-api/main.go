@@ -321,6 +321,7 @@ func main() {
 		catalogService.AnimeLibClient(),
 		animeRepo,
 		catalogService,
+		rawResolver,
 		log,
 	)
 	internalEpisodesHandler := handler.NewInternalEpisodesHandler(episodesLookupService, log)
