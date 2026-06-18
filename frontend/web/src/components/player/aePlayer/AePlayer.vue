@@ -341,6 +341,7 @@ import { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
 import { providerById, CURATED_TIER } from './providerRegistry'
 import { pickSmartDefault } from '@/composables/aePlayer/smartDefault'
+import { pickInitialProvider } from '@/composables/aePlayer/initialProvider'
 import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rankedProviderIds } from '@/composables/aePlayer/rankedProviderIds'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
@@ -372,6 +373,11 @@ const props = defineProps<{
   theater: boolean
   isHentai?: boolean
   initialEpisode?: number
+  /** Notification deep-link: aePlayer provider id to pin on mount (e.g. 'kodik').
+   *  Ignored unless it names a real, active provider row. */
+  initialProvider?: string
+  /** Notification deep-link: team TITLE to preselect alongside initialProvider. */
+  initialTeam?: string
   /** Shikimori id (= MAL id) for AniSkip skip-times. Absent ⇒ no skip UI. */
   malId?: string | number
 }>()
@@ -593,6 +599,20 @@ function applyResolvedCombo() {
   if (team) state.setTeam(team)
 }
 
+// Notification deep-link override: pin the provider the user was watching
+// BEFORE the smart default runs. Honored only for a real, active provider
+// row (coarse/legacy/unavailable values fall through to the smart default).
+// Runs after applyResolvedCombo so initialTeam wins over the saved-pref team,
+// and after setAudio/setLang (which reset team → null) so the team sticks.
+function applyInitialProvider() {
+  if (state.combo.value.provider) return
+  const id = pickInitialProvider(props.initialProvider, rows.value)
+  if (!id) return
+  providerAutoSelected = false // user-intent pin, not an auto-selection
+  state.setProvider(id, '')
+  if (props.initialTeam) state.setTeam(props.initialTeam)
+}
+
 // evaluated exactly once at first-active rows (resolveAttempted guards re-run)
 const buildAvailable = (): WatchCombo[] => {
   const combos: WatchCombo[] = []
@@ -626,6 +646,7 @@ watch(rows, () => {
   resolveAttempted = true
   resolvePreference(available).finally(() => {
     applyResolvedCombo()
+    applyInitialProvider()
     preferenceSettled.value = true
   })
 }, { immediate: true })
