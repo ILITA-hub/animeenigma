@@ -8,7 +8,7 @@ const row = (id: string, state: ProviderRow['state']): ProviderRow =>
 const rows: ProviderRow[] = [
   row('kodik', 'active'),
   row('gogoanime', 'active'),
-  row('animelib', 'inactive'),
+  row('animelib', 'down'),
 ]
 
 describe('pickInitialProvider', () => {
@@ -16,7 +16,7 @@ describe('pickInitialProvider', () => {
     expect(pickInitialProvider('kodik', rows)).toBe('kodik')
   })
 
-  it('returns null for an inactive provider (falls back to smart default)', () => {
+  it('returns null for a non-active (down) provider (falls back to smart default)', () => {
     expect(pickInitialProvider('animelib', rows)).toBeNull()
   })
 
