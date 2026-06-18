@@ -265,28 +265,6 @@
     "native": "Нативный",
     "recommendedVoice": "Рекомендуемая озвучка",
     "episodeShort": "эп.",
-    "raw": {
-      "tab": "RAW JP",
-      "unavailable": "Это аниме пока недоступно через сырой японский источник. Попробуйте Kodik или AnimeLib."
-    },
-    "ourenglish": {
-      "label": "OurEnglish",
-      "unavailable": "Это аниме сейчас не доступно через английские источники. Попробуйте Kodik или AniLib.",
-      "sourceLabel": "Источник",
-      "sourceAuto": "Авто (лучший доступный)",
-      "serverLabel": "Сервер",
-      "activeProvider": "Стрим от {name}"
-    },
-    "anime18": {
-      "tab": "18anime",
-      "label": "18anime"
-    },
-    "kodikAdfree": {
-      "tab": "AEПлеер",
-      "label": "AEПлеер",
-      "skipIntro": "Пропустить",
-      "extractError": "Не удалось загрузить поток без рекламы. Попробуйте обычный плеер Кодик или сообщите об ошибке."
-    },
     "classicKodik": {
       "switch": "Классический Kodik",
       "back": "Вернуться к плееру AnimeEnigma"

@@ -265,28 +265,6 @@
     "native": "Native",
     "recommendedVoice": "Recommended voice acting",
     "episodeShort": "ep.",
-    "raw": {
-      "tab": "RAW JP",
-      "unavailable": "This anime isn't yet available via the raw Japanese provider. Try Kodik or AnimeLib instead."
-    },
-    "ourenglish": {
-      "label": "OurEnglish",
-      "unavailable": "This anime isn't available through any English provider right now. Try Kodik or AniLib.",
-      "sourceLabel": "Source",
-      "sourceAuto": "Auto (best available)",
-      "serverLabel": "Server",
-      "activeProvider": "Streaming from {name}"
-    },
-    "anime18": {
-      "tab": "18anime",
-      "label": "18anime"
-    },
-    "kodikAdfree": {
-      "tab": "AE Player",
-      "label": "AE Player",
-      "skipIntro": "Skip",
-      "extractError": "Couldn't load the ad-free stream. Try the standard Kodik player or report it."
-    },
     "classicKodik": {
       "switch": "Classic Kodik",
       "back": "Back to AnimeEnigma player"

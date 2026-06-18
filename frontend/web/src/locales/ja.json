@@ -265,28 +265,6 @@
     "native": "ネイティブ",
     "recommendedVoice": "おすすめの吹替",
     "episodeShort": "話",
-    "raw": {
-      "tab": "RAW JP",
-      "unavailable": "このアニメはまだ生の日本語ソースで利用できません。KodikまたはAnimeLibをお試しください。"
-    },
-    "ourenglish": {
-      "label": "OurEnglish",
-      "unavailable": "現在、英語ソースではこのアニメを利用できません。KodikまたはAniLibをお試しください。",
-      "sourceLabel": "ソース",
-      "sourceAuto": "自動（最適）",
-      "serverLabel": "サーバー",
-      "activeProvider": "{name}から配信中"
-    },
-    "anime18": {
-      "tab": "18anime",
-      "label": "18anime"
-    },
-    "kodikAdfree": {
-      "tab": "AEプレーヤー",
-      "label": "AEプレーヤー",
-      "skipIntro": "スキップ",
-      "extractError": "広告なしストリームを読み込めませんでした。通常のKodikプレーヤーをお試しいただくか、問題をご報告ください。"
-    },
     "classicKodik": {
       "switch": "クラシック Kodik",
       "back": "AnimeEnigma プレーヤーに戻る"
