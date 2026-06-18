@@ -1411,6 +1411,7 @@
     "sync_toast_paused": "{username} поставил(а) на паузу",
     "sync_toast_seeked": "{username} перемотал(а) на {time}",
     "connection_status_closed": "Соединение потеряно — повтор попытки…",
+    "player_tab_aeplayer": "AnimeEnigma",
     "player_tab_kodik": "Кодик",
     "player_tab_kodik-adfree": "AEПлеер",
     "player_tab_animelib": "АниЛиб",

@@ -60,7 +60,7 @@ const { t } = useI18n()
  * WatchTogetherView.vue and the PlayerKind union order in types/.
  * Keep in sync with the PlayerKind union in src/types/watch-together.ts.
  */
-const ALL_PLAYERS: readonly PlayerKind[] = ['kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
+const ALL_PLAYERS: readonly PlayerKind[] = ['aeplayer', 'kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
 const PLAYERS = computed(() => ALL_PLAYERS.filter((p) => !props.hiddenKinds.includes(p)))
 
 function onTabClick(kind: PlayerKind) {

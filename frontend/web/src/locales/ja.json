@@ -1513,6 +1513,7 @@
     "sync_toast_paused": "{username} が一時停止しました",
     "sync_toast_seeked": "{username} が {time} にシークしました",
     "connection_status_closed": "接続が切断されました — 再試行中…",
+    "player_tab_aeplayer": "AnimeEnigma",
     "player_tab_kodik": "Kodik",
     "player_tab_kodik-adfree": "AEプレーヤー",
     "player_tab_animelib": "AniLib",

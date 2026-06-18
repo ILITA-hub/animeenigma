@@ -78,6 +78,7 @@ import ReactionBurstOverlay from '@/components/watch-together/ReactionBurstOverl
 import SyncToastStack from '@/components/watch-together/SyncToastStack.vue'
 import ConnectionStatusOverlay from '@/components/watch-together/ConnectionStatusOverlay.vue'
 import PlayerTabBar from '@/components/watch-together/PlayerTabBar.vue'
+import { tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
 import Button from '@/components/ui/Button.vue'
 
 // Lazy-load each player so the WatchTogetherView chunk stays under the
@@ -343,6 +344,19 @@ if (typeof window !== 'undefined') {
 function onSelectPlayer(player: PlayerKind) {
   if (player === livePlayer.value) return
   roomHandle.emitChangePlayer(player)
+  // Switching TO aeplayer: if the room's current token already parses as an
+  // aePlayer combo (i.e. we're switching aeplayer→aeplayer or the room was
+  // created as aeplayer), re-emit it so every joiner adopts a combo
+  // immediately rather than waiting for the freshly-mounted AePlayer's first
+  // broadcast. When the current token is a legacy translation id (kodik→
+  // aeplayer), there is no combo to forward — the mounted AePlayer runs its
+  // smart-default and broadcasts its own combo (existing AePlayer room watcher).
+  if (player === 'aeplayer') {
+    const combo = tokenToCombo(roomHandle.room.value?.translation_id ?? '')
+    if (combo) {
+      roomHandle.emitChangeTranslation(comboToToken(combo))
+    }
+  }
 }
 
 // Navigation back to the anime page from empty/capacity states. Falls

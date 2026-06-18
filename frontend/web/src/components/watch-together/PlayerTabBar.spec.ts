@@ -1,10 +1,11 @@
 /**
  * Workstream watch-together — Phase 04 (state-switching) Plan 04.4 Task 1.
  * Updated: kodik-adfree (AEПлеер) added as the 6th PlayerKind.
+ * Updated: aeplayer (AnimeEnigma) added, leads the bar → 7 PlayerKinds.
  *
- * Vitest spec for PlayerTabBar.vue. Locks the 6-tab switcher behavior:
+ * Vitest spec for PlayerTabBar.vue. Locks the 7-tab switcher behavior:
  *
- *   1. Renders exactly 6 buttons, one per PlayerKind
+ *   1. Renders exactly 7 buttons, one per PlayerKind
  *   2. Each rendered button label resolves through i18n
  *      (no raw `watch_together.player_tab_*` substring leaks)
  *   3. Active tab gains the active-state styling
@@ -27,6 +28,7 @@ vi.mock('vue-i18n', () => ({
       // rendered HTML" assertion is meaningful (the rendered text should
       // NOT contain `watch_together.player_tab_*`).
       const map: Record<string, string> = {
+        'watch_together.player_tab_aeplayer': 'AnimeEnigma',
         'watch_together.player_tab_kodik': 'Kodik',
         'watch_together.player_tab_kodik-adfree': 'AE Player',
         'watch_together.player_tab_animelib': 'AniLib',
@@ -42,17 +44,26 @@ vi.mock('vue-i18n', () => ({
 
 import PlayerTabBar from './PlayerTabBar.vue'
 
-const ALL_PLAYERS: PlayerKind[] = ['kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw']
+const ALL_PLAYERS: PlayerKind[] = ['aeplayer', 'kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw']
 
 function mountBar(props: { activePlayer: PlayerKind | null; disabled?: boolean } = { activePlayer: 'kodik' }) {
   return mount(PlayerTabBar, { props })
 }
 
 describe('PlayerTabBar', () => {
-  it('Test 1: renders exactly 6 tab buttons (one per PlayerKind)', () => {
+  it('Test 1: renders exactly 7 tab buttons (one per PlayerKind)', () => {
     const wrapper = mountBar({ activePlayer: 'kodik' })
     const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs).toHaveLength(6)
+    expect(tabs).toHaveLength(7)
+  })
+
+  it('Test 1a: aeplayer tab is rendered (leads the bar)', () => {
+    const wrapper = mountBar({ activePlayer: 'kodik' })
+    const tabs = wrapper.findAll('[role="tab"]')
+    const aeTab = tabs.find((t) => t.attributes('data-player') === 'aeplayer')
+    expect(aeTab).toBeDefined()
+    expect(aeTab!.text()).toBe('AnimeEnigma')
+    expect(tabs[0]!.attributes('data-player')).toBe('aeplayer')
   })
 
   it('Test 1b: kodik-adfree tab is rendered', () => {
@@ -124,8 +135,8 @@ describe('PlayerTabBar', () => {
     expect(html).not.toMatch(/\bfont-extrabold\b/)
   })
 
-  it('Test 8: all six player kinds can be selected (cycle through inactive tabs)', async () => {
-    // Pin active to 'raw' so the other 5 are clickable.
+  it('Test 8: all player kinds can be selected (cycle through inactive tabs)', async () => {
+    // Pin active to 'raw' so every other tab is clickable.
     const wrapper = mountBar({ activePlayer: 'raw' })
     const expectations: PlayerKind[] = ALL_PLAYERS.filter((k) => k !== 'raw')
     for (const kind of expectations) {
@@ -134,19 +145,19 @@ describe('PlayerTabBar', () => {
     }
     const emits = wrapper.emitted('select-player')
     expect(emits).toBeTruthy()
-    expect(emits).toHaveLength(5)
+    expect(emits).toHaveLength(expectations.length)
     expect(emits!.map((e) => e[0])).toEqual(expectations)
   })
 
-  it('Test 9: hiddenKinds omits those tabs (AniLib hidden → 5 tabs, no animelib)', () => {
+  it('Test 9: hiddenKinds omits those tabs (AniLib hidden → 6 tabs, no animelib)', () => {
     const wrapper = mount(PlayerTabBar, {
       props: { activePlayer: 'kodik' as PlayerKind, hiddenKinds: ['animelib'] as PlayerKind[] },
     })
     const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs).toHaveLength(5)
+    expect(tabs).toHaveLength(6)
     expect(tabs.find((t) => t.attributes('data-player') === 'animelib')).toBeUndefined()
-    // The remaining five are still present.
-    for (const kind of ['kodik', 'kodik-adfree', 'ourenglish', 'hanime', 'raw']) {
+    // The remaining six are still present.
+    for (const kind of ['aeplayer', 'kodik', 'kodik-adfree', 'ourenglish', 'hanime', 'raw']) {
       expect(tabs.find((t) => t.attributes('data-player') === kind)).toBeDefined()
     }
   })
