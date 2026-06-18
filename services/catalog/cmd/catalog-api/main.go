@@ -252,16 +252,6 @@ func main() {
 
 	characterService := service.NewCharacterService(animeRepo, characterRepo, shikimoriClient, redisCache, log)
 
-	// Start Kodik liveness probe (reports via shared provider-health metrics).
-	healthChecker := service.NewPlayerHealthChecker(
-		catalogService.KodikClient(),
-		cfg.HealthCheck.Interval,
-		log,
-	)
-	healthCtx, healthCancel := context.WithCancel(context.Background())
-	defer healthCancel()
-	go healthChecker.Start(healthCtx)
-
 	// Initialize external clients
 	telegramClient := telegram.NewClient(cfg.Telegram.NewsChannel)
 
@@ -299,6 +289,18 @@ func main() {
 	})
 	rawResolver := service.NewRawResolver(allanimeClient, libraryClient, animeRepo, redisCache, log)
 	rawHandler := handler.NewRawHandler(rawResolver, log)
+
+	// Start Kodik + ae library liveness probes (reports via shared provider-health
+	// metrics). Constructed AFTER libraryClient so the ae probe can be wired in.
+	healthChecker := service.NewPlayerHealthChecker(
+		catalogService.KodikClient(),
+		cfg.HealthCheck.Interval,
+		log,
+		libraryClient,
+	)
+	healthCtx, healthCancel := context.WithCancel(context.Background())
+	defer healthCancel()
+	go healthChecker.Start(healthCtx)
 
 	// Workstream raw-jp, Phase 06 — internal cache-invalidation
 	// endpoint POSTed by the library encoder after every successful
