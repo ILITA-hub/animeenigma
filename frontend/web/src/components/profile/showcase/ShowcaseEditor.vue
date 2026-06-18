@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast'
-import draggable from 'vuedraggable'
 import Select from '@/components/ui/Select.vue'
 import type { SelectOption } from '@/components/ui/Select.vue'
 import type { AboutConfig, FavoriteAnimeConfig, CardCollectionConfig, OpEdConfig, ShowcaseBlock, ShowcaseBlockType } from '@/types/showcase'
@@ -324,13 +323,6 @@ defineExpose({ swapBlocks, local })
         </div>
       </div>
     </div>
-
-    <!-- Hidden legacy draggable — kept so existing ShowcaseEditor tests (which stub 'draggable') continue to pass -->
-    <draggable v-model="local" item-key="order" handle=".showcase-drag-handle" class="hidden">
-      <template #item="{ element, index }">
-        <div :data-legacy-item="index" />
-      </template>
-    </draggable>
 
     <div class="flex gap-2">
       <button

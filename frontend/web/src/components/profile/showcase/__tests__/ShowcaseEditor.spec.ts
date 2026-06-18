@@ -12,15 +12,6 @@ vi.mock('@/composables/useToast', () => ({
   useToast: () => ({ push: vi.fn() }),
 }))
 
-vi.mock('vuedraggable', () => ({
-  default: {
-    name: 'draggable',
-    props: ['modelValue'],
-    emits: ['update:modelValue'],
-    template: '<div><slot v-for="(el, idx) in modelValue" :element="el" :index="idx" name="item" /></div>',
-  },
-}))
-
 vi.mock('@/api/client', () => ({
   userApi: {
     getWatchlist: vi.fn().mockResolvedValue({
@@ -61,7 +52,7 @@ const mountEditor = (modelValue: ShowcaseBlock[] = blocks) =>
     props: { userId: 'u1', modelValue },
     global: {
       mocks: { $t: (k: string) => k },
-      stubs: { teleport: true, Select: true },
+      stubs: { teleport: true, Select: true, ShowcaseBlockView: true },
     },
   })
 
