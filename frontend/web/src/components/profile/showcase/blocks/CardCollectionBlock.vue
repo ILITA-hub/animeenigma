@@ -108,7 +108,7 @@ const rarityGlow: Record<string, string> = {
 </script>
 
 <template>
-  <div class="rounded-xl border border-border bg-card p-4 md:p-6">
+  <div class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
     <h3 class="mb-3 text-lg font-semibold text-foreground">
       {{ $t('showcase.block.card_collection') }}
     </h3>

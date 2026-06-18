@@ -48,7 +48,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="rounded-xl border border-border bg-card p-4 md:p-6">
+  <div class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
     <h3 class="mb-3 text-lg font-semibold text-foreground">{{ $t('showcase.block.favorite_character') }}</h3>
 
     <!-- A: circles (default) — avatar ring row using CharacterCard -->

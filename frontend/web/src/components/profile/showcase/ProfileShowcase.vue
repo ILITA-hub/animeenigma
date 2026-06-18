@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ShowcaseBlock } from '@/types/showcase'
+import { spanClasses, sizeFor } from '@/types/showcase'
 import { showcaseApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import AboutBlock from './blocks/AboutBlock.vue'
@@ -16,6 +17,7 @@ import CompatibilityBlock from './blocks/CompatibilityBlock.vue'
 import ShowcaseEditor from './ShowcaseEditor.vue'
 
 const props = defineProps<{ userId: string; isOwner: boolean }>()
+const emit = defineEmits<{ loaded: [number] }>()
 
 const { t } = useI18n()
 const toast = useToast()
@@ -23,6 +25,11 @@ const toast = useToast()
 const blocks = ref<ShowcaseBlock[]>([])
 const editing = ref(false)
 const loading = ref(true)
+
+function cellClass(b: ShowcaseBlock): string {
+  const s = sizeFor(b.type, b.variant)
+  return spanClasses(b.w || s.defW, b.h || s.defH)
+}
 
 async function load() {
   loading.value = true
@@ -32,6 +39,7 @@ async function load() {
       ? (res.data as { data: { blocks: ShowcaseBlock[] } }).data
       : res.data
     blocks.value = data.blocks ?? []
+    emit('loaded', blocks.value.length)
   } catch {
     blocks.value = []
   } finally {
@@ -76,20 +84,22 @@ onMounted(load)
     />
 
     <template v-else>
-      <p v-if="!loading && !blocks.length" class="text-sm text-muted-foreground">
-        {{ $t('showcase.empty') }}
-      </p>
-      <template v-for="(b, i) in blocks" :key="i">
-        <AboutBlock v-if="b.type === 'about'" :config="b.config as never" :variant="b.variant" />
-        <FavoriteAnimeBlock v-else-if="b.type === 'favorite_anime'" :config="b.config as never" :variant="b.variant" :user-id="userId" />
-        <StatsBlock v-else-if="b.type === 'stats'" :user-id="userId" :variant="b.variant" />
-        <FavoriteCharacterBlock v-else-if="b.type === 'favorite_character'" :config="b.config as never" :variant="b.variant" />
-        <CardCollectionBlock v-else-if="b.type === 'card_collection'" :config="b.config as never" :user-id="userId" :variant="b.variant" />
-        <ContinueWatchingBlock v-else-if="b.type === 'continue_watching'" :user-id="userId" :variant="b.variant" />
-        <OpEdBlock v-else-if="b.type === 'op_ed'" :config="b.config as never" :variant="b.variant" />
-        <AnimeDnaBlock v-else-if="b.type === 'anime_dna'" :user-id="userId" :variant="b.variant" />
-        <CompatibilityBlock v-else-if="b.type === 'compatibility'" :user-id="userId" :is-owner="isOwner" :variant="b.variant" />
-      </template>
+      <p v-if="!loading && !blocks.length" class="text-sm text-muted-foreground">{{ $t('showcase.empty') }}</p>
+      <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-3 [grid-auto-flow:dense] [grid-auto-rows:165px] md:[grid-auto-rows:190px]">
+        <template v-for="(b, i) in blocks" :key="i">
+          <div :data-showcase-cell="b.type" :class="['h-full', cellClass(b)]">
+            <AboutBlock v-if="b.type === 'about'" :config="b.config as never" :variant="b.variant" />
+            <FavoriteAnimeBlock v-else-if="b.type === 'favorite_anime'" :config="b.config as never" :variant="b.variant" :user-id="userId" />
+            <StatsBlock v-else-if="b.type === 'stats'" :user-id="userId" :variant="b.variant" />
+            <FavoriteCharacterBlock v-else-if="b.type === 'favorite_character'" :config="b.config as never" :variant="b.variant" />
+            <CardCollectionBlock v-else-if="b.type === 'card_collection'" :config="b.config as never" :user-id="userId" :variant="b.variant" />
+            <ContinueWatchingBlock v-else-if="b.type === 'continue_watching'" :user-id="userId" :variant="b.variant" />
+            <OpEdBlock v-else-if="b.type === 'op_ed'" :config="b.config as never" :variant="b.variant" />
+            <AnimeDnaBlock v-else-if="b.type === 'anime_dna'" :user-id="userId" :variant="b.variant" />
+            <CompatibilityBlock v-else-if="b.type === 'compatibility'" :user-id="userId" :is-owner="isOwner" :variant="b.variant" />
+          </div>
+        </template>
+      </div>
     </template>
   </section>
 </template>

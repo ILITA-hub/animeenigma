@@ -9,7 +9,7 @@ const v = computed(() => props.variant || defaultVariant('about'))
 
 <template>
   <!-- quote (default): accent bar + large text + mono status -->
-  <div v-if="v === 'quote'" class="about-quote relative rounded-xl border border-border bg-card">
+  <div v-if="v === 'quote'" class="about-quote relative h-full rounded-xl border border-border bg-card">
     <p class="q font-semibold text-foreground leading-relaxed">
       {{ config.text }}
     </p>
@@ -19,7 +19,7 @@ const v = computed(() => props.variant || defaultVariant('about'))
   </div>
 
   <!-- bio: avatar + name + paragraph + chips -->
-  <div v-else-if="v === 'bio'" class="rounded-xl border border-border bg-card p-4 md:p-6">
+  <div v-else-if="v === 'bio'" class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
     <div class="flex items-center gap-3.5 mb-3.5">
       <div class="about-av-ring shrink-0 rounded-[14px] p-0.5">
         <div class="flex h-full w-full items-center justify-center rounded-xl bg-card font-semibold text-foreground text-sm">
@@ -34,7 +34,7 @@ const v = computed(() => props.variant || defaultVariant('about'))
   </div>
 
   <!-- terminal: hacker style Neon Tokyo -->
-  <div v-else-if="v === 'terminal'" class="rounded-xl border border-border overflow-hidden bg-[#0a0a13]">
+  <div v-else-if="v === 'terminal'" class="h-full rounded-xl border border-border overflow-hidden bg-[#0a0a13]">
     <div class="flex items-center gap-1.5 px-4 py-2.5 border-b border-border">
       <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#ff5f57]"></span>
       <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#febc2e]"></span>
@@ -62,7 +62,7 @@ const v = computed(() => props.variant || defaultVariant('about'))
   </div>
 
   <!-- minimal: large centered statement, no border -->
-  <div v-else-if="v === 'minimal'" class="py-8 px-5 text-center">
+  <div v-else-if="v === 'minimal'" class="h-full py-8 px-5 text-center">
     <p class="about-min-big font-semibold text-foreground text-2xl leading-snug tracking-tight max-w-xl mx-auto">
       {{ config.text }}
     </p>
@@ -72,7 +72,7 @@ const v = computed(() => props.variant || defaultVariant('about'))
   </div>
 
   <!-- vn: visual novel dialog box -->
-  <div v-else-if="v === 'vn'" class="about-vn relative rounded-xl overflow-hidden flex items-end min-h-[200px]">
+  <div v-else-if="v === 'vn'" class="about-vn relative h-full rounded-xl overflow-hidden flex items-end min-h-[200px]">
     <div class="about-vn-bg absolute inset-0"></div>
     <div class="about-vn-box relative mx-4 mb-4 ml-[calc(120px+16px)] border rounded-xl p-4 md:p-5 border-primary/40 bg-black/80 backdrop-blur">
       <span class="about-nametag absolute -top-3 left-4 text-xs font-semibold px-3 py-1 rounded-lg bg-primary text-primary-foreground shadow-md">

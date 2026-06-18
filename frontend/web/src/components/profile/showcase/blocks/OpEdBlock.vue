@@ -45,7 +45,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="themes.length" class="space-y-3">
+  <div v-if="themes.length" class="h-full space-y-3">
     <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
       {{ $t('showcase.block.op_ed') }}
     </h3>

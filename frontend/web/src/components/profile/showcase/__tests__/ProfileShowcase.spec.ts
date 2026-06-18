@@ -17,6 +17,32 @@ vi.mock('@/api/client', () => ({
   apiClient: { get: vi.fn().mockResolvedValue({ data: {} }) },
 }))
 
+describe('ProfileShowcase grid', () => {
+  it('wraps each block in a cell with span classes and emits loaded', async () => {
+    const { showcaseApi } = await import('@/api/client')
+    vi.mocked(showcaseApi.getShowcase).mockResolvedValueOnce({
+      data: { blocks: [
+        { type: 'favorite_anime', variant: 'row', order: 0, w: 4, h: 1, config: { anime_ids: [] } },
+        { type: 'stats', variant: 'tiles', order: 1, config: {} },
+      ] },
+    } as never)
+    const i18n = createI18n({ locale: 'en', legacy: false, messages: { en } })
+    const wrapper = mount(ProfileShowcase, {
+      props: { userId: 'u1', isOwner: false },
+      global: {
+        plugins: [i18n],
+        stubs: { FavoriteAnimeBlock: true, StatsBlock: true, ShowcaseEditor: true },
+      },
+    })
+    await new Promise((r) => setTimeout(r))
+    const cells = wrapper.findAll('[data-showcase-cell]')
+    expect(cells).toHaveLength(2)
+    expect(cells[0].classes()).toContain('md:col-span-4')
+    expect(cells[1].classes()).toContain('md:col-span-2') // stats default 2x1
+    expect(wrapper.emitted('loaded')?.[0]).toEqual([2])
+  })
+})
+
 import { showcaseApi } from '@/api/client'
 import ProfileShowcase from '../ProfileShowcase.vue'
 

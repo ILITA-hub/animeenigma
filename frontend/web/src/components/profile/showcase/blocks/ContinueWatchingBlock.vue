@@ -38,7 +38,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="items.length" class="rounded-xl border border-border bg-card p-4 md:p-6">
+  <div v-if="items.length" class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
     <h3 class="mb-3 text-lg font-semibold text-foreground">{{ $t('showcase.block.continue_watching') }}</h3>
     <div class="cw flex flex-col gap-2">
       <div
