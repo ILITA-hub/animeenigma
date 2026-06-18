@@ -55,7 +55,7 @@
 -->
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -427,6 +427,17 @@ const aeAnimeMeta = computed(() => ({
   eps: aeAnimeTotal.value || aeAnimeAired.value || 1,
   still: aeAnimeStill.value,
 }))
+
+// Mid-session switch: a room created on a legacy player and switched to
+// aeplayer never ran the bootstrap meta fetch (which only fires for rooms that
+// START as aeplayer). Load it on the flip so AePlayer mounts with a real title
+// / next-ep gating / AniSkip instead of placeholders. Guarded on an unloaded
+// title so it fetches at most once.
+watch(livePlayer, (p) => {
+  if (p === 'aeplayer' && !aeAnimeTitle.value && animeId.value) {
+    void loadAeAnimeMeta(animeId.value)
+  }
+})
 </script>
 
 <template>
