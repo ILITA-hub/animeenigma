@@ -3,7 +3,7 @@ package handler
 // Watch-Together workstream / Phase 04 — WT-STATE-02.
 //
 // GET /internal/anime/{shikimoriId}/episodes/validate
-//   ?player=kodik|animelib|ourenglish|hanime|raw
+//   ?player=kodik|animelib|ourenglish|hanime|raw|aeplayer
 //   &episode_id=<provider-specific>
 //   &translation_id=<provider-specific>       (optional — empty = player-change mode)
 //   &watch_type=sub|dub                       (animelib only)

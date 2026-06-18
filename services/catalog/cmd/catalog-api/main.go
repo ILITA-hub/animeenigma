@@ -330,7 +330,7 @@ func main() {
 	// (player, episode_id, translation_id) tuple for the WT service's
 	// state:change_{episode,player,translation} inbound handlers. The
 	// kodik/animelib path reuses episodesLookupService (D-04 "smallest
-	// change"); ourenglish/hanime/raw ship permissive v1.0 validation.
+	// change"); ourenglish/hanime/raw/aeplayer ship permissive v1.0 validation.
 	episodesValidateService := service.NewEpisodesValidateService(episodesLookupService, animeRepo, log)
 	internalEpisodesValidateHandler := handler.NewInternalEpisodesValidateHandler(episodesValidateService, log)
 
