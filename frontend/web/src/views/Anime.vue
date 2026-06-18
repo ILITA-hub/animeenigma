@@ -660,6 +660,8 @@
           :theater="theaterMode"
           :is-hentai="isHentai"
           :initial-episode="resumeStartEpisode"
+          :initial-provider="queryProvider"
+          :initial-team="queryTeam"
           :mal-id="anime.shikimoriId"
           @toggle-theater="setTheater(!theaterMode)"
         />
@@ -1476,6 +1478,24 @@ const queryEpisode = computed<number | undefined>(() => {
   if (total > 0 && n > total) return total
   return n
 })
+
+// Notification deep-link — `?provider=` is an aePlayer source id, `?team=` is a
+// team TITLE. Both are HINTS preselected on aePlayer (see AePlayer initialProvider).
+const queryProvider = computed<string | undefined>(() => {
+  const v = route.query.provider
+  const s = Array.isArray(v) ? v[0] : v
+  return typeof s === 'string' && s !== '' ? s : undefined
+})
+const queryTeam = computed<string | undefined>(() => {
+  const v = route.query.team
+  const s = Array.isArray(v) ? v[0] : v
+  return typeof s === 'string' && s !== '' ? s : undefined
+})
+
+// A `?provider=` deep-link always opens aePlayer (the param speaks aePlayer's
+// source vocabulary). Set the ref directly; its localStorage watcher persists
+// the switch, which matches the retire-all-but-aePlayer direction.
+if (queryProvider.value) aeSelected.value = true
 
 // What episode the player should mount on. Authenticated + state machine
 // loaded → use the state machine's startEpisode. Otherwise fall back to the
