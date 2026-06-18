@@ -231,9 +231,10 @@ func runFailover[T any](
 	providers []domain.Provider,
 	cache *health.InMemoryHealthCache,
 	providerTimeout time.Duration,
+	operation string,
 	call func(ctx context.Context, p domain.Provider) (T, error),
 ) (T, error) {
-	v, _, err := runFailoverNamed(ctx, log, providers, cache, providerTimeout, call)
+	v, _, err := runFailoverNamed(ctx, log, providers, cache, providerTimeout, operation, call)
 	return v, err
 }
 
@@ -284,6 +285,7 @@ func runFailoverNamed[T any](
 	providers []domain.Provider,
 	cache *health.InMemoryHealthCache,
 	providerTimeout time.Duration,
+	operation string,
 	call func(ctx context.Context, p domain.Provider) (T, error),
 ) (T, string, error) {
 	var zero T
@@ -320,9 +322,12 @@ func runFailoverNamed[T any](
 			continue
 		}
 
-		result, err := providerCall(ctx, providerTimeout, func(c context.Context) (T, error) {
-			return call(c, p)
-		})
+		result, err := func() (res T, e error) {
+			defer metrics.ObserveParser(p.Name(), operation, time.Now(), &e)
+			return providerCall(ctx, providerTimeout, func(c context.Context) (T, error) {
+				return call(c, p)
+			})
+		}()
 		if err == nil {
 			return result, p.Name(), nil
 		}
@@ -401,7 +406,7 @@ func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer s
 // search misses, so allanime wins FindID, but gogoanime.ListEpisodes returns
 // ([],nil) for the allanime ID).
 func (o *Orchestrator) FindIDNamed(ctx context.Context, ref domain.AnimeRef, prefer string) (string, string, error) {
-	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "find_id",
 		func(c context.Context, p domain.Provider) (string, error) {
 			return p.FindID(c, ref)
 		})
@@ -420,7 +425,7 @@ func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer stri
 // different provider re-resolved from the failover order would receive episode
 // IDs it cannot parse.
 func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer string) ([]domain.Episode, string, error) {
-	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "list_episodes",
 		func(c context.Context, p domain.Provider) ([]domain.Episode, error) {
 			return p.ListEpisodes(c, providerID)
 		})
@@ -428,7 +433,7 @@ func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer
 
 // ListServers runs the provider chain for server listing for one episode.
 func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, prefer string) ([]domain.Server, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "list_servers",
 		func(c context.Context, p domain.Provider) ([]domain.Server, error) {
 			return p.ListServers(c, providerID, episodeID)
 		})
@@ -436,7 +441,7 @@ func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, p
 
 // GetStream runs the provider chain to pull a playable Stream.
 func (o *Orchestrator) GetStream(ctx context.Context, providerID, episodeID, serverID string, cat domain.Category, prefer string) (*domain.Stream, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "get_stream",
 		func(c context.Context, p domain.Provider) (*domain.Stream, error) {
 			return p.GetStream(c, providerID, episodeID, serverID, cat)
 		})
