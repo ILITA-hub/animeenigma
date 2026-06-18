@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # design-system-lint — build-failing color/token-discipline gate (DS-GOV-01).
 #
-# Enforces 5 color/token/typography/primitive rules over frontend/web/src/**/*.vue
-# (excluding *.spec.* and __tests__), mirroring scripts/i18n-lint.sh:
+# Enforces 8 color/token/typography/primitive rules over frontend/web/src/**/*.vue
+# (excluding *.spec.* and __tests__), mirroring scripts/i18n-lint.sh, plus an
+# allowlist path-integrity pre-pass (catches stale lines left by file renames):
 #
 #   RULE 1 — Zero off-palette Tailwind color classes (ERROR). Scans *.vue AND
 #            *.ts (component class-strings leak via cva variant files etc.),
@@ -57,6 +58,7 @@ RULE5_ERRORS=0
 RULE6_ERRORS=0
 RULE7_ERRORS=0
 RULE8_ERRORS=0
+ALLOWLIST_PATH_ERRORS=0
 
 # Off-palette palette set (Phase-4 verbatim). Brand/provider hues
 # (cyan|pink|orange|rose|indigo|teal|lime) are deliberately ABSENT.
@@ -116,6 +118,37 @@ allow_hit() {
     }
     END { exit !found }
   ' "$allow_file"
+}
+
+# ============================================================================
+# ALLOWLIST path integrity — fail on stale lines left by file renames/deletes
+# ============================================================================
+# Both allowlists key exceptions by file path (`path:value:reason`). A `git mv`
+# silently desyncs them: the old line points at a vanished file (silent rot) and
+# the renamed file's real exceptions stop matching. This pre-pass converts the
+# rot into a loud, located, build-failing signal at rename time. The path is the
+# segment before the FIRST ':' — values like rgb(45,212,191) carry commas but no
+# colon before `:reason`, so ${line%%:*} yields the path for every entry.
+check_allowlist_paths() {
+  local allow_file="$1" label="$2"
+  [ -f "$allow_file" ] || return 0
+  local any=0 path
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue ;; esac   # skip blank + comment lines
+    path="${line%%:*}"
+    [ -z "$path" ] && continue
+    if [ ! -f "$SCRIPT_DIR/../$path" ]; then
+      echo -e "  ${RED}ERROR${NC} ${label}: '${path}' no longer exists (renamed/deleted? update or remove the line)"
+      ALLOWLIST_PATH_ERRORS=$((ALLOWLIST_PATH_ERRORS + 1)); ERRORS=$((ERRORS + 1)); any=1
+    fi
+  done < "$allow_file"
+  [ "$any" -eq 0 ] && echo -e "  ${GREEN}OK${NC} ${label}: all allowlisted paths exist"
+}
+
+run_allowlist_paths() {
+  echo "=== ALLOWLIST: path integrity (no stale rename/delete lines) ==="
+  check_allowlist_paths "$ALLOWLIST" "design-system-allowlist.txt"
+  check_allowlist_paths "$SPACING_ALLOWLIST" "design-system-spacing-allowlist.txt"
 }
 
 # ============================================================================
@@ -520,11 +553,32 @@ EOF
   fi
   echo -e "  ${GREEN}DETECTED${NC} raw checkbox (R5) + honored bespoke-keep radio exemption"
 
+  # 1e) Allowlist path integrity — a bogus path must be detected; a real one exempt.
+  local al_bad al_good
+  al_bad=$(mktemp); al_good=$(mktemp)
+  # shellcheck disable=SC2064
+  trap "rm -f '$scratch' '$al_bad' '$al_good'" EXIT
+  printf '# comment\nsrc/__does_not_exist__.vue:#abc:bogus stale line\n' > "$al_bad"
+  printf 'src/App.vue:#fff:real path, value irrelevant to the path check\n' > "$al_good"
+  ( ALLOWLIST_PATH_ERRORS=0 ERRORS=0; check_allowlist_paths "$al_bad" "selftest-bad" >/dev/null 2>&1
+    [ "$ALLOWLIST_PATH_ERRORS" -eq 1 ] ) || {
+    echo -e "  ${RED}SELFTEST FAIL${NC} — stale allowlist path NOT detected"
+    rm -f "$scratch" "$al_bad" "$al_good"; trap - EXIT; exit 1
+  }
+  ( ALLOWLIST_PATH_ERRORS=0 ERRORS=0; check_allowlist_paths "$al_good" "selftest-good" >/dev/null 2>&1
+    [ "$ALLOWLIST_PATH_ERRORS" -eq 0 ] ) || {
+    echo -e "  ${RED}SELFTEST FAIL${NC} — real allowlist path wrongly flagged"
+    rm -f "$scratch" "$al_bad" "$al_good"; trap - EXIT; exit 1
+  }
+  echo -e "  ${GREEN}DETECTED${NC} stale allowlist path + passed a real one (allowlist integrity)"
+  rm -f "$al_bad" "$al_good"
+
   # 3) Remove the scratch file and assert the clean tree PASSES.
   rm -f "$scratch"
   trap - EXIT
 
-  ERRORS=0; RULE1_ERRORS=0; RULE2_ERRORS=0; RULE3_ERRORS=0; RULE4_ERRORS=0; RULE5_ERRORS=0; RULE6_ERRORS=0; RULE7_ERRORS=0; RULE8_ERRORS=0
+  ERRORS=0; RULE1_ERRORS=0; RULE2_ERRORS=0; RULE3_ERRORS=0; RULE4_ERRORS=0; RULE5_ERRORS=0; RULE6_ERRORS=0; RULE7_ERRORS=0; RULE8_ERRORS=0; ALLOWLIST_PATH_ERRORS=0
+  run_allowlist_paths >/dev/null
   run_rule1 >/dev/null
   run_rule2 >/dev/null
   run_rule3 >/dev/null
@@ -549,6 +603,8 @@ if [ "${1:-}" = "--selftest" ]; then
   run_selftest
 fi
 
+run_allowlist_paths
+echo ""
 run_rule1
 run_rule2
 run_rule3
@@ -560,6 +616,7 @@ run_rule8
 
 echo ""
 echo "=== Summary ==="
+echo -e "  Stale allowlist paths       : ${ALLOWLIST_PATH_ERRORS}"
 echo -e "  Off-palette classes (RULE 1): ${RULE1_ERRORS}"
 echo -e "  Non-allowlisted hex (RULE 2): ${RULE2_ERRORS}"
 echo -e "  Deprecated aliases  (RULE 3): ${RULE3_ERRORS}"

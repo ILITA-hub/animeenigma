@@ -47,3 +47,49 @@ describe('full-tree i18n parity (en/ru/ja)', () => {
     expect(jaKeys.size).toBe(enKeys.size)
   })
 })
+
+// Flatten to a dot-key -> string-value map (arrays recurse by index, same as
+// leafPaths) so we can compare interpolation vars per key across locales.
+function leafValues(obj: unknown, prefix = '', out: Record<string, string> = {}): Record<string, string> {
+  if (obj === null || typeof obj !== 'object') {
+    out[prefix] = String(obj)
+  } else {
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      leafValues(v, prefix ? `${prefix}.${k}` : k, out)
+    }
+  }
+  return out
+}
+
+// ICU named/list placeholders: {name}, {count}, {0}. NOT vue-i18n linked
+// messages (@:foo) or escaped literals ({'@'}) — those aren't interpolation vars.
+function placeholders(s: string): string[] {
+  const set = new Set<string>()
+  for (const m of s.matchAll(/\{\s*([a-zA-Z0-9_]+)\s*\}/g)) set.add(m[1])
+  return [...set].sort()
+}
+
+describe('full-tree ICU placeholder parity (en/ru/ja)', () => {
+  const enVals = leafValues(en)
+  const ruVals = leafValues(ru)
+  const jaVals = leafValues(ja)
+
+  // Restricted to keys present in all three (key parity is asserted above; this
+  // keeps placeholder-drift failures from doubling up with missing-key ones).
+  const common = Object.keys(enVals).filter((k) => k in ruVals && k in jaVals)
+
+  it('every shared key has matching {placeholder} vars across locales', () => {
+    const mismatches: Array<{ key: string; en: string[]; ru: string[]; ja: string[] }> = []
+    for (const key of common) {
+      const enP = placeholders(enVals[key])
+      const ruP = placeholders(ruVals[key])
+      const jaP = placeholders(jaVals[key])
+      const same =
+        enP.length === ruP.length &&
+        enP.length === jaP.length &&
+        enP.every((p, i) => p === ruP[i] && p === jaP[i])
+      if (!same) mismatches.push({ key, en: enP, ru: ruP, ja: jaP })
+    }
+    expect(mismatches).toEqual([])
+  })
+})
