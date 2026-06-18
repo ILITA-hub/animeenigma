@@ -349,6 +349,7 @@ import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
+import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useToast } from '@/composables/useToast'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
@@ -390,8 +391,13 @@ const props = defineProps<{
   room?: WatchTogetherRoomHandle | null
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'toggle-theater'): void
+  /** Watch-Together create seed. Emitted (outside a room) whenever the live
+   *  combo + episode resolve to a usable source, so the anime page's Invite
+   *  button can create the room AS aeplayer seeded with the current combo.
+   *  `null` ⇒ no usable source yet (the InviteButton keeps the legacy default). */
+  (e: 'combo-change', seed: WtCreateSeed | null): void
 }>()
 
 // ─── Core state ──────────────────────────────────────────────────────────────
@@ -890,6 +896,21 @@ const tracking = useWatchTracking(
     },
   },
   () => comboToWatchCombo(state.combo.value),
+)
+
+// ─── Watch-Together create seed (anime-page Invite button) ───────────────────
+// Outside a room, surface the live combo + current episode to the parent
+// (Anime.vue) so the Invite button can CREATE the room AS aeplayer seeded with
+// exactly this source. Suppressed in a room — there the room is authoritative
+// and the broadcast watcher above already syncs the combo. immediate so the
+// parent has the latest seed (or null) before the user can click Invite.
+watch(
+  () => [state.combo.value, selectedEpisode.value?.number] as const,
+  () => {
+    if (props.room) return
+    emit('combo-change', wtCreateSeed(state.combo.value, selectedEpisode.value?.number ?? 0))
+  },
+  { deep: true, immediate: true },
 )
 
 /** Whether the user already has this episode marked watched (drawer data). */

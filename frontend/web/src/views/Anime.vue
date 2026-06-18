@@ -122,9 +122,9 @@
               <InviteButton
                 v-if="authStore.isAuthenticated && anime"
                 :anime-id="anime.id"
-                :episode-id="String(resumeStartEpisode ?? lastEpisode ?? 1)"
-                :player="(resolvedCombo?.player === 'english' ? 'ourenglish' : (resolvedCombo?.player ?? 'kodik')) as PlayerKind"
-                :translation-id="resolvedCombo?.translation_id ?? ''"
+                :episode-id="wtInvitePayload.episodeId"
+                :player="wtInvitePayload.player"
+                :translation-id="wtInvitePayload.translationId"
               />
             </template>
           </div>
@@ -664,6 +664,7 @@
           :initial-team="queryTeam"
           :mal-id="anime.shikimoriId"
           @toggle-theater="setTheater(!theaterMode)"
+          @combo-change="aeWtSeed = $event"
         />
       </section>
 
@@ -1135,6 +1136,7 @@ const aePlayerEnabled = import.meta.env.VITE_AE_PLAYER_ENABLED !== 'false'
 // only on first render (i.e. when a logged-in user has activated the player).
 const InviteButton = defineAsyncComponent(() => import('@/components/watch-together/InviteButton.vue'))
 import type { PlayerKind } from '@/types/watch-together'
+import type { WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import ResumePill from '@/components/player/ResumePill.vue'
 import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
@@ -1587,6 +1589,32 @@ const preferenceState = ref<{
 } | null>(null)
 
 const resolvedCombo = computed(() => preferenceState.value?.resolvedCombo ?? null)
+
+// Watch-Together create seed surfaced by AePlayer (live combo + episode). When
+// the aePlayer surface is the active one at room-create time, this drives the
+// Invite button to create the room AS aeplayer seeded with that exact combo.
+// Null until AePlayer has a resolved source (or when aePlayer isn't selected).
+const aeWtSeed = ref<WtCreateSeed | null>(null)
+
+// The Invite button's create-room payload. Prefers the aePlayer seed when the
+// aePlayer surface is active AND a usable source is resolved; otherwise falls
+// back to the legacy coarse-combo default (kodik / resolved player).
+const wtInvitePayload = computed<{ player: PlayerKind; translationId: string; episodeId: string }>(() => {
+  if (aeSelected.value && aeWtSeed.value) {
+    return {
+      player: aeWtSeed.value.player,
+      translationId: aeWtSeed.value.translation_id,
+      episodeId: aeWtSeed.value.episode_id,
+    }
+  }
+  return {
+    player: (resolvedCombo.value?.player === 'english'
+      ? 'ourenglish'
+      : (resolvedCombo.value?.player ?? 'kodik')) as PlayerKind,
+    translationId: resolvedCombo.value?.translation_id ?? '',
+    episodeId: String(resumeStartEpisode.value ?? lastEpisode.value ?? 1),
+  }
+})
 
 // Numeric episode ref for the tracker. lastEpisode is Ref<number | undefined>
 // (resume-progress is unknown until localStorage is read); the tracker only
