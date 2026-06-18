@@ -45,3 +45,46 @@ export function watchComboToPartialCombo(rc: ResolvedCombo | WatchCombo): { audi
     team: rc.translation_title ? rc.translation_title : null,
   }
 }
+
+/** The 5 combo fields carried opaquely in a Watch-Together room's
+ *  `translation_id` so every room member resolves the SAME stream. */
+export interface WtComboFields {
+  audio: AudioKind
+  lang: TrackLang
+  team: string | null
+  provider: string
+  server: string
+}
+
+/** Serialize a combo into the opaque WT room token (carried in `translation_id`). */
+export function comboToToken(c: WtComboFields): string {
+  return JSON.stringify({
+    provider: c.provider,
+    audio: c.audio,
+    lang: c.lang,
+    team: c.team ?? null,
+    server: c.server,
+  })
+}
+
+/** Parse a WT room token back into combo fields. Returns null on parse error
+ *  or when `provider` is not a string. Missing team coerces to null, missing
+ *  server to ''. */
+export function tokenToCombo(token: string): WtComboFields | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(token)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const o = parsed as Record<string, unknown>
+  if (typeof o.provider !== 'string') return null
+  return {
+    provider: o.provider,
+    audio: o.audio as AudioKind,
+    lang: o.lang as TrackLang,
+    team: (o.team ?? null) as string | null,
+    server: typeof o.server === 'string' ? o.server : '',
+  }
+}

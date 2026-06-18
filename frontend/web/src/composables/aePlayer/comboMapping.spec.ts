@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { providerToLegacyPlayer, comboToWatchCombo, watchComboToPartialCombo } from './comboMapping'
+import { providerToLegacyPlayer, comboToWatchCombo, watchComboToPartialCombo, comboToToken, tokenToCombo, type WtComboFields } from './comboMapping'
 
 describe('providerToLegacyPlayer', () => {
   it('maps EN scraper ids to english', () => {
@@ -41,5 +41,47 @@ describe('watchComboToPartialCombo', () => {
   it('maps english resolved combo to en lang, no team', () => {
     expect(watchComboToPartialCombo({ player: 'english', language: 'en', watch_type: 'sub', translation_id: '', translation_title: '', tier: 'community', tier_number: 3 }))
       .toEqual({ audio: 'sub', lang: 'en', team: null })
+  })
+})
+
+describe('comboToToken / tokenToCombo (WT room translation_id)', () => {
+  it('round-trips a full combo (sub/en/team/allanime/wixmp)', () => {
+    const fields: WtComboFields = {
+      audio: 'sub',
+      lang: 'en',
+      team: 'SubsPlease',
+      provider: 'allanime',
+      server: 'wixmp',
+    }
+    expect(tokenToCombo(comboToToken(fields))).toEqual(fields)
+  })
+
+  it('round-trips a null team (dub/ru/null/kodik/empty server)', () => {
+    const fields: WtComboFields = {
+      audio: 'dub',
+      lang: 'ru',
+      team: null,
+      provider: 'kodik',
+      server: '',
+    }
+    expect(tokenToCombo(comboToToken(fields))).toEqual(fields)
+  })
+
+  it('returns null for non-JSON input', () => {
+    expect(tokenToCombo('not-json')).toBeNull()
+  })
+
+  it('returns null when provider is not a string', () => {
+    expect(tokenToCombo(JSON.stringify({ provider: 42, audio: 'sub', lang: 'en' }))).toBeNull()
+  })
+
+  it('coerces missing team to null and missing server to empty string', () => {
+    expect(tokenToCombo(JSON.stringify({ provider: 'miruro', audio: 'sub', lang: 'ja' }))).toEqual({
+      provider: 'miruro',
+      audio: 'sub',
+      lang: 'ja',
+      team: null,
+      server: '',
+    })
   })
 })
