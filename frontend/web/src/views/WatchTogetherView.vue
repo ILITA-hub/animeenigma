@@ -70,6 +70,7 @@ import {
   type PlayerKind,
 } from '@/api/watch-together'
 import { useWatchTogetherRoom } from '@/composables/useWatchTogetherRoom'
+import { useAnime } from '@/composables/useAnime'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import RoomSidebar from '@/components/watch-together/RoomSidebar.vue'
@@ -89,6 +90,10 @@ const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/An
 const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/OurEnglishPlayer.vue'))
 const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
 const RawPlayer = defineAsyncComponent(() => import('@/components/player/RawPlayer.vue'))
+// First-party AnimeEnigma player (aePlayer). Unlike the legacy players it
+// needs richer anime metadata (title / aired / total / poster), so the view
+// fetches the anime detail once the room snapshot gives us the anime_id.
+const AePlayer = defineAsyncComponent(() => import('@/components/player/aePlayer/AePlayer.vue'))
 
 // AniLib hidden 2026-06-01 (see Anime.vue animeLibEnabled): AnimeLib upstream
 // serves Kodik-only players for every title now, so the AniLib path dead-ends
@@ -154,6 +159,37 @@ const roomHandle = useWatchTogetherRoom(roomId)
 
 // Plan 04.4 — toast composable for sender-only state-error surfacing.
 const toast = useToast()
+
+// aePlayer anime metadata. The legacy players only need anime_id, but
+// aePlayer requires the richer `{ title, ep, eps, still }` object plus
+// malId/isHentai. We lazily fetch the anime detail (reusing useAnime, the
+// same composable Anime.vue uses) once the room snapshot hands us the
+// anime_id, and build the AePlayer props from it (mirroring Anime.vue's
+// `:anime="..."` binding). The fetch is best-effort: on failure aePlayer
+// still mounts with a minimal placeholder meta object.
+const { fetchAnime } = useAnime()
+const aeAnimeTitle = ref('')
+const aeAnimeAired = ref(0)
+const aeAnimeTotal = ref(0)
+const aeAnimeStill = ref<string | undefined>(undefined)
+const aeMalId = ref<string | undefined>(undefined)
+const aeIsHentai = ref(false)
+
+async function loadAeAnimeMeta(id: string) {
+  if (!id) return
+  try {
+    const a = await fetchAnime(id)
+    if (!a) return
+    aeAnimeTitle.value = a.title
+    aeAnimeAired.value = a.episodesAired || 0
+    aeAnimeTotal.value = a.totalEpisodes || 0
+    aeAnimeStill.value = a.coverImage || undefined
+    aeMalId.value = a.shikimoriId || undefined
+    aeIsHentai.value = a.rawGenres?.some((g) => g.name === 'Hentai') ?? false
+  } catch {
+    // Best-effort: aePlayer mounts with the placeholder meta on failure.
+  }
+}
 
 // Subscribe to terminal events from the composable. Both unsubscribers
 // are eaten — the handle's auto-disconnect cleans up on unmount.
@@ -230,6 +266,11 @@ async function bootstrap() {
     }
     const snap = await getRoom(roomId, auth.isAuthenticated ? undefined : auth.wtGuestToken)
     lastAnimeId.value = snap.room.anime_id
+    // Fetch the anime detail aePlayer needs (best-effort; does not block the
+    // room connect or gate the live view). Only aePlayer rooms consume it,
+    // but fetching unconditionally keeps the flow simple and the result
+    // cheap (a single cached GET /anime/{id}).
+    void loadAeAnimeMeta(snap.room.anime_id)
     // Plan 05.5: persist for WS-only room:closed events that may arrive
     // after the composable resets its `room` ref. Privacy modes throw on
     // sessionStorage; silent failure is OK — the in-memory ref still
@@ -363,6 +404,16 @@ const initialEpisode = computed(() => {
 })
 
 const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.value ?? '')
+
+// aePlayer's REQUIRED `anime` object. Built from the fetched detail, mirroring
+// Anime.vue's binding: ep falls back to 1 (≥1 invariant aePlayer expects),
+// eps falls back to aired-or-1 when the total is unknown.
+const aeAnimeMeta = computed(() => ({
+  title: aeAnimeTitle.value,
+  ep: aeAnimeAired.value || 1,
+  eps: aeAnimeTotal.value || aeAnimeAired.value || 1,
+  still: aeAnimeStill.value,
+}))
 </script>
 
 <template>
@@ -518,6 +569,23 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
         :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :room="roomHandle"
+      />
+      <!-- First-party AnimeEnigma player. Unlike the legacy players it needs
+           the full anime meta object + malId/isHentai (sourced via
+           loadAeAnimeMeta). theater is fixed false in-room (the WT layout owns
+           the chrome); @toggle-theater is a no-op since there's no theater
+           toggle in this view. -->
+      <AePlayer
+        v-else-if="livePlayer === 'aeplayer'"
+        :key="`player-${livePlayer}`"
+        :anime-id="animeId"
+        :anime="aeAnimeMeta"
+        :theater="false"
+        :is-hentai="aeIsHentai"
+        :initial-episode="initialEpisode"
+        :mal-id="aeMalId"
+        :room="roomHandle"
+        @toggle-theater="() => {}"
       />
       <!-- Forward-compat: unknown player kind → empty state, NOT a crash.
            The protocol may add a 6th player; this guards against the WS
