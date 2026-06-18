@@ -643,7 +643,13 @@ func main() {
 	// provider_enabled via the shared metrics.EmitProviderRoster helper. Disabled
 	// providers are not Register()-ed but ARE reflected here so they stay visible in
 	// the Grafana management table. Catalog emits the scraper_operated=false rows.
-	scraperRows := cfg.Providers.Rows(append(append([]string{}, candidateProviders...), adultCandidates...))
+	//
+	// Emit provider_info/provider_enabled for the FULL scraper-owned roster
+	// (config.KnownProviders == the scraper_operated=true set), NOT the flag-gated
+	// registration candidate list — so a registered-or-not provider like animekai
+	// (disabled stub, SCRAPER_ANIMEKAI_ENABLED off) still appears in the management
+	// table with its true DB status. Registration below stays flag-gated.
+	scraperRows := cfg.Providers.Rows(config.KnownProviders)
 	rosterEntries := make([]metrics.RosterEntry, 0, len(scraperRows))
 	for _, row := range scraperRows {
 		rosterEntries = append(rosterEntries, metrics.RosterEntry{
