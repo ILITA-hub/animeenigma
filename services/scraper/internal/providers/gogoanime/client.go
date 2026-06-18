@@ -594,6 +594,19 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 		e.dub = ep
 	}
 
+	// emit picks the canonical (sub-preferred) episode and tags it with the
+	// categories found during the merge, so downstream (notifications) can
+	// compute latest-sub vs latest-dub.
+	emit := func(e *merged) domain.Episode {
+		ep := e.sub
+		if !e.hasSub {
+			ep = e.dub
+		}
+		ep.HasSub = e.hasSub
+		ep.HasDub = e.hasDub
+		return ep
+	}
+
 	// Flatten in ascending episode order. Each emitted Episode tags via its
 	// ID slug (which embeds -dub for dub-only episodes) so the orchestrator
 	// can route to the right category at GetStream time.
@@ -606,10 +619,8 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 			// sorted iteration below.
 			break
 		}
-		if e.hasSub {
-			all = append(all, e.sub)
-		} else if e.hasDub {
-			all = append(all, e.dub)
+		if e.hasSub || e.hasDub {
+			all = append(all, emit(e))
 		}
 		delete(byNum, n)
 	}
@@ -627,11 +638,8 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 		// cache hit.
 		sort.Ints(nums)
 		for _, n := range nums {
-			e := byNum[n]
-			if e.hasSub {
-				all = append(all, e.sub)
-			} else if e.hasDub {
-				all = append(all, e.dub)
+			if e := byNum[n]; e.hasSub || e.hasDub {
+				all = append(all, emit(e))
 			}
 		}
 	}

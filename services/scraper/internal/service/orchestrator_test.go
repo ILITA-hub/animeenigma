@@ -1135,3 +1135,26 @@ func TestOrchestrator_ListEpisodesNamed_NoWinnerOnFailure(t *testing.T) {
 		t.Errorf("winner = %q; want empty on failure", winner)
 	}
 }
+
+func TestListEpisodesNamed_DefaultsHasSubWhenUntagged(t *testing.T) {
+	t.Parallel()
+	p := &fakeProvider{
+		nameVal: "animepahe",
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{Number: 1}, {Number: 2}}, nil // untagged: both flags false
+		},
+	}
+	o := newTestOrchestrator(t, p)
+	eps, _, err := o.ListEpisodesNamed(context.Background(), "x", "")
+	if err != nil {
+		t.Fatalf("err = %v; want nil", err)
+	}
+	for _, e := range eps {
+		if !e.HasSub {
+			t.Errorf("ep %d HasSub = false; want true (default for untagged provider)", e.Number)
+		}
+		if e.HasDub {
+			t.Errorf("ep %d HasDub = true; want false", e.Number)
+		}
+	}
+}

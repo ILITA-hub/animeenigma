@@ -588,6 +588,48 @@ func TestFindID_NoMatch(t *testing.T) {
 	}
 }
 
+// TestListEpisodes_TagsSubDub verifies the merged episode list carries
+// per-episode HasSub/HasDub derived from the sub + dub category pages.
+func TestListEpisodes_TagsSubDub(t *testing.T) {
+	t.Parallel()
+	subHTML := []byte(`<html><head><title>Show</title></head><body>` +
+		`<a href="/show-episode-1">1</a><a href="/show-episode-2">2</a><a href="/show-episode-3">3</a>` +
+		`</body></html>`)
+	dubHTML := []byte(`<html><head><title>Show Dub</title></head><body>` +
+		`<a href="/show-dub-episode-1">1</a><a href="/show-dub-episode-2">2</a>` +
+		`</body></html>`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/category/show":
+			_, _ = w.Write(subHTML)
+		case "/category/show-dub":
+			_, _ = w.Write(dubHTML)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	p, _, _, _ := newTestProvider(t, srv)
+
+	eps, err := p.ListEpisodes(context.Background(), "show")
+	if err != nil {
+		t.Fatalf("ListEpisodes err = %v; want nil", err)
+	}
+	byNum := map[int]domain.Episode{}
+	for _, e := range eps {
+		byNum[e.Number] = e
+	}
+	if !byNum[1].HasSub || !byNum[1].HasDub {
+		t.Errorf("ep1 = {sub:%v dub:%v}; want both true", byNum[1].HasSub, byNum[1].HasDub)
+	}
+	if !byNum[2].HasSub || !byNum[2].HasDub {
+		t.Errorf("ep2 = {sub:%v dub:%v}; want both true", byNum[2].HasSub, byNum[2].HasDub)
+	}
+	if !byNum[3].HasSub || byNum[3].HasDub {
+		t.Errorf("ep3 = {sub:%v dub:%v}; want sub true, dub false", byNum[3].HasSub, byNum[3].HasDub)
+	}
+}
+
 // Helper indirections to expose the health-package constants without an
 // extra import in this file. Tests use these so a stage-key rename in the
 // canonical health package is caught by the compiler here too.

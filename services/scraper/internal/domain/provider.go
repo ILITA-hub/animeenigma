@@ -49,6 +49,12 @@ type Episode struct {
 	Number   int    `json:"number"`
 	Title    string `json:"title"`
 	IsFiller bool   `json:"is_filler"`
+	// HasSub/HasDub mark which audio categories the provider found for this
+	// episode. Providers that cannot distinguish leave both false; the
+	// orchestrator then defaults HasSub=true (sub is the common case). Used by
+	// the notifications detector to compute latest-sub vs latest-dub.
+	HasSub bool `json:"has_sub"`
+	HasDub bool `json:"has_dub"`
 }
 
 // Server is one of the streaming servers a provider lists for an episode

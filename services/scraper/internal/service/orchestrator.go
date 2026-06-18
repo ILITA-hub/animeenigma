@@ -425,10 +425,19 @@ func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer stri
 // different provider re-resolved from the failover order would receive episode
 // IDs it cannot parse.
 func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer string) ([]domain.Episode, string, error) {
-	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "list_episodes",
+	eps, name, err := runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "list_episodes",
 		func(c context.Context, p domain.Provider) ([]domain.Episode, error) {
 			return p.ListEpisodes(c, providerID)
 		})
+	// Providers that don't distinguish audio category leave both flags false;
+	// default to sub-available so the API contract is honest (gogoanime sets
+	// both explicitly and is unaffected).
+	for i := range eps {
+		if !eps[i].HasSub && !eps[i].HasDub {
+			eps[i].HasSub = true
+		}
+	}
+	return eps, name, err
 }
 
 // ListServers runs the provider chain for server listing for one episode.
