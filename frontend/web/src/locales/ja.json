@@ -287,6 +287,10 @@
       "skipIntro": "スキップ",
       "extractError": "広告なしストリームを読み込めませんでした。通常のKodikプレーヤーをお試しいただくか、問題をご報告ください。"
     },
+    "classicKodik": {
+      "switch": "クラシック Kodik",
+      "back": "AnimeEnigma プレーヤーに戻る"
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",

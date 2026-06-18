@@ -287,6 +287,10 @@
       "skipIntro": "Skip",
       "extractError": "Couldn't load the ad-free stream. Try the standard Kodik player or report it."
     },
+    "classicKodik": {
+      "switch": "Classic Kodik",
+      "back": "Back to AnimeEnigma player"
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",
