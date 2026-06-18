@@ -638,19 +638,22 @@ func main() {
 		log.Fatalw("adult-group wiring invariant broken", "got", got, "want", expectedAdult)
 	}
 
-	// ISS-023: reflect the provider-management config into Prometheus so the
-	// Grafana dashboard shows EVERY provider (enabled and disabled) with its
-	// reason/description. Disabled providers are not Register()-ed, so without
-	// this they would vanish from all metrics. Includes the adult group so
-	// 18anime appears in the provider-management dashboard.
-	for _, row := range cfg.Providers.Rows(append(append([]string{}, candidateProviders...), adultCandidates...)) {
-		enabled := 0.0
-		if row.Enabled {
-			enabled = 1.0
-		}
-		metrics.ProviderEnabled.WithLabelValues(row.Name).Set(enabled)
-		metrics.ProviderInfo.WithLabelValues(row.Name, string(row.Status), row.Reason, row.Description).Set(1)
+	// ISS-023 / roster unification: reflect the scraper-OWNED provider rows
+	// (scraper_operated=true: the EN chain + 18anime) into provider_info/
+	// provider_enabled via the shared metrics.EmitProviderRoster helper. Disabled
+	// providers are not Register()-ed but ARE reflected here so they stay visible in
+	// the Grafana management table. Catalog emits the scraper_operated=false rows.
+	scraperRows := cfg.Providers.Rows(append(append([]string{}, candidateProviders...), adultCandidates...))
+	rosterEntries := make([]metrics.RosterEntry, 0, len(scraperRows))
+	for _, row := range scraperRows {
+		rosterEntries = append(rosterEntries, metrics.RosterEntry{
+			Name:        row.Name,
+			Status:      string(row.Status),
+			Reason:      row.Reason,
+			Description: row.Description,
+		})
 	}
+	metrics.EmitProviderRoster(rosterEntries)
 	log.Infow("provider management config loaded",
 		"source", cfg.Providers.Source,
 		"disabled", cfg.Providers.DisabledNames(),
