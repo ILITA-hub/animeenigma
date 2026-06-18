@@ -367,7 +367,8 @@ func newLibraryStream(minioURL, quality string) *RawStream {
 // titles AllAnime has never heard of (e.g. Chinese donghua). Returns an
 // empty list (Available=false) when the library is unconfigured, the
 // anime has no shikimori_id, or nothing is encoded yet.
-func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*EpisodesResponse, error) {
+func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (_ *EpisodesResponse, err error) {
+	defer metrics.ObserveParser("ae", "get_episodes", time.Now(), &err)
 	empty := &EpisodesResponse{Episodes: []RawEpisode{}, Available: false, Source: "library"}
 	if r.library == nil {
 		return empty, nil
@@ -406,7 +407,8 @@ func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*
 // first-party ("ae") provider, which must reflect on-prem availability
 // only (that's the whole point of the latency/load comparison). Returns
 // errors.NotFound when the episode is not encoded locally.
-func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string) (*RawStream, error) {
+func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string) (_ *RawStream, err error) {
+	defer metrics.ObserveParser("ae", "get_stream", time.Now(), &err)
 	if r.library == nil {
 		return nil, errors.NotFound("library not configured")
 	}
