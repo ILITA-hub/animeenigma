@@ -85,10 +85,10 @@ onMounted(load)
         <StatsBlock v-else-if="b.type === 'stats'" :user-id="userId" :variant="b.variant" />
         <FavoriteCharacterBlock v-else-if="b.type === 'favorite_character'" :config="b.config as never" :variant="b.variant" />
         <CardCollectionBlock v-else-if="b.type === 'card_collection'" :config="b.config as never" :user-id="userId" :variant="b.variant" />
-        <ContinueWatchingBlock v-else-if="b.type === 'continue_watching'" :user-id="userId" />
-        <OpEdBlock v-else-if="b.type === 'op_ed'" :config="b.config as never" />
-        <AnimeDnaBlock v-else-if="b.type === 'anime_dna'" :user-id="userId" />
-        <CompatibilityBlock v-else-if="b.type === 'compatibility'" :user-id="userId" :is-owner="isOwner" />
+        <ContinueWatchingBlock v-else-if="b.type === 'continue_watching'" :user-id="userId" :variant="b.variant" />
+        <OpEdBlock v-else-if="b.type === 'op_ed'" :config="b.config as never" :variant="b.variant" />
+        <AnimeDnaBlock v-else-if="b.type === 'anime_dna'" :user-id="userId" :variant="b.variant" />
+        <CompatibilityBlock v-else-if="b.type === 'compatibility'" :user-id="userId" :is-owner="isOwner" :variant="b.variant" />
       </template>
     </template>
   </section>

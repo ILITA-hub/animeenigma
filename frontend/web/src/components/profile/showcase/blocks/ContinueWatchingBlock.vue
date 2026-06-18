@@ -4,7 +4,7 @@ import { publicApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 
-const props = defineProps<{ userId: string; config?: unknown; isOwner?: boolean }>()
+const props = defineProps<{ userId: string; config?: unknown; isOwner?: boolean; variant?: string }>()
 
 interface WatchingAnime {
   anime_id: string

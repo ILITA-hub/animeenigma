@@ -1796,6 +1796,7 @@
     "pick_cards": "Pick cards",
     "saved": "Showcase saved",
     "save_error": "Couldn't save showcase — please retry",
+    "auto_fill_error": "Couldn't auto-fill — please retry",
     "variant_label": "Variant",
     "auto_fill": "Auto",
     "op_ed_add_theme": "Add theme ID",

@@ -4,6 +4,14 @@ import ShowcaseEditor from '../ShowcaseEditor.vue'
 import type { ShowcaseBlock } from '@/types/showcase'
 import { defaultVariant } from '@/types/showcase'
 
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k }),
+}))
+
+vi.mock('@/composables/useToast', () => ({
+  useToast: () => ({ push: vi.fn() }),
+}))
+
 vi.mock('vuedraggable', () => ({
   default: {
     name: 'draggable',

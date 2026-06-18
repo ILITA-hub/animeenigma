@@ -5,6 +5,7 @@ import { showcaseApi } from '@/api/client'
 const props = defineProps<{
   userId: string
   isOwner?: boolean
+  variant?: string
 }>()
 
 interface CompatData {

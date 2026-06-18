@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useToast } from '@/composables/useToast'
 import draggable from 'vuedraggable'
 import Select from '@/components/ui/Select.vue'
 import type { SelectOption } from '@/components/ui/Select.vue'
@@ -17,6 +19,9 @@ function aboutConfig(el: ShowcaseBlock): AboutConfig {
 
 const props = defineProps<{ userId: string; modelValue: ShowcaseBlock[] }>()
 const emit = defineEmits<{ save: [ShowcaseBlock[]]; cancel: [] }>()
+
+const { t } = useI18n()
+const toast = useToast()
 
 const local = ref<ShowcaseBlock[]>(props.modelValue.map((b) => ({ ...b })))
 
@@ -61,39 +66,47 @@ function variantOptions(type: ShowcaseBlockType): SelectOption[] {
 }
 
 async function autoFillAnime(el: ShowcaseBlock) {
-  const res = await userApi.getWatchlist({ sort: 'score', order: 'desc', per_page: 12 })
-  const items = (res.data?.data ?? res.data) as Array<{ anime_id: string; score?: number }>
-  const sorted = [...items].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 12)
-  ;(el.config as FavoriteAnimeConfig).anime_ids = sorted.map((i) => i.anime_id)
+  try {
+    const res = await userApi.getWatchlist({ sort: 'score', order: 'desc', per_page: 12 })
+    const items = (res.data?.data ?? res.data) as Array<{ anime_id: string; score?: number }>
+    const sorted = [...items].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 12)
+    ;(el.config as FavoriteAnimeConfig).anime_ids = sorted.map((i) => i.anime_id)
+  } catch {
+    toast.push(t('showcase.auto_fill_error'), 'error')
+  }
 }
 
 async function autoFillCards(el: ShowcaseBlock) {
-  const res = await gachaApi.getCollection()
-  const view = res.data?.data ?? res.data
-  const RARITY_ORDER: Record<string, number> = { SSR: 4, SR: 3, R: 2, N: 1 }
-  const owned = view.cards
-    .filter((c: { owned: boolean }) => c.owned)
-    .sort(
-      (
-        a: { card: { rarity: string; created_at: string } },
-        b: { card: { rarity: string; created_at: string } },
-      ) => {
-        const rd = (RARITY_ORDER[b.card.rarity] ?? 0) - (RARITY_ORDER[a.card.rarity] ?? 0)
-        if (rd !== 0) return rd
-        return new Date(b.card.created_at).getTime() - new Date(a.card.created_at).getTime()
-      },
-    )
-    .slice(0, 12)
-  ;(el.config as CardCollectionConfig).card_ids = owned.map((c: { card: { id: string } }) => c.card.id)
+  try {
+    const res = await gachaApi.getCollection()
+    const view = res.data?.data ?? res.data
+    const RARITY_ORDER: Record<string, number> = { SSR: 4, SR: 3, R: 2, N: 1 }
+    const owned = view.cards
+      .filter((c: { owned: boolean }) => c.owned)
+      .sort(
+        (
+          a: { card: { rarity: string; created_at: string } },
+          b: { card: { rarity: string; created_at: string } },
+        ) => {
+          const rd = (RARITY_ORDER[b.card.rarity] ?? 0) - (RARITY_ORDER[a.card.rarity] ?? 0)
+          if (rd !== 0) return rd
+          return new Date(b.card.created_at).getTime() - new Date(a.card.created_at).getTime()
+        },
+      )
+      .slice(0, 12)
+    ;(el.config as CardCollectionConfig).card_ids = owned.map((c: { card: { id: string } }) => c.card.id)
+  } catch {
+    toast.push(t('showcase.auto_fill_error'), 'error')
+  }
 }
 
-const newThemeId = ref('')
+const newThemeId = ref<Record<number, string>>({})
 
-function addThemeId(el: ShowcaseBlock, id: string) {
+function addThemeId(el: ShowcaseBlock, index: number, id: string) {
   const cfg = el.config as OpEdConfig
   const trimmed = id.trim()
   if (trimmed && !cfg.theme_ids.includes(trimmed)) cfg.theme_ids.push(trimmed)
-  newThemeId.value = ''
+  newThemeId.value[index] = ''
 }
 
 function removeThemeId(el: ShowcaseBlock, id: string) {
@@ -220,17 +233,18 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
             </div>
             <div class="flex gap-2">
               <input
-                v-model="newThemeId"
+                :value="newThemeId[index] ?? ''"
                 :placeholder="$t('showcase.op_ed_add_theme')"
                 class="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs"
                 data-test="showcase-theme-input"
-                @keydown.enter.prevent="addThemeId(element, newThemeId)"
+                @input="newThemeId[index] = ($event.target as HTMLInputElement).value"
+                @keydown.enter.prevent="addThemeId(element, index, newThemeId[index] ?? '')"
               />
               <button
                 type="button"
                 class="rounded-lg border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent"
                 data-test="showcase-theme-add"
-                @click="addThemeId(element, newThemeId)"
+                @click="addThemeId(element, index, newThemeId[index] ?? '')"
               >
                 +
               </button>

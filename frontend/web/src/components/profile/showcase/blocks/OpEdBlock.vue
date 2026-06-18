@@ -16,7 +16,7 @@ interface ThemeData {
   slug?: string
 }
 
-const props = defineProps<{ config: OpEdConfig }>()
+const props = defineProps<{ config: OpEdConfig; variant?: string }>()
 
 const themes = ref<ThemeData[]>([])
 
@@ -69,9 +69,9 @@ onMounted(async () => {
           <!-- OP / ED badge -->
           <span
             class="absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-black/70 border border-border"
-            :class="theme.theme_type === 'ED' ? 'text-pink' : 'text-cyan'"
+            :class="theme.theme_type === 'ED' || theme.theme_type === 'ending' ? 'text-pink' : 'text-cyan'"
           >
-            {{ theme.slug || theme.theme_type || 'OP' }}
+            {{ theme.theme_type === 'ending' || theme.theme_type === 'ED' ? 'ED' : 'OP' }}
           </span>
           <!-- equalizer animation (decorative) -->
           <div class="absolute left-2.5 bottom-3 flex gap-0.5 items-end h-4" aria-hidden="true">

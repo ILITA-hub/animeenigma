@@ -4,7 +4,7 @@ import { publicApi } from '@/api/client'
 import type { FacetGenre, WatchlistFacets } from '@/types/watchlist-facets'
 import { useI18n } from 'vue-i18n'
 
-const props = defineProps<{ userId: string; config?: unknown; isOwner?: boolean }>()
+const props = defineProps<{ userId: string; config?: unknown; isOwner?: boolean; variant?: string }>()
 
 const { locale } = useI18n()
 
