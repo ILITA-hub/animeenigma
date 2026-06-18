@@ -4,6 +4,51 @@ import (
 	"fmt"
 )
 
+// resultEpisodeCount returns the episode count a single search result implies,
+// using Kodik's field precedence: last_episode → episodes_count → summed
+// season episodes → 1 for a bare anime entry.
+func resultEpisodeCount(r SearchResult) int {
+	count := r.LastEpisode
+	if count == 0 {
+		count = r.EpisodesCount
+	}
+	if count == 0 && r.Seasons != nil {
+		for _, season := range r.Seasons {
+			if season != nil && season.Episodes != nil {
+				count += len(season.Episodes)
+			}
+		}
+	}
+	if count == 0 && r.Type == "anime" {
+		count = 1
+	}
+	return count
+}
+
+// maxAnyTeamEpisode returns the highest episode count across ALL translations
+// (team-agnostic) — the anime-level "latest episode" for notification detection.
+func maxAnyTeamEpisode(results []SearchResult) int {
+	best := 0
+	for _, r := range results {
+		if c := resultEpisodeCount(r); c > best {
+			best = c
+		}
+	}
+	return best
+}
+
+// LatestEpisodeAnyTranslation returns the latest episode available across ANY
+// translation for the anime (used by the notifications detector for aePlayer
+// kodik combos, which carry no specific translation_id). Returns 0 + nil when
+// the anime has no kodik results (caller maps that to NotFound/skip).
+func (c *Client) LatestEpisodeAnyTranslation(shikimoriID string) (int, error) {
+	results, err := c.SearchByShikimoriID(shikimoriID)
+	if err != nil {
+		return 0, fmt.Errorf("kodik: search by shikimori_id %q: %w", shikimoriID, err)
+	}
+	return maxAnyTeamEpisode(results), nil
+}
+
 // LatestEpisodeForTranslation returns the highest available episode number on
 // Kodik for a single (shikimori_id, translation_id) combination.
 //
@@ -52,20 +97,7 @@ func (c *Client) LatestEpisodeForTranslation(shikimoriID string, translationID i
 		}
 
 		// Same precedence as GetTranslations (kodik/client.go ~L522).
-		count := r.LastEpisode
-		if count == 0 {
-			count = r.EpisodesCount
-		}
-		if count == 0 && r.Seasons != nil {
-			for _, season := range r.Seasons {
-				if season != nil && season.Episodes != nil {
-					count += len(season.Episodes)
-				}
-			}
-		}
-		if count == 0 && r.Type == "anime" {
-			count = 1
-		}
+		count := resultEpisodeCount(r)
 
 		if count > best {
 			best = count
