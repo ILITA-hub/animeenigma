@@ -5,15 +5,7 @@ import type { ShowcaseBlock } from '@/types/showcase'
 import { spanClasses, sizeFor } from '@/types/showcase'
 import { showcaseApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
-import AboutBlock from './blocks/AboutBlock.vue'
-import FavoriteAnimeBlock from './blocks/FavoriteAnimeBlock.vue'
-import StatsBlock from './blocks/StatsBlock.vue'
-import FavoriteCharacterBlock from './blocks/FavoriteCharacterBlock.vue'
-import CardCollectionBlock from './blocks/CardCollectionBlock.vue'
-import ContinueWatchingBlock from './blocks/ContinueWatchingBlock.vue'
-import OpEdBlock from './blocks/OpEdBlock.vue'
-import AnimeDnaBlock from './blocks/AnimeDnaBlock.vue'
-import CompatibilityBlock from './blocks/CompatibilityBlock.vue'
+import ShowcaseBlockView from './ShowcaseBlockView.vue'
 import ShowcaseEditor from './ShowcaseEditor.vue'
 
 const props = defineProps<{ userId: string; isOwner: boolean }>()
@@ -88,15 +80,7 @@ onMounted(load)
       <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-3 [grid-auto-flow:dense] [grid-auto-rows:165px] md:[grid-auto-rows:190px]">
         <template v-for="(b, i) in blocks" :key="i">
           <div :data-showcase-cell="b.type" :class="['h-full', cellClass(b)]">
-            <AboutBlock v-if="b.type === 'about'" :config="b.config as never" :variant="b.variant" />
-            <FavoriteAnimeBlock v-else-if="b.type === 'favorite_anime'" :config="b.config as never" :variant="b.variant" :user-id="userId" />
-            <StatsBlock v-else-if="b.type === 'stats'" :user-id="userId" :variant="b.variant" />
-            <FavoriteCharacterBlock v-else-if="b.type === 'favorite_character'" :config="b.config as never" :variant="b.variant" />
-            <CardCollectionBlock v-else-if="b.type === 'card_collection'" :config="b.config as never" :user-id="userId" :variant="b.variant" />
-            <ContinueWatchingBlock v-else-if="b.type === 'continue_watching'" :user-id="userId" :variant="b.variant" />
-            <OpEdBlock v-else-if="b.type === 'op_ed'" :config="b.config as never" :variant="b.variant" />
-            <AnimeDnaBlock v-else-if="b.type === 'anime_dna'" :user-id="userId" :variant="b.variant" />
-            <CompatibilityBlock v-else-if="b.type === 'compatibility'" :user-id="userId" :is-owner="isOwner" :variant="b.variant" />
+            <ShowcaseBlockView :block="b" :user-id="userId" :is-owner="isOwner" />
           </div>
         </template>
       </div>

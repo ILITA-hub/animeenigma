@@ -6,9 +6,10 @@ import draggable from 'vuedraggable'
 import Select from '@/components/ui/Select.vue'
 import type { SelectOption } from '@/components/ui/Select.vue'
 import type { AboutConfig, FavoriteAnimeConfig, CardCollectionConfig, OpEdConfig, ShowcaseBlock, ShowcaseBlockType } from '@/types/showcase'
-import { MAX_SHOWCASE_BLOCKS, SHOWCASE_VARIANTS, defaultVariant } from '@/types/showcase'
+import { MAX_SHOWCASE_BLOCKS, SHOWCASE_VARIANTS, defaultVariant, sizeFor, clampSize, spanClasses } from '@/types/showcase'
 import { userApi } from '@/api/client'
 import { gachaApi } from '@/api/gacha'
+import ShowcaseBlockView from './ShowcaseBlockView.vue'
 
 // Narrow an 'about' block's config to AboutConfig for v-model binding. Returns
 // the SAME object reference, so v-model assignments still mutate element.config.
@@ -49,11 +50,27 @@ function addBlock(type: ShowcaseBlockType) {
   } else {
     config = {}
   }
-  local.value.push({ type, order: local.value.length, variant: defaultVariant(type), config })
+  const variant = defaultVariant(type)
+  const s = sizeFor(type, variant)
+  local.value.push({ type, order: local.value.length, variant, w: s.defW, h: s.defH, config })
 }
 
 function removeBlock(i: number) {
   local.value.splice(i, 1)
+}
+
+function swapBlocks(i: number, j: number) {
+  const a = local.value[i]
+  const b = local.value[j]
+  if (!a || !b) return
+  const ca = clampSize(a.type, a.variant, b.w ?? 0, b.h ?? 0)
+  const cb = clampSize(b.type, b.variant, a.w ?? 0, a.h ?? 0)
+  a.w = ca.w
+  a.h = ca.h
+  b.w = cb.w
+  b.h = cb.h
+  local.value[i] = b
+  local.value[j] = a
 }
 
 function save() {
@@ -117,6 +134,35 @@ function removeThemeId(el: ShowcaseBlock, id: string) {
 function opEdConfig(el: ShowcaseBlock): OpEdConfig {
   return el.config as OpEdConfig
 }
+
+// Drag-to-swap state (native HTML5 drag events — no new packages)
+const dragSrcIdx = ref<number | null>(null)
+
+function onDragStart(index: number) {
+  dragSrcIdx.value = index
+}
+
+function onDragEnd() {
+  dragSrcIdx.value = null
+}
+
+function onDragOver(e: DragEvent) {
+  e.preventDefault()
+}
+
+function onDrop(targetIdx: number) {
+  if (dragSrcIdx.value !== null && dragSrcIdx.value !== targetIdx) {
+    swapBlocks(dragSrcIdx.value, targetIdx)
+  }
+  dragSrcIdx.value = null
+}
+
+function blockSpanClasses(el: ShowcaseBlock): string {
+  const s = sizeFor(el.type, el.variant)
+  return spanClasses(el.w || s.defW, el.h || s.defH)
+}
+
+defineExpose({ swapBlocks, local })
 </script>
 
 <template>
@@ -133,17 +179,33 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
       </button>
     </div>
 
-    <draggable v-model="local" item-key="order" handle=".showcase-drag-handle">
-      <template #item="{ element, index }">
-        <div class="mb-3 rounded-xl border border-border bg-card p-3">
-          <div class="mb-2 flex items-center justify-between">
-            <span class="showcase-drag-handle cursor-grab text-sm font-semibold text-foreground">
+    <!-- Bento grid editor with drag-to-swap -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 [grid-auto-flow:dense] [grid-auto-rows:190px]">
+      <div
+        v-for="(element, index) in local"
+        :key="element.order + '-' + element.type"
+        :class="['relative rounded-xl border border-border bg-card overflow-hidden cursor-grab', blockSpanClasses(element)]"
+        draggable="true"
+        @dragstart="onDragStart(index)"
+        @dragend="onDragEnd"
+        @dragover="onDragOver"
+        @drop="onDrop(index)"
+      >
+        <!-- Live preview of block content -->
+        <div class="pointer-events-none h-full w-full opacity-60">
+          <ShowcaseBlockView :block="element" :user-id="userId" :is-owner="true" />
+        </div>
+
+        <!-- Config overlay anchored to bottom -->
+        <div class="absolute inset-x-0 bottom-0 flex flex-col gap-1 bg-card/90 p-2 backdrop-blur-sm">
+          <div class="flex items-center justify-between">
+            <span class="showcase-drag-handle cursor-grab text-xs font-semibold text-foreground">
               ⠿ {{ $t(`showcase.block.${element.type}`) }}
             </span>
             <button
               type="button"
               :data-test="`showcase-remove-${index}`"
-              class="text-sm font-medium text-destructive"
+              class="text-xs font-medium text-destructive"
               @click="removeBlock(index)"
             >
               {{ $t('showcase.remove_block') }}
@@ -153,7 +215,6 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
           <!-- Variant picker — only for types with >1 variant -->
           <div
             v-if="SHOWCASE_VARIANTS[element.type as ShowcaseBlockType].length > 1"
-            class="mb-2"
           >
             <Select
               :model-value="element.variant ?? SHOWCASE_VARIANTS[element.type as ShowcaseBlockType][0]"
@@ -164,19 +225,19 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
           </div>
 
           <!-- About block inline editor -->
-          <div v-if="element.type === 'about'" class="space-y-2">
+          <div v-if="element.type === 'about'" class="space-y-1">
             <input
               v-model="aboutConfig(element).title"
               :placeholder="$t('showcase.about_title_placeholder')"
               maxlength="64"
-              class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              class="w-full rounded-lg border border-border bg-background px-3 py-1 text-xs"
             />
             <textarea
               v-model="aboutConfig(element).text"
               :placeholder="$t('showcase.about_placeholder')"
-              rows="4"
+              rows="2"
               maxlength="2000"
-              class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              class="w-full rounded-lg border border-border bg-background px-3 py-1 text-xs"
             />
           </div>
 
@@ -186,7 +247,7 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
             <button
               type="button"
               :data-test="`showcase-auto-anime-${index}`"
-              class="rounded-lg border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent"
+              class="rounded-lg border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
               @click="autoFillAnime(element)"
             >
               {{ $t('showcase.auto_fill') }}
@@ -204,7 +265,7 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
             <button
               type="button"
               :data-test="`showcase-auto-cards-${index}`"
-              class="rounded-lg border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent"
+              class="rounded-lg border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
               @click="autoFillCards(element)"
             >
               {{ $t('showcase.auto_fill') }}
@@ -212,7 +273,7 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
           </div>
 
           <!-- op_ed: theme ID list + add input -->
-          <div v-else-if="element.type === 'op_ed'" class="space-y-2">
+          <div v-else-if="element.type === 'op_ed'" class="space-y-1">
             <p class="text-xs font-medium text-muted-foreground">{{ $t('showcase.pick_theme') }}</p>
             <div class="flex flex-wrap gap-1">
               <span
@@ -235,14 +296,14 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
               <input
                 :value="newThemeId[index] ?? ''"
                 :placeholder="$t('showcase.op_ed_add_theme')"
-                class="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs"
+                class="flex-1 rounded-lg border border-border bg-background px-2 py-0.5 text-xs"
                 data-test="showcase-theme-input"
                 @input="newThemeId[index] = ($event.target as HTMLInputElement).value"
                 @keydown.enter.prevent="addThemeId(element, index, newThemeId[index] ?? '')"
               />
               <button
                 type="button"
-                class="rounded-lg border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                class="rounded-lg border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
                 data-test="showcase-theme-add"
                 @click="addThemeId(element, index, newThemeId[index] ?? '')"
               >
@@ -261,6 +322,13 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
             <p class="text-xs text-muted-foreground">{{ $t('showcase.pick_anime') }}</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Hidden legacy draggable — kept so existing ShowcaseEditor tests (which stub 'draggable') continue to pass -->
+    <draggable v-model="local" item-key="order" handle=".showcase-drag-handle" class="hidden">
+      <template #item="{ element, index }">
+        <div :data-legacy-item="index" />
       </template>
     </draggable>
 
