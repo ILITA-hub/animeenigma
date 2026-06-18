@@ -895,6 +895,78 @@ func TestStateChange_Player_BogusValue_BadPayload(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
+// Test StateChange.6b — aeplayer follows the permissive path: an aeplayer
+// room with an unknown catalog episode id is NOT short-circuited — it
+// round-trips to the catalog (whose permissive contract decides), exactly
+// like ourenglish/hanime/raw. Mechanism: aeplayer ∈ validPlayers so a
+// change_player to it reaches catalog rather than BAD_PAYLOAD; and an
+// aeplayer-room change_episode reaches catalog with the unknown id (no
+// per-player short-circuit in this service).
+// ----------------------------------------------------------------------------
+
+func TestStateChange_AePlayer_PermissivePath(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-ae-permissive"
+	r := fx.defaultRoom(roomID)
+	r.Player = domain.PlayerAePlayer // room is already on aeplayer
+	fx.seedRoom(t, r)
+
+	// Unknown catalog episode id: with the permissive contract (fake catalog
+	// returns Valid=true) this must be accepted — NOT rejected pre-catalog.
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeEpisode,
+		map[string]interface{}{"episode_id": "unknown-ep-999"})
+
+	calls := fx.hub.snapshot()
+	if findErrorCode(t, calls, errCodeBadPayload) {
+		t.Fatal("aeplayer episode change must NOT be rejected as BAD_PAYLOAD (permissive path)")
+	}
+	if !findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatalf("expected room:state_changed broadcast on permissive accept; calls=%v", calls)
+	}
+
+	// The episode change must have round-tripped to the catalog with the
+	// aeplayer + the unknown id (proves it took the permissive validate path).
+	cc := fx.catalog.snapshot()
+	if len(cc) != 1 {
+		t.Fatalf("catalog calls = %d, want 1 (episode change must reach catalog)", len(cc))
+	}
+	if cc[0].Player != domain.PlayerAePlayer || cc[0].EpisodeID != "unknown-ep-999" {
+		t.Errorf("catalog call = %+v, want {player=aeplayer, episode=unknown-ep-999}", cc[0])
+	}
+
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.EpisodeID != "unknown-ep-999" {
+		t.Errorf("EpisodeID = %q, want unknown-ep-999 (permissive accept persisted)", room.EpisodeID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.6c — changing TO aeplayer reaches the catalog round-trip
+// (is in validPlayers), not short-circuited as BAD_PAYLOAD.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Player_AePlayer_ReachesCatalog(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-pl-ae"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangePlayer,
+		map[string]interface{}{"player": domain.PlayerAePlayer})
+
+	calls := fx.hub.snapshot()
+	if findErrorCode(t, calls, errCodeBadPayload) {
+		t.Fatal("aeplayer must be accepted by validPlayers, not BAD_PAYLOAD")
+	}
+	if !findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatalf("expected room:state_changed broadcast; calls=%v", calls)
+	}
+	cc := fx.catalog.snapshot()
+	if len(cc) != 1 || cc[0].Player != domain.PlayerAePlayer {
+		t.Fatalf("expected 1 catalog call with player=aeplayer; got %+v", cc)
+	}
+}
+
+// ----------------------------------------------------------------------------
 // Test StateChange.7 — change_player Valid=true → HSET player + reset
 // episode_id="1" + translation_id="" + playback resets; broadcast to ALL.
 // ----------------------------------------------------------------------------
