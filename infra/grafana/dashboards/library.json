@@ -1185,6 +1185,46 @@
       ],
       "title": "Autocache triggers \u2014 who / when / what watched (last 10)",
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "aenigma-postgres-library"
+      },
+      "description": "CAUSE -> EFFECT: each user-driven autocache trigger (player Logic B next_ep + catalog backfill) and the download it produced. Left = the watch (who / combo / watched ep); right (-> columns) = the episode the autocache fetched as a result + its current status (no job yet -> queued -> downloading -> in pool). Joined exactly by (MAL ID, fetched ep). The aggregate scheduler Logic A push has no single user, so it is not listed here (see the by-trigger metrics + the downloads table).",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "id": 16,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "aenigma-postgres-library"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  t.created_at AS \"Triggered\",\n  COALESCE(NULLIF(t.username,''), NULLIF(t.user_id,''), '?') AS \"Who\",\n  t.reason AS \"Trigger\",\n  COALESCE(NULLIF(t.watch_player,''),'?') || '/' || COALESCE(NULLIF(t.watch_language,''),'?') || '/' || COALESCE(NULLIF(t.watch_type,''),'?') AS \"Combo\",\n  t.watched_episode AS \"Watched ep\",\n  t.mal_id AS \"MAL ID\",\n  t.target_episode AS \"-> Fetched ep\",\n  COALESCE(NULLIF(j.title,''), '(searching / no release yet)') AS \"-> Downloaded release\",\n  CASE WHEN e.id IS NOT NULL THEN 'in pool' ELSE COALESCE(j.status, 'no job yet') END AS \"-> Effect\",\n  e.downloaded_at AS \"-> In pool at\"\nFROM autocache_trigger_log t\nLEFT JOIN LATERAL (\n  SELECT title, status FROM library_jobs\n  WHERE shikimori_id = t.mal_id AND episode = t.target_episode AND source='autocache'\n  ORDER BY created_at DESC LIMIT 1\n) j ON true\nLEFT JOIN LATERAL (\n  SELECT id, downloaded_at FROM library_episodes\n  WHERE shikimori_id = t.mal_id AND episode_number = t.target_episode AND source='autocache'\n  ORDER BY created_at DESC LIMIT 1\n) e ON true\nORDER BY t.created_at DESC\nLIMIT 20",
+          "refId": "A"
+        }
+      ],
+      "title": "Autocache cause -> effect (who watched -> what got downloaded)",
+      "type": "table"
     }
   ],
   "refresh": "30s",

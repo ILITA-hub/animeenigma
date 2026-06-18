@@ -193,6 +193,11 @@ func main() {
 	if err := db.DB.Exec(migrations.AutocacheDemandTitlesSQL).Error; err != nil {
 		log.Fatalw("failed to apply autocache_demand_titles migration", "error", err)
 	}
+	// 012 (v4.1): the append-only autocache_trigger_log (cause→effect — who/when/
+	// what-watched per user-driven trigger + the target episode). Independent table.
+	if err := db.DB.Exec(migrations.AutocacheTriggerLogSQL).Error; err != nil {
+		log.Fatalw("failed to apply autocache_trigger_log migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {
@@ -479,8 +484,9 @@ func main() {
 	// the new demandRepo, the autocacheConfigRepo (enabled switch), and the
 	// existing libMetrics — no reconstruction.
 	demandRepo := repo.NewDemandRepository(db.DB)
+	triggerLogRepo := repo.NewTriggerLogRepository(db.DB)
 	autocacheInternalHandler := handler.NewAutocacheInternalHandler(
-		handler.NewGormAutocacheInternalDeps(episodeRepo, demandRepo, autocacheConfigRepo),
+		handler.NewGormAutocacheInternalDeps(episodeRepo, demandRepo, autocacheConfigRepo, triggerLogRepo),
 		libMetrics,
 		log,
 	)

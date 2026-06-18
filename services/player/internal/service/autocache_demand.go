@@ -22,10 +22,25 @@ const demandChanCap = 256
 // reason. Titles is the ordered fallback title list (name_jp → romaji → name_en)
 // the library Planner searches trackers with.
 type demandMsg struct {
-	MalID   string   `json:"mal_id"`
-	Episode int      `json:"episode"`
-	Reason  string   `json:"reason"`
-	Titles  []string `json:"titles,omitempty"`
+	MalID   string          `json:"mal_id"`
+	Episode int             `json:"episode"`
+	Reason  string          `json:"reason"`
+	Titles  []string        `json:"titles,omitempty"`
+	Trigger *DemandTrigger  `json:"trigger,omitempty"`
+}
+
+// DemandTrigger is the cause→effect watcher context the player attaches to a
+// Logic-B next_ep demand: who watched, the combo, and the episode they were
+// actually watching (the cause). The demand's Episode is the TARGET (N+1) — what
+// the autocache fetches. The library appends this to autocache_trigger_log so the
+// dashboard can show the watch that caused each download.
+type DemandTrigger struct {
+	UserID         string `json:"user_id,omitempty"`
+	Username       string `json:"username,omitempty"`
+	Player         string `json:"player,omitempty"`
+	Language       string `json:"language,omitempty"`
+	WatchType      string `json:"watch_type,omitempty"`
+	WatchedEpisode int    `json:"watched_episode,omitempty"`
 }
 
 // DemandProducer is a fire-and-forget producer that POSTs autocache demands to
@@ -91,11 +106,11 @@ func (p *DemandProducer) Stop() {
 // because main.go calls srv.Shutdown() (draining all in-flight HTTP handlers,
 // the only callers) BEFORE the deferred Stop() closes the channel. If you add
 // a non-HTTP caller or reorder shutdown, guard sends with an atomic closed flag.
-func (p *DemandProducer) Want(malID string, episode int, reason string, titles []string) {
+func (p *DemandProducer) Want(malID string, episode int, reason string, titles []string, trigger *DemandTrigger) {
 	if p == nil || !p.enabled {
 		return
 	}
-	msg := demandMsg{MalID: malID, Episode: episode, Reason: reason, Titles: titles}
+	msg := demandMsg{MalID: malID, Episode: episode, Reason: reason, Titles: titles, Trigger: trigger}
 	select {
 	case p.ch <- msg:
 	default:

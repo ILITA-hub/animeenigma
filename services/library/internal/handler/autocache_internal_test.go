@@ -31,6 +31,10 @@ type stubInternalDeps struct {
 	recordTitles  []string
 	recordErr     error
 
+	triggerCalls int
+	triggerRow   *domain.AutocacheTriggerLog
+	triggerErr   error
+
 	enabled    bool
 	enabledErr error
 }
@@ -49,6 +53,12 @@ func (s *stubInternalDeps) RecordDemand(_ context.Context, malID string, episode
 	s.recordReason = reason
 	s.recordTitles = titles
 	return s.recordErr
+}
+
+func (s *stubInternalDeps) RecordTrigger(_ context.Context, row *domain.AutocacheTriggerLog) error {
+	s.triggerCalls++
+	s.triggerRow = row
+	return s.triggerErr
 }
 
 func (s *stubInternalDeps) ConfigEnabled(context.Context) (bool, error) {
@@ -168,6 +178,53 @@ func TestAutocacheInternalDemand_DisabledSkipsButStill200(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(m.GetServeTotalForTest("miss")) - before; got != 0 {
 		t.Fatalf("want serve_total{miss} unchanged when disabled, got +%v", got)
+	}
+}
+
+// A user-driven demand carrying a `trigger` block records a cause→effect
+// trigger-log row (target episode = the demand episode; watched episode + combo
+// + who from the trigger), with the validated reason honored.
+func TestAutocacheInternalDemand_TriggerRecordsCauseEffect(t *testing.T) {
+	deps := &stubInternalDeps{enabled: true}
+	h, _ := newTestInternalHandler(deps)
+
+	body := `{"mal_id":"59708","episode":2,"reason":"next_ep","titles":["Youkoso"],` +
+		`"trigger":{"user_id":"u1","username":"tNeymik","player":"english","language":"en","watch_type":"sub","watched_episode":1}}`
+	rec := postJSON(h.Demand, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	if deps.triggerCalls != 1 {
+		t.Fatalf("want RecordTrigger called once, got %d", deps.triggerCalls)
+	}
+	tr := deps.triggerRow
+	if tr == nil {
+		t.Fatal("trigger row is nil")
+	}
+	if tr.MalID != "59708" || tr.TargetEpisode != 2 || tr.WatchedEpisode != 1 {
+		t.Errorf("got mal=%q target=%d watched=%d, want 59708/2/1", tr.MalID, tr.TargetEpisode, tr.WatchedEpisode)
+	}
+	if tr.Reason != "next_ep" || tr.Username != "tNeymik" || tr.WatchType != "sub" || tr.WatchPlayer != "english" {
+		t.Errorf("unexpected trigger fields: %+v", tr)
+	}
+}
+
+// A demand with NO trigger block (e.g. scheduler Logic A) records the demand but
+// no trigger-log row.
+func TestAutocacheInternalDemand_NoTriggerSkipsLog(t *testing.T) {
+	deps := &stubInternalDeps{enabled: true}
+	h, _ := newTestInternalHandler(deps)
+
+	rec := postJSON(h.Demand, `{"mal_id":"111","episode":7,"reason":"ongoing"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	if deps.triggerCalls != 0 {
+		t.Fatalf("want RecordTrigger NOT called without a trigger block, got %d", deps.triggerCalls)
+	}
+	if deps.recordCalls != 1 {
+		t.Fatalf("want the demand still recorded, got %d", deps.recordCalls)
 	}
 }
 

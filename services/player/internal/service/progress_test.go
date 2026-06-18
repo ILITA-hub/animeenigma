@@ -30,15 +30,17 @@ type fakeDemand struct {
 	episode int
 	reason  string
 	titles  []string
+	trigger *DemandTrigger
 	calls   int
 }
 
-func (f *fakeDemand) Want(malID string, episode int, reason string, titles []string) {
+func (f *fakeDemand) Want(malID string, episode int, reason string, titles []string, trigger *DemandTrigger) {
 	f.calls++
 	f.malID = malID
 	f.episode = episode
 	f.reason = reason
 	f.titles = titles
+	f.trigger = trigger
 }
 
 // fakeUpserter is a no-op progress upserter so UpdateProgress's persistence
@@ -112,6 +114,14 @@ func TestUpdateProgress_FiresNextEpForRawAudioWatcher(t *testing.T) {
 			// Planner can search trackers by title).
 			if len(d.titles) != 3 || d.titles[0] != "JP" || d.titles[1] != "Romaji" || d.titles[2] != "EN" {
 				t.Errorf("demand titles = %#v, want [JP Romaji EN]", d.titles)
+			}
+			// Cause→effect trigger: the watched episode (N=5) + combo must be carried
+			// so the library can log who/what caused the N+1 fetch.
+			if d.trigger == nil {
+				t.Fatal("expected a cause→effect trigger on the demand")
+			}
+			if d.trigger.WatchedEpisode != 5 || d.trigger.Player != tc.player || d.trigger.WatchType != tc.watchType {
+				t.Errorf("trigger = %+v, want watched=5 player=%q watch_type=%q", d.trigger, tc.player, tc.watchType)
 			}
 		})
 	}

@@ -347,7 +347,7 @@ func TestRecordDemand_PostsDemandPathWithReason(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	if err := c.RecordDemand(context.Background(), "57466", 7, "backfill", []string{"JP", "Romaji", "EN"}); err != nil {
+	if err := c.RecordDemand(context.Background(), "57466", 7, "backfill", []string{"JP", "Romaji", "EN"}, nil); err != nil {
 		t.Fatalf("RecordDemand returned %v, want nil on 200", err)
 	}
 	if seenPath != "/internal/library/autocache/demand" {
@@ -393,7 +393,7 @@ func TestRecordDemand_500ReturnsWrappedError(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	err := c.RecordDemand(context.Background(), "57466", 1, "backfill", nil)
+	err := c.RecordDemand(context.Background(), "57466", 1, "backfill", nil, nil)
 	if err == nil {
 		t.Fatal("expected wrapped error on 503")
 	}

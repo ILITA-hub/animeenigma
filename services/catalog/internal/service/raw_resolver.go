@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -367,8 +368,7 @@ func newLibraryStream(minioURL, quality string) *RawStream {
 // titles AllAnime has never heard of (e.g. Chinese donghua). Returns an
 // empty list (Available=false) when the library is unconfigured, the
 // anime has no shikimori_id, or nothing is encoded yet.
-func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (_ *EpisodesResponse, err error) {
-	defer metrics.ObserveParser("ae", "get_episodes", time.Now(), &err)
+func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*EpisodesResponse, error) {
 	empty := &EpisodesResponse{Episodes: []RawEpisode{}, Available: false, Source: "library"}
 	if r.library == nil {
 		return empty, nil
@@ -407,8 +407,7 @@ func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (_
 // first-party ("ae") provider, which must reflect on-prem availability
 // only (that's the whole point of the latency/load comparison). Returns
 // errors.NotFound when the episode is not encoded locally.
-func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string) (_ *RawStream, err error) {
-	defer metrics.ObserveParser("ae", "get_stream", time.Now(), &err)
+func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string) (*RawStream, error) {
 	if r.library == nil {
 		return nil, errors.NotFound("library not configured")
 	}
@@ -444,9 +443,17 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		// Ordered fallback titles (name_jp → romaji → name_en) so the library
 		// Planner can search trackers by title; empties are dropped server-side.
 		titles := []string{anime.NameJP, anime.Name, anime.NameEN}
+		// Cause→effect: attribute the backfill to the user who hit this ae MISS
+		// (player=ae, the first-party source; watched + target episode are the same
+		// requested episode). Best-effort — empty when the request is unauthenticated.
+		trigger := &library.DemandTrigger{Player: "ae", WatchedEpisode: episodeNumber}
+		if claims, ok := authz.ClaimsFromContext(ctx); ok && claims != nil {
+			trigger.UserID = claims.UserID
+			trigger.Username = claims.Username
+		}
 		sigCtx := context.WithoutCancel(ctx)
 		r.fireSignal(func() {
-			_ = r.library.RecordDemand(sigCtx, mal, ep, "backfill", titles)
+			_ = r.library.RecordDemand(sigCtx, mal, ep, "backfill", titles, trigger)
 		})
 		return nil, errors.NotFound("episode not in library")
 	}

@@ -55,6 +55,8 @@ type autocacheInternalDeps interface {
 	RecordDemand(ctx context.Context, malID string, episode int, reason domain.DemandReason, titles []string) error
 	// ConfigEnabled reports the master autocache `enabled` switch.
 	ConfigEnabled(ctx context.Context) (bool, error)
+	// RecordTrigger appends a cause→effect trigger-log row (best-effort).
+	RecordTrigger(ctx context.Context, row *domain.AutocacheTriggerLog) error
 }
 
 // AutocacheInternalHandler serves the two Docker-network-only serve-signal
@@ -85,6 +87,24 @@ type autocacheSignalBody struct {
 	// titles of its own, so without this the Planner can only search "<mal> <ep>".
 	// Optional + ignored by the fetch endpoint; producers send non-empty + deduped.
 	Titles []string `json:"titles,omitempty"`
+	// Trigger is the optional cause→effect context for a USER-DRIVEN demand (player
+	// Logic B, catalog backfill): who/when/what-watched. When present, the handler
+	// appends an autocache_trigger_log row keyed on (mal_id, episode=target) so the
+	// dashboard can show the watch that caused each download. Absent for the
+	// aggregate scheduler Logic A push (no single user). Ignored by fetch.
+	Trigger *demandTrigger `json:"trigger,omitempty"`
+}
+
+// demandTrigger is the watcher context attached to a user-driven demand. The
+// demand's `episode` field is the TARGET episode (what the autocache fetches);
+// WatchedEpisode is the episode the user was actually watching (the cause).
+type demandTrigger struct {
+	UserID         string `json:"user_id,omitempty"`
+	Username       string `json:"username,omitempty"`
+	Player         string `json:"player,omitempty"`
+	Language       string `json:"language,omitempty"`
+	WatchType      string `json:"watch_type,omitempty"`
+	WatchedEpisode int    `json:"watched_episode,omitempty"`
 }
 
 // maxEpisode bounds the accepted episode number (WR-02). Go decodes JSON
@@ -173,9 +193,32 @@ func (h *AutocacheInternalHandler) Demand(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.deps.RecordDemand(ctx, body.MALID, body.Episode, validateDemandReason(body.Reason), body.Titles); err != nil {
+	reason := validateDemandReason(body.Reason)
+	if err := h.deps.RecordDemand(ctx, body.MALID, body.Episode, reason, body.Titles); err != nil {
 		h.log.Warnw("autocache demand record failed (non-fatal)",
 			"mal_id", body.MALID, "episode", body.Episode, "error", err)
+	}
+	// Cause→effect: a user-driven demand (Logic B / backfill) carries a trigger
+	// block — append an autocache_trigger_log row so the dashboard can tie the
+	// resulting download back to who/when/what was watched. Best-effort; a logging
+	// failure never affects the demand. body.Episode is the TARGET episode (the
+	// join key to the eventual download).
+	if body.Trigger != nil {
+		tl := &domain.AutocacheTriggerLog{
+			MalID:          body.MALID,
+			TargetEpisode:  body.Episode,
+			Reason:         string(reason),
+			UserID:         body.Trigger.UserID,
+			Username:       body.Trigger.Username,
+			WatchPlayer:    body.Trigger.Player,
+			WatchLanguage:  body.Trigger.Language,
+			WatchType:      body.Trigger.WatchType,
+			WatchedEpisode: body.Trigger.WatchedEpisode,
+		}
+		if err := h.deps.RecordTrigger(ctx, tl); err != nil {
+			h.log.Warnw("autocache trigger log insert failed (non-fatal)",
+				"mal_id", body.MALID, "episode", body.Episode, "error", err)
+		}
 	}
 	h.metrics.IncServeTotal("miss")
 	httputil.OK(w, map[string]bool{"ok": true})
@@ -188,6 +231,13 @@ type gormAutocacheInternalDeps struct {
 	episodes   episodeBumper
 	demand     demandRecorder
 	configRepo AutocacheConfigStore
+	triggers   triggerRecorder
+}
+
+// triggerRecorder is the narrow slice of *repo.TriggerLogRepository the handler
+// needs to append a cause→effect row.
+type triggerRecorder interface {
+	Insert(ctx context.Context, row *domain.AutocacheTriggerLog) error
 }
 
 // episodeBumper is the narrow slice of *repo.EpisodeRepository the handler needs.
@@ -202,8 +252,8 @@ type demandRecorder interface {
 
 // NewGormAutocacheInternalDeps wires the production autocacheInternalDeps from
 // the existing repos already constructed in main.go.
-func NewGormAutocacheInternalDeps(episodes episodeBumper, demand demandRecorder, configRepo AutocacheConfigStore) autocacheInternalDeps {
-	return &gormAutocacheInternalDeps{episodes: episodes, demand: demand, configRepo: configRepo}
+func NewGormAutocacheInternalDeps(episodes episodeBumper, demand demandRecorder, configRepo AutocacheConfigStore, triggers triggerRecorder) autocacheInternalDeps {
+	return &gormAutocacheInternalDeps{episodes: episodes, demand: demand, configRepo: configRepo, triggers: triggers}
 }
 
 func (g *gormAutocacheInternalDeps) BumpFetch(ctx context.Context, malID string, episode int) error {
@@ -220,4 +270,8 @@ func (g *gormAutocacheInternalDeps) ConfigEnabled(ctx context.Context) (bool, er
 		return false, err
 	}
 	return cfg.Enabled, nil
+}
+
+func (g *gormAutocacheInternalDeps) RecordTrigger(ctx context.Context, row *domain.AutocacheTriggerLog) error {
+	return g.triggers.Insert(ctx, row)
 }

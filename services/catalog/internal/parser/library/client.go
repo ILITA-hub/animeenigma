@@ -256,13 +256,38 @@ func (c *Client) RecordFetch(ctx context.Context, malID string, episode int) err
 // trackers with (the library has no anime titles of its own); empty entries are
 // dropped server-side. The caller drops the returned error; a non-2xx/transport
 // error never fails the playback resolution + failover. Docker-network-only.
-func (c *Client) RecordDemand(ctx context.Context, malID string, episode int, reason string, titles []string) error {
-	return c.postInternal(ctx, "/internal/library/autocache/demand", map[string]any{
+func (c *Client) RecordDemand(ctx context.Context, malID string, episode int, reason string, titles []string, trigger *DemandTrigger) error {
+	body := map[string]any{
 		"mal_id":  malID,
 		"episode": episode,
 		"reason":  reason,
 		"titles":  titles,
-	})
+	}
+	if trigger != nil {
+		body["trigger"] = map[string]any{
+			"user_id":         trigger.UserID,
+			"username":        trigger.Username,
+			"player":          trigger.Player,
+			"language":        trigger.Language,
+			"watch_type":      trigger.WatchType,
+			"watched_episode": trigger.WatchedEpisode,
+		}
+	}
+	return c.postInternal(ctx, "/internal/library/autocache/demand", body)
+}
+
+// DemandTrigger is the cause→effect watcher context attached to a backfill demand
+// (the user who hit an ae serve-MISS for this episode). The library appends it to
+// autocache_trigger_log so the dashboard can show the playback that caused the
+// download. For backfill the watched + target episode are the same (the requested
+// episode).
+type DemandTrigger struct {
+	UserID         string
+	Username       string
+	Player         string
+	Language       string
+	WatchType      string
+	WatchedEpisode int
 }
 
 // Ping issues a GET /health on the configured library APIURL. Returns

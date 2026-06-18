@@ -122,3 +122,11 @@ var AutocacheDemandOngoingSQL string
 //
 //go:embed 011_autocache_demand_titles.sql
 var AutocacheDemandTitlesSQL string
+
+// AutocacheTriggerLogSQL is migrations/012_autocache_trigger_log.sql embedded as a
+// string. Creates the append-only autocache_trigger_log (the cause→effect log:
+// who/when/what-watched per user-driven trigger + the target episode the autocache
+// fetched). Independent table (no FK ordering); applied by main.go.
+//
+//go:embed 012_autocache_trigger_log.sql
+var AutocacheTriggerLogSQL string

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
@@ -26,7 +27,7 @@ type logicBLookup interface {
 // demandFirer is the fire-and-forget autocache-demand seam (satisfied by
 // *DemandProducer). Kept narrow so UpdateProgress's Logic-B branch is testable.
 type demandFirer interface {
-	Want(malID string, episode int, reason string, titles []string)
+	Want(malID string, episode int, reason string, titles []string, trigger *DemandTrigger)
 }
 
 type ProgressService struct {
@@ -143,8 +144,21 @@ func (s *ProgressService) maybeFireNextEpDemand(ctx context.Context, userID stri
 	}
 
 	// Fire-and-forget; nil-safe on the producer side. titles (name_jp → romaji →
-	// name_en) let the library Planner search trackers by title.
-	s.demand.Want(shikimoriID, next, "next_ep", titles)
+	// name_en) let the library Planner search trackers by title; the trigger block
+	// carries the cause→effect context (who watched WHAT episode to cause this
+	// N+1 fetch) so the dashboard can tie the download back to this watch. The
+	// username comes from the request JWT claims (best-effort — empty if absent).
+	trigger := &DemandTrigger{
+		UserID:         userID,
+		Player:         req.Player,
+		Language:       req.Language,
+		WatchType:      req.WatchType,
+		WatchedEpisode: req.EpisodeNumber,
+	}
+	if claims, ok := authz.ClaimsFromContext(ctx); ok && claims != nil {
+		trigger.Username = claims.Username
+	}
+	s.demand.Want(shikimoriID, next, "next_ep", titles, trigger)
 }
 
 // GetProgress returns watch progress for an anime
