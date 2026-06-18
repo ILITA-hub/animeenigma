@@ -586,6 +586,12 @@ watch(() => props.animeId, () => {
 // instead of thrashing away from a source that may be working. With hacker mode
 // off the switch is performed and the same ledger records it with `acted: true`.
 async function advanceToNextSource(reason: string): Promise<boolean> {
+  // In a Watch-Together room the source is pinned to the shared room combo:
+  // per-member auto-failover would diverge members onto different streams
+  // (different encodes/intros → drift sync meaningless). Today this is also
+  // covered because providerAutoSelected stays false in room mode, but guard
+  // explicitly so a future change to that flag can't reintroduce divergence.
+  if (roomPinned.value) return false
   if (!providerAutoSelected) return false
   if (sourceSwitchAttempts >= MAX_SOURCE_SWITCHES) return false
   const provider = state.combo.value.provider
