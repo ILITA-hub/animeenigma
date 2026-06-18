@@ -32,10 +32,10 @@ const routes: RouteRecordRaw[] = [
   },
   {
     // Workstream notifications / Phase 3 — backend ships watch_url as
-    // /anime/{id}/watch?player=&episode=&translation= but the frontend
-    // route is /anime/:id (which consumes the same query params). This
-    // alias redirects without 404'ing for any code path that pushes the
-    // raw watch_url (e.g. future email/Telegram deep links). The store's
+    // /anime/{id}/watch?provider=&team=&episode= but the frontend route
+    // is /anime/:id (which consumes the same query params). This alias
+    // redirects without 404'ing for any code path that pushes the raw
+    // watch_url (e.g. future email/Telegram deep links). The store's
     // translateWatchUrl helper produces the canonical /anime/:id?... shape
     // directly; this alias is belt + suspenders.
     path: '/anime/:id/watch',

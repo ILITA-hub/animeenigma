@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
-import { useNotificationsStore } from './notifications'
+import { useNotificationsStore, translateWatchUrl } from './notifications'
 import type { UserNotification } from '@/types/notification'
 
 const STORAGE_KEY = 'notif:shownToasts'
@@ -60,5 +60,25 @@ describe('notifications store — toast persistence', () => {
 
     store.stop()
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+})
+
+describe('translateWatchUrl — notification deep-link params', () => {
+  it('unwraps /watch and preserves provider/team/episode', () => {
+    expect(
+      translateWatchUrl('/anime/abc/watch?provider=kodik&team=AniLibria&episode=12'),
+    ).toEqual({
+      path: '/anime/abc',
+      query: { provider: 'kodik', team: 'AniLibria', episode: '12' },
+    })
+  })
+
+  it('decodes an encoded team title with a space', () => {
+    expect(
+      translateWatchUrl('/anime/abc/watch?provider=kodik&team=Studio+Band&episode=3'),
+    ).toEqual({
+      path: '/anime/abc',
+      query: { provider: 'kodik', team: 'Studio Band', episode: '3' },
+    })
   })
 })

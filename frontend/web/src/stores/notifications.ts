@@ -100,9 +100,10 @@ function isFeatureEnabled(): boolean {
 /**
  * Parse the backend's `watch_url` into a vue-router target.
  *
- * Backend ships `/anime/{id}/watch?player=X&episode=N&translation=Y`.
- * The live frontend route is `/anime/:id`, which already consumes
- * `?episode=N` (see Anime.vue line 1251) plus `?player=`, `?translation=`.
+ * Backend ships `/anime/{id}/watch?provider=X&team=Y&episode=N`.
+ * The live frontend route is `/anime/:id`, which consumes `?episode=N`
+ * (lands the user on the episode) and `?provider=`/`?team=` (aePlayer
+ * preselects that source + team on mount — see Anime.vue queryProvider).
  * This helper unwraps the `/watch` suffix and preserves all query params.
  *
  * Defensive: if the URL doesn't match the expected shape, return a raw
