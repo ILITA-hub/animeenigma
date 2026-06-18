@@ -1,28 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useToast } from '@/composables/useToast'
-import Select from '@/components/ui/Select.vue'
-import type { SelectOption } from '@/components/ui/Select.vue'
-import type { AboutConfig, FavoriteAnimeConfig, CardCollectionConfig, OpEdConfig, ShowcaseBlock, ShowcaseBlockType } from '@/types/showcase'
-import { MAX_SHOWCASE_BLOCKS, SHOWCASE_VARIANTS, defaultVariant, sizeFor, clampSize, spanClasses } from '@/types/showcase'
-import { userApi } from '@/api/client'
-import { gachaApi } from '@/api/gacha'
+import type { ShowcaseBlock, ShowcaseBlockType } from '@/types/showcase'
+import { MAX_SHOWCASE_BLOCKS, defaultVariant, sizeFor, clampSize, spanClasses } from '@/types/showcase'
 import ShowcaseBlockView from './ShowcaseBlockView.vue'
 import ShowcaseConfigDialog from './ShowcaseConfigDialog.vue'
 
-// Narrow an 'about' block's config to AboutConfig for v-model binding. Returns
-// the SAME object reference, so v-model assignments still mutate element.config.
-// (vue-tsc cannot parse an inline `as` cast inside a v-model expression.)
-function aboutConfig(el: ShowcaseBlock): AboutConfig {
-  return el.config as AboutConfig
-}
-
 const props = defineProps<{ userId: string; modelValue: ShowcaseBlock[] }>()
 const emit = defineEmits<{ save: [ShowcaseBlock[]]; cancel: [] }>()
-
-const { t } = useI18n()
-const toast = useToast()
 
 const local = ref<ShowcaseBlock[]>(props.modelValue.map((b) => ({ ...b })))
 
@@ -37,8 +21,6 @@ const ADDABLE: ShowcaseBlockType[] = [
   'anime_dna',
   'compatibility',
 ]
-
-const AUTO_TYPES: ShowcaseBlockType[] = ['continue_watching', 'anime_dna', 'compatibility']
 
 function addBlock(type: ShowcaseBlockType) {
   if (local.value.length >= MAX_SHOWCASE_BLOCKS) return
@@ -76,63 +58,6 @@ function swapBlocks(i: number, j: number) {
 function save() {
   const renumbered = local.value.map((b, i) => ({ ...b, order: i, variant: b.variant ?? defaultVariant(b.type) }))
   emit('save', renumbered)
-}
-
-function variantOptions(type: ShowcaseBlockType): SelectOption[] {
-  return SHOWCASE_VARIANTS[type].map((v) => ({ value: v, label: v }))
-}
-
-async function autoFillAnime(el: ShowcaseBlock) {
-  try {
-    const res = await userApi.getWatchlist({ sort: 'score', order: 'desc', per_page: 12 })
-    const items = (res.data?.data ?? res.data) as Array<{ anime_id: string; score?: number }>
-    const sorted = [...items].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 12)
-    ;(el.config as FavoriteAnimeConfig).anime_ids = sorted.map((i) => i.anime_id)
-  } catch {
-    toast.push(t('showcase.auto_fill_error'), 'error')
-  }
-}
-
-async function autoFillCards(el: ShowcaseBlock) {
-  try {
-    const res = await gachaApi.getCollection()
-    const view = res.data?.data ?? res.data
-    const RARITY_ORDER: Record<string, number> = { SSR: 4, SR: 3, R: 2, N: 1 }
-    const owned = view.cards
-      .filter((c: { owned: boolean }) => c.owned)
-      .sort(
-        (
-          a: { card: { rarity: string; created_at: string } },
-          b: { card: { rarity: string; created_at: string } },
-        ) => {
-          const rd = (RARITY_ORDER[b.card.rarity] ?? 0) - (RARITY_ORDER[a.card.rarity] ?? 0)
-          if (rd !== 0) return rd
-          return new Date(b.card.created_at).getTime() - new Date(a.card.created_at).getTime()
-        },
-      )
-      .slice(0, 12)
-    ;(el.config as CardCollectionConfig).card_ids = owned.map((c: { card: { id: string } }) => c.card.id)
-  } catch {
-    toast.push(t('showcase.auto_fill_error'), 'error')
-  }
-}
-
-const newThemeId = ref<Record<number, string>>({})
-
-function addThemeId(el: ShowcaseBlock, index: number, id: string) {
-  const cfg = el.config as OpEdConfig
-  const trimmed = id.trim()
-  if (trimmed && !cfg.theme_ids.includes(trimmed)) cfg.theme_ids.push(trimmed)
-  newThemeId.value[index] = ''
-}
-
-function removeThemeId(el: ShowcaseBlock, id: string) {
-  const cfg = el.config as OpEdConfig
-  cfg.theme_ids = cfg.theme_ids.filter((t) => t !== id)
-}
-
-function opEdConfig(el: ShowcaseBlock): OpEdConfig {
-  return el.config as OpEdConfig
 }
 
 // ── Resize helpers ────────────────────────────────────────────────
@@ -299,138 +224,26 @@ defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes, o
           @pointerdown="startResize($event, index)"
         >◢</button>
 
-        <!-- Config overlay anchored to bottom -->
-        <div class="absolute inset-x-0 bottom-0 flex flex-col gap-1 bg-card/90 p-2 backdrop-blur-sm">
-          <div class="flex items-center justify-between">
-            <span class="showcase-drag-handle cursor-grab text-xs font-semibold text-foreground">
-              ⠿ {{ $t(`showcase.block.${element.type}`) }}
-            </span>
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                :data-test="`showcase-config-${index}`"
-                class="text-xs font-medium text-brand-cyan hover:text-foreground"
-                @click.stop="openConfig(index)"
-              >⚙</button>
-              <button
-                type="button"
-                :data-test="`showcase-remove-${index}`"
-                class="text-xs font-medium text-destructive"
-                @click="removeBlock(index)"
-              >
-                {{ $t('showcase.remove_block') }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Variant picker — only for types with >1 variant -->
-          <div
-            v-if="SHOWCASE_VARIANTS[element.type as ShowcaseBlockType].length > 1"
-          >
-            <Select
-              :model-value="element.variant ?? SHOWCASE_VARIANTS[element.type as ShowcaseBlockType][0]"
-              :options="variantOptions(element.type)"
-              :label="$t('showcase.variant_label')"
-              @update:model-value="element.variant = $event as string"
-            />
-          </div>
-
-          <!-- About block inline editor -->
-          <div v-if="element.type === 'about'" class="space-y-1">
-            <input
-              v-model="aboutConfig(element).title"
-              :placeholder="$t('showcase.about_title_placeholder')"
-              maxlength="64"
-              class="w-full rounded-lg border border-border bg-background px-3 py-1 text-xs"
-            />
-            <textarea
-              v-model="aboutConfig(element).text"
-              :placeholder="$t('showcase.about_placeholder')"
-              rows="2"
-              maxlength="2000"
-              class="w-full rounded-lg border border-border bg-background px-3 py-1 text-xs"
-            />
-          </div>
-
-          <!-- favorite_anime: picker hint + Auto button -->
-          <div v-else-if="element.type === 'favorite_anime'" class="flex items-center gap-2">
-            <p class="flex-1 text-xs text-muted-foreground">{{ $t('showcase.pick_anime') }}</p>
+        <!-- Control overlay anchored to bottom — config lives in the dialog -->
+        <div class="absolute inset-x-0 bottom-0 flex items-center justify-between bg-card/90 px-2 py-1.5 backdrop-blur-sm">
+          <span class="showcase-drag-handle cursor-grab text-xs font-semibold text-foreground">
+            ⠿ {{ $t(`showcase.block.${element.type}`) }}
+          </span>
+          <div class="flex items-center gap-2">
             <button
               type="button"
-              :data-test="`showcase-auto-anime-${index}`"
-              class="rounded-lg border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
-              @click="autoFillAnime(element)"
-            >
-              {{ $t('showcase.auto_fill') }}
-            </button>
-          </div>
-
-          <!-- favorite_character: picker hint -->
-          <div v-else-if="element.type === 'favorite_character'">
-            <p class="text-xs text-muted-foreground">{{ $t('showcase.pick_character') }}</p>
-          </div>
-
-          <!-- card_collection: picker hint + Auto button -->
-          <div v-else-if="element.type === 'card_collection'" class="flex items-center gap-2">
-            <p class="flex-1 text-xs text-muted-foreground">{{ $t('showcase.pick_cards') }}</p>
+              :data-test="`showcase-config-${index}`"
+              class="text-xs font-medium text-brand-cyan hover:text-foreground"
+              @click.stop="openConfig(index)"
+            >⚙</button>
             <button
               type="button"
-              :data-test="`showcase-auto-cards-${index}`"
-              class="rounded-lg border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
-              @click="autoFillCards(element)"
+              :data-test="`showcase-remove-${index}`"
+              class="text-xs font-medium text-destructive"
+              @click="removeBlock(index)"
             >
-              {{ $t('showcase.auto_fill') }}
+              {{ $t('showcase.remove_block') }}
             </button>
-          </div>
-
-          <!-- op_ed: theme ID list + add input -->
-          <div v-else-if="element.type === 'op_ed'" class="space-y-1">
-            <p class="text-xs font-medium text-muted-foreground">{{ $t('showcase.pick_theme') }}</p>
-            <div class="flex flex-wrap gap-1">
-              <span
-                v-for="tid in opEdConfig(element).theme_ids"
-                :key="tid"
-                class="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs"
-              >
-                {{ tid }}
-                <button
-                  type="button"
-                  class="text-destructive"
-                  :data-test="`showcase-remove-theme-${tid}`"
-                  @click="removeThemeId(element, tid)"
-                >
-                  ×
-                </button>
-              </span>
-            </div>
-            <div class="flex gap-2">
-              <input
-                :value="newThemeId[index] ?? ''"
-                :placeholder="$t('showcase.op_ed_add_theme')"
-                class="flex-1 rounded-lg border border-border bg-background px-2 py-0.5 text-xs"
-                data-test="showcase-theme-input"
-                @input="newThemeId[index] = ($event.target as HTMLInputElement).value"
-                @keydown.enter.prevent="addThemeId(element, index, newThemeId[index] ?? '')"
-              />
-              <button
-                type="button"
-                class="rounded-lg border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent"
-                data-test="showcase-theme-add"
-                @click="addThemeId(element, index, newThemeId[index] ?? '')"
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          <!-- Auto types (continue_watching, anime_dna, compatibility) -->
-          <div v-else-if="AUTO_TYPES.includes(element.type)">
-            <p class="text-xs text-muted-foreground">{{ $t('showcase.auto_block_info') }}</p>
-          </div>
-
-          <!-- stats fallback -->
-          <div v-else>
-            <p class="text-xs text-muted-foreground">{{ $t('showcase.pick_anime') }}</p>
           </div>
         </div>
       </div>
