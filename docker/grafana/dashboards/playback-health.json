@@ -27,7 +27,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Full player roster: 'Enabled' = providers in the normal auto-failover / always-on set (provider_enabled=1); 'Total' = every registered provider (count of provider_info). Covers the EN scraper chain, Kodik, AniLib, Hanime, Raw (JP), 18anime and the self-hosted ae library. Enabled < Total means some providers are degraded or disabled — see the Provider Management table for the per-provider tri-state.",
+      "description": "Full player roster tri-state tally, from the provider_info `status` label: 'Enabled' = in the normal auto-failover / always-on set; 'Degraded' = registered + manually selectable but out of auto-failover (e.g. AnimeFever ad-substitution, AUTO-484); 'Total' = every registered provider. Covers the EN scraper chain, Kodik, AniLib, Hanime, Raw (JP), 18anime and the self-hosted ae library. Enabled + Degraded + Disabled = Total — see the Provider Roster table below for the per-provider tri-state.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -45,7 +45,32 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Degraded"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 4,
@@ -75,9 +100,18 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(provider_enabled)",
+          "expr": "count(provider_info{status=\"enabled\"})",
           "legendFormat": "Enabled",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "count(provider_info{status=\"degraded\"}) or vector(0)",
+          "legendFormat": "Degraded",
+          "refId": "C"
         },
         {
           "datasource": {
@@ -89,7 +123,7 @@
           "refId": "B"
         }
       ],
-      "title": "Providers (Enabled / Total)",
+      "title": "Providers (Enabled / Degraded / Total)",
       "type": "stat"
     },
     {
@@ -315,129 +349,10 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Full per-provider roster with tri-state status (enabled / degraded / disabled) + reason + description, from provider_info (whose `status` label is the catalog scraper_providers tri-state for EN providers, and 'enabled' for the always-on players). Covers the EN scraper chain, Kodik (RU), AniLib (RU), Hanime (18+), Raw (JP), 18anime and the self-hosted ae library. For live per-stage up/down see the 'Provider × Stage Up' timeline below (probed providers only).",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "left"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Status"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "enabled": {
-                        "text": "🟢 Enabled",
-                        "color": "green"
-                      },
-                      "degraded": {
-                        "text": "🟡 Degraded",
-                        "color": "orange"
-                      },
-                      "disabled": {
-                        "text": "⚪ Disabled",
-                        "color": "red"
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Description"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 520
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 10,
-        "x": 14,
-        "y": 6
-      },
-      "id": 21,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "10.3.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "provider_info",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true,
-              "Value": true
-            },
-            "renameByName": {
-              "provider": "Provider",
-              "status": "Status",
-              "reason": "Reason",
-              "description": "Description"
-            },
-            "indexByName": {
-              "Provider": 0,
-              "Status": 1,
-              "Reason": 2,
-              "Description": 3
-            }
-          }
-        }
-      ],
-      "title": "Provider Management",
-      "type": "table"
-    },
-    {
-      "datasource": {
         "type": "postgres",
         "uid": "aenigma-postgres"
       },
-      "description": "The authoritative provider roster from the catalog stream_providers table — every stream source (ae + EN scraper chain + adult + legacy players) with its lifecycle status, group, and whether the scraper operates it. This is the single source of truth the rest of the dashboard's metrics pivot around.",
+      "description": "The authoritative provider roster from the catalog stream_providers table — every stream source (ae + EN scraper chain + adult + legacy players) with its lifecycle status (enabled / degraded / disabled), group, whether the scraper operates it, and the reason + full description recording WHY it is in its current state. This is the single source of truth the rest of the dashboard's metrics pivot around (it replaces the former Prometheus-derived 'Provider Management' table — same data, but read straight from the source of truth).",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -484,12 +399,66 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "scraper_operated"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "true": {
+                        "text": "scraper",
+                        "color": "text"
+                      },
+                      "false": {
+                        "text": "player",
+                        "color": "text"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reason"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 320
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "description"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 560
+              }
+            ]
           }
         ]
       },
       "gridPos": {
         "h": 9,
-        "w": 14,
+        "w": 24,
         "x": 0,
         "y": 6
       },
@@ -508,11 +477,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT name, status, \"group\", scraper_operated, reason FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
+          "rawSql": "SELECT name, status, \"group\", scraper_operated, reason, description FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
           "refId": "A"
         }
       ],
-      "title": "Provider Roster (stream_providers)",
+      "title": "Provider Roster (stream_providers — source of truth)",
       "type": "table"
     },
     {
@@ -611,7 +580,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Seconds since each provider's probe last ticked (heartbeat). Catches a silently-dead probe (stale gauge). Includes Kodik.",
+      "description": "Seconds since each provider's probe last ticked (heartbeat). Catches a silently-dead probe (stale gauge). Includes Kodik. Providers never probed (e.g. 18anime, which runs in its own orchestrator and emits a zero-timestamp heartbeat) are filtered out via `> 0` so they don't render as a bogus ~56-year age.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -667,7 +636,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "time() - provider_probe_last_tick_timestamp{provider=~\"$provider\"}",
+          "expr": "time() - (provider_probe_last_tick_timestamp{provider=~\"$provider\"} > 0)",
           "legendFormat": "{{ provider }}",
           "refId": "A"
         }
