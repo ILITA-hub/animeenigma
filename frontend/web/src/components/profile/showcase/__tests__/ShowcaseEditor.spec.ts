@@ -132,4 +132,20 @@ describe('ShowcaseEditor', () => {
     expect(text).toContain('showcase.block.anime_dna')
     expect(text).toContain('showcase.block.compatibility')
   })
+
+  it('resize clamps to the variant bounds', () => {
+    const wrapper = mount(ShowcaseEditor, { props: { userId: 'u1', modelValue: [
+      { type: 'favorite_anime', variant: 'row', order: 0, w: 4, h: 1, config: { anime_ids: [] } },
+    ] }, global: { stubs: { draggable: true, Select: true, ShowcaseBlockView: true }, mocks: { $t: (k: string) => k } } })
+    ;(wrapper.vm as any).applyResize(0, -5, +2) // try to shrink below min / grow past max-h(1)
+    const b = (wrapper.vm as any).local[0]
+    expect([b.w, b.h]).toEqual([2, 1]) // row: W2..4, H fixed 1
+  })
+
+  it('reports fixed-size variants', () => {
+    const wrapper = mount(ShowcaseEditor, { props: { userId: 'u1', modelValue: [
+      { type: 'stats', variant: 'tiles', order: 0, w: 2, h: 1, config: {} },
+    ] }, global: { stubs: { draggable: true, Select: true, ShowcaseBlockView: true }, mocks: { $t: (k: string) => k } } })
+    expect((wrapper.vm as any).isFixed((wrapper.vm as any).local[0])).toBe(true)
+  })
 })

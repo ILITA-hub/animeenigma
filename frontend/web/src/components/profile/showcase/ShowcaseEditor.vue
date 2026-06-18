@@ -134,6 +134,56 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
   return el.config as OpEdConfig
 }
 
+// ── Resize helpers ────────────────────────────────────────────────
+function isFixed(b: ShowcaseBlock): boolean {
+  const s = sizeFor(b.type, b.variant)
+  return s.minW === s.maxW && s.minH === s.maxH
+}
+
+function applyResize(i: number, dCols: number, dRows: number) {
+  const b = local.value[i]
+  if (!b) return
+  const c = clampSize(b.type, b.variant, (b.w ?? 0) + dCols, (b.h ?? 0) + dRows)
+  b.w = c.w
+  b.h = c.h
+}
+
+function applyResizeAbsolute(i: number, w: number, h: number) {
+  const b = local.value[i]
+  if (!b) return
+  const c = clampSize(b.type, b.variant, w, h)
+  b.w = c.w
+  b.h = c.h
+}
+
+function startResize(e: PointerEvent, i: number) {
+  e.preventDefault()
+  e.stopPropagation()
+  const grid = (e.currentTarget as HTMLElement).closest('[data-showcase-grid]') as HTMLElement
+  const cols = window.innerWidth < 768 ? 2 : 4
+  const gap = 12
+  const cellW = (grid.clientWidth - (cols - 1) * gap) / cols
+  const rowH = window.innerWidth < 768 ? 165 : 190
+  const sx = e.clientX
+  const sy = e.clientY
+  const sw = local.value[i].w ?? 0
+  const sh = local.value[i].h ?? 0
+  ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  const move = (ev: PointerEvent) => {
+    applyResizeAbsolute(
+      i,
+      sw + Math.round((ev.clientX - sx) / (cellW + gap)),
+      sh + Math.round((ev.clientY - sy) / (rowH + gap)),
+    )
+  }
+  const up = () => {
+    document.removeEventListener('pointermove', move)
+    document.removeEventListener('pointerup', up)
+  }
+  document.addEventListener('pointermove', move)
+  document.addEventListener('pointerup', up)
+}
+
 // Drag-to-swap state (native HTML5 drag events — no new packages)
 const dragSrcIdx = ref<number | null>(null)
 
@@ -161,7 +211,7 @@ function blockSpanClasses(el: ShowcaseBlock): string {
   return spanClasses(el.w || s.defW, el.h || s.defH)
 }
 
-defineExpose({ swapBlocks, local })
+defineExpose({ swapBlocks, applyResize, isFixed, local })
 </script>
 
 <template>
@@ -179,7 +229,7 @@ defineExpose({ swapBlocks, local })
     </div>
 
     <!-- Bento grid editor with drag-to-swap -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 [grid-auto-flow:dense] [grid-auto-rows:190px]">
+    <div data-showcase-grid class="grid grid-cols-2 md:grid-cols-4 gap-3 [grid-auto-flow:dense] [grid-auto-rows:190px]">
       <div
         v-for="(element, index) in local"
         :key="element.order + '-' + element.type"
@@ -194,6 +244,15 @@ defineExpose({ swapBlocks, local })
         <div class="pointer-events-none h-full w-full opacity-60">
           <ShowcaseBlockView :block="element" :user-id="userId" :is-owner="true" />
         </div>
+
+        <!-- Corner resize handle — hidden for fixed-size variants and on touch devices -->
+        <button
+          v-if="!isFixed(element)"
+          type="button"
+          class="showcase-resize absolute bottom-1 right-1 grid h-6 w-6 place-items-center rounded-lg border border-border text-brand-cyan cursor-nwse-resize touch-none z-10"
+          :data-test="`showcase-resize-${index}`"
+          @pointerdown="startResize($event, index)"
+        >◢</button>
 
         <!-- Config overlay anchored to bottom -->
         <div class="absolute inset-x-0 bottom-0 flex flex-col gap-1 bg-card/90 p-2 backdrop-blur-sm">
@@ -343,3 +402,11 @@ defineExpose({ swapBlocks, local })
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (pointer: coarse) {
+  .showcase-resize {
+    display: none;
+  }
+}
+</style>
