@@ -95,9 +95,9 @@ func TestSelectRAWFilter(t *testing.T) {
 			name: "first qualifying of a ranked slice wins (skips disqualified leaders)",
 			releases: []domain.Release{
 				{Title: "Some Anime - 01 [1080p] DUB", Uploader: "DubGroup", Quality: "1080p", Seeders: 100}, // dub → skip
-				{Title: "Some Anime - 01 [2160p]", Uploader: "Ohys-Raws", Quality: "2160p", Seeders: 80},      // over cap → skip
-				{Title: "Some Anime - 01 [1080p]", Uploader: "Ohys-Raws", Quality: "1080p", Seeders: 7},       // winner
-				{Title: "Some Anime - 01 [720p]", Uploader: "Ohys-Raws", Quality: "720p", Seeders: 4},         // also valid but lower-ranked
+				{Title: "Some Anime - 01 [2160p]", Uploader: "Ohys-Raws", Quality: "2160p", Seeders: 80},     // over cap → skip
+				{Title: "Some Anime - 01 [1080p]", Uploader: "Ohys-Raws", Quality: "1080p", Seeders: 7},      // winner
+				{Title: "Some Anime - 01 [720p]", Uploader: "Ohys-Raws", Quality: "720p", Seeders: 4},        // also valid but lower-ranked
 			},
 			wantFound: true,
 			wantTitle: "Some Anime - 01 [1080p]",
@@ -119,7 +119,11 @@ func TestSelectRAWFilter(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, found := selectRAW(tc.releases, qualityCap, minSeeders)
+			// All fixtures here are episode 01 of "Some Anime" with no MAL-ID, so
+			// the episode-exact + title-match guards pass; this table exercises the
+			// RAW/quality/seeder gates. The episode + identity guards have their own
+			// table below (TestSelectRAW_EpisodeAndIdentityGuards).
+			got, found := selectRAW(tc.releases, qualityCap, minSeeders, 1, 0, []string{"Some Anime"})
 			if found != tc.wantFound {
 				t.Fatalf("selectRAW found = %v, want %v (got title %q)", found, tc.wantFound, got.Title)
 			}
@@ -127,6 +131,119 @@ func TestSelectRAWFilter(t *testing.T) {
 				t.Fatalf("selectRAW title = %q, want %q", got.Title, tc.wantTitle)
 			}
 		})
+	}
+}
+
+// TestSelectRAW_EpisodeAndIdentityGuards is the v4.1 false-match regression: the
+// pick must be the EXACT wanted episode AND the right anime (MAL-ID if the release
+// carries one, else a title match). These are the real-world fixtures that
+// motivated the fix.
+func TestSelectRAW_EpisodeAndIdentityGuards(t *testing.T) {
+	const qualityCap, minSeeders = 1080, 3
+
+	cases := []struct {
+		name      string
+		releases  []domain.Release
+		wantEp    int
+		malID     int
+		titles    []string
+		wantFound bool
+		wantTitle string
+	}{
+		{
+			name:      "wrong anime via keyword hit is rejected (Kanojo for Bookworm)",
+			releases:  []domain.Release{{Title: "[SubsPlease] Kanojo, Okarishimasu - 59 (1080p)", Uploader: "SubsPlease", Quality: "1080p", Seeders: 200}},
+			wantEp:    10,
+			titles:    []string{"Honzuki no Gekokujou", "Ascendance of a Bookworm"},
+			wantFound: false, // episode 59≠10 AND title mismatch
+		},
+		{
+			name:      "right anime wrong episode is rejected (Witch Hat ep12 for ep11)",
+			releases:  []domain.Release{{Title: "[SubsPlease] Tongari Boushi no Atelier - 12 (1080p)", Uploader: "SubsPlease", Quality: "1080p", Seeders: 2005}},
+			wantEp:    11,
+			titles:    []string{"Tongari Boushi no Atelier", "Witch Hat Atelier"},
+			wantFound: false, // episode 12≠11
+		},
+		{
+			name:      "correct anime + SxxExx episode via title match (Classroom CR rip)",
+			releases:  []domain.Release{{Title: "Classroom of the Elite S04E12 VOSTFR 1080p WEB x264 AAC -Tsundere-Raws (CR)", Uploader: "Tsundere-Raws", Quality: "1080p", Seeders: 160}},
+			wantEp:    12,
+			titles:    []string{"Youkoso Jitsuryoku Shijou Shugi no Kyoushitsu e", "Classroom of the Elite 4th Season"},
+			wantFound: true,
+			wantTitle: "Classroom of the Elite S04E12 VOSTFR 1080p WEB x264 AAC -Tsundere-Raws (CR)",
+		},
+		{
+			name:      "MAL-ID-verified release accepted regardless of title wording",
+			releases:  []domain.Release{{Title: "Ohys-Raws SomethingObscure - 05 (1080p)", Uploader: "Ohys-Raws", Quality: "1080p", Seeders: 10, MALID: 59708}},
+			wantEp:    5,
+			malID:     59708,
+			titles:    []string{"unrelated romaji"},
+			wantFound: true,
+			wantTitle: "Ohys-Raws SomethingObscure - 05 (1080p)",
+		},
+		{
+			name:      "MAL-ID present but mismatched is rejected",
+			releases:  []domain.Release{{Title: "Ohys-Raws Whatever - 05 (1080p)", Uploader: "Ohys-Raws", Quality: "1080p", Seeders: 10, MALID: 99999}},
+			wantEp:    5,
+			malID:     59708,
+			titles:    []string{"Whatever"},
+			wantFound: false, // MAL-ID present → trusted, and 99999≠59708 (title fallback NOT consulted)
+		},
+		{
+			name:      "unparseable episode is rejected (episode-exact always)",
+			releases:  []domain.Release{{Title: "Some Anime Batch Complete 1080p", Uploader: "Ohys-Raws", Quality: "1080p", Seeders: 50}},
+			wantEp:    3,
+			titles:    []string{"Some Anime"},
+			wantFound: false,
+		},
+		{
+			name: "skips false leader, takes the correct lower-ranked release",
+			releases: []domain.Release{
+				{Title: "[SubsPlease] Kanojo, Okarishimasu - 59 (1080p)", Uploader: "SubsPlease", Quality: "1080p", Seeders: 999}, // wrong anime+ep
+				{Title: "[Ohys-Raws] Honzuki no Gekokujou - 10 (1080p)", Uploader: "Ohys-Raws", Quality: "1080p", Seeders: 12},    // correct
+			},
+			wantEp:    10,
+			titles:    []string{"Honzuki no Gekokujou", "Ascendance of a Bookworm"},
+			wantFound: true,
+			wantTitle: "[Ohys-Raws] Honzuki no Gekokujou - 10 (1080p)",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, found := selectRAW(tc.releases, qualityCap, minSeeders, tc.wantEp, tc.malID, tc.titles)
+			if found != tc.wantFound {
+				t.Fatalf("selectRAW found = %v, want %v (got title %q)", found, tc.wantFound, got.Title)
+			}
+			if found && got.Title != tc.wantTitle {
+				t.Fatalf("selectRAW title = %q, want %q", got.Title, tc.wantTitle)
+			}
+		})
+	}
+}
+
+// TestEpisodeOf pins the multi-pattern episode parser used by the episode-exact
+// guard: SxxEyy, EP/Episode token, and the generic "- NN" form.
+func TestEpisodeOf(t *testing.T) {
+	cases := []struct {
+		title  string
+		want   int
+		wantOK bool
+	}{
+		{"Classroom of the Elite S04E12 VOSTFR 1080p", 12, true},
+		{"[SubsPlease] Tongari Boushi no Atelier - 12 (1080p)", 12, true},
+		{"[Ohys-Raws] Some Show - 05 [1080p]", 5, true},
+		{"Some Show Episode 7 [1080p]", 7, true},
+		{"Some Show EP08 1080p", 8, true},
+		{"Some Show - 09v2 (1080p)", 9, true},
+		{"Some Show Batch 01-12 Complete 1080p", 0, false}, // ambiguous batch → no single ep
+		{"Some Movie 1080p BD", 0, false},
+	}
+	for _, tc := range cases {
+		got, ok := episodeOf(tc.title)
+		if ok != tc.wantOK || (ok && got != tc.want) {
+			t.Errorf("episodeOf(%q) = (%d,%v), want (%d,%v)", tc.title, got, ok, tc.want, tc.wantOK)
+		}
 	}
 }
 

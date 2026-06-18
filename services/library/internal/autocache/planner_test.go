@@ -148,7 +148,7 @@ func winningRelease() []domain.Release {
 func TestPlannerDisabledNoOp(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonOngoing}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonOngoing, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	s := &fakeSearcher{releases: winningRelease()}
@@ -168,7 +168,7 @@ func TestPlannerDisabledNoOp(t *testing.T) {
 func TestPlannerPresentDeletesAndCounts(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonBackfill}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonBackfill, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{"1:5": true}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	s := &fakeSearcher{releases: winningRelease()}
@@ -191,7 +191,7 @@ func TestPlannerPresentDeletesAndCounts(t *testing.T) {
 func TestPlannerInFlightDedup(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonNextEp, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{}}
 	e := &fakeEnqueuer{active: map[string]bool{"1:5": true}}
 	s := &fakeSearcher{releases: winningRelease()}
@@ -214,7 +214,7 @@ func TestPlannerInFlightDedup(t *testing.T) {
 func TestPlannerWinningReleaseEnqueues(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	s := &fakeSearcher{releases: winningRelease()}
@@ -250,7 +250,7 @@ func TestPlannerWinningReleaseEnqueues(t *testing.T) {
 func TestPlannerNoReleaseLeavesDemand(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonBackfill}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonBackfill, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	s := &fakeSearcher{releases: nil} // no qualifying release
@@ -286,7 +286,7 @@ func TestPlannerReasonTriggerMapping(t *testing.T) {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			reg := prometheus.NewRegistry()
 			m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-			d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "7", Episode: 3, Reason: tc.reason}}}
+			d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "7", Episode: 5, Reason: tc.reason, Titles: "Anime"}}}
 			p := &fakePresence{present: map[string]bool{}}
 			e := &fakeEnqueuer{active: map[string]bool{}}
 			s := &fakeSearcher{releases: winningRelease()}
@@ -331,7 +331,7 @@ func TestPlannerGcBackoffEvictsStale(t *testing.T) {
 func TestPlannerForgetSearchedOnPresent(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "9", Episode: 4, Reason: domain.DemandReasonOngoing}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "9", Episode: 4, Reason: domain.DemandReasonOngoing, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{"9:4": true}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	s := &fakeSearcher{releases: winningRelease()}
@@ -354,7 +354,7 @@ func TestPlannerForgetSearchedOnPresent(t *testing.T) {
 func TestPlannerBudgetAdmittedEnqueues(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	s := &fakeSearcher{releases: winningRelease()} // SizeBytes: 123
@@ -385,7 +385,7 @@ func TestPlannerBudgetAdmittedEnqueues(t *testing.T) {
 func TestPlannerBudgetRejectedLeavesDemandAndBacksOff(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	s := &fakeSearcher{releases: winningRelease()}
@@ -417,7 +417,7 @@ func TestPlannerBudgetRejectedLeavesDemandAndBacksOff(t *testing.T) {
 func TestPlannerBudgetErrorFailsOpen(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	s := &fakeSearcher{releases: winningRelease()}
@@ -443,7 +443,7 @@ func TestPlannerBudgetErrorFailsOpen(t *testing.T) {
 func TestPlannerBudgetFallbackEstimate(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
-	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp}}}
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{{MALID: "42", Episode: 5, Reason: domain.DemandReasonNextEp, Titles: "Anime"}}}
 	p := &fakePresence{present: map[string]bool{}}
 	e := &fakeEnqueuer{active: map[string]bool{}}
 	// A qualifying release (allowlisted RAW uploader) with no reported size.

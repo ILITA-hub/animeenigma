@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 )
@@ -51,17 +52,24 @@ var qualityTokenRegex = regexp.MustCompile(`(?i)\b(2160|1080|720|480)p\b`)
 
 // selectRAW iterates the (already seeder-ranked DESC) release slice and returns
 // the first release that:
-//   (a) is RAW — per isRAW's allowlist-gated policy (WR-04): allowlisted uploader
-//       OR an explicit positive raw token, AND no negative (dub/dual/multi/eng-
-//       audio/hardsub) token,
-//   (b) parses to a resolution ≤ qualityCap, and
-//   (c) has Seeders ≥ minSeeders.
 //
-// Because the input is seeder-ranked DESC, the first qualifying release is the
-// best-seeded eligible RAW. Returns (zero, false) when none qualify. A release
-// whose quality token is missing/unparseable is rejected (conservative — we
-// cannot prove it is ≤ cap).
-func selectRAW(releases []domain.Release, qualityCap, minSeeders int) (domain.Release, bool) {
+//	(a) is RAW — per isRAW's allowlist-gated policy (WR-04): allowlisted uploader
+//	    OR an explicit positive raw token, AND no negative (dub/dual/multi/eng-
+//	    audio/hardsub) token,
+//	(b) parses to a resolution ≤ qualityCap,
+//	(c) has Seeders ≥ minSeeders,
+//	(d) parses to EXACTLY the wanted episode (episode-exact, ALWAYS — a release
+//	    whose episode can't be parsed or differs is rejected), and
+//	(e) is the right ANIME: a release carrying a MAL-ID is trusted iff that ID ==
+//	    malID; a release with no MAL-ID (keyword Jackett/Nyaa hit) must instead
+//	    title-match one of the demand titles (name_jp → romaji → name_en).
+//
+// (d) + (e) were added (v4.1 fix) because the keyword search could otherwise grab
+// a popular unrelated release — e.g. "Kanojo, Okarishimasu - 59" for a Bookworm
+// ep-10 demand — and cache the wrong anime/episode. Because the input is seeder-
+// ranked DESC, the first fully-qualifying release is the best-seeded valid RAW.
+// Returns (zero, false) when none qualify (the demand retries next tick).
+func selectRAW(releases []domain.Release, qualityCap, minSeeders, wantEpisode, malID int, titles []string) (domain.Release, bool) {
 	for _, r := range releases {
 		if !isRAW(r.Title, r.Uploader) {
 			continue
@@ -73,9 +81,120 @@ func selectRAW(releases []domain.Release, qualityCap, minSeeders int) (domain.Re
 		if r.Seeders < minSeeders {
 			continue
 		}
+		// (d) episode-exact — the strongest false-match guard (kills both a wrong
+		// anime whose absolute numbering differs AND an off-by-one same-anime pick).
+		if ep, ok := episodeOf(r.Title); !ok || ep != wantEpisode {
+			continue
+		}
+		// (e) anime identity — MAL-ID if the release carries one, else title match.
+		if !animeMatches(r, malID, titles) {
+			continue
+		}
 		return r, true
 	}
 	return domain.Release{}, false
+}
+
+// episodeRegexes extract an episode number from a release title, tried in order
+// of specificity: SxxEyy (Tsundere-Raws/CR-style), an explicit EP/Episode token,
+// then the generic "- NN (" / "- NN [" / "- NN " form (SubsPlease/Erai/Ohys). The
+// generic library filename.Detector only knows the last form, so the autocache
+// guard needs this broader parser to handle the SxxEyy releases its title search
+// surfaces. First match wins.
+var episodeRegexes = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\bs\d{1,2}e(\d{1,4})\b`),
+	regexp.MustCompile(`(?i)\b(?:ep|episode)\.?\s*(\d{1,4})\b`),
+	regexp.MustCompile(`(?:^|[\s_\]\)])-\s*(\d{1,4})(?:v\d+)?(?:\s|$|[\(\[])`),
+}
+
+// episodeOf parses the episode number from a release title. ok=false when no
+// recognized pattern matches (episode-exact then rejects — we cannot confirm it
+// is the wanted episode). Numbers are clamped to [1, 9999].
+func episodeOf(title string) (int, bool) {
+	for _, re := range episodeRegexes {
+		if m := re.FindStringSubmatch(title); len(m) >= 2 {
+			if n, err := strconv.Atoi(m[1]); err == nil && n >= 1 && n <= 9999 {
+				return n, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// animeMatches reports whether a release is the requested anime. A release that
+// carries a MAL-ID (AnimeTosho-sourced) is trusted iff that ID matches; one with
+// no MAL-ID (a keyword Jackett/Nyaa hit) must title-match a demand title. This is
+// the "prefer MAL-ID, fall back to title (name_jp → romaji → name_en)" rule.
+func animeMatches(r domain.Release, malID int, titles []string) bool {
+	if r.MALID > 0 {
+		return malID > 0 && r.MALID == malID
+	}
+	return titleMatches(r.Title, titles)
+}
+
+// matchStopwords are tokens too generic to carry anime identity — excluded from
+// the token-overlap test so "of/the/no/season" can't inflate a match.
+var matchStopwords = map[string]bool{
+	"the": true, "of": true, "no": true, "a": true, "to": true, "e": true,
+	"wa": true, "ga": true, "season": true, "part": true, "cour": true,
+	"1st": true, "2nd": true, "3rd": true, "4th": true, "5th": true,
+}
+
+// titleMatches reports whether a release title corresponds to any of the ordered
+// demand titles (name_jp → romaji → name_en). A title matches when the normalized
+// demand title is a substring of the normalized release title (covers a full
+// romaji/English title embedded in the release, as Tsundere-Raws/CR releases do),
+// OR ≥70% of the demand title's significant tokens appear in the release. Empty
+// demand titles (legacy/title-less rows) match nothing — only a MAL-ID-verified
+// release can satisfy such a row.
+func titleMatches(releaseTitle string, demandTitles []string) bool {
+	rel := normalizeForMatch(releaseTitle)
+	if rel == "" {
+		return false
+	}
+	relTokens := make(map[string]bool)
+	for _, tok := range strings.Fields(rel) {
+		relTokens[tok] = true
+	}
+	for _, dt := range demandTitles {
+		nt := normalizeForMatch(dt)
+		if nt == "" {
+			continue
+		}
+		if strings.Contains(rel, nt) {
+			return true
+		}
+		var sig, hit int
+		for _, tok := range strings.Fields(nt) {
+			if len(tok) < 2 || matchStopwords[tok] {
+				continue
+			}
+			sig++
+			if relTokens[tok] {
+				hit++
+			}
+		}
+		if sig > 0 && hit*100 >= sig*70 {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeForMatch lowercases and reduces a title to space-separated
+// alphanumeric runs (Unicode-aware, so kana/kanji are preserved as letters),
+// dropping bracket tags, punctuation, and separators so romaji/English titles
+// compare cleanly across release-naming styles.
+func normalizeForMatch(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune(' ')
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }
 
 // isRAW reports whether (title, uploader) looks like a JP-audio raw.

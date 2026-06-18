@@ -285,7 +285,9 @@ func (p *Planner) plan(ctx context.Context, d domain.AutocacheDemand, cfg *domai
 	// contributes regardless of the keyword. A legacy/title-less row falls back to
 	// the bare mal_id keyword (the old, near-useless behavior — better than not
 	// searching).
-	queries := d.SearchTitles()
+	matchTitles := d.SearchTitles()
+	malID := malIDInt(d.MALID)
+	queries := matchTitles
 	if len(queries) == 0 {
 		queries = []string{d.MALID}
 	}
@@ -297,7 +299,7 @@ func (p *Planner) plan(ctx context.Context, d domain.AutocacheDemand, cfg *domai
 	for _, title := range queries {
 		res, err := p.search.FetchAll(ctx, SearchQuery{
 			Query: searchQueryFor(title, d.Episode),
-			MALID: malIDInt(d.MALID),
+			MALID: malID,
 			Limit: 50,
 		})
 		if err != nil {
@@ -307,7 +309,10 @@ func (p *Planner) plan(ctx context.Context, d domain.AutocacheDemand, cfg *domai
 			}
 			continue
 		}
-		if rel, ok = selectRAW(res.Releases, cfg.QualityCap, cfg.MinSeeders); ok {
+		// Episode-exact + anime-identity (MAL-ID, else title-match) guard the pick
+		// against false matches (e.g. a popular unrelated keyword hit). matchTitles
+		// is the FULL ordered title set, independent of which title drove this query.
+		if rel, ok = selectRAW(res.Releases, cfg.QualityCap, cfg.MinSeeders, d.Episode, malID, matchTitles); ok {
 			break
 		}
 	}
