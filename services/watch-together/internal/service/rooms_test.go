@@ -126,6 +126,20 @@ func TestCreate_RejectsUnknownPlayer(t *testing.T) {
 	}
 }
 
+func TestCreate_AcceptsAePlayer(t *testing.T) {
+	svc, _ := newService(t, "room-ae", time.Now())
+	in := validInput()
+	in.Player = domain.PlayerAePlayer
+
+	room, err := svc.Create(context.Background(), "host", "name", in)
+	if err != nil {
+		t.Fatalf("Create with aeplayer returned error: %v", err)
+	}
+	if room.Player != domain.PlayerAePlayer {
+		t.Errorf("Room.Player = %q, want %q", room.Player, domain.PlayerAePlayer)
+	}
+}
+
 func TestCreate_RejectsEmptyHostUserID(t *testing.T) {
 	svc, _ := newService(t, "x", time.Now())
 

@@ -83,6 +83,8 @@ const (
 	PlayerOurEnglish = "ourenglish"
 	PlayerHanime     = "hanime"
 	PlayerRaw        = "raw"
+	// PlayerAePlayer is the first-party AnimeEnigma unified player (multi-source).
+	PlayerAePlayer = "aeplayer"
 )
 
 // ----------------------------------------------------------------------------

@@ -465,6 +465,7 @@ var validPlayers = map[string]struct{}{
 	domain.PlayerOurEnglish: {},
 	domain.PlayerHanime:     {},
 	domain.PlayerRaw:        {},
+	domain.PlayerAePlayer:   {},
 }
 
 // mapValidationReason converts a catalog ValidateResult.Reason into an
@@ -601,7 +602,7 @@ func (r *InboundRouter) handleChangePlayer(
 		// Bogus player value — never round-trip to catalog for an obviously
 		// invalid identifier.
 		r.sendBadPayload(ctx, conn, domain.MsgStateChangePlayer,
-			fmt.Errorf("player %q not in {kodik, animelib, ourenglish, hanime, raw}", payload.Player))
+			fmt.Errorf("player %q not in {kodik, animelib, ourenglish, hanime, raw, aeplayer}", payload.Player))
 		return
 	}
 

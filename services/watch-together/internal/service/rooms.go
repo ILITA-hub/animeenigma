@@ -53,6 +53,7 @@ var allowedPlayers = map[string]struct{}{
 	domain.PlayerOurEnglish: {},
 	domain.PlayerHanime:     {},
 	domain.PlayerRaw:        {},
+	domain.PlayerAePlayer:   {},
 }
 
 // CreateRoomInput is the transport-agnostic payload for RoomService.Create.
@@ -78,7 +79,7 @@ func (in CreateRoomInput) validate() error {
 		return fmt.Errorf("%w: player is required", ErrInvalidInput)
 	}
 	if _, ok := allowedPlayers[in.Player]; !ok {
-		return fmt.Errorf("%w: unknown player %q (allowed: kodik|animelib|ourenglish|hanime|raw)", ErrInvalidInput, in.Player)
+		return fmt.Errorf("%w: unknown player %q (allowed: kodik|animelib|ourenglish|hanime|raw|aeplayer)", ErrInvalidInput, in.Player)
 	}
 	if in.TranslationID == "" {
 		return fmt.Errorf("%w: translation_id is required", ErrInvalidInput)
