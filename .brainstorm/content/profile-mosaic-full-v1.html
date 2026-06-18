@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Профиль с мозаикой — полный вид</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --base:#08080f; --surface:#11111c; --card:#10101d;
+  --line:rgba(255,255,255,.06); --line-strong:rgba(255,255,255,.12);
+  --fg:#fff; --muted:rgba(255,255,255,.56); --muted-2:rgba(255,255,255,.38);
+  --cyan:#00d4ff; --pink:#ff2d7c; --violet:#a78bfa; --success:#00ff9d; --warning:#ffc24b; --orange:#ff8a3d;
+  --f-d:'Manrope',system-ui,sans-serif; --f-b:'Inter',system-ui,sans-serif; --f-m:'JetBrains Mono',ui-monospace,monospace;
+  --row:188px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--base);color:var(--fg);font-family:var(--f-b);font-size:15px;line-height:1.5}
+.max{max-width:896px;margin:0 auto;padding:0 16px}
+img{display:block}
+
+/* ── fake top nav ── */
+.nav{position:sticky;top:0;z-index:80;height:56px;display:flex;align-items:center;gap:18px;background:rgba(8,8,15,.78);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.nav .logo{font-family:var(--f-d);font-weight:700;font-size:17px;letter-spacing:-.01em}
+.nav .logo b{color:var(--cyan)}
+.nav .nl{color:var(--muted);font-size:13.5px}
+.nav .sp{flex:1}
+.nav .ava{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--pink))}
+
+/* demo toggle */
+.demobar{position:fixed;right:18px;bottom:18px;z-index:200;display:flex;gap:6px;background:rgba(12,12,22,.92);border:1px solid var(--line-strong);border-radius:999px;padding:5px;backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.demobar button{font-family:var(--f-m);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:transparent;border:0;border-radius:999px;padding:7px 14px;cursor:pointer}
+.demobar button.on{background:rgba(0,212,255,.16);color:var(--cyan);box-shadow:0 0 0 1px rgba(0,212,255,.4) inset}
+
+/* ── profile header ── */
+.phead{position:relative;overflow:hidden}
+.phead::before{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,212,255,.10),transparent 70%)}
+.phead .inner{position:relative;padding:88px 0 26px}
+.prow{display:flex;align-items:flex-end;gap:22px}
+.bigava{width:104px;height:104px;border-radius:50%;flex:none;background:linear-gradient(135deg,#5b2d8b,#a78bfa 60%,#00d4ff);box-shadow:0 0 0 4px rgba(0,212,255,.3);display:grid;place-items:center;font-family:var(--f-d);font-weight:700;font-size:34px}
+.pinfo{flex:1;min-width:0}
+.pinfo h1{font-family:var(--f-d);font-weight:600;font-size:30px;margin-bottom:5px}
+.pmeta{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.badge{font-size:11.5px;font-weight:600;background:rgba(0,212,255,.14);color:var(--cyan);border:1px solid rgba(0,212,255,.3);border-radius:7px;padding:2px 9px}
+.pmeta .since{color:var(--muted);font-size:13.5px}
+.share{display:flex;align-items:center;gap:8px;padding:9px 15px;border-radius:10px;background:rgba(0,212,255,.10);border:1px solid rgba(0,212,255,.22);color:var(--cyan);font-size:13.5px;font-weight:500;cursor:pointer}
+
+/* ── showcase header ── */
+.sc-head{display:flex;align-items:center;justify-content:space-between;margin:26px 0 14px}
+.sc-head h2{font-family:var(--f-d);font-weight:600;font-size:19px}
+.sc-edit{font-size:13px;font-weight:500;color:var(--fg);border:1px solid var(--line-strong);border-radius:9px;padding:6px 13px;cursor:pointer;display:flex;gap:7px;align-items:center}
+.sc-edit:hover{background:rgba(255,255,255,.05)}
+.hint{font-family:var(--f-m);font-size:11px;color:var(--violet);margin:-6px 0 14px;display:none}
+body.edit .hint{display:block}
+
+/* ── BENTO GRID ── */
+.bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:var(--row);gap:14px;grid-auto-flow:dense}
+.tile{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;overflow:hidden;display:flex;flex-direction:column}
+.w1{grid-column:span 1}.w2{grid-column:span 2}.w3{grid-column:span 3}.w4{grid-column:span 4}
+.h1{grid-row:span 1}.h2{grid-row:span 2}
+.tile h3{font-family:var(--f-d);font-weight:600;font-size:14.5px;margin-bottom:13px;display:flex;align-items:center;gap:8px}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.tile.about{background:linear-gradient(140deg,rgba(167,139,250,.12),rgba(0,212,255,.04));border-color:rgba(167,139,250,.22)}
+
+/* edit-mode chrome */
+body.edit .tile{border-style:dashed;border-color:var(--line-strong);cursor:grab}
+body.edit .tile:hover{border-color:var(--cyan)}
+.handle{position:absolute;right:6px;bottom:6px;width:22px;height:22px;border-radius:7px;background:rgba(0,212,255,.16);border:1px solid rgba(0,212,255,.5);display:none;align-items:center;justify-content:center;color:var(--cyan);font-size:11px;cursor:nwse-resize;z-index:6}
+body.edit .handle{display:flex}
+.dim{position:absolute;left:8px;top:8px;font-family:var(--f-m);font-size:10px;letter-spacing:.05em;color:var(--violet);background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.35);border-radius:6px;padding:1px 7px;display:none;z-index:6}
+body.edit .dim{display:block}
+body.edit .tile h3,body.edit .tile .body{opacity:.5}
+.addtile{display:none;align-items:center;justify-content:center;flex-direction:column;gap:8px;border:1px dashed var(--line-strong);border-radius:16px;color:var(--muted);font-size:13px;cursor:pointer;background:rgba(255,255,255,.015)}
+.addtile .plus{font-size:26px;color:var(--violet)}
+body.edit .addtile{display:flex}
+
+/* tile bodies */
+.posters{display:grid;gap:9px}
+.poster{position:relative;border-radius:10px;overflow:hidden;display:flex;align-items:flex-end;padding:8px;font-weight:600;font-size:11px;line-height:1.2;box-shadow:0 6px 18px rgba(0,0,0,.4);min-height:0}
+.poster span.t{position:relative;z-index:2;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+.poster::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 38%,rgba(0,0,0,.85));z-index:1}
+.p1{background:linear-gradient(135deg,#1a3a4a,#0d5b6b 60%,#00d4ff)}.p2{background:linear-gradient(135deg,#2a1a4a,#5b2d8b 55%,#a78bfa)}
+.p3{background:linear-gradient(135deg,#4a1a2a,#8b2d4d 55%,#ff2d7c)}.p4{background:linear-gradient(135deg,#1a4a2a,#2d8b5b 55%,#00ff9d)}
+.p5{background:linear-gradient(135deg,#4a3a1a,#8b6d2d 55%,#ffc24b)}.p6{background:linear-gradient(135deg,#3a1a4a,#6b2d8b 55%,#ff8a3d)}
+.rk{position:absolute;top:6px;left:6px;z-index:3;background:rgba(0,0,0,.66);border-radius:6px;font-family:var(--f-m);font-size:10px;font-weight:600;padding:1px 6px}
+.scd{position:absolute;top:6px;right:6px;z-index:3;background:rgba(0,0,0,.66);border-radius:6px;font-size:9.5px;font-weight:600;padding:1px 5px;color:var(--cyan)}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:13px;flex:1;align-content:center}
+.stat .big{font-family:var(--f-d);font-weight:700;font-size:25px;line-height:1;background:linear-gradient(180deg,#fff,var(--cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:3px}
+.gbar{display:grid;grid-template-columns:72px 1fr 30px;align-items:center;gap:9px;margin:6px 0;font-size:12px}
+.gbar .track{height:7px;border-radius:5px;background:rgba(255,255,255,.07);overflow:hidden}
+.gbar .fill{height:100%;border-radius:5px}.gbar .v{text-align:right;color:var(--muted);font-family:var(--f-m);font-size:10.5px}
+.charbig{position:relative;flex:1;border-radius:11px;overflow:hidden;min-height:0;display:flex;align-items:flex-end;padding:11px;background:linear-gradient(135deg,#3a1733,#7a2d6b 55%,#ff2d7c)}
+.charbig::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.82));z-index:1}
+.charbig .ci{position:relative;z-index:2}.charbig .cn{font-weight:600;font-size:14px}.charbig .cr{font-size:11px;color:rgba(255,255,255,.7)}
+.aboutq{font-family:var(--f-b);font-size:14.5px;line-height:1.6;color:rgba(255,255,255,.86);flex:1}
+.aboutsig{display:flex;align-items:center;gap:10px;margin-top:14px}
+.aboutsig .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--pink))}
+.aboutsig .nm{font-weight:600;font-size:12.5px}.aboutsig .sub{font-size:11px;color:var(--muted);font-family:var(--f-m)}
+.cards{display:flex;gap:8px;flex:1}
+.cards .c{flex:1;border-radius:9px;position:relative;display:flex;align-items:flex-end;padding:7px;font-size:10px;font-weight:600;box-shadow:0 6px 16px rgba(0,0,0,.4)}
+.cards .c span{position:relative;z-index:2}.cards .c::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.8));border-radius:9px}
+.cards .ssr{border:1px solid var(--warning)}
+
+/* ── tabs ── */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:34px 0 22px}
+.tab{padding:12px 4px;margin-right:22px;font-size:14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer}
+.tab.act{color:var(--fg);border-bottom-color:var(--cyan)}
+.wstats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.glass{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:13px;padding:13px;text-align:center}
+.glass .n{font-family:var(--f-d);font-weight:600;font-size:22px;color:var(--cyan)}.glass .l{font-size:11px;color:var(--muted-2);margin-top:2px}
+.chips{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.chip{font-size:12.5px;color:var(--muted);border:1px solid var(--line-strong);border-radius:999px;padding:6px 13px}
+.chip.act{background:rgba(0,212,255,.14);color:var(--cyan);border-color:rgba(0,212,255,.35)}
+.wgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding-bottom:60px}
+.wgrid .poster{aspect-ratio:2/3}
+@media(max-width:760px){
+  .bento{grid-template-columns:repeat(2,1fr);grid-auto-rows:170px}
+  .w3,.w4{grid-column:span 2}
+  .wgrid{grid-template-columns:repeat(3,1fr)}.wstats{grid-template-columns:repeat(2,1fr)}
+  .prow{flex-direction:column;align-items:center;text-align:center}.pinfo h1{font-size:25px}
+}
+</style>
+</head>
+<body class="view">
+
+<div class="nav"><div class="max" style="display:flex;align-items:center;gap:18px;width:100%">
+  <span class="logo">Anime<b>Enigma</b></span>
+  <span class="nl">Каталог</span><span class="nl">Игры</span><span class="nl">Витрина</span>
+  <span class="sp"></span><span class="ava"></span>
+</div></div>
+
+<!-- PROFILE HEADER -->
+<div class="phead"><div class="max inner">
+  <div class="prow">
+    <div class="bigava">0n</div>
+    <div class="pinfo">
+      <h1>0neymik0</h1>
+      <div class="pmeta"><span class="badge">Admin</span><span class="since">на сайте с 2022</span></div>
+    </div>
+    <div class="share">⇪ Поделиться</div>
+  </div>
+</div></div>
+
+<!-- SHOWCASE -->
+<div class="max">
+  <div class="sc-head">
+    <h2>Витрина</h2>
+    <div class="sc-edit" id="editBtn">✎ <span id="editLbl">Редактировать</span></div>
+  </div>
+  <div class="hint">↳ тащи за блок — меняешь порядок · тяни угловую ручку ◢ — меняешь размер · сетка плотно упаковывается сама</div>
+
+  <div class="bento">
+    <!-- About: 2×2 -->
+    <div class="tile about w2 h2">
+      <span class="dim">2×2</span>
+      <h3><span class="dot" style="background:var(--violet)"></span>О себе</h3>
+      <div class="body" style="display:flex;flex-direction:column;flex:1">
+        <p class="aboutq">Смотрю аниме с 2014-го. Сэйнэн, психологические триллеры и всё, что заставляет думать после титров. Цундере не одобряю, но терплю.</p>
+        <div class="aboutsig"><div class="av"></div><div><div class="nm">0neymik0</div><div class="sub">342 аниме · 87 дней</div></div></div>
+      </div>
+      <span class="handle">◢</span>
+    </div>
+
+    <!-- Stats: 2×1 -->
+    <div class="tile w2 h1">
+      <span class="dim">2×1</span>
+      <h3><span class="dot" style="background:var(--success)"></span>Статистика</h3>
+      <div class="body statgrid">
+        <div class="stat"><div class="big">342</div><div class="lbl">аниме</div></div>
+        <div class="stat"><div class="big">1 240</div><div class="lbl">эпизодов</div></div>
+        <div class="stat"><div class="big">87</div><div class="lbl">дней</div></div>
+        <div class="stat"><div class="big">8.4</div><div class="lbl">оценка</div></div>
+      </div>
+      <span class="handle">◢</span>
+    </div>
+
+    <!-- Card collection: 2×1 -->
+    <div class="tile w2 h1">
+      <span class="dim">2×1</span>
+      <h3><span class="dot" style="background:var(--warning)"></span>Коллекция карт</h3>
+      <div class="body cards">
+        <div class="c ssr p6"><span>SSR · Frieren</span></div>
+        <div class="c p2"><span>SR</span></div>
+        <div class="c p3"><span>SR</span></div>
+        <div class="c p1"><span>R</span></div>
+      </div>
+      <span class="handle">◢</span>
+    </div>
+
+    <!-- Favorite anime: 4×1 -->
+    <div class="tile w4 h1">
+      <span class="dim">4×1</span>
+      <h3><span class="dot" style="background:var(--cyan)"></span>Любимое аниме</h3>
+      <div class="body posters" style="grid-template-columns:repeat(6,1fr);flex:1">
+        <div class="poster p1"><span class="rk">1</span><span class="scd">9.4</span><span class="t">Frieren</span></div>
+        <div class="poster p2"><span class="rk">2</span><span class="t">Steins;Gate</span></div>
+        <div class="poster p3"><span class="rk">3</span><span class="t">Vinland Saga</span></div>
+        <div class="poster p4"><span class="rk">4</span><span class="t">Monster</span></div>
+        <div class="poster p5"><span class="rk">5</span><span class="t">Mob Psycho</span></div>
+        <div class="poster p6"><span class="rk">6</span><span class="t">Hyouka</span></div>
+      </div>
+      <span class="handle">◢</span>
+    </div>
+
+    <!-- Character: 1×2 tall -->
+    <div class="tile w1 h2">
+      <span class="dim">1×2</span>
+      <h3><span class="dot" style="background:var(--pink)"></span>Персонаж</h3>
+      <div class="body" style="display:flex;flex:1;min-height:0">
+        <div class="charbig"><div class="ci"><div class="cn">Фрирен</div><div class="cr">♥ #1 · гл. роль</div></div></div>
+      </div>
+      <span class="handle">◢</span>
+    </div>
+
+    <!-- DNA: 1×1 -->
+    <div class="tile w1 h1">
+      <span class="dim">1×1</span>
+      <h3><span class="dot" style="background:var(--orange)"></span>ДНК</h3>
+      <div class="body" style="flex:1;display:flex;flex-direction:column;justify-content:center">
+        <div class="gbar"><span>Сэйнэн</span><div class="track"><div class="fill" style="width:82%;background:linear-gradient(90deg,var(--orange),var(--warning))"></div></div><span class="v">82</span></div>
+        <div class="gbar"><span>Психо</span><div class="track"><div class="fill" style="width:64%;background:linear-gradient(90deg,var(--violet),var(--pink))"></div></div><span class="v">64</span></div>
+        <div class="gbar"><span>Триллер</span><div class="track"><div class="fill" style="width:48%;background:linear-gradient(90deg,var(--cyan),var(--success))"></div></div><span class="v">48</span></div>
+      </div>
+      <span class="handle">◢</span>
+    </div>
+
+    <!-- Continue watching: 2×1 -->
+    <div class="tile w2 h1">
+      <span class="dim">2×1</span>
+      <h3><span class="dot" style="background:var(--cyan)"></span>Продолжить просмотр</h3>
+      <div class="body posters" style="grid-template-columns:repeat(4,1fr);flex:1">
+        <div class="poster p4"><span class="t">EP 12</span></div>
+        <div class="poster p2"><span class="t">EP 3</span></div>
+        <div class="poster p1"><span class="t">EP 7</span></div>
+        <div class="poster p5"><span class="t">EP 1</span></div>
+      </div>
+      <span class="handle">◢</span>
+    </div>
+
+    <!-- add placeholder (edit only) -->
+    <div class="addtile w2 h1"><span class="plus">+</span>Добавить блок</div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="max">
+  <div class="tabs">
+    <span class="tab act">Список</span><span class="tab">Отзывы</span><span class="tab">Коллекции</span><span class="tab">Достижения</span>
+  </div>
+  <div class="wstats">
+    <div class="glass"><div class="n">342</div><div class="l">всего аниме</div></div>
+    <div class="glass"><div class="n">◆ 8.4</div><div class="l">сред. оценка</div></div>
+    <div class="glass"><div class="n" style="color:var(--success)">1 240</div><div class="l">эпизодов</div></div>
+    <div class="glass"><div class="n" style="color:var(--violet)">198</div><div class="l">завершено</div></div>
+  </div>
+  <div class="chips">
+    <span class="chip act">Все · 342</span><span class="chip">Смотрю · 14</span><span class="chip">Завершено · 198</span><span class="chip">В планах · 88</span><span class="chip">Брошено · 42</span>
+  </div>
+  <div class="wgrid">
+    <div class="poster p1"><span class="scd">9.4</span><span class="t">Frieren</span></div>
+    <div class="poster p2"><span class="scd">9.1</span><span class="t">Steins;Gate</span></div>
+    <div class="poster p3"><span class="scd">8.8</span><span class="t">Vinland</span></div>
+    <div class="poster p4"><span class="scd">9.0</span><span class="t">Monster</span></div>
+    <div class="poster p5"><span class="scd">8.7</span><span class="t">Mob Psycho</span></div>
+    <div class="poster p6"><span class="scd">8.3</span><span class="t">Hyouka</span></div>
+    <div class="poster p2"><span class="scd">8.9</span><span class="t">86</span></div>
+    <div class="poster p3"><span class="scd">8.5</span><span class="t">Dorohedoro</span></div>
+    <div class="poster p1"><span class="scd">8.2</span><span class="t">Odd Taxi</span></div>
+    <div class="poster p4"><span class="scd">9.2</span><span class="t">Hunter×H</span></div>
+    <div class="poster p5"><span class="scd">8.0</span><span class="t">Bocchi</span></div>
+    <div class="poster p6"><span class="scd">7.9</span><span class="t">Chainsaw</span></div>
+  </div>
+</div>
+
+<!-- demo toggle -->
+<div class="demobar">
+  <button class="on" data-mode="view">Просмотр</button>
+  <button data-mode="edit">Редактирование</button>
+</div>
+
+<script>
+const btns=document.querySelectorAll('.demobar button');
+const editBtn=document.getElementById('editBtn');
+const editLbl=document.getElementById('editLbl');
+function setMode(m){
+  document.body.className=m;
+  btns.forEach(b=>b.classList.toggle('on',b.dataset.mode===m));
+  editLbl.textContent = m==='edit' ? 'Готово' : 'Редактировать';
+}
+btns.forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+editBtn.onclick=()=>setMode(document.body.className==='edit'?'view':'edit');
+</script>
+</body>
+</html>

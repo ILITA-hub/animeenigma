@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Витрина профиля — редизайн: 4 концепта композиции</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --base:#08080f; --surface:#11111c; --surface-2:#0c0c16; --card:#10101d;
+  --line:rgba(255,255,255,.06); --line-strong:rgba(255,255,255,.12);
+  --fg:#fff; --muted:rgba(255,255,255,.56); --muted-2:rgba(255,255,255,.38);
+  --cyan:#00d4ff; --pink:#ff2d7c; --violet:#a78bfa; --success:#00ff9d; --warning:#ffc24b; --orange:#ff8a3d;
+  --f-d:'Manrope',system-ui,sans-serif; --f-b:'Inter',system-ui,sans-serif; --f-m:'JetBrains Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--base);color:var(--fg);font-family:var(--f-b);font-size:15px;line-height:1.55;padding-bottom:140px}
+.wrap{max-width:980px;margin:0 auto;padding:0 24px}
+a{color:inherit}
+
+/* page chrome */
+header.page{padding:46px 0 26px;border-bottom:1px solid var(--line);margin-bottom:14px}
+h1{font-family:var(--f-d);font-weight:700;font-size:27px;letter-spacing:-.02em}
+h1 .v{color:var(--cyan);font-family:var(--f-m);font-size:.55em;vertical-align:super;margin-left:6px}
+.sub{color:var(--muted);margin-top:9px;max-width:740px;font-size:14.5px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;position:sticky;top:0;background:linear-gradient(var(--base),var(--base) 70%,transparent);padding:14px 0 12px;z-index:50}
+.toc a{font-family:var(--f-m);font-size:12px;color:var(--muted);text-decoration:none;border:1px solid var(--line-strong);border-radius:999px;padding:6px 13px;transition:.15s;cursor:pointer}
+.toc a:hover{color:var(--cyan);border-color:var(--cyan)}
+.toc a .n{color:var(--violet);margin-right:6px}
+
+h2{font-family:var(--f-d);font-weight:700;font-size:22px;margin:54px 0 4px;scroll-margin-top:64px}
+h2 .n{color:var(--cyan);font-family:var(--f-m);font-size:.7em;margin-right:11px}
+.h2sub{color:var(--muted);font-size:14px;margin-bottom:22px;max-width:780px}
+ul.pc{list-style:none;font-size:13px;margin:12px 0 4px;display:flex;flex-wrap:wrap;gap:6px 18px}
+ul.pc li{padding-left:18px;position:relative;color:var(--muted)}
+ul.pc li.p::before{content:"+";position:absolute;left:2px;color:var(--success);font-family:var(--f-m)}
+ul.pc li.m::before{content:"−";position:absolute;left:2px;color:var(--pink);font-family:var(--f-m)}
+
+/* ── shared showcase primitives ──────────────────────────── */
+.stage{background:linear-gradient(160deg,#0a0a13,#0d0d18);border:1px solid var(--line-strong);border-radius:20px;padding:26px;overflow:hidden}
+.kick{font-family:var(--f-m);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-2)}
+.poster{position:relative;border-radius:11px;overflow:hidden;aspect-ratio:2/3;display:flex;align-items:flex-end;padding:9px;font-weight:600;font-size:11.5px;line-height:1.25;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.poster span{position:relative;z-index:2;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+.poster::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 35%,rgba(0,0,0,.85));z-index:1}
+.p1{background:linear-gradient(135deg,#1a3a4a,#0d5b6b 60%,#00d4ff)}
+.p2{background:linear-gradient(135deg,#2a1a4a,#5b2d8b 55%,#a78bfa)}
+.p3{background:linear-gradient(135deg,#4a1a2a,#8b2d4d 55%,#ff2d7c)}
+.p4{background:linear-gradient(135deg,#1a4a2a,#2d8b5b 55%,#00ff9d)}
+.p5{background:linear-gradient(135deg,#4a3a1a,#8b6d2d 55%,#ffc24b)}
+.p6{background:linear-gradient(135deg,#3a1a4a,#6b2d8b 55%,#ff8a3d)}
+.rank{position:absolute;top:7px;left:7px;z-index:3;background:rgba(0,0,0,.66);border-radius:7px;font-family:var(--f-m);font-size:11px;font-weight:600;padding:2px 7px}
+.score{position:absolute;top:7px;right:7px;z-index:3;background:rgba(0,0,0,.66);border-radius:7px;font-size:10.5px;font-weight:600;padding:2px 6px;color:var(--cyan)}
+.av{border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--pink));display:grid;place-items:center;font-family:var(--f-d);font-weight:700;flex:none}
+
+/* generic block panel (current style, for reference + concept D base) */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.panel h3{font-family:var(--f-d);font-weight:600;font-size:15px;margin-bottom:13px;display:flex;align-items:center;gap:8px}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+
+/* ════════════ CONCEPT 0 — CURRENT (reference) ════════════ */
+.cur{display:flex;flex-direction:column;gap:16px}
+.cur .panel{padding:20px}
+
+/* ════════════ CONCEPT A — BENTO GRID ════════════ */
+.bento{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;grid-auto-flow:dense}
+.bento .panel{margin:0}
+.col2{grid-column:span 2}.col3{grid-column:span 3}.col4{grid-column:span 4}
+.row2{grid-row:span 2}
+.bento .about{background:linear-gradient(135deg,rgba(167,139,250,.10),rgba(0,212,255,.04));border-color:rgba(167,139,250,.22)}
+.statmini{display:flex;flex-direction:column;gap:2px}
+.statmini .big{font-family:var(--f-d);font-weight:700;font-size:26px;line-height:1;background:linear-gradient(180deg,#fff,var(--cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.statmini .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+
+/* ════════════ CONCEPT B — EDITORIAL / BORDERLESS ════════════ */
+.edi{display:flex;flex-direction:column;gap:0}
+.edi-sec{padding:30px 0;border-top:1px solid var(--line)}
+.edi-sec:first-child{border-top:0;padding-top:6px}
+.edi-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+.edi-head .t{font-family:var(--f-d);font-weight:600;font-size:18px}
+.edi-quote{font-family:var(--f-d);font-weight:500;font-size:23px;line-height:1.45;letter-spacing:-.01em;max-width:680px}
+.edi-quote .accent{color:var(--cyan)}
+
+/* ════════════ CONCEPT C — HERO BANNER + GRID ════════════ */
+.hero{position:relative;border-radius:18px;overflow:hidden;padding:30px 28px;background:radial-gradient(120% 140% at 15% 0%,rgba(167,139,250,.30),transparent 55%),radial-gradient(120% 140% at 95% 100%,rgba(0,212,255,.22),transparent 50%),linear-gradient(135deg,#13132a,#0b0b16);border:1px solid var(--line-strong)}
+.hero-top{display:flex;align-items:center;gap:18px}
+.hero-meta{flex:1;min-width:0}
+.hero-name{font-family:var(--f-d);font-weight:700;font-size:24px;letter-spacing:-.01em}
+.hero-handle{color:var(--muted);font-family:var(--f-m);font-size:12.5px;margin-top:2px}
+.hero-bio{color:rgba(255,255,255,.78);font-size:14px;margin-top:13px;max-width:560px;line-height:1.55}
+.hero-stats{display:flex;gap:26px;margin-top:20px;flex-wrap:wrap}
+.hero-stats .s .big{font-family:var(--f-d);font-weight:700;font-size:22px}
+.hero-stats .s .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+
+/* ════════════ CONCEPT D — ACCENT PANELS ════════════ */
+.acc{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.acc .panel{position:relative;padding:0;overflow:hidden;border-color:var(--line-strong)}
+.acc .ph{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--line);font-family:var(--f-d);font-weight:600;font-size:14px}
+.acc .pb{padding:16px}
+.acc .panel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;z-index:3}
+.acc .panel::after{content:"";position:absolute;left:0;top:0;right:0;height:60px;opacity:.10;pointer-events:none}
+.acc .e-cyan::before{background:var(--cyan)}.acc .e-cyan::after{background:radial-gradient(60% 100% at 0 0,var(--cyan),transparent)}.acc .e-cyan .ph{color:var(--cyan)}
+.acc .e-pink::before{background:var(--pink)}.acc .e-pink::after{background:radial-gradient(60% 100% at 0 0,var(--pink),transparent)}.acc .e-pink .ph{color:var(--pink)}
+.acc .e-violet::before{background:var(--violet)}.acc .e-violet::after{background:radial-gradient(60% 100% at 0 0,var(--violet),transparent)}.acc .e-violet .ph{color:var(--violet)}
+.acc .e-success::before{background:var(--success)}.acc .e-success::after{background:radial-gradient(60% 100% at 0 0,var(--success),transparent)}.acc .e-success .ph{color:var(--success)}
+.acc .span2{grid-column:span 2}
+
+/* genre bars */
+.gbar{display:grid;grid-template-columns:84px 1fr 34px;align-items:center;gap:10px;margin:7px 0;font-size:12.5px}
+.gbar .track{height:8px;border-radius:5px;background:rgba(255,255,255,.07);overflow:hidden}
+.gbar .fill{height:100%;border-radius:5px}
+.gbar .v{text-align:right;color:var(--muted);font-family:var(--f-m);font-size:11px}
+
+.note{background:var(--surface);border:1px solid var(--line-strong);border-left:3px solid var(--cyan);border-radius:10px;padding:13px 17px;margin:16px 0 4px;font-size:13.5px;color:rgba(255,255,255,.8)}
+.tag{display:inline-block;font-family:var(--f-m);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;margin-left:9px;vertical-align:3px}
+.tag.rec{background:rgba(0,255,157,.12);color:var(--success);border:1px solid rgba(0,255,157,.3)}
+@media(max-width:760px){
+  .bento,.acc,.hero-grid{grid-template-columns:1fr 1fr}
+  .col3,.col4,.span2,.acc .span2{grid-column:span 2}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="page">
+  <h1>Витрина профиля — редизайн<span class="v">v1</span></h1>
+  <p class="sub">Блоки-варианты ты уже сделал. Здесь редизайнится <b>слой композиции</b> — то, как вся витрина подаётся в профиле. Сейчас это вертикальный стек одинаковых карточек (<code style="font-family:var(--f-m);font-size:12px;background:rgba(255,255,255,.07);padding:1px 6px;border-radius:5px">space-y-4 · rounded-xl border bg-card</code>) — каждый блок выглядит как сосед, ритма нет. Ниже — текущий вид для сравнения и 4 концепта. Контент условный, токены — реальные Neon Tokyo.</p>
+  <nav class="toc">
+    <a href="#cur"><span class="n">0</span>Сейчас</a>
+    <a href="#a"><span class="n">A</span>Bento-сетка</a>
+    <a href="#b"><span class="n">B</span>Editorial</a>
+    <a href="#c"><span class="n">C</span>Hero-баннер</a>
+    <a href="#d"><span class="n">D</span>Accent-панели</a>
+  </nav>
+</header>
+
+<!-- ══════════ 0 — CURRENT ══════════ -->
+<h2 id="cur"><span class="n">0</span>Как выглядит сейчас</h2>
+<p class="h2sub">Один столбец, каждый блок — карточка с одинаковой рамкой и фоном. Функционально, но плоско и однообразно: «страница настроек», а не витрина.</p>
+<div class="stage">
+  <div class="cur">
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--violet)"></span>О себе</h3>
+      <p style="color:rgba(255,255,255,.8);font-size:14px">Смотрю аниме с 2014-го. Сэйнэн, психологические триллеры и всё, что заставляет думать после титров. Цундере не одобряю, но терплю.</p>
+    </div>
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--cyan)"></span>Любимое аниме</h3>
+      <div style="display:flex;gap:10px">
+        <div class="poster p1" style="flex:1"><span class="rank">1</span><span class="score">9.4</span><span>Frieren</span></div>
+        <div class="poster p2" style="flex:1"><span class="rank">2</span><span>Steins;Gate</span></div>
+        <div class="poster p3" style="flex:1"><span class="rank">3</span><span>Vinland Saga</span></div>
+        <div class="poster p4" style="flex:1"><span class="rank">4</span><span>Monster</span></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--success)"></span>Статистика</h3>
+      <div style="display:flex;gap:30px"><div class="statmini"><span class="big">342</span><span class="lbl">аниме</span></div><div class="statmini"><span class="big">1 240</span><span class="lbl">эпизодов</span></div><div class="statmini"><span class="big">87</span><span class="lbl">дней</span></div><div class="statmini"><span class="big">8.4</span><span class="lbl">сред. оценка</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ A — BENTO ══════════ -->
+<h2 id="a"><span class="n">A</span>Bento-сетка <span class="tag rec">рекомендую</span></h2>
+<p class="h2sub">Адаптивная мозаика: блоки занимают разную ширину/высоту по важности. Ломает монотонность столбца, плотнее по информации, ощущается как «дашборд личности». Порядок и размер блоков — часть редактора.</p>
+<div class="stage">
+  <div class="bento">
+    <div class="panel about col2 row2">
+      <h3><span class="dot" style="background:var(--violet)"></span>О себе</h3>
+      <p style="color:rgba(255,255,255,.82);font-size:14px;line-height:1.6">Смотрю аниме с 2014-го. Сэйнэн, психологические триллеры и всё, что заставляет думать после титров.</p>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:16px"><div class="av" style="width:38px;height:38px;font-size:14px">0n</div><div><div style="font-weight:600;font-size:13px">0neymik0</div><div style="font-size:11px;color:var(--muted);font-family:var(--f-m)">с нами 4 года</div></div></div>
+    </div>
+    <div class="panel col2">
+      <h3><span class="dot" style="background:var(--success)"></span>Статистика</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="statmini"><span class="big">342</span><span class="lbl">аниме</span></div>
+        <div class="statmini"><span class="big">87</span><span class="lbl">дней</span></div>
+        <div class="statmini"><span class="big">1 240</span><span class="lbl">эпизодов</span></div>
+        <div class="statmini"><span class="big">8.4</span><span class="lbl">оценка</span></div>
+      </div>
+    </div>
+    <div class="panel col2">
+      <h3><span class="dot" style="background:var(--pink)"></span>Любимый персонаж</h3>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="av" style="width:52px;height:52px;font-size:17px;background:linear-gradient(135deg,#5b2d8b,#a78bfa)">Fr</div>
+        <div><div style="font-weight:600;font-size:14px">Фрирен</div><div style="font-size:12px;color:var(--muted)">♥ #1 · главная роль</div></div>
+      </div>
+    </div>
+    <div class="panel col4">
+      <h3><span class="dot" style="background:var(--cyan)"></span>Любимое аниме</h3>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px">
+        <div class="poster p1"><span class="rank">1</span><span class="score">9.4</span><span>Frieren</span></div>
+        <div class="poster p2"><span class="rank">2</span><span>Steins;Gate</span></div>
+        <div class="poster p3"><span class="rank">3</span><span>Vinland Saga</span></div>
+        <div class="poster p4"><span class="rank">4</span><span>Monster</span></div>
+        <div class="poster p5"><span class="rank">5</span><span>Mob Psycho</span></div>
+        <div class="poster p6"><span class="rank">6</span><span>Hyouka</span></div>
+      </div>
+    </div>
+    <div class="panel col2">
+      <h3><span class="dot" style="background:var(--orange)"></span>ДНК вкуса</h3>
+      <div class="gbar"><span>Сэйнэн</span><div class="track"><div class="fill" style="width:82%;background:linear-gradient(90deg,var(--orange),var(--warning))"></div></div><span class="v">82%</span></div>
+      <div class="gbar"><span>Психология</span><div class="track"><div class="fill" style="width:64%;background:linear-gradient(90deg,var(--violet),var(--pink))"></div></div><span class="v">64%</span></div>
+      <div class="gbar"><span>Триллер</span><div class="track"><div class="fill" style="width:48%;background:linear-gradient(90deg,var(--cyan),var(--success))"></div></div><span class="v">48%</span></div>
+    </div>
+    <div class="panel col2">
+      <h3><span class="dot" style="background:var(--warning)"></span>Коллекция карт</h3>
+      <div style="display:flex;gap:8px">
+        <div class="poster p6" style="flex:1;aspect-ratio:3/4;border:1px solid var(--warning)"><span>SSR</span></div>
+        <div class="poster p2" style="flex:1;aspect-ratio:3/4"><span>SR</span></div>
+        <div class="poster p3" style="flex:1;aspect-ratio:3/4"><span>SR</span></div>
+        <div class="poster p1" style="flex:1;aspect-ratio:3/4"><span>R</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<ul class="pc">
+  <li class="p">визуальный ритм, не монотонно</li><li class="p">плотнее, меньше скролла</li>
+  <li class="p">иерархия: важное — крупнее</li><li class="m">сложнее редактор (размеры тайлов)</li>
+</ul>
+
+<!-- ══════════ B — EDITORIAL ══════════ -->
+<h2 id="b"><span class="n">B</span>Editorial / безрамочный</h2>
+<p class="h2sub">Убираем повторяющиеся рамки-коробки. Секции разделены тонкими линиями и воздухом, заголовки — kicker-метки. Контент дышит, фокус на самом контенте. Журнальная, «премиальная» подача.</p>
+<div class="stage" style="padding:30px 34px">
+  <div class="edi">
+    <div class="edi-sec">
+      <div class="kick" style="margin-bottom:12px">— о себе</div>
+      <p class="edi-quote">Смотрю аниме с 2014-го. <span class="accent">Сэйнэн, психологические триллеры</span> и всё, что заставляет думать после титров.</p>
+    </div>
+    <div class="edi-sec">
+      <div class="edi-head"><span class="kick">— любимое аниме</span><span class="kick">топ 5</span></div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px">
+        <div class="poster p1"><span class="rank">1</span><span class="score">9.4</span><span>Frieren</span></div>
+        <div class="poster p2"><span class="rank">2</span><span>Steins;Gate</span></div>
+        <div class="poster p3"><span class="rank">3</span><span>Vinland Saga</span></div>
+        <div class="poster p4"><span class="rank">4</span><span>Monster</span></div>
+        <div class="poster p5"><span class="rank">5</span><span>Mob Psycho</span></div>
+      </div>
+    </div>
+    <div class="edi-sec">
+      <div class="kick" style="margin-bottom:16px">— в цифрах</div>
+      <div style="display:flex;gap:48px;flex-wrap:wrap">
+        <div><div style="font-family:var(--f-d);font-weight:700;font-size:34px;line-height:1">342</div><div class="kick" style="margin-top:4px">аниме</div></div>
+        <div><div style="font-family:var(--f-d);font-weight:700;font-size:34px;line-height:1">1 240</div><div class="kick" style="margin-top:4px">эпизодов</div></div>
+        <div><div style="font-family:var(--f-d);font-weight:700;font-size:34px;line-height:1">87</div><div class="kick" style="margin-top:4px">дней просмотра</div></div>
+        <div><div style="font-family:var(--f-d);font-weight:700;font-size:34px;line-height:1;color:var(--cyan)">8.4</div><div class="kick" style="margin-top:4px">средняя оценка</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<ul class="pc">
+  <li class="p">самый «дорогой» и чистый вид</li><li class="p">контент в центре внимания</li>
+  <li class="m">меньше «игровой» энергии, чем у карт/гачи</li><li class="m">блокам с тяжёлым фоном (терминал, VN) тут тесно</li>
+</ul>
+
+<!-- ══════════ C — HERO ══════════ -->
+<h2 id="c"><span class="n">C</span>Hero-баннер + сетка</h2>
+<p class="h2sub">Витрина открывается крупным «представляющим» баннером (аватар + bio + ключевые цифры на градиентном фоне), а ниже — компактная сетка остальных блоков. Сразу даёт «лицо» профиля, как в Steam/игровых профилях.</p>
+<div class="stage">
+  <div class="hero">
+    <div class="hero-top">
+      <div class="av" style="width:72px;height:72px;font-size:26px;box-shadow:0 0 0 3px rgba(167,139,250,.35),0 8px 30px rgba(0,212,255,.25)">0n</div>
+      <div class="hero-meta">
+        <div class="hero-name">0neymik0</div>
+        <div class="hero-handle">@0neymik0 · с нами 4 года</div>
+      </div>
+    </div>
+    <p class="hero-bio">Смотрю аниме с 2014-го. Сэйнэн, психологические триллеры и всё, что заставляет думать после титров.</p>
+    <div class="hero-stats">
+      <div class="s"><div class="big">342</div><div class="lbl">аниме</div></div>
+      <div class="s"><div class="big">1 240</div><div class="lbl">эпизодов</div></div>
+      <div class="s"><div class="big">87</div><div class="lbl">дней</div></div>
+      <div class="s"><div class="big" style="color:var(--cyan)">8.4</div><div class="lbl">оценка</div></div>
+    </div>
+  </div>
+  <div class="hero-grid">
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--cyan)"></span>Любимое аниме</h3>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px">
+        <div class="poster p1"><span class="rank">1</span><span>Frieren</span></div>
+        <div class="poster p2"><span class="rank">2</span><span>Steins;Gate</span></div>
+        <div class="poster p3"><span class="rank">3</span><span>Vinland</span></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--warning)"></span>Карты</h3>
+      <div style="display:flex;gap:8px">
+        <div class="poster p6" style="flex:1;aspect-ratio:3/4;border:1px solid var(--warning)"><span>SSR</span></div>
+        <div class="poster p2" style="flex:1;aspect-ratio:3/4"><span>SR</span></div>
+        <div class="poster p3" style="flex:1;aspect-ratio:3/4"><span>R</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<ul class="pc">
+  <li class="p">мгновенное «лицо» профиля</li><li class="p">знакомый игровой паттерн</li>
+  <li class="p">сетка снизу гибкая</li><li class="m">about/stats полу-фиксированы в баннере</li>
+</ul>
+
+<!-- ══════════ D — ACCENT PANELS ══════════ -->
+<h2 id="d"><span class="n">D</span>Accent-панели</h2>
+<p class="h2sub">Минимальное вмешательство в текущую структуру: оставляем панели, но даём каждому типу блока свою акцентную идентичность — цветной торец, заголовок-шапка с угловым свечением. Каждый блок узнаётся, монотонность пропадает почти бесплатно.</p>
+<div class="stage">
+  <div class="acc">
+    <div class="panel e-violet span2">
+      <div class="ph"><span class="dot" style="background:var(--violet)"></span>О себе</div>
+      <div class="pb" style="color:rgba(255,255,255,.82);font-size:14px">Смотрю аниме с 2014-го. Сэйнэн, психологические триллеры и всё, что заставляет думать после титров. Цундере не одобряю, но терплю.</div>
+    </div>
+    <div class="panel e-cyan span2">
+      <div class="ph"><span class="dot" style="background:var(--cyan)"></span>Любимое аниме</div>
+      <div class="pb"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
+        <div class="poster p1"><span class="rank">1</span><span class="score">9.4</span><span>Frieren</span></div>
+        <div class="poster p2"><span class="rank">2</span><span>Steins;Gate</span></div>
+        <div class="poster p3"><span class="rank">3</span><span>Vinland</span></div>
+        <div class="poster p4"><span class="rank">4</span><span>Monster</span></div>
+        <div class="poster p5"><span class="rank">5</span><span>Mob</span></div>
+      </div></div>
+    </div>
+    <div class="panel e-success">
+      <div class="ph"><span class="dot" style="background:var(--success)"></span>Статистика</div>
+      <div class="pb"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="statmini"><span class="big">342</span><span class="lbl">аниме</span></div>
+        <div class="statmini"><span class="big">87</span><span class="lbl">дней</span></div>
+        <div class="statmini"><span class="big">1 240</span><span class="lbl">эпизодов</span></div>
+        <div class="statmini"><span class="big">8.4</span><span class="lbl">оценка</span></div>
+      </div></div>
+    </div>
+    <div class="panel e-pink">
+      <div class="ph"><span class="dot" style="background:var(--pink)"></span>Любимый персонаж</div>
+      <div class="pb"><div style="display:flex;align-items:center;gap:12px">
+        <div class="av" style="width:50px;height:50px;font-size:16px;background:linear-gradient(135deg,#5b2d8b,#a78bfa)">Fr</div>
+        <div><div style="font-weight:600;font-size:14px">Фрирен</div><div style="font-size:12px;color:var(--muted)">♥ #1 · главная роль</div></div>
+      </div></div>
+    </div>
+  </div>
+</div>
+<ul class="pc">
+  <li class="p">минимальные правки текущего кода</li><li class="p">каждый блок узнаётся</li>
+  <li class="p">сохраняет привычную структуру</li><li class="m">всё ещё сетка коробок, просто нарядных</li>
+</ul>
+
+<div class="note" style="margin-top:48px">
+  <b>Мой выбор — A (Bento) или гибрид C+A:</b> hero-баннер сверху для «лица» профиля, под ним bento-сетка для остального. D — самый дешёвый по реализации запасной вариант, если хочется минимум правок. Скажи, какой концепт (или микс) откручиваем дальше — доведу до пиксельной точности на реальных токенах и перенесу в Vue-компонент <code style="font-family:var(--f-m);font-size:12px;background:rgba(255,255,255,.07);padding:1px 6px;border-radius:5px">ProfileShowcase.vue</code>.
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор витрины — интерактивный прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --base:#08080f;--card:#10101d;--line:rgba(255,255,255,.06);--line-strong:rgba(255,255,255,.12);
+  --fg:#fff;--muted:rgba(255,255,255,.56);--muted-2:rgba(255,255,255,.38);
+  --cyan:#00d4ff;--pink:#ff2d7c;--violet:#a78bfa;--success:#00ff9d;--warning:#ffc24b;--orange:#ff8a3d;
+  --f-d:'Manrope',system-ui,sans-serif;--f-b:'Inter',system-ui,sans-serif;--f-m:'JetBrains Mono',ui-monospace,monospace;
+  --row:150px;--gap:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--base);color:var(--fg);font-family:var(--f-b);font-size:14px;line-height:1.5;padding:34px 0 120px}
+.wrap{max-width:880px;margin:0 auto;padding:0 22px}
+h1{font-family:var(--f-d);font-weight:700;font-size:24px;letter-spacing:-.02em}
+.sub{color:var(--muted);margin-top:8px;max-width:720px;font-size:14px}
+
+/* editor toolbar */
+.bar{display:flex;align-items:center;gap:12px;margin:26px 0 6px;flex-wrap:wrap}
+.bar .ttl{font-family:var(--f-d);font-weight:600;font-size:18px;margin-right:auto}
+.bar .mode{font-family:var(--f-m);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--violet);background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.35);border-radius:999px;padding:4px 11px}
+.btn{font-size:13px;font-weight:500;border-radius:9px;padding:7px 15px;cursor:pointer;border:1px solid var(--line-strong);color:var(--fg);background:transparent}
+.btn:hover{background:rgba(255,255,255,.05)}
+.btn.pri{background:rgba(0,212,255,.14);border-color:rgba(0,212,255,.4);color:var(--cyan)}
+.tips{font-family:var(--f-m);font-size:11px;color:var(--muted);margin:4px 0 16px;display:flex;flex-wrap:wrap;gap:4px 16px}
+.tips b{color:var(--violet);font-weight:500}
+
+/* bento */
+.bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:var(--row);gap:var(--gap);grid-auto-flow:dense}
+.tile{position:relative;background:var(--card);border:1px dashed var(--line-strong);border-radius:15px;padding:14px;overflow:hidden;display:flex;flex-direction:column;cursor:grab;transition:border-color .15s,box-shadow .15s,opacity .1s;user-select:none}
+.tile:hover{border-color:var(--cyan)}
+.tile.dragging{opacity:.35;cursor:grabbing}
+.tile.resizing{border-color:var(--violet);border-style:solid;box-shadow:0 0 0 1px var(--violet),0 14px 40px rgba(167,139,250,.25);z-index:10}
+.tile.about{background:linear-gradient(140deg,rgba(167,139,250,.12),rgba(0,212,255,.04))}
+.tile.dropbefore{box-shadow:-4px 0 0 -1px var(--cyan)}
+.tile.dropafter{box-shadow:4px 0 0 -1px var(--cyan)}
+.tt{font-family:var(--f-d);font-weight:600;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.dim{position:absolute;left:9px;top:9px;font-family:var(--f-m);font-size:10px;letter-spacing:.04em;color:var(--violet);background:rgba(167,139,250,.16);border:1px solid rgba(167,139,250,.4);border-radius:6px;padding:1px 7px;z-index:7;pointer-events:none}
+.del{position:absolute;right:8px;top:8px;width:22px;height:22px;border-radius:7px;background:rgba(255,45,124,.14);border:1px solid rgba(255,45,124,.4);color:var(--pink);display:grid;place-items:center;font-size:13px;cursor:pointer;z-index:8;opacity:0;transition:.12s}
+.tile:hover .del{opacity:1}
+.handle{position:absolute;right:5px;bottom:5px;width:24px;height:24px;border-radius:8px;background:rgba(0,212,255,.18);border:1px solid rgba(0,212,255,.55);display:grid;place-items:center;color:var(--cyan);font-size:12px;cursor:nwse-resize;z-index:9;touch-action:none}
+.handle:hover{background:rgba(0,212,255,.3)}
+.body{flex:1;min-height:0;opacity:.85}
+
+/* tile content */
+.pp{display:grid;gap:7px;height:100%}
+.po{position:relative;border-radius:8px;overflow:hidden;display:flex;align-items:flex-end;padding:6px;font-size:9.5px;font-weight:600;min-height:0}
+.po span{position:relative;z-index:2;text-shadow:0 1px 5px #000}
+.po::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.85))}
+.p1{background:linear-gradient(135deg,#1a3a4a,#0d5b6b,#00d4ff)}.p2{background:linear-gradient(135deg,#2a1a4a,#5b2d8b,#a78bfa)}
+.p3{background:linear-gradient(135deg,#4a1a2a,#8b2d4d,#ff2d7c)}.p4{background:linear-gradient(135deg,#1a4a2a,#2d8b5b,#00ff9d)}
+.p5{background:linear-gradient(135deg,#4a3a1a,#8b6d2d,#ffc24b)}.p6{background:linear-gradient(135deg,#3a1a4a,#6b2d8b,#ff8a3d)}
+.statg{display:grid;grid-template-columns:1fr 1fr;gap:9px;height:100%;align-content:center}
+.st .b{font-family:var(--f-d);font-weight:700;font-size:20px;line-height:1;color:var(--cyan)}.st .l{font-size:9px;color:var(--muted);text-transform:uppercase;margin-top:2px}
+.cb{position:relative;height:100%;border-radius:9px;overflow:hidden;display:flex;align-items:flex-end;padding:8px;background:linear-gradient(135deg,#3a1733,#7a2d6b,#ff2d7c);font-size:11px;font-weight:600}
+.cb::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(0,0,0,.8))}.cb span{position:relative;z-index:2}
+.aq{font-size:12px;line-height:1.55;color:rgba(255,255,255,.85)}
+.gbar{display:grid;grid-template-columns:54px 1fr;align-items:center;gap:8px;margin:5px 0;font-size:11px}
+.gbar .track{height:6px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}.gbar .fill{height:100%;border-radius:4px}
+
+.add{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;border:1px dashed var(--line-strong);border-radius:15px;color:var(--muted);font-size:12.5px;cursor:pointer;background:rgba(255,255,255,.015)}
+.add:hover{border-color:var(--violet);color:var(--violet)}
+.add .pl{font-size:24px;color:var(--violet)}
+.note{background:rgba(255,255,255,.03);border:1px solid var(--line-strong);border-left:3px solid var(--cyan);border-radius:10px;padding:12px 16px;margin-top:22px;font-size:13px;color:rgba(255,255,255,.8)}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:rgba(0,255,157,.14);border:1px solid rgba(0,255,157,.4);color:var(--success);font-size:13px;font-weight:500;padding:10px 20px;border-radius:999px;opacity:0;transition:.25s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:720px){.bento{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Редактор витрины — живой прототип</h1>
+  <p class="sub">Это рабочая имитация редактора. Можно реально <b>перетаскивать</b> блоки (меняется порядок) и <b>тянуть угловую ручку ◢</b> (меняется размер со снапом к ячейкам). Сетка плотно переупаковывается сама.</p>
+
+  <div class="bar">
+    <span class="ttl">Витрина</span>
+    <span class="mode">● режим редактирования</span>
+    <button class="btn" id="cancel">Отмена</button>
+    <button class="btn pri" id="save">Сохранить</button>
+  </div>
+  <div class="tips">
+    <span>🖐 <b>тащи тело блока</b> — порядок</span>
+    <span>◢ <b>тяни угол</b> — размер (ширина 1–4, высота 1–2)</span>
+    <span>✕ <b>удалить блок</b></span>
+    <span>＋ <b>добавить блок</b></span>
+  </div>
+
+  <div class="bento" id="bento">
+    <div class="tile about" data-w="2" data-h="2">
+      <span class="dim">2×2</span><span class="del">✕</span>
+      <div class="tt"><span class="dot" style="background:var(--violet)"></span>О себе</div>
+      <div class="body"><p class="aq">Смотрю аниме с 2014-го. Сэйнэн, психологические триллеры и всё, что заставляет думать после титров. Цундере не одобряю, но терплю.</p></div>
+      <span class="handle">◢</span>
+    </div>
+
+    <div class="tile" data-w="2" data-h="1">
+      <span class="dim">2×1</span><span class="del">✕</span>
+      <div class="tt"><span class="dot" style="background:var(--success)"></span>Статистика</div>
+      <div class="body"><div class="statg"><div class="st"><div class="b">342</div><div class="l">аниме</div></div><div class="st"><div class="b">1240</div><div class="l">эп.</div></div><div class="st"><div class="b">87</div><div class="l">дней</div></div><div class="st"><div class="b">8.4</div><div class="l">оценка</div></div></div></div>
+      <span class="handle">◢</span>
+    </div>
+
+    <div class="tile" data-w="1" data-h="2">
+      <span class="dim">1×2</span><span class="del">✕</span>
+      <div class="tt"><span class="dot" style="background:var(--pink)"></span>Персонаж</div>
+      <div class="body"><div class="cb"><span>Фрирен · ♥#1</span></div></div>
+      <span class="handle">◢</span>
+    </div>
+
+    <div class="tile" data-w="1" data-h="1">
+      <span class="dim">1×1</span><span class="del">✕</span>
+      <div class="tt"><span class="dot" style="background:var(--orange)"></span>ДНК</div>
+      <div class="body"><div class="gbar"><span>Сэйнэн</span><div class="track"><div class="fill" style="width:82%;background:linear-gradient(90deg,var(--orange),var(--warning))"></div></div></div><div class="gbar"><span>Психо</span><div class="track"><div class="fill" style="width:64%;background:linear-gradient(90deg,var(--violet),var(--pink))"></div></div></div></div>
+      <span class="handle">◢</span>
+    </div>
+
+    <div class="tile" data-w="4" data-h="1">
+      <span class="dim">4×1</span><span class="del">✕</span>
+      <div class="tt"><span class="dot" style="background:var(--cyan)"></span>Любимое аниме</div>
+      <div class="body"><div class="pp" style="grid-template-columns:repeat(6,1fr)"><div class="po p1"><span>Frieren</span></div><div class="po p2"><span>Steins;Gate</span></div><div class="po p3"><span>Vinland</span></div><div class="po p4"><span>Monster</span></div><div class="po p5"><span>Mob</span></div><div class="po p6"><span>Hyouka</span></div></div></div>
+      <span class="handle">◢</span>
+    </div>
+
+    <div class="tile" data-w="2" data-h="1">
+      <span class="dim">2×1</span><span class="del">✕</span>
+      <div class="tt"><span class="dot" style="background:var(--warning)"></span>Коллекция карт</div>
+      <div class="body"><div class="pp" style="grid-template-columns:repeat(4,1fr)"><div class="po p6" style="border:1px solid var(--warning)"><span>SSR</span></div><div class="po p2"><span>SR</span></div><div class="po p3"><span>SR</span></div><div class="po p1"><span>R</span></div></div></div>
+      <span class="handle">◢</span>
+    </div>
+
+    <div class="add" id="add"><span class="pl">＋</span>Добавить блок</div>
+  </div>
+
+  <div class="note">💡 В реальной версии: на тач-экранах угловая ручка скрыта (там только перетаскивание порядка), а размеры настраиваются с десктопа. На телефоне сетка схлопывается в 2 колонки. Сохранение шлёт <code style="font-family:var(--f-m);font-size:11px;background:rgba(255,255,255,.07);padding:1px 5px;border-radius:4px">{type, variant, order, w, h}</code> на бэкенд.</div>
+</div>
+
+<div class="toast" id="toast">✓ Витрина сохранена</div>
+
+<script>
+const bento=document.getElementById('bento');
+const addBtn=document.getElementById('add');
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+function applySpan(tile){
+  const w=+tile.dataset.w, h=+tile.dataset.h;
+  tile.style.gridColumn='span '+w;
+  tile.style.gridRow='span '+h;
+  tile.querySelector('.dim').textContent=w+'×'+h;
+}
+function metrics(){
+  const cs=getComputedStyle(bento);
+  const gap=parseFloat(cs.columnGap)||12;
+  const rowGap=parseFloat(cs.rowGap)||12;
+  const cols=4;
+  const cellW=(bento.clientWidth-(cols-1)*gap)/cols;
+  const rowH=parseFloat(cs.gridAutoRows)||150;
+  return {gap,rowGap,cellW,rowH};
+}
+
+/* ── RESIZE via corner handle ── */
+function initResize(tile){
+  const handle=tile.querySelector('.handle');
+  if(!handle) return;
+  handle.addEventListener('pointerdown',e=>{
+    e.preventDefault(); e.stopPropagation();
+    tile.setAttribute('draggable','false');
+    tile.classList.add('resizing');
+    const {gap,rowGap,cellW,rowH}=metrics();
+    const sx=e.clientX, sy=e.clientY;
+    const sw=+tile.dataset.w, sh=+tile.dataset.h;
+    handle.setPointerCapture(e.pointerId);
+    function move(ev){
+      const dx=ev.clientX-sx, dy=ev.clientY-sy;
+      const nw=clamp(sw+Math.round(dx/(cellW+gap)),1,4);
+      const nh=clamp(sh+Math.round(dy/(rowH+rowGap)),1,2);
+      if(nw!=+tile.dataset.w||nh!=+tile.dataset.h){
+        tile.dataset.w=nw; tile.dataset.h=nh; applySpan(tile);
+      }
+    }
+    function up(ev){
+      tile.classList.remove('resizing');
+      tile.setAttribute('draggable','true');
+      try{handle.releasePointerCapture(e.pointerId)}catch(_){}
+      document.removeEventListener('pointermove',move);
+      document.removeEventListener('pointerup',up);
+    }
+    document.addEventListener('pointermove',move);
+    document.addEventListener('pointerup',up);
+  });
+}
+
+/* ── REORDER via native drag ── */
+let dragEl=null;
+function clearDropHints(){bento.querySelectorAll('.dropbefore,.dropafter').forEach(t=>t.classList.remove('dropbefore','dropafter'));}
+function initDrag(tile){
+  tile.setAttribute('draggable','true');
+  tile.addEventListener('dragstart',e=>{dragEl=tile;setTimeout(()=>tile.classList.add('dragging'),0);e.dataTransfer.effectAllowed='move';});
+  tile.addEventListener('dragend',()=>{tile.classList.remove('dragging');clearDropHints();dragEl=null;});
+  tile.addEventListener('dragover',e=>{
+    e.preventDefault();
+    if(!dragEl||dragEl===tile)return;
+    const r=tile.getBoundingClientRect();
+    const before=e.clientX < r.left+r.width/2;
+    clearDropHints();
+    tile.classList.add(before?'dropbefore':'dropafter');
+  });
+  tile.addEventListener('drop',e=>{
+    e.preventDefault();
+    if(!dragEl||dragEl===tile)return;
+    const r=tile.getBoundingClientRect();
+    const before=e.clientX < r.left+r.width/2;
+    bento.insertBefore(dragEl, before?tile:tile.nextSibling===addBtn?addBtn:tile.nextSibling);
+    clearDropHints();
+  });
+}
+
+function wire(tile){applySpan(tile);initResize(tile);initDrag(tile);
+  const del=tile.querySelector('.del');
+  if(del)del.addEventListener('click',ev=>{ev.stopPropagation();tile.style.transition='opacity .15s';tile.style.opacity='0';setTimeout(()=>tile.remove(),150);});
+}
+bento.querySelectorAll('.tile').forEach(wire);
+
+/* allow dropping onto the add-tile zone / end */
+addBtn.addEventListener('dragover',e=>{e.preventDefault();});
+addBtn.addEventListener('drop',e=>{e.preventDefault();if(dragEl){bento.insertBefore(dragEl,addBtn);clearDropHints();}});
+
+/* add a new block */
+const palette=[
+  {t:'Отзывы',c:'var(--cyan)'},{t:'OP/ED',c:'var(--pink)'},{t:'Достижения',c:'var(--warning)'},{t:'Совместимость',c:'var(--violet)'}
+];
+let pi=0;
+addBtn.addEventListener('click',()=>{
+  const p=palette[pi++%palette.length];
+  const tile=document.createElement('div');
+  tile.className='tile';tile.dataset.w='2';tile.dataset.h='1';
+  tile.innerHTML='<span class="dim">2×1</span><span class="del">✕</span><div class="tt"><span class="dot" style="background:'+p.c+'"></span>'+p.t+'</div><div class="body"><p class="aq" style="color:var(--muted)">новый блок — настрой содержимое</p></div><span class="handle">◢</span>';
+  bento.insertBefore(tile,addBtn);
+  wire(tile);
+});
+
+/* save/cancel */
+const toast=document.getElementById('toast');
+document.getElementById('save').addEventListener('click',()=>{
+  const layout=[...bento.querySelectorAll('.tile')].map((t,i)=>({order:i,w:+t.dataset.w,h:+t.dataset.h}));
+  console.log('SAVE payload',layout);
+  toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1800);
+});
+document.getElementById('cancel').addEventListener('click',()=>location.reload());
+</script>
+</body>
+</html>
