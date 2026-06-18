@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/notifications/internal/domain"
@@ -58,7 +59,7 @@ func BuildNewEpisodePayload(
 		WatchType:              combo.WatchType,
 		TranslationID:          combo.TranslationID,
 		TranslationTitle:       translationTitle,
-		WatchURL:               BuildWatchURL(anime.ID, combo.Player, maxWatched+1, combo.TranslationID),
+		WatchURL:               BuildWatchURL(anime.ID, combo.Player, maxWatched+1, translationTitle),
 	}
 
 	out, err := json.Marshal(payload)
@@ -68,12 +69,13 @@ func BuildNewEpisodePayload(
 	return out, nil
 }
 
-// BuildWatchURL formats the deep-link URL pattern from the design doc:
+// BuildWatchURL formats the new-episode deep-link consumed by the frontend
+// NotificationCard / store. aePlayer reads `provider` (its source id) and
+// `team` (the team TITLE, e.g. a Kodik translation title) to preselect the
+// source on mount; `episode` lands the user on the new episode:
 //
-//	/anime/{anime_id}/watch?player={player}&episode={ep}&translation={translation_id}
-//
-// The Phase 3 frontend NotificationCard consumes this URL verbatim.
-func BuildWatchURL(animeID, player string, episode int, translationID string) string {
-	return fmt.Sprintf("/anime/%s/watch?player=%s&episode=%d&translation=%s",
-		animeID, player, episode, translationID)
+//	/anime/{anime_id}/watch?provider={provider}&team={team}&episode={ep}
+func BuildWatchURL(animeID, provider string, episode int, team string) string {
+	return fmt.Sprintf("/anime/%s/watch?provider=%s&team=%s&episode=%d",
+		animeID, url.QueryEscape(provider), url.QueryEscape(team), episode)
 }
