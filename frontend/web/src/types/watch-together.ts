@@ -155,7 +155,7 @@ export type ErrorCode =
  * The five frontend player IDs accepted by `Room.player`. Matches the five
  * `<*Player>` Vue components in `frontend/web/src/components/player/`.
  */
-export type PlayerKind = 'kodik' | 'kodik-adfree' | 'animelib' | 'ourenglish' | 'hanime' | 'raw'
+export type PlayerKind = 'kodik' | 'kodik-adfree' | 'animelib' | 'ourenglish' | 'hanime' | 'raw' | 'aeplayer'
 
 /** Playback state union — either the video is `playing` or `paused`. */
 export type PlaybackState = 'playing' | 'paused'
