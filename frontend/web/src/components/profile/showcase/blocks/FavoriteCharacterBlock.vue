@@ -6,6 +6,7 @@ import { charactersApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import CharacterCard from '@/components/anime/CharacterCard.vue'
+import CharacterImage from '@/components/anime/CharacterImage.vue'
 import type { CharacterCardModel } from '@/types/character'
 
 const props = defineProps<{ config: FavoriteCharacterConfig; variant?: string }>()
@@ -73,16 +74,9 @@ onMounted(async () => {
           >
             ★ #1
           </span>
-          <img
-            :src="c.image"
-            :alt="c.name"
-            class="h-full w-full object-cover"
-            style="aspect-ratio: 3/4"
-          />
-          <!-- gradient overlay -->
-          <div class="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent" />
+          <CharacterImage :src="c.image || '/placeholder.svg'" :alt="c.name" ratio="3/4" :scrim="true" :proxy-width="256" />
           <!-- name + role -->
-          <div class="absolute bottom-0 left-0 right-0 p-2">
+          <div class="absolute bottom-0 left-0 right-0 z-10 p-2">
             <div class="truncate text-xs font-semibold text-foreground" data-testid="portrait-name">{{ c.name }}</div>
             <div class="truncate text-xs text-muted-foreground">{{ c.role }}</div>
           </div>
@@ -100,13 +94,15 @@ onMounted(async () => {
           style="aspect-ratio: 3/4"
           data-testid="hero-big-card"
         >
-          <img
-            :src="items[0].image"
+          <CharacterImage
+            :src="items[0].image || '/placeholder.svg'"
             :alt="items[0].name"
-            class="h-full w-full object-cover"
+            ratio="3/4"
+            :proxy-width="512"
+            class="w-full"
           />
           <!-- overlay -->
-          <div class="absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/90" />
+          <div class="absolute inset-0 z-10 bg-gradient-to-b from-black/15 via-transparent to-black/90" />
           <!-- ♥ #1 badge -->
           <span class="absolute left-2 top-2 rounded-md bg-black/70 px-1.5 py-0.5 text-xs font-semibold text-pink-400">
             ♥ #1

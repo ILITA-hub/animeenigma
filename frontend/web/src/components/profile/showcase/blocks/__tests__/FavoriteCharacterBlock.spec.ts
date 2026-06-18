@@ -28,6 +28,9 @@ vi.mock('@/utils/title', () => ({
 
 vi.mock('@/composables/useImageProxy', () => ({
   getImageUrl: vi.fn((u) => u ?? ''),
+  // CharacterImage (child) resizes/falls back through these.
+  cardPosterUrl: (u: string) => u,
+  getImageFallbackUrl: (u: string) => u,
 }))
 
 describe('FavoriteCharacterBlock', () => {

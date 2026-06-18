@@ -14,9 +14,14 @@
 
     <div v-else-if="character" class="mt-6 flex flex-col md:flex-row gap-6">
       <div class="w-48 shrink-0 mx-auto md:mx-0">
-        <div class="rounded-xl overflow-hidden bg-white/5 border border-white/10 aspect-[2/3]">
-          <img :src="character.image" :alt="character.name" class="w-full h-full object-cover" />
-        </div>
+        <CharacterImage
+          :src="character.image || '/placeholder.svg'"
+          :alt="character.name"
+          ratio="2/3"
+          rounded="xl"
+          :proxy-width="384"
+          class="border border-white/10"
+        />
       </div>
 
       <div class="flex-1 min-w-0">
@@ -40,6 +45,7 @@
 import { onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Spinner from '@/components/ui/Spinner.vue'
+import CharacterImage from '@/components/anime/CharacterImage.vue'
 import { useCharacter } from '@/composables/useCharacters'
 
 const route = useRoute()
