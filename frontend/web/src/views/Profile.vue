@@ -69,17 +69,19 @@
         </div>
       </div>
 
-      <!-- Profile Showcase (dark-ship gate: VITE_PROFILE_WALL_ADMIN_ONLY) -->
-      <ProfileShowcase
-        v-if="profileWallVisible && profileUser?.id"
-        :user-id="profileUser.id"
-        :is-owner="!!isOwnProfile"
-        class="mt-6"
-      />
-
       <!-- Tabs -->
       <div class="max-w-4xl mx-auto px-4">
         <Tabs v-model="activeTab" :tabs="tabs" variant="underline" full-width class="mb-6">
+          <!-- Showcase Tab (dark-ship gate: VITE_PROFILE_WALL_ADMIN_ONLY) -->
+          <template v-if="profileWallVisible" #showcase>
+            <ProfileShowcase
+              v-if="profileUser?.id"
+              :user-id="profileUser.id"
+              :is-owner="!!isOwnProfile"
+              @loaded="onShowcaseLoaded"
+            />
+          </template>
+
           <!-- Watchlist Tab -->
           <template #watchlist>
             <!-- Loading -->
@@ -1017,11 +1019,11 @@ const memberSinceYear = computed(() => {
 })
 
 // Tabs
-const activeTab = ref('watchlist')
+const activeTab = ref(profileWallVisible.value ? 'showcase' : 'watchlist')
 const tabs = computed(() => {
-  const baseTabs = [
-    { value: 'watchlist', label: t('profile.tabs.watchlist') },
-  ]
+  const baseTabs: Array<{ value: string; label: string }> = []
+  if (profileWallVisible.value) baseTabs.push({ value: 'showcase', label: t('profile.tabs.showcase') })
+  baseTabs.push({ value: 'watchlist', label: t('profile.tabs.watchlist') })
   if (isOwnProfile.value && gachaVisible.value) {
     baseTabs.push({ value: 'collection', label: t('gacha.collection_tab') })
   }
@@ -1032,6 +1034,12 @@ const tabs = computed(() => {
   }
   return baseTabs
 })
+
+function onShowcaseLoaded(count: number) {
+  if (count === 0 && !isOwnProfile.value && activeTab.value === 'showcase') {
+    activeTab.value = 'watchlist'
+  }
+}
 
 // Phase 7 — Advanced Settings tab state. Lazy-loaded the first time the user
 // opens the tab so we don't spend a request on every Profile mount.

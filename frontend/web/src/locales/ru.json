@@ -489,6 +489,7 @@
     "memberSince": "Участник с",
     "uploadAvatar": "Загрузить аватар",
     "tabs": {
+      "showcase": "Витрина",
       "watchlist": "Мои списки",
       "settings": "Настройки",
       "advanced": "Продвинутое"

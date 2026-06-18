@@ -499,6 +499,7 @@
       }
     },
     "tabs": {
+      "showcase": "ショーケース",
       "watchlist": "マイリスト",
       "settings": "設定",
       "advanced": "詳細設定"
