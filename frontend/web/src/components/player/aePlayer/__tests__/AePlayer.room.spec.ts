@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { ref, nextTick } from 'vue'
 import type { Ref } from 'vue'
 import type { Room } from '@/types/watch-together'
+import { comboToToken } from '@/composables/aePlayer/comboMapping'
 
 // AePlayer exposes its live `state.combo` via defineExpose({ __combo }) so the
 // test can read the pinned/applied combo without mocking usePlayerState (which
@@ -203,5 +204,63 @@ describe('AePlayer — WT room sync (Sub-Part A: HTML5 bridge)', () => {
     await nextTick()
 
     expect(room.emitPlay).not.toHaveBeenCalled()
+  })
+})
+
+// Read the live combo exposed by AePlayer via defineExpose({ __combo }).
+// test-utils unwraps the exposed ref on `vm`, so `__combo` is the Combo object
+// itself (not a { value } wrapper).
+function readCombo(wrapper: ReturnType<typeof mountPlayer>): import('@/types/aePlayer').Combo {
+  const exposed = (wrapper.vm as unknown as { __combo: unknown }).__combo
+  const maybeRef = exposed as { value?: import('@/types/aePlayer').Combo }
+  return (maybeRef && 'value' in maybeRef && maybeRef.value
+    ? maybeRef.value
+    : exposed) as import('@/types/aePlayer').Combo
+}
+
+describe('AePlayer — WT room sync (Sub-Part B: pin to room combo)', () => {
+  it('applies the room translation_id combo on mount and keeps it (no auto-override)', async () => {
+    const token = comboToToken({
+      provider: 'allanime',
+      audio: 'sub',
+      lang: 'en',
+      team: null,
+      server: 'wixmp',
+    })
+    const room = makeRoom({ player: 'aeplayer', translation_id: token })
+    const wrapper = mountPlayer(room)
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    const combo = readCombo(wrapper)
+    expect(combo.provider).toBe('allanime')
+    expect(combo.audio).toBe('sub')
+    expect(combo.lang).toBe('en')
+    expect(combo.server).toBe('wixmp')
+  })
+
+  it('re-applies the combo when the room translation_id changes (remote source switch)', async () => {
+    const first = comboToToken({
+      provider: 'allanime', audio: 'sub', lang: 'en', team: null, server: 'wixmp',
+    })
+    const room = makeRoom({ player: 'aeplayer', translation_id: first })
+    const wrapper = mountPlayer(room)
+    await flushPromises()
+    await nextTick()
+
+    expect(readCombo(wrapper).provider).toBe('allanime')
+
+    // Remote member switches source → room.translation_id mutates.
+    room.room.value!.translation_id = comboToToken({
+      provider: 'miruro', audio: 'dub', lang: 'en', team: null, server: 'kiwi',
+    })
+    await nextTick()
+    await flushPromises()
+
+    const combo = readCombo(wrapper)
+    expect(combo.provider).toBe('miruro')
+    expect(combo.audio).toBe('dub')
+    expect(combo.server).toBe('kiwi')
   })
 })

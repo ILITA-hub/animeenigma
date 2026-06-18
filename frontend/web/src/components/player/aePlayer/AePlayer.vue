@@ -347,7 +347,7 @@ import { rankedProviderIds } from '@/composables/aePlayer/rankedProviderIds'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
-import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer } from '@/composables/aePlayer/comboMapping'
+import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo } from '@/composables/aePlayer/comboMapping'
 import { useToast } from '@/composables/useToast'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
@@ -409,6 +409,37 @@ const toast = useToast()
 // bridge is never instantiated and the player behaves exactly as standalone.
 if (props.room) {
   usePlayerSyncBridge(videoRef, props.room)
+}
+
+// True iff mounted inside a WT room — the room's combo is authoritative, so
+// AePlayer's own auto-source-selection (Stage 1a smart default + Stage 1b
+// saved-combo restore) is suppressed.
+const roomPinned = computed(() => !!props.room)
+
+// Parse a WT room token (carried in `translation_id`) and apply it wholesale to
+// the player's combo. The room is the single source of truth for the source, so
+// every field (audio/lang/team/provider/server) is set from the token.
+function applyRoomCombo(token: string | undefined | null) {
+  if (!token) return
+  const fields = tokenToCombo(token)
+  if (!fields) return
+  state.combo.value = {
+    audio: fields.audio,
+    lang: fields.lang,
+    team: fields.team,
+    provider: fields.provider,
+    server: fields.server,
+  }
+}
+
+// Apply the room's combo on mount and on every remote source switch. immediate
+// so a joiner adopts the room's source before its own auto-select can run.
+if (props.room) {
+  watch(
+    () => props.room?.room.value?.translation_id,
+    (tid) => applyRoomCombo(tid),
+    { immediate: true },
+  )
 }
 
 // Test seam: expose the live combo ref so WT room-sync specs can assert the
@@ -662,6 +693,8 @@ const buildAvailable = (): WatchCombo[] => {
 // one-shot latch (non-reactive on purpose — read/written only inside the watcher)
 let resolveAttempted = false
 watch(rows, () => {
+  // WT: the room's combo is authoritative — never run the saved-combo restore.
+  if (roomPinned.value) return
   if (resolveAttempted) return
   const available = buildAvailable()
   if (available.length === 0) return
@@ -676,6 +709,8 @@ watch(rows, () => {
 watch(
   [rows, preferenceSettled, orderedProviderIds],
   () => {
+    // WT: the room pins the source — suppress the smart default entirely.
+    if (roomPinned.value) return
     if (state.combo.value.provider) return
     if (!preferenceSettled.value) return // let the saved prefs (audio/lang) settle first
     void pickSmartDefault(rows.value, orderedProviderIds.value, {
