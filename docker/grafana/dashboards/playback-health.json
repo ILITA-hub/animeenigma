@@ -580,11 +580,18 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Seconds since each provider's probe last ticked (heartbeat). Catches a silently-dead probe (stale gauge). Includes Kodik. Providers never probed (e.g. 18anime, which runs in its own orchestrator and emits a zero-timestamp heartbeat) render as a neutral 'never' instead of a bogus ~56-year age (any age ≥ 1 year is treated as never-ticked).",
+      "description": "Seconds since each provider's probe last ticked (heartbeat). Catches a silently-dead probe (stale gauge). Includes Kodik. Scrollable table sorted by staleness (oldest first). Providers never probed (e.g. 18anime, which runs in its own orchestrator and emits a zero-timestamp heartbeat) render as a neutral 'never' instead of a bogus ~56-year age (any age ≥ 1 year is treated as never-ticked).",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
+          },
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false
           },
           "mappings": [
             {
@@ -619,7 +626,26 @@
           },
           "unit": "s"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last Tick (age)"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 6,
@@ -629,18 +655,17 @@
       },
       "id": 25,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
         },
-        "textMode": "value_and_name"
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Last Tick (age)",
+            "desc": true
+          }
+        ]
       },
       "pluginVersion": "10.3.3",
       "targets": [
@@ -650,12 +675,35 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "time() - provider_probe_last_tick_timestamp{provider=~\"$provider\"}",
+          "format": "table",
+          "instant": true,
           "legendFormat": "{{ provider }}",
           "refId": "A"
         }
       ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "provider": "Provider",
+              "Value": "Last Tick (age)"
+            },
+            "indexByName": {
+              "provider": 0,
+              "Value": 1
+            }
+          }
+        }
+      ],
       "title": "Probe Last Tick (by provider)",
-      "type": "stat"
+      "type": "table"
     },
     {
       "datasource": {
