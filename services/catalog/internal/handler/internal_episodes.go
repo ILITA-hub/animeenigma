@@ -29,6 +29,7 @@ package handler
 // `notifications:episodes:{shikimori_id}:{player}:{translation_id}:{watch_type}`.
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -37,17 +38,24 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// episodesLookup is the one-method interface the handler needs from the
+// service layer. *service.EpisodesLookupService satisfies it; a fake
+// implementation is used in tests.
+type episodesLookup interface {
+	LatestAvailable(ctx context.Context, shikimoriID, player, translationID, watchType, language string) (service.EpisodesLookupResult, error)
+}
+
 // InternalEpisodesHandler implements GET
 // /internal/anime/{shikimoriId}/episodes. The handler is a thin shell over
 // EpisodesLookupService — input validation + JSON shape, nothing else. All
 // caching, parser dispatch, and error classification live in the service.
 type InternalEpisodesHandler struct {
-	svc *service.EpisodesLookupService
+	svc episodesLookup
 	log *logger.Logger
 }
 
 // NewInternalEpisodesHandler constructs the handler.
-func NewInternalEpisodesHandler(svc *service.EpisodesLookupService, log *logger.Logger) *InternalEpisodesHandler {
+func NewInternalEpisodesHandler(svc episodesLookup, log *logger.Logger) *InternalEpisodesHandler {
 	return &InternalEpisodesHandler{svc: svc, log: log}
 }
 
@@ -72,12 +80,15 @@ func (h *InternalEpisodesHandler) GetLatestEpisode(w http.ResponseWriter, r *htt
 	watchType := q.Get("watch_type")
 	language := q.Get("language")
 
-	if player != "kodik" && player != "animelib" {
-		// D-DET-03: any other player value returns 400 in v1.0.
-		httputil.BadRequest(w, "player not supported by detector in v1.0")
+	// Anime-level players (aePlayer, empty translation_id): english/ae/raw.
+	// Legacy translation-specific players: kodik/animelib (require an id).
+	animeLevel := player == "english" || player == "ae" || player == "raw"
+	legacy := player == "kodik" || player == "animelib"
+	if !animeLevel && !legacy {
+		httputil.BadRequest(w, "player not supported by detector")
 		return
 	}
-	if translationID == "" {
+	if legacy && translationID == "" {
 		httputil.BadRequest(w, "translation_id is required")
 		return
 	}
