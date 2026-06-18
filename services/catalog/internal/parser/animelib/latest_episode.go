@@ -130,6 +130,35 @@ func (c *Client) LatestEpisodeForTeam(ctx context.Context, animelibID int, teamI
 	return highest, teamName, nil
 }
 
+// maxAnimeLibEpisode returns the highest integer episode number in the list.
+// Non-numeric/fractional Number strings are skipped (AnimeLib uses string
+// numbers; specials like "3.5" don't advance the "latest episode" count).
+func maxAnimeLibEpisode(eps []Episode) int {
+	best := 0
+	for _, e := range eps {
+		n, err := strconv.Atoi(e.Number)
+		if err != nil {
+			continue
+		}
+		if n > best {
+			best = n
+		}
+	}
+	return best
+}
+
+// LatestEpisodeAnyTeam returns the latest episode number across the full
+// (team-agnostic) episode list for an AnimeLib anime id. Used by the
+// notifications detector for aePlayer animelib combos (no specific team).
+// Returns 0 + nil when the list is empty (caller maps to NotFound/skip).
+func (c *Client) LatestEpisodeAnyTeam(ctx context.Context, animelibID int) (int, error) {
+	eps, err := c.GetEpisodes(animelibID)
+	if err != nil {
+		return 0, fmt.Errorf("animelib: episodes for id %d: %w", animelibID, err)
+	}
+	return maxAnimeLibEpisode(eps), nil
+}
+
 // translationTypeForWatchType maps the notifications' watch_type string into
 // the AnimeLib TranslationType ID enum.
 func translationTypeForWatchType(watchType string) (int, error) {
