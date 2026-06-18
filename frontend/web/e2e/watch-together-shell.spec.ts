@@ -209,7 +209,7 @@ test.describe('Watch Together — two-browser smoke (Phase 02 Plan 02.10)', () =
       // player needs to mount, so the InviteButton renders immediately.
       // Mirrors what real returning users see (and avoids fighting the
       // provider-resolution chain in a headless test environment where
-      // kodik/animelib/etc. round-trips can flake).
+      // kodik/aeplayer source round-trips can flake).
       const seededCombo = {
         data: {
           player: 'kodik',

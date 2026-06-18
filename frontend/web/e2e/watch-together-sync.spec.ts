@@ -12,7 +12,7 @@ import { test, expect, type Browser, type BrowserContext, type Page, type APIReq
  *   4. Browser B's state mirrors within 2s (500ms target + 4× slack).
  *
  * Plus one drift-correction test under simulated 4× CPU throttling on a
- * single player (animelib — HTML5 + cheap to drive). Verifies the soft
+ * single player (aeplayer — HTML5 + cheap to drive). Verifies the soft
  * correction loop pulls the throttled follower back to the leader's
  * timeline once the throttle is released.
  *
@@ -223,13 +223,15 @@ test.describe('Watch Together — two-browser sync (WT-SYNC-09, Plan 03.6)', () 
     test.skip(!up, 'AnimeEnigma local stack is not up — run `make dev` and re-run')
   })
 
-  // ─── HTML5 players (AnimeLib, OurEnglish, Hanime, Raw) ─────────────────
+  // ─── HTML5 player (aePlayer) ───────────────────────────────────────────
   //
-  // Each block drives play/pause/seek on browser A and asserts browser B
+  // After the Plan B player-surface collapse, aePlayer is the sole HTML5
+  // <video> surface (it serves every source — RU/EN/JP/18+ — internally).
+  // The block drives play/pause/seek on browser A and asserts browser B
   // mirrors within SYNC_POLL_TIMEOUT_MS. The <video> element is the
   // single source of truth on both sides.
 
-  for (const player of ['animelib', 'ourenglish', 'hanime', 'raw'] as const) {
+  for (const player of ['aeplayer'] as const) {
     test(`sync: two browsers stay in lockstep on ${player} player`, async ({
       browser,
       request,
@@ -446,7 +448,7 @@ test.describe('Watch Together — two-browser sync (WT-SYNC-09, Plan 03.6)', () 
     }
   })
 
-  // ─── Drift correction under CPU throttling (animelib) ──────────────────
+  // ─── Drift correction under CPU throttling (aeplayer) ──────────────────
   //
   // Throttle B's tab to 4× CPU slowdown, let A play unthrottled for a few
   // seconds (B accumulates drift since its video clock advances slower
@@ -455,11 +457,11 @@ test.describe('Watch Together — two-browser sync (WT-SYNC-09, Plan 03.6)', () 
   // observation window. The soft window is 5s in the implementation; we
   // assert <3s convergence to leave headroom.
 
-  test('sync: drift correction pulls B back when throttled (animelib)', async ({
+  test('sync: drift correction pulls B back when throttled (aeplayer)', async ({
     browser,
     request,
   }) => {
-    const pair = await setupPair(browser, request, 'animelib')
+    const pair = await setupPair(browser, request, 'aeplayer')
     const { pageA, pageB } = pair
     try {
       const videoA = pageA.locator('video').first()

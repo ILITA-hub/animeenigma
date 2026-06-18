@@ -23,7 +23,7 @@ import { dirname, join } from 'node:path'
  * `expect(video).toBeVisible()` BEFORE any sync/episode logic runs (observed
  * 2026-06-01).
  *
- * This spec removes that dependency by intercepting the OurEnglish player's
+ * This spec removes that dependency by intercepting aePlayer's scraper
  * data path at the browser edge with `page.route()`:
  *
  *   GET /api/anime/{id}/scraper/episodes          → 3 fake episodes
@@ -32,13 +32,14 @@ import { dirname, join } from 'node:path'
  *                                                    our proxy URL
  *   GET /api/streaming/hls-proxy?…&type=mp4        → a real ~3 s MP4 fixture
  *
- * The OurEnglish player therefore mounts a genuine HTML5 `<video>` on BOTH
- * browsers, and the rest of the stack is REAL:
+ * aePlayer therefore mounts a genuine HTML5 `<video>` on BOTH browsers
+ * (it serves every source — RU/EN/JP/18+ — internally via the same
+ * scraper routes), and the rest of the stack is REAL:
  *   - the watch-together WS service (room create, snapshot, broadcast),
- *   - the catalog episode-validate back-channel (permissive for ourenglish —
+ *   - the catalog episode-validate back-channel (permissive for aeplayer —
  *     any non-empty episode_id is Valid, so change_episode round-trips),
  *   - `usePlayerSyncBridge` (play/pause/seek/time-tick), and
- *   - the episode-change wiring fixed 2026-06-01 (OurEnglish now emits
+ *   - the episode-change wiring fixed 2026-06-01 (the player emits
  *     `String(ep.number)` + an inbound `initialEpisode` watcher).
  *
  * Anime: Frieren (UUID resolved live via /api/anime/search?q=Frieren so the
@@ -60,7 +61,7 @@ const SYNC_POLL_TIMEOUT_MS = 2000
 const PLAYER_MOUNT_TIMEOUT_MS = 15_000
 const PROPAGATE_TIMEOUT_MS = 2000
 
-const PLAYER = 'ourenglish'
+const PLAYER = 'aeplayer'
 
 // Three fake episodes. `id` deliberately differs from `number` so the test
 // proves the player emits the NUMBER (not the opaque scraper id) on
@@ -167,7 +168,7 @@ async function createRoom(
 ): Promise<{ roomId: string; inviteUrl: string }> {
   const resp = await request.post('/api/watch-together/rooms', {
     headers: { Authorization: `Bearer ${token}` },
-    // episode_id "1" matches FAKE_EPISODES[0].number. ourenglish validation
+    // episode_id "1" matches FAKE_EPISODES[0].number. aeplayer validation
     // is permissive (any non-empty episode_id → Valid), so the change_episode
     // round-trip below also succeeds without real provider data.
     data: { anime_id: animeId, episode_id: '1', player: PLAYER, translation_id: 'e2e-seeded' },
@@ -182,10 +183,10 @@ async function createRoom(
 }
 
 /**
- * Install the OurEnglish data-path mocks on a page. Must be called BEFORE
- * page.goto so the routes are armed when the player fetches.
+ * Install the scraper data-path mocks on a page. Must be called BEFORE
+ * page.goto so the routes are armed when aePlayer fetches.
  */
-async function mockOurEnglishProvider(page: Page): Promise<void> {
+async function mockScraperProvider(page: Page): Promise<void> {
   const json = (route: Route, payload: unknown) =>
     route.fulfill({
       status: 200,
@@ -236,8 +237,8 @@ async function setupPair(browser: Browser, request: APIRequestContext): Promise<
   const pageB = await ctxB.newPage()
 
   // Arm provider mocks on BOTH browsers before any navigation.
-  await mockOurEnglishProvider(pageA)
-  await mockOurEnglishProvider(pageB)
+  await mockScraperProvider(pageA)
+  await mockScraperProvider(pageB)
 
   const authA = await loginAs(pageA, request, UI_AUDIT_USERNAME, UI_AUDIT_PASSWORD)
   await registerEphemeralUser(pageB, request)
@@ -286,7 +287,7 @@ async function readPlaybackTime(page: Page): Promise<number | null> {
   })
 }
 
-test.describe('Watch Together — Frieren self-seeded two-browser (OurEnglish)', () => {
+test.describe('Watch Together — Frieren self-seeded two-browser (aePlayer)', () => {
   test.beforeAll(async ({ request }) => {
     const up = await isStackUp(request)
     test.skip(!up, 'AnimeEnigma local stack is not up — run `make dev` and re-run')
@@ -385,7 +386,7 @@ test.describe('Watch Together — Frieren self-seeded two-browser (OurEnglish)',
 
       // Drive a real episode change through the composable. This is the path
       // the in-player episode list takes (selectEpisode → emitChangeEpisode).
-      // The fix under test: OurEnglish emits the NUMBER ("2"), not ep.id.
+      // The fix under test: the player emits the NUMBER ("2"), not ep.id.
       await pageA.evaluate(() => {
         const h = (window as unknown as WindowWithHook).__wtTestRoom
         h?.emitChangeEpisode('2')

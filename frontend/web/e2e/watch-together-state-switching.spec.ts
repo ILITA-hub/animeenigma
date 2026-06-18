@@ -26,7 +26,8 @@ import {
  *      envelope from 04.3); follower's room.episode_id reactive state
  *      flips and the active player re-mounts via the :key binding.
  *   2. player_switch_propagates        — Host clicks PlayerTabBar's
- *      "animelib" tab; follower's tab bar shows the new active tab AND
+ *      "aeplayer" tab (the surviving HTML5 surface after the Plan B
+ *      collapse); follower's tab bar shows the new active tab AND
  *      the player chunk re-mounts (asserted via the post-mount video
  *      element on B).
  *   3. translation_switch_propagates   — Host emits change_translation;
@@ -51,14 +52,14 @@ import {
  *   - room creation 4xx → throws with the player kind in the message
  *   - the PlayerTabBar component carries `data-player="<kind>"` on each
  *     button (Plan 04.4 — verified in PlayerTabBar.vue template); we
- *     locate via `[role="tab"][data-player="animelib"]`
+ *     locate via `[role="tab"][data-player="aeplayer"]`
  *
  * Why a test hook?
  *   Tests 1, 3, and 4 drive state changes via the underlying
  *   useWatchTogetherRoom composable directly. The per-player UI
  *   switchers (episode dropdowns, translation lists) live inside player
- *   chunks whose markup varies wildly across the 5 player kinds; a UI-
- *   driven approach would couple this spec to AnimeLibPlayer's internal
+ *   chunks whose markup varies across the surviving player kinds; a UI-
+ *   driven approach would couple this spec to AePlayer's internal
  *   DOM. The composable is the stable seam — Plan 04.5 wired every
  *   player's user-click selectors through `props.room.emitChangeXxx`,
  *   so calling emitChangeXxx() directly exercises the exact same
@@ -82,14 +83,14 @@ const UI_AUDIT_PASSWORD = 'audit_bot_test_password_2026'
 const PROPAGATE_TIMEOUT_MS = 2000
 const PLAYER_MOUNT_TIMEOUT_MS = 15_000
 // Default first-episode id we seed when creating a fresh room. The
-// catalog validate endpoint accepts any non-empty string for
-// permissive players (ourenglish/hanime/raw — see 04.1 SUMMARY) and
-// any 1..latest integer for kodik/animelib. "1" satisfies both.
+// catalog validate endpoint accepts any non-empty string for the
+// permissive players (aeplayer — see episodes_validate.go) and any
+// 1..latest integer for the strict kodik path. "1" satisfies both.
 const INITIAL_EPISODE = '1'
 // Obviously-invalid episode id used by Test 4. Catalog's
-// EpisodesValidateService rejects this for kodik/animelib (parsed >
-// latest) and for permissive players only when empty — so we route
-// Test 4 through 'animelib' explicitly to exercise the strict path.
+// EpisodesValidateService rejects this for the strict players (kodik:
+// parsed > latest) but stays permissive for aeplayer — so we route
+// Test 4 through 'kodik' explicitly to exercise the strict path.
 const INVALID_EPISODE = '99999'
 
 interface AuthResult {
@@ -323,7 +324,7 @@ test.describe('Watch Together — two-browser state switching (WT-STATE-05, Plan
     browser,
     request,
   }) => {
-    const pair = await setupPair(browser, request, 'animelib')
+    const pair = await setupPair(browser, request, 'aeplayer')
     const { pageA, pageB } = pair
     try {
       // Wait for both sides to mount the player + composable.
@@ -384,8 +385,9 @@ test.describe('Watch Together — two-browser state switching (WT-STATE-05, Plan
     browser,
     request,
   }) => {
-    // Start on kodik so we can switch to animelib (a meaningful HTML5
-    // transition that exercises the player chunk re-mount via :key).
+    // Start on kodik so we can switch to aeplayer (the surviving HTML5
+    // transition — PlayerTabBar offers only ['aeplayer', 'kodik'] after
+    // the Plan B collapse — exercising the player chunk re-mount via :key).
     const pair = await setupPair(browser, request, 'kodik')
     const { pageA, pageB } = pair
     try {
@@ -398,26 +400,26 @@ test.describe('Watch Together — two-browser state switching (WT-STATE-05, Plan
       // PlayerTabBar is overlaid top-left inside the player column. Its
       // template uses `data-player="<kind>"` on each role=tab button
       // (verified in PlayerTabBar.vue).
-      const animelibTabA = pageA.locator('[role="tab"][data-player="animelib"]').first()
-      await expect(animelibTabA).toBeVisible({ timeout: PLAYER_MOUNT_TIMEOUT_MS })
-      await animelibTabA.click()
+      const aeplayerTabA = pageA.locator('[role="tab"][data-player="aeplayer"]').first()
+      await expect(aeplayerTabA).toBeVisible({ timeout: PLAYER_MOUNT_TIMEOUT_MS })
+      await aeplayerTabA.click()
 
-      // Follower's PlayerTabBar should report animelib as the active
+      // Follower's PlayerTabBar should report aeplayer as the active
       // tab within 2s — aria-selected="true" is the canonical signal.
-      const animelibTabB = pageB.locator('[role="tab"][data-player="animelib"]').first()
+      const aeplayerTabB = pageB.locator('[role="tab"][data-player="aeplayer"]').first()
       await expect
         .poll(
-          async () => animelibTabB.getAttribute('aria-selected'),
+          async () => aeplayerTabB.getAttribute('aria-selected'),
           {
             timeout: PROPAGATE_TIMEOUT_MS,
-            message: 'follower PlayerTabBar did not flip aria-selected to animelib',
+            message: 'follower PlayerTabBar did not flip aria-selected to aeplayer',
           },
         )
         .toBe('true')
 
       // And a new player chunk should mount on B — the HTML5 <video>
-      // element appears when AnimeLibPlayer mounts (the Kodik iframe
-      // is replaced via :key="player-${livePlayer}" re-mount).
+      // element appears when AePlayer mounts (the Kodik iframe is
+      // replaced via :key="player-${livePlayer}" re-mount).
       await expect(pageB.locator('video').first()).toBeVisible({
         timeout: PLAYER_MOUNT_TIMEOUT_MS,
       })
@@ -431,7 +433,7 @@ test.describe('Watch Together — two-browser state switching (WT-STATE-05, Plan
     browser,
     request,
   }) => {
-    const pair = await setupPair(browser, request, 'animelib')
+    const pair = await setupPair(browser, request, 'aeplayer')
     const { pageA, pageB } = pair
     try {
       const videoA = pageA.locator('video').first()
@@ -450,10 +452,10 @@ test.describe('Watch Together — two-browser state switching (WT-STATE-05, Plan
       const initialB = await readRoomField(pageB, 'translation_id')
 
       // Host emits change_translation. We need a translation_id that
-      // the catalog will accept for the animelib player; the most
+      // the catalog will accept for the aeplayer surface; the most
       // robust path is to read whatever translation_id A's player has
-      // already auto-resolved (the AnimeLib parser auto-picks the
-      // first available translation on mount) and re-emit it. If A
+      // already auto-resolved (aePlayer auto-resolves a combo/source
+      // on mount) and re-emit it. If A
       // hasn't auto-picked yet, fall back to emitting "42" — the
       // catalog will either accept (valid translation) or reject with
       // sender-only TRANSLATION_UNAVAILABLE (which still proves the
@@ -542,11 +544,15 @@ test.describe('Watch Together — two-browser state switching (WT-STATE-05, Plan
     browser,
     request,
   }) => {
-    const pair = await setupPair(browser, request, 'animelib')
+    // Route through 'kodik' — the surviving STRICT-validating player.
+    // aeplayer is permissive (episodes_validate.go) and would accept
+    // "99999", so it can't exercise the EPISODE_UNAVAILABLE safety path.
+    const pair = await setupPair(browser, request, 'kodik')
     const { pageA, pageB } = pair
     try {
-      const videoA = pageA.locator('video').first()
-      await expect(videoA).toBeVisible({ timeout: PLAYER_MOUNT_TIMEOUT_MS })
+      // Kodik mounts an iframe (no HTML5 <video>); wait on that instead.
+      const ifrA = pageA.locator('iframe').first()
+      await expect(ifrA).toBeVisible({ timeout: PLAYER_MOUNT_TIMEOUT_MS })
 
       const hookOnA = await hasTestHook(pageA)
       const hookOnB = await hasTestHook(pageB)

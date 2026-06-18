@@ -22,7 +22,7 @@ import { test, expect, type Page, type APIRequestContext } from '@playwright/tes
  *   6. B opens the same URL → both see member count = 2 + each other's name
  *   7. Chat A → B, chat B → A
  *   8. Reaction A → B, reaction B → A
- *   9. Controls: 5 player tabs on each side, both agree on active tab
+ *   9. Controls: 2 player tabs (aeplayer + kodik) on each side, both agree on active tab
  *  10. A reloads → still in room (snapshot replay)
  *  11. B closes → A drops back to 1 member
  *
@@ -275,9 +275,10 @@ test.describe('Watch Together — full 2-browser scenario', () => {
         timeout: 8_000,
       })
 
-      // ── 7. Controls: 5 player tabs, both agree on active tab ─────
-      await expect(pageA.locator(PLAYER_TAB)).toHaveCount(5)
-      await expect(pageB.locator(PLAYER_TAB)).toHaveCount(5)
+      // ── 7. Controls: 2 player tabs (aeplayer + kodik, the Plan B
+      //       survivors), both agree on active tab ─────
+      await expect(pageA.locator(PLAYER_TAB)).toHaveCount(2)
+      await expect(pageB.locator(PLAYER_TAB)).toHaveCount(2)
       const activeA = await pageA
         .locator(`${PLAYER_TAB}[aria-selected="true"]`)
         .first()
