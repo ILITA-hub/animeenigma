@@ -1791,6 +1791,11 @@
     "pick_character": "Pick characters",
     "pick_cards": "Pick cards",
     "saved": "Showcase saved",
-    "save_error": "Couldn't save showcase — please retry"
+    "save_error": "Couldn't save showcase — please retry",
+    "cardCollection": {
+      "others": "Also in collection",
+      "favCard": "★ Favorite card",
+      "holoFoil": "Holo-foil"
+    }
   }
 }

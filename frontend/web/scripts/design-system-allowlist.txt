@@ -178,3 +178,16 @@ src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#e6703a:podium bro
 src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#06121a:podium pedestal rank number text-on-medal — near-black contrast on light medal surface; no token at this depth
 src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#cfd8ff:podium silver medal ring — fixed medal identity color, no token
 src/components/profile/showcase/blocks/FavoriteAnimeBlock.vue:#ff9d6b:podium bronze medal ring — fixed medal identity color, no token
+
+# CardCollectionBlock — gacha rarity frame gradients and ambient overlays
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:#ff9d00:SSR rarity gold-end gradient stop — gacha card rarity identity color (deep gold); no DS token within tolerance
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:#009dcc:R rarity frame gradient end — gacha card R-tier identity (cyan-600 variant); no DS token at this shade
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(255,255,255,0.18):holo-foil overlay shimmer — card shine effect; no alpha token at this value
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(0,0,0,0.8):card bottom gradient scrim — always-dark overlay, not a theme surface token
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(255,214,0,0.2):SSR rarity badge bg — gacha rarity identity glow at 20% alpha; no token
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(167,139,250,0.2):SR rarity badge bg — gacha rarity identity glow at 20% alpha; no token
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(34,211,238,0.2):R rarity badge bg — gacha rarity identity (cyan) at 20% alpha; no token
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(255,214,0,0.55):SSR card shadow glow — gacha rarity identity; no token at this alpha
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(167,139,250,0.5):SR card shadow glow — gacha rarity identity; no token at this alpha
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(255,255,255,0.4):tilt3d sheen radial — interactive highlight on 3D card hover; no alpha token
+src/components/profile/showcase/blocks/CardCollectionBlock.vue:rgba(4,4,10,0.72):dialog backdrop — near-black scrim for card detail modal; no token at this depth
