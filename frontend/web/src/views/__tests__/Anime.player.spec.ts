@@ -11,7 +11,7 @@
  * localStorage-normalization logic itself is unit-tested separately in
  * animePlayerPrefs.spec.ts.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
@@ -154,6 +154,13 @@ async function mountView() {
 }
 
 describe('Anime.vue player surface (Plan B)', () => {
+  // Warm the heavy Anime.vue dependency graph ONCE so the first real test
+  // doesn't bear the cold dynamic-import cost and race the default 5s timeout
+  // (cold import of the full view tree can exceed it on a busy CI box).
+  beforeAll(async () => {
+    await import('@/views/Anime.vue')
+  }, 30000)
+
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
