@@ -78,11 +78,9 @@ onMounted(load)
     <template v-else>
       <p v-if="!loading && !blocks.length" class="text-sm text-muted-foreground">{{ $t('showcase.empty') }}</p>
       <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-3 [grid-auto-flow:dense] [grid-auto-rows:165px] md:[grid-auto-rows:190px]">
-        <template v-for="(b, i) in blocks" :key="i">
-          <div :data-showcase-cell="b.type" :class="['h-full', cellClass(b)]">
-            <ShowcaseBlockView :block="b" :user-id="userId" :is-owner="isOwner" />
-          </div>
-        </template>
+        <div v-for="(b, i) in blocks" :key="i" :data-showcase-cell="b.type" :class="['h-full', cellClass(b)]">
+          <ShowcaseBlockView :block="b" :user-id="userId" :is-owner="isOwner" />
+        </div>
       </div>
     </template>
   </section>
