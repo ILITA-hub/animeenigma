@@ -115,3 +115,32 @@ func TestValidateBlocks_OpEdLimit(t *testing.T) {
 		t.Fatal("expected error: too many op_ed theme_ids")
 	}
 }
+
+func TestValidateBlocks_ClampsSize(t *testing.T) {
+	// favorite_anime/row bounds: W2..4, H1..1, default 4x1
+	blocks := []Block{{Type: BlockFavoriteAnime, Variant: "row", Width: 1, Height: 3,
+		Config: cfg(t, map[string][]string{"anime_ids": {"a"}})}}
+	if err := ValidateBlocks(blocks); err != nil {
+		t.Fatalf("expected clamp, got error: %v", err)
+	}
+	if blocks[0].Width != 2 || blocks[0].Height != 1 {
+		t.Fatalf("want 2x1 after clamp, got %dx%d", blocks[0].Width, blocks[0].Height)
+	}
+}
+
+func TestValidateBlocks_BackfillsDefaultSize(t *testing.T) {
+	blocks := []Block{{Type: BlockStats, Variant: "tiles"}} // w/h absent
+	if err := ValidateBlocks(blocks); err != nil {
+		t.Fatal(err)
+	}
+	if blocks[0].Width != 2 || blocks[0].Height != 1 {
+		t.Fatalf("want default 2x1, got %dx%d", blocks[0].Width, blocks[0].Height)
+	}
+}
+
+func TestSizeFor_FallsBackToDefaultVariant(t *testing.T) {
+	got := SizeFor(BlockAbout, "") // empty -> default variant "quote"
+	if got.DefW != 2 || got.DefH != 1 {
+		t.Fatalf("about default want 2x1, got %dx%d", got.DefW, got.DefH)
+	}
+}

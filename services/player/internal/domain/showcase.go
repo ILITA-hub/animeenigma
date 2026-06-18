@@ -27,6 +27,8 @@ type Block struct {
 	Type    string          `json:"type"`
 	Variant string          `json:"variant,omitempty"`
 	Order   int             `json:"order"`
+	Width   int             `json:"w,omitempty"`
+	Height  int             `json:"h,omitempty"`
 	Config  json.RawMessage `json:"config"`
 }
 
@@ -62,6 +64,75 @@ var VariantAllowlist = map[string][]string{
 	BlockCompatibility:     {"ring"},
 }
 
+// SizeBound is the grid-cell size range for one (block type, variant).
+type SizeBound struct{ MinW, MaxW, MinH, MaxH, DefW, DefH int }
+
+// VariantSizeAllowlist maps block type → variant → size bounds (grid cells,
+// W 1..4, H 1..3). Keep in sync with frontend src/types/showcase.ts VARIANT_SIZE.
+var VariantSizeAllowlist = map[string]map[string]SizeBound{
+	BlockAbout: {
+		"quote": {2, 4, 1, 2, 2, 1}, "bio": {2, 4, 1, 2, 2, 2}, "terminal": {2, 4, 1, 2, 2, 2},
+		"minimal": {2, 4, 1, 2, 2, 1}, "vn": {2, 2, 1, 1, 2, 1},
+	},
+	BlockFavoriteAnime: {
+		"row": {2, 4, 1, 1, 4, 1}, "podium": {2, 2, 2, 2, 2, 2}, "grid": {2, 4, 1, 3, 4, 2},
+		"list": {2, 2, 1, 3, 2, 2}, "banner": {2, 4, 1, 3, 2, 2},
+	},
+	BlockFavoriteCharacter: {
+		"circles": {1, 4, 1, 3, 2, 1}, "portraits": {2, 4, 1, 3, 2, 2},
+		"hero": {2, 4, 1, 3, 2, 2}, "hex": {1, 4, 1, 3, 2, 2},
+	},
+	BlockCardCollection: {
+		"row": {2, 4, 1, 1, 2, 1}, "fan": {2, 4, 2, 3, 2, 2}, "grid": {2, 4, 1, 3, 2, 2},
+		"hero": {2, 4, 1, 2, 2, 2}, "tilt3d": {2, 4, 2, 3, 3, 2},
+	},
+	BlockStats: {
+		"tiles": {2, 2, 1, 1, 2, 1}, "rings": {2, 2, 1, 1, 2, 1},
+		"bars": {2, 2, 1, 1, 2, 1}, "strip": {2, 2, 1, 1, 2, 1},
+	},
+	BlockContinueWatching: {"cards": {2, 4, 1, 3, 2, 2}},
+	BlockOpEd:             {"grid": {2, 4, 1, 3, 2, 2}},
+	BlockAnimeDNA:         {"bars": {1, 2, 1, 3, 1, 2}},
+	BlockCompatibility:    {"ring": {1, 2, 1, 1, 2, 1}},
+}
+
+// SizeFor returns the bound for (type, variant); empty/unknown variant falls
+// back to the type's default variant (VariantAllowlist[type][0]).
+func SizeFor(blockType, variant string) SizeBound {
+	byVariant := VariantSizeAllowlist[blockType]
+	if b, ok := byVariant[variant]; ok {
+		return b
+	}
+	if defaults := VariantAllowlist[blockType]; len(defaults) > 0 {
+		return byVariant[defaults[0]]
+	}
+	return SizeBound{1, 4, 1, 3, 2, 1}
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+// clampBlockSize backfills absent w/h to the variant default and clamps any
+// provided value into the variant's range. Never rejects.
+func clampBlockSize(b *Block) {
+	sb := SizeFor(b.Type, b.Variant)
+	if b.Width == 0 {
+		b.Width = sb.DefW
+	}
+	if b.Height == 0 {
+		b.Height = sb.DefH
+	}
+	b.Width = clampInt(b.Width, sb.MinW, sb.MaxW)
+	b.Height = clampInt(b.Height, sb.MinH, sb.MaxH)
+}
+
 type aboutConfig struct {
 	Title string `json:"title"`
 	Text  string `json:"text"`
@@ -93,13 +164,15 @@ func ValidateBlocks(blocks []Block) error {
 	if len(blocks) > MaxBlocks {
 		return errors.InvalidInput("too many showcase blocks")
 	}
-	for _, b := range blocks {
+	for i := range blocks {
+		b := &blocks[i]
 		if _, known := VariantAllowlist[b.Type]; !known {
 			return errors.InvalidInput("unknown showcase block type")
 		}
 		if !variantAllowed(b.Type, b.Variant) {
 			return errors.InvalidInput("unknown variant for block type")
 		}
+		clampBlockSize(b)
 		switch b.Type {
 		case BlockStats, BlockContinueWatching, BlockAnimeDNA, BlockCompatibility:
 			// auto blocks: no config required
