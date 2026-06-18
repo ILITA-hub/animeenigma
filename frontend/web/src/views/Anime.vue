@@ -362,170 +362,33 @@
                Watch CTA (see line ~128). The previous mount here (gated on
                playerActivated, adjacent to the language tabs) was removed
                to keep a single discovery point next to Continue Watching. -->
-          <!-- Language tabs + Provider sub-tabs -->
-          <!-- UA-062 (UX-12 Phase 5): ButtonGroup wraps the RU/EN/18+ toggle
-               with role="group" + aria-label; each child button binds
-               aria-pressed to its selected state. -->
-          <!-- Hidden for not-yet-released titles: no sources exist to switch
-               between, so the language/provider toggles are noise. -->
-          <div v-if="!notReleasedYet" class="flex flex-wrap gap-2 player-tabs">
-            <ButtonGroup
-              :label="$t('anime.languageSwitchLabel')"
-              container-class="flex gap-1 bg-white/5 rounded-lg p-1"
+          <!-- Plan B — the per-language tabs + provider sub-tabs are retired.
+               AePlayer is the DEFAULT player and selects every surviving source
+               (ae / kodik-HLS / EN scraper chain / raw / 18anime) inside its own
+               SourcePanel. The only page-level surface toggle is the binary
+               "Classic Kodik" iframe fallback. Hidden for not-yet-released
+               titles (no sources to switch). -->
+          <div
+            v-if="!notReleasedYet && aePlayerEnabled"
+            class="flex flex-wrap items-center gap-2 player-tabs"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              radius="md"
+              :aria-pressed="classicKodik"
+              @click="classicKodik = !classicKodik"
             >
-              <button
-                @click="switchLanguage('ru')"
-                :aria-pressed="videoLanguage === 'ru'"
-                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
-                :class="videoLanguage === 'ru'
-                  ? 'bg-white/15 text-white'
-                  : 'text-white/50 hover:text-white/70'"
-              >
-                RU
-              </button>
-              <!-- Phase 24-28 — OurEnglish (scraper-microservice failover) -->
-              <button
-                v-if="ourEnglishEnabled"
-                @click="switchLanguage('en')"
-                :aria-pressed="videoLanguage === 'en'"
-                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
-                :class="videoLanguage === 'en'
-                  ? 'bg-white/15 text-white'
-                  : 'text-white/50 hover:text-white/70'"
-              >
-                EN
-              </button>
-              <button
-                v-if="isHentai"
-                @click="switchLanguage('18+')"
-                :aria-pressed="videoLanguage === '18+'"
-                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
-                :class="videoLanguage === '18+'
-                  ? 'bg-white/15 text-white'
-                  : 'text-white/50 hover:text-white/70'"
-              >
-                18+
-              </button>
-              <!-- Workstream raw-jp / Phase 04 — RAW JP language pill behind
-                   VITE_RAW_PROVIDER_ENABLED flag. -->
-              <button
-                v-if="rawProviderEnabled"
-                @click="switchLanguage('raw')"
-                :aria-pressed="videoLanguage === 'raw'"
-                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
-                :class="videoLanguage === 'raw'
-                  ? 'bg-white/15 text-white'
-                  : 'text-white/50 hover:text-white/70'"
-              >
-                {{ $t('player.raw.tab') }}
-              </button>
-              <!-- Task 15 — Unified Player pill (default ON, VITE_AE_PLAYER_ENABLED=false to hide) -->
-              <button
-                v-if="aePlayerEnabled"
-                @click="aeSelected = !aeSelected"
-                :aria-pressed="aeSelected"
-                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all inline-flex items-center gap-1.5"
-                :class="aeSelected ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/70'"
-              >
-                {{ $t('player.aePlayer.tab') }}
-                <span class="text-[10px] px-1 rounded bg-cyan-500/20 text-cyan-400">{{ $t('player.aePlayer.beta') }}</span>
-              </button>
-            </ButtonGroup>
-
-            <!-- Provider sub-tabs — hidden when unified player is active (it has its own source picker) -->
-            <!-- UA-063 (UX-12 Phase 5): ButtonGroup wraps provider chips. -->
-            <ButtonGroup
-              v-if="videoLanguage === 'ru' && !aeSelected"
-              :label="$t('anime.providerSwitchLabel')"
-              container-class="contents"
-            >
-              <button
-                @click="onUserPickedProvider('kodik')"
-                :aria-pressed="videoProvider === 'kodik'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'kodik'
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                Kodik
-              </button>
-              <button
-                v-if="animeLibEnabled"
-                @click="onUserPickedProvider('animelib')"
-                :aria-pressed="videoProvider === 'animelib'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'animelib'
-                  ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                AniLib
-              </button>
-              <button
-                v-if="kodikAdfreeEnabled"
-                @click="onUserPickedProvider('kodik-adfree')"
-                :aria-pressed="videoProvider === 'kodik-adfree'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'kodik-adfree'
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                {{ $t('player.kodikAdfree.tab') }}
-              </button>
-            </ButtonGroup>
-            <template v-else-if="videoLanguage === 'en' && ourEnglishEnabled && !aeSelected">
-              <button
-                @click="videoProvider = 'ourenglish'"
-                :aria-pressed="videoProvider === 'ourenglish'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'ourenglish'
-                  ? 'bg-success-soft text-success border border-success/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                {{ $t('player.ourenglish.label') }}
-              </button>
-            </template>
-            <template v-else-if="videoLanguage === '18+' && !aeSelected">
-              <button
-                @click="videoProvider = 'hanime'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'hanime'
-                  ? 'bg-pink-500/20 text-pink-400 border border-pink-500/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                Hanime
-              </button>
-              <button
-                v-if="anime18Enabled"
-                @click="videoProvider = 'anime18'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'anime18'
-                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                {{ $t('player.anime18.label') }}
-              </button>
-            </template>
-            <!-- Workstream raw-jp / Phase 04 — single-chip group for v0.1.
-                 v0.2's hybrid resolver adds 'minio' here. -->
-            <template v-else-if="videoLanguage === 'raw' && rawProviderEnabled && !aeSelected">
-              <button
-                @click="onUserPickedProvider('raw')"
-                :aria-pressed="videoProvider === 'raw'"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'raw'
-                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                AllAnime
-              </button>
-            </template>
+              {{ classicKodik ? $t('player.classicKodik.back') : $t('player.classicKodik.switch') }}
+            </Button>
           </div>
         </div>
-        <!-- Task 15: existing player chain unmounted when unified player is selected (prevents hidden audio) -->
-        <div class="glass-card p-4 md:p-6" v-if="!aeSelected">
-          <!-- Not-released notice: an announced/upcoming title with no sources
-               yet. Replaces the player so users see "premieres on {date}"
-               rather than a misleading "no available videos" error. -->
+
+        <!-- Default surface: AePlayer. Premiere notice replaces it for
+             not-yet-released titles so users see "premieres on {date}" rather
+             than an empty-source error. -->
+        <div class="glass-card p-4 md:p-6" v-if="!classicKodik && aePlayerEnabled">
           <div
             v-if="notReleasedYet"
             class="w-full aspect-video rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center text-center gap-3 px-6"
@@ -536,136 +399,52 @@
               {{ premiereDate ? $t('anime.notReleased.withDate', { date: premiereDate }) : $t('anime.notReleased.noDate') }}
             </p>
           </div>
-          <!-- Click-to-load placeholder (saves bandwidth / no auto-buffer) -->
-          <button
-            v-else-if="!playerActivated"
-            type="button"
-            @click="onPlaceholderCtaClick"
-            class="relative w-full aspect-video rounded-lg overflow-hidden group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-            :aria-label="placeholderCtaLabel"
-          >
-            <img
-              :src="anime.coverImage"
-              :alt="anime.title"
-              class="absolute inset-0 w-full h-full object-cover blur-sm scale-110"
-              @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime?.coverImage ?? '') } }"
-            />
-            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/40" aria-hidden="true" />
-            <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
-              <span class="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-cyan-500/90 group-hover:bg-cyan-400 text-black flex items-center justify-center shadow-lg transition-colors">
-                <Play class="size-8 sm:size-10 ml-1" fill="currentColor" aria-hidden="true" />
-              </span>
-              <span class="text-base sm:text-lg font-semibold">
-                {{ placeholderCtaLabel }}
-              </span>
-            </div>
-          </button>
-          <template v-else>
-            <!-- Kodik Player -->
-            <KodikPlayer
-              v-if="videoProvider === 'kodik'"
-              :anime-id="anime.id"
-              :anime-name="anime.title"
-              :total-episodes="anime.totalEpisodes"
-              :episode-duration-min="anime.episodeDuration"
-              :preferred-combo="resolvedCombo"
-              :initial-episode="resumeStartEpisode"
-              @available-translations="handleAvailableTranslations"
-            >
-              <template #header-middle>
-                <ResumePill v-bind="resumePillProps" />
-              </template>
-            </KodikPlayer>
-            <!-- Ad-free Kodik Player (HLS via kodikextract) -->
-            <KodikAdFreePlayer
-              v-else-if="videoProvider === 'kodik-adfree' && kodikAdfreeEnabled"
-              :anime-id="anime.id"
-              :anime-name="anime.title"
-              :total-episodes="anime.totalEpisodes"
-              :episode-duration-min="anime.episodeDuration"
-              :preferred-combo="resolvedCombo"
-              :initial-episode="resumeStartEpisode"
-              @available-translations="handleAvailableTranslations"
-            >
-              <template #header-middle>
-                <ResumePill v-bind="resumePillProps" />
-              </template>
-            </KodikAdFreePlayer>
-            <!-- AnimeLib Player -->
-            <AnimeLibPlayer
-              v-else-if="videoProvider === 'animelib' && animeLibEnabled"
-              :anime-id="anime.id"
-              :anime-name="anime.title"
-              :total-episodes="anime.totalEpisodes"
-              :preferred-combo="resolvedCombo"
-              :initial-episode="resumeStartEpisode"
-              @available-translations="handleAvailableTranslations"
-            >
-              <template #header-middle>
-                <ResumePill v-bind="resumePillProps" />
-              </template>
-            </AnimeLibPlayer>
-            <!-- OurEnglish Player (Phase 24-28 scraper microservice) -->
-            <OurEnglishPlayer
-              v-else-if="videoProvider === 'ourenglish' && ourEnglishEnabled"
-              :anime-id="anime.id"
-              :initial-episode="resumeStartEpisode"
-            >
-              <template #header-middle>
-                <ResumePill v-bind="resumePillProps" />
-              </template>
-            </OurEnglishPlayer>
-            <!-- Hanime Player -->
-            <HanimePlayer
-              v-else-if="videoProvider === 'hanime'"
-              :anime-id="anime.id"
-              :anime-name="anime.title"
-              :total-episodes="anime.totalEpisodes"
-              :initial-episode="resumeStartEpisode"
-            >
-              <template #header-middle>
-                <ResumePill v-bind="resumePillProps" />
-              </template>
-            </HanimePlayer>
-            <!-- 18anime (18+) Player — second 18+ provider, behind VITE_ANIME18_ENABLED. -->
-            <Anime18Player
-              v-else-if="videoProvider === 'anime18' && anime18Enabled"
-              :anime-id="anime.id"
-              :anime-name="anime.title"
-              :total-episodes="anime.totalEpisodes"
-              :initial-episode="resumeStartEpisode"
-            >
-              <template #header-middle>
-                <ResumePill v-bind="resumePillProps" />
-              </template>
-            </Anime18Player>
-            <!-- Workstream raw-jp / Phase 04 — RawPlayer mounts behind the
-                 same VITE_RAW_PROVIDER_ENABLED flag that gates the chip. -->
-            <RawPlayer
-              v-else-if="videoProvider === 'raw' && rawProviderEnabled"
-              :anime-id="anime.id"
-            >
-              <template #header-middle>
-                <ResumePill v-bind="resumePillProps" />
-              </template>
-            </RawPlayer>
-          </template>
+          <AePlayer
+            v-else
+            :anime-id="anime.id"
+            :anime="{ title: anime.title, ep: (anime.episodesAired || 1), eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage }"
+            :theater="theaterMode"
+            :is-hentai="isHentai"
+            :initial-episode="resumeStartEpisode"
+            :initial-provider="queryProvider"
+            :initial-team="queryTeam"
+            :mal-id="anime.shikimoriId"
+            @toggle-theater="setTheater(!theaterMode)"
+            @combo-change="aeWtSeed = $event"
+          />
         </div>
-        <!-- Task 15: Unified player mounts as a sibling AFTER the existing chain;
-             glass-card above is v-show="!aeSelected" so only one renders. -->
-        <AePlayer
-          v-if="aeSelected && aePlayerEnabled"
-          :anime-id="anime.id"
-          :anime="{ title: anime.title, ep: (anime.episodesAired || 1), eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage }"
-          :theater="theaterMode"
-          :is-hentai="isHentai"
-          :initial-episode="resumeStartEpisode"
-          :initial-provider="queryProvider"
-          :initial-team="queryTeam"
-          :mal-id="anime.shikimoriId"
-          @toggle-theater="setTheater(!theaterMode)"
-          @combo-change="aeWtSeed = $event"
-        />
+
+        <!-- Classic Kodik fallback: the iframe KodikPlayer. Also the surface
+             when AePlayer is disabled via VITE_AE_PLAYER_ENABLED=false. -->
+        <div class="glass-card p-4 md:p-6" v-else>
+          <div
+            v-if="notReleasedYet"
+            class="w-full aspect-video rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center text-center gap-3 px-6"
+          >
+            <Calendar class="size-12 text-cyan-400/80" aria-hidden="true" />
+            <p class="text-lg font-semibold text-white">{{ $t('anime.notReleased.title') }}</p>
+            <p class="text-sm text-white/60 max-w-md">
+              {{ premiereDate ? $t('anime.notReleased.withDate', { date: premiereDate }) : $t('anime.notReleased.noDate') }}
+            </p>
+          </div>
+          <KodikPlayer
+            v-else
+            :anime-id="anime.id"
+            :anime-name="anime.title"
+            :total-episodes="anime.totalEpisodes"
+            :episode-duration-min="anime.episodeDuration"
+            :preferred-combo="resolvedCombo"
+            :initial-episode="resumeStartEpisode"
+            @available-translations="handleAvailableTranslations"
+          >
+            <template #header-middle>
+              <ResumePill v-bind="resumePillProps" />
+            </template>
+          </KodikPlayer>
+          <!-- When AePlayer is disabled there's no toggle above; offer a way
+               back is moot (Classic Kodik is the only surface). When AePlayer
+               is enabled the toggle above flips back. -->
+        </div>
       </section>
 
       <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
@@ -1071,13 +850,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Avatar, Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
+import { Avatar, Badge, Button, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
 import { GenreChip, PosterCard, PosterImage, AnimeContextMenu } from '@/components/anime'
 import ReviewReactions from '@/components/anime/ReviewReactions.vue'
 import CharacterCard from '@/components/anime/CharacterCard.vue'
 import Carousel from '@/components/carousel/Carousel.vue'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
-import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
 import { computeWatchCta, type WatchCta } from '@/composables/watchCta'
 import RewatchCounter from '@/components/anime/RewatchCounter.vue'
@@ -1091,34 +869,11 @@ import type { AnimeCardModel } from '@/types/card'
 import type { CharacterCardModel } from '@/types/character'
 import type { WatchCombo } from '@/types/preference'
 
+// Plan B survivors: KodikPlayer (the iframe "Classic Kodik" fallback) and
+// AePlayer (the default). The other six players (KodikAdFree / AnimeLib /
+// Hanime / Anime18 / Raw / OurEnglish) are retired — their imports + template
+// mounts are removed here; the component files are deleted in a later task.
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
-// Ad-free Kodik player (libs/kodikextract HLS extraction). Behind a flag so it
-// can dark-ship; defaults ON.
-const KodikAdFreePlayer = defineAsyncComponent(() => import('@/components/player/KodikAdFreePlayer.vue'))
-const kodikAdfreeEnabled = import.meta.env.VITE_KODIK_ADFREE_ENABLED !== 'false'
-const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/AnimeLibPlayer.vue'))
-const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
-// 18anime (18+) — second 18+ provider alongside Hanime. Behind
-// VITE_ANIME18_ENABLED (default OFF) so it can dark-ship until verified.
-const Anime18Player = defineAsyncComponent(() => import('@/components/player/Anime18Player.vue'))
-const anime18Enabled = import.meta.env.VITE_ANIME18_ENABLED === 'true'
-// Workstream raw-jp, Phase 04 — lazy-load RawPlayer behind a Vite flag.
-const RawPlayer = defineAsyncComponent(() => import('@/components/player/RawPlayer.vue'))
-const rawProviderEnabled = import.meta.env.VITE_RAW_PROVIDER_ENABLED === 'true'
-// Phase 24-28 — OurEnglish (scraper-microservice-backed EN player).
-// Behind VITE_OURENGLISH_ENABLED so it can ship dark until upstream
-// gates are green in production.
-const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/OurEnglishPlayer.vue'))
-const ourEnglishEnabled = import.meta.env.VITE_OURENGLISH_ENABLED !== 'false'
-// AniLib direct-MP4 hidden 2026-06-01: AnimeLib's upstream API
-// (hapi.hentaicdn.org) now returns Kodik-only players for every title — zero
-// "Animelib" direct-MP4 sources — so the AniLib path resolves to empty
-// translations for ALL anime (verified across 11 titles incl. Frieren/One
-// Piece, even with a valid ANIMELIB_TOKEN). Since the no-Kodik-fallback rule
-// drops Kodik-only translations, the chip would always dead-end on "no
-// sources". Default OFF; flip VITE_ANIMELIB_ENABLED=true to restore the chip
-// if upstream brings direct video back.
-const animeLibEnabled = import.meta.env.VITE_ANIMELIB_ENABLED === 'true'
 // Unified player (Task 15) — single-surface player; default ON, set
 // VITE_AE_PLAYER_ENABLED=false to disable for dark-ship.
 // loadingComponent: selecting the tab unmounts the existing-player card
@@ -1137,6 +892,7 @@ const aePlayerEnabled = import.meta.env.VITE_AE_PLAYER_ENABLED !== 'false'
 const InviteButton = defineAsyncComponent(() => import('@/components/watch-together/InviteButton.vue'))
 import type { PlayerKind } from '@/types/watch-together'
 import type { WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
+import { resolveInitialPlayerPref, CLASSIC_KODIK_KEY } from './animePlayerPrefs'
 import ResumePill from '@/components/player/ResumePill.vue'
 import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
@@ -1146,7 +902,7 @@ import { useViewerContextStore, type ViewerContextData } from '@/stores/viewerCo
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { parseDescription } from '@/utils/description-parser'
-import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
+import { getImageUrl } from '@/composables/useImageProxy'
 
 interface AnimeWithExtras {
   japaneseTitle?: string
@@ -1259,15 +1015,9 @@ const watchCta = computed<WatchCta>(() => computeWatchCta({
 
 const watchCtaLabel = computed(() => t(watchCta.value.labelKey, watchCta.value.labelParams ?? {}))
 
-// The click-to-load player placeholder is a playback surface — clicking it must
-// never mutate the list, so the mark-watched terminal degrades to plain watch.
-const placeholderCta = computed<WatchCta>(() => {
-  const cta = watchCta.value
-  return cta.action === 'mark-watched'
-    ? { action: 'watch', startEpisode: 1, labelKey: 'anime.watchNow' }
-    : cta
-})
-const placeholderCtaLabel = computed(() => t(placeholderCta.value.labelKey, placeholderCta.value.labelParams ?? {}))
+// Plan B — the click-to-load placeholder (and its degraded `placeholderCta`)
+// is retired with the legacy player chain; AePlayer mounts directly with its
+// own loading skeleton, so the page-level placeholder is no longer needed.
 
 // startRewatchFlow — server-side cycle reset (status→watching, episodes=0,
 // watch_progress reset, is_rewatching=true; the count bumps on the new finale),
@@ -1307,7 +1057,6 @@ async function dispatchWatchCta(cta: WatchCta) {
 }
 
 const onWatchCtaClick = () => dispatchWatchCta(watchCta.value)
-const onPlaceholderCtaClick = () => dispatchWatchCta(placeholderCta.value)
 
 // Manual rewatch-count stepper (RewatchCounter beside the status badge).
 // Optimistic; the PUT carries the current status so the entry isn't moved.
@@ -1365,38 +1114,20 @@ const showShikimoriEdit = ref(false)
 const showAdminMenu = ref(false)
 const editShikimoriId = ref('')
 const savingShikimoriId = ref(false)
-// Runtime-validate localStorage values — users who previously selected an
-// EN player ('english' / 'hianime' / 'consumet') would otherwise hit a value
-// outside the new union, no v-if branch matches, and nothing renders.
-const VALID_LANGUAGES = ['ru', 'en', '18+', 'raw'] as const
-type VideoLanguage = (typeof VALID_LANGUAGES)[number]
-const _savedLang = localStorage.getItem('preferred_video_language')
-const videoLanguage = ref<VideoLanguage>(
-  (VALID_LANGUAGES as readonly string[]).includes(_savedLang ?? '') ? (_savedLang as VideoLanguage) : 'ru'
-)
-// Task 15 — dedicated flag so selecting the unified player never overwrites
-// videoLanguage (which controls all existing-player routing).
-// Persisted so a stale-chunk recovery reload (after a deploy) — or any reload —
-// restores the user's AnimeEnigma selection instead of silently dropping back
-// to the default player.
-const aeSelected = ref(localStorage.getItem('unified_player_selected') === '1')
-watch(aeSelected, (on) => {
-  if (on) localStorage.setItem('unified_player_selected', '1')
-  else localStorage.removeItem('unified_player_selected')
+// Plan B — AePlayer is the DEFAULT mounted player; "Classic Kodik" (the iframe
+// KodikPlayer) is the opt-in fallback. The legacy per-language tabs + provider
+// sub-tabs are retired (AePlayer's own SourcePanel serves every surviving
+// source: ae / kodik-HLS / EN scraper chain / raw / 18anime). One boolean now
+// chooses the surface, normalized from the old localStorage shape on mount.
+const _playerPref = resolveInitialPlayerPref({
+  [CLASSIC_KODIK_KEY]: localStorage.getItem(CLASSIC_KODIK_KEY),
+  unified_player_selected: localStorage.getItem('unified_player_selected'),
+  preferred_video_provider: localStorage.getItem('preferred_video_provider'),
 })
-// Workstream raw-jp, Phase 04 — 'raw' is the AllAnime-backed raw-JP provider.
-// Phase 24-28 — 'ourenglish' is the scraper-microservice-backed EN provider
-// (failover across gogoanime/animepahe/allanime/animefever/miruro/nineanime).
-const VALID_PROVIDERS = ['kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'anime18', 'raw'] as const
-type VideoProvider = (typeof VALID_PROVIDERS)[number]
-const _savedProv = localStorage.getItem('preferred_video_provider')
-// Coerce a pinned-but-disabled 'animelib' back to 'kodik' so users who last
-// watched on AniLib don't boot into a hidden tab with no player mounted.
-const _initialProv =
-  (VALID_PROVIDERS as readonly string[]).includes(_savedProv ?? '') ? (_savedProv as VideoProvider) : 'kodik'
-const videoProvider = ref<VideoProvider>(
-  (_initialProv === 'animelib' && !animeLibEnabled) || (_initialProv === 'kodik-adfree' && !kodikAdfreeEnabled) ? 'kodik' : _initialProv
-)
+const classicKodik = ref(_playerPref.classicKodik)
+watch(classicKodik, (on) => {
+  localStorage.setItem(CLASSIC_KODIK_KEY, on ? 'true' : 'false')
+})
 
 // Last-watched episode. For authenticated users this comes from server-side
 // watch_progress (Phase 4 — A-03 / D-02 single source of truth). For
@@ -1495,9 +1226,8 @@ const queryTeam = computed<string | undefined>(() => {
 })
 
 // A `?provider=` deep-link always opens aePlayer (the param speaks aePlayer's
-// source vocabulary). Set the ref directly; its localStorage watcher persists
-// the switch, which matches the retire-all-but-aePlayer direction.
-if (queryProvider.value) aeSelected.value = true
+// source vocabulary), so make sure we're not on the Classic Kodik fallback.
+if (queryProvider.value) classicKodik.value = false
 
 // What episode the player should mount on. Authenticated + state machine
 // loaded → use the state machine's startEpisode. Otherwise fall back to the
@@ -1600,7 +1330,10 @@ const aeWtSeed = ref<WtCreateSeed | null>(null)
 // aePlayer surface is active AND a usable source is resolved; otherwise falls
 // back to the legacy coarse-combo default (kodik / resolved player).
 const wtInvitePayload = computed<{ player: PlayerKind; translationId: string; episodeId: string }>(() => {
-  if (aeSelected.value && aeWtSeed.value) {
+  // AePlayer is the default surface — when it's active and has resolved a
+  // source, seed the room with its exact combo. The Classic Kodik fallback
+  // creates a legacy kodik room from the resolved coarse combo.
+  if (!classicKodik.value && aeWtSeed.value) {
     return {
       player: aeWtSeed.value.player,
       translationId: aeWtSeed.value.translation_id,
@@ -1608,68 +1341,18 @@ const wtInvitePayload = computed<{ player: PlayerKind; translationId: string; ep
     }
   }
   return {
-    player: (resolvedCombo.value?.player === 'english'
-      ? 'ourenglish'
-      : (resolvedCombo.value?.player ?? 'kodik')) as PlayerKind,
+    player: 'kodik' as PlayerKind,
     translationId: resolvedCombo.value?.translation_id ?? '',
     episodeId: String(resumeStartEpisode.value ?? lastEpisode.value ?? 1),
   }
 })
 
-// Numeric episode ref for the tracker. lastEpisode is Ref<number | undefined>
-// (resume-progress is unknown until localStorage is read); the tracker only
-// reads this for the optional payload, so default to 0 when unset.
-const currentEpisodeForTracker = computed(() => lastEpisode.value ?? 0)
-
-// Player-dimension override tracker. Instantiated ONCE at the Anime.vue level
-// because the player choice happens here, not inside any single player
-// component — a per-player composable instance can't observe a switch from
-// inside the unmounting player. This is the ONLY dimension this composable
-// handles outside the four player components (the per-player tracker handles
-// episode/team/language). Only fires from user-driven button clicks routed
-// through onUserPickedProvider — programmatic mutations to videoProvider.value
-// (initial preference resolution in initPreferences, switchLanguage tab
-// auto-pick, fallback when a parser fails) are intentionally direct
-// assignments and do NOT route through the tracker, per CONTEXT D-08.
-// See .planning/phases/01-instrumentation-baseline/01-RESEARCH.md §Pattern 2.
-const playerSwitchTracker = useOverrideTracker({
-  animeId: route.params.id as string,
-  // The composable's `player` is a static label — it identifies which player
-  // bucket this tracker belongs to in Loki. For Anime.vue the bucket is the
-  // CURRENT player at construction time; subsequent switches are recorded as
-  // dimension='player', new_combo.player=<destination>. The label is only used
-  // to filter Grafana panels, not to gate emissions. The 18+ 'hanime' provider
-  // is not part of the tracked PlayerName set; map it to 'kodik' for the
-  // bucket label so the type compiles. (No override fires for hanime anyway —
-  // onUserPickedProvider is typed to exclude it.)
-  // Workstream raw-jp / Phase 04 — 'raw' is also outside the tracked
-  // PlayerName set; map to 'kodik' for the bucket label like hanime.
-  // Phase 24-28 — 'ourenglish' maps to 'english' (the existing analytics
-  // bucket for EN providers, preserved across the HiAnime→Consumet→OurEnglish
-  // generation rollover).
-  player: videoProvider.value === 'hanime' || videoProvider.value === 'raw' || videoProvider.value === 'anime18' || videoProvider.value === 'kodik-adfree'
-    ? 'kodik'
-    : videoProvider.value === 'ourenglish'
-      ? 'english'
-      : videoProvider.value,
-  resolvedCombo,
-  currentEpisode: currentEpisodeForTracker,
-})
-
-function onUserPickedProvider(newProvider: 'kodik' | 'kodik-adfree' | 'animelib' | 'raw') {
-  // Only fire override if the user is genuinely SWITCHING. The composable's
-  // first-per-(load_session_id, dimension) lock would also catch repeats, but
-  // an explicit guard keeps E2E timing predictable.
-  if (newProvider !== videoProvider.value) {
-    // Workstream raw-jp / Phase 04 — 'raw' is outside the tracked
-    // PlayerName set; map to 'kodik' for the picker event like hanime.
-    // Ad-free Kodik is also outside the tracked PlayerName set; map to 'kodik'
-    // for the bucket label so the analytics type compiles.
-    const trackedProvider = (newProvider === 'raw' || newProvider === 'kodik-adfree') ? 'kodik' : newProvider
-    playerSwitchTracker.recordPickerEvent('player', { player: trackedProvider })
-  }
-  videoProvider.value = newProvider
-}
+// Plan B — the per-provider override tracker (useOverrideTracker) is retired
+// along with the provider sub-tabs: there is no longer a user-facing player
+// switch on this page (AePlayer owns source selection inside its own
+// SourcePanel; the only page-level toggle is the binary Classic Kodik
+// fallback). The resolved coarse combo is still resolved below purely to feed
+// KodikPlayer's :preferred-combo and the WT invite payload.
 
 const initPreferences = (animeId: string, tier1Combo?: ViewerContextData['combo']) => {
   const pref = useWatchPreferences(animeId, { tier1Combo })
@@ -1680,35 +1363,7 @@ const initPreferences = (animeId: string, tier1Combo?: ViewerContextData['combo'
       if (preferenceState.value) {
         preferenceState.value.resolvedCombo = pref.resolvedCombo.value
       }
-      // Auto-switch player/language based on resolved combo. Skip resolved
-      // EN combos — the EN tab is offline pending new providers.
-      if (pref.resolvedCombo.value) {
-        applyResolvedCombo(pref.resolvedCombo.value)
-      }
     }
-  }
-  // If we already have a cached result, apply it
-  if (pref.resolvedCombo.value) {
-    applyResolvedCombo(pref.resolvedCombo.value)
-  }
-}
-
-function applyResolvedCombo(combo: WatchCombo) {
-  if (combo.language === 'ru' || combo.language === '18+') {
-    videoLanguage.value = combo.language
-  }
-  if (combo.player === 'kodik' || combo.player === 'animelib' || combo.player === 'hanime') {
-    // 'kodik-adfree' is our ad-free player surface for the SAME RU Kodik source
-    // as 'kodik'. The watch-preference resolver only knows 'kodik', so when a
-    // user has explicitly picked the ad-free variant, don't let auto-resolve
-    // clobber them back to the iframe Kodik (the bug: pick ad-free → its
-    // available-translations emit triggers resolve → snaps back to 'kodik').
-    if (combo.player === 'kodik' && videoProvider.value === 'kodik-adfree') {
-      return
-    }
-    // AniLib hidden (see animeLibEnabled): never auto-resolve onto the disabled
-    // provider — fall back to Kodik, which carries the same RU translations.
-    videoProvider.value = combo.player === 'animelib' && !animeLibEnabled ? 'kodik' : combo.player
   }
 }
 
@@ -2484,43 +2139,12 @@ const retry = () => {
   fetchAnime(animeId)
 }
 
-// Language / provider switching
-const switchLanguage = (lang: 'ru' | 'en' | '18+' | 'raw') => {
-  // Deselect unified player whenever user picks an existing language tab.
-  aeSelected.value = false
-  videoLanguage.value = lang
-  // Auto-select first provider in the group
-  if (lang === 'ru') {
-    const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'kodik-adfree' | 'animelib' | null
-    videoProvider.value = savedRu && (savedRu !== 'animelib' || animeLibEnabled) && (savedRu !== 'kodik-adfree' || kodikAdfreeEnabled) ? savedRu : 'kodik'
-  } else if (lang === 'en') {
-    // Phase 24-28 — single-provider group; the in-player source dropdown
-    // pins the failover preference inside OurEnglishPlayer itself.
-    videoProvider.value = 'ourenglish'
-  } else if (lang === '18+') {
-    videoProvider.value = 'hanime'
-  } else if (lang === 'raw') {
-    // Workstream raw-jp, Phase 04 — single-option group for v0.1; the
-    // preferred_raw_provider key exists for v0.2's hybrid resolver
-    // (where 'minio' joins 'raw' as a viable choice).
-    const savedRaw = localStorage.getItem('preferred_raw_provider') as 'raw' | null
-    videoProvider.value = savedRaw || 'raw'
-  }
-}
-
-// Save preferred video provider to localStorage
-watch(videoProvider, (newProvider) => {
-  localStorage.setItem('preferred_video_provider', newProvider)
-  if (videoLanguage.value === 'ru') {
-    localStorage.setItem('preferred_ru_provider', newProvider)
-  } else if (videoLanguage.value === 'raw') {
-    localStorage.setItem('preferred_raw_provider', newProvider)
-  }
-})
-
-watch(videoLanguage, (newLang) => {
-  localStorage.setItem('preferred_video_language', newLang)
-})
+// Plan B — `switchLanguage` / per-provider persistence watchers are retired
+// with the language + provider tabs. The page no longer routes a legacy player
+// chain; AePlayer selects sources internally and the only page-level surface
+// toggle is the binary Classic Kodik fallback (persisted via the classicKodik
+// watcher above). The obsolete preferred_video_* / preferred_*_provider keys
+// are no longer written.
 
 // Shared data-loading function — called on mount and on route param change
 const loadAnimeData = async (animeId: string) => {
@@ -2598,13 +2222,8 @@ const loadAnimeData = async (animeId: string) => {
   const fetched = await fetchAnime(animeId)
   if (gen !== loadGeneration) return
 
-  // Reset 18+ tab if this anime doesn't have the Hentai genre
-  if (videoLanguage.value === '18+') {
-    const fetchedIsHentai = fetched?.rawGenres?.some(g => g.name === 'Hentai') ?? false
-    if (!fetchedIsHentai) {
-      videoLanguage.value = 'ru'
-    }
-  }
+  // Plan B — the 18+ language tab is retired; AePlayer gates its own 18+
+  // sources by `is-hentai`, so there is no page-level tab to reset here.
 
   // Load last-watched episode from localStorage (anon path), then pull the
   // viewer-context aggregate — ONE request carrying rating, watchers-count,
