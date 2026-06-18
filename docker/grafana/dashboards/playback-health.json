@@ -580,13 +580,26 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Seconds since each provider's probe last ticked (heartbeat). Catches a silently-dead probe (stale gauge). Includes Kodik. Providers never probed (e.g. 18anime, which runs in its own orchestrator and emits a zero-timestamp heartbeat) are filtered out via `> 0` so they don't render as a bogus ~56-year age.",
+      "description": "Seconds since each provider's probe last ticked (heartbeat). Catches a silently-dead probe (stale gauge). Includes Kodik. Providers never probed (e.g. 18anime, which runs in its own orchestrator and emits a zero-timestamp heartbeat) render as a neutral 'never' instead of a bogus ~56-year age (any age ≥ 1 year is treated as never-ticked).",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "range",
+              "options": {
+                "from": 31536000,
+                "to": 99999999999,
+                "result": {
+                  "text": "never",
+                  "color": "text",
+                  "index": 0
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -636,7 +649,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "time() - (provider_probe_last_tick_timestamp{provider=~\"$provider\"} > 0)",
+          "expr": "time() - provider_probe_last_tick_timestamp{provider=~\"$provider\"}",
           "legendFormat": "{{ provider }}",
           "refId": "A"
         }
