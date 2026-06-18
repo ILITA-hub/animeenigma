@@ -7,8 +7,21 @@
   "graphTooltip": 1,
   "id": null,
   "links": [],
-  "description": "Unified playback health: catalog-parser performance (success-rate %, p95 latency) for the RU/JP/18+ players, plus a single Provider Health view covering Kodik, 18anime and the EN OurEnglish scraper failover chain (per-provider\u00d7stage probes, management table with degraded reasons, fallback transparency, probe heartbeats) and the daily playability canary. Replaces the former Player/Health, Scraper/Health, Scraper/Provider Health and Scraper/Provider Management dashboards.",
+  "description": "Unified playback health, roster-driven: every panel keyed off the stream_providers roster. Roster table (Postgres) anchors who exists + their lifecycle (status/group/scraper_operated); per-provider health, parser latency, real-user telemetry and HLS-proxy panels cover all 13 providers. $provider enumerates the full roster via provider_info.",
   "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "Overview",
+      "type": "row"
+    },
     {
       "datasource": {
         "type": "prometheus",
@@ -38,7 +51,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 2,
       "options": {
@@ -84,7 +97,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Fraction of provider\u00d7stage probes currently UP (all providers: Kodik, 18anime + EN scraper chain). 1.0 = all healthy.",
+      "description": "Fraction of provider×stage probes currently UP (all providers: Kodik, 18anime + EN scraper chain). 1.0 = all healthy.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -116,7 +129,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 0
+        "y": 1
       },
       "id": 3,
       "options": {
@@ -186,7 +199,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 0
+        "y": 1
       },
       "id": 4,
       "options": {
@@ -223,7 +236,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Total provider\u2192provider failover events in the EN scraper chain over the selected time range (top time picker).",
+      "description": "Total provider→provider failover events in the EN scraper chain over the selected time range (top time picker).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -255,7 +268,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 0
+        "y": 1
       },
       "id": 5,
       "options": {
@@ -293,148 +306,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
-      },
-      "id": 10,
-      "panels": [],
-      "title": "Parser Performance (catalog parsers \u2014 RU / JP / 18+)",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Catalog-parser request success rate per provider (success / total) over a 5m window. Providers: allanime, 18anime, animelib, hanime, kodik. NOT the EN scraper provider set.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
-          },
-          "min": 0,
-          "max": 1,
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
         "y": 5
       },
-      "id": 12,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "last"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.3.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum by (provider) (rate(parser_requests_total{status=\"success\"}[5m])) / sum by (provider) (rate(parser_requests_total[5m]))",
-          "legendFormat": "{{ provider }}",
-          "refId": "A"
-        }
-      ],
-      "title": "Parser Success Rate % (by provider)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Catalog-parser p95 request latency per provider over a 5m window.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 5
-      },
-      "id": 13,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.3.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(parser_request_duration_seconds_bucket[5m])))",
-          "legendFormat": "{{ provider }}",
-          "refId": "A"
-        }
-      ],
-      "title": "Parser p95 Latency (by provider)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 12
-      },
-      "id": 20,
+      "id": 101,
       "panels": [],
-      "title": "Provider Health",
+      "title": "Roster",
       "type": "row"
     },
     {
@@ -463,15 +339,15 @@
                     "type": "value",
                     "options": {
                       "enabled": {
-                        "text": "\ud83d\udfe2 Enabled",
+                        "text": "🟢 Enabled",
                         "color": "green"
                       },
                       "degraded": {
-                        "text": "\ud83d\udfe1 Degraded",
+                        "text": "🟡 Degraded",
                         "color": "orange"
                       },
                       "disabled": {
-                        "text": "\u26aa Disabled",
+                        "text": "⚪ Disabled",
                         "color": "red"
                       }
                     }
@@ -501,10 +377,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 13
+        "h": 9,
+        "w": 10,
+        "x": 14,
+        "y": 6
       },
       "id": 21,
       "options": {
@@ -558,10 +434,106 @@
     },
     {
       "datasource": {
+        "type": "postgres",
+        "uid": "aenigma-postgres"
+      },
+      "description": "The authoritative provider roster from the catalog stream_providers table — every stream source (ae + EN scraper chain + adult + legacy players) with its lifecycle status, group, and whether the scraper operates it. This is the single source of truth the rest of the dashboard's metrics pivot around.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left"
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "enabled": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "enabled"
+                      },
+                      "degraded": {
+                        "color": "orange",
+                        "index": 1,
+                        "text": "degraded"
+                      },
+                      "disabled": {
+                        "color": "red",
+                        "index": 2,
+                        "text": "disabled"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 0,
+        "y": 6
+      },
+      "id": 102,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "aenigma-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT name, status, \"group\", scraper_operated, reason FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
+          "refId": "A"
+        }
+      ],
+      "title": "Provider Roster (stream_providers)",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 103,
+      "panels": [],
+      "title": "Provider Health",
+      "type": "row"
+    },
+    {
+      "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Per-provider \u00d7 per-stage probe state (1=UP, 0=DOWN) over time. Filtered by the $provider and $stage dropdowns. Scraper stages: search, episodes, servers, stream, stream_segment. Kodik reports stage 'liveness'.",
+      "description": "Per-provider × per-stage probe state (1=UP, 0=DOWN) over time. Filtered by the $provider and $stage dropdowns. Scraper stages: search, episodes, servers, stream, stream_segment. Kodik reports stage 'liveness'.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -603,10 +575,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
+        "h": 8,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 17
       },
       "id": 22,
       "options": {
@@ -631,116 +603,8 @@
           "refId": "A"
         }
       ],
-      "title": "Provider \u00d7 Stage Up",
+      "title": "Provider × Stage Up",
       "type": "state-timeline"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Which providers the failover chain moved AWAY from over the selected range \u2014 i.e. how often each provider failed and triggered a fallback. Higher = less reliable as a primary. One bar per provider.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "min": 0,
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 33
-      },
-      "id": 23,
-      "options": {
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "valueMode": "color"
-      },
-      "pluginVersion": "10.3.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum by (from) (increase(parser_fallback_total[$__range]))",
-          "format": "time_series",
-          "instant": true,
-          "legendFormat": "{{ from }}",
-          "refId": "A"
-        }
-      ],
-      "title": "Fallbacked from",
-      "type": "bargauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Where the failover chain landed over the selected range \u2014 the next provider tried after a fallback. '(chain exhausted)' means no further provider was available (total failure for that attempt). One bar per provider.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "min": 0,
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 33
-      },
-      "id": 24,
-      "options": {
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "valueMode": "color"
-      },
-      "pluginVersion": "10.3.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "label_replace(sum by (to) (increase(parser_fallback_total[$__range])), \"to\", \"(chain exhausted)\", \"to\", \"\")",
-          "format": "time_series",
-          "instant": true,
-          "legendFormat": "{{ to }}",
-          "refId": "A"
-        }
-      ],
-      "title": "Stopped fallbacking at",
-      "type": "bargauge"
     },
     {
       "datasource": {
@@ -776,10 +640,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 24,
+        "h": 6,
+        "w": 12,
         "x": 0,
-        "y": 41
+        "y": 25
       },
       "id": 25,
       "options": {
@@ -859,9 +723,9 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 45
+        "w": 12,
+        "x": 12,
+        "y": 25
       },
       "id": 26,
       "options": {
@@ -895,12 +759,244 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 31
       },
-      "id": 30,
+      "id": 104,
       "panels": [],
-      "title": "EN Playability Canary",
+      "title": "Parser",
       "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Catalog-parser request success rate per provider (success / total) over a 5m window. Providers: allanime, 18anime, animelib, hanime, kodik. NOT the EN scraper provider set.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "min": 0,
+          "max": 1,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (provider) (rate(parser_requests_total{status=\"success\"}[5m])) / sum by (provider) (rate(parser_requests_total[5m]))",
+          "legendFormat": "{{ provider }}",
+          "refId": "A"
+        }
+      ],
+      "title": "Parser Success Rate % (by provider)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Catalog-parser p95 request latency per provider over a 5m window.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(parser_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{ provider }}",
+          "refId": "A"
+        }
+      ],
+      "title": "Parser p95 Latency (by provider)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Which providers the failover chain moved AWAY from over the selected range — i.e. how often each provider failed and triggered a fallback. Higher = less reliable as a primary. One bar per provider.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 39
+      },
+      "id": 23,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (from) (increase(parser_fallback_total[$__range]))",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "{{ from }}",
+          "refId": "A"
+        }
+      ],
+      "title": "Fallbacked from",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Where the failover chain landed over the selected range — the next provider tried after a fallback. '(chain exhausted)' means no further provider was available (total failure for that attempt). One bar per provider.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 39
+      },
+      "id": 24,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "label_replace(sum by (to) (increase(parser_fallback_total[$__range])), \"to\", \"(chain exhausted)\", \"to\", \"\")",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "{{ to }}",
+          "refId": "A"
+        }
+      ],
+      "title": "Stopped fallbacking at",
+      "type": "bargauge"
     },
     {
       "datasource": {
@@ -955,10 +1051,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 52
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 39
       },
       "id": 31,
       "options": {
@@ -1023,74 +1119,215 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 60
+        "y": 46
       },
-      "id": 40,
+      "id": 105,
       "panels": [],
-      "title": "AnimeEnigma (self-hosted) Provider",
+      "title": "Real-User Player Telemetry (ClickHouse)",
       "type": "row"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
       },
-      "description": "Rate of AnimeEnigma (ae) provider endpoint hits on catalog (episodes + stream resolution), split by HTTP status. A 404 means the title has no self-hosted copy yet; 200 = served from the library.",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
-          },
-          "min": 0,
-          "unit": "reqps"
-        },
+        "defaults": {},
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 12,
         "x": 0,
-        "y": 61
+        "y": 47
       },
-      "id": 41,
+      "id": 46,
       "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "last"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
+        "footer": {
+          "show": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "showHeader": true
       },
-      "pluginVersion": "10.3.3",
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
           },
-          "expr": "sum by (status) (rate(http_requests_total{service=\"catalog\", path=\"/api/anime/:id/ae\"}[5m]))",
-          "legendFormat": "{{ status }}",
-          "refId": "A"
+          "rawQuery": true,
+          "queryType": "sql",
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT target AS provider, round(countIf(JSONExtractBool(properties,'reached_playback'))/count(),3) AS reached_rate, count() AS resolves FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_resolve' GROUP BY provider ORDER BY resolves DESC"
         }
       ],
-      "title": "ae Resolutions (catalog) by status",
-      "type": "timeseries"
+      "title": "Reached-playback rate by provider",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 47
+      },
+      "id": 47,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
+          "rawQuery": true,
+          "queryType": "sql",
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT target AS provider, round(100*countIf(JSONExtractString(properties,'outcome')='ok')/count(),1) AS ok_pct, count() AS resolves FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_resolve' GROUP BY provider ORDER BY resolves DESC"
+        }
+      ],
+      "title": "Resolve success % by provider",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 55
+      },
+      "id": 48,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
+          "rawQuery": true,
+          "queryType": "sql",
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT target AS provider, quantile(0.95)(duration_ms) AS p95_ms FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_resolve' GROUP BY provider ORDER BY p95_ms DESC"
+        }
+      ],
+      "title": "p95 resolve latency by provider",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 55
+      },
+      "id": 49,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
+          "rawQuery": true,
+          "queryType": "sql",
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT target AS provider, count() AS stalls, quantile(0.95)(duration_ms) AS p95_stall_ms FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_stall' GROUP BY provider ORDER BY stalls DESC"
+        }
+      ],
+      "title": "Stalls by provider",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 55
+      },
+      "id": 50,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
+          "rawQuery": true,
+          "queryType": "sql",
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT target AS provider, JSONExtractString(properties,'error_kind') AS error_kind, count() AS fails FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_resolve' AND JSONExtractString(properties,'outcome')='fail' GROUP BY provider, error_kind ORDER BY fails DESC LIMIT 20"
+        }
+      ],
+      "title": "Top failing (provider, error_kind)",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
+      "id": 106,
+      "panels": [],
+      "title": "HLS Proxy",
+      "type": "row"
     },
     {
       "datasource": {
@@ -1120,9 +1357,9 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 61
+        "w": 8,
+        "x": 0,
+        "y": 64
       },
       "id": 42,
       "options": {
@@ -1160,7 +1397,7 @@
           "refId": "B"
         }
       ],
-      "title": "HLS Proxy Requests/s \u2014 on-prem vs external",
+      "title": "HLS Proxy Requests/s — on-prem vs external",
       "type": "timeseries"
     },
     {
@@ -1191,9 +1428,9 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 68
+        "w": 8,
+        "x": 8,
+        "y": 64
       },
       "id": 43,
       "options": {
@@ -1231,7 +1468,7 @@
           "refId": "B"
         }
       ],
-      "title": "HLS Proxy Egress \u2014 on-prem vs external",
+      "title": "HLS Proxy Egress — on-prem vs external",
       "type": "timeseries"
     },
     {
@@ -1262,9 +1499,9 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 68
+        "w": 8,
+        "x": 16,
+        "y": 64
       },
       "id": 44,
       "options": {
@@ -1304,16 +1541,9 @@
       ],
       "title": "HLS Proxy Latency (p50 / p95)",
       "type": "timeseries"
-    },
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 75 }, "id": 45, "panels": [], "title": "Real-User Player Telemetry (ClickHouse)", "type": "row" },
-    { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "fieldConfig": { "defaults": {}, "overrides": [] }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 76 }, "id": 46, "options": { "footer": { "show": false }, "showHeader": true }, "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "rawQuery": true, "queryType": "sql", "format": "table", "refId": "A", "rawSql": "SELECT target AS provider, round(countIf(JSONExtractBool(properties,'reached_playback'))/count(),3) AS reached_rate, count() AS resolves FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_resolve' GROUP BY provider ORDER BY resolves DESC" }], "title": "Reached-playback rate by provider", "type": "table" },
-    { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "fieldConfig": { "defaults": {}, "overrides": [] }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 76 }, "id": 47, "options": { "footer": { "show": false }, "showHeader": true }, "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "rawQuery": true, "queryType": "sql", "format": "table", "refId": "A", "rawSql": "SELECT target AS provider, round(100*countIf(JSONExtractString(properties,'outcome')='ok')/count(),1) AS ok_pct, count() AS resolves FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_resolve' GROUP BY provider ORDER BY resolves DESC" }], "title": "Resolve success % by provider", "type": "table" },
-    { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "fieldConfig": { "defaults": {}, "overrides": [] }, "gridPos": { "h": 8, "w": 8, "x": 0, "y": 84 }, "id": 48, "options": { "footer": { "show": false }, "showHeader": true }, "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "rawQuery": true, "queryType": "sql", "format": "table", "refId": "A", "rawSql": "SELECT target AS provider, quantile(0.95)(duration_ms) AS p95_ms FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_resolve' GROUP BY provider ORDER BY p95_ms DESC" }], "title": "p95 resolve latency by provider", "type": "table" },
-    { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "fieldConfig": { "defaults": {}, "overrides": [] }, "gridPos": { "h": 8, "w": 8, "x": 8, "y": 84 }, "id": 49, "options": { "footer": { "show": false }, "showHeader": true }, "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "rawQuery": true, "queryType": "sql", "format": "table", "refId": "A", "rawSql": "SELECT target AS provider, count() AS stalls, quantile(0.95)(duration_ms) AS p95_stall_ms FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_stall' GROUP BY provider ORDER BY stalls DESC" }], "title": "Stalls by provider", "type": "table" },
-    { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "fieldConfig": { "defaults": {}, "overrides": [] }, "gridPos": { "h": 8, "w": 8, "x": 16, "y": 84 }, "id": 50, "options": { "footer": { "show": false }, "showHeader": true }, "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" }, "rawQuery": true, "queryType": "sql", "format": "table", "refId": "A", "rawSql": "SELECT target AS provider, JSONExtractString(properties,'error_kind') AS error_kind, count() AS fails FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_resolve' AND JSONExtractString(properties,'outcome')='fail' GROUP BY provider, error_kind ORDER BY fails DESC LIMIT 20" }], "title": "Top failing (provider, error_kind)", "type": "table" }
+    }
   ],
   "schemaVersion": 39,
-  "style": "dark",
   "tags": [
     "playback",
     "scraper",
@@ -1322,11 +1552,7 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": false,
-          "text": "Prometheus",
-          "value": "PBFA97CFB590B2093"
-        },
+        "current": {},
         "hide": 0,
         "includeAll": false,
         "name": "DS_PROMETHEUS",
@@ -1335,33 +1561,25 @@
         "type": "datasource"
       },
       {
-        "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(provider_health_up, provider)",
+        "definition": "label_values(provider_info, provider)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "provider",
+        "sort": 1,
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(provider_health_up, provider)",
+          "query": "label_values(provider_info, provider)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
         "regex": "",
-        "sort": 1,
         "type": "query"
       },
       {
@@ -1396,15 +1614,15 @@
       }
     ]
   },
-  "refresh": "30s",
   "time": {
-    "from": "now-24h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
+  "refresh": "30s",
   "title": "Playback / Health",
   "uid": "playback-health",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }
