@@ -351,9 +351,12 @@ import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer } f
 import { useToast } from '@/composables/useToast'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
+import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
+
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult } from '@/types/aePlayer'
 import type { WatchCombo } from '@/types/preference'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -380,6 +383,10 @@ const props = defineProps<{
   initialTeam?: string
   /** Shikimori id (= MAL id) for AniSkip skip-times. Absent ⇒ no skip UI. */
   malId?: string | number
+  /** Watch-Together: when set, the player mirrors playback (play/pause/seek)
+   *  and source/episode state to the room. Null/undefined ⇒ zero WT behavior
+   *  (the bridge is never instantiated, auto-source-select runs as normal). */
+  room?: WatchTogetherRoomHandle | null
 }>()
 
 defineEmits<{
@@ -395,6 +402,19 @@ const state = usePlayerState()
 const engine = useVideoEngine(videoRef)
 const resolver = useProviderResolver()
 const toast = useToast()
+
+// ─── Watch-Together (room sync) ───────────────────────────────────────────────
+// When mounted inside a WT room, wire the generic HTML5 playback bridge (mirrors
+// play/pause/seek/time-tick both ways). When the room is null/undefined the
+// bridge is never instantiated and the player behaves exactly as standalone.
+if (props.room) {
+  usePlayerSyncBridge(videoRef, props.room)
+}
+
+// Test seam: expose the live combo ref so WT room-sync specs can assert the
+// applied/pinned combo without mocking usePlayerState (which hands every caller
+// an independent instance). No production consumer reads this.
+defineExpose({ __combo: state.combo })
 
 // ─── Provider health filter ───────────────────────────────────────────────────
 
