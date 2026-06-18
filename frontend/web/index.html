@@ -7,6 +7,13 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Dark canvas BEFORE any stylesheet loads — otherwise Firefox paints its
+         default white <html> background for a frame on hard reload (and behind
+         posters that haven't decoded yet). color-scheme makes the browser's own
+         default canvas dark; the inline bg pins the exact base color (#08080f =
+         --color-base) so there is no white flash. -->
+    <meta name="color-scheme" content="dark">
+    <style>html{background-color:#08080f}</style>
     <link rel="dns-prefetch" href="https://telegram.org">
     <link rel="preconnect" href="https://telegram.org" crossorigin>
     <link rel="dns-prefetch" href="https://oauth.telegram.org">

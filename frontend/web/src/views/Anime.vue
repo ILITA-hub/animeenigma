@@ -17,14 +17,14 @@
       <div class="flex flex-col md:flex-row gap-6 md:gap-8">
         <!-- Poster -->
         <div class="flex-shrink-0">
-          <div class="w-40 md:w-56 aspect-[2/3] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10">
-            <img
-              :src="anime.coverImage"
-              :alt="anime.title"
-              class="w-full h-full object-cover"
-              @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime?.coverImage ?? '') } }"
-            />
-          </div>
+          <PosterImage
+            :src="anime.coverImage"
+            :alt="anime.title"
+            ratio="2/3"
+            rounded="xl"
+            :proxy-width="448"
+            class="w-40 md:w-56 shadow-2xl ring-1 ring-white/10"
+          />
         </div>
 
         <!-- Info -->
@@ -1069,7 +1069,7 @@ import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Avatar, Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
-import { GenreChip, PosterCard, AnimeContextMenu } from '@/components/anime'
+import { GenreChip, PosterCard, PosterImage, AnimeContextMenu } from '@/components/anime'
 import ReviewReactions from '@/components/anime/ReviewReactions.vue'
 import CharacterCard from '@/components/anime/CharacterCard.vue'
 import Carousel from '@/components/carousel/Carousel.vue'

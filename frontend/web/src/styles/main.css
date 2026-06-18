@@ -170,6 +170,10 @@
 /* Base styles */
 html {
   scroll-behavior: smooth;
+  /* Dark canvas so Firefox never falls back to its white default behind
+     unloaded content or during the pre-paint frame on hard reload. */
+  color-scheme: dark;
+  background-color: var(--color-base);
 }
 
 body {
