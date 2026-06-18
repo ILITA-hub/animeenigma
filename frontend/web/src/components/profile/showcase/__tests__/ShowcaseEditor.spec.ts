@@ -82,11 +82,12 @@ describe('ShowcaseEditor', () => {
 
   it('adding a block sets variant to defaultVariant(type)', async () => {
     const w = mountEditor([])
-    // Click the "favorite_anime" add button
-    const addButtons = w.findAll('button')
-    const animeBtn = addButtons.find((b) => b.text().includes('showcase.block.favorite_anime'))
-    expect(animeBtn).toBeTruthy()
-    await animeBtn!.trigger('click')
+    // Open the picker first, then click the favorite_anime option
+    await w.find('[data-test="showcase-open-picker"]').trigger('click')
+    await w.vm.$nextTick()
+    const animeBtn = w.find('[data-test="picker-favorite_anime"]')
+    expect(animeBtn.exists()).toBeTruthy()
+    await animeBtn.trigger('click')
     await w.find('[data-test="showcase-save"]').trigger('click')
     const payload = w.emitted('save')![0][0] as ShowcaseBlock[]
     expect(payload).toHaveLength(1)
@@ -124,8 +125,11 @@ describe('ShowcaseEditor', () => {
     expect(cfg.anime_ids).toContain('a2')
   })
 
-  it('add menu lists 4 new block types', () => {
+  it('add menu lists 4 new block types', async () => {
     const w = mountEditor([])
+    // Open the picker to see the block type options
+    ;(w.vm as any).pickerOpen = true
+    await w.vm.$nextTick()
     const text = w.text()
     expect(text).toContain('showcase.block.continue_watching')
     expect(text).toContain('showcase.block.op_ed')
@@ -147,5 +151,16 @@ describe('ShowcaseEditor', () => {
       { type: 'stats', variant: 'tiles', order: 0, w: 2, h: 1, config: {} },
     ] }, global: { stubs: { draggable: true, Select: true, ShowcaseBlockView: true }, mocks: { $t: (k: string) => k } } })
     expect((wrapper.vm as any).isFixed((wrapper.vm as any).local[0])).toBe(true)
+  })
+
+  it('disables already-present types in the picker', async () => {
+    const wrapper = mount(ShowcaseEditor, { props: { userId: 'u1', modelValue: [
+      { type: 'about', variant: 'bio', order: 0, w: 2, h: 2, config: { title: '', text: '' } },
+    ] }, global: { stubs: { draggable: true, Select: true, ShowcaseBlockView: true }, mocks: { $t: (k: string) => k } } })
+    ;(wrapper.vm as any).pickerOpen = true
+    await wrapper.vm.$nextTick()
+    const aboutBtn = wrapper.find('[data-test="picker-about"]')
+    expect(aboutBtn.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="picker-stats"]').attributes('disabled')).toBeUndefined()
   })
 })

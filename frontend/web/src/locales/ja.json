@@ -1778,6 +1778,7 @@
     "save": "保存",
     "cancel": "キャンセル",
     "add_block": "ブロックを追加",
+    "add_block_title": "ブロックを追加",
     "remove_block": "削除",
     "empty": "まだ何もありません。",
     "block": {

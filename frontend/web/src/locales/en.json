@@ -1778,6 +1778,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "add_block": "Add block",
+    "add_block_title": "Add a block",
     "remove_block": "Remove",
     "empty": "Nothing here yet.",
     "block": {

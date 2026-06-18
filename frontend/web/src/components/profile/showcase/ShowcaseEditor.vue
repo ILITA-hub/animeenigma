@@ -184,6 +184,11 @@ function startResize(e: PointerEvent, i: number) {
   document.addEventListener('pointerup', up)
 }
 
+// ── Add-block picker ─────────────────────────────────────────────
+const pickerOpen = ref(false)
+function usedTypes(): Set<string> { return new Set(local.value.map((b) => b.type)) }
+function pick(type: ShowcaseBlockType) { addBlock(type); pickerOpen.value = false }
+
 // Drag-to-swap state (native HTML5 drag events — no new packages)
 const dragSrcIdx = ref<number | null>(null)
 
@@ -211,21 +216,50 @@ function blockSpanClasses(el: ShowcaseBlock): string {
   return spanClasses(el.w || s.defW, el.h || s.defH)
 }
 
-defineExpose({ swapBlocks, applyResize, isFixed, local })
+defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes })
 </script>
 
 <template>
   <div class="space-y-4">
-    <div class="flex flex-wrap items-center gap-2">
+    <!-- Add-block picker trigger -->
+    <div class="relative">
       <button
-        v-for="t in ADDABLE"
-        :key="t"
         type="button"
+        data-test="showcase-open-picker"
         class="rounded-lg border border-border px-3 py-1 text-sm font-medium text-foreground hover:bg-accent"
-        @click="addBlock(t)"
+        :disabled="local.length >= MAX_SHOWCASE_BLOCKS"
+        @click="pickerOpen = true"
       >
-        + {{ $t(`showcase.block.${t}`) }}
+        + {{ $t('showcase.add_block') }}
       </button>
+
+      <!-- Picker overlay -->
+      <div
+        v-if="pickerOpen"
+        class="absolute left-0 top-8 z-50 flex flex-col gap-1 rounded-xl border border-border bg-card p-3 shadow-lg"
+      >
+        <p class="mb-1 text-xs font-semibold text-muted-foreground">{{ $t('showcase.add_block_title') }}</p>
+        <button
+          v-for="type in ADDABLE"
+          :key="type"
+          type="button"
+          :data-test="`picker-${type}`"
+          :disabled="usedTypes().has(type)"
+          class="rounded-lg border border-border px-3 py-1 text-left text-sm font-medium text-foreground hover:bg-accent disabled:opacity-40 disabled:pointer-events-none"
+          @click="pick(type)"
+        >
+          {{ $t(`showcase.block.${type}`) }}
+        </button>
+        <button
+          type="button"
+          class="mt-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          @click="pickerOpen = false"
+        >
+          {{ $t('showcase.cancel') }}
+        </button>
+      </div>
+      <!-- Backdrop to close picker -->
+      <div v-if="pickerOpen" class="fixed inset-0 z-40" @click="pickerOpen = false" />
     </div>
 
     <!-- Bento grid editor with drag-to-swap -->
