@@ -17,9 +17,11 @@
         "overrides": [
           { "matcher": { "id": "byName", "options": "status" },
             "properties": [ { "id": "mappings", "value": [
-              { "type": "value", "options": { "enabled": { "color": "green", "index": 0, "text": "enabled" } } },
-              { "type": "value", "options": { "degraded": { "color": "orange", "index": 1, "text": "degraded" } } },
-              { "type": "value", "options": { "disabled": { "color": "red", "index": 2, "text": "disabled" } } }
+              { "type": "value", "options": {
+                "enabled":  { "color": "green",  "index": 0, "text": "enabled" },
+                "degraded": { "color": "orange", "index": 1, "text": "degraded" },
+                "disabled": { "color": "red",    "index": 2, "text": "disabled" }
+              } }
             ] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] }
         ]
       },
@@ -62,9 +64,11 @@
         "current": {},
         "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
         "definition": "label_values(provider_info, provider)",
+        "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "provider",
+        "sort": 1,
         "options": [],
         "query": { "qryType": 1, "query": "label_values(provider_info, provider)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
         "refresh": 2,
