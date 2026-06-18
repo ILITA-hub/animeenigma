@@ -161,8 +161,9 @@ func main() {
 	}
 
 	// One-time (guarded) retirement of the hanime + animelib roster rows (Plan B:
-	// those player surfaces are retired, content dropped). Run-once via a sentinel
-	// guard row, so a later operator re-enable in the DB is never clobbered.
+	// those player surfaces are retired, content dropped). Run-once via the
+	// catalog_migration_guards ledger table, so a later operator re-enable in
+	// the DB is never clobbered.
 	if err := scraperprovider.RetireHanimeAnimelib(db.DB); err != nil {
 		log.Errorw("retire hanime+animelib failed (continuing)", "error", err)
 	}
