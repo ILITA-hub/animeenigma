@@ -1,0 +1,114 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "description": "Unified playback health, roster-driven: every panel keyed off the stream_providers roster. Roster table (Postgres) anchors who exists + their lifecycle (status/group/scraper_operated); per-provider health, parser latency, real-user telemetry and HLS-proxy panels cover all 13 providers. $provider enumerates the full roster via provider_info.",
+  "panels": [
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 100, "panels": [], "title": "Overview", "type": "row" },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }, "id": 101, "panels": [], "title": "Roster", "type": "row" },
+    {
+      "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+      "description": "The authoritative provider roster from the catalog stream_providers table — every stream source (ae + EN scraper chain + adult + legacy players) with its lifecycle status, group, and whether the scraper operates it. This is the single source of truth the rest of the dashboard's metrics pivot around.",
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" }, "mappings": [] },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "status" },
+            "properties": [ { "id": "mappings", "value": [
+              { "type": "value", "options": { "enabled": { "color": "green", "index": 0, "text": "enabled" } } },
+              { "type": "value", "options": { "degraded": { "color": "orange", "index": 1, "text": "degraded" } } },
+              { "type": "value", "options": { "disabled": { "color": "red", "index": 2, "text": "disabled" } } }
+            ] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 14, "x": 0, "y": 6 },
+      "id": 102,
+      "options": { "footer": { "show": false }, "showHeader": true },
+      "targets": [ {
+        "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+        "format": "table",
+        "rawQuery": true,
+        "rawSql": "SELECT name, status, \"group\", scraper_operated, reason FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
+        "refId": "A"
+      } ],
+      "title": "Provider Roster (stream_providers)",
+      "type": "table"
+    },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }, "id": 103, "panels": [], "title": "Provider Health", "type": "row" },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }, "id": 104, "panels": [], "title": "Parser", "type": "row" },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 }, "id": 105, "panels": [], "title": "Real-User Player Telemetry (ClickHouse)", "type": "row" },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }, "id": 106, "panels": [], "title": "HLS Proxy", "type": "row" }
+  ],
+  "schemaVersion": 39,
+  "tags": ["playback", "scraper", "ae"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "PBFA97CFB590B2093"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(provider_info, provider)",
+        "includeAll": true,
+        "multi": true,
+        "name": "provider",
+        "options": [],
+        "query": { "qryType": 1, "query": "label_values(provider_info, provider)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(provider_health_up, stage)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "stage",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(provider_health_up, stage)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "refresh": "30s",
+  "title": "Playback / Health",
+  "uid": "playback-health",
+  "version": 1,
+  "weekStart": ""
+}
