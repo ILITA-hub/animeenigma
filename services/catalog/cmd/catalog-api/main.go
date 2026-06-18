@@ -160,6 +160,15 @@ func main() {
 		log.Errorw("backfill scraper_operated failed (continuing)", "error", err)
 	}
 
+	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
+	// provider_info/provider_enabled management metrics. Runs after the roster is
+	// fully migrated/seeded/backfilled so names + flags are authoritative. The
+	// scraper emits its own (scraper_operated=true) rows — the two partition the
+	// roster with no duplicate series.
+	if err := scraperprovider.EmitCatalogSideRoster(db.DB); err != nil {
+		log.Errorw("emit catalog-side provider roster metrics failed (continuing)", "error", err)
+	}
+
 	// Initialize cache
 	redisCache, err := cache.New(cfg.Redis)
 	if err != nil {

@@ -44,34 +44,10 @@ func NewPlayerHealthChecker(
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
-	// Register Kodik as a first-class provider row in the management table even
-	// before the first probe tick completes.
-	metrics.ProviderEnabled.WithLabelValues(providerKodik).Set(1)
-	metrics.ProviderInfo.WithLabelValues(
-		providerKodik,
-		"enabled",
-		"RU iframe player",
-		"Kodik RU iframe — liveness via Naruto search probe (catalog-side, not part of the EN failover chain)",
-	).Set(1)
-	// Register the catalog-side players as first-class rows in the unified
-	// provider-management metrics, so the Grafana table + count cover the FULL
-	// player roster — not just Kodik + the EN scraper chain. These have no catalog
-	// liveness probe (only Kodik does), so they emit no provider_health_up; they're
-	// surfaced purely for management visibility. animelib + hanime are marked
-	// disabled (no longer surfaced in the frontend player); raw + ae stay enabled.
-	for _, p := range []struct{ name, status, reason, desc string }{
-		{"animelib", "disabled", "RU direct-MP4 player", "AniLib RU direct-MP4 player (catalog parser). Disabled — no longer surfaced in the frontend player."},
-		{"hanime", "disabled", "18+ HLS player", "Hanime 18+ HLS player (catalog parser). Disabled — no longer surfaced in the frontend player."},
-		{"allanime-raw", "enabled", "JP original-audio player", "Raw JP player (AllAnime HLS / fast4speed.rsvp, catalog parser). Always-on; not part of the EN failover chain."},
-		{"ae", "enabled", "Self-hosted library", "AnimeEnigma self-hosted library (BitTorrent → HLS → MinIO). 200 = served on-prem, 404 = no local copy yet."},
-	} {
-		enabled := 0.0
-		if p.status == "enabled" {
-			enabled = 1.0
-		}
-		metrics.ProviderEnabled.WithLabelValues(p.name).Set(enabled)
-		metrics.ProviderInfo.WithLabelValues(p.name, p.status, p.reason, p.desc).Set(1)
-	}
+	// provider_info / provider_enabled for kodik + the other catalog-side players is
+	// emitted from the DB roster by scraperprovider.EmitCatalogSideRoster at boot
+	// (single-emitter partition). This checker only runs the LIVE Kodik liveness
+	// probe (provider_health_up{kodik,liveness} + probe_last_tick).
 	return &PlayerHealthChecker{
 		kodikClient: kodikClient,
 		interval:    interval,
