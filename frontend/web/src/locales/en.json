@@ -1796,6 +1796,11 @@
     "pick_cards": "Pick cards",
     "saved": "Showcase saved",
     "save_error": "Couldn't save showcase — please retry",
+    "variant_label": "Variant",
+    "auto_fill": "Auto",
+    "op_ed_add_theme": "Add theme ID",
+    "auto_block_info": "Auto-populated from your data",
+    "pick_theme": "Theme IDs",
     "cardCollection": {
       "others": "Also in collection",
       "favCard": "★ Favorite card",

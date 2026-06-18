@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ShowcaseEditor from '../ShowcaseEditor.vue'
 import type { ShowcaseBlock } from '@/types/showcase'
+import { defaultVariant } from '@/types/showcase'
 
 vi.mock('vuedraggable', () => ({
   default: {
@@ -12,15 +13,48 @@ vi.mock('vuedraggable', () => ({
   },
 }))
 
+vi.mock('@/api/client', () => ({
+  userApi: {
+    getWatchlist: vi.fn().mockResolvedValue({
+      data: {
+        data: [
+          { anime_id: 'a1', score: 9 },
+          { anime_id: 'a2', score: 8 },
+          { anime_id: 'a3', score: 7 },
+        ],
+      },
+    }),
+  },
+}))
+
+vi.mock('@/api/gacha', () => ({
+  gachaApi: {
+    getCollection: vi.fn().mockResolvedValue({
+      data: {
+        data: {
+          cards: [
+            { card: { id: 'c1', rarity: 'SSR', created_at: '2026-01-01' }, owned: true, count: 1 },
+            { card: { id: 'c2', rarity: 'SR', created_at: '2026-01-02' }, owned: false, count: 0 },
+            { card: { id: 'c3', rarity: 'R', created_at: '2026-01-03' }, owned: true, count: 1 },
+          ],
+        },
+      },
+    }),
+  },
+}))
+
 const blocks: ShowcaseBlock[] = [
   { type: 'about', order: 0, config: { text: 'hi' } },
   { type: 'stats', order: 1, config: {} },
 ]
 
-const mountEditor = () =>
+const mountEditor = (modelValue: ShowcaseBlock[] = blocks) =>
   mount(ShowcaseEditor, {
-    props: { userId: 'u1', modelValue: blocks },
-    global: { mocks: { $t: (k: string) => k }, stubs: { teleport: true } },
+    props: { userId: 'u1', modelValue },
+    global: {
+      mocks: { $t: (k: string) => k },
+      stubs: { teleport: true, Select: true },
+    },
   })
 
 describe('ShowcaseEditor', () => {
@@ -45,5 +79,58 @@ describe('ShowcaseEditor', () => {
     await w.find('[data-test="showcase-save"]').trigger('click')
     const payload = w.emitted('save')![0][0] as ShowcaseBlock[]
     expect(payload).toHaveLength(1)
+  })
+
+  it('adding a block sets variant to defaultVariant(type)', async () => {
+    const w = mountEditor([])
+    // Click the "favorite_anime" add button
+    const addButtons = w.findAll('button')
+    const animeBtn = addButtons.find((b) => b.text().includes('showcase.block.favorite_anime'))
+    expect(animeBtn).toBeTruthy()
+    await animeBtn!.trigger('click')
+    await w.find('[data-test="showcase-save"]').trigger('click')
+    const payload = w.emitted('save')![0][0] as ShowcaseBlock[]
+    expect(payload).toHaveLength(1)
+    expect(payload[0].variant).toBe(defaultVariant('favorite_anime'))
+  })
+
+  it('save payload includes variant on every block', async () => {
+    const customBlocks: ShowcaseBlock[] = [
+      { type: 'favorite_anime', order: 0, variant: 'podium', config: { anime_ids: [] } },
+      { type: 'stats', order: 1, config: {} },
+    ]
+    const w = mountEditor(customBlocks)
+    await w.find('[data-test="showcase-save"]').trigger('click')
+    const payload = w.emitted('save')![0][0] as ShowcaseBlock[]
+    expect(payload[0].variant).toBe('podium')
+    // stats has only 1 variant so save should fill the default
+    expect(payload[1].variant).toBe(defaultVariant('stats'))
+  })
+
+  it('auto button on favorite_anime fills config.anime_ids', async () => {
+    const { userApi } = await import('@/api/client')
+    const customBlocks: ShowcaseBlock[] = [
+      { type: 'favorite_anime', order: 0, variant: 'row', config: { anime_ids: [] } },
+    ]
+    const w = mountEditor(customBlocks)
+    const autoBtn = w.find('[data-test="showcase-auto-anime-0"]')
+    expect(autoBtn.exists()).toBe(true)
+    await autoBtn.trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(userApi.getWatchlist).toHaveBeenCalled()
+    await w.find('[data-test="showcase-save"]').trigger('click')
+    const payload = w.emitted('save')![0][0] as ShowcaseBlock[]
+    const cfg = payload[0].config as { anime_ids: string[] }
+    expect(cfg.anime_ids).toContain('a1')
+    expect(cfg.anime_ids).toContain('a2')
+  })
+
+  it('add menu lists 4 new block types', () => {
+    const w = mountEditor([])
+    const text = w.text()
+    expect(text).toContain('showcase.block.continue_watching')
+    expect(text).toContain('showcase.block.op_ed')
+    expect(text).toContain('showcase.block.anime_dna')
+    expect(text).toContain('showcase.block.compatibility')
   })
 })

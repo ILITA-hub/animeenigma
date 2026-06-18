@@ -1796,6 +1796,11 @@
     "pick_cards": "カードを選ぶ",
     "saved": "ショーケースを保存しました",
     "save_error": "ショーケースを保存できませんでした。もう一度お試しください",
+    "variant_label": "バリアント",
+    "auto_fill": "自動",
+    "op_ed_add_theme": "テーマIDを追加",
+    "auto_block_info": "データから自動入力",
+    "pick_theme": "テーマID",
     "cardCollection": {
       "others": "コレクション内",
       "favCard": "★ お気に入りカード",
