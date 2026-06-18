@@ -141,7 +141,7 @@ function removeTheme(id: string) {
                 : 'border-border text-muted-foreground hover:text-foreground',
             ]"
             @click="setVariant(v)"
-          >{{ v }}</button>
+          >{{ $t(`showcase.variant.${v}`) }}</button>
         </div>
       </div>
 
