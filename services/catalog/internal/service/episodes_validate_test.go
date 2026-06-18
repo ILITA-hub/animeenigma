@@ -155,6 +155,26 @@ func TestValidateEpisode_Raw_Permissive_Happy(t *testing.T) {
 	}
 }
 
+func TestValidateEpisode_AePlayer_Permissive_Happy(t *testing.T) {
+	// aeplayer is the first-party multi-source unified player. Per-provider
+	// episode validation is wrong (it spans many providers), so v1 trusts
+	// the driving member's selection — exactly like ourenglish/hanime/raw.
+	// Must NOT consult the episode lookup.
+	lookup := &fakeLookup{t: t} // must not be called
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+
+	got, err := svc.ValidateEpisode(context.Background(), "57466", "aeplayer", "3", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got.Valid {
+		t.Fatalf("aeplayer permissive: want Valid=true, got %+v", got)
+	}
+	if lookup.calls != 0 {
+		t.Fatalf("aeplayer must not consult lookup, got %d calls", lookup.calls)
+	}
+}
+
 // -----------------------------------------------------------------
 // Negative — Valid=false branches (200 OK from handler)
 // -----------------------------------------------------------------
@@ -434,7 +454,7 @@ func TestValidateEpisode_EmptyShikimoriID(t *testing.T) {
 // -----------------------------------------------------------------
 
 func TestIsValidPlayer(t *testing.T) {
-	for _, p := range []string{"kodik", "animelib", "ourenglish", "hanime", "raw"} {
+	for _, p := range []string{"kodik", "animelib", "ourenglish", "hanime", "raw", "aeplayer"} {
 		if !IsValidPlayer(p) {
 			t.Errorf("IsValidPlayer(%q) = false, want true", p)
 		}

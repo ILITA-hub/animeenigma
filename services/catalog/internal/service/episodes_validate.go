@@ -18,9 +18,14 @@ package service
 //
 // D-04 "smallest change": kodik/animelib delegate to the existing
 // EpisodesLookupService.LatestAvailable so we reuse the parser + 5-min
-// Redis cache that NOTIF-DET-01 already pays for. The remaining three
-// players (ourenglish/hanime/raw) ship permissive v1.0 validation —
-// tightening is deferred to v1.1 (see TODO inline).
+// Redis cache that NOTIF-DET-01 already pays for. The remaining
+// players (ourenglish/hanime/raw/aeplayer) ship permissive v1.0
+// validation — tightening is deferred to v1.1 (see TODO inline).
+//
+// aeplayer is the first-party AnimeEnigma unified multi-source player.
+// Because it spans many providers, per-provider episode validation is
+// wrong; v1 trusts the driving member's selection (same rationale as
+// ourenglish/hanime/raw).
 
 import (
 	"context"
@@ -58,9 +63,10 @@ var validPlayers = map[string]struct{}{
 	"ourenglish": {},
 	"hanime":     {},
 	"raw":        {},
+	"aeplayer":   {},
 }
 
-// IsValidPlayer reports whether p is one of the 5 known players.
+// IsValidPlayer reports whether p is one of the known players.
 // Exported for handler-side input validation symmetry.
 func IsValidPlayer(p string) bool {
 	_, ok := validPlayers[p]
@@ -116,15 +122,16 @@ func NewEpisodesValidateService(
 //
 //  1. Translation-omitted (translationID == "") — used by
 //     state:change_player. Validates that the player is supported and
-//     for kodik/animelib that an anime row exists. The permissive trio
-//     (ourenglish/hanime/raw) returns Valid=true unconditionally.
+//     for kodik/animelib that an anime row exists. The permissive set
+//     (ourenglish/hanime/raw/aeplayer) returns Valid=true
+//     unconditionally.
 //
 //  2. Full validation (translationID != "") — used by
 //     state:change_episode and state:change_translation. For
 //     kodik/animelib this consults EpisodesLookupService and asserts
 //     episodeID is numeric, > 0, and ≤ LatestAvailableEpisode. For
-//     ourenglish/hanime/raw it only checks that episodeID is non-empty
-//     (TODO v1.1 below).
+//     ourenglish/hanime/raw/aeplayer it only checks that episodeID is
+//     non-empty (TODO v1.1 below).
 //
 // Error vs. ValidateResult contract:
 //   - apperrors.InvalidInput — caller bug (missing/unknown input).
@@ -149,9 +156,11 @@ func (s *EpisodesValidateService) ValidateEpisode(
 		return s.validateKodikOrAnimeLib(ctx, shikimoriID, player, episodeID, translationID, watchType)
 	default:
 		// TODO(v1.1): tighten validation via scraper/parser
-		// episode-listing methods for ourenglish, hanime, and raw.
-		// Phase 4 ships permissive validation per D-04 "smallest
-		// change" + the workstream §Claude's Discretion note.
+		// episode-listing methods for ourenglish, hanime, raw, and
+		// aeplayer. Phase 4 ships permissive validation per D-04
+		// "smallest change" + the workstream §Claude's Discretion note.
+		// aeplayer is multi-source, so per-provider probing is wrong —
+		// it stays permissive (trusts the driving member's selection).
 		return s.validatePermissive(episodeID, translationID), nil
 	}
 }
@@ -268,8 +277,8 @@ func (s *EpisodesValidateService) validateKodikOrAnimeLib(
 	return ValidateResult{Valid: true}, nil
 }
 
-// validatePermissive is the v1.0 ourenglish/hanime/raw branch. No
-// upstream probe — we only sanity-check the request shape.
+// validatePermissive is the v1.0 ourenglish/hanime/raw/aeplayer branch.
+// No upstream probe — we only sanity-check the request shape.
 //
 // Three WT call shapes reach here (see the inbound state:* handlers):
 //   - change_episode     → episode set, translation = room's (maybe "")
@@ -280,7 +289,8 @@ func (s *EpisodesValidateService) validateKodikOrAnimeLib(
 // "switch to this player" request whose real first episode the frontend
 // resolves on mount. We MUST accept it (mirrors the kodik/animelib
 // translation-omitted branch) — rejecting it broke every in-room switch
-// to OurEnglish/Hanime/Raw with a bogus EPISODE_UNAVAILABLE (ISS-025).
+// to OurEnglish/Hanime/Raw/AePlayer with a bogus EPISODE_UNAVAILABLE
+// (ISS-025).
 // Full mode still requires a non-empty episode_id.
 //
 // TODO(v1.1): tighten full-mode validation by calling the scraper
