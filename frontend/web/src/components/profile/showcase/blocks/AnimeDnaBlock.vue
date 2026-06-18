@@ -30,9 +30,9 @@ function genreLabel(g: FacetGenre): string {
 </script>
 
 <template>
-  <div v-if="genres.length" class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
-    <h3 class="mb-3 text-lg font-semibold text-foreground">{{ $t('showcase.block.anime_dna') }}</h3>
-    <div class="dna flex flex-col gap-2">
+  <div v-if="genres.length" class="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 md:p-6">
+    <h3 class="mb-3 shrink-0 text-lg font-semibold text-foreground">{{ $t('showcase.block.anime_dna') }}</h3>
+    <div class="dna flex min-h-0 flex-1 flex-col justify-center gap-2 overflow-hidden">
       <div
         v-for="g in genres"
         :key="g.id"

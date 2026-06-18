@@ -48,11 +48,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
-    <h3 class="mb-3 text-lg font-semibold text-foreground">{{ $t('showcase.block.favorite_character') }}</h3>
+  <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 md:p-6">
+    <h3 class="mb-3 shrink-0 text-lg font-semibold text-foreground">{{ $t('showcase.block.favorite_character') }}</h3>
 
     <!-- A: circles (default) — avatar ring row using CharacterCard -->
-    <div v-if="v === 'circles'">
+    <div v-if="v === 'circles'" class="min-h-0 flex-1 overflow-hidden fade-clip">
       <div v-if="items.length" class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
         <CharacterCard v-for="c in items" :key="c.id" :model="c" />
       </div>
@@ -60,7 +60,7 @@ onMounted(async () => {
     </div>
 
     <!-- B: portraits — vertical cards with gradient overlay + name -->
-    <div v-else-if="v === 'portraits'">
+    <div v-else-if="v === 'portraits'" class="min-h-0 flex-1 overflow-hidden fade-clip">
       <div v-if="items.length" class="flex flex-wrap gap-3">
         <div
           v-for="(c, i) in items"
@@ -86,11 +86,11 @@ onMounted(async () => {
     </div>
 
     <!-- C: hero — big featured card left + ranked list right -->
-    <div v-else-if="v === 'hero'">
-      <div v-if="items.length" class="hero-layout gap-4">
+    <div v-else-if="v === 'hero'" class="min-h-0 flex-1 overflow-hidden">
+      <div v-if="items.length" class="hero-layout h-full items-center gap-4">
         <!-- big card (first character) -->
         <div
-          class="relative overflow-hidden rounded-xl border border-border"
+          class="relative max-h-full overflow-hidden rounded-xl border border-border"
           style="aspect-ratio: 3/4"
           data-testid="hero-big-card"
         >
@@ -146,7 +146,7 @@ onMounted(async () => {
     </div>
 
     <!-- D: hex — clipped hexagon avatars -->
-    <div v-else-if="v === 'hex'">
+    <div v-else-if="v === 'hex'" class="min-h-0 flex-1 overflow-hidden fade-clip">
       <div v-if="items.length" class="flex flex-wrap gap-4">
         <div
           v-for="c in items"
@@ -176,6 +176,13 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* Clean-clip overflow: fade the bottom edge so items beyond the cell cut
+   cleanly (no scrollbar). `black`/`transparent` = alpha mask, not a color. */
+.fade-clip {
+  -webkit-mask-image: linear-gradient(to bottom, black 84%, transparent);
+  mask-image: linear-gradient(to bottom, black 84%, transparent);
+}
+
 /* B: portraits card — fixed 3:4 aspect ratio */
 .portrait-card {
   aspect-ratio: 3/4;

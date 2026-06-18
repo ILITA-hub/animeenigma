@@ -38,9 +38,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="items.length" class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
-    <h3 class="mb-3 text-lg font-semibold text-foreground">{{ $t('showcase.block.continue_watching') }}</h3>
-    <div class="cw flex flex-col gap-2">
+  <div v-if="items.length" class="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 md:p-6">
+    <h3 class="mb-3 shrink-0 text-lg font-semibold text-foreground">{{ $t('showcase.block.continue_watching') }}</h3>
+    <div class="cw flex min-h-0 flex-1 flex-col gap-2 overflow-hidden fade-clip">
       <div
         v-for="entry in items"
         :key="entry.anime_id"
@@ -62,3 +62,12 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Clean-clip overflow: fade the bottom edge so rows beyond the cell cut
+   cleanly (no scrollbar). `black`/`transparent` = alpha mask, not a color. */
+.fade-clip {
+  -webkit-mask-image: linear-gradient(to bottom, black 84%, transparent);
+  mask-image: linear-gradient(to bottom, black 84%, transparent);
+}
+</style>

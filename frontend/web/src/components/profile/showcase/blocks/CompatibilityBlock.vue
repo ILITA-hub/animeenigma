@@ -42,8 +42,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="!isOwner && compat" class="h-full space-y-3">
-    <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+  <div v-if="!isOwner && compat" class="flex h-full min-h-0 flex-col justify-center gap-3 overflow-hidden">
+    <h3 class="shrink-0 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
       {{ $t('showcase.block.compatibility') }}
     </h3>
     <div class="flex items-center gap-5 flex-wrap">

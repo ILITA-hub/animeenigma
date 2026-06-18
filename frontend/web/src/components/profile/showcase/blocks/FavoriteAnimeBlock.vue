@@ -66,16 +66,16 @@ const podiumItems = computed(() => {
 </script>
 
 <template>
-  <div class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
-    <h3 class="mb-3 text-lg font-semibold text-foreground">{{ $t('showcase.block.favorite_anime') }}</h3>
+  <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 md:p-6">
+    <h3 class="mb-3 shrink-0 text-lg font-semibold text-foreground">{{ $t('showcase.block.favorite_anime') }}</h3>
 
     <!-- A: row (default) — horizontal scrolling strip with rank + score overlays -->
-    <div v-if="v === 'row'">
-      <div v-if="items.length" class="flex gap-3 overflow-x-auto pb-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border">
+    <div v-if="v === 'row'" class="min-h-0 flex-1">
+      <div v-if="items.length" class="flex h-full items-stretch gap-3 overflow-x-auto pb-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border">
         <div
           v-for="(item, i) in items"
           :key="item.id"
-          class="relative flex-none w-[120px] sm:w-[132px]"
+          class="relative aspect-[2/3] h-full flex-none"
         >
           <PosterCard :model="item" />
           <span class="absolute top-2 left-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs font-semibold text-foreground">
@@ -93,8 +93,8 @@ const podiumItems = computed(() => {
     </div>
 
     <!-- B: podium — olympic top-3, gold center + raised -->
-    <div v-else-if="v === 'podium'">
-      <div v-if="items.length" class="podium-grid mx-auto max-w-[580px] items-end gap-4">
+    <div v-else-if="v === 'podium'" class="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+      <div v-if="items.length" class="podium-grid mx-auto max-h-full max-w-[580px] items-end gap-4">
         <div
           v-for="entry in podiumItems"
           :key="entry.item.id"
@@ -128,7 +128,7 @@ const podiumItems = computed(() => {
     </div>
 
     <!-- C: grid — equal 6-col (3-col mobile) grid of posters -->
-    <div v-else-if="v === 'grid'">
+    <div v-else-if="v === 'grid'" class="min-h-0 flex-1 overflow-hidden fade-clip">
       <div v-if="items.length" class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
         <PosterCard v-for="item in items" :key="item.id" :model="item" />
       </div>
@@ -136,7 +136,7 @@ const podiumItems = computed(() => {
     </div>
 
     <!-- D: list — mini poster + title + score + progress bar -->
-    <div v-else-if="v === 'list'">
+    <div v-else-if="v === 'list'" class="min-h-0 flex-1 overflow-hidden fade-clip">
       <div v-if="items.length" class="flex flex-col gap-2.5">
         <div
           v-for="(item, i) in items"
@@ -179,7 +179,7 @@ const podiumItems = computed(() => {
     </div>
 
     <!-- E: banner — wide cover strips with overlay gradient + zoom on hover -->
-    <div v-else-if="v === 'banner'">
+    <div v-else-if="v === 'banner'" class="min-h-0 flex-1 overflow-hidden fade-clip">
       <div v-if="items.length" class="flex flex-col gap-3">
         <div
           v-for="item in items"
@@ -216,6 +216,14 @@ const podiumItems = computed(() => {
 </template>
 
 <style scoped>
+/* Clean-clip overflow: fade the bottom edge so items beyond the cell cut
+   cleanly (no scrollbar). Auto-adapts to any cell height. `black`/`transparent`
+   keywords = alpha mask only, not a color literal. */
+.fade-clip {
+  -webkit-mask-image: linear-gradient(to bottom, black 84%, transparent);
+  mask-image: linear-gradient(to bottom, black 84%, transparent);
+}
+
 /* Podium: 3-col grid (silver | gold | bronze), gold center is taller */
 .podium-grid {
   display: grid;

@@ -74,11 +74,11 @@ const completedPct = computed(() => {
 </script>
 
 <template>
-  <div class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
-    <h3 class="mb-3 text-lg font-semibold text-foreground">{{ $t('showcase.block.stats') }}</h3>
+  <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 md:p-6">
+    <h3 class="mb-2 shrink-0 text-base font-semibold text-foreground">{{ $t('showcase.block.stats') }}</h3>
 
     <!-- A: tiles (default) -->
-    <div v-if="v === 'tiles'" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div v-if="v === 'tiles'" class="grid min-h-0 flex-1 content-center grid-cols-4 gap-2">
       <div class="rounded-2xl border border-border p-4 text-center" style="background:radial-gradient(120% 120% at 50% 0%,var(--cyan-a08),var(--white-a4))">
         <div class="text-2xl font-semibold" style="background:linear-gradient(180deg,var(--foreground),var(--brand-cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
           {{ stats?.total_entries ?? 0 }}
@@ -106,59 +106,59 @@ const completedPct = computed(() => {
     </div>
 
     <!-- B: rings -->
-    <div v-else-if="v === 'rings'" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <div class="stats-ring flex flex-col items-center gap-2 p-2">
+    <div v-else-if="v === 'rings'" class="grid min-h-0 flex-1 content-center grid-cols-4 gap-2">
+      <div class="stats-ring flex min-h-0 flex-col items-center justify-center gap-1">
         <div
-          class="stats-ring-circ relative grid h-[104px] w-[104px] place-items-center rounded-full"
+          class="stats-ring-circ relative grid aspect-square h-auto w-full max-w-[88px] place-items-center rounded-full"
           :style="`background:conic-gradient(var(--brand-cyan) ${ringPct.total}%,var(--white-a8) 0)`"
         >
-          <div class="absolute inset-[9px] rounded-full bg-card"></div>
-          <span class="relative text-xl font-semibold" style="background:linear-gradient(180deg,var(--foreground),var(--brand-cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
+          <div class="absolute inset-[7px] rounded-full bg-card"></div>
+          <span class="relative text-base font-semibold md:text-lg" style="background:linear-gradient(180deg,var(--foreground),var(--brand-cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
             {{ stats?.total_entries ?? 0 }}
           </span>
         </div>
-        <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('profile.stats.totalAnime') }}</span>
+        <span class="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground md:text-xs">{{ $t('profile.stats.totalAnime') }}</span>
       </div>
-      <div class="stats-ring flex flex-col items-center gap-2 p-2">
+      <div class="stats-ring flex min-h-0 flex-col items-center justify-center gap-1">
         <div
-          class="stats-ring-circ relative grid h-[104px] w-[104px] place-items-center rounded-full"
+          class="stats-ring-circ relative grid aspect-square h-auto w-full max-w-[88px] place-items-center rounded-full"
           :style="`background:conic-gradient(var(--brand-pink) ${ringPct.score}%,var(--white-a8) 0)`"
         >
-          <div class="absolute inset-[9px] rounded-full bg-card"></div>
-          <span class="relative text-xl font-semibold" style="background:linear-gradient(180deg,var(--foreground),var(--brand-pink));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
+          <div class="absolute inset-[7px] rounded-full bg-card"></div>
+          <span class="relative text-base font-semibold md:text-lg" style="background:linear-gradient(180deg,var(--foreground),var(--brand-pink));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
             {{ stats?.avg_score && stats.avg_score > 0 ? stats.avg_score.toFixed(1) : '-' }}
           </span>
         </div>
-        <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('profile.stats.avgScore') }}</span>
+        <span class="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground md:text-xs">{{ $t('profile.stats.avgScore') }}</span>
       </div>
-      <div class="stats-ring flex flex-col items-center gap-2 p-2">
+      <div class="stats-ring flex min-h-0 flex-col items-center justify-center gap-1">
         <div
-          class="stats-ring-circ relative grid h-[104px] w-[104px] place-items-center rounded-full"
+          class="stats-ring-circ relative grid aspect-square h-auto w-full max-w-[88px] place-items-center rounded-full"
           :style="`background:conic-gradient(var(--brand-violet) ${ringPct.eps}%,var(--white-a8) 0)`"
         >
-          <div class="absolute inset-[9px] rounded-full bg-card"></div>
-          <span class="relative text-xl font-semibold" style="background:linear-gradient(180deg,var(--foreground),var(--brand-violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
+          <div class="absolute inset-[7px] rounded-full bg-card"></div>
+          <span class="relative text-base font-semibold md:text-lg" style="background:linear-gradient(180deg,var(--foreground),var(--brand-violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
             {{ stats?.total_episodes ?? 0 }}
           </span>
         </div>
-        <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('profile.stats.episodesWatched') }}</span>
+        <span class="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground md:text-xs">{{ $t('profile.stats.episodesWatched') }}</span>
       </div>
-      <div class="stats-ring flex flex-col items-center gap-2 p-2">
+      <div class="stats-ring flex min-h-0 flex-col items-center justify-center gap-1">
         <div
-          class="stats-ring-circ relative grid h-[104px] w-[104px] place-items-center rounded-full"
+          class="stats-ring-circ relative grid aspect-square h-auto w-full max-w-[88px] place-items-center rounded-full"
           :style="`background:conic-gradient(var(--success) ${ringPct.completed}%,var(--white-a8) 0)`"
         >
-          <div class="absolute inset-[9px] rounded-full bg-card"></div>
-          <span class="relative text-xl font-semibold" style="background:linear-gradient(180deg,var(--foreground),var(--success));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
+          <div class="absolute inset-[7px] rounded-full bg-card"></div>
+          <span class="relative text-base font-semibold md:text-lg" style="background:linear-gradient(180deg,var(--foreground),var(--success));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
             {{ completedPct }}
           </span>
         </div>
-        <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('profile.stats.completed') }}</span>
+        <span class="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground md:text-xs">{{ $t('profile.stats.completed') }}</span>
       </div>
     </div>
 
     <!-- C: bars -->
-    <div v-else-if="v === 'bars'" class="flex flex-col gap-3">
+    <div v-else-if="v === 'bars'" class="flex min-h-0 flex-1 flex-col justify-center gap-2">
       <div
         v-for="item in barItems"
         :key="item.labelKey"
@@ -177,7 +177,7 @@ const completedPct = computed(() => {
     </div>
 
     <!-- D: strip -->
-    <div v-else-if="v === 'strip'" class="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
+    <div v-else-if="v === 'strip'" class="flex min-h-0 flex-1 flex-wrap content-center items-center justify-between gap-3 px-1">
       <div class="stats-strip-item flex items-baseline gap-2">
         <span class="text-2xl font-semibold" style="background:linear-gradient(180deg,var(--foreground),var(--brand-cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
           {{ stats?.total_entries ?? 0 }}

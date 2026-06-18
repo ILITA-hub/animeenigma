@@ -45,11 +45,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="themes.length" class="h-full space-y-3">
-    <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+  <div v-if="themes.length" class="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+    <h3 class="shrink-0 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
       {{ $t('showcase.block.op_ed') }}
     </h3>
-    <div class="grid grid-cols-3 gap-3 max-[680px]:grid-cols-2">
+    <div class="grid min-h-0 flex-1 grid-cols-3 gap-3 overflow-hidden fade-clip max-[680px]:grid-cols-2">
       <div
         v-for="theme in themes"
         :key="theme.id"
@@ -106,6 +106,13 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* Clean-clip overflow: fade the bottom edge so cards beyond the cell cut
+   cleanly (no scrollbar). `black`/`transparent` = alpha mask, not a color. */
+.fade-clip {
+  -webkit-mask-image: linear-gradient(to bottom, black 84%, transparent);
+  mask-image: linear-gradient(to bottom, black 84%, transparent);
+}
+
 @keyframes oped-eq {
   0%, 100% { height: 4px; }
   50%       { height: 16px; }

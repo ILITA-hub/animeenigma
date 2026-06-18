@@ -108,13 +108,13 @@ const rarityGlow: Record<string, string> = {
 </script>
 
 <template>
-  <div class="h-full rounded-xl border border-border bg-card p-4 md:p-6">
-    <h3 class="mb-3 text-lg font-semibold text-foreground">
+  <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 md:p-6">
+    <h3 class="mb-3 shrink-0 text-lg font-semibold text-foreground">
       {{ $t('showcase.block.card_collection') }}
     </h3>
 
     <!-- ── ROW (default) ─────────────────────────────────────────── -->
-    <div v-if="v === 'row' && cards.length" class="cc-row flex gap-3 overflow-x-auto pb-2">
+    <div v-if="v === 'row' && cards.length" class="cc-row flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto pb-2">
       <div
         v-for="c in cards"
         :key="c.id"
@@ -136,7 +136,7 @@ const rarityGlow: Record<string, string> = {
     <!-- ── FAN ───────────────────────────────────────────────────── -->
     <div
       v-else-if="v === 'fan' && cards.length"
-      class="relative flex h-72 items-end justify-center"
+      class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
     >
       <div
         v-for="(c, idx) in cards.slice(0, 5)"
@@ -159,7 +159,7 @@ const rarityGlow: Record<string, string> = {
     <!-- ── GRID ──────────────────────────────────────────────────── -->
     <div
       v-else-if="v === 'grid' && cards.length"
-      class="cc-grid grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5"
+      class="cc-grid grid min-h-0 flex-1 grid-cols-3 gap-3 overflow-hidden fade-clip sm:grid-cols-4 md:grid-cols-5"
     >
       <div
         v-for="c in cards"
@@ -182,7 +182,7 @@ const rarityGlow: Record<string, string> = {
     <!-- ── HERO ──────────────────────────────────────────────────── -->
     <div
       v-else-if="v === 'hero' && cards.length"
-      class="grid gap-6 md:grid-cols-[180px_1fr]"
+      class="grid min-h-0 flex-1 content-center gap-6 overflow-hidden md:grid-cols-[180px_1fr]"
     >
       <!-- Featured card -->
       <div
@@ -246,7 +246,7 @@ const rarityGlow: Record<string, string> = {
     <!-- ── TILT3D ─────────────────────────────────────────────────── -->
     <div
       v-else-if="v === 'tilt3d' && cards.length"
-      class="cc-tilt3d flex flex-wrap justify-center gap-6"
+      class="cc-tilt3d flex min-h-0 flex-1 flex-wrap content-center justify-center gap-6 overflow-hidden fade-clip"
       style="perspective: 1000px"
     >
       <div
@@ -485,6 +485,20 @@ const rarityGlow: Record<string, string> = {
 .cc-row {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--border)) transparent;
+}
+
+/* Row cards scale to the cell height (aspect 5/7 derives the width) so the
+   strip never overflows the fixed bento row. */
+.cc-row .cc-gcard {
+  height: 100%;
+  width: auto;
+}
+
+/* Clean-clip overflow: fade the bottom edge so cards beyond the cell cut
+   cleanly (no scrollbar). `black`/`transparent` = alpha mask, not a color. */
+.fade-clip {
+  -webkit-mask-image: linear-gradient(to bottom, black 84%, transparent);
+  mask-image: linear-gradient(to bottom, black 84%, transparent);
 }
 
 /* ── FAN variant ─────────────────────────────────────────────────────────── */

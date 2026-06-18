@@ -71,8 +71,8 @@ describe('StatsBlock', () => {
       props: { userId: 'test-user', variant: 'bars' },
       global: { mocks: { $t: (k: string) => k } },
     })
-    // bars variant has flex-col with gap-3 containing 4 rows
-    const barsContainer = w.find('.flex.flex-col.gap-3')
+    // bars variant has flex-col with gap-2 containing 4 rows
+    const barsContainer = w.find('.flex.flex-col.gap-2')
     expect(barsContainer.exists()).toBe(true)
     expect(barsContainer.findAll(':scope > div').length).toBe(4)
   })
