@@ -21,13 +21,14 @@ const items = ref<WatchingAnime[]>([])
 onMounted(async () => {
   try {
     const res = await publicApi.getPublicWatchlist(props.userId, { status: 'watching', per_page: 12 })
-    const raw = res.data as { data?: WatchingAnime[] } & { items?: WatchingAnime[] } & WatchingAnime[]
+    type WatchlistResponse = { data?: WatchingAnime[] } & { items?: WatchingAnime[] } & WatchingAnime[]
+    const raw = res.data as unknown as WatchlistResponse
     const list: WatchingAnime[] = Array.isArray(raw)
       ? raw
-      : ('data' in raw && Array.isArray(raw.data))
-        ? raw.data as WatchingAnime[]
-        : ('items' in raw && Array.isArray(raw.items))
-          ? raw.items as WatchingAnime[]
+      : ('data' in raw && Array.isArray((raw as { data?: WatchingAnime[] }).data))
+        ? (raw as { data: WatchingAnime[] }).data
+        : ('items' in raw && Array.isArray((raw as { items?: WatchingAnime[] }).items))
+          ? (raw as { items: WatchingAnime[] }).items
           : []
     items.value = list
   } catch {

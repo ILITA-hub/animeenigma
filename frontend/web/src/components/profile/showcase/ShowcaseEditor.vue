@@ -152,11 +152,11 @@ function opEdConfig(el: ShowcaseBlock): OpEdConfig {
 
           <!-- Variant picker — only for types with >1 variant -->
           <div
-            v-if="SHOWCASE_VARIANTS[element.type].length > 1"
+            v-if="SHOWCASE_VARIANTS[element.type as ShowcaseBlockType].length > 1"
             class="mb-2"
           >
             <Select
-              :model-value="element.variant ?? SHOWCASE_VARIANTS[element.type][0]"
+              :model-value="element.variant ?? SHOWCASE_VARIANTS[element.type as ShowcaseBlockType][0]"
               :options="variantOptions(element.type)"
               :label="$t('showcase.variant_label')"
               @update:model-value="element.variant = $event as string"
