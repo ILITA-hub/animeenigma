@@ -12,11 +12,13 @@
       <div class="flex gap-3 mb-3">
         <!-- w=384 matches the card surfaces (PosterCard / WatchlistRow), so the
              menu thumb is a browser-cache hit instead of a full-size download. -->
-        <img
-          :src="cardPosterUrl(anime.coverImage, 384)"
+        <PosterImage
+          :src="anime.coverImage"
           :alt="localizedTitle"
-          class="w-12 h-16 rounded object-cover flex-shrink-0"
-          @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime!.coverImage) } }"
+          ratio="2/3"
+          rounded="sm"
+          :proxy-width="384"
+          class="w-12 flex-shrink-0"
         />
         <div class="min-w-0 flex-1">
           <p class="text-sm font-medium text-white line-clamp-2 leading-tight">{{ localizedTitle }}</p>
@@ -94,12 +96,12 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Check, Trash2, ExternalLink, Star } from 'lucide-vue-next'
 import { DropdownMenu, DropdownMenuItem, ScoreDiamond } from '@/components/ui'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { userApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { getLocalizedTitle } from '@/utils/title'
-import { cardPosterUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 
 interface Anime {
   id: string | number

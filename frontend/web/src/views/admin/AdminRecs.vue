@@ -89,11 +89,14 @@
                   </td>
                   <td class="px-3 py-2">
                     <div class="flex items-center gap-3 min-w-0">
-                      <img
+                      <PosterImage
                         v-if="row.anime.poster_url"
                         :src="row.anime.poster_url"
                         :alt="row.anime.name || row.anime.id"
-                        class="w-10 h-14 object-cover rounded flex-shrink-0"
+                        ratio="2/3"
+                        rounded="sm"
+                        :proxy-width="128"
+                        class="w-10 flex-shrink-0"
                       />
                       <router-link
                         :to="`/anime/${row.anime.id}`"
@@ -250,6 +253,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import { useAdminRecs, type AdminRecRow } from '@/composables/useAdminRecs'
 import Button from '@/components/ui/Button.vue'
 import { Spinner } from '@/components/ui'

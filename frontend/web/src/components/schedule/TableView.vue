@@ -26,7 +26,7 @@
         <tr class="dt-row border-b border-white/5 hover:bg-white/[0.04] cursor-pointer" @click="go(r.anime.id)">
           <td class="p-3">
             <div class="flex items-center gap-2.5">
-              <img :src="r.anime.poster_url || '/placeholder.svg'" :alt="titleOf(r)" class="w-[30px] h-10 rounded object-cover flex-none bg-muted" />
+              <PosterImage :src="r.anime.poster_url || '/placeholder.svg'" :alt="titleOf(r)" ratio="2/3" rounded="sm" :proxy-width="64" class="w-[30px] flex-none" />
               <div>
                 <div class="font-semibold text-sm">{{ titleOf(r) }}</div>
                 <div class="text-[11px] text-muted-foreground">{{ r.anime.name }}</div>
@@ -61,6 +61,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Star } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import type { Occurrence, TableSortKey } from '@/composables/schedule/types'
 import { getLocalizedTitle } from '@/utils/title'
 import { formatAirTime, formatDayTitle } from '@/composables/schedule/format'

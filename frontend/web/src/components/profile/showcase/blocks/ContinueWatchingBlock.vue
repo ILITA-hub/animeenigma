@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { publicApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
-import { getImageUrl } from '@/composables/useImageProxy'
+import PosterImage from '@/components/anime/PosterImage.vue'
 
 const props = defineProps<{ userId: string; config?: unknown; isOwner?: boolean; variant?: string }>()
 
@@ -47,10 +47,13 @@ onMounted(async () => {
         class="cwc flex items-center gap-3 rounded-lg border border-border bg-white/[0.02] px-3 py-2"
         data-testid="cw-card"
       >
-        <img
-          :src="getImageUrl(entry.anime?.poster_url) || ''"
+        <PosterImage
+          :src="entry.anime?.poster_url || '/placeholder.svg'"
           :alt="getLocalizedTitle(entry.anime?.name, entry.anime?.name_ru, entry.anime?.name_jp) || ''"
-          class="h-14 w-10 shrink-0 rounded-md object-cover"
+          ratio="2/3"
+          rounded="md"
+          :proxy-width="128"
+          class="w-10 shrink-0"
         />
         <span class="min-w-0 truncate text-sm font-medium text-foreground" data-testid="cw-title">
           {{ getLocalizedTitle(entry.anime?.name, entry.anime?.name_ru, entry.anime?.name_jp) || entry.anime?.name }}

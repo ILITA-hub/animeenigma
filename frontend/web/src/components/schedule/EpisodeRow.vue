@@ -4,12 +4,14 @@
     class="flex items-center border-t border-white/5 first:border-t-0 first:pt-0"
     :class="size === 'lg' ? 'gap-3 py-2' : 'gap-2 py-1.5'"
   >
-    <img
+    <PosterImage
       :src="occurrence.anime.poster_url || '/placeholder.svg'"
       :alt="title"
-      class="rounded object-cover flex-none bg-muted"
-      :class="size === 'lg' ? 'w-12 h-16' : 'w-7 h-10'"
-      loading="lazy"
+      ratio="2/3"
+      rounded="sm"
+      :proxy-width="size === 'lg' ? 128 : 64"
+      class="flex-none"
+      :class="size === 'lg' ? 'w-12' : 'w-7'"
     />
     <div class="min-w-0 flex-1">
       <div
@@ -29,6 +31,7 @@ import { computed } from 'vue'
 import type { Occurrence } from '@/composables/schedule/types'
 import { getLocalizedTitle } from '@/utils/title'
 import { formatAirTime } from '@/composables/schedule/format'
+import PosterImage from '@/components/anime/PosterImage.vue'
 
 const props = withDefaults(defineProps<{ occurrence: Occurrence; size?: 'sm' | 'lg' }>(), { size: 'sm' })
 const title = computed(() => getLocalizedTitle(props.occurrence.anime.name, props.occurrence.anime.name_ru, props.occurrence.anime.name_jp))

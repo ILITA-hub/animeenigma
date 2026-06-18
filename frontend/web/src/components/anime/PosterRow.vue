@@ -17,21 +17,14 @@
       <EllipsisVertical class="size-4" />
     </button>
 
-    <div class="poster-wrap">
-      <img
-        :src="posterSrc"
-        :alt="model.title"
-        class="poster"
-        loading="lazy"
-        @load="posterLoaded = true"
-        @error="onPosterError"
-      />
-      <!-- Glass skeleton — translucent overlay ABOVE the img so the native
-           progressive poster render shows through; fades out on @load -->
-      <Transition name="sk-fade">
-        <div v-if="!posterLoaded" class="absolute inset-0 sk-drift pointer-events-none" aria-hidden="true" data-testid="poster-skeleton" />
-      </Transition>
-    </div>
+    <PosterImage
+      :src="model.coverImage || '/placeholder.svg'"
+      :alt="model.title"
+      ratio="2/3"
+      rounded="lg"
+      :proxy-width="128"
+      class="poster-wrap"
+    />
 
     <div class="body">
       <div class="title truncate" data-testid="row-title">{{ model.title }}</div>
@@ -73,7 +66,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EllipsisVertical, Star, Clock } from 'lucide-vue-next'
 import ScoreDiamond from '@/components/ui/ScoreDiamond.vue'
-import { cardPosterUrl } from '@/composables/useImageProxy'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import { useUserTimezone } from '@/composables/useUserTimezone'
 import { wallClockDate } from '@/composables/schedule/timezone'
 import type { AnimeCardModel } from '@/types/card'
@@ -102,25 +95,6 @@ const to = computed(() =>
     ? `${props.model.href}?episode=${props.model.nextEpisode.ep}`
     : props.model.href
 )
-
-// Fallback chain: resized proxy URL → original upstream URL → placeholder
-const posterFallbackStage = ref(0)
-const posterLoaded = ref(false)
-const posterSrc = computed(() => {
-  const raw = props.model.coverImage
-  if (!raw || posterFallbackStage.value >= 2) return '/placeholder.svg'
-  if (posterFallbackStage.value === 1) return raw
-  return cardPosterUrl(raw, 128)
-})
-function onPosterError() {
-  const raw = props.model.coverImage
-  // Skip the original-URL stage when the proxied URL is the raw URL anyway
-  if (posterFallbackStage.value === 0 && raw && cardPosterUrl(raw, 128) !== raw) {
-    posterFallbackStage.value = 1
-  } else {
-    posterFallbackStage.value = 2
-  }
-}
 
 // Script-level computed labels — avoids $t() in templates (no i18n plugin in unit tests)
 const openMenuLabel = computed(() => t('contextMenu.openMenu'))

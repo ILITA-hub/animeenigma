@@ -29,10 +29,13 @@
             v-if="dailyGaveUp && dailyAnswer"
             class="mb-6 flex items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-4"
           >
-            <img
-              :src="answerPoster"
+            <PosterImage
+              :src="dailyAnswer.poster_url || '/placeholder.svg'"
               :alt="dailyAnswer.name_ru"
-              class="w-16 h-24 rounded-lg object-cover flex-shrink-0 bg-white/10"
+              ratio="2/3"
+              rounded="lg"
+              :proxy-width="256"
+              class="w-16 flex-shrink-0"
             />
             <div class="min-w-0">
               <p class="text-xs text-muted-foreground mb-1">{{ $t('anidle.give_up_revealed') }}</p>
@@ -134,7 +137,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { cardPosterUrl } from '@/composables/useImageProxy'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import { useAnidle } from '@/composables/useAnidle'
 import { useAuthStore } from '@/stores/auth'
 import LoadingState from '@/components/ui/LoadingState.vue'
@@ -176,9 +179,6 @@ const showResult = ref(false)
 const loadingLeaderboard = ref(false)
 
 // The result modal is for a WIN only; a give-up reveals the answer inline.
-const answerPoster = computed(() =>
-  dailyAnswer.value ? cardPosterUrl(dailyAnswer.value.poster_url, 256) : '',
-)
 const answerGenres = computed(() =>
   dailyAnswer.value ? dailyAnswer.value.genres.map(g => g.name).join(', ') : '',
 )

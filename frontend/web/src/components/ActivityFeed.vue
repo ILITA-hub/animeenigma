@@ -66,12 +66,13 @@
           tabindex="-1"
           aria-hidden="true"
         >
-          <img
-            :src="cardPosterUrl(event.anime.poster_url, 128)"
+          <PosterImage
+            :src="event.anime.poster_url || '/placeholder.svg'"
             :alt="animeName(event)"
-            class="feed-poster-img"
-            loading="lazy"
-            @error="onPosterError"
+            ratio="2/3"
+            rounded="none"
+            :proxy-width="128"
+            class="w-full"
           />
         </router-link>
       </div>
@@ -99,8 +100,8 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Avatar from '@/components/ui/Avatar.vue'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import { activityApi } from '@/api/client'
-import { cardPosterUrl } from '@/composables/useImageProxy'
 import { getLocalizedTitle } from '@/utils/title'
 
 interface ActivityEvent {
@@ -181,15 +182,6 @@ const actionText = (event: ActivityEvent): string => {
 const animeName = (event: ActivityEvent): string => {
   if (!event.anime) return t('home.noData')
   return getLocalizedTitle(event.anime.name, event.anime.name_ru) || t('home.noData')
-}
-
-// A broken poster <img> renders its (long) alt text inside the 40×60 slot,
-// ballooning the row height. Swap to the placeholder on error (guard against
-// a loop if the placeholder itself ever fails). Mirrors ColumnItem.vue.
-const onPosterError = (e: Event): void => {
-  const img = e.target as HTMLImageElement
-  if (img.src.endsWith('/placeholder.svg')) return
-  img.src = '/placeholder.svg'
 }
 
 const formatRelativeTime = (dateStr: string): string => {

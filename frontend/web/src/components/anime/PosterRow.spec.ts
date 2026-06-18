@@ -9,6 +9,7 @@ vi.mock('vue-i18n', async (importOriginal) => ({
 }))
 
 import PosterRow from './PosterRow.vue'
+import PosterImage from './PosterImage.vue'
 import type { AnimeCardModel } from '@/types/card'
 
 const RouterLinkStub = { name: 'RouterLink', props: ['to'], template: '<a :href="to"><slot /></a>' }
@@ -63,40 +64,20 @@ describe('PosterRow', () => {
   })
 })
 
-describe('PosterRow poster skeleton + resized proxy', () => {
-  it('overlays the glass skeleton on the always-visible poster until it loads', async () => {
-    const w = mountRow()
-    expect(w.find('[data-testid="poster-skeleton"]').exists()).toBe(true)
-    // The img is NEVER opacity-hidden — the native progressive render must
-    // stay visible under the translucent overlay as loading feedback.
-    expect(w.find('img.poster').classes()).not.toContain('opacity-0')
-
-    await w.find('img.poster').trigger('load')
-    expect(w.find('[data-testid="poster-skeleton"]').exists()).toBe(false)
-  })
-
-  it('routes shikimori posters through the resizing image-proxy (w=128)', () => {
+describe('PosterRow poster — delegates to PosterImage', () => {
+  // The skeleton overlay, image-proxy resize (w=128) and proxied→original→
+  // fallback chain now live in PosterImage and are covered by PosterImage.spec.
+  // Here we only assert PosterRow wires the right props into it.
+  it('renders a PosterImage with the model cover and the resized proxy width', () => {
     const shiki = 'https://shikimori.io/uploads/poster/animes/1/abc.jpeg'
-    const w = mountRow({ coverImage: shiki })
-    const src = w.find('img.poster').attributes('src')!
-    expect(src).toContain('/api/streaming/image-proxy?url=')
-    expect(src).toContain('w=128')
-    expect(src).toContain(encodeURIComponent(shiki))
+    const pi = mountRow({ coverImage: shiki }).findComponent(PosterImage)
+    expect(pi.exists()).toBe(true)
+    expect(pi.props('src')).toBe(shiki)
+    expect(pi.props('proxyWidth')).toBe(128)
   })
 
-  it('keeps non-proxyable poster URLs untouched', () => {
-    const w = mountRow({ coverImage: 'http://x/p.jpg' })
-    expect(w.find('img.poster').attributes('src')).toBe('http://x/p.jpg')
-  })
-
-  it('falls back proxied → original → placeholder on consecutive errors', async () => {
-    const shiki = 'https://shikimori.io/uploads/poster/animes/1/abc.jpeg'
-    const w = mountRow({ coverImage: shiki })
-
-    await w.find('img.poster').trigger('error')
-    expect(w.find('img.poster').attributes('src')).toBe(shiki)
-
-    await w.find('img.poster').trigger('error')
-    expect(w.find('img.poster').attributes('src')).toBe('/placeholder.svg')
+  it('falls back to the placeholder when the model has no cover', () => {
+    const pi = mountRow({ coverImage: '' }).findComponent(PosterImage)
+    expect(pi.props('src')).toBe('/placeholder.svg')
   })
 })

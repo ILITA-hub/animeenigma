@@ -9,7 +9,7 @@
         :to="`/anime/${o.anime.id}`"
         class="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.045] p-2.5 hover:bg-white/[0.08] transition-colors"
       >
-        <img :src="o.anime.poster_url || '/placeholder.svg'" :alt="titleOf(o)" class="w-[54px] h-[76px] rounded-lg object-cover flex-none bg-muted" />
+        <PosterImage :src="o.anime.poster_url || '/placeholder.svg'" :alt="titleOf(o)" ratio="2/3" rounded="lg" :proxy-width="128" class="w-[54px] flex-none" />
         <div class="min-w-0 flex-1">
           <div class="text-sm font-semibold text-foreground line-clamp-2">{{ titleOf(o) }}</div>
           <div class="text-xs text-primary mt-1">{{ $t('schedule.episode', { n: o.episode }) }}</div>
@@ -31,6 +31,7 @@ import { useI18n } from 'vue-i18n'
 import { Star } from 'lucide-vue-next'
 import Modal from '@/components/ui/Modal.vue'
 import Button from '@/components/ui/Button.vue'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import type { Occurrence } from '@/composables/schedule/types'
 import { getLocalizedTitle } from '@/utils/title'
 import { formatAirTime, formatDayTitle } from '@/composables/schedule/format'

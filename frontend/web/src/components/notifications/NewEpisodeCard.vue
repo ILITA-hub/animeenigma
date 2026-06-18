@@ -9,13 +9,14 @@
       class="flex items-start gap-3 flex-1 min-w-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded"
       @click="onClick"
     >
-      <img
+      <PosterImage
         v-if="payload.anime_poster_url"
         :src="payload.anime_poster_url"
         :alt="payload.anime_title"
-        class="w-[52px] h-[72px] rounded object-cover flex-shrink-0 bg-white/5"
-        loading="lazy"
-        @error="onPosterError"
+        ratio="2/3"
+        rounded="sm"
+        :proxy-width="128"
+        class="w-[52px] flex-shrink-0"
       />
       <div
         v-else
@@ -53,10 +54,11 @@
  *
  * Phase 3 — workstream: notifications.
  */
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
+import PosterImage from '@/components/anime/PosterImage.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'
 import type { UserNotification, NewEpisodePayload } from '@/types/notification'
@@ -72,8 +74,6 @@ const emit = defineEmits<{
 const { t, locale } = useI18n()
 const router = useRouter()
 const store = useNotificationsStore()
-
-const posterFailed = ref(false)
 
 const payload = computed<NewEpisodePayload>(() => {
   // Safe cast: dispatched only when notification.type === 'new_episode'.
@@ -135,9 +135,5 @@ async function onDismiss(): Promise<void> {
   }
   // Don't close the parent dropdown on dismiss — user may want to
   // dismiss more notifications in the same session.
-}
-
-function onPosterError(): void {
-  posterFailed.value = true
 }
 </script>

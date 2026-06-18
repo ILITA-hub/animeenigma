@@ -50,16 +50,14 @@
             :to="`/anime/${item.anime?.id || item.anime_id}`"
             class="group block"
           >
-            <div class="rounded-lg overflow-hidden bg-white/5 aspect-[2/3] mb-2">
-              <img
-                v-if="item.anime?.poster_url"
-                :src="item.anime.poster_url"
-                :alt="cardTitle(item)"
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                loading="lazy"
-              />
-              <div v-else class="w-full h-full bg-white/10"></div>
-            </div>
+            <PosterImage
+              :src="item.anime?.poster_url || '/placeholder.svg'"
+              :alt="cardTitle(item)"
+              ratio="2/3"
+              rounded="lg"
+              :proxy-width="384"
+              class="mb-2 group-hover:scale-105 transition-transform duration-300"
+            />
             <h3 class="text-sm font-medium text-white truncate group-hover:text-cyan-400 transition-colors">
               {{ cardTitle(item) }}
             </h3>
@@ -76,6 +74,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { animeApi, type Collection, type CollectionItem } from '@/api/client'
 import { Spinner, EmptyState } from '@/components/ui'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import { getLocalizedTitle } from '@/utils/title'
 
 const route = useRoute()

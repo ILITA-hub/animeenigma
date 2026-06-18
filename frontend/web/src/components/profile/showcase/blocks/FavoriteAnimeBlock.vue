@@ -5,6 +5,7 @@ import { defaultVariant } from '@/types/showcase'
 import { animeApi } from '@/api/client'
 import { fromHomeAnime } from '@/utils/toCardModel'
 import PosterCard from '@/components/anime/PosterCard.vue'
+import PosterImage from '@/components/anime/PosterImage.vue'
 import type { AnimeCardModel } from '@/types/card'
 
 const props = defineProps<{ config: FavoriteAnimeConfig; variant?: string; userId?: string }>()
@@ -145,10 +146,13 @@ const podiumItems = computed(() => {
           <!-- rank number -->
           <span class="w-[22px] shrink-0 text-center text-sm font-semibold text-brand-cyan">{{ i + 1 }}</span>
           <!-- mini poster -->
-          <img
-            :src="item.coverImage"
+          <PosterImage
+            :src="item.coverImage || '/placeholder.svg'"
             :alt="item.title"
-            class="h-16 w-[46px] shrink-0 rounded-[9px] object-cover"
+            ratio="2/3"
+            rounded="lg"
+            :proxy-width="128"
+            class="w-[46px] shrink-0"
           />
           <!-- info -->
           <div class="min-w-0 flex-1">
