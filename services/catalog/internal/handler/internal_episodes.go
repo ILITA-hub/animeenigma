@@ -3,8 +3,9 @@ package handler
 // Phase 2 v1.0 Notifications Engine — NOTIF-DET-01.
 //
 // GET /internal/anime/{shikimoriId}/episodes
-//   ?player=kodik|animelib
-//   &translation_id=<provider-specific>
+//   ?player=kodik|animelib|english|ae|raw
+//   &translation_id=<provider-specific>   (required only for kodik|animelib;
+//                                           anime-level players omit it)
 //   &watch_type=sub|dub
 //   &language=<bcp47 short>
 //
@@ -18,8 +19,8 @@ package handler
 //     "checked_at": "2026-05-21T03:00:00Z"
 //   }
 //
-// Response 400 — player not in the v1.0 allowlist {kodik, animelib} or a
-// required query param missing.
+// Response 400 — player not in the allowlist {kodik, animelib, english, ae, raw}
+// or a required query param missing (kodik/animelib need translation_id).
 // Response 404 — combo has no matching upstream episode (parser-level
 // not-found).
 // Response 500 — parser/HTTP/cache infrastructure failure.
