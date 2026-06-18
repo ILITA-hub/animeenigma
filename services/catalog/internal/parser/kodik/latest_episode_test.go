@@ -12,6 +12,14 @@ func TestResultEpisodeCount_Precedence(t *testing.T) {
 	if got := resultEpisodeCount(SearchResult{Type: "anime"}); got != 1 {
 		t.Errorf("anime min-1 fallback: got %d, want 1", got)
 	}
+	// Seasons-sum branch (only when LastEpisode + EpisodesCount are both 0).
+	seasoned := SearchResult{Seasons: map[string]*Season{
+		"1": {Episodes: map[string]interface{}{"1": "a", "2": "b"}},
+		"2": {Episodes: map[string]interface{}{"1": "c"}},
+	}}
+	if got := resultEpisodeCount(seasoned); got != 3 {
+		t.Errorf("seasons-sum fallback: got %d, want 3", got)
+	}
 	if got := resultEpisodeCount(SearchResult{}); got != 0 {
 		t.Errorf("empty non-anime: got %d, want 0", got)
 	}
