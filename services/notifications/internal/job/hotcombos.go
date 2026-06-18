@@ -23,14 +23,15 @@ import (
 //	JOIN animes a ON a.id = wh.anime_id
 //	WHERE al.status = 'watching'
 //	  AND a.status = 'ongoing'
-//	  AND wh.translation_id != '';
+//	  AND (wh.translation_id != '' OR wh.player IN ('english', 'ae', 'raw'));
 //
 // Filtering on status='watching' (user-side) AND 'ongoing' (catalog-side)
-// + non-empty translation_id keeps the result set bounded to "combos that
-// could legitimately produce a new_episode notification". English-player
-// rows in watch_history naturally drop out — their translation_id either
-// isn't populated or the watch_type doesn't match the catalog allowlist
-// {kodik, animelib} (D-DET-03).
+// keeps the result set bounded to "combos that could legitimately produce a
+// new_episode notification". Legacy translation-specific players (kodik,
+// animelib) carry a non-empty translation_id. Anime-level aePlayer players
+// (english/ae/raw) are admitted with an empty translation_id and resolved at
+// the anime level. hanime/kodik/animelib rows with an empty translation_id
+// stay excluded — no anime-level resolver exists for them yet (D-DET-03).
 type HotCombosCollector struct {
 	db  *gorm.DB
 	log *logger.Logger
@@ -56,7 +57,7 @@ func (c *HotCombosCollector) Collect(ctx context.Context) ([]domain.Combo, error
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
 		  AND a.status = 'ongoing'
-		  AND wh.translation_id != ''
+		  AND (wh.translation_id != '' OR wh.player IN ('english', 'ae', 'raw'))
 	`
 
 	var rows []domain.Combo
