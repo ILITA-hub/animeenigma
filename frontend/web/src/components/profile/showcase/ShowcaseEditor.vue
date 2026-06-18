@@ -219,7 +219,7 @@ defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes, o
         <button
           v-if="!isFixed(element)"
           type="button"
-          class="showcase-resize absolute bottom-1 right-1 grid h-6 w-6 place-items-center rounded-lg border border-border text-brand-cyan cursor-nwse-resize touch-none z-10"
+          class="showcase-resize absolute bottom-10 right-1 grid h-6 w-6 place-items-center rounded-lg border border-border bg-card/90 text-brand-cyan cursor-nwse-resize touch-none z-20"
           :data-test="`showcase-resize-${index}`"
           @pointerdown="startResize($event, index)"
         >◢</button>
