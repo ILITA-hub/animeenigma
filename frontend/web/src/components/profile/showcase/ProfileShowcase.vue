@@ -39,11 +39,11 @@ async function load() {
       ? (res.data as { data: { blocks: ShowcaseBlock[] } }).data
       : res.data
     blocks.value = data.blocks ?? []
-    emit('loaded', blocks.value.length)
   } catch {
     blocks.value = []
   } finally {
     loading.value = false
+    emit('loaded', blocks.value.length)
   }
 }
 

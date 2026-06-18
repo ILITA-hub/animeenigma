@@ -113,4 +113,15 @@ describe('ProfileShowcase', () => {
     // (if editing.value were false, the editor div would be gone)
     expect(w.find('[data-testid="editor"]').exists()).toBe(true)
   })
+
+  it('emits loaded(0) when showcase load fails', async () => {
+    vi.mocked(showcaseApi.getShowcase).mockRejectedValueOnce(new Error('api error'))
+
+    const w = mountSc(false)
+    await flushPromises()
+
+    // On error, blocks.value is set to [] in the catch block
+    // The finally block should emit loaded with the length (0)
+    expect(w.emitted('loaded')?.[0]).toEqual([0])
+  })
 })
