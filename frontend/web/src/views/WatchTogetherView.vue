@@ -86,21 +86,18 @@ import Button from '@/components/ui/Button.vue'
 // pattern; Vite emits one chunk per dynamic import → players load only
 // when their branch is rendered.
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
-const KodikAdFreePlayer = defineAsyncComponent(() => import('@/components/player/KodikAdFreePlayer.vue'))
-const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/AnimeLibPlayer.vue'))
-const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/OurEnglishPlayer.vue'))
-const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
-const RawPlayer = defineAsyncComponent(() => import('@/components/player/RawPlayer.vue'))
 // First-party AnimeEnigma player (aePlayer). Unlike the legacy players it
 // needs richer anime metadata (title / aired / total / poster), so the view
 // fetches the anime detail once the room snapshot gives us the anime_id.
 const AePlayer = defineAsyncComponent(() => import('@/components/player/aePlayer/AePlayer.vue'))
 
-// AniLib hidden 2026-06-01 (see Anime.vue animeLibEnabled): AnimeLib upstream
-// serves Kodik-only players for every title now, so the AniLib path dead-ends
-// on "no sources". Drop its in-room tab unless explicitly re-enabled.
-const hiddenPlayerKinds: readonly PlayerKind[] =
-  import.meta.env.VITE_ANIMELIB_ENABLED === 'true' ? [] : ['animelib']
+// Legacy players (kodik-adfree / animelib / ourenglish / hanime / raw) retired
+// 2026-06-17 — only the first-party aePlayer + Classic Kodik iframe survive.
+// Hide every retired kind from the in-room PlayerTabBar so the switch offers
+// only the survivors; their component branches are removed from the dispatch
+// chain below (the forward-compat v-else still catches a pre-deploy room
+// snapshot that names a retired player).
+const hiddenPlayerKinds: readonly PlayerKind[] = ['kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw']
 
 const route = useRoute()
 const router = useRouter()
@@ -558,40 +555,6 @@ watch(livePlayer, (p) => {
         :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :initial-episode="initialEpisode"
-        :room="roomHandle"
-      />
-      <KodikAdFreePlayer
-        v-else-if="livePlayer === 'kodik-adfree'"
-        :key="`player-${livePlayer}`"
-        :anime-id="animeId"
-        :initial-episode="initialEpisode"
-        :room="roomHandle"
-      />
-      <AnimeLibPlayer
-        v-else-if="livePlayer === 'animelib'"
-        :key="`player-${livePlayer}`"
-        :anime-id="animeId"
-        :initial-episode="initialEpisode"
-        :room="roomHandle"
-      />
-      <OurEnglishPlayer
-        v-else-if="livePlayer === 'ourenglish'"
-        :key="`player-${livePlayer}`"
-        :anime-id="animeId"
-        :initial-episode="initialEpisode"
-        :room="roomHandle"
-      />
-      <HanimePlayer
-        v-else-if="livePlayer === 'hanime'"
-        :key="`player-${livePlayer}`"
-        :anime-id="animeId"
-        :initial-episode="initialEpisode"
-        :room="roomHandle"
-      />
-      <RawPlayer
-        v-else-if="livePlayer === 'raw'"
-        :key="`player-${livePlayer}`"
-        :anime-id="animeId"
         :room="roomHandle"
       />
       <!-- First-party AnimeEnigma player. Unlike the legacy players it needs

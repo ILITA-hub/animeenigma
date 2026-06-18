@@ -1,14 +1,15 @@
 <!--
   Workstream watch-together — Phase 04 (state-switching) Plan 04.4 Task 1.
 
-  PlayerTabBar.vue — a small horizontal 6-tab switcher mounted inside
-  WatchTogetherView so users can request a player swap (kodik → animelib
-  etc.) from inside the room. The Anime.vue tabs aren't mounted under
+  PlayerTabBar.vue — a small horizontal tab switcher mounted inside
+  WatchTogetherView so users can request a player swap (aePlayer ↔ Kodik)
+  from inside the room. The Anime.vue tabs aren't mounted under
   `/watch/room/:roomId`, so without this component there is no in-room
-  way to drive `state:change_player`.
+  way to drive `state:change_player`. Legacy players were retired
+  2026-06-17 — only aePlayer + Classic Kodik survive.
 
   Behavior contract (locked in Plan 04.4 Task 1):
-    - Renders 6 tabs, one per PlayerKind, labels via i18n
+    - Renders one tab per surviving PlayerKind, labels via i18n
       (watch_together.player_tab_<kind>).
     - The tab whose data-player matches `activePlayer` carries
       aria-selected="true" and an active-state class set.
@@ -37,9 +38,9 @@ const props = withDefaults(
     /** When true: aria-disabled on every tab, no emits. */
     disabled?: boolean
     /**
-     * Player kinds to omit from the bar entirely. Defaults to none, preserving
-     * the original 5-tab contract. WatchTogetherView passes `['animelib']`
-     * while the AniLib provider is hidden (see Anime.vue animeLibEnabled).
+     * Player kinds to omit from the bar entirely. Defaults to none.
+     * WatchTogetherView passes the retired legacy kinds here so the in-room
+     * switch only ever offers the surviving aePlayer + Kodik tabs.
      */
     hiddenKinds?: readonly PlayerKind[]
   }>(),
@@ -56,11 +57,14 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 /**
- * Stable iteration order — matches the 6-way dispatch order in
- * WatchTogetherView.vue and the PlayerKind union order in types/.
- * Keep in sync with the PlayerKind union in src/types/watch-together.ts.
+ * Stable iteration order — matches the dispatch order in WatchTogetherView.vue.
+ * Legacy players (kodik-adfree / animelib / ourenglish / hanime / raw) retired
+ * 2026-06-17; only the first-party aePlayer + Classic Kodik survive, so the
+ * in-room switch offers just those two (aePlayer leads). The PlayerKind union
+ * still carries the retired kinds so a pre-deploy room snapshot naming one is
+ * recognized (and routed to the view's forward-compat empty state).
  */
-const ALL_PLAYERS: readonly PlayerKind[] = ['aeplayer', 'kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
+const ALL_PLAYERS: readonly PlayerKind[] = ['aeplayer', 'kodik'] as const
 const PLAYERS = computed(() => ALL_PLAYERS.filter((p) => !props.hiddenKinds.includes(p)))
 
 function onTabClick(kind: PlayerKind) {
