@@ -98,9 +98,6 @@ func (s *EpisodesLookupService) LatestAvailable(
 		return EpisodesLookupResult{}, apperrors.InvalidInput("shikimori_id required")
 	}
 	animeLevel := isAnimeLevelPlayer(player)
-	if !animeLevel && translationID == "" {
-		return EpisodesLookupResult{}, apperrors.InvalidInput("translation_id required")
-	}
 
 	cacheKey := fmt.Sprintf("notifications:episodes:%s:%s:%s:%s",
 		shikimoriID, player, translationID, watchType)
@@ -120,6 +117,10 @@ func (s *EpisodesLookupService) LatestAvailable(
 	switch {
 	case animeLevel:
 		latest, translationTitle, err = s.animeLevel.Latest(ctx, shikimoriID, player, watchType)
+	case player == "kodik" && translationID == "":
+		latest, translationTitle, err = s.latestKodikAnyTeam(shikimoriID)
+	case player == "animelib" && translationID == "":
+		latest, translationTitle, err = s.latestAnimeLibAnyTeam(ctx, shikimoriID)
 	case player == "kodik":
 		tid, parseErr := strconv.Atoi(translationID)
 		if parseErr != nil {
@@ -192,6 +193,43 @@ func (s *EpisodesLookupService) lookupAnimeLib(
 	}
 
 	return s.animelibClient.LatestEpisodeForTeam(ctx, animelibID, teamID, watchType)
+}
+
+// latestKodikAnyTeam resolves the anime-level latest episode for an aePlayer
+// kodik combo (empty translation_id) — the max across any translation.
+func (s *EpisodesLookupService) latestKodikAnyTeam(shikimoriID string) (int, string, error) {
+	n, err := s.kodikClient.LatestEpisodeAnyTranslation(shikimoriID)
+	if err != nil {
+		return 0, "", err
+	}
+	if n == 0 {
+		return 0, "", apperrors.NotFound("no kodik episodes for anime")
+	}
+	return n, "", nil
+}
+
+// latestAnimeLibAnyTeam resolves the anime-level latest episode for an aePlayer
+// animelib combo (empty translation_id) — the max across the full episode list.
+func (s *EpisodesLookupService) latestAnimeLibAnyTeam(ctx context.Context, shikimoriID string) (int, string, error) {
+	anime, err := s.animeRepo.GetByShikimoriID(ctx, shikimoriID)
+	if err != nil {
+		return 0, "", fmt.Errorf("anime lookup by shikimori_id %q: %w", shikimoriID, err)
+	}
+	if anime == nil {
+		return 0, "", apperrors.NotFound("anime not found")
+	}
+	animelibID, err := s.catalogService.ResolveAnimeLibID(ctx, anime)
+	if err != nil {
+		return 0, "", fmt.Errorf("animelib id resolve: %w", err)
+	}
+	n, err := s.animelibClient.LatestEpisodeAnyTeam(ctx, animelibID)
+	if err != nil {
+		return 0, "", err
+	}
+	if n == 0 {
+		return 0, "", apperrors.NotFound("no animelib episodes for anime")
+	}
+	return n, "", nil
 }
 
 // isNotFoundLike inspects an error message for the parser adapters'

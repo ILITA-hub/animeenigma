@@ -35,8 +35,11 @@ func TestInternalEpisodes_AnimeLevelPlayersNoTranslationID(t *testing.T) {
 	if c := doReq(t, h, "/internal/anime/57466/episodes?player=ae"); c != 200 {
 		t.Errorf("ae no-id = %d, want 200", c)
 	}
-	if c := doReq(t, h, "/internal/anime/57466/episodes?player=kodik"); c != 400 {
-		t.Errorf("kodik no-id = %d, want 400", c)
+	if c := doReq(t, h, "/internal/anime/57466/episodes?player=kodik"); c != 200 {
+		t.Errorf("kodik no-id = %d, want 200 (Phase 3 any-team)", c)
+	}
+	if c := doReq(t, h, "/internal/anime/57466/episodes?player=animelib"); c != 200 {
+		t.Errorf("animelib no-id = %d, want 200 (Phase 3 any-team)", c)
 	}
 	if c := doReq(t, h, "/internal/anime/57466/episodes?player=hanime&translation_id=x"); c != 400 {
 		t.Errorf("hanime = %d, want 400", c)

@@ -4,8 +4,9 @@ package handler
 //
 // GET /internal/anime/{shikimoriId}/episodes
 //   ?player=kodik|animelib|english|ae|raw
-//   &translation_id=<provider-specific>   (required only for kodik|animelib;
-//                                           anime-level players omit it)
+//   &translation_id=<provider-specific>   (optional for kodik|animelib; omit
+//                                           to get the max across any team;
+//                                           anime-level players always omit it)
 //   &watch_type=sub|dub
 //   &language=<bcp47 short>
 //
@@ -82,15 +83,12 @@ func (h *InternalEpisodesHandler) GetLatestEpisode(w http.ResponseWriter, r *htt
 	language := q.Get("language")
 
 	// Anime-level players (aePlayer, empty translation_id): english/ae/raw.
-	// Legacy translation-specific players: kodik/animelib (require an id).
+	// Legacy translation-specific players: kodik/animelib (accept with OR
+	// without translation_id; empty → any-team max, present → legacy path).
 	animeLevel := player == "english" || player == "ae" || player == "raw"
 	legacy := player == "kodik" || player == "animelib"
 	if !animeLevel && !legacy {
 		httputil.BadRequest(w, "player not supported by detector")
-		return
-	}
-	if legacy && translationID == "" {
-		httputil.BadRequest(w, "translation_id is required")
 		return
 	}
 
