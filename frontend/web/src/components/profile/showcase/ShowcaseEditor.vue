@@ -215,37 +215,32 @@ defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes, o
           <ShowcaseBlockView :block="element" :user-id="userId" :is-owner="true" />
         </div>
 
-        <!-- Corner resize handle — hidden for fixed-size variants and on touch devices -->
+        <!-- Top-left controls: configure + remove (corner icons, like the design mock) -->
+        <div class="absolute left-1.5 top-1.5 z-20 flex items-center gap-1.5">
+          <button
+            type="button"
+            :data-test="`showcase-config-${index}`"
+            :title="$t('showcase.variant_label')"
+            class="grid h-7 w-7 place-items-center rounded-lg border border-border bg-card/90 text-sm text-brand-cyan backdrop-blur-sm hover:text-foreground"
+            @click.stop="openConfig(index)"
+          >⚙</button>
+          <button
+            type="button"
+            :data-test="`showcase-remove-${index}`"
+            :title="$t('showcase.remove_block')"
+            class="grid h-7 w-7 place-items-center rounded-lg border border-border bg-card/90 text-sm text-destructive backdrop-blur-sm hover:bg-destructive/10"
+            @click.stop="removeBlock(index)"
+          >✕</button>
+        </div>
+
+        <!-- Corner resize handle — bottom-right; hidden for fixed-size variants and on touch devices -->
         <button
           v-if="!isFixed(element)"
           type="button"
-          class="showcase-resize absolute bottom-10 right-1 grid h-6 w-6 place-items-center rounded-lg border border-border bg-card/90 text-brand-cyan cursor-nwse-resize touch-none z-20"
+          class="showcase-resize absolute bottom-1.5 right-1.5 grid h-7 w-7 place-items-center rounded-lg border border-border bg-card/90 text-brand-cyan backdrop-blur-sm cursor-nwse-resize touch-none z-20"
           :data-test="`showcase-resize-${index}`"
           @pointerdown="startResize($event, index)"
         >◢</button>
-
-        <!-- Control overlay anchored to bottom — config lives in the dialog -->
-        <div class="absolute inset-x-0 bottom-0 flex items-center justify-between bg-card/90 px-2 py-1.5 backdrop-blur-sm">
-          <span class="showcase-drag-handle cursor-grab text-xs font-semibold text-foreground">
-            ⠿ {{ $t(`showcase.block.${element.type}`) }}
-          </span>
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              :data-test="`showcase-config-${index}`"
-              class="text-xs font-medium text-brand-cyan hover:text-foreground"
-              @click.stop="openConfig(index)"
-            >⚙</button>
-            <button
-              type="button"
-              :data-test="`showcase-remove-${index}`"
-              class="text-xs font-medium text-destructive"
-              @click="removeBlock(index)"
-            >
-              {{ $t('showcase.remove_block') }}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
 
