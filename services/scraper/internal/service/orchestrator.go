@@ -538,7 +538,8 @@ func (o *Orchestrator) GetStreamGated(
 func (o *Orchestrator) attemptGatedStream(
 	ctx context.Context, budget time.Duration, p domain.Provider,
 	providerID, episodeID, serverID string, cat domain.Category,
-) (*domain.Stream, bool, error) {
+) (_ *domain.Stream, _ bool, err error) {
+	defer metrics.ObserveParser(p.Name(), "get_stream", time.Now(), &err)
 	pctx := ctx
 	if budget > 0 {
 		var cancel context.CancelFunc
