@@ -1783,7 +1783,9 @@
       "favorite_anime": "お気に入りのアニメ",
       "stats": "統計",
       "favorite_character": "お気に入りのキャラクター",
-      "card_collection": "カードコレクション"
+      "card_collection": "カードコレクション",
+      "continue_watching": "視聴中",
+      "anime_dna": "Anime DNA"
     },
     "about_placeholder": "自己紹介を書いてください…",
     "about_title_placeholder": "タイトル",

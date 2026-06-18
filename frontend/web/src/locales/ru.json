@@ -1783,7 +1783,9 @@
       "favorite_anime": "Любимое аниме",
       "stats": "Статистика",
       "favorite_character": "Любимые персонажи",
-      "card_collection": "Коллекция карточек"
+      "card_collection": "Коллекция карточек",
+      "continue_watching": "Сейчас смотрю",
+      "anime_dna": "Anime DNA"
     },
     "about_placeholder": "Расскажите о себе…",
     "about_title_placeholder": "Заголовок",

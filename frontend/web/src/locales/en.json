@@ -1783,7 +1783,9 @@
       "favorite_anime": "Favorite anime",
       "stats": "Stats",
       "favorite_character": "Favorite characters",
-      "card_collection": "Card collection"
+      "card_collection": "Card collection",
+      "continue_watching": "Continue watching",
+      "anime_dna": "Anime DNA"
     },
     "about_placeholder": "Tell others about yourself…",
     "about_title_placeholder": "Title",
