@@ -353,6 +353,34 @@ func (c *Client) SendMessage(html string) (int, error) {
 	return msg.MessageID, nil
 }
 
+// EditMessageText replaces the text of a previously sent message in the bot's
+// chat. Used to flip a 👁️ watch message to a terminal ✅/❌/💔 state so it no
+// longer reads as in-progress after the work finishes. Editing is best-effort
+// cosmetic cleanup: failures are logged and swallowed (returns false) so they
+// never block the work that just completed.
+func (c *Client) EditMessageText(messageID int, html string) bool {
+	if messageID == 0 {
+		return false
+	}
+	if len(html) > 4090 {
+		html = html[:4087] + "..."
+	}
+	body := map[string]interface{}{
+		"chat_id":    c.chatID,
+		"message_id": messageID,
+		"text":       html,
+		"parse_mode": "HTML",
+	}
+	_, err := c.post("editMessageText", body)
+	if err != nil {
+		c.log.Warnw("edit message failed",
+			"message_id", messageID,
+			"error", err,
+		)
+	}
+	return err == nil
+}
+
 func (c *Client) AnswerCallbackQuery(callbackID string, text string) error {
 	body := map[string]interface{}{
 		"callback_query_id": callbackID,

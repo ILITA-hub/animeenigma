@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/config"
@@ -136,5 +137,42 @@ func TestIsAdminMessage(t *testing.T) {
 	}
 	if s.isAdminMessage(msgFrom("")) {
 		t.Error("empty username (grafana alert) should not match")
+	}
+}
+
+func TestWatchTerminalHTML(t *testing.T) {
+	// The eye marker MUST survive: isInterruptReply matches on eyeBase, so a
+	// late 💔 reply to a finished message resolves to "nothing to interrupt"
+	// instead of being classified as a fresh admin request.
+	for _, st := range []watchTerminalState{watchDone, watchFailed, watchAborted} {
+		got := watchTerminalHTML("Applying fix AUTO-502", st)
+		if !strings.Contains(got, eyeBase) {
+			t.Errorf("state %d: terminal HTML missing eye marker %q: %q", st, eyeBase, got)
+		}
+		// No longer in-progress: the abort instruction line is gone.
+		if strings.Contains(got, "to abort") {
+			t.Errorf("state %d: terminal HTML still invites abort: %q", st, got)
+		}
+		if strings.Contains(got, "Applying fix AUTO-502…") {
+			t.Errorf("state %d: terminal HTML still shows in-progress ellipsis: %q", st, got)
+		}
+	}
+
+	cases := map[watchTerminalState]string{
+		watchDone:    "✅",
+		watchFailed:  "❌",
+		watchAborted: "💔",
+	}
+	for st, emoji := range cases {
+		got := watchTerminalHTML("Analyzing report from @user", st)
+		if !strings.Contains(got, emoji) {
+			t.Errorf("state %d: terminal HTML missing status emoji %q: %q", st, emoji, got)
+		}
+	}
+
+	// The label is HTML-escaped so a label with markup can't break parse_mode.
+	got := watchTerminalHTML("fix <b>x</b> & y", watchDone)
+	if strings.Contains(got, "<b>x</b>") {
+		t.Errorf("label not escaped: %q", got)
 	}
 }

@@ -1584,12 +1584,50 @@ func (s *service) runInterruptible(ctx context.Context, replyTo int, label strin
 
 	result, err := fn(aCtx)
 
+	// Flip the 👁️ watch message to a terminal ✅/❌/💔 state. It previously had
+	// no completion update, so every applied fix left a frozen "Applying fix …"
+	// line that read as still-in-progress forever. Editing is best-effort
+	// cosmetic cleanup — EditMessageText swallows its own errors.
+
 	// Distinguish an admin interrupt (only aCtx cancelled) from a shutdown
 	// (parent ctx cancelled too). Only the former gets the dedicated sentinel.
 	if err != nil && aCtx.Err() != nil && ctx.Err() == nil {
+		s.tg.EditMessageText(watchID, watchTerminalHTML(label, watchAborted))
 		return nil, errInterrupted
 	}
+	if err != nil {
+		s.tg.EditMessageText(watchID, watchTerminalHTML(label, watchFailed))
+		return result, err
+	}
+	s.tg.EditMessageText(watchID, watchTerminalHTML(label, watchDone))
 	return result, err
+}
+
+// watchTerminalState is the resolved outcome a 👁️ watch message is edited to.
+type watchTerminalState int
+
+const (
+	watchDone watchTerminalState = iota
+	watchFailed
+	watchAborted
+)
+
+// watchTerminalHTML renders the terminal replacement for a 👁️ watch message.
+// It retains the leading 👁 marker — so a late 💔 reply still matches
+// isInterruptReply and resolves to "nothing to interrupt" rather than spawning
+// a fresh analysis — but drops the "Reply 💔 to abort" line and the trailing
+// "…" and appends a status line, so the message no longer reads as in-progress.
+func watchTerminalHTML(label string, state watchTerminalState) string {
+	var status string
+	switch state {
+	case watchAborted:
+		status = "💔 прервано."
+	case watchFailed:
+		status = "❌ не удалось."
+	default:
+		status = "✅ готово."
+	}
+	return fmt.Sprintf("👁️ <i>%s</i>\n%s", escTelegram(label), status)
 }
 
 // messageLabel renders a short human description of a message for the 👁️ watch
