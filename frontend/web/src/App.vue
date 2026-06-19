@@ -75,25 +75,29 @@
 
     <!-- Footer -->
     <footer v-if="!appError" class="py-8 px-4 text-center border-t border-white/10">
-      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
         <p class="text-white/60 text-sm">
           &copy; {{ new Date().getFullYear() }} AnimeEnigma. {{ $t('footer.rights') }}
         </p>
+        <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
         <router-link to="/status" class="text-white/60 hover:text-white/80 text-sm transition-colors">
           {{ $t('status.title') }}
         </router-link>
-        <a href="mailto:info@animeenigma.ru" class="text-white/60 hover:text-white/80 text-sm transition-colors">
+        <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
+        <FeedbackButton />
+        <template v-if="MY_FEEDBACK_ENABLED && authStore.isAuthenticated">
+          <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
+          <router-link
+            to="/my-feedback"
+            class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
+          >
+            <Inbox class="size-4" aria-hidden="true" />
+            {{ $t('footer.feedback.viewMine') }}
+          </router-link>
+        </template>
+        <a href="mailto:info@animeenigma.ru" class="text-white/60 hover:text-white/80 text-sm transition-colors sm:ml-auto">
           info@animeenigma.ru
         </a>
-        <FeedbackButton />
-        <router-link
-          v-if="MY_FEEDBACK_ENABLED && authStore.isAuthenticated"
-          to="/my-feedback"
-          class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
-        >
-          <Inbox class="size-4" aria-hidden="true" />
-          {{ $t('footer.feedback.viewMine') }}
-        </router-link>
       </div>
     </footer>
 
