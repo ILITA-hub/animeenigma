@@ -71,6 +71,42 @@ func RetireHanimeAnimelib(db *gorm.DB) error {
 	return nil
 }
 
+// reEnableHanimeGuardKey marks ReEnableHanime as applied.
+const reEnableHanimeGuardKey = "reenable_hanime"
+
+// ReEnableHanime re-enables the hanime roster row exactly once. Forward-only
+// counterpart to RetireHanimeAnimelib: hanime was retired in Plan B (2026-06-18)
+// but restored as an in-aePlayer 18+ source (2026-06-19). RUN-ONCE guarded via
+// the catalog_migration_guards ledger, so on every subsequent boot it is a no-op
+// and an operator who later re-disables hanime is NOT clobbered. Must run AFTER
+// SeedDefaults + RetireHanimeAnimelib so it wins the final status on fresh DBs
+// (seed=enabled -> retire disables -> this re-enables). animelib is intentionally
+// left disabled. Idempotent; safe to call every boot.
+func ReEnableHanime(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", reEnableHanimeGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check reenable-hanime guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator re-disable
+	}
+
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "hanime").
+		Update("status", domain.StatusEnabled).Error; err != nil {
+		return fmt.Errorf("re-enable hanime (status=enabled): %w", err)
+	}
+
+	if err := db.Create(&migrationGuard{Key: reEnableHanimeGuardKey}).Error; err != nil {
+		return fmt.Errorf("write reenable-hanime guard: %w", err)
+	}
+	return nil
+}
+
 // BackfillScraperOperated sets the intrinsic scraper_operated flag on every row.
 // Idempotent and safe to run every boot: like Group, the flag is intrinsic (NOT
 // operator-editable), so re-deriving it from the canonical name set is always

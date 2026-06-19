@@ -104,10 +104,10 @@ var defaultProviders = []domain.ScraperProvider{
 		QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
 	{
-		Name: "hanime", Status: domain.StatusDisabled,
-		Reason:      "18+ HLS player retired (Plan B)",
-		Description: "Hanime HLS. Player surface retired in favor of aePlayer; " +
-			"content dropped (2026-06-18, Plan B).",
+		Name: "hanime", Status: domain.StatusEnabled,
+		Reason:      "18+ source restored into aePlayer (2026-06-19)",
+		Description: "Hanime HLS. Selectable 18+ source inside aePlayer (hentai titles); " +
+			"catalog-operated parser via /hanime/* routes.",
 		SubDelivery: "none", QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
 	{

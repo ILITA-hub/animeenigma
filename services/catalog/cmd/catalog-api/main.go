@@ -168,6 +168,14 @@ func main() {
 		log.Errorw("retire hanime+animelib failed (continuing)", "error", err)
 	}
 
+	// Forward-only: hanime was retired in Plan B (2026-06-18) but restored as an
+	// in-aePlayer 18+ source (2026-06-19). MUST run after RetireHanimeAnimelib so
+	// it wins the final status on fresh DBs. Run-once guarded; an operator who
+	// later re-disables it is never clobbered.
+	if err := scraperprovider.ReEnableHanime(db.DB); err != nil {
+		log.Errorw("re-enable hanime failed (continuing)", "error", err)
+	}
+
 	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
 	// provider_info/provider_enabled management metrics. Runs after the roster is
 	// fully migrated/seeded/backfilled so names + flags are authoritative. The
