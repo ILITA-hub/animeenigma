@@ -80,4 +80,24 @@ describe('computeProviderRows', () => {
     const rows = computeProviderRows([], { audio: 'dub', lang: 'ru', content: 'common' })
     expect(rows.find(r => r.def.id === 'kodik')!.state).toBe('active')
   })
+
+  it('keeps 18+ sources relevant on a hentai title regardless of audio/lang combo', () => {
+    // Default combo is sub/en, but hanime is tagged dub/ru. On a hentai title
+    // it must still show in the menu (combo-agnostic 18+ source), not be
+    // filtered to 'irrelevant'.
+    const rows = computeProviderRows(
+      [health({ name: '18anime' })],
+      { audio: 'sub', lang: 'en', content: 'hentai' },
+    )
+    expect(rows.find(r => r.def.id === 'hanime')!.state).toBe('active')
+    expect(rows.find(r => r.def.id === '18anime')!.state).toBe('active')
+  })
+
+  it('still hides common (non-18+) sources on a hentai title', () => {
+    const rows = computeProviderRows(
+      [health({ name: 'allanime' })],
+      { audio: 'sub', lang: 'en', content: 'hentai' },
+    )
+    expect(rows.find(r => r.def.id === 'allanime')!.state).toBe('irrelevant')
+  })
 })

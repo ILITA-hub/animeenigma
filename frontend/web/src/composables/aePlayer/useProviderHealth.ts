@@ -27,11 +27,18 @@ export function computeProviderRows(
     if (def.staticDisabled) {
       return { def, state: 'disabled', reason: def.staticDisabled.description }
     }
-    // Relevance check: audio, language, and content kind must all match.
+    // Relevance check: content kind must match; audio + language must match too
+    // EXCEPT for 18+ sources on a hentai title — they play a single combo-
+    // agnostic source, so they stay visible in the menu (with their badge)
+    // regardless of the audio/lang toggle.
+    const isHentaiTitle = filter.content === 'hentai'
+    const isAdultSource = def.content.includes('hentai')
     const relevant =
-      def.audios.includes(filter.audio) &&
-      def.langs.includes(filter.lang) &&
-      def.content.includes(filter.content)
+      isHentaiTitle && isAdultSource
+        ? true
+        : def.audios.includes(filter.audio) &&
+          def.langs.includes(filter.lang) &&
+          def.content.includes(filter.content)
     if (!relevant) {
       return { def, state: 'irrelevant', reason: relevanceReason(def, filter) }
     }
