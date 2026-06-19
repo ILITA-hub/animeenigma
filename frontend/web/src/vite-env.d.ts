@@ -12,6 +12,7 @@ interface ImportMetaEnv {
   readonly VITE_SOCKET_URL: string
   readonly VITE_APP_NAME: string
   readonly VITE_APP_VERSION: string
+  readonly VITE_HLS_PROXY_BASE?: string
 }
 
 interface ImportMeta {
