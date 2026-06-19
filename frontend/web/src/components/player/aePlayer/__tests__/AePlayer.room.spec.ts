@@ -72,6 +72,14 @@ vi.mock('@/composables/useToast', () => ({
   useToast: () => ({ push: vi.fn() }),
 }))
 
+// useWatchTogetherLaunch (in-player WT button) calls useI18n() at setup; the
+// player otherwise uses only template $t. Stub the module so the mount doesn't
+// require an installed i18n plugin. (auth + api/client are already mocked, so
+// this never reaches src/i18n.ts / createI18n.)
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k, locale: { value: 'en' } }),
+}))
+
 // Stores — return minimal shapes the component reads.
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ isAuthenticated: false, user: null }),

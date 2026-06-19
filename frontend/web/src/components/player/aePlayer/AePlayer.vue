@@ -113,7 +113,12 @@
 
       <!-- Top-right actions -->
       <div class="pl-top-right">
-        <WatchTogetherButton />
+        <WatchTogetherButton
+          v-if="showWtLaunch"
+          :disabled="!currentWtSeed"
+          :loading="wtLaunching"
+          @launch="onLaunchWt"
+        />
       </div>
     </div>
 
@@ -350,6 +355,7 @@ import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
 import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
+import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
 import { useToast } from '@/composables/useToast'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
@@ -898,20 +904,46 @@ const tracking = useWatchTracking(
   () => comboToWatchCombo(state.combo.value),
 )
 
-// ─── Watch-Together create seed (anime-page Invite button) ───────────────────
-// Outside a room, surface the live combo + current episode to the parent
-// (Anime.vue) so the Invite button can CREATE the room AS aeplayer seeded with
-// exactly this source. Suppressed in a room — there the room is authoritative
-// and the broadcast watcher above already syncs the combo. immediate so the
-// parent has the latest seed (or null) before the user can click Invite.
-watch(
-  () => [state.combo.value, selectedEpisode.value?.number] as const,
-  () => {
-    if (props.room) return
-    emit('combo-change', wtCreateSeed(state.combo.value, selectedEpisode.value?.number ?? 0))
-  },
-  { deep: true, immediate: true },
+// ─── Watch-Together create seed ──────────────────────────────────────────────
+// The live combo + current episode as a create-room seed (null until a usable
+// source resolves). Drives BOTH the in-player launch button (below) and the
+// anime-page Invite button (via the combo-change emit).
+const currentWtSeed = computed<WtCreateSeed | null>(() =>
+  wtCreateSeed(state.combo.value, selectedEpisode.value?.number ?? 0),
 )
+
+// Outside a room, surface the seed to the parent (Anime.vue) so the Invite
+// button can CREATE the room AS aeplayer seeded with exactly this source.
+// Suppressed in a room — there the room is authoritative and the broadcast
+// watcher above already syncs the combo. immediate so the parent has the
+// latest seed (or null) before the user can click Invite.
+watch(
+  currentWtSeed,
+  (seed) => {
+    if (props.room) return
+    emit('combo-change', seed)
+  },
+  { immediate: true },
+)
+
+// ─── In-player Watch-Together launch button ──────────────────────────────────
+// Shown only standalone (not inside a room) and only to authenticated users —
+// creating a room requires a JWT, and inside a room the RoomSidebar owns
+// invites. Disabled until a usable source resolves; clicking creates the room
+// from the live combo and routes to it (same flow as the anime-page Invite).
+const { launching: wtLaunching, launch: launchWt } = useWatchTogetherLaunch()
+const showWtLaunch = computed(() => !props.room && auth.isAuthenticated)
+
+async function onLaunchWt(): Promise<void> {
+  const seed = currentWtSeed.value
+  if (!seed) return
+  await launchWt({
+    animeId: props.animeId,
+    episodeId: seed.episode_id,
+    player: seed.player,
+    translationId: seed.translation_id,
+  })
+}
 
 /** Whether the user already has this episode marked watched (drawer data). */
 function isEpisodeWatched(n: number): boolean {

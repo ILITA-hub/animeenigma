@@ -39,14 +39,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { UserPlus } from 'lucide-vue-next'
 import { Spinner } from '@/components/ui'
 
-import { createRoom } from '@/api/watch-together'
 import type { PlayerKind } from '@/api/watch-together'
 import { kodikApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
+import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
 
 const props = defineProps<{
   /** Shikimori UUID for the anime currently displayed in WatchView. */
@@ -63,8 +62,8 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const router = useRouter()
 const toast = useToast()
+const { launch } = useWatchTogetherLaunch()
 
 const loading = ref(false)
 
@@ -99,18 +98,6 @@ async function fetchFirstTranslationId(): Promise<string> {
   }
 }
 
-async function tryClipboardWrite(url: string): Promise<boolean> {
-  if (typeof navigator === 'undefined' || !navigator.clipboard) {
-    return false
-  }
-  try {
-    await navigator.clipboard.writeText(url)
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function onClick(): Promise<void> {
   if (loading.value) return
   loading.value = true
@@ -124,32 +111,14 @@ async function onClick(): Promise<void> {
       return
     }
 
-    const response = await createRoom({
-      anime_id: props.animeId,
-      episode_id: props.episodeId,
+    // Shared create-room → navigate → copy-invite flow (also used by the
+    // in-player WatchTogether button). Handles its own success/error toasts.
+    await launch({
+      animeId: props.animeId,
+      episodeId: props.episodeId,
       player: props.player,
-      translation_id: translationId,
+      translationId,
     })
-
-    // Navigate FIRST so the address bar shows the room URL before the
-    // toast appears. If the user closes the toast or the clipboard
-    // fallback opens, they still ended up on the right route.
-    router.push(`/watch/room/${response.room_id}`)
-
-    const copied = await tryClipboardWrite(response.invite_url)
-    if (copied) {
-      toast.push(t('watch_together.invite_copied_toast'), 'success', 4000)
-    } else {
-      // Manual-copy fallback. The URL is embedded in the toast body so
-      // the user can select-and-copy without a separate modal.
-      toast.push(
-        `${t('watch_together.invite_copy_manual')} ${response.invite_url}`,
-        'info',
-        8000,
-      )
-    }
-  } catch {
-    toast.push(t('watch_together.invite_failed_toast'), 'error', 4000)
   } finally {
     loading.value = false
   }

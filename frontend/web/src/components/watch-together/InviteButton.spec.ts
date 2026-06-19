@@ -40,14 +40,20 @@ const { pushMock, toastPushMock, createRoomMock } = vi.hoisted(() => ({
   createRoomMock: vi.fn(),
 }))
 
-vi.mock('vue-i18n', () => ({
+// importOriginal preserves createI18n / createRouter (used by src/i18n.ts and
+// src/router, reached via the @/api/client → auth import graph) so the SFC's
+// module eval doesn't throw when this spec runs in isolation. Only the
+// composable entrypoints are overridden.
+vi.mock('vue-i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-i18n')>()),
   useI18n: () => ({
     t: (key: string) => key,
     locale: { value: 'en' },
   }),
 }))
 
-vi.mock('vue-router', () => ({
+vi.mock('vue-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-router')>()),
   useRouter: () => ({ push: pushMock }),
 }))
 

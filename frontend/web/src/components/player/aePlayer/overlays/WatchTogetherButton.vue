@@ -1,26 +1,38 @@
 <template>
-  <div class="pl-wt-btn" data-test="wt-wip">
+  <div class="pl-wt-btn" data-test="wt-launch">
     <button
-      disabled
-      title="Watch Together — coming soon"
+      type="button"
+      :disabled="disabled || loading"
+      :title="t('watch_together.invite_button_label')"
+      :aria-label="t('watch_together.invite_button_label')"
       class="pl-icon"
-      aria-label="Watch Together — coming soon"
-      aria-disabled="true"
-      style="opacity: 0.5; cursor: not-allowed;"
+      @click="emit('launch')"
     >
+      <Spinner v-if="loading" size="sm" tone="mono" aria-hidden="true" />
       <!-- Users icon -->
-      <Users class="size-5" aria-hidden="true" />
+      <Users v-else class="size-5" aria-hidden="true" />
     </button>
-    <!-- WIP badge -->
-    <span class="pl-wt-wip-badge" aria-hidden="true">WIP</span>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { Users } from 'lucide-vue-next'
-// WIP STUB — WatchTogetherButton is always disabled.
-// Emits nothing. Opens nothing.
-// data-test="wt-wip" is on the wrapper div for easy test selection.
+import { Spinner } from '@/components/ui'
+
+// In-player "Watch Together" launcher. Presentational only: emits `launch` and
+// lets AePlayer create the room from the live source. AePlayer hides this button
+// entirely when already inside a room or for anonymous users, and disables it
+// until a usable source has resolved (`disabled`) / while the create-room
+// request is in flight (`loading`).
+defineProps<{
+  disabled?: boolean
+  loading?: boolean
+}>()
+
+const emit = defineEmits<{ (e: 'launch'): void }>()
+
+const { t } = useI18n()
 </script>
 
 <style scoped>
@@ -38,25 +50,16 @@ import { Users } from 'lucide-vue-next'
   background: transparent;
   border: 0;
   color: #fff;
+  cursor: pointer;
   transition: background 0.15s;
 }
 
-.pl-wt-wip-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  min-width: 22px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 999px;
-  background: var(--brand-pink, #ff4d8d);
-  color: #fff;
-  font-size: 8px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
-  pointer-events: none;
+.pl-icon:hover:not(:disabled) {
+  background: var(--white-a8);
+}
+
+.pl-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>
