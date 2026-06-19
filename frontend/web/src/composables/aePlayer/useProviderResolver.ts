@@ -32,6 +32,7 @@
 import { scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, Combo } from '@/types/aePlayer'
+import { hlsProxyUrl } from '@/utils/streaming'
 
 // ─── Error ──────────────────────────────────────────────────────────────────
 
@@ -429,7 +430,7 @@ function buildProxyUrl(
     params.set('exp', sign.exp)
     params.set('sig', sign.sig)
   }
-  return `/api/streaming/hls-proxy?${params.toString()}`
+  return hlsProxyUrl(params.toString())
 }
 
 function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {

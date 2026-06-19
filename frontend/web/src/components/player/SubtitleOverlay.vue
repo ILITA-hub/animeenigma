@@ -25,6 +25,7 @@
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import type { SubtitleCue } from '@/utils/subtitle-parser'
 import { parseASS, parseSRT, parseVTT } from '@/utils/subtitle-parser'
+import { hlsProxyUrl } from '@/utils/streaming'
 
 const props = withDefaults(defineProps<{
   videoElement: HTMLVideoElement | null
@@ -268,7 +269,7 @@ async function loadSubtitles(url: string, format: string) {
     // fetched directly; external provider URLs go through the CORS proxy.
     const fetchUrl = url.startsWith('/')
       ? url
-      : `/api/streaming/hls-proxy?url=${encodeURIComponent(url)}`
+      : hlsProxyUrl(`url=${encodeURIComponent(url)}`)
     const resp = await fetch(fetchUrl, { signal: subtitleAbortController.signal })
     if (!resp.ok) throw new Error(`Failed to fetch subtitle file: ${resp.status}`)
 
