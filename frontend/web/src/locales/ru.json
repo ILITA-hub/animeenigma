@@ -1394,8 +1394,6 @@
     "sync_toast_paused": "{username} поставил(а) на паузу",
     "sync_toast_seeked": "{username} перемотал(а) на {time}",
     "connection_status_closed": "Соединение потеряно — повтор попытки…",
-    "player_tab_aeplayer": "AnimeEnigma",
-    "player_tab_kodik": "Кодик",
     "state_change_episode_unavailable": "Эпизод недоступен для этого аниме / плеера / озвучки",
     "state_change_player_unavailable": "Этот плеер не имеет эпизодов для этого аниме",
     "state_change_translation_unavailable": "Озвучка недоступна для этого эпизода",

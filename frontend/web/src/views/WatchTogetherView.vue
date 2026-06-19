@@ -67,7 +67,6 @@ import {
   ERR_EPISODE_UNAVAILABLE,
   ERR_PLAYER_UNAVAILABLE,
   ERR_TRANSLATION_UNAVAILABLE,
-  type PlayerKind,
 } from '@/api/watch-together'
 import { useWatchTogetherRoom } from '@/composables/useWatchTogetherRoom'
 import { useAnime } from '@/composables/useAnime'
@@ -77,27 +76,14 @@ import RoomSidebar from '@/components/watch-together/RoomSidebar.vue'
 import ReactionBurstOverlay from '@/components/watch-together/ReactionBurstOverlay.vue'
 import SyncToastStack from '@/components/watch-together/SyncToastStack.vue'
 import ConnectionStatusOverlay from '@/components/watch-together/ConnectionStatusOverlay.vue'
-import PlayerTabBar from '@/components/watch-together/PlayerTabBar.vue'
-import { tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
 import Button from '@/components/ui/Button.vue'
 
-// Lazy-load each player so the WatchTogetherView chunk stays under the
-// 30KB gz budget (WT-NF-04). Mirrors Anime.vue's defineAsyncComponent
-// pattern; Vite emits one chunk per dynamic import → players load only
-// when their branch is rendered.
-const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
-// First-party AnimeEnigma player (aePlayer). Unlike the legacy players it
-// needs richer anime metadata (title / aired / total / poster), so the view
-// fetches the anime detail once the room snapshot gives us the anime_id.
+// WatchTogether is aePlayer-only (Kodik retired from WT 2026-06-19 — aePlayer
+// plays Kodik content internally via its own SourcePanel, so there is no longer
+// an in-room player switch). Lazy-loaded so the WatchTogetherView chunk stays
+// under the 30KB gz budget (WT-NF-04); aePlayer needs richer anime metadata
+// (title / aired / total / poster), fetched once the snapshot gives the anime_id.
 const AePlayer = defineAsyncComponent(() => import('@/components/player/aePlayer/AePlayer.vue'))
-
-// Legacy players (kodik-adfree / animelib / ourenglish / hanime / raw) retired
-// 2026-06-17 — only the first-party aePlayer + Classic Kodik iframe survive.
-// Hide every retired kind from the in-room PlayerTabBar so the switch offers
-// only the survivors; their component branches are removed from the dispatch
-// chain below (the forward-compat v-else still catches a pre-deploy room
-// snapshot that names a retired player).
-const hiddenPlayerKinds: readonly PlayerKind[] = ['kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw']
 
 const route = useRoute()
 const router = useRouter()
@@ -265,9 +251,9 @@ async function bootstrap() {
     const snap = await getRoom(roomId, auth.isAuthenticated ? undefined : auth.wtGuestToken)
     lastAnimeId.value = snap.room.anime_id
     // Fetch the anime detail aePlayer needs (best-effort; does not block the
-    // room connect or gate the live view). Only aePlayer rooms consume it, so
-    // skip the GET for legacy-player rooms.
-    if (snap.room.player === 'aeplayer') void loadAeAnimeMeta(snap.room.anime_id)
+    // room connect or gate the live view). Every room renders aePlayer now
+    // (WT is aePlayer-only), so always load it.
+    void loadAeAnimeMeta(snap.room.anime_id)
     // Plan 05.5: persist for WS-only room:closed events that may arrive
     // after the composable resets its `room` ref. Privacy modes throw on
     // sessionStorage; silent failure is OK — the in-memory ref still
@@ -321,38 +307,13 @@ onBeforeUnmount(() => {
 // `window.__wtTestRoom.emitChange{Episode,Player,Translation}`.
 // Exposes the SAME roomHandle the in-page UI already uses, scoped to
 // the user's current room (no privilege gain — anything callable via
-// the hook is also callable via the visible PlayerTabBar / Chat /
-// Reaction palette buttons). Kept unconditional so the Docker
+// the hook is also callable via the visible Chat / Reaction palette
+// buttons). Kept unconditional so the Docker
 // production-mode build that we use for headless e2e gets it. The
 // risk surface is negligible: the room handle has no admin powers,
 // only the WS emits this user could trigger anyway.
 if (typeof window !== 'undefined') {
   (window as unknown as { __wtTestRoom?: unknown }).__wtTestRoom = roomHandle
-}
-
-// Plan 04.4 — PlayerTabBar @select-player handler. Routes ALL user-driven
-// player changes through the room handle so the backend validates +
-// broadcasts; the composable's auto-mutation of room.value.player then
-// flips the :key on the active player branch and Vue re-mounts cleanly.
-// Defense in depth: PlayerTabBar already guards against same-kind clicks,
-// but the view re-checks here so direct programmatic emit calls (tests,
-// future shortcuts) can't accidentally fire spurious change_player.
-function onSelectPlayer(player: PlayerKind) {
-  if (player === livePlayer.value) return
-  roomHandle.emitChangePlayer(player)
-  // Switching TO aeplayer: if the room's current token already parses as an
-  // aePlayer combo (i.e. we're switching aeplayer→aeplayer or the room was
-  // created as aeplayer), re-emit it so every joiner adopts a combo
-  // immediately rather than waiting for the freshly-mounted AePlayer's first
-  // broadcast. When the current token is a legacy translation id (kodik→
-  // aeplayer), there is no combo to forward — the mounted AePlayer runs its
-  // smart-default and broadcasts its own combo (existing AePlayer room watcher).
-  if (player === 'aeplayer') {
-    const combo = tokenToCombo(roomHandle.room.value?.translation_id ?? '')
-    if (combo) {
-      roomHandle.emitChangeTranslation(comboToToken(combo))
-    }
-  }
 }
 
 // Navigation back to the anime page from empty/capacity states. Falls
@@ -400,7 +361,12 @@ const liveMembers = computed(() => roomHandle.members.value)
 const liveMessages = computed(() => roomHandle.messages.value)
 const liveReactions = computed(() => roomHandle.reactions.value)
 const liveConnectionStatus = computed(() => roomHandle.connectionStatus.value)
-const livePlayer = computed(() => roomHandle.room.value?.player ?? null)
+// WatchTogether is aePlayer-only: any loaded room renders aePlayer regardless
+// of the stored player kind. An in-flight LEGACY room (e.g. a pre-2026-06-19
+// 'kodik' room still inside its ≤15min TTL) therefore upgrades gracefully —
+// aePlayer ignores the legacy translation_id, resolves a BEST source in-room
+// and broadcasts it. null only until the snapshot/WS delivers the room.
+const livePlayer = computed<'aeplayer' | null>(() => (roomHandle.room.value ? 'aeplayer' : null))
 
 // Episode id passed to each player. Phase 2 keeps the string-as-is
 // (per CONTEXT.md §"Player mounting in WatchTogetherView" — players
@@ -425,11 +391,10 @@ const aeAnimeMeta = computed(() => ({
   still: aeAnimeStill.value,
 }))
 
-// Mid-session switch: a room created on a legacy player and switched to
-// aeplayer never ran the bootstrap meta fetch (which only fires for rooms that
-// START as aeplayer). Load it on the flip so AePlayer mounts with a real title
-// / next-ep gating / AniSkip instead of placeholders. Guarded on an unloaded
-// title so it fetches at most once.
+// Safety net: if the room arrives via WS before the REST snapshot ran its
+// loadAeAnimeMeta (or that fetch was skipped), load the meta when livePlayer
+// first resolves so AePlayer mounts with a real title / next-ep gating /
+// AniSkip instead of placeholders. Guarded on an unloaded title (at most once).
 watch(livePlayer, (p) => {
   if (p === 'aeplayer' && !aeAnimeTitle.value && animeId.value) {
     void loadAeAnimeMeta(animeId.value)
@@ -520,19 +485,7 @@ watch(livePlayer, (p) => {
   >
     <!-- Player column — relative so the burst overlay can `absolute inset-0` -->
     <div class="relative flex-1 min-w-0 bg-black">
-      <!-- Plan 04.4 — PlayerTabBar overlays the top-left of the player.
-           Routes user-driven player switches through roomHandle.emitChangePlayer;
-           the broadcast's room:state_changed event flips livePlayer which
-           tears down the old player (via :key) and mounts the new one. -->
-      <PlayerTabBar
-        class="absolute top-2 left-2 z-20"
-        :active-player="livePlayer"
-        :hidden-kinds="hiddenPlayerKinds"
-        @select-player="onSelectPlayer"
-      />
-
       <!-- Guest nudge — only when the viewer joined without logging in.
-           Centered so it never collides with the left-aligned PlayerTabBar.
            "Log in" preserves the room URL so the user rejoins as themselves. -->
       <div
         v-if="isGuest"
@@ -550,20 +503,13 @@ watch(livePlayer, (p) => {
         </Button>
       </div>
 
-      <KodikPlayer
-        v-if="livePlayer === 'kodik'"
-        :key="`player-${livePlayer}`"
-        :anime-id="animeId"
-        :initial-episode="initialEpisode"
-        :room="roomHandle"
-      />
-      <!-- First-party AnimeEnigma player. Unlike the legacy players it needs
-           the full anime meta object + malId/isHentai (sourced via
+      <!-- First-party AnimeEnigma player — the ONLY WatchTogether player.
+           Needs the full anime meta object + malId/isHentai (sourced via
            loadAeAnimeMeta). theater is fixed false in-room (the WT layout owns
            the chrome); @toggle-theater is a no-op since there's no theater
            toggle in this view. -->
       <AePlayer
-        v-else-if="livePlayer === 'aeplayer'"
+        v-if="livePlayer === 'aeplayer'"
         :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :anime="aeAnimeMeta"

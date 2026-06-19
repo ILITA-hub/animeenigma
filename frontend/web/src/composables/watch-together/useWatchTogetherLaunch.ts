@@ -33,7 +33,9 @@ export interface WatchTogetherLaunchPayload {
   episodeId: string
   /** Active player kind (drives WatchTogetherView's player mount). */
   player: PlayerKind
-  /** Resolved translation/dub/combo identifier. Must be non-empty. */
+  /** Resolved translation/dub/combo identifier. Must be non-empty for every
+   *  player EXCEPT aeplayer, which accepts an empty token (resolves a smart
+   *  default in-room). */
   translationId: string
 }
 
@@ -59,7 +61,10 @@ export function useWatchTogetherLaunch() {
 
   async function launch(payload: WatchTogetherLaunchPayload): Promise<void> {
     if (launching.value) return
-    if (!payload.translationId) {
+    // aePlayer rooms may be created token-less (the player resolves a BEST
+    // source and broadcasts it). Every other player needs a concrete
+    // translation_id, so refuse an empty one for them.
+    if (!payload.translationId && payload.player !== 'aeplayer') {
       toast.push(t('watch_together.invite_failed_toast'), 'error', 4000)
       return
     }

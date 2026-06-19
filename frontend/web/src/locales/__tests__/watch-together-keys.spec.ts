@@ -99,10 +99,8 @@ describe('watch_together i18n parity', () => {
     'sync_toast_paused',
     'sync_toast_seeked',
     'connection_status_closed',
-    // PlayerTabBar tab labels (survivors only; the 6 retired players were
-    // removed in Plan B — aePlayer is the default surface + Classic Kodik).
-    'player_tab_aeplayer',
-    'player_tab_kodik',
+    // (PlayerTabBar removed 2026-06-19 — WatchTogether is aePlayer-only, so the
+    // player_tab_* labels were deleted alongside the in-room player switcher.)
     // Phase 04 (state-switching) Plan 04.4 — sender-only state-error toasts.
     'state_change_episode_unavailable',
     'state_change_player_unavailable',

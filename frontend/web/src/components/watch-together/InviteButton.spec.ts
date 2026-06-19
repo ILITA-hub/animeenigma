@@ -79,7 +79,7 @@ import InviteButton from './InviteButton.vue'
 const baseProps = {
   animeId: 'anime-uuid',
   episodeId: 'episode-uuid',
-  player: 'kodik' as const,
+  player: 'aeplayer' as const,
   translationId: 'translation-uuid',
 }
 
@@ -116,7 +116,7 @@ describe('InviteButton', () => {
     expect(createRoomMock).toHaveBeenCalledWith({
       anime_id: 'anime-uuid',
       episode_id: 'episode-uuid',
-      player: 'kodik',
+      player: 'aeplayer',
       translation_id: 'translation-uuid',
     })
   })

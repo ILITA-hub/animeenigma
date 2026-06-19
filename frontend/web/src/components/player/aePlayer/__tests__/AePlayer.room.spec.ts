@@ -271,6 +271,33 @@ describe('AePlayer — WT room sync (Sub-Part B: pin to room combo)', () => {
     expect(combo.audio).toBe('dub')
     expect(combo.server).toBe('kiwi')
   })
+
+  it('does NOT pin from an EMPTY room token (token-less room → resolves in-room)', async () => {
+    // A token-less aeplayer room has no combo to adopt, so applyRoomCombo
+    // no-ops and the pin-suppression is bypassed (roomHasCombo=false). The
+    // provider therefore stays unset on mount (in the test env the smart
+    // default has no rows to resolve) rather than being force-pinned.
+    const room = makeRoom({ player: 'aeplayer', translation_id: '' })
+    const wrapper = mountPlayer(room)
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(readCombo(wrapper).provider).toBe('')
+  })
+
+  it('does NOT pin from a LEGACY kodik token (graceful upgrade → resolves in-room)', async () => {
+    // An in-flight pre-2026-06-19 kodik room carries a numeric kodik id, not an
+    // aePlayer combo token. tokenToCombo can't parse it, so the player ignores
+    // it and resolves a BEST source in-room instead of pinning garbage.
+    const room = makeRoom({ player: 'kodik', translation_id: '1234' })
+    const wrapper = mountPlayer(room)
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(readCombo(wrapper).provider).toBe('')
+  })
 })
 
 // Invoke the exposed __setProvider seam to simulate a genuine local user pick.

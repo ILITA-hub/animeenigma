@@ -115,6 +115,21 @@ func TestCreate_RejectsEmptyTranslationID(t *testing.T) {
 	}
 }
 
+func TestCreate_AllowsEmptyTranslationIDForAePlayer(t *testing.T) {
+	svc, _ := newService(t, "room-ae-empty", time.Now())
+	in := validInput()
+	in.Player = domain.PlayerAePlayer
+	in.TranslationID = ""
+
+	room, err := svc.Create(context.Background(), "host", "name", in)
+	if err != nil {
+		t.Fatalf("Create aeplayer with empty translation_id returned error: %v", err)
+	}
+	if room.TranslationID != "" {
+		t.Errorf("Room.TranslationID = %q, want empty", room.TranslationID)
+	}
+}
+
 func TestCreate_RejectsUnknownPlayer(t *testing.T) {
 	svc, _ := newService(t, "x", time.Now())
 	in := validInput()

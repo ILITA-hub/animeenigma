@@ -43,81 +43,40 @@ import { UserPlus } from 'lucide-vue-next'
 import { Spinner } from '@/components/ui'
 
 import type { PlayerKind } from '@/api/watch-together'
-import { kodikApi } from '@/api/client'
-import { useToast } from '@/composables/useToast'
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
 
 const props = defineProps<{
   /** Shikimori UUID for the anime currently displayed in WatchView. */
   animeId: string
-  /** Provider-specific episode identifier (string — varies by player). */
+  /** Episode NUMBER (as a string) the aeplayer room should open on. */
   episodeId: string
-  /** Active player kind (drives WatchTogetherView's player mount). */
+  /** Always 'aeplayer' — WatchTogether is aePlayer-only (Kodik retired from
+   *  WT 2026-06-19; aePlayer plays Kodik content internally). Kept as a prop
+   *  so the parent owns the value. */
   player: PlayerKind
-  /** Active translation/dub identifier — may be empty for the discovery
-   *  mount on the anime detail page. When empty, the button fetches the
-   *  first available translation from the catalog before creating the
-   *  room (sub-second; no player-mount chain). */
+  /** aePlayer combo token from the live player. May be empty: a token-less
+   *  aeplayer room resolves a BEST source in-room and broadcasts it, so the
+   *  discovery button works before the player has resolved a combo. */
   translationId: string
 }>()
 
 const { t } = useI18n()
-const toast = useToast()
 const { launch } = useWatchTogetherLaunch()
 
 const loading = ref(false)
-
-interface Translation {
-  id: number
-  pinned?: boolean
-  type?: string
-}
-
-/**
- * Fetch the first usable kodik translation id for this anime from the
- * catalog. Prefers pinned translations (admin-curated default) and falls
- * back to the first row. Returns "" if nothing is available — caller
- * surfaces an error toast.
- *
- * The discovery button always defaults to the kodik player because (a)
- * every Russian-speaking user has kodik, (b) every anime that surfaces
- * the button has `has_kodik=true`, and (c) the user can switch player
- * inside the room via PlayerTabBar without any of this fetch cost. This
- * keeps the click <500ms in the common case.
- */
-async function fetchFirstTranslationId(): Promise<string> {
-  try {
-    const resp = await kodikApi.getTranslations(props.animeId)
-    const rows = (resp.data?.data ?? resp.data ?? []) as Translation[]
-    if (!Array.isArray(rows) || rows.length === 0) return ''
-    const pinned = rows.find(r => r.pinned)
-    const winner = pinned ?? rows[0]
-    return winner ? String(winner.id) : ''
-  } catch {
-    return ''
-  }
-}
 
 async function onClick(): Promise<void> {
   if (loading.value) return
   loading.value = true
   try {
-    let translationId = props.translationId
-    if (!translationId) {
-      translationId = await fetchFirstTranslationId()
-    }
-    if (!translationId) {
-      toast.push(t('watch_together.invite_failed_toast'), 'error', 4000)
-      return
-    }
-
     // Shared create-room → navigate → copy-invite flow (also used by the
     // in-player WatchTogether button). Handles its own success/error toasts.
+    // translationId may be empty — aeplayer rooms resolve a default in-room.
     await launch({
       animeId: props.animeId,
       episodeId: props.episodeId,
       player: props.player,
-      translationId,
+      translationId: props.translationId,
     })
   } finally {
     loading.value = false

@@ -1496,8 +1496,6 @@
     "sync_toast_paused": "{username} が一時停止しました",
     "sync_toast_seeked": "{username} が {time} にシークしました",
     "connection_status_closed": "接続が切断されました — 再試行中…",
-    "player_tab_aeplayer": "AnimeEnigma",
-    "player_tab_kodik": "Kodik",
     "state_change_episode_unavailable": "このアニメ／プレーヤー／翻訳の組み合わせではエピソードを利用できません",
     "state_change_player_unavailable": "このプレーヤーにはこのアニメのエピソードがありません",
     "state_change_translation_unavailable": "このエピソードでは翻訳を利用できません",

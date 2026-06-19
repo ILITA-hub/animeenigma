@@ -81,7 +81,12 @@ func (in CreateRoomInput) validate() error {
 	if _, ok := allowedPlayers[in.Player]; !ok {
 		return fmt.Errorf("%w: unknown player %q (allowed: kodik|animelib|ourenglish|hanime|raw|aeplayer)", ErrInvalidInput, in.Player)
 	}
-	if in.TranslationID == "" {
+	// translation_id is required for the legacy single-source players (it
+	// names the exact upstream stream). The first-party aePlayer carries its
+	// source selection as an opaque combo token and resolves a smart default
+	// when the token is empty, so aeplayer rooms may be created token-less —
+	// the host's player picks the BEST source and broadcasts it to joiners.
+	if in.TranslationID == "" && in.Player != domain.PlayerAePlayer {
 		return fmt.Errorf("%w: translation_id is required", ErrInvalidInput)
 	}
 	return nil

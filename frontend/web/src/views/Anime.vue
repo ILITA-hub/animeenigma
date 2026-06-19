@@ -1326,14 +1326,13 @@ const resolvedCombo = computed(() => preferenceState.value?.resolvedCombo ?? nul
 // Null until AePlayer has a resolved source (or when aePlayer isn't selected).
 const aeWtSeed = ref<WtCreateSeed | null>(null)
 
-// The Invite button's create-room payload. Prefers the aePlayer seed when the
-// aePlayer surface is active AND a usable source is resolved; otherwise falls
-// back to the legacy coarse-combo default (kodik / resolved player).
+// The Invite button's create-room payload. WatchTogether is aePlayer-only
+// (Kodik retired from WT 2026-06-19 — aePlayer plays Kodik content internally).
+// When the player has resolved a combo, seed the room with it; otherwise create
+// a token-less aeplayer room (the room's player resolves a BEST source in-room
+// and broadcasts it to joiners), so the invite works before the player resolves.
 const wtInvitePayload = computed<{ player: PlayerKind; translationId: string; episodeId: string }>(() => {
-  // AePlayer is the default surface — when it's active and has resolved a
-  // source, seed the room with its exact combo. The Classic Kodik fallback
-  // creates a legacy kodik room from the resolved coarse combo.
-  if (!classicKodik.value && aeWtSeed.value) {
+  if (aeWtSeed.value) {
     return {
       player: aeWtSeed.value.player,
       translationId: aeWtSeed.value.translation_id,
@@ -1341,8 +1340,8 @@ const wtInvitePayload = computed<{ player: PlayerKind; translationId: string; ep
     }
   }
   return {
-    player: 'kodik' as PlayerKind,
-    translationId: resolvedCombo.value?.translation_id ?? '',
+    player: 'aeplayer' as PlayerKind,
+    translationId: '',
     episodeId: String(resumeStartEpisode.value ?? lastEpisode.value ?? 1),
   }
 })
@@ -1352,7 +1351,7 @@ const wtInvitePayload = computed<{ player: PlayerKind; translationId: string; ep
 // switch on this page (AePlayer owns source selection inside its own
 // SourcePanel; the only page-level toggle is the binary Classic Kodik
 // fallback). The resolved coarse combo is still resolved below purely to feed
-// KodikPlayer's :preferred-combo and the WT invite payload.
+// KodikPlayer's :preferred-combo (the WT invite payload now uses the aePlayer seed).
 
 const initPreferences = (animeId: string, tier1Combo?: ViewerContextData['combo']) => {
   const pref = useWatchPreferences(animeId, { tier1Combo })

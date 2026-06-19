@@ -1394,8 +1394,6 @@
     "sync_toast_paused": "{username} paused",
     "sync_toast_seeked": "{username} seeked to {time}",
     "connection_status_closed": "Connection lost — retrying…",
-    "player_tab_aeplayer": "AnimeEnigma",
-    "player_tab_kodik": "Kodik",
     "state_change_episode_unavailable": "Episode unavailable for this anime / player / translation combo",
     "state_change_player_unavailable": "This player has no episodes for this anime",
     "state_change_translation_unavailable": "Translation unavailable for this episode",

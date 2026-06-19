@@ -429,6 +429,16 @@ if (props.room) {
 // saved-combo restore) is suppressed.
 const roomPinned = computed(() => !!props.room)
 
+// Whether the room currently pins a usable aePlayer combo. True only when the
+// room's translation_id parses to a real combo token. When false (a token-less
+// room, or an in-flight LEGACY room whose translation_id is a kodik id, not an
+// aePlayer combo) there is nothing to adopt, so we let the normal smart-default
+// resolution run — the player picks the BEST source and the broadcast watcher
+// publishes it to the room. Once a combo lands this flips true and pins.
+const roomHasCombo = computed(
+  () => roomPinned.value && !!tokenToCombo(props.room?.room.value?.translation_id ?? ''),
+)
+
 // Guard so the combo-broadcast watcher does not echo a combo we applied FROM
 // the room back TO the room. Set true around every applyRoomCombo, cleared on
 // the next tick once the deep combo watcher has observed the change.
@@ -772,8 +782,10 @@ const buildAvailable = (): WatchCombo[] => {
 // one-shot latch (non-reactive on purpose — read/written only inside the watcher)
 let resolveAttempted = false
 watch(rows, () => {
-  // WT: the room's combo is authoritative — never run the saved-combo restore.
-  if (roomPinned.value) return
+  // WT: when the room pins a usable combo it is authoritative — never run the
+  // saved-combo restore. A token-less / legacy room has nothing to pin, so we
+  // fall through and resolve normally (BEST source + saved audio/lang).
+  if (roomHasCombo.value) return
   if (resolveAttempted) return
   const available = buildAvailable()
   if (available.length === 0) return
@@ -788,8 +800,9 @@ watch(rows, () => {
 watch(
   [rows, preferenceSettled, orderedProviderIds],
   () => {
-    // WT: the room pins the source — suppress the smart default entirely.
-    if (roomPinned.value) return
+    // WT: a room that pins a usable combo suppresses the smart default. A
+    // token-less / legacy room resolves BEST and broadcasts it (see roomHasCombo).
+    if (roomHasCombo.value) return
     if (state.combo.value.provider) return
     if (!preferenceSettled.value) return // let the saved prefs (audio/lang) settle first
     void pickSmartDefault(rows.value, orderedProviderIds.value, {

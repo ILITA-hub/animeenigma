@@ -1,17 +1,17 @@
 /**
- * Plan A — AePlayer branch in WatchTogetherView.
+ * WatchTogetherView — aePlayer-only player mounting.
  *
- * Verifies that when the room's `player` is `'aeplayer'`, the view mounts
- * the AePlayer SFC (stubbed) with `:room` bound, and does NOT render any
- * legacy player. The anime metadata object AePlayer requires
- * (`{ title, ep, eps, still }`) is sourced from a `useAnime().fetchAnime`
- * call wired into the view's bootstrap.
+ * WatchTogether is aePlayer-only (Kodik retired from WT 2026-06-19 — aePlayer
+ * plays Kodik content internally). The view mounts the AePlayer SFC (stubbed)
+ * with `:room` bound for ANY loaded room, including in-flight LEGACY rooms whose
+ * stored `player` is a retired kind (e.g. 'kodik') — those upgrade gracefully.
+ * The anime metadata AePlayer requires (`{ title, ep, eps, still }`) is sourced
+ * from a `useAnime().fetchAnime` call wired into the view's bootstrap.
  *
- * Mocking approach mirrors the existing view-test conventions
- * (Profile.showcase.spec.ts): every heavy dependency stubbed, async player
- * components replaced with trivial stubs, the room composable + REST
- * snapshot + anime fetch mocked so the live-room branch renders
- * deterministically.
+ * Mocking approach mirrors the existing view-test conventions: every heavy
+ * dependency stubbed, async player component replaced with a trivial stub, the
+ * room composable + REST snapshot + anime fetch mocked so the live-room branch
+ * renders deterministically.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
@@ -26,7 +26,6 @@ import en from '@/locales/en.json'
 // --------------------------------------------------------------------------
 const roomRef = ref<Record<string, unknown> | null>(null)
 
-const emitChangePlayer = vi.fn()
 const connect = vi.fn().mockResolvedValue(undefined)
 const disconnect = vi.fn()
 
@@ -38,7 +37,7 @@ vi.mock('@/composables/useWatchTogetherRoom', () => ({
     reactions: ref([]),
     connectionStatus: ref('open'),
     emitChangeEpisode: vi.fn(),
-    emitChangePlayer,
+    emitChangePlayer: vi.fn(),
     emitChangeTranslation: vi.fn(),
     sendChat: vi.fn(),
     sendReaction: vi.fn(),
@@ -94,8 +93,9 @@ function makeRouter() {
   })
 }
 
-// Stubs for every player + shell child so the mount is light. Each player
-// stub records its props via a data-testid + serialized props.
+// Player stub records its props via a data-testid + serialized props. A
+// KodikPlayer stub is kept so the "no legacy player rendered" assertions are
+// meaningful even though the view no longer imports it.
 const playerStub = (name: string) => ({
   name,
   props: ['animeId', 'anime', 'theater', 'isHentai', 'initialEpisode', 'malId', 'room'],
@@ -103,18 +103,12 @@ const playerStub = (name: string) => ({
 })
 
 const globalStubs = {
-  KodikPlayer: playerStub('KodikPlayer'),
-  KodikAdFreePlayer: playerStub('KodikAdFreePlayer'),
-  AnimeLibPlayer: playerStub('AnimeLibPlayer'),
-  OurEnglishPlayer: playerStub('OurEnglishPlayer'),
-  HanimePlayer: playerStub('HanimePlayer'),
-  RawPlayer: playerStub('RawPlayer'),
   AePlayer: playerStub('AePlayer'),
+  KodikPlayer: playerStub('KodikPlayer'),
   RoomSidebar: { template: '<div/>' },
   ReactionBurstOverlay: { template: '<div/>' },
   SyncToastStack: { template: '<div/>' },
   ConnectionStatusOverlay: { template: '<div/>' },
-  PlayerTabBar: { template: '<div/>' },
 }
 
 async function mountView() {
@@ -129,7 +123,7 @@ async function mountView() {
   return wrapper
 }
 
-describe('WatchTogetherView — aeplayer branch', () => {
+describe('WatchTogetherView — aePlayer-only mounting', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     roomRef.value = null
@@ -158,14 +152,11 @@ describe('WatchTogetherView — aeplayer branch', () => {
     expect(ae.attributes('data-has-room')).toBe('1')
   })
 
-  it('does NOT render any legacy player for an aeplayer room', async () => {
+  it('never renders the standalone Kodik player', async () => {
     roomRef.value = { id: 'room-1', anime_id: 'anime-uuid-1', episode_id: '3', player: 'aeplayer' }
     const wrapper = await mountView()
 
     expect(wrapper.find('[data-testid="KodikPlayer"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="OurEnglishPlayer"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="RawPlayer"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="HanimePlayer"]').exists()).toBe(false)
   })
 
   it('passes the fetched anime metadata object to AePlayer', async () => {
@@ -185,7 +176,7 @@ describe('WatchTogetherView — aeplayer branch', () => {
     expect(fetchAnime).toHaveBeenCalledWith('anime-uuid-1')
   })
 
-  it('still mounts a legacy player (kodik) when player is not aeplayer', async () => {
+  it('gracefully upgrades an in-flight LEGACY kodik room to AePlayer', async () => {
     getRoom.mockResolvedValue({
       room: { id: 'room-1', anime_id: 'anime-uuid-1', episode_id: '3', player: 'kodik' },
       members: [],
@@ -194,7 +185,10 @@ describe('WatchTogetherView — aeplayer branch', () => {
     roomRef.value = { id: 'room-1', anime_id: 'anime-uuid-1', episode_id: '3', player: 'kodik' }
     const wrapper = await mountView()
 
-    expect(wrapper.find('[data-testid="KodikPlayer"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="AePlayer"]').exists()).toBe(false)
+    // The retired standalone Kodik player is never mounted; the room renders
+    // AePlayer instead (which plays Kodik content internally).
+    expect(wrapper.find('[data-testid="KodikPlayer"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="AePlayer"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="AePlayer"]').attributes('data-has-room')).toBe('1')
   })
 })

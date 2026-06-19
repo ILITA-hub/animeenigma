@@ -96,15 +96,26 @@ describe('useWatchTogetherLaunch', () => {
     )
   })
 
-  it('refuses an empty translationId without calling createRoom', async () => {
+  it('refuses an empty translationId for a NON-aeplayer player', async () => {
     const { launch } = useWatchTogetherLaunch()
-    await launch({ ...PAYLOAD, translationId: '' })
+    await launch({ ...PAYLOAD, player: 'kodik' as const, translationId: '' })
     expect(createRoomMock).not.toHaveBeenCalled()
     expect(toastPushMock).toHaveBeenCalledWith(
       'watch_together.invite_failed_toast',
       'error',
       4000,
     )
+  })
+
+  it('ALLOWS an empty translationId for aeplayer (token-less room)', async () => {
+    createRoomMock.mockResolvedValue({ room_id: 'r1', invite_url: 'http://x/r1' })
+    const { launch } = useWatchTogetherLaunch()
+    await launch({ ...PAYLOAD, player: 'aeplayer' as const, translationId: '' })
+    expect(createRoomMock).toHaveBeenCalledTimes(1)
+    expect(createRoomMock).toHaveBeenCalledWith(
+      expect.objectContaining({ player: 'aeplayer', translation_id: '' }),
+    )
+    expect(pushMock).toHaveBeenCalledWith('/watch/room/r1')
   })
 
   it('exposes a launching flag that is false after completion', async () => {
