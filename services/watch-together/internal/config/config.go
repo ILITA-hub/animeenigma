@@ -7,7 +7,7 @@
 //   - MaxMembers:      WATCH_TOGETHER_MAX_MEMBERS (default 10, per WT-NF-02)
 //   - RoomTTL:         WATCH_TOGETHER_ROOM_TTL (default 900s, sliding)
 //   - GracePeriod:     WATCH_TOGETHER_GRACE_PERIOD (default 5m post-last-disconnect)
-//   - PublicBaseURL:   WATCH_TOGETHER_PUBLIC_BASE_URL (default https://animeenigma.ru)
+//   - PublicBaseURL:   WATCH_TOGETHER_PUBLIC_BASE_URL (default https://animeenigma.org)
 //
 // No Postgres / GORM — this service is Redis-only by design
 // (Phase 01-CONTEXT.md / WT-FOUND-02 deferred persistence to v1.2).
@@ -39,7 +39,7 @@ type Config struct {
 	GracePeriod time.Duration
 
 	// PublicBaseURL is the public origin used to construct invite + ws URLs
-	// in the POST /rooms response. Default "https://animeenigma.ru" (prod);
+	// in the POST /rooms response. Default "https://animeenigma.org" (prod);
 	// override via WATCH_TOGETHER_PUBLIC_BASE_URL. NEVER include a trailing
 	// slash — Load() trims it. The handler swaps http→ws / https→wss for
 	// the ws_url field; see wsURLFromBase in internal/handler/rooms.go.
@@ -65,7 +65,7 @@ type Config struct {
 	// that are allowed to upgrade /ws. Set via WATCH_TOGETHER_ALLOWED_ORIGINS.
 	// Used alongside PublicBaseURL — e.g. in a hybrid local-dev + production
 	// deployment where the same docker stack serves both `localhost:3003`
-	// (developer access) and `https://animeenigma.ru` (public). The Origin
+	// (developer access) and `https://animeenigma.org` (public). The Origin
 	// header on a WS upgrade is the requesting page's origin, so this list
 	// must contain every origin the frontend is served from.
 	ExtraAllowedOrigins []string
@@ -108,7 +108,7 @@ func Load() (*Config, error) {
 		MaxMembers:      getEnvInt("WATCH_TOGETHER_MAX_MEMBERS", 10),
 		RoomTTL:         getEnvDuration("WATCH_TOGETHER_ROOM_TTL", 900*time.Second),
 		GracePeriod:     getEnvDuration("WATCH_TOGETHER_GRACE_PERIOD", 5*time.Minute),
-		PublicBaseURL:       strings.TrimRight(getEnv("WATCH_TOGETHER_PUBLIC_BASE_URL", "https://animeenigma.ru"), "/"),
+		PublicBaseURL:       strings.TrimRight(getEnv("WATCH_TOGETHER_PUBLIC_BASE_URL", "https://animeenigma.org"), "/"),
 		CatalogURL:          strings.TrimRight(getEnv("CATALOG_URL", "http://catalog:8081"), "/"),
 		AllowAllOrigins:     getEnvBool("WATCH_TOGETHER_ALLOW_ALL_ORIGINS", false),
 		ExtraAllowedOrigins: parseCSV(getEnv("WATCH_TOGETHER_ALLOWED_ORIGINS", "")),

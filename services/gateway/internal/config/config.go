@@ -19,7 +19,7 @@ type Config struct {
 	CORSOrigins []string
 	Environment string // "production", "staging", "development", etc.
 	DevMode     bool   // Skip admin auth when true (for local development)
-	SiteURL     string // Public-facing base URL for OG meta tags (e.g. "https://animeenigma.ru")
+	SiteURL     string // Public-facing base URL for OG meta tags (e.g. "https://animeenigma.org")
 	// Phase 11 / UX-24 — env-backed system-status banner. When
 	// SystemBannerActive=true AND SystemBannerMessage is non-empty,
 	// GET /api/system/status returns a single Incident sourced from

@@ -114,7 +114,7 @@ func Load() (*Config, error) {
 		IssuePath:        getEnv("ISSUES_PATH", "docs/issues/issues.json"),
 		PlayerInternalURL: getEnv("PLAYER_INTERNAL_URL", "http://localhost:8083"),
 		AttachmentsDir:    getEnv("ATTACHMENTS_DIR", ".claude/maintenance-attachments"),
-		FeedbackBaseURL:   getEnv("FEEDBACK_BASE_URL", "https://animeenigma.ru"),
+		FeedbackBaseURL:   getEnv("FEEDBACK_BASE_URL", "https://animeenigma.org"),
 		TestMode:         getEnvBool("MAINTENANCE_TEST_MODE", false),
 	}, nil
 }
