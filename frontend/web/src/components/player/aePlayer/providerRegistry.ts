@@ -25,8 +25,7 @@ export const PROVIDER_REGISTRY: ProviderDef[] = [
     staticDisabled: { reason: 'Unavailable', description: 'AniLib direct streams are not currently working' } },
 
   // 18+ (adult group). 18anime is a scraper provider but in the adult orchestrator.
-  { id: 'hanime',  name: 'Hanime', hue: '#ff4d8d', group: 'adult', audios: ['dub'], langs: ['ru'], content: ['hentai'], scraper: false,
-    staticDisabled: { reason: 'Unavailable', description: 'Hanime streams are not currently working' } },
+  { id: 'hanime',  name: 'Hanime', hue: '#ff4d8d', group: 'adult', audios: ['dub'], langs: ['ru'], content: ['hentai'], scraper: false },
   { id: '18anime', name: '18anime', hue: '#fb7185', group: 'adult', audios: ['sub', 'dub'], langs: ['en'], content: ['hentai'], scraper: true },
 
   // JP raw.

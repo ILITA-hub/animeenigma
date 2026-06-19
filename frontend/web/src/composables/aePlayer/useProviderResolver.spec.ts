@@ -309,6 +309,52 @@ describe('useProviderResolver', () => {
     expect(eps.length).toBe(24)
     expect(eps[23].number).toBe(24)
   })
+
+  it('routes hanime to the hanime adapter (slug-keyed, NOT the scraper)', async () => {
+    const scraperApi = { getEpisodes: vi.fn(), getServers: vi.fn(), getStream: vi.fn() }
+    const hanimeApi = {
+      getEpisodes: vi.fn().mockResolvedValue({
+        data: { data: [{ name: 'Episode 1', slug: 'show-1' }, { name: 'Episode 2', slug: 'show-2' }] },
+      }),
+      getStream: vi.fn().mockResolvedValue({
+        data: { data: { sources: [
+          { url: 'http://cdn/480.m3u8', height: '480', width: 854, size_mb: 100 },
+          { url: 'http://cdn/1080.m3u8', height: '1080', width: 1920, size_mb: 500 },
+        ] } },
+      }),
+    }
+    const resolver = makeResolver({ scraperApi, hanimeApi } as any)
+    const eps = await resolver.listEpisodes('hanime', 'uuid')
+    expect(hanimeApi.getEpisodes).toHaveBeenCalledWith('uuid')
+    expect(scraperApi.getEpisodes).not.toHaveBeenCalled()
+    expect(eps.length).toBe(2)
+    expect(eps[0].key).toBe('show-1') // slug-keyed
+    expect(eps[0].number).toBe(1)     // ordinal derived from index
+    const stream = await resolver.resolveStream('hanime', 'uuid', eps[0], {
+      audio: 'dub', lang: 'ru', provider: 'hanime', server: '', team: null,
+    })
+    expect(hanimeApi.getStream).toHaveBeenCalledWith('uuid', 'show-1')
+    const params = proxyParams(stream.url)
+    expect(params.get('url')).toBe('http://cdn/1080.m3u8') // highest-res source
+    expect(stream.type).toBe('hls')
+  })
+
+  it('throws NotAvailableError when hanime returns no sources', async () => {
+    const hanimeApi = {
+      getEpisodes: vi.fn().mockResolvedValue({ data: { data: [{ name: 'E1', slug: 's1' }] } }),
+      getStream: vi.fn().mockResolvedValue({ data: { data: { sources: [] } } }),
+    }
+    const resolver = makeResolver({ hanimeApi } as any)
+    const eps = await resolver.listEpisodes('hanime', 'uuid')
+    await expect(
+      resolver.resolveStream('hanime', 'uuid', eps[0], { audio: 'dub', lang: 'ru', provider: 'hanime', server: '', team: null }),
+    ).rejects.toThrow(/no stream URL/)
+  })
+
+  it('throws NotAvailableError for hanime when the hanimeApi dep is missing', async () => {
+    const resolver = makeResolver({} as any)
+    await expect(resolver.listEpisodes('hanime', 'uuid')).rejects.toThrow()
+  })
 })
 
 describe('ProviderResolver.listTeams', () => {

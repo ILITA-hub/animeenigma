@@ -20,16 +20,16 @@
  * • aeAdapter       — covers 'ae' (first-party AnimeEnigma / self-hosted MinIO HLS) using
  *   aeApi.getEpisodes / getStream. Episodes/stream come STRICTLY from the on-prem library;
  *   the stream URL is proxy-signed (exp/sig) so the un-allowlisted minio host is trusted.
+ * • hanimeAdapter   — covers 'hanime' (18+) via hanimeApi (/hanime/* catalog
+ *   routes). Slug-keyed like anime18 (episode key = slug); the ordinal is
+ *   derived from list order since hanime episodes carry no number.
  *
  * NOT wired (throw NotAvailableError)
  * ─────────────────────────────────────
  * • 'animelib'  — upstream went Kodik-only (see MEMORY.md); hidden by default.
- * • 'hanime'    — hanimeApi.getStream(animeId, slug) needs the episode slug, not
- *                 a number, and the resolver contract uses a number-keyed EpisodeOption;
- *                 kept as NotAvailableError until a slug-keyed adapter is wired.
  */
 
-import { scraperApi, rawApi, anime18Api, kodikApi, aeApi } from '@/api/client'
+import { scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, Combo } from '@/types/aePlayer'
 
@@ -111,6 +111,24 @@ interface Anime18Source {
   quality: string
 }
 
+// ─── Hanime types (mirrored from domain.HanimeEpisode / HanimeStream) ────────
+
+interface HanimeEpisode {
+  name: string
+  slug: string
+}
+
+interface HanimeSource {
+  url: string
+  height: string
+  width: number
+  size_mb: number
+}
+
+interface HanimeStream {
+  sources: HanimeSource[]
+}
+
 // ─── Kodik types ─────────────────────────────────────────────────────────────
 
 interface KodikTranslation {
@@ -171,6 +189,7 @@ export interface ResolverDeps {
   anime18Api?: typeof anime18Api
   kodikApi?: typeof kodikApi
   aeApi?: typeof aeApi
+  hanimeApi?: typeof hanimeApi
 }
 
 // ─── Set of provider IDs that route through the scraper microservice ─────────
@@ -343,6 +362,43 @@ function makeAnime18Adapter(api: typeof anime18Api): ProviderAdapter {
   }
 }
 
+function makeHanimeAdapter(api: typeof hanimeApi): ProviderAdapter {
+  return {
+    async listEpisodes(animeId: string): Promise<EpisodeOption[]> {
+      const response = await api.getEpisodes(animeId)
+      const data: HanimeEpisode[] = response.data?.data || response.data || []
+      // Hanime episodes carry only {name, slug} — derive the ordinal from order.
+      return (Array.isArray(data) ? data : []).map((ep, i) => ({
+        key: ep.slug, // slug is the native identifier needed by getStream
+        label: i + 1,
+        number: i + 1,
+        title: ep.name || undefined,
+      }))
+    },
+
+    async resolveStream(animeId: string, ep: EpisodeOption): Promise<StreamResult> {
+      const slug = String(ep.key)
+      const response = await api.getStream(animeId, slug)
+      const data: HanimeStream | undefined = response.data?.data || response.data
+      const sources = data?.sources ?? []
+      // Highest-resolution source first (width desc; height is a numeric string).
+      const best = [...sources].sort(
+        (a, b) => (b.width || parseInt(b.height, 10) || 0) - (a.width || parseInt(a.height, 10) || 0),
+      )[0]
+      if (!best?.url) {
+        throw new NotAvailableError('hanime', 'returned no stream URL')
+      }
+      const type: 'hls' | 'mp4' = best.url.includes('.m3u8') ? 'hls' : 'mp4'
+      // Hanime CDN hosts are allowlisted in the HLS proxy and the stream URLs are
+      // token-signed, so no source Referer is required (verified at smoke time).
+      return {
+        url: buildProxyUrl(best.url, '', type),
+        type,
+      }
+    },
+  }
+}
+
 // ─── Kodik proxy helper ───────────────────────────────────────────────────────
 
 /**
@@ -460,7 +516,6 @@ export interface ProviderResolver {
 export function makeResolver(deps: ResolverDeps): ProviderResolver {
   const UNAVAILABLE_PROVIDERS = new Set<string>([
     'animelib', // upstream went Kodik-only
-    'hanime',   // needs slug-based episode key; deferred
   ])
 
   function getAdapter(provider: string): ProviderAdapter {
@@ -503,6 +558,13 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
       return makeAnime18Adapter(deps.anime18Api)
     }
 
+    if (provider === 'hanime') {
+      if (!deps.hanimeApi) {
+        throw new NotAvailableError(provider, 'not available (hanimeApi dep missing)')
+      }
+      return makeHanimeAdapter(deps.hanimeApi)
+    }
+
     throw new NotAvailableError(provider)
   }
 
@@ -537,5 +599,5 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
  * Call this inside a Vue setup context.
  */
 export function useProviderResolver(): ProviderResolver {
-  return makeResolver({ scraperApi, rawApi, anime18Api, kodikApi, aeApi })
+  return makeResolver({ scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi })
 }
