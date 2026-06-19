@@ -72,4 +72,15 @@ describe('SourcePanel collapse', () => {
     await btn.trigger('click')
     expect(w.findAll('[data-test="provider-chip"]').length).toBe(3)
   })
+
+  it('sorts available rows above unavailable ones, ranking as tiebreak (hacker mode)', () => {
+    // Ranking prefers gogoanime, but it is disabled → active rows must float above it.
+    const rows = [a('gogoanime', 'disabled'), a('allanime', 'active'), a('miruro', 'active')]
+    const w = mount(SourcePanel, {
+      props: { ...cb, rows, rankedIds: ['gogoanime', 'allanime', 'miruro'], provider: '', hackerMode: true, playbackError: false } as any,
+      ...mountOpts,
+    })
+    const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
+    expect(ids).toEqual(['allanime', 'miruro', 'gogoanime'])
+  })
 })

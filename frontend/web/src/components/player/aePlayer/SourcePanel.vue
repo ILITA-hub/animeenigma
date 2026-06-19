@@ -174,7 +174,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AudioKind, TrackLang, ProviderRow } from '@/types/aePlayer'
+import type { AudioKind, TrackLang, ProviderRow, ChipState } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
 import ProviderChip from './ProviderChip.vue'
 
@@ -228,13 +228,29 @@ const langIndex = computed(() =>
   langOptions.findIndex(o => o.value === props.lang),
 )
 
-// Rows sorted by the merged capability ranking (registry order for unranked).
+// Availability bucket → available sources float to the top of the full list,
+// capability ranking is the tiebreak within each bucket. 'degraded' is
+// selectable-but-not-auto (AUTO-484) so it ranks below 'active' but above the
+// truly-unavailable states. Array.prototype.sort is stable, so equal keys keep
+// input order.
+const STATE_RANK: Record<ChipState, number> = {
+  active: 0,
+  degraded: 1,
+  wip: 2,
+  down: 3,
+  disabled: 4,
+  irrelevant: 5,
+}
 const sortedRows = computed(() => {
   const pos = (id: string) => {
     const i = props.rankedIds.indexOf(id)
     return i === -1 ? Number.MAX_SAFE_INTEGER : i
   }
-  return [...props.rows].sort((a, b) => pos(a.def.id) - pos(b.def.id))
+  return [...props.rows].sort(
+    (a, b) =>
+      STATE_RANK[a.state] - STATE_RANK[b.state] ||
+      pos(a.def.id) - pos(b.def.id),
+  )
 })
 const activeRows = computed(() => sortedRows.value.filter(r => r.state === 'active'))
 const activeCount = computed(() => activeRows.value.length)
