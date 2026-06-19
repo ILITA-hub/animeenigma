@@ -150,8 +150,10 @@ func TestReEnableHanime_GuardedDoesNotClobberOperatorDisable(t *testing.T) {
 		t.Fatalf("reenable1: %v", err)
 	}
 	// Operator later disables hanime again.
-	db.Model(&domain.ScraperProvider{}).Where("name = ?", "hanime").
-		Update("status", domain.StatusDisabled)
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "hanime").
+		Update("status", domain.StatusDisabled).Error; err != nil {
+		t.Fatalf("operator disable: %v", err)
+	}
 	// Second boot must NOT clobber the operator's disable (guard already set).
 	if err := scraperprovider.ReEnableHanime(db); err != nil {
 		t.Fatalf("reenable2: %v", err)

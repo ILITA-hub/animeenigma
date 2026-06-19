@@ -95,10 +95,16 @@ func ReEnableHanime(db *gorm.DB) error {
 		return nil // already applied — never clobber a later operator re-disable
 	}
 
-	if err := db.Model(&domain.ScraperProvider{}).
+	result := db.Model(&domain.ScraperProvider{}).
 		Where("name = ?", "hanime").
-		Update("status", domain.StatusEnabled).Error; err != nil {
-		return fmt.Errorf("re-enable hanime (status=enabled): %w", err)
+		Update("status", domain.StatusEnabled)
+	if result.Error != nil {
+		return fmt.Errorf("re-enable hanime (status=enabled): %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No hanime row to flip (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("re-enable hanime: no row found for name=hanime")
 	}
 
 	if err := db.Create(&migrationGuard{Key: reEnableHanimeGuardKey}).Error; err != nil {
