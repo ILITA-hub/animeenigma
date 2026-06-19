@@ -22,10 +22,11 @@
 //     is mid (documented in D2 as accepted trade-off)
 //   - ~6-month half-life expected
 //
-// **Operator kill-switch:** SCRAPER_DEGRADED_PROVIDERS=nineanime excludes
-// this provider from main.go orchestrator registration (zero per-request
-// cost). When the brand-jack rebrands or DMCAs, this is the response —
-// no replanning needed.
+// **Operator kill-switch:** set this provider's status to `disabled` (or
+// `degraded`) in the catalog `scraper_providers` DB table — the single source
+// of truth (AUTO-484) — to exclude it from main.go orchestrator registration
+// (zero per-request cost). When the brand-jack rebrands or DMCAs, this is the
+// response — no replanning needed.
 //
 // Lift Decision Log (CONTEXT.md D1 — copy-with-adaptation, per Phase 26):
 //

@@ -67,6 +67,7 @@
 //     section + Code Examples + Anti-Patterns to Avoid)
 //   - services/scraper/internal/providers/allanime/ — template provider.
 //
-// Operator kill-switch: SCRAPER_DEGRADED_PROVIDERS=animefever excludes this
-// provider from main.go orchestrator registration (zero per-request cost).
+// Operator kill-switch: set this provider's status to `disabled` (or `degraded`)
+// in the catalog `scraper_providers` DB table — the single source of truth
+// (AUTO-484) — to exclude it from main.go orchestrator registration.
 package animefever

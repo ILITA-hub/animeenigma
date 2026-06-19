@@ -44,8 +44,11 @@ providers:
 	if m := pc.Meta("animepahe"); m.Reason != "Cloudflare challenge" {
 		t.Errorf("animepahe reason = %q; want Cloudflare challenge", m.Reason)
 	}
-	if got := pc.toDegradedConfig(); !got.IsDegraded("animepahe") || got.IsDegraded("allanime") {
-		t.Errorf("toDegradedConfig wrong: animepahe must be degraded, allanime must not")
+	if pc.IsRegistered("animepahe") {
+		t.Errorf("animepahe (enabled:false) must be unregistered (disabled)")
+	}
+	if !pc.IsRegistered("allanime") {
+		t.Errorf("allanime (enabled:true) must be registered")
 	}
 }
 
@@ -94,17 +97,15 @@ func TestLoadProviders_MissingFile(t *testing.T) {
 	}
 }
 
-func TestProvidersFromDegraded_EnvFallback(t *testing.T) {
-	d := parseDegradedProviders("animepahe,gogoanime")
-	pc := providersFromDegraded(d, "env")
-	if pc.IsEnabled("animepahe") || pc.IsEnabled("gogoanime") {
-		t.Errorf("degraded providers must be disabled")
+func TestAllProvidersEnabled_OfflineFallback(t *testing.T) {
+	pc := allProvidersEnabled("default")
+	for _, name := range KnownProviders {
+		if !pc.IsEnabled(name) {
+			t.Errorf("offline fallback: provider %q must be enabled", name)
+		}
 	}
-	if !pc.IsEnabled("allanime") {
-		t.Errorf("non-degraded provider must be enabled")
-	}
-	if pc.Source != "env" {
-		t.Errorf("Source = %q; want env", pc.Source)
+	if pc.Source != "default" {
+		t.Errorf("Source = %q; want default", pc.Source)
 	}
 }
 

@@ -6,29 +6,26 @@ import (
 	"testing"
 )
 
-func TestProvidersConfig_ToDegradedConfig(t *testing.T) {
+func TestProvidersConfig_RegistrationTriState(t *testing.T) {
 	pc := NewProvidersConfigForTest([]ProviderMeta{
 		{Name: "allanime", Status: StatusEnabled},
 		{Name: "animepahe", Status: StatusDisabled},
 		{Name: "animefever", Status: StatusDegraded},
 	})
-	d := pc.ToDegradedConfig()
-	if d.IsDegraded("allanime") {
-		t.Error("allanime is enabled; should NOT be in the disabled set")
+	// enabled → registered + in auto-failover.
+	if !pc.IsRegistered("allanime") || !pc.IsEnabled("allanime") {
+		t.Error("allanime is enabled; must be registered and in auto-failover")
 	}
-	if !d.IsDegraded("animepahe") {
-		t.Error("animepahe is disabled; should be in the disabled set")
+	// disabled → not registered.
+	if pc.IsRegistered("animepahe") {
+		t.Error("animepahe is disabled; must NOT be registered")
 	}
-	// Soft-degraded providers ARE registered, so they must NOT appear in the
-	// disabled (not-registered) projection.
-	if d.IsDegraded("animefever") {
-		t.Error("animefever is soft-degraded (registered); must NOT be in the disabled set")
+	// soft-degraded → registered but excluded from auto-failover.
+	if !pc.IsRegistered("animefever") || pc.IsEnabled("animefever") {
+		t.Error("animefever is soft-degraded; must be registered but NOT in auto-failover")
 	}
 	if !pc.IsSoftDegraded("animefever") || pc.IsSoftDegraded("allanime") {
 		t.Error("IsSoftDegraded wrong: only animefever should be soft-degraded")
-	}
-	if !pc.IsRegistered("animefever") || pc.IsRegistered("animepahe") {
-		t.Error("IsRegistered wrong: animefever registered, animepahe not")
 	}
 }
 

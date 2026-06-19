@@ -80,7 +80,7 @@ curl -sS http://localhost:3000/search?q=Frieren | jq '.data[0].title'
 |---------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
 | `/healthz` returns 503 `browser:"down"` for > 90 s                                          | `make redeploy-animepahe-resolver` — compose `restart: unless-stopped` auto-recovers most cases. |
 | `stealth_challenge_failures_total` rises sustained > 1 h                                   | Follow `STEALTH-PINS.md` § Refresh Procedure (npm install latest stealth pins + npm test + redeploy). |
-| `/search` consistently returns 502 `stealth_challenge_failed` after pin refresh             | Re-add `animepahe` to `SCRAPER_DEGRADED_PROVIDERS` in `docker/.env` and escalate per `.claude/maintenance-prompt.md` Pattern 7 animepahe-resolver branch. |
+| `/search` consistently returns 502 `stealth_challenge_failed` after pin refresh             | Set `animepahe` status to `degraded`/`disabled` in the catalog `scraper_providers` DB table (single source of truth; hot-reloaded ~60s) and escalate per `.claude/maintenance-prompt.md` Pattern 7 animepahe-resolver branch. |
 | `page_recycle_total` not incrementing                                                       | Sidecar restarted recently; expected for the first `PAGE_RECYCLE_AT` requests. After ≥ N requests, ≥ 1 recycle should be visible. |
 | `docker stats animepahe-resolver` shows RSS > 450 MB sustained                              | Lower `PAGE_RECYCLE_AT` env (e.g. to 50) and redeploy. If still > 450 MB, switch to close-first recycle order (`browser.js::recyclePage({closeFirst: true})`). Update STEALTH-PINS.md D5 section. |
 

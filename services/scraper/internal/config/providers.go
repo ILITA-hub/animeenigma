@@ -216,28 +216,6 @@ func (p ProvidersConfig) Rows(candidates []string) []ProviderRow {
 	return rows
 }
 
-// toDegradedConfig projects DISABLED (not degraded) providers into the existing
-// DegradedProvidersConfig shape — i.e. the "not registered" set, so main.go's
-// boot wiring invariant (registered == non-disabled candidates) stays correct.
-// Soft-degraded providers ARE registered, so they are deliberately excluded here.
-func (p ProvidersConfig) toDegradedConfig() DegradedProvidersConfig {
-	m := make(map[string]bool)
-	for name, meta := range p.load() {
-		if meta.Status == StatusDisabled {
-			m[name] = true
-		}
-	}
-	return DegradedProvidersConfig{Names: m}
-}
-
-// ToDegradedConfig projects disabled providers into the legacy
-// DegradedProvidersConfig shape so boot-time provider registration (which gates
-// on DegradedProviders.IsDegraded) honors this config. Exported wrapper of the
-// internal projection — used by main.go when the DB-backed remote config wins.
-func (p ProvidersConfig) ToDegradedConfig() DegradedProvidersConfig {
-	return p.toDegradedConfig()
-}
-
 // LoadProviders reads + validates the YAML provider config at path.
 func LoadProviders(path string) (ProvidersConfig, error) {
 	raw, err := os.ReadFile(path)
@@ -303,16 +281,13 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 	return newProvidersConfig(metas, "file"), nil
 }
 
-// providersFromDegraded builds a ProvidersConfig from the legacy degraded set
-// (env fallback): every known provider is enabled unless degraded; no metadata.
-func providersFromDegraded(d DegradedProvidersConfig, source string) ProvidersConfig {
+// allProvidersEnabled builds the offline-fallback ProvidersConfig: every known
+// provider enabled, no metadata. Used at boot until/if the catalog DB (the
+// single source of truth, AUTO-484) answers and re-gates registration.
+func allProvidersEnabled(source string) ProvidersConfig {
 	metas := make(map[string]ProviderMeta, len(KnownProviders))
 	for _, name := range KnownProviders {
-		status := StatusEnabled
-		if d.IsDegraded(name) {
-			status = StatusDisabled
-		}
-		metas[name] = ProviderMeta{Name: name, Status: status, Group: GroupOf(name)}
+		metas[name] = ProviderMeta{Name: name, Status: StatusEnabled, Group: GroupOf(name)}
 	}
 	return newProvidersConfig(metas, source)
 }

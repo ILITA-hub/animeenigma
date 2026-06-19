@@ -28,7 +28,6 @@ type Config struct {
 	AnimeFever         AnimeFeverConfig
 	Miruro             MiruroConfig
 	NineAnime          NineAnimeConfig
-	DegradedProviders  DegradedProvidersConfig
 
 	// ProviderTimeout bounds how long the failover orchestrator waits on a
 	// SINGLE provider before moving to the next one. Without it, one slow/hung
@@ -53,31 +52,6 @@ type Config struct {
 	// ProvidersRefresh is how often to re-fetch remote provider config. 0 = no
 	// periodic refresh (boot-only).
 	ProvidersRefresh time.Duration
-}
-
-// DegradedProvidersConfig is the global kill-switch for providers known to be
-// upstream-dead. Names in the set are NOT Register()-ed with the orchestrator,
-// so failover skips them with zero per-request latency cost. Read from
-// SCRAPER_DEGRADED_PROVIDERS (comma-separated, lowercase names).
-//
-// Use case: animepahe.ru is IP-blocked and animepahe.io is FingerprintJS-gated
-// (2026-05-18); anitaku.to migrated to a different platform (anineko.to) the
-// existing parser can't handle. Until per-provider fixes land, mark them
-// degraded so the orchestrator stops wasting cycles on guaranteed failures.
-//
-// Flipping a provider OFF this list is a config-only restart — no rebuild.
-type DegradedProvidersConfig struct {
-	Names map[string]bool
-}
-
-// IsDegraded reports whether the named provider is in the kill-switch set.
-// Name comparison is case-insensitive to match how providers identify
-// themselves (Provider.Name() returns lowercase by convention).
-func (d DegradedProvidersConfig) IsDegraded(name string) bool {
-	if d.Names == nil {
-		return false
-	}
-	return d.Names[strings.ToLower(name)]
 }
 
 // ServerConfig controls the HTTP listener.
@@ -156,8 +130,8 @@ type AnimeKaiConfig struct {
 
 // AllAnimeConfig is the per-provider override surface for allanime.Provider
 // (Phase 26 — SCRAPER-HEAL-25). Unlike AnimeKai, AllAnime ships always-on
-// — there is no SCRAPER_ALLANIME_ENABLED gate. Operator can disable via
-// SCRAPER_DEGRADED_PROVIDERS=allanime if the upstream goes hard down.
+// — there is no SCRAPER_ALLANIME_ENABLED gate. Operator can disable/degrade it
+// via the catalog `scraper_providers` DB table if the upstream goes hard down.
 // BaseURL defaults to https://api.allanime.day; override via
 // SCRAPER_ALLANIME_BASE_URL when the upstream rotates hostnames.
 type AllAnimeConfig struct {
@@ -166,8 +140,8 @@ type AllAnimeConfig struct {
 
 // AnimeFeverConfig is the per-provider override surface for
 // animefever.Provider (Phase 28 — SCRAPER-HEAL-36). Always-on; operator
-// can disable via SCRAPER_DEGRADED_PROVIDERS=animefever if upstream goes
-// hard down. BaseURL defaults to https://animefever.cc; override via
+// can disable/degrade it via the catalog `scraper_providers` DB table if
+// upstream goes hard down. BaseURL defaults to https://animefever.cc; override via
 // SCRAPER_ANIMEFEVER_BASE_URL when the upstream rotates hostnames.
 type AnimeFeverConfig struct {
 	BaseURL string
@@ -178,8 +152,8 @@ type AnimeFeverConfig struct {
 // instance accepted as a low-quality, last-resort source per CONTEXT.md D2.
 // BaseURL defaults to https://9anime.me.uk; override via
 // SCRAPER_NINEANIME_BASE_URL when the upstream rotates hostnames. Operator
-// kill via SCRAPER_DEGRADED_PROVIDERS=nineanime when upstream breaks
-// (~6-month half-life expected).
+// kill/degrade via the catalog `scraper_providers` DB table when upstream
+// breaks (~6-month half-life expected).
 type NineAnimeConfig struct {
 	BaseURL string
 }
@@ -257,9 +231,11 @@ func Load() (*Config, error) {
 	// the catalog Postgres `scraper_providers` table, fetched in main.go via
 	// LoadProvidersRemote and hot-reloaded every SCRAPER_PROVIDERS_REFRESH. This
 	// block only builds the offline fallback used until/if catalog answers at boot:
-	// the SCRAPER_DEGRADED_PROVIDERS env (default empty = all enabled). The legacy
-	// SCRAPER_PROVIDERS_FILE (scraper-providers.yaml) is retired (AUTO-484) and
-	// normally unset; the dormant file branch is kept only as a defensive override.
+	// every known provider enabled (the DB then re-gates registration at boot). The
+	// legacy SCRAPER_PROVIDERS_FILE (scraper-providers.yaml) is retired (AUTO-484)
+	// and normally unset; the dormant file branch is kept only as a defensive
+	// override. (SCRAPER_DEGRADED_PROVIDERS env removed AUTO-503 — Postgres is the
+	// single source of truth, so the env kill-switch is obsolete.)
 	if providersPath := getEnv("SCRAPER_PROVIDERS_FILE", ""); providersPath != "" {
 		_, statErr := os.Stat(providersPath)
 		switch {
@@ -269,19 +245,16 @@ func Load() (*Config, error) {
 				return nil, fmt.Errorf("scraper providers file: %w", err)
 			}
 			cfg.Providers = pc
-			cfg.DegradedProviders = pc.toDegradedConfig()
 		case errors.Is(statErr, os.ErrNotExist):
-			// Missing file → env fallback (zero-break migration).
-			cfg.DegradedProviders = parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", ""))
-			cfg.Providers = providersFromDegraded(cfg.DegradedProviders, "env-fallback")
+			// Missing file → all-enabled offline default (DB re-gates at boot).
+			cfg.Providers = allProvidersEnabled("default-fallback")
 		default:
 			// Path set but unreadable (permission/IO/is-a-directory) — fail fast
 			// rather than silently abandon the operator's explicit source of truth.
 			return nil, fmt.Errorf("scraper providers file %q: %w", providersPath, statErr)
 		}
 	} else {
-		cfg.DegradedProviders = parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", ""))
-		cfg.Providers = providersFromDegraded(cfg.DegradedProviders, "env")
+		cfg.Providers = allProvidersEnabled("default")
 	}
 	if u := cfg.MegacloudExtractor.URL; u != "" {
 		parsed, err := url.Parse(u)
@@ -364,24 +337,6 @@ func Load() (*Config, error) {
 		}
 	}
 	return cfg, nil
-}
-
-// parseDegradedProviders splits a CSV list of provider names into a set.
-// Whitespace is trimmed, names are lowercased, empties dropped. Empty input
-// returns an empty set (no providers degraded — the production default).
-//
-// Example: SCRAPER_DEGRADED_PROVIDERS="gogoanime, animepahe" disables both
-// from registration in main.go.
-func parseDegradedProviders(csv string) DegradedProvidersConfig {
-	m := make(map[string]bool)
-	for _, p := range strings.Split(csv, ",") {
-		p = strings.ToLower(strings.TrimSpace(p))
-		if p == "" {
-			continue
-		}
-		m[p] = true
-	}
-	return DegradedProvidersConfig{Names: m}
 }
 
 // parseServerPriority splits a CSV priority spec into a normalized slice.

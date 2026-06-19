@@ -170,11 +170,11 @@ services:
       SCRAPER_GOGOANIME_BASE_URL: ${SCRAPER_GOGOANIME_BASE_URL:-https://anitaku.to}
       # Provider management (enable/degrade/disable + reason/description) lives in
       # the catalog Postgres `scraper_providers` table — the SINGLE source of truth
-      # (docker/scraper-providers.yaml was retired 2026-06-17, AUTO-484). The scraper
+      # (docker/scraper-providers.yaml was retired 2026-06-17, AUTO-484; the
+      # SCRAPER_DEGRADED_PROVIDERS env kill-switch was removed AUTO-503). The scraper
       # fetches it from catalog (CATALOG_URL) at boot + every SCRAPER_PROVIDERS_REFRESH.
-      # SCRAPER_DEGRADED_PROVIDERS is a last-resort OFFLINE fallback, used ONLY if
-      # catalog is unreachable at boot (comma-separated names; empty = all enabled).
-      SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-}
+      # If catalog is unreachable at boot the scraper starts all providers enabled,
+      # then re-gates from the DB on the next refresh.
       # ISS-022: per-provider failover budget. Without it, one hung provider
       # early in the chain (animepahe when animepahe.pw is down, ~55s of retries)
       # consumes the whole request budget so catalog's 15s SCRAPER_TIMEOUT kills

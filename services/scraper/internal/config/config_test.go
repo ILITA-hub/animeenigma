@@ -630,14 +630,13 @@ func TestLoad_NineAnimeInvalidBaseURL(t *testing.T) {
 	}
 }
 
-func TestLoad_ProvidersFile_WinsOverEnv(t *testing.T) {
+func TestLoad_ProvidersFile_Loads(t *testing.T) {
 	path := writeTempYAML(t, `
 providers:
   - { name: animepahe, enabled: false, reason: "CF", description: "d" }
   - { name: allanime, enabled: true }
 `)
 	t.Setenv("SCRAPER_PROVIDERS_FILE", path)
-	t.Setenv("SCRAPER_DEGRADED_PROVIDERS", "miruro")
 
 	cfg, err := Load()
 	if err != nil {
@@ -646,42 +645,44 @@ providers:
 	if cfg.Providers.Source != "file" {
 		t.Errorf("Providers.Source = %q; want file", cfg.Providers.Source)
 	}
-	if !cfg.DegradedProviders.IsDegraded("animepahe") {
-		t.Errorf("animepahe must be degraded (from file)")
+	if cfg.Providers.IsRegistered("animepahe") {
+		t.Errorf("animepahe (enabled:false) must be unregistered (disabled, from file)")
 	}
-	if cfg.DegradedProviders.IsDegraded("miruro") {
-		t.Errorf("miruro must NOT be degraded — env ignored when file present")
+	if !cfg.Providers.IsRegistered("allanime") {
+		t.Errorf("allanime (enabled:true) must be registered (from file)")
 	}
 }
 
-func TestLoad_NoProvidersFile_FallsBackToEnv(t *testing.T) {
+func TestLoad_NoProvidersFile_AllProvidersEnabled(t *testing.T) {
 	t.Setenv("SCRAPER_PROVIDERS_FILE", "")
-	t.Setenv("SCRAPER_DEGRADED_PROVIDERS", "gogoanime,animepahe")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load err = %v; want nil", err)
 	}
-	if cfg.Providers.Source != "env" {
-		t.Errorf("Providers.Source = %q; want env", cfg.Providers.Source)
+	if cfg.Providers.Source != "default" {
+		t.Errorf("Providers.Source = %q; want default", cfg.Providers.Source)
 	}
-	if !cfg.DegradedProviders.IsDegraded("gogoanime") || !cfg.DegradedProviders.IsDegraded("animepahe") {
-		t.Errorf("env degraded set not applied")
+	for _, name := range KnownProviders {
+		if !cfg.Providers.IsEnabled(name) {
+			t.Errorf("offline default: provider %q must be enabled", name)
+		}
 	}
 }
 
 func TestLoad_ProvidersFileMissing_FallsBackWithSource(t *testing.T) {
 	t.Setenv("SCRAPER_PROVIDERS_FILE", "/no/such/providers.yaml")
-	t.Setenv("SCRAPER_DEGRADED_PROVIDERS", "nineanime")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load err = %v; want nil (missing file must fall back, not fail)", err)
 	}
-	if cfg.Providers.Source != "env-fallback" {
-		t.Errorf("Providers.Source = %q; want env-fallback", cfg.Providers.Source)
+	if cfg.Providers.Source != "default-fallback" {
+		t.Errorf("Providers.Source = %q; want default-fallback", cfg.Providers.Source)
 	}
-	if !cfg.DegradedProviders.IsDegraded("nineanime") {
-		t.Errorf("env fallback degraded set not applied")
+	for _, name := range KnownProviders {
+		if !cfg.Providers.IsEnabled(name) {
+			t.Errorf("offline fallback: provider %q must be enabled", name)
+		}
 	}
 }

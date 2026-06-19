@@ -218,18 +218,17 @@ func main() {
 	log.Infow("per-provider failover budget configured", "timeout", cfg.ProviderTimeout.String())
 
 	// Prefer DB-backed provider config from catalog (the runtime source of truth);
-	// fall back to the YAML/env config already in cfg if catalog is unreachable at
-	// boot. Set BOTH cfg.Providers (handler/health display) AND cfg.DegradedProviders
-	// (which gates provider registration below) so the DB is authoritative at boot.
+	// fall back to the all-enabled offline default already in cfg if catalog is
+	// unreachable at boot. cfg.Providers (which gates provider registration below)
+	// is authoritative at boot.
 	// NOTE: this only re-gates registration at BOOT. Runtime hot enable/disable of the
 	// failover roster would require orchestrator re-registration (future work); the
 	// periodic refresher currently hot-updates the /health display only.
 	if cfg.CatalogURL != "" {
 		if pc, err := config.LoadProvidersRemote(context.Background(), cfg.CatalogURL, nil, 5*time.Second); err != nil {
-			log.Warnw("remote provider config unavailable; using YAML/env fallback", "error", err, "catalog_url", cfg.CatalogURL)
+			log.Warnw("remote provider config unavailable; using all-enabled offline fallback", "error", err, "catalog_url", cfg.CatalogURL)
 		} else {
 			cfg.Providers = pc
-			cfg.DegradedProviders = pc.ToDegradedConfig()
 			log.Infow("loaded provider config from catalog",
 				"source", pc.Source, "disabled", pc.DisabledNames(), "degraded", pc.DegradedNames())
 		}
@@ -324,8 +323,8 @@ func main() {
 	// Phase 26 (SCRAPER-HEAL-25) — AllAnime as the THIRD live EN provider.
 	// Lifted from services/catalog/internal/parser/allanime/ (copy-with-
 	// adaptation per CONTEXT.md D1). Ships ALWAYS-ON — no SCRAPER_ALLANIME_
-	// ENABLED gate. Operator can disable via SCRAPER_DEGRADED_PROVIDERS=
-	// allanime if upstream goes hard down. Failover chain order:
+	// ENABLED gate. Operator can disable/degrade it via the catalog
+	// `scraper_providers` DB table if upstream goes hard down. Failover chain order:
 	// gogoanime → animepahe → allanime → [animekai gated].
 	allAnimeBaseHTTP := domain.NewBaseHTTPClient(log,
 		domain.WithPerHostRPS("api.allanime.day", 1.0, 2),
@@ -345,8 +344,8 @@ func main() {
 	registerByStatus(allAnimeProvider)
 
 	// Phase 28 (SCRAPER-HEAL-36) — AnimeFever as the FOURTH live EN provider.
-	// Failover slot 4 per CONTEXT.md D5. Always-on; operator disables via
-	// SCRAPER_DEGRADED_PROVIDERS=animefever if upstream breaks.
+	// Failover slot 4 per CONTEXT.md D5. Always-on; operator disables/degrades it
+	// via the catalog `scraper_providers` DB table if upstream breaks.
 	// HTML-scrape + AJAX-POST data path; embed extraction delegated to the
 	// vidstream_vip extractor registered in Plan 28-03 (sibling Wave 1 plan).
 	animeFeverBaseHTTP := domain.NewBaseHTTPClient(log,
@@ -410,8 +409,8 @@ func main() {
 	//
 	// Per CONTEXT.md D2 — explicitly accepted as low-quality, last-resort.
 	// Operator policy "as many providers as possible" overrides the natural
-	// "not-worth" verdict. ~6-month half-life expected. Operator kills via
-	// SCRAPER_DEGRADED_PROVIDERS=nineanime when upstream rebrands/DMCAs.
+	// "not-worth" verdict. ~6-month half-life expected. Operator kills/degrades it
+	// via the catalog `scraper_providers` DB table when upstream rebrands/DMCAs.
 	//
 	// The legacy my.1anime.site direct-MP4 extraction still happens inline
 	// via regex (long-tail catalog). The popular catalog migrated to the
@@ -588,10 +587,10 @@ func main() {
 	// Phase 19 wiring invariant — adapts the Phase 18 invariant to the
 	// flag-conditional shape. Candidates are: gogoanime + animepahe
 	// (unconditional) and animekai (gated by SCRAPER_ANIMEKAI_ENABLED). Each
-	// candidate that is in SCRAPER_DEGRADED_PROVIDERS is intentionally not
-	// Register()-ed, so the expected count subtracts those. A future
-	// maintainer dropping any Register() call surfaces the regression at boot
-	// via this fatal.
+	// candidate the DB marks `disabled` is intentionally not registered, so the
+	// expected count counts only the registered (enabled OR degraded) ones. A
+	// future maintainer dropping any Register() call surfaces the regression at
+	// boot via this fatal.
 	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
 	// → allanime → animefever (28-02) → miruro (28-04) → nineanime (28-05).
 	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "animefever", "miruro", "nineanime"}
@@ -600,7 +599,7 @@ func main() {
 	}
 	expectedProviders := 0
 	for _, name := range candidateProviders {
-		if !cfg.DegradedProviders.IsDegraded(name) {
+		if cfg.Providers.IsRegistered(name) {
 			expectedProviders++
 		}
 	}
@@ -614,14 +613,10 @@ func main() {
 		for _, p := range registered {
 			names = append(names, p.Name())
 		}
-		degradedNames := make([]string, 0, len(cfg.DegradedProviders.Names))
-		for n := range cfg.DegradedProviders.Names {
-			degradedNames = append(degradedNames, n)
-		}
 		log.Fatalw("Phase 19 wiring invariant broken",
 			"got", got, "want", expectedProviders,
 			"flag", cfg.AnimeKai.Enabled,
-			"degraded", degradedNames,
+			"disabled", cfg.Providers.DisabledNames(),
 			"registered", names)
 	}
 
@@ -638,28 +633,19 @@ func main() {
 		log.Fatalw("adult-group wiring invariant broken", "got", got, "want", expectedAdult)
 	}
 
-	// ISS-023 / roster unification: reflect the scraper-OWNED provider rows
-	// (scraper_operated=true: the EN chain + 18anime) into provider_info/
-	// provider_enabled via the shared metrics.EmitProviderRoster helper. Disabled
-	// providers are not Register()-ed but ARE reflected here so they stay visible in
-	// the Grafana management table. Catalog emits the scraper_operated=false rows.
-	//
-	// Emit provider_info/provider_enabled for the FULL scraper-owned roster
-	// (config.KnownProviders == the scraper_operated=true set), NOT the flag-gated
-	// registration candidate list — so a registered-or-not provider like animekai
-	// (disabled stub, SCRAPER_ANIMEKAI_ENABLED off) still appears in the management
-	// table with its true DB status. Registration below stays flag-gated.
-	scraperRows := cfg.Providers.Rows(config.KnownProviders)
-	rosterEntries := make([]metrics.RosterEntry, 0, len(scraperRows))
-	for _, row := range scraperRows {
-		rosterEntries = append(rosterEntries, metrics.RosterEntry{
-			Name:        row.Name,
-			Status:      string(row.Status),
-			Reason:      row.Reason,
-			Description: row.Description,
-		})
+	// ISS-023: reflect the provider-management config into Prometheus so the
+	// Grafana dashboard shows EVERY provider (enabled and disabled) with its
+	// reason/description. Disabled providers are not Register()-ed, so without
+	// this they would vanish from all metrics. Includes the adult group so
+	// 18anime appears in the provider-management dashboard.
+	for _, row := range cfg.Providers.Rows(append(append([]string{}, candidateProviders...), adultCandidates...)) {
+		enabled := 0.0
+		if row.Enabled {
+			enabled = 1.0
+		}
+		metrics.ProviderEnabled.WithLabelValues(row.Name).Set(enabled)
+		metrics.ProviderInfo.WithLabelValues(row.Name, string(row.Status), row.Reason, row.Description).Set(1)
 	}
-	metrics.EmitProviderRoster(rosterEntries)
 	log.Infow("provider management config loaded",
 		"source", cfg.Providers.Source,
 		"disabled", cfg.Providers.DisabledNames(),

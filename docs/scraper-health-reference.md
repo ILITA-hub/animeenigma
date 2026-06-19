@@ -145,9 +145,11 @@ checks `cache.IsHealthy(name)`. A skip increments
 
 **What the gate does NOT cover:** a provider that is merely *slow* (healthy
 gauge, hung upstream) still burns the chain's time budget — that's ISS-022
-(failover starvation; no per-provider deadline). Operator mitigation:
-`SCRAPER_DEGRADED_PROVIDERS=<name,…>` env on the scraper skips registering the
-provider entirely (logged at boot as "provider SKIPPED (degraded…)").
+(failover starvation; no per-provider deadline). Operator mitigation: set the
+provider's status to `disabled` (skip registration) or `degraded` (registered
+but excluded from auto-failover) in the catalog `scraper_providers` DB table —
+the single source of truth (AUTO-484; the `SCRAPER_DEGRADED_PROVIDERS` env was
+removed AUTO-503). Hot-reloaded within ~60s.
 
 ---
 
@@ -230,8 +232,9 @@ curl -s 'http://localhost:9090/prometheus/api/v1/query' \
 curl -s 'http://localhost:9090/prometheus/api/v1/query' \
   --data-urlencode 'query=time() - provider_probe_last_tick_timestamp > 1200'
 
-# Take a misbehaving provider out of the chain (restart required)
-# docker/.env → SCRAPER_DEGRADED_PROVIDERS=animepahe  && make restart-scraper
+# Take a misbehaving provider out of the chain (catalog DB — single source of
+# truth, hot-reloaded within ~60s, no restart):
+#   UPDATE scraper_providers SET status='degraded' WHERE name='animepahe';
 ```
 
 Known issues touching this system: ISS-017 (probe noise vs real downs,

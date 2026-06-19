@@ -78,8 +78,9 @@ curl -sS "$BASE/api/anime/$ANIME_ID/scraper/episodes?prefer=animepahe" | jq '.da
 #    - Roll back: git checkout HEAD -- services/animepahe-resolver/package.json \
 #                                       services/animepahe-resolver/package-lock.json
 #    - Redeploy the previous build.
-#    - Re-add `animepahe` to SCRAPER_DEGRADED_PROVIDERS in docker/.env
-#      (operator decision, NOT auto-applied).
+#    - Set `animepahe` status to `degraded` (or `disabled`) in the catalog
+#      `scraper_providers` DB table — the single source of truth (operator
+#      decision, NOT auto-applied; hot-reloaded within ~60s, no restart).
 #    - Open a maintenance-bot escalation: `escalate` tier per
 #      .claude/maintenance-prompt.md Pattern 7 animepahe-resolver branch.
 ```
