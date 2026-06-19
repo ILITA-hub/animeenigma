@@ -1084,6 +1084,10 @@ services:
         # byte-identical to today). Set VITE_MSK_ASSET_HOST in docker/.env to the
         # edge HTTPS origin to activate per-user edge routing. See utils/assetEdge.ts.
         VITE_MSK_ASSET_HOST: "${VITE_MSK_ASSET_HOST:-}"
+        # HLS-only edge. Empty/unset ⇒ OFF (HLS served origin-relative, byte-identical
+        # to today). Set VITE_HLS_PROXY_BASE in docker/.env to the stream subdomain
+        # origin (e.g. https://stream.animeenigma.org) to route HLS off-domain.
+        VITE_HLS_PROXY_BASE: "${VITE_HLS_PROXY_BASE:-}"
     container_name: animeenigma-web
     restart: unless-stopped
     ports:
