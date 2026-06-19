@@ -49,7 +49,7 @@ jobs:
       - name: Run Kodik RPC canary
         run: bunx playwright test e2e/kodik-rpc-probe.spec.ts --project=chromium
         env:
-          BASE_URL: https://animeenigma.ru
+          BASE_URL: https://animeenigma.org
 
       - name: Upload Playwright HTML report
         if: always()
@@ -83,7 +83,7 @@ jobs:
           The undocumented kodik_player_api postMessage RPC may have changed. RU watch-together sync could be degraded.
 
           🔍 Debug recipe:
-          1. Open https://animeenigma.ru in a browser, navigate to any anime with Kodik player.
+          1. Open https://animeenigma.org in a browser, navigate to any anime with Kodik player.
           2. In DevTools console:
              \`window.frames[0].postMessage({key:'kodik_player_api',value:{method:'get_time'}}, '*')\`
           3. If no \`kodik_player_time\` response arrives within 2s, the RPC is gone.

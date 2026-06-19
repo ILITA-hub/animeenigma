@@ -95,8 +95,8 @@
             {{ $t('footer.feedback.viewMine') }}
           </router-link>
         </template>
-        <a href="mailto:info@animeenigma.ru" class="text-white/60 hover:text-white/80 text-sm transition-colors sm:ml-auto">
-          info@animeenigma.ru
+        <a href="mailto:info@animeenigma.org" class="text-white/60 hover:text-white/80 text-sm transition-colors sm:ml-auto">
+          info@animeenigma.org
         </a>
       </div>
     </footer>

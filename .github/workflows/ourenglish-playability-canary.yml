@@ -60,12 +60,12 @@ jobs:
         env:
           # Target production. Override here (or via workflow_dispatch + a
           # repo/env edit) to point at staging.
-          CANARY_BASE_URL: https://animeenigma.ru
+          CANARY_BASE_URL: https://animeenigma.org
           # BASE_URL is what playwright.config.ts keys off to SKIP the local
           # `npm run dev` webServer (it only spins one up when BASE_URL is
           # unset). The spec itself uses CANARY_BASE_URL via test.use(); this
           # just suppresses the dev-server launch in CI. Keep them in sync.
-          BASE_URL: https://animeenigma.ru
+          BASE_URL: https://animeenigma.org
 
       - name: Upload Playwright HTML report
         if: always()
@@ -99,7 +99,7 @@ jobs:
           The EN player did NOT reach real playback (currentTime > 0) for at least one provider the scraper health endpoint reports as playable — an ISS-020-class signal that the bundled hls.js may be freezing the player at 0:00.
 
           🔍 Debug recipe:
-          1. Open https://animeenigma.ru/anime/dbc95dd5-8470-4f83-9632-622431073182 (TenSura S4).
+          1. Open https://animeenigma.org/anime/dbc95dd5-8470-4f83-9632-622431073182 (TenSura S4).
           2. Click the in-page *EN* language pill, let the player resolve.
           3. Watch the timecode — if it sits at 0:00, open DevTools console and look for a fatal hls.js \`bufferAddCodecError\` (e.g. mp4a.40.1 on CODECS-less HLS).
           4. Per-provider: use the in-player *Source* dropdown to pin allanime (direct-MP4 control) and animepahe (HLS — the one ISS-020 broke).

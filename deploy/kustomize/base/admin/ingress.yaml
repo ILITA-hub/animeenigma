@@ -16,14 +16,15 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - admin.animeenigma.ru
-      secretName: admin-tls
+        - animeenigma.org
+      secretName: animeenigma-org-tls
   rules:
-    - host: admin.animeenigma.ru
+    # admin is path-based (animeenigma.org/admin); no admin.* subdomain
+    - host: animeenigma.org
       http:
         paths:
           # Grafana - monitoring dashboards
-          - path: /grafana
+          - path: /admin/grafana
             pathType: Prefix
             backend:
               service:
@@ -31,7 +32,7 @@ spec:
                 port:
                   number: 3000
           # pgAdmin - database administration
-          - path: /pgadmin
+          - path: /admin/pgadmin
             pathType: Prefix
             backend:
               service:
@@ -39,7 +40,7 @@ spec:
                 port:
                   number: 80
           # Kubernetes Dashboard
-          - path: /k8s
+          - path: /admin/k8s
             pathType: Prefix
             backend:
               service:
@@ -47,7 +48,7 @@ spec:
                 port:
                   number: 443
           # Prometheus - raw metrics
-          - path: /prometheus
+          - path: /admin/prometheus
             pathType: Prefix
             backend:
               service:

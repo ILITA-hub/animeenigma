@@ -25,7 +25,7 @@ data:
   MINIO_USE_SSL: "false"
 
   # Site
-  SITE_URL: "https://animeenigma.ru"
+  SITE_URL: "https://animeenigma.org"
 
   # Shikimori
   SHIKIMORI_BASE_URL: "https://shikimori.one"

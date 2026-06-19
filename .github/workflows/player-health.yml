@@ -36,7 +36,7 @@ jobs:
       - name: Run player health checks
         run: bunx playwright test --config=playwright.health.config.ts --project=${{ matrix.project }}
         env:
-          BASE_URL: https://animeenigma.ru
+          BASE_URL: https://animeenigma.org
 
       - name: Upload test report
         if: always()

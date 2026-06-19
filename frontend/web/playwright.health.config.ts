@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 /**
  * Playwright config for daily player health checks.
- * Runs against production (animeenigma.ru) across real browser engines.
+ * Runs against production (animeenigma.org) across real browser engines.
  *
  * Usage:
  *   bunx playwright test --config=playwright.health.config.ts
@@ -24,7 +24,7 @@ export default defineConfig({
     timeout: 15000,
   },
   use: {
-    baseURL: process.env.BASE_URL || 'https://animeenigma.ru',
+    baseURL: process.env.BASE_URL || 'https://animeenigma.org',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

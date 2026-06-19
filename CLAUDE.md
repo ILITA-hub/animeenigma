@@ -576,12 +576,13 @@ Available metrics:
 
 ### Admin URLs (Kubernetes)
 
-When deployed to Kubernetes, admin interfaces are available at:
+Admin is **path-based** at `animeenigma.org/admin` — there is no `admin.*` subdomain.
+Grafana/Prometheus/pgAdmin are reached via the gateway `/admin/*` route:
 
-- `https://admin.animeenigma.ru/grafana` - Grafana dashboards
-- `https://admin.animeenigma.ru/prometheus` - Prometheus raw metrics
-- `https://admin.animeenigma.ru/pgadmin` - PostgreSQL admin
-- `https://admin.animeenigma.ru/k8s` - Kubernetes dashboard
+- `https://animeenigma.org/admin/grafana` - Grafana dashboards
+- `https://animeenigma.org/admin/prometheus` - Prometheus raw metrics
+- `https://animeenigma.org/admin/pgadmin` - PostgreSQL admin
+- `https://animeenigma.org/admin/k8s` - Kubernetes dashboard
 
 ## File Locations
 
