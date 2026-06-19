@@ -64,23 +64,22 @@ Three coordinated edits so a fresh DB and the existing live DB both converge on 
    aePlayer (2026-06-19)". Keep `group: adult`, `scraper_operated: false`, `QualityCeiling:
    "1080p"`. (For a fresh DB, seed now inserts it enabled.)
 
-2. **`services/catalog/internal/service/scraperprovider/migrate.go`** — remove `"hanime"` from
-   the `RetireHanimeAnimelib` name filter so it only disables `animelib`. This prevents a fresh
-   DB from seeding hanime enabled and then immediately re-disabling it. The existing guard key
-   stays (already applied on live DBs); only the affected name set narrows. Update the doc
-   comment + `migrate_test.go` accordingly.
+2. **New guarded migration `ReEnableHanime(db)`** in
+   `services/catalog/internal/service/scraperprovider/migrate.go` — mirrors the
+   `RetireHanimeAnimelib` pattern (run-once via the `catalog_migration_guards` ledger, **new**
+   guard key `reenable_hanime`). Flips the `hanime` row `status` to `enabled` exactly once. This is
+   a **forward-only** migration: `RetireHanimeAnimelib` is left **untouched** (its historical
+   meaning + guard key are preserved, zero re-run risk). On a fresh DB the boot sequence is
+   `seed(enabled) → RetireHanimeAnimelib(disables hanime+animelib) → ReEnableHanime(enables
+   hanime)` → net **enabled**; on the live DB it is `RetireHanimeAnimelib(no-op, guard set) →
+   ReEnableHanime(enables hanime)` → **enabled**. `animelib` stays disabled in both paths. The
+   transient disable→enable on a fresh boot is invisible (single boot, before the roster is
+   emitted). Co-locate a test in `migrate_test.go` (idempotent: second run is a no-op; an operator
+   who later re-disables hanime is NOT clobbered — the guard prevents re-flip).
 
-3. **New guarded migration `ReEnableHanime(db)`** in `migrate.go` — mirrors the
-   `RetireHanimeAnimelib` pattern (run-once via the `catalog_migration_guards` ledger, new guard
-   key e.g. `reenable_hanime`). Flips the **existing** live `hanime` row `status` back to
-   `enabled` exactly once. This is what fixes production. Wire it into the catalog boot sequence
-   in `cmd/catalog-api/main.go` right after the existing retire/backfill migrations. Co-locate a
-   test in `migrate_test.go` (idempotent: second run is a no-op; respects an operator who later
-   re-disables — guard prevents re-flip).
-
-   Operator-override note: the guard means once `ReEnableHanime` has run, a future operator
-   `status=disabled` edit is preserved (the migration won't re-flip it), matching the
-   DB-authoritative roster philosophy.
+3. **Wire `ReEnableHanime` into boot** — call it in `cmd/catalog-api/main.go` immediately
+   **after** the existing `RetireHanimeAnimelib(db.DB)` call (currently ~line 167) and before
+   `EmitCatalogSideRoster`, so it wins on fresh DBs and applies to the live DB.
 
 `animelib` is untouched and stays disabled.
 
