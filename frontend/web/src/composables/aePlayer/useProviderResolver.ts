@@ -511,6 +511,8 @@ export interface ProviderResolver {
  * - provider === 'raw'       → rawAdapter (requires deps.rawApi)
  * - provider === '18anime'   → anime18Adapter via anime18Api (/anime18/* backend,
  *                              NOT the EN scraper chain; requires deps.anime18Api)
+ * - provider === 'hanime'    → hanimeAdapter via hanimeApi (/hanime/* catalog
+ *                              routes; requires deps.hanimeApi)
  * - anything else            → NotAvailableError
  */
 export function makeResolver(deps: ResolverDeps): ProviderResolver {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { makeResolver } from './useProviderResolver'
+import { makeResolver, NotAvailableError } from './useProviderResolver'
 
 /** Parse the query params of a `/api/streaming/hls-proxy?...` URL. */
 function proxyParams(url: string): URLSearchParams {
@@ -353,7 +353,7 @@ describe('useProviderResolver', () => {
 
   it('throws NotAvailableError for hanime when the hanimeApi dep is missing', async () => {
     const resolver = makeResolver({} as any)
-    await expect(resolver.listEpisodes('hanime', 'uuid')).rejects.toThrow()
+    await expect(resolver.listEpisodes('hanime', 'uuid')).rejects.toThrow(NotAvailableError)
   })
 })
 
