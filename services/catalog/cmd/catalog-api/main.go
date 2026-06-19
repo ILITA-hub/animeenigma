@@ -176,6 +176,14 @@ func main() {
 		log.Errorw("re-enable hanime failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) flip of miruro to supports_sub=false: its upstream stopped
+	// serving sub streams (only English dub plays), so it must not advertise/auto-
+	// select for SUB (original-Japanese-audio) playback. Run-once via the ledger;
+	// a later operator re-enable in the DB is never clobbered.
+	if err := scraperprovider.MiruroDubOnly(db.DB); err != nil {
+		log.Errorw("miruro dub-only migration failed (continuing)", "error", err)
+	}
+
 	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
 	// provider_info/provider_enabled management metrics. Runs after the roster is
 	// fully migrated/seeded/backfilled so names + flags are authoritative. The

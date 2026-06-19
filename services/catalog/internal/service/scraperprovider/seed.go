@@ -35,7 +35,11 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "miruro", Status: domain.StatusEnabled,
-		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
+		Reason: "DUB-only — upstream stopped serving sub streams (2026-06-19)",
+		Description: "Miruro's upstream no longer returns sub servers; only English dub " +
+			"plays. SupportsSub=false so it is never offered/auto-selected for SUB " +
+			"(original-Japanese-audio) playback. Existing DBs flipped via MiruroDubOnly.",
+		SupportsSub: false, SupportsDub: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 70,
 	},
 	{
@@ -97,7 +101,7 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "animelib", Status: domain.StatusDisabled,
-		Reason:      "RU direct-MP4 player retired (Plan B)",
+		Reason: "RU direct-MP4 player retired (Plan B)",
 		Description: "AniLib direct MP4. Player surface retired in favor of aePlayer; " +
 			"content dropped (2026-06-18, Plan B).",
 		SupportsDub: true, SubDelivery: "none",
@@ -105,7 +109,7 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "hanime", Status: domain.StatusEnabled,
-		Reason:      "18+ source restored into aePlayer (2026-06-19)",
+		Reason: "18+ source restored into aePlayer (2026-06-19)",
 		Description: "Hanime HLS. Selectable 18+ source inside aePlayer (hentai titles); " +
 			"catalog-operated parser via /hanime/* routes.",
 		SubDelivery: "none", QualityCeiling: "1080p", PreferenceWeight: 0,

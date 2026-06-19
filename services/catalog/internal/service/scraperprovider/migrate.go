@@ -130,3 +130,44 @@ func BackfillScraperOperated(db *gorm.DB) error {
 	return nil
 }
 
+// miruroDubOnlyGuardKey marks MiruroDubOnly as applied.
+const miruroDubOnlyGuardKey = "miruro_dub_only"
+
+// MiruroDubOnly flips the miruro roster row to supports_sub=false exactly once.
+// Miruro's upstream stopped serving sub streams (only English dub plays), so it
+// must not advertise/auto-select for SUB (original-Japanese-audio) playback. The
+// seed is insert-if-absent and so never updates the existing prod row; this
+// RUN-ONCE guarded migration carries the flip to live DBs. Guarded via the
+// catalog_migration_guards ledger so it is a no-op on every later boot and an
+// operator who re-enables sub in the DB is NOT clobbered. Idempotent; safe to
+// call every boot. supports_dub is left as-is (true).
+func MiruroDubOnly(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", miruroDubOnlyGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check miruro-dub-only guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator re-enable
+	}
+
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "miruro").
+		Update("supports_sub", false)
+	if result.Error != nil {
+		return fmt.Errorf("miruro dub-only (supports_sub=false): %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No miruro row to flip (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("miruro dub-only: no row found for name=miruro")
+	}
+
+	if err := db.Create(&migrationGuard{Key: miruroDubOnlyGuardKey}).Error; err != nil {
+		return fmt.Errorf("write miruro-dub-only guard: %w", err)
+	}
+	return nil
+}

@@ -15,7 +15,9 @@ export const PROVIDER_REGISTRY: ProviderDef[] = [
   { id: 'allanime',   name: 'AllAnime',   hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true },
   { id: 'animefever', name: 'AnimeFever', hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true },
   { id: 'gogoanime',  name: 'Gogoanime',  hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true },
-  { id: 'miruro',     name: 'Miruro',     hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true },
+  // Miruro is DUB-only: its upstream stopped serving sub streams, so it must not
+  // be offered/auto-selected for SUB (original-Japanese-audio) playback (2026-06-19).
+  { id: 'miruro',     name: 'Miruro',     hue: '#00d4ff', group: 'en', audios: ['dub'],        langs: ['en'], content: ['common'], scraper: true },
   { id: 'nineanime',  name: '9anime',     hue: '#00d4ff', group: 'en', audios: ['sub'],        langs: ['en'], content: ['common'], scraper: true },
   { id: 'animepahe',  name: 'AnimePahe',  hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true },
 

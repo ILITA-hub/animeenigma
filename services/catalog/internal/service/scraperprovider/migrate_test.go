@@ -165,6 +165,66 @@ func TestReEnableHanime_GuardedDoesNotClobberOperatorDisable(t *testing.T) {
 	}
 }
 
+func TestMiruroDubOnly_FlipsMiruroSubOnly(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Simulate a pre-existing live DB where miruro still advertised sub.
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "miruro").
+		Update("supports_sub", true).Error; err != nil {
+		t.Fatalf("preset miruro supports_sub=true: %v", err)
+	}
+
+	if err := scraperprovider.MiruroDubOnly(db); err != nil {
+		t.Fatalf("miruro dub-only: %v", err)
+	}
+
+	var miruro, gogo domain.ScraperProvider
+	db.First(&miruro, "name = ?", "miruro")
+	db.First(&gogo, "name = ?", "gogoanime")
+	if miruro.SupportsSub {
+		t.Error("miruro supports_sub should be false after MiruroDubOnly")
+	}
+	if !miruro.SupportsDub {
+		t.Error("miruro supports_dub must stay true")
+	}
+	// Other providers untouched.
+	if !gogo.SupportsSub {
+		t.Error("gogoanime supports_sub must stay true (only miruro is flipped)")
+	}
+}
+
+func TestMiruroDubOnly_GuardedDoesNotClobberOperatorReEnable(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := scraperprovider.MiruroDubOnly(db); err != nil {
+		t.Fatalf("miruro dub-only 1: %v", err)
+	}
+	// Operator later re-enables sub on miruro.
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "miruro").
+		Update("supports_sub", true).Error; err != nil {
+		t.Fatalf("operator re-enable sub: %v", err)
+	}
+	// Second boot must NOT clobber the operator's re-enable (guard already set).
+	if err := scraperprovider.MiruroDubOnly(db); err != nil {
+		t.Fatalf("miruro dub-only 2: %v", err)
+	}
+	var miruro domain.ScraperProvider
+	db.First(&miruro, "name = ?", "miruro")
+	if !miruro.SupportsSub {
+		t.Error("miruro supports_sub = false (guard clobbered operator re-enable)")
+	}
+}
+
 func TestBackfillScraperOperated_SetsIntrinsicFlag(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
