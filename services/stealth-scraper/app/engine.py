@@ -273,22 +273,37 @@ class CamoufoxEngine:
                 raise
 
             except asyncio.TimeoutError as exc:
+                # A timeout/crash is a BROWSER fault, not a proxy fault — tear the
+                # (possibly wedged) browser down and retry with a FRESH cold one
+                # on the SAME exit. Do NOT add the proxy to ``tried``: with a
+                # single exit, excluding it here makes pool.select() return None
+                # on the next pass → the loop gives up after one attempt instead
+                # of self-healing the browser.
                 last_err = exc
                 await self._teardown(profile, reason="crash")
                 self.profiles.release(profile, ok=False)
-                tried.add(proxy.id)
                 continue
 
             except Exception as exc:  # noqa: BLE001
+                # Driver/context death ("Connection closed while reading from the
+                # driver", "unable to perform operation on <WriteUnixTransport>")
+                # — same as above: recycle the browser, keep the exit, retry.
                 last_err = exc
                 await self._teardown(profile, reason="crash")
                 self.profiles.release(profile, ok=False)
-                tried.add(proxy.id)
                 continue
 
-        metrics.RESOLVE_TOTAL.labels(provider=provider, result="challenge").inc()
-        raise ChallengeError(
-            f"exhausted {len(tried)} exit(s); last: {last_err}", kind="exhausted"
+        # Distinguish "every exit was challenged" (rotate-worthy) from "the
+        # browser kept crashing on the only exit" — both 5xx to the Go side, but
+        # the metric + message should not lie about a challenge that never came.
+        if isinstance(last_err, ChallengeError):
+            metrics.RESOLVE_TOTAL.labels(provider=provider, result="challenge").inc()
+            raise ChallengeError(
+                f"exhausted {len(tried)} exit(s); last: {last_err}", kind="exhausted"
+            )
+        metrics.RESOLVE_TOTAL.labels(provider=provider, result="error").inc()
+        raise RecipeError(
+            f"resolve failed after {self.cfg.max_proxy_retries + 1} browser attempt(s): {last_err}"
         )
 
     async def _acquire_profile(self, retries: int = 50) -> Profile | None:

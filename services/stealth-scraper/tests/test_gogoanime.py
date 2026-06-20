@@ -94,16 +94,21 @@ class FakeAPIResp:
 
 
 class FakeRequest:
-    def __init__(self, getsources_body):
+    def __init__(self, getsources_body, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n"):
         self._body = getsources_body
+        self._master_status = master_status
+        self._master_body = master_body
 
     async def get(self, url, headers=None):
-        return FakeAPIResp(200, self._body)
+        # getSources enrichment fetch vs. a master/.m3u8 liveness probe.
+        if "getSources" in url:
+            return FakeAPIResp(200, self._body)
+        return FakeAPIResp(self._master_status, self._master_body)
 
 
 class FakeContext:
-    def __init__(self, getsources_body):
-        self.request = FakeRequest(getsources_body)
+    def __init__(self, getsources_body, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n"):
+        self.request = FakeRequest(getsources_body, master_status, master_body)
 
 
 class FakePage:
@@ -163,13 +168,13 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def ctx(page, **params):
+def ctx(page, *, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n", **params):
     base = {"episode_url": "https://gogoanimes.fi/one-piece-episode-1", "category": "sub"}
     base.update(params)
     cfg = Config(capture_attempts=3, capture_delay=0.0)
     return RecipeContext(
         page=page,
-        context=FakeContext(REAL_GETSOURCES),
+        context=FakeContext(REAL_GETSOURCES, master_status, master_body),
         params=base,
         cfg=cfg,
         log=None,
@@ -185,6 +190,32 @@ class TestGogoanimeChain(unittest.TestCase):
         self.assertEqual(session["referer"], "https://megaplay.buzz/")
         self.assertEqual(len(session["subtitles"]), 1)  # enriched from getSources
         self.assertEqual(session["intro"], {"start": 0, "end": 130})
+        self.assertEqual(session["cdn_probe_status"], 200)  # probed live
+
+    def test_dead_cdn_403_raises_so_orchestrator_fails_over(self):
+        # megaplay pinned this stream to a WAF-blocked CDN (cdn.mewstream.buzz):
+        # the master returns a 403 Cloudflare page. We must NOT hand that back as
+        # success — raise so the Go orchestrator fails over to the next provider.
+        page = FakePage()
+        with self.assertRaises(RecipeError):
+            run(GogoanimeRecipe().resolve(
+                ctx(page, master_status=403, master_body="<!DOCTYPE html><title>Attention Required! | Cloudflare</title>")
+            ))
+
+    def test_expired_master_404_rejected(self):
+        page = FakePage()
+        with self.assertRaises(RecipeError):
+            run(GogoanimeRecipe().resolve(
+                ctx(page, master_status=404, master_body="<html>404 not found</html>")
+            ))
+
+    def test_200_but_not_a_playlist_rejected(self):
+        # 200 with an HTML body (soft-block / interstitial) is not a live stream.
+        page = FakePage()
+        with self.assertRaises(RecipeError):
+            run(GogoanimeRecipe().resolve(
+                ctx(page, master_status=200, master_body="<html><body>blocked</body></html>")
+            ))
 
     def test_navigation_host_allowlist(self):
         page = FakePage()

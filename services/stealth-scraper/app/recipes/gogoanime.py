@@ -311,6 +311,7 @@ class GogoanimeRecipe(Recipe):
         # master — so we don't depend on autoplay actually starting playback
         # (a cold profile blocks autoplay, so the .m3u8 is never fetched). We
         # re-fetch getSources via APIRequestContext (no browser CORS) and parse.
+        gs_master: str | None = None
         gs_url = await self._await_getsources(captured, rc.cfg)
         if gs_url:
             try:
@@ -320,7 +321,7 @@ class GogoanimeRecipe(Recipe):
                 )
                 if r.status == 200:
                     gs = parse_getsources(json.loads(await r.text()))
-                    session["master_url"] = gs["master_url"]
+                    gs_master = gs["master_url"]
                     session["subtitles"] = gs["subtitles"]
                     session["intro"] = gs["intro"]
                     session["outro"] = gs["outro"]
@@ -329,16 +330,61 @@ class GogoanimeRecipe(Recipe):
             except Exception:  # noqa: BLE001 - fall through to interception
                 pass
 
-        # FALLBACK: if getSources didn't yield a master, use an intercepted
-        # .m3u8 (requires the player to have actually started playback).
-        if not session["master_url"]:
-            session["master_url"] = await self._await_m3u8(captured, rc.cfg)
+        # FALLBACK candidate(s): if getSources gave no master, wait for an
+        # intercepted .m3u8 (requires the player to have actually started
+        # playback). When getSources DID give a master we skip this wait — a
+        # cold profile won't fire playback anyway, so polling only adds latency.
+        if gs_master is None:
+            await self._await_m3u8(captured, rc.cfg)
 
-        if not session["master_url"]:
-            raise RecipeError(
-                "megaplay: no master from getSources or intercepted .m3u8"
-            )
-        return session
+        # Build an ordered, de-duped candidate list (getSources master first,
+        # then any intercepted master/.m3u8) and probe each: megaplay pins some
+        # streams to a CDN that hard-blocks our exit IP at the Cloudflare WAF
+        # (e.g. cdn.mewstream.buzz → 403 "Attention Required" to curl AND a real
+        # browser). Returning such a dead master as success makes the player show
+        # "stream unavailable" with no failover. Instead we accept only a master
+        # that actually serves a playlist, and raise otherwise so the Go
+        # orchestrator fails over to the next provider.
+        candidates: list[str] = []
+        for c in [gs_master, *captured["masters"], *captured["m3u8s"]]:
+            if c and c not in candidates:
+                candidates.append(c)
+        if not candidates:
+            raise RecipeError("megaplay: no master from getSources or intercepted .m3u8")
+
+        last_status: int | None = None
+        for cand in candidates:
+            status, ok = await self._probe_master(rc, cand, referer)
+            last_status = status
+            if ok:
+                session["master_url"] = cand
+                session["cdn_probe_status"] = status
+                return session
+
+        session["cdn_probe_status"] = last_status
+        raise RecipeError(
+            f"megaplay: all {len(candidates)} CDN candidate(s) dead/blocked "
+            f"(last probe status={last_status}) — likely WAF-blocked CDN "
+            f"({host_of(candidates[0])})"
+        )
+
+    async def _probe_master(
+        self, rc: RecipeContext, url: str, referer: str
+    ) -> tuple[int | None, bool]:
+        """HEAD-ish liveness probe of a candidate master via the browser's
+        APIRequestContext (same exit IP + Referer the streaming proxy will use).
+        Live iff 200 AND the body is an actual HLS playlist (#EXTM3U) — a
+        Cloudflare block returns 403 with an HTML "Attention Required" page, and
+        an expired/stale URL returns 404, both of which we reject."""
+        try:
+            r = await rc.context.request.get(url, headers={"Referer": referer})
+            status = r.status
+            if status != 200:
+                return status, False
+            head = (await r.text())[:64].lstrip()
+            return status, head.startswith("#EXT")
+        except Exception:  # noqa: BLE001 - network error == not live
+            return None, False
 
     async def _await_getsources(self, captured: dict, cfg: Any) -> str | None:
         """Poll for the getSources request the player fires on init."""
