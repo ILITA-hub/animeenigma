@@ -115,7 +115,8 @@
         class="pl-srcbtn"
         :class="{ 'is-open': openMenu === 'source' }"
         data-test="source-pill"
-        aria-label="`Source: ${providerName} · ${audioLabel}`"
+        :aria-label="`Source: ${providerName} · ${audioLabel}`"
+        :aria-expanded="openMenu === 'source'"
         @click="emit('toggle-source')"
       >
         <!-- Provider identity-hue dot -->
@@ -133,6 +134,7 @@
       <PlayerIconButton
         :active="openMenu === 'subs'"
         aria-label="Subtitles"
+        :aria-expanded="openMenu === 'subs'"
         data-test="toggle-subs"
         @click="emit('toggle-subs')"
       >
@@ -143,6 +145,7 @@
       <PlayerIconButton
         :active="openMenu === 'settings'"
         aria-label="Settings"
+        :aria-expanded="openMenu === 'settings'"
         data-test="toggle-settings"
         @click="emit('toggle-settings')"
       >
@@ -290,10 +293,21 @@ function onVolumeInput(event: Event) {
   cursor: pointer;
 }
 
-.pl-vol:hover .pl-vol-range {
+.pl-vol:hover .pl-vol-range,
+.pl-vol:focus-within .pl-vol-range {
   width: 72px;
   opacity: 1;
   margin-right: 6px;
+}
+
+/* Coarse pointers (touch) have no hover — keep the slider revealed so it's
+   reachable without a hover affordance. */
+@media (pointer: coarse) {
+  .pl-vol-range {
+    width: 72px;
+    opacity: 1;
+    margin-right: 6px;
+  }
 }
 
 /* Time pill — same geometry as the source pill (.pl-srcbtn) */

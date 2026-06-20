@@ -59,19 +59,17 @@
     <!-- Source error overlay -->
     <div
       v-if="sourceError"
+      role="alert"
+      aria-live="assertive"
       class="absolute inset-0 z-[2] flex items-center justify-center"
       style="background: var(--black-a80);"
     >
       <div class="flex flex-col items-center gap-3 text-center px-8">
         <CircleAlert :size="48" :stroke-width="1.5" class="text-muted-foreground" aria-hidden="true" />
         <p class="text-sm font-medium text-foreground">{{ sourceError }}</p>
-        <button
-          class="px-4 py-2 rounded-md text-sm font-semibold text-foreground"
-          style="background: var(--border);"
-          @click="retryResolution"
-        >
+        <Button variant="soft" size="sm" data-test="source-error-retry" @click="retryResolution">
           Retry
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -172,7 +170,7 @@
 
     <NextEpisodeCard
       v-if="showNextEpisode"
-      :next-ep="anime.ep + 1"
+      :next-ep="nextEpisodeNumber"
       :title="anime.title"
       :still-url="anime.still"
       :countdown="nextEpCountdown"
@@ -317,6 +315,7 @@ import { useViewerContextStore } from '@/stores/viewerContext'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
+import { Button } from '@/components/ui'
 import PlayerControlBar from './PlayerControlBar.vue'
 import SourcePanel from './SourcePanel.vue'
 import EpisodesPanel from './EpisodesPanel.vue'
@@ -607,9 +606,16 @@ let providerAutoSelected = false
 const triedSources = new Set<string>()
 let sourceSwitchAttempts = 0
 const MAX_SOURCE_SWITCHES = 5
+// True from the moment an auto-failover commits the switch (setProvider/setServer)
+// until the next resolve takes over (isResolving flips true). During that handoff
+// the OLD <video> element can fire a native error for the source we're leaving —
+// onVideoError must NOT mistake that for a dead destination and strand the
+// recovering source behind "Stream unavailable".
+let switchingSource = false
 function resetSourceSwitching() {
   triedSources.clear()
   sourceSwitchAttempts = 0
+  switchingSource = false
 }
 watch(() => props.animeId, () => {
   aeAvailableCache = null
@@ -687,6 +693,7 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
   // Commit the switch.
   triedSources.add(curKey)
   sourceSwitchAttempts++
+  switchingSource = true // suppress the outgoing element's error during handoff
   if (switchServerId) {
     state.setServer(switchServerId) // combo watcher re-resolves the stream
   } else {
@@ -1197,6 +1204,7 @@ async function loadEpisodesAndStream() {
 
   sourceError.value = null
   isResolving.value = true
+  switchingSource = false // resolve owns error handling now — handoff window over
   hasStarted.value = false
   const token = ++resolveToken
   resolveStartedAt = performance.now()
@@ -1625,7 +1633,10 @@ function onTimeUpdate() {
 // Covers the native/mp4 path (e.g. upstream CDN 404 → MEDIA_ERR_SRC_NOT_SUPPORTED).
 function onVideoError() {
   const v = videoRef.value
-  if (!v?.error || isResolving.value) return
+  // isResolving: a resolve is in flight. switchingSource: an auto-failover just
+  // committed and the destination resolve hasn't taken over yet — in both cases
+  // this native error is from the source we're leaving, not a dead destination.
+  if (!v?.error || isResolving.value || switchingSource) return
   setBuffering(false)
   sourceError.value = 'Stream unavailable'
 }
@@ -1823,9 +1834,35 @@ function onEnded() {
   }
 }
 
-const anime_hasNextEp = computed(
-  () => props.anime.ep < props.anime.eps,
+// The episode the user is actually on — NOT props.anime.ep, which is the
+// mount-time prop and never updates as they switch episodes inside the player.
+const currentEpNumber = computed(
+  () => selectedEpisode.value?.number ?? props.initialEpisode ?? props.anime.ep ?? 1,
 )
+
+// "Has a next episode" derived from the loaded episode list (authoritative for
+// the current source), falling back to the catalog ep/eps counts before the
+// list resolves. Using props.anime.ep here was the bug: after switching a few
+// episodes it still pointed at the mount episode, so the countdown could start
+// at the series end (and then goToNextEpisode found nothing → silent stall).
+const anime_hasNextEp = computed(() => {
+  const sel = selectedEpisode.value
+  if (episodes.value.length && sel) {
+    const idx = episodes.value.findIndex((e) => e.number === sel.number)
+    if (idx >= 0) return idx + 1 < episodes.value.length
+  }
+  return currentEpNumber.value < props.anime.eps
+})
+
+// The actual next episode number for the "Up next" card label.
+const nextEpisodeNumber = computed(() => {
+  const sel = selectedEpisode.value
+  if (episodes.value.length && sel) {
+    const idx = episodes.value.findIndex((e) => e.number === sel.number)
+    if (idx >= 0 && idx + 1 < episodes.value.length) return episodes.value[idx + 1].number
+  }
+  return currentEpNumber.value + 1
+})
 
 function startNextEpCountdown() {
   showNextEpisode.value = true
@@ -1869,6 +1906,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
   if (!provider) return
   sourceError.value = null
   isResolving.value = true
+  switchingSource = false // resolve owns error handling now — handoff window over
   hasStarted.value = false
   const token = ++resolveToken
   resolveStartedAt = performance.now()
@@ -2490,11 +2528,16 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* Player shell is tabindex=0 for hotkeys — suppress all focus rings;
-   play/pause state and control bar visibility are sufficient feedback. */
-.pl:focus,
+/* Player shell is tabindex=0 for hotkeys. Suppress the ring on mouse focus,
+   but keyboard users need to perceive that the player region is focused (that
+   focus is what routes Space/arrows to THIS player) — show a subtle inset ring
+   only on :focus-visible (keyboard), not on click. */
+.pl:focus {
+  outline: none;
+}
 .pl:focus-visible {
   outline: none;
+  box-shadow: inset 0 0 0 2px var(--cyan-a40);
 }
 
 /* Floating menu cards (source / settings / subtitles) — anchored over the

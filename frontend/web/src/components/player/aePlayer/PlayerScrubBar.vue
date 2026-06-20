@@ -14,6 +14,10 @@
     @mouseleave="onMouseLeave"
     @keydown.left.prevent.stop="onKeySeek(-1)"
     @keydown.right.prevent.stop="onKeySeek(1)"
+    @keydown.down.prevent.stop="onKeySeek(-1)"
+    @keydown.up.prevent.stop="onKeySeek(1)"
+    @keydown.home.prevent.stop="onKeySeekTo(0)"
+    @keydown.end.prevent.stop="onKeySeekTo(100)"
   >
     <!-- Rail background (via ::before in scoped CSS) -->
 
@@ -141,11 +145,18 @@ function onTrackClick(event: MouseEvent) {
   emit('seek', pct)
 }
 
-// Keyboard slider: ←/→ = ±5 s expressed in track percent.
+// Keyboard slider: ←/→ and ↓/↑ = ±5 s expressed in track percent. Up/Down are
+// bound with .stop so they act on the focused slider instead of falling through
+// to the global volume hotkey (WAI-ARIA slider pattern).
 function onKeySeek(dir: 1 | -1) {
   if (!props.durationSec) return
   const stepPct = (5 / props.durationSec) * 100
   emit('seek', clamp(props.progress + dir * stepPct, 0, 100))
+}
+
+// Home/End jump to the start/end of the timeline (WAI-ARIA slider pattern).
+function onKeySeekTo(pct: number) {
+  emit('seek', clamp(pct, 0, 100))
 }
 
 function onMouseMove(event: MouseEvent) {

@@ -48,6 +48,21 @@ describe('PlayerControlBar', () => {
     expect(pill.text()).toContain('Sub')
   })
 
+  it('source pill aria-label is interpolated, not a literal template string', () => {
+    const w = mount(PlayerControlBar, { props: baseProps })
+    const pill = w.find('[data-test="source-pill"]')
+    // Regression: was a static attr `\`Source: ${providerName}...\`` shipped verbatim to AT.
+    expect(pill.attributes('aria-label')).toBe('Source: AllAnime · Sub')
+    expect(pill.attributes('aria-label')).not.toContain('${')
+  })
+
+  it('exposes aria-expanded on the source pill reflecting its menu state', () => {
+    const closed = mount(PlayerControlBar, { props: baseProps })
+    expect(closed.find('[data-test="source-pill"]').attributes('aria-expanded')).toBe('false')
+    const open = mount(PlayerControlBar, { props: { ...baseProps, openMenu: 'source' } })
+    expect(open.find('[data-test="source-pill"]').attributes('aria-expanded')).toBe('true')
+  })
+
   it('emits toggle-episodes when the episodes pill is clicked', async () => {
     const w = mount(PlayerControlBar, { props: baseProps })
     await w.find('[data-test="episodes-pill"]').trigger('click')

@@ -57,4 +57,22 @@ describe('PlayerScrubBar', () => {
     expect(seeks[0][0]).toBeCloseTo(50.5) // +5s of 1000s = +0.5pct
     expect(seeks[1][0]).toBeCloseTo(49.5)
   })
+  it('Up/Down arrows also seek ±5s (WAI-ARIA slider pattern)', async () => {
+    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] } })
+    const track = w.find('[data-test="track"]')
+    await track.trigger('keydown', { key: 'ArrowUp' })
+    await track.trigger('keydown', { key: 'ArrowDown' })
+    const seeks = w.emitted('seek') as number[][]
+    expect(seeks[0][0]).toBeCloseTo(50.5)
+    expect(seeks[1][0]).toBeCloseTo(49.5)
+  })
+  it('Home/End jump to the start/end of the timeline', async () => {
+    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] } })
+    const track = w.find('[data-test="track"]')
+    await track.trigger('keydown', { key: 'Home' })
+    await track.trigger('keydown', { key: 'End' })
+    const seeks = w.emitted('seek') as number[][]
+    expect(seeks[0][0]).toBe(0)
+    expect(seeks[1][0]).toBe(100)
+  })
 })
