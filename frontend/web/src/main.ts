@@ -24,18 +24,26 @@ app.config.errorHandler = (err, _instance, info) => {
 
 const pinia = createPinia()
 app.use(pinia)
-app.use(router)
-app.use(i18n)
 
 // Cross-domain magic-link SSO landing: when we arrive with ?ae_sso=1, the
 // httpOnly session cookies are already set but THIS origin's localStorage is
-// empty (the user logged in on a different domain, e.g. animeenigma.ru). Adopt
-// the session from the refresh_token cookie BEFORE mount so the router guards
-// and first render see the authenticated state, then strip the marker so it
-// never lingers in the URL or gets bookmarked. Non-SSO loads are untouched.
+// empty (the user logged in on a different domain, e.g. animeenigma.ru). We:
+//   1. Strip the ?ae_sso=1 marker from the URL FIRST — before the router is
+//      installed — so the router never captures it into route.query (which
+//      would re-sync it back into the address bar after a replaceState).
+//   2. Adopt the session from the refresh_token cookie BEFORE mount, so the
+//      router guards and first render see the authenticated state.
+// Non-SSO loads are completely untouched (router/i18n install + mount as usual).
 async function bootstrap() {
   const params = new URLSearchParams(window.location.search)
   if (params.get('ae_sso') === '1') {
+    params.delete('ae_sso')
+    const qs = params.toString()
+    window.history.replaceState(
+      {},
+      '',
+      window.location.pathname + (qs ? '?' + qs : '') + window.location.hash,
+    )
     const auth = useAuthStore(pinia)
     if (!auth.token) {
       try {
@@ -44,14 +52,9 @@ async function bootstrap() {
         // Stale/absent cookie — fall through and render anonymously.
       }
     }
-    params.delete('ae_sso')
-    const qs = params.toString()
-    window.history.replaceState(
-      {},
-      '',
-      window.location.pathname + (qs ? '?' + qs : '') + window.location.hash,
-    )
   }
+  app.use(router)
+  app.use(i18n)
   app.mount('#app')
 }
 
