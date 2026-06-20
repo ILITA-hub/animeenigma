@@ -1048,6 +1048,11 @@
       "thankYou": "ありがとうございます！確認します。",
       "submitError": "送信に失敗しました。もう一度お試しください。",
       "viewMine": "マイフィードバック"
+    },
+    "social": {
+      "telegram": "Telegram",
+      "github": "GitHub",
+      "email": "メール"
     }
   },
   "status": {
