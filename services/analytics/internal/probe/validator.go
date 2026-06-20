@@ -106,7 +106,11 @@ func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict
 			return verdict
 		}
 		body, st, err := v.fetch(ctx, v.proxyURL(rs, line))
-		if err != nil || st == http.StatusForbidden {
+		if err != nil {
+			verdict.Reason = streamprobe.ReasonCDNUnreachable
+			return verdict
+		}
+		if st == http.StatusForbidden {
 			verdict.Reason = streamprobe.ReasonStatus403
 			return verdict
 		}
