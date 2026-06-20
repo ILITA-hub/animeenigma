@@ -85,3 +85,11 @@ scrape_configs:
     static_configs:
       - targets: ['clickhouse:9363']
     metrics_path: /metrics
+
+  # Host bandwidth (vnstat). The vnstat-exporter container reads the host's
+  # /var/lib/vnstat DB (eth0) and exposes per-interface RX/TX totals + month/day
+  # gauges. Drives the "Server Bandwidth" Grafana dashboard.
+  - job_name: 'vnstat'
+    static_configs:
+      - targets: ['vnstat-exporter:9100']
+    metrics_path: /metrics
