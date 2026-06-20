@@ -257,12 +257,12 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "time() - (scheduler_job_last_success_timestamp{exported_job=\"scraper_playability_canary\"} > 0)",
-          "legendFormat": "Canary Age",
+          "expr": "time() - (probe_last_run_timestamp > 0)",
+          "legendFormat": "Probe Age",
           "refId": "A"
         }
       ],
-      "title": "Canary Last Run (age)",
+      "title": "Probe Last Run (age)",
       "type": "stat"
     },
     {
@@ -550,15 +550,13 @@
         "y": 17
       },
       "id": 22,
+      "description": "Per-EN-provider playability status from the daily probe run. status ∈ {up, degraded, down}; reason is '-' when up. Kodik/ae liveness is tracked separately under provider_health_up{stage=\"liveness\"}.",
       "options": {
-        "alignValue": "left",
-        "mergeValues": true,
-        "rowHeight": 0.6,
-        "showValue": "never",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
       },
       "pluginVersion": "10.3.3",
       "targets": [
@@ -567,13 +565,96 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "provider_health_up{provider=~\"$provider\", stage=~\"$stage\"}",
-          "legendFormat": "{{ provider }}/{{ stage }}",
+          "expr": "probe_provider_status{provider=~\"$provider\"}",
+          "instant": true,
+          "format": "table",
+          "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Provider × Stage Up",
-      "type": "state-timeline"
+      "title": "Provider Playability",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "provider": "Provider",
+              "status": "Stage Status",
+              "reason": "Reason"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Stage Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "up": {
+                        "text": "up",
+                        "color": "green",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "degraded": {
+                        "text": "degraded",
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "down": {
+                        "text": "down",
+                        "color": "red",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "type": "table"
     },
     {
       "datasource": {
@@ -1112,7 +1193,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "topk(15, sum by (provider, server, reason, anime_slot) (playability_canary_runs_total{result=\"fail\", provider=~\"$provider\"}))",
+          "expr": "topk(15, sum by (provider, server, reason, slot) (probe_runs_total{result=\"fail\", provider=~\"$provider\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -1131,11 +1212,11 @@
               "provider": 0,
               "server": 1,
               "reason": 2,
-              "anime_slot": 3,
+              "slot": 3,
               "Value": 4
             },
             "renameByName": {
-              "anime_slot": "Slot",
+              "slot": "Slot",
               "Value": "Fail Count"
             }
           }
@@ -1610,36 +1691,6 @@
         },
         "refresh": 2,
         "regex": "",
-        "type": "query"
-      },
-      {
-        "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
-        "definition": "label_values(provider_health_up, stage)",
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "name": "stage",
-        "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(provider_health_up, stage)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 2,
-        "regex": "",
-        "sort": 1,
         "type": "query"
       }
     ]
