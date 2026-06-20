@@ -38,20 +38,12 @@ type JobsConfig struct {
 	AnnouncedStaleHours int
 	ReleasedStaleHours  int
 
-	// Phase 23 — scraper playability canary (SCRAPER-HEAL-12 / -13).
-	// ScraperPlayabilityCanaryCron: cron expression for the daily canary
-	//   run. Default `0 3 * * *` (03:00 local time, off-peak). The canary
-	//   itself applies ±5min jitter on top of the cron tick to avoid
-	//   03:00:00 fingerprinting upstream.
-	// ScraperBaseURL: base URL of the in-cluster scraper service the canary
-	//   calls (/scraper/servers, /scraper/stream). Default matches the
-	//   docker-compose service name.
-	// CanaryReportDir: directory the canary writes per-run JSON logs into.
-	//   Must live under a mounted volume (player_reports) for persistence
-	//   across container restarts. See CONTEXT.md D5.
-	ScraperPlayabilityCanaryCron string
-	ScraperBaseURL               string
-	CanaryReportDir              string
+	// Phase A — daily playback-health probe trigger (replaces Phase 23 canary).
+	// PlaybackProbeCron: cron expression for the daily probe run.
+	//   Default `0 3 * * *` (03:00 local time, off-peak). The scheduler
+	//   POSTs analytics' /internal/probe/run; analytics runs the full
+	//   catalog-signed resolve → HLS proxy validation chain.
+	PlaybackProbeCron string
 
 	// Phase 03 (v4.0) — daily db_read P95 read-threshold recompute trigger
 	// (D-03 / AR-EFFECT-01). ReadThresholdCron: cron for the daily trigger
@@ -143,10 +135,8 @@ func Load() (*Config, error) {
 			OngoingStaleHours:   getEnvInt("ONGOING_STALE_HOURS", 12),
 			AnnouncedStaleHours: getEnvInt("ANNOUNCED_STALE_HOURS", 72),
 			ReleasedStaleHours:  getEnvInt("RELEASED_STALE_HOURS", 168),
-			// Phase 23 — canary.
-			ScraperPlayabilityCanaryCron: getEnv("SCRAPER_PLAYABILITY_CANARY_CRON", "0 3 * * *"),
-			ScraperBaseURL:               getEnv("SCRAPER_BASE_URL", "http://scraper:8088"),
-			CanaryReportDir:              getEnv("CANARY_REPORT_DIR", "/data/reports/canary-runs"),
+			// Phase A — daily playback-health probe trigger.
+			PlaybackProbeCron: getEnv("PLAYBACK_PROBE_CRON", "0 3 * * *"),
 			// Phase 03 (v4.0) — daily read-threshold recompute trigger.
 			ReadThresholdCron:    getEnv("READ_THRESHOLD_CRON", "0 5 * * *"),
 			AnalyticsInternalURL: getEnv("ANALYTICS_INTERNAL_URL", "http://analytics:8092"),

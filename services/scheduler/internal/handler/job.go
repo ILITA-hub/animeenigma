@@ -51,10 +51,8 @@ func (h *JobHandler) TriggerCalendarSync(w http.ResponseWriter, r *http.Request)
 	httputil.OK(w, map[string]string{"status": "job triggered"})
 }
 
-// TriggerScraperPlayabilityCanary manually triggers the canary job
-// (Phase 23 SCRAPER-HEAL-12). Used by the synthetic Pattern 6 test in
-// Plan 23-03 to drive a known-good probe pass through the live stack.
-func (h *JobHandler) TriggerScraperPlayabilityCanary(w http.ResponseWriter, r *http.Request) {
-	go h.jobService.TriggerScraperPlayabilityCanary(context.Background())
+// TriggerPlaybackProbe manually triggers the playback-health probe job.
+func (h *JobHandler) TriggerPlaybackProbe(w http.ResponseWriter, r *http.Request) {
+	go h.jobService.TriggerPlaybackProbe(context.Background())
 	httputil.OK(w, map[string]string{"status": "job triggered"})
 }

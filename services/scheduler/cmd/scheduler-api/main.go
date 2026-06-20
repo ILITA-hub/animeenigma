@@ -117,8 +117,8 @@ func main() {
 	topAnimeJob := jobs.NewTopAnimeSyncJob(&cfg.Jobs, log)
 	calendarJob := jobs.NewCalendarSyncJob(&cfg.Jobs, log)
 	animeLoaderJob := jobs.NewAnimeLoaderJob(taskRepo, exportJobRepo, taskProcessor, log)
-	// Phase 23 — daily scraper playability canary (SCRAPER-HEAL-12/-13).
-	scraperPlayabilityCanaryJob := jobs.NewScraperPlayabilityCanaryJob(db.DB, &cfg.Jobs, log)
+	// Phase A — daily playback-health probe trigger.
+	probeTriggerJob := jobs.NewProbeTriggerJob(&cfg.Jobs, log)
 	// Phase 03 (v4.0) — daily read-threshold recompute trigger (D-03).
 	readThresholdJob := jobs.NewReadThresholdJob(&cfg.Jobs, log)
 	// Stage 2b — daily provider-ranking recompute trigger.
@@ -137,7 +137,7 @@ func main() {
 	autocachePredictionJob := jobs.NewAutocachePredictionJob(db.DB, cfg.Jobs.AutocacheActiveWatcherDays, cfg.Jobs.AutocacheAvgRawEpBytes, log)
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, scraperPlayabilityCanaryJob, readThresholdJob, providerRankingJob, autocacheLogicAJob, autocachePredictionJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, probeTriggerJob, readThresholdJob, providerRankingJob, autocacheLogicAJob, autocachePredictionJob, log)
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler
@@ -146,7 +146,7 @@ func main() {
 		cfg.Jobs.CleanupCron,
 		cfg.Jobs.TopAnimeSyncCron,
 		cfg.Jobs.CalendarSyncCron,
-		cfg.Jobs.ScraperPlayabilityCanaryCron,
+		cfg.Jobs.PlaybackProbeCron,
 		cfg.Jobs.ReadThresholdCron,
 		cfg.Jobs.ProviderRankingCron,
 		cfg.Jobs.AutocacheLogicACron,

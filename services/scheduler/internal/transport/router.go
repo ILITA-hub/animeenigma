@@ -46,8 +46,8 @@ func NewRouter(
 			r.Post("/cleanup", jobHandler.TriggerCleanup)
 			r.Post("/top-anime-sync", jobHandler.TriggerTopAnimeSync)
 			r.Post("/calendar-sync", jobHandler.TriggerCalendarSync)
-			// Phase 23 — scraper playability canary manual trigger.
-			r.Post("/scraper_playability_canary", jobHandler.TriggerScraperPlayabilityCanary)
+			// Phase A — playback-health probe manual trigger.
+			r.Post("/playback_probe", jobHandler.TriggerPlaybackProbe)
 		})
 
 		// Task management routes for MAL export
