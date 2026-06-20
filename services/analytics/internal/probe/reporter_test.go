@@ -33,4 +33,27 @@ func TestReporter_SetsGaugeAndRows(t *testing.T) {
 	if len(ch.rows) != 1 {
 		t.Fatalf("rows=%d", len(ch.rows))
 	}
+	// info metric: up provider with empty reason → reason label becomes "-"
+	if got := testutil.ToFloat64(metrics.ProbeProviderStatus.WithLabelValues("gogoanime", string(StatusUp), "-")); got != 1.0 {
+		t.Fatalf("info gauge = %v, want 1", got)
+	}
+}
+
+func TestReporter_StatusInfoMetric_DegradedReason(t *testing.T) {
+	ch := &fakeCH{}
+	rep := NewPromReporter(ch)
+	run := RunResult{
+		ProviderVerdicts: []ProviderVerdict{
+			{Provider: "animefever", Status: StatusDegraded, Reason: "status_403 on HD-1"},
+		},
+		Verdicts: []Verdict{},
+		At:       2000,
+	}
+	if err := rep.Report(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	// degraded provider: reason label must be verbatim, not "-"
+	if got := testutil.ToFloat64(metrics.ProbeProviderStatus.WithLabelValues("animefever", string(StatusDegraded), "status_403 on HD-1")); got != 1.0 {
+		t.Fatalf("info gauge degraded = %v, want 1", got)
+	}
 }

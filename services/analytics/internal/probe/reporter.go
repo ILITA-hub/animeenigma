@@ -37,8 +37,14 @@ type PromReporter struct{ ch CHWriter }
 func NewPromReporter(ch CHWriter) *PromReporter { return &PromReporter{ch: ch} }
 
 func (r *PromReporter) Report(ctx context.Context, run RunResult) error {
+	metrics.ProbeProviderStatus.Reset()
 	for _, pv := range run.ProviderVerdicts {
 		metrics.ProbeProviderUp.WithLabelValues(pv.Provider).Set(pv.Status.Gauge())
+		reason := pv.Reason
+		if reason == "" {
+			reason = "-"
+		}
+		metrics.ProbeProviderStatus.WithLabelValues(pv.Provider, string(pv.Status), reason).Set(1)
 	}
 	rows := make([]ProbeRow, 0, len(run.Verdicts))
 	for _, v := range run.Verdicts {
