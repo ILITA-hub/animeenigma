@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -24,6 +25,12 @@ type Config struct {
 	// Guest tokens are access-only (no refresh), so a longer-than-access TTL
 	// keeps mid-session re-mint churn rare. See libs/authz GenerateGuestToken.
 	GuestTokenTTL time.Duration
+
+	// MagicLinkTargetBase is the destination domain for cross-domain SSO
+	// bridge redirects (MAGIC_LINK_TARGET_BASE, default https://animeenigma.org).
+	// Generate redirects to this base; Login consumes the token here.
+	// Trailing slash is stripped at load time.
+	MagicLinkTargetBase string
 }
 
 type TelegramConfig struct {
@@ -89,7 +96,8 @@ func Load() (*Config, error) {
 			WebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 			WebhookURL:    getEnv("TELEGRAM_WEBHOOK_URL", ""),
 		},
-		GuestTokenTTL: getEnvDuration("AUTH_GUEST_TOKEN_TTL", 6*time.Hour),
+		GuestTokenTTL:       getEnvDuration("AUTH_GUEST_TOKEN_TTL", 6*time.Hour),
+		MagicLinkTargetBase: strings.TrimRight(getEnv("MAGIC_LINK_TARGET_BASE", "https://animeenigma.org"), "/"),
 	}, nil
 }
 

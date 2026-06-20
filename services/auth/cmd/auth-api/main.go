@@ -113,12 +113,13 @@ func main() {
 	telegramBotHandler := handler.NewTelegramBotHandler(authService, cfg.Telegram.BotToken, cfg.Telegram.WebhookSecret, log)
 	userHandler := handler.NewUserHandler(userService, log)
 	sessionsHandler := handler.NewSessionsHandler(authService, log)
+	magicLinkHandler := handler.NewMagicLinkHandler(authService, authHandler, cfg.MagicLinkTargetBase, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("auth")
 
 	// Initialize router
-	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, sessionsHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, sessionsHandler, magicLinkHandler, cfg.JWT, log, metricsCollector)
 
 	// Register Telegram webhook (warn on failure, don't block startup)
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.WebhookURL != "" {

@@ -17,6 +17,7 @@ func NewRouter(
 	telegramBotHandler *handler.TelegramBotHandler,
 	userHandler *handler.UserHandler,
 	sessionsHandler *handler.SessionsHandler,
+	magicLinkHandler *handler.MagicLinkHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -35,6 +36,11 @@ func NewRouter(
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
 	})
+
+	// Cross-domain SSO bridge (registered at root, not under /api, so the 302
+	// reaches the browser rather than being consumed by the gateway's API prefix).
+	r.Get("/magic-link-generate", magicLinkHandler.Generate)
+	r.Get("/magic-link-login", magicLinkHandler.Login)
 
 	// Metrics endpoint
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
