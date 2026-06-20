@@ -131,7 +131,7 @@ func (c *Client) resolve(ctx context.Context, req resolveRequest) (*domain.Strea
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, domain.WrapProviderDown(err, "sidecar: decode response")
 	}
-	if !out.Success || out.Data.MasterURL == "" {
+	if !out.Success || out.Data.PlaylistProxyPath == "" {
 		return nil, domain.WrapProviderDown(
 			fmt.Errorf("sidecar unsuccessful: %s", out.Error), "sidecar: resolve",
 		)
@@ -141,11 +141,14 @@ func (c *Client) resolve(ctx context.Context, req resolveRequest) (*domain.Strea
 }
 
 // toStream maps a sidecar resolution to a domain.Stream. The Source URL is the
-// REAL CDN master the browser resolved. The CDN serves the playlist + segments
-// to any client bearing the megaplay Referer (no browser/clearance needed for
-// streaming — verified 2026-06-20), so the downstream streaming HLS proxy
-// fetches it directly using the Referer header; catalog signs the URL so the
-// proxy's provenance gate trusts it (same pattern as the other scraper CDNs).
+// sidecar's OWN /hls restream path (not the real CDN): the megaplay CDNs sit
+// behind Cloudflare bot-management that gates on the TLS/HTTP2 fingerprint, so
+// the playlist + segments can ONLY be fetched through the resolving Camoufox
+// browser's in-page fetch — a direct Go/curl fetch gets a 403 "Attention
+// Required" page (verified 2026-06-20). The downstream streaming HLS proxy
+// fetches this sidecar /hls URL (the `stealth-scraper` host is allowlisted) and
+// rewrites the returned playlist's child URIs to route segment GETs back
+// through the same path.
 func (c *Client) toStream(d sessionData) *domain.Stream {
 	tracks := make([]domain.Track, 0, len(d.Subtitles))
 	for _, s := range d.Subtitles {
@@ -157,11 +160,8 @@ func (c *Client) toStream(d sessionData) *domain.Stream {
 		})
 	}
 	st := &domain.Stream{
-		Sources: []domain.Source{{URL: d.MasterURL, Type: "hls"}},
+		Sources: []domain.Source{{URL: c.baseURL + d.PlaylistProxyPath, Type: "hls"}},
 		Tracks:  tracks,
-	}
-	if d.Referer != "" {
-		st.Headers = map[string]string{"Referer": d.Referer}
 	}
 	if d.Intro != nil {
 		st.Intro = &domain.TimeRange{Start: d.Intro.Start, End: d.Intro.End}

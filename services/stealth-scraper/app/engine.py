@@ -17,11 +17,29 @@ runtime/binary.
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
+
+# Fetch a URL inside the page and return "status|content-type|base64body".
+# Uses FileReader/blob for base64 (manual Uint8Array + btoa trips Camoufox's
+# xray security wrapper → "Permission denied to access property constructor").
+# Takes a single STRING arg (object args also trip the wrapper).
+_IN_PAGE_FETCH_JS = """async (url) => {
+  const r = await fetch(url);
+  const ct = r.headers.get('content-type') || '';
+  const blob = await r.blob();
+  const b64 = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onloadend = () => resolve((fr.result + '').split(',')[1] || '');
+    fr.onerror = () => reject(new Error('filereader'));
+    fr.readAsDataURL(blob);
+  });
+  return r.status + '|' + ct + '|' + b64;
+}"""
 
 from . import metrics
 from .config import Config
@@ -49,6 +67,13 @@ class Session:
     cdn_host: str | None
     master_url: str
     expires_at: float
+    # The live Playwright page kept open on the megaplay player origin. Cloudflare
+    # gates these CDNs on the TLS/HTTP2 fingerprint of the connection, so the
+    # playlist + segments can ONLY be fetched through the real Firefox network
+    # stack (in-page fetch) — NOT the driver's HTTP client / Go / curl. This page
+    # is that fetch context; it is the whole reason the session is retained.
+    page: Any = None
+    player_url: str = ""
 
 
 class _CamoufoxHandle:
@@ -219,44 +244,35 @@ class CamoufoxEngine:
                 break
             metrics.PROXY_SELECT_TOTAL.labels(proxy_id=proxy.id, type=proxy.type).inc()
 
+            page = None
             try:
                 context = await self._ensure_browser(profile, proxy.id)
                 page = await context.new_page()
-                try:
-                    rc = RecipeContext(
-                        page=page, context=context, params=params, cfg=self.cfg,
-                        log=self._log, proxy_id=proxy.id, user_agent=profile.user_agent,
-                    )
-                    partial = await asyncio.wait_for(
-                        recipe.resolve(rc),
-                        timeout=self.cfg.resolve_timeout_ms / 1000.0,
-                    )
-                finally:
-                    try:
-                        await page.close()
-                    except Exception:  # noqa: BLE001
-                        pass
+                rc = RecipeContext(
+                    page=page, context=context, params=params, cfg=self.cfg,
+                    log=self._log, proxy_id=proxy.id, user_agent=profile.user_agent,
+                )
+                partial = await asyncio.wait_for(
+                    recipe.resolve(rc),
+                    timeout=self.cfg.resolve_timeout_ms / 1000.0,
+                )
 
-                payload = self._direct_payload(partial, proxy.id)
+                # SUCCESS: retain the page + profile as a Session. The CDN is
+                # Cloudflare-fingerprint-gated, so the playlist + segments can
+                # only be fetched through THIS browser page (in-page fetch). The
+                # page stays open (NOT closed) and the profile stays leased until
+                # the session expires / is closed.
+                session = await self._open_session(partial, context, proxy.id, profile, page)
                 self.pool.mark_ok(proxy.id)
-                # The resolved CDN serves the playlist + segments to ANY client
-                # bearing the megaplay Referer (verified — no browser/clearance
-                # needed for streaming). So we return the REAL master URL and
-                # RELEASE the profile immediately — the downstream streaming HLS
-                # proxy does the actual restreaming. No session retention → no
-                # pool exhaustion. (The /hls session path remains for any future
-                # provider whose CDN truly needs the browser context.)
-                self.profiles.release(profile, ok=True)
-                if self.profiles.needs_retire(profile):
-                    await self._teardown(profile, reason="recycle")
                 metrics.RESOLVE_TOTAL.labels(provider=provider, result="ok").inc()
                 metrics.RESOLVE_DURATION.labels(provider=provider).observe(
                     time.monotonic() - started
                 )
-                return payload
+                return self._session_payload(session, partial)
 
             except ChallengeError as exc:
                 last_err = exc
+                await _safe_close_page(page)
                 metrics.CHALLENGE_TOTAL.labels(host=exc.host or "?", kind=exc.kind).inc()
                 metrics.PROXY_BLOCK_TOTAL.labels(proxy_id=proxy.id).inc()
                 self.pool.mark_blocked(proxy.id)
@@ -267,6 +283,7 @@ class CamoufoxEngine:
 
             except (NotFoundError, RecipeError) as exc:
                 last_err = exc
+                await _safe_close_page(page)
                 self.profiles.release(profile, ok=False)
                 result = "not_found" if isinstance(exc, NotFoundError) else "error"
                 metrics.RESOLVE_TOTAL.labels(provider=provider, result=result).inc()
@@ -280,6 +297,7 @@ class CamoufoxEngine:
                 # on the next pass → the loop gives up after one attempt instead
                 # of self-healing the browser.
                 last_err = exc
+                await _safe_close_page(page)
                 await self._teardown(profile, reason="crash")
                 self.profiles.release(profile, ok=False)
                 continue
@@ -289,6 +307,7 @@ class CamoufoxEngine:
                 # driver", "unable to perform operation on <WriteUnixTransport>")
                 # — same as above: recycle the browser, keep the exit, retry.
                 last_err = exc
+                await _safe_close_page(page)
                 await self._teardown(profile, reason="crash")
                 self.profiles.release(profile, ok=False)
                 continue
@@ -315,21 +334,14 @@ class CamoufoxEngine:
         return None
 
     async def _open_session(
-        self, partial: dict, context: Any, proxy_id: str, profile: Profile
+        self, partial: dict, context: Any, proxy_id: str, profile: Profile, page: Any
     ) -> Session:
         master = partial.get("master_url")
-        cookies: list[dict] = []
+        player_url = ""
         try:
-            for c in (await context.cookies(master) if master else []):
-                cookies.append(
-                    {
-                        "name": c.get("name"), "value": c.get("value"),
-                        "domain": c.get("domain"), "path": c.get("path", "/"),
-                    }
-                )
+            player_url = page.url
         except Exception:  # noqa: BLE001
-            cookies = []
-        partial["cookies"] = cookies
+            player_url = ""
 
         sid = uuid.uuid4().hex
         session = Session(
@@ -341,6 +353,8 @@ class CamoufoxEngine:
             cdn_host=host_of(master),
             master_url=master,
             expires_at=time.time() + self.cfg.session_ttl_seconds,
+            page=page,
+            player_url=player_url,
         )
         self._sessions[sid] = session
         return session
@@ -380,11 +394,18 @@ class CamoufoxEngine:
             "resolved_via": "camoufox",
         }
 
-    # -- stream proxy (optional; for future browser-bound CDNs) ------------- #
+    # -- stream proxy (mandatory: Cloudflare-fingerprint-gated CDNs) -------- #
     async def proxy_fetch(self, sid: str, url: str) -> dict:
-        """Fetch ``url`` through the session's clearance-bearing browser context
-        (same exit IP + cookies + TLS). Rewrites playlists so child URIs route
-        back through this proxy. Returns {status, content_type, body(bytes)}."""
+        """Fetch ``url`` through the session page's IN-PAGE ``fetch()`` — i.e. the
+        real Firefox network stack (same TLS/HTTP2 fingerprint the player uses).
+
+        This is the whole point of the sidecar restream: the megaplay CDNs
+        (mewstream.buzz / flarestorm.buzz / …) sit behind Cloudflare bot-management
+        that gates on the connection's TLS fingerprint, so curl / Go net/http /
+        Playwright's APIRequestContext all get a 403 "Attention Required" page —
+        ONLY an in-page browser fetch passes (verified 2026-06-20). Playlists are
+        rewritten so child URIs route back through this proxy. Returns
+        {status, content_type, body(bytes)}."""
         self._evict_expired()
         session = self._sessions.get(sid)
         if session is None:
@@ -392,15 +413,7 @@ class CamoufoxEngine:
         if not host_allowed_for_session(url, session):
             raise RecipeError(f"proxy host not allowed for session: {host_of(url)}")
 
-        ctx = session.profile.context
-        if ctx is None:
-            raise SessionGone(sid)
-        resp = await ctx.request.get(
-            url, headers={"Referer": session.referer} if session.referer else {}
-        )
-        status = resp.status
-        ctype = (resp.headers or {}).get("content-type", "")
-        body = await resp.body()
+        status, ctype, body = await self._in_page_fetch(session, url)
 
         # Bump TTL on activity (sliding window) so an actively-watched stream
         # isn't evicted mid-playback.
@@ -420,7 +433,43 @@ class CamoufoxEngine:
             }
         return {"status": status, "content_type": ctype or "application/octet-stream", "body": body}
 
+    async def _in_page_fetch(self, session: Session, url: str) -> tuple[int, str, bytes]:
+        """Run ``fetch(url)`` inside the session's live page and marshal the
+        response back as bytes. Encodes via FileReader/base64 (NOT typed-array +
+        btoa, which trips Camoufox's xray wrapper). Re-navigates the page to the
+        player origin and retries once if the execution context was destroyed
+        (the player page occasionally self-navigates during a long watch)."""
+        page = session.page
+        if page is None:
+            raise SessionGone(session.id)
+        try:
+            raw = await page.evaluate(_IN_PAGE_FETCH_JS, url)
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            if "context was destroyed" in msg or "Target closed" in msg or "navigation" in msg:
+                if not session.player_url:
+                    raise SessionGone(session.id) from exc
+                await page.goto(
+                    session.player_url, referer=session.referer or None,
+                    wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms,
+                )
+                raw = await page.evaluate(_IN_PAGE_FETCH_JS, url)
+            else:
+                raise
+        status_s, ctype, b64 = raw.split("|", 2)
+        body = base64.b64decode(b64) if b64 else b""
+        return int(status_s), ctype, body
+
+    async def aclose_session(self, sid: str) -> bool:
+        session = self._sessions.pop(sid, None)
+        if session is None:
+            return False
+        await _safe_close_page(session.page)
+        self.profiles.release(session.profile, ok=True)
+        return True
+
     def close_session(self, sid: str) -> bool:
+        """Sync drop (page closed lazily on next evict). Prefer aclose_session."""
         session = self._sessions.pop(sid, None)
         if session is None:
             return False
@@ -432,6 +481,13 @@ class CamoufoxEngine:
         for sid, session in list(self._sessions.items()):
             if session.expires_at <= now:
                 self._sessions.pop(sid, None)
+                # Fire-and-forget page close (sync context can't await).
+                page = session.page
+                if page is not None:
+                    try:
+                        asyncio.get_event_loop().create_task(_safe_close_page(page))
+                    except Exception:  # noqa: BLE001
+                        pass
                 self.profiles.release(session.profile, ok=True)
 
 
@@ -460,7 +516,43 @@ def host_allowed_for_session(url: str, session: Session) -> bool:
     cdn = (session.cdn_host or "").lower()
     if cdn and (h == cdn or _registrable(h) == _registrable(cdn)):
         return True
-    return h.endswith("lostproject.club") or h.endswith("megaplay.buzz")
+    if h.endswith("lostproject.club") or h.endswith("megaplay.buzz"):
+        return True
+    # The segment CDN rotates and DIFFERS from the master CDN host
+    # (mewstream.buzz master → flarestorm.buzz segments), and the host is
+    # unpredictable, so a registrable-domain match isn't enough. The child URLs
+    # come from playlists the controlled browser itself fetched, so they're
+    # trusted CDN URLs — allow any public https host, blocking only private /
+    # loopback / link-local targets (SSRF guard against a poisoned playlist
+    # pointing the in-page fetch at an internal service).
+    return _is_public_https_host(url, h)
+
+
+def _is_public_https_host(url: str, host: str) -> bool:
+    import ipaddress
+    from urllib.parse import urlsplit
+
+    if urlsplit(url).scheme != "https":
+        return False
+    bare = host.split(":")[0]
+    low = bare.lower()
+    if low in ("localhost", "stealth-scraper") or low.endswith(".local"):
+        return False
+    try:
+        ip = ipaddress.ip_address(bare)
+        return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved)
+    except ValueError:
+        # Not a bare IP → a hostname; a public TLD with a dot is required.
+        return "." in bare
+
+
+async def _safe_close_page(page: Any) -> None:
+    if page is None:
+        return
+    try:
+        await page.close()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _q(url: str) -> str:

@@ -94,21 +94,18 @@ class FakeAPIResp:
 
 
 class FakeRequest:
-    def __init__(self, getsources_body, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n"):
+    def __init__(self, getsources_body):
         self._body = getsources_body
-        self._master_status = master_status
-        self._master_body = master_body
 
     async def get(self, url, headers=None):
-        # getSources enrichment fetch vs. a master/.m3u8 liveness probe.
-        if "getSources" in url:
-            return FakeAPIResp(200, self._body)
-        return FakeAPIResp(self._master_status, self._master_body)
+        # Only the getSources enrichment fetch uses APIRequestContext now (the
+        # master liveness probe runs as an IN-PAGE fetch via page.evaluate).
+        return FakeAPIResp(200, self._body)
 
 
 class FakeContext:
-    def __init__(self, getsources_body, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n"):
-        self.request = FakeRequest(getsources_body, master_status, master_body)
+    def __init__(self, getsources_body):
+        self.request = FakeRequest(getsources_body)
 
 
 class FakePage:
@@ -134,6 +131,9 @@ class FakePage:
         self.nested_url = nested_url
         self.visited = []
         self._handlers = []
+        # In-page master probe result (set by ctx()): "<status>|<first16>".
+        self._probe_status = 200
+        self._probe_head = "#EXTM3U\n#EXT-X-VER"
 
     def on(self, event, cb):
         if event == "response":
@@ -155,6 +155,9 @@ class FakePage:
         return self.title_value
 
     async def evaluate(self, js, *args):
+        # The in-page master liveness probe (returns "status|first16chars").
+        if "fetch(url)" in js:
+            return f"{self._probe_status}|{self._probe_head}"
         if "/category/" in js:
             return self.category_href
         if "data-video" in js:
@@ -169,12 +172,15 @@ def run(coro):
 
 
 def ctx(page, *, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n", **params):
+    # The master liveness probe is an in-page fetch → drive it via the page.
+    page._probe_status = master_status
+    page._probe_head = master_body[:16]
     base = {"episode_url": "https://gogoanimes.fi/one-piece-episode-1", "category": "sub"}
     base.update(params)
     cfg = Config(capture_attempts=3, capture_delay=0.0)
     return RecipeContext(
         page=page,
-        context=FakeContext(REAL_GETSOURCES, master_status, master_body),
+        context=FakeContext(REAL_GETSOURCES),
         params=base,
         cfg=cfg,
         log=None,

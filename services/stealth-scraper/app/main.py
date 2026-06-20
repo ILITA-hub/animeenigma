@@ -137,4 +137,4 @@ async def hls(
 @app.delete("/session/{sid}")
 async def close_session(sid: str) -> JSONResponse:
     engine: CamoufoxEngine = app.state.engine
-    return JSONResponse({"closed": engine.close_session(sid)})
+    return JSONResponse({"closed": await engine.aclose_session(sid)})

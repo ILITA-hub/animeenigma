@@ -47,14 +47,14 @@ func TestResolveEmbed_MapsSession(t *testing.T) {
 	if gotReq["provider"] != "gogoanime" || gotReq["embed_url"] != "https://gogoanime.me.uk/x" {
 		t.Errorf("request payload wrong: %v", gotReq)
 	}
-	if len(st.Sources) != 1 || st.Sources[0].URL != "https://s2.cinewave2.site/a/b/master.m3u8" {
-		t.Errorf("source url = %v; want the real CDN master url", st.Sources)
+	// Source is the sidecar's own /hls restream path (baseURL + playlist_proxy_path),
+	// NOT the raw CDN master — the CDN is Cloudflare-fingerprint-gated and can only
+	// be fetched through the resolving browser, so the streaming proxy fetches this.
+	if len(st.Sources) != 1 || st.Sources[0].URL != srv.URL+"/hls?sid=abc123&url=enc" {
+		t.Errorf("source url = %v; want sidecar /hls path", st.Sources)
 	}
 	if st.Sources[0].Type != "hls" {
 		t.Errorf("type = %q; want hls", st.Sources[0].Type)
-	}
-	if st.Headers["Referer"] != "https://megaplay.buzz/" {
-		t.Errorf("referer header = %q", st.Headers["Referer"])
 	}
 	if len(st.Tracks) != 1 || !st.Tracks[0].Default || st.Tracks[0].Kind != "captions" {
 		t.Errorf("tracks = %v", st.Tracks)

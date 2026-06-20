@@ -49,6 +49,14 @@ GOGOANIME_ALLOWED_HOSTS = {
 }
 
 _MEGAPLAY_PLAYER_HOSTS = ("megaplay.buzz", "vidwish.live")
+
+# In-page liveness probe: fetch the candidate master through the real Firefox
+# network stack and return "status|first16chars". A single STRING arg + no
+# typed-array work (keeps Camoufox's xray wrapper happy).
+_PROBE_MASTER_JS = """async (url) => {
+  try { const r = await fetch(url); const t = await r.text(); return r.status + '|' + t.slice(0, 16); }
+  catch (e) { return '0|'; }
+}"""
 _WORD_RUN = re.compile(r"[0-9A-Za-z]+(?: [0-9A-Za-z]+)*")
 _LEAD_WORD = re.compile(r"^[0-9A-Za-z]+")
 
@@ -340,11 +348,13 @@ class GogoanimeRecipe(Recipe):
         # Build an ordered, de-duped candidate list (getSources master first,
         # then any intercepted master/.m3u8) and probe each: megaplay pins some
         # streams to a CDN that hard-blocks our exit IP at the Cloudflare WAF
-        # (e.g. cdn.mewstream.buzz → 403 "Attention Required" to curl AND a real
-        # browser). Returning such a dead master as success makes the player show
-        # "stream unavailable" with no failover. Instead we accept only a master
-        # that actually serves a playlist, and raise otherwise so the Go
-        # orchestrator fails over to the next provider.
+        # actually-dead (HTTP 404 / removed) vs. live. The probe MUST use an
+        # IN-PAGE fetch (real Firefox network stack): these CDNs are Cloudflare-
+        # fingerprint-gated, so a non-browser fetch (APIRequestContext / curl /
+        # Go) gets a 403 even when the stream is perfectly playable in-browser —
+        # probing that way would FALSELY reject every Cloudflare-fronted stream.
+        # Only a master that the browser itself can fetch is accepted; otherwise
+        # we raise so the Go orchestrator fails over to the next provider.
         candidates: list[str] = []
         for c in [gs_master, *captured["masters"], *captured["m3u8s"]]:
             if c and c not in candidates:
@@ -363,27 +373,24 @@ class GogoanimeRecipe(Recipe):
 
         session["cdn_probe_status"] = last_status
         raise RecipeError(
-            f"megaplay: all {len(candidates)} CDN candidate(s) dead/blocked "
-            f"(last probe status={last_status}) — likely WAF-blocked CDN "
-            f"({host_of(candidates[0])})"
+            f"megaplay: all {len(candidates)} CDN candidate(s) unfetchable in-browser "
+            f"(last status={last_status}) — stream removed/expired ({host_of(candidates[0])})"
         )
 
     async def _probe_master(
         self, rc: RecipeContext, url: str, referer: str
     ) -> tuple[int | None, bool]:
-        """HEAD-ish liveness probe of a candidate master via the browser's
-        APIRequestContext (same exit IP + Referer the streaming proxy will use).
-        Live iff 200 AND the body is an actual HLS playlist (#EXTM3U) — a
-        Cloudflare block returns 403 with an HTML "Attention Required" page, and
-        an expired/stale URL returns 404, both of which we reject."""
+        """Liveness probe via the page's IN-PAGE ``fetch()`` (real Firefox network
+        stack — the only client that passes the CDN's Cloudflare fingerprint gate).
+        Live iff 200 AND the body is an actual HLS playlist (#EXT…). The recipe's
+        page is on the megaplay player origin at this point, so the fetch carries
+        the right Origin/Referer the CDN expects."""
         try:
-            r = await rc.context.request.get(url, headers={"Referer": referer})
-            status = r.status
-            if status != 200:
-                return status, False
-            head = (await r.text())[:64].lstrip()
-            return status, head.startswith("#EXT")
-        except Exception:  # noqa: BLE001 - network error == not live
+            raw = await rc.page.evaluate(_PROBE_MASTER_JS, url)
+            status_s, head = raw.split("|", 1)
+            status = int(status_s)
+            return (status or None), (status == 200 and head.lstrip().startswith("#EXT"))
+        except Exception:  # noqa: BLE001 - eval/network error == not live
             return None, False
 
     async def _await_getsources(self, captured: dict, cfg: Any) -> str | None:

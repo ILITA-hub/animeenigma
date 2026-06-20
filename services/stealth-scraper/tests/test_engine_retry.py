@@ -13,6 +13,8 @@ from app.recipes.base import ChallengeError, Recipe, RecipeError
 
 
 class _FakePage:
+    url = "https://megaplay.buzz/stream/s-2/122211/sub"
+
     async def close(self):
         pass
 
