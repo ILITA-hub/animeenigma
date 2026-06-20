@@ -17,9 +17,12 @@ Internal-only service; the Go `scraper` is the only caller. Engine = **Camoufox*
 ## HTTP contract
 
 ```
-GET  /healthz   → {status, pool_size, live_browsers, proxies[...]}
-GET  /metrics   → Prometheus
-POST /resolve   → resolve a stream session
+GET    /healthz        → {status, pool_size, live_browsers, active_sessions, proxies[...]}
+GET    /metrics        → Prometheus
+POST   /resolve        → resolve a stream session (retains a browser session)
+GET    /hls?sid=&url=  → MANDATORY stream proxy: fetch playlist/segment via the
+                         session's clearance-bearing browser context
+DELETE /session/{sid}  → release a session's browser/profile
 ```
 
 ### `POST /resolve`
@@ -42,13 +45,14 @@ Success (`200`):
 {
   "success": true,
   "data": {
+    "session_id": "ab12…",                              // ← use for /hls + DELETE
     "master_url": "https://cdn.mewstream.buzz/anime/.../master.m3u8",
+    "playlist_proxy_path": "/hls?sid=ab12…&url=<master>", // ← play THIS (host-prefixed)
     "referer": "https://megaplay.buzz/",
     "subtitles": [{ "url": "...vtt", "label": "English", "default": true }],
     "intro": { "start": 0, "end": 130 },
     "outro": { "start": 0, "end": 0 },
-    "cdn_probe_status": 200,           // in-browser fetch of master.m3u8
-    // --- clearance binding (plan §3.6) ---
+    "cdn_probe_status": 200,
     "cookies": [{ "name": "cf_clearance", "value": "...", "domain": "...", "path": "/" }],
     "user_agent": "Mozilla/5.0 (...) Firefox/...",
     "proxy_id": "res-de",
@@ -62,12 +66,14 @@ Success (`200`):
 Failures: `404` (`not_found`), `502` (`challenge` — all exits blocked / `error`),
 `500` (`internal`).
 
-> **⚠️ Clearance binding is the integration crux.** A `cf_clearance` cookie is
-> bound to **(exit IP, User-Agent)**. So the streaming HLS proxy must, for these
-> sessions, egress the playlist + `.ts` segments through the **same `proxy_id`**
-> and replay the returned `cookies` + `user_agent`. Handing back a bare
-> `master_url` is not enough — that path is the next workstream (Go scraper
-> integration + `libs/videoutils/proxy.go`).
+> **⚠️ Clearance binding — now handled IN this sidecar (mandatory).** A
+> `cf_clearance` cookie is bound to **(exit IP, User-Agent)**, so the playlist +
+> every `.ts` segment must be fetched through the **same** browser context that
+> resolved the session. `GET /hls` does exactly that (via the session's
+> Playwright `APIRequestContext`) and rewrites playlists so child URIs route back
+> through it. A consumer plays `playlist_proxy_path`, NOT the raw `master_url`.
+> This keeps the whole flow inside "scrapers" — the player/streaming HLS proxy is
+> untouched for now.
 
 ## Architecture
 
@@ -102,10 +108,26 @@ jar across resolves → clearance is reused, not re-solved every time.
 | `STEALTH_WARP_PROXY_URL` | `""` | e.g. `socks5://warp-proxy:1080` |
 | `STEALTH_MAX_PROXY_RETRIES` | `2` | exit rotations per resolve on challenge |
 | `STEALTH_WARMING_ENABLED` | `false` | session aging on cold profiles |
-| `SCRAPER_GOGOANIME_BASE_URL` | `https://gogoanimes.fi` | |
+
+**No provider envs/consts.** Provider config (`base_url`, `engine`, status, …)
+lives in the DB roster table `scraper_providers` (catalog domain; new `engine` +
+`base_url` columns) and is passed per-request by the Go scraper as `base_url`.
+The former `SCRAPER_GOGOANIME_BASE_URL` env is retired.
 
 Phase 1 ships with a **placeholder proxy slot**: `direct` (+ optional WARP). Add a
-residential endpoint to `STEALTH_PROXIES` to test against the live challenge.
+residential endpoint to `STEALTH_PROXIES` — **required** to actually clear the
+challenge (see below).
+
+## Run on the server (no Docker yet)
+
+The Camoufox Firefox binary is installed on the server in a venv:
+
+```bash
+cd services/stealth-scraper
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt && python -m camoufox fetch   # already done on this host
+uvicorn app.main:app --host 0.0.0.0 --port 3000
+```
 
 ## Deploy (compose snippet — wired in the integration workstream)
 
@@ -131,15 +153,22 @@ Pure-logic + the async recipe chain (fake page) run with **zero third-party deps
 cd services/stealth-scraper && python3 -m unittest discover -s tests -v
 ```
 
-**Verified locally:** 21 unit tests (proxy pool selection/rotation/sticky/cooldown,
-keyword + getSources parsing, host-allowlist guard, challenge detection, full
-recipe happy-path + challenge/not-found paths via a fake page).
+**Verified locally:** 28 unit tests (proxy pool selection/rotation/sticky/cooldown,
+keyword + getSources parsing, host-allowlist guard, challenge detection, the full
+recipe happy-path + search/challenge/not-found paths via a fake page, and the HLS
+playlist rewriter). Camoufox launches headless on the server and spoofs Firefox
+135/Windows (live smoke OK).
 
-**Deploy-gated (needs the Camoufox binary + network, can't run in this env):** the
-live browser launch, real DOM selectors on `gogoanimes.fi`, and whether Camoufox
-actually clears `cdn.mewstream.buzz`'s Cloudflare challenge. Build the image
-(`python -m camoufox fetch` runs at build), `POST /resolve`, and confirm
-`cdn_probe_status: 200` + a `cf_clearance` cookie in the response.
+**⚠️ Key finding (2026-06-20):** even a real Camoufox browser (JS executing, 7s
+solve wait) gets a **403 Cloudflare "Attention Required" from our datacenter IP**
+on `cdn.mewstream.buzz`. That is a WAF/IP-reputation block on the datacenter ASN,
+not a JS challenge a browser can auto-solve. So:
+- curl + any IP → fails (no browser identity)
+- **browser + datacenter IP → fails** (WAF blocks the ASN) ← proven
+- browser + residential/mobile IP → the combination that should work
+
+End-to-end gogoanime is therefore **gated on a residential exit** in
+`STEALTH_PROXIES`. The browser is necessary but not sufficient alone.
 
 ## Not yet done (next workstreams)
 

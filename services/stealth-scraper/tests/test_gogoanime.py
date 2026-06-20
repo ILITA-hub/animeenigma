@@ -97,7 +97,9 @@ class FakePage:
         cdn_status=200,
         cdn_head="#EXTM3U",
         title_value="Megaplay",
+        category_href="/category/one-piece",
     ):
+        self.category_href = category_href
         self.embed_url = embed_url
         self.data_id = data_id
         self.getsources_status = getsources_status
@@ -115,6 +117,8 @@ class FakePage:
         return self.title_value
 
     async def evaluate(self, js, *args):
+        if "/category/" in js:
+            return self.category_href
         if "data-video" in js:
             return self.embed_url
         if "hosts.some" in js or "querySelectorAll('iframe')" in js:
@@ -175,6 +179,32 @@ class TestGogoanimeChain(unittest.TestCase):
         page = FakePage(getsources_status=404, getsources_body="nope")
         with self.assertRaises(RecipeError):
             run(GogoanimeRecipe().resolve(ctx(page)))
+
+    def test_search_path_resolves_with_base_url(self):
+        page = FakePage()
+        session = run(
+            GogoanimeRecipe().resolve(
+                ctx(
+                    page,
+                    episode_url=None,
+                    base_url="https://gogoanimes.fi",
+                    keyword="One Piece",
+                    episode=1100,
+                )
+            )
+        )
+        self.assertTrue(session["master_url"].endswith("master.m3u8"))
+        # It actually navigated the built episode URL.
+        self.assertIn("https://gogoanimes.fi/one-piece-episode-1100", page.visited)
+
+    def test_base_url_required_when_no_episode_url(self):
+        page = FakePage()
+        with self.assertRaises(RecipeError):
+            run(
+                GogoanimeRecipe().resolve(
+                    ctx(page, episode_url=None, keyword="One Piece", episode=1)
+                )
+            )
 
 
 if __name__ == "__main__":

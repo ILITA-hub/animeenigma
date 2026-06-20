@@ -79,6 +79,37 @@ type ProviderMeta struct {
 	SubDelivery      string // "soft" | "hard" | "none" (default "hard")
 	QualityCeiling   string
 	PreferenceWeight int
+	// Engine selects the scraping engine for this provider: "http" (legacy
+	// in-process Go scraper, default) or "browser" (Camoufox stealth-scraper
+	// sidecar). DB-driven — there is NO SCRAPER_*_ENGINE env.
+	Engine string
+	// BaseURL is the provider's mirror origin from the DB (replaces the former
+	// SCRAPER_<NAME>_BASE_URL envs). Empty ⇒ the provider's built-in default.
+	BaseURL string
+}
+
+// EngineHTTP / EngineBrowser are the ProviderMeta.Engine values.
+const (
+	EngineHTTP    = "http"
+	EngineBrowser = "browser"
+)
+
+// EngineOf returns the configured engine for a provider, defaulting to
+// EngineHTTP when unset (absent provider or empty column).
+func (p ProvidersConfig) EngineOf(name string) string {
+	if m, ok := p.load()[name]; ok && m.Engine != "" {
+		return m.Engine
+	}
+	return EngineHTTP
+}
+
+// BaseURLOf returns the DB-configured mirror base URL for a provider (empty when
+// unset — callers fall back to the provider's built-in default).
+func (p ProvidersConfig) BaseURLOf(name string) string {
+	if m, ok := p.load()[name]; ok {
+		return m.BaseURL
+	}
+	return ""
 }
 
 // providerEntry is the raw YAML shape. Enabled is a pointer so an omitted

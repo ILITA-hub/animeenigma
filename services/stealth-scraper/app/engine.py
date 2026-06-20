@@ -1,11 +1,17 @@
-"""CamoufoxEngine — warm browser pool + recipe execution + challenge rotation.
+"""CamoufoxEngine — warm browser pool + recipe execution + challenge rotation +
+mandatory in-session stream proxying.
 
-Ties together: ProfileManager (aged persistent identities), ProxyPool (sticky
-exit IPs, rotate-on-block), Camoufox launch options, and the recipe chain.
+Ties together ProfileManager (aged persistent identities), ProxyPool (sticky exit
+IPs, rotate-on-block), Camoufox launch options, and the recipe chain.
 
-Camoufox is imported lazily so the pure-logic modules + unit tests don't need
-the runtime/binary. End-to-end resolution requires the camoufox Firefox binary
-(``python -m camoufox fetch``) + network and is verified on deploy.
+Stream proxying is MANDATORY (see streamproxy.py): on a successful resolve the
+profile/browser is RETAINED as a Session, and the playlist + every segment are
+fetched back through that same session's Playwright APIRequestContext — same exit
+IP, same cookie jar (clearance), same TLS fingerprint. A bare master_url alone is
+useless because the CDN is clearance-walled.
+
+Camoufox is imported lazily so the pure-logic modules + unit tests need no
+runtime/binary.
 """
 
 from __future__ import annotations
@@ -13,6 +19,8 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from . import metrics
@@ -22,17 +30,27 @@ from .profiles import Profile, ProfileManager
 from .recipes import ChallengeError, NotFoundError, Recipe, RecipeContext, RecipeError
 from .recipes.base import host_of
 from .recipes.gogoanime import GogoanimeRecipe
+from .streamproxy import looks_like_m3u8, make_wrap, rewrite_playlist
 from .tunnels import ProxyPool, build_pool_from_config
-from .warming import warm_profile
 
-# Resource types blocked at the context level to cut bandwidth + fingerprint
-# surface (images are handled by camoufox's block_images launch option).
 _ROUTE_BLOCK = {"font", "media"}
 
 
+@dataclass
+class Session:
+    id: str
+    profile: Profile
+    proxy_id: str
+    referer: str
+    user_agent: str
+    cdn_host: str | None
+    master_url: str
+    expires_at: float
+
+
 class _CamoufoxHandle:
-    """Holds an open Camoufox persistent context via the async-CM protocol so we
-    can keep the browser warm outside an ``async with`` block."""
+    """Holds an open Camoufox persistent context (so cookie harvest works) via
+    the async-CM protocol, kept warm outside an ``async with`` block."""
 
     def __init__(self, opts: dict) -> None:
         self._opts = opts
@@ -60,9 +78,9 @@ class CamoufoxEngine:
         self.cfg = cfg
         self.pool: ProxyPool = build_pool_from_config(cfg)
         self.profiles = ProfileManager(cfg.profile_dir, cfg.pool_size)
-        self._handles: dict[str, _CamoufoxHandle] = {}  # profile id -> handle
+        self._handles: dict[str, _CamoufoxHandle] = {}     # profile id -> handle
+        self._sessions: dict[str, Session] = {}            # session id -> Session
         self._recipes: dict[str, Recipe] = {"gogoanime": GogoanimeRecipe()}
-        self._lock = asyncio.Lock()  # serializes launch/teardown bookkeeping
         self._log: Any = None
 
     def set_logger(self, log: Any) -> None:
@@ -74,6 +92,7 @@ class CamoufoxEngine:
         metrics.BROWSER_POOL_SIZE.set(0)
 
     async def stop(self) -> None:
+        self._sessions.clear()
         for pid, handle in list(self._handles.items()):
             try:
                 await handle.close()
@@ -87,20 +106,17 @@ class CamoufoxEngine:
             "status": "ok",
             "pool_size": self.cfg.pool_size,
             "live_browsers": len(self._handles),
+            "active_sessions": len(self._sessions),
             "proxies": [
                 {"id": e.id, "type": e.type, "blocked": e.total_blocked}
                 for e in self.pool.all()
             ],
         }
 
-    # -- launch / teardown of a profile's browser --------------------------- #
+    # -- launch / teardown -------------------------------------------------- #
     async def _ensure_browser(self, profile: Profile, proxy_id: str) -> Any:
-        """Ensure ``profile`` has a live Camoufox bound to ``proxy_id``. A
-        clearance is exit-IP-bound, so a proxy change forces a relaunch."""
         if profile.launched and profile.proxy_id == proxy_id:
             return profile.context
-
-        # Tear down a stale browser (different proxy) before relaunch.
         if profile.launched:
             await self._teardown(profile, reason="rotate")
 
@@ -125,14 +141,14 @@ class CamoufoxEngine:
             page = await context.new_page()
             profile.user_agent = await page.evaluate("() => navigator.userAgent")
             if self.cfg.warming_enabled:
+                from .warming import warm_profile
+
                 await warm_profile(
-                    page,
-                    self.cfg.warming_sites,
-                    self._log,
+                    page, self.cfg.warming_sites, self._log,
                     nav_timeout_ms=self.cfg.nav_timeout_ms,
                 )
             await page.close()
-        except Exception:  # noqa: BLE001 - UA/warming best-effort
+        except Exception:  # noqa: BLE001
             profile.user_agent = profile.user_agent or ""
 
         metrics.BROWSER_POOL_SIZE.set(len(self._handles))
@@ -165,7 +181,7 @@ class CamoufoxEngine:
 
         try:
             await context.route("**/*", _route)
-        except Exception:  # noqa: BLE001 - routing is an optimization, not required
+        except Exception:  # noqa: BLE001
             pass
 
     # -- resolve ------------------------------------------------------------ #
@@ -174,14 +190,15 @@ class CamoufoxEngine:
         if recipe is None:
             raise RecipeError(f"unknown provider: {provider}")
 
+        self._evict_expired()
         started = time.monotonic()
         tried: set[str] = set()
         last_err: Exception | None = None
 
-        for attempt in range(self.cfg.max_proxy_retries + 1):
+        for _ in range(self.cfg.max_proxy_retries + 1):
             profile = await self._acquire_profile()
             if profile is None:
-                raise RecipeError("no free browser profile (pool exhausted)")
+                raise RecipeError("no free browser profile (pool/sessions exhausted)")
 
             proxy = self.pool.select(
                 preferred_type=params.get("proxy_type"),
@@ -198,45 +215,35 @@ class CamoufoxEngine:
                 page = await context.new_page()
                 try:
                     rc = RecipeContext(
-                        page=page,
-                        context=context,
-                        params=params,
-                        cfg=self.cfg,
-                        log=self._log,
-                        proxy_id=proxy.id,
-                        user_agent=profile.user_agent,
+                        page=page, context=context, params=params, cfg=self.cfg,
+                        log=self._log, proxy_id=proxy.id, user_agent=profile.user_agent,
                     )
-                    session = await asyncio.wait_for(
+                    partial = await asyncio.wait_for(
                         recipe.resolve(rc),
                         timeout=self.cfg.resolve_timeout_ms / 1000.0,
                     )
-                    session = await self._finalize(session, context, proxy.id, profile)
                 finally:
                     try:
                         await page.close()
                     except Exception:  # noqa: BLE001
                         pass
 
+                session = await self._open_session(partial, context, proxy.id, profile)
                 self.pool.mark_ok(proxy.id)
-                self.profiles.release(profile, ok=True)
-                if self.profiles.needs_retire(profile):
-                    await self._teardown(profile, reason="recycle")
+                # NB: profile is RETAINED by the session (NOT released) so the
+                # stream proxy can reuse its clearance-bearing context.
                 metrics.RESOLVE_TOTAL.labels(provider=provider, result="ok").inc()
                 metrics.RESOLVE_DURATION.labels(provider=provider).observe(
                     time.monotonic() - started
                 )
-                return session
+                return self._session_payload(session, partial)
 
             except ChallengeError as exc:
                 last_err = exc
-                metrics.CHALLENGE_TOTAL.labels(
-                    host=exc.host or "?", kind=exc.kind
-                ).inc()
+                metrics.CHALLENGE_TOTAL.labels(host=exc.host or "?", kind=exc.kind).inc()
                 metrics.PROXY_BLOCK_TOTAL.labels(proxy_id=proxy.id).inc()
                 self.pool.mark_blocked(proxy.id)
                 tried.add(proxy.id)
-                # Clearance is dead on this IP; drop the browser so the retry
-                # relaunches on a fresh exit.
                 await self._teardown(profile, reason="rotate")
                 self.profiles.release(profile, ok=False)
                 continue
@@ -255,7 +262,7 @@ class CamoufoxEngine:
                 tried.add(proxy.id)
                 continue
 
-            except Exception as exc:  # noqa: BLE001 - browser crash etc.
+            except Exception as exc:  # noqa: BLE001
                 last_err = exc
                 await self._teardown(profile, reason="crash")
                 self.profiles.release(profile, ok=False)
@@ -264,8 +271,7 @@ class CamoufoxEngine:
 
         metrics.RESOLVE_TOTAL.labels(provider=provider, result="challenge").inc()
         raise ChallengeError(
-            f"exhausted {len(tried)} exit(s); last: {last_err}",
-            kind="exhausted",
+            f"exhausted {len(tried)} exit(s); last: {last_err}", kind="exhausted"
         )
 
     async def _acquire_profile(self, retries: int = 50) -> Profile | None:
@@ -276,31 +282,127 @@ class CamoufoxEngine:
             await asyncio.sleep(0.1)
         return None
 
-    async def _finalize(
-        self, session: dict, context: Any, proxy_id: str, profile: Profile
-    ) -> dict:
-        """Harvest the clearance cookies for the CDN host + attach the binding
-        the streaming HLS proxy needs to fetch the playlist/segments itself."""
-        master = session.get("master_url")
+    async def _open_session(
+        self, partial: dict, context: Any, proxy_id: str, profile: Profile
+    ) -> Session:
+        master = partial.get("master_url")
         cookies: list[dict] = []
         try:
-            raw = await context.cookies(master) if master else []
-            for c in raw:
+            for c in (await context.cookies(master) if master else []):
                 cookies.append(
                     {
-                        "name": c.get("name"),
-                        "value": c.get("value"),
-                        "domain": c.get("domain"),
-                        "path": c.get("path", "/"),
+                        "name": c.get("name"), "value": c.get("value"),
+                        "domain": c.get("domain"), "path": c.get("path", "/"),
                     }
                 )
-        except Exception:  # noqa: BLE001 - cookie harvest best-effort
+        except Exception:  # noqa: BLE001
             cookies = []
+        partial["cookies"] = cookies
 
-        session["cookies"] = cookies
-        session["user_agent"] = profile.user_agent
-        session["proxy_id"] = proxy_id
-        session["cdn_host"] = host_of(master)
-        session["resolved_via"] = "camoufox"
-        session["expires_at"] = int(time.time()) + self.cfg.session_ttl_seconds
+        sid = uuid.uuid4().hex
+        session = Session(
+            id=sid,
+            profile=profile,
+            proxy_id=proxy_id,
+            referer=partial.get("referer", ""),
+            user_agent=profile.user_agent,
+            cdn_host=host_of(master),
+            master_url=master,
+            expires_at=time.time() + self.cfg.session_ttl_seconds,
+        )
+        self._sessions[sid] = session
         return session
+
+    def _session_payload(self, session: Session, partial: dict) -> dict:
+        return {
+            "session_id": session.id,
+            "master_url": session.master_url,
+            # Path the caller proxies the stream through (host-prefixed by caller).
+            "playlist_proxy_path": f"/hls?sid={session.id}&url={_q(session.master_url)}",
+            "referer": session.referer,
+            "subtitles": partial.get("subtitles", []),
+            "intro": partial.get("intro"),
+            "outro": partial.get("outro"),
+            "cdn_probe_status": partial.get("cdn_probe_status"),
+            "cookies": partial.get("cookies", []),
+            "user_agent": session.user_agent,
+            "proxy_id": session.proxy_id,
+            "cdn_host": session.cdn_host,
+            "resolved_via": "camoufox",
+            "expires_at": int(session.expires_at),
+        }
+
+    # -- stream proxy (mandatory) ------------------------------------------ #
+    async def proxy_fetch(self, sid: str, url: str) -> dict:
+        """Fetch ``url`` through the session's clearance-bearing browser context
+        (same exit IP + cookies + TLS). Rewrites playlists so child URIs route
+        back through this proxy. Returns {status, content_type, body(bytes)}."""
+        self._evict_expired()
+        session = self._sessions.get(sid)
+        if session is None:
+            raise SessionGone(sid)
+        if not host_allowed_for_session(url, session):
+            raise RecipeError(f"proxy host not allowed for session: {host_of(url)}")
+
+        ctx = session.profile.context
+        if ctx is None:
+            raise SessionGone(sid)
+        resp = await ctx.request.get(
+            url, headers={"Referer": session.referer} if session.referer else {}
+        )
+        status = resp.status
+        ctype = (resp.headers or {}).get("content-type", "")
+        body = await resp.body()
+
+        # Bump TTL on activity (sliding window) so an actively-watched stream
+        # isn't evicted mid-playback.
+        session.expires_at = time.time() + self.cfg.session_ttl_seconds
+
+        text_head = body[:64].decode("utf-8", "ignore")
+        if looks_like_m3u8(text_head, ctype):
+            wrapped = rewrite_playlist(
+                body.decode("utf-8", "ignore"),
+                url,
+                make_wrap(sid, lambda s, u: f"/hls?sid={s}&url={_q(u)}"),
+            )
+            return {
+                "status": status,
+                "content_type": "application/vnd.apple.mpegurl",
+                "body": wrapped.encode("utf-8"),
+            }
+        return {"status": status, "content_type": ctype or "application/octet-stream", "body": body}
+
+    def close_session(self, sid: str) -> bool:
+        session = self._sessions.pop(sid, None)
+        if session is None:
+            return False
+        self.profiles.release(session.profile, ok=True)
+        return True
+
+    def _evict_expired(self) -> None:
+        now = time.time()
+        for sid, session in list(self._sessions.items()):
+            if session.expires_at <= now:
+                self._sessions.pop(sid, None)
+                self.profiles.release(session.profile, ok=True)
+
+
+class SessionGone(Exception):
+    def __init__(self, sid: str):
+        super().__init__(f"unknown or expired session: {sid}")
+        self.sid = sid
+
+
+def host_allowed_for_session(url: str, session: Session) -> bool:
+    """A session may only proxy URLs on the recipe's allowed hosts (SSRF guard).
+    The gogoanime recipe's allowlist already covers mewstream/lostproject."""
+    from .recipes.gogoanime import GOGOANIME_ALLOWED_HOSTS
+    from .recipes.base import host_allowed
+
+    return host_allowed(host_of(url), GOGOANIME_ALLOWED_HOSTS)
+
+
+def _q(url: str) -> str:
+    from urllib.parse import quote
+
+    return quote(url, safe="")

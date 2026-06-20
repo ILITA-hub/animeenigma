@@ -64,8 +64,11 @@ class Config:
         ]
     )
 
-    # Recipe / navigation
-    gogoanime_base_url: str = "https://gogoanimes.fi"
+    # Recipe / navigation.
+    # NOTE: provider config (base_url, engine, enabled, ...) is NOT held here.
+    # It lives in the DB roster table `scraper_providers` (catalog domain) and is
+    # supplied per-request by the Go scraper. The sidecar carries NO provider-
+    # specific envs/consts — only generic browser/navigation knobs.
     nav_timeout_ms: int = 30_000
     resolve_timeout_ms: int = 60_000
 
@@ -95,7 +98,6 @@ class Config:
             max_proxy_retries=_int(g("STEALTH_MAX_PROXY_RETRIES"), 2),
             warming_enabled=_bool(g("STEALTH_WARMING_ENABLED"), False),
             warming_sites=_csv(g("STEALTH_WARMING_SITES"), Config().warming_sites),
-            gogoanime_base_url=g("SCRAPER_GOGOANIME_BASE_URL", "https://gogoanimes.fi"),
             nav_timeout_ms=_int(g("STEALTH_NAV_TIMEOUT_MS"), 30_000),
             resolve_timeout_ms=_int(g("STEALTH_RESOLVE_TIMEOUT_MS"), 60_000),
             session_ttl_seconds=_int(g("STEALTH_SESSION_TTL_SECONDS"), 600),

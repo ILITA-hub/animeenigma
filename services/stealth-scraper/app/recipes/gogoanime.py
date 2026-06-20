@@ -168,7 +168,11 @@ class GogoanimeRecipe(Recipe):
         if p.get("episode_url"):
             return p["episode_url"]
 
-        base = p.get("base_url") or rc.cfg.gogoanime_base_url
+        # base_url is DB-sourced (scraper_providers.base_url), passed in the
+        # request — the sidecar holds no provider URL consts/envs.
+        base = p.get("base_url")
+        if not base:
+            raise RecipeError("gogoanime: base_url required (DB roster) when no episode_url")
         dub = (p.get("category") or "sub").lower() == "dub"
         episode = int(p["episode"])
         title = p.get("keyword") or p.get("title") or ""

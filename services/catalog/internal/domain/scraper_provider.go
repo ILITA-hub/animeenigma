@@ -47,6 +47,18 @@ type ScraperProvider struct {
 	SubDelivery      string    `gorm:"size:8;default:'hard'" json:"sub_delivery"` // soft|hard|none
 	QualityCeiling   string    `gorm:"size:8" json:"quality_ceiling"`
 	PreferenceWeight int       `json:"preference_weight"`
+	// Engine selects HOW this provider is scraped (DB-driven; there is NO
+	// SCRAPER_*_ENGINE env):
+	//   - "http"    — legacy in-process Go net/http scraper (default).
+	//   - "browser" — resolved via the Camoufox stealth-scraper sidecar
+	//     (services/stealth-scraper), for providers whose CDN/player is
+	//     JS/fingerprint/clearance-walled and a curl-class client cannot reach
+	//     (e.g. gogoanime → megaplay → cdn.mewstream.buzz Cloudflare).
+	Engine string `gorm:"size:16;default:'http'" json:"engine"`
+	// BaseURL is the provider's mirror origin (e.g. https://gogoanimes.fi),
+	// replacing the former SCRAPER_<NAME>_BASE_URL envs. Empty ⇒ the provider's
+	// built-in default still applies.
+	BaseURL string `gorm:"size:256" json:"base_url"`
 	// ScraperOperated marks providers operated by the scraper microservice (the
 	// EN failover chain + the 18+ orchestrator). Intrinsic (derived from name,
 	// NOT operator-editable). The scraper consumes only scraper_operated=true

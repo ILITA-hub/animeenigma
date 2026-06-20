@@ -24,12 +24,18 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "gogoanime", Status: domain.StatusEnabled,
-		Reason: "Revived via gogoanimes.fi mirror + megaplay",
-		Description: "anitaku.to migrated to anineko.to (\"We Have Moved\"). Repointed " +
-			"SCRAPER_GOGOANIME_BASE_URL to gogoanimes.fi (classic gogo HTML: " +
-			"anime_muti_link + /search.html), whose newplayer.php embed nests the " +
-			"megaplay.buzz player — now routed through the megaplay extractor " +
-			"(gogoanime.me.uk added to its wrapper allowlist). Re-enabled 2026-06-05.",
+		// gogoanime → megaplay → cdn.mewstream.buzz is Cloudflare-WAF-walled
+		// (datacenter ASN gets a 403 "Attention Required" even from a real
+		// Camoufox browser — verified 2026-06-20). Resolved via the Camoufox
+		// stealth-scraper sidecar (needs a residential exit). Engine + BaseURL
+		// are DB-driven; the SCRAPER_GOGOANIME_BASE_URL env is retired.
+		Engine: "browser", BaseURL: "https://gogoanimes.fi",
+		Reason: "Browser-scraped via Camoufox sidecar (megaplay CDN Cloudflare-walled)",
+		Description: "anitaku.to migrated to anineko.to. Mirror gogoanimes.fi (classic gogo " +
+			"HTML: anime_muti_link + /search.html), whose newplayer.php embed nests the " +
+			"megaplay.buzz player on cdn.mewstream.buzz. That CDN is behind Cloudflare and " +
+			"403s curl-class clients AND a datacenter-IP browser; resolved through the " +
+			"stealth-scraper Camoufox sidecar (engine=browser) with a residential exit.",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 85,
 	},

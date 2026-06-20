@@ -28,6 +28,8 @@ type remoteProvider struct {
 	SubDelivery      string `json:"sub_delivery"`
 	QualityCeiling   string `json:"quality_ceiling"`
 	PreferenceWeight int    `json:"preference_weight"`
+	Engine           string `json:"engine"`
+	BaseURL          string `json:"base_url"`
 }
 
 // statusOf resolves the tri-state: prefer the new status field; fall back to the
@@ -118,6 +120,8 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 			SubDelivery:      subDelivery,
 			QualityCeiling:   p.QualityCeiling,
 			PreferenceWeight: p.PreferenceWeight,
+			Engine:           p.Engine,
+			BaseURL:          p.BaseURL,
 		}
 	}
 	return newProvidersConfig(metas, "remote"), nil
