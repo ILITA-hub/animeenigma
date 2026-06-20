@@ -77,9 +77,16 @@ func KeyClass(raw string) string {
 		return "room"
 	case PrefixTelegramAuth:
 		return "tgauth"
+	case PrefixXDomainMagic:
+		return "xdomain"
 	default:
 		return classOther
 	}
+}
+
+// KeyXDomainMagic is the Redis key for a one-time cross-domain SSO handoff token.
+func KeyXDomainMagic(token string) string {
+	return PrefixXDomainMagic + token
 }
 
 // classOther is the single catch-all bucket for unknown prefixes. Keeping it a

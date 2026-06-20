@@ -12,6 +12,9 @@ var (
 	TTLRateLimit   = 1 * time.Minute
 	TTLUserOnline    = 5 * time.Minute
 	TTLTelegramAuth  = 5 * time.Minute
+	// One-time cross-domain SSO handoff token. Deliberately tiny — the token
+	// rides in a URL during a single redirect chain.
+	TTLXDomainMagic = 60 * time.Second
 
 	// Medium-lived cache for moderately stable data
 	TTLAnimeList      = 1 * time.Hour
@@ -52,6 +55,7 @@ const (
 	PrefixRateLimit    = "ratelimit:"
 	PrefixRoom         = "room:"
 	PrefixTelegramAuth = "tgauth:"
+	PrefixXDomainMagic = "xdomain:"
 )
 
 // Key builders for consistent cache key formatting
