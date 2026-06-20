@@ -20,6 +20,8 @@ const (
 	ReasonSignedURLExpired Reason = "signed_url_expired"
 	ReasonCDNUnreachable   Reason = "cdn_unreachable"
 	ReasonEmptyResponse    Reason = "empty_response"
+	ReasonDecodeFailed     Reason = "decode_failed"
+	ReasonInvalidVideo     Reason = "invalid_video"
 )
 
 // AllReasons returns every defined Reason value in declaration order.
@@ -33,5 +35,7 @@ func AllReasons() []Reason {
 		ReasonSignedURLExpired,
 		ReasonCDNUnreachable,
 		ReasonEmptyResponse,
+		ReasonDecodeFailed,
+		ReasonInvalidVideo,
 	}
 }
