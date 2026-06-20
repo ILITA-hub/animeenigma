@@ -50,14 +50,13 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "animefever", Status: domain.StatusDegraded,
-		Reason: "Region-walled ad substitution (AUTO-484)",
+		Reason: "Ad-substituted HLS segments (AUTO-484)",
 		Description: "animefever.cc → am.vidstream.vip (StreamX.Me/JW player) returns a valid " +
-			"manifest, but EVERY HLS segment 302-redirects to a TikTok/ByteDance ad CDN " +
-			"(sf16-scmcdn-sg.ibytedtos.com / ad-site-i18n-sg) that 403s outside its target " +
-			"region. Verified 2026-06-17 (AUTO-484): the ad swap is keyed on egress-IP class " +
-			"and is identical on our DE datacenter IP, Cloudflare WARP, AND a residential RU IP " +
-			"— so it is unwatchable for our users. uBlock/WARP/residential do not recover it. " +
-			"Degraded: kept manually selectable (hacker mode) but out of the auto-failover chain.",
+			"manifest, but its HLS segments 302-redirect to an ad CDN " +
+			"(sf16-scmcdn-sg.ibytedtos.com / ad-site-i18n-sg) that 403s for us, so playback " +
+			"fails. The exact trigger for the ad swap is not confirmed. " +
+			"Degraded: kept manually selectable (hacker mode) but out of the auto-failover chain. " +
+			"Existing DBs updated via AnimefeverDeclaim.",
 		SupportsSub: true, SupportsDub: false, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 60,
 	},

@@ -184,6 +184,12 @@ func main() {
 		log.Errorw("miruro dub-only migration failed (continuing)", "error", err)
 	}
 
+	// Remove unverified "Region-walled" / egress-IP-class claims from animefever
+	// description (AUTO-484 follow-up). Run-once via the ledger.
+	if err := scraperprovider.AnimefeverDeclaim(db.DB); err != nil {
+		log.Errorw("animefever declaim migration failed (continuing)", "error", err)
+	}
+
 	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
 	// provider_info/provider_enabled management metrics. Runs after the roster is
 	// fully migrated/seeded/backfilled so names + flags are authoritative. The

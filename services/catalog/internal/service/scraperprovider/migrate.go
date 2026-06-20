@@ -133,6 +133,9 @@ func BackfillScraperOperated(db *gorm.DB) error {
 // miruroDubOnlyGuardKey marks MiruroDubOnly as applied.
 const miruroDubOnlyGuardKey = "miruro_dub_only"
 
+// animefeverDeclaimGuardKey marks AnimefeverDeclaim as applied.
+const animefeverDeclaimGuardKey = "animefever_declaim"
+
 // MiruroDubOnly flips the miruro roster row to supports_sub=false exactly once.
 // Miruro's upstream stopped serving sub streams (only English dub plays), so it
 // must not advertise/auto-select for SUB (original-Japanese-audio) playback. The
@@ -168,6 +171,46 @@ func MiruroDubOnly(db *gorm.DB) error {
 
 	if err := db.Create(&migrationGuard{Key: miruroDubOnlyGuardKey}).Error; err != nil {
 		return fmt.Errorf("write miruro-dub-only guard: %w", err)
+	}
+	return nil
+}
+
+// AnimefeverDeclaim removes the unverified "Region-walled" / egress-IP-class claims
+// from the animefever provider description (AUTO-484 follow-up). The seed is
+// insert-if-absent and so never updates an existing prod row; this RUN-ONCE guarded
+// migration carries the corrected reason/description to live DBs. Guarded via the
+// catalog_migration_guards ledger so it is a no-op on every later boot. Idempotent;
+// safe to call every boot.
+func AnimefeverDeclaim(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", animefeverDeclaimGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check animefever-declaim guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator edit
+	}
+
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "animefever").
+		Updates(map[string]interface{}{
+			"reason":      "Ad-substituted HLS segments (AUTO-484)",
+			"description": "animefever.cc → am.vidstream.vip (StreamX.Me/JW player) returns a valid manifest, but its HLS segments 302-redirect to an ad CDN (sf16-scmcdn-sg.ibytedtos.com / ad-site-i18n-sg) that 403s for us, so playback fails. The exact trigger for the ad swap is not confirmed. Degraded: kept manually selectable (hacker mode) but out of the auto-failover chain. Existing DBs updated via AnimefeverDeclaim.",
+		})
+	if result.Error != nil {
+		return fmt.Errorf("animefever declaim: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No animefever row to update (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("animefever declaim: no row found for name=animefever")
+	}
+
+	if err := db.Create(&migrationGuard{Key: animefeverDeclaimGuardKey}).Error; err != nil {
+		return fmt.Errorf("write animefever-declaim guard: %w", err)
 	}
 	return nil
 }
