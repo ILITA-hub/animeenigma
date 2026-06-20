@@ -222,10 +222,16 @@ class GogoanimeRecipe(Recipe):
         if not embed:
             raise RecipeError("gogoanime: no data-video / player iframe on episode page")
         embed = _normalize_url(embed, episode_url)
+        return await self._embed_to_player(rc, embed, _origin(episode_url))
 
-        # Already a megaplay/vidwish player → referer is the episode site.
+    async def _embed_to_player(self, rc: RecipeContext, embed: str, site_origin: str) -> tuple[str, str]:
+        """Resolve an embed/wrapper URL to (player_url, goto_referer). The
+        megaplay/vidwish player only serves its real page when navigated WITH the
+        embedding wrapper's referer — else it returns a "file not found" page."""
+        embed = _normalize_url(embed, site_origin)
+        # Already a megaplay/vidwish player → referer is the episode site origin.
         if host_of(embed) and any(h in host_of(embed) for h in _MEGAPLAY_PLAYER_HOSTS):
-            return embed, _origin(episode_url) + "/"
+            return embed, site_origin + "/"
 
         # A gogoanime.me.uk wrapper nests the real megaplay/vidwish iframe. The
         # wrapper origin is the referer the player expects.
@@ -245,8 +251,17 @@ class GogoanimeRecipe(Recipe):
         return _normalize_url(nested, embed), _origin(embed) + "/"
 
     async def resolve(self, rc: RecipeContext) -> dict[str, Any]:
-        episode_url = await self._resolve_episode_url(rc)
-        player_url, goto_referer = await self._resolve_player_url(rc, episode_url)
+        # The Go scraper passes embed_url = a known server/wrapper URL (its own
+        # curl-based ListServers already found it); fall back to full search →
+        # episode → embed discovery when only a title/episode is given.
+        embed_url = rc.params.get("embed_url")
+        if embed_url:
+            player_url, goto_referer = await self._embed_to_player(
+                rc, embed_url, _origin(embed_url)
+            )
+        else:
+            episode_url = await self._resolve_episode_url(rc)
+            player_url, goto_referer = await self._resolve_player_url(rc, episode_url)
         player_origin = _origin(player_url)
         # The CDN enforces the megaplay player origin as Referer on the
         # master/segment fetches (verified live 2026-06-20).

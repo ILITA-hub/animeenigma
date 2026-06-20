@@ -28,6 +28,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/miruro"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/nineanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/sidecar"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/transport"
 )
 
@@ -296,6 +297,19 @@ func main() {
 		"priority", cfg.Gogoanime.ServerPriority,
 		"known_extractors", knownExtractorNames)
 
+	// Camoufox stealth-scraper sidecar — providers whose DB `engine` column is
+	// "browser" (e.g. gogoanime → megaplay: JS-runtime stream id + rotating CDN)
+	// delegate stream extraction here. engine + base_url are read LIVE from the
+	// atomic provider roster (cfg.Providers) so a roster refresh flips behaviour
+	// without a restart.
+	stealthClient := sidecar.New(cfg.StealthScraperURL, 90*time.Second)
+	gogoUseBrowser := func() bool {
+		return cfg.Providers.EngineOf("gogoanime") == config.EngineBrowser
+	}
+	gogoBrowserResolve := func(ctx context.Context, embedURL string, category domain.Category) (*domain.Stream, error) {
+		return stealthClient.ResolveEmbed(ctx, "gogoanime", embedURL, category, cfg.Providers.BaseURLOf("gogoanime"))
+	}
+
 	gogoanimeProvider, err := gogoanime.New(gogoanime.Deps{
 		BaseURL:        cfg.Gogoanime.BaseURL,
 		HTTP:           gogoanimeBaseHTTP,
@@ -306,7 +320,9 @@ func main() {
 		ServerPriority: cfg.Gogoanime.ServerPriority,
 		HostExtractor:  hostExtractor,
 		// Probe nil → New() defaults to libs/streamprobe.Probe.
-		Probe: nil,
+		Probe:          nil,
+		UseBrowser:     gogoUseBrowser,
+		BrowserResolve: gogoBrowserResolve,
 	})
 	if err != nil {
 		log.Fatalw("failed to construct Gogoanime provider", "error", err)

@@ -214,6 +214,20 @@ class TestGogoanimeChain(unittest.TestCase):
         with self.assertRaises(RecipeError):
             run(GogoanimeRecipe().resolve(ctx(page, episode_url=None, keyword="X", episode=1)))
 
+    def test_embed_url_skips_episode_discovery(self):
+        # The Go scraper passes a known megaplay embed; recipe goes straight to
+        # the player + interception, no search/category navigation.
+        page = FakePage()
+        session = run(
+            GogoanimeRecipe().resolve(
+                ctx(page, episode_url=None,
+                    embed_url="https://megaplay.buzz/stream/s-2/141568/sub")
+            )
+        )
+        self.assertEqual(session["master_url"], "https://s2.cinewave2.site/anime/aa/bb/master.m3u8")
+        self.assertFalse(any("/search.html" in u for u in page.visited))
+        self.assertFalse(any("/category/" in u for u in page.visited))
+
 
 if __name__ == "__main__":
     unittest.main()

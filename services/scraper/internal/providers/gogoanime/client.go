@@ -199,7 +199,20 @@ type Deps struct {
 	// drive deterministic gate outcomes. nil → defaults to
 	// streamprobe.Probe inside New().
 	Probe probeFunc
+
+	// UseBrowser reports (live, per-call) whether gogoanime's DB `engine` column
+	// is "browser". BrowserResolve resolves an embed/server URL via the Camoufox
+	// stealth-scraper sidecar. Both nil ⇒ legacy in-process curl extraction. The
+	// megaplay player builds its stream id + (rotating) CDN host at runtime in
+	// JS, so curl-class extraction can't reach it — engine=browser routes the
+	// extraction through a real browser instead.
+	UseBrowser     func() bool
+	BrowserResolve BrowserResolveFunc
 }
+
+// BrowserResolveFunc resolves an embed/wrapper URL (a gogoanime server ID) to a
+// playable Stream via the stealth-scraper sidecar. Injected by main.go.
+type BrowserResolveFunc func(ctx context.Context, embedURL string, category domain.Category) (*domain.Stream, error)
 
 // Provider implements domain.Provider for the Gogoanime/Anitaku upstream.
 type Provider struct {
@@ -215,6 +228,10 @@ type Provider struct {
 	serverPriority []string
 	hostExtractor  map[string]string
 	probe          probeFunc
+
+	// Browser-engine delegation (DB engine=browser → stealth-scraper sidecar).
+	useBrowser     func() bool
+	browserResolve BrowserResolveFunc
 
 	// stages is the in-memory health snapshot, updated on each method call.
 	stagesMu sync.Mutex
@@ -261,6 +278,8 @@ func New(d Deps) (*Provider, error) {
 		serverPriority: d.ServerPriority,
 		hostExtractor:  d.HostExtractor,
 		probe:          probe,
+		useBrowser:     d.UseBrowser,
+		browserResolve: d.BrowserResolve,
 		stages:         make(map[string]domain.StageHealth, len(stageNames)),
 	}
 	// Pre-seed all four stages so HealthCheck always returns the canonical
@@ -860,6 +879,12 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 // at ListServers time via the episode-ID slug. Cache namespacing uses the
 // hashed serverID for bounded key length.
 func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverID string, category domain.Category) (*domain.Stream, error) {
+	// engine=browser: the megaplay player resolves its stream id + (rotating)
+	// CDN host at runtime in JS — delegate extraction to the stealth-scraper
+	// sidecar, which drives a real browser. serverID IS the embed/wrapper URL.
+	if p.browserEnabled() {
+		return p.streamViaBrowser(ctx, serverID, category)
+	}
 	_ = category // informational only (sub/dub baked into serverID already).
 	// Cache key: hash the serverID for bounded length.
 	h := sha256.Sum256([]byte(serverID))
@@ -924,6 +949,52 @@ func classifyStreamErr(err error) string {
 	}
 }
 
+// browserEnabled reports whether this call should route extraction through the
+// stealth-scraper sidecar (DB engine=browser + a resolver wired).
+func (p *Provider) browserEnabled() bool {
+	return p.useBrowser != nil && p.browserResolve != nil && p.useBrowser()
+}
+
+// streamViaBrowser resolves an embed/server URL through the sidecar and records
+// stage health, mirroring the in-process GetStream contract.
+func (p *Provider) streamViaBrowser(ctx context.Context, embedURL string, category domain.Category) (*domain.Stream, error) {
+	if embedURL == "" {
+		werr := domain.WrapExtractFailed(errors.New("empty server id"), "gogoanime: browser resolve")
+		p.markStage(health.StageStream, werr)
+		return nil, werr
+	}
+	stream, err := p.browserResolve(ctx, embedURL, category)
+	if err != nil {
+		// Keep stage health low-cardinality + token-free (WR-04).
+		p.markStage(health.StageStream, errors.New("gogoanime: browser "+classifyStreamErr(err)))
+		return nil, err
+	}
+	if stream == nil || len(stream.Sources) == 0 {
+		werr := domain.WrapExtractFailed(errors.New("empty stream"), "gogoanime: browser empty stream")
+		p.markStage(health.StageStream, werr)
+		return nil, werr
+	}
+	p.markStage(health.StageStream, nil)
+	return stream, nil
+}
+
+// pickBrowserEmbed chooses the embed/server URL to hand the sidecar from a gated
+// server list — prefer a megaplay/wrapper host, else the first server.
+func pickBrowserEmbed(servers []domain.Server) string {
+	for _, s := range servers {
+		h := strings.ToLower(s.ID)
+		if strings.Contains(h, "gogoanime.me.uk") ||
+			strings.Contains(h, "megaplay.buzz") ||
+			strings.Contains(h, "vidwish.live") {
+			return s.ID
+		}
+	}
+	if len(servers) > 0 {
+		return servers[0].ID
+	}
+	return ""
+}
+
 // GetStreamWithGate is the priority-aware + gated entry point for the
 // EnglishPlayer cold path.
 //
@@ -955,6 +1026,20 @@ func (p *Provider) GetStreamWithGate(
 	ctx context.Context, providerID, episodeID, serverID string,
 	category domain.Category, servers []domain.Server,
 ) (*domain.Stream, bool, error) {
+	// engine=browser: skip the streamprobe gate entirely (the sidecar guarantees
+	// a working stream) and resolve the pinned or first megaplay server through
+	// the browser.
+	if p.browserEnabled() {
+		embed := serverID
+		if embed == "" {
+			embed = pickBrowserEmbed(servers)
+		}
+		if embed == "" {
+			return nil, false, domain.WrapNotFound(nil, "gogoanime: no servers for browser stream")
+		}
+		s, err := p.GetStream(ctx, providerID, episodeID, embed, category)
+		return s, false, err
+	}
 	// Caller-pinned path: no priority, no gate.
 	if serverID != "" {
 		s, err := p.GetStream(ctx, providerID, episodeID, serverID, category)

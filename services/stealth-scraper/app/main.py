@@ -38,6 +38,10 @@ class ResolveRequest(BaseModel):
     episode: int | None = Field(default=None, ge=0, le=10_000)
     category: str = Field(default="sub", pattern="^(sub|dub)$")
     episode_url: str | None = Field(default=None, max_length=2048)
+    # embed_url is a known server/wrapper URL the Go scraper already discovered
+    # via its curl ListServers — the sidecar resolves it straight to the player
+    # (skips search/episode discovery).
+    embed_url: str | None = Field(default=None, max_length=2048)
     # base_url is the provider mirror from the DB roster (scraper_providers.base_url),
     # passed by the Go scraper — the sidecar holds no provider URL consts/envs.
     base_url: str | None = Field(default=None, max_length=256)

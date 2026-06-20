@@ -49,6 +49,11 @@ type Config struct {
 	// config from /internal/scraper/providers. Empty disables remote config.
 	CatalogURL string
 
+	// StealthScraperURL is the base URL of the Camoufox stealth-scraper sidecar
+	// (services/stealth-scraper), used to resolve providers whose DB `engine`
+	// column is "browser". Non-secret service-discovery URL (Docker network).
+	StealthScraperURL string
+
 	// ProvidersRefresh is how often to re-fetch remote provider config. 0 = no
 	// periodic refresh (boot-only).
 	ProvidersRefresh time.Duration
@@ -224,6 +229,7 @@ func Load() (*Config, error) {
 		ProviderTimeout: getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
 	}
 	cfg.CatalogURL = getEnv("CATALOG_URL", "")
+	cfg.StealthScraperURL = getEnv("STEALTH_SCRAPER_URL", "http://stealth-scraper:3000")
 	if d, err := time.ParseDuration(getEnv("SCRAPER_PROVIDERS_REFRESH", "60s")); err == nil {
 		cfg.ProvidersRefresh = d
 	}
