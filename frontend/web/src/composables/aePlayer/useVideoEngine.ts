@@ -76,12 +76,23 @@ export function shouldFatalOnNetworkError(
   return playlistDead || netRetries >= maxRetries
 }
 
-export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
+export function useVideoEngine(
+  videoEl: Ref<HTMLVideoElement | null>,
+  // When provided and false, skip building the per-fragment hacker-mode stats
+  // (rolling fragStats window + bandwidthEstimate) — pure allocation churn that
+  // only the debug HUD / scrub heatmap consume. The always-on fragLoadedCount
+  // below keeps the stall watchdog working regardless.
+  collectStats?: Ref<boolean>,
+) {
   const fatal = ref<string | null>(null)
   const levels = ref<QualityLevel[]>([])
   const currentLevelLabel = ref('')
   const fragStats = ref<FragStat[]>([])
   const bandwidthEstimate = ref(0)
+  // Cheap always-on signal: how many fragments have loaded for the current
+  // stream. The silent-stall watchdog needs "are fragments flowing?" even when
+  // the detailed fragStats array isn't being built (hacker mode off).
+  const fragLoadedCount = ref(0)
   let hls: any = null
   // Monotonic load generation. `load()` awaits a dynamic import of hls.js, so two
   // calls in quick succession (e.g. a provider change immediately followed by an
@@ -100,6 +111,7 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     currentLevelLabel.value = ''
     fragStats.value = []
     bandwidthEstimate.value = 0
+    fragLoadedCount.value = 0
     destroy()
 
     // Progressive MP4 — native playback. The backend proxy injects Referer and
@@ -127,10 +139,14 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     // fragment 0, leaving the player frozen at readyState 0 with no error.
     hls = new Hls({
       enableWorker: true,
-      backBufferLength: 90,
+      // Retain only ~30s of already-played media behind the playhead. The "10s
+      // behind" seek requirement needs far less than the old 90s; the surplus
+      // was pure memory held for content the viewer already watched (notably on
+      // mobile during long episodes). Forward buffering is left at the proven
+      // values — that's the rebuffering-protection knob, not a memory/egress one.
+      backBufferLength: 30,
       // Seek-ahead window (spec 2026-06-10): keep ~1 min buffered ahead so
       // ±5s arrow-key seeks land inside the buffer and resolve instantly.
-      // backBufferLength 90 already covers the "10s behind" requirement.
       maxBufferLength: 60,
       maxMaxBufferLength: 120,
     })
@@ -153,6 +169,11 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
       const f = data?.frag
       const st = f?.stats
       if (!f || !st) return
+      fragLoadedCount.value++ // cheap always-on signal for the stall watchdog
+      // The detailed rolling window + bandwidth read are consumed ONLY by the
+      // hacker-mode HUD / scrub heatmap. Skip the per-fragment array
+      // reallocation (and the reactivity it triggers) when nobody's looking.
+      if (collectStats && !collectStats.value) return
       const loadMs = Math.max(0, (st.loading?.end ?? 0) - (st.loading?.start ?? 0))
       // Rolling window of the last 30 fragments — enough for the hacker-mode
       // HUD + scrub-bar heatmap without unbounded growth on long episodes.
@@ -214,5 +235,5 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
 
   onUnmounted(destroy)
 
-  return { fatal, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate }
+  return { fatal, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, fragLoadedCount }
 }

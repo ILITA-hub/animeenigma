@@ -27,7 +27,7 @@
           </p>
         </div>
         <button
-          class="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors border-0 bg-transparent"
+          class="touch-target flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors border-0 bg-transparent"
           aria-label="Close"
           @click="emit('close')"
         >

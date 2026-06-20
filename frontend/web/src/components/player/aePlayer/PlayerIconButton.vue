@@ -25,6 +25,7 @@ const playerIconButtonVariants = cva(
     'grid place-items-center shrink-0 cursor-pointer border-0 bg-transparent text-white',
     'rounded-[var(--r-md)] transition-colors duration-150',
     'hover:bg-white/[0.14]',
+    'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cyan/60',
     // active = the former `.pl-icon.is-open` menu-open highlight
     'data-[active=true]:bg-brand-cyan/20 data-[active=true]:text-brand-cyan',

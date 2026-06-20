@@ -21,6 +21,8 @@
           class="relative grid grid-cols-2 rounded-full p-1"
           style="background: var(--white-a8);"
           :data-on="audioIndex"
+          role="radiogroup"
+          aria-label="Audio"
         >
           <!-- Sliding thumb -->
           <span
@@ -36,9 +38,11 @@
             v-for="opt in audioOptions"
             :key="opt.value"
             :data-test="'audio-' + opt.value"
+            role="radio"
+            :aria-checked="audio === opt.value"
             :class="[
-              'relative z-10 py-[9px] px-1.5 border-0 bg-transparent text-[13px] font-semibold transition-colors duration-[180ms] text-center',
-              'focus-visible:outline-none',
+              'relative z-10 py-[9px] px-1.5 border-0 bg-transparent text-[13px] font-semibold transition-colors duration-[180ms] text-center rounded-full',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
               audio === opt.value ? 'text-white' : 'text-[var(--muted-foreground)]',
             ]"
             @click="emit('update:audio', opt.value)"
@@ -57,6 +61,8 @@
           class="relative rounded-full p-1"
           style="background: var(--white-a8); display: grid; grid-template-columns: repeat(3, 1fr);"
           :data-on="langIndex"
+          role="radiogroup"
+          aria-label="Language"
         >
           <!-- Sliding thumb (3 cols) -->
           <span
@@ -72,9 +78,11 @@
             v-for="opt in langOptions"
             :key="opt.value"
             :data-test="'lang-' + opt.value"
+            role="radio"
+            :aria-checked="lang === opt.value"
             :class="[
-              'relative z-10 py-[9px] px-1.5 border-0 bg-transparent text-[13px] font-semibold transition-colors duration-[180ms] text-center',
-              'focus-visible:outline-none',
+              'relative z-10 py-[9px] px-1.5 border-0 bg-transparent text-[13px] font-semibold transition-colors duration-[180ms] text-center rounded-full',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
               lang === opt.value ? 'text-white' : 'text-[var(--muted-foreground)]',
             ]"
             @click="emit('update:lang', opt.value)"

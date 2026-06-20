@@ -67,12 +67,12 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
     expect(video.getAttribute('src')).toBe('https://x/ep.mp4')
   })
 
-  it('warms 50 spread thumbnails in the background with zero hovering', async () => {
+  it('warms spread thumbnails in the background with zero hovering', async () => {
     const w = make({ streamUrl: 'https://x/ep.mp4', streamType: 'mp4' })
     await vi.advanceTimersByTimeAsync(4000) // eager init
     const { video, writes } = instrument(w)
     const DUR = 1100
-    const POINTS = 50 // mirrors PREFETCH_POINTS in ScrubPreview.vue
+    const POINTS = 16 // mirrors PREFETCH_POINTS in ScrubPreview.vue
     Object.defineProperty(video, 'duration', { get: () => DUR, configurable: true })
 
     // Evenly-spaced prefetch points, each snapped to the 5s bucket grid.
@@ -118,8 +118,8 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
     // …and the pump self-recovers: prefetch continues without further input.
     await vi.advanceTimersByTimeAsync(600)
     expect(writes.length).toBeGreaterThanOrEqual(2)
-    // First background prefetch point: 1100 × 1/51 → bucket 4 → t=20.
-    expect(writes[1]).toBe(20)
+    // First background prefetch point: 1100 × 1/17 ≈ 64.7 → bucket 13 → t=65.
+    expect(writes[1]).toBe(65)
   })
 
   it('sets the mp4 src on first hover', async () => {

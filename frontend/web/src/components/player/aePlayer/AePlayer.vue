@@ -139,6 +139,7 @@
       :stream-type="currentStream?.type ?? '—'"
       :level-label="engine.currentLevelLabel.value"
       :seek="lastSeek"
+      :decision="sourceDecision"
       :intents="sourceFallbackDebug.intents"
       :pinned="state.hudPinned.value"
       :fading="hudFading"
@@ -324,7 +325,7 @@ import SubtitlesMenu from './SubtitlesMenu.vue'
 import BrowseSubsModal from './BrowseSubsModal.vue'
 import BigPlayButton from './overlays/BigPlayButton.vue'
 import BufferingOverlay from './overlays/BufferingOverlay.vue'
-import DebugHud, { type SeekTrace } from './overlays/DebugHud.vue'
+import DebugHud, { type SeekTrace, type SourceDecision } from './overlays/DebugHud.vue'
 import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
@@ -411,7 +412,11 @@ const videoRef = ref<HTMLVideoElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
 const isPointerInside = ref(false)
 const state = usePlayerState()
-const engine = useVideoEngine(videoRef)
+// Pass hackerMode as the stats-collection gate: the per-fragment fragStats/
+// bandwidth churn is only consumed by the debug HUD + scrub heatmap, so skip it
+// for the ~99% of sessions with hacker mode off (the watchdog uses the cheap
+// always-on fragLoadedCount instead).
+const engine = useVideoEngine(videoRef, state.hackerMode)
 const resolver = useProviderResolver()
 const toast = useToast()
 
@@ -450,6 +455,24 @@ let applyingRoomEpisode = false
 // Parse a WT room token (carried in `translation_id`) and apply it wholesale to
 // the player's combo. The room is the single source of truth for the source, so
 // every field (audio/lang/team/provider/server) is set from the token.
+// Hacker-mode insight: WHAT source combo is active and WHY it was chosen. Set at
+// every selection site (deep-link, smart default, facet re-pick, auto-failover,
+// room pin, manual). Surfaced in the DebugHud so you can see whether the player
+// landed on this provider/audio/lang/team because it's the BEST pick, a pinned
+// deep-link, a fallback after a failure, or your own click. Declared above
+// applyRoomCombo because the immediate room watcher calls that during setup.
+const sourceDecision = ref<SourceDecision | null>(null)
+function recordDecision(reason: string) {
+  const c = state.combo.value
+  sourceDecision.value = {
+    provider: c.provider,
+    audio: c.audio,
+    lang: c.lang,
+    team: c.team ?? null,
+    reason,
+  }
+}
+
 function applyRoomCombo(token: string | undefined | null) {
   if (!token) return
   const fields = tokenToCombo(token)
@@ -462,6 +485,7 @@ function applyRoomCombo(token: string | undefined | null) {
     provider: fields.provider,
     server: fields.server,
   }
+  recordDecision('pinned by the Watch-Together room')
   // Release after Vue flushes the deep combo watcher for this change so the
   // broadcast watcher sees applyingRoomCombo===true and skips the echo.
   void nextTick(() => {
@@ -598,6 +622,7 @@ const displayRows = computed<ProviderRow[]>(() =>
 // per-anime ae availability probe must be invalidated when the title changes.
 // Also reset saved-combo fallback state so the new title gets a fresh attempt.
 let providerAutoSelected = false
+
 // Dynamic-BEST source switching: when an AUTO-selected source fails to actually
 // play (a dead playlist at playback — e.g. a megaplay CDN host that 403/502s our
 // IP), advance through candidate sources — untried servers of the current
@@ -701,6 +726,11 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
     state.setProvider(toProvider, '') // provider watcher re-lists + re-resolves
   }
   recordFallbackIntent({ from: provider, to: toProvider, reason, acted: true })
+  recordDecision(
+    switchServerId
+      ? `auto-failover — switched server (${reason})`
+      : `auto-failover — previous source failed (${reason})`,
+  )
   return true
 }
 
@@ -709,7 +739,7 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
 // hangs at 0:00 (the documented platform-wide codec stall). The fatal-driven
 // switch can't see that. So after a stream attaches, if NO fragment has loaded
 // AND playback never started within the window, treat it as a dead source and
-// advance. Guarded on fragStats.length === 0 so a merely-slow stream (fragments
+// advance. Guarded on fragLoadedCount === 0 so a merely-slow stream (fragments
 // trickling in) is NOT switched away from.
 let playbackWatchdog: ReturnType<typeof setTimeout> | null = null
 const PLAYBACK_WATCHDOG_MS = 12000
@@ -726,7 +756,7 @@ function armPlaybackWatchdog() {
     if (tok !== resolveToken) return            // superseded by a newer resolve
     if (hasStarted.value) return                // already playing
     if (sourceError.value) return               // already errored/handled
-    if (engine.fragStats.value.length > 0) return // fragments flowing — just slow
+    if (engine.fragLoadedCount.value > 0) return // fragments flowing — just slow
     void (async () => {
       if (await advanceToNextSource('silent stall')) {
         toast.push("That source won't play — switching to the next best…", 'info', 4000)
@@ -786,6 +816,7 @@ function applyInitialProvider() {
   // audio/lang intentionally left as-resolved (saved prefs / defaults); the team
   // title is matched best-effort within them by the downstream resolver.
   if (props.initialTeam) state.setTeam(props.initialTeam)
+  recordDecision('deep-link — pinned from the ?provider/?team URL')
 }
 
 // evaluated exactly once at first-active rows (resolveAttempted guards re-run)
@@ -849,6 +880,12 @@ watch(
           rows.value.some((r) => r.def.id === id && r.state === 'active')) {
         providerAutoSelected = true
         state.setProvider(id, '')
+        const rank = orderedProviderIds.value.indexOf(id)
+        recordDecision(
+          rank >= 0
+            ? `smart default — best playable source (rank ${rank + 1} of ${orderedProviderIds.value.length})`
+            : 'smart default — best playable source',
+        )
       }
     })
   },
@@ -1378,6 +1415,7 @@ async function repickProviderForFacet() {
   const cur = state.combo.value.provider
   const curStillActive = rows.value.some((r) => r.def.id === cur && r.state === 'active')
   if (curStillActive) {
+    recordDecision('kept current source — it still serves your audio / language')
     void resolveStreamForCurrentEpisode()
     return
   }
@@ -1397,6 +1435,7 @@ async function repickProviderForFacet() {
   }
   providerAutoSelected = true
   state.setProvider(id, '') // provider watcher re-lists episodes + refreshes teams
+  recordDecision('re-picked best source for the new audio / language')
 }
 
 // ─── Provider selection helper ────────────────────────────────────────────────
@@ -1405,6 +1444,7 @@ function onSelectProvider(id: string) {
   providerAutoSelected = false
   resetSourceSwitching() // manual pick — fresh state, and don't auto-switch it
   state.setProvider(id, '')
+  recordDecision('manual — you picked this source')
   // loadEpisodesAndStream fires via the provider watcher above
 }
 
@@ -1453,15 +1493,21 @@ let rafId: number | null = null
 function writeProgress() {
   const v = videoRef.value
   if (!v) return
-  currentTime.value = v.currentTime
+  // Change-gate every reactive write: tick() runs ~60×/sec, but duration is
+  // effectively constant and buffered/progress change far slower than per-frame.
+  // Assigning only on a real change stops the per-frame reactivity storm (and
+  // the computed/re-render cascade it drove) for refs that didn't actually move.
+  if (v.currentTime !== currentTime.value) currentTime.value = v.currentTime
   const dur = v.duration || 0
-  duration.value = dur
+  if (dur !== duration.value) duration.value = dur
   if (dur > 0) {
-    state.progress.value = (v.currentTime / dur) * 100
+    const pct = (v.currentTime / dur) * 100
+    if (pct !== state.progress.value) state.progress.value = pct
   }
   // Buffered
   if (v.buffered.length > 0 && dur > 0) {
-    bufferedPct.value = (v.buffered.end(v.buffered.length - 1) / dur) * 100
+    const bpct = (v.buffered.end(v.buffered.length - 1) / dur) * 100
+    if (bpct !== bufferedPct.value) bufferedPct.value = bpct
   }
   // Watch tracking: heartbeat saves + duration-aware auto-complete. Only feed
   // real playback positions — a paused pre-start frame (currentTime 0) or a
@@ -2538,7 +2584,7 @@ onUnmounted(() => {
 
 .pl-title {
   font-family: var(--font-display, inherit);
-  font-weight: 800;
+  font-weight: 600;
   font-size: 19px;
   margin: 2px 0 0;
   color: #fff;

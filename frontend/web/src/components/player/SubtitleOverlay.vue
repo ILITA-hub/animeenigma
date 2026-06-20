@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { ref, shallowRef, watch, onMounted, onUnmounted, computed } from 'vue'
 import type { SubtitleCue } from '@/utils/subtitle-parser'
 import { parseASS, parseSRT, parseVTT } from '@/utils/subtitle-parser'
 import { hlsProxyUrl } from '@/utils/streaming'
@@ -57,7 +57,10 @@ const emit = defineEmits<{
   (e: 'error', msg: string): void
 }>()
 
-const cues = ref<SubtitleCue[]>([])
+// shallowRef: the cue array is immutable after parse and replaced wholesale on
+// every load, so per-object deep reactivity over 1000+ cues is pure overhead —
+// activeCues only needs to re-run when the array reference changes.
+const cues = shallowRef<SubtitleCue[]>([])
 const currentTime = ref(0)
 let animFrameId: number | null = null
 
@@ -234,12 +237,18 @@ function cueTextStyle(cue: SubtitleCue): Record<string, string> {
   return style
 }
 
-// Time sync loop
+// Time sync loop. The video clock is read every frame, but the reactive write
+// (which drives the activeCues filter+sort over the whole cue list) is coarsened
+// to ~8 Hz and change-gated: subtitle timing only needs ~⅛-second precision, so
+// recomputing 60×/sec was ~7× wasted work on the main thread during playback.
+// While paused the value never changes → no write → no recompute.
+const TIME_SYNC_HZ = 8
 function startTimeSync() {
   stopTimeSync()
   function tick() {
     if (props.videoElement) {
-      currentTime.value = props.videoElement.currentTime
+      const snapped = Math.round(props.videoElement.currentTime * TIME_SYNC_HZ) / TIME_SYNC_HZ
+      if (snapped !== currentTime.value) currentTime.value = snapped
     }
     animFrameId = requestAnimationFrame(tick)
   }

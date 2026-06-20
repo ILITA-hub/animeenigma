@@ -25,6 +25,16 @@
       </span>
     </div>
 
+    <!-- Selected combo + WHY it was chosen -->
+    <template v-if="decision">
+      <div class="pl-hud-row pl-hud-head" data-test="hud-decision-head">SELECTED COMBO</div>
+      <div class="pl-hud-row" data-test="hud-decision-combo">
+        {{ decision.provider || '—' }} · {{ decision.audio }} · {{ decision.lang
+        }}<template v-if="decision.team"> · {{ decision.team }}</template>
+      </div>
+      <div class="pl-hud-row pl-hud-dim" data-test="hud-decision-why">why: {{ decision.reason }}</div>
+    </template>
+
     <!-- Metadata — always shown in full -->
     <div class="pl-hud-row">BW   {{ bw }}</div>
     <div class="pl-hud-row">
@@ -115,6 +125,15 @@ import type { FragStat } from '@/composables/aePlayer/useVideoEngine'
 import { scrubDebug as scrub } from '@/composables/aePlayer/scrubPreviewDebug'
 import type { FallbackIntent } from '@/composables/aePlayer/sourceFallbackDebug'
 
+/** The active source combo + WHY the player landed on it. */
+export interface SourceDecision {
+  provider: string
+  audio: string
+  lang: string
+  team: string | null
+  reason: string
+}
+
 /** One user seek, traced through the pipeline. Mutated in place as events land. */
 export interface SeekTrace {
   /** target position, seconds */
@@ -147,6 +166,9 @@ const props = defineProps<{
   streamType: string
   levelLabel: string
   seek?: SeekTrace | null
+  /** the active source combo + the reason it was chosen (smart default,
+   *  deep-link, failover, manual, room) */
+  decision?: SourceDecision | null
   /** source auto-fallback ledger (newest last) */
   intents?: FallbackIntent[]
   /** keep the HUD on screen during playback */

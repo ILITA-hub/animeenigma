@@ -62,6 +62,32 @@ describe('DebugHud', () => {
     expect(head).toContain('1080p')
   })
 
+  it('shows the SELECTED COMBO + why when a decision is provided', () => {
+    const w = mount(DebugHud, {
+      props: {
+        ...baseProps,
+        decision: {
+          provider: 'kodik',
+          audio: 'sub',
+          lang: 'ru',
+          team: 'AniLibria',
+          reason: 'smart default — best playable source (rank 1 of 6)',
+        },
+      },
+    })
+    expect(w.find('[data-test="hud-decision-head"]').exists()).toBe(true)
+    const combo = w.find('[data-test="hud-decision-combo"]').text()
+    expect(combo).toContain('kodik')
+    expect(combo).toContain('sub')
+    expect(combo).toContain('AniLibria')
+    expect(w.find('[data-test="hud-decision-why"]').text()).toContain('smart default')
+  })
+
+  it('omits the SELECTED COMBO section when no decision is set', () => {
+    const w = mount(DebugHud, { props: baseProps })
+    expect(w.find('[data-test="hud-decision-head"]').exists()).toBe(false)
+  })
+
   it('formats bandwidth in Mbit/s and the buffer window', () => {
     const w = mount(DebugHud, { props: baseProps })
     expect(w.text()).toContain('4.2 Mbit/s')

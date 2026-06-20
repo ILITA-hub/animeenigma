@@ -78,8 +78,11 @@ const BUCKET_SEC = 5
 const CACHE_MAX = 150
 /** pointer-rest debounce before issuing a real (network) seek */
 const SETTLE_MS = 180
-/** evenly-spaced timeline points prefetched in the background */
-const PREFETCH_POINTS = 50
+/** evenly-spaced timeline points prefetched in the background. Kept modest: one
+ *  cached frame per ~6% of the bar is plenty visually, and every point is a
+ *  fragment fetched through the HLS proxy — 50 was a large, mostly-unused
+ *  egress multiplier on the self-hosted target. */
+const PREFETCH_POINTS = 16
 /** a stuck seek (failed fragment) must not wedge the prefetch pump */
 const SEEK_WATCHDOG_MS = 8000
 /** eager-init delay after a stream loads — the MAIN player wins startup
@@ -111,6 +114,13 @@ let eagerTimer: ReturnType<typeof setTimeout> | null = null
 let pumpTimer: ReturnType<typeof setTimeout> | null = null
 let prefetchQueue: number[] = []
 let prefetchArmed = false
+/** Touch devices have no hover, so the preview bubble never shows — never warm
+ *  the thumbnail cache there (pure wasted proxy egress on the most
+ *  bandwidth-sensitive clients). */
+const isCoarsePointer =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(pointer: coarse)').matches
 /** performance.now() when the in-flight seek was issued — capture latency */
 let seekIssuedAt: number | null = null
 let prefetchCompleteLogged = false
@@ -432,9 +442,10 @@ watch(
 )
 
 // New stream — tear down (cache frames belong to the old video). Re-arm
-// immediately if the bubble is showing; otherwise EAGERLY after a short
-// delay, so the 50-point thumbnail warm-up runs before the first hover
-// instead of being gated on it. `immediate` covers the initial mount.
+// immediately if the bubble is showing; otherwise EAGERLY after a short delay,
+// so the thumbnail warm-up runs before the first hover instead of being gated
+// on it. Skipped entirely on coarse pointers (touch — no hover bubble ever).
+// `immediate` covers the initial mount.
 watch(
   () => props.streamUrl,
   () => {
@@ -444,6 +455,7 @@ watch(
       void ensureEngine()
       return
     }
+    if (isCoarsePointer) return
     eagerTimer = setTimeout(() => {
       eagerTimer = null
       void ensureEngine()
