@@ -47,31 +47,61 @@ func (a *HTTPAnimeSet) Resolve(ctx context.Context) ([]AnimeRef, error) {
 	if resp.StatusCode != http.StatusOK {
 		return refs, nil
 	}
+
+	// Real spotlight envelope: {"cards":[{"type":"...","data":{...}}],"generated_at":"..."}
+	// No "data" wrapper at the top level.
 	var env struct {
-		Data struct {
-			Cards []struct {
-				AnimeID string `json:"anime_id"`
-			} `json:"cards"`
-		} `json:"data"`
+		Cards []struct {
+			Type string          `json:"type"`
+			Data json.RawMessage `json:"data"`
+		} `json:"cards"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
 		return refs, nil
 	}
-	var ids []string
-	for _, c := range env.Data.Cards {
-		if c.AnimeID != "" && c.AnimeID != a.anchor {
-			ids = append(ids, c.AnimeID)
+
+	// Extract anime UUIDs from anime-bearing cards.
+	// Anime-bearing cards have data.anime.id; non-anime cards (latest_news,
+	// platform_stats, telegram_news) either lack "anime" or have an empty id.
+	var featuredID string
+	var pool []string
+	for _, c := range env.Cards {
+		var h struct {
+			Anime struct {
+				ID string `json:"id"`
+			} `json:"anime"`
 		}
+		if json.Unmarshal(c.Data, &h) != nil {
+			continue
+		}
+		id := h.Anime.ID
+		if id == "" || id == a.anchor {
+			continue
+		}
+		if c.Type == "featured" && featuredID == "" {
+			featuredID = id
+		}
+		pool = append(pool, id)
 	}
-	if len(ids) == 0 {
+
+	if len(pool) == 0 {
 		return refs, nil
 	}
-	refs = append(refs, AnimeRef{UUID: ids[0], Slot: SlotFeatured})
-	if len(ids) > 1 {
-		pick := ids[1+a.rng.Intn(len(ids)-1)]
-		refs = append(refs, AnimeRef{UUID: pick, Slot: SlotSpotlightRandom})
-		other := ids[a.rng.Intn(len(ids))]
-		refs = append(refs, AnimeRef{UUID: other, Slot: SlotRandom})
+
+	// SlotFeatured: prefer the "featured"-type card; fall back to pool[0].
+	slotFeaturedID := featuredID
+	if slotFeaturedID == "" {
+		slotFeaturedID = pool[0]
 	}
+	refs = append(refs, AnimeRef{UUID: slotFeaturedID, Slot: SlotFeatured})
+
+	// SlotSpotlightRandom: random pick from pool.
+	pick := pool[a.rng.Intn(len(pool))]
+	refs = append(refs, AnimeRef{UUID: pick, Slot: SlotSpotlightRandom})
+
+	// SlotRandom: another random pick from pool (may coincide — acceptable).
+	other := pool[a.rng.Intn(len(pool))]
+	refs = append(refs, AnimeRef{UUID: other, Slot: SlotRandom})
+
 	return refs, nil
 }
