@@ -48,6 +48,7 @@ const (
 type ResolvedStream struct {
 	Provider  string
 	AnimeUUID string
+	AnimeName string // human-readable title for the dashboard reason column
 	Slot      AnimeSlot
 	Server    string // server id/name, e.g. "...type=hd-1..."
 	MasterURL string
@@ -61,6 +62,7 @@ type ResolvedStream struct {
 type Verdict struct {
 	Provider  string
 	AnimeUUID string
+	AnimeName string
 	Slot      AnimeSlot
 	Server    string
 	Stage     Stage

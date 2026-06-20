@@ -11,6 +11,7 @@ type ProbeRow struct {
 	RunTS     int64
 	Provider  string
 	AnimeUUID string
+	AnimeName string
 	Slot      string
 	Server    string
 	Stage     string
@@ -54,7 +55,7 @@ func (r *PromReporter) Report(ctx context.Context, run RunResult) error {
 		}
 		metrics.ProbeRunsTotal.WithLabelValues(v.Provider, string(v.Slot), v.Server, result, string(v.Reason)).Inc()
 		rows = append(rows, ProbeRow{
-			RunTS: run.At, Provider: v.Provider, AnimeUUID: v.AnimeUUID, Slot: string(v.Slot),
+			RunTS: run.At, Provider: v.Provider, AnimeUUID: v.AnimeUUID, AnimeName: v.AnimeName, Slot: string(v.Slot),
 			Server: v.Server, Stage: string(v.Stage), Reason: string(v.Reason), Playable: v.Playable(),
 		})
 	}

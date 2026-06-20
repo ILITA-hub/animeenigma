@@ -108,12 +108,20 @@ ORDER BY (anonymous_id, timestamp)`
   run_ts      DateTime,
   provider    LowCardinality(String),
   anime_uuid  String,
+  anime_name  String,
   slot        LowCardinality(String),
   server      String,
   stage       LowCardinality(String),
   reason      LowCardinality(String),
   playable    UInt8
 ) ENGINE = MergeTree ORDER BY (run_ts, provider) TTL run_ts + INTERVAL 90 DAY`
+
+	// alterProbeRunsAddAnimeNameDDL adds anime_name to a probe_runs table that
+	// predates the column (the create-table DDL only fires on a fresh install).
+	// Idempotent: IF NOT EXISTS makes re-runs on every boot a no-op. AFTER
+	// anime_uuid keeps the physical column order aligned with the positional
+	// INSERT in ClickHouseStore.InsertProbeRows.
+	alterProbeRunsAddAnimeNameDDL = `ALTER TABLE probe_runs ADD COLUMN IF NOT EXISTS anime_name String AFTER anime_uuid`
 
 	// createResolvedViewDDL stitches identity at query time. argMax(user_id,
 	// timestamp) picks the latest identity per anonymous_id; person_id is the
@@ -142,6 +150,7 @@ func EnsureSchema(ctx context.Context, conn driver.Conn) error {
 		createEventsTableDDL,
 		createIdentitiesTableDDL,
 		createProbeRunsTableDDL,
+		alterProbeRunsAddAnimeNameDDL,
 		createResolvedViewDDL,
 	} {
 		if err := conn.Exec(ctx, ddl); err != nil {

@@ -11,7 +11,7 @@ import (
 )
 
 type Resolver interface {
-	Resolve(ctx context.Context, animeUUID string, slot AnimeSlot, provider string) ([]ResolvedStream, Stage, error)
+	Resolve(ctx context.Context, animeUUID, animeName string, slot AnimeSlot, provider string) ([]ResolvedStream, Stage, error)
 }
 
 type HTTPResolver struct {
@@ -73,7 +73,7 @@ func (r *HTTPResolver) get(ctx context.Context, path string, q url.Values) (*env
 	return &e, nil
 }
 
-func (r *HTTPResolver) Resolve(ctx context.Context, animeUUID string, slot AnimeSlot, provider string) ([]ResolvedStream, Stage, error) {
+func (r *HTTPResolver) Resolve(ctx context.Context, animeUUID, animeName string, slot AnimeSlot, provider string) ([]ResolvedStream, Stage, error) {
 	base := "/api/anime/" + animeUUID + "/scraper"
 	eps, err := r.get(ctx, base+"/episodes", url.Values{"prefer": {provider}})
 	if err != nil {
@@ -102,7 +102,7 @@ func (r *HTTPResolver) Resolve(ctx context.Context, animeUUID string, slot Anime
 		}
 		src := st.Data.Stream.Sources[0]
 		out = append(out, ResolvedStream{
-			Provider: provider, AnimeUUID: animeUUID, Slot: slot, Server: s.ID,
+			Provider: provider, AnimeUUID: animeUUID, AnimeName: animeName, Slot: slot, Server: s.ID,
 			MasterURL: src.URL, Exp: src.Exp, Sig: src.Sig,
 			Referer: st.Data.Stream.Headers["Referer"], Stage: StageStream,
 		})

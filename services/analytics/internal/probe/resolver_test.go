@@ -23,7 +23,7 @@ func TestHTTPResolver_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	r := NewHTTPResolver(srv.URL, srv.Client())
-	streams, stage, err := r.Resolve(context.Background(), "uuid1", SlotAnchor, "gogoanime")
+	streams, stage, err := r.Resolve(context.Background(), "uuid1", "Frieren", SlotAnchor, "gogoanime")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -34,6 +34,9 @@ func TestHTTPResolver_HappyPath(t *testing.T) {
 	if s.MasterURL != "https://cdn/m.m3u8" || s.Exp != "99" || s.Sig != "ab" || s.Referer != "https://ref/" {
 		t.Fatalf("bad resolved stream: %+v", s)
 	}
+	if s.AnimeName != "Frieren" {
+		t.Fatalf("AnimeName not carried through: got %q", s.AnimeName)
+	}
 }
 
 func TestHTTPResolver_NoEpisodes(t *testing.T) {
@@ -42,7 +45,7 @@ func TestHTTPResolver_NoEpisodes(t *testing.T) {
 	}))
 	defer srv.Close()
 	r := NewHTTPResolver(srv.URL, srv.Client())
-	_, stage, err := r.Resolve(context.Background(), "uuid1", SlotAnchor, "gogoanime")
+	_, stage, err := r.Resolve(context.Background(), "uuid1", "Frieren", SlotAnchor, "gogoanime")
 	if err == nil || stage != StageEpisodes {
 		t.Fatalf("want episodes-stage error, got stage=%v err=%v", stage, err)
 	}

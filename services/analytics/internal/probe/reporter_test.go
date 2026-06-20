@@ -21,7 +21,7 @@ func TestReporter_SetsGaugeAndRows(t *testing.T) {
 	rep := NewPromReporter(ch)
 	run := RunResult{
 		ProviderVerdicts: []ProviderVerdict{{Provider: "gogoanime", Status: StatusUp}},
-		Verdicts: []Verdict{{Provider: "gogoanime", Slot: SlotAnchor, Server: "s", Reason: streamprobe.ReasonPlayable}},
+		Verdicts: []Verdict{{Provider: "gogoanime", AnimeName: "Frieren", Slot: SlotAnchor, Server: "s", Reason: streamprobe.ReasonPlayable}},
 		At: 1000,
 	}
 	if err := rep.Report(context.Background(), run); err != nil {
@@ -32,6 +32,9 @@ func TestReporter_SetsGaugeAndRows(t *testing.T) {
 	}
 	if len(ch.rows) != 1 {
 		t.Fatalf("rows=%d", len(ch.rows))
+	}
+	if ch.rows[0].AnimeName != "Frieren" {
+		t.Fatalf("ProbeRow.AnimeName=%q, want Frieren", ch.rows[0].AnimeName)
 	}
 	// info metric: up provider with empty reason → reason label becomes "-"
 	if got := testutil.ToFloat64(metrics.ProbeProviderStatus.WithLabelValues("gogoanime", string(StatusUp), "-")); got != 1.0 {

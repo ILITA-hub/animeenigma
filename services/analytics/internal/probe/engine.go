@@ -34,10 +34,10 @@ func (e *Engine) probeProvider(ctx context.Context, p string, refs []AnimeRef) (
 		}
 	}()
 	for _, ref := range refs {
-		streams, stage, rerr := e.res.Resolve(ctx, ref.UUID, ref.Slot, p)
+		streams, stage, rerr := e.res.Resolve(ctx, ref.UUID, ref.Name, ref.Slot, p)
 		if rerr != nil {
 			verdicts = append(verdicts, Verdict{
-				Provider: p, AnimeUUID: ref.UUID, Slot: ref.Slot, Stage: stage,
+				Provider: p, AnimeUUID: ref.UUID, AnimeName: ref.Name, Slot: ref.Slot, Stage: stage,
 				Reason: streamprobe.ReasonCDNUnreachable,
 			})
 			continue

@@ -81,7 +81,7 @@ func firstNonComment(manifest []byte) string {
 func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict {
 	ctx, cancel := context.WithTimeout(ctx, validatorBudget)
 	defer cancel()
-	verdict := Verdict{Provider: rs.Provider, AnimeUUID: rs.AnimeUUID, Slot: rs.Slot, Server: rs.Server, Stage: StagePlayback}
+	verdict := Verdict{Provider: rs.Provider, AnimeUUID: rs.AnimeUUID, AnimeName: rs.AnimeName, Slot: rs.Slot, Server: rs.Server, Stage: StagePlayback}
 
 	master, status, err := v.fetch(ctx, v.proxyURL(rs, rs.MasterURL))
 	if err != nil {

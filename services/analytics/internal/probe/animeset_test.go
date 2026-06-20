@@ -104,6 +104,46 @@ func TestAnimeSet_SpotlightDown_AnchorOnly(t *testing.T) {
 	}
 }
 
+// namedSpotlightPayload carries title fields on the anime cards so the resolver
+// can populate AnimeRef.Name.
+const namedSpotlightPayload = `{
+  "cards":[
+    {"type":"featured","data":{"anime":{"id":"feat-uuid","name":"Gintama","name_ru":"Гинтама"}}},
+    {"type":"random_tail","data":{"anime":{"id":"rand-uuid","name":"Bleach"}}}
+  ],
+  "generated_at":"2026-06-20T00:00:00Z"
+}`
+
+func TestAnimeSet_PopulatesNames(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Anchor name comes from the detail endpoint; spotlight from the list.
+		if r.URL.Path == "/api/anime/ANCHOR" {
+			w.Write([]byte(`{"data":{"name":"Sousou no Frieren","name_ru":"Фрирен"}}`))
+			return
+		}
+		w.Write([]byte(namedSpotlightPayload))
+	}))
+	defer srv.Close()
+
+	as := NewHTTPAnimeSet(srv.URL, "ANCHOR", srv.Client(), rand.New(rand.NewSource(1)))
+	refs, err := as.Resolve(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bySlot := map[AnimeSlot]AnimeRef{}
+	for _, r := range refs {
+		bySlot[r.Slot] = r
+	}
+	// Anchor name from the detail endpoint, Russian preferred.
+	if bySlot[SlotAnchor].Name != "Фрирен" {
+		t.Fatalf("anchor name = %q, want Фрирен", bySlot[SlotAnchor].Name)
+	}
+	// Featured name from the spotlight card, Russian preferred.
+	if bySlot[SlotFeatured].Name != "Гинтама" {
+		t.Fatalf("featured name = %q, want Гинтама", bySlot[SlotFeatured].Name)
+	}
+}
+
 func TestAnimeSet_OnlyNonAnimeCards_AnchorOnly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(onlyNonAnimePayload))

@@ -10,19 +10,19 @@ import (
 type fakeAS struct{}
 
 func (fakeAS) Resolve(_ context.Context) ([]AnimeRef, error) {
-	return []AnimeRef{{UUID: "u", Slot: SlotAnchor}}, nil
+	return []AnimeRef{{UUID: "u", Name: "Anchor Title", Slot: SlotAnchor}}, nil
 }
 
 type fakeRes struct{}
 
-func (fakeRes) Resolve(_ context.Context, u string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
-	return []ResolvedStream{{Provider: p, AnimeUUID: u, Slot: s, Server: "srv", Stage: StageStream}}, StageStream, nil
+func (fakeRes) Resolve(_ context.Context, u, name string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
+	return []ResolvedStream{{Provider: p, AnimeUUID: u, AnimeName: name, Slot: s, Server: "srv", Stage: StageStream}}, StageStream, nil
 }
 
 type fakeVal struct{}
 
 func (fakeVal) Validate(_ context.Context, rs ResolvedStream) Verdict {
-	return Verdict{Provider: rs.Provider, AnimeUUID: rs.AnimeUUID, Slot: rs.Slot, Server: rs.Server, Stage: StagePlayback, Reason: streamprobe.ReasonPlayable}
+	return Verdict{Provider: rs.Provider, AnimeUUID: rs.AnimeUUID, AnimeName: rs.AnimeName, Slot: rs.Slot, Server: rs.Server, Stage: StagePlayback, Reason: streamprobe.ReasonPlayable}
 }
 
 type capRep struct {
@@ -48,12 +48,16 @@ func TestEngine_RunOnce(t *testing.T) {
 	if rep.run.At != 42 {
 		t.Fatalf("At=%d", rep.run.At)
 	}
+	// AnimeName must flow AnimeRef -> Resolve -> ResolvedStream -> Verdict.
+	if len(rep.run.Verdicts) == 0 || rep.run.Verdicts[0].AnimeName != "Anchor Title" {
+		t.Fatalf("AnimeName not propagated to verdict: %+v", rep.run.Verdicts)
+	}
 }
 
 // errRes is a Resolver that always returns an error at the given stage.
 type errRes struct{ stage Stage }
 
-func (r errRes) Resolve(_ context.Context, u string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
+func (r errRes) Resolve(_ context.Context, u, name string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
 	return nil, r.stage, context.DeadlineExceeded
 }
 
@@ -87,11 +91,11 @@ func TestEngine_ResolveError_SynthesizesCDNUnreachable(t *testing.T) {
 // panicRes panics for the given provider, delegates to fakeRes for all others.
 type panicRes struct{ bad string }
 
-func (r panicRes) Resolve(ctx context.Context, u string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
+func (r panicRes) Resolve(ctx context.Context, u, name string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
 	if p == r.bad {
 		panic("injected test panic for " + p)
 	}
-	return fakeRes{}.Resolve(ctx, u, s, p)
+	return fakeRes{}.Resolve(ctx, u, name, s, p)
 }
 
 func TestEngine_ProviderPanic_Isolated(t *testing.T) {

@@ -356,6 +356,7 @@ func (s *ClickHouseStore) InsertProbeRows(ctx context.Context, rows []probe.Prob
 			time.Unix(r.RunTS, 0), // run_ts  DateTime
 			r.Provider,            // provider
 			r.AnimeUUID,           // anime_uuid
+			r.AnimeName,           // anime_name
 			r.Slot,                // slot
 			r.Server,              // server
 			r.Stage,               // stage
