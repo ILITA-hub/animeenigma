@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sync"
 	"time"
 
@@ -521,6 +522,7 @@ func (o *Orchestrator) GetStreamGated(
 		// terminal error, by classifyProviderErr below.
 		stream, gated, err := o.attemptGatedStream(ctx, budget, p, providerID, episodeID, serverID, cat)
 		if err == nil {
+			o.logResolvedStream(p.Name(), providerID, episodeID, serverID, cat, stream)
 			return stream, gated, nil
 		}
 
@@ -537,6 +539,40 @@ func (o *Orchestrator) GetStreamGated(
 	}
 
 	return nil, false, summarizeFailover(errs)
+}
+
+// logResolvedStream emits one structured INFO line per SUCCESSFUL stream
+// resolution so the concrete upstream URL a video was scraped from is
+// visible in the scraper logs for analytics / outage triage (e.g. spotting
+// that gogoanime's megaplay master.m3u8 now lives on a Cloudflare-walled
+// cdn.mewstream.buzz). One line per playback start — low volume, no PII.
+//
+// Fields: winning provider, the provider-specific anime/episode/server ids,
+// the resolved primary source URL + its host (the CDN identity), the source
+// type/quality, the total source count, and the upstream Referer header the
+// HLS proxy will replay. A nil logger / empty stream is a silent no-op.
+func (o *Orchestrator) logResolvedStream(provider, providerID, episodeID, serverID string, cat domain.Category, s *domain.Stream) {
+	if o.log == nil || s == nil || len(s.Sources) == 0 {
+		return
+	}
+	primary := s.Sources[0]
+	host := ""
+	if u, err := url.Parse(primary.URL); err == nil {
+		host = u.Hostname()
+	}
+	o.log.Infow("scraper resolved stream",
+		"provider", provider,
+		"provider_anime_id", providerID,
+		"episode", episodeID,
+		"server", serverID,
+		"category", string(cat),
+		"source_url", primary.URL,
+		"source_host", host,
+		"source_type", primary.Type,
+		"quality", primary.Quality,
+		"source_count", len(s.Sources),
+		"referer", s.Headers["Referer"],
+	)
 }
 
 // attemptGatedStream runs ONE provider's gated (or plain) stream resolution
