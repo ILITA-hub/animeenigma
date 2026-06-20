@@ -10,6 +10,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# xvfb provides the virtual display for headless="virtual" (headful-in-Xvfb is
+# far less bot-detectable than true headless Firefox).
+RUN apt-get update && apt-get install -y --no-install-recommends xvfb \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 # Install deps, the system libraries headless Firefox needs (via Playwright's
 # dep installer), then fetch the Camoufox Firefox binary into the image.

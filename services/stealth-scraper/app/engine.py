@@ -393,13 +393,26 @@ class SessionGone(Exception):
         self.sid = sid
 
 
-def host_allowed_for_session(url: str, session: Session) -> bool:
-    """A session may only proxy URLs on the recipe's allowed hosts (SSRF guard).
-    The gogoanime recipe's allowlist already covers mewstream/lostproject."""
-    from .recipes.gogoanime import GOGOANIME_ALLOWED_HOSTS
-    from .recipes.base import host_allowed
+def _registrable(host: str) -> str:
+    """Crude eTLD+1 (last two labels). Good enough to bucket CDN subdomain
+    rotation (s2.cinewave2.site ↔ s3.cinewave2.site)."""
+    parts = host.split(".")
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
 
-    return host_allowed(host_of(url), GOGOANIME_ALLOWED_HOSTS)
+
+def host_allowed_for_session(url: str, session: Session) -> bool:
+    """SSRF guard for the /hls proxy: a session may only proxy hosts on the
+    SAME registrable domain as the CDN that was actually resolved for it (the
+    CDN host is dynamic/rotating, so a static allowlist can't anticipate it),
+    plus the known subtitle host family. The resolved CDN host is itself trusted
+    because it's what the real player loaded inside our controlled browser."""
+    h = host_of(url)
+    if not h:
+        return False
+    cdn = (session.cdn_host or "").lower()
+    if cdn and (h == cdn or _registrable(h) == _registrable(cdn)):
+        return True
+    return h.endswith("lostproject.club") or h.endswith("megaplay.buzz")
 
 
 def _q(url: str) -> str:

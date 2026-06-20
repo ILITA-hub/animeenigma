@@ -159,16 +159,26 @@ recipe happy-path + search/challenge/not-found paths via a fake page, and the HL
 playlist rewriter). Camoufox launches headless on the server and spoofs Firefox
 135/Windows (live smoke OK).
 
-**⚠️ Key finding (2026-06-20):** even a real Camoufox browser (JS executing, 7s
-solve wait) gets a **403 Cloudflare "Attention Required" from our datacenter IP**
-on `cdn.mewstream.buzz`. That is a WAF/IP-reputation block on the datacenter ASN,
-not a JS challenge a browser can auto-solve. So:
-- curl + any IP → fails (no browser identity)
-- **browser + datacenter IP → fails** (WAF blocks the ASN) ← proven
-- browser + residential/mobile IP → the combination that should work
+**✅ Verified working end-to-end on the server (2026-06-20), NO proxy needed.**
+The earlier "datacenter IP is Cloudflare-blocked" conclusion was WRONG — it came
+from hammering a **stale, abandoned CDN host** (`cdn.mewstream.buzz`) pulled from
+old logs. The live megaplay CDN has **rotated** (`mewstream.buzz` → `cinewave2.site`
+→ …) and serves fine from our clean IP. What actually matters:
 
-End-to-end gogoanime is therefore **gated on a residential exit** in
-`STEALTH_PROXIES`. The browser is necessary but not sufficient alone.
+1. **Virtual display, not true headless.** `headless="virtual"` (Xvfb headful) —
+   true-headless Firefox is detectable.
+2. **The wrapper referer.** The megaplay player only serves its real page when
+   navigated WITH the embedding wrapper's `Referer` (else it returns a "file not
+   found" page). The CDN then serves master/segments with `Referer: megaplay.buzz`.
+3. **Network interception, not DOM parsing.** The stream id + CDN host are built
+   at runtime by the player JS (not in the HTML) and the CDN host rotates — so we
+   capture the `getSources` + `.m3u8` requests the player fires.
+
+Proven flow: episode → megaplay player (with referer, virtual display) → intercept
+`.m3u8` on `cinewave2.site` → `ctx.request.get(master)` → **200 `#EXTM3U` 1080p**,
+segment **200**. No `cf_clearance` cookie was even required. A residential exit
+remains supported (`STEALTH_PROXIES`) for future hosts that DO challenge, but is
+NOT required for gogoanime today. Smoke: `python scripts/live_gogoanime.py "Dandadan" 1`.
 
 ## Not yet done (next workstreams)
 

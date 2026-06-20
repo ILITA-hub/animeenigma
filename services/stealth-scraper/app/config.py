@@ -35,8 +35,11 @@ class Config:
     host: str = "0.0.0.0"
     port: int = 3000
 
-    # Browser pool
-    headless: bool = True
+    # Browser pool.
+    # headless: "virtual" (headful in an Xvfb virtual display — least detectable,
+    # the default), "true" (true headless), or "false" (real headful display).
+    # True headless Firefox is detectable; "virtual" passes where headless fails.
+    headless: str = "virtual"
     pool_size: int = 2
     profile_dir: str = "/data/profiles"
     geoip: bool = True          # camoufox: align locale/timezone/geo to the proxy IP
@@ -71,6 +74,10 @@ class Config:
     # specific envs/consts — only generic browser/navigation knobs.
     nav_timeout_ms: int = 30_000
     resolve_timeout_ms: int = 60_000
+    # How long to wait for the player JS to fire its .m3u8 request (interception):
+    # capture_attempts polls of capture_delay seconds each.
+    capture_attempts: int = 40
+    capture_delay: float = 0.5
 
     # How long a resolved stream session (cookies + master url) is advertised as
     # fresh. cf_clearance typically lives ~30 min; keep this comfortably under it.
@@ -83,7 +90,7 @@ class Config:
         return cls(
             host=g("HOST", "0.0.0.0"),
             port=_int(g("PORT"), 3000),
-            headless=_bool(g("STEALTH_HEADLESS"), True),
+            headless=g("STEALTH_HEADLESS", "virtual").strip().lower(),
             pool_size=_int(g("STEALTH_POOL_SIZE"), 2),
             profile_dir=g("STEALTH_PROFILE_DIR", "/data/profiles"),
             geoip=_bool(g("STEALTH_GEOIP"), True),
@@ -100,5 +107,7 @@ class Config:
             warming_sites=_csv(g("STEALTH_WARMING_SITES"), Config().warming_sites),
             nav_timeout_ms=_int(g("STEALTH_NAV_TIMEOUT_MS"), 30_000),
             resolve_timeout_ms=_int(g("STEALTH_RESOLVE_TIMEOUT_MS"), 60_000),
+            capture_attempts=_int(g("STEALTH_CAPTURE_ATTEMPTS"), 40),
+            capture_delay=float(g("STEALTH_CAPTURE_DELAY") or 0.5),
             session_ttl_seconds=_int(g("STEALTH_SESSION_TTL_SECONDS"), 600),
         )

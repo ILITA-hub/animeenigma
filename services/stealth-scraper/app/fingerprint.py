@@ -27,6 +27,17 @@ _GEO_LOCALE = {
 }
 
 
+def _headless_opt(value):
+    """Map the config headless string to camoufox's headless arg:
+    "virtual" → 'virtual' (Xvfb headful), "false" → False, anything else → True."""
+    v = str(value).strip().lower()
+    if v == "virtual":
+        return "virtual"
+    if v in ("false", "0", "no", "off"):
+        return False
+    return True
+
+
 def _seed(profile_id: str) -> int:
     """Deterministic per-profile seed so a profile's OS/fingerprint is stable
     across relaunches (sticky identity)."""
@@ -55,7 +66,7 @@ def build_launch_options(
     pass a ``locale`` fallback derived from the geo hint for the geoip-off path.
     """
     opts: dict[str, Any] = {
-        "headless": bool(cfg.headless),
+        "headless": _headless_opt(cfg.headless),
         "humanize": bool(cfg.humanize),
         "os": pick_os(profile_id, cfg.os_rotate),
         "persistent_context": True,

@@ -22,6 +22,7 @@ Playwright Page.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
@@ -197,24 +198,37 @@ class GogoanimeRecipe(Recipe):
 
         raise NotFoundError(f"gogoanime: no /category match for {title!r}")
 
-    async def _resolve_player_url(self, rc: RecipeContext, episode_url: str) -> str:
+    async def _resolve_player_url(self, rc: RecipeContext, episode_url: str) -> tuple[str, str]:
+        """Return (player_url, goto_referer). The megaplay/vidwish player only
+        serves its real page when navigated WITH the embedding wrapper's referer
+        (otherwise it returns a "file not found" error page) — so we also return
+        the referer the goto must carry."""
         await self._goto(rc, episode_url)
         # The active server's embed lives in data-video (or the play iframe src).
+        # Prefer an HD/megaplay server over decoy embeds (filemoon/vidmoly).
         embed = await rc.page.evaluate(
-            """() => {
-                const el = document.querySelector('[data-video]');
-                if (el) return el.getAttribute('data-video');
+            """(hosts) => {
+                const vids = Array.from(document.querySelectorAll('[data-video]'))
+                    .map(el => el.getAttribute('data-video')).filter(Boolean);
+                const pick = vids.find(v => hosts.some(h => v.includes(h)))
+                          || vids.find(v => v.includes('gogoanime.me.uk'))
+                          || vids[0];
+                if (pick) return pick;
                 const f = document.querySelector('.play-video iframe, iframe#playerframe, iframe');
                 return f ? f.getAttribute('src') : null;
-            }"""
+            }""",
+            list(_MEGAPLAY_PLAYER_HOSTS),
         )
         if not embed:
             raise RecipeError("gogoanime: no data-video / player iframe on episode page")
         embed = _normalize_url(embed, episode_url)
 
-        # A gogoanime.me.uk wrapper nests the real megaplay/vidwish iframe.
+        # Already a megaplay/vidwish player → referer is the episode site.
         if host_of(embed) and any(h in host_of(embed) for h in _MEGAPLAY_PLAYER_HOSTS):
-            return embed
+            return embed, _origin(episode_url) + "/"
+
+        # A gogoanime.me.uk wrapper nests the real megaplay/vidwish iframe. The
+        # wrapper origin is the referer the player expects.
         await self._goto(rc, embed)
         nested = await rc.page.evaluate(
             """(hosts) => {
@@ -228,81 +242,90 @@ class GogoanimeRecipe(Recipe):
         )
         if not nested:
             raise RecipeError("gogoanime: no nested megaplay/vidwish iframe in wrapper")
-        return _normalize_url(nested, embed)
+        return _normalize_url(nested, embed), _origin(embed) + "/"
 
     async def resolve(self, rc: RecipeContext) -> dict[str, Any]:
         episode_url = await self._resolve_episode_url(rc)
-        player_url = await self._resolve_player_url(rc, episode_url)
-
-        await self._goto(rc, player_url)
+        player_url, goto_referer = await self._resolve_player_url(rc, episode_url)
         player_origin = _origin(player_url)
+        # The CDN enforces the megaplay player origin as Referer on the
+        # master/segment fetches (verified live 2026-06-20).
         referer = player_origin + "/"
 
-        # data-id is the canonical id megaplay feeds to getSources (NOT the path
-        # id — reusing the path id silently returns the wrong episode).
-        data_id = await rc.page.evaluate(
-            """() => {
-                const el = document.querySelector('[data-id]');
-                return el ? el.getAttribute('data-id') : null;
-            }"""
-        )
-        if not data_id:
-            raise RecipeError("megaplay: no data-id on player page")
+        # The stream id + CDN host are built at RUNTIME by the player JS and are
+        # NOT in the static HTML, and the CDN host rotates (mewstream.buzz →
+        # cinewave2.site → …). So we INTERCEPT the requests the player actually
+        # fires rather than parsing the DOM. on('response') sees subframes too.
+        captured: dict[str, Any] = {"getsources": None, "masters": [], "m3u8s": []}
 
-        sources_url = f"{player_origin}/stream/getSources?id={quote(str(data_id))}"
-        # Fetch getSources FROM the player page context, so it carries the
-        # browser's cookies + Origin + fingerprint (and any clearance).
-        raw = await rc.page.evaluate(
-            """async (url) => {
-                const r = await fetch(url, {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                    credentials: 'include',
-                });
-                return { status: r.status, body: await r.text() };
-            }""",
-            sources_url,
-        )
-        if looks_like_challenge(raw.get("status"), raw.get("body")):
-            raise ChallengeError(
-                f"challenge on getSources (status={raw.get('status')})",
-                host=host_of(sources_url),
-                kind="getsources",
-            )
-        if raw.get("status") != 200:
-            raise RecipeError(f"megaplay getSources status {raw.get('status')}")
+        def _on_response(resp: Any) -> None:
+            u = resp.url
+            if "getSources" in u and captured["getsources"] is None:
+                captured["getsources"] = u
+            elif ".m3u8" in u:
+                captured["m3u8s"].append(u)
+                if "master" in u.lower():
+                    captured["masters"].append(u)
+
+        rc.page.on("response", _on_response)
         try:
-            payload = json.loads(raw["body"])
-        except (ValueError, KeyError) as exc:
-            raise RecipeError(f"megaplay getSources: bad JSON: {exc}") from exc
-
-        session = parse_getsources(payload)
-        session["referer"] = referer
-
-        # Probe the CDN master.m3u8 from the player origin (mirrors hls.js) to
-        # trigger/solve the CDN's Cloudflare challenge against THIS browser+IP,
-        # so the clearance cookie lands in the context jar for harvest.
-        cdn_probe = await rc.page.evaluate(
-            """async (url) => {
-                try {
-                    const r = await fetch(url, { credentials: 'include' });
-                    let head = '';
-                    try { head = (await r.text()).slice(0, 256); } catch (e) {}
-                    return { status: r.status, head };
-                } catch (e) {
-                    return { status: 0, head: String(e) };
-                }
-            }""",
-            session["master_url"],
-        )
-        status = cdn_probe.get("status")
-        session["cdn_probe_status"] = status
-        if looks_like_challenge(status, cdn_probe.get("head")):
-            raise ChallengeError(
-                f"challenge on CDN master.m3u8 (status={status})",
-                host=host_of(session["master_url"]),
-                kind="cdn",
+            resp = await rc.page.goto(
+                player_url, referer=goto_referer,
+                wait_until="domcontentloaded", timeout=rc.cfg.nav_timeout_ms,
             )
+        except Exception as exc:  # noqa: BLE001
+            raise RecipeError(f"megaplay player nav failed: {exc}") from exc
+        title = await _safe_title(rc.page)
+        if looks_like_challenge(resp.status if resp else None, title):
+            raise ChallengeError(
+                f"challenge on megaplay player (status={resp.status if resp else None})",
+                host=host_of(player_url), kind="player",
+            )
+
+        master = await self._await_m3u8(captured, rc.cfg)
+        if not master:
+            raise RecipeError(
+                "megaplay: no .m3u8 intercepted (player JS did not start playback)"
+            )
+
+        session: dict[str, Any] = {
+            "master_url": master,
+            "referer": referer,
+            "subtitles": [],
+            "intro": None,
+            "outro": None,
+            "cdn_probe_status": None,
+        }
+        # Enrich with subtitles/intro/outro from the intercepted getSources
+        # (fetched via APIRequestContext — no browser CORS).
+        if captured["getsources"]:
+            try:
+                r = await rc.context.request.get(
+                    captured["getsources"],
+                    headers={"X-Requested-With": "XMLHttpRequest", "Referer": referer},
+                )
+                if r.status == 200:
+                    data = json.loads(await r.text())
+                    gs = parse_getsources(data)
+                    session["subtitles"] = gs["subtitles"]
+                    session["intro"] = gs["intro"]
+                    session["outro"] = gs["outro"]
+            except Exception:  # noqa: BLE001 - enrichment is best-effort
+                pass
         return session
+
+    async def _await_m3u8(self, captured: dict, cfg: Any) -> str | None:
+        """Poll for an intercepted playlist (player JS fires it shortly after
+        load). Prefer a 'master' playlist; fall back to the first .m3u8."""
+        attempts = getattr(cfg, "capture_attempts", 40)
+        delay = getattr(cfg, "capture_delay", 0.5)
+        for _ in range(attempts):
+            if captured["masters"]:
+                return captured["masters"][0]
+            await asyncio.sleep(delay)
+        if captured["m3u8s"]:
+            return captured["m3u8s"][0]
+        return None
 
 
 def _normalize_url(url: str, base: str) -> str:
@@ -319,3 +342,10 @@ def _origin(url: str) -> str:
 
     s = urlsplit(url)
     return f"{s.scheme}://{s.netloc}"
+
+
+async def _safe_title(page: Any) -> str:
+    try:
+        return await page.title()
+    except Exception:  # noqa: BLE001
+        return ""

@@ -24,18 +24,20 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "gogoanime", Status: domain.StatusEnabled,
-		// gogoanime → megaplay → cdn.mewstream.buzz is Cloudflare-WAF-walled
-		// (datacenter ASN gets a 403 "Attention Required" even from a real
-		// Camoufox browser — verified 2026-06-20). Resolved via the Camoufox
-		// stealth-scraper sidecar (needs a residential exit). Engine + BaseURL
-		// are DB-driven; the SCRAPER_GOGOANIME_BASE_URL env is retired.
+		// gogoanime → megaplay player resolves its stream id + (rotating) CDN
+		// host at RUNTIME in JS, and the player only serves with the embedding
+		// wrapper Referer — a curl-class scraper can't follow it. Resolved via
+		// the Camoufox stealth-scraper sidecar (engine=browser): real Firefox in
+		// a virtual display + network interception of the .m3u8. Verified
+		// end-to-end on the clean server IP 2026-06-20 (no proxy needed). Engine
+		// + BaseURL are DB-driven; the SCRAPER_GOGOANIME_BASE_URL env is retired.
 		Engine: "browser", BaseURL: "https://gogoanimes.fi",
-		Reason: "Browser-scraped via Camoufox sidecar (megaplay CDN Cloudflare-walled)",
+		Reason: "Browser-scraped via Camoufox sidecar (megaplay JS-runtime id + rotating CDN)",
 		Description: "anitaku.to migrated to anineko.to. Mirror gogoanimes.fi (classic gogo " +
 			"HTML: anime_muti_link + /search.html), whose newplayer.php embed nests the " +
-			"megaplay.buzz player on cdn.mewstream.buzz. That CDN is behind Cloudflare and " +
-			"403s curl-class clients AND a datacenter-IP browser; resolved through the " +
-			"stealth-scraper Camoufox sidecar (engine=browser) with a residential exit.",
+			"megaplay.buzz player. The stream id + CDN host (mewstream.buzz → cinewave2.site " +
+			"→ …) are built at runtime by the player JS and the CDN is Referer-gated, so the " +
+			"stealth-scraper drives a real browser and intercepts the .m3u8 (engine=browser).",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 85,
 	},
