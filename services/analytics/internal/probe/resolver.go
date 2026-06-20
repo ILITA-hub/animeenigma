@@ -54,7 +54,10 @@ func (r *HTTPResolver) get(ctx context.Context, path string, q url.Values) (*env
 	if len(q) > 0 {
 		u += "?" + q.Encode()
 	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.hc.Do(req)
 	if err != nil {
 		return nil, err
