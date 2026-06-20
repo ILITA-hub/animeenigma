@@ -9,6 +9,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/analytics/internal/probe"
 )
 
 // ClickHouseStore implements domain.EventStore against ClickHouse via the
@@ -333,3 +334,39 @@ HAVING resolves >= ?`
 func PurgeOlderThanCH(_ context.Context, _ driver.Conn, _ time.Time) (int64, error) {
 	return 0, nil
 }
+
+// InsertProbeRows persists a batch of playback-probe verdicts to the probe_runs
+// table. Empty batches are a no-op (matching InsertBatch). Each row maps
+// ProbeRow.RunTS (Unix seconds) to a DateTime and ProbeRow.Playable to UInt8,
+// mirroring the InsertBatch PrepareBatch/Append/Send idiom exactly.
+func (s *ClickHouseStore) InsertProbeRows(ctx context.Context, rows []probe.ProbeRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO probe_runs")
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		var pl uint8
+		if r.Playable {
+			pl = 1
+		}
+		if err := batch.Append(
+			time.Unix(r.RunTS, 0), // run_ts  DateTime
+			r.Provider,            // provider
+			r.AnimeUUID,           // anime_uuid
+			r.Slot,                // slot
+			r.Server,              // server
+			r.Stage,               // stage
+			r.Reason,              // reason
+			pl,                    // playable UInt8
+		); err != nil {
+			return err
+		}
+	}
+	return batch.Send()
+}
+
+// Compile-time assertion: ClickHouseStore must satisfy probe.CHWriter.
+var _ probe.CHWriter = (*ClickHouseStore)(nil)

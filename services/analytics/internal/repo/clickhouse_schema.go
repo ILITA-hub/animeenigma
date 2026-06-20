@@ -99,6 +99,22 @@ SETTINGS index_granularity = 8192`
 ENGINE = MergeTree
 ORDER BY (anonymous_id, timestamp)`
 
+	// createProbeRunsTableDDL records one row per (run, provider, anime, server)
+	// probe verdict. Used by probe.PromReporter via repo.ClickHouseStore to write
+	// the playback-health history consumed by the Grafana probe dashboard.
+	// TTL mirrors the events table: 90 days, then ClickHouse deletes the data.
+	createProbeRunsTableDDL = `CREATE TABLE IF NOT EXISTS probe_runs
+(
+  run_ts      DateTime,
+  provider    LowCardinality(String),
+  anime_uuid  String,
+  slot        LowCardinality(String),
+  server      String,
+  stage       LowCardinality(String),
+  reason      LowCardinality(String),
+  playable    UInt8
+) ENGINE = MergeTree ORDER BY (run_ts, provider) TTL run_ts + INTERVAL 90 DAY`
+
 	// createResolvedViewDDL stitches identity at query time. argMax(user_id,
 	// timestamp) picks the latest identity per anonymous_id; person_id is the
 	// identified user if ever known, else the anonymous id. This preserves the
@@ -125,6 +141,7 @@ func EnsureSchema(ctx context.Context, conn driver.Conn) error {
 		createDatabaseDDL,
 		createEventsTableDDL,
 		createIdentitiesTableDDL,
+		createProbeRunsTableDDL,
 		createResolvedViewDDL,
 	} {
 		if err := conn.Exec(ctx, ddl); err != nil {
