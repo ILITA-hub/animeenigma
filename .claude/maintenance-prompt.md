@@ -382,14 +382,15 @@ make redeploy-scraper
 2. Tier: `auto_fix` (retry the job)
 
 ### Scraper Playability Regression (WARNING / CRITICAL)
-**Source**: `playability_canary_failures_total{provider, server, anime}` from the nightly scheduler canary job, OR `parser_unplayable_total` spike in prod, OR `parser_ad_decoy_total` > 0.
+**Source**: `probe_runs_total{provider, slot, server, result="fail", reason}` from the daily analytics playback probe (the old scheduler canary was absorbed into the analytics probe engine — it now resolves via catalog's signed path and validates real playback through the HLS proxy with ffprobe), OR `parser_unplayable_total` spike in prod, OR `parser_ad_decoy_total` > 0.
 **This is the scope you (the maintenance bot) ARE expected to fix.** The canary cron deliberately surfaces upstream-site changes within 24h so a human doesn't need to notice — match the alert to Pattern 6 or 7 and act:
-1. Read the alert labels: `provider`, `server`, `reason` (one of `ad_decoy`, `zero_match`, `status_403` / `403_upstream`, `signed_url_expired`, `cdn_unreachable`, `empty_response`).
+1. Read the alert labels: `provider`, `server`, `reason` (one of `ad_decoy`, `zero_match`, `status_403` / `403_upstream`, `signed_url_expired`, `cdn_unreachable`, `empty_response`, `decode_failed`, `invalid_video`).
 2. `ad_decoy` → Pattern 6 fix paths.
 3. `zero_match` → Pattern 7 + Auto-Edit Selector Workflow. If preconditions pass: `auto_edit_selectors`. If upstream is dead / platform-rebranded / FingerprintJS-gated: `escalate` (recommend a `scraper_providers` DB status change to `degraded`/`disabled`, do NOT touch code).
 3a. `cdn_unreachable` → Pattern 7 fix paths (packed-JS / allowlist). Tier: `button_fix` (outside auto-edit scope).
 4. `signed_url_expired` → find the stream-cache TTL helper in `services/scraper/internal/providers/<name>/cache.go` (search for `computeStreamTTL`) and shorten if the upstream signed-URL TTL is now shorter than ours. Tier: `button_fix`.
 5. `status_403` / `403_upstream` on a CDN we previously accepted → check `libs/videoutils/proxy.go` `HLSProxyAllowedDomains` first; if the host is allowlisted, the upstream itself is the issue → escalate.
+5a. `decode_failed` / `invalid_video` → the analytics playback probe fetched the resolved stream through the HLS proxy and ffprobe found no decodable video stream (`decode_failed` = segment bytes don't decode; `invalid_video` = the walk only ever reached manifests, never a media segment). Means the upstream resolved a URL but is serving corrupt bytes, an ad-substituted/non-video payload, or an empty/looping manifest. Tier: `escalate` — this is an upstream content/CDN change, not a selector drift; cross-check `probe_runs_total{reason="decode_failed"}` vs other providers for the same anime to confirm it's provider-specific, then recommend a `scraper_providers` DB status change to `degraded` if it's persistent.
 6. If 2+ providers fail simultaneously → likely network-level (DNS, egress IP-blocked, WARP misconfigured) → escalate, do not redeploy.
 **Do NOT** restart the scraper service as a first response to playability alerts — these are content/structure regressions, not crashes. Restarting masks the real issue.
 
