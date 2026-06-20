@@ -7,9 +7,11 @@ package main
 
 import (
 	"context"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/ingest"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/job"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/observ"
+	"github.com/ILITA-hub/animeenigma/services/analytics/internal/probe"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/repo"
 	svc "github.com/ILITA-hub/animeenigma/services/analytics/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/transport"
@@ -130,6 +133,7 @@ func main() {
 	// analytics' core ingestion must never depend on Redis being up.
 	var readThresholdHandler *handler.ReadThresholdHandler
 	var playerRankingHandler *handler.PlayerRankingHandler
+	var probeHandler *handler.ProbeHandler
 	redisCache, rerr := cache.New(cfg.Redis)
 	if rerr != nil {
 		log.Warnw("redis unavailable — read-threshold recompute disabled this boot", "error", rerr)
@@ -144,6 +148,22 @@ func main() {
 		if chConn != nil {
 			playerRankingSvc := svc.NewPlayerRankingService(chConn, redisRankingWriter{cache: redisCache})
 			playerRankingHandler = handler.NewPlayerRankingHandler(playerRankingSvc)
+
+			// Playback probe engine — only wired when ClickHouse is available so
+			// probe.PromReporter can persist probe_runs rows. The scheduler triggers
+			// /internal/probe/run daily; operators may also call it ad-hoc.
+			chStore := repo.NewClickHouseStore(chConn)
+			resolver := probe.NewHTTPResolver(cfg.CatalogURL, nil)
+			validator := probe.NewHTTPValidator(cfg.StreamingURL, nil, probe.NewFFprobe(cfg.FFprobePath))
+			animeSet := probe.NewHTTPAnimeSet(cfg.CatalogURL, cfg.ProbeAnchorUUID, nil, rand.New(rand.NewSource(time.Now().UnixNano()))) //nolint:gosec
+			engine := probe.NewEngine(
+				strings.Split(cfg.ProbeProviders, ","),
+				animeSet, resolver, validator,
+				probe.NewPromReporter(chStore),
+				func() int64 { return time.Now().Unix() },
+				log,
+			)
+			probeHandler = handler.NewProbeHandler(engine)
 		}
 	}
 
@@ -156,7 +176,7 @@ func main() {
 	defer c.Stop()
 
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, log, collector)
+	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, probeHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {

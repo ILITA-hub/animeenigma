@@ -25,6 +25,7 @@ import (
 //	POST /internal/erase           (internal — gateway never proxies /internal/*)
 //	POST /internal/read-thresholds/recompute (internal — scheduler daily trigger)
 //	POST /internal/player-ranking/recompute (internal — scheduler daily trigger)
+//	POST /internal/probe/run       (internal — scheduler daily trigger; on-demand probe)
 func NewRouter(
 	collect *handler.CollectHandler,
 	clientError *handler.ClientErrorHandler,
@@ -33,6 +34,7 @@ func NewRouter(
 	admin *handler.AdminHandler,
 	readThresholds *handler.ReadThresholdHandler,
 	playerRanking *handler.PlayerRankingHandler,
+	probe *handler.ProbeHandler,
 	log *logger.Logger,
 	collector *metrics.Collector,
 ) http.Handler {
@@ -88,6 +90,14 @@ func NewRouter(
 	// only — never gateway-proxied.
 	if playerRanking != nil {
 		r.Post("/internal/player-ranking/recompute", playerRanking.ServeHTTP)
+	}
+	// /internal/probe/run triggers a single on-demand playback probe sweep across
+	// all configured EN providers. The scheduler POSTs here on its daily cron;
+	// operators may also trigger it manually. Only wired when ClickHouse is
+	// available (probe.PromReporter writes probe_runs rows). Docker-network only —
+	// never gateway-proxied.
+	if probe != nil {
+		r.Post("/internal/probe/run", probe.ServeHTTP)
 	}
 
 	return r

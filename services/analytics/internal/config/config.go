@@ -29,6 +29,18 @@ type Config struct {
 	// ClickHouse holds the native-protocol connection params for the CH backend.
 	// Only consulted when StoreBackend is "clickhouse" or "dualwrite".
 	ClickHouse ClickHouseConfig
+
+	// Probe config — playback probe engine (analytics/internal/probe).
+	// CatalogURL is the internal catalog base URL for episode/stream resolution.
+	CatalogURL string
+	// StreamingURL is the internal streaming service base URL for HLS validation.
+	StreamingURL string
+	// ProbeAnchorUUID is the always-probed anchor anime UUID (Frieren).
+	ProbeAnchorUUID string
+	// FFprobePath is the filesystem path (or bare name) of the ffprobe binary.
+	FFprobePath string
+	// ProbeProviders is a comma-separated ordered list of EN providers to probe.
+	ProbeProviders string
 }
 
 // ClickHouseConfig mirrors the env-driven Database config shape for the native
@@ -94,6 +106,11 @@ func Load() (*Config, error) {
 			User:     getEnv("CLICKHOUSE_USER", "analytics"),
 			Password: getEnv("CLICKHOUSE_PASSWORD", ""),
 		},
+		CatalogURL:      getEnv("CATALOG_URL", "http://catalog:8081"),
+		StreamingURL:    getEnv("STREAMING_URL", "http://streaming:8082"),
+		ProbeAnchorUUID: getEnv("PROBE_ANCHOR_UUID", "f0b40660-6627-4a59-8dcf-7ec8596b3623"),
+		FFprobePath:     getEnv("FFPROBE_PATH", "ffprobe"),
+		ProbeProviders:  getEnv("PROBE_PROVIDERS", "gogoanime,miruro,allanime,nineanime,animefever"),
 	}, nil
 }
 
