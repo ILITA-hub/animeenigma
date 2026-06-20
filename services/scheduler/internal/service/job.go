@@ -11,25 +11,25 @@ import (
 )
 
 type JobService struct {
-	cron                   *cron.Cron
-	shikimoriJob           *jobs.ShikimoriSyncJob
-	cleanupJob             *jobs.CleanupJob
-	topAnimeJob            *jobs.TopAnimeSyncJob
-	calendarJob            *jobs.CalendarSyncJob
-	probeTriggerJob        *jobs.ProbeTriggerJob
-	readThresholdJob       *jobs.ReadThresholdJob
-	providerRankingJob     *jobs.ProviderRankingJob
-	autocacheLogicAJob     *jobs.AutocacheLogicAJob
-	autocachePredictionJob *jobs.AutocachePredictionJob
-	log                    *logger.Logger
-	lastShikimoriRun       time.Time
-	lastCleanupRun         time.Time
-	lastTopAnimeRun        time.Time
-	lastCalendarRun        time.Time
-	lastProbeRun           time.Time
-	lastReadThresholdRun   time.Time
-	lastProviderRankingRun time.Time
-	lastAutocacheLogicARun time.Time
+	cron                       *cron.Cron
+	shikimoriJob               *jobs.ShikimoriSyncJob
+	cleanupJob                 *jobs.CleanupJob
+	topAnimeJob                *jobs.TopAnimeSyncJob
+	calendarJob                *jobs.CalendarSyncJob
+	probeTriggerJob            *jobs.ProbeTriggerJob
+	readThresholdJob           *jobs.ReadThresholdJob
+	providerRankingJob         *jobs.ProviderRankingJob
+	autocacheLogicAJob         *jobs.AutocacheLogicAJob
+	autocachePredictionJob     *jobs.AutocachePredictionJob
+	log                        *logger.Logger
+	lastShikimoriRun           time.Time
+	lastCleanupRun             time.Time
+	lastTopAnimeRun            time.Time
+	lastCalendarRun            time.Time
+	lastProbeRun               time.Time
+	lastReadThresholdRun       time.Time
+	lastProviderRankingRun     time.Time
+	lastAutocacheLogicARun     time.Time
 	lastAutocachePredictionRun time.Time
 }
 

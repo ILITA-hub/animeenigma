@@ -124,12 +124,12 @@ func Load() (*Config, error) {
 			DB:       getEnvInt("REDIS_DB", 2),
 		},
 		Jobs: JobsConfig{
-			ShikimoriSyncCron:  getEnv("SHIKIMORI_SYNC_CRON", "0 2 * * *"),     // Daily at 2 AM
-			CleanupCron:        getEnv("CLEANUP_CRON", "0 3 * * 0"),            // Weekly on Sunday at 3 AM
-			TopAnimeSyncCron:   getEnv("TOP_ANIME_SYNC_CRON", "0 1 * * *"),     // Daily at 1 AM
-			CalendarSyncCron:   getEnv("CALENDAR_SYNC_CRON", "0 4 * * 1"),      // Weekly on Monday at 4 AM
-			ShikimoriAPIURL:    getEnv("SHIKIMORI_API_URL", "https://shikimori.one/api"),
-			ShikimoriAppName:   getEnv("SHIKIMORI_APP_NAME", "AnimeEnigma"),
+			ShikimoriSyncCron:   getEnv("SHIKIMORI_SYNC_CRON", "0 2 * * *"), // Daily at 2 AM
+			CleanupCron:         getEnv("CLEANUP_CRON", "0 3 * * 0"),        // Weekly on Sunday at 3 AM
+			TopAnimeSyncCron:    getEnv("TOP_ANIME_SYNC_CRON", "0 1 * * *"), // Daily at 1 AM
+			CalendarSyncCron:    getEnv("CALENDAR_SYNC_CRON", "0 4 * * 1"),  // Weekly on Monday at 4 AM
+			ShikimoriAPIURL:     getEnv("SHIKIMORI_API_URL", "https://shikimori.one/api"),
+			ShikimoriAppName:    getEnv("SHIKIMORI_APP_NAME", "AnimeEnigma"),
 			CatalogServiceURL:   getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
 			DataRetentionDays:   getEnvInt("DATA_RETENTION_DAYS", 90),
 			OngoingStaleHours:   getEnvInt("ONGOING_STALE_HOURS", 12),
@@ -147,8 +147,8 @@ func Load() (*Config, error) {
 			LibraryInternalURL:         getEnv("LIBRARY_INTERNAL_URL", getEnv("LIBRARY_SERVICE_URL", "http://library:8089")),
 			AutocacheActiveWatcherDays: getEnvInt("AUTOCACHE_ACTIVE_WATCHER_DAYS", 30),
 			// Phase 11 (OBS-05) — daily storage-need prediction job.
-			AutocachePredictionCron: getEnv("AUTOCACHE_PREDICTION_CRON", "0 4 * * *"),         // Daily 04:00
-			AutocacheAvgRawEpBytes:  getEnvInt64("AUTOCACHE_AVG_RAW_EP_BYTES", 1288490188),    // ~1.2 GiB (spec §7 avg_raw_ep_size)
+			AutocachePredictionCron: getEnv("AUTOCACHE_PREDICTION_CRON", "0 4 * * *"),      // Daily 04:00
+			AutocacheAvgRawEpBytes:  getEnvInt64("AUTOCACHE_AVG_RAW_EP_BYTES", 1288490188), // ~1.2 GiB (spec §7 avg_raw_ep_size)
 		},
 	}, nil
 }
