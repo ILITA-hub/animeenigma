@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import router from './router'
 import i18n from './i18n'
 import App from './App.vue'
+import { useAuthStore } from './stores/auth'
 import { tryReloadOnChunkError } from './utils/chunk-reload'
 import { reportFeError, installFeErrorTraps } from './utils/feErrorLog'
 import { initAssetEdge } from './utils/assetEdge'
@@ -21,10 +22,40 @@ app.config.errorHandler = (err, _instance, info) => {
   console.error('[Vue Error]', err, info)
 }
 
-app.use(createPinia())
+const pinia = createPinia()
+app.use(pinia)
 app.use(router)
 app.use(i18n)
-app.mount('#app')
+
+// Cross-domain magic-link SSO landing: when we arrive with ?ae_sso=1, the
+// httpOnly session cookies are already set but THIS origin's localStorage is
+// empty (the user logged in on a different domain, e.g. animeenigma.ru). Adopt
+// the session from the refresh_token cookie BEFORE mount so the router guards
+// and first render see the authenticated state, then strip the marker so it
+// never lingers in the URL or gets bookmarked. Non-SSO loads are untouched.
+async function bootstrap() {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('ae_sso') === '1') {
+    const auth = useAuthStore(pinia)
+    if (!auth.token) {
+      try {
+        await auth.refreshAccessToken()
+      } catch {
+        // Stale/absent cookie — fall through and render anonymously.
+      }
+    }
+    params.delete('ae_sso')
+    const qs = params.toString()
+    window.history.replaceState(
+      {},
+      '',
+      window.location.pathname + (qs ? '?' + qs : '') + window.location.hash,
+    )
+  }
+  app.mount('#app')
+}
+
+void bootstrap()
 
 // Uncaught window errors → backend log (gated + volume-capped inside the util).
 installFeErrorTraps()
