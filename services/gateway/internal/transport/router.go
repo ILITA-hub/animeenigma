@@ -200,6 +200,16 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/gacha/*", proxyHandler.ProxyToWeb)
 	})
 
+	// Magic-link SSO bridge routes (public, no JWT). These endpoints return
+	// 302 redirects for cross-domain (.ru → .org) login handoff; the gateway
+	// must relay the redirect verbatim to the browser (not chase it) so the
+	// Location header and any Set-Cookie reach the client unchanged.
+	// Registered at the gateway root (not under /api) so the redirect target
+	// URL — which lives on the .org domain — can differ from the gateway's
+	// own /api prefix.
+	r.Get("/magic-link-generate", proxyHandler.ProxyToAuthNoRedirect)
+	r.Get("/magic-link-login", proxyHandler.ProxyToAuthNoRedirect)
+
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Auth service routes (public)

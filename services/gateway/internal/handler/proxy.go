@@ -28,6 +28,34 @@ func (h *ProxyHandler) ProxyToAuth(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "auth")
 }
 
+// ProxyToAuthNoRedirect proxies requests to the auth service without following
+// HTTP redirects. Used for the magic-link bridge routes (/magic-link-generate,
+// /magic-link-login) so that cross-domain 302 responses reach the browser
+// instead of being chased server-side.
+func (h *ProxyHandler) ProxyToAuthNoRedirect(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.proxyService.ForwardNoRedirect(r, "auth")
+	if err != nil {
+		h.log.Errorw("proxy failed", "service", "auth", "error", err)
+		metrics.ProxyUpstreamErrors.WithLabelValues("forward_error", "auth").Inc()
+		httputil.Error(w, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy response headers, skipping CORS headers (gateway middleware handles CORS)
+	for key, values := range resp.Header {
+		if isCORSHeader(key) {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
 // ProxyToCatalog proxies requests to catalog service
 func (h *ProxyHandler) ProxyToCatalog(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "catalog")

@@ -87,12 +87,22 @@ func isInConnectionList(src http.Header, canon string) bool {
 }
 
 type ProxyService struct {
-	serviceURLs config.ServiceURLs
-	client      *http.Client
-	log         *logger.Logger
+	serviceURLs      config.ServiceURLs
+	client           *http.Client
+	noRedirectClient *http.Client
+	log              *logger.Logger
 }
 
 func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyService {
+	transport := tracing.WrapTransport(&http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   3 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	})
 	return &ProxyService{
 		serviceURLs: serviceURLs,
 		client: &http.Client{
@@ -101,22 +111,42 @@ func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyS
 			// into the forwarded request so downstream services continue the
 			// same trace. This is the core FE→BE propagation fix — the gateway
 			// previously propagated nothing. No-op when tracing is disabled.
-			Transport: tracing.WrapTransport(&http.Transport{
-				DialContext: (&net.Dialer{
-					Timeout:   3 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
-			}),
+			Transport: transport,
 		},
-		log:         log,
+		// noRedirectClient is identical to client but does NOT follow redirects.
+		// Used for magic-link bridge routes (/magic-link-generate,
+		// /magic-link-login) so that 302 responses from the auth service reach
+		// the browser unmodified instead of being chased server-side (which
+		// would swallow the redirect and try to fetch the external .org URL).
+		noRedirectClient: &http.Client{
+			Timeout:   15 * time.Second,
+			Transport: transport,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		log: log,
 	}
 }
 
 // Forward forwards the request to the appropriate service
 func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response, error) {
+	return s.forwardWith(s.client, r, service)
+}
+
+// ForwardNoRedirect forwards the request to the appropriate service without
+// following HTTP redirects. The upstream's 3xx response (including Location
+// and Set-Cookie headers) is returned to the caller verbatim. Used for the
+// magic-link bridge routes so that cross-domain 302s reach the browser.
+func (s *ProxyService) ForwardNoRedirect(r *http.Request, service string) (*http.Response, error) {
+	return s.forwardWith(s.noRedirectClient, r, service)
+}
+
+// forwardWith is the shared implementation for Forward and ForwardNoRedirect.
+// It performs path rewrites, header filtering, Grafana SSO injection, and the
+// auth-service refresh_token cookie re-forward — the caller selects which
+// http.Client to use (redirect-following vs. non-following).
+func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service string) (*http.Response, error) {
 	targetURL, err := s.getServiceURL(service)
 	if err != nil {
 		return nil, err
@@ -213,7 +243,7 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 	// + headers, including Set-Cookie) rather than letting the handler
 	// synthesize a 500 that would silently drop the upstream's rotated
 	// refresh-token cookie.
-	resp, err := s.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		if resp != nil {
 			return resp, nil
