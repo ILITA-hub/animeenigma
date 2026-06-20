@@ -376,6 +376,7 @@ class CamoufoxEngine:
             "outro": partial.get("outro"),
             "proxy_id": proxy_id,
             "cdn_host": host_of(master),
+            "cdn_probe_status": partial.get("cdn_probe_status"),
             "resolved_via": "camoufox",
         }
 
