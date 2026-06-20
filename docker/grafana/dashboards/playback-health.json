@@ -458,17 +458,17 @@
                   {
                     "type": "value",
                     "options": {
-                      "1": {
+                      "up": {
                         "text": "up",
                         "color": "green",
                         "index": 0
                       },
-                      "0.5": {
+                      "degraded": {
                         "text": "degraded",
                         "color": "orange",
                         "index": 1
                       },
-                      "0": {
+                      "down": {
                         "text": "down",
                         "color": "red",
                         "index": 2
@@ -508,7 +508,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 620
+                "value": 640
               }
             ]
           },
@@ -584,28 +584,14 @@
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "probe_provider_up",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "",
-          "range": false,
-          "refId": "B"
-        },
-        {
-          "datasource": {
             "type": "grafana-clickhouse-datasource",
             "uid": "aenigma-clickhouse"
           },
           "rawQuery": true,
           "queryType": "sql",
           "format": "table",
-          "rawSql": "SELECT provider, arrayStringConcat(arrayMap(x -> x.1, arraySlice(arrayReverseSort(x -> x.2, groupArray((label, c))), 1, 3)), ' · ') AS reasons FROM (  SELECT provider, concat(reason, ' — ', if(empty(anime_name), 'anime', anime_name)) AS label, count() AS c   FROM probe_runs   WHERE run_ts = (SELECT max(run_ts) FROM probe_runs) AND playable = 0   GROUP BY provider, label) GROUP BY provider",
-          "refId": "C"
+          "rawSql": "SELECT provider, multiIf(countIf(playable = 1) > 0, 'up', countIf(stage = 'playback') > 0, 'degraded', 'down') AS playability, arrayStringConcat(topKIf(3)(label, playable = 0), ' · ') AS reasons FROM (  SELECT provider, stage, playable,          concat(reason, ' — ', if(empty(anime_name), 'anime', anime_name)) AS label   FROM probe_runs WHERE run_ts = (SELECT max(run_ts) FROM probe_runs)) GROUP BY provider ORDER BY provider",
+          "refId": "B"
         }
       ],
       "title": "Provider Roster & Playability",
@@ -621,23 +607,20 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true
+              "Time": true
             },
             "indexByName": {
               "provider": 0,
               "Group": 1,
               "Config": 2,
               "Scraper": 3,
-              "Value": 4,
+              "playability": 4,
               "reasons": 5,
               "Note": 6
             },
             "renameByName": {
               "provider": "Provider",
-              "Value": "Playability",
+              "playability": "Playability",
               "reasons": "Reasons"
             }
           }
