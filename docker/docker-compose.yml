@@ -139,6 +139,44 @@ services:
       retries: 3
       start_period: 20s
 
+  # Camoufox stealth-scraper sidecar — resolves providers whose DB `engine`
+  # column is "browser" (gogoanime → megaplay: JS-runtime stream id + rotating
+  # CDN that curl-class scraping can't reach). Drives a real anti-detect Firefox
+  # in a virtual display (Xvfb) + intercepts the .m3u8, then restreams the
+  # playlist + segments through that same browser context via /hls. Internal-only
+  # (no host port; the scraper talks to it over the compose network). See
+  # services/stealth-scraper/README.md.
+  stealth-scraper:
+    build:
+      context: ..
+      dockerfile: services/stealth-scraper/Dockerfile
+    container_name: animeenigma-stealth-scraper
+    restart: unless-stopped
+    init: true                  # SIGTERM cleanup for Firefox subprocesses
+    shm_size: 512m              # Firefox wants shm for tabs/contexts
+    security_opt:
+      - seccomp:unconfined      # Firefox sandbox needs userns under Docker
+    mem_limit: 1800m            # Firefox + Xvfb + warm profile pool
+    cpus: "1.0"
+    environment:
+      STEALTH_HEADLESS: ${STEALTH_HEADLESS:-virtual}
+      STEALTH_POOL_SIZE: ${STEALTH_POOL_SIZE:-2}
+      STEALTH_GEOIP: ${STEALTH_GEOIP:-true}
+      STEALTH_HUMANIZE: ${STEALTH_HUMANIZE:-true}
+      # Optional residential/mobile exits (JSON array of {id,type,url,geo}) —
+      # SECRET, supply via docker/.env. Empty ⇒ direct exit only (sufficient for
+      # gogoanime today, since the server IP is clean).
+      STEALTH_PROXIES: ${STEALTH_PROXIES:-}
+      STEALTH_WARP_PROXY_URL: ${STEALTH_WARP_PROXY_URL:-}
+    volumes:
+      - stealth_profiles:/data/profiles
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   scraper:
     build:
       context: ..
@@ -160,6 +198,9 @@ services:
       # for animepahe (replaces direct upstream fetch). See
       # services/animepahe-resolver/.
       SCRAPER_ANIMEPAHE_RESOLVER_URL: http://animepahe-resolver:3000
+      # Camoufox stealth-scraper sidecar — used for providers whose DB engine
+      # column is "browser" (e.g. gogoanime). Non-secret service-discovery URL.
+      STEALTH_SCRAPER_URL: ${STEALTH_SCRAPER_URL:-http://stealth-scraper:3000}
       # Phase 19 — AnimeKai (gated). Flag is default-off in production.
       # See docker/.env.example and .planning/REQUIREMENTS.md SCRAPER-KAI-05.
       # Toggle live with: SCRAPER_ANIMEKAI_ENABLED=true docker compose up -d scraper
@@ -197,6 +238,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Start-order only (not service_healthy): the scraper fails open to
+      # provider failover if the sidecar is briefly unavailable, so the browser
+      # pool's slow warmup must not block scraper boot.
+      stealth-scraper:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8088/health"]
       interval: 30s
@@ -207,6 +253,33 @@ services:
   # =============================================================================
   # Monitoring & Admin
   # =============================================================================
+
+  # Host bandwidth exporter. vnstat runs on the HOST (systemd vnstatd, tracking
+  # eth0) and writes /var/lib/vnstat/vnstat.db; this container mounts that DB
+  # read-only, copies it, and exposes per-interface RX/TX as Prometheus metrics
+  # at :9100/metrics (scrape job 'vnstat'). Self-contained build (Ubuntu 24.04 →
+  # vnstat 2.12, matching the host) so there is no DB-format skew.
+  vnstat-exporter:
+    build:
+      context: ./vnstat-exporter
+    container_name: animeenigma-vnstat-exporter
+    restart: unless-stopped
+    environment:
+      VNSTAT_DB_SRC: /host-vnstat/vnstat.db
+      # Allowlist; host vnstatd is already limited to eth0 but we filter here too.
+      INTERFACES: ${VNSTAT_INTERFACES:-eth0}
+    volumes:
+      - /var/lib/vnstat:/host-vnstat:ro
+    ports:
+      # Host-published for manual debugging only (Prometheus scrapes the internal
+      # docker-network port vnstat-exporter:9100). 9100 is already taken on the
+      # host, so the debug port is 9110.
+      - "127.0.0.1:9110:9100"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9100/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   prometheus:
     image: prom/prometheus:v2.50.1
@@ -1077,6 +1150,8 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: /api
+        VITE_RAW_PROVIDER_ENABLED: "true"
+        VITE_ANIME18_ENABLED: "true"
         # Gacha dark-ship gate (spec §12): unset/true ⇒ UI admin-only.
         # Release flip: set VITE_GACHA_ADMIN_ONLY=false in docker/.env + make redeploy-web.
         VITE_GACHA_ADMIN_ONLY: "${VITE_GACHA_ADMIN_ONLY:-true}"
@@ -1117,6 +1192,8 @@ services:
 
 volumes:
   jackett_config:
+  # Persistent Camoufox browser profiles (cookies/history → aged sessions).
+  stealth_profiles:
   postgres_data:
   redis_data:
   minio_data:

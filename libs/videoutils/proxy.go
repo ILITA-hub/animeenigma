@@ -471,6 +471,17 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	// scraper, never through this proxy.
 	{Domain: "mewstream.buzz", Reason: "megaplay.buzz HLS master/variant playlist origin; seeds provenance tokens for rotating segment CDNs (nineanime revival 2026-06-01)", Owner: "@0neymik0", Added: "2026-06-01"},
 	{Domain: "lostproject.club", Reason: "megaplay.buzz subtitle .vtt track host (nineanime revival 2026-06-01)", Owner: "@0neymik0", Added: "2026-06-01"},
+
+	// 2026-06-20 — stealth-scraper sidecar (services/stealth-scraper). NOT a
+	// third-party CDN: this is our OWN internal, fixed docker-network host.
+	// Providers with DB engine=browser (gogoanime → megaplay) return a stream
+	// whose master + every child playlist/segment URL is the sidecar's own /hls
+	// proxy, which restreams the rotating real CDN (cinewave2.site → …) through
+	// the resolving Camoufox browser context. The "rely on signing, don't add
+	// CDNs" rule targets THIRD-PARTY rotating CDNs; allowlisting our stable
+	// first-party service host is correct (and the real upstream CDN stays
+	// UNlisted — it is reached only inside the sidecar, never through this proxy).
+	{Domain: "stealth-scraper", Reason: "first-party Camoufox stealth-scraper sidecar /hls restreamer (engine=browser providers)", Owner: "@0neymik0", Added: "2026-06-20"},
 }
 
 // HLSProxyAllowedDomains is the flat []string view of

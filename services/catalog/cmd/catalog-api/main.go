@@ -152,6 +152,22 @@ func main() {
 		log.Infow("scraper provider defaults seeded")
 	}
 
+	// One-time enablement: route the EXISTING gogoanime row through the Camoufox
+	// stealth-scraper sidecar (engine=browser + gogoanimes.fi base). AutoMigrate
+	// added `engine` with default 'http', so a pre-existing gogoanime row needs
+	// flipping; fresh DBs already get engine=browser from the seed above, so the
+	// filter matches nothing there. Idempotent — once engine='browser' it is a
+	// no-op. Uses the model (TableName-aware) so it targets the roster table
+	// regardless of the scraper_providers↔stream_providers rename. Non-fatal so a
+	// migration hiccup never blocks catalog boot.
+	if res := db.DB.Model(&domain.ScraperProvider{}).
+		Where("name = ? AND engine <> ?", "gogoanime", "browser").
+		Updates(map[string]any{"engine": "browser", "base_url": "https://gogoanimes.fi"}); res.Error != nil {
+		log.Warnw("gogoanime engine→browser migration failed (non-fatal)", "error", res.Error)
+	} else if res.RowsAffected > 0 {
+		log.Infow("migrated gogoanime provider to engine=browser (stealth-scraper)")
+	}
+
 	// Backfill the intrinsic scraper_operated flag on every roster row (idempotent;
 	// the flag mirrors Group — intrinsic, not operator-editable). Ensures pre-
 	// existing rows (which AutoMigrate created the column on as default-false) and
