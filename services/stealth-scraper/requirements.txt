@@ -1,0 +1,9 @@
+# stealth-scraper sidecar — Camoufox (anti-detect Firefox) + FastAPI.
+# Camoufox pulls Playwright; the Firefox binary is fetched at image build via
+# `python -m camoufox fetch` (see Dockerfile). geoip extra aligns the browser
+# locale/timezone/WebRTC to the proxy exit IP.
+camoufox[geoip]==0.4.11
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+prometheus-client==0.21.1
+pydantic==2.10.4
