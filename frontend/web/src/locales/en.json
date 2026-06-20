@@ -1048,6 +1048,11 @@
       "thankYou": "Thank you! We'll take a look.",
       "submitError": "Couldn't send feedback. Please try again.",
       "viewMine": "My feedback"
+    },
+    "social": {
+      "telegram": "Telegram",
+      "github": "GitHub",
+      "email": "Email"
     }
   },
   "status": {

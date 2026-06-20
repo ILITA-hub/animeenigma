@@ -1048,6 +1048,11 @@
       "thankYou": "Спасибо! Мы посмотрим.",
       "submitError": "Не удалось отправить. Попробуйте ещё раз.",
       "viewMine": "Мои обращения"
+    },
+    "social": {
+      "telegram": "Telegram",
+      "github": "GitHub",
+      "email": "Email"
     }
   },
   "status": {

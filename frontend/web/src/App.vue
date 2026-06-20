@@ -95,9 +95,33 @@
             {{ $t('footer.feedback.viewMine') }}
           </router-link>
         </template>
-        <a href="mailto:info@animeenigma.org" class="text-white/60 hover:text-white/80 text-sm transition-colors sm:ml-auto">
-          info@animeenigma.org
-        </a>
+        <div class="flex items-center gap-3 sm:ml-auto">
+          <a
+            href="https://t.me/anime_enigma"
+            target="_blank"
+            rel="noopener noreferrer"
+            :aria-label="$t('footer.social.telegram')"
+            class="text-muted-foreground hover:text-brand-cyan transition-colors"
+          >
+            <Send class="size-4" aria-hidden="true" />
+          </a>
+          <a
+            href="https://github.com/ILITA-hub/animeenigma"
+            target="_blank"
+            rel="noopener noreferrer"
+            :aria-label="$t('footer.social.github')"
+            class="text-muted-foreground hover:text-brand-cyan transition-colors"
+          >
+            <Github class="size-4" aria-hidden="true" />
+          </a>
+          <a
+            href="mailto:info@animeenigma.org"
+            :aria-label="$t('footer.social.email')"
+            class="text-muted-foreground hover:text-brand-cyan transition-colors"
+          >
+            <Mail class="size-4" aria-hidden="true" />
+          </a>
+        </div>
       </div>
     </footer>
 
@@ -107,7 +131,7 @@
 
 <script setup lang="ts">
 import { onMounted, onErrorCaptured, ref, watch } from 'vue'
-import { TriangleAlert, Inbox } from 'lucide-vue-next'
+import { TriangleAlert, Inbox, Send, Github, Mail } from 'lucide-vue-next'
 import { TooltipProvider } from 'reka-ui'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
