@@ -29,6 +29,12 @@
       <!-- Provider name + capability labels -->
       <span class="flex-1 min-w-0 flex flex-col gap-0.5">
         <span class="font-semibold truncate">{{ row.def.name }}</span>
+        <!-- Hacker-mode plain-language description for every provider -->
+        <span
+          v-if="hackerMode && row.def.blurb"
+          data-test="provider-blurb"
+          class="text-[10px] font-medium text-[var(--muted-foreground)] leading-snug"
+        >{{ row.def.blurb }}</span>
         <span v-if="labels" class="flex items-center gap-[5px] flex-wrap">
           <span
             v-for="c in labels.categories"

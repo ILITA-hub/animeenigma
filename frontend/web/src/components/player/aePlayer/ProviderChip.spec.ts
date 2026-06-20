@@ -76,4 +76,15 @@ describe('ProviderChip', () => {
     await w.find('button').trigger('click')
     expect(w.emitted('select')).toBeTruthy()
   })
+
+  // --- hacker-mode blurb (provider descriptions) ---
+  const blurbRow = row({ def: { id: 'kodik', name: 'Kodik', hue: '#22d3ee', group: 'ru', audios: ['dub'], langs: ['ru'], content: ['common'], scraper: false, blurb: 'RU HLS — Russian dub & sub teams.' } })
+  it('shows the provider blurb in hacker mode', () => {
+    const w = mount(ProviderChip, { props: { row: blurbRow, hackerMode: true }, ...capMountOpts })
+    expect(w.find('[data-test="provider-blurb"]').text()).toContain('RU HLS')
+  })
+  it('hides the provider blurb when not in hacker mode', () => {
+    const w = mount(ProviderChip, { props: { row: blurbRow, hackerMode: false }, ...capMountOpts })
+    expect(w.find('[data-test="provider-blurb"]').exists()).toBe(false)
+  })
 })

@@ -17,6 +17,8 @@ export interface ProviderDef {
   langs: TrackLang[]         // track languages this backend serves
   content: ContentKind[]     // which content kinds it serves
   scraper: boolean           // true => live health comes from /scraper/health
+  /** One-line plain-language summary shown under the name in hacker mode. */
+  blurb?: string
   /** Non-scraper backends that are hard-disabled or WIP carry their reason here. */
   staticDisabled?: { reason: string; description: string; wip?: boolean }
 }

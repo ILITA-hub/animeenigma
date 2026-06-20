@@ -255,22 +255,35 @@ const sortedRows = computed(() => {
 const activeRows = computed(() => sortedRows.value.filter(r => r.state === 'active'))
 const activeCount = computed(() => activeRows.value.length)
 
-// Collapse: by default show only the best playable source — the selected
-// provider when set (the smart default already picked the top-ranked one),
-// else the first active row. Hacker mode → full ranked list; error-expanded
-// → all active rows.
+// The single best playable source — the selected provider when set (the smart
+// default already picked the top-ranked one), else the first active row. Only
+// this one carries the BEST badge.
 const topRow = computed(
   () => activeRows.value.find(r => r.def.id === props.provider) ?? activeRows.value[0] ?? null,
 )
+
+// Default collapse shows the top N selectable sources (not just the single
+// best) so users can switch between the strongest options without opening
+// hacker mode. The selected provider is always pinned into the visible set
+// even if it ranks below the top N. Hacker mode → full ranked list;
+// error-expanded → all active rows.
+const TOP_N = 3
 const expanded = ref(false)
 watch(() => props.provider, () => { expanded.value = false })
+
+const collapsedRows = computed(() => {
+  const top = activeRows.value.slice(0, TOP_N)
+  const selected = activeRows.value.find(r => r.def.id === props.provider)
+  if (selected && !top.some(r => r.def.id === selected.def.id)) top.push(selected)
+  return top
+})
 
 const visibleRows = computed(() => {
   if (props.hackerMode) return sortedRows.value
   if (expanded.value) return activeRows.value
-  return topRow.value ? [topRow.value] : []
+  return collapsedRows.value
 })
-const hiddenCount = computed(() => Math.max(0, activeCount.value - 1))
+const hiddenCount = computed(() => Math.max(0, activeCount.value - collapsedRows.value.length))
 
 // Team → category tag from the selected provider's capability variants.
 function teamCategory(name: string): 'sub' | 'dub' | null {

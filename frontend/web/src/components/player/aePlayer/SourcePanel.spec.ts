@@ -35,29 +35,30 @@ describe('SourcePanel collapse', () => {
   const a = (id: string, state: ProviderRow['state'] = 'active'): ProviderRow =>
     ({ def: { id, name: id, hue: '#0df', group: 'en', audios: ['sub'], langs: ['en'], content: ['common'], scraper: true }, state } as ProviderRow)
   const collapseRows = [a('gogoanime'), a('allanime'), a('miruro')]
+  const fiveRows = [a('gogoanime'), a('allanime'), a('miruro'), a('animepahe'), a('animefever')]
   const cb = {
     audio: 'sub', lang: 'en', team: null, server: '',
     servers: [] as { id: string; label: string }[], teams: [] as string[],
-    rankedIds: ['gogoanime', 'allanime', 'miruro'],
+    rankedIds: ['gogoanime', 'allanime', 'miruro', 'animepahe', 'animefever'],
   }
 
-  it('default shows only the top-ranked active provider', () => {
-    const w = mount(SourcePanel, { props: { ...cb, rows: collapseRows, provider: '', hackerMode: false, playbackError: false } as any, ...mountOpts })
-    expect(w.findAll('[data-test="provider-chip"]').length).toBe(1)
-    expect(w.find('[data-test="provider-chip"]').attributes('data-id')).toBe('gogoanime')
+  it('default shows the top 3 ranked active providers', () => {
+    const w = mount(SourcePanel, { props: { ...cb, rows: fiveRows, provider: '', hackerMode: false, playbackError: false } as any, ...mountOpts })
+    const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
+    expect(ids).toEqual(['gogoanime', 'allanime', 'miruro'])
   })
 
-  it('default shows the selected provider when one is selected', () => {
-    const w = mount(SourcePanel, { props: { ...cb, rows: collapseRows, provider: 'allanime', hackerMode: false, playbackError: false } as any, ...mountOpts })
-    expect(w.findAll('[data-test="provider-chip"]').length).toBe(1)
-    expect(w.find('[data-test="provider-chip"]').attributes('data-id')).toBe('allanime')
+  it('pins the selected provider into the visible set even when it ranks below the top 3', () => {
+    const w = mount(SourcePanel, { props: { ...cb, rows: fiveRows, provider: 'animefever', hackerMode: false, playbackError: false } as any, ...mountOpts })
+    const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
+    expect(ids).toEqual(['gogoanime', 'allanime', 'miruro', 'animefever'])
   })
 
-  it('promotes the next active provider when the top one is down', () => {
+  it('shows only active providers, excluding down/disabled ones', () => {
     const downTop = [a('gogoanime', 'down'), a('allanime'), a('miruro')]
     const w = mount(SourcePanel, { props: { ...cb, rows: downTop, provider: '', hackerMode: false, playbackError: false } as any, ...mountOpts })
-    expect(w.findAll('[data-test="provider-chip"]').length).toBe(1)
-    expect(w.find('[data-test="provider-chip"]').attributes('data-id')).toBe('allanime')
+    const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
+    expect(ids).toEqual(['allanime', 'miruro'])
   })
 
   it('hacker mode shows the full ranked list', () => {
@@ -65,12 +66,13 @@ describe('SourcePanel collapse', () => {
     expect(w.findAll('[data-test="provider-chip"]').length).toBe(3)
   })
 
-  it('shows try-another only on playback error, and expands on click', async () => {
-    const w = mount(SourcePanel, { props: { ...cb, rows: collapseRows, provider: 'gogoanime', hackerMode: false, playbackError: true } as any, ...mountOpts })
+  it('shows try-another when active providers exceed the top 3 on playback error, and expands on click', async () => {
+    const w = mount(SourcePanel, { props: { ...cb, rows: fiveRows, provider: 'gogoanime', hackerMode: false, playbackError: true } as any, ...mountOpts })
+    expect(w.findAll('[data-test="provider-chip"]').length).toBe(3)
     const btn = w.find('[data-test="try-another"]')
     expect(btn.exists()).toBe(true)
     await btn.trigger('click')
-    expect(w.findAll('[data-test="provider-chip"]').length).toBe(3)
+    expect(w.findAll('[data-test="provider-chip"]').length).toBe(5)
   })
 
   it('sorts available rows above unavailable ones, ranking as tiebreak (hacker mode)', () => {

@@ -215,7 +215,7 @@
     <!-- Source panel (floating, top-right) -->
     <div v-if="openMenu === 'source'" ref="sourceMenuEl" class="pl-floating pl-floating--source" @click.stop>
       <SourcePanel
-        :rows="rows"
+        :rows="displayRows"
         :audio="state.combo.value.audio"
         :lang="state.combo.value.lang"
         :team="state.combo.value.team"
@@ -362,7 +362,7 @@ import { recordPlayerEvent } from '@/utils/playerTelemetry'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult } from '@/types/aePlayer'
+import type { StreamResult, ProviderRow } from '@/types/aePlayer'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
@@ -538,7 +538,7 @@ const filter = computed(() => ({
   content: (props.isHentai ? 'hentai' : 'common') as 'hentai' | 'common',
 }))
 
-const { rows, start } = useProviderHealth(filter)
+const { rows, recompute: recomputeRows, start } = useProviderHealth(filter)
 
 // Capability report → server ranking + sub/dub/quality/team labels for the
 // Source panel. orderedProviderIds merges the capability ranking with the
@@ -556,6 +556,10 @@ const orderedProviderIds = computed(() =>
 // only has a subset of titles encoded, so `ae` (top of CURATED_TIER) must be
 // skipped when this anime isn't on-prem. aeApi.getEpisodes returns
 // { episodes, available }; treat available=false OR an empty list as "no".
+// Reactive mirror of the probe so the SourcePanel can HIDE the first-party
+// `ae` chip (not merely skip auto-selecting it) until a local copy exists for
+// this title. null = not-yet-known, true/false = probe result.
+const aeAvailable = ref<boolean | null>(null)
 let aeAvailableCache: Promise<boolean> | null = null
 function isProviderAvailable(id: string): Promise<boolean> {
   if (id !== 'ae') return Promise.resolve(true)
@@ -567,9 +571,29 @@ function isProviderAvailable(id: string): Promise<boolean> {
         return Boolean(data?.available) && (data?.episodes?.length ?? 0) > 0
       })
       .catch(() => false)
+    aeAvailableCache.then((v) => { aeAvailable.value = v })
   }
   return aeAvailableCache
 }
+
+// Display rows for the Source panel: the first-party `ae` chip is downgraded
+// to a non-selectable row until its library probe confirms a local copy, so it
+// never appears as a pickable source for titles that aren't encoded on-prem.
+// Selection logic keeps reading the ungated `rows` (pickSmartDefault gates `ae`
+// via isProviderAvailable), so this is purely cosmetic.
+const displayRows = computed<ProviderRow[]>(() =>
+  rows.value.map((r) =>
+    r.def.id === 'ae' && aeAvailable.value !== true
+      ? {
+          def: r.def,
+          state: 'irrelevant' as const,
+          reason: aeAvailable.value === false
+            ? 'Not in the AnimeEnigma library yet'
+            : 'Checking the AnimeEnigma library…',
+        }
+      : r,
+  ),
+)
 
 // props.animeId can change without a remount (no :key on the player), so the
 // per-anime ae availability probe must be invalidated when the title changes.
@@ -589,9 +613,11 @@ function resetSourceSwitching() {
 }
 watch(() => props.animeId, () => {
   aeAvailableCache = null
+  aeAvailable.value = null
   providerAutoSelected = false
   resetSourceSwitching()
   resetFallbackIntents()
+  void isProviderAvailable('ae') // eager re-probe for the new title
 })
 
 // Switch to the next candidate source after a playback failure. Returns true if
@@ -1295,9 +1321,50 @@ watch(
     // and resolves the stream itself once the real list arrives. Combo
     // (audio/lang/server) changes are NOT gated on the list.
     if (newVal[4] !== oldVal[4] && episodes.value.length === 0) return
+    // An AUDIO or LANGUAGE change is a facet change: the current provider may no
+    // longer serve it (e.g. switching to English while on Kodik, which is
+    // RU-only). When it can't, drop the current stream and re-pick the best
+    // provider for the new facet — refreshing episodes/servers/teams — instead
+    // of silently re-resolving a provider that has no such stream.
+    const facetChanged = newVal[0] !== oldVal[0] || newVal[1] !== oldVal[1]
+    if (facetChanged && !roomPinned.value) {
+      void repickProviderForFacet()
+      return
+    }
     void resolveStreamForCurrentEpisode()
   },
 )
+
+// Re-pick the provider after an audio/language change. If the current provider
+// still serves the new facet, keep it and just re-resolve (so a sub↔dub toggle
+// on a provider that has both stays put). Otherwise drop the now-wrong stream
+// and switch to the top-ranked provider that serves the new facet, which
+// triggers a full re-list + team/server refresh via the provider watcher.
+async function repickProviderForFacet() {
+  recomputeRows() // ensure rows reflect the just-changed audio/lang filter
+  const cur = state.combo.value.provider
+  const curStillActive = rows.value.some((r) => r.def.id === cur && r.state === 'active')
+  if (curStillActive) {
+    void resolveStreamForCurrentEpisode()
+    return
+  }
+  // Current provider can't serve the new facet — drop its stream immediately so
+  // the user doesn't keep hearing the wrong-language audio while we resolve.
+  engine.destroy()
+  sourceError.value = null
+  resetSourceSwitching()
+  const id = await pickSmartDefault(rows.value, orderedProviderIds.value, {
+    needsCheck: AE_NEEDS_CHECK,
+    isAvailable: isProviderAvailable,
+    isPlayable: isCapPlayable,
+  })
+  if (!id) {
+    sourceError.value = 'No source for this language / audio'
+    return
+  }
+  providerAutoSelected = true
+  state.setProvider(id, '') // provider watcher re-lists episodes + refreshes teams
+}
 
 // ─── Provider selection helper ────────────────────────────────────────────────
 
@@ -1524,6 +1591,12 @@ function onTimeUpdate() {
     hasStarted.value = true
     clearPlaybackWatchdog() // real playback — cancel the stall watchdog
     resetSourceSwitching() // a source that actually plays earns a fresh budget
+    // A source that actually plays must clear any stale error overlay: the
+    // fallback chain can set sourceError='Stream unavailable' when the switch
+    // budget is exhausted WHILE the source it just landed on is still buffering
+    // — then that source starts playing and the overlay would otherwise stay up
+    // over a working video. First real frame ⇒ the stream works, drop the error.
+    sourceError.value = null
     // Telemetry: first real frame — resolve ok + reached_playback (best-effort)
     if (!reachedReported) {
       reachedReported = true
@@ -2171,6 +2244,7 @@ function onVisibilityChange() {
 
 onMounted(() => {
   start()
+  void isProviderAvailable('ae') // eager probe so the ae chip resolves its availability
   // Apply initial volume
   const v = videoRef.value
   if (v) {
