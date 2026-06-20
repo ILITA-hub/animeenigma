@@ -24,26 +24,28 @@ app.config.errorHandler = (err, _instance, info) => {
 
 const pinia = createPinia()
 app.use(pinia)
+app.use(router)
+app.use(i18n)
 
-// Cross-domain magic-link SSO landing: when we arrive with ?ae_sso=1, the
-// httpOnly session cookies are already set but THIS origin's localStorage is
-// empty (the user logged in on a different domain, e.g. animeenigma.ru). We:
-//   1. Strip the ?ae_sso=1 marker from the URL FIRST — before the router is
-//      installed — so the router never captures it into route.query (which
-//      would re-sync it back into the address bar after a replaceState).
-//   2. Adopt the session from the refresh_token cookie BEFORE mount, so the
-//      router guards and first render see the authenticated state.
-// Non-SSO loads are completely untouched (router/i18n install + mount as usual).
+// Cross-domain magic-link SSO landing: magic-link-login set the httpOnly session
+// cookies plus a readable one-shot `ae_sso=1` marker cookie. THIS origin's
+// localStorage is empty (the user logged in on a different domain, e.g.
+// animeenigma.ru), so without a nudge the app renders logged-out despite valid
+// cookies. When the marker is present we adopt the session from the
+// refresh_token cookie (one /auth/refresh) BEFORE mount — so router guards and
+// the first render see the authenticated state — then delete the marker cookie.
+// The URL is never touched (no ?ae_sso clutter). Non-SSO loads are untouched.
+function readCookie(name: string): string | undefined {
+  return document.cookie
+    .split('; ')
+    .find((c) => c.startsWith(name + '='))
+    ?.slice(name.length + 1)
+}
+
 async function bootstrap() {
-  const params = new URLSearchParams(window.location.search)
-  if (params.get('ae_sso') === '1') {
-    params.delete('ae_sso')
-    const qs = params.toString()
-    window.history.replaceState(
-      {},
-      '',
-      window.location.pathname + (qs ? '?' + qs : '') + window.location.hash,
-    )
+  if (readCookie('ae_sso') === '1') {
+    // One-shot: clear the marker immediately so a reload won't re-trigger.
+    document.cookie = 'ae_sso=; Path=/; Max-Age=0; Secure; SameSite=Lax'
     const auth = useAuthStore(pinia)
     if (!auth.token) {
       try {
@@ -53,8 +55,6 @@ async function bootstrap() {
       }
     }
   }
-  app.use(router)
-  app.use(i18n)
   app.mount('#app')
 }
 

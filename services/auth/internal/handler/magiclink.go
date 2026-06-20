@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -55,25 +54,28 @@ func (h *MagicLinkHandler) Generate(w http.ResponseWriter, r *http.Request) {
 func (h *MagicLinkHandler) Login(w http.ResponseWriter, r *http.Request) {
 	oldurl := service.SanitizeOldURL(r.URL.Query().Get("oldurl"))
 	token := r.URL.Query().Get("token")
-	dest := oldurl
 	if token != "" {
 		if resp, err := h.authService.ConsumeMagicToken(r.Context(), token, sessionContextFromReq(r)); err == nil && resp != nil {
 			h.cookie.setRefreshTokenCookie(w, resp.RefreshToken)
 			h.cookie.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
+			// Readable one-shot marker (NOT HttpOnly) telling the SPA to adopt the
+			// just-set httpOnly session on boot via a single /auth/refresh — this
+			// origin's localStorage is empty (the user logged in on a different
+			// domain), so the app would otherwise render logged-out despite valid
+			// cookies. Kept OUT of the URL so the address bar / bookmarks stay
+			// clean; the SPA deletes this cookie after reading it.
+			http.SetCookie(w, &http.Cookie{
+				Name:     "ae_sso",
+				Value:    "1",
+				Path:     "/",
+				MaxAge:   60,
+				Secure:   true,
+				SameSite: http.SameSiteLaxMode,
+			})
 			metrics.AuthEventsTotal.WithLabelValues("magic_link", "success").Inc()
-			// Append a transient marker so the SPA adopts the just-set session
-			// cookies on boot: this origin's localStorage is empty (different
-			// domain than where the user logged in), so without a nudge the app
-			// would render logged-out despite valid cookies. The SPA does a
-			// one-shot /auth/refresh when it sees ae_sso=1, then strips it.
-			sep := "?"
-			if strings.Contains(oldurl, "?") {
-				sep = "&"
-			}
-			dest = oldurl + sep + "ae_sso=1"
 		} else {
 			metrics.AuthEventsTotal.WithLabelValues("magic_link", "error").Inc()
 		}
 	}
-	http.Redirect(w, r, dest, http.StatusFound)
+	http.Redirect(w, r, oldurl, http.StatusFound)
 }
