@@ -33,7 +33,10 @@ from .recipes.gogoanime import GogoanimeRecipe
 from .streamproxy import looks_like_m3u8, make_wrap, rewrite_playlist
 from .tunnels import ProxyPool, build_pool_from_config
 
-_ROUTE_BLOCK = {"font", "media"}
+# Resource types eligible for routing aborts. The ACTUAL set aborted is the
+# intersection with cfg.block_resources (default empty → no routing installed),
+# because aborting media/xhr can prevent the player JS from firing its .m3u8.
+_ROUTE_BLOCKABLE = {"image", "font", "media", "stylesheet"}
 
 
 @dataclass
@@ -167,9 +170,15 @@ class CamoufoxEngine:
         metrics.BROWSER_RELAUNCH_TOTAL.labels(reason=reason).inc()
 
     async def _install_routing(self, context: Any) -> None:
+        # Only abort the configured resource types; default (empty) installs no
+        # routing at all — aborting media/xhr can stop the player firing its .m3u8.
+        block = {r for r in (self.cfg.block_resources or []) if r in _ROUTE_BLOCKABLE}
+        if not block:
+            return
+
         async def _route(route: Any) -> None:
             try:
-                if route.request.resource_type in _ROUTE_BLOCK:
+                if route.request.resource_type in block:
                     await route.abort()
                 else:
                     await route.continue_()
@@ -228,15 +237,23 @@ class CamoufoxEngine:
                     except Exception:  # noqa: BLE001
                         pass
 
-                session = await self._open_session(partial, context, proxy.id, profile)
+                payload = self._direct_payload(partial, proxy.id)
                 self.pool.mark_ok(proxy.id)
-                # NB: profile is RETAINED by the session (NOT released) so the
-                # stream proxy can reuse its clearance-bearing context.
+                # The resolved CDN serves the playlist + segments to ANY client
+                # bearing the megaplay Referer (verified — no browser/clearance
+                # needed for streaming). So we return the REAL master URL and
+                # RELEASE the profile immediately — the downstream streaming HLS
+                # proxy does the actual restreaming. No session retention → no
+                # pool exhaustion. (The /hls session path remains for any future
+                # provider whose CDN truly needs the browser context.)
+                self.profiles.release(profile, ok=True)
+                if self.profiles.needs_retire(profile):
+                    await self._teardown(profile, reason="recycle")
                 metrics.RESOLVE_TOTAL.labels(provider=provider, result="ok").inc()
                 metrics.RESOLVE_DURATION.labels(provider=provider).observe(
                     time.monotonic() - started
                 )
-                return self._session_payload(session, partial)
+                return payload
 
             except ChallengeError as exc:
                 last_err = exc
@@ -332,7 +349,22 @@ class CamoufoxEngine:
             "expires_at": int(session.expires_at),
         }
 
-    # -- stream proxy (mandatory) ------------------------------------------ #
+    def _direct_payload(self, partial: dict, proxy_id: str) -> dict:
+        """Return the resolved REAL master URL + referer (no session). The
+        downstream streaming HLS proxy fetches it directly with the Referer."""
+        master = partial.get("master_url")
+        return {
+            "master_url": master,
+            "referer": partial.get("referer", ""),
+            "subtitles": partial.get("subtitles", []),
+            "intro": partial.get("intro"),
+            "outro": partial.get("outro"),
+            "proxy_id": proxy_id,
+            "cdn_host": host_of(master),
+            "resolved_via": "camoufox",
+        }
+
+    # -- stream proxy (optional; for future browser-bound CDNs) ------------- #
     async def proxy_fetch(self, sid: str, url: str) -> dict:
         """Fetch ``url`` through the session's clearance-bearing browser context
         (same exit IP + cookies + TLS). Rewrites playlists so child URIs route

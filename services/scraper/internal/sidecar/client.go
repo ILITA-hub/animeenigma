@@ -131,7 +131,7 @@ func (c *Client) resolve(ctx context.Context, req resolveRequest) (*domain.Strea
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, domain.WrapProviderDown(err, "sidecar: decode response")
 	}
-	if !out.Success || out.Data.PlaylistProxyPath == "" {
+	if !out.Success || out.Data.MasterURL == "" {
 		return nil, domain.WrapProviderDown(
 			fmt.Errorf("sidecar unsuccessful: %s", out.Error), "sidecar: resolve",
 		)
@@ -140,9 +140,12 @@ func (c *Client) resolve(ctx context.Context, req resolveRequest) (*domain.Strea
 	return c.toStream(out.Data), nil
 }
 
-// toStream maps a sidecar session to a domain.Stream. The Source URL is the
-// sidecar's own /hls proxy (absolute), which restreams through the resolving
-// browser context (clearance/referer/CDN handled inside the sidecar).
+// toStream maps a sidecar resolution to a domain.Stream. The Source URL is the
+// REAL CDN master the browser resolved. The CDN serves the playlist + segments
+// to any client bearing the megaplay Referer (no browser/clearance needed for
+// streaming — verified 2026-06-20), so the downstream streaming HLS proxy
+// fetches it directly using the Referer header; catalog signs the URL so the
+// proxy's provenance gate trusts it (same pattern as the other scraper CDNs).
 func (c *Client) toStream(d sessionData) *domain.Stream {
 	tracks := make([]domain.Track, 0, len(d.Subtitles))
 	for _, s := range d.Subtitles {
@@ -154,7 +157,7 @@ func (c *Client) toStream(d sessionData) *domain.Stream {
 		})
 	}
 	st := &domain.Stream{
-		Sources: []domain.Source{{URL: c.baseURL + d.PlaylistProxyPath, Type: "hls"}},
+		Sources: []domain.Source{{URL: d.MasterURL, Type: "hls"}},
 		Tracks:  tracks,
 	}
 	if d.Referer != "" {

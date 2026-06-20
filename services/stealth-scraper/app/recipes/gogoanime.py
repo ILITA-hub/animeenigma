@@ -297,47 +297,70 @@ class GogoanimeRecipe(Recipe):
                 host=host_of(player_url), kind="player",
             )
 
-        master = await self._await_m3u8(captured, rc.cfg)
-        if not master:
-            raise RecipeError(
-                "megaplay: no .m3u8 intercepted (player JS did not start playback)"
-            )
-
         session: dict[str, Any] = {
-            "master_url": master,
+            "master_url": None,
             "referer": referer,
             "subtitles": [],
             "intro": None,
             "outro": None,
             "cdn_probe_status": None,
         }
-        # Enrich with subtitles/intro/outro from the intercepted getSources
-        # (fetched via APIRequestContext — no browser CORS).
-        if captured["getsources"]:
+
+        # PRIMARY: derive the master from the getSources RESPONSE. getSources
+        # fires on player init (reliable) and its sources.file IS the live CDN
+        # master — so we don't depend on autoplay actually starting playback
+        # (a cold profile blocks autoplay, so the .m3u8 is never fetched). We
+        # re-fetch getSources via APIRequestContext (no browser CORS) and parse.
+        gs_url = await self._await_getsources(captured, rc.cfg)
+        if gs_url:
             try:
                 r = await rc.context.request.get(
-                    captured["getsources"],
+                    gs_url,
                     headers={"X-Requested-With": "XMLHttpRequest", "Referer": referer},
                 )
                 if r.status == 200:
-                    data = json.loads(await r.text())
-                    gs = parse_getsources(data)
+                    gs = parse_getsources(json.loads(await r.text()))
+                    session["master_url"] = gs["master_url"]
                     session["subtitles"] = gs["subtitles"]
                     session["intro"] = gs["intro"]
                     session["outro"] = gs["outro"]
-            except Exception:  # noqa: BLE001 - enrichment is best-effort
+            except RecipeError:
+                raise
+            except Exception:  # noqa: BLE001 - fall through to interception
                 pass
+
+        # FALLBACK: if getSources didn't yield a master, use an intercepted
+        # .m3u8 (requires the player to have actually started playback).
+        if not session["master_url"]:
+            session["master_url"] = await self._await_m3u8(captured, rc.cfg)
+
+        if not session["master_url"]:
+            raise RecipeError(
+                "megaplay: no master from getSources or intercepted .m3u8"
+            )
         return session
 
-    async def _await_m3u8(self, captured: dict, cfg: Any) -> str | None:
-        """Poll for an intercepted playlist (player JS fires it shortly after
-        load). Prefer a 'master' playlist; fall back to the first .m3u8."""
+    async def _await_getsources(self, captured: dict, cfg: Any) -> str | None:
+        """Poll for the getSources request the player fires on init."""
         attempts = getattr(cfg, "capture_attempts", 40)
         delay = getattr(cfg, "capture_delay", 0.5)
         for _ in range(attempts):
-            if captured["masters"]:
-                return captured["masters"][0]
+            if captured["getsources"]:
+                return captured["getsources"]
             await asyncio.sleep(delay)
+        return captured["getsources"]
+
+    async def _await_m3u8(self, captured: dict, cfg: Any) -> str | None:
+        """Poll for an intercepted playlist (fallback when getSources missed).
+        Prefer a 'master' playlist; fall back to the first .m3u8."""
+        attempts = getattr(cfg, "capture_attempts", 40)
+        delay = getattr(cfg, "capture_delay", 0.5)
+        for _ in range(attempts):
+            if captured["masters"] or captured["m3u8s"]:
+                break
+            await asyncio.sleep(delay)
+        if captured["masters"]:
+            return captured["masters"][0]
         if captured["m3u8s"]:
             return captured["m3u8s"][0]
         return None

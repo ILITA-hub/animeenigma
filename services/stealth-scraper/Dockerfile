@@ -15,7 +15,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends xvfb \
  && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# Build context is the repo root (compose `context: ..`), matching the
+# animepahe-resolver sidecar convention — so COPY paths are repo-relative.
+COPY services/stealth-scraper/requirements.txt .
 # Install deps, the system libraries headless Firefox needs (via Playwright's
 # dep installer), then fetch the Camoufox Firefox binary into the image.
 RUN pip install -r requirements.txt \
@@ -23,7 +25,7 @@ RUN pip install -r requirements.txt \
  && python -m camoufox fetch \
  && mkdir -p /data/profiles
 
-COPY app ./app
+COPY services/stealth-scraper/app ./app
 
 EXPOSE 3000
 

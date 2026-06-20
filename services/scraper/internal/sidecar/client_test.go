@@ -47,8 +47,8 @@ func TestResolveEmbed_MapsSession(t *testing.T) {
 	if gotReq["provider"] != "gogoanime" || gotReq["embed_url"] != "https://gogoanime.me.uk/x" {
 		t.Errorf("request payload wrong: %v", gotReq)
 	}
-	if len(st.Sources) != 1 || st.Sources[0].URL != srv.URL+"/hls?sid=abc123&url=enc" {
-		t.Errorf("source url = %v; want sidecar /hls absolute", st.Sources)
+	if len(st.Sources) != 1 || st.Sources[0].URL != "https://s2.cinewave2.site/a/b/master.m3u8" {
+		t.Errorf("source url = %v; want the real CDN master url", st.Sources)
 	}
 	if st.Sources[0].Type != "hls" {
 		t.Errorf("type = %q; want hls", st.Sources[0].Type)

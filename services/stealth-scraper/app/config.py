@@ -45,9 +45,11 @@ class Config:
     geoip: bool = True          # camoufox: align locale/timezone/geo to the proxy IP
     humanize: bool = True       # camoufox: human-like cursor movement
     os_rotate: list[str] = field(default_factory=lambda: ["windows", "macos", "linux"])
-    block_resources: list[str] = field(
-        default_factory=lambda: ["image", "font", "media"]
-    )
+    # Resource types to abort during a resolve (bandwidth/fingerprint trim).
+    # DEFAULT EMPTY: aborting media/xhr can stop the player JS from firing its
+    # .m3u8 (verified — "no .m3u8 intercepted"). Correctness > bandwidth; opt in
+    # per-deploy via STEALTH_BLOCK_RESOURCES only if a provider tolerates it.
+    block_resources: list[str] = field(default_factory=list)
 
     # Tunnels (proxy)
     # STEALTH_PROXIES is a JSON array of {"id","type","url","geo"} entries.
@@ -96,9 +98,7 @@ class Config:
             geoip=_bool(g("STEALTH_GEOIP"), True),
             humanize=_bool(g("STEALTH_HUMANIZE"), True),
             os_rotate=_csv(g("STEALTH_OS_ROTATE"), ["windows", "macos", "linux"]),
-            block_resources=_csv(
-                g("STEALTH_BLOCK_RESOURCES"), ["image", "font", "media"]
-            ),
+            block_resources=_csv(g("STEALTH_BLOCK_RESOURCES"), []),
             proxies_json=g("STEALTH_PROXIES", ""),
             warp_proxy_url=g("STEALTH_WARP_PROXY_URL", ""),
             proxy_cooldown_seconds=float(_int(g("STEALTH_PROXY_COOLDOWN_SECONDS"), 120)),

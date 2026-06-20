@@ -113,6 +113,7 @@ class FakePage:
         embed_url="https://megaplay.buzz/stream/s-2/141568/sub",
         master_url="https://s2.cinewave2.site/anime/aa/bb/master.m3u8",
         getsources_url="https://megaplay.buzz/stream/getSources?id=161323",
+        fire_getsources=True,
         fire_master=True,
         title_value="Megaplay",
         category_href="/category/one-piece",
@@ -121,6 +122,7 @@ class FakePage:
         self.embed_url = embed_url
         self.master_url = master_url
         self.getsources_url = getsources_url
+        self.fire_getsources = fire_getsources
         self.fire_master = fire_master
         self.title_value = title_value
         self.category_href = category_href
@@ -138,7 +140,8 @@ class FakePage:
         # the player JS firing its getSources + master.m3u8 requests.
         if self._handlers:
             for cb in self._handlers:
-                cb(FakeResp(self.getsources_url))
+                if self.fire_getsources:
+                    cb(FakeResp(self.getsources_url))
                 if self.fire_master:
                     cb(FakeResp(self.master_url))
         return FakeResp(url, status=200)
@@ -193,8 +196,15 @@ class TestGogoanimeChain(unittest.TestCase):
         with self.assertRaises(ChallengeError):
             run(GogoanimeRecipe().resolve(ctx(page)))
 
-    def test_no_m3u8_intercepted_is_recipe_error(self):
+    def test_getsources_only_no_playback_succeeds(self):
+        # Cold profiles block autoplay so the .m3u8 is never fetched — the master
+        # must still resolve from the getSources response alone.
         page = FakePage(fire_master=False)
+        session = run(GogoanimeRecipe().resolve(ctx(page)))
+        self.assertEqual(session["master_url"], "https://s2.cinewave2.site/anime/aa/bb/master.m3u8")
+
+    def test_no_getsources_no_m3u8_is_recipe_error(self):
+        page = FakePage(fire_getsources=False, fire_master=False)
         with self.assertRaises(RecipeError):
             run(GogoanimeRecipe().resolve(ctx(page)))
 
