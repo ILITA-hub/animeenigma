@@ -20,33 +20,54 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// sessionHashFinder is satisfied by *repo.SessionRepository and by in-package
+// test fakes — allows MintMagicToken to be unit-tested without a live DB.
+type sessionHashFinder interface {
+	FindAliveByHash(ctx context.Context, hash string) (*domain.UserSession, error)
+	Create(ctx context.Context, s *domain.UserSession) error
+}
+
+// userByIDGetter is satisfied by *repo.UserRepository and by in-package
+// test fakes — allows ConsumeMagicToken to be unit-tested without a live DB.
+type userByIDGetter interface {
+	GetByID(ctx context.Context, id string) (*domain.User, error)
+}
+
 type AuthService struct {
 	userRepo         *repo.UserRepository
 	sessionRepo      *repo.SessionRepository
-	cache            *cache.RedisCache
+	cache            cache.Cache
 	jwtManager       *authz.JWTManager
 	telegramBotToken string
 	guestTokenTTL    time.Duration
 	log              *logger.Logger
+
+	// magicSessionFinder and magicUserGetter are set to the concrete repos by
+	// NewAuthService but can be replaced by in-package test fakes to allow
+	// MintMagicToken / ConsumeMagicToken unit tests without a live DB.
+	magicSessionFinder sessionHashFinder
+	magicUserGetter    userByIDGetter
 }
 
 func NewAuthService(
 	userRepo *repo.UserRepository,
 	sessionRepo *repo.SessionRepository,
-	cache *cache.RedisCache,
+	c cache.Cache,
 	jwtConfig authz.JWTConfig,
 	telegramBotToken string,
 	guestTokenTTL time.Duration,
 	log *logger.Logger,
 ) *AuthService {
 	return &AuthService{
-		userRepo:         userRepo,
-		sessionRepo:      sessionRepo,
-		cache:            cache,
-		jwtManager:       authz.NewJWTManager(jwtConfig),
-		telegramBotToken: telegramBotToken,
-		guestTokenTTL:    guestTokenTTL,
-		log:              log,
+		userRepo:           userRepo,
+		sessionRepo:        sessionRepo,
+		cache:              c,
+		jwtManager:         authz.NewJWTManager(jwtConfig),
+		telegramBotToken:   telegramBotToken,
+		guestTokenTTL:      guestTokenTTL,
+		log:                log,
+		magicSessionFinder: sessionRepo,
+		magicUserGetter:    userRepo,
 	}
 }
 
@@ -546,7 +567,7 @@ func (s *AuthService) createSessionAndAuthResponse(
 		LastSeenAt:       now,
 		ExpiresAt:        now.Add(SessionExpirySentinel),
 	}
-	if err := s.sessionRepo.Create(ctx, session); err != nil {
+	if err := s.magicSessionFinder.Create(ctx, session); err != nil {
 		return nil, err
 	}
 
