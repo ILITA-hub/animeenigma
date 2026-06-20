@@ -1056,6 +1056,11 @@ function onResumeFromSaved() {
 const sourceError = ref<string | null>(null)
 const resolvedServers = ref<{ id: string; label: string }[]>([])
 const teams = ref<string[]>([])
+// Latest-wins guard for the team chips, independent of resolveToken: the team
+// list is (re)loaded both on provider switch and on a same-provider audio
+// toggle, so it needs its own epoch so a slow earlier fetch can't overwrite a
+// newer one.
+let teamsToken = 0
 const currentStream = ref<StreamResult | null>(null)
 const isResolving = ref(false)
 
@@ -1198,6 +1203,29 @@ function initSelectedEpisode() {
   }
 }
 
+// Load the provider-native team chips (e.g. Kodik translation titles) for the
+// CURRENT audio facet. Kodik exposes different teams for sub vs dub, so the list
+// is scoped to state.combo.audio — otherwise SUB shows a wall of DUB teams.
+// Best-effort and self-epoched (teamsToken) so it never blocks or races a
+// stream resolve.
+function loadTeams(provider: string) {
+  const tok = ++teamsToken
+  teams.value = [] // clear stale chips immediately
+  resolver
+    .listTeams(provider, props.animeId, state.combo.value.audio)
+    .then((t) => { if (tok === teamsToken) teams.value = t })
+    .catch(() => { if (tok === teamsToken) teams.value = [] })
+}
+
+// Reload the team chips when the audio facet flips on the SAME provider (a
+// sub↔dub toggle on Kodik). Provider switches reload teams via
+// loadEpisodesAndStream; this covers the in-place toggle so the chips track the
+// selected audio. Guarded on a real provider being selected.
+watch(() => state.combo.value.audio, () => {
+  const provider = state.combo.value.provider
+  if (provider) loadTeams(provider)
+})
+
 async function loadEpisodesAndStream() {
   const provider = state.combo.value.provider
   if (!provider) return
@@ -1219,12 +1247,9 @@ async function loadEpisodesAndStream() {
     episodes.value = eps
 
     // Provider-native teams (e.g. Kodik translation titles) for the Source
-    // panel. Best-effort — never blocks the stream resolve.
-    teams.value = [] // clear stale chips immediately on provider switch
-    resolver
-      .listTeams(provider, props.animeId)
-      .then((t) => { if (token === resolveToken) teams.value = t })
-      .catch(() => { if (token === resolveToken) teams.value = [] })
+    // panel, scoped to the current audio facet. Best-effort — never blocks the
+    // stream resolve.
+    loadTeams(provider)
 
     // Preserve the selected episode across provider changes: keep the same
     // episode NUMBER when the new source has it, and never snap back to EP 1

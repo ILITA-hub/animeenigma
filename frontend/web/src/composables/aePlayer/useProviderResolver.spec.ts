@@ -358,22 +358,30 @@ describe('useProviderResolver', () => {
 })
 
 describe('ProviderResolver.listTeams', () => {
+  // Mixed sub/dub roster: type 'voice' = dub, anything else = sub.
   const kodikApi = {
     getTranslations: async () => ({ data: { data: [
-      { id: 1, title: 'AniLibria', type: 'voice', episodes_count: 12 },
-      { id: 2, title: 'AniDUB',    type: 'voice', episodes_count: 12 },
-      { id: 3, title: 'AniLibria', type: 'voice', episodes_count: 8 }, // dup title
+      { id: 1, title: 'AniLibria',   type: 'voice',    episodes_count: 12 },
+      { id: 2, title: 'AniDUB',      type: 'voice',    episodes_count: 12 },
+      { id: 3, title: 'AniLibria',   type: 'voice',    episodes_count: 8  }, // dup title
+      { id: 4, title: 'SovetRomantica', type: 'subtitles', episodes_count: 12 },
+      { id: 5, title: 'Crunchyroll', type: 'subtitles', episodes_count: 12 },
     ] } }),
     getStream: async () => ({ data: { data: {} } }),
   } as never
 
-  it('returns unique Kodik translation titles as teams', async () => {
+  it('returns ONLY dub teams when audio is dub (unique, first-seen order)', async () => {
     const resolver = makeResolver({ kodikApi })
-    expect(await resolver.listTeams('kodik', 'anime-1')).toEqual(['AniLibria', 'AniDUB'])
+    expect(await resolver.listTeams('kodik', 'anime-1', 'dub')).toEqual(['AniLibria', 'AniDUB'])
+  })
+
+  it('returns ONLY sub teams when audio is sub — no DUB teams leak in', async () => {
+    const resolver = makeResolver({ kodikApi })
+    expect(await resolver.listTeams('kodik', 'anime-1', 'sub')).toEqual(['SovetRomantica', 'Crunchyroll'])
   })
 
   it('returns [] for providers without team support', async () => {
     const resolver = makeResolver({})
-    expect(await resolver.listTeams('allanime', 'anime-1')).toEqual([])
+    expect(await resolver.listTeams('allanime', 'anime-1', 'sub')).toEqual([])
   })
 })
