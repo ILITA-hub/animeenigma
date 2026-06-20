@@ -51,7 +51,7 @@ func Rollup(provider string, verdicts []Verdict) ProviderVerdict {
 	var domR streamprobe.Reason
 	best := -1
 	for r, c := range counts {
-		if c > best {
+		if c > best || (c == best && string(r) < string(domR)) {
 			best, domR = c, r
 		}
 	}

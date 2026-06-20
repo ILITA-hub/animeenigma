@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/libs/streamprobe"
@@ -30,5 +31,23 @@ func TestRollup_Down(t *testing.T) {
 func TestRollup_Empty(t *testing.T) {
 	if Rollup("p", nil).Status != StatusDown {
 		t.Fatalf("empty must be down")
+	}
+}
+
+func TestRollup_TieBreakDeterministic(t *testing.T) {
+	// Two non-playable reasons at equal counts; deterministic tie-break should pick the lexicographically smaller one
+	verdicts := []Verdict{
+		{Reason: streamprobe.ReasonStatus403, Stage: StagePlayback, Server: "https://example.com/x"},
+		{Reason: streamprobe.ReasonCDNUnreachable, Stage: StagePlayback, Server: "https://cdn.example.com/y"},
+	}
+	pv := Rollup("test-provider", verdicts)
+
+	// Both reasons have count 1; "cdn_unreachable" < "status_403" lexicographically
+	expected := "cdn_unreachable on "
+	if pv.Status != StatusDegraded {
+		t.Fatalf("expected StatusDegraded, got %v", pv.Status)
+	}
+	if !strings.Contains(pv.Reason, expected) {
+		t.Fatalf("expected reason to start with %q, got %q", expected, pv.Reason)
 	}
 }
