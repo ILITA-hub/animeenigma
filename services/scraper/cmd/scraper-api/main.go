@@ -489,73 +489,14 @@ func main() {
 			"name", anime18Provider.Name(), "group", config.GroupAdult)
 	}
 
-	// Phase 17 Plan 01: seed the provider_health_up gauge family with zero-
-	// initialized children for every (provider, stage) pair so the HELP/TYPE
-	// lines appear in /metrics from boot. The probe runner (Plan 17-02) will
-	// overwrite these once it ticks. Without this seed, Prometheus exposition
-	// suppresses the metric family until the first observation lands.
-	//
-	// For most providers we initialize Up=1 (the optimistic default) so the
-	// orchestrator's nil-cache backcompat path observes a Grafana panel
-	// reading 1, matching the "no probe yet, assume healthy" semantic.
-	// Plan 17-02 flips this based on real probe data.
-	//
-	// Phase 19 (CR-01): escape-hatch providers like AnimeKai MUST be seeded
-	// with Up=0 so Grafana NEVER shows a green panel during the ~15 min
-	// before the first probe tick fires when the flag is on. This preserves
-	// the documented invariant in animekai/client.go and ensures the
-	// SCRAPER-OBS-04 alert ("stream_segment=0 for 15 min") can fire during
-	// the escape-hatch window — see bootHealthSeedValue() below.
-	//
-	// REVIEW.md WR-01: take ONE snapshot of the registered-providers list
-	// and reuse it for both the metric-seed loop and the probe-spawn loop.
-	// Taking two snapshots invites a bug where a future maintainer inserts
-	// a Register() between the two and the seeded metric set diverges from
-	// the spawned probe set.
-	providers := orchestrator.RegisteredProviders()
-	adultProviders := adultOrch.RegisteredProviders()
-	// Seed metrics for BOTH groups so adult providers appear in Grafana, but
-	// only EN providers get a liveness probe spawned below (the golden pool is
-	// mainstream anime — no 18+ golden, so 18anime health stays at the seed).
-	seedProviders := append(append([]domain.Provider{}, providers...), adultProviders...)
-	for _, p := range seedProviders {
-		seedValue := bootHealthSeedValue(p.Name())
-		for _, stage := range health.AllStages {
-			metrics.ProviderHealthUp.WithLabelValues(p.Name(), stage).Set(seedValue)
-		}
-		// Heartbeat starts at 0 (never ticked) — the probe sets it on each tick.
-		metrics.ProviderProbeLastTick.WithLabelValues(p.Name()).Set(0)
-		// Seed parser_zero_match_total with a no-op Add(0) so the HELP/TYPE
-		// lines appear in /metrics from boot. The label `selector="_seeded"`
-		// is a sentinel that means "no real zero-match event yet" — once
-		// parsers start incrementing real selectors (Phase 18+), this sentinel
-		// becomes background noise on a single low-value child.
+	// Seed parser_zero_match_total with a no-op Add(0) for every registered
+	// provider (EN + adult groups) so the HELP/TYPE lines appear in /metrics
+	// from boot. The label `selector="_seeded"` is a sentinel that means "no
+	// real zero-match event yet" — once parsers start incrementing real
+	// selectors (Phase 18+), this sentinel becomes background noise on a
+	// single low-value child.
+	for _, p := range append(append([]domain.Provider{}, orchestrator.RegisteredProviders()...), adultOrch.RegisteredProviders()...) {
 		metrics.ParserZeroMatchTotal.WithLabelValues(p.Name(), "_seeded").Add(0)
-	}
-
-	// Phase 17 Plan 02: spawn one liveness probe goroutine per registered
-	// provider. IMPORTANT ordering (RESEARCH "Wiring the probe into main.go"):
-	//   1. All providers must be Register()-ed first; orchestrator.RegisteredProviders()
-	//      enumerates the closed set.
-	//   2. Spawn probes BEFORE ListenAndServe so the probe path runs in the
-	//      same process as the user-serving path (cookie-jar + HTTP-client
-	//      identity guarantee from Phase 15 SCRAPER-FOUND-06).
-	//   3. On SIGTERM, probeCancel() is called BEFORE srv.Shutdown(ctx) so
-	//      probes drain cleanly without racing the orchestrator teardown.
-	//
-	// The probe goroutines self-recover from provider panics (defer recover
-	// in ProbeRunner.Start). They emit provider_health_up{provider, stage}
-	// gauges + provider_probe_last_tick_timestamp{provider} heartbeat on
-	// every tick (15 min ± 20% jitter).
-	probeCtx, probeCancel := context.WithCancel(context.Background())
-	// Seed a named origin so the probe's egress effects attribute to
-	// "scheduled_job/scraper-health-probe" instead of "goroutine/unknown" (the
-	// probe runs off any request, so its ctx carries no SeedMiddleware baggage).
-	probeCtx = tracing.SeedBaggage(probeCtx, "scheduled_job:scraper-health-probe", "")
-	for _, p := range providers {
-		runner := health.NewProbeRunner(p, health.DefaultGoldenPool, cache, log)
-		go runner.Start(probeCtx)
-		log.Infow("scraper.probe: spawned", "provider", p.Name())
 	}
 
 	// HTTP handler + router wiring.
@@ -676,10 +617,6 @@ func main() {
 
 	log.Info("shutting down server...")
 
-	// Cancel probe goroutines BEFORE srv.Shutdown so probes drain cleanly
-	// without racing the orchestrator teardown (RESEARCH P-07).
-	probeCancel()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -690,22 +627,3 @@ func main() {
 	log.Info("server stopped")
 }
 
-// bootHealthSeedValue returns the initial value for the provider_health_up
-// gauge children seeded at startup, given the provider's stable name.
-//
-// Most providers seed Up=1 ("no probe yet, assume healthy"); escape-hatch
-// providers must seed Up=0 so Grafana never shows a green panel during the
-// ~15 min before the first probe tick fires. AnimeKai is registered as an
-// escape-hatch stub in Phase 19 (see animekai/client.go and
-// .planning/phases/19-animekai-gated/19-REVIEW.md CR-01).
-//
-// A name-based decision is an intentional pragmatic shortcut for Phase 19;
-// the longer-term refactor is to expose this as an optional method on the
-// domain.Provider interface so each provider declares its own boot state.
-// When that lands, drop the name switch here and call the interface method.
-func bootHealthSeedValue(name string) float64 {
-	if name == "animekai" {
-		return 0
-	}
-	return 1
-}
