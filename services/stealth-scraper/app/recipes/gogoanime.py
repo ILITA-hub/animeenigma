@@ -54,8 +54,11 @@ _MEGAPLAY_PLAYER_HOSTS = ("megaplay.buzz", "vidwish.live")
 # network stack and return "status|first16chars". A single STRING arg + no
 # typed-array work (keeps Camoufox's xray wrapper happy).
 _PROBE_MASTER_JS = """async (url) => {
-  try { const r = await fetch(url); const t = await r.text(); return r.status + '|' + t.slice(0, 16); }
-  catch (e) { return '0|'; }
+  try {
+    const r = await fetch(url);
+    const t = (await r.text()).replace(/^[\\uFEFF\\s]+/, '');
+    return r.status + '|' + t.slice(0, 64);
+  } catch (e) { return '0|'; }
 }"""
 _WORD_RUN = re.compile(r"[0-9A-Za-z]+(?: [0-9A-Za-z]+)*")
 _LEAD_WORD = re.compile(r"^[0-9A-Za-z]+")
@@ -159,6 +162,11 @@ class GogoanimeRecipe(Recipe):
             url, wait_until="domcontentloaded", timeout=rc.cfg.nav_timeout_ms
         )
         status = resp.status if resp else None
+        # A 404/410 is a genuine "not on this provider" miss → NotFoundError
+        # (→404/kind=not_found) so the orchestrator/metrics don't mistake it for
+        # a transient provider fault (RecipeError→502).
+        if status in (404, 410):
+            raise NotFoundError(f"gogoanime: {host} returned {status} for {url}")
         # Cheap challenge sniff on the landing document.
         try:
             title = await rc.page.title()
@@ -182,6 +190,8 @@ class GogoanimeRecipe(Recipe):
         base = p.get("base_url")
         if not base:
             raise RecipeError("gogoanime: base_url required (DB roster) when no episode_url")
+        if p.get("episode") is None:
+            raise RecipeError("gogoanime: episode required when no episode_url/embed_url")
         dub = (p.get("category") or "sub").lower() == "dub"
         episode = int(p["episode"])
         title = p.get("keyword") or p.get("title") or ""
@@ -333,9 +343,10 @@ class GogoanimeRecipe(Recipe):
                     session["subtitles"] = gs["subtitles"]
                     session["intro"] = gs["intro"]
                     session["outro"] = gs["outro"]
-            except RecipeError:
-                raise
-            except Exception:  # noqa: BLE001 - fall through to interception
+            except Exception:  # noqa: BLE001 — ANY getSources failure (incl. a
+                # malformed/relative sources.file raised by parse_getsources)
+                # falls through to interception rather than hard-aborting the
+                # resolve when an intercepted .m3u8 candidate may still exist.
                 pass
 
         # FALLBACK candidate(s): if getSources gave no master, wait for an
@@ -359,6 +370,13 @@ class GogoanimeRecipe(Recipe):
         for c in [gs_master, *captured["masters"], *captured["m3u8s"]]:
             if c and c not in candidates:
                 candidates.append(c)
+        # The page is retained as the live session, so detach the response
+        # listener now that capture is done — otherwise it keeps appending to
+        # captured["m3u8s"] for the whole watch (per-session unbounded growth).
+        try:
+            rc.page.remove_listener("response", _on_response)
+        except Exception:  # noqa: BLE001 — best-effort; duck-typed page may lack it
+            pass
         if not candidates:
             raise RecipeError("megaplay: no master from getSources or intercepted .m3u8")
 

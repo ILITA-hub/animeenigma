@@ -100,6 +100,45 @@ func TestResolveEmbed_SuccessFalse_ProviderDown(t *testing.T) {
 	}
 }
 
+func TestResolveEmbed_TransportError_ProviderDown(t *testing.T) {
+	// A closed listener → connection refused → transport error must map to
+	// ErrProviderDown so the orchestrator soft-skips/fails over.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+	c := New(addr, 2*time.Second)
+	_, err := c.ResolveEmbed(context.Background(), "gogoanime", "e", domain.CategorySub, "")
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Fatalf("err = %v; want ErrProviderDown", err)
+	}
+}
+
+func TestResolveEmbed_EmptyPlaylistPath_ProviderDown(t *testing.T) {
+	// success:true but no playlist_proxy_path would otherwise build a Source URL
+	// of baseURL+"" (the bare sidecar root) — a broken HLS source. Guarded.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"data":{"master_url":"https://x/m.m3u8"}}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL, 5*time.Second)
+	_, err := c.ResolveEmbed(context.Background(), "gogoanime", "e", domain.CategorySub, "")
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Fatalf("err = %v; want ErrProviderDown", err)
+	}
+}
+
+func TestResolveEmbed_MalformedJSON_ProviderDown(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{not valid json`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL, 5*time.Second)
+	_, err := c.ResolveEmbed(context.Background(), "gogoanime", "e", domain.CategorySub, "")
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Fatalf("err = %v; want ErrProviderDown", err)
+	}
+}
+
 func decodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }

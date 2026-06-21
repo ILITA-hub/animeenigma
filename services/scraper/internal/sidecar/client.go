@@ -118,22 +118,31 @@ func (c *Client) resolve(ctx context.Context, req resolveRequest) (*domain.Strea
 	if err != nil {
 		return nil, domain.WrapProviderDown(err, "sidecar: read body")
 	}
+
+	// Best-effort pre-parse so the sidecar's `kind`
+	// (challenge|error|internal|exhausted|not_found) is surfaced in the error —
+	// a Cloudflare challenge storm reads differently from a recipe regression on
+	// the playback-health dashboard, even though both map to ErrProviderDown for
+	// failover.
+	var out resolveResponse
+	decodeErr := json.Unmarshal(raw, &out)
+
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, domain.WrapNotFound(fmt.Errorf("sidecar 404: %s", snippet(raw)), "sidecar: not found")
+		return nil, domain.WrapNotFound(
+			fmt.Errorf("sidecar 404 (kind=%s): %s", out.Kind, snippet(raw)), "sidecar: not found")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, domain.WrapProviderDown(
-			fmt.Errorf("sidecar status %d: %s", resp.StatusCode, snippet(raw)), "sidecar: resolve",
+			fmt.Errorf("sidecar status %d (kind=%s): %s", resp.StatusCode, out.Kind, snippet(raw)),
+			"sidecar: resolve",
 		)
 	}
-
-	var out resolveResponse
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, domain.WrapProviderDown(err, "sidecar: decode response")
+	if decodeErr != nil {
+		return nil, domain.WrapProviderDown(decodeErr, "sidecar: decode response")
 	}
 	if !out.Success || out.Data.PlaylistProxyPath == "" {
 		return nil, domain.WrapProviderDown(
-			fmt.Errorf("sidecar unsuccessful: %s", out.Error), "sidecar: resolve",
+			fmt.Errorf("sidecar unsuccessful (kind=%s): %s", out.Kind, out.Error), "sidecar: resolve",
 		)
 	}
 
