@@ -1546,6 +1546,106 @@ func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
 	}
 }
 
+// TestGetEpisodes_ForwardsExclusive — exclusive=true query param must be
+// forwarded to OrderedProviderNames (and through the full resolve chain).
+// With two registered providers and prefer=first&exclusive=true, the handler
+// should pass exclusive=true → OrderedProviderNames returns only ["first"],
+// so data.meta.tried has length 1. Without exclusive the list would be 2.
+// This proves the query param is wired end-to-end.
+func TestGetEpisodes_ForwardsExclusive(t *testing.T) {
+	t.Parallel()
+	first := &fakeProvider{
+		name:               "first",
+		listEpisodesResult: []domain.Episode{{ID: "ep1", Number: 1}},
+	}
+	second := &fakeProvider{
+		name:               "second",
+		listEpisodesResult: []domain.Episode{{ID: "ep2", Number: 1}},
+	}
+	h := newTestHandler(t, first, second)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/scraper/episodes?mal_id=1&prefer=first&exclusive=true", nil)
+	h.GetEpisodes(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	body := requireJSON(t, resp)
+	tried := metaTried(t, body)
+	// exclusive=true + prefer=first → only "first" in the failover list.
+	// If exclusive were not forwarded, tried would contain both providers.
+	if len(tried) != 1 {
+		t.Fatalf("exclusive=true query param not forwarded: len(meta.tried) = %d; want 1 (only preferred provider)", len(tried))
+	}
+	if tried[0] != "first" {
+		t.Errorf("meta.tried[0] = %q; want \"first\"", tried[0])
+	}
+}
+
+// TestGetEpisodes_ExclusiveFalseByDefault — absence of exclusive param means
+// no-failover mode is NOT engaged: with two providers and no exclusive param,
+// meta.tried must contain both providers (default failover order).
+func TestGetEpisodes_ExclusiveFalseByDefault(t *testing.T) {
+	t.Parallel()
+	first := &fakeProvider{
+		name:               "first",
+		listEpisodesResult: []domain.Episode{{ID: "ep1", Number: 1}},
+	}
+	second := &fakeProvider{
+		name:               "second",
+		listEpisodesResult: []domain.Episode{{ID: "ep2", Number: 1}},
+	}
+	h := newTestHandler(t, first, second)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/scraper/episodes?mal_id=1", nil)
+	h.GetEpisodes(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	body := requireJSON(t, resp)
+	tried := metaTried(t, body)
+	// No exclusive param → both providers in the tried list (default failover).
+	if len(tried) != 2 {
+		t.Errorf("without exclusive param, len(meta.tried) = %d; want 2 (full failover list)", len(tried))
+	}
+}
+
+// TestParseQuery_ExclusiveParam — unit test for parseQuery: exclusive=true
+// sets qp.exclusive=true; absent or =false leaves it false.
+func TestParseQuery_ExclusiveParam(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		query   string
+		want    bool
+	}{
+		{"?exclusive=true", true},
+		{"?exclusive=false", false},
+		{"?exclusive=1", false},  // only literal "true" accepted
+		{"", false},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.query, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/scraper/episodes"+tc.query, nil)
+			qp := parseQuery(req)
+			if qp.exclusive != tc.want {
+				t.Errorf("parseQuery(%q).exclusive = %v; want %v", tc.query, qp.exclusive, tc.want)
+			}
+		})
+	}
+}
+
 // TestHealthUp_ExcludesStreamSegmentColdStart verifies the cold-start exclusion
 // rule in healthUp: stream_segment is a probe-only oracle that starts as false
 // until the first tick, so it MUST NOT be counted when deriving the coarse "up"
