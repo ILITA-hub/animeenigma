@@ -540,6 +540,7 @@ class CamoufoxEngine:
         # the poisoned session and surface ChallengeError so Go fails over.
         if looks_like_challenge(status, body[:4096].decode("utf-8", "ignore")):
             await self.aclose_session(session.id)
+            metrics.CHALLENGE_TOTAL.labels(host=h or "?", kind="fetch").inc()
             raise ChallengeError(f"challenge on fetch {h}", host=h, kind="fetch")
 
         session.expires_at = time.time() + self.cfg.session_ttl_seconds
@@ -577,6 +578,8 @@ class CamoufoxEngine:
                 await _safe_close_page(page)
                 self.pool.mark_blocked(proxy.id)
                 self.profiles.release(profile, ok=False)
+                metrics.CHALLENGE_TOTAL.labels(host=host_of(origin) or "?", kind="warm").inc()
+                metrics.PROXY_BLOCK_TOTAL.labels(proxy_id=proxy.id).inc()
                 raise ChallengeError(
                     f"challenge warming {origin}", host=host_of(origin), kind="warm"
                 )
