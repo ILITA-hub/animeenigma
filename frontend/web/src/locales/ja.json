@@ -258,7 +258,9 @@
       "tryAnother": "別のソースを試す",
       "raw": "RAW",
       "subBurnedIn": "焼き込み",
-      "subSelectable": "選択可能"
+      "subSelectable": "選択可能",
+      "providerLacksAnime": "この配信元にこのアニメはありません",
+      "providerCdnUnreachable": "この配信元のCDNにこのアニメで接続できません"
     },
     "pin": "固定",
     "unpin": "固定解除",

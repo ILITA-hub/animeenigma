@@ -343,9 +343,11 @@ import { segmentsToChapters, activeSkipSegment } from '@/composables/aePlayer/sk
 import { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
 import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/aePlayer/useProviderResolver'
 import { useProviderHealth } from '@/composables/aePlayer/useProviderHealth'
+import { useProviderAvailability, overlayAvailability } from '@/composables/aePlayer/useProviderAvailability'
+import { useI18n } from 'vue-i18n'
 import { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
-import { providerById, CURATED_TIER } from './providerRegistry'
+import { providerById, CURATED_TIER, PROVIDER_REGISTRY } from './providerRegistry'
 import { pickSmartDefault } from '@/composables/aePlayer/smartDefault'
 import { pickInitialProvider } from '@/composables/aePlayer/initialProvider'
 import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
@@ -418,7 +420,12 @@ const state = usePlayerState()
 // always-on fragLoadedCount instead).
 const engine = useVideoEngine(videoRef, state.hackerMode)
 const resolver = useProviderResolver()
+const { t } = useI18n()
 const toast = useToast()
+
+// Hacker-mode per-anime availability tracking (reuses animeIdRef declared below for capabilities).
+// scraperProviderIds is module-level (static) — same registry across all instances.
+const scraperProviderIds = new Set(PROVIDER_REGISTRY.filter((d) => d.scraper).map((d) => d.id))
 
 // ─── Watch-Together (room sync) ───────────────────────────────────────────────
 // When mounted inside a WT room, wire the generic HTML5 playback bridge (mirrors
@@ -572,6 +579,7 @@ const { capMap, rankedIds: capRankedIds } = useCapabilities(animeIdRef)
 const orderedProviderIds = computed(() =>
   rankedProviderIds(rows.value, capRankedIds.value, CURATED_TIER),
 )
+const availability = useProviderAvailability(animeIdRef)
 
 // ─── Provider defaults ────────────────────────────────────────────────────────
 
@@ -605,17 +613,23 @@ function isProviderAvailable(id: string): Promise<boolean> {
 // Selection logic keeps reading the ungated `rows` (pickSmartDefault gates `ae`
 // via isProviderAvailable), so this is purely cosmetic.
 const displayRows = computed<ProviderRow[]>(() =>
-  rows.value.map((r) =>
-    r.def.id === 'ae' && aeAvailable.value !== true
-      ? {
-          def: r.def,
-          state: 'irrelevant' as const,
-          reason: aeAvailable.value === false
-            ? 'Not in the AnimeEnigma library yet'
-            : 'Checking the AnimeEnigma library…',
-        }
-      : r,
-  ),
+  rows.value.map((r) => {
+    // Existing `ae` library-gating (unchanged).
+    if (r.def.id === 'ae' && aeAvailable.value !== true) {
+      return {
+        def: r.def,
+        state: 'irrelevant' as const,
+        reason: aeAvailable.value === false
+          ? 'Not in the AnimeEnigma library yet'
+          : 'Checking the AnimeEnigma library…',
+      }
+    }
+    // Hacker-mode per-anime availability overlay for scraper providers.
+    if (state.hackerMode.value && scraperProviderIds.has(r.def.id)) {
+      return overlayAvailability(r, availability.get(r.def.id), t)
+    }
+    return r
+  }),
 )
 
 // props.animeId can change without a remount (no :key on the player), so the
@@ -648,6 +662,7 @@ watch(() => props.animeId, () => {
   providerAutoSelected = false
   resetSourceSwitching()
   resetFallbackIntents()
+  availability.reset()
   void isProviderAvailable('ae') // eager re-probe for the new title
 })
 
@@ -706,6 +721,9 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
 
   if (state.hackerMode.value) {
     recordFallbackIntent({ from: provider, to: toProvider, reason, acted: false })
+    if (scraperProviderIds.has(provider)) {
+      availability.markCdnUnreachable(provider)
+    }
     const target = switchServerId ? `${provider} · server ${switchServerId}` : toProvider
     sourceError.value = target
       ? `Hacker mode: auto-switch suppressed — would try ${target} (${reason}). Pick a source manually.`
@@ -1444,6 +1462,9 @@ function onSelectProvider(id: string) {
   providerAutoSelected = false
   resetSourceSwitching() // manual pick — fresh state, and don't auto-switch it
   state.setProvider(id, '')
+  if (state.hackerMode.value && scraperProviderIds.has(id)) {
+    void availability.checkExists(id)
+  }
   recordDecision('manual — you picked this source')
   // loadEpisodesAndStream fires via the provider watcher above
 }

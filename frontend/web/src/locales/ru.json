@@ -258,7 +258,9 @@
       "tryAnother": "Другой источник",
       "raw": "RAW",
       "subBurnedIn": "вшитые",
-      "subSelectable": "отдельные"
+      "subSelectable": "отдельные",
+      "providerLacksAnime": "У этого источника нет этого аниме",
+      "providerCdnUnreachable": "CDN источника недоступен для этого аниме"
     },
     "pin": "Закрепить",
     "unpin": "Открепить",
