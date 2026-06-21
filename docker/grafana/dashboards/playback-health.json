@@ -352,7 +352,7 @@
         "type": "datasource",
         "uid": "-- Mixed --"
       },
-      "description": "Merged provider roster (Postgres stream_providers — source of truth) + live playback verdict (daily honest probe). One row per provider: lifecycle Config status, who operates it, the probed Playability (up/degraded/down), and the top-3 failure Reasons with the anime title each failed on. Non-probed providers (Kodik/AniLib/Hanime/Raw/18anime/ae) show '— not probed'. Filtered by $provider for the probe columns.",
+      "description": "Merged provider roster (Postgres stream_providers — source of truth) + live playback verdict (daily honest probe). One row per provider: lifecycle Config status, how each stream is Resolved via (scraper microservice + engine — 'Camoufox' = stealth browser sidecar, 'HTTP' = direct fetch — vs catalog parser, FE iframe, or self-hosted), the probed Playability (up/degraded/down), and the top-3 failure Reasons with the anime title each failed on. Non-probed providers (Kodik/AniLib/Hanime/Raw/18anime/ae) show '— not probed'. Filtered by $provider for the probe columns.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -411,38 +411,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Scraper"
+              "options": "Resolved via"
             },
             "properties": [
               {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "true": {
-                        "text": "scraper",
-                        "color": "text"
-                      },
-                      "false": {
-                        "text": "player",
-                        "color": "text"
-                      },
-                      "1": {
-                        "text": "scraper",
-                        "color": "text"
-                      },
-                      "0": {
-                        "text": "player",
-                        "color": "text"
-                      }
-                    }
-                  }
-                ]
-              },
-              {
                 "id": "custom.width",
-                "value": 90
+                "value": 150
               }
             ]
           },
@@ -579,7 +553,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", status AS \"Config\", scraper_operated AS \"Scraper\", reason AS \"Note\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
+          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", status AS \"Config\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", reason AS \"Note\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
           "refId": "A"
         },
         {
@@ -613,7 +587,7 @@
               "provider": 0,
               "Group": 1,
               "Config": 2,
-              "Scraper": 3,
+              "Resolved via": 3,
               "playability": 4,
               "reasons": 5,
               "Note": 6
