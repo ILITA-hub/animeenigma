@@ -442,12 +442,24 @@ func main() {
 		domain.WithProvider("nineanime"),
 		domain.WithTransport(egressTransport),
 	)
+	nineUseBrowser := func() bool {
+		return cfg.Providers.EngineOf("nineanime") == config.EngineBrowser
+	}
+	nineBrowserResolve := func(ctx context.Context, embedURL string, category domain.Category) (*domain.Stream, error) {
+		return stealthClient.ResolveEmbed(ctx, "nineanime", embedURL, category, cfg.Providers.BaseURLOf("nineanime"))
+	}
+	nineBrowserFetch := func(ctx context.Context, provider, url string) (int, []byte, error) {
+		return stealthClient.Fetch(ctx, provider, url)
+	}
 	nineAnimeProvider, err := nineanime.New(nineanime.Deps{
-		BaseURL:  cfg.NineAnime.BaseURL,
-		HTTP:     nineAnimeBaseHTTP,
-		Cache:    redisCache,
-		Log:      log,
-		Megaplay: embeds.NewRecordingMegaplayExtractor(megaplayWrap), // WR-07: record megaplay egress; nineanime tags provider via ctx
+		BaseURL:        cfg.NineAnime.BaseURL,
+		HTTP:           nineAnimeBaseHTTP,
+		Cache:          redisCache,
+		Log:            log,
+		Megaplay:       embeds.NewRecordingMegaplayExtractor(megaplayWrap), // WR-07: record megaplay egress; nineanime tags provider via ctx
+		UseBrowser:     nineUseBrowser,
+		BrowserResolve: nineBrowserResolve,
+		BrowserFetch:   nineBrowserFetch,
 	})
 	if err != nil {
 		log.Fatalw("failed to construct NineAnime provider", "error", err)
