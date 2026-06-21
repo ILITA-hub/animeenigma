@@ -213,6 +213,16 @@ func main() {
 		log.Errorw("animefever declaim migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) flip of nineanime to engine=browser + base_url:
+	// 9anime.me.uk is DDoS-Guard/JS-gated and its megaplay player resolves the
+	// stream id + rotating CDN at runtime, so it must be scraped via the Camoufox
+	// stealth-scraper sidecar. The seed ships engine=browser for fresh DBs only;
+	// this carries the flip to existing live DBs. Run-once via the ledger; a later
+	// operator revert in the DB is never clobbered.
+	if err := scraperprovider.NineanimeBrowser(db.DB); err != nil {
+		log.Errorw("nineanime browser migration failed (continuing)", "error", err)
+	}
+
 	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
 	// provider_info/provider_enabled management metrics. Runs after the roster is
 	// fully migrated/seeded/backfilled so names + flags are authoritative. The

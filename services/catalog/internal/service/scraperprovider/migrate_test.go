@@ -225,6 +225,85 @@ func TestMiruroDubOnly_GuardedDoesNotClobberOperatorReEnable(t *testing.T) {
 	}
 }
 
+func TestNineanimeBrowser_FlipsEngineAndBaseURL(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Simulate a pre-existing live DB where nineanime was still engine='http'
+	// (the seed shipped engine='browser' only for fresh DBs; an existing row is
+	// never overwritten by the insert-if-absent seed).
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "nineanime").
+		Updates(map[string]interface{}{"engine": "http", "base_url": ""}).Error; err != nil {
+		t.Fatalf("preset nineanime engine=http: %v", err)
+	}
+
+	if err := scraperprovider.NineanimeBrowser(db); err != nil {
+		t.Fatalf("nineanime browser: %v", err)
+	}
+
+	var nine, gogo domain.ScraperProvider
+	db.First(&nine, "name = ?", "nineanime")
+	db.First(&gogo, "name = ?", "gogoanime")
+	if nine.Engine != "browser" {
+		t.Errorf("nineanime engine = %q, want browser", nine.Engine)
+	}
+	if nine.BaseURL != "https://9anime.me.uk" {
+		t.Errorf("nineanime base_url = %q, want https://9anime.me.uk", nine.BaseURL)
+	}
+	// Other providers untouched (gogoanime keeps its own browser base URL).
+	if gogo.BaseURL != "https://gogoanimes.fi" {
+		t.Errorf("gogoanime base_url = %q, must stay gogoanimes.fi (only nineanime is flipped)", gogo.BaseURL)
+	}
+}
+
+func TestNineanimeBrowser_GuardedDoesNotClobberOperatorRevert(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := scraperprovider.NineanimeBrowser(db); err != nil {
+		t.Fatalf("nineanime browser 1: %v", err)
+	}
+	// Operator later reverts nineanime back to engine='http' in the DB.
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "nineanime").
+		Update("engine", "http").Error; err != nil {
+		t.Fatalf("operator revert engine=http: %v", err)
+	}
+	// Second boot must NOT clobber the operator's revert (guard already set).
+	if err := scraperprovider.NineanimeBrowser(db); err != nil {
+		t.Fatalf("nineanime browser 2: %v", err)
+	}
+	var nine domain.ScraperProvider
+	db.First(&nine, "name = ?", "nineanime")
+	if nine.Engine != "http" {
+		t.Errorf("nineanime engine = %q, want http (guard clobbered operator revert)", nine.Engine)
+	}
+}
+
+func TestNineanimeBrowser_NoRow_ErrorsAndDoesNotWriteGuard(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// No nineanime row at all (seed did not run / row hard-deleted).
+	if err := scraperprovider.NineanimeBrowser(db); err == nil {
+		t.Fatal("NineanimeBrowser should error when no nineanime row exists")
+	}
+	// Guard must NOT be written, so a later boot (once the row exists) retries.
+	var guards int64
+	db.Table("catalog_migration_guards").Where("key = ?", "nineanime_browser").Count(&guards)
+	if guards != 0 {
+		t.Errorf("guard count = %d, want 0 (must not write guard on no-row failure)", guards)
+	}
+}
+
 func TestBackfillScraperOperated_SetsIntrinsicFlag(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

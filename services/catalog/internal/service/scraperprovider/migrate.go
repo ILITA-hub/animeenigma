@@ -180,6 +180,9 @@ const miruroDubOnlyGuardKey = "miruro_dub_only"
 // animefeverDeclaimGuardKey marks AnimefeverDeclaim as applied.
 const animefeverDeclaimGuardKey = "animefever_declaim"
 
+// nineanimeBrowserGuardKey marks NineanimeBrowser as applied.
+const nineanimeBrowserGuardKey = "nineanime_browser"
+
 // MiruroDubOnly flips the miruro roster row to supports_sub=false exactly once.
 // Miruro's upstream stopped serving sub streams (only English dub plays), so it
 // must not advertise/auto-select for SUB (original-Japanese-audio) playback. The
@@ -255,6 +258,46 @@ func AnimefeverDeclaim(db *gorm.DB) error {
 
 	if err := db.Create(&migrationGuard{Key: animefeverDeclaimGuardKey}).Error; err != nil {
 		return fmt.Errorf("write animefever-declaim guard: %w", err)
+	}
+	return nil
+}
+
+// NineanimeBrowser flips nineanime onto the Camoufox stealth-scraper sidecar
+// (engine=browser) with its DB-driven base URL. 9anime.me.uk's whole site is
+// DDoS-Guard/JS-gated (discovery times out for a curl-class client) and its
+// megaplay player resolves the stream id + rotating CDN at runtime in JS, so a
+// real browser is required. The seed is insert-if-absent and never updates the
+// existing prod row; this RUN-ONCE guarded migration carries the flip to live
+// DBs. Guarded via catalog_migration_guards so it's a no-op on every later boot
+// and an operator who reverts engine in the DB is NOT clobbered. Idempotent.
+func NineanimeBrowser(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", nineanimeBrowserGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check nineanime-browser guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator revert
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "nineanime").
+		Updates(map[string]interface{}{
+			"engine":   "browser",
+			"base_url": "https://9anime.me.uk",
+		})
+	if result.Error != nil {
+		return fmt.Errorf("nineanime browser flip: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No nineanime row to flip (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("nineanime browser flip: no row found for name=nineanime")
+	}
+	if err := db.Create(&migrationGuard{Key: nineanimeBrowserGuardKey}).Error; err != nil {
+		return fmt.Errorf("write nineanime-browser guard: %w", err)
 	}
 	return nil
 }

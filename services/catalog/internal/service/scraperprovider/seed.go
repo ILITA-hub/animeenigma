@@ -64,6 +64,18 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "nineanime", Status: domain.StatusEnabled,
+		// 9anime.me.uk's whole site is DDoS-Guard/JS-gated (discovery times out
+		// for a curl-class client) and its popular catalog migrated to the
+		// megaplay.buzz JS player (runtime stream id + rotating Referer-gated CDN).
+		// Resolved via the Camoufox stealth-scraper sidecar (engine=browser):
+		// discovery GETs route through the warm browser session; megaplay players
+		// are intercepted for the .m3u8. Verified live 2026-06-21.
+		Engine: "browser", BaseURL: "https://9anime.me.uk",
+		Reason: "Browser-scraped via Camoufox sidecar (DDoS-Guard site + megaplay JS player)",
+		Description: "9anime.me.uk discovery (WP-REST search + series/episode pages) is " +
+			"DDoS-Guard/JS-gated and its popular catalog uses the megaplay.buzz player whose " +
+			"stream id + CDN are built at runtime in JS; the stealth-scraper drives a real " +
+			"browser for both discovery and the .m3u8 interception (engine=browser).",
 		SupportsSub: true, SupportsDub: false, SubDelivery: "hard",
 		QualityCeiling: "720p", PreferenceWeight: 40,
 	},
