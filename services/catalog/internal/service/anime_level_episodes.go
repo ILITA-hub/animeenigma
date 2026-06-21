@@ -8,7 +8,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
-// Anime-level (team-agnostic) players: aePlayer persists translation_id=” for
+// Anime-level (team-agnostic) players: aePlayer persists translation_id='' for
 // these, so "latest available episode" is resolved at the anime level — no
 // translation/team id. See spec 2026-06-18-aeplayer-notification-coverage.
 func isAnimeLevelPlayer(player string) bool {
