@@ -66,6 +66,7 @@ from .profiles import Profile, ProfileManager
 from .recipes import ChallengeError, NotFoundError, Recipe, RecipeContext, RecipeError
 from .recipes.base import host_of
 from .recipes.gogoanime import GogoanimeRecipe
+from .recipes.nineanime import NineAnimeRecipe
 from .streamproxy import looks_like_m3u8, make_wrap, rewrite_playlist
 from .tunnels import ProxyPool, build_pool_from_config
 
@@ -132,7 +133,10 @@ class CamoufoxEngine:
         self.profiles = ProfileManager(cfg.profile_dir, cfg.pool_size)
         self._handles: dict[str, _CamoufoxHandle] = {}     # profile id -> handle
         self._sessions: dict[str, Session] = {}            # session id -> Session
-        self._recipes: dict[str, Recipe] = {"gogoanime": GogoanimeRecipe()}
+        self._recipes: dict[str, Recipe] = {
+            "gogoanime": GogoanimeRecipe(),
+            "nineanime": NineAnimeRecipe(),
+        }
         self._log: Any = None
         # Async DNS resolver (host -> list[ip str]); injectable in tests so the
         # SSRF guard is exercised without real network resolution.
