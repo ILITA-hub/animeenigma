@@ -15,6 +15,7 @@ package sidecar
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +27,8 @@ import (
 )
 
 const maxBody = 1 << 20 // 1 MiB — resolve responses are small JSON.
+
+const maxFetchBody = 16 << 20 // 16 MiB — discovery pages (HTML/JSON) base64-inflated.
 
 // Client is a thin HTTP wrapper around the stealth-scraper sidecar.
 type Client struct {
@@ -83,6 +86,20 @@ type resolveResponse struct {
 	Data    sessionData `json:"data"`
 }
 
+type fetchRequest struct {
+	Provider string `json:"provider"`
+	URL      string `json:"url"`
+	Method   string `json:"method,omitempty"`
+}
+
+type fetchResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+	Kind    string `json:"kind"`
+	Status  int    `json:"status"`
+	Body    string `json:"body"` // base64
+}
+
 // ResolveEmbed resolves a known embed/wrapper URL (a provider server ID) to a
 // playable Stream via the sidecar. provider is the recipe key (e.g. "gogoanime").
 func (c *Client) ResolveEmbed(
@@ -94,6 +111,59 @@ func (c *Client) ResolveEmbed(
 		Category: string(category),
 		BaseURL:  baseURL,
 	})
+}
+
+// Fetch routes one GET through the sidecar's warm browser session for `provider`
+// (a site whose discovery is challenge-gated to curl/Go) and returns the RAW
+// body + the UPSTREAM status. Only sidecar-level failures (challenge / pool
+// exhausted / host denied / transport) return an error; an upstream 4xx/5xx is
+// returned as (status, body, nil) so the provider keeps its own status handling.
+func (c *Client) Fetch(ctx context.Context, provider, rawURL string) (int, []byte, error) {
+	reqBody, err := json.Marshal(fetchRequest{Provider: provider, URL: rawURL, Method: "GET"})
+	if err != nil {
+		return 0, nil, domain.WrapProviderDown(err, "sidecar: marshal fetch")
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/fetch", bytes.NewReader(reqBody))
+	if err != nil {
+		return 0, nil, domain.WrapProviderDown(err, "sidecar: build fetch request")
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return 0, nil, domain.WrapProviderDown(err, "sidecar: fetch request")
+	}
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxFetchBody))
+	if err != nil {
+		return 0, nil, domain.WrapProviderDown(err, "sidecar: read fetch body")
+	}
+
+	var out fetchResponse
+	decodeErr := json.Unmarshal(raw, &out)
+
+	if resp.StatusCode == http.StatusNotFound {
+		return 0, nil, domain.WrapNotFound(
+			fmt.Errorf("sidecar fetch 404 (kind=%s): %s", out.Kind, snippet(raw)), "sidecar: fetch not found")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, nil, domain.WrapProviderDown(
+			fmt.Errorf("sidecar fetch %d (kind=%s): %s", resp.StatusCode, out.Kind, snippet(raw)),
+			"sidecar: fetch")
+	}
+	if decodeErr != nil {
+		return 0, nil, domain.WrapProviderDown(decodeErr, "sidecar: decode fetch response")
+	}
+	if !out.Success {
+		return 0, nil, domain.WrapProviderDown(
+			fmt.Errorf("sidecar fetch unsuccessful (kind=%s): %s", out.Kind, out.Error), "sidecar: fetch")
+	}
+	body, err := base64.StdEncoding.DecodeString(out.Body)
+	if err != nil {
+		return 0, nil, domain.WrapProviderDown(err, "sidecar: decode fetch body b64")
+	}
+	return out.Status, body, nil
 }
 
 func (c *Client) resolve(ctx context.Context, req resolveRequest) (*domain.Stream, error) {

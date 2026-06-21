@@ -2,6 +2,7 @@ package sidecar
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -136,6 +137,72 @@ func TestResolveEmbed_MalformedJSON_ProviderDown(t *testing.T) {
 	_, err := c.ResolveEmbed(context.Background(), "gogoanime", "e", domain.CategorySub, "")
 	if !errors.Is(err, domain.ErrProviderDown) {
 		t.Fatalf("err = %v; want ErrProviderDown", err)
+	}
+}
+
+func TestFetch_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/fetch" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		body := base64.StdEncoding.EncodeToString([]byte(`{"ok":1}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true, "status": 200, "content_type": "application/json", "body": body,
+		})
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 5*time.Second)
+	status, body, err := c.Fetch(context.Background(), "nineanime", "https://9anime.me.uk/x")
+	if err != nil {
+		t.Fatalf("Fetch err: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d", status)
+	}
+	if string(body) != `{"ok":1}` {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestFetch_UpstreamStatusPassedThrough(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := base64.StdEncoding.EncodeToString([]byte("not found"))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true, "status": 404, "content_type": "text/html", "body": body,
+		})
+	}))
+	defer srv.Close()
+	c := New(srv.URL, 5*time.Second)
+	status, _, err := c.Fetch(context.Background(), "nineanime", "https://9anime.me.uk/missing")
+	if err != nil {
+		t.Fatalf("err: %v", err) // upstream 404 is NOT a sidecar error; Go handles status
+	}
+	if status != 404 {
+		t.Fatalf("status = %d", status)
+	}
+}
+
+func TestFetch_ChallengeIsProviderDown(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false, "kind": "challenge", "error": "blocked",
+		})
+	}))
+	defer srv.Close()
+	c := New(srv.URL, 5*time.Second)
+	_, _, err := c.Fetch(context.Background(), "nineanime", "https://9anime.me.uk/x")
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Fatalf("want ErrProviderDown, got %v", err)
+	}
+}
+
+func TestFetch_TransportErrorIsProviderDown(t *testing.T) {
+	c := New("http://127.0.0.1:0", 1*time.Second) // unroutable
+	_, _, err := c.Fetch(context.Background(), "nineanime", "https://9anime.me.uk/x")
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Fatalf("want ErrProviderDown, got %v", err)
 	}
 }
 
