@@ -11,7 +11,17 @@ from prometheus_client import Counter, Gauge, Histogram
 RESOLVE_TOTAL = Counter(
     "stealth_resolve_total",
     "Resolve attempts by provider and result.",
-    ["provider", "result"],  # result: ok|not_found|challenge|error
+    ["provider", "result"],  # result: ok|not_found|challenge|error|exhausted
+)
+
+ACTIVE_SESSIONS = Gauge(
+    "stealth_active_sessions",
+    "Retained browser stream sessions (each pins one pool profile).",
+)
+
+POOL_EXHAUSTED_TOTAL = Counter(
+    "stealth_pool_exhausted_total",
+    "Resolves rejected because every browser profile was leased (pool full).",
 )
 
 RESOLVE_DURATION = Histogram(

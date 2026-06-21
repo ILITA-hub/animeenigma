@@ -70,7 +70,13 @@ class ProfileManager:
         return profile.uses >= self.max_uses
 
     def reset_handles(self, profile: Profile) -> None:
+        # Clear live handles only. Do NOT zero `uses` here: this runs on every
+        # browser teardown (rotate/crash), and zeroing the success counter on
+        # each teardown is why needs_retire never fired. Use reset_uses() to
+        # actually retire a profile.
         profile.browser = None
         profile.context = None
         profile.user_agent = ""
+
+    def reset_uses(self, profile: Profile) -> None:
         profile.uses = 0

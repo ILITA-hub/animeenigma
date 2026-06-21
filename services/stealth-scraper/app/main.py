@@ -22,7 +22,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
 from .config import Config
-from .engine import CamoufoxEngine, SessionGone
+from .engine import CamoufoxEngine, FetchTimeout, PoolExhausted, SessionGone
 from .recipes import ChallengeError, NotFoundError, RecipeError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -91,6 +91,11 @@ async def resolve(req: ResolveRequest) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": str(exc), "kind": "not_found"}, status_code=404
         )
+    except PoolExhausted as exc:
+        # Pool saturated — 503 (retryable) so the Go orchestrator fails over.
+        return JSONResponse(
+            {"success": False, "error": str(exc), "kind": "exhausted"}, status_code=503
+        )
     except ChallengeError as exc:
         # All exits challenged — surface as 502 so the Go side fails over.
         return JSONResponse(
@@ -110,7 +115,7 @@ async def resolve(req: ResolveRequest) -> JSONResponse:
 @app.get("/hls")
 async def hls(
     sid: str = Query(..., min_length=8, max_length=64),
-    url: str = Query(..., max_length=4096),
+    url: str = Query(..., max_length=8192),  # signed CDN segment URLs can be long
 ) -> Response:
     """Mandatory stream proxy: fetch the playlist/segment through the resolving
     session's clearance-bearing browser context (same exit IP + cookies + TLS).
@@ -120,6 +125,10 @@ async def hls(
         out = await engine.proxy_fetch(sid, url)
     except SessionGone as exc:
         return Response(str(exc), status_code=410, media_type="text/plain")
+    except FetchTimeout as exc:
+        # Hung upstream fetch; the session was torn down. 504 so the client/Go
+        # side can re-resolve rather than retry a dead session.
+        return Response(str(exc), status_code=504, media_type="text/plain")
     except RecipeError as exc:
         return Response(str(exc), status_code=400, media_type="text/plain")
     except Exception as exc:  # noqa: BLE001

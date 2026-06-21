@@ -84,6 +84,19 @@ class Config:
     # How long a resolved stream session (cookies + master url) is advertised as
     # fresh. cf_clearance typically lives ~30 min; keep this comfortably under it.
     session_ttl_seconds: int = 600
+    # Hard timeout for a single in-page /hls fetch (playlist/segment). Unlike
+    # resolve(), this path was unbounded — a hung CDN fetch pinned a browser slot
+    # until the TTL. On timeout the session is torn down and the slot reclaimed.
+    fetch_timeout_ms: int = 20_000
+    # Max in-page fetch body size (bytes). The body is base64'd into memory, so an
+    # oversized response is a memory-exhaustion DoS (~3x: blob + b64 + decode).
+    max_body_bytes: int = 64 * 1024 * 1024
+    # A resolved-but-never-fetched session (player resolved then abandoned) is
+    # reaped after this short grace instead of holding a profile for the full TTL.
+    unactivated_grace_seconds: int = 45
+    # Background reaper cadence: frees expired/abandoned sessions and retires
+    # over-used profiles without waiting for the next request.
+    reaper_interval_seconds: float = 30.0
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -110,4 +123,8 @@ class Config:
             capture_attempts=_int(g("STEALTH_CAPTURE_ATTEMPTS"), 40),
             capture_delay=float(g("STEALTH_CAPTURE_DELAY") or 0.5),
             session_ttl_seconds=_int(g("STEALTH_SESSION_TTL_SECONDS"), 600),
+            fetch_timeout_ms=_int(g("STEALTH_FETCH_TIMEOUT_MS"), 20_000),
+            max_body_bytes=_int(g("STEALTH_MAX_BODY_BYTES"), 64 * 1024 * 1024),
+            unactivated_grace_seconds=_int(g("STEALTH_UNACTIVATED_GRACE_SECONDS"), 45),
+            reaper_interval_seconds=float(_int(g("STEALTH_REAPER_INTERVAL_SECONDS"), 30)),
         )
