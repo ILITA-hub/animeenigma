@@ -21,7 +21,7 @@ import base64
 import os
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 # Fetch a URL inside the page and return "status|content-type|base64body".
@@ -38,7 +38,7 @@ _IN_PAGE_FETCH_JS = """async (url) => {
     fr.onerror = () => reject(new Error('filereader'));
     fr.readAsDataURL(blob);
   });
-  return r.status + '|' + ct + '|' + b64;
+  return r.status + '|' + ct + '|' + (r.url || '') + '|' + b64;
 }"""
 
 from . import metrics
@@ -74,6 +74,9 @@ class Session:
     # is that fetch context; it is the whole reason the session is retained.
     page: Any = None
     player_url: str = ""
+    # Per-session cache of host -> SSRF-guard verdict so active playback does
+    # not re-resolve DNS for every segment (see host_allowed_for_session).
+    host_acl_cache: dict = field(default_factory=dict)
 
 
 class _CamoufoxHandle:
@@ -110,6 +113,9 @@ class CamoufoxEngine:
         self._sessions: dict[str, Session] = {}            # session id -> Session
         self._recipes: dict[str, Recipe] = {"gogoanime": GogoanimeRecipe()}
         self._log: Any = None
+        # Async DNS resolver (host -> list[ip str]); injectable in tests so the
+        # SSRF guard is exercised without real network resolution.
+        self._resolve_host = _default_resolve
 
     def set_logger(self, log: Any) -> None:
         self._log = log
@@ -410,10 +416,20 @@ class CamoufoxEngine:
         session = self._sessions.get(sid)
         if session is None:
             raise SessionGone(sid)
-        if not host_allowed_for_session(url, session):
+        if not await host_allowed_for_session(url, session, self._resolve_host):
             raise RecipeError(f"proxy host not allowed for session: {host_of(url)}")
 
-        status, ctype, body = await self._in_page_fetch(session, url)
+        status, ctype, final_url, body = await self._in_page_fetch(session, url)
+
+        # The in-page fetch follows redirects; a trusted CDN could 30x toward an
+        # internal target. Re-validate the post-redirect URL before returning its
+        # body (closes the redirect bypass of the SSRF guard).
+        if (
+            final_url
+            and final_url != url
+            and not await host_allowed_for_session(final_url, session, self._resolve_host)
+        ):
+            raise RecipeError(f"proxy redirect target not allowed: {host_of(final_url)}")
 
         # Bump TTL on activity (sliding window) so an actively-watched stream
         # isn't evicted mid-playback.
@@ -433,7 +449,7 @@ class CamoufoxEngine:
             }
         return {"status": status, "content_type": ctype or "application/octet-stream", "body": body}
 
-    async def _in_page_fetch(self, session: Session, url: str) -> tuple[int, str, bytes]:
+    async def _in_page_fetch(self, session: Session, url: str) -> tuple[int, str, str, bytes]:
         """Run ``fetch(url)`` inside the session's live page and marshal the
         response back as bytes. Encodes via FileReader/base64 (NOT typed-array +
         btoa, which trips Camoufox's xray wrapper). Re-navigates the page to the
@@ -456,9 +472,9 @@ class CamoufoxEngine:
                 raw = await page.evaluate(_IN_PAGE_FETCH_JS, url)
             else:
                 raise
-        status_s, ctype, b64 = raw.split("|", 2)
+        status_s, ctype, final_url, b64 = raw.split("|", 3)
         body = base64.b64decode(b64) if b64 else b""
-        return int(status_s), ctype, body
+        return int(status_s), ctype, final_url, body
 
     async def aclose_session(self, sid: str) -> bool:
         session = self._sessions.pop(sid, None)
@@ -497,53 +513,86 @@ class SessionGone(Exception):
         self.sid = sid
 
 
-def _registrable(host: str) -> str:
-    """Crude eTLD+1 (last two labels). Good enough to bucket CDN subdomain
-    rotation (s2.cinewave2.site ↔ s3.cinewave2.site)."""
-    parts = host.split(".")
-    return ".".join(parts[-2:]) if len(parts) >= 2 else host
+async def host_allowed_for_session(url: str, session: Session, resolve=None) -> bool:
+    """SSRF guard for the /hls proxy. The child URLs come from playlists the
+    controlled browser fetched, so the host is dynamic/rotating (mewstream.buzz
+    master → flarestorm.buzz segments) and unpredictable — we allow any PUBLIC
+    https host but reject anything that resolves to a private / loopback /
+    link-local / reserved address, so a poisoned upstream playlist cannot point
+    the in-page fetch at an internal service.
 
-
-def host_allowed_for_session(url: str, session: Session) -> bool:
-    """SSRF guard for the /hls proxy: a session may only proxy hosts on the
-    SAME registrable domain as the CDN that was actually resolved for it (the
-    CDN host is dynamic/rotating, so a static allowlist can't anticipate it),
-    plus the known subtitle host family. The resolved CDN host is itself trusted
-    because it's what the real player loaded inside our controlled browser."""
-    h = host_of(url)
-    if not h:
-        return False
-    cdn = (session.cdn_host or "").lower()
-    if cdn and (h == cdn or _registrable(h) == _registrable(cdn)):
-        return True
-    if h.endswith("lostproject.club") or h.endswith("megaplay.buzz"):
-        return True
-    # The segment CDN rotates and DIFFERS from the master CDN host
-    # (mewstream.buzz master → flarestorm.buzz segments), and the host is
-    # unpredictable, so a registrable-domain match isn't enough. The child URLs
-    # come from playlists the controlled browser itself fetched, so they're
-    # trusted CDN URLs — allow any public https host, blocking only private /
-    # loopback / link-local targets (SSRF guard against a poisoned playlist
-    # pointing the in-page fetch at an internal service).
-    return _is_public_https_host(url, h)
-
-
-def _is_public_https_host(url: str, host: str) -> bool:
-    import ipaddress
+    Hardened (2026-06-21): https on EVERY path; DNS resolution drives the
+    private-address rejection (closing the octal/hex/decimal-IP, DNS-rebind, and
+    IPv4-mapped-IPv6 bypasses the old textual check let through). ``resolve`` is
+    an injectable async resolver (host -> list[ip str]) for tests; the verdict is
+    cached per session so active playback doesn't re-resolve each segment."""
     from urllib.parse import urlsplit
 
     if urlsplit(url).scheme != "https":
         return False
-    bare = host.split(":")[0]
-    low = bare.lower()
-    if low in ("localhost", "stealth-scraper") or low.endswith(".local"):
+    h = host_of(url)  # lowercased hostname, no port, IPv6 brackets stripped
+    if not h:
         return False
+    if h in ("localhost", "stealth-scraper") or h.endswith(".local"):
+        return False
+    # Must be a routable target shape: a dotted hostname or an IP literal — a
+    # bare single-label name (e.g. a Docker service: redis, catalog) is blocked.
+    if "." not in h and _parse_ip(h) is None:
+        return False
+
+    cache = session.host_acl_cache
+    if h in cache:
+        return cache[h]
+    ok = await _resolves_public_only(h, resolve or _default_resolve)
+    cache[h] = ok
+    return ok
+
+
+async def _resolves_public_only(host: str, resolve) -> bool:
+    """True iff host is (or every resolved address of host is) a public IP."""
+    ip = _parse_ip(host)
+    if ip is not None:
+        return _is_public_ip(ip)
     try:
-        ip = ipaddress.ip_address(bare)
-        return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved)
+        addrs = await resolve(host)
+    except Exception:  # noqa: BLE001 — resolution failure ⇒ deny
+        return False
+    parsed = [p for p in (_parse_ip(a) for a in addrs) if p is not None]
+    if not parsed:
+        return False
+    return all(_is_public_ip(p) for p in parsed)
+
+
+async def _default_resolve(host: str) -> list[str]:
+    import socket
+
+    loop = asyncio.get_running_loop()
+    infos = await loop.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    return [info[4][0] for info in infos]
+
+
+def _parse_ip(s: str):
+    import ipaddress
+
+    try:
+        return ipaddress.ip_address(s)
     except ValueError:
-        # Not a bare IP → a hostname; a public TLD with a dot is required.
-        return "." in bare
+        return None
+
+
+def _is_public_ip(ip) -> bool:
+    # Unwrap IPv4-mapped IPv6 (::ffff:127.0.0.1) so the v4 classification applies.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
 
 
 async def _safe_close_page(page: Any) -> None:
