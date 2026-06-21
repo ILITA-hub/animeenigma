@@ -8,9 +8,15 @@ services:
     container_name: animeenigma-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: animeenigma
+      POSTGRES_USER: ${DB_USER:-postgres}
+      # Single source of truth for the DB password: every service reads the
+      # same ${DB_PASSWORD} var (default keeps the historical `postgres` so
+      # `make dev` and an un-tuned box are unchanged). To harden: set a strong
+      # DB_PASSWORD in docker/.env, then rotate the live role — see
+      # docs/runbooks/secret-rotation.md (changing this var alone does NOT
+      # re-key an already-initialized postgres_data volume).
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-animeenigma}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -42,8 +48,12 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      # Default keeps minioadmin/minioadmin (loopback-bound only). To harden:
+      # set strong MINIO_ROOT_USER/MINIO_ROOT_PASSWORD in docker/.env and
+      # restart minio + all consumers (MinIO honors root creds from env on
+      # restart). See docs/runbooks/secret-rotation.md.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
@@ -76,8 +86,8 @@ services:
     container_name: animeenigma-meilisearch
     restart: unless-stopped
     environment:
-      MEILI_MASTER_KEY: masterkey
-      MEILI_ENV: development
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-masterkey}
+      MEILI_ENV: ${MEILI_ENV:-development}
     ports:
       - "127.0.0.1:7700:7700"
     volumes:
@@ -600,9 +610,9 @@ services:
       SERVER_PORT: 8080
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       # Access-token lifetime. 1h: sessions are non-rotating + revoke-only, so a
@@ -637,9 +647,9 @@ services:
       SERVER_PORT: 8081
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       REDIS_HOST: redis
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
@@ -684,8 +694,8 @@ services:
       SERVER_PORT: 8082
       REDIS_HOST: redis
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: animeenigma
       MINIO_USE_SSL: "false"
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
@@ -714,9 +724,9 @@ services:
       SERVER_PORT: 8083
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_ALERTS_BOT_TOKEN:-}
@@ -785,9 +795,9 @@ services:
       SERVER_PORT: 8085
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       REDIS_HOST: redis
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
       CATALOG_SERVICE_URL: http://catalog:8081
@@ -821,9 +831,9 @@ services:
       SERVER_PORT: 8086
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       TRACING_ENABLED: "true"
     ports:
@@ -853,9 +863,9 @@ services:
       SERVER_PORT: 8090
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       REDIS_HOST: redis
       # Phase 2 detector reads catalog's /internal/anime/{id}/episodes.
@@ -902,9 +912,9 @@ services:
       SERVER_PORT: 8094
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       REDIS_HOST: redis
       # S6 combo-pin Shikimori /similar fallback.
@@ -936,9 +946,9 @@ services:
       SERVER_PORT: 8095
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       REDIS_HOST: redis
       CATALOG_URL: http://catalog:8081
@@ -1014,17 +1024,17 @@ services:
       SERVER_PORT: 8093
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       REDIS_HOST: redis
       GACHA_ENABLED: "true"
       GACHA_STARTER_BONUS: "300"
       TRACING_ENABLED: "true"
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_USE_SSL: "false"
       GACHA_MINIO_BUCKET: gacha-cards
     ports:
@@ -1054,9 +1064,9 @@ services:
       SERVER_PORT: 8092
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: animeenigma
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
       ANALYTICS_IP_SALT: ${ANALYTICS_IP_SALT:-change-me-in-production}
       ANALYTICS_RETENTION_DAYS: "90"
       ANALYTICS_PURGE_CRON: "17 3 * * *"
@@ -1103,8 +1113,8 @@ services:
       SERVER_PORT: 8089
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${LIBRARY_DB_NAME:-library}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       # Phase 04 (raw-jp / v0.2) — MinIO writer + ffmpeg encoder.

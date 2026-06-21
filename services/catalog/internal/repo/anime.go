@@ -61,8 +61,33 @@ func (r *AnimeRepository) GetByMALID(ctx context.Context, malID string) (*domain
 	return &anime, nil
 }
 
+// animeMetadataColumns are the Shikimori-sourced metadata columns a refresh
+// owns. Update force-writes exactly these (Select includes zero values, so a
+// finished anime's next_episode_at is correctly cleared) and never touches the
+// lazily-maintained or admin-controlled columns: the provider-availability
+// flags (has_dub/has_kodik/has_animelib/has_raw/has_english), the local
+// has_video flag, the admin pin (sort_priority), hidden, franchise /
+// franchise_checked, or the externally-resolved IDs (mal_id, ani_list_id,
+// im_db_id, tmdb_id). Those are maintained by their dedicated Set*/Update*
+// methods. Previously Update used Save, a full-row overwrite that silently
+// zeroed every one of those columns on each refresh cycle, because the refresh
+// paths hand Update a freshly mapped anime with all of them at zero values.
+var animeMetadataColumns = []string{
+	"name", "name_en", "name_ru", "name_jp", "description",
+	"year", "season", "status", "kind", "rating", "material_source",
+	"episodes_count", "episodes_aired", "episode_duration",
+	"score", "poster_url", "next_episode_at", "aired_on",
+}
+
 func (r *AnimeRepository) Update(ctx context.Context, anime *domain.Anime) error {
-	result := r.db.WithContext(ctx).Save(anime)
+	if anime.ID == "" {
+		return liberrors.NotFound("anime")
+	}
+	result := r.db.WithContext(ctx).
+		Model(&domain.Anime{}).
+		Where("id = ?", anime.ID).
+		Select(animeMetadataColumns).
+		Updates(anime)
 	if result.Error != nil {
 		return fmt.Errorf("update anime: %w", result.Error)
 	}

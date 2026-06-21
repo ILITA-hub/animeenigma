@@ -19,12 +19,12 @@ spec:
             - containerPort: 80
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 80
             initialDelaySeconds: 5
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 80
             initialDelaySeconds: 3
           resources:
@@ -34,9 +34,26 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
+          # NOTE: this image is stock Alpine nginx — the master process starts
+          # as root to bind port 80 and then drops worker processes to the
+          # `nginx` user (the standard nginx model). Forcing runAsNonRoot /
+          # runAsUser:65534 made the master unable to bind :80 and write its
+          # pid file, guaranteeing CrashLoopBackOff. We harden what we can
+          # without an unprivileged-nginx image rebuild: no privilege
+          # escalation and a read-only-friendly cap set. (Switching to
+          # nginxinc/nginx-unprivileged on :8080 — also updating nginx.conf,
+          # the Service targetPort and the compose port map — is the follow-up
+          # if a fully non-root pod is required.)
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+                - CHOWN
+                - SETUID
+                - SETGID
 ---
 apiVersion: v1
 kind: Service
