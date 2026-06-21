@@ -15,14 +15,22 @@ type probeRunner interface {
 // ProbeHandler triggers a single on-demand probe run. Registered ONLY at
 // /internal/probe/run (the gateway never proxies /internal/*). The scheduler
 // POSTs here on its daily cron; the cron job or an operator can also trigger
-// it manually. A 5-minute timeout caps the full provider sweep.
+// it manually. An 8-minute timeout caps the full provider sweep.
 type ProbeHandler struct{ runner probeRunner }
 
 func NewProbeHandler(r probeRunner) *ProbeHandler { return &ProbeHandler{runner: r} }
 
 // ServeHTTP runs one probe cycle (body ignored). 204 on success; 500 on error.
-func (h *ProbeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+//
+// The run is detached from the REQUEST context on purpose: the full sweep takes
+// several minutes (ae + kodik-noads add live upstream resolves), and the daily
+// scheduler trigger — or a manual curl — can disconnect before it finishes. A
+// cancelled request context would abort the final ClickHouse write mid-run,
+// leaving the Prometheus gauges updated but no probe_runs rows persisted. A
+// fresh background context with generous headroom guarantees the verdict rows
+// are written regardless of client timeout.
+func (h *ProbeHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	if err := h.runner.RunOnce(ctx); err != nil {
 		http.Error(w, "probe run failed", http.StatusInternalServerError)
