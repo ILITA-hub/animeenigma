@@ -124,6 +124,14 @@ var iframeSrcRegex = regexp.MustCompile(`(?i)<iframe[^>]+src=["']([^"']+)["']`)
 // absolute URL from the iframe host.
 var videoSrcRegex = regexp.MustCompile(`(?i)<source[^>]+src=["'](videos/[^"']+\.mp4)["']`)
 
+// BrowserResolveFunc resolves a megaplay embed/wrapper URL to a playable Stream
+// via the Camoufox sidecar. BrowserFetchFunc routes one discovery GET through the
+// sidecar's warm browser session, returning (upstreamStatus, body). main.go binds
+// these to the sidecar.Client (provider + baseURL pre-bound) when this provider's
+// DB engine column is "browser"; the pure-Go path leaves them nil.
+type BrowserResolveFunc func(ctx context.Context, embedURL string, category domain.Category) (*domain.Stream, error)
+type BrowserFetchFunc func(ctx context.Context, provider, url string) (int, []byte, error)
+
 // Deps is the constructor input for New(). Per WR-04, the Embeds field
 // from the allanime template is deliberately omitted — nineanime does
 // MP4 extraction inline, not via the embed registry. Including a dead
@@ -140,6 +148,14 @@ type Deps struct {
 	// Optional: when nil, 1anime.site/megaplay.buzz iframes fail at the host
 	// gate exactly as before (legacy my.1anime.site MP4 path is unaffected).
 	Megaplay domain.EmbedExtractor
+
+	// Browser routing — set together when this provider's DB engine column is
+	// "browser". UseBrowser is the live per-call gate; BrowserFetch carries the
+	// challenge-gated discovery GETs; BrowserResolve resolves megaplay players.
+	// All nil ⇒ legacy pure-Go path (engine=http) unchanged.
+	UseBrowser     func() bool
+	BrowserResolve BrowserResolveFunc
+	BrowserFetch   BrowserFetchFunc
 }
 
 // Provider implements domain.Provider for the 9anime.me.uk upstream.
@@ -149,6 +165,10 @@ type Provider struct {
 	cache    *cacheLayer
 	log      *logger.Logger
 	megaplay domain.EmbedExtractor
+
+	useBrowser     func() bool
+	browserResolve BrowserResolveFunc
+	browserFetch   BrowserFetchFunc
 
 	stagesMu sync.Mutex
 	stages   map[string]domain.StageHealth
@@ -171,12 +191,15 @@ func New(d Deps) (*Provider, error) {
 		base = defaultBaseURL
 	}
 	p := &Provider{
-		baseURL:  strings.TrimRight(base, "/"),
-		http:     d.HTTP,
-		cache:    newCacheLayer(d.Cache),
-		log:      d.Log,
-		megaplay: d.Megaplay,
-		stages:   make(map[string]domain.StageHealth, len(stageNames)),
+		baseURL:        strings.TrimRight(base, "/"),
+		http:           d.HTTP,
+		cache:          newCacheLayer(d.Cache),
+		log:            d.Log,
+		megaplay:       d.Megaplay,
+		useBrowser:     d.UseBrowser,
+		browserResolve: d.BrowserResolve,
+		browserFetch:   d.BrowserFetch,
+		stages:         make(map[string]domain.StageHealth, len(stageNames)),
 	}
 	// Optimistic seed: stages start Up=true so the orchestrator's nil-cache
 	// backcompat path treats us as healthy before the first probe tick.
@@ -561,6 +584,10 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 	case p.isAllowedIframeHost(iframeHost):
 		// Legacy my.1anime.site MP4 host — fall through to steps 3–6 below.
 	case p.megaplay != nil && p.megaplay.Matches(iframeURL):
+		if p.browserEnabled() {
+			// JS player (megaplay/vidwish) — resolve + restream via Camoufox.
+			return p.streamViaBrowser(ctx, iframeURL, category)
+		}
 		return p.streamViaMegaplay(ctx, providerID, episodeURL, serverID, iframeURL)
 	case isYouTubeStubHost(iframeHost):
 		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorYouTubeStub).Inc()
@@ -712,10 +739,54 @@ func cachedToStream(c *cachedStream) *domain.Stream {
 	}
 }
 
+// browserEnabled reports whether this call should route through the Camoufox
+// sidecar (DB engine=browser + all three callbacks wired). Requires the full
+// trio so a half-wired Deps never silently runs a mixed path.
+func (p *Provider) browserEnabled() bool {
+	return p.useBrowser != nil && p.browserResolve != nil &&
+		p.browserFetch != nil && p.useBrowser()
+}
+
+// streamViaBrowser resolves a megaplay embed URL through the sidecar, mirroring
+// the in-process GetStream contract (stage health + non-empty guard). Used in
+// place of streamViaMegaplay when engine=browser.
+func (p *Provider) streamViaBrowser(ctx context.Context, embedURL string, category domain.Category) (*domain.Stream, error) {
+	stream, err := p.browserResolve(ctx, embedURL, category)
+	if err != nil {
+		p.markStage(health.StageStream, errors.New("nineanime: browser resolve failed"))
+		return nil, err
+	}
+	if stream == nil || len(stream.Sources) == 0 {
+		werr := domain.WrapExtractFailed(errors.New("empty stream"), "nineanime: browser empty stream")
+		p.markStage(health.StageStream, werr)
+		return nil, werr
+	}
+	p.markStage(health.StageStream, nil)
+	return stream, nil
+}
+
 // httpGetBody fetches one URL via BaseHTTPClient and returns the body
 // bytes (capped). Maps transport / 5xx / 4xx failures to the canonical
-// domain errors.
+// domain errors. When engine=browser, the discovery GET is routed through the
+// Camoufox sidecar instead (same status→error mapping).
 func (p *Provider) httpGetBody(ctx context.Context, urlStr string, cap int64) ([]byte, error) {
+	if p.browserEnabled() {
+		status, body, err := p.browserFetch(ctx, providerName, urlStr)
+		if err != nil {
+			return nil, err // already wrapped (ProviderDown/NotFound) by the client
+		}
+		if status >= 500 {
+			return nil, domain.WrapProviderDown(
+				fmt.Errorf("upstream %d: %s", status, truncate(string(body), 200)),
+				"nineanime: browser upstream 5xx")
+		}
+		if status >= 400 {
+			return nil, domain.WrapExtractFailed(
+				fmt.Errorf("http %d: %s", status, truncate(string(body), 200)),
+				"nineanime: browser upstream 4xx")
+		}
+		return body, nil
+	}
 	resp, err := p.http.Get(ctx, urlStr)
 	if err != nil {
 		return nil, domain.WrapProviderDown(err, "nineanime: http get")

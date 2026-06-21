@@ -87,6 +87,30 @@ func readFixture(t *testing.T, name string) []byte {
 	return b
 }
 
+// newTestDeps builds a valid Deps for direct New() construction — a real
+// BaseHTTPClient (compressed retry backoff so tests don't sleep), an in-memory
+// cache, the default logger, and a BaseURL. Browser-routing tests mutate the
+// returned Deps (UseBrowser/BrowserFetch/BrowserResolve) before calling New.
+// baseURL may be empty (the provider then defaults to defaultBaseURL).
+func newTestDeps(t *testing.T, baseURL string) Deps {
+	t.Helper()
+	log := logger.Default()
+	base := domain.NewBaseHTTPClient(log,
+		domain.WithRetryWaitMin(1*time.Millisecond),
+		domain.WithRetryWaitMax(5*time.Millisecond),
+		domain.WithMaxRetries(0),
+	)
+	if baseURL == "" {
+		baseURL = "https://9anime.me.uk"
+	}
+	return Deps{
+		BaseURL: baseURL,
+		HTTP:    base,
+		Cache:   cache.Cache(newInMemoryCache()),
+		Log:     log,
+	}
+}
+
 // newTestProvider constructs a Provider talking to httpSrv. Compresses
 // retry backoff so tests don't sleep.
 func newTestProvider(t *testing.T, httpSrv *httptest.Server) *Provider {
@@ -699,6 +723,74 @@ func TestIsAllowedIframeHost(t *testing.T) {
 }
 
 // --- markStage / HealthCheck ---------------------------------------------
+
+// --- Browser routing (Camoufox sidecar, engine=browser) ------------------
+
+// TestBrowserEnabled_RoutesHTTPGetBodyThroughFetch — with all three browser
+// callbacks wired and UseBrowser()==true, FindID's WP-REST discovery GET must
+// route through BrowserFetch (the sidecar's warm browser session), NOT the
+// pure-Go BaseHTTPClient.
+func TestBrowserEnabled_RoutesHTTPGetBodyThroughFetch(t *testing.T) {
+	var fetched string
+	deps := newTestDeps(t, "https://9anime.me.uk")
+	deps.UseBrowser = func() bool { return true }
+	deps.BrowserResolve = func(ctx context.Context, embedURL string, cat domain.Category) (*domain.Stream, error) {
+		return nil, errors.New("unused")
+	}
+	deps.BrowserFetch = func(ctx context.Context, provider, url string) (int, []byte, error) {
+		fetched = url
+		return 200, []byte(`[]`), nil // empty WP-REST search result
+	}
+	p, err := New(deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = p.FindID(context.Background(), domain.AnimeRef{Title: "Frieren"})
+	if fetched == "" || !strings.Contains(fetched, "/wp-json/wp/v2/search") {
+		t.Fatalf("expected WP-REST search via BrowserFetch, got %q", fetched)
+	}
+}
+
+// TestBrowserEnabled_MegaplayIframeDelegatesToBrowserResolve — with browser
+// enabled, a megaplay iframe in the episode page (fetched via BrowserFetch)
+// must be resolved through BrowserResolve, NOT the pure-Go megaplay extractor.
+// The fake megaplay's Extract must NEVER be called (browser path wins).
+func TestBrowserEnabled_MegaplayIframeDelegatesToBrowserResolve(t *testing.T) {
+	var resolved string
+	want := &domain.Stream{Sources: []domain.Source{{URL: "http://stealth/hls?sid=1", Type: "hls"}}}
+	epHTML := `<iframe src="https://megaplay.buzz/stream/s-2/123/sub"></iframe>`
+	deps := newTestDeps(t, "https://9anime.me.uk")
+	// Existing fakeMegaplay matches any URL containing "megaplay.buzz"; its
+	// Extract returns the (nil) canned stream and records gotURL — if the
+	// browser path failed to win, gotURL would be set and we'd catch it.
+	mp := &fakeMegaplay{}
+	deps.Megaplay = mp
+	deps.UseBrowser = func() bool { return true }
+	deps.BrowserFetch = func(ctx context.Context, provider, url string) (int, []byte, error) {
+		return 200, []byte(epHTML), nil
+	}
+	deps.BrowserResolve = func(ctx context.Context, embedURL string, cat domain.Category) (*domain.Stream, error) {
+		resolved = embedURL
+		return want, nil
+	}
+	p, err := New(deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := p.GetStream(context.Background(), "id", "https://9anime.me.uk/ep-1/", "", domain.CategorySub)
+	if err != nil {
+		t.Fatalf("GetStream err: %v", err)
+	}
+	if resolved != "https://megaplay.buzz/stream/s-2/123/sub" {
+		t.Fatalf("BrowserResolve embed = %q", resolved)
+	}
+	if got != want {
+		t.Fatalf("stream mismatch")
+	}
+	if mp.gotURL != "" {
+		t.Fatalf("pure-Go megaplay Extract must NOT be called when browser is on; gotURL=%q", mp.gotURL)
+	}
+}
 
 // TestMarkStage_Success — successful stage call sets Up=true.
 func TestMarkStage_Success(t *testing.T) {
