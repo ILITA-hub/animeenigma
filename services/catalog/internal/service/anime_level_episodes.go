@@ -8,7 +8,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
-// Anime-level (team-agnostic) players: aePlayer persists translation_id='' for
+// Anime-level (team-agnostic) players: aePlayer persists translation_id=” for
 // these, so "latest available episode" is resolved at the anime level — no
 // translation/team id. See spec 2026-06-18-aeplayer-notification-coverage.
 func isAnimeLevelPlayer(player string) bool {
@@ -27,7 +27,7 @@ type animeFinder interface {
 	GetByShikimoriID(ctx context.Context, shikimoriID string) (*domain.Anime, error)
 }
 type scraperEpisodeLister interface {
-	GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error)
+	GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error)
 }
 type rawEpisodeLister interface {
 	GetEpisodes(ctx context.Context, animeID string) (*EpisodesResponse, error)
@@ -71,7 +71,7 @@ func (r *animeLevelResolver) Latest(ctx context.Context, shikimoriID, player, wa
 // the scraper tagged has_dub (none ⇒ NotFound, so the detector skips silently
 // rather than claiming the sub count for dub).
 func (r *animeLevelResolver) latestEnglish(ctx context.Context, animeID, watchType string) (int, string, error) {
-	status, body, err := r.scraper.GetScraperEpisodes(ctx, animeID, "")
+	status, body, err := r.scraper.GetScraperEpisodes(ctx, animeID, "", false)
 	if err != nil {
 		return 0, "", apperrors.Wrap(err, apperrors.CodeUnavailable, "scraper episodes lookup failed")
 	}

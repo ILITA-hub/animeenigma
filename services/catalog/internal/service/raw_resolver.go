@@ -44,8 +44,8 @@ const (
 //   - error wrapping into libs/errors.AppError so the handler maps to 503
 //     rather than 500 on upstream/transport failures.
 type RawResolver struct {
-	client    *allanime.Client
-	library   *library.Client // optional — when nil, the library-first
+	client  *allanime.Client
+	library *library.Client // optional — when nil, the library-first
 	// branch is skipped entirely (defensive for environments without
 	// LIBRARY_API_URL). Phase 06 (workstream raw-jp / v0.2).
 	animeRepo *repo.AnimeRepository

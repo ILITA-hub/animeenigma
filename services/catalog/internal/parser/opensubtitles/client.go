@@ -164,11 +164,11 @@ func (c *Client) Search(ctx context.Context, p SearchParams) ([]SubtitleEntry, e
 			Type       string `json:"type"`
 			ID         string `json:"id"`
 			Attributes struct {
-				Language       string `json:"language"`
-				Release        string `json:"release"`
-				DownloadCount  int    `json:"download_count"`
-				FileExtension  string `json:"file_extension"`
-				Files          []struct {
+				Language      string `json:"language"`
+				Release       string `json:"release"`
+				DownloadCount int    `json:"download_count"`
+				FileExtension string `json:"file_extension"`
+				Files         []struct {
 					FileID   int    `json:"file_id"`
 					FileName string `json:"file_name"`
 				} `json:"files"`

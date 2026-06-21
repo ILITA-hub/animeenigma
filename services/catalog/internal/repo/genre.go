@@ -70,10 +70,10 @@ func (r *GenreRepository) GetForAnimes(ctx context.Context, animeIDs []string) (
 	}
 
 	var rows []struct {
-		AnimeID string       `gorm:"column:anime_id"`
-		ID      string       `gorm:"column:id"`
-		Name    string       `gorm:"column:name"`
-		NameRU  string       `gorm:"column:name_ru"`
+		AnimeID string `gorm:"column:anime_id"`
+		ID      string `gorm:"column:id"`
+		Name    string `gorm:"column:name"`
+		NameRU  string `gorm:"column:name_ru"`
 	}
 	err := r.db.WithContext(ctx).
 		Table("anime_genres").

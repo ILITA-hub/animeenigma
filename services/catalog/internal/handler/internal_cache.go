@@ -64,13 +64,13 @@ var shikimoriIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 // Behavior:
 //   - Validate the path param against shikimoriIDPattern. Bad input → 400.
 //   - Look up the anime row by shikimori_id.
-//     - Row missing → 200 idempotent. The encoder may have finished
-//       before the catalog row was created.
-//     - Repo error → 500.
+//   - Row missing → 200 idempotent. The encoder may have finished
+//     before the catalog row was created.
+//   - Repo error → 500.
 //   - DELETE the three raw:* families keyed by the resolved animeID:
-//       raw:source-decision:{animeID}:*   (SCAN + DEL via Invalidate)
-//       raw:stream:{animeID}:*            (SCAN + DEL via Invalidate)
-//       raw:episodes:{animeID}            (exact key, Delete)
+//     raw:source-decision:{animeID}:*   (SCAN + DEL via Invalidate)
+//     raw:stream:{animeID}:*            (SCAN + DEL via Invalidate)
+//     raw:episodes:{animeID}            (exact key, Delete)
 //   - libs/cache.Invalidate does not return a count today; the
 //     response body therefore omits the count. (Decision documented
 //     in 06-PLAN.md Task 3.)

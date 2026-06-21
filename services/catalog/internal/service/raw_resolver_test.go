@@ -163,7 +163,7 @@ func newAllAnimeMockClient(t *testing.T, srv *httptest.Server) *allanime.Client 
 	})
 	u, _ := url.Parse(srv.URL)
 	allanime.SetHTTPClientForTest(c, &http.Client{
-		Timeout: 2 * time.Second,
+		Timeout:   2 * time.Second,
 		Transport: &rewriteTransport{to: u.Host, base: http.DefaultTransport},
 	})
 	return c

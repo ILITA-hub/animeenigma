@@ -66,7 +66,7 @@ type fakeScraperForwarder struct {
 	replyErr    error
 }
 
-func (f *fakeScraperForwarder) GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string, exclusive bool) (int, []byte, error) {
 	f.gotEpisodesMALID = malID
 	f.gotEpisodesTitle = title
 	f.gotEpisodesAlt = altTitles
@@ -74,7 +74,7 @@ func (f *fakeScraperForwarder) GetEpisodes(ctx context.Context, malID int, title
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperForwarder) GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string, exclusive bool) (int, []byte, error) {
 	f.gotServersMALID = malID
 	f.gotServersTitle = title
 	f.gotServersAlt = altTitles
@@ -83,7 +83,7 @@ func (f *fakeScraperForwarder) GetServers(ctx context.Context, malID int, title 
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
 	f.gotStreamMALID = malID
 	f.gotStreamTitle = title
 	f.gotStreamAlt = altTitles
@@ -116,7 +116,7 @@ func TestCatalogService_GetScraperEpisodes_HappyPath(t *testing.T) {
 	}
 	ops := newScraperOps(repo, scr)
 
-	status, body, err := ops.GetScraperEpisodes(context.Background(), "11111111-1111-4111-8111-111111111111", "animepahe")
+	status, body, err := ops.GetScraperEpisodes(context.Background(), "11111111-1111-4111-8111-111111111111", "animepahe", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestCatalogService_GetScraperEpisodes_AnimeNotFound(t *testing.T) {
 	scr := &fakeScraperForwarder{}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperEpisodes(context.Background(), "00000000-0000-0000-0000-000000000000", "")
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "00000000-0000-0000-0000-000000000000", "", false)
 	if err == nil {
 		t.Fatal("expected error for unknown anime, got nil")
 	}
@@ -158,7 +158,7 @@ func TestCatalogService_GetScraperEpisodes_NoMALOrShikimoriID(t *testing.T) {
 	scr := &fakeScraperForwarder{}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperEpisodes(context.Background(), "22222222-2222-4222-8222-222222222222", "")
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "22222222-2222-4222-8222-222222222222", "", false)
 	if err == nil {
 		t.Fatal("expected error for missing mal_id, got nil")
 	}
@@ -177,7 +177,7 @@ func TestCatalogService_GetScraperEpisodes_ShikimoriIDFromShikimoriField(t *test
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperEpisodes(context.Background(), "33333333-3333-4333-8333-333333333333", "")
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "33333333-3333-4333-8333-333333333333", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestCatalogService_GetScraperEpisodes_ShikimoriIDInvalid_FallbackMALID(t *t
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperEpisodes(context.Background(), "44444444-4444-4444-8444-444444444444", "")
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "44444444-4444-4444-8444-444444444444", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestCatalogService_GetScraperServers_PassesEpisodeQuery(t *testing.T) {
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperServers(context.Background(), "55555555-5555-4555-8555-555555555555", "ep-1", "animepahe")
+	_, _, err := ops.GetScraperServers(context.Background(), "55555555-5555-4555-8555-555555555555", "ep-1", "animepahe", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestCatalogService_GetScraperStream_PassesAllQuery(t *testing.T) {
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperStream(context.Background(), "66666666-6666-4666-8666-666666666666", "ep-2", "srv-1", "sub", "animepahe")
+	_, _, err := ops.GetScraperStream(context.Background(), "66666666-6666-4666-8666-666666666666", "ep-2", "srv-1", "sub", "animepahe", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestCatalogService_GetScraperEpisodes_MalformedUUID(t *testing.T) {
 	scr := &fakeScraperForwarder{}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperEpisodes(context.Background(), "not-a-uuid", "")
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "not-a-uuid", "", false)
 	if err == nil {
 		t.Fatal("expected NotFound for malformed UUID, got nil")
 	}

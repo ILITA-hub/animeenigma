@@ -80,7 +80,7 @@ type PlayerData struct {
 	Player          string          `json:"player"`           // "Kodik" or "Animelib"
 	TranslationType TranslationType `json:"translation_type"` // {"id": 2, "label": "Озвучка"}
 	Team            Team            `json:"team"`
-	Src             string          `json:"src"`             // iframe URL for Kodik players
+	Src             string          `json:"src"`                 // iframe URL for Kodik players
 	Video           *VideoData      `json:"video,omitempty"`     // direct video for Animelib players
 	Subtitles       []SubtitleFile  `json:"subtitles,omitempty"` // external subtitle files (ASS, VTT)
 	Views           int             `json:"views"`
@@ -114,7 +114,7 @@ type VideoData struct {
 // VideoQuality represents a single quality variant
 type VideoQuality struct {
 	Quality int    `json:"quality"` // 360, 720, 1080, 2160
-	Href    string `json:"href"`   // path to mp4
+	Href    string `json:"href"`    // path to mp4
 	Bitrate int    `json:"bitrate"`
 }
 

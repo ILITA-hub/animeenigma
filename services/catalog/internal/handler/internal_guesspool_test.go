@@ -41,7 +41,7 @@ func TestInternalGuessPool_GetPool(t *testing.T) {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
 	var resp struct {
-		Success bool                   `json:"success"`
+		Success bool                     `json:"success"`
 		Data    []service.GuessPoolEntry `json:"data"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {

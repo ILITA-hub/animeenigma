@@ -13,8 +13,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
+	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
@@ -24,9 +24,9 @@ import (
 // scraperServiceAPI is the minimal interface the scraper handlers need
 // from the catalog service. *service.CatalogService satisfies it.
 type scraperServiceAPI interface {
-	GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error)
-	GetScraperServers(ctx context.Context, animeID, episodeID, prefer string) (int, []byte, error)
-	GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string) (int, []byte, error)
+	GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error)
+	GetScraperServers(ctx context.Context, animeID, episodeID, prefer string, exclusive bool) (int, []byte, error)
+	GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error)
 	GetScraperHealth(ctx context.Context) (int, []byte, error)
 }
 
@@ -60,8 +60,9 @@ func (h *ScraperEndpointsHandler) GetScraperEpisodes(w http.ResponseWriter, r *h
 		return
 	}
 	prefer := r.URL.Query().Get("prefer")
+	exclusive := r.URL.Query().Get("exclusive") == "true"
 
-	status, body, err := h.scraperSvc.GetScraperEpisodes(r.Context(), animeID, prefer)
+	status, body, err := h.scraperSvc.GetScraperEpisodes(r.Context(), animeID, prefer, exclusive)
 	if err != nil {
 		h.writeScraperError(w, err)
 		return
@@ -82,8 +83,9 @@ func (h *ScraperEndpointsHandler) GetScraperServers(w http.ResponseWriter, r *ht
 		return
 	}
 	prefer := r.URL.Query().Get("prefer")
+	exclusive := r.URL.Query().Get("exclusive") == "true"
 
-	status, body, err := h.scraperSvc.GetScraperServers(r.Context(), animeID, episodeID, prefer)
+	status, body, err := h.scraperSvc.GetScraperServers(r.Context(), animeID, episodeID, prefer, exclusive)
 	if err != nil {
 		h.writeScraperError(w, err)
 		return
@@ -114,8 +116,9 @@ func (h *ScraperEndpointsHandler) GetScraperStream(w http.ResponseWriter, r *htt
 		category = "sub"
 	}
 	prefer := r.URL.Query().Get("prefer")
+	exclusive := r.URL.Query().Get("exclusive") == "true"
 
-	status, body, err := h.scraperSvc.GetScraperStream(r.Context(), animeID, episodeID, serverID, category, prefer)
+	status, body, err := h.scraperSvc.GetScraperStream(r.Context(), animeID, episodeID, serverID, category, prefer, exclusive)
 	if err != nil {
 		h.writeScraperError(w, err)
 		return

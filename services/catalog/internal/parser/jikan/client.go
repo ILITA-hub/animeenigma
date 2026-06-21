@@ -18,10 +18,10 @@ type Client struct {
 
 // AnimeInfo contains the title and image information from MAL
 type AnimeInfo struct {
-	MalID         int        `json:"mal_id"`
-	Title         string     `json:"title"`
-	TitleEnglish  string     `json:"title_english"`
-	TitleJapanese string     `json:"title_japanese"`
+	MalID         int         `json:"mal_id"`
+	Title         string      `json:"title"`
+	TitleEnglish  string      `json:"title_english"`
+	TitleJapanese string      `json:"title_japanese"`
 	Images        AnimeImages `json:"images"`
 }
 

@@ -38,9 +38,9 @@ type animeFetcher interface {
 // gogoanime) can run their fuzzy title fallback; without it FindID
 // fails with "cannot search without a title".
 type scraperForwarder interface {
-	GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string) (int, []byte, error)
-	GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string) (int, []byte, error)
-	GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string) (int, []byte, error)
+	GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string, exclusive bool) (int, []byte, error)
+	GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string, exclusive bool) (int, []byte, error)
+	GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error)
 	GetHealth(ctx context.Context) (int, []byte, error)
 }
 
@@ -131,12 +131,12 @@ func altTitleForms(primary string, forms ...string) []string {
 // to true via SetHasEnglish. Best-effort — failures are logged but never
 // surface to the caller. Mirrors the SetHasKodik / SetHasAnimeLib lazy-
 // backfill pattern from Phase 15 (UX-31).
-func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error) {
+func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error) {
 	malID, title, altTitles, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	status, body, gErr := o.scraperClient.GetEpisodes(ctx, malID, title, altTitles, prefer)
+	status, body, gErr := o.scraperClient.GetEpisodes(ctx, malID, title, altTitles, prefer, exclusive)
 	// Best-effort backfill on confirmed success. Detect non-empty
 	// episodes by a simple substring scan — the response envelope is
 	// `{"success":true,"data":{"episodes":[...]}}` and an empty
@@ -155,21 +155,21 @@ func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer str
 }
 
 // GetScraperServers resolves animeID -> MAL ID + title and forwards.
-func (o *scraperOps) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string) (int, []byte, error) {
+func (o *scraperOps) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string, exclusive bool) (int, []byte, error) {
 	malID, title, altTitles, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetServers(ctx, malID, title, altTitles, episodeID, prefer)
+	return o.scraperClient.GetServers(ctx, malID, title, altTitles, episodeID, prefer, exclusive)
 }
 
 // GetScraperStream resolves animeID -> MAL ID + title and forwards.
-func (o *scraperOps) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string) (int, []byte, error) {
+func (o *scraperOps) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
 	malID, title, altTitles, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetStream(ctx, malID, title, altTitles, episodeID, serverID, category, prefer)
+	return o.scraperClient.GetStream(ctx, malID, title, altTitles, episodeID, serverID, category, prefer, exclusive)
 }
 
 // GetScraperHealth bypasses the animeRepo entirely — the scraper's
@@ -183,18 +183,18 @@ func (o *scraperOps) GetScraperHealth(ctx context.Context) (int, []byte, error) 
 
 // GetScraperEpisodes is the public CatalogService method the handler
 // layer calls. It delegates to the internal scraperOps unit.
-func (s *CatalogService) GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error) {
-	return s.scraperOps().GetScraperEpisodes(ctx, animeID, prefer)
+func (s *CatalogService) GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error) {
+	return s.scraperOps().GetScraperEpisodes(ctx, animeID, prefer, exclusive)
 }
 
 // GetScraperServers — see GetScraperEpisodes.
-func (s *CatalogService) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string) (int, []byte, error) {
-	return s.scraperOps().GetScraperServers(ctx, animeID, episodeID, prefer)
+func (s *CatalogService) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string, exclusive bool) (int, []byte, error) {
+	return s.scraperOps().GetScraperServers(ctx, animeID, episodeID, prefer, exclusive)
 }
 
 // GetScraperStream — see GetScraperEpisodes.
-func (s *CatalogService) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string) (int, []byte, error) {
-	return s.scraperOps().GetScraperStream(ctx, animeID, episodeID, serverID, category, prefer)
+func (s *CatalogService) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
+	return s.scraperOps().GetScraperStream(ctx, animeID, episodeID, serverID, category, prefer, exclusive)
 }
 
 // GetScraperHealth — see GetScraperEpisodes.

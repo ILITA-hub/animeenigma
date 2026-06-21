@@ -36,10 +36,10 @@ const (
 // Pattern lifted from services/catalog/internal/service/subs_aggregator.go
 // lines 109-156 (sync.WaitGroup + buffered chan + drop-on-error). Three
 // deliberate adaptations for spotlight (per 01-PATTERNS.md):
-//   1. Per-card ctx.WithTimeout instead of trusting the outer ctx.
-//   2. (nil, nil) is a silent-drop, not a log (eligibility=false contract).
-//   3. Detached snapshot write because the request ctx is about to be
-//      cancelled by the caller when Resolve returns.
+//  1. Per-card ctx.WithTimeout instead of trusting the outer ctx.
+//  2. (nil, nil) is a silent-drop, not a log (eligibility=false contract).
+//  3. Detached snapshot write because the request ctx is about to be
+//     cancelled by the caller when Resolve returns.
 type Aggregator struct {
 	cache     cache.Cache
 	log       *logger.Logger

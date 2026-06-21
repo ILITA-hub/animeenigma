@@ -326,10 +326,10 @@ type Franchise struct {
 
 // VideoResponse is the full parsed response from the GetVideo endpoint.
 type VideoResponse struct {
-	Video              VideoMeta        `json:"hentai_video"`
-	Servers            []Server         `json:"servers"`
-	Franchise          Franchise        `json:"hentai_franchise"`
-	FranchiseVideos    []FranchiseEntry `json:"hentai_franchise_hentai_videos"`
+	Video           VideoMeta        `json:"hentai_video"`
+	Servers         []Server         `json:"servers"`
+	Franchise       Franchise        `json:"hentai_franchise"`
+	FranchiseVideos []FranchiseEntry `json:"hentai_franchise_hentai_videos"`
 }
 
 // GetVideo retrieves video metadata and stream URLs for the given slug.
@@ -367,11 +367,11 @@ func (c *Client) GetVideo(slug string) (*VideoResponse, error) {
 
 	// The API returns a top-level object with hentai_video, videos_manifest, etc.
 	var envelope struct {
-		HentaiVideo  VideoMeta `json:"hentai_video"`
+		HentaiVideo    VideoMeta `json:"hentai_video"`
 		VideosManifest struct {
 			Servers []Server `json:"servers"`
 		} `json:"videos_manifest"`
-		HentaiFranchise            Franchise        `json:"hentai_franchise"`
+		HentaiFranchise             Franchise        `json:"hentai_franchise"`
 		HentaiFranchiseHentaiVideos []FranchiseEntry `json:"hentai_franchise_hentai_videos"`
 	}
 

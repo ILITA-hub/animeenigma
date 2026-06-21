@@ -66,8 +66,8 @@ type SkipTimesResultItem struct {
 		StartTime float64 `json:"startTime"`
 		EndTime   float64 `json:"endTime"`
 	} `json:"interval"`
-	SkipType      string  `json:"skipType"`      // "op" | "ed" | "mixed-op" | "mixed-ed" | "recap"
-	SkipID        string  `json:"skipId"`        // Aniskip submission UUID — unused frontend-side
+	SkipType      string  `json:"skipType"` // "op" | "ed" | "mixed-op" | "mixed-ed" | "recap"
+	SkipID        string  `json:"skipId"`   // Aniskip submission UUID — unused frontend-side
 	EpisodeLength float64 `json:"episodeLength"`
 }
 

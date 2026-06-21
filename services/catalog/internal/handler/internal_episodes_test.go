@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
+	"github.com/go-chi/chi/v5"
 )
 
 type fakeLookup struct{}

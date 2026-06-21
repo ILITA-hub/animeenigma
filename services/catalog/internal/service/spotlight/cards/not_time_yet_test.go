@@ -17,12 +17,12 @@ import (
 // fakeListByStatuses is shared across not_time_yet_test.go and
 // continue_watching_new_test.go (same package).
 type fakeListByStatuses struct {
-	items           []client.InternalListItem
-	err             error
-	calls           int32
-	capturedUserID  string
+	items            []client.InternalListItem
+	err              error
+	calls            int32
+	capturedUserID   string
 	capturedStatuses []string
-	mu              sync.Mutex
+	mu               sync.Mutex
 }
 
 func (f *fakeListByStatuses) FetchListByStatuses(_ context.Context, userID string, statuses []string) ([]client.InternalListItem, error) {

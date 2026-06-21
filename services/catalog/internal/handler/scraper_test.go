@@ -37,20 +37,20 @@ type fakeScraperService struct {
 	healthCalls int32
 }
 
-func (f *fakeScraperService) GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error) {
+func (f *fakeScraperService) GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error) {
 	f.gotAnimeID = animeID
 	f.gotPrefer = prefer
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperService) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string) (int, []byte, error) {
+func (f *fakeScraperService) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string, exclusive bool) (int, []byte, error) {
 	f.gotAnimeID = animeID
 	f.gotEpisode = episodeID
 	f.gotPrefer = prefer
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperService) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string) (int, []byte, error) {
+func (f *fakeScraperService) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
 	f.gotAnimeID = animeID
 	f.gotEpisode = episodeID
 	f.gotServer = serverID
@@ -317,7 +317,7 @@ type uuidToMalIDStub struct {
 	scraperBase string
 }
 
-func (s *uuidToMalIDStub) GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error) {
+func (s *uuidToMalIDStub) GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error) {
 	malID, ok := s.mapping[animeID]
 	if !ok {
 		return 0, nil, liberrors.NotFound("anime")
@@ -329,10 +329,10 @@ func (s *uuidToMalIDStub) GetScraperEpisodes(ctx context.Context, animeID, prefe
 	return roundTrip(ctx, u)
 }
 
-func (s *uuidToMalIDStub) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string) (int, []byte, error) {
+func (s *uuidToMalIDStub) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string, exclusive bool) (int, []byte, error) {
 	return 0, nil, errors.New("not implemented in stub")
 }
-func (s *uuidToMalIDStub) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string) (int, []byte, error) {
+func (s *uuidToMalIDStub) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
 	return 0, nil, errors.New("not implemented in stub")
 }
 func (s *uuidToMalIDStub) GetScraperHealth(ctx context.Context) (int, []byte, error) {

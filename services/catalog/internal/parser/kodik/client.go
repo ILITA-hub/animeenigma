@@ -48,22 +48,22 @@ func (c *Client) storeToken(token string) {
 
 // SearchResult represents an anime search result from Kodik
 type SearchResult struct {
-	ID            string       `json:"id"`
-	Type          string       `json:"type"`
-	Link          string       `json:"link"`
-	Title         string       `json:"title"`
-	TitleOrig     string       `json:"title_orig"`
-	OtherTitle    string       `json:"other_title,omitempty"`
-	Year          int          `json:"year"`
-	LastSeason    int          `json:"last_season,omitempty"`
-	LastEpisode   int          `json:"last_episode,omitempty"`
-	EpisodesCount int          `json:"episodes_count,omitempty"`
-	ShikimoriID   string       `json:"shikimori_id,omitempty"`
-	KinopoiskID   string       `json:"kinopoisk_id,omitempty"`
-	ImdbID        string       `json:"imdb_id,omitempty"`
-	Quality       string       `json:"quality"`
-	Translation   *Translation `json:"translation"`
-	Screenshots   []string     `json:"screenshots,omitempty"`
+	ID            string             `json:"id"`
+	Type          string             `json:"type"`
+	Link          string             `json:"link"`
+	Title         string             `json:"title"`
+	TitleOrig     string             `json:"title_orig"`
+	OtherTitle    string             `json:"other_title,omitempty"`
+	Year          int                `json:"year"`
+	LastSeason    int                `json:"last_season,omitempty"`
+	LastEpisode   int                `json:"last_episode,omitempty"`
+	EpisodesCount int                `json:"episodes_count,omitempty"`
+	ShikimoriID   string             `json:"shikimori_id,omitempty"`
+	KinopoiskID   string             `json:"kinopoisk_id,omitempty"`
+	ImdbID        string             `json:"imdb_id,omitempty"`
+	Quality       string             `json:"quality"`
+	Translation   *Translation       `json:"translation"`
+	Screenshots   []string           `json:"screenshots,omitempty"`
 	Seasons       map[string]*Season `json:"seasons,omitempty"`
 }
 
@@ -77,7 +77,7 @@ type Translation struct {
 
 // Season represents season data with episodes
 type Season struct {
-	Link     string                  `json:"link"`
+	Link     string                 `json:"link"`
 	Episodes map[string]interface{} `json:"episodes,omitempty"` // Can be string or Episode object
 }
 

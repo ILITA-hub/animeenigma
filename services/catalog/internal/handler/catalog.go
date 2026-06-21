@@ -781,7 +781,6 @@ func (h *CatalogHandler) UnpinTranslation(w http.ResponseWriter, r *http.Request
 	httputil.OK(w, map[string]string{"status": "unpinned"})
 }
 
-
 // ============================================================================
 // AnimeLib Handlers
 // ============================================================================

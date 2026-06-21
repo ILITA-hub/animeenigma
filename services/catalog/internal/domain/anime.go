@@ -8,46 +8,46 @@ import (
 
 // Anime represents an anime in the catalog
 type Anime struct {
-	ID              string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Name            string         `gorm:"size:500;index" json:"name"`
-	NameEN          string         `gorm:"size:500" json:"name_en,omitempty"`
-	NameRU          string         `gorm:"size:500" json:"name_ru,omitempty"`
-	NameJP          string         `gorm:"size:500" json:"name_jp,omitempty"`
-	Description     string         `gorm:"type:text" json:"description,omitempty"`
-	Year            int            `json:"year,omitempty"`
-	Season          string         `gorm:"size:20" json:"season,omitempty"`
-	Status          AnimeStatus    `gorm:"size:20;default:'released'" json:"status"`
+	ID          string      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Name        string      `gorm:"size:500;index" json:"name"`
+	NameEN      string      `gorm:"size:500" json:"name_en,omitempty"`
+	NameRU      string      `gorm:"size:500" json:"name_ru,omitempty"`
+	NameJP      string      `gorm:"size:500" json:"name_jp,omitempty"`
+	Description string      `gorm:"type:text" json:"description,omitempty"`
+	Year        int         `json:"year,omitempty"`
+	Season      string      `gorm:"size:20" json:"season,omitempty"`
+	Status      AnimeStatus `gorm:"size:20;default:'released'" json:"status"`
 	// S5 attribute dimensions (Phase 12 Decision §A1) — Shikimori-sourced.
 	// Rating doubles as the S5 "demographic" proxy per Decision §A3.
 	// MaterialSource column name avoids collision with VideoSource.SourceType.
-	Kind            string         `gorm:"size:20;index" json:"kind,omitempty"`
-	Rating          string         `gorm:"size:20" json:"rating,omitempty"`
-	MaterialSource  string         `gorm:"size:50;column:material_source" json:"material_source,omitempty"`
-	Franchise       string         `gorm:"size:200;index" json:"franchise,omitempty"`
+	Kind           string `gorm:"size:20;index" json:"kind,omitempty"`
+	Rating         string `gorm:"size:20" json:"rating,omitempty"`
+	MaterialSource string `gorm:"size:50;column:material_source" json:"material_source,omitempty"`
+	Franchise      string `gorm:"size:200;index" json:"franchise,omitempty"`
 	// FranchiseChecked records that franchise backfill ran for this row, so a
 	// genuinely standalone anime (empty franchise) is not re-fetched on every
 	// guess-pool build. Internal bookkeeping — not exposed in the API.
-	FranchiseChecked bool          `gorm:"default:false;index" json:"-"`
-	EpisodesCount   int            `json:"episodes_count"`
-	EpisodesAired   int            `json:"episodes_aired,omitempty"`
-	EpisodeDuration int            `json:"episode_duration,omitempty"`
-	Score           float64        `gorm:"type:decimal(4,2)" json:"score,omitempty"`
-	PosterURL       string         `gorm:"type:text" json:"poster_url,omitempty"`
-	ShikimoriID     string         `gorm:"size:50;index" json:"shikimori_id,omitempty"`
-	MALID           string         `gorm:"size:50" json:"mal_id,omitempty"`
-	AniListID       string         `gorm:"size:50" json:"anilist_id,omitempty"`
+	FranchiseChecked bool    `gorm:"default:false;index" json:"-"`
+	EpisodesCount    int     `json:"episodes_count"`
+	EpisodesAired    int     `json:"episodes_aired,omitempty"`
+	EpisodeDuration  int     `json:"episode_duration,omitempty"`
+	Score            float64 `gorm:"type:decimal(4,2)" json:"score,omitempty"`
+	PosterURL        string  `gorm:"type:text" json:"poster_url,omitempty"`
+	ShikimoriID      string  `gorm:"size:50;index" json:"shikimori_id,omitempty"`
+	MALID            string  `gorm:"size:50" json:"mal_id,omitempty"`
+	AniListID        string  `gorm:"size:50" json:"anilist_id,omitempty"`
 	// IMDbID / TMDBID — workstream raw-jp, Phase 02. Resolved lazily via
 	// Kitsu mappings on the first OpenSubtitles query for this anime.
 	// Nullable: not every title has either mapping.
-	IMDbID *string `gorm:"size:50;index" json:"imdb_id,omitempty"`
-	TMDBID *string `gorm:"size:50;index" json:"tmdb_id,omitempty"`
-	HasVideo        bool           `gorm:"default:false;index" json:"has_video"`
+	IMDbID   *string `gorm:"size:50;index" json:"imdb_id,omitempty"`
+	TMDBID   *string `gorm:"size:50;index" json:"tmdb_id,omitempty"`
+	HasVideo bool    `gorm:"default:false;index" json:"has_video"`
 	// HasDub indicates the anime has at least one Kodik translation with
 	// type=="voice" (a dubbed track, as opposed to subtitled-only). Populated
 	// lazily by GetKodikTranslations whenever the catalog service touches
 	// Kodik on behalf of this anime. Default false; existing rows remain
 	// valid until search-driven re-ingest backfills them. Phase 9 (UX-18).
-	HasDub          bool           `gorm:"default:false;index" json:"has_dub"`
+	HasDub bool `gorm:"default:false;index" json:"has_dub"`
 	// Phase 15 (UX-31) — per-provider availability booleans. Each parser
 	// (kodik / animelib) lazily sets its corresponding flag the first time
 	// the catalog touches that provider for the anime. Mirrors HasDub.
@@ -64,25 +64,25 @@ type Anime struct {
 	// scraper provider returns >= 1 episode for the anime. Mirrors the
 	// HasKodik / HasAnimeLib / HasRaw lazy-backfill pattern.
 	// Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5).
-	HasEnglish bool `gorm:"default:false;index;column:has_english" json:"has_english"`
-	Hidden          bool           `gorm:"default:false" json:"hidden"`
-	SortPriority    int            `gorm:"default:0" json:"sort_priority,omitempty"`
-	NextEpisodeAt   *time.Time     `json:"next_episode_at,omitempty"`
-	AiredOn         *time.Time     `json:"aired_on,omitempty"`
-	Genres          []Genre        `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
+	HasEnglish    bool       `gorm:"default:false;index;column:has_english" json:"has_english"`
+	Hidden        bool       `gorm:"default:false" json:"hidden"`
+	SortPriority  int        `gorm:"default:0" json:"sort_priority,omitempty"`
+	NextEpisodeAt *time.Time `json:"next_episode_at,omitempty"`
+	AiredOn       *time.Time `json:"aired_on,omitempty"`
+	Genres        []Genre    `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
 	// Phase 12 Decision §A1/A2 — Studios absorbs the producers role; no
 	// separate Producers field exists in v2.0 (Decision §A2 collapses
 	// the spec-§3.1 producers 0.05 into studios 0.25).
-	Studios         []Studio       `gorm:"many2many:anime_studios;" json:"studios,omitempty"`
+	Studios []Studio `gorm:"many2many:anime_studios;" json:"studios,omitempty"`
 	// Phase 12 Decision §A4 — AniList-sourced tags. Explicit AnimeTag
 	// join model preserves Rank (0-100) for v2.1 rank-weighted TF-IDF
 	// even though v1 S5 ignores rank.
-	Tags            []Tag          `gorm:"many2many:anime_tags;joinForeignKey:AnimeID;joinReferences:TagID" json:"tags,omitempty"`
-	Videos          []Video        `gorm:"foreignKey:AnimeID" json:"-"`
-	VideoSources    []VideoSource  `gorm:"-" json:"video_sources,omitempty"` // Computed, not stored
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+	Tags         []Tag          `gorm:"many2many:anime_tags;joinForeignKey:AnimeID;joinReferences:TagID" json:"tags,omitempty"`
+	Videos       []Video        `gorm:"foreignKey:AnimeID" json:"-"`
+	VideoSources []VideoSource  `gorm:"-" json:"video_sources,omitempty"` // Computed, not stored
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // RelatedAnime represents a related anime entry fetched from Shikimori (not stored in DB)
@@ -277,10 +277,10 @@ type KodikVideoSource struct {
 // Unlike KodikVideoSource (an iframe embed link), this carries a direct .m3u8
 // URL that the frontend proxies through /api/streaming/hls-proxy.
 type KodikStreamSource struct {
-	StreamURL     string `json:"stream_url"`     // raw .m3u8 on the Kodik CDN
-	Referer       string `json:"referer"`        // Referer to send to the CDN
-	Quality       int    `json:"quality"`        // chosen quality
-	Qualities     []int  `json:"qualities"`      // all available qualities
+	StreamURL     string `json:"stream_url"` // raw .m3u8 on the Kodik CDN
+	Referer       string `json:"referer"`    // Referer to send to the CDN
+	Quality       int    `json:"quality"`    // chosen quality
+	Qualities     []int  `json:"qualities"`  // all available qualities
 	Episode       int    `json:"episode"`
 	TranslationID int    `json:"translation_id"`
 	Translation   string `json:"translation"`

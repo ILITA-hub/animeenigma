@@ -41,12 +41,12 @@ type ScraperProvider struct {
 	Reason      string `json:"reason"`
 	Description string `json:"description"`
 	// Capability traits (curated; refined per-title by live discovery in P2).
-	SupportsSub      bool      `json:"supports_sub"`
-	SupportsDub      bool      `json:"supports_dub"`
-	SupportsRaw      bool      `json:"supports_raw"`
-	SubDelivery      string    `gorm:"size:8;default:'hard'" json:"sub_delivery"` // soft|hard|none
-	QualityCeiling   string    `gorm:"size:8" json:"quality_ceiling"`
-	PreferenceWeight int       `json:"preference_weight"`
+	SupportsSub      bool   `json:"supports_sub"`
+	SupportsDub      bool   `json:"supports_dub"`
+	SupportsRaw      bool   `json:"supports_raw"`
+	SubDelivery      string `gorm:"size:8;default:'hard'" json:"sub_delivery"` // soft|hard|none
+	QualityCeiling   string `gorm:"size:8" json:"quality_ceiling"`
+	PreferenceWeight int    `json:"preference_weight"`
 	// Engine selects HOW this provider is scraped (DB-driven; there is NO
 	// SCRAPER_*_ENGINE env):
 	//   - "http"    — legacy in-process Go net/http scraper (default).
@@ -65,7 +65,7 @@ type ScraperProvider struct {
 	// rows, so first-party/legacy players (ae, kodik, animelib, hanime, raw) in
 	// this table never enter EN failover. Added 2026-06-17 (roster unification).
 	ScraperOperated bool      `json:"scraper_operated"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // TableName pins the physical table. Renamed scraper_providers → stream_providers

@@ -52,11 +52,11 @@ type CatalogService struct {
 
 // CatalogServiceOptions contains optional configuration for CatalogService
 type CatalogServiceOptions struct {
-	AniwatchAPIURL   string
-	JimakuAPIKey     string
-	AnimeLibToken    string
-	HanimeEmail      string
-	HanimePassword   string
+	AniwatchAPIURL string
+	JimakuAPIKey   string
+	AnimeLibToken  string
+	HanimeEmail    string
+	HanimePassword string
 	// Phase 15 (plan 04) — scraper microservice thin-client wiring.
 	// ScraperAPIURL defaults to http://scraper:8088 when empty.
 	// ScraperTimeout defaults to 15s when zero.
@@ -1771,7 +1771,6 @@ func (s *CatalogService) UpdateShikimoriID(ctx context.Context, animeID string, 
 	return s.animeRepo.UpdateShikimoriID(ctx, animeID, shikimoriID)
 }
 
-
 // matchesAnime checks if a search result matches an anime using exact and containment matching.
 // Extra names (e.g. English title from Jikan) can be passed for additional matching.
 func matchesAnime(resultName string, anime *domain.Anime, extraNames ...string) bool {
@@ -1810,7 +1809,6 @@ func normalizeTitle(title string) string {
 	title = strings.ReplaceAll(title, "  ", " ")
 	return title
 }
-
 
 // ============================================================================
 // AnimeLib API Methods

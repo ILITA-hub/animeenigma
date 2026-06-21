@@ -25,18 +25,18 @@ import (
 //   - "sub" → TranslationType.ID == 1 ("Субтитры" / subtitles)
 //
 // Algorithm:
-//   1. GetEpisodes(animelibID) — cheap O(1) HTTP, returns episode IDs +
-//      numeric labels.
-//   2. Sort newest-first by parsed Number (string -> int / fallback float).
-//   3. Fan out GetEpisodeStreams (one HTTP per episode) with errgroup cap 5.
-//      Newest-first ordering means we can prune cheaply: if the highest
-//      matching episode so far is N, we no longer need to query episodes
-//      with Number < N. (We DO still query equal-or-higher because the
-//      pre-sort may not be monotonic when AnimeLib emits decimals like
-//      "10.5".)
-//   4. Per-episode: scan PlayerData for the first match → record episode
-//      number → continue to other goroutines (no early-abort because
-//      errgroup is best-effort, not strict).
+//  1. GetEpisodes(animelibID) — cheap O(1) HTTP, returns episode IDs +
+//     numeric labels.
+//  2. Sort newest-first by parsed Number (string -> int / fallback float).
+//  3. Fan out GetEpisodeStreams (one HTTP per episode) with errgroup cap 5.
+//     Newest-first ordering means we can prune cheaply: if the highest
+//     matching episode so far is N, we no longer need to query episodes
+//     with Number < N. (We DO still query equal-or-higher because the
+//     pre-sort may not be monotonic when AnimeLib emits decimals like
+//     "10.5".)
+//  4. Per-episode: scan PlayerData for the first match → record episode
+//     number → continue to other goroutines (no early-abort because
+//     errgroup is best-effort, not strict).
 //
 // The second return value is the team's display name (Team.Name, e.g.
 // "AniRise") taken from the matching PlayerData — same upstream payload,

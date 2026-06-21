@@ -70,7 +70,8 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 // GetEpisodes forwards GET /scraper/episodes?mal_id=<id>&title=<title>&prefer=<prefer>.
 // Title is required for providers whose malsync entries are missing (e.g. gogoanime),
 // which fall back to fuzzy title search; AnimePahe also uses it for its own fuzzy fallback.
-func (c *Client) GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string) (int, []byte, error) {
+// When exclusive is true, ?exclusive=true is appended so the scraper skips failover.
+func (c *Client) GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string, exclusive bool) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
 	if title != "" {
@@ -79,6 +80,9 @@ func (c *Client) GetEpisodes(ctx context.Context, malID int, title string, altTi
 	setAltTitles(q, altTitles)
 	if prefer != "" {
 		q.Set("prefer", prefer)
+	}
+	if exclusive {
+		q.Set("exclusive", "true")
 	}
 	return c.doGET(ctx, "/scraper/episodes", q)
 }
@@ -92,7 +96,8 @@ func setAltTitles(q url.Values, altTitles []string) {
 }
 
 // GetServers forwards GET /scraper/servers?mal_id=<id>&title=<title>&episode=<ep>&prefer=<prefer>.
-func (c *Client) GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string) (int, []byte, error) {
+// When exclusive is true, ?exclusive=true is appended so the scraper skips failover.
+func (c *Client) GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string, exclusive bool) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
 	if title != "" {
@@ -103,11 +108,15 @@ func (c *Client) GetServers(ctx context.Context, malID int, title string, altTit
 	if prefer != "" {
 		q.Set("prefer", prefer)
 	}
+	if exclusive {
+		q.Set("exclusive", "true")
+	}
 	return c.doGET(ctx, "/scraper/servers", q)
 }
 
 // GetStream forwards GET /scraper/stream?mal_id=...&title=...&episode=...&server=...&category=...&prefer=...
-func (c *Client) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string) (int, []byte, error) {
+// When exclusive is true, ?exclusive=true is appended so the scraper skips failover.
+func (c *Client) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
 	if title != "" {
@@ -121,6 +130,9 @@ func (c *Client) GetStream(ctx context.Context, malID int, title string, altTitl
 	}
 	if prefer != "" {
 		q.Set("prefer", prefer)
+	}
+	if exclusive {
+		q.Set("exclusive", "true")
 	}
 	return c.doGET(ctx, "/scraper/stream", q)
 }

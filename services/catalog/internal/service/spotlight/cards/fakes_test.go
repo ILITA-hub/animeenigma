@@ -110,9 +110,9 @@ func (f *fakeCache) Set(_ context.Context, key string, value interface{}, _ time
 	return nil
 }
 
-func (f *fakeCache) Delete(_ context.Context, _ ...string) error             { return nil }
-func (f *fakeCache) Exists(_ context.Context, _ string) (bool, error)        { return false, nil }
-func (f *fakeCache) Invalidate(_ context.Context, _ string) error            { return nil }
+func (f *fakeCache) Delete(_ context.Context, _ ...string) error      { return nil }
+func (f *fakeCache) Exists(_ context.Context, _ string) (bool, error) { return false, nil }
+func (f *fakeCache) Invalidate(_ context.Context, _ string) error     { return nil }
 func (f *fakeCache) GetOrSet(_ context.Context, _ string, _ interface{}, _ time.Duration, _ func() (interface{}, error)) error {
 	panic("spotlight resolvers must NOT use GetOrSet — deliberate divergence (Pitfall 5)")
 }

@@ -23,14 +23,14 @@ type fakeScraper struct {
 	err    error
 }
 
-func (f fakeScraper) GetScraperEpisodes(_ context.Context, _, _ string) (int, []byte, error) {
+func (f fakeScraper) GetScraperEpisodes(_ context.Context, _, _ string, _ bool) (int, []byte, error) {
 	return f.status, f.body, f.err
 }
 
 type fakeRaw struct {
-	lib  *EpisodesResponse
-	raw  *EpisodesResponse
-	err  error
+	lib *EpisodesResponse
+	raw *EpisodesResponse
+	err error
 }
 
 func (f fakeRaw) GetLibraryEpisodes(_ context.Context, _ string) (*EpisodesResponse, error) {

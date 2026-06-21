@@ -14,10 +14,10 @@ import (
 
 // fakeAnime18Service implements anime18ServiceAPI for handler tests.
 type fakeAnime18Service struct {
-	episodes   []domain.Anime18Episode
+	episodes    []domain.Anime18Episode
 	episodesErr error
-	stream     *domain.Anime18Stream
-	streamErr  error
+	stream      *domain.Anime18Stream
+	streamErr   error
 
 	gotAnimeID string
 	gotEp      string
@@ -65,7 +65,7 @@ func TestGetAnime18Episodes_OK(t *testing.T) {
 		t.Errorf("service got animeID %q, want uuid-123", svc.gotAnimeID)
 	}
 	var resp struct {
-		Success bool                   `json:"success"`
+		Success bool                    `json:"success"`
 		Data    []domain.Anime18Episode `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {

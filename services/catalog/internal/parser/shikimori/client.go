@@ -29,19 +29,19 @@ type Client struct {
 }
 
 type rateLimiter struct {
-	mu       sync.Mutex
-	tokens   int
-	maxTokens int
+	mu         sync.Mutex
+	tokens     int
+	maxTokens  int
 	lastRefill time.Time
-	interval time.Duration
+	interval   time.Duration
 }
 
 func newRateLimiter(rps int) *rateLimiter {
 	return &rateLimiter{
-		tokens:    rps,
-		maxTokens: rps,
+		tokens:     rps,
+		maxTokens:  rps,
 		lastRefill: time.Now(),
-		interval:  time.Second,
+		interval:   time.Second,
 	}
 }
 
@@ -104,14 +104,14 @@ type animeByIDQuery struct {
 }
 
 type shikimoriAnime struct {
-	ID            graphql.String     `graphql:"id"`
-	Name          graphql.String     `graphql:"name"`
-	English       graphql.String     `graphql:"english"`
-	Russian       graphql.String     `graphql:"russian"`
-	Japanese      graphql.String     `graphql:"japanese"`
-	Description   graphql.String     `graphql:"description"`
-	Score         graphql.Float      `graphql:"score"`
-	Status        graphql.String     `graphql:"status"`
+	ID          graphql.String `graphql:"id"`
+	Name        graphql.String `graphql:"name"`
+	English     graphql.String `graphql:"english"`
+	Russian     graphql.String `graphql:"russian"`
+	Japanese    graphql.String `graphql:"japanese"`
+	Description graphql.String `graphql:"description"`
+	Score       graphql.Float  `graphql:"score"`
+	Status      graphql.String `graphql:"status"`
 	// Phase 12 (Decision §A1) — S5 attribute dimensions.
 	// Kind (TV/Movie/OVA/...), Rating (G/PG/PG-13/R/R+/Rx — used as the
 	// S5 demographic proxy per Decision §A3), and the adaptation source
@@ -123,22 +123,22 @@ type shikimoriAnime struct {
 	// it "source" — the live API rejects that field with "Field 'source'
 	// doesn't exist on type 'Anime'", so we query "origin" and surface it
 	// as Source on the parser-local struct.
-	Kind          graphql.String     `graphql:"kind"`
-	Rating        graphql.String     `graphql:"rating"`
-	Source        graphql.String     `graphql:"origin"`
-	Episodes      graphql.Int        `graphql:"episodes"`
-	EpisodesAired graphql.Int        `graphql:"episodesAired"`
-	Duration      graphql.Int        `graphql:"duration"`
-	MalId         graphql.String     `graphql:"malId"`
-	AiredOn       *shikimoriDate     `graphql:"airedOn"`
-	NextEpisodeAt graphql.String     `graphql:"nextEpisodeAt"`
-	Poster        *shikimoriPoster   `graphql:"poster"`
-	Genres        []shikimoriGenre   `graphql:"genres"`
+	Kind          graphql.String   `graphql:"kind"`
+	Rating        graphql.String   `graphql:"rating"`
+	Source        graphql.String   `graphql:"origin"`
+	Episodes      graphql.Int      `graphql:"episodes"`
+	EpisodesAired graphql.Int      `graphql:"episodesAired"`
+	Duration      graphql.Int      `graphql:"duration"`
+	MalId         graphql.String   `graphql:"malId"`
+	AiredOn       *shikimoriDate   `graphql:"airedOn"`
+	NextEpisodeAt graphql.String   `graphql:"nextEpisodeAt"`
+	Poster        *shikimoriPoster `graphql:"poster"`
+	Genres        []shikimoriGenre `graphql:"genres"`
 	// Phase 12 (Decision §A1/A2) — Shikimori does not separate producers,
 	// so this single Studios payload feeds both spec dimensions, collapsed
 	// in S5 to a 0.25 weight.
-	Studios       []shikimoriStudio  `graphql:"studios"`
-	Videos        []shikimoriVideo   `graphql:"videos"`
+	Studios []shikimoriStudio `graphql:"studios"`
+	Videos  []shikimoriVideo  `graphql:"videos"`
 }
 
 type shikimoriDate struct {
@@ -165,10 +165,10 @@ type shikimoriStudio struct {
 }
 
 type shikimoriVideo struct {
-	ID       graphql.String `graphql:"id"`
-	URL      graphql.String `graphql:"url"`
-	Name     graphql.String `graphql:"name"`
-	Kind     graphql.String `graphql:"kind"`
+	ID        graphql.String `graphql:"id"`
+	URL       graphql.String `graphql:"url"`
+	Name      graphql.String `graphql:"name"`
+	Kind      graphql.String `graphql:"kind"`
 	PlayerURL graphql.String `graphql:"playerUrl"`
 }
 
@@ -230,27 +230,27 @@ func (c *Client) executeRawQuery(ctx context.Context, query string) ([]*domain.A
 }
 
 type rawAnime struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	English        string  `json:"english"`
-	Russian        string  `json:"russian"`
-	Japanese       string  `json:"japanese"`
-	Description    string  `json:"description"`
-	Score          float64 `json:"score"`
-	Status         string  `json:"status"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	English     string  `json:"english"`
+	Russian     string  `json:"russian"`
+	Japanese    string  `json:"japanese"`
+	Description string  `json:"description"`
+	Score       float64 `json:"score"`
+	Status      string  `json:"status"`
 	// Phase 12 (Decision §A1) — S5 attribute dimensions. The adaptation
 	// source field is "origin" in Shikimori's GraphQL schema; we keep the
 	// Go field name `Source` for clarity at the boundary with domain.Anime
 	// (column: material_source).
-	Kind           string  `json:"kind"`
-	Rating         string  `json:"rating"`
-	Source         string  `json:"origin"`
-	Episodes       int     `json:"episodes"`
-	EpisodesAired  int     `json:"episodesAired"`
-	Duration       int     `json:"duration"`
-	NextEpisodeAt  string  `json:"nextEpisodeAt"`
-	MalID          string  `json:"malId"`
-	AiredOn        *struct {
+	Kind          string `json:"kind"`
+	Rating        string `json:"rating"`
+	Source        string `json:"origin"`
+	Episodes      int    `json:"episodes"`
+	EpisodesAired int    `json:"episodesAired"`
+	Duration      int    `json:"duration"`
+	NextEpisodeAt string `json:"nextEpisodeAt"`
+	MalID         string `json:"malId"`
+	AiredOn       *struct {
 		Year  int `json:"year"`
 		Month int `json:"month"`
 		Day   int `json:"day"`

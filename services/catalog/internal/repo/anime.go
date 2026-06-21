@@ -257,7 +257,6 @@ func (r *AnimeRepository) SetHasAnimeLib(ctx context.Context, animeID string, ha
 		Update("has_animelib", has).Error
 }
 
-
 // SetHasRaw flips the animes.has_raw column for one anime. Called
 // lazily by the raw resolver when an AllAnime show ID resolves to a
 // playable raw stream — best-effort. Workstream raw-jp, Phase 01.

@@ -45,9 +45,9 @@ type Client struct {
 	httpClient *http.Client
 
 	// Domain rotation cache. mu guards activeDomain + failedAt.
-	mu            sync.RWMutex
-	activeDomain  string    // current first-success domain
-	failedAt      time.Time // last time the active domain failed
+	mu             sync.RWMutex
+	activeDomain   string    // current first-success domain
+	failedAt       time.Time // last time the active domain failed
 	domainCooldown time.Duration
 }
 
