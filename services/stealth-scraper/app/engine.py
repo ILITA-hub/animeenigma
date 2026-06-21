@@ -566,15 +566,21 @@ class CamoufoxEngine:
         try:
             context = await self._ensure_browser(profile, proxy.id)
             page = await context.new_page()
+            # wait_until="commit": return as soon as the response is received,
+            # WITHOUT waiting for the (ad-script-heavy) page to finish loading —
+            # otherwise the warm itself is slow on sites like 9anime. The
+            # clearance is cookie-based, set on the response, so commit suffices.
             resp = await page.goto(
-                origin, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
+                origin, wait_until="commit", timeout=self.cfg.nav_timeout_ms
             )
             status = resp.status if resp else 0
             try:
-                title = await page.title()
+                # Challenge-check the raw response body (page.title() needs a
+                # parsed DOM, which "commit" hasn't produced yet).
+                head = (await resp.body())[:4096].decode("utf-8", "ignore") if resp else ""
             except Exception:  # noqa: BLE001
-                title = ""
-            if looks_like_challenge(status, title):
+                head = ""
+            if looks_like_challenge(status, head):
                 await _safe_close_page(page)
                 self.pool.mark_blocked(proxy.id)
                 self.profiles.release(profile, ok=False)
@@ -615,8 +621,10 @@ class CamoufoxEngine:
             raise SessionGone(session.id)
         try:
             resp = await asyncio.wait_for(
+                # commit: return on response (raw body via resp.body()) without
+                # waiting for ad scripts to execute — fast + no main-thread wedge.
                 page.goto(
-                    url, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
+                    url, wait_until="commit", timeout=self.cfg.nav_timeout_ms
                 ),
                 timeout=self.cfg.fetch_timeout_ms / 1000.0,
             )
