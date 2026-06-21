@@ -12,7 +12,10 @@ import (
 type AnimeRef struct {
 	UUID string
 	Name string
-	Slot AnimeSlot
+	// Episode is the specific episode to probe (0 = default/first). The ae
+	// target set sets this to the uploaded episode; scraper/kodik sets leave it 0.
+	Episode int
+	Slot    AnimeSlot
 }
 
 // animeName carries the title fields a catalog anime object exposes. The probe
@@ -68,7 +71,7 @@ func (a *HTTPAnimeSet) fetchName(ctx context.Context, uuid string) string {
 		return ""
 	}
 	var env struct {
-		Data    *animeName `json:"data"`
+		Data *animeName `json:"data"`
 		animeName
 	}
 	if json.NewDecoder(resp.Body).Decode(&env) != nil {

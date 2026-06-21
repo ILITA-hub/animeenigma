@@ -110,7 +110,10 @@ func Load() (*Config, error) {
 		StreamingURL:    getEnv("STREAMING_URL", "http://streaming:8082"),
 		ProbeAnchorUUID: getEnv("PROBE_ANCHOR_UUID", "f0b40660-6627-4a59-8dcf-7ec8596b3623"),
 		FFprobePath:     getEnv("FFPROBE_PATH", "ffprobe"),
-		ProbeProviders:  getEnv("PROBE_PROVIDERS", "gogoanime,miruro,allanime,nineanime,animefever"),
+		// ae + kodik-noads carry custom probing rules (library uploads / scraped
+		// ad-free Kodik); the rest are EN scraper-chain providers. Order is the
+		// dashboard tie-break order.
+		ProbeProviders: getEnv("PROBE_PROVIDERS", "gogoanime,miruro,allanime,nineanime,animefever,ae,kodik-noads"),
 	}, nil
 }
 

@@ -13,9 +13,14 @@ func (fakeAS) Resolve(_ context.Context) ([]AnimeRef, error) {
 	return []AnimeRef{{UUID: "u", Name: "Anchor Title", Slot: SlotAnchor}}, nil
 }
 
+// emptyAS returns no refs (e.g. an empty library or a down catalog).
+type emptyAS struct{}
+
+func (emptyAS) Resolve(_ context.Context) ([]AnimeRef, error) { return nil, nil }
+
 type fakeRes struct{}
 
-func (fakeRes) Resolve(_ context.Context, u, name string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
+func (fakeRes) Resolve(_ context.Context, u, name string, _ int, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
 	return []ResolvedStream{{Provider: p, AnimeUUID: u, AnimeName: name, Slot: s, Server: "srv", Stage: StageStream}}, StageStream, nil
 }
 
@@ -36,9 +41,13 @@ func (c *capRep) Report(_ context.Context, run RunResult) error {
 	return nil
 }
 
+func target(p string, as AnimeSetResolver, res Resolver) ProbeTarget {
+	return ProbeTarget{Provider: p, AnimeSet: as, Resolver: res}
+}
+
 func TestEngine_RunOnce(t *testing.T) {
 	rep := &capRep{}
-	e := NewEngine([]string{"gogoanime"}, fakeAS{}, fakeRes{}, fakeVal{}, rep, func() int64 { return 42 }, nil)
+	e := NewEngine([]ProbeTarget{target("gogoanime", fakeAS{}, fakeRes{})}, fakeVal{}, rep, func() int64 { return 42 }, nil)
 	if err := e.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -57,21 +66,19 @@ func TestEngine_RunOnce(t *testing.T) {
 // errRes is a Resolver that always returns an error at the given stage.
 type errRes struct{ stage Stage }
 
-func (r errRes) Resolve(_ context.Context, u, name string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
+func (r errRes) Resolve(_ context.Context, u, name string, _ int, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
 	return nil, r.stage, context.DeadlineExceeded
 }
 
 func TestEngine_ResolveError_SynthesizesCDNUnreachable(t *testing.T) {
 	rep := &capRep{}
-	e := NewEngine([]string{"badprov"}, fakeAS{}, errRes{stage: StageServers}, fakeVal{}, rep, func() int64 { return 1 }, nil)
+	e := NewEngine([]ProbeTarget{target("badprov", fakeAS{}, errRes{stage: StageServers})}, fakeVal{}, rep, func() int64 { return 1 }, nil)
 	if err := e.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// Reporter must be called exactly once.
 	if rep.n != 1 {
 		t.Fatalf("Reporter called %d times, want 1", rep.n)
 	}
-	// Must produce at least one verdict for the provider.
 	if len(rep.run.Verdicts) == 0 {
 		t.Fatal("expected at least one verdict, got none")
 	}
@@ -82,7 +89,6 @@ func TestEngine_ResolveError_SynthesizesCDNUnreachable(t *testing.T) {
 	if v.Stage != StageServers {
 		t.Fatalf("Stage=%v, want StageServers", v.Stage)
 	}
-	// Provider must roll up to StatusDown.
 	if len(rep.run.ProviderVerdicts) != 1 || rep.run.ProviderVerdicts[0].Status != StatusDown {
 		t.Fatalf("ProviderVerdicts=%+v, want StatusDown", rep.run.ProviderVerdicts)
 	}
@@ -91,26 +97,27 @@ func TestEngine_ResolveError_SynthesizesCDNUnreachable(t *testing.T) {
 // panicRes panics for the given provider, delegates to fakeRes for all others.
 type panicRes struct{ bad string }
 
-func (r panicRes) Resolve(ctx context.Context, u, name string, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
+func (r panicRes) Resolve(ctx context.Context, u, name string, ep int, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
 	if p == r.bad {
 		panic("injected test panic for " + p)
 	}
-	return fakeRes{}.Resolve(ctx, u, name, s, p)
+	return fakeRes{}.Resolve(ctx, u, name, ep, s, p)
 }
 
 func TestEngine_ProviderPanic_Isolated(t *testing.T) {
 	rep := &capRep{}
-	e := NewEngine([]string{"bad", "good"}, fakeAS{}, panicRes{bad: "bad"}, fakeVal{}, rep, func() int64 { return 7 }, nil)
+	pr := panicRes{bad: "bad"}
+	e := NewEngine([]ProbeTarget{
+		target("bad", fakeAS{}, pr),
+		target("good", fakeAS{}, pr),
+	}, fakeVal{}, rep, func() int64 { return 7 }, nil)
 
-	// RunOnce must not propagate the panic.
 	if err := e.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// Reporter called exactly once.
 	if rep.n != 1 {
 		t.Fatalf("Reporter called %d times, want 1", rep.n)
 	}
-	// Must have verdicts for both providers.
 	if len(rep.run.ProviderVerdicts) != 2 {
 		t.Fatalf("ProviderVerdicts count=%d, want 2", len(rep.run.ProviderVerdicts))
 	}
@@ -123,5 +130,56 @@ func TestEngine_ProviderPanic_Isolated(t *testing.T) {
 	}
 	if pvByName["good"].Status != StatusUp {
 		t.Fatalf("provider 'good' status=%v, want StatusUp", pvByName["good"].Status)
+	}
+}
+
+// recordingRes records which provider names it was asked to resolve, so the
+// per-target dispatch can be asserted.
+type recordingRes struct{ seen *[]string }
+
+func (r recordingRes) Resolve(_ context.Context, u, name string, _ int, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
+	*r.seen = append(*r.seen, p)
+	return []ResolvedStream{{Provider: p, AnimeUUID: u, AnimeName: name, Slot: s, Server: "srv", Stage: StageStream}}, StageStream, nil
+}
+
+func TestEngine_PerTargetDispatch(t *testing.T) {
+	// Two targets, each with its OWN resolver instance; the engine must call each
+	// target's resolver (not a single shared one) with that target's provider.
+	var seenA, seenB []string
+	rep := &capRep{}
+	e := NewEngine([]ProbeTarget{
+		target("provA", fakeAS{}, recordingRes{seen: &seenA}),
+		target("provB", fakeAS{}, recordingRes{seen: &seenB}),
+	}, fakeVal{}, rep, func() int64 { return 1 }, nil)
+	if err := e.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(seenA) != 1 || seenA[0] != "provA" {
+		t.Fatalf("resolver A saw %v, want [provA]", seenA)
+	}
+	if len(seenB) != 1 || seenB[0] != "provB" {
+		t.Fatalf("resolver B saw %v, want [provB]", seenB)
+	}
+	if len(rep.run.ProviderVerdicts) != 2 {
+		t.Fatalf("want 2 provider verdicts, got %d", len(rep.run.ProviderVerdicts))
+	}
+}
+
+func TestEngine_EmptyAnimeSet_SyntheticDown(t *testing.T) {
+	// A target whose anime-set resolves nothing must still appear, as Down, with
+	// exactly one synthetic empty_response verdict (so it lands a probe_runs row).
+	rep := &capRep{}
+	e := NewEngine([]ProbeTarget{target("ae", emptyAS{}, fakeRes{})}, fakeVal{}, rep, func() int64 { return 1 }, nil)
+	if err := e.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.run.Verdicts) != 1 {
+		t.Fatalf("verdicts = %d, want 1 synthetic", len(rep.run.Verdicts))
+	}
+	if rep.run.Verdicts[0].Reason != streamprobe.ReasonEmptyResponse {
+		t.Fatalf("synthetic reason = %v, want empty_response", rep.run.Verdicts[0].Reason)
+	}
+	if len(rep.run.ProviderVerdicts) != 1 || rep.run.ProviderVerdicts[0].Status != StatusDown {
+		t.Fatalf("provider verdict = %+v, want Down", rep.run.ProviderVerdicts)
 	}
 }

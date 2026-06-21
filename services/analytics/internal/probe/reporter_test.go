@@ -21,8 +21,8 @@ func TestReporter_SetsGaugeAndRows(t *testing.T) {
 	rep := NewPromReporter(ch)
 	run := RunResult{
 		ProviderVerdicts: []ProviderVerdict{{Provider: "gogoanime", Status: StatusUp}},
-		Verdicts: []Verdict{{Provider: "gogoanime", AnimeName: "Frieren", Slot: SlotAnchor, Server: "s", Reason: streamprobe.ReasonPlayable}},
-		At: 1000,
+		Verdicts:         []Verdict{{Provider: "gogoanime", AnimeName: "Frieren", Slot: SlotAnchor, Server: "s", Reason: streamprobe.ReasonPlayable}},
+		At:               1000,
 	}
 	if err := rep.Report(context.Background(), run); err != nil {
 		t.Fatal(err)

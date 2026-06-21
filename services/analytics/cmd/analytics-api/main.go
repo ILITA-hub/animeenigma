@@ -153,12 +153,42 @@ func main() {
 			// probe.PromReporter can persist probe_runs rows. The scheduler triggers
 			// /internal/probe/run daily; operators may also call it ad-hoc.
 			chStore := repo.NewClickHouseStore(chConn)
-			resolver := probe.NewHTTPResolver(cfg.CatalogURL, nil)
 			validator := probe.NewHTTPValidator(cfg.StreamingURL, nil, probe.NewFFprobe(cfg.FFprobePath))
-			animeSet := probe.NewHTTPAnimeSet(cfg.CatalogURL, cfg.ProbeAnchorUUID, nil, rand.New(rand.NewSource(time.Now().UnixNano()))) //nolint:gosec
+
+			// Shared instances for the EN scraper chain: one spotlight anime-set
+			// and one scraper resolver (catalog /scraper/...).
+			spotlight := probe.NewHTTPAnimeSet(cfg.CatalogURL, cfg.ProbeAnchorUUID, nil, rand.New(rand.NewSource(time.Now().UnixNano()))) //nolint:gosec
+			scraperRes := probe.NewHTTPResolver(cfg.CatalogURL, nil)
+
+			// Providers with custom rules. ae uses the "3 latest distinct-anime
+			// library uploads" set + the ae stream resolver; kodik-noads reuses the
+			// spotlight set with the scraped ad-free Kodik resolver.
+			build := map[string]func() probe.ProbeTarget{
+				"ae": func() probe.ProbeTarget {
+					return probe.ProbeTarget{Provider: "ae", AnimeSet: probe.NewAeAnimeSet(cfg.CatalogURL, 3, nil), Resolver: probe.NewAeResolver(cfg.CatalogURL, nil)}
+				},
+				"kodik-noads": func() probe.ProbeTarget {
+					return probe.ProbeTarget{Provider: "kodik-noads", AnimeSet: spotlight, Resolver: probe.NewKodikNoadsResolver(cfg.CatalogURL, nil)}
+				},
+			}
+
+			var targets []probe.ProbeTarget
+			for _, name := range strings.Split(cfg.ProbeProviders, ",") {
+				name = strings.TrimSpace(name)
+				if name == "" {
+					continue
+				}
+				if b, ok := build[name]; ok {
+					targets = append(targets, b())
+					continue
+				}
+				// Default: an EN scraper provider — shared spotlight set + scraper resolver.
+				targets = append(targets, probe.ProbeTarget{Provider: name, AnimeSet: spotlight, Resolver: scraperRes})
+			}
+
 			engine := probe.NewEngine(
-				strings.Split(cfg.ProbeProviders, ","),
-				animeSet, resolver, validator,
+				targets,
+				validator,
 				probe.NewPromReporter(chStore),
 				func() int64 { return time.Now().Unix() },
 				log,

@@ -41,6 +41,9 @@ const (
 	SlotFeatured        AnimeSlot = "featured"
 	SlotSpotlightRandom AnimeSlot = "spotlight_random"
 	SlotRandom          AnimeSlot = "random"
+	// SlotLibraryLatest labels an ae target — one of the newest distinct-anime
+	// library uploads (carries its own Episode, unlike the scraper slots).
+	SlotLibraryLatest AnimeSlot = "library_latest"
 )
 
 // ResolvedStream is one server's catalog-signed stream, ready to validate

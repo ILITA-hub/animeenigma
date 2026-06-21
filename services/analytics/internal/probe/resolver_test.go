@@ -23,7 +23,7 @@ func TestHTTPResolver_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	r := NewHTTPResolver(srv.URL, srv.Client())
-	streams, stage, err := r.Resolve(context.Background(), "uuid1", "Frieren", SlotAnchor, "gogoanime")
+	streams, stage, err := r.Resolve(context.Background(), "uuid1", "Frieren", 0, SlotAnchor, "gogoanime")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestHTTPResolver_NoEpisodes(t *testing.T) {
 	}))
 	defer srv.Close()
 	r := NewHTTPResolver(srv.URL, srv.Client())
-	_, stage, err := r.Resolve(context.Background(), "uuid1", "Frieren", SlotAnchor, "gogoanime")
+	_, stage, err := r.Resolve(context.Background(), "uuid1", "Frieren", 0, SlotAnchor, "gogoanime")
 	if err == nil || stage != StageEpisodes {
 		t.Fatalf("want episodes-stage error, got stage=%v err=%v", stage, err)
 	}
