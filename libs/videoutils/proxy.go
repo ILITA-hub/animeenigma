@@ -638,9 +638,12 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 		// Rewrite URLs in the M3U8
 		rewritten := rewriteM3U8URLs(string(body), sourceURL, referer)
 
-		// Set headers (skip Content-Length as it changed)
+		// Set headers (skip Content-Length as it changed; skip the CORS headers we
+		// set ourselves above — an upstream that also sends Access-Control-Allow-*
+		// would otherwise duplicate them, and a response with two ACAO values is
+		// rejected by browsers as a CORS error).
 		for key, values := range resp.Header {
-			if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" {
+			if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" || isProxySetCORSHeader(key) {
 				continue
 			}
 			for _, value := range values {
@@ -657,8 +660,12 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 
 	// Copy response headers for non-M3U8 content
 	for key, values := range resp.Header {
-		// Skip hop-by-hop headers and Content-Type (we'll set it ourselves)
-		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Type" {
+		// Skip hop-by-hop headers, Content-Type (we set it ourselves), and the
+		// CORS headers we set above — an upstream Access-Control-Allow-* would
+		// otherwise duplicate them and browsers reject a multi-value ACAO as a
+		// CORS failure (notably the stealth-scraper /hls sidecar always sends
+		// Access-Control-Allow-Origin: *).
+		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Type" || isProxySetCORSHeader(key) {
 			continue
 		}
 		for _, value := range values {
@@ -705,6 +712,23 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 	}
 
 	return bytesIn, bytesOut, nil
+}
+
+// isProxySetCORSHeader reports whether key is a CORS header this proxy sets
+// itself. Such headers must NOT be copied from the upstream response: if the
+// upstream also emits them (the stealth-scraper /hls sidecar always sends
+// Access-Control-Allow-Origin: *), the client receives two values and the
+// Fetch spec treats a multi-value Access-Control-Allow-Origin as a CORS
+// failure — silently breaking playback under the cross-origin stream.* base.
+func isProxySetCORSHeader(key string) bool {
+	switch key {
+	case "Access-Control-Allow-Origin",
+		"Access-Control-Allow-Methods",
+		"Access-Control-Allow-Headers",
+		"Access-Control-Expose-Headers":
+		return true
+	}
+	return false
 }
 
 // rewriteM3U8URLs rewrites URLs in an M3U8 playlist to go through the proxy
