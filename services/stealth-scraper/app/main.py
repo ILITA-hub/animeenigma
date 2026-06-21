@@ -12,6 +12,7 @@ host allowlist (SSRF guard).
 
 from __future__ import annotations
 
+import base64
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
@@ -49,6 +50,13 @@ class ResolveRequest(BaseModel):
 
     def params(self) -> dict[str, Any]:
         return self.model_dump(exclude={"provider"}, exclude_none=True)
+
+
+class FetchRequest(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=32)
+    url: str = Field(..., max_length=8192)
+    # GET-only for now (nineanime discovery). POST is wired for future allanime.
+    method: str = Field(default="GET", pattern="^(GET|POST)$")
 
 
 @asynccontextmanager
@@ -110,6 +118,33 @@ async def resolve(req: ResolveRequest) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": str(exc), "kind": "internal"}, status_code=500
         )
+
+
+@app.post("/fetch")
+async def fetch(req: FetchRequest) -> JSONResponse:
+    """Discovery fetch: GET an allowlisted provider URL through a warm,
+    challenge-solved browser session and return the raw body (base64). The Go
+    scraper keeps its parsers and only swaps transport when engine=browser."""
+    engine: CamoufoxEngine = app.state.engine
+    try:
+        out = await engine.browser_fetch(req.provider, req.url)
+        return JSONResponse({
+            "success": True,
+            "status": out["status"],
+            "content_type": out["content_type"],
+            "body": base64.b64encode(out["body"]).decode(),
+        })
+    except NotFoundError as exc:
+        return JSONResponse({"success": False, "error": str(exc), "kind": "not_found"}, status_code=404)
+    except PoolExhausted as exc:
+        return JSONResponse({"success": False, "error": str(exc), "kind": "exhausted"}, status_code=503)
+    except ChallengeError as exc:
+        return JSONResponse({"success": False, "error": str(exc), "kind": "challenge"}, status_code=502)
+    except RecipeError as exc:
+        return JSONResponse({"success": False, "error": str(exc), "kind": "error"}, status_code=502)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("fetch crashed")
+        return JSONResponse({"success": False, "error": str(exc), "kind": "internal"}, status_code=500)
 
 
 @app.get("/hls")

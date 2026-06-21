@@ -78,5 +78,37 @@ class TestBrowserFetch(unittest.TestCase):
         self.assertEqual(len(eng._sessions), 0)        # poisoned session dropped
 
 
+class TestFetchRoute(unittest.TestCase):
+    """Exercise the /fetch route handler directly (no httpx/TestClient dep)."""
+
+    def _set_engine(self, engine):
+        import app.main as m
+        m.app.state.engine = engine
+        return m
+
+    def test_fetch_route_returns_base64_body(self):
+        import json
+        from app.main import FetchRequest
+        eng, _, _ = _engine_with_fetch_session(body=b'{"hello":"world"}')
+        m = self._set_engine(eng)
+        resp = run(m.fetch(FetchRequest(
+            provider="nineanime",
+            url="https://9anime.me.uk/wp-json/wp/v2/search?search=x")))
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.body)
+        self.assertTrue(data["success"])
+        self.assertEqual(data["status"], 200)
+        self.assertEqual(base64.b64decode(data["body"]), b'{"hello":"world"}')
+
+    def test_fetch_route_host_denied_is_502(self):
+        import json
+        from app.main import FetchRequest
+        eng, _, _ = _engine_with_fetch_session()
+        m = self._set_engine(eng)
+        resp = run(m.fetch(FetchRequest(provider="nineanime", url="https://evil.example.com/x")))
+        self.assertEqual(resp.status_code, 502)
+        self.assertEqual(json.loads(resp.body)["kind"], "error")
+
+
 if __name__ == "__main__":
     unittest.main()
