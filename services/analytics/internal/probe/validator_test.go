@@ -103,3 +103,40 @@ func TestValidator_InnerFetchTransportError(t *testing.T) {
 		t.Fatalf("want cdn_unreachable for inner transport error, got %s", got.Reason)
 	}
 }
+
+// TestValidator_UsesNativeProxyPath is the regression test for the deploy bug:
+// the probe calls streaming DIRECTLY, so it must hit the native /api/v1/hls-proxy
+// route, not the public /api/streaming/hls-proxy path the gateway rewrites. This
+// stub serves ONLY the native route (404 elsewhere, exactly like prod) and emits
+// child URLs as the public path the real proxy rewrites them to — the validator
+// must remap those children to the native route too, or the variant/segment hops
+// 404 and the verdict is a false empty_response.
+func TestValidator_UsesNativeProxyPath(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/hls-proxy" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte("404 page not found\n"))
+			return
+		}
+		u := r.URL.Query().Get("url")
+		switch {
+		case strings.Contains(u, "master"):
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n/api/streaming/hls-proxy?url=variant\n"))
+		case strings.Contains(u, "variant"):
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:4,\n/api/streaming/hls-proxy?url=seg0\n"))
+		default:
+			_, _ = w.Write([]byte("BINARYSEGMENTDATA"))
+		}
+	}))
+	defer s.Close()
+
+	v := NewHTTPValidator(s.URL, s.Client(), fakeProber{})
+	got := v.Validate(context.Background(), ResolvedStream{
+		MasterURL: "http://minio:9000/raw-library/x/master.m3u8", Provider: "ae", Exp: "1", Sig: "a",
+	})
+	if got.Reason != streamprobe.ReasonPlayable {
+		t.Fatalf("want playable via native /api/v1/hls-proxy path; got %s", got.Reason)
+	}
+}

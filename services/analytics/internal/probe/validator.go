@@ -33,12 +33,24 @@ func NewHTTPValidator(streamingBaseURL string, hc *http.Client, vp VideoProber) 
 	return &HTTPValidator{streaming: strings.TrimRight(streamingBaseURL, "/"), hc: hc, prober: vp}
 }
 
-// proxyURL builds the streaming hls-proxy URL for a raw upstream URL. When the
-// upstream is already a proxied (rewritten) path returned in a manifest, it is
-// absolute-from-root and used as-is against the streaming base.
+// hlsProxyPath is the streaming service's NATIVE proxy route. The probe calls
+// streaming directly (http://streaming:8082), bypassing the gateway — so it must
+// use /api/v1/hls-proxy, NOT the public /api/streaming/hls-proxy path that the
+// gateway rewrites for browsers. Hitting the public path against the service
+// directly 404s (route not found), which the validator would misread as a dead
+// stream. See services/streaming/internal/transport/router.go.
+const hlsProxyPath = "/api/v1/hls-proxy"
+
+// proxyURL builds the streaming hls-proxy URL for a raw upstream URL. A manifest
+// child the proxy already rewrote is a root-absolute PUBLIC path
+// (/api/streaming/hls-proxy?url=...&exp=...&sig=...) — the probe maps that public
+// prefix to the streaming-native route, preserving the proxy-minted query, so
+// the variant/segment hops also reach the service directly.
 func (v *HTTPValidator) proxyURL(rs ResolvedStream, raw string) string {
-	if strings.HasPrefix(raw, "/api/streaming/") {
-		return v.streaming + raw
+	for _, pfx := range []string{"/api/streaming/hls-proxy", hlsProxyPath} {
+		if strings.HasPrefix(raw, pfx) {
+			return v.streaming + hlsProxyPath + strings.TrimPrefix(raw, pfx)
+		}
 	}
 	q := url.Values{"url": {raw}}
 	if rs.Exp != "" {
@@ -50,7 +62,7 @@ func (v *HTTPValidator) proxyURL(rs ResolvedStream, raw string) string {
 	if rs.Referer != "" {
 		q.Set("referer", rs.Referer)
 	}
-	return v.streaming + "/api/streaming/hls-proxy?" + q.Encode()
+	return v.streaming + hlsProxyPath + "?" + q.Encode()
 }
 
 func (v *HTTPValidator) fetch(ctx context.Context, u string) ([]byte, int, error) {
