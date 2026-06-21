@@ -892,7 +892,6 @@ const aePlayerEnabled = import.meta.env.VITE_AE_PLAYER_ENABLED !== 'false'
 const InviteButton = defineAsyncComponent(() => import('@/components/watch-together/InviteButton.vue'))
 import type { PlayerKind } from '@/types/watch-together'
 import type { WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
-import { tokenToCombo } from '@/composables/aePlayer/comboMapping'
 import { resolveInitialPlayerPref, CLASSIC_KODIK_KEY } from './animePlayerPrefs'
 import ResumePill from '@/components/player/ResumePill.vue'
 import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
@@ -1327,36 +1326,12 @@ const resolvedCombo = computed(() => preferenceState.value?.resolvedCombo ?? nul
 // Null until AePlayer has a resolved source (or when aePlayer isn't selected).
 const aeWtSeed = ref<WtCreateSeed | null>(null)
 
-// Reflect the live aePlayer source into the URL so `?provider=&team=&episode=`
-// is TWO-WAY: the same params that deep-link a notification/shared link into a
-// specific source are now also written as the user switches provider/team/
-// episode, making the address bar shareable + bookmarkable and letting
-// back/forward track the source. The read path (queryProvider/queryTeam/
-// queryEpisode → :initial-* props) is one-shot at mount, so writing here never
-// re-triggers it. router.replace (not push) keeps history clean; we only write
-// on a real diff. combo-change is suppressed inside WT rooms (Anime.vue is never
-// a room), and `aeWtSeed` is null until a source resolves — so no churn on load.
-watch(aeWtSeed, (seed) => {
-  if (!seed) return
-  const combo = tokenToCombo(seed.translation_id)
-  if (!combo) return
-  const ep = parseInt(seed.episode_id, 10)
-  const next: Record<string, string> = {}
-  for (const [k, v] of Object.entries(route.query)) {
-    if (typeof v === 'string') next[k] = v
-  }
-  next.provider = combo.provider
-  if (combo.team) next.team = combo.team
-  else delete next.team
-  if (Number.isFinite(ep) && ep > 0) next.episode = String(ep)
-  if (
-    next.provider !== route.query.provider ||
-    next.team !== route.query.team ||
-    next.episode !== route.query.episode
-  ) {
-    void router.replace({ query: next }).catch(() => {})
-  }
-})
+// NOTE: two-way URL sync (writing ?provider/?team/?episode as the player
+// switches source) was reverted — it made a reload pin the last-played source
+// via applyInitialProvider, overriding the deterministic BEST default that the
+// product rule requires. `?provider`/`?team`/`?episode` stay READ-only deep-link
+// hints (notifications / shared links). Whether to bring back shareable-source
+// URLs (done right — e.g. only on a manual source pick) is a parked TODO.
 
 // The Invite button's create-room payload. WatchTogether is aePlayer-only
 // (Kodik retired from WT 2026-06-19 — aePlayer plays Kodik content internally).
