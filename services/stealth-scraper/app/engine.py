@@ -64,7 +64,7 @@ from .config import Config
 from .fingerprint import build_launch_options, proxy_to_playwright
 from .profiles import Profile, ProfileManager
 from .recipes import ChallengeError, NotFoundError, Recipe, RecipeContext, RecipeError
-from .recipes.base import host_of
+from .recipes.base import host_allowed, host_of, looks_like_challenge
 from .recipes.gogoanime import GogoanimeRecipe
 from .recipes.nineanime import NineAnimeRecipe
 from .streamproxy import looks_like_m3u8, make_wrap, rewrite_playlist
@@ -510,6 +510,92 @@ class CamoufoxEngine:
             }
         return {"status": status, "content_type": ctype or "application/octet-stream", "body": body}
 
+    # -- discovery fetch (challenge-gated sites: warm session + in-page fetch) -- #
+    async def browser_fetch(self, provider: str, url: str) -> dict:
+        """GET ``url`` through a warm, challenge-solved session keyed by
+        (provider, origin), returning the RAW body (no playlist rewrite). For
+        providers whose whole site is challenge-gated (e.g. 9anime DDoS-Guard):
+        the in-page fetch clears the challenge a curl/Go client cannot. SSRF is
+        gated by the recipe's static ``allowed_hosts``."""
+        recipe = self._recipes.get(provider)
+        if recipe is None:
+            raise RecipeError(f"unknown provider: {provider}")
+        h = host_of(url)
+        if not host_allowed(h, recipe.allowed_hosts):
+            raise RecipeError(f"fetch host not allowed for {provider}: {h}")
+
+        self._evict_expired()
+        origin = _origin_of(url)
+        session = await self._warm_fetch_session(provider, origin)
+        session.in_use += 1
+        try:
+            status, ctype, _final, body = await self._in_page_fetch(session, url)
+        except FetchTimeout:
+            await self.aclose_session(session.id)
+            raise
+        finally:
+            session.in_use = max(0, session.in_use - 1)
+
+        # A challenge can re-appear mid-session (cookie expiry / new edge): drop
+        # the poisoned session and surface ChallengeError so Go fails over.
+        if looks_like_challenge(status, body[:4096].decode("utf-8", "ignore")):
+            await self.aclose_session(session.id)
+            raise ChallengeError(f"challenge on fetch {h}", host=h, kind="fetch")
+
+        session.expires_at = time.time() + self.cfg.session_ttl_seconds
+        return {"status": status, "content_type": ctype, "body": body}
+
+    async def _warm_fetch_session(self, provider: str, origin: str) -> Session:
+        """Get-or-create a session warmed on ``origin`` (navigates it once to
+        solve the site challenge; later fetches reuse its cookies)."""
+        key = f"fetch::{provider}::{origin}"
+        existing = self._sessions.get(key)
+        if existing is not None and existing.page is not None:
+            return existing
+
+        profile = await self._acquire_profile()
+        if profile is None:
+            metrics.POOL_EXHAUSTED_TOTAL.inc()
+            raise PoolExhausted("no free browser profile (pool/sessions exhausted)")
+        proxy = self.pool.select(sticky_key=profile.id)
+        if proxy is None:
+            self.profiles.release(profile, ok=False)
+            raise RecipeError("no proxy available for fetch warm")
+
+        try:
+            context = await self._ensure_browser(profile, proxy.id)
+            page = await context.new_page()
+            resp = await page.goto(
+                origin, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
+            )
+            status = resp.status if resp else 0
+            try:
+                title = await page.title()
+            except Exception:  # noqa: BLE001
+                title = ""
+            if looks_like_challenge(status, title):
+                await _safe_close_page(page)
+                self.pool.mark_blocked(proxy.id)
+                self.profiles.release(profile, ok=False)
+                raise ChallengeError(
+                    f"challenge warming {origin}", host=host_of(origin), kind="warm"
+                )
+            session = Session(
+                id=key, profile=profile, proxy_id=proxy.id, referer=origin,
+                user_agent=profile.user_agent, cdn_host=host_of(origin),
+                master_url=origin, expires_at=time.time() + self.cfg.session_ttl_seconds,
+                page=page, player_url=origin,
+            )
+            self._sessions[key] = session
+            metrics.ACTIVE_SESSIONS.set(len(self._sessions))
+            return session
+        except ChallengeError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            await self._teardown(profile, reason="crash")
+            self.profiles.release(profile, ok=False)
+            raise RecipeError(f"fetch warm failed for {origin}: {exc}") from exc
+
     async def _in_page_fetch(self, session: Session, url: str) -> tuple[int, str, str, bytes]:
         """Run ``fetch(url)`` inside the session's live page and marshal the
         response back as bytes. Encodes via FileReader/base64 (NOT typed-array +
@@ -744,3 +830,10 @@ def _q(url: str) -> str:
     from urllib.parse import quote
 
     return quote(url, safe="")
+
+
+def _origin_of(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    p = urlsplit(url)
+    return f"{p.scheme}://{p.netloc}"
