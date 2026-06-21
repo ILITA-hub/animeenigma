@@ -1,6 +1,8 @@
-"""browser_fetch: in-page fetch of an allowlisted discovery URL through a warm,
-challenge-solved session keyed per (provider, origin). Returns the raw body.
-Used for providers whose whole site is challenge-gated (9anime DDoS-Guard)."""
+"""browser_fetch: discovery fetch of an allowlisted URL through a warm,
+challenge-solved session keyed per (provider, origin), via NAVIGATION
+(``page.goto``) so an ad-heavy page's wedged main thread can't time out the
+fetch. Returns the raw body. Used for providers whose whole site is
+challenge-gated (9anime DDoS-Guard)."""
 import base64
 import time
 import unittest
@@ -15,17 +17,39 @@ def run(coro):
     return asyncio.run(coro)
 
 
+class _FetchResponse:
+    """Fake Playwright Response returned by page.goto(): exposes status,
+    headers (content-type), url, and async body()."""
+
+    def __init__(self, body: bytes, status: int, ctype: str, url: str):
+        self.status = status
+        self.headers = {"content-type": ctype}
+        self.url = url
+        self._body = body
+
+    async def body(self) -> bytes:
+        return self._body
+
+
 class _FetchPage:
-    """Fake page: evaluate() mimics the in-page fetch JS contract
-    'status|content-type|final-url|base64(body)'. Counts calls for reuse asserts."""
+    """Fake page: goto() mimics a navigation returning a Response carrying the
+    fixture body (browser_fetch discovery path). evaluate() is retained for the
+    in-page fetch contract used by the /hls path. ``calls`` counts navigations
+    (goto) for the reuse asserts; ``evals`` counts in-page fetches so a test can
+    prove discovery went via navigation, NOT main-thread evaluate()."""
     url = "https://9anime.me.uk/"
 
     def __init__(self, body: bytes, status: int = 200, ctype: str = "application/json"):
         self._body, self._status, self._ctype = body, status, ctype
-        self.calls = 0
+        self.calls = 0   # goto (navigation) count
+        self.evals = 0   # evaluate (in-page fetch) count
+
+    async def goto(self, url, **kwargs):
+        self.calls += 1
+        return _FetchResponse(self._body, self._status, self._ctype, url)
 
     async def evaluate(self, js, url):
-        self.calls += 1
+        self.evals += 1
         return f"{self._status}|{self._ctype}|{url}|{base64.b64encode(self._body).decode()}"
 
     async def close(self):
@@ -62,13 +86,14 @@ class TestBrowserFetch(unittest.TestCase):
         out = run(eng.browser_fetch("nineanime", "https://9anime.me.uk/wp-json/wp/v2/search?search=x"))
         self.assertEqual(out["status"], 200)
         self.assertEqual(out["body"], b'{"hello":"world"}')
-        self.assertEqual(page.calls, 1)
+        self.assertEqual(page.calls, 1)               # one goto navigation
+        self.assertEqual(page.evals, 0)               # NOT via main-thread evaluate()
 
     def test_session_reused_per_origin(self):
         eng, _, page = _engine_with_fetch_session()
         run(eng.browser_fetch("nineanime", "https://9anime.me.uk/a"))
         run(eng.browser_fetch("nineanime", "https://9anime.me.uk/b"))
-        self.assertEqual(page.calls, 2)               # same page reused
+        self.assertEqual(page.calls, 2)               # SAME page's goto called twice
         self.assertEqual(len(eng._sessions), 1)        # no second session opened
 
     def test_challenge_body_raises_and_drops_session(self):
