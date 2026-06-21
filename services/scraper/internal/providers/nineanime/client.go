@@ -119,10 +119,14 @@ var stageNames = health.AllStages
 // than a downstream `<source>`-regex miss that misattributes the failure.
 var iframeSrcRegex = regexp.MustCompile(`(?i)<iframe[^>]+src=["']([^"']+)["']`)
 
-// videoSrcRegex extracts the <source src="videos/<name>.mp4"> from the
-// my.1anime.site embed page. The src is RELATIVE; caller composes
-// absolute URL from the iframe host.
-var videoSrcRegex = regexp.MustCompile(`(?i)<source[^>]+src=["'](videos/[^"']+\.mp4)["']`)
+// videoSrcRegex extracts the <source ... type="video/mp4"> URL from the
+// my.1anime.site embed page. The 2026-06 themesia embed serves an ABSOLUTE,
+// extension-less URL (e.g. `https://my.1anime.site/stream/<hash>`); the
+// pre-themesia embed served a RELATIVE `videos/<name>.mp4` path. This regex
+// captures whatever the `src` is (relative or absolute) on a source whose
+// `type` is `video/mp4`; GetStream uses an absolute http(s) URL as-is and
+// only joins a relative path with the iframe host (backward-compat).
+var videoSrcRegex = regexp.MustCompile(`(?is)<source[^>]+src=["']([^"']+)["'][^>]*type=["']video/mp4["']`)
 
 // BrowserResolveFunc resolves a megaplay embed/wrapper URL to a playable Stream
 // via the Camoufox sidecar. BrowserFetchFunc routes one discovery GET through the
@@ -416,11 +420,29 @@ func slugFromURL(u string) string {
 	return parts[1]
 }
 
-// ListEpisodes scrapes the `/series/<slug>/` page for episode anchors
-// `<a class="ep-item" data-number="N" href="...">`. Per Pitfall 5,
-// each Episode.ID is the FULL canonical episode URL from the anchor
-// `href` — NEVER reconstructed by string concatenation (some slugs have
-// an `hd-` prefix, some do not).
+// ListEpisodes scrapes the `/series/<slug>/` page for episode anchors. The
+// 2026-06 themesia WordPress theme nests them as
+//
+//	<div class="eplister">
+//	  <ul>
+//	    <li data-index="0">
+//	      <a href="…/…-episode-10-english-subbed/">
+//	        <div class="epl-num">10</div>
+//	        <div class="epl-title">…</div>
+//	        <div class="epl-date">…</div>
+//	      </a>
+//	    </li>
+//	    … (descending order)
+//	  </ul>
+//	</div>
+//
+// (The pre-themesia shape was `<a class="ep-item" data-number="N" href>`.)
+// We select `div.eplister ul li a`, read the episode number from the
+// `.epl-num` text, and take the episode URL from the anchor `href`. Per
+// Pitfall 5, each Episode.ID is the FULL canonical episode URL from the
+// anchor `href` — NEVER reconstructed by string concatenation (some slugs
+// have an `hd-` prefix, some do not). Source order is descending; the
+// post-processing sorts ascending.
 func (p *Provider) ListEpisodes(ctx context.Context, slug string) ([]domain.Episode, error) {
 	if strings.TrimSpace(slug) == "" {
 		err := domain.WrapExtractFailed(errors.New("empty slug"), "nineanime: ListEpisodes")
@@ -449,10 +471,11 @@ func (p *Provider) ListEpisodes(ctx context.Context, slug string) ([]domain.Epis
 
 	var refs []episodeRef
 	seenHrefs := map[string]bool{}
-	// The class is compound: "item ep-item". goquery's `a.ep-item`
-	// matches any anchor whose class list contains "ep-item".
-	doc.Find("a.ep-item").Each(func(_ int, a *goquery.Selection) {
-		n, aerr := strconv.Atoi(strings.TrimSpace(a.AttrOr("data-number", "")))
+	// Themesia theme: episode anchors live at div.eplister > ul > li > a,
+	// with the episode number in the anchor's `.epl-num` child. Skip anchors
+	// whose `.epl-num` is empty/non-numeric or whose href is empty.
+	doc.Find("div.eplister ul li a").Each(func(_ int, a *goquery.Selection) {
+		n, aerr := strconv.Atoi(strings.TrimSpace(a.Find(".epl-num").Text()))
 		if aerr != nil || n <= 0 {
 			return
 		}
@@ -521,8 +544,10 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 //  2. regex iframe src → my.1anime.site URL
 //  3. GET iframe URL with Referer:<baseURL>/ (T-28-05-05 SSRF defense
 //     enforced by isAllowedIframeHost when production-strict)
-//  4. regex <source src="videos/...mp4">
-//  5. build absolute URL from iframe host + relative src
+//  4. regex <source ... type="video/mp4"> (themesia: absolute extension-less
+//     URL; legacy: relative videos/...mp4)
+//  5. use the absolute src as-is, or build absolute URL from iframe host +
+//     relative src (backward-compat)
 //  6. return Stream{Sources:[{Type:"mp4"}], Headers:{Referer:"https://my.1anime.site/"}}
 //
 // Per Pitfall 6, the returned source Type is "mp4", not "hls".
@@ -642,7 +667,7 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 		return nil, err
 	}
 
-	// (4) Regex <source src="videos/...mp4">.
+	// (4) Regex <source ... type="video/mp4">.
 	vm := videoSrcRegex.FindSubmatch(embedBody)
 	if len(vm) < 2 {
 		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorVideoMP4Source).Inc()
@@ -650,11 +675,19 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 		p.markStage(health.StageStream, err)
 		return nil, err
 	}
-	relSrc := string(vm[1])
+	src := strings.TrimSpace(string(vm[1]))
 
-	// (5) Compose absolute URL from iframe host + relative src.
-	absURL := fmt.Sprintf("%s://%s/%s",
-		parsedIframe.Scheme, parsedIframe.Host, relSrc)
+	// (5) Resolve to an absolute URL. The themesia embed serves an absolute
+	// http(s) `src` (e.g. my.1anime.site/stream/<hash>) — use it verbatim.
+	// The pre-themesia embed served a relative `videos/...mp4` path — join it
+	// with the iframe host (backward-compat).
+	var absURL string
+	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		absURL = src
+	} else {
+		absURL = fmt.Sprintf("%s://%s/%s",
+			parsedIframe.Scheme, parsedIframe.Host, strings.TrimPrefix(src, "/"))
+	}
 
 	// Public-facing Referer is always the 1anime.site origin (matches
 	// the production CDN's CORS contract). The httptest path's iframe

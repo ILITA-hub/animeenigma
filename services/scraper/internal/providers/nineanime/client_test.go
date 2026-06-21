@@ -330,10 +330,11 @@ func TestFindID_BelowThreshold(t *testing.T) {
 
 // --- ListEpisodes --------------------------------------------------------
 
-// TestListEpisodes_Frieren — given the captured series HTML, returns a
-// non-empty slice sorted by Number ascending. Per Pitfall 5, each
-// Episode.ID is the FULL canonical episode URL from the anchor href (not
-// reconstructed).
+// TestListEpisodes_Frieren — given the captured themesia series HTML
+// (div.eplister > ul > li > a, .epl-num for the number, descending source
+// order), returns a non-empty slice sorted by Number ASCENDING. Per Pitfall
+// 5, each Episode.ID is the FULL canonical episode URL from the anchor href
+// (not reconstructed).
 func TestListEpisodes_Frieren(t *testing.T) {
 	body := readFixture(t, "series_frieren_s2.html")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -353,18 +354,33 @@ func TestListEpisodes_Frieren(t *testing.T) {
 	if len(eps) == 0 {
 		t.Fatal("ListEpisodes: empty slice; want >0 episodes")
 	}
+	// The themesia fixture lists episodes 10..1 (descending source order);
+	// the parser must dedup + sort ascending to a contiguous 1..10.
+	if len(eps) != 10 {
+		t.Fatalf("len(eps) = %d; want 10 (themesia eplister has 10 li > a anchors)", len(eps))
+	}
 	// Sorted ascending by Number.
 	for i := 1; i < len(eps); i++ {
 		if eps[i-1].Number > eps[i].Number {
 			t.Fatalf("episodes not sorted: %d > %d at index %d", eps[i-1].Number, eps[i].Number, i)
 		}
 	}
-	// Episode 1 has the irregular "hd-" prefix (per Pitfall 5).
-	if !strings.HasPrefix(eps[0].ID, "http") {
-		t.Fatalf("Episode.ID must be a full URL (Pitfall 5 — don't reconstruct); got %q", eps[0].ID)
-	}
+	// First episode is 1, last is 10 — the full ascending range parsed from
+	// the .epl-num values.
 	if eps[0].Number != 1 {
 		t.Fatalf("first episode Number = %d; want 1", eps[0].Number)
+	}
+	if eps[len(eps)-1].Number != 10 {
+		t.Fatalf("last episode Number = %d; want 10", eps[len(eps)-1].Number)
+	}
+	// Episode 1 has the irregular "hd-" prefix and its full canonical href is
+	// the Episode.ID (per Pitfall 5 — never reconstructed). The new -english-
+	// subbed/ URL pattern is preserved verbatim from the anchor href.
+	if eps[0].ID != "https://9anime.me.uk/hd-frieren-beyond-journeys-end-season-2-episode-1-english-subbed/" {
+		t.Fatalf("Episode 1 ID = %q; want the full hd-…-episode-1-english-subbed/ href (Pitfall 5)", eps[0].ID)
+	}
+	if !strings.HasSuffix(eps[len(eps)-1].ID, "-episode-10-english-subbed/") {
+		t.Fatalf("Episode 10 ID = %q; want suffix -episode-10-english-subbed/", eps[len(eps)-1].ID)
 	}
 }
 
@@ -448,11 +464,12 @@ func TestGetStream_Frieren(t *testing.T) {
 	if stream.Sources[0].Type != "mp4" {
 		t.Fatalf("Sources[0].Type = %q; want mp4 (Pitfall 6 — 9anime is MP4-only)", stream.Sources[0].Type)
 	}
-	if !strings.HasSuffix(stream.Sources[0].URL, ".mp4") {
-		t.Fatalf("Sources[0].URL = %q; want suffix .mp4", stream.Sources[0].URL)
-	}
-	if !strings.Contains(stream.Sources[0].URL, "/videos/") {
-		t.Fatalf("Sources[0].URL = %q; want path containing /videos/", stream.Sources[0].URL)
+	// The themesia my.1anime.site embed now serves an ABSOLUTE, extension-less
+	// <source ... type="video/mp4"> URL (e.g. my.1anime.site/stream/<hash>),
+	// NOT the legacy relative `videos/...mp4` path. The parser must pass the
+	// absolute URL through unchanged.
+	if stream.Sources[0].URL != "https://my.1anime.site/stream/8c9dc0e380ec443737c51c0c93b20084" {
+		t.Fatalf("Sources[0].URL = %q; want the absolute my.1anime.site/stream/<hash> URL from the new <source> shape", stream.Sources[0].URL)
 	}
 	if stream.Headers["Referer"] == "" {
 		t.Fatal("Headers[Referer] is empty; want a non-empty Referer for embed CORS")
