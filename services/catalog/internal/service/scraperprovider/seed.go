@@ -101,10 +101,19 @@ var defaultProviders = []domain.ScraperProvider{
 		QualityCeiling: "1080p", PreferenceWeight: 100,
 	},
 	{
-		Name: "kodik", Status: domain.StatusEnabled,
-		Reason:      "RU iframe player (legacy, slated for retirement)",
-		Description: "Kodik iframe embed. Retiring in favor of aePlayer (2026-06-17).",
+		Name: "kodik-iframe", Status: domain.StatusEnabled,
+		Reason: "RU iframe embed — playback not probeable (no direct stream)",
+		Description: "Kodik iframe embed. The player has no direct video control, so the " +
+			"playback probe cannot validate it (it reads '— not probed').",
 		SupportsDub: true, SubDelivery: "none", PreferenceWeight: 0,
+	},
+	{
+		Name: "kodik-noads", Status: domain.StatusEnabled,
+		Reason: "Ad-free scraped Kodik HLS (kodikextract)",
+		Description: "Direct ad-free Kodik HLS resolved via kodikextract (solodcdn CDN). " +
+			"A real stream, so it is playback-probed.",
+		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
+		QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
 	{
 		Name: "animelib", Status: domain.StatusDisabled,
@@ -135,12 +144,13 @@ var defaultProviders = []domain.ScraperProvider{
 // "adult"), so the seed can never move 18anime into the EN failover chain.
 // Absent entries default to "en".
 var intrinsicGroups = map[string]string{
-	"18anime":  "adult",
-	"hanime":   "adult",
-	"ae":       "firstparty",
-	"kodik":    "ru",
-	"animelib": "ru",
-	"raw":      "jp",
+	"18anime":      "adult",
+	"hanime":       "adult",
+	"ae":           "firstparty",
+	"kodik-iframe": "ru",
+	"kodik-noads":  "ru",
+	"animelib":     "ru",
+	"raw":          "jp",
 }
 
 func intrinsicGroup(name string) string {

@@ -28,8 +28,8 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 13 {
-		t.Fatalf("want 13 default rows, got %d", count)
+	if count != 14 {
+		t.Fatalf("want 14 default rows, got %d", count)
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")
@@ -44,10 +44,15 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	if ae.Group != "firstparty" || !ae.IsEnabled() || ae.ScraperOperated {
 		t.Errorf("ae seeded wrong (want firstparty/enabled/not-scraper-operated): %+v", ae)
 	}
-	var kodik domain.ScraperProvider
-	db.First(&kodik, "name = ?", "kodik")
-	if kodik.Group != "ru" || kodik.ScraperOperated {
-		t.Errorf("kodik seeded wrong (want ru/not-scraper-operated): %+v", kodik)
+	var kodikIframe domain.ScraperProvider
+	db.First(&kodikIframe, "name = ?", "kodik-iframe")
+	if kodikIframe.Group != "ru" || kodikIframe.ScraperOperated {
+		t.Errorf("kodik-iframe seeded wrong (want ru/not-scraper-operated): %+v", kodikIframe)
+	}
+	var kodikNoads domain.ScraperProvider
+	db.First(&kodikNoads, "name = ?", "kodik-noads")
+	if kodikNoads.Group != "ru" || kodikNoads.ScraperOperated || !kodikNoads.IsEnabled() {
+		t.Errorf("kodik-noads seeded wrong (want ru/enabled/not-scraper-operated): %+v", kodikNoads)
 	}
 }
 
@@ -95,7 +100,7 @@ func TestSeedDefaults_IdempotentDoesNotOverwrite(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 13 {
+	if count != 14 {
 		t.Fatalf("re-seed created duplicates: %d rows", count)
 	}
 	var all domain.ScraperProvider

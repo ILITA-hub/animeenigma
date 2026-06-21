@@ -247,3 +247,87 @@ func TestBackfillScraperOperated_SetsIntrinsicFlag(t *testing.T) {
 		t.Error("ae should be scraper_operated=false")
 	}
 }
+
+func TestSplitKodik_RenamesLegacyKodikAndSeedsNoads(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Simulate a pre-split live DB: a single legacy "kodik" row.
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "kodik", Status: domain.StatusEnabled, Group: "ru",
+	}).Error; err != nil {
+		t.Fatalf("seed legacy kodik: %v", err)
+	}
+
+	// SplitKodik (rename) must run BEFORE SeedDefaults, mirroring main.go order.
+	if err := scraperprovider.SplitKodik(db); err != nil {
+		t.Fatalf("split kodik: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var legacy int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "kodik").Count(&legacy)
+	if legacy != 0 {
+		t.Errorf("legacy 'kodik' row must be gone after split, found %d", legacy)
+	}
+	var iframe, noads domain.ScraperProvider
+	if err := db.First(&iframe, "name = ?", "kodik-iframe").Error; err != nil {
+		t.Fatalf("kodik-iframe row missing: %v", err)
+	}
+	if iframe.Group != "ru" {
+		t.Errorf("kodik-iframe group = %q, want ru", iframe.Group)
+	}
+	if err := db.First(&noads, "name = ?", "kodik-noads").Error; err != nil {
+		t.Fatalf("kodik-noads row missing: %v", err)
+	}
+	if noads.Group != "ru" || noads.Status != domain.StatusEnabled {
+		t.Errorf("kodik-noads = %+v, want group ru / enabled", noads)
+	}
+}
+
+func TestSplitKodik_FreshDB_NoLegacyRow(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Fresh DB: no kodik row at all. SplitKodik then SeedDefaults.
+	if err := scraperprovider.SplitKodik(db); err != nil {
+		t.Fatalf("split kodik (fresh): %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	for _, name := range []string{"kodik-iframe", "kodik-noads"} {
+		var c int64
+		db.Model(&domain.ScraperProvider{}).Where("name = ?", name).Count(&c)
+		if c != 1 {
+			t.Errorf("%s count = %d, want 1 on fresh DB", name, c)
+		}
+	}
+	var legacy int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "kodik").Count(&legacy)
+	if legacy != 0 {
+		t.Errorf("no legacy 'kodik' row should exist on fresh DB, found %d", legacy)
+	}
+}
+
+func TestSplitKodik_Idempotent(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	_ = db.AutoMigrate(&domain.ScraperProvider{})
+	_ = db.Create(&domain.ScraperProvider{Name: "kodik", Status: domain.StatusEnabled, Group: "ru"}).Error
+	if err := scraperprovider.SplitKodik(db); err != nil {
+		t.Fatalf("split 1: %v", err)
+	}
+	// Re-running must be a guarded no-op (no error, no duplicate).
+	if err := scraperprovider.SplitKodik(db); err != nil {
+		t.Fatalf("split 2 (idempotent): %v", err)
+	}
+	var iframe int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "kodik-iframe").Count(&iframe)
+	if iframe != 1 {
+		t.Errorf("kodik-iframe count = %d, want 1 after double-run", iframe)
+	}
+}

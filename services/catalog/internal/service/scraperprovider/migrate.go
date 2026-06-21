@@ -130,6 +130,50 @@ func BackfillScraperOperated(db *gorm.DB) error {
 	return nil
 }
 
+// splitKodikGuardKey marks SplitKodik as applied.
+const splitKodikGuardKey = "split_kodik_2026_06_21"
+
+// SplitKodik renames the legacy single "kodik" roster row to "kodik-iframe" (the
+// un-probeable embed). The new "kodik-noads" row (the scraped ad-free HLS) is
+// inserted by SeedDefaults, so this migration is rename-only.
+//
+// MUST run BEFORE SeedDefaults: the seed is insert-if-absent, so if it ran first
+// it would insert a fresh "kodik-iframe" while the old "kodik" row still existed,
+// and this rename would then collide on the name primary key. Running the rename
+// first means the seed sees kodik-iframe already present (skip) and only inserts
+// kodik-noads.
+//
+// RUN-ONCE guarded via the catalog_migration_guards ledger. On a fresh DB there
+// is no "kodik" row (the seed uses kodik-iframe directly), so the rename affects
+// 0 rows — that is the correct terminal state, so the guard is still written.
+// Idempotent; safe to call every boot. The functional data-source key "kodik"
+// used elsewhere (capability families, parsers, FE, watch-together) is a separate
+// identifier and is intentionally untouched.
+func SplitKodik(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", splitKodikGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check split-kodik guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied
+	}
+
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "kodik").
+		Update("name", "kodik-iframe").Error; err != nil {
+		return fmt.Errorf("split kodik (rename kodik -> kodik-iframe): %w", err)
+	}
+
+	if err := db.Create(&migrationGuard{Key: splitKodikGuardKey}).Error; err != nil {
+		return fmt.Errorf("write split-kodik guard: %w", err)
+	}
+	return nil
+}
+
 // miruroDubOnlyGuardKey marks MiruroDubOnly as applied.
 const miruroDubOnlyGuardKey = "miruro_dub_only"
 

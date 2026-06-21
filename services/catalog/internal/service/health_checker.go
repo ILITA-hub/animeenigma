@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	// providerKodik is the provider label Kodik reports under in the shared
-	// provider-health metric family (libs/metrics/provider.go). Kodik is the RU
-	// iframe player; it is probed by catalog (not the scraper microservice) but
-	// surfaces in the unified "Provider Health" Grafana view alongside the EN
-	// scraper providers. See docs/superpowers/specs/2026-06-05-playback-health-v2.
-	providerKodik = "kodik"
+	// providerKodik is the provider label the Kodik iframe liveness check reports
+	// under in the shared provider-health metric family (libs/metrics/provider.go).
+	// Matches the roster row name "kodik-iframe" (the un-probeable embed) so the
+	// liveness gauge lines up with the roster after the kodik split. The scraped
+	// "kodik-noads" row gets its verdict from the analytics playback probe instead.
+	providerKodik = "kodik-iframe"
 	// kodikStage is the single synthetic probe stage for Kodik (distinct from the
 	// scraper stages search/episodes/servers/stream/stream_segment).
 	kodikStage = "liveness"

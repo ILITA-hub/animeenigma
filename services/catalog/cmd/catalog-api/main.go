@@ -142,7 +142,14 @@ func main() {
 		}
 	}
 
-	// Bootstrap scraper_providers from the Go-embedded default roster
+	// Split the legacy "kodik" row into "kodik-iframe" (un-probeable embed) +
+	// "kodik-noads" (scraped HLS). MUST run BEFORE SeedDefaults so the rename
+	// wins before the insert-if-absent seed could add a duplicate kodik-iframe.
+	if err := scraperprovider.SplitKodik(db.DB); err != nil {
+		log.Errorw("split-kodik migration failed (continuing)", "error", err)
+	}
+
+	// Bootstrap stream_providers from the Go-embedded default roster
 	// (insert-if-absent; the DB is the SINGLE source of truth — the YAML was
 	// retired 2026-06-17, AUTO-484). Idempotent: operator edits are never
 	// overwritten.
