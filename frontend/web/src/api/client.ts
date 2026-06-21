@@ -743,13 +743,13 @@ export const kodikApi = {
  * orchestrator picks its default.
  */
 export const scraperApi = {
-  getEpisodes: (animeId: string, prefer?: string) =>
+  getEpisodes: (animeId: string, prefer?: string, exclusive?: boolean) =>
     apiClient.get(`/anime/${animeId}/scraper/episodes`, {
-      params: prefer ? { prefer } : undefined,
+      params: { ...(prefer && { prefer }), ...(exclusive && { exclusive: 'true' }) },
     }),
-  getServers: (animeId: string, episodeId: string, prefer?: string) =>
+  getServers: (animeId: string, episodeId: string, prefer?: string, exclusive?: boolean) =>
     apiClient.get(`/anime/${animeId}/scraper/servers`, {
-      params: { episode: episodeId, ...(prefer && { prefer }) },
+      params: { episode: episodeId, ...(prefer && { prefer }), ...(exclusive && { exclusive: 'true' }) },
     }),
   getStream: (
     animeId: string,
@@ -757,9 +757,10 @@ export const scraperApi = {
     serverId: string,
     category: 'sub' | 'dub',
     prefer?: string,
+    exclusive?: boolean,
   ) =>
     apiClient.get(`/anime/${animeId}/scraper/stream`, {
-      params: { episode: episodeId, server: serverId, category, ...(prefer && { prefer }) },
+      params: { episode: episodeId, server: serverId, category, ...(prefer && { prefer }), ...(exclusive && { exclusive: 'true' }) },
     }),
   // Health is per-service (not per-anime) but the catalog route is templated
   // on animeId for routing reasons. The catalog forwards to scraper without
