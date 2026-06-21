@@ -529,7 +529,7 @@ class CamoufoxEngine:
         session = await self._warm_fetch_session(provider, origin)
         session.in_use += 1
         try:
-            status, ctype, _final, body = await self._navigate_fetch(session, url)
+            status, ctype, _final, body = await self._in_page_fetch(session, url)
         except FetchTimeout:
             await self.aclose_session(session.id)
             raise
@@ -598,41 +598,6 @@ class CamoufoxEngine:
             await self._teardown(profile, reason="crash")
             self.profiles.release(profile, ok=False)
             raise RecipeError(f"fetch warm failed for {origin}: {exc}") from exc
-
-    async def _navigate_fetch(self, session: Session, url: str) -> tuple[int, str, str, bytes]:
-        """DISCOVERY fetch via NAVIGATION (``page.goto``), returning the raw
-        response body. For ad-script-heavy challenge-gated sites (9anime.me.uk) a
-        reused warm session's page accumulates ad scripts that starve the main
-        thread, so an in-page ``page.evaluate`` fetch can time out → FetchTimeout
-        → discovery 502s. Navigation returns when the response arrives and does
-        NOT depend on the main thread staying free; the DDoS-Guard clearance
-        cookie set during warm persists across navigations, so the target loads
-        directly (no challenge, no wedge). This also sidesteps in-page CORS limits
-        for same-origin discovery. The /hls path keeps using ``_in_page_fetch``
-        (CDN segment fetches need the in-page network stack)."""
-        page = session.page
-        if page is None:
-            raise SessionGone(session.id)
-        try:
-            resp = await asyncio.wait_for(
-                page.goto(
-                    url, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
-                ),
-                timeout=self.cfg.fetch_timeout_ms / 1000.0,
-            )
-        except asyncio.TimeoutError as exc:
-            raise FetchTimeout(session.id) from exc
-        if resp is None:
-            raise RecipeError(f"navigation returned no response: {host_of(url)}")
-        status = resp.status
-        ctype = (resp.headers or {}).get("content-type", "")
-        body = await resp.body()
-        final_url = resp.url or url
-        if len(body) > self.cfg.max_body_bytes:
-            raise RecipeError(
-                f"upstream body exceeds cap ({self.cfg.max_body_bytes} bytes): {host_of(url)}"
-            )
-        return status, ctype, final_url, body
 
     async def _in_page_fetch(self, session: Session, url: str) -> tuple[int, str, str, bytes]:
         """Run ``fetch(url)`` inside the session's live page and marshal the
