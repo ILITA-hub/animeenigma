@@ -27,6 +27,7 @@ func NewRouter(
 	internalEpisodesHandler *handler.InternalEpisodesHandler,
 	internalEpisodesValidateHandler *handler.InternalEpisodesValidateHandler,
 	internalScraperProvidersHandler *handler.InternalScraperProvidersHandler,
+	internalProbeHandler *handler.InternalProbeHandler,
 	spotlightHandler *handler.SpotlightHandler,
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
 	capabilitiesHandler *handler.CapabilitiesHandler,
@@ -90,6 +91,12 @@ func NewRouter(
 	// Same gateway-non-routing security model as the internal endpoints above.
 	if internalScraperProvidersHandler != nil {
 		r.Get("/internal/scraper/providers", internalScraperProvidersHandler.List)
+	}
+
+	// Playback-probe ae target set (newest distinct-anime library uploads mapped
+	// to catalog UUIDs). Same gateway-non-routing model as the endpoints above.
+	if internalProbeHandler != nil {
+		r.Get("/internal/probe/ae-targets", internalProbeHandler.AeTargets)
 	}
 
 	// Anidle guess-game pool (spec 2026-06-15) — Docker-network only.

@@ -78,6 +78,21 @@ type listEnvelope struct {
 	} `json:"data"`
 }
 
+// RecentEpisode is one entry from GET /internal/library/recent-episodes —
+// the (anime, episode) the playback probe should target.
+type RecentEpisode struct {
+	ShikimoriID   string `json:"shikimori_id"`
+	EpisodeNumber int    `json:"episode_number"`
+}
+
+// recentEnvelope wraps the {episodes:[{shikimori_id,episode_number}]} payload.
+type recentEnvelope struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Episodes []RecentEpisode `json:"episodes"`
+	} `json:"data"`
+}
+
 // NewClient constructs a Client from a Config. Empty timeout falls
 // back to 2 seconds (SPEC-locked per-request cap). Trailing slash on
 // APIURL is trimmed so URL composition never produces a double slash.
@@ -288,6 +303,49 @@ type DemandTrigger struct {
 	Language       string
 	WatchType      string
 	WatchedEpisode int
+}
+
+// RecentEpisodes fetches the newest distinct-anime library uploads via
+// GET /internal/library/recent-episodes?limit=N, for the analytics playback
+// probe's ae target set. Behavior mirrors the other readers:
+//
+//   - 200 → returns the (possibly empty) slice.
+//   - 404 / unconfigured client → (nil, nil): legitimate empty state.
+//   - 5xx / other non-2xx / transport / decode error → (nil, wrapped error).
+func (c *Client) RecentEpisodes(ctx context.Context, limit int) ([]RecentEpisode, error) {
+	if c == nil || c.cfg.APIURL == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 3
+	}
+	u := fmt.Sprintf("%s/internal/library/recent-episodes?limit=%d", c.cfg.APIURL, limit)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("library: build recent request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("library: recent do request: %w", err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		var env recentEnvelope
+		if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+			return nil, fmt.Errorf("library: decode recent 200 body: %w", err)
+		}
+		return env.Data.Episodes, nil
+	case resp.StatusCode == http.StatusNotFound:
+		return nil, nil
+	case resp.StatusCode >= 500:
+		return nil, fmt.Errorf("library: recent upstream %d", resp.StatusCode)
+	default:
+		return nil, fmt.Errorf("library: recent unexpected status %d", resp.StatusCode)
+	}
 }
 
 // Ping issues a GET /health on the configured library APIURL. Returns

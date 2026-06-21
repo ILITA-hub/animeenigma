@@ -386,6 +386,9 @@ func main() {
 	// microservice at boot + on a refresh interval. Same gateway-non-routing
 	// security model as the other /internal/* endpoints above.
 	internalScraperProvidersHandler := handler.NewInternalScraperProvidersHandler(db.DB, log)
+	// ae playback-probe target set: newest distinct-anime library uploads mapped
+	// to catalog UUIDs (library client + anime repo).
+	internalProbeHandler := handler.NewInternalProbeHandler(libraryClient, animeRepo, log)
 
 	// Anidle guess-game pool (spec 2026-06-15) — Docker-network only.
 	// Serves GET /internal/guessgame/pool for the anidle guessing-game service.
@@ -474,7 +477,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
