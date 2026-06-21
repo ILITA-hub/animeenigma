@@ -52,10 +52,12 @@
 //	                                                       for tie-breaks
 //	                                                       (CONTEXT.md
 //	                                                       Discretion #2).
-//	GET /series/<slug>/                                 → HTML. Parse
-//	                                                       <a class="ep-item"
-//	                                                       data-number="N">
-//	                                                       elements. Episode
+//	GET /series/<slug>/                                 → HTML (themesia theme).
+//	                                                       Parse
+//	                                                       div.eplister ul li a
+//	                                                       anchors; number from
+//	                                                       the nested .epl-num
+//	                                                       text. Episode
 //	                                                       ID = the FULL
 //	                                                       canonical episode
 //	                                                       URL (per Pitfall 5

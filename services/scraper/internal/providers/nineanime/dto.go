@@ -36,6 +36,6 @@ type wpSearchResult struct {
 // number for sort-key.
 type episodeRef struct {
 	URL    string `json:"url"`    // full canonical episode URL (the Episode.ID)
-	Number int    `json:"number"` // parsed `data-number` attr (sort key)
+	Number int    `json:"number"` // parsed from .epl-num text (sort key)
 	Title  string `json:"title,omitempty"`
 }
