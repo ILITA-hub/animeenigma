@@ -123,11 +123,15 @@ func (o *Orchestrator) EmbedRegistry() *domain.Registry {
 // to position 0; the remainder stays in registration order. Unknown prefer
 // values are silently ignored (caller-supplied input is not trusted).
 //
+// When exclusive is true the returned slice contains ONLY the preferred
+// provider (no-failover mode). An unset or unknown prefer with exclusive=true
+// returns an empty slice, which the caller surfaces as "no providers".
+//
 // The implementation tracks the preferred provider by INDEX so the second
 // loop can skip it unconditionally — a previous version compared against
 // `len(out) == 1` which produced a duplicate once the loop appended any
 // non-preferred provider (advancing len(out) to 2). See REVIEW.md CR-01.
-func (o *Orchestrator) orderedProviders(prefer string) []domain.Provider {
+func (o *Orchestrator) orderedProviders(prefer string, exclusive bool) []domain.Provider {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if len(o.providers) == 0 {
@@ -143,6 +147,11 @@ func (o *Orchestrator) orderedProviders(prefer string) []domain.Provider {
 				break
 			}
 		}
+	}
+	if exclusive {
+		// No-failover: route ONLY to the preferred provider (empty when prefer
+		// is unset/unknown, which the handler surfaces as "no providers").
+		return out
 	}
 	for i, p := range o.providers {
 		if i == preferredIdx {
@@ -364,13 +373,16 @@ func runFailoverNamed[T any](
 // preferred name first if it matches a registered provider, then the
 // rest in registration order. Unknown prefer values are silently ignored.
 //
+// When exclusive is true only the preferred provider is included (no
+// failover). See orderedProviders for the full exclusive semantics.
+//
 // Phase 16 plan 05 (SCRAPER-NF-05 backend half): exposed publicly so the
 // HTTP handler can render `meta.tried` on every response — both success
 // and error — without poking the orchestrator's internal lock again.
 // Returns an empty (non-nil) slice when no providers are registered so
 // the handler can encode `"tried":[]` unconditionally.
-func (o *Orchestrator) OrderedProviderNames(prefer string) []string {
-	ps := o.orderedProviders(prefer)
+func (o *Orchestrator) OrderedProviderNames(prefer string, exclusive bool) []string {
+	ps := o.orderedProviders(prefer, exclusive)
 	if len(ps) == 0 {
 		return []string{}
 	}
@@ -391,7 +403,7 @@ func (o *Orchestrator) OrderedProviderNames(prefer string) []string {
 // per-method business calls so the catalog can pass `mal_id` and the
 // orchestrator resolves it through the registered provider chain.
 func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer string) (string, error) {
-	id, _, err := o.FindIDNamed(ctx, ref, prefer)
+	id, _, err := o.FindIDNamed(ctx, ref, prefer, false)
 	return id, err
 }
 
@@ -406,8 +418,14 @@ func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer s
 // titles only allanime/miruro can resolve" bug, e.g. "91 Days": gogoanime's
 // search misses, so allanime wins FindID, but gogoanime.ListEpisodes returns
 // ([],nil) for the allanime ID).
-func (o *Orchestrator) FindIDNamed(ctx context.Context, ref domain.AnimeRef, prefer string) (string, string, error) {
-	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "find_id",
+//
+// When exclusive is true the call is pinned to the `prefer` provider only —
+// no failover. This is the "honest availability" probe path: callers that
+// need to know whether a SPECIFIC provider has a given anime must set
+// exclusive=true so a failure on that provider is not masked by a successful
+// response from another provider in the chain.
+func (o *Orchestrator) FindIDNamed(ctx context.Context, ref domain.AnimeRef, prefer string, exclusive bool) (string, string, error) {
+	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudget(), "find_id",
 		func(c context.Context, p domain.Provider) (string, error) {
 			return p.FindID(c, ref)
 		})
@@ -415,7 +433,7 @@ func (o *Orchestrator) FindIDNamed(ctx context.Context, ref domain.AnimeRef, pre
 
 // ListEpisodes runs the provider chain for episode listing.
 func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer string) ([]domain.Episode, error) {
-	eps, _, err := o.ListEpisodesNamed(ctx, providerID, prefer)
+	eps, _, err := o.ListEpisodesNamed(ctx, providerID, prefer, false)
 	return eps, err
 }
 
@@ -425,8 +443,11 @@ func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer stri
 // this same provider (surfaced to the client via meta.provider) — otherwise a
 // different provider re-resolved from the failover order would receive episode
 // IDs it cannot parse.
-func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer string) ([]domain.Episode, string, error) {
-	eps, name, err := runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "list_episodes",
+//
+// When exclusive is true the call is pinned to the `prefer` provider only —
+// no failover. See FindIDNamed for the rationale.
+func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer string, exclusive bool) ([]domain.Episode, string, error) {
+	eps, name, err := runFailoverNamed(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudget(), "list_episodes",
 		func(c context.Context, p domain.Provider) ([]domain.Episode, error) {
 			return p.ListEpisodes(c, providerID)
 		})
@@ -442,8 +463,11 @@ func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer
 }
 
 // ListServers runs the provider chain for server listing for one episode.
-func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, prefer string) ([]domain.Server, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "list_servers",
+//
+// When exclusive is true the call is pinned to the `prefer` provider only —
+// no failover. See FindIDNamed for the rationale.
+func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, prefer string, exclusive bool) ([]domain.Server, error) {
+	return runFailover(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudget(), "list_servers",
 		func(c context.Context, p domain.Provider) ([]domain.Server, error) {
 			return p.ListServers(c, providerID, episodeID)
 		})
@@ -451,7 +475,7 @@ func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, p
 
 // GetStream runs the provider chain to pull a playable Stream.
 func (o *Orchestrator) GetStream(ctx context.Context, providerID, episodeID, serverID string, cat domain.Category, prefer string) (*domain.Stream, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(), "get_stream",
+	return runFailover(ctx, o.log, o.orderedProviders(prefer, false), o.cache, o.providerBudget(), "get_stream",
 		func(c context.Context, p domain.Provider) (*domain.Stream, error) {
 			return p.GetStream(c, providerID, episodeID, serverID, cat)
 		})
@@ -486,13 +510,16 @@ type gatedProvider interface {
 // providers are skipped with a parser_fallback_total emit; ErrProviderDown
 // / ErrExtractFailed / ErrNotFound are all retryable; ctx errors terminal.
 //
+// When exclusive is true the call is pinned to the `prefer` provider only —
+// no failover. See FindIDNamed for the rationale.
+//
 // SCRAPER-HEAL-04.
 func (o *Orchestrator) GetStreamGated(
 	ctx context.Context,
 	providerID, episodeID, serverID string,
-	cat domain.Category, prefer string,
+	cat domain.Category, prefer string, exclusive bool,
 ) (*domain.Stream, bool, error) {
-	providers := o.orderedProviders(prefer)
+	providers := o.orderedProviders(prefer, exclusive)
 	if len(providers) == 0 {
 		return nil, false, domain.ErrNotFound
 	}

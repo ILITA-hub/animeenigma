@@ -217,7 +217,7 @@ func parseAltTitles(raw, primary string) []string {
 // meta.tried on success; 404/502/503 with meta.tried on error.
 func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 	qp := parseQuery(r)
-	tried := h.svc.OrderedProviderNames(qp.prefer)
+	tried := h.svc.OrderedProviderNames(qp.prefer, false)
 
 	if len(tried) == 0 {
 		h.writeError(w, http.StatusServiceUnavailable, codeNoProviders, "no providers available", tried)
@@ -236,7 +236,7 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 
 	// Pin ListEpisodes to the provider that resolved the ID — the providerID
 	// is opaque and only that provider can parse it (see resolveProviderID).
-	eps, winner, err := h.svc.ListEpisodesNamed(r.Context(), providerID, pinPrefer(idWinner, qp.prefer))
+	eps, winner, err := h.svc.ListEpisodesNamed(r.Context(), providerID, pinPrefer(idWinner, qp.prefer), false)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -255,7 +255,7 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 // GetServers handles GET /scraper/servers?mal_id=...&episode=...&prefer=....
 func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
 	qp := parseQuery(r)
-	tried := h.svc.OrderedProviderNames(qp.prefer)
+	tried := h.svc.OrderedProviderNames(qp.prefer, false)
 
 	if len(tried) == 0 {
 		h.writeError(w, http.StatusServiceUnavailable, codeNoProviders, "no providers available", tried)
@@ -276,7 +276,7 @@ func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srvs, err := h.svc.ListServers(r.Context(), providerID, qp.episode, pinPrefer(idWinner, qp.prefer))
+	srvs, err := h.svc.ListServers(r.Context(), providerID, qp.episode, pinPrefer(idWinner, qp.prefer), false)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -291,7 +291,7 @@ func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
 // GetStream handles GET /scraper/stream?mal_id=...&episode=...&server=...&category=...&prefer=....
 func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 	qp := parseQuery(r)
-	tried := h.svc.OrderedProviderNames(qp.prefer)
+	tried := h.svc.OrderedProviderNames(qp.prefer, false)
 
 	if len(tried) == 0 {
 		h.writeError(w, http.StatusServiceUnavailable, codeNoProviders, "no providers available", tried)
@@ -323,7 +323,7 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stream, gated, err := h.svc.GetStreamGated(r.Context(), providerID, qp.episode, qp.server, cat, pinPrefer(idWinner, qp.prefer))
+	stream, gated, err := h.svc.GetStreamGated(r.Context(), providerID, qp.episode, qp.server, cat, pinPrefer(idWinner, qp.prefer), false)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -536,7 +536,7 @@ func (h *ScraperHandler) GetAdminHealth(w http.ResponseWriter, r *http.Request) 
 // Orchestrator.FindIDNamed.
 func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, title string, altTitles []string, prefer string) (string, string, error) {
 	ref := domain.AnimeRef{ShikimoriID: malID, Title: title, AltTitles: altTitles}
-	return h.svc.FindIDNamed(ctx, ref, prefer)
+	return h.svc.FindIDNamed(ctx, ref, prefer, false)
 }
 
 // pinPrefer chooses the effective `prefer` for a post-FindID stage: the

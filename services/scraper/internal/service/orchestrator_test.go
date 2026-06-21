@@ -97,7 +97,7 @@ func TestOrchestrator_ZeroProviders_ReturnsErrNotFound(t *testing.T) {
 	if _, err := o.ListEpisodes(ctx, "any-id", ""); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("ListEpisodes err = %v; want ErrNotFound", err)
 	}
-	if _, err := o.ListServers(ctx, "any-id", "ep1", ""); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := o.ListServers(ctx, "any-id", "ep1", "", false); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("ListServers err = %v; want ErrNotFound", err)
 	}
 	if _, err := o.GetStream(ctx, "any-id", "ep1", "srv1", domain.CategorySub, ""); !errors.Is(err, domain.ErrNotFound) {
@@ -477,13 +477,13 @@ func TestOrchestrator_DegradedExcludedFromAutoFailover(t *testing.T) {
 	o.RegisterDegraded(pd)
 
 	// No prefer → degraded provider is excluded from the auto order.
-	auto := o.orderedProviders("")
+	auto := o.orderedProviders("", false)
 	if len(auto) != 1 || auto[0].Name() != "A_en" {
 		t.Fatalf("auto order = %v; want [A_en] only (degraded excluded)", names(auto))
 	}
 
 	// Explicit prefer reaches the degraded provider and puts it first.
-	pref := o.orderedProviders("D_deg")
+	pref := o.orderedProviders("D_deg", false)
 	if len(pref) != 2 || pref[0].Name() != "D_deg" {
 		t.Fatalf("prefer order = %v; want [D_deg, A_en]", names(pref))
 	}
@@ -578,7 +578,7 @@ func TestOrchestrator_PreferPriority_NoDuplicates(t *testing.T) {
 	}
 
 	// Also verify the slice returned by orderedProviders has the correct length.
-	ordered := o.orderedProviders("B_nd")
+	ordered := o.orderedProviders("B_nd", false)
 	if len(ordered) != 3 {
 		t.Errorf("orderedProviders len = %d; want 3 (no duplicates)", len(ordered))
 	}
@@ -739,7 +739,7 @@ func TestOrchestrator_NilCache_Backcompat(t *testing.T) {
 	if eps, err := o.ListEpisodes(ctx, "x", ""); err != nil || len(eps) != 1 {
 		t.Errorf("ListEpisodes = (%+v, %v); want one episode", eps, err)
 	}
-	if srvs, err := o.ListServers(ctx, "x", "y", ""); err != nil || len(srvs) != 1 {
+	if srvs, err := o.ListServers(ctx, "x", "y", "", false); err != nil || len(srvs) != 1 {
 		t.Errorf("ListServers = (%+v, %v); want one server", srvs, err)
 	}
 	if s, err := o.GetStream(ctx, "x", "y", "z", domain.CategorySub, ""); err != nil || s == nil {
@@ -912,7 +912,7 @@ func TestOrchestrator_GetStreamGated_GatedProvider(t *testing.T) {
 		},
 	}
 	o := newTestOrchestrator(t, gp)
-	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "")
+	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "", false)
 	if err != nil {
 		t.Fatalf("GetStreamGated: %v", err)
 	}
@@ -936,7 +936,7 @@ func TestOrchestrator_GetStreamGated_NonGatedFallback(t *testing.T) {
 		},
 	}
 	o := newTestOrchestrator(t, plain)
-	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "")
+	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "", false)
 	if err != nil {
 		t.Fatalf("GetStreamGated: %v", err)
 	}
@@ -970,7 +970,7 @@ func TestOrchestrator_GetStreamGated_AllProvidersFail(t *testing.T) {
 		},
 	}
 	o := newTestOrchestrator(t, gp, plain)
-	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "")
+	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "", false)
 	if err == nil {
 		t.Fatal("err = nil; want non-nil after exhaustion")
 	}
@@ -990,7 +990,7 @@ func TestOrchestrator_GetStreamGated_AllProvidersFail(t *testing.T) {
 func TestOrchestrator_GetStreamGated_ZeroProviders(t *testing.T) {
 	t.Parallel()
 	o := newTestOrchestrator(t)
-	_, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "")
+	_, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "", false)
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("err = %v; want ErrNotFound", err)
 	}
@@ -1022,7 +1022,7 @@ func TestOrchestrator_GetStreamGated_CallerPin_StillGated(t *testing.T) {
 	}
 	o := newTestOrchestrator(t, gp)
 	stream, gated, err := o.GetStreamGated(context.Background(),
-		"anime", "ep1", "https://otakuhg.site/e/CALLER-PIN", domain.CategorySub, "")
+		"anime", "ep1", "https://otakuhg.site/e/CALLER-PIN", domain.CategorySub, "", false)
 	if err != nil {
 		t.Fatalf("GetStreamGated: %v", err)
 	}
@@ -1080,7 +1080,7 @@ func TestOrchestrator_ListEpisodesNamed_ReturnsWinner(t *testing.T) {
 		},
 	}
 	o := newTestOrchestrator(t, p)
-	eps, winner, err := o.ListEpisodesNamed(context.Background(), "x", "")
+	eps, winner, err := o.ListEpisodesNamed(context.Background(), "x", "", false)
 	if err != nil {
 		t.Fatalf("ListEpisodesNamed err = %v; want nil", err)
 	}
@@ -1113,7 +1113,7 @@ func TestOrchestrator_ListEpisodesNamed_WinnerAfterFailover(t *testing.T) {
 		},
 	}
 	o := newTestOrchestrator(t, pa, pb)
-	_, winner, err := o.ListEpisodesNamed(context.Background(), "x", "")
+	_, winner, err := o.ListEpisodesNamed(context.Background(), "x", "", false)
 	if err != nil {
 		t.Fatalf("ListEpisodesNamed err = %v; want nil after failover", err)
 	}
@@ -1127,7 +1127,7 @@ func TestOrchestrator_ListEpisodesNamed_WinnerAfterFailover(t *testing.T) {
 func TestOrchestrator_ListEpisodesNamed_NoWinnerOnFailure(t *testing.T) {
 	t.Parallel()
 	o := newTestOrchestrator(t)
-	_, winner, err := o.ListEpisodesNamed(context.Background(), "x", "")
+	_, winner, err := o.ListEpisodesNamed(context.Background(), "x", "", false)
 	if err == nil {
 		t.Fatal("ListEpisodesNamed err = nil; want error on zero providers")
 	}
@@ -1145,7 +1145,7 @@ func TestListEpisodesNamed_DefaultsHasSubWhenUntagged(t *testing.T) {
 		},
 	}
 	o := newTestOrchestrator(t, p)
-	eps, _, err := o.ListEpisodesNamed(context.Background(), "x", "")
+	eps, _, err := o.ListEpisodesNamed(context.Background(), "x", "", false)
 	if err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
@@ -1156,5 +1156,37 @@ func TestListEpisodesNamed_DefaultsHasSubWhenUntagged(t *testing.T) {
 		if e.HasDub {
 			t.Errorf("ep %d HasDub = true; want false", e.Number)
 		}
+	}
+}
+
+func TestOrchestrator_Exclusive_NoFailover_NotFound(t *testing.T) {
+	t.Parallel()
+	pa := &fakeProvider{
+		nameVal: "gogo_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return nil, domain.WrapNotFound(errors.New("no match"), "gogo")
+		},
+	}
+	pb := &fakeProvider{
+		nameVal: "other_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{ID: "ep1"}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, pa, pb)
+
+	// exclusive=true pinned to gogo: must NOT fail over to pb; must return ErrNotFound.
+	_, _, err := o.ListEpisodesNamed(context.Background(), "x", pa.Name(), true)
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("exclusive pin must return ErrNotFound, got %v", err)
+	}
+	// And the failover-chain must be exactly [gogo].
+	if names := o.OrderedProviderNames(pa.Name(), true); len(names) != 1 || names[0] != pa.Name() {
+		t.Fatalf("exclusive OrderedProviderNames = %v, want [%s]", names, pa.Name())
+	}
+	// exclusive=false still fails over to pb.
+	got, _, err := o.ListEpisodesNamed(context.Background(), "x", pa.Name(), false)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("non-exclusive must fail over, got %v err %v", got, err)
 	}
 }

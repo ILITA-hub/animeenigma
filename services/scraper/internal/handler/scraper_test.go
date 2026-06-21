@@ -1036,23 +1036,23 @@ func TestOrchestrator_OrderedProviderNames(t *testing.T) {
 	o.Register(b)
 
 	// No prefer — registration order.
-	got := o.OrderedProviderNames("")
+	got := o.OrderedProviderNames("", false)
 	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Errorf("OrderedProviderNames(\"\") = %v; want [a b]", got)
 	}
 	// prefer=b — b moves to position 0.
-	got = o.OrderedProviderNames("b")
+	got = o.OrderedProviderNames("b", false)
 	if len(got) != 2 || got[0] != "b" || got[1] != "a" {
 		t.Errorf("OrderedProviderNames(\"b\") = %v; want [b a]", got)
 	}
 	// prefer=unknown — ignored.
-	got = o.OrderedProviderNames("zzz")
+	got = o.OrderedProviderNames("zzz", false)
 	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Errorf("OrderedProviderNames(\"zzz\") = %v; want [a b]", got)
 	}
 	// Zero providers — empty slice.
 	o2 := service.NewOrchestrator(log, domain.NewRegistry(), nil)
-	if got := o2.OrderedProviderNames(""); len(got) != 0 {
+	if got := o2.OrderedProviderNames("", false); len(got) != 0 {
 		t.Errorf("OrderedProviderNames on zero-provider orchestrator = %v; want []", got)
 	}
 }

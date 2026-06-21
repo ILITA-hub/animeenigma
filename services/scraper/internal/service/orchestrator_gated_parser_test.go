@@ -29,7 +29,7 @@ func TestGetStreamGated_EmitsParserMetrics(t *testing.T) {
 	// GetStreamGated with a plain provider: takes the p.GetStream fallback
 	// branch inside attemptGatedStream. Returns (nil, false, nil) — nil stream
 	// is allowed (no-content success from the fake).
-	_, _, err := o.GetStreamGated(context.Background(), "pid", "eid", "sid", domain.CategorySub, "")
+	_, _, err := o.GetStreamGated(context.Background(), "pid", "eid", "sid", domain.CategorySub, "", false)
 	if err != nil {
 		t.Fatalf("GetStreamGated err = %v", err)
 	}

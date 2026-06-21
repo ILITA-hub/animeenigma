@@ -318,7 +318,7 @@ func TestOrchestrator_AnimePaheToGogoanimeFailover(t *testing.T) {
 		t.Fatal("orch.ListEpisodes returned 0 episodes")
 	}
 
-	servers, err := orch.ListServers(ctx, animeID, episodes[0].ID, "")
+	servers, err := orch.ListServers(ctx, animeID, episodes[0].ID, "", false)
 	if err != nil {
 		t.Fatalf("orch.ListServers: %v", err)
 	}
