@@ -21,9 +21,18 @@ type stubEpisodeReader struct {
 	listRet []domain.Episode
 	listErr error
 
+	recentRet      []domain.Episode
+	recentErr      error
+	gotRecentLimit int
+
 	gotShikimoriID   string
 	gotEpisodeNumber int
 	gotListShikimori string
+}
+
+func (s *stubEpisodeReader) ListRecentDistinct(_ context.Context, limit int) ([]domain.Episode, error) {
+	s.gotRecentLimit = limit
+	return s.recentRet, s.recentErr
 }
 
 func (s *stubEpisodeReader) GetByShikimoriEpisode(_ context.Context, id string, n int) (*domain.Episode, error) {
@@ -206,6 +215,52 @@ func TestEpisodes_List_HappyPath(t *testing.T) {
 	}
 	if parsed.Data.Episodes[0].DurationSec != 1450 {
 		t.Errorf("ep0 duration = %d, want 1450", parsed.Data.Episodes[0].DurationSec)
+	}
+}
+
+func TestEpisodes_RecentEpisodes_HappyPath(t *testing.T) {
+	repo := &stubEpisodeReader{recentRet: []domain.Episode{
+		{ShikimoriID: "100", EpisodeNumber: 28},
+		{ShikimoriID: "200", EpisodeNumber: 12},
+	}}
+	h := NewEpisodesHandler(repo, &stubURL{}, nil)
+	r := httptest.NewRequest(http.MethodGet, "/internal/library/recent-episodes?limit=3", nil)
+	w := httptest.NewRecorder()
+	h.RecentEpisodes(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if repo.gotRecentLimit != 3 {
+		t.Errorf("limit passed = %d, want 3", repo.gotRecentLimit)
+	}
+	var parsed struct {
+		Data struct {
+			Episodes []struct {
+				ShikimoriID   string `json:"shikimori_id"`
+				EpisodeNumber int    `json:"episode_number"`
+			} `json:"episodes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(parsed.Data.Episodes) != 2 ||
+		parsed.Data.Episodes[0].ShikimoriID != "100" || parsed.Data.Episodes[0].EpisodeNumber != 28 {
+		t.Fatalf("episodes = %+v", parsed.Data.Episodes)
+	}
+}
+
+func TestEpisodes_RecentEpisodes_DefaultLimit(t *testing.T) {
+	repo := &stubEpisodeReader{recentRet: nil}
+	h := NewEpisodesHandler(repo, &stubURL{}, nil)
+	r := httptest.NewRequest(http.MethodGet, "/internal/library/recent-episodes", nil)
+	w := httptest.NewRecorder()
+	h.RecentEpisodes(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if repo.gotRecentLimit != 3 {
+		t.Errorf("default limit = %d, want 3", repo.gotRecentLimit)
 	}
 }
 

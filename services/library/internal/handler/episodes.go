@@ -19,6 +19,7 @@ import (
 type EpisodeStoreReader interface {
 	GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int) (*domain.Episode, error)
 	List(ctx context.Context, shikimoriID string) ([]domain.Episode, error)
+	ListRecentDistinct(ctx context.Context, limit int) ([]domain.Episode, error)
 }
 
 // URLBuilder is the slice of *minio.Writer the handler needs (the
@@ -97,6 +98,44 @@ func (h *EpisodesHandler) List(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 	httputil.OK(w, listResponse{Episodes: items})
+}
+
+// recentItem is one entry in the RecentEpisodes response — the (anime, episode)
+// the probe should target. Minimal on purpose: the catalog ae-targets endpoint
+// maps shikimori_id → catalog UUID + title.
+type recentItem struct {
+	ShikimoriID   string `json:"shikimori_id"`
+	EpisodeNumber int    `json:"episode_number"`
+}
+
+type recentResponse struct {
+	Episodes []recentItem `json:"episodes"`
+}
+
+// RecentEpisodes handles GET /internal/library/recent-episodes?limit=N — the
+// newest episode of each distinct anime, newest upload first (Docker-network
+// only; feeds the analytics playback probe's ae target set). Returns 200 with
+// an empty array when the library holds nothing yet.
+func (h *EpisodesHandler) RecentEpisodes(w http.ResponseWriter, r *http.Request) {
+	limit := 3
+	if q := r.URL.Query().Get("limit"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	eps, err := h.episodeRepo.ListRecentDistinct(r.Context(), limit)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	items := make([]recentItem, 0, len(eps))
+	for i := range eps {
+		items = append(items, recentItem{
+			ShikimoriID:   eps[i].ShikimoriID,
+			EpisodeNumber: eps[i].EpisodeNumber,
+		})
+	}
+	httputil.OK(w, recentResponse{Episodes: items})
 }
 
 // Get handles GET /api/library/episodes/{shikimori_id}/{episode}.

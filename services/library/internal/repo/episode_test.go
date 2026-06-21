@@ -19,6 +19,47 @@ func TestEpisode_TableName(t *testing.T) {
 	}
 }
 
+// TestDedupeNewestPerAnime covers the ae-probe target dedupe rule: from an
+// already newest-first slice, keep the first (newest) row per shikimori_id and
+// cap at limit.
+func TestDedupeNewestPerAnime(t *testing.T) {
+	// Newest-first input: anime "1" appears twice (ep5 newer than ep4),
+	// anime "2" once, anime "3" once.
+	in := []domain.Episode{
+		{ShikimoriID: "1", EpisodeNumber: 5},
+		{ShikimoriID: "1", EpisodeNumber: 4},
+		{ShikimoriID: "2", EpisodeNumber: 12},
+		{ShikimoriID: "3", EpisodeNumber: 1},
+	}
+	got := dedupeNewestPerAnime(in, 3)
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want 3 (distinct anime), got %+v", len(got), got)
+	}
+	wantIDs := []string{"1", "2", "3"}
+	for i, w := range wantIDs {
+		if got[i].ShikimoriID != w {
+			t.Fatalf("got[%d].ShikimoriID = %q, want %q", i, got[i].ShikimoriID, w)
+		}
+	}
+	// Anime "1" must be its NEWEST episode (5), not 4.
+	if got[0].EpisodeNumber != 5 {
+		t.Fatalf("anime 1 episode = %d, want 5 (newest)", got[0].EpisodeNumber)
+	}
+}
+
+// TestDedupeNewestPerAnime_Cap caps at limit even with more distinct anime.
+func TestDedupeNewestPerAnime_Cap(t *testing.T) {
+	in := []domain.Episode{
+		{ShikimoriID: "1", EpisodeNumber: 1},
+		{ShikimoriID: "2", EpisodeNumber: 1},
+		{ShikimoriID: "3", EpisodeNumber: 1},
+		{ShikimoriID: "4", EpisodeNumber: 1},
+	}
+	if got := dedupeNewestPerAnime(in, 2); len(got) != 2 {
+		t.Fatalf("len = %d, want 2 (capped)", len(got))
+	}
+}
+
 // TestEpisode_JSON_NilPointersOmitted asserts pointer fields stay out
 // of JSON output when nil. The HTTP handler relies on this so the
 // public response shape matches the spec.

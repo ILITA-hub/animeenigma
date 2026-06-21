@@ -74,6 +74,43 @@ func (r *EpisodeRepository) List(ctx context.Context, shikimoriID string) ([]dom
 	return eps, nil
 }
 
+// ListRecentDistinct returns the newest episode of each distinct anime, newest
+// upload first, capped at limit. Used by the playback probe's ae target set
+// ("3 latest uploaded library episodes", deduped to distinct anime). Portable:
+// loads rows newest-first and dedupes in Go (no Postgres-only DISTINCT ON), so
+// it works on both the Postgres prod DB and the sqlite test harness.
+func (r *EpisodeRepository) ListRecentDistinct(ctx context.Context, limit int) ([]domain.Episode, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 3
+	}
+	var eps []domain.Episode
+	if err := r.db.WithContext(ctx).
+		Order("created_at DESC, episode_number DESC").
+		Find(&eps).Error; err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "list recent distinct episodes")
+	}
+	return dedupeNewestPerAnime(eps, limit), nil
+}
+
+// dedupeNewestPerAnime keeps the first row per shikimori_id from an already
+// newest-first slice and caps the result at limit. Factored out so the dedupe
+// rule is unit-testable without a database.
+func dedupeNewestPerAnime(eps []domain.Episode, limit int) []domain.Episode {
+	seen := make(map[string]struct{}, len(eps))
+	out := make([]domain.Episode, 0, limit)
+	for _, ep := range eps {
+		if _, ok := seen[ep.ShikimoriID]; ok {
+			continue
+		}
+		seen[ep.ShikimoriID] = struct{}{}
+		out = append(out, ep)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
 // UpdateMinioPath repoints a single episode row's minio_path prefix. Used by
 // the Phase-7 one-time admin-content migrator (autocache.Migrator) AFTER the
 // MinIO objects have been server-side-Moved into the new aeProvider/<mal>/RAW/

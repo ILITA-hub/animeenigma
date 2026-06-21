@@ -65,6 +65,13 @@ func NewRouter(
 		r.Post("/internal/library/autocache/demand", autocacheInternalHandler.Demand)
 	}
 
+	// Docker-network-only: the newest distinct-anime library uploads, feeding
+	// the analytics playback probe's ae target set. Same /internal/* non-proxied
+	// rule as the autocache signals above.
+	if episodesHandler != nil {
+		r.Get("/internal/library/recent-episodes", episodesHandler.RecentEpisodes)
+	}
+
 	// API routes. Phase 2 adds /search; Phase 3 adds the job-control
 	// group. Gateway-side admin gate covers all /api/library/*
 	// non-/health routes (services/gateway/internal/transport/router.go).
