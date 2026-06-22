@@ -1,10 +1,12 @@
 package service
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -214,6 +216,184 @@ func TestProxyService_PathRewrite_OtherAdminScraper(t *testing.T) {
 	// Defensive: ensure no /admin segment slipped through.
 	if strings.Contains(got, "/admin") {
 		t.Errorf("backend received path = %q; must not contain /admin", got)
+	}
+}
+
+// newTestStreamingProxy points the streaming service URL at a test backend.
+func newTestStreamingProxy(streamingURL string) *ProxyService {
+	return NewProxyService(config.ServiceURLs{
+		StreamingService: streamingURL,
+	}, logger.Default())
+}
+
+// slowStreamBackend writes a header + first chunk immediately, sleeps past the
+// 15s API-client total timeout, then writes a final chunk. A client with a
+// fixed total Timeout truncates mid-body; a streaming client (header-timeout
+// only) reads it all.
+func slowStreamBackend(t *testing.T, sleep time.Duration, head, tail string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fl, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("backend ResponseWriter is not a Flusher")
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, head)
+		fl.Flush()
+		time.Sleep(sleep)
+		_, _ = io.WriteString(w, tail)
+		fl.Flush()
+	}))
+}
+
+// TestProxyService_ForwardStream_NoTotalTimeout — audit finding L466. A
+// gateway-routed HLS/MP4/image stream body must NOT be truncated by a fixed
+// 15s http.Client.Timeout. ForwardStream uses a client with no total timeout
+// (header timeout only), so a body that streams slowly past 15s arrives whole.
+func TestProxyService_ForwardStream_NoTotalTimeout(t *testing.T) {
+	t.Parallel()
+	const head, tail = "FIRST", "SECOND"
+	backend := slowStreamBackend(t, 16*time.Second, head, tail)
+	defer backend.Close()
+
+	p := newTestStreamingProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/streaming/hls-proxy", nil)
+	resp, err := p.ForwardStream(req, "streaming")
+	if err != nil {
+		t.Fatalf("ForwardStream: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read streamed body: %v (got %q)", err, body)
+	}
+	if got := string(body); got != head+tail {
+		t.Errorf("streamed body = %q; want %q (body truncated — total timeout still capping the stream)", got, head+tail)
+	}
+}
+
+// TestProxyService_Forward_APIClientTruncatesSlowBody is the control: the
+// existing 15s API-JSON client (Forward) MUST cut off a body that streams past
+// its total timeout. This proves the timeout split is real — the streaming
+// client behaves differently from the API client.
+func TestProxyService_Forward_APIClientTruncatesSlowBody(t *testing.T) {
+	t.Parallel()
+	const head, tail = "FIRST", "SECOND"
+	backend := slowStreamBackend(t, 16*time.Second, head, tail)
+	defer backend.Close()
+
+	p := newTestStreamingProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/streaming/hls-proxy", nil)
+	resp, err := p.Forward(req, "streaming")
+	if err != nil {
+		// A transport-level deadline before any response is also acceptable
+		// evidence the API client refuses the slow body.
+		return
+	}
+	defer resp.Body.Close()
+
+	_, readErr := io.ReadAll(resp.Body)
+	if readErr == nil {
+		t.Errorf("API client read the full slow body without error; expected the 15s total Timeout to truncate it")
+	}
+}
+
+// newTestRoomsProxy points the rooms service URL at a test backend.
+func newTestRoomsProxy(roomsURL string) *ProxyService {
+	return NewProxyService(config.ServiceURLs{
+		RoomsService: roomsURL,
+	}, logger.Default())
+}
+
+// TestProxyService_PathRewrite_Rooms asserts the gateway rewrites the public
+// /api/rooms/... prefix to the rooms service's actual mount /api/v1/rooms/...
+// (audit finding L753). The rooms service only mounts routes under /api/v1, so
+// without this rewrite the inbound /api/rooms/* arrives verbatim and 404s.
+func TestProxyService_PathRewrite_Rooms(t *testing.T) {
+	t.Parallel()
+	gotPath := make(chan string, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath <- r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestRoomsProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/rooms/abc", nil)
+	resp, err := p.Forward(req, "rooms")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := <-gotPath; got != "/api/v1/rooms/abc" {
+		t.Errorf("rooms backend received path = %q; want /api/v1/rooms/abc", got)
+	}
+}
+
+// TestProxyService_PathRewrite_RoomsRoot asserts the bare /api/rooms collection
+// path also rewrites to /api/v1/rooms (the trailing-slash form covers the
+// {roomId} subroutes; this covers the no-trailing-slash collection endpoint).
+func TestProxyService_PathRewrite_RoomsRoot(t *testing.T) {
+	t.Parallel()
+	gotPath := make(chan string, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath <- r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestRoomsProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/rooms", nil)
+	resp, err := p.Forward(req, "rooms")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := <-gotPath; got != "/api/v1/rooms" {
+		t.Errorf("rooms backend received path = %q; want /api/v1/rooms", got)
+	}
+}
+
+// TestProxyService_PathRewrite_GameRooms asserts the /api/game/rooms/... family
+// the SPA's gameApi actually calls (frontend/web/src/api/client.ts) is rewritten
+// onto the rooms service's /api/v1/rooms/... mount (audit finding L753). Without
+// this, joining a co-watch game room 404s end to end.
+func TestProxyService_PathRewrite_GameRooms(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"/api/game/rooms", "/api/v1/rooms"},
+		{"/api/game/rooms/abc", "/api/v1/rooms/abc"},
+		{"/api/game/rooms/abc/join", "/api/v1/rooms/abc/join"},
+		{"/api/game/rooms/abc/leave", "/api/v1/rooms/abc/leave"},
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			gotPath := make(chan string, 1)
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath <- r.URL.Path
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer backend.Close()
+
+			p := newTestRoomsProxy(backend.URL)
+			req := httptest.NewRequest(http.MethodGet, c.in, nil)
+			resp, err := p.Forward(req, "rooms")
+			if err != nil {
+				t.Fatalf("Forward: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if got := <-gotPath; got != c.want {
+				t.Errorf("rooms backend received path = %q; want %q", got, c.want)
+			}
+		})
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -92,6 +93,16 @@ func (h *ProxyHandler) ProxyToScraper(w http.ResponseWriter, r *http.Request) {
 // ProxyToStreaming proxies requests to streaming service
 func (h *ProxyHandler) ProxyToStreaming(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "streaming")
+}
+
+// ProxyToStreamingBody proxies large/long-lived streaming bodies (HLS
+// playlists/segments, MP4 restream, image-proxy) to the streaming service
+// WITHOUT the 15s total client timeout that truncated long playback bodies
+// (audit finding L466). It also clears the per-response server write deadline
+// so the gateway HTTP server's WriteTimeout (30s) does not re-cap the streamed
+// body — the body is then bounded only by the request context.
+func (h *ProxyHandler) ProxyToStreamingBody(w http.ResponseWriter, r *http.Request) {
+	h.proxyStream(w, r, "streaming")
 }
 
 // ProxyToThemes proxies requests to themes service
@@ -196,6 +207,48 @@ func (h *ProxyHandler) proxy(w http.ResponseWriter, r *http.Request, service str
 	w.WriteHeader(resp.StatusCode)
 
 	// Copy response body
+	_, _ = io.Copy(w, resp.Body)
+}
+
+// proxyStream is the streaming-body variant of proxy: it forwards via the
+// no-total-timeout streamClient and clears the per-response write deadline so
+// the gateway server's WriteTimeout does not truncate a long playback body
+// (audit finding L466). On a backend with a short WriteTimeout the body would
+// otherwise be cut off regardless of the client-side timeout split.
+func (h *ProxyHandler) proxyStream(w http.ResponseWriter, r *http.Request, service string) {
+	// Disable the server-level write deadline for this response. The gateway's
+	// http.Server sets WriteTimeout (30s) which would otherwise re-cap the
+	// streamed body. A zero time means "no deadline". SetWriteDeadline is
+	// best-effort — if the ResponseWriter doesn't support it (e.g. some test
+	// recorders) we simply proceed; the streamClient split still removes the
+	// 15s client cap.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+
+	resp, err := h.proxyService.ForwardStream(r, service)
+	if err != nil {
+		h.log.Errorw("stream proxy failed", "service", service, "error", err)
+		metrics.ProxyUpstreamErrors.WithLabelValues("forward_error", service).Inc()
+		httputil.Error(w, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 500 {
+		metrics.ProxyUpstreamErrors.WithLabelValues(strconv.Itoa(resp.StatusCode), service).Inc()
+	}
+
+	// Copy response headers, skipping CORS headers (gateway middleware handles CORS)
+	for key, values := range resp.Header {
+		if isCORSHeader(key) {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
 

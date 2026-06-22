@@ -92,7 +92,7 @@ type ServiceURLs struct {
 	RecsService string
 	// AnidleService — anime guessing game service (spec 2026-06-15). Port 8095.
 	AnidleService string
-	WebService           string
+	WebService    string
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
@@ -132,12 +132,12 @@ func Load() (*Config, error) {
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Services: ServiceURLs{
-			AuthService:      getEnv("AUTH_SERVICE_URL", "http://auth:8080"),
-			CatalogService:   getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
-			PlayerService:    getEnv("PLAYER_SERVICE_URL", "http://player:8083"),
-			RoomsService:     getEnv("ROOMS_SERVICE_URL", "http://rooms:8084"),
-			ScraperService:   getEnv("SCRAPER_SERVICE_URL", "http://scraper:8088"),
-			StreamingService: getEnv("STREAMING_SERVICE_URL", "http://streaming:8082"),
+			AuthService:          getEnv("AUTH_SERVICE_URL", "http://auth:8080"),
+			CatalogService:       getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
+			PlayerService:        getEnv("PLAYER_SERVICE_URL", "http://player:8083"),
+			RoomsService:         getEnv("ROOMS_SERVICE_URL", "http://rooms:8084"),
+			ScraperService:       getEnv("SCRAPER_SERVICE_URL", "http://scraper:8088"),
+			StreamingService:     getEnv("STREAMING_SERVICE_URL", "http://streaming:8082"),
 			ThemesService:        getEnv("THEMES_SERVICE_URL", "http://themes:8086"),
 			LibraryService:       getEnv("LIBRARY_SERVICE_URL", "http://library:8089"),
 			NotificationsService: getEnv("NOTIFICATIONS_SERVICE_URL", "http://notifications:8090"),
@@ -152,9 +152,15 @@ func Load() (*Config, error) {
 			PrometheusService: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090"),
 			// Infrastructure services (for status page)
 			SchedulerService: getEnv("SCHEDULER_SERVICE_URL", "http://scheduler:8085"),
-			RedisAddr:        getEnv("REDIS_ADDR", "redis:6379"),
-			PostgresAddr:     getEnv("POSTGRES_ADDR", "postgres:5432"),
-			NatsAddr:         getEnv("NATS_ADDR", "nats:4222"),
+			// REDIS_ADDR is an explicit escape hatch; when unset, derive the
+			// addr from the REDIS_HOST(+REDIS_PORT) convention the rest of the
+			// stack uses (audit finding L480). Compose sets only REDIS_HOST, so
+			// without this derivation the per-user GCRA limiter would silently
+			// fall back to the hardcoded "redis:6379" and break on any
+			// non-default Redis topology (fail-open → limiter disabled).
+			RedisAddr:    getEnv("REDIS_ADDR", getEnv("REDIS_HOST", "redis")+":"+getEnv("REDIS_PORT", "6379")),
+			PostgresAddr: getEnv("POSTGRES_ADDR", "postgres:5432"),
+			NatsAddr:     getEnv("NATS_ADDR", "nats:4222"),
 		},
 		RateLimit: RateLimitConfig{
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),

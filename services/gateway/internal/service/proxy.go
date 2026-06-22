@@ -90,11 +90,18 @@ type ProxyService struct {
 	serviceURLs      config.ServiceURLs
 	client           *http.Client
 	noRedirectClient *http.Client
-	log              *logger.Logger
+	// streamClient carries large/long-lived bodies (HLS/MP4/image-proxy) and
+	// deliberately has NO total http.Client.Timeout — a fixed total timeout
+	// covers the whole exchange including the streamed body read, so it
+	// truncated long playback bodies at 15s (audit finding L466). TTFB is
+	// still bounded by the transport's ResponseHeaderTimeout; the body is
+	// bounded by the request context + the streaming router's WriteTimeout.
+	streamClient *http.Client
+	log          *logger.Logger
 }
 
 func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyService {
-	transport := tracing.WrapTransport(&http.Transport{
+	baseTransport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   3 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -102,7 +109,19 @@ func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyS
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
-	})
+	}
+	transport := tracing.WrapTransport(baseTransport)
+
+	// streamTransport reuses the same dialer/pool tuning but adds a
+	// ResponseHeaderTimeout so a hung upstream can't park a streaming
+	// connection forever waiting for the first byte. Crucially it is paired
+	// with a client that has NO total Timeout, so the body itself streams
+	// without a hard 15s cap. Cloned (not shared) so setting the header
+	// timeout here never affects the API-JSON client above.
+	streamBase := baseTransport.Clone()
+	streamBase.ResponseHeaderTimeout = 15 * time.Second
+	streamTransport := tracing.WrapTransport(streamBase)
+
 	return &ProxyService{
 		serviceURLs: serviceURLs,
 		client: &http.Client{
@@ -125,6 +144,10 @@ func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyS
 				return http.ErrUseLastResponse
 			},
 		},
+		streamClient: &http.Client{
+			// No total Timeout — the streamed body must not be truncated.
+			Transport: streamTransport,
+		},
 		log: log,
 	}
 }
@@ -132,6 +155,17 @@ func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyS
 // Forward forwards the request to the appropriate service
 func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response, error) {
 	return s.forwardWith(s.client, r, service)
+}
+
+// ForwardStream forwards the request to the appropriate service using the
+// streamClient — the client WITHOUT a total http.Client.Timeout (audit finding
+// L466). Use this for routes whose response body is a large or long-lived
+// stream (HLS playlists/segments, MP4 restream, image-proxy) so the body read
+// is bounded by the request context + the streaming router's WriteTimeout
+// rather than truncated at the 15s API timeout. TTFB is still bounded by the
+// transport's ResponseHeaderTimeout.
+func (s *ProxyService) ForwardStream(r *http.Request, service string) (*http.Response, error) {
+	return s.forwardWith(s.streamClient, r, service)
 }
 
 // ForwardNoRedirect forwards the request to the appropriate service without
@@ -183,6 +217,21 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 	case "streaming":
 		// /api/streaming/... -> /api/v1/... (streaming service uses /api/v1)
 		path = strings.Replace(path, "/api/streaming/", "/api/v1/", 1)
+	case "rooms":
+		// The rooms service mounts its REST + WS + leaderboard routes ONLY
+		// under /api/v1, so inbound paths must be rewritten or they 404
+		// (audit finding L753). Two inbound prefixes reach here:
+		//   - /api/game/rooms/...  -> /api/v1/rooms/...  (the family the SPA's
+		//     gameApi actually calls — see frontend/web/src/api/client.ts)
+		//   - /api/rooms/...       -> /api/v1/rooms/...  (defensive/direct callers)
+		// A single prefix Replace per form covers both the bare collection
+		// (/api/rooms) and the {roomId} subroutes (/api/rooms/{id}/join).
+		switch {
+		case strings.HasPrefix(path, "/api/game/rooms"):
+			path = strings.Replace(path, "/api/game/rooms", "/api/v1/rooms", 1)
+		case strings.HasPrefix(path, "/api/rooms"):
+			path = strings.Replace(path, "/api/rooms", "/api/v1/rooms", 1)
+		}
 	}
 
 	// Build target URL with path and query

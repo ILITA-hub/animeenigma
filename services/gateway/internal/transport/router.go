@@ -464,6 +464,11 @@ func NewRouterWithCleanup(
 			r.Use(userRateLimit)
 			r.Use(BlockGuestRoleMiddleware)
 			r.HandleFunc("/rooms/*", proxyHandler.ProxyToRooms)
+			// /game/* is the path family the SPA actually calls (gameApi in
+			// frontend/web/src/api/client.ts → /api/game/rooms/*). Both /rooms
+			// and /game route to the rooms service; the path-rewrite in
+			// proxy.go (case "rooms") maps both onto the service's /api/v1/rooms
+			// mount (audit finding L753).
 			r.HandleFunc("/game/*", proxyHandler.ProxyToRooms)
 		})
 
@@ -613,12 +618,16 @@ func NewRouterWithCleanup(
 
 		// Streaming service routes - most are public, only admin needs auth
 		r.Route("/streaming", func(r chi.Router) {
-			// Public routes (no auth required)
-			r.Get("/hls-proxy", proxyHandler.ProxyToStreaming)
+			// Public routes (no auth required). The body-streaming endpoints
+			// (hls-proxy GET, image-proxy, stream/*) go through the
+			// no-total-timeout stream client so a long HLS/MP4 body isn't
+			// truncated at 15s (audit finding L466). The OPTIONS preflight and
+			// proxy-status return small JSON and stay on the API client.
+			r.Get("/hls-proxy", proxyHandler.ProxyToStreamingBody)
 			r.Options("/hls-proxy", proxyHandler.ProxyToStreaming) // CORS preflight
 			r.Get("/proxy-status", proxyHandler.ProxyToStreaming)
-			r.Get("/image-proxy", proxyHandler.ProxyToStreaming)
-			r.HandleFunc("/stream/*", proxyHandler.ProxyToStreaming)
+			r.Get("/image-proxy", proxyHandler.ProxyToStreamingBody)
+			r.HandleFunc("/stream/*", proxyHandler.ProxyToStreamingBody)
 			// NOTE: /internal/* is intentionally NOT proxied. Streaming's
 			// /api/v1/internal/token is a service-to-service stream-token minter;
 			// exposing it through the public gateway made it an unauthenticated
@@ -663,6 +672,20 @@ func getApiKeyHTTPClient() *http.Client {
 	return apiKeyHTTPClient
 }
 
+// sharedAPIKeyCache is the process-wide TTL cache for resolved ak_* API-key
+// claims (audit finding L473). A single instance is shared across every
+// JWT/Optional middleware so a hot key resolved by one protected group is
+// reused by all of them. Backed by the real resolveApiKey + time.Now.
+var sharedAPIKeyCache = newAPIKeyCache(resolveApiKey, nil)
+
+// resolveApiKeyCached resolves an API key through the shared TTL cache, falling
+// back to the auth-service POST on a miss/expiry. Both JWT middlewares use this
+// instead of calling resolveApiKey directly, so hot ak_* keys skip the blocking
+// per-request auth round trip.
+func resolveApiKeyCached(authServiceURL, apiKey string) (*authz.Claims, error) {
+	return sharedAPIKeyCache.resolveCached(authServiceURL, apiKey)
+}
+
 // JWTValidationMiddleware validates JWT tokens and resolves API keys (ak_ prefix).
 func JWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL string) func(http.Handler) http.Handler {
 	jwtManager := authz.NewJWTManager(jwtConfig)
@@ -679,8 +702,9 @@ func JWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL string) f
 			var err error
 
 			if strings.HasPrefix(token, "ak_") {
-				// Resolve API key via auth service internal endpoint
-				resolved, resolveErr := resolveApiKey(authServiceURL, token)
+				// Resolve API key via auth service internal endpoint (cached:
+				// hot keys skip the blocking per-request POST — audit L473).
+				resolved, resolveErr := resolveApiKeyCached(authServiceURL, token)
 				if resolveErr != nil {
 					httputil.Unauthorized(w)
 					return
@@ -741,7 +765,7 @@ func OptionalJWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL s
 			}
 
 			if strings.HasPrefix(token, "ak_") {
-				resolved, resolveErr := resolveApiKey(authServiceURL, token)
+				resolved, resolveErr := resolveApiKeyCached(authServiceURL, token)
 				if resolveErr != nil {
 					// Bad/expired API key on an optional-auth route → degrade to
 					// anonymous rather than 401, matching the route's contract.
@@ -802,8 +826,8 @@ func resolveApiKey(authServiceURL, apiKey string) (*authz.Claims, error) {
 
 	var result struct {
 		Data struct {
-			UserID   string    `json:"user_id"`
-			Username string    `json:"username"`
+			UserID   string     `json:"user_id"`
+			Username string     `json:"username"`
 			Role     authz.Role `json:"role"`
 		} `json:"data"`
 	}

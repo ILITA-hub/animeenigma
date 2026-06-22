@@ -145,6 +145,60 @@ func TestConfig_AnalyticsServiceDefault(t *testing.T) {
 	}
 }
 
+// TestConfig_RedisAddrDerivation asserts the gateway honors the same
+// REDIS_HOST/REDIS_PORT convention the rest of the stack uses (audit finding
+// L480). The per-user GCRA limiter reads RedisAddr, but compose only sets
+// REDIS_HOST — so RedisAddr must derive from REDIS_HOST(+REDIS_PORT) when no
+// explicit REDIS_ADDR override is present. REDIS_ADDR stays an explicit escape
+// hatch.
+func TestConfig_RedisAddrDerivation(t *testing.T) {
+	cases := []struct {
+		name      string
+		redisAddr string
+		redisHost string
+		redisPort string
+		want      string
+	}{
+		{
+			name:      "host_only_derives_with_default_port",
+			redisHost: "cacheboxonly",
+			want:      "cacheboxonly:6379",
+		},
+		{
+			name:      "host_and_port",
+			redisHost: "cachebox",
+			redisPort: "6380",
+			want:      "cachebox:6380",
+		},
+		{
+			name:      "explicit_addr_overrides_host",
+			redisAddr: "explicit:1234",
+			redisHost: "ignored",
+			redisPort: "9999",
+			want:      "explicit:1234",
+		},
+		{
+			name: "nothing_set_default_preserved",
+			want: "redis:6379",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
+			t.Setenv("REDIS_ADDR", c.redisAddr)
+			t.Setenv("REDIS_HOST", c.redisHost)
+			t.Setenv("REDIS_PORT", c.redisPort)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got := cfg.Services.RedisAddr; got != c.want {
+				t.Errorf("RedisAddr = %q; want %q", got, c.want)
+			}
+		})
+	}
+}
+
 func TestProfileWallAdminOnly_DefaultsTrue(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
 	t.Setenv("PROFILE_WALL_ADMIN_ONLY", "")
