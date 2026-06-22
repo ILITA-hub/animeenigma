@@ -110,5 +110,66 @@ class TestFetchRoute(unittest.TestCase):
         self.assertEqual(json.loads(resp.body)["kind"], "error")
 
 
+class _PoisonPage:
+    """evaluate() raises 'Target closed' to simulate a poisoned warm page.
+    A liveness probe `()=>1` evaluation (no url arg) returns 1 so we can tell
+    the poison-fence apart from the liveness probe."""
+    url = "https://9anime.me.uk/"
+
+    def __init__(self):
+        self.calls = 0
+        self.gotos = 0
+
+    async def evaluate(self, js, *args):
+        # Liveness probe: `()=>1` takes no url arg.
+        if not args:
+            return 1
+        self.calls += 1
+        raise RuntimeError("Target closed")
+
+    async def goto(self, *a, **k):
+        self.gotos += 1
+
+    async def close(self):
+        pass
+
+
+def _engine_poison_session(poison_max=2):
+    eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False, poison_max=poison_max))
+    prof = eng.profiles.lease()
+    page = _PoisonPage()
+    key = "fetch::nineanime::https://9anime.me.uk"
+    sess = Session(
+        id=key, profile=prof, proxy_id="direct", referer="https://9anime.me.uk",
+        user_agent="UA", cdn_host="9anime.me.uk", master_url="https://9anime.me.uk",
+        expires_at=time.time() + 600, page=page, player_url=page.url, provider="nineanime",
+    )
+    eng._sessions[key] = sess
+    return eng, sess, page
+
+
+class TestPoisonFence(unittest.TestCase):
+    def test_no_nav_retry_on_target_closed(self):
+        from app.engine import ProviderWedged
+        eng, sess, page = _engine_poison_session(poison_max=2)
+        # First crash: increments crash_count, does NOT nav-retry, raises.
+        with self.assertRaises(Exception):
+            run(eng._in_page_fetch(sess, "https://9anime.me.uk/x"))
+        self.assertEqual(sess.crash_count, 1)
+        self.assertEqual(page.gotos, 0, "must NOT re-navigate the poisoned page")
+        self.assertIn(sess.id, eng._sessions, "below poison_max: session retained")
+
+    def test_poison_max_tears_down_and_wedges(self):
+        from app.engine import ProviderWedged
+        eng, sess, page = _engine_poison_session(poison_max=2)
+        with self.assertRaises(Exception):
+            run(eng._in_page_fetch(sess, "https://9anime.me.uk/x"))   # crash_count=1
+        with self.assertRaises(ProviderWedged) as ctx:
+            run(eng._in_page_fetch(sess, "https://9anime.me.uk/x"))   # crash_count=2 -> wedge
+        self.assertEqual(ctx.exception.provider, "nineanime")
+        self.assertNotIn(sess.id, eng._sessions, "wedged session must be closed")
+        self.assertEqual(sess.profile.status, "crashed", "slot marked crashed for the reaper")
+
+
 if __name__ == "__main__":
     unittest.main()

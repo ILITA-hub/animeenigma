@@ -99,6 +99,16 @@ class Session:
     # In-flight /hls fetch refcount: eviction must not close a page that a
     # concurrent proxy_fetch is awaiting a fetch on (use-after-close guard).
     in_use: int = 0
+    # -- self-heal (Phase 1) ------------------------------------------------ #
+    # Consecutive in-page-fetch crashes ("Target closed"/"context was destroyed")
+    # on THIS warm session. At cfg.poison_max the profile is torn down and the
+    # caller fails over, instead of nav-retrying a poisoned page (the AUTO-527
+    # warm-session poison loop).
+    crash_count: int = 0
+    last_error: str = ""
+    # Provider that owns this session (set for warm fetch:: sessions); used to
+    # tag the wedge error so the Go breaker can attribute it.
+    provider: str = ""
 
 
 class _CamoufoxHandle:
@@ -124,6 +134,13 @@ class _CamoufoxHandle:
             finally:
                 self._cm = None
                 self.context = None
+                # Short grace so the OS reaps the browser process / closes the
+                # CDP WebSocket before a relaunch reuses the same user_data_dir;
+                # without it the new context can inherit a half-dead socket.
+                try:
+                    await asyncio.sleep(0.25)
+                except Exception:  # noqa: BLE001
+                    pass
 
 
 class CamoufoxEngine:
@@ -238,8 +255,15 @@ class CamoufoxEngine:
             except Exception:  # noqa: BLE001
                 pass
         self.profiles.reset_handles(profile)
+        # A "crash" teardown leaves the slot marked crashed so the reaper
+        # resurrects it (a relaunch can't be done inline — the caller is failing
+        # over). Other reasons (rotate/recycle/cold) keep the slot healthy so a
+        # fresh lease re-launches it normally.
+        if reason == "crash":
+            self.profiles.mark_crashed(profile, error=profile.last_error)
         metrics.BROWSER_POOL_SIZE.set(len(self._handles))
         metrics.BROWSER_RELAUNCH_TOTAL.labels(reason=reason).inc()
+        metrics.POOL_CRASHED.set(self.profiles.status_counts().get("crashed", 0))
 
     async def _install_routing(self, context: Any) -> None:
         # Only abort the configured resource types; default (empty) installs no
@@ -587,7 +611,7 @@ class CamoufoxEngine:
                 id=key, profile=profile, proxy_id=proxy.id, referer=origin,
                 user_agent=profile.user_agent, cdn_host=host_of(origin),
                 master_url=origin, expires_at=time.time() + self.cfg.session_ttl_seconds,
-                page=page, player_url=origin,
+                page=page, player_url=origin, provider=provider,
             )
             self._sessions[key] = session
             metrics.ACTIVE_SESSIONS.set(len(self._sessions))
@@ -602,9 +626,15 @@ class CamoufoxEngine:
     async def _in_page_fetch(self, session: Session, url: str) -> tuple[int, str, str, bytes]:
         """Run ``fetch(url)`` inside the session's live page and marshal the
         response back as bytes. Encodes via FileReader/base64 (NOT typed-array +
-        btoa, which trips Camoufox's xray wrapper). Re-navigates the page to the
-        player origin and retries once if the execution context was destroyed
-        (the player page occasionally self-navigates during a long watch)."""
+        btoa, which trips Camoufox's xray wrapper).
+
+        Poison-fence (Phase 1): a "Target closed" / "context was destroyed" /
+        "navigation" error means the page is dead. We DO NOT re-navigate and
+        retry the same page (that is the AUTO-527 poison loop — every retry
+        burns a pool slot). Instead we count the crash on the session; below
+        cfg.poison_max we surface the error so the caller fails over once; AT
+        poison_max we tear the profile down (mark it crashed for the reaper) and
+        raise ProviderWedged so the Go breaker can trip the provider."""
         page = session.page
         if page is None:
             raise SessionGone(session.id)
@@ -614,19 +644,25 @@ class CamoufoxEngine:
             raise FetchTimeout(session.id) from exc
         except Exception as exc:  # noqa: BLE001
             msg = str(exc)
-            if "context was destroyed" in msg or "Target closed" in msg or "navigation" in msg:
-                if not session.player_url:
-                    raise SessionGone(session.id) from exc
-                await page.goto(
-                    session.player_url, referer=session.referer or None,
-                    wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms,
-                )
-                try:
-                    raw = await self._evaluate_fetch(page, url)
-                except asyncio.TimeoutError as exc2:
-                    raise FetchTimeout(session.id) from exc2
-            else:
+            if (
+                "context was destroyed" in msg
+                or "Target closed" in msg
+                or "navigation" in msg
+            ):
+                session.crash_count += 1
+                session.last_error = msg
+                if session.crash_count >= self.cfg.poison_max:
+                    profile = session.profile
+                    await self.aclose_session(session.id)
+                    await self._teardown(profile, reason="crash")
+                    raise ProviderWedged(
+                        f"warm session poisoned ({session.crash_count} strikes): {msg}",
+                        provider=session.provider,
+                    ) from exc
+                # Below the limit: surface the crash so the caller fails over
+                # ONCE; the session stays for one more strike (no nav-retry).
                 raise
+            raise
         status_s, ctype, final_url, b64 = raw.split("|", 3)
         if b64 == _TOO_LARGE:
             raise RecipeError(
@@ -718,6 +754,18 @@ class PoolExhausted(RecipeError):
     """Every browser profile is leased (pool saturated). Distinct from a recipe
     failure so the API can map it to 503 (retryable ⇒ the Go orchestrator fails
     over) and a dedicated metric can alert on saturation."""
+
+
+class ProviderWedged(RecipeError):
+    """A warm session for a provider has poisoned itself (>= cfg.poison_max
+    in-page-fetch crashes). The profile is torn down + marked crashed for the
+    reaper; the caller fails over. Distinct from a plain RecipeError so the API
+    maps it to 503 {kind:"provider_wedged"} and the Go breaker can attribute the
+    wedge to a provider (it carries .provider)."""
+
+    def __init__(self, message: str, provider: str = ""):
+        super().__init__(message)
+        self.provider = provider
 
 
 class FetchTimeout(Exception):

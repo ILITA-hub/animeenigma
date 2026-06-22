@@ -212,5 +212,25 @@ class TestProfileHealth(unittest.TestCase):
         self.assertEqual(counts["healthy"], 2)
 
 
+class TestTeardownMarksCrashed(unittest.TestCase):
+    def _eng(self):
+        return CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
+
+    def test_crash_reason_marks_slot_crashed(self):
+        eng = self._eng()
+        p = eng.profiles.all()[0]
+        run(eng._teardown(p, reason="crash"))
+        self.assertEqual(p.status, "crashed")
+        self.assertEqual(p.consecutive_fail, 1)
+
+    def test_non_crash_reason_does_not_mark_crashed(self):
+        eng = self._eng()
+        p = eng.profiles.all()[0]
+        run(eng._teardown(p, reason="rotate"))
+        self.assertEqual(p.status, "healthy")
+        run(eng._teardown(p, reason="recycle"))
+        self.assertEqual(p.status, "healthy")
+
+
 if __name__ == "__main__":
     unittest.main()
