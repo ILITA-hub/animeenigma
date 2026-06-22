@@ -38,6 +38,19 @@ import (
 // next sweep (the demand is idempotent via the library PK).
 const logicADemandTimeout = 5 * time.Second
 
+// rawAudioWatcherPredicate is the SQL fragment that selects watch_history rows
+// carrying original Japanese audio: ANY sub combo (watch_type='sub' — kodik/ru/sub,
+// english/en/sub, hianime/en/sub etc. all carry JP audio regardless of subtitle
+// language/provider), plus the ae/raw players. It is SHARED verbatim by Logic A
+// (this file's enumeration join) and the Phase-11 prediction job
+// (autocache_prediction.go) so the two cannot drift — the prediction header
+// promises the join is identical to Logic A's. The predicate uses the
+// `wh.` table alias both queries bind to.
+//
+// Corrected 2026-06-17: was `wh.player IN ('ae','raw') OR wh.language = 'ja'`,
+// which wrongly dropped sub combos (kodik/ru/sub, english/en/sub).
+const rawAudioWatcherPredicate = `(wh.watch_type = 'sub' OR wh.player IN ('ae', 'raw'))`
+
 // AutocacheLogicAJob enumerates ongoing anime with an active JP-audio watcher and
 // re-asserts an `ongoing` demand for each one's latest-aired episode.
 type AutocacheLogicAJob struct {
@@ -111,8 +124,9 @@ func (j *AutocacheLogicAJob) Run(ctx context.Context) error {
 	// skip DUB), the D8 recency predicate (al.updated_at > cutoff), and the
 	// episodes_aired projection (the latest-aired episode target, A3). ANY sub combo
 	// carries original Japanese audio regardless of subtitle language/provider, so
-	// kodik/ru/sub, english/en/sub, hianime/en/sub etc. all qualify. (Corrected
-	// 2026-06-17: was player∈{ae,raw} OR lang='ja', which wrongly dropped sub combos.)
+	// kodik/ru/sub, english/en/sub, hianime/en/sub etc. all qualify. The raw-audio
+	// filter is the SHARED rawAudioWatcherPredicate const, consumed verbatim by the
+	// prediction job too (autocache_prediction.go) so the two joins cannot drift.
 	// All three tables live in animeenigma.
 	const q = `
 		SELECT DISTINCT
@@ -126,7 +140,7 @@ func (j *AutocacheLogicAJob) Run(ctx context.Context) error {
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
 		  AND a.status = 'ongoing'
-		  AND (wh.watch_type = 'sub' OR wh.player IN ('ae', 'raw'))
+		  AND ` + rawAudioWatcherPredicate + `
 		  AND al.updated_at > ?
 	`
 

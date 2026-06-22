@@ -344,3 +344,54 @@ func TestLogicA_JoinFailureReturnsError(t *testing.T) {
 		t.Fatal("want error on join failure, got nil")
 	}
 }
+
+// TestLogicA_PredictionSameDistinctSet is the L662 no-drift contract: over one
+// shared mixed seed, the prediction job's ongoing count must equal the number of
+// distinct anime Logic A fires a demand for. Both jobs splice the SHARED
+// rawAudioWatcherPredicate const, so a future edit to one predicate that diverges
+// from the other would break this test. The seed mixes a qualifying ae/ja, a
+// kodik/ru/sub (the formerly-dropped combo), an english/en/sub, and an excluded
+// kodik/ru/dub.
+func TestLogicA_PredictionSameDistinctSet(t *testing.T) {
+	resetPredictionGauge()
+	db := newLogicATestDB(t) // has the title columns both jobs/queries reference
+	now := time.Now()
+
+	// Three qualifying ongoing anime (ae/ja, kodik/ru/sub, english/en/sub).
+	seedAnimeRow(t, db, "a1", "111", "ongoing", 7)
+	seedListRow(t, db, "u1", "a1", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
+
+	seedAnimeRow(t, db, "a2", "222", "ongoing", 5)
+	seedListRow(t, db, "u2", "a2", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u2", "a2", "kodik", "ru")
+
+	seedAnimeRow(t, db, "a3", "333", "ongoing", 3)
+	seedListRow(t, db, "u3", "a3", "watching", now.Add(-1*time.Hour))
+	seedWatchRow(t, db, "u3", "a3", "english", "en")
+
+	// One excluded dub combo (kodik/ru/dub) — counted by neither job.
+	seedAnimeRow(t, db, "a4", "444", "ongoing", 4)
+	seedListRow(t, db, "u4", "a4", "watching", now.Add(-1*time.Hour))
+	seedWatchRowWT(t, db, "u4", "a4", "kodik", "ru", "dub")
+
+	srv, captured := capturingLibrary(t, http.StatusOK)
+	defer srv.Close()
+
+	logicA := NewAutocacheLogicAJob(db, srv.URL, 30, logger.Default())
+	require.NoError(t, logicA.Run(context.Background()))
+
+	prediction := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
+	require.NoError(t, prediction.Run(context.Background()))
+
+	// Distinct mal_ids Logic A fired demand for.
+	distinct := map[string]struct{}{}
+	for _, d := range captured() {
+		distinct[d.MalID] = struct{}{}
+	}
+	require.Len(t, distinct, 3, "Logic A must fire demand for exactly the 3 JP-audio anime")
+
+	// The prediction ongoing count (gauge / avg) must equal that distinct set size.
+	require.Equal(t, float64(len(distinct)*int(avgEpBytesTest)), predictionOngoing(t),
+		"prediction ongoing count must match Logic A's distinct demand set")
+}

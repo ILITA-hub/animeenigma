@@ -75,6 +75,11 @@ func NewAutocachePredictionJob(db *gorm.DB, activeWatcherDays int, avgRawEpBytes
 // downstream (autocache_logic_a.go:121), so the heuristic count now equals the
 // number of distinct anime Logic A would actually fire demand for — no longer
 // collapsing all empty-shikimori_id anime into one distinct bucket.
+// Both queries splice in the SHARED rawAudioWatcherPredicate const (defined in
+// autocache_logic_a.go) so the prediction join stays byte-for-byte identical to
+// Logic A's raw-audio filter and the two cannot drift again — the package header
+// promises they are the same. predictionOngoingQuery keeps the a.status='ongoing'
+// clause; predictionNextepQuery drops it.
 const predictionOngoingQuery = `
 	SELECT count(*) FROM (
 		SELECT DISTINCT a.id
@@ -84,7 +89,7 @@ const predictionOngoingQuery = `
 		WHERE al.status = 'watching'
 		  AND a.status = 'ongoing'
 		  AND a.shikimori_id <> ''
-		  AND (wh.player IN ('ae', 'raw') OR wh.language = 'ja')
+		  AND ` + rawAudioWatcherPredicate + `
 		  AND al.updated_at > ?
 	) t
 `
@@ -97,7 +102,7 @@ const predictionNextepQuery = `
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
 		  AND a.shikimori_id <> ''
-		  AND (wh.player IN ('ae', 'raw') OR wh.language = 'ja')
+		  AND ` + rawAudioWatcherPredicate + `
 		  AND al.updated_at > ?
 	) t
 `

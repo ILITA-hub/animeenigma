@@ -49,7 +49,11 @@ func NewJobService(
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
-		cron:                   cron.New(),
+		// WithChain(SkipIfStillRunning) makes a still-running scheduled entry skip
+		// its next due tick instead of launching a concurrent goroutine — closes
+		// the cron-overlap case where a slow run (e.g. Logic A every 20 min)
+		// overlaps the next tick. (audit M669)
+		cron:                   cron.New(cron.WithChain(cron.SkipIfStillRunning(cron.DefaultLogger))),
 		shikimoriJob:           shikimoriJob,
 		cleanupJob:             cleanupJob,
 		topAnimeJob:            topAnimeJob,
