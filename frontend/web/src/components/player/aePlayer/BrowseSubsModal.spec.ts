@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import BrowseSubsModal from './BrowseSubsModal.vue'
+
+// BrowseSubsModal uses $t() in template; stub vue-i18n so tests mount without
+// a real plugin — keys are returned as-is (good enough for DOM presence checks).
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k }),
+}))
 
 const tracks = [
   { url: 't1', provider: 'Jimaku', lang: 'ja', label: 'Kawaisubs Re:Zero 12', format: 'ass' },
@@ -27,5 +33,23 @@ describe('BrowseSubsModal', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(w.emitted('close')).toBeTruthy()
     w.unmount()
+  })
+
+  it('shows a loading state', () => {
+    const w = mount(BrowseSubsModal, { props: { tracks: [], selectedUrl: null, loading: true } })
+    expect(w.find('[data-test="subs-loading"]').exists()).toBe(true)
+  })
+
+  it('shows an error with a retry button that emits retry', async () => {
+    const w = mount(BrowseSubsModal, { props: { tracks: [], selectedUrl: null, error: 'jimaku down' } })
+    expect(w.find('[data-test="subs-error"]').exists()).toBe(true)
+    await w.find('[data-test="subs-retry"]').trigger('click')
+    expect(w.emitted('retry')).toBeTruthy()
+  })
+
+  it('emits off when "Subtitles off" is clicked', async () => {
+    const w = mount(BrowseSubsModal, { props: { tracks: [{ url: 'u', provider: 'jimaku', lang: 'ja', label: 'L', format: 'srt' }], selectedUrl: 'u' } })
+    await w.find('[data-test="subs-off"]').trigger('click')
+    expect(w.emitted('off')).toBeTruthy()
   })
 })

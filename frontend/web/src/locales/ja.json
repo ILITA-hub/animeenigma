@@ -430,7 +430,15 @@
       "sourceUnavailable": "このソースはまだ利用できません",
       "streamUnavailable": "ストリームを利用できません",
       "retry": "再試行",
-      "off": "オフ"
+      "off": "オフ",
+      "subs": {
+        "loading": "字幕を読み込み中…",
+        "loadError": "字幕を読み込めませんでした。",
+        "retry": "再試行",
+        "off": "字幕オフ",
+        "empty": "条件に一致する字幕がありません。",
+        "providersDown": "接続できません: {providers}"
+      }
     }
   },
   "search": {

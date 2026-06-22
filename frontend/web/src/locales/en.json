@@ -430,7 +430,15 @@
       "sourceUnavailable": "This source isn't available yet",
       "streamUnavailable": "Stream unavailable",
       "retry": "Retry",
-      "off": "Off"
+      "off": "Off",
+      "subs": {
+        "loading": "Loading subtitles…",
+        "loadError": "Couldn't load subtitles.",
+        "retry": "Retry",
+        "off": "Subtitles off",
+        "empty": "No subtitles match your search.",
+        "providersDown": "Couldn't reach: {providers}"
+      }
     }
   },
   "search": {

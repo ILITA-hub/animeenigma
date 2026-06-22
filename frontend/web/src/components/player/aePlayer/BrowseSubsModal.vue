@@ -103,69 +103,107 @@
 
       <!-- Body -->
       <div class="overflow-y-auto px-5 py-3.5 pb-4.5" style="scrollbar-width: thin;">
-        <!-- Empty state -->
-        <div v-if="groupedTracks.length === 0" class="text-center text-[var(--muted-foreground)] py-10 text-[14px]">
-          No subtitles match your search.
+        <!-- Loading -->
+        <div v-if="loading" data-test="subs-loading" class="text-center text-[var(--muted-foreground)] py-10 text-[14px]">
+          {{ $t('player.aePlayer.subs.loading') }}
         </div>
 
-        <!-- Groups -->
-        <div
-          v-for="group in groupedTracks"
-          :key="group.lang"
-          data-test="lang-group"
-          class="mb-4"
-        >
-          <h3 class="text-[14px] font-semibold text-white mb-2 m-0">
-            {{ group.lang.toUpperCase() }}
-            <span class="text-[var(--muted-foreground)] font-normal ml-1">({{ group.tracks.length }})</span>
-          </h3>
-          <ul class="list-none m-0 p-0 flex flex-col gap-[7px]">
-            <li
-              v-for="track in group.tracks"
-              :key="track.url"
-              data-test="track"
-              :class="[
-                'flex items-center gap-3 px-3 py-[11px] rounded-[var(--r-md)] border transition-all',
-                track.url === selectedUrl
-                  ? 'border-[var(--accent-line)]'
-                  : 'bg-white/[0.05] border-transparent',
-              ]"
-              :style="track.url === selectedUrl ? 'background: var(--accent-soft)' : ''"
-            >
-              <!-- Provider badge -->
-              <span
-                class="flex-shrink-0 px-[9px] py-[3px] rounded-full text-[11px] font-semibold"
-                :style="providerBadgeStyle(track.provider)"
-              >
-                {{ track.provider }}
-              </span>
+        <!-- Error -->
+        <div v-else-if="error" data-test="subs-error" class="text-center py-10">
+          <p class="text-[var(--muted-foreground)] text-[14px] mb-3">{{ $t('player.aePlayer.subs.loadError') }}</p>
+          <button
+            data-test="subs-retry"
+            class="px-3.5 py-[7px] rounded-[var(--r-sm)] border-0 text-[13px] font-semibold text-white hover:bg-white/20"
+            style="background: var(--border);"
+            @click="emit('retry')"
+          >
+            {{ $t('player.aePlayer.subs.retry') }}
+          </button>
+        </div>
 
-              <!-- Track info -->
-              <div class="flex-1 min-w-0 flex flex-col gap-0.5">
-                <span class="text-[14px] text-white truncate">{{ track.label }}</span>
-                <span class="text-[11px] text-[var(--muted-foreground)]">{{ track.format.toUpperCase() }}</span>
-              </div>
+        <template v-else>
+          <!-- Providers-down notice (non-blocking) -->
+          <p v-if="providersDown && providersDown.length" class="text-[12px] text-[var(--muted-foreground)] mb-2">
+            {{ $t('player.aePlayer.subs.providersDown', { providers: providersDown.join(', ') }) }}
+          </p>
 
-              <!-- Select button -->
-              <button
-                data-test="select"
-                :disabled="track.url === selectedUrl"
+          <!-- Subtitles off -->
+          <button
+            data-test="subs-off"
+            :class="[
+              'w-full flex items-center gap-3 px-3 py-[11px] mb-3 rounded-[var(--r-md)] border transition-all text-left',
+              selectedUrl === null ? 'border-[var(--accent-line)]' : 'bg-white/[0.05] border-transparent',
+            ]"
+            :style="selectedUrl === null ? 'background: var(--accent-soft)' : ''"
+            @click="emit('off')"
+          >
+            <span class="text-[14px] text-white">{{ $t('player.aePlayer.subs.off') }}</span>
+          </button>
+
+          <!-- Empty -->
+          <div v-if="groupedTracks.length === 0" class="text-center text-[var(--muted-foreground)] py-10 text-[14px]">
+            {{ $t('player.aePlayer.subs.empty') }}
+          </div>
+
+          <!-- Groups -->
+          <div
+            v-for="group in groupedTracks"
+            :key="group.lang"
+            data-test="lang-group"
+            class="mb-4"
+          >
+            <h3 class="text-[14px] font-semibold text-white mb-2 m-0">
+              {{ group.lang.toUpperCase() }}
+              <span class="text-[var(--muted-foreground)] font-normal ml-1">({{ group.tracks.length }})</span>
+            </h3>
+            <ul class="list-none m-0 p-0 flex flex-col gap-[7px]">
+              <li
+                v-for="track in group.tracks"
+                :key="track.url"
+                data-test="track"
                 :class="[
-                  'flex-shrink-0 px-3.5 py-[7px] rounded-[var(--r-sm)] border-0 text-[13px] font-semibold transition-all',
+                  'flex items-center gap-3 px-3 py-[11px] rounded-[var(--r-md)] border transition-all',
                   track.url === selectedUrl
-                    ? 'cursor-default text-[var(--brand-cyan)]'
-                    : 'text-white hover:bg-white/20',
+                    ? 'border-[var(--accent-line)]'
+                    : 'bg-white/[0.05] border-transparent',
                 ]"
-                :style="track.url === selectedUrl
-                  ? 'background: var(--accent-line)'
-                  : 'background: var(--border)'"
-                @click="emit('select', track)"
+                :style="track.url === selectedUrl ? 'background: var(--accent-soft)' : ''"
               >
-                {{ track.url === selectedUrl ? 'Selected' : 'Select' }}
-              </button>
-            </li>
-          </ul>
-        </div>
+                <!-- Provider badge -->
+                <span
+                  class="flex-shrink-0 px-[9px] py-[3px] rounded-full text-[11px] font-semibold"
+                  :style="providerBadgeStyle(track.provider)"
+                >
+                  {{ track.provider }}
+                </span>
+
+                <!-- Track info -->
+                <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+                  <span class="text-[14px] text-white truncate">{{ track.label }}</span>
+                  <span class="text-[11px] text-[var(--muted-foreground)]">{{ track.format.toUpperCase() }}</span>
+                </div>
+
+                <!-- Select button -->
+                <button
+                  data-test="select"
+                  :disabled="track.url === selectedUrl"
+                  :class="[
+                    'flex-shrink-0 px-3.5 py-[7px] rounded-[var(--r-sm)] border-0 text-[13px] font-semibold transition-all',
+                    track.url === selectedUrl
+                      ? 'cursor-default text-[var(--brand-cyan)]'
+                      : 'text-white hover:bg-white/20',
+                  ]"
+                  :style="track.url === selectedUrl
+                    ? 'background: var(--accent-line)'
+                    : 'background: var(--border)'"
+                  @click="emit('select', track)"
+                >
+                  {{ track.url === selectedUrl ? 'Selected' : 'Select' }}
+                </button>
+              </li>
+            </ul>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -173,7 +211,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X, Search } from 'lucide-vue-next'
+
+const { t: $t } = useI18n()
 
 export interface SubTrack {
   url: string
@@ -186,11 +227,16 @@ export interface SubTrack {
 const props = defineProps<{
   tracks: SubTrack[]
   selectedUrl: string | null
+  loading?: boolean
+  error?: string | null
+  providersDown?: string[]
 }>()
 
 const emit = defineEmits<{
   (e: 'select', track: SubTrack): void
   (e: 'close'): void
+  (e: 'retry'): void
+  (e: 'off'): void
 }>()
 
 function onWindowKey(e: KeyboardEvent) {
