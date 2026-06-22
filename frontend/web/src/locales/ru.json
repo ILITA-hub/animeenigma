@@ -301,6 +301,8 @@
       "genericFormat": "Субтитры",
       "loadError": "Не удалось загрузить субтитры: {error}",
       "providersDown": "Некоторые источники не ответили: {providers}",
+      "providerIssues": "Некоторые источники субтитров могут быть недоступны: {issues}",
+      "status": { "degraded": "сбои", "down": "недоступен" },
       "providerChip": {
         "jimaku": "Jimaku",
         "opensubtitles": "OpenSubtitles"

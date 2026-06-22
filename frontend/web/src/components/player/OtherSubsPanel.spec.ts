@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import OtherSubsPanel from './OtherSubsPanel.vue'
+import type { GroupedSubs } from '@/types/raw'
 
 // The component reads `useI18n().t`/`locale` in <script> (providerLabel,
 // languageHeader, orderLangs) AND `$t` in <template> (filter labels), so BOTH
@@ -39,6 +40,33 @@ const mountPanel = () =>
       },
     },
   })
+
+// Configurable helper for provider_health / providers_down tests.
+const mountWithData = async (overrides: Partial<GroupedSubs>) => {
+  const { subtitlesApi } = await import('@/api/client')
+  ;(subtitlesApi.all as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    data: {
+      data: {
+        episode: overrides.episode ?? 1,
+        languages: overrides.languages ?? {},
+        providers_down: overrides.providers_down,
+        provider_health: overrides.provider_health,
+      },
+    },
+  })
+  const wrapper = mount(OtherSubsPanel, {
+    props: { modelValue: true, animeId: 'x', episode: 1, currentTrackUrl: null },
+    global: {
+      mocks: { $t: (k: string, p?: Record<string, unknown>) => (p ? `${k}:${JSON.stringify(p)}` : k) },
+      stubs: {
+        Modal: { template: '<div><slot /></div>' },
+        Badge: { template: '<span><slot /></span>' },
+      },
+    },
+  })
+  await flushPromises()
+  return wrapper
+}
 
 describe('OtherSubsPanel filters', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -93,5 +121,33 @@ describe('OtherSubsPanel filters', () => {
     await flushPromises()
     expect(wrapper.html()).toContain('EN rip')
     expect(wrapper.html()).not.toContain('RU rip')
+  })
+})
+
+describe('OtherSubsPanel provider-issues note', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shows a merged degraded note from provider_health', async () => {
+    const wrapper = await mountWithData({
+      languages: {}, episode: 1,
+      provider_health: [{ provider: 'jimaku', status: 'degraded' }],
+    })
+    expect(wrapper.find('[data-testid="provider-issues"]').exists()).toBe(true)
+    expect(wrapper.text().toLowerCase()).toContain('jimaku')
+  })
+
+  it('merges provider_health (down) with providers_down without duplication', async () => {
+    const wrapper = await mountWithData({
+      languages: {}, episode: 1,
+      provider_health: [{ provider: 'opensubtitles', status: 'down' }],
+      providers_down: ['opensubtitles'],
+    })
+    const matches = wrapper.text().match(/OpenSubtitles/gi) ?? []
+    expect(matches.length).toBe(1)
+  })
+
+  it('shows no provider-issue note when all healthy', async () => {
+    const wrapper = await mountWithData({ languages: {}, episode: 1 })
+    expect(wrapper.find('[data-testid="provider-issues"]').exists()).toBe(false)
   })
 })

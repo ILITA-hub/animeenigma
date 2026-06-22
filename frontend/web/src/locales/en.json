@@ -301,6 +301,8 @@
       "genericFormat": "Subtitle",
       "loadError": "Couldn't load subtitles: {error}",
       "providersDown": "Some sources didn't respond: {providers}",
+      "providerIssues": "Some subtitle sources may be unavailable: {issues}",
+      "status": { "degraded": "degraded", "down": "down" },
       "providerChip": {
         "jimaku": "Jimaku",
         "opensubtitles": "OpenSubtitles"

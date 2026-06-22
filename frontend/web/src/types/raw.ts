@@ -42,9 +42,16 @@ export interface SubtitleTrack {
   release?: string
 }
 
+export interface ProviderHealth {
+  provider: string
+  status: 'degraded' | 'down'
+  latency_ms?: number
+}
+
 /** Subtitle response grouped by ISO 639-1 language code. */
 export interface GroupedSubs {
   languages: Record<string, SubtitleTrack[]>
   episode: number
   providers_down?: string[]
+  provider_health?: ProviderHealth[]
 }

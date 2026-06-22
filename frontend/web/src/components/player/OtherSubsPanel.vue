@@ -112,8 +112,12 @@
         </ul>
       </section>
 
-      <p v-if="providersDown.length > 0" class="text-warning/80 text-xs text-center pt-2 border-t border-white/10">
-        {{ $t('player.otherSubs.providersDown', { providers: providersDown.join(', ') }) }}
+      <p
+        v-if="providerIssues.length > 0"
+        data-testid="provider-issues"
+        class="text-warning/80 text-xs text-center pt-2 border-t border-white/10"
+      >
+        {{ $t('player.otherSubs.providerIssues', { issues: providerIssuesText }) }}
       </p>
     </div>
   </Modal>
@@ -126,7 +130,7 @@ import Modal from '@/components/ui/Modal.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { Spinner } from '@/components/ui'
 import { subtitlesApi } from '@/api/client'
-import type { GroupedSubs, SubtitleTrack } from '@/types/raw'
+import type { GroupedSubs, SubtitleTrack, ProviderHealth } from '@/types/raw'
 
 const props = defineProps<{
   modelValue: boolean
@@ -215,7 +219,31 @@ watch(providerFilter, () => {
   }
 })
 
-const providersDown = computed(() => data.value?.providers_down ?? [])
+// Merged provider-issue list: the active probe's verdict (provider_health,
+// degraded/down) unioned with this request's passive providers_down. Backend
+// already applies worse-wins; the union here is belt-and-suspenders so a
+// providers_down entry the probe didn't cover still surfaces exactly once.
+const providerIssues = computed<ProviderHealth[]>(() => {
+  const out: ProviderHealth[] = []
+  const seen = new Set<string>()
+  for (const h of data.value?.provider_health ?? []) {
+    out.push(h)
+    seen.add(h.provider)
+  }
+  for (const p of data.value?.providers_down ?? []) {
+    if (!seen.has(p)) {
+      out.push({ provider: p, status: 'down' })
+      seen.add(p)
+    }
+  }
+  return out
+})
+
+const providerIssuesText = computed(() =>
+  providerIssues.value
+    .map((i) => `${providerLabel(i.provider)} (${t(`player.otherSubs.status.${i.status}`)})`)
+    .join(', '),
+)
 
 const isSelected = (track: SubtitleTrack) =>
   props.currentTrackUrl !== null && track.url === props.currentTrackUrl
