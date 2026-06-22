@@ -41,7 +41,7 @@ func HTTPMiddleware(service string) func(http.Handler) http.Handler {
 		instrumented := otelhttp.NewHandler(
 			next, service,
 			otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
-				return r.Method + " " + r.URL.Path
+				return spanNameFromRequest(r)
 			}),
 		)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +52,81 @@ func HTTPMiddleware(service string) func(http.Handler) http.Handler {
 			instrumented.ServeHTTP(w, r)
 		})
 	}
+}
+
+// spanNameFromRequest builds the otelhttp span name "METHOD <normalized-path>".
+// It must run at the http.Server.Handler wrap level — OUTSIDE the chi router —
+// so chi.RouteContext(r).RoutePattern() is still empty here (the formatter fires
+// before the inner router matches the route). We therefore normalize the
+// concrete path ourselves instead of relying on the route pattern.
+func spanNameFromRequest(r *http.Request) string {
+	return r.Method + " " + normalizeSpanPath(r.URL.Path)
+}
+
+// normalizeSpanPath collapses dynamic path segments (UUIDs, numeric IDs) to
+// ":id" so the trace SpanName has coarse cardinality. Self-contained port of
+// libs/metrics' normalizePath/splitPath/isID logic (libs/tracing and libs/metrics
+// are separate Go modules; tracing does not require metrics, so we duplicate the
+// ~15 lines rather than introduce a cross-module dependency). Keeps the first
+// two path segments verbatim and replaces ID-shaped segments from index 2+.
+func normalizeSpanPath(path string) string {
+	if len(path) == 0 {
+		return "/"
+	}
+	segments := splitSpanPath(path)
+	if len(segments) == 0 {
+		return "/"
+	}
+	normalized := ""
+	for i, seg := range segments {
+		if i >= 2 && isSpanID(seg) {
+			normalized += "/:id"
+		} else {
+			normalized += "/" + seg
+		}
+		if i >= 3 {
+			break
+		}
+	}
+	return normalized
+}
+
+// splitSpanPath splits a URL path into non-empty segments (drops leading,
+// trailing, and repeated slashes).
+func splitSpanPath(path string) []string {
+	var segments []string
+	current := ""
+	for _, c := range path {
+		if c == '/' {
+			if current != "" {
+				segments = append(segments, current)
+				current = ""
+			}
+		} else {
+			current += string(c)
+		}
+	}
+	if current != "" {
+		segments = append(segments, current)
+	}
+	return segments
+}
+
+// isSpanID reports whether s looks like a dynamic ID: a 36-char UUID or a
+// purely-numeric segment.
+func isSpanID(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	if len(s) == 36 {
+		return true
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // SeedMiddleware is a chi middleware that enriches the request context with the

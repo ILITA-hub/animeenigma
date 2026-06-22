@@ -35,6 +35,40 @@ func TestHTTPMiddleware_ContinuesInboundTrace(t *testing.T) {
 	}
 }
 
+// normalizeSpanPath must collapse dynamic path segments (UUIDs, numeric IDs)
+// so the otelhttp span name has coarse cardinality — otherwise every distinct
+// anime UUID becomes a distinct SpanName value in the CH otel_traces column.
+func TestNormalizeSpanPath(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"uuid segment", "/api/anime/3fa85f64-5717-4562-b3fc-2c963f66afa6", "/api/anime/:id"},
+		{"numeric id with trailing segment", "/api/anime/42/episodes", "/api/anime/:id/episodes"},
+		{"static path unchanged", "/api/genres", "/api/genres"},
+		{"empty path", "", "/"},
+		{"root", "/", "/"},
+		{"trailing slash", "/api/anime/42/", "/api/anime/:id"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeSpanPath(tc.in); got != tc.want {
+				t.Fatalf("normalizeSpanPath(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// The otelhttp span-name formatter must produce "METHOD <normalized-path>" so
+// the trace span name is low-cardinality regardless of concrete IDs in the URL.
+func TestSpanNameFormatter(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/anime/3fa85f64-5717-4562-b3fc-2c963f66afa6", nil)
+	if got, want := spanNameFromRequest(r), "GET /api/anime/:id"; got != want {
+		t.Fatalf("spanNameFromRequest = %q, want %q", got, want)
+	}
+}
+
 // /health, /healthz and /metrics must bypass the span machinery so health
 // checks and Prometheus scrapes never create trace spam.
 func TestHTTPMiddleware_BypassesOpsEndpoints(t *testing.T) {
