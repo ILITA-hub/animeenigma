@@ -42,7 +42,7 @@ func NewRouter(
 
 	// API routes
 	r.Route("/api/v1", func(r chi.Router) {
-		// Protected routes
+		// Protected routes (header/cookie Bearer token via AuthMiddleware).
 		r.Group(func(r chi.Router) {
 			r.Use(AuthMiddleware(jwtConfig))
 
@@ -55,12 +55,15 @@ func NewRouter(
 				r.Post("/{roomId}/leave", roomHandler.LeaveRoom)
 			})
 
-			// WebSocket endpoint
-			r.Get("/ws", wsHandler.HandleWebSocket)
-
 			// Leaderboard routes
 			r.Get("/leaderboard", leaderboardHandler.GetLeaderboard)
 		})
+
+		// WebSocket endpoint — mounted OUTSIDE the header/cookie AuthMiddleware
+		// group because browsers can't set an Authorization header on a native
+		// WS upgrade. The handler validates the ?token= query param pre-upgrade
+		// (project-wide WS auth convention; see watch-together).
+		r.Get("/ws", wsHandler.HandleWebSocket)
 	})
 
 	return r

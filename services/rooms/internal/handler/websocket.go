@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/rooms/internal/service"
@@ -40,21 +42,44 @@ func newUpgrader(allowed []string) websocket.Upgrader {
 }
 
 type WebSocketHandler struct {
-	wsService *service.WebSocketService
-	log       *logger.Logger
-	upgrader  websocket.Upgrader
+	wsService  *service.WebSocketService
+	log        *logger.Logger
+	upgrader   websocket.Upgrader
+	jwtManager *authz.JWTManager
 }
 
-func NewWebSocketHandler(wsService *service.WebSocketService, log *logger.Logger, allowedOrigins []string) *WebSocketHandler {
+func NewWebSocketHandler(wsService *service.WebSocketService, log *logger.Logger, allowedOrigins []string, jwtConfig authz.JWTConfig) *WebSocketHandler {
 	return &WebSocketHandler{
-		wsService: wsService,
-		log:       log,
-		upgrader:  newUpgrader(allowedOrigins),
+		wsService:  wsService,
+		log:        log,
+		upgrader:   newUpgrader(allowedOrigins),
+		jwtManager: authz.NewJWTManager(jwtConfig),
 	}
 }
 
-// HandleWebSocket handles WebSocket connections for real-time game updates
+// HandleWebSocket handles WebSocket connections for real-time game updates.
+//
+// Auth lives in the ?token= query param (validated pre-upgrade) because
+// browsers cannot set an Authorization header on a native WebSocket upgrade —
+// this mirrors the project-wide convention used by watch-together. The /ws
+// route is therefore mounted OUTSIDE the header/cookie AuthMiddleware group.
 func (h *WebSocketHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Pre-upgrade JWT validation. 401 BEFORE Upgrade so the failure shows as
+	// a clean HTTP status in the browser network panel rather than a
+	// successful upgrade followed by an immediate close.
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		h.log.Debugw("ws upgrade rejected: missing token")
+		httputil.Unauthorized(w)
+		return
+	}
+	claims, err := h.jwtManager.ValidateAccessToken(token)
+	if err != nil {
+		h.log.Debugw("ws upgrade rejected: invalid token", "error", err)
+		httputil.Unauthorized(w)
+		return
+	}
+
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.log.Errorw("failed to upgrade connection", "error", err)
@@ -64,5 +89,5 @@ func (h *WebSocketHandler) HandleWebSocket(w http.ResponseWriter, r *http.Reques
 	metrics.WebSocketConnectionsActive.Inc()
 	defer metrics.WebSocketConnectionsActive.Dec()
 
-	h.wsService.HandleConnection(conn, r.Context())
+	h.wsService.HandleConnection(conn, r.Context(), claims.UserID, claims.Username)
 }
