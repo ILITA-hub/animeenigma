@@ -27,4 +27,26 @@ var (
 		Name: "probe_provider_status",
 		Help: "Per-provider playability rollup as labels (value always 1).",
 	}, []string{"provider", "status", "reason"})
+
+	// ProbeSubtitleProviderUp is the ACTIVE subtitle probe verdict per provider:
+	// 1 up, 0.5 degraded, 0 down. Distinct from the passive
+	// catalog_subtitle_provider_up (which is driven by real resolve traffic).
+	// Reset() each run so a provider that drops out of the probe set is not left
+	// with a stale series.
+	ProbeSubtitleProviderUp = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "probe_subtitle_provider_up",
+		Help: "Active subtitle-probe verdict per provider: 1 up, 0.5 degraded, 0 down.",
+	}, []string{"provider"})
+
+	// ProbeSubtitleLatencySeconds is the last active-probe ping latency per provider.
+	ProbeSubtitleLatencySeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "probe_subtitle_latency_seconds",
+		Help: "Last active subtitle-probe ping latency per provider, in seconds.",
+	}, []string{"provider"})
+
+	// ProbeSubtitleLastRun is the unix timestamp of the last completed subtitle probe run.
+	ProbeSubtitleLastRun = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "probe_subtitle_last_run_timestamp",
+		Help: "Unix timestamp of the last completed active subtitle probe run.",
+	})
 )
