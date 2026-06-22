@@ -65,24 +65,36 @@ func New(cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("get sql db: %w", err)
 	}
 
-	maxOpenConns := cfg.MaxOpenConns
-	if maxOpenConns <= 0 {
-		maxOpenConns = 25
-	}
-	maxIdleConns := cfg.MaxIdleConns
-	if maxIdleConns <= 0 {
-		maxIdleConns = 5
-	}
-	connMaxLifetime := cfg.ConnMaxLifetime
-	if connMaxLifetime <= 0 {
-		connMaxLifetime = time.Hour
-	}
+	maxOpenConns, maxIdleConns, connMaxLifetime := resolvePoolSettings(cfg)
 
 	sqlDB.SetMaxOpenConns(maxOpenConns)
 	sqlDB.SetMaxIdleConns(maxIdleConns)
 	sqlDB.SetConnMaxLifetime(connMaxLifetime)
 
 	return &DB{DB: db}, nil
+}
+
+// resolvePoolSettings clamps connection-pool sizing to fleet-safe defaults.
+//
+// With ~11 long-running GORM services each calling New, an unbounded per-service
+// default risks exhausting Postgres' max_connections. A zero/negative MaxOpenConns
+// resolves to 10 (so 11 services x 10 = ~110 steady-state max-open), idle to 2,
+// and lifetime to 1h. Explicit positive values pass through unchanged so a single
+// hot service can still be tuned via its Config.
+func resolvePoolSettings(cfg Config) (maxOpen, maxIdle int, lifetime time.Duration) {
+	maxOpen = cfg.MaxOpenConns
+	if maxOpen <= 0 {
+		maxOpen = 10
+	}
+	maxIdle = cfg.MaxIdleConns
+	if maxIdle <= 0 {
+		maxIdle = 2
+	}
+	lifetime = cfg.ConnMaxLifetime
+	if lifetime <= 0 {
+		lifetime = time.Hour
+	}
+	return maxOpen, maxIdle, lifetime
 }
 
 // ensureDatabaseExists creates the database if it doesn't exist
