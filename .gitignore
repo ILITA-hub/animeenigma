@@ -132,3 +132,8 @@ tmp/
 
 # Maintenance bot: downloaded Telegram attachments (mirrored to the feedback store; never commit)
 .claude/maintenance-attachments/
+
+# Maintenance bot: runtime state (live-rewritten by the maintenance service — Telegram
+# update offset, active alerts, cooldowns). Tracking it churns the shared base tree and
+# stalls the ff-only auto-sync; it's host-local runtime state, never commit.
+.claude/maintenance-state.json
