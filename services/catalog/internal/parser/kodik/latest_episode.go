@@ -1,6 +1,7 @@
 package kodik
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -41,8 +42,8 @@ func maxAnyTeamEpisode(results []SearchResult) int {
 // translation for the anime (used by the notifications detector for aePlayer
 // kodik combos, which carry no specific translation_id). Returns 0 + nil when
 // the anime has no kodik results (caller maps that to NotFound/skip).
-func (c *Client) LatestEpisodeAnyTranslation(shikimoriID string) (int, error) {
-	results, err := c.SearchByShikimoriID(shikimoriID)
+func (c *Client) LatestEpisodeAnyTranslation(ctx context.Context, shikimoriID string) (int, error) {
+	results, err := c.SearchByShikimoriID(ctx, shikimoriID)
 	if err != nil {
 		return 0, fmt.Errorf("kodik: search by shikimori_id %q: %w", shikimoriID, err)
 	}
@@ -78,8 +79,8 @@ func (c *Client) LatestEpisodeAnyTranslation(shikimoriID string) (int, error) {
 // Returns 0 + a descriptive error when no result for the translation is
 // found. Callers (the detector) treat that as a per-combo failure (skip,
 // don't abort the run) — see services/notifications/internal/job/detector.go.
-func (c *Client) LatestEpisodeForTranslation(shikimoriID string, translationID int) (int, string, error) {
-	results, err := c.SearchByShikimoriID(shikimoriID)
+func (c *Client) LatestEpisodeForTranslation(ctx context.Context, shikimoriID string, translationID int) (int, string, error) {
+	results, err := c.SearchByShikimoriID(ctx, shikimoriID)
 	if err != nil {
 		return 0, "", fmt.Errorf("kodik: search by shikimori_id %q: %w", shikimoriID, err)
 	}

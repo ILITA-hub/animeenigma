@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
@@ -68,20 +70,28 @@ func (s *CharacterService) GetAnimeCharacters(ctx context.Context, animeID strin
 		return s.chars.GetByAnimeID(ctx, animeID)
 	}
 
-	rows := make([]domain.AnimeCharacter, 0, len(roles))
+	// Build the full character + join-row slices and bulk-upsert in ONE
+	// ReplaceAnimeCharacters call (single tx) instead of the old per-character
+	// UpsertCharacter loop (2 queries each = a 2N N+1 on every 6h cache miss).
+	// UUIDs are assigned Go-side so chars and rows stay index-aligned; the repo
+	// resolves each join row to the canonical stored id (handles the
+	// conflict-keeps-old-id case). See repo/character.go ReplaceAnimeCharacters.
+	chars := make([]domain.Character, len(roles))
+	rows := make([]domain.AnimeCharacter, len(roles))
 	for i := range roles {
-		stored, uerr := s.chars.UpsertCharacter(ctx, &roles[i].Character)
-		if uerr != nil {
-			return nil, uerr
+		ch := roles[i].Character
+		if ch.ID == "" {
+			ch.ID = uuid.NewString()
 		}
-		rows = append(rows, domain.AnimeCharacter{
+		chars[i] = ch
+		rows[i] = domain.AnimeCharacter{
 			AnimeID:     animeID,
-			CharacterID: stored.ID,
+			CharacterID: ch.ID,
 			Role:        roles[i].Role,
 			Position:    i,
-		})
+		}
 	}
-	if err := s.chars.ReplaceAnimeCharacters(ctx, animeID, rows, nil); err != nil {
+	if err := s.chars.ReplaceAnimeCharacters(ctx, animeID, rows, chars); err != nil {
 		return nil, err
 	}
 

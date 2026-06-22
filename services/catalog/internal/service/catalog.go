@@ -190,10 +190,13 @@ func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchF
 		return s.searchShikimori(ctx, filters)
 	}
 
-	// Check search result cache for simple query searches
+	// Check search result cache for query searches. The key reflects the FULL
+	// canonical filter set (filters.CacheKey) — keying on query+page alone made
+	// two requests with the same query but different genre/year/kind/sort/score
+	// filters collide in the 15m search cache and serve stale, wrong results.
 	var searchCacheKey string
 	if filters.Query != "" {
-		searchCacheKey = cache.KeySearchResults(filters.Query, filters.Page)
+		searchCacheKey = filters.CacheKey()
 		var cached struct {
 			Animes []*domain.Anime `json:"animes"`
 			Total  int64           `json:"total"`
@@ -1469,7 +1472,7 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 	}
 
 	// Get translations from Kodik (with retry on failure)
-	translations, err := s.kodikClient.GetTranslations(anime.ShikimoriID)
+	translations, err := s.kodikClient.GetTranslations(ctx, anime.ShikimoriID)
 	if err != nil {
 		s.log.Warnw("failed to get kodik translations, returning empty list",
 			"anime_id", animeID,
@@ -1548,7 +1551,7 @@ func (s *CatalogService) GetKodikVideoSource(ctx context.Context, animeID string
 	}
 
 	// Get episode link from Kodik
-	embedLink, err := s.kodikClient.GetEpisodeLink(anime.ShikimoriID, episode, translationID)
+	embedLink, err := s.kodikClient.GetEpisodeLink(ctx, anime.ShikimoriID, episode, translationID)
 	if err != nil {
 		s.log.Warnw("failed to get kodik video source",
 			"anime_id", animeID,
@@ -1561,7 +1564,7 @@ func (s *CatalogService) GetKodikVideoSource(ctx context.Context, animeID string
 
 	// Get translation name
 	translationName := ""
-	translations, _ := s.kodikClient.GetTranslations(anime.ShikimoriID)
+	translations, _ := s.kodikClient.GetTranslations(ctx, anime.ShikimoriID)
 	for _, t := range translations {
 		if t.ID == translationID {
 			translationName = t.Title
@@ -1606,7 +1609,7 @@ func (s *CatalogService) GetKodikStreamSource(ctx context.Context, animeID strin
 		return &cached, nil
 	}
 
-	embedLink, err := s.kodikClient.GetEpisodeLink(anime.ShikimoriID, episode, translationID)
+	embedLink, err := s.kodikClient.GetEpisodeLink(ctx, anime.ShikimoriID, episode, translationID)
 	if err != nil {
 		s.log.Warnw("kodik adfree: embed link failed", "anime_id", animeID, "episode", episode, "translation_id", translationID, "error", err)
 		return nil, errors.NotFound("video not found on kodik")
@@ -1634,7 +1637,7 @@ func (s *CatalogService) GetKodikStreamSource(ctx context.Context, animeID strin
 	}
 
 	translationName := ""
-	if translations, terr := s.kodikClient.GetTranslations(anime.ShikimoriID); terr == nil {
+	if translations, terr := s.kodikClient.GetTranslations(ctx, anime.ShikimoriID); terr == nil {
 		for _, t := range translations {
 			if t.ID == translationID {
 				translationName = t.Title
@@ -1664,7 +1667,7 @@ func (s *CatalogService) SearchKodik(ctx context.Context, title string) ([]domai
 		return nil, errors.Internal("kodik client not initialized")
 	}
 
-	results, err := s.kodikClient.SearchByTitle(title)
+	results, err := s.kodikClient.SearchByTitle(ctx, title)
 	if err != nil {
 		return nil, err
 	}
@@ -1842,7 +1845,7 @@ func (s *CatalogService) GetAnimeLibEpisodes(ctx context.Context, animeID string
 	}
 
 	// Get episodes
-	episodes, err := s.animelibClient.GetEpisodes(animelibID)
+	episodes, err := s.animelibClient.GetEpisodes(ctx, animelibID)
 	if err != nil {
 		s.log.Warnw("failed to get animelib episodes",
 			"anime_id", animeID,
@@ -1878,7 +1881,7 @@ func (s *CatalogService) GetAnimeLibTranslations(ctx context.Context, animeID st
 	}
 
 	// Get episode streams (includes player/translation data)
-	detail, err := s.animelibClient.GetEpisodeStreams(episodeID)
+	detail, err := s.animelibClient.GetEpisodeStreams(ctx, episodeID)
 	if err != nil {
 		s.log.Warnw("failed to get animelib episode streams",
 			"anime_id", animeID,
@@ -1965,7 +1968,7 @@ func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, 
 	}
 
 	// Get episode streams
-	detail, err := s.animelibClient.GetEpisodeStreams(episodeID)
+	detail, err := s.animelibClient.GetEpisodeStreams(ctx, episodeID)
 	if err != nil {
 		s.log.Warnw("failed to get animelib episode streams",
 			"anime_id", animeID,
@@ -2025,7 +2028,7 @@ func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, 
 
 // SearchAnimeLib searches for anime on AnimeLib by title
 func (s *CatalogService) SearchAnimeLib(ctx context.Context, title string) ([]domain.AnimeLibSearchResult, error) {
-	results, err := s.animelibClient.Search(title)
+	results, err := s.animelibClient.Search(ctx, title)
 	if err != nil {
 		return nil, err
 	}
@@ -2076,7 +2079,13 @@ func (s *CatalogService) findAnimeLibID(ctx context.Context, anime *domain.Anime
 		return 0, fmt.Errorf("anime not found on AnimeLib")
 	}
 
-	// Launch all name-variant searches in parallel
+	// Launch all name-variant searches in parallel. fanCtx is cancelled as soon
+	// as a match is found so the losing goroutines abort their in-flight AnimeLib
+	// requests (Search now threads ctx into the upstream HTTP call) instead of
+	// running to the client timeout and wasting egress.
+	fanCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	type searchResult struct{ id int }
 	ch := make(chan searchResult, 1)
 	var wg sync.WaitGroup
@@ -2085,7 +2094,10 @@ func (s *CatalogService) findAnimeLibID(ctx context.Context, anime *domain.Anime
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-			results, err := s.animelibClient.Search(name)
+			if fanCtx.Err() != nil {
+				return
+			}
+			results, err := s.animelibClient.Search(fanCtx, name)
 			if err != nil {
 				s.log.Debugw("animelib search failed for variant", "name", name, "error", err)
 				return
@@ -2108,6 +2120,7 @@ func (s *CatalogService) findAnimeLibID(ctx context.Context, anime *domain.Anime
 	}()
 
 	if found, ok := <-ch; ok {
+		cancel() // stop the remaining in-flight variant searches
 		_ = s.cache.Set(ctx, cacheKey, found.id, 24*time.Hour)
 		return found.id, nil
 	}

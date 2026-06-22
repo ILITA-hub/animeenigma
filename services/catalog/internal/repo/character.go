@@ -52,8 +52,17 @@ func (r *CharacterRepository) GetByShikimoriID(ctx context.Context, shikimoriID 
 	return &ch, nil
 }
 
-// ReplaceAnimeCharacters upserts every character and rebuilds the anime's
-// join rows in one transaction. Position is the index within rows as passed.
+// ReplaceAnimeCharacters upserts every character and rebuilds the anime's join
+// rows in one transaction. Position is the index within rows as passed.
+//
+// When chars and rows are index-aligned (rows[i] is the join for chars[i], as
+// the catalog service builds them), the repo resolves each join row's
+// CharacterID to the canonical *stored* id after the upsert. This matters on
+// the conflict path: an OnConflict-by-shikimori_id upsert keeps the existing
+// row's id, so a caller-assigned fresh UUID would not match the stored id and
+// the join (anime_characters.character_id = characters.id) would silently drop
+// the character. Resolving here lets the service bulk-upsert in ONE call
+// instead of the old per-character UpsertCharacter loop (the 2N N+1).
 func (r *CharacterRepository) ReplaceAnimeCharacters(ctx context.Context, animeID string, rows []domain.AnimeCharacter, chars []domain.Character) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for i := range chars {
@@ -67,6 +76,31 @@ func (r *CharacterRepository) ReplaceAnimeCharacters(ctx context.Context, animeI
 				return err
 			}
 		}
+
+		// Resolve join rows to the canonical stored character ids. Build a
+		// shikimori_id -> stored id map from a single read-back so a conflicting
+		// upsert (which keeps the pre-existing id) doesn't orphan the join.
+		// Only applies when rows are index-aligned with chars.
+		if len(chars) > 0 && len(rows) == len(chars) {
+			shikiIDs := make([]string, 0, len(chars))
+			for i := range chars {
+				shikiIDs = append(shikiIDs, chars[i].ShikimoriID)
+			}
+			var stored []domain.Character
+			if err := tx.Where("shikimori_id IN ?", shikiIDs).Find(&stored).Error; err != nil {
+				return err
+			}
+			idByShikimori := make(map[string]string, len(stored))
+			for _, s := range stored {
+				idByShikimori[s.ShikimoriID] = s.ID
+			}
+			for i := range rows {
+				if id, ok := idByShikimori[chars[i].ShikimoriID]; ok {
+					rows[i].CharacterID = id
+				}
+			}
+		}
+
 		if err := tx.Where("anime_id = ?", animeID).Delete(&domain.AnimeCharacter{}).Error; err != nil {
 			return err
 		}

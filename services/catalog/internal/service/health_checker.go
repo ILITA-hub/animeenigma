@@ -142,7 +142,10 @@ func (h *PlayerHealthChecker) checkKodik() error {
 	if h.kodikClient == nil {
 		return fmt.Errorf("kodik client not initialized")
 	}
-	results, err := h.kodikClient.SearchByShikimoriID("20") // Naruto
+	// Bounded context so the health probe cannot hang past one check interval.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	results, err := h.kodikClient.SearchByShikimoriID(ctx, "20") // Naruto
 	if err != nil {
 		return err
 	}

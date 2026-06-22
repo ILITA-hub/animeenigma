@@ -1,2 +1,0 @@
-ALTER TABLE anime ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT FALSE;
-CREATE INDEX IF NOT EXISTS idx_anime_hidden ON anime(hidden) WHERE hidden = true;

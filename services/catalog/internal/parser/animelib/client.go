@@ -1,6 +1,7 @@
 package animelib
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -119,11 +120,11 @@ type VideoQuality struct {
 }
 
 // Search searches for anime by title on AnimeLib
-func (c *Client) Search(query string) ([]SearchResult, error) {
+func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, error) {
 	searchURL := fmt.Sprintf("%s/anime?q=%s&site_id[]=1&site_id[]=3&fields[]=rate_avg&fields[]=releaseDate",
 		c.baseURL, url.QueryEscape(query))
 
-	body, err := c.doRequest(searchURL)
+	body, err := c.doRequest(ctx, searchURL)
 	if err != nil {
 		return nil, fmt.Errorf("search request failed: %w", err)
 	}
@@ -140,10 +141,10 @@ func (c *Client) Search(query string) ([]SearchResult, error) {
 }
 
 // GetAnimeBySlug gets detailed anime information by slug URL
-func (c *Client) GetAnimeBySlug(slugURL string) (*AnimeDetail, error) {
+func (c *Client) GetAnimeBySlug(ctx context.Context, slugURL string) (*AnimeDetail, error) {
 	detailURL := fmt.Sprintf("%s/anime/%s", c.baseURL, url.PathEscape(slugURL))
 
-	body, err := c.doRequest(detailURL)
+	body, err := c.doRequest(ctx, detailURL)
 	if err != nil {
 		return nil, fmt.Errorf("anime detail request failed: %w", err)
 	}
@@ -160,10 +161,10 @@ func (c *Client) GetAnimeBySlug(slugURL string) (*AnimeDetail, error) {
 }
 
 // GetEpisodes gets all episodes for an anime by its AnimeLib ID
-func (c *Client) GetEpisodes(animeID int) ([]Episode, error) {
+func (c *Client) GetEpisodes(ctx context.Context, animeID int) ([]Episode, error) {
 	episodesURL := fmt.Sprintf("%s/episodes?anime_id=%d", c.baseURL, animeID)
 
-	body, err := c.doRequest(episodesURL)
+	body, err := c.doRequest(ctx, episodesURL)
 	if err != nil {
 		return nil, fmt.Errorf("episodes request failed: %w", err)
 	}
@@ -180,10 +181,10 @@ func (c *Client) GetEpisodes(animeID int) ([]Episode, error) {
 }
 
 // GetEpisodeStreams gets detailed episode data including player/stream info
-func (c *Client) GetEpisodeStreams(episodeID int) (*EpisodeDetail, error) {
+func (c *Client) GetEpisodeStreams(ctx context.Context, episodeID int) (*EpisodeDetail, error) {
 	episodeURL := fmt.Sprintf("%s/episodes/%d", c.baseURL, episodeID)
 
-	body, err := c.doRequest(episodeURL)
+	body, err := c.doRequest(ctx, episodeURL)
 	if err != nil {
 		return nil, fmt.Errorf("episode detail request failed: %w", err)
 	}
@@ -207,7 +208,7 @@ func BuildVideoURL(href string) string {
 // doRequest performs an HTTP GET request and returns the body.
 // If a token is set and the request returns 401/403, it retries without
 // the Authorization header (self-healing against expired tokens).
-func (c *Client) doRequest(reqURL string) ([]byte, error) {
+func (c *Client) doRequest(ctx context.Context, reqURL string) ([]byte, error) {
 	maxAttempts := 1
 	if c.token != "" {
 		maxAttempts = 2 // retry without token on auth failure
@@ -215,7 +216,7 @@ func (c *Client) doRequest(reqURL string) ([]byte, error) {
 
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		req, err := http.NewRequest("GET", reqURL, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		if err != nil {
 			return nil, err
 		}

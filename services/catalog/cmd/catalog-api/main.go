@@ -84,7 +84,10 @@ func main() {
 		log.Fatalw("rename scraper_providers -> stream_providers failed", "error", err)
 	}
 
-	// Auto-migrate schema
+	// Auto-migrate schema. GORM AutoMigrate is the AUTHORITATIVE schema source
+	// for this service — the services/catalog/migrations/*.sql files were dead
+	// code (no golang-migrate runner ever existed; they targeted a singular
+	// `anime` table that AutoMigrate never owns) and were removed. (audit L389)
 	if err := db.AutoMigrate(
 		&domain.Anime{},
 		&domain.Genre{},
@@ -122,6 +125,27 @@ func main() {
 	// underlying table already exists.
 	if err := db.SetupJoinTable(&domain.Anime{}, "Tags", &domain.AnimeTag{}); err != nil {
 		log.Fatalw("failed to register AnimeTag join model", "error", err)
+	}
+
+	// Punctuation-insensitive Search (handler → repo.Search) filters on
+	// regexp_replace(lower(name), '[^[:alnum:]]+', '', 'g') LIKE '%q%' across
+	// name/name_ru/name_jp, executed twice per request (Count + Find). A plain
+	// b-tree can't serve that expression, so the query seq-scans the whole
+	// `animes` table. GORM AutoMigrate cannot express GIN/expression indexes, so
+	// create pg_trgm GIN expression indexes here — idempotent, Postgres-only, and
+	// non-fatal (search still works unindexed if creation fails). (audit L382)
+	if db.DB.Dialector.Name() == "postgres" {
+		searchIdxStmts := []string{
+			`CREATE EXTENSION IF NOT EXISTS pg_trgm`,
+			`CREATE INDEX IF NOT EXISTS idx_animes_name_trgm ON animes USING gin (regexp_replace(lower(name), '[^[:alnum:]]+', '', 'g') gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_animes_name_ru_trgm ON animes USING gin (regexp_replace(lower(name_ru), '[^[:alnum:]]+', '', 'g') gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_animes_name_jp_trgm ON animes USING gin (regexp_replace(lower(name_jp), '[^[:alnum:]]+', '', 'g') gin_trgm_ops)`,
+		}
+		for _, stmt := range searchIdxStmts {
+			if err := db.DB.Exec(stmt).Error; err != nil {
+				log.Warnw("failed to create search trigram index (non-fatal)", "error", err, "stmt", stmt)
+			}
+		}
 	}
 
 	// One-time migration: scraper_providers.enabled (bool) → status enum

@@ -1,6 +1,7 @@
 package kodik
 
 import (
+	"context"
 	"testing"
 )
 
@@ -23,7 +24,7 @@ func TestSearchByTitle(t *testing.T) {
 		t.Fatalf("failed to create client: %v", err)
 	}
 
-	results, err := client.SearchByTitle("Наруто")
+	results, err := client.SearchByTitle(context.Background(), "Наруто")
 	if err != nil {
 		t.Fatalf("failed to search: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestSearchByShikimoriID(t *testing.T) {
 	}
 
 	// Search for Naruto (shikimori_id = 20)
-	results, err := client.SearchByShikimoriID("20")
+	results, err := client.SearchByShikimoriID(context.Background(), "20")
 	if err != nil {
 		t.Fatalf("failed to search: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestGetTranslations(t *testing.T) {
 	}
 
 	// Get translations for Naruto (shikimori_id = 20)
-	translations, err := client.GetTranslations("20")
+	translations, err := client.GetTranslations(context.Background(), "20")
 	if err != nil {
 		t.Fatalf("failed to get translations: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestGetEpisodeLink(t *testing.T) {
 	}
 
 	// Get episode 1 link for Naruto with AniDUB (609)
-	link, err := client.GetEpisodeLink("20", 1, 609)
+	link, err := client.GetEpisodeLink(context.Background(), "20", 1, 609)
 	if err != nil {
 		t.Fatalf("failed to get episode link: %v", err)
 	}

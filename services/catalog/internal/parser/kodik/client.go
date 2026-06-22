@@ -1,6 +1,7 @@
 package kodik
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,14 @@ const (
 type Client struct {
 	httpClient *http.Client
 
+	// tokenSourceURL / fallbackTokenURL / apiEndpoint override the package-level
+	// source consts. They default to TokenSourceURL / FallbackTokenURL /
+	// APIEndpoint and exist so tests can point HTTP calls at an httptest server /
+	// fake RoundTripper without hitting the live Kodik/GitHub-hosted sources.
+	tokenSourceURL   string
+	fallbackTokenURL string
+	apiEndpoint      string
+
 	// mu guards token/tokenExpires. The Client is a singleton shared across all
 	// concurrent catalog requests (services/catalog: one kodik.NewClient reused
 	// for every request), so the lazy token refresh would otherwise be a data
@@ -29,6 +38,33 @@ type Client struct {
 	mu           sync.RWMutex
 	token        string
 	tokenExpires time.Time
+}
+
+// primaryTokenURL returns the configured primary token source, defaulting to
+// the package const.
+func (c *Client) primaryTokenURL() string {
+	if c.tokenSourceURL != "" {
+		return c.tokenSourceURL
+	}
+	return TokenSourceURL
+}
+
+// fallbackTokenSourceURL returns the configured fallback token source,
+// defaulting to the package const.
+func (c *Client) fallbackTokenSourceURL() string {
+	if c.fallbackTokenURL != "" {
+		return c.fallbackTokenURL
+	}
+	return FallbackTokenURL
+}
+
+// endpoint returns the configured Kodik API base, defaulting to the package
+// const.
+func (c *Client) endpoint() string {
+	if c.apiEndpoint != "" {
+		return c.apiEndpoint
+	}
+	return APIEndpoint
 }
 
 // tokenSnapshot returns the current token under a read lock.
@@ -193,17 +229,9 @@ func isValidToken(token string) bool {
 
 // getToken retrieves the API token from public sources
 func (c *Client) getToken() (string, error) {
-	// Try main source with decoding (most reliable, decoded token)
-	resp, err := c.httpClient.Get(TokenSourceURL)
-	if err == nil && resp.StatusCode == 200 {
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err == nil {
-			token := c.extractTokenFromSource(string(body))
-			if isValidToken(token) {
-				return token, nil
-			}
-		}
+	// Try main source with decoding (most reliable, decoded token).
+	if token, ok := c.getTokenFromPrimary(); ok {
+		return token, nil
 	}
 
 	// Fallback to direct token extraction from JS
@@ -215,9 +243,35 @@ func (c *Client) getToken() (string, error) {
 	return "", fmt.Errorf("failed to get valid kodik token from any source")
 }
 
+// getTokenFromPrimary fetches and decodes the token from the primary source.
+// It owns the response body lifecycle via defer so the connection is returned
+// to the keep-alive pool on EVERY path — the previous inline version only closed
+// the body inside the StatusCode==200 block, leaking the connection on any
+// non-200 (err==nil) response during Kodik auth-failure storms.
+func (c *Client) getTokenFromPrimary() (string, bool) {
+	resp, err := c.httpClient.Get(c.primaryTokenURL())
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", false
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", false
+	}
+	token := c.extractTokenFromSource(string(body))
+	if !isValidToken(token) {
+		return "", false
+	}
+	return token, true
+}
+
 // getTokenFromFallback extracts token from the fallback JS source
 func (c *Client) getTokenFromFallback() (string, error) {
-	resp, err := c.httpClient.Get(FallbackTokenURL)
+	resp, err := c.httpClient.Get(c.fallbackTokenSourceURL())
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch token source: %w", err)
 	}
@@ -242,6 +296,19 @@ func (c *Client) getTokenFromFallback() (string, error) {
 	}
 
 	return text[tokenStart : tokenStart+tokenEnd], nil
+}
+
+// postForm issues a context-aware POST to the Kodik /search endpoint with the
+// given form params. Replaces http.Client.PostForm so the request honors ctx
+// cancellation (the capabilities fan-out and search paths bound the whole call
+// with a request-scoped timeout).
+func (c *Client) postForm(ctx context.Context, params url.Values) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint()+"/search", strings.NewReader(params.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return c.httpClient.Do(req)
 }
 
 // extractTokenFromSource extracts token using the decode algorithm
@@ -406,7 +473,7 @@ func decodeSecret(input []int, password string) string {
 }
 
 // SearchByShikimoriID searches for anime by Shikimori ID
-func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error) {
+func (c *Client) SearchByShikimoriID(ctx context.Context, shikimoriID string) ([]SearchResult, error) {
 	// Refresh token if needed
 	_ = c.refreshTokenIfNeeded() // Continue with existing token if refresh fails
 
@@ -415,8 +482,12 @@ func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error)
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
-			// Wait before retry (exponential backoff)
-			time.Sleep(time.Duration(attempt*500) * time.Millisecond)
+			// Wait before retry (exponential backoff), aborting if ctx is done.
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt*500) * time.Millisecond):
+			}
 		}
 
 		params := url.Values{}
@@ -425,8 +496,11 @@ func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error)
 		params.Set("with_episodes", "true")
 		params.Set("with_material_data", "true")
 
-		resp, err := c.httpClient.PostForm(APIEndpoint+"/search", params)
+		resp, err := c.postForm(ctx, params)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			lastErr = fmt.Errorf("search request failed: %w", err)
 			continue
 		}
@@ -469,7 +543,7 @@ func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error)
 }
 
 // SearchByTitle searches for anime by title
-func (c *Client) SearchByTitle(title string) ([]SearchResult, error) {
+func (c *Client) SearchByTitle(ctx context.Context, title string) ([]SearchResult, error) {
 	// Refresh token if needed
 	_ = c.refreshTokenIfNeeded() // Continue with existing token if refresh fails
 
@@ -478,7 +552,11 @@ func (c *Client) SearchByTitle(title string) ([]SearchResult, error) {
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
-			time.Sleep(time.Duration(attempt*500) * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt*500) * time.Millisecond):
+			}
 		}
 
 		params := url.Values{}
@@ -488,8 +566,11 @@ func (c *Client) SearchByTitle(title string) ([]SearchResult, error) {
 		params.Set("with_episodes", "true")
 		params.Set("limit", "50")
 
-		resp, err := c.httpClient.PostForm(APIEndpoint+"/search", params)
+		resp, err := c.postForm(ctx, params)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			lastErr = fmt.Errorf("search request failed: %w", err)
 			continue
 		}
@@ -530,8 +611,8 @@ func (c *Client) SearchByTitle(title string) ([]SearchResult, error) {
 }
 
 // GetTranslations returns all available translations for an anime by Shikimori ID
-func (c *Client) GetTranslations(shikimoriID string) ([]Translation, error) {
-	results, err := c.SearchByShikimoriID(shikimoriID)
+func (c *Client) GetTranslations(ctx context.Context, shikimoriID string) ([]Translation, error) {
+	results, err := c.SearchByShikimoriID(ctx, shikimoriID)
 	if err != nil {
 		return nil, err
 	}
@@ -611,8 +692,8 @@ func TranslationsHaveDub(translations []Translation) bool {
 }
 
 // GetEpisodeLink returns the embed link for a specific episode
-func (c *Client) GetEpisodeLink(shikimoriID string, episode int, translationID int) (string, error) {
-	results, err := c.SearchByShikimoriID(shikimoriID)
+func (c *Client) GetEpisodeLink(ctx context.Context, shikimoriID string, episode int, translationID int) (string, error) {
+	results, err := c.SearchByShikimoriID(ctx, shikimoriID)
 	if err != nil {
 		return "", err
 	}
@@ -656,8 +737,8 @@ func (c *Client) GetEpisodeLink(shikimoriID string, episode int, translationID i
 
 // GetVideoURL extracts the actual video URL from a Kodik embed page
 // This requires additional scraping of the embed page
-func (c *Client) GetVideoURL(embedLink string) (*VideoSource, error) {
-	req, err := http.NewRequest("GET", embedLink, nil)
+func (c *Client) GetVideoURL(ctx context.Context, embedLink string) (*VideoSource, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, embedLink, nil)
 	if err != nil {
 		return nil, err
 	}

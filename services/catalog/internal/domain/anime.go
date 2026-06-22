@@ -8,15 +8,18 @@ import (
 
 // Anime represents an anime in the catalog
 type Anime struct {
-	ID          string      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Name        string      `gorm:"size:500;index" json:"name"`
-	NameEN      string      `gorm:"size:500" json:"name_en,omitempty"`
-	NameRU      string      `gorm:"size:500" json:"name_ru,omitempty"`
-	NameJP      string      `gorm:"size:500" json:"name_jp,omitempty"`
-	Description string      `gorm:"type:text" json:"description,omitempty"`
-	Year        int         `json:"year,omitempty"`
-	Season      string      `gorm:"size:20" json:"season,omitempty"`
-	Status      AnimeStatus `gorm:"size:20;default:'released'" json:"status"`
+	ID          string `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Name        string `gorm:"size:500;index" json:"name"`
+	NameEN      string `gorm:"size:500" json:"name_en,omitempty"`
+	NameRU      string `gorm:"size:500" json:"name_ru,omitempty"`
+	NameJP      string `gorm:"size:500" json:"name_jp,omitempty"`
+	Description string `gorm:"type:text" json:"description,omitempty"`
+	// Year / Season / Status are filtered (and Status often ordered) in
+	// Search / GetOngoingAnime / the next-episode + stale-refresh queries.
+	// Previously unindexed → seq scans on every browse. (audit L389)
+	Year   int         `gorm:"index" json:"year,omitempty"`
+	Season string      `gorm:"size:20;index" json:"season,omitempty"`
+	Status AnimeStatus `gorm:"size:20;default:'released';index" json:"status"`
 	// S5 attribute dimensions (Phase 12 Decision §A1) — Shikimori-sourced.
 	// Rating doubles as the S5 "demographic" proxy per Decision §A3.
 	// MaterialSource column name avoids collision with VideoSource.SourceType.
@@ -27,15 +30,19 @@ type Anime struct {
 	// FranchiseChecked records that franchise backfill ran for this row, so a
 	// genuinely standalone anime (empty franchise) is not re-fetched on every
 	// guess-pool build. Internal bookkeeping — not exposed in the API.
-	FranchiseChecked bool    `gorm:"default:false;index" json:"-"`
-	EpisodesCount    int     `json:"episodes_count"`
-	EpisodesAired    int     `json:"episodes_aired,omitempty"`
-	EpisodeDuration  int     `json:"episode_duration,omitempty"`
-	Score            float64 `gorm:"type:decimal(4,2)" json:"score,omitempty"`
-	PosterURL        string  `gorm:"type:text" json:"poster_url,omitempty"`
-	ShikimoriID      string  `gorm:"size:50;index" json:"shikimori_id,omitempty"`
-	MALID            string  `gorm:"size:50" json:"mal_id,omitempty"`
-	AniListID        string  `gorm:"size:50" json:"anilist_id,omitempty"`
+	FranchiseChecked bool `gorm:"default:false;index" json:"-"`
+	EpisodesCount    int  `json:"episodes_count"`
+	EpisodesAired    int  `json:"episodes_aired,omitempty"`
+	EpisodeDuration  int  `json:"episode_duration,omitempty"`
+	// Composite index on (sort_priority, score) backs the default Search order
+	// `sort_priority DESC, score DESC` (audit L389). priority:1/2 sets column
+	// order within the index; the index is ascending but Postgres can scan it
+	// backwards for the DESC ordering.
+	Score       float64 `gorm:"type:decimal(4,2);index:idx_animes_sort_score,priority:2" json:"score,omitempty"`
+	PosterURL   string  `gorm:"type:text" json:"poster_url,omitempty"`
+	ShikimoriID string  `gorm:"size:50;index" json:"shikimori_id,omitempty"`
+	MALID       string  `gorm:"size:50" json:"mal_id,omitempty"`
+	AniListID   string  `gorm:"size:50" json:"anilist_id,omitempty"`
 	// IMDbID / TMDBID — workstream raw-jp, Phase 02. Resolved lazily via
 	// Kitsu mappings on the first OpenSubtitles query for this anime.
 	// Nullable: not every title has either mapping.
@@ -64,11 +71,14 @@ type Anime struct {
 	// scraper provider returns >= 1 episode for the anime. Mirrors the
 	// HasKodik / HasAnimeLib / HasRaw lazy-backfill pattern.
 	// Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5).
-	HasEnglish    bool       `gorm:"default:false;index;column:has_english" json:"has_english"`
-	Hidden        bool       `gorm:"default:false" json:"hidden"`
-	SortPriority  int        `gorm:"default:0" json:"sort_priority,omitempty"`
-	NextEpisodeAt *time.Time `json:"next_episode_at,omitempty"`
-	AiredOn       *time.Time `json:"aired_on,omitempty"`
+	HasEnglish   bool `gorm:"default:false;index;column:has_english" json:"has_english"`
+	Hidden       bool `gorm:"default:false" json:"hidden"`
+	SortPriority int  `gorm:"default:0;index:idx_animes_sort_score,priority:1" json:"sort_priority,omitempty"`
+	// NextEpisodeAt is filtered + ordered in the next-episode query;
+	// AiredOn is filtered + ordered in GetOngoingAnime / ListGuessPoolCandidates.
+	// Both previously unindexed. (audit L389)
+	NextEpisodeAt *time.Time `gorm:"index" json:"next_episode_at,omitempty"`
+	AiredOn       *time.Time `gorm:"index" json:"aired_on,omitempty"`
 	Genres        []Genre    `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
 	// Phase 12 Decision §A1/A2 — Studios absorbs the producers role; no
 	// separate Producers field exists in v2.0 (Decision §A2 collapses

@@ -139,6 +139,77 @@ func TestCharacterRepo_UpsertCharacter_IsIdempotent(t *testing.T) {
 	assert.Equal(t, int64(1), count, "upsert must not create duplicate rows")
 }
 
+// TestCharacterRepo_ReplaceAnimeCharacters_BulkUpsertAndJoinInOneCall is the
+// N+1 fix (L403): the service now hands ReplaceAnimeCharacters an index-aligned
+// (chars, rows) pair in a single call instead of looping UpsertCharacter. The
+// repo bulk-upserts the characters and resolves each join row's CharacterID to
+// the canonical stored id, so GetByAnimeID returns all characters.
+func TestCharacterRepo_ReplaceAnimeCharacters_BulkUpsertAndJoinInOneCall(t *testing.T) {
+	db := setupCharacterTestDB(t)
+	r := NewCharacterRepository(db)
+	ctx := context.Background()
+
+	seedAnimeForCharTest(t, db, "anime-bulk", "Frieren")
+
+	// Caller assigns Go-side UUIDs (as the service does). rows are index-aligned
+	// with chars: rows[i] is the join for chars[i].
+	chars := []domain.Character{
+		{ID: "char-a", ShikimoriID: "100", Name: "Stark"},
+		{ID: "char-b", ShikimoriID: "101", Name: "Frieren"},
+	}
+	rows := []domain.AnimeCharacter{
+		{AnimeID: "anime-bulk", CharacterID: "char-a", Role: "supporting", Position: 0},
+		{AnimeID: "anime-bulk", CharacterID: "char-b", Role: "main", Position: 1},
+	}
+
+	require.NoError(t, r.ReplaceAnimeCharacters(ctx, "anime-bulk", rows, chars))
+
+	got, err := r.GetByAnimeID(ctx, "anime-bulk")
+	require.NoError(t, err)
+	require.Len(t, got, 2, "both characters must be joined and returned in one call")
+	assert.Equal(t, "Frieren", got[0].Name, "main first")
+	assert.Equal(t, "Stark", got[1].Name)
+}
+
+// TestCharacterRepo_ReplaceAnimeCharacters_ConflictKeepsStoredID guards the
+// correctness hazard the N+1 read-back used to mask: when a character already
+// exists with a DIFFERENT id, the upsert conflict keeps the stored id. The repo
+// must resolve the join row to that canonical stored id (not the caller's fresh
+// UUID), or the join silently drops the character.
+func TestCharacterRepo_ReplaceAnimeCharacters_ConflictKeepsStoredID(t *testing.T) {
+	db := setupCharacterTestDB(t)
+	r := NewCharacterRepository(db)
+	ctx := context.Background()
+
+	seedAnimeForCharTest(t, db, "anime-cf", "Frieren")
+
+	// Seed an existing character with a stable id.
+	existing, err := r.UpsertCharacter(ctx, &domain.Character{ID: "stored-id-1", ShikimoriID: "200", Name: "OldName"})
+	require.NoError(t, err)
+	require.Equal(t, "stored-id-1", existing.ID)
+
+	// Now the caller hands a FRESH (different) UUID for the same shikimori_id.
+	chars := []domain.Character{
+		{ID: "fresh-id-xyz", ShikimoriID: "200", Name: "NewName"},
+	}
+	rows := []domain.AnimeCharacter{
+		{AnimeID: "anime-cf", CharacterID: "fresh-id-xyz", Role: "main", Position: 0},
+	}
+	require.NoError(t, r.ReplaceAnimeCharacters(ctx, "anime-cf", rows, chars))
+
+	// The character must still be reachable via the join — resolved to the
+	// canonical stored id, not the fresh UUID.
+	got, err := r.GetByAnimeID(ctx, "anime-cf")
+	require.NoError(t, err)
+	require.Len(t, got, 1, "conflicting character must remain joined via its stored id")
+	assert.Equal(t, "main", got[0].Role)
+
+	// And no duplicate character row was created.
+	var count int64
+	require.NoError(t, db.Model(&domain.Character{}).Where("shikimori_id = ?", "200").Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+}
+
 func TestCharacterRepo_GetByShikimoriID_NotFound(t *testing.T) {
 	db := setupCharacterTestDB(t)
 	r := NewCharacterRepository(db)

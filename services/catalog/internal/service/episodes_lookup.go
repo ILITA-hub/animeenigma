@@ -118,7 +118,7 @@ func (s *EpisodesLookupService) LatestAvailable(
 	case animeLevel:
 		latest, translationTitle, err = s.animeLevel.Latest(ctx, shikimoriID, player, watchType)
 	case player == "kodik" && translationID == "":
-		latest, translationTitle, err = s.latestKodikAnyTeam(shikimoriID)
+		latest, translationTitle, err = s.latestKodikAnyTeam(ctx, shikimoriID)
 	case player == "animelib" && translationID == "":
 		latest, translationTitle, err = s.latestAnimeLibAnyTeam(ctx, shikimoriID)
 	case player == "kodik":
@@ -127,7 +127,7 @@ func (s *EpisodesLookupService) LatestAvailable(
 			return EpisodesLookupResult{}, apperrors.InvalidInput(
 				fmt.Sprintf("translation_id must be numeric for kodik: %v", parseErr))
 		}
-		latest, translationTitle, err = s.kodikClient.LatestEpisodeForTranslation(shikimoriID, tid)
+		latest, translationTitle, err = s.kodikClient.LatestEpisodeForTranslation(ctx, shikimoriID, tid)
 	case player == "animelib":
 		if watchType != "sub" && watchType != "dub" {
 			return EpisodesLookupResult{}, apperrors.InvalidInput(
@@ -197,8 +197,8 @@ func (s *EpisodesLookupService) lookupAnimeLib(
 
 // latestKodikAnyTeam resolves the anime-level latest episode for an aePlayer
 // kodik combo (empty translation_id) — the max across any translation.
-func (s *EpisodesLookupService) latestKodikAnyTeam(shikimoriID string) (int, string, error) {
-	n, err := s.kodikClient.LatestEpisodeAnyTranslation(shikimoriID)
+func (s *EpisodesLookupService) latestKodikAnyTeam(ctx context.Context, shikimoriID string) (int, string, error) {
+	n, err := s.kodikClient.LatestEpisodeAnyTranslation(ctx, shikimoriID)
 	if err != nil {
 		return 0, "", err
 	}

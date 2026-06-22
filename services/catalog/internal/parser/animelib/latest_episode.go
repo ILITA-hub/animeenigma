@@ -57,7 +57,7 @@ func (c *Client) LatestEpisodeForTeam(ctx context.Context, animelibID int, teamI
 		return 0, "", err
 	}
 
-	episodes, err := c.GetEpisodes(animelibID)
+	episodes, err := c.GetEpisodes(ctx, animelibID)
 	if err != nil {
 		return 0, "", fmt.Errorf("animelib: get_episodes anime_id=%d: %w", animelibID, err)
 	}
@@ -95,7 +95,7 @@ func (c *Client) LatestEpisodeForTeam(ctx context.Context, animelibID int, teamI
 			if gctx.Err() != nil {
 				return nil
 			}
-			detail, err := c.GetEpisodeStreams(ep.ep.ID)
+			detail, err := c.GetEpisodeStreams(gctx, ep.ep.ID)
 			if err != nil {
 				// Per-episode failures are not fatal — the rest of the fan-out
 				// can still find a matching higher-numbered episode.
@@ -152,7 +152,7 @@ func maxAnimeLibEpisode(eps []Episode) int {
 // notifications detector for aePlayer animelib combos (no specific team).
 // Returns 0 + nil when the list is empty (caller maps to NotFound/skip).
 func (c *Client) LatestEpisodeAnyTeam(ctx context.Context, animelibID int) (int, error) {
-	eps, err := c.GetEpisodes(animelibID)
+	eps, err := c.GetEpisodes(ctx, animelibID)
 	if err != nil {
 		return 0, fmt.Errorf("animelib: episodes for id %d: %w", animelibID, err)
 	}

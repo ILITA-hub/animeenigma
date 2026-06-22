@@ -56,7 +56,6 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /catalog-api .
-COPY services/catalog/migrations ./migrations
 
 EXPOSE 8081
 
