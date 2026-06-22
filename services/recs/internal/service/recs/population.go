@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 )
 
 // populationCache is the minimal cache surface PopulationOrchestrator depends
@@ -31,6 +32,11 @@ const LastComputedKey = "recs:popsignal:lastcomputed"
 // 60-minute cadence so the key never naturally expires under normal operation.
 const lastComputedTTL = 24 * time.Hour
 
+// populationTickTimeout bounds a single population RunOnce. Well under the
+// 60-minute production cadence so a hung Precompute aborts and the next tick
+// still fires instead of stalling the ticker forever (audit L641).
+const populationTickTimeout = 10 * time.Minute
+
 // PopulationOrchestrator runs Precompute across all population-scope signal
 // modules on a fixed cadence (60 minutes in production; tests use shorter
 // intervals). It is intentionally a separate type from the per-user
@@ -43,13 +49,17 @@ type PopulationOrchestrator struct {
 	modules []SignalModule
 	cache   populationCache
 	log     *logger.Logger
+
+	// tickTimeout bounds each Start-driven RunOnce. Defaults to
+	// populationTickTimeout; tests override it with a tiny budget.
+	tickTimeout time.Duration
 }
 
 // NewPopulationOrchestrator wires the orchestrator with population-scope
 // modules (S3, S4 in Phase 10), a Redis-backed cache (or any populationCache),
 // and a structured logger.
 func NewPopulationOrchestrator(modules []SignalModule, cache populationCache, log *logger.Logger) *PopulationOrchestrator {
-	return &PopulationOrchestrator{modules: modules, cache: cache, log: log}
+	return &PopulationOrchestrator{modules: modules, cache: cache, log: log, tickTimeout: populationTickTimeout}
 }
 
 // RunOnce invokes Precompute on every registered module. Errors are joined
@@ -81,6 +91,23 @@ func (p *PopulationOrchestrator) RunOnce(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// runTick executes one RunOnce under a per-tick timeout derived from ctx
+// (audit L641) so a hung query aborts instead of stalling the ticker. On
+// success it advances the recs_cron_last_success_unixtime{cron="population"}
+// gauge so a frozen cron is observable in Grafana.
+func (p *PopulationOrchestrator) runTick(ctx context.Context, phase string) {
+	tickCtx, cancel := context.WithTimeout(ctx, p.tickTimeout)
+	defer cancel()
+	if err := p.RunOnce(tickCtx); err != nil {
+		p.log.Errorw("population precompute failed ("+phase+")", "error", err)
+		// Do NOT return / panic — the caller continues ticking. Per success
+		// criterion #5: stale signals continue serving.
+		return
+	}
+	metrics.RecsCronLastSuccessUnixtime.WithLabelValues("population").SetToCurrentTime()
+	p.log.Infow("population precompute " + phase + " complete")
+}
+
 // Start spawns a goroutine that fires RunOnce immediately (boot tick) and then
 // once every `interval` thereafter. Cancelling ctx exits the goroutine.
 //
@@ -91,11 +118,7 @@ func (p *PopulationOrchestrator) Start(ctx context.Context, interval time.Durati
 	go func() {
 		// Boot tick — populate signals within seconds of redeploy so the
 		// trending row works on cold start without the user waiting an hour.
-		if err := p.RunOnce(ctx); err != nil {
-			p.log.Errorw("population precompute failed (boot tick)", "error", err)
-		} else {
-			p.log.Infow("population precompute boot tick complete")
-		}
+		p.runTick(ctx, "boot tick")
 
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -105,13 +128,7 @@ func (p *PopulationOrchestrator) Start(ctx context.Context, interval time.Durati
 				p.log.Infow("population precompute cron stopped")
 				return
 			case <-ticker.C:
-				if err := p.RunOnce(ctx); err != nil {
-					p.log.Errorw("population precompute failed (tick)", "error", err)
-					// Do NOT return / panic — continue ticking. Per
-					// success criterion #5: stale signals continue serving.
-					continue
-				}
-				p.log.Infow("population precompute tick complete")
+				p.runTick(ctx, "tick")
 			}
 		}
 	}()

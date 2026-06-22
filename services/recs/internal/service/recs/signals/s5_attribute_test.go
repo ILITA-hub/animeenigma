@@ -559,6 +559,98 @@ func TestS5Attribute_PreservesS1AndS6(t *testing.T) {
 	assert.NotEqual(t, "{}", row.S5Affinity, "S5Affinity must be populated by Precompute")
 }
 
+// L648 IDF-hoist: the population-scope IDF is identical for every user in a
+// cron tick, so it must be computed ONCE per tick (via PrecomputeShared) and
+// reused across all per-user Precompute calls — not recomputed N times.
+func TestS5Attribute_IDFHoist_ComputedOncePerTick(t *testing.T) {
+	db := setupS5TestDB(t)
+
+	// 3 users, shared studio so IDF is non-trivial.
+	seedS5Anime(t, db, "anime-A", "tv", "pg_13", "manga")
+	seedS5Studio(t, db, "anime-A", "Madhouse")
+	for _, u := range []string{"user-1", "user-2", "user-3"} {
+		seedS5History(t, db, "wh-"+u, u, "anime-A", "kodik", 60)
+	}
+
+	r := repo.NewRecsRepository(db)
+	s5 := NewS5Attribute(db, r)
+
+	// Build the shared (once-per-tick) IDF context, then run Precompute for
+	// all three users under it. The IDF must be computed exactly once.
+	ctx, err := s5.PrecomputeShared(context.Background())
+	require.NoError(t, err)
+	for _, u := range []string{"user-1", "user-2", "user-3"} {
+		require.NoError(t, s5.Precompute(ctx, recs.UserID(u)))
+	}
+
+	assert.Equal(t, int64(1), s5.idfComputeCalls(),
+		"population IDF must be computed once per tick (PrecomputeShared), not per user")
+}
+
+// Without a shared context (e.g. the single-user TriggerForUser path), S5 must
+// still work standalone by computing IDF inline.
+func TestS5Attribute_IDFHoist_InlineFallbackStandalone(t *testing.T) {
+	db := setupS5TestDB(t)
+	seedS5Anime(t, db, "anime-A", "tv", "pg_13", "manga")
+	seedS5Studio(t, db, "anime-A", "Madhouse")
+	seedS5History(t, db, "wh-1", "user-1", "anime-A", "kodik", 60)
+
+	r := repo.NewRecsRepository(db)
+	s5 := NewS5Attribute(db, r)
+
+	// No PrecomputeShared call — plain Precompute must fall back to inline IDF.
+	require.NoError(t, s5.Precompute(context.Background(), "user-1"))
+	assert.Equal(t, int64(1), s5.idfComputeCalls(),
+		"standalone Precompute (no shared ctx) must compute IDF inline exactly once")
+
+	row, err := r.GetUserSignals(context.Background(), "user-1")
+	require.NoError(t, err)
+	var aff map[string]float64
+	require.NoError(t, json.Unmarshal([]byte(row.S5Affinity), &aff))
+	assert.NotZero(t, aff["studio:Madhouse"],
+		"inline-fallback IDF must still produce the same affinity vector")
+}
+
+// The hoisted (shared-ctx) and inline paths must produce identical affinity
+// vectors — the hoist is a performance optimization, not a behavior change.
+func TestS5Attribute_IDFHoist_SharedAndInlineAgree(t *testing.T) {
+	build := func() *gorm.DB {
+		db := setupS5TestDB(t)
+		seedS5Anime(t, db, "anime-A", "tv", "pg_13", "manga")
+		seedS5Anime(t, db, "anime-B", "movie", "r", "novel")
+		seedS5Studio(t, db, "anime-A", "Madhouse")
+		seedS5Studio(t, db, "anime-B", "MAPPA")
+		seedS5Genre(t, db, "anime-A", "action")
+		seedS5Tag(t, db, "anime-A", "shounen")
+		for _, u := range []string{"user-1", "user-2"} {
+			seedS5History(t, db, "wha-"+u, u, "anime-A", "kodik", 60)
+		}
+		seedS5History(t, db, "whb-1", "user-1", "anime-B", "kodik", 120)
+		return db
+	}
+
+	// Inline path.
+	dbInline := build()
+	rInline := repo.NewRecsRepository(dbInline)
+	s5Inline := NewS5Attribute(dbInline, rInline)
+	require.NoError(t, s5Inline.Precompute(context.Background(), "user-1"))
+	inlineRow, err := rInline.GetUserSignals(context.Background(), "user-1")
+	require.NoError(t, err)
+
+	// Shared path.
+	dbShared := build()
+	rShared := repo.NewRecsRepository(dbShared)
+	s5Shared := NewS5Attribute(dbShared, rShared)
+	sharedCtx, err := s5Shared.PrecomputeShared(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, s5Shared.Precompute(sharedCtx, "user-1"))
+	sharedRow, err := rShared.GetUserSignals(context.Background(), "user-1")
+	require.NoError(t, err)
+
+	assert.Equal(t, inlineRow.S5Affinity, sharedRow.S5Affinity,
+		"hoisted IDF must yield the identical affinity vector as the inline path")
+}
+
 // s5RandomID is a deterministic ID builder for the property test.
 func s5RandomID(prefix string, n int) string {
 	return fmt.Sprintf("%s-%04d", prefix, n)

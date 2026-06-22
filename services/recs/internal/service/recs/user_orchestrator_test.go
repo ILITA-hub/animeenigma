@@ -385,3 +385,110 @@ func (s *slowSignalRecorder) Precompute(_ context.Context, _ UserID) error {
 func (s *slowSignalRecorder) Score(_ context.Context, _ UserID, _ []AnimeID) (map[AnimeID]RawScore, error) {
 	return nil, nil
 }
+
+// blockingUserSignal blocks on ctx.Done() for a configurable subset of users
+// (or all). Records whether the per-call ctx carried a deadline. Used to prove
+// (a) the per-tick timeout (audit L641) and (b) the per-user timeout (L648).
+type blockingUserSignal struct {
+	id          SignalID
+	mu          sync.Mutex
+	calls       int64
+	blockUsers  map[UserID]bool // if non-nil, only these users block; else all block
+	seen        []UserID
+	sawDeadline int64 // atomic bool: 1 if any blocked call's ctx had a deadline
+}
+
+func (b *blockingUserSignal) ID() SignalID { return b.id }
+func (b *blockingUserSignal) Precompute(ctx context.Context, userID UserID) error {
+	atomic.AddInt64(&b.calls, 1)
+	b.mu.Lock()
+	b.seen = append(b.seen, userID)
+	b.mu.Unlock()
+	shouldBlock := b.blockUsers == nil || b.blockUsers[userID]
+	if !shouldBlock {
+		return nil
+	}
+	if _, ok := ctx.Deadline(); ok {
+		atomic.StoreInt64(&b.sawDeadline, 1)
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+func (b *blockingUserSignal) Score(_ context.Context, _ UserID, _ []AnimeID) (map[AnimeID]RawScore, error) {
+	return nil, nil
+}
+func (b *blockingUserSignal) seenUsers() []UserID {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]UserID, len(b.seen))
+	copy(out, b.seen)
+	return out
+}
+
+// L641: a hung per-user precompute under the cron's shared ctx stalls the
+// ticker forever. The per-tick timeout must abort it so the next tick fires.
+func TestUserOrchestrator_StartPerTickTimeout(t *testing.T) {
+	db := setupUserOrchTestDB(t)
+	seedWH(t, db, "wh1", "user-A")
+
+	block := &blockingUserSignal{id: "s1"} // all users block forever
+	pre := NewOrchestrator([]SignalModule{block})
+	cache := newUserOrchFakeCache()
+	o := NewUserOrchestrator(pre, db, cache, logger.Default())
+	o.tickTimeout = 60 * time.Millisecond
+	o.perUserTimeout = 40 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	o.Start(ctx, 30*time.Millisecond)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt64(&block.calls) >= 2 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+
+	assert.GreaterOrEqual(t, atomic.LoadInt64(&block.calls), int64(2),
+		"per-tick timeout must abort a hung precompute so the next tick fires")
+}
+
+// L648: one slow user must not starve the rest. With a per-user timeout, the
+// 'slow' user's precompute aborts and 'fast' still gets its cache.Delete.
+func TestUserOrchestrator_RunOncePerUserTimeoutDoesNotStarveOthers(t *testing.T) {
+	db := setupUserOrchTestDB(t)
+	seedWH(t, db, "wh1", "slow")
+	seedWH(t, db, "wh2", "fast")
+
+	block := &blockingUserSignal{
+		id:         "s1",
+		blockUsers: map[UserID]bool{"slow": true}, // only 'slow' hangs
+	}
+	pre := NewOrchestrator([]SignalModule{block})
+	cache := newUserOrchFakeCache()
+	o := NewUserOrchestrator(pre, db, cache, logger.Default())
+	o.perUserTimeout = 50 * time.Millisecond
+
+	start := time.Now()
+	err := o.RunOnce(context.Background())
+	elapsed := time.Since(start)
+
+	// 'slow' blocks until its per-user budget fires; without the per-user
+	// timeout RunOnce would hang forever.
+	assert.Less(t, elapsed, 1*time.Second,
+		"per-user timeout must bound the slow user so RunOnce returns")
+	assert.Error(t, err, "the slow user's DeadlineExceeded is joined into the error")
+
+	// 'fast' must still have been processed AND had its cache deleted —
+	// the slow user did not starve it.
+	assert.Equal(t, int64(1), atomic.LoadInt64(&block.sawDeadline),
+		"the blocked (slow) precompute must have carried a deadline")
+	assert.True(t, cache.deletesContains("recs:user:fast:topN:v4"),
+		"fast user must still get its cache.Delete despite the slow user hanging")
+	assert.False(t, cache.deletesContains("recs:user:slow:topN:v4"),
+		"slow user failed (timed out) -> stale-serves, no cache delete")
+
+	seen := block.seenUsers()
+	assert.Len(t, seen, 2, "both users must be visited even though one hung")
+}

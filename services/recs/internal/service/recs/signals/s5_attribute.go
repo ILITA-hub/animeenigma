@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/recs/internal/domain"
@@ -40,6 +41,35 @@ import (
 type S5Attribute struct {
 	db   *gorm.DB
 	repo *repo.RecsRepository
+
+	// idfCalls counts how many times the population IDF was actually computed
+	// from the DB (computePopulationIDF). The IDF-hoist (audit L648) computes
+	// it ONCE per cron tick via PrecomputeShared and reuses it across every
+	// per-user Precompute, so this stays at 1 per tick instead of N (one per
+	// user). Read by tests via idfComputeCalls().
+	idfCalls atomic.Int64
+}
+
+// s5PopulationIDF holds the six population-scope IDF tables that are identical
+// for every user within a single cron tick. Computed once by PrecomputeShared
+// and threaded through ctx so per-user Precompute calls reuse it (audit L648).
+type s5PopulationIDF struct {
+	tag    map[string]float64
+	studio map[string]float64
+	genre  map[string]float64
+	kind   map[string]float64
+	rating map[string]float64
+	source map[string]float64
+}
+
+// s5IDFContextKey is the unexported context key under which PrecomputeShared
+// stows the per-tick IDF bundle. Unexported type prevents collisions.
+type s5IDFContextKey struct{}
+
+// idfFromContext returns the per-tick IDF bundle if PrecomputeShared seeded it.
+func idfFromContext(ctx context.Context) (*s5PopulationIDF, bool) {
+	idf, ok := ctx.Value(s5IDFContextKey{}).(*s5PopulationIDF)
+	return idf, ok
 }
 
 const (
@@ -76,6 +106,70 @@ func NewS5Attribute(db *gorm.DB, recsRepo *repo.RecsRepository) *S5Attribute {
 
 // ID returns the stable signal identifier "s5".
 func (s *S5Attribute) ID() recs.SignalID { return recs.SignalID("s5") }
+
+// idfComputeCalls returns how many times the population IDF was computed from
+// the DB. Test-only observability for the IDF-hoist (audit L648).
+func (s *S5Attribute) idfComputeCalls() int64 { return s.idfCalls.Load() }
+
+// computePopulationIDF runs the six population-scope IDF queries once. It is
+// the single place the IDF is materialized; PrecomputeShared calls it once per
+// tick, and the per-user Precompute inline-fallback calls it when no shared
+// bundle was seeded into ctx. The idfCalls counter increments on every actual
+// computation so the hoist can be verified (computed once per tick, not per
+// user).
+func (s *S5Attribute) computePopulationIDF(ctx context.Context) (*s5PopulationIDF, error) {
+	s.idfCalls.Add(1)
+
+	totalUsers, err := s.totalUsersWithHistory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if totalUsers == 0 {
+		// Defensive — callers only reach IDF when at least one user has
+		// history, so totalUsers >= 1. Belt-and-braces.
+		totalUsers = 1
+	}
+
+	idfTag, err := s.idfMultiValue(ctx, "anime_tags", "tag_id", totalUsers)
+	if err != nil {
+		return nil, err
+	}
+	idfStudio, err := s.idfMultiValue(ctx, "anime_studios", "studio_id", totalUsers)
+	if err != nil {
+		return nil, err
+	}
+	idfGenre, err := s.idfMultiValue(ctx, "anime_genres", "genre_id", totalUsers)
+	if err != nil {
+		return nil, err
+	}
+	idfKind, idfRating, idfSource, err := s.idfSingleValueAttrs(ctx, totalUsers)
+	if err != nil {
+		return nil, err
+	}
+
+	return &s5PopulationIDF{
+		tag:    idfTag,
+		studio: idfStudio,
+		genre:  idfGenre,
+		kind:   idfKind,
+		rating: idfRating,
+		source: idfSource,
+	}, nil
+}
+
+// PrecomputeShared computes the population-scope IDF once and returns a child
+// context carrying it (audit L648). The UserOrchestrator calls this once per
+// RunOnce sweep before iterating users; each per-user Precompute then reuses
+// the seeded IDF instead of recomputing it. Implements the optional
+// recs.SharedPrecomputer interface. Returns the parent ctx unchanged on error
+// so the caller can still fall back to per-user inline IDF.
+func (s *S5Attribute) PrecomputeShared(ctx context.Context) (context.Context, error) {
+	idf, err := s.computePopulationIDF(ctx)
+	if err != nil {
+		return ctx, fmt.Errorf("s5: precompute shared IDF: %w", err)
+	}
+	return context.WithValue(ctx, s5IDFContextKey{}, idf), nil
+}
 
 // unitForRow returns the time-weighted unit for one watch_history row per
 // the spec §3.1 Kodik fallback rule.
@@ -162,60 +256,40 @@ func (s *S5Attribute) Precompute(ctx context.Context, userID recs.UserID) error 
 		return err
 	}
 
-	// 4. Compute IDF for the dimensions we have non-zero TF on. IDF is
-	//    population-scope (computed once across all users with watch_history).
-	//
-	//    At current scale (~10 users, ~3500 anime, 6 dimensions) recomputing
-	//    IDF on every per-user precompute costs tens of milliseconds total
-	//    per cron tick — well below the 6h cadence budget. Phase 14 may add
-	//    an Orchestrator-level pre-step if scale demands it.
-	totalUsers, err := s.totalUsersWithHistory(ctx)
-	if err != nil {
-		return err
-	}
-	if totalUsers == 0 {
-		// Defensive — the user we're computing for has watch_history rows,
-		// so totalUsers must be >= 1. Belt-and-braces.
-		totalUsers = 1
-	}
-
-	idfTag, err := s.idfMultiValue(ctx, "anime_tags", "tag_id", totalUsers)
-	if err != nil {
-		return err
-	}
-	idfStudio, err := s.idfMultiValue(ctx, "anime_studios", "studio_id", totalUsers)
-	if err != nil {
-		return err
-	}
-	idfGenre, err := s.idfMultiValue(ctx, "anime_genres", "genre_id", totalUsers)
-	if err != nil {
-		return err
-	}
-	idfKind, idfRating, idfSource, err := s.idfSingleValueAttrs(ctx, totalUsers)
-	if err != nil {
-		return err
+	// 4. Resolve the population-scope IDF. IDF is identical for every user in
+	//    a cron tick, so the UserOrchestrator computes it ONCE per tick via
+	//    PrecomputeShared and seeds it into ctx (audit L648). When present we
+	//    reuse it; otherwise (the single-user TriggerForUser path, or any
+	//    standalone Precompute) we compute it inline so S5 still works on its
+	//    own.
+	idf, ok := idfFromContext(ctx)
+	if !ok {
+		idf, err = s.computePopulationIDF(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	// 5. Combine TF * IDF into the final affinity vector keyed by
 	//    "{dim}:{attr_id}".
 	affinity := make(map[string]float64)
 	for k, tf := range tfTag {
-		affinity[s5DimTag+":"+k] = tf * idfTag[k]
+		affinity[s5DimTag+":"+k] = tf * idf.tag[k]
 	}
 	for k, tf := range tfStudio {
-		affinity[s5DimStudio+":"+k] = tf * idfStudio[k]
+		affinity[s5DimStudio+":"+k] = tf * idf.studio[k]
 	}
 	for k, tf := range tfGenre {
-		affinity[s5DimGenre+":"+k] = tf * idfGenre[k]
+		affinity[s5DimGenre+":"+k] = tf * idf.genre[k]
 	}
 	for k, tf := range tfKind {
-		affinity[s5DimKind+":"+k] = tf * idfKind[k]
+		affinity[s5DimKind+":"+k] = tf * idf.kind[k]
 	}
 	for k, tf := range tfRating {
-		affinity[s5DimDemographic+":"+k] = tf * idfRating[k]
+		affinity[s5DimDemographic+":"+k] = tf * idf.rating[k]
 	}
 	for k, tf := range tfSource {
-		affinity[s5DimSource+":"+k] = tf * idfSource[k]
+		affinity[s5DimSource+":"+k] = tf * idf.source[k]
 	}
 
 	encoded, err := json.Marshal(affinity)

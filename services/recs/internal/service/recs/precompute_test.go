@@ -62,3 +62,68 @@ func TestOrchestrator_RunForUserNoModules(t *testing.T) {
 		t.Errorf("empty registry must not error: %v", err)
 	}
 }
+
+type sharedCtxKey struct{ id SignalID }
+
+// sharedSignal is a SignalModule that also implements SharedPrecomputer. It
+// counts PrecomputeShared invocations and seeds a value into ctx so callers
+// can confirm the chained context is threaded through.
+type sharedSignal struct {
+	trackingSignal
+	sharedCalls int
+	sharedErr   error
+}
+
+func (s *sharedSignal) PrecomputeShared(ctx context.Context) (context.Context, error) {
+	s.sharedCalls++
+	if s.sharedErr != nil {
+		return ctx, s.sharedErr // return parent ctx unchanged on error
+	}
+	return context.WithValue(ctx, sharedCtxKey{s.id}, "seeded"), nil
+}
+
+func TestOrchestrator_BuildSharedContext_RunsSharedPrecomputersOnce(t *testing.T) {
+	shared := &sharedSignal{trackingSignal: trackingSignal{id: "s5"}}
+	plain := &trackingSignal{id: "s2"} // not a SharedPrecomputer
+	o := NewOrchestrator([]SignalModule{plain, shared})
+
+	ctx, err := o.BuildSharedContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if shared.sharedCalls != 1 {
+		t.Errorf("PrecomputeShared calls=%d want 1 (once per sweep)", shared.sharedCalls)
+	}
+	if ctx.Value(sharedCtxKey{"s5"}) != "seeded" {
+		t.Errorf("BuildSharedContext must thread the enriched context from the shared precomputer")
+	}
+}
+
+func TestOrchestrator_BuildSharedContext_ErrorIsNonFatalAndKeepsParentCtx(t *testing.T) {
+	wantErr := errors.New("idf query failed")
+	shared := &sharedSignal{trackingSignal: trackingSignal{id: "s5"}, sharedErr: wantErr}
+	o := NewOrchestrator([]SignalModule{shared})
+
+	ctx, err := o.BuildSharedContext(context.Background())
+	if !errors.Is(err, wantErr) {
+		t.Errorf("err=%v want wraps %v", err, wantErr)
+	}
+	// On error the parent ctx is returned unchanged (no seeded value) so the
+	// per-user inline fallback path runs.
+	if ctx.Value(sharedCtxKey{"s5"}) != nil {
+		t.Errorf("a failed shared precompute must NOT seed a value (callers fall back to inline)")
+	}
+}
+
+func TestOrchestrator_BuildSharedContext_NoSharedPrecomputers(t *testing.T) {
+	plain := &trackingSignal{id: "s2"}
+	o := NewOrchestrator([]SignalModule{plain})
+
+	ctx, err := o.BuildSharedContext(context.Background())
+	if err != nil {
+		t.Errorf("registry with no SharedPrecomputers must not error: %v", err)
+	}
+	if ctx == nil {
+		t.Errorf("BuildSharedContext must always return a usable context")
+	}
+}

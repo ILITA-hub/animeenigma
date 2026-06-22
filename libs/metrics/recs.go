@@ -46,4 +46,17 @@ var (
 		},
 		[]string{"signal_id", "pinned"},
 	)
+
+	// RecsCronLastSuccessUnixtime records the wall-clock time (unix seconds) of
+	// the most recent SUCCESSFUL tick for each recs cron. A frozen / hung cron
+	// stops advancing this gauge, so `time() - recs_cron_last_success_unixtime`
+	// in Grafana surfaces a stalled ticker. The `cron` label is the closed set
+	// {population, user, co_occurrence} — bounded cardinality (audit L641).
+	RecsCronLastSuccessUnixtime = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "recs_cron_last_success_unixtime",
+			Help: "Unix timestamp (seconds) of the last successful recs cron tick, labeled by cron {population,user,co_occurrence} (audit L641).",
+		},
+		[]string{"cron"},
+	)
 )

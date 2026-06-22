@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"gorm.io/gorm"
 )
@@ -39,6 +40,15 @@ const (
 	// triggerPrecomputeTimeout bounds a fire-and-forget precompute goroutine
 	// so a runaway query doesn't survive past the next debounce window.
 	triggerPrecomputeTimeout = 5 * time.Minute
+
+	// userTickTimeout bounds a whole RunOnce sweep under Start. Well under the
+	// 6h production cadence so a hung sweep aborts and the next tick fires
+	// instead of stalling the ticker forever (audit L641).
+	userTickTimeout = 30 * time.Minute
+
+	// userPerUserTimeout bounds a single user's precompute inside RunOnce so
+	// one slow user cannot starve the rest of the sweep (audit L648).
+	userPerUserTimeout = 2 * time.Minute
 )
 
 // UserTopNKey returns the per-user topN cache key in the canonical shape so
@@ -65,6 +75,13 @@ type UserOrchestrator struct {
 	db         *gorm.DB
 	cache      userOrchestratorCache
 	log        *logger.Logger
+
+	// tickTimeout bounds each Start-driven RunOnce sweep; perUserTimeout
+	// bounds a single user's precompute inside RunOnce. Default to the
+	// userTickTimeout / userPerUserTimeout consts; tests override with tiny
+	// budgets.
+	tickTimeout    time.Duration
+	perUserTimeout time.Duration
 }
 
 // NewUserOrchestrator wires the orchestrator with a precompute Orchestrator
@@ -72,10 +89,12 @@ type UserOrchestrator struct {
 // handle, a Redis-backed cache, and a structured logger.
 func NewUserOrchestrator(precompute *Orchestrator, db *gorm.DB, cache userOrchestratorCache, log *logger.Logger) *UserOrchestrator {
 	return &UserOrchestrator{
-		precompute: precompute,
-		db:         db,
-		cache:      cache,
-		log:        log,
+		precompute:     precompute,
+		db:             db,
+		cache:          cache,
+		log:            log,
+		tickTimeout:    userTickTimeout,
+		perUserTimeout: userPerUserTimeout,
 	}
 }
 
@@ -94,9 +113,33 @@ func (o *UserOrchestrator) RunOnce(ctx context.Context) error {
 		return fmt.Errorf("recs: load distinct watch_history users: %w", err)
 	}
 
+	// Build the once-per-tick shared precompute context (audit L648): signals
+	// that implement SharedPrecomputer (e.g. S5's population-scope IDF) compute
+	// their cross-user state once here and seed it into sharedCtx, so the
+	// per-user loop reuses it instead of recomputing it for every user. A
+	// failed shared step is non-fatal — each signal falls back to inline
+	// per-user computation — so we log and continue with the best-effort ctx.
+	sharedCtx, sharedErr := o.precompute.BuildSharedContext(ctx)
+	if sharedErr != nil {
+		o.log.Warnw("recs shared precompute step failed; falling back to per-user inline", "error", sharedErr)
+	}
+
+	// Resolve the per-user budget once (tests may leave the field zero when
+	// constructing the struct directly; fall back to the prod default).
+	perUser := o.perUserTimeout
+	if perUser <= 0 {
+		perUser = userPerUserTimeout
+	}
+
 	var errs []error
 	for _, uid := range userIDs {
-		if err := o.precompute.RunForUser(ctx, uid); err != nil {
+		// Bound each user so one slow user can't starve the rest of the sweep
+		// (audit L648). Composes with the per-tick timeout in Start (L641).
+		// Derive from sharedCtx so per-user work reuses the hoisted IDF.
+		uCtx, cancel := context.WithTimeout(sharedCtx, perUser)
+		err := o.precompute.RunForUser(uCtx, uid)
+		cancel()
+		if err != nil {
 			errs = append(errs, fmt.Errorf("recs: user precompute %q: %w", uid, err))
 			// Stale-serves: do NOT delete cache on failure.
 			continue
@@ -115,6 +158,25 @@ func (o *UserOrchestrator) RunOnce(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// runTick executes one RunOnce sweep under a per-tick timeout derived from ctx
+// (audit L641) so a hung sweep aborts instead of stalling the ticker. On
+// success it advances the recs_cron_last_success_unixtime{cron="user"} gauge
+// so a frozen cron is observable in Grafana.
+func (o *UserOrchestrator) runTick(ctx context.Context, phase string) {
+	budget := o.tickTimeout
+	if budget <= 0 {
+		budget = userTickTimeout
+	}
+	tickCtx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	if err := o.RunOnce(tickCtx); err != nil {
+		o.log.Errorw("user precompute failed ("+phase+")", "error", err)
+		return
+	}
+	metrics.RecsCronLastSuccessUnixtime.WithLabelValues("user").SetToCurrentTime()
+	o.log.Infow("user precompute " + phase + " complete")
+}
+
 // Start spawns a goroutine that fires RunOnce immediately (boot tick) and
 // then once every `interval` thereafter. Cancelling ctx exits the goroutine.
 //
@@ -124,11 +186,7 @@ func (o *UserOrchestrator) Start(ctx context.Context, interval time.Duration) {
 	go func() {
 		// Boot tick — get fresh signals within seconds of redeploy so logged-in
 		// users see personalised recs without waiting 6 hours.
-		if err := o.RunOnce(ctx); err != nil {
-			o.log.Errorw("user precompute failed (boot tick)", "error", err)
-		} else {
-			o.log.Infow("user precompute boot tick complete")
-		}
+		o.runTick(ctx, "boot tick")
 
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -138,11 +196,7 @@ func (o *UserOrchestrator) Start(ctx context.Context, interval time.Duration) {
 				o.log.Infow("user precompute cron stopped")
 				return
 			case <-ticker.C:
-				if err := o.RunOnce(ctx); err != nil {
-					o.log.Errorw("user precompute failed (tick)", "error", err)
-					continue
-				}
-				o.log.Infow("user precompute tick complete")
+				o.runTick(ctx, "tick")
 			}
 		}
 	}()

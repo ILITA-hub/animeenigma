@@ -182,3 +182,52 @@ func (h *healingSignal) Precompute(_ context.Context, _ UserID) error {
 func (h *healingSignal) Score(_ context.Context, _ UserID, _ []AnimeID) (map[AnimeID]RawScore, error) {
 	return nil, nil
 }
+
+// blockingSignal blocks on ctx.Done() and records whether the per-call ctx
+// carried a deadline. Used to prove the per-tick timeout (audit L641): a hung
+// Precompute must NOT stall the ticker forever.
+type blockingSignal struct {
+	id          SignalID
+	calls       int64
+	sawDeadline int64 // atomic bool: 1 if any call's ctx had a deadline
+}
+
+func (b *blockingSignal) ID() SignalID { return b.id }
+func (b *blockingSignal) Precompute(ctx context.Context, _ UserID) error {
+	atomic.AddInt64(&b.calls, 1)
+	if _, ok := ctx.Deadline(); ok {
+		atomic.StoreInt64(&b.sawDeadline, 1)
+	}
+	<-ctx.Done() // block until the per-tick timeout (or parent cancel) fires
+	return ctx.Err()
+}
+func (b *blockingSignal) Score(_ context.Context, _ UserID, _ []AnimeID) (map[AnimeID]RawScore, error) {
+	return nil, nil
+}
+
+func TestPopulationOrchestrator_StartPerTickTimeout(t *testing.T) {
+	// A signal whose Precompute hangs forever. Without a per-tick timeout the
+	// ticker stalls at 1 call; with the timeout each tick aborts and the next
+	// fires, so the call count advances past 1.
+	block := &blockingSignal{id: "s3"}
+	cache := newFakeCache()
+	o := NewPopulationOrchestrator([]SignalModule{block}, cache, logger.Default())
+	o.tickTimeout = 40 * time.Millisecond // tiny budget for the test
+
+	ctx, cancel := context.WithCancel(context.Background())
+	o.Start(ctx, 30*time.Millisecond)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt64(&block.calls) >= 2 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+
+	assert.GreaterOrEqual(t, atomic.LoadInt64(&block.calls), int64(2),
+		"per-tick timeout must abort a hung Precompute so the next tick fires; without it calls stays stuck at 1")
+	assert.Equal(t, int64(1), atomic.LoadInt64(&block.sawDeadline),
+		"each per-tick RunOnce must carry a deadline so a hung query can't run forever")
+}
