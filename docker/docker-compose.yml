@@ -106,7 +106,10 @@ services:
     volumes:
       - meilisearch_data:/meili_data
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7700/health"]
+      # 127.0.0.1 (not localhost): Meilisearch binds IPv4 0.0.0.0 only, but
+      # `localhost` resolves to ::1 (IPv6) first inside the container, so the
+      # probe connection-refuses and the container is falsely marked unhealthy.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:7700/health"]
       interval: 10s
       timeout: 5s
       retries: 3
