@@ -83,7 +83,9 @@ func Load() (*Config, error) {
 			Region:          getEnv("MINIO_REGION", "us-east-1"),
 		},
 		Proxy: videoutils.ProxyConfig{
-			UserAgent:      getEnv("PROXY_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
+			// Full Firefox UA (see libs/videoutils DefaultProxyConfig): a real
+			// browser engine token is required by UA-locked CDNs like okcdn.
+			UserAgent:      getEnv("PROXY_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"),
 			Timeout:        getEnvDuration("PROXY_TIMEOUT", 30*time.Second),
 			MaxBufferSize:  getEnvInt64("PROXY_MAX_BUFFER", 10*1024*1024),
 			AllowedDomains: allowedDomains,

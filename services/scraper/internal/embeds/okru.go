@@ -30,7 +30,13 @@ const (
 	defaultOkruHTTPTimeout = 15 * time.Second
 	maxOkruBody            = 4 << 20 // 4 MiB DoS guard (ok.ru pages are larger)
 	okruReferer            = "https://ok.ru/"
-	okruUA                 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+	// okruUA must be a real-browser UA: ok.ru bakes the resolving engine into the
+	// returned okcdn stream URL (srcAg/GECKO for Firefox) and okcdn then rejects a
+	// fetch whose UA engine doesn't match (400). This MUST stay the same
+	// Gecko/Firefox family as the HLS proxy's fetch UA (libs/videoutils
+	// DefaultProxyConfig.UserAgent) or playback 400s. Verified: GECKO resolve +
+	// Firefox fetch => 200 #EXTM3U.
+	okruUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"
 )
 
 var okruHosts = []string{"ok.ru"} // host equality OR strict subdomain (m.ok.ru, www.ok.ru, …)

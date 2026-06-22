@@ -78,7 +78,13 @@ func (p *VideoProxy) fetchURLFor(sourceURL string) string {
 // DefaultProxyConfig returns sensible defaults
 func DefaultProxyConfig() ProxyConfig {
 	return ProxyConfig{
-		UserAgent:     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+		// Full Firefox UA. okcdn (ok.ru CDN, used by the okru provider) bakes the
+		// resolving browser's engine into the stream URL (srcAg/GECKO) and rejects
+		// a mismatched fetch UA with 400 — so the HLS proxy must identify as a real
+		// browser, not the old truncated "...AppleWebKit/537.36" string (no engine
+		// token => 400). Other CDNs ignore the UA, so this is safe globally. Must
+		// stay a Gecko/Firefox UA to match the okru extractor's resolve UA (okruUA).
+		UserAgent:     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0",
 		Timeout:       30 * time.Second,
 		MaxBufferSize: 10 * 1024 * 1024, // 10MB buffer
 		AllowedDomains: []string{
