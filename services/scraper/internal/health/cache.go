@@ -9,7 +9,14 @@ import (
 // An entry older than this is treated as "unknown" and the cache fails open
 // — IsHealthy returns true so the orchestrator keeps dispatching. This
 // guarantees a probe outage cannot blank the service.
-const cacheStaleTTL = 60 * time.Second
+//
+// It MUST exceed the probe interval (~15min), otherwise every entry is stale
+// between probes and the proactive skip-gate is effectively dead — it always
+// fails open and never actually skips an unhealthy provider (audit #19). Set to
+// ~2x the probe interval, mirroring the handler's playabilityFreshTTL=30min, so
+// a fresh verdict survives until (and a little past) the next probe tick while
+// still failing open if probing stops entirely.
+const cacheStaleTTL = 30 * time.Minute
 
 // MaxLastErrChars is the upper bound on LastErr length BEFORE storage. The
 // probe (Plan 17-02) is the writer; it MUST truncate before calling Update.

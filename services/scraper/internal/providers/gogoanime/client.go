@@ -879,14 +879,9 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 // at ListServers time via the episode-ID slug. Cache namespacing uses the
 // hashed serverID for bounded key length.
 func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverID string, category domain.Category) (*domain.Stream, error) {
-	// engine=browser: the megaplay player resolves its stream id + (rotating)
-	// CDN host at runtime in JS — delegate extraction to the stealth-scraper
-	// sidecar, which drives a real browser. serverID IS the embed/wrapper URL.
-	if p.browserEnabled() {
-		return p.streamViaBrowser(ctx, serverID, category)
-	}
 	_ = category // informational only (sub/dub baked into serverID already).
-	// Cache key: hash the serverID for bounded length.
+	// Cache key: hash the serverID for bounded length. Shared by BOTH the
+	// in-process extractor path and the browser-engine (sidecar) path.
 	h := sha256.Sum256([]byte(serverID))
 	cacheKey := fmt.Sprintf("stream:%s:%s:%s:%s", providerName, providerID, episodeID, hex.EncodeToString(h[:8]))
 
@@ -894,6 +889,23 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	if err := p.cache.Get(ctx, cacheKey, &cached); err == nil {
 		p.markStage(health.StageStream, nil)
 		return &cached, nil
+	}
+
+	// engine=browser: the megaplay player resolves its stream id + (rotating)
+	// CDN host at runtime in JS — delegate extraction to the stealth-scraper
+	// sidecar, which drives a real browser. serverID IS the embed/wrapper URL.
+	// Cache the sidecar result with the same TTL as the in-process path so
+	// re-resolves and concurrent viewers reuse one Camoufox run instead of
+	// hitting the capped sidecar on every request (audit #15).
+	if p.browserEnabled() {
+		stream, err := p.streamViaBrowser(ctx, serverID, category)
+		if err != nil {
+			return nil, err // streamViaBrowser already recorded stage health
+		}
+		if ttl := computeStreamTTL(stream.Sources[0].URL, time.Now()); ttl > 0 {
+			_ = p.cache.Set(ctx, cacheKey, *stream, ttl)
+		}
+		return stream, nil
 	}
 
 	ext, err := p.embeds.Find(serverID)

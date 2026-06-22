@@ -48,20 +48,40 @@ func TestCache_FreshDownEntry_ReturnsFalse(t *testing.T) {
 	}
 }
 
-// TestCache_StaleEntry_FailsOpen — stale entry (>60s) is treated as "unknown"
-// and fails open. Use the WithNow constructor to advance time past the TTL.
+// TestCache_StaleEntry_FailsOpen — a stale entry (older than cacheStaleTTL) is
+// treated as "unknown" and fails open. Use the WithNow constructor to advance
+// time past the TTL (now 30min — see cacheStaleTTL).
 func TestCache_StaleEntry_FailsOpen(t *testing.T) {
 	t.Parallel()
 	base := time.Now()
 	c := NewInMemoryHealthCacheWithNow(func() time.Time {
-		return base.Add(70 * time.Second)
+		return base.Add(cacheStaleTTL + time.Minute)
 	})
 	c.Update("animepahe", ProviderHealth{
 		Stages:      map[string]StageStatus{StageStreamSegment: {Up: false}},
-		LastUpdated: base, // 70s in the past relative to now()
+		LastUpdated: base, // older than cacheStaleTTL relative to now()
 	})
 	if !c.IsHealthy("animepahe") {
 		t.Errorf("IsHealthy(stale down) = false; want true (stale = fail-open)")
+	}
+}
+
+// TestCache_FreshDownEntry_IsSkipped — a DOWN verdict that is still fresh
+// (within cacheStaleTTL) must report unhealthy so the orchestrator skip-gate
+// actually skips it. Guards the audit #19 fix (the gate was dead when the TTL
+// was 60s vs a ~15min probe interval).
+func TestCache_FreshDownEntry_IsSkipped(t *testing.T) {
+	t.Parallel()
+	base := time.Now()
+	c := NewInMemoryHealthCacheWithNow(func() time.Time {
+		return base.Add(cacheStaleTTL - time.Minute) // still fresh
+	})
+	c.Update("animepahe", ProviderHealth{
+		Stages:      map[string]StageStatus{StageStreamSegment: {Up: false}},
+		LastUpdated: base,
+	})
+	if c.IsHealthy("animepahe") {
+		t.Errorf("IsHealthy(fresh down) = true; want false (fresh DOWN verdict must be skipped)")
 	}
 }
 
