@@ -26,6 +26,16 @@
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400 800; font-display: swap; src: url('/fonts/jetbrains-mono-cyr-ext.woff2') format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
 /* Noto Sans JP is sliced into unicode-range subsets — see noto-sans-jp.css (imported above). */
 
+/* Hard-reset link underlines. Tailwind v4 Preflight sets `a { text-decoration: inherit }`,
+   which can expose the UA `a { text-decoration: underline }` in privacy-hardened browsers
+   (Firefox resistFingerprinting/Tor, Brave strict) where the inherit chain behaves
+   differently — every link renders underlined ("underlined font" everywhere). Resetting
+   in `@layer base` is intentional: `@layer utilities` (the `underline`/`hover:underline`
+   classes) and scoped component `<style>` rules still win where underline is wanted. */
+@layer base {
+  a { text-decoration: none; color: inherit; }
+}
+
 /* Neon Tokyo Theme */
 @theme {
   /* Colors */
