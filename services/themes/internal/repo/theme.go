@@ -70,6 +70,15 @@ func (r *ThemeRepository) List(ctx context.Context, params domain.ThemeListParam
 		query = query.Order("avg_score DESC, vote_count DESC, anime_themes.anime_name ASC")
 	}
 
+	// Bound the result set. The handler always supplies a clamped Limit, but
+	// guard here too so direct repo callers never trigger an unbounded scan.
+	if params.Limit > 0 {
+		query = query.Limit(params.Limit)
+	}
+	if params.Offset > 0 {
+		query = query.Offset(params.Offset)
+	}
+
 	var themes []domain.AnimeTheme
 	if err := query.Scan(&themes).Error; err != nil {
 		return nil, err

@@ -61,4 +61,6 @@ type ThemeListParams struct {
 	Type   string `json:"type"` // "op", "ed", or ""
 	Sort   string `json:"sort"` // "rating", "name", "newest"
 	UserID string `json:"-"`
+	Limit  int    `json:"limit"`  // page size; clamped to [1, 500], default 100
+	Offset int    `json:"offset"` // page offset; clamped to >= 0
 }

@@ -24,19 +24,53 @@ func NewThemeHandler(themeService *service.ThemeService, log *logger.Logger) *Th
 	}
 }
 
-// ListThemes handles GET /api/themes
-func (h *ThemeHandler) ListThemes(w http.ResponseWriter, r *http.Request) {
+const (
+	// defaultListLimit bounds GET /api/themes when no limit is supplied, so the
+	// expensive grouped two-LEFT-JOIN scan never returns the whole table.
+	defaultListLimit = 100
+	// maxListLimit is the hard ceiling a client may request.
+	maxListLimit = 500
+)
+
+// parseListParams extracts and clamps the GET /api/themes query parameters.
+// Limit defaults to defaultListLimit when absent, non-numeric, or <= 0, and is
+// capped at maxListLimit. Offset is clamped to >= 0.
+func parseListParams(r *http.Request) domain.ThemeListParams {
+	q := r.URL.Query()
 	params := domain.ThemeListParams{
-		Season: r.URL.Query().Get("season"),
-		Type:   r.URL.Query().Get("type"),
-		Sort:   r.URL.Query().Get("sort"),
+		Season: q.Get("season"),
+		Type:   q.Get("type"),
+		Sort:   q.Get("sort"),
+		Limit:  defaultListLimit,
 	}
 
-	if yearStr := r.URL.Query().Get("year"); yearStr != "" {
+	if yearStr := q.Get("year"); yearStr != "" {
 		if y, err := strconv.Atoi(yearStr); err == nil {
 			params.Year = y
 		}
 	}
+
+	if limitStr := q.Get("limit"); limitStr != "" {
+		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
+			if n > maxListLimit {
+				n = maxListLimit
+			}
+			params.Limit = n
+		}
+	}
+
+	if offsetStr := q.Get("offset"); offsetStr != "" {
+		if n, err := strconv.Atoi(offsetStr); err == nil && n > 0 {
+			params.Offset = n
+		}
+	}
+
+	return params
+}
+
+// ListThemes handles GET /api/themes
+func (h *ThemeHandler) ListThemes(w http.ResponseWriter, r *http.Request) {
+	params := parseListParams(r)
 
 	// Optional auth — extract user ID if present
 	claims, _ := authz.ClaimsFromContext(r.Context())
