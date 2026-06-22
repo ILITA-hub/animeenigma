@@ -49,10 +49,15 @@ func NewRouter(
 	r.Use(httputil.CORS([]string{"*"}))
 	r.Use(middleware.RealIP)
 
-	// Public health check.
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+	// Public health check. Register GET and HEAD: the Docker healthcheck
+	// probes with `wget --spider` (an HTTP HEAD), and chi 405s a HEAD against
+	// a GET-only route — which falsely marks the container unhealthy. Mirrors
+	// the fleet convention (gacha, watch-together).
+	healthFn := func(w http.ResponseWriter, _ *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
-	})
+	}
+	r.Get("/health", healthFn)
+	r.Head("/health", healthFn)
 
 	// Prometheus metrics endpoint.
 	r.Get("/metrics", func(w http.ResponseWriter, req *http.Request) {
