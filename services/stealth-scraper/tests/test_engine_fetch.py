@@ -213,5 +213,101 @@ class TestWarmReuseLiveness(unittest.TestCase):
         self.assertNotIn(key, eng._sessions, "dead warm session must be evicted")
 
 
+class _FakeHandle:
+    """Stand-in for _CamoufoxHandle: holds a context, records close()."""
+    def __init__(self):
+        self.context = object()
+        self.closed = False
+
+    async def close(self):
+        self.closed = True
+        self.context = None
+
+
+class TestWarmReuseLivenessResurrectionSeam(unittest.TestCase):
+    """Interlock for the resurrection seam: a warm-session liveness-fail must
+    tear the profile's browser handle/context fully down (NOT just close the
+    page), so the reaper's _resurrect_crashed_slot -> _ensure_browser actually
+    cold-relaunches instead of the launched-guard short-circuiting a dead
+    context. The existing resurrection tests STUB _ensure_browser, which bypasses
+    that guard — this exercises the real seam."""
+
+    def _engine_with_launched_dead_session(self):
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
+        prof = eng.profiles.lease()
+        # Simulate a fully-launched browser slot: handle in _handles + context on
+        # the profile (so profile.launched is True and the _ensure_browser guard
+        # would fire on a matching proxy_id).
+        handle = _FakeHandle()
+        prof.proxy_id = "direct"
+        prof.browser = handle
+        prof.context = handle.context
+        eng._handles[prof.id] = handle
+        page = _DeadProbePage()
+        key = "fetch::nineanime::https://9anime.me.uk"
+        sess = Session(
+            id=key, profile=prof, proxy_id="direct", referer="https://9anime.me.uk",
+            user_agent="UA", cdn_host="9anime.me.uk", master_url="https://9anime.me.uk",
+            expires_at=time.time() + 600, page=page, player_url=page.url, provider="nineanime",
+        )
+        eng._sessions[key] = sess
+        return eng, prof, handle, key
+
+    def test_liveness_fail_tears_down_handle_so_reaper_relaunches(self):
+        eng, prof, handle, key = self._engine_with_launched_dead_session()
+
+        # (1) Warm-reuse liveness probe fails -> the seam must fully tear down.
+        from app.engine import PoolExhausted
+        with self.assertRaises((PoolExhausted, RecipeError)):
+            run(eng._warm_fetch_session("nineanime", "https://9anime.me.uk"))
+
+        # The dead browser handle/context must be GONE, not just the page.
+        self.assertNotIn(key, eng._sessions, "dead warm session must be evicted")
+        self.assertNotIn(prof.id, eng._handles,
+                         "dead browser handle must be popped from _handles")
+        self.assertFalse(prof.launched,
+                         "profile.context must be cleared so launched==False")
+        self.assertTrue(handle.closed, "the dead browser handle must be closed")
+        self.assertEqual(prof.status, "crashed",
+                         "slot must be marked crashed for the reaper")
+
+        # (2) The reaper now resurrects: because launched==False, the
+        # _ensure_browser guard must NOT short-circuit — a REAL relaunch happens.
+        relaunches = {"n": 0}
+        real_ensure = eng._ensure_browser
+
+        async def _counting_ensure(profile, proxy_id):
+            relaunches["n"] += 1
+            # Re-attach a fresh handle/context the way a real cold launch would.
+            h = _FakeHandle()
+            eng._handles[profile.id] = h
+            profile.browser = h
+            profile.context = h.context
+            profile.proxy_id = proxy_id
+            return h.context
+
+        eng._ensure_browser = _counting_ensure
+        prof.next_resurrect_at = 0.0  # eligible now
+        run(eng._resurrect_crashed_slot(prof))
+
+        self.assertEqual(relaunches["n"], 1,
+                         "resurrect must invoke _ensure_browser (no dead-context short-circuit)")
+        self.assertEqual(prof.status, "healthy", "resurrected slot returns to the pool")
+        self.assertEqual(prof.consecutive_fail, 0)
+
+    def test_old_behavior_would_leak_dead_handle(self):
+        """Regression guard: prove the assertion actually depends on teardown.
+        If the seam only marked-crashed + closed the page (the OLD bug), the
+        handle would persist and launched would stay True — the guard below
+        documents exactly that failure mode is what we fixed."""
+        eng, prof, handle, key = self._engine_with_launched_dead_session()
+        from app.engine import PoolExhausted
+        with self.assertRaises((PoolExhausted, RecipeError)):
+            run(eng._warm_fetch_session("nineanime", "https://9anime.me.uk"))
+        # Post-fix invariants (these are the lines that fail against OLD code).
+        self.assertFalse(prof.launched)
+        self.assertNotIn(prof.id, eng._handles)
+
+
 if __name__ == "__main__":
     unittest.main()

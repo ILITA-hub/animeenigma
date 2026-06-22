@@ -636,13 +636,20 @@ class CamoufoxEngine:
                 return existing
             except Exception:  # noqa: BLE001
                 # Liveness probe failed: the page (and therefore the browser slot)
-                # is dead. Mark the profile crashed before releasing so the reaper
-                # handles resurrection — do NOT let the profile fall back to the
-                # healthy-leasable pool (that would be the AUTO-527 re-entry loop).
-                self.profiles.mark_crashed(
-                    existing.profile, error="liveness-probe: page dead"
-                )
+                # is dead. Mirror the poison-fence path EXACTLY (see _in_page_fetch):
+                # aclose_session() only closes the PAGE, so the browser handle/
+                # context survive — if we stop there, profile.launched stays True
+                # and _ensure_browser's launched-guard would hand the reaper back
+                # the DEAD context (mark_healthy, no relaunch). We must ALSO tear
+                # the handle down via _teardown(reason='crash') so launched==False
+                # and _handles[pid] is popped, forcing a real cold relaunch. Order
+                # matches the poison-fence: evict the session, THEN teardown.
+                # _teardown(reason='crash') calls mark_crashed itself, so set the
+                # real reason on the Profile first (don't double-mark).
+                dead = existing.profile
+                dead.last_error = existing.last_error or "liveness-probe: page dead"
                 await self.aclose_session(key)
+                await self._teardown(dead, reason="crash")
 
         profile = await self._acquire_profile()
         if profile is None:
@@ -719,6 +726,11 @@ class CamoufoxEngine:
                 session.last_error = msg
                 if session.crash_count >= self.cfg.poison_max:
                     profile = session.profile
+                    # _teardown(reason='crash') marks the slot crashed with
+                    # error=profile.last_error, but the real crash message lives
+                    # on the SESSION — thread it onto the Profile so health()'s
+                    # crashed-slot line carries the actual reason, not a blank.
+                    profile.last_error = session.last_error or msg
                     await self.aclose_session(session.id)
                     await self._teardown(profile, reason="crash")
                     raise ProviderWedged(
