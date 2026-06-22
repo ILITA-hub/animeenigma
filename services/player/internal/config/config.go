@@ -105,6 +105,9 @@ type TelegramConfig struct {
 
 type MaintenanceConfig struct {
 	URL string // e.g. http://172.18.0.1:8087
+	// Token is the shared secret sent as X-Maintenance-Token on /api/reports.
+	// Must match the maintenance daemon's REPORTS_AUTH_TOKEN (finding #39).
+	Token string
 }
 
 type ReportsConfig struct {
@@ -164,7 +167,8 @@ func Load() (*Config, error) {
 			Dir: getEnv("REPORTS_DIR", "/data/reports"),
 		},
 		Maintenance: MaintenanceConfig{
-			URL: getEnv("MAINTENANCE_URL", ""),
+			URL:   getEnv("MAINTENANCE_URL", ""),
+			Token: getEnv("REPORTS_AUTH_TOKEN", ""),
 		},
 		Tier2: Tier2Config{
 			HalfLifeDays:   getEnvFloat("TIER2_HALF_LIFE_DAYS", 30.0),

@@ -16,6 +16,12 @@ type Config struct {
 	SuppressedAlerts []string // alert keys to ignore (e.g., "Parser Failure Rate:kodik")
 	StatePath        string
 	IssuePath        string
+	// ReportsAuthToken, when set, is the shared secret required on the
+	// /api/reports endpoint (X-Maintenance-Token header). The player service
+	// is the sole legitimate caller. When empty the endpoint stays open and
+	// the daemon logs a WARN at startup. See finding #39 (autonomous-fix
+	// trigger): an unauthenticated report can drive a write+deploy+git-push.
+	ReportsAuthToken string
 	// PlayerInternalURL is the base URL of the player service's internal
 	// feedback API (the bot runs on the host; player publishes 127.0.0.1:8083).
 	PlayerInternalURL string
@@ -116,14 +122,15 @@ func Load() (*Config, error) {
 			PromptPath:  getEnv("MAINTENANCE_PROMPT_PATH", ".claude/maintenance-prompt.md"),
 			TimeoutSec:  getEnvInt("CLAUDE_TIMEOUT_SEC", 300),
 		},
-		Admins:           admins,
-		SuppressedAlerts: parseSuppressed(getEnv("SUPPRESSED_ALERTS", "")),
-		StatePath:        getEnv("STATE_PATH", ".claude/maintenance-state.json"),
-		IssuePath:        getEnv("ISSUES_PATH", "docs/issues/issues.json"),
+		Admins:            admins,
+		SuppressedAlerts:  parseSuppressed(getEnv("SUPPRESSED_ALERTS", "")),
+		StatePath:         getEnv("STATE_PATH", ".claude/maintenance-state.json"),
+		IssuePath:         getEnv("ISSUES_PATH", "docs/issues/issues.json"),
+		ReportsAuthToken:  getEnv("REPORTS_AUTH_TOKEN", ""),
 		PlayerInternalURL: getEnv("PLAYER_INTERNAL_URL", "http://localhost:8083"),
 		AttachmentsDir:    getEnv("ATTACHMENTS_DIR", ".claude/maintenance-attachments"),
 		FeedbackBaseURL:   getEnv("FEEDBACK_BASE_URL", "https://animeenigma.org"),
-		TestMode:         getEnvBool("MAINTENANCE_TEST_MODE", false),
+		TestMode:          getEnvBool("MAINTENANCE_TEST_MODE", false),
 	}, nil
 }
 

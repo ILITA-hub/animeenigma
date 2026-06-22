@@ -120,7 +120,13 @@ func main() {
 		},
 		cfg.Grafana.WebhookUser,
 		cfg.Grafana.WebhookPass,
+		cfg.ReportsAuthToken,
 	)
+	if cfg.ReportsAuthToken == "" {
+		log.Warnw("/api/reports is UNAUTHENTICATED — set REPORTS_AUTH_TOKEN to require the X-Maintenance-Token shared secret (player is the sole legitimate caller)")
+	} else {
+		log.Infow("/api/reports requires X-Maintenance-Token shared secret")
+	}
 	server := &http.Server{
 		Addr:    cfg.Server.Address(),
 		Handler: router,
@@ -156,13 +162,13 @@ func main() {
 
 	// Start polling loop
 	svc := &service{
-		tg:          tg,
-		gf:          gf,
-		disp:        disp,
-		state:       stateMgr,
-		cfg:         cfg,
-		workChan:    workChan,
-		fb:          feedback.NewClient(cfg.PlayerInternalURL, log),
+		tg:       tg,
+		gf:       gf,
+		disp:     disp,
+		state:    stateMgr,
+		cfg:      cfg,
+		workChan: workChan,
+		fb:       feedback.NewClient(cfg.PlayerInternalURL, log),
 	}
 
 	go svc.run(ctx)
@@ -183,14 +189,14 @@ func main() {
 }
 
 type service struct {
-	tg          *telegram.Client
-	gf          *grafana.Client
-	disp        *dispatcher.Dispatcher
-	state       *state.Manager
-	cfg         *config.Config
-	workChan    chan workItem
-	fb          *feedback.Client
-	mu          sync.Mutex
+	tg       *telegram.Client
+	gf       *grafana.Client
+	disp     *dispatcher.Dispatcher
+	state    *state.Manager
+	cfg      *config.Config
+	workChan chan workItem
+	fb       *feedback.Client
+	mu       sync.Mutex
 
 	// interrupts maps a 👁️ "watching" bot message ID → *interruptEntry. Each
 	// long-running Claude invocation sends a 👁️ message and registers its

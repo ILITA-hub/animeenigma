@@ -395,7 +395,7 @@ func main() {
 	// AUTO-417 — feedback triage notification loop. Fire-and-forget producer
 	// to the notifications service; an outage never affects reports/triage.
 	feedbackNotifier := service.NewFeedbackNotifier(cfg.Notify.InternalURL, cfg.Notify.Enabled, log)
-	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir, cfg.Maintenance.URL, feedbackNotifier)
+	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir, cfg.Maintenance.URL, cfg.Maintenance.Token, feedbackNotifier)
 	// Admin feedback browser reads the same on-disk report archive (REPORTS_DIR).
 	adminReportsHandler := handler.NewAdminReportsHandler(log, cfg.Reports.Dir, feedbackNotifier)
 	syncHandler := handler.NewSyncHandler(syncRepo, log)

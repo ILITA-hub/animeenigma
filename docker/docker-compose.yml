@@ -766,6 +766,11 @@ services:
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
       REPORTS_DIR: /data/reports
       MAINTENANCE_URL: http://host-gateway:8087
+      # Shared secret sent as X-Maintenance-Token on /api/reports. Must match the
+      # maintenance daemon's REPORTS_AUTH_TOKEN (host docker/maintenance.env).
+      # A report drives an autonomous fix, so the player authenticates itself
+      # (finding #39). Empty -> header omitted (open maintenance deployments).
+      REPORTS_AUTH_TOKEN: ${REPORTS_AUTH_TOKEN:-}
       TRACING_ENABLED: "true"
       # Gacha (Лудка) Phase 4 — fire-and-forget «Энигмы» credits to the gacha
       # service on episode-watched / title-completed. Producer is non-blocking

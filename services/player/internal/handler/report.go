@@ -34,11 +34,12 @@ type ReportHandler struct {
 	telegramChatID   string
 	telegramEnabled  bool
 	maintenanceURL   string
+	maintenanceToken string
 	reportsDir       string
 	notifier         *service.FeedbackNotifier
 }
 
-func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reportsDir, maintenanceURL string, notifier *service.FeedbackNotifier) *ReportHandler {
+func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reportsDir, maintenanceURL, maintenanceToken string, notifier *service.FeedbackNotifier) *ReportHandler {
 	enabled := telegramToken != "" && telegramChatID != ""
 	if !enabled {
 		log.Warnw("telegram notifications disabled for error reports", "reason", "missing TELEGRAM_BOT_TOKEN or TELEGRAM_ADMIN_CHAT_ID")
@@ -64,6 +65,7 @@ func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reports
 		telegramChatID:   telegramChatID,
 		telegramEnabled:  enabled,
 		maintenanceURL:   maintenanceURL,
+		maintenanceToken: maintenanceToken,
 		reportsDir:       reportsDir,
 		notifier:         notifier,
 	}
@@ -227,16 +229,16 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 
 func (h *ReportHandler) sendToMaintenance(claims *authz.Claims, report *domain.ErrorReport, reportFile string) error {
 	payload := map[string]interface{}{
-		"username":    claims.Username,
-		"user_id":     claims.UserID,
-		"player_type": report.PlayerType,
-		"category":    report.Category,
-		"anime_name":  report.AnimeName,
-		"server_name": report.ServerName,
+		"username":      claims.Username,
+		"user_id":       claims.UserID,
+		"player_type":   report.PlayerType,
+		"category":      report.Category,
+		"anime_name":    report.AnimeName,
+		"server_name":   report.ServerName,
 		"error_message": report.ErrorMessage,
-		"description": report.Description,
-		"url":         report.URL,
-		"report_file": reportFile,
+		"description":   report.Description,
+		"url":           report.URL,
+		"report_file":   reportFile,
 	}
 	if report.EpisodeNumber != nil {
 		payload["episode_number"] = *report.EpisodeNumber
@@ -247,8 +249,20 @@ func (h *ReportHandler) sendToMaintenance(claims *authz.Claims, report *domain.E
 		return fmt.Errorf("marshal: %w", err)
 	}
 
+	req, err := http.NewRequest(http.MethodPost, h.maintenanceURL+"/api/reports", strings.NewReader(string(data)))
+	if err != nil {
+		return fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// Shared-secret gate on the maintenance side (finding #39): a report drives
+	// an autonomous fix, so the player authenticates itself as the legitimate
+	// caller. Omitted when unset so open maintenance deployments still work.
+	if h.maintenanceToken != "" {
+		req.Header.Set("X-Maintenance-Token", h.maintenanceToken)
+	}
+
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Post(h.maintenanceURL+"/api/reports", "application/json", strings.NewReader(string(data)))
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("post: %w", err)
 	}
