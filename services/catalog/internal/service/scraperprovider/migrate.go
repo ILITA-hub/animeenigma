@@ -183,6 +183,9 @@ const animefeverDeclaimGuardKey = "animefever_declaim"
 // nineanimeBrowserGuardKey marks NineanimeBrowser as applied.
 const nineanimeBrowserGuardKey = "nineanime_browser"
 
+// allanimeDegradeGuardKey marks AllAnimeDegrade as applied.
+const allanimeDegradeGuardKey = "allanime_degrade"
+
 // MiruroDubOnly flips the miruro roster row to supports_sub=false exactly once.
 // Miruro's upstream stopped serving sub streams (only English dub plays), so it
 // must not advertise/auto-select for SUB (original-Japanese-audio) playback. The
@@ -298,6 +301,44 @@ func NineanimeBrowser(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: nineanimeBrowserGuardKey}).Error; err != nil {
 		return fmt.Errorf("write nineanime-browser guard: %w", err)
+	}
+	return nil
+}
+
+// AllAnimeDegrade flips allanime to status=degraded exactly once. AllAnime's
+// stream leg is dead (its sources decode to /apivtwo/clock.json behind a
+// Cloudflare Turnstile, unsolvable from our egress); the ok.ru sources are
+// served clock-free by the new 'okru' provider. The seed is insert-if-absent
+// and never updates an existing prod row, so this RUN-ONCE guarded migration
+// carries the flip to live DBs. Guarded via catalog_migration_guards so it is
+// a no-op on later boots and never clobbers an operator re-enable. Idempotent.
+func AllAnimeDegrade(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", allanimeDegradeGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check allanime-degrade guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator re-enable
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "allanime").
+		Updates(map[string]interface{}{
+			"status":      domain.StatusDegraded,
+			"reason":      "Stream broken — AllAnime sources behind Cloudflare Turnstile clock (2026-06-22)",
+			"description": "AllAnime discovery still works, but its primary sources decode to /apivtwo/clock.json behind a Cloudflare managed/Turnstile challenge (api.allanime.day) or a down bare host — unsolvable from our egress. Degraded: out of auto-failover, manually selectable (hacker mode). Its ok.ru ('Ok') sources are served clock-free by the 'okru' provider. Existing DBs flipped via AllAnimeDegrade.",
+		})
+	if result.Error != nil {
+		return fmt.Errorf("allanime degrade: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("allanime degrade: no row found for name=allanime")
+	}
+	if err := db.Create(&migrationGuard{Key: allanimeDegradeGuardKey}).Error; err != nil {
+		return fmt.Errorf("write allanime-degrade guard: %w", err)
 	}
 	return nil
 }
