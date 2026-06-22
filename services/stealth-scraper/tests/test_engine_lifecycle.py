@@ -145,5 +145,29 @@ class TestProfileRetirement(unittest.TestCase):
         self.assertFalse(pm.needs_retire(p))
 
 
+class TestSelfHealConfig(unittest.TestCase):
+    def test_defaults(self):
+        cfg = Config()
+        self.assertEqual(cfg.poison_max, 2)
+        self.assertEqual(cfg.readyz_saturation_seconds, 15.0)
+        self.assertEqual(cfg.resurrect_backoff_base_seconds, 1.0)
+        self.assertEqual(cfg.resurrect_backoff_cap_seconds, 30.0)
+        self.assertEqual(cfg.resurrect_max_fails, 3)
+
+    def test_env_overrides(self):
+        cfg = Config.from_env({
+            "STEALTH_POISON_MAX": "4",
+            "STEALTH_READYZ_SATURATION_SECONDS": "30",
+            "STEALTH_RESURRECT_BACKOFF_BASE_SECONDS": "2",
+            "STEALTH_RESURRECT_BACKOFF_CAP_SECONDS": "60",
+            "STEALTH_RESURRECT_MAX_FAILS": "5",
+        })
+        self.assertEqual(cfg.poison_max, 4)
+        self.assertEqual(cfg.readyz_saturation_seconds, 30.0)
+        self.assertEqual(cfg.resurrect_backoff_base_seconds, 2.0)
+        self.assertEqual(cfg.resurrect_backoff_cap_seconds, 60.0)
+        self.assertEqual(cfg.resurrect_max_fails, 5)
+
+
 if __name__ == "__main__":
     unittest.main()

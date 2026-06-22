@@ -98,6 +98,22 @@ class Config:
     # over-used profiles without waiting for the next request.
     reaper_interval_seconds: float = 30.0
 
+    # -- self-heal (Phase 1) ------------------------------------------------ #
+    # After this many consecutive in-page-fetch crashes ("Target closed" /
+    # "context was destroyed") on the SAME warm session, the profile is torn
+    # down and the caller fails over instead of nav-retrying a poisoned page.
+    poison_max: int = 2
+    # /readyz returns 503 only after the pool has been saturated (free==0) for
+    # at least this long — a transient burst does not flip readiness.
+    readyz_saturation_seconds: float = 15.0
+    # Crashed-slot resurrection backoff: base * 2**consecutive_fail, capped.
+    # 1 -> 2 -> 4 -> 8 -> 16 -> 30 (cap).
+    resurrect_backoff_base_seconds: float = 1.0
+    resurrect_backoff_cap_seconds: float = 30.0
+    # After this many consecutive failed resurrect attempts a crashed slot is
+    # retired (its user_data_dir wiped) instead of revived again.
+    resurrect_max_fails: int = 3
+
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
         e = env if env is not None else os.environ
@@ -127,4 +143,15 @@ class Config:
             max_body_bytes=_int(g("STEALTH_MAX_BODY_BYTES"), 64 * 1024 * 1024),
             unactivated_grace_seconds=_int(g("STEALTH_UNACTIVATED_GRACE_SECONDS"), 45),
             reaper_interval_seconds=float(_int(g("STEALTH_REAPER_INTERVAL_SECONDS"), 30)),
+            poison_max=_int(g("STEALTH_POISON_MAX"), 2),
+            readyz_saturation_seconds=float(
+                _int(g("STEALTH_READYZ_SATURATION_SECONDS"), 15)
+            ),
+            resurrect_backoff_base_seconds=float(
+                _int(g("STEALTH_RESURRECT_BACKOFF_BASE_SECONDS"), 1)
+            ),
+            resurrect_backoff_cap_seconds=float(
+                _int(g("STEALTH_RESURRECT_BACKOFF_CAP_SECONDS"), 30)
+            ),
+            resurrect_max_fails=_int(g("STEALTH_RESURRECT_MAX_FAILS"), 3),
         )
