@@ -65,8 +65,11 @@ func TestDecideAutoApply(t *testing.T) {
 	}{
 		{"low risk auto-applies for anyone", domain.RiskLow, "bug", "", true},
 		{"low risk auto-applies for feedback latency too", domain.RiskLow, "latency", "", true},
-		{"medium risk real bug auto-applies", domain.RiskMedium, "bug", "", true},
-		{"medium risk content-quality auto-applies", domain.RiskMedium, "content-quality", "", true},
+		// audit #5: a medium-risk bug from an END-USER report must NOT auto-apply
+		// (write+deploy+push) — it needs the admin button.
+		{"medium risk real bug from end-user needs button", domain.RiskMedium, "bug", "", false},
+		{"medium risk content-quality from end-user needs button", domain.RiskMedium, "content-quality", "", false},
+		{"medium risk real bug from admin auto-applies", domain.RiskMedium, "bug", admin, true},
 		{"medium risk non-bug from admin auto-applies", domain.RiskMedium, "latency", admin, true},
 		{"medium risk non-bug from non-admin needs button", domain.RiskMedium, "latency", "", false},
 		{"high risk never auto-applies", domain.RiskHigh, "bug", admin, false},
@@ -90,6 +93,21 @@ func TestDecideAutoApply(t *testing.T) {
 				t.Errorf("button path returned empty reason")
 			}
 		})
+	}
+}
+
+// TestDecideAutoApply_GrafanaAlertBugAutoApplies confirms a Grafana alert (a
+// trusted internal source) still auto-applies a medium-risk bug fix (audit #5).
+func TestDecideAutoApply_GrafanaAlertBugAutoApplies(t *testing.T) {
+	s := newTestService(t, []string{"0neymik0"})
+	res := buttonResult(domain.RiskMedium, "bug", "svc-grafana")
+	grafanaMsg := domain.ClassifiedMessage{
+		Type: domain.MessageAlertFiring,
+		From: domain.User{Username: "grafana", IsBot: true},
+	}
+	apply, _, reason := s.decideAutoApply(grafanaMsg, res)
+	if !apply {
+		t.Fatalf("Grafana-sourced medium bug must auto-apply; got apply=false reason=%q", reason)
 	}
 }
 

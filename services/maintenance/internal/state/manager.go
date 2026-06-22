@@ -58,11 +58,38 @@ func (m *Manager) Load() error {
 	return nil
 }
 
-// State returns the current state (read-only snapshot).
+// State returns a deep-copied snapshot of the current state.
+//
+// *m.state is only a shallow struct copy, so the map fields are reference types
+// shared with the Manager. Returning that directly let a caller iterate a map
+// (e.g. checkResolvedAlerts ranging ActiveAlerts) concurrently with a
+// SetActiveAlert/RemoveActiveAlert write on another goroutine — a fatal
+// "concurrent map iteration and map write" panic (audit #34). Deep-copy every
+// map so the snapshot is truly independent.
 func (m *Manager) State() domain.State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return *m.state
+	snapshot := *m.state
+	snapshot.ActiveAlerts = copyMap(m.state.ActiveAlerts)
+	snapshot.Cooldowns = copyMap(m.state.Cooldowns)
+	snapshot.FixAttemptCounts = copyMap(m.state.FixAttemptCounts)
+	snapshot.LastFixPerService = copyMap(m.state.LastFixPerService)
+	snapshot.PendingFixes = copyMap(m.state.PendingFixes)
+	return snapshot
+}
+
+// copyMap returns a shallow per-entry copy of src (nil-safe). The values are
+// flat domain structs, so a value copy is enough to make iteration of the
+// returned map safe against concurrent writes to the source map.
+func copyMap[K comparable, V any](src map[K]V) map[K]V {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[K]V, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
 
 // UpdateOffset sets the last processed update ID.

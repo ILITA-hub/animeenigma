@@ -1289,13 +1289,20 @@ func (s *service) decideAutoApply(msg domain.ClassifiedMessage, result *domain.A
 	case domain.RiskLow:
 		label = "auto(risk=low)"
 	case domain.RiskMedium:
+		// A medium-risk auto-apply writes code, redeploys, and git-pushes. Only
+		// TRUSTED sources may trigger that autonomously — an admin message or a
+		// Grafana alert (our own monitoring). Previously a "real bug" auto-applied
+		// regardless of source, so unauthenticated end-user report content
+		// (error_report / user_issue) classified as a bug could drive a
+		// write+deploy+push with no human in the loop (audit #5). End-user-sourced
+		// fixes now always require the admin button.
 		switch {
-		case isRealBug(result.Issue.Category):
+		case isRealBug(result.Issue.Category) && (s.isAdminMessage(msg) || isGrafanaAlert(msg)):
 			label = "auto(risk=medium,bug)"
 		case s.isAdminMessage(msg):
 			label = "auto(risk=medium,admin)"
 		default:
-			return false, "", "medium risk: needs admin button (not a bug, not admin-sent)"
+			return false, "", "medium risk: needs admin button (end-user-sourced, or not admin/Grafana)"
 		}
 	default: // high or unset
 		return false, "", "high/unknown risk: needs admin button"
@@ -1312,6 +1319,20 @@ func (s *service) decideAutoApply(msg domain.ClassifiedMessage, result *domain.A
 		}
 	}
 	return true, label, ""
+}
+
+// isGrafanaAlert reports whether the message originated from our own Grafana
+// alerting (API poller or webhook) — a trusted internal source. Both paths set
+// From to the grafana/grafana-webhook bot identity; end-user reports never do.
+func isGrafanaAlert(msg domain.ClassifiedMessage) bool {
+	if !msg.From.IsBot {
+		return false
+	}
+	switch strings.ToLower(msg.From.Username) {
+	case "grafana", "grafana-webhook":
+		return true
+	}
+	return false
 }
 
 // isAdminMessage reports whether the message was sent by a configured admin
