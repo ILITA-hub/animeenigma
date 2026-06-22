@@ -228,6 +228,27 @@ class TestGogoanimeChain(unittest.TestCase):
         with self.assertRaises(RecipeError):
             run(GogoanimeRecipe().resolve(ctx(page, episode_url="https://evil.com/ep")))
 
+    def test_rejects_spoofed_megaplay_host(self):
+        # Finding #43: a wrapper-supplied embed whose host merely CONTAINS
+        # "megaplay.buzz" as a substring ("evilmegaplay.buzz.attacker.com") must
+        # NOT be treated as a trusted player and navigated to.
+        page = FakePage()
+        with self.assertRaises(RecipeError):
+            run(GogoanimeRecipe().resolve(
+                ctx(page, episode_url=None,
+                    embed_url="https://evilmegaplay.buzz.attacker.com/stream/s-2/1/sub")
+            ))
+
+    def test_rejects_spoofed_nested_iframe_host(self):
+        # Finding #43: a trusted wrapper (gogoanime.me.uk) that nests an iframe
+        # pointing at a host outside the allowlist must be rejected before the
+        # final player navigation, not blindly followed.
+        page = FakePage(nested_url="https://evilmegaplay.buzz.attacker.com/x")
+        with self.assertRaises(RecipeError):
+            run(GogoanimeRecipe().resolve(
+                ctx(page, episode_url=None, embed_url="https://gogoanime.me.uk/wrapper")
+            ))
+
     def test_challenge_on_player(self):
         page = FakePage(title_value="Just a moment...")
         with self.assertRaises(ChallengeError):

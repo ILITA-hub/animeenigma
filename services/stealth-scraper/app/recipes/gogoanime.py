@@ -248,7 +248,11 @@ class GogoanimeRecipe(Recipe):
         embedding wrapper's referer — else it returns a "file not found" page."""
         embed = _normalize_url(embed, site_origin)
         # Already a megaplay/vidwish player → referer is the episode site origin.
-        if host_of(embed) and any(h in host_of(embed) for h in _MEGAPLAY_PLAYER_HOSTS):
+        # Match the PARSED host exactly-or-by-subdomain (finding #43): a loose
+        # substring let "evilmegaplay.buzz.attacker.com" pose as megaplay.buzz and
+        # drive the browser to an attacker host whose intercepted .m3u8 became the
+        # session's auto-trusted CDN.
+        if host_allowed(host_of(embed), _MEGAPLAY_PLAYER_HOSTS):
             return embed, site_origin + "/"
 
         # A gogoanime.me.uk wrapper nests the real megaplay/vidwish iframe. The
@@ -266,7 +270,15 @@ class GogoanimeRecipe(Recipe):
         )
         if not nested:
             raise RecipeError("gogoanime: no nested megaplay/vidwish iframe in wrapper")
-        return _normalize_url(nested, embed), _origin(embed) + "/"
+        player_url = _normalize_url(nested, embed)
+        # The nested iframe src is attacker-influenceable wrapper DOM (finding
+        # #43): re-validate its host against the allowlist before it becomes the
+        # navigation target.
+        if not host_allowed(host_of(player_url), self.allowed_hosts):
+            raise RecipeError(
+                f"gogoanime: nested iframe host not allowed: {host_of(player_url)}"
+            )
+        return player_url, _origin(embed) + "/"
 
     async def resolve(self, rc: RecipeContext) -> dict[str, Any]:
         # The Go scraper passes embed_url = a known server/wrapper URL (its own
@@ -299,6 +311,14 @@ class GogoanimeRecipe(Recipe):
                 captured["m3u8s"].append(u)
                 if "master" in u.lower():
                     captured["masters"].append(u)
+
+        # The final player navigation is the one place that bypassed _goto()'s
+        # host allowlist (finding #43): enforce it here so a player_url derived
+        # from a compromised wrapper/embed can never drive the browser off-allowlist.
+        if not host_allowed(host_of(player_url), self.allowed_hosts):
+            raise RecipeError(
+                f"gogoanime: player navigation blocked (host not allowed): {host_of(player_url)}"
+            )
 
         rc.page.on("response", _on_response)
         try:
