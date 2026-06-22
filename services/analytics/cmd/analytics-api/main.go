@@ -186,10 +186,12 @@ func main() {
 				targets = append(targets, probe.ProbeTarget{Provider: name, AnimeSet: spotlight, Resolver: scraperRes})
 			}
 
+			pool := probe.NewHTTPPopularPool(cfg.CatalogURL, nil)
 			engine := probe.NewEngine(
 				targets,
 				validator,
 				probe.NewPromReporter(chStore),
+				pool, rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
 				func() int64 { return time.Now().Unix() },
 				log,
 			)
