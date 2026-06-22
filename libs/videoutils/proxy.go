@@ -184,6 +184,20 @@ func newIPv4Transport(firstParty []string) *http.Transport {
 	plain := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	guarded := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: netguard.DenyPrivateControl}
 	t := http.DefaultTransport.(*http.Transport).Clone()
+	// Raise the per-host idle keep-alive pool from Go's default of 2 (finding
+	// L417): the hottest path is a steady flood of HLS segment GETs to ONE CDN
+	// host, and a 2-conn idle cap forces a re-dial + re-TLS on every request
+	// past the first two idle conns. 64 lets segments reuse keep-alive conns;
+	// the global MaxIdleConns=100 ceiling (Clone default) is left intact.
+	t.MaxIdleConnsPerHost = 64
+	// Bound the time-to-first-header phase (finding L781): an upstream that
+	// completes TCP+TLS but never sends response headers would otherwise pin a
+	// proxy slot indefinitely (streaming caps concurrency at 50 → pool
+	// exhaustion → 503). This caps only the header wait, NOT the body stream —
+	// the body still flows under the request context (cancelled on client
+	// disconnect), so large MP4s are unaffected. 20s is deliberately generous:
+	// some CDNs are genuinely slow to first byte on large manifests.
+	t.ResponseHeaderTimeout = 20 * time.Second
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		// Coerce any TCP dial to IPv4-only.
 		switch network {
