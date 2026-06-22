@@ -103,6 +103,12 @@ func (r *HTTPResolver) Resolve(ctx context.Context, animeUUID, animeName string,
 
 	sv, err := r.get(ctx, base+"/servers", url.Values{"episode": {epID}, "prefer": {provider}, "exclusive": {"true"}})
 	if err != nil {
+		if errors.Is(err, ErrProbeNotFound) {
+			// A 404 at the servers stage is NOT a "provider lacks the anime"
+			// signal (only the episodes/search stage is) — surface it as a
+			// generic failure so the engine treats it as CDNUnreachable, not re-roll.
+			err = fmt.Errorf("%s/servers -> not found", base)
+		}
 		return nil, StageServers, err
 	}
 	if len(sv.Data.Servers) == 0 {

@@ -52,6 +52,31 @@ func TestHTTPResolver_NoEpisodes(t *testing.T) {
 	}
 }
 
+func TestHTTPResolver_ServersNotFound_NotSentinel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "/scraper/episodes"):
+			w.Write([]byte(`{"success":true,"data":{"episodes":[{"id":"ep1","number":1}]}}`))
+		case strings.Contains(r.URL.Path, "/scraper/servers"):
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	res := NewHTTPResolver(srv.URL, srv.Client())
+	_, stage, err := res.Resolve(context.Background(), "uuid1", "Frieren", 0, SlotAnchor, "gogoanime")
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if stage != StageServers {
+		t.Fatalf("want StageServers, got %v", stage)
+	}
+	if errors.Is(err, ErrProbeNotFound) {
+		t.Fatalf("servers-stage 404 must NOT be ErrProbeNotFound (re-roll sentinel), got %v", err)
+	}
+}
+
 func TestHTTPResolver_NotFound404_ReturnsSearchSentinel(t *testing.T) {
 	var sawExclusive bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

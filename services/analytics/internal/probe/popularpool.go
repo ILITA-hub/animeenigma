@@ -3,6 +3,7 @@ package probe
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -39,6 +40,9 @@ func (p *HTTPPopularPool) Pool(ctx context.Context) ([]PopularAnime, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("popular -> %d", resp.StatusCode)
+	}
 	var real struct {
 		Data []struct {
 			ID   string `json:"id"`
