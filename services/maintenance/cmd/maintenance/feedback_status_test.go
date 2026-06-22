@@ -26,6 +26,18 @@ func TestFeedbackStatusFor(t *testing.T) {
 		{"captured todo stays a single open task", res(domain.TierInfoOnly, "captured"), feedback.StatusNew},
 		{"backlogged todo stays open", res(domain.TierInfoOnly, "backlog"), feedback.StatusNew},
 		{"captured is case/space-insensitive", res(domain.TierInfoOnly, "  Captured "), feedback.StatusNew},
+		// Phrasing drift: the Claude CLI's --json-schema is best-effort, so the LLM
+		// may emit a longer capture phrase than the bare token. These must still map
+		// to a single open task, not leak to ai_done.
+		{"captured-for-later phrase stays new", res(domain.TierInfoOnly, "captured for later"), feedback.StatusNew},
+		{"backlog phrase stays new", res(domain.TierInfoOnly, "backlog this item"), feedback.StatusNew},
+		{"to do (spaced) stays new", res(domain.TierInfoOnly, "to do"), feedback.StatusNew},
+		{"TODO: prefix on resolved tier stays new", res(domain.TierResolved, "TODO: investigate"), feedback.StatusNew},
+		// Guard: legitimate completion/lifecycle statuses must NOT be mis-captured as
+		// todo (they carry no capture marker), so they stay ai_done.
+		{"auto_fixed is not a captured todo", res(domain.TierInfoOnly, "auto_fixed"), feedback.StatusAIDone},
+		{"open is not a captured todo", res(domain.TierInfoOnly, "open"), feedback.StatusAIDone},
+		{"resolved-word on resolved tier stays ai_done", res(domain.TierResolved, "resolved"), feedback.StatusAIDone},
 		{"button fix pending → in_progress", res(domain.TierButtonFix, "open"), feedback.StatusInProgress},
 		{"escalation → in_progress", res(domain.TierEscalate, "escalated"), feedback.StatusInProgress},
 		// A captured backlog item only matters for the info/resolved tiers; an

@@ -84,7 +84,7 @@ var analysisSchema = `{
         "title": {"type": "string"},
         "category": {"type": "string"},
         "priority": {"type": "string"},
-        "status": {"type": "string"}
+        "status": {"type": "string", "enum": ["captured", "open", "investigating", "auto_fixed", "escalated", "resolved", "wont_fix", "backlog", "todo"]}
       },
       "required": ["title", "category", "priority", "status"]
     }

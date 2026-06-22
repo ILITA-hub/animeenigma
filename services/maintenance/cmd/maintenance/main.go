@@ -1030,13 +1030,26 @@ func feedbackStatusFor(result *domain.AnalysisResult) string {
 	}
 }
 
+// captureMarkers are the substrings that signal the LLM recorded the request
+// as future work to do, rather than a completed action. They are kept tight
+// (capture-intent words only) so legitimate completion/lifecycle statuses like
+// "auto_fixed", "open", "resolved", "escalated" are never mis-captured.
+var captureMarkers = []string{"captured", "backlog", "todo", "to do"}
+
 // isCapturedTodo reports whether the LLM recorded the request as a backlog /
 // todo item to be worked on later (issue status the analyzer emits for
 // "captured this for the future" rather than a completed action).
+//
+// The Claude CLI's --json-schema enum is best-effort, not a hard validator, so
+// the analyzer may drift to a longer phrase ("captured for later", "backlog
+// this item", "TODO: investigate"). We therefore match any capture marker as a
+// substring of the normalized status, not just the bare tokens.
 func isCapturedTodo(issueStatus string) bool {
-	switch strings.ToLower(strings.TrimSpace(issueStatus)) {
-	case "captured", "backlog", "todo":
-		return true
+	norm := strings.ToLower(strings.TrimSpace(issueStatus))
+	for _, m := range captureMarkers {
+		if strings.Contains(norm, m) {
+			return true
+		}
 	}
 	return false
 }
