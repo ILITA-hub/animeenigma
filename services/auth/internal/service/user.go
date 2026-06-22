@@ -66,6 +66,13 @@ func (s *UserService) Update(ctx context.Context, userID string, req *domain.Upd
 			return nil, errors.InvalidInput("current password is incorrect")
 		}
 
+		// Enforce the password policy before hashing (8–72 bytes). Without the
+		// upper bound a >72-byte password makes bcrypt return an opaque error
+		// that surfaced as a 500 instead of a clean 400.
+		if err := domain.ValidatePassword(*req.NewPassword); err != nil {
+			return nil, err
+		}
+
 		// Hash new password
 		hashedPassword, err := HashPassword(*req.NewPassword)
 		if err != nil {

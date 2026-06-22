@@ -154,13 +154,16 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate request
-	if len(req.Username) < 3 || len(req.Username) > 32 {
-		httputil.Error(w, errors.InvalidInput("username must be between 3 and 32 characters"))
+	// Validate request. httputil.Bind does NOT run the struct validate tags,
+	// so enforce the policy explicitly via the domain validators (single
+	// source of truth): alphanum+_- username and an 8–72 byte password (72 is
+	// bcrypt's input limit; longer inputs used to surface as a generic 500).
+	if err := domain.ValidateUsername(req.Username); err != nil {
+		httputil.Error(w, err)
 		return
 	}
-	if len(req.Password) < 8 {
-		httputil.Error(w, errors.InvalidInput("password must be at least 8 characters"))
+	if err := domain.ValidatePassword(req.Password); err != nil {
+		httputil.Error(w, err)
 		return
 	}
 
