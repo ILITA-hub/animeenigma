@@ -198,7 +198,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	sc := sessionContextFromReq(r)
 	resp, err := h.authService.Login(r.Context(), &req, sc)
 	if err != nil {
-		metrics.AuthEventsTotal.WithLabelValues("login", "error").Inc()
+		// Distinguish brute-force lockouts (429) from ordinary failures so the
+		// throttle is observable in Grafana (audit medium #6).
+		status := "error"
+		if appErr, ok := errors.IsAppError(err); ok && appErr.Code == errors.CodeRateLimited {
+			status = "lockout"
+		}
+		metrics.AuthEventsTotal.WithLabelValues("login", status).Inc()
 		httputil.Error(w, err)
 		return
 	}

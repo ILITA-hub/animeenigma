@@ -42,6 +42,11 @@ type AuthService struct {
 	guestTokenTTL    time.Duration
 	log              *logger.Logger
 
+	// Login brute-force throttle (audit medium #6). Defaults set in
+	// NewAuthService; overridable in tests.
+	loginMaxFails   int
+	loginFailWindow time.Duration
+
 	// magicSessionFinder and magicUserGetter are set to the concrete repos by
 	// NewAuthService but can be replaced by in-package test fakes to allow
 	// MintMagicToken / ConsumeMagicToken unit tests without a live DB.
@@ -68,6 +73,8 @@ func NewAuthService(
 		log:                log,
 		magicSessionFinder: sessionRepo,
 		magicUserGetter:    userRepo,
+		loginMaxFails:      10,
+		loginFailWindow:    15 * time.Minute,
 	}
 }
 
@@ -157,9 +164,16 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest,
 }
 
 func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest, sc SessionContext) (*domain.AuthResponse, error) {
+	// Brute-force throttle (audit medium #6): reject before doing any work
+	// once the per-account failure threshold is hit.
+	if s.loginLocked(ctx, req.Username) {
+		return nil, errors.New(errors.CodeRateLimited, "too many failed login attempts, please try again later")
+	}
+
 	user, err := s.userRepo.GetByUsername(ctx, req.Username)
 	if err != nil {
 		if appErr, ok := errors.IsAppError(err); ok && appErr.Code == errors.CodeNotFound {
+			s.recordLoginFailure(ctx, req.Username)
 			return nil, errors.Unauthorized("invalid credentials")
 		}
 		return nil, err
@@ -167,8 +181,12 @@ func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest, sc Se
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		s.recordLoginFailure(ctx, req.Username)
 		return nil, errors.Unauthorized("invalid credentials")
 	}
+
+	// Successful authentication — clear the failure counter.
+	s.clearLoginFailures(ctx, req.Username)
 
 	// Opportunistic upgrade: if the stored hash uses a weaker cost than
 	// the current policy, re-hash with the new cost and persist. Failures
