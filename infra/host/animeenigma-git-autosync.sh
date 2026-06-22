@@ -34,7 +34,7 @@ fi
 
 # Fetch non-interactively. BatchMode => never blocks on a passphrase/known-hosts.
 if ! GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=10' \
-     git fetch --quiet origin "$BRANCH" 2>>"$LOG"; then
+     git fetch --quiet origin "$BRANCH" 2>/dev/null; then
   log "skip: 'git fetch origin $BRANCH' failed"
   exit 0
 fi
@@ -44,13 +44,21 @@ remote_sha=$(git rev-parse --short "origin/$BRANCH" 2>/dev/null)
 
 if [ "$local_sha" = "$remote_sha" ]; then
   log "ok: already current ($local_sha)"
+elif [ -n "$(git ls-files --unmerged 2>/dev/null)" ]; then
+  # Stranded conflict state: a failed merge/rebase/autostash-pop left unmerged index
+  # entries (often with NO MERGE_HEAD, so nothing to --abort). ff is impossible until
+  # a human clears it. Report it distinctly instead of as a generic "ff-blocked".
+  nconf=$(git diff --name-only --diff-filter=U 2>/dev/null | wc -l | tr -d ' ')
+  log "skip: CONFLICTED — ${nconf} unmerged file(s) in the base tree (stranded merge/rebase/autostash); needs manual cleanup; left at $local_sha"
+elif ls .git/MERGE_HEAD .git/CHERRY_PICK_HEAD >/dev/null 2>&1 || [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
+  log "skip: IN-PROGRESS merge/rebase/cherry-pick in the base tree; needs --continue/--abort; left at $local_sha"
 else
   # Refuse to act if we carry local commits origin/$BRANCH does not (divergence).
   ahead=$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo "?")
   if [ "$ahead" != "0" ]; then
     log "skip: DIVERGED — $ahead local commit(s) not on origin/$BRANCH (local=$local_sha remote=$remote_sha). Push or drop them; ff-only sync paused until then."
   # Fast-forward only. Harmlessly aborts if uncommitted changes touch incoming files.
-  elif git merge --ff-only --quiet "origin/$BRANCH" 2>>"$LOG"; then
+  elif git merge --ff-only --quiet "origin/$BRANCH" 2>/dev/null; then
     log "ok: fast-forwarded $local_sha -> $(git rev-parse --short HEAD)"
   else
     log "skip: fast-forward blocked (uncommitted changes overlap incoming files); left at $local_sha"
@@ -58,7 +66,7 @@ else
 fi
 
 # Cheap hygiene: drop worktree refs whose dirs are gone (does not delete live worktrees).
-git worktree prune 2>>"$LOG" || true
+git worktree prune 2>/dev/null || true
 
 # Self-trim the log so it can never grow unbounded (we hold the lock here).
 if [ -f "$LOG" ]; then

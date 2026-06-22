@@ -30,7 +30,9 @@ reason and exits 0 having changed nothing:
 
 - HEAD is not on `main` (detached / other branch)
 - `git fetch` fails (e.g. transient network)
-- the tree has **diverged** (local commits not on `origin/main`)
+- the tree has **diverged** (local commits not on `origin/main`) — `skip: DIVERGED`
+- the tree is in a **conflict state** (unmerged index entries from a stranded merge/rebase/autostash, often with no `MERGE_HEAD`) — `skip: CONFLICTED`
+- a merge/rebase/cherry-pick is **in progress** — `skip: IN-PROGRESS`
 - a fast-forward is **blocked by uncommitted changes** that overlap incoming files
 
 This makes it safe on the shared tree and compatible with the `git-guard`
