@@ -541,6 +541,7 @@ class CamoufoxEngine:
         if session is None:
             raise SessionGone(sid)
         if not await host_allowed_for_session(url, session, self._resolve_host):
+            metrics.STEALTH_PROXY_FETCH_TOTAL.labels(result="host_denied").inc()
             raise RecipeError(f"proxy host not allowed for session: {host_of(url)}")
 
         # Slide the TTL BEFORE the (possibly long) fetch and mark the session
@@ -549,14 +550,21 @@ class CamoufoxEngine:
         # deadline while the network round-trip is in flight.
         session.expires_at = time.time() + self.cfg.session_ttl_seconds
         session.in_use += 1
+        started = time.monotonic()
         try:
             status, ctype, final_url, body = await self._in_page_fetch(session, url)
         except FetchTimeout:
             # A hung fetch would pin this browser slot forever — reclaim it.
+            self._observe_proxy_fetch("timeout", started)
             await self.aclose_session(sid)
+            raise
+        except FetchTooLarge:
+            # Over-cap body (resource-leak guard tripped) — count it distinctly.
+            self._observe_proxy_fetch("too_large", started)
             raise
         finally:
             session.in_use = max(0, session.in_use - 1)
+        self._observe_proxy_fetch("ok", started, body_bytes=len(body))
 
         # The in-page fetch follows redirects; a trusted CDN could 30x toward an
         # internal target. Re-validate the post-redirect URL before returning its
@@ -584,6 +592,20 @@ class CamoufoxEngine:
                 "body": wrapped.encode("utf-8"),
             }
         return {"status": status, "content_type": ctype or "application/octet-stream", "body": body}
+
+    @staticmethod
+    def _observe_proxy_fetch(
+        result: str, started: float, body_bytes: int | None = None
+    ) -> None:
+        """Record restream in-page-fetch observability (audit L613): duration +
+        result counter, plus body size on success. Pure side-effect; never
+        raises into the request path."""
+        metrics.STEALTH_PROXY_FETCH_DURATION.labels(result=result).observe(
+            time.monotonic() - started
+        )
+        metrics.STEALTH_PROXY_FETCH_TOTAL.labels(result=result).inc()
+        if body_bytes is not None:
+            metrics.STEALTH_PROXY_FETCH_BYTES.observe(body_bytes)
 
     # -- discovery fetch (challenge-gated sites: warm session + in-page fetch) -- #
     async def browser_fetch(self, provider: str, url: str) -> dict:
@@ -743,7 +765,7 @@ class CamoufoxEngine:
             raise
         status_s, ctype, final_url, b64 = raw.split("|", 3)
         if b64 == _TOO_LARGE:
-            raise RecipeError(
+            raise FetchTooLarge(
                 f"upstream body exceeds cap ({self.cfg.max_body_bytes} bytes): {host_of(url)}"
             )
         body = base64.b64decode(b64) if b64 else b""
@@ -929,6 +951,13 @@ class FetchTimeout(Exception):
     def __init__(self, sid: str):
         super().__init__(f"in-page fetch timeout: {sid}")
         self.sid = sid
+
+
+class FetchTooLarge(RecipeError):
+    """The upstream body exceeded cfg.max_body_bytes (the over-cap path). A
+    RecipeError subclass so every existing ``except RecipeError`` handler treats
+    it identically — only the proxy_fetch metrics path tells it apart (so the
+    ``too_large`` result is countable separately from other recipe failures)."""
 
 
 def _rm_dir(path: str) -> None:

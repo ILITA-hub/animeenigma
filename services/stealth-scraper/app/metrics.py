@@ -75,3 +75,30 @@ SLOT_RESURRECT_TOTAL = Counter(
     "Crashed-slot resurrection attempts in the reaper, by result.",
     ["result"],  # ok|fail|retired
 )
+
+STEALTH_PROXY_FETCH_TOTAL = Counter(
+    "stealth_proxy_fetch_total",
+    "In-page restream fetches (proxy_fetch), by result.",
+    ["result"],  # ok|timeout|too_large|host_denied
+)
+
+STEALTH_PROXY_FETCH_DURATION = Histogram(
+    "stealth_proxy_fetch_duration_seconds",
+    "Wall-clock duration of a restream in-page fetch, by result.",
+    ["result"],  # ok|timeout|too_large|host_denied
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30),
+)
+
+STEALTH_PROXY_FETCH_BYTES = Histogram(
+    "stealth_proxy_fetch_bytes",
+    "Body size (bytes) returned by a successful restream in-page fetch.",
+    buckets=(
+        1024,
+        16 * 1024,
+        128 * 1024,
+        512 * 1024,
+        2 * 1024 * 1024,
+        8 * 1024 * 1024,
+        32 * 1024 * 1024,
+    ),
+)
