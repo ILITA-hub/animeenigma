@@ -2,6 +2,7 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,5 +49,31 @@ func TestHTTPResolver_NoEpisodes(t *testing.T) {
 	_, stage, err := r.Resolve(context.Background(), "uuid1", "Frieren", 0, SlotAnchor, "gogoanime")
 	if err == nil || stage != StageEpisodes {
 		t.Fatalf("want episodes-stage error, got stage=%v err=%v", stage, err)
+	}
+}
+
+func TestHTTPResolver_NotFound404_ReturnsSearchSentinel(t *testing.T) {
+	var sawExclusive bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/scraper/episodes") {
+			if r.URL.Query().Get("exclusive") == "true" {
+				sawExclusive = true
+			}
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	}))
+	defer srv.Close()
+
+	res := NewHTTPResolver(srv.URL, srv.Client())
+	_, stage, err := res.Resolve(context.Background(), "uuid1", "Frieren", 0, SlotAnchor, "gogoanime")
+	if !errors.Is(err, ErrProbeNotFound) {
+		t.Fatalf("want ErrProbeNotFound, got %v", err)
+	}
+	if stage != StageSearch {
+		t.Fatalf("want StageSearch, got %v", stage)
+	}
+	if !sawExclusive {
+		t.Fatal("expected request to carry exclusive=true query param")
 	}
 }

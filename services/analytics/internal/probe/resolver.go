@@ -3,12 +3,18 @@ package probe
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
+
+// ErrProbeNotFound signals the preferred provider has no match for the anime
+// (scraper returned 404 not_found under exclusive routing). The engine treats
+// this as "skip + re-roll", never a provider failure.
+var ErrProbeNotFound = errors.New("probe: provider has no match for anime")
 
 type Resolver interface {
 	// Resolve produces the candidate streams for one (anime, provider). episode
@@ -66,6 +72,9 @@ func (r *HTTPResolver) get(ctx context.Context, path string, q url.Values) (*env
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrProbeNotFound
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s -> %d", path, resp.StatusCode)
 	}
@@ -80,8 +89,11 @@ func (r *HTTPResolver) Resolve(ctx context.Context, animeUUID, animeName string,
 	// episode is unused: the scraper set always probes episode 1 (the first
 	// listed episode), so the per-ref Episode hint does not apply here.
 	base := "/api/anime/" + animeUUID + "/scraper"
-	eps, err := r.get(ctx, base+"/episodes", url.Values{"prefer": {provider}})
+	eps, err := r.get(ctx, base+"/episodes", url.Values{"prefer": {provider}, "exclusive": {"true"}})
 	if err != nil {
+		if errors.Is(err, ErrProbeNotFound) {
+			return nil, StageSearch, ErrProbeNotFound
+		}
 		return nil, StageEpisodes, err
 	}
 	if len(eps.Data.Episodes) == 0 {
@@ -89,7 +101,7 @@ func (r *HTTPResolver) Resolve(ctx context.Context, animeUUID, animeName string,
 	}
 	epID := eps.Data.Episodes[0].ID
 
-	sv, err := r.get(ctx, base+"/servers", url.Values{"episode": {epID}, "prefer": {provider}})
+	sv, err := r.get(ctx, base+"/servers", url.Values{"episode": {epID}, "prefer": {provider}, "exclusive": {"true"}})
 	if err != nil {
 		return nil, StageServers, err
 	}
@@ -100,7 +112,7 @@ func (r *HTTPResolver) Resolve(ctx context.Context, animeUUID, animeName string,
 	var out []ResolvedStream
 	for _, s := range sv.Data.Servers {
 		st, err := r.get(ctx, base+"/stream", url.Values{
-			"episode": {epID}, "server": {s.ID}, "category": {"sub"}, "prefer": {provider},
+			"episode": {epID}, "server": {s.ID}, "category": {"sub"}, "prefer": {provider}, "exclusive": {"true"},
 		})
 		if err != nil || len(st.Data.Stream.Sources) == 0 {
 			continue
