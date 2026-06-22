@@ -14,7 +14,7 @@ export const PROVIDER_REGISTRY: ProviderDef[] = [
 
   // EN scraper providers (live health from backend).
   { id: 'allanime',   name: 'AllAnime',   hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true,
-    blurb: 'EN scraper — direct MP4 / robust HLS, broad coverage.' },
+    blurb: 'EN scraper — degraded: stream behind Cloudflare Turnstile (use OK.ru).' },
   { id: 'animefever', name: 'AnimeFever', hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true,
     blurb: 'EN scraper — degraded: ad-substitution on our IP class.' },
   { id: 'gogoanime',  name: 'Gogoanime',  hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true,
@@ -25,6 +25,8 @@ export const PROVIDER_REGISTRY: ProviderDef[] = [
     blurb: 'EN scraper — DUB only (upstream dropped sub).' },
   { id: 'nineanime',  name: '9anime',     hue: '#00d4ff', group: 'en', audios: ['sub'],        langs: ['en'], content: ['common'], scraper: true,
     blurb: 'EN scraper — MP4-only last resort.' },
+  { id: 'okru',       name: 'OK.ru',      hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true,
+    blurb: 'EN scraper — AllAnime index, OK.ru CDN (clock-free).' },
   { id: 'animepahe',  name: 'AnimePahe',  hue: '#00d4ff', group: 'en', audios: ['sub', 'dub'], langs: ['en'], content: ['common'], scraper: true,
     blurb: 'EN scraper — Kwik via stealth-Chromium sidecar.' },
 
@@ -62,6 +64,7 @@ export const CURATED_TIER: string[] = [
   'animepahe',
   'animefever',
   'nineanime',
+  'okru',       // AllAnime Ok (ok.ru) sources, clock-free
   'kodik',      // RU
   'raw',        // JP
   '18anime',    // adult
