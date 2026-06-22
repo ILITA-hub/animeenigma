@@ -1,0 +1,9 @@
+# AnimeEnigma — keep the shared base tree (/data/animeenigma) synced to
+# origin/main so worktrees branch off fresh code and the tree never rots.
+# SAFE: the script is fast-forward-only and no-ops on divergence / uncommitted
+# changes (it never merges non-ff, rebases, stashes, resets, or pushes).
+# Logs to /var/log/animeenigma-git-sync.log.
+# Install to: /etc/cron.d/animeenigma-git-sync  (root-owned, mode 644)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+*/10 * * * * root /usr/local/bin/animeenigma-git-autosync.sh

@@ -448,6 +448,13 @@ The home page's `HeroSpotlightBlock` (workstream `hero-spotlight`) is a 9-card r
 
 Verify the full stack with: `cd services/catalog && go test ./internal/service/spotlight/... -count=1 -race` and `cd frontend/web && bunx vitest run src/components/home/spotlight/ src/locales/__tests__/spotlight-keys.spec.ts && bunx tsc --noEmit`. The Phase 3 end-to-end Playwright spec `frontend/web/e2e/spotlight.spec.ts` is the canonical regression test for the full carousel.
 
+## Git & Deploy Workflow
+
+Full guide: [`docs/git-workflow.md`](docs/git-workflow.md). The flow:
+**worktree off fresh `origin/main` → code + verify → pull-rebase-push to `main` → `/animeenigma-after-update` (run *after* the push, to catch the latest) → `git worktree remove` + `prune` (only once after-update is green).**
+
+> **GOLDEN RULE: never make direct changes in `/data/animeenigma` (the `main` base tree) — do all work in worktrees. The only exception is `.env` / secrets files** (git-ignored + host-only, so they don't cause divergence). The base tree is a read-only mirror of `origin/main`, fast-forwarded every 10 min by a cron (`/usr/local/bin/animeenigma-git-autosync.sh`, source `infra/host/`); committing or editing code there makes it dirty/diverged, which **pauses the ff-only auto-sync** (logs `skip: DIVERGED`) and tangles your diff with other agents' WIP.
+
 ## Local Development Commands
 
 Use `make` for all local development operations. Run `make help` to see all available targets.
