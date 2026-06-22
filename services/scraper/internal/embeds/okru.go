@@ -33,7 +33,7 @@ const (
 	okruUA                 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
 
-var okruHosts = []string{"ok.ru", "okru.ru"} // host equality OR strict subdomain (m.ok.ru, etc.)
+var okruHosts = []string{"ok.ru"} // host equality OR strict subdomain (m.ok.ru, www.ok.ru, …)
 
 // dataOptionsRe captures the data-options attribute payload (HTML-escaped JSON).
 var dataOptionsRe = regexp.MustCompile(`data-options="([^"]*)"`)

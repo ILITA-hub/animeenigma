@@ -363,9 +363,12 @@ func main() {
 	// okru — serves AllAnime's Ok (ok.ru) sources clock-free (no api.allanime.day
 	// clock endpoint). Registered immediately AFTER allanime so the EN failover
 	// order is gogoanime → animepahe → allanime → okru → animefever → …
+	// This client backs okru's DISCOVERY only (it wraps an internal allanime
+	// provider hitting api.allanime.day). The ok.ru page fetch happens in the
+	// embeds.OkruExtractor's own http.Client (mirrors vibeplayer), so a
+	// per-host RPS for ok.ru here would be dead config.
 	okruBaseHTTP := domain.NewBaseHTTPClient(log,
 		domain.WithPerHostRPS("api.allanime.day", 1.0, 2),
-		domain.WithPerHostRPS("ok.ru", 1.0, 2),
 		domain.WithProvider("okru"),
 		domain.WithTransport(egressTransport),
 	)

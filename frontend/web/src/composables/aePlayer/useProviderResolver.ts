@@ -198,6 +198,7 @@ export interface ResolverDeps {
 
 export const SCRAPER_IDS = new Set<string>([
   'allanime',
+  'okru',
   'animefever',
   'gogoanime',
   'miruro',
