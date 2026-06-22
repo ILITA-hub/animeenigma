@@ -282,17 +282,22 @@
         @update:sub-size="v => { state.subSize.value = v }"
         @update:sub-bg="v => { state.subBg.value = v }"
         @update:sub-offset="v => { state.subOffset.value = v }"
-        @open-browse="browseOpen = true"
+        @open-browse="() => { browseOpen = true; void ensureSubsLoaded() }"
       />
     </div>
 
     <!-- Browse subtitles modal -->
     <BrowseSubsModal
       v-if="browseOpen"
-      :tracks="[]"
+      :tracks="subtitleTracks"
       :selected-url="chosenSubUrl"
+      :loading="subsLoading"
+      :error="subsError"
+      :providers-down="subsProvidersDown"
       @click.stop
       @select="onSelectSubTrack"
+      @retry="refetchSubs"
+      @off="onSubtitlesOff"
       @close="browseOpen = false"
     />
   </div>
@@ -306,6 +311,7 @@ import {
   nextTick,
   onMounted,
   onUnmounted,
+  toRef,
 } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { CircleAlert, ChevronDown, Play, X } from 'lucide-vue-next'
@@ -355,6 +361,8 @@ import { rankedProviderIds } from '@/composables/aePlayer/rankedProviderIds'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
+import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
+import { pickDefaultSubtitle } from '@/composables/aePlayer/pickDefaultSubtitle'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
 import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
@@ -2168,6 +2176,53 @@ const chosenSubFormat = computed<'ass' | 'srt' | 'vtt' | null>(() => {
   return null
 })
 
+// Episode number the subtitle aggregation keys on.
+const subEpisode = computed(() => selectedEpisode.value?.number ?? props.anime.ep)
+// Provider's own signed soft-subs from the resolved stream.
+const providerSubtitles = computed(() => currentStream.value?.subtitles)
+const {
+  tracks: subtitleTracks,
+  loading: subsLoading,
+  error: subsError,
+  providersDown: subsProvidersDown,
+  ensureLoaded: ensureSubsLoaded,
+  refetch: refetchSubs,
+} = useSubtitleTracks(toRef(props, 'animeId'), subEpisode, providerSubtitles)
+
+// User explicitly turned subs off (or picked one) for THIS stream → don't re-auto-select.
+let subUserDecided = false
+
+function autoSelectSubtitle() {
+  if (subUserDecided || chosenSub.value) return
+  if (state.combo.value.audio !== 'sub') return // only SUB/raw cuts
+  if (hardsubNote.value) return                 // burned-in already
+  const pick = pickDefaultSubtitle(subtitleTracks.value, { lang: state.combo.value.lang })
+  if (pick) {
+    chosenSub.value = pick
+    state.subLang.value = pick.lang
+  }
+}
+
+// A NEW episode is a fresh subtitle decision — clear the pick + the user latch.
+// (Keyed on episode, NOT currentStream: a same-episode re-resolve — server
+// fallback, quality swap — must NOT drop a sub the user already picked.)
+watch(subEpisode, () => {
+  subUserDecided = false
+  chosenSub.value = null
+})
+
+// Fetch aggregation eagerly once a SUB stream resolves, then auto-select.
+watch(
+  [currentStream, () => state.combo.value.audio],
+  async () => {
+    if (!currentStream.value || state.combo.value.audio !== 'sub') return
+    await ensureSubsLoaded()
+    autoSelectSubtitle()
+  },
+)
+// Provider tracks (and late aggregation) can arrive after the first tick.
+watch(subtitleTracks, () => autoSelectSubtitle())
+
 // Real subtitle languages — only what's actually loaded as a soft track
 // (the menu renders the "Off" option itself). Provider hardsubs are burned
 // into the video and are NOT a selectable track, so a fresh stream offers
@@ -2191,9 +2246,17 @@ const hardsubNote = computed(() => {
 })
 
 function onSelectSubTrack(track: SubTrack) {
+  subUserDecided = true
   chosenSub.value = track
   // Selecting a track turns the overlay on for that language
   state.subLang.value = track.lang
+  browseOpen.value = false
+}
+
+function onSubtitlesOff() {
+  subUserDecided = true
+  chosenSub.value = null
+  state.subLang.value = 'off'
   browseOpen.value = false
 }
 
