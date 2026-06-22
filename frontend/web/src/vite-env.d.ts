@@ -13,6 +13,8 @@ interface ImportMetaEnv {
   readonly VITE_APP_NAME: string
   readonly VITE_APP_VERSION: string
   readonly VITE_HLS_PROXY_BASE?: string
+  /** Short git commit hash of the deployed build (baked at build time, shown in footer). */
+  readonly VITE_GIT_COMMIT?: string
 }
 
 interface ImportMeta {

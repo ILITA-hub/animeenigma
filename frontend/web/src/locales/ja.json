@@ -1033,6 +1033,7 @@
   },
   "footer": {
     "rights": "All rights reserved",
+    "build": "ビルド",
     "feedback": {
       "button": "フィードバックを送る",
       "title": "フィードバックを送る",

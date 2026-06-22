@@ -1033,6 +1033,7 @@
   },
   "footer": {
     "rights": "All rights reserved",
+    "build": "build",
     "feedback": {
       "button": "Send feedback",
       "title": "Send feedback",

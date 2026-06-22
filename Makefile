@@ -269,7 +269,7 @@ type-check: ## Run TypeScript type check on frontend
 
 redeploy-web: i18n-lint lint-design type-check ## Rebuild and restart web frontend (runs i18n lint + design-system gate + type-check first)
 	@echo "Rebuilding web frontend..."
-	docker compose -f docker/docker-compose.yml build web
+	VITE_GIT_COMMIT="$$(git rev-parse --short HEAD 2>/dev/null)" docker compose -f docker/docker-compose.yml build web
 	docker stop animeenigma-web || true
 	docker rm animeenigma-web || true
 	docker compose -f docker/docker-compose.yml up -d --no-deps web

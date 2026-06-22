@@ -79,6 +79,18 @@
         <p class="text-white/60 text-sm">
           &copy; {{ new Date().getFullYear() }} AnimeEnigma. {{ $t('footer.rights') }}
         </p>
+        <template v-if="commitHash">
+          <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
+          <a
+            :href="commitUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            :title="$t('footer.build')"
+            class="text-white/60 hover:text-white/80 text-sm font-mono transition-colors"
+          >
+            {{ $t('footer.build') }} {{ commitHash }}
+          </a>
+        </template>
         <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
         <router-link to="/status" class="text-white/60 hover:text-white/80 text-sm transition-colors">
           {{ $t('status.title') }}
@@ -156,6 +168,13 @@ const notifEnabled = (import.meta.env.VITE_NOTIFICATIONS_ENABLED as string | und
 // "My feedback" footer link re-enabled per owner approval of AUTO-436
 // (2026-06-11, in-chat). FeedbackButton.vue has the same flag.
 const MY_FEEDBACK_ENABLED = true
+
+// Short git commit hash of the deployed build, baked in by `make redeploy-web`
+// (Dockerfile ARG VITE_GIT_COMMIT). Empty in dev / builds without a checkout.
+const commitHash = (import.meta.env.VITE_GIT_COMMIT ?? '').trim()
+const commitUrl = commitHash
+  ? `https://github.com/ILITA-hub/animeenigma/commit/${commitHash}`
+  : ''
 
 // Auth-driven lifecycle: start polling on login, stop + clear state on
 // logout. immediate=true so an already-authenticated tab on page-load

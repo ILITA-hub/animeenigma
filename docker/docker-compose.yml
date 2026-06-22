@@ -1218,6 +1218,9 @@ services:
         # to today). Set VITE_HLS_PROXY_BASE in docker/.env to the stream subdomain
         # origin (e.g. https://stream.animeenigma.org) to route HLS off-domain.
         VITE_HLS_PROXY_BASE: "${VITE_HLS_PROXY_BASE:-}"
+        # Short git commit hash of the deployed build (shown in the footer).
+        # `make redeploy-web` exports it from `git rev-parse --short HEAD`.
+        VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
     container_name: animeenigma-web
     restart: unless-stopped
     ports:
