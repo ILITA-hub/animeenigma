@@ -2,16 +2,92 @@ package eighteenanime
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 )
+
+// inMemoryCache is a tiny, race-safe cache.Cache impl backed by a map. Tests do
+// not need TTL semantics; the ttl argument is ignored.
+type inMemoryCache struct {
+	mu sync.Mutex
+	m  map[string][]byte
+}
+
+func newInMemoryCache() *inMemoryCache { return &inMemoryCache{m: make(map[string][]byte)} }
+
+func (c *inMemoryCache) Get(ctx context.Context, key string, dest interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.m[key]
+	if !ok {
+		return errors.New("miss")
+	}
+	return json.Unmarshal(v, dest)
+}
+
+func (c *inMemoryCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	b, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m[key] = b
+	return nil
+}
+
+func (c *inMemoryCache) Delete(ctx context.Context, keys ...string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, k := range keys {
+		delete(c.m, k)
+	}
+	return nil
+}
+
+func (c *inMemoryCache) Exists(ctx context.Context, key string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.m[key]
+	return ok, nil
+}
+
+func (c *inMemoryCache) Invalidate(ctx context.Context, pattern string) error { return nil }
+
+func (c *inMemoryCache) GetOrSet(ctx context.Context, key string, dest interface{}, ttl time.Duration, fn func() (interface{}, error)) error {
+	if err := c.Get(ctx, key, dest); err == nil {
+		return nil
+	}
+	val, err := fn()
+	if err != nil {
+		return err
+	}
+	if err := c.Set(ctx, key, val, ttl); err != nil {
+		return err
+	}
+	return c.Get(ctx, key, dest)
+}
+
+func (c *inMemoryCache) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
+	c.mu.Lock()
+	_, ok := c.m[key]
+	c.mu.Unlock()
+	if ok {
+		return false, nil
+	}
+	return true, c.Set(ctx, key, value, ttl)
+}
 
 // newFixtureServer serves the captured fixtures: GET /?s= search, the episode
 // page, and an mp4upload-style embed page (for the GetStream failover path).
@@ -58,7 +134,13 @@ func newRoutedProvider(t *testing.T, srv *httptest.Server) *Provider {
 	if err != nil {
 		t.Fatalf("parse fixture URL: %v", err)
 	}
-	hc := &http.Client{Timeout: 8 * time.Second, Transport: hostRouteTransport{target: target}}
+	hc := domain.NewBaseHTTPClient(logger.Default(),
+		domain.WithTransport(hostRouteTransport{target: target}),
+		domain.WithProvider(providerName),
+		domain.WithRetryWaitMin(1*time.Millisecond),
+		domain.WithRetryWaitMax(5*time.Millisecond),
+		domain.WithMaxRetries(0),
+	)
 	return New(Deps{BaseURL: srv.URL, SearchBase: srv.URL, HTTP: hc})
 }
 
@@ -136,6 +218,82 @@ func TestProvider_ListServers(t *testing.T) {
 	}
 }
 
+// countingRouteTransport reroutes every request to the fixture server
+// (preserving path/query) and counts how many times the episode page
+// (/hentai/...) is fetched, so a test can prove ListServers+GetStream share a
+// single episode-page GET (finding L697).
+type countingRouteTransport struct {
+	target  *url.URL
+	mu      sync.Mutex
+	episode int // count of /hentai/ episode-page fetches
+}
+
+func (t *countingRouteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.HasPrefix(req.URL.Path, "/hentai/") {
+		t.mu.Lock()
+		t.episode++
+		t.mu.Unlock()
+	}
+	req.URL.Scheme = t.target.Scheme
+	req.URL.Host = t.target.Host
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func (t *countingRouteTransport) episodeFetches() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.episode
+}
+
+// newCountingProvider builds a provider whose HTTP routes everything to the
+// fixture and counts episode-page fetches. A shared Cache lets the memo persist.
+func newCountingProvider(t *testing.T, srv *httptest.Server) (*Provider, *countingRouteTransport) {
+	t.Helper()
+	target, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse fixture URL: %v", err)
+	}
+	rt := &countingRouteTransport{target: target}
+	hc := domain.NewBaseHTTPClient(logger.Default(),
+		domain.WithTransport(rt),
+		domain.WithProvider(providerName),
+		domain.WithRetryWaitMin(1*time.Millisecond),
+		domain.WithRetryWaitMax(5*time.Millisecond),
+		domain.WithMaxRetries(0),
+	)
+	p := New(Deps{BaseURL: srv.URL, SearchBase: srv.URL, HTTP: hc, Cache: newInMemoryCache()})
+	return p, rt
+}
+
+// TestProvider_SharesEpisodePageFetch proves ListServers then GetStream for the
+// same episode fetch the episode page exactly ONCE — the parsed mirror list is
+// memoized (finding L697). Before the cache, each call independently re-fetched
+// EpisodeURL(episodeID) (count == 2).
+func TestProvider_SharesEpisodePageFetch(t *testing.T) {
+	srv := newFixtureServer(t)
+	defer srv.Close()
+	p, rt := newCountingProvider(t, srv)
+
+	const episodeID = "472-akiba-girls-episode-1"
+	if _, err := p.ListServers(context.Background(), "base", episodeID); err != nil {
+		t.Fatalf("ListServers: %v", err)
+	}
+	if _, err := p.GetStream(context.Background(), "base", episodeID, "", domain.CategorySub); err != nil {
+		t.Fatalf("GetStream: %v", err)
+	}
+	if got := rt.episodeFetches(); got != 1 {
+		t.Fatalf("episode page fetched %d times across ListServers+GetStream, want 1", got)
+	}
+
+	// A repeat GetStream within the TTL must add ZERO episode-page fetches.
+	if _, err := p.GetStream(context.Background(), "base", episodeID, "", domain.CategorySub); err != nil {
+		t.Fatalf("GetStream (repeat): %v", err)
+	}
+	if got := rt.episodeFetches(); got != 1 {
+		t.Fatalf("episode page fetched %d times after a cached repeat GetStream, want 1", got)
+	}
+}
+
 func TestProvider_resolveStream_Failover(t *testing.T) {
 	srv := newFixtureServer(t)
 	defer srv.Close()
@@ -153,6 +311,64 @@ func TestProvider_resolveStream_Failover(t *testing.T) {
 	}
 	if src.Referer != "https://www.mp4upload.com/" {
 		t.Fatalf("expected mp4upload referer, got %q", src.Referer)
+	}
+}
+
+// tagCapturingTransport routes every request to the fixture (like
+// hostRouteTransport) and records the scraper provider tag carried on each
+// outbound request's context, so the test can prove the BaseHTTPClient pipeline
+// (WithProvider egress tag) actually applies to 18anime's traffic.
+type tagCapturingTransport struct {
+	target *url.URL
+	mu     sync.Mutex
+	tags   []string
+}
+
+func (t *tagCapturingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.mu.Lock()
+	t.tags = append(t.tags, domain.ProviderFromContext(req.Context()))
+	t.mu.Unlock()
+	req.URL.Scheme = t.target.Scheme
+	req.URL.Host = t.target.Host
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// TestProvider_EgressProviderTag asserts that 18anime's upstream requests flow
+// through domain.BaseHTTPClient and carry the WithProvider("18anime") egress
+// tag (finding L690) — so the Activity-Register recorder pivots its egress rows
+// by provider+host. Before the migration, New() ignored any *BaseHTTPClient and
+// used a bare http.Client, leaving every request UNTAGGED (tag == "").
+func TestProvider_EgressProviderTag(t *testing.T) {
+	srv := newFixtureServer(t)
+	defer srv.Close()
+	target, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse fixture URL: %v", err)
+	}
+	rt := &tagCapturingTransport{target: target}
+	hc := domain.NewBaseHTTPClient(logger.Default(),
+		domain.WithTransport(rt),
+		domain.WithProvider(providerName),
+		domain.WithRetryWaitMin(1*time.Millisecond),
+		domain.WithRetryWaitMax(5*time.Millisecond),
+		domain.WithMaxRetries(0),
+	)
+	p := New(Deps{BaseURL: srv.URL, SearchBase: srv.URL, HTTP: hc})
+
+	// Exercise a real upstream fetch through fetch() (the BaseHTTPClient path).
+	if _, err := p.ListServers(context.Background(), "base", "472-akiba-girls-episode-1"); err != nil {
+		t.Fatalf("ListServers: %v", err)
+	}
+
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if len(rt.tags) == 0 {
+		t.Fatal("no outbound requests captured")
+	}
+	for i, tag := range rt.tags {
+		if tag != providerName {
+			t.Fatalf("request %d carried provider tag %q, want %q (18anime not flowing through BaseHTTPClient)", i, tag, providerName)
+		}
 	}
 }
 

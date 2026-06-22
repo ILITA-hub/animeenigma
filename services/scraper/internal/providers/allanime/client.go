@@ -49,6 +49,19 @@ import (
 // orchestrator's registry key. Backend slug = display label = "allanime".
 const providerName = "allanime"
 
+// streamGateBudget is the total in-call wall-clock budget for the GetStream
+// candidate-probe loop (finding L704). The loop probes candidate sources
+// sequentially via a real ranged GET each; without a ceiling a cold episode
+// with many embed sourceUrls serializes multiple multi-second probes. Mirrors
+// gogoanime's streamGateBudget. Warm repeats stay cheap (verdicts are cached).
+const streamGateBudget = 8 * time.Second
+
+// maxStreamProbes caps how many candidate sources GetStream probes in a single
+// call, a second guard alongside streamGateBudget so a pathological source list
+// can't burn the whole budget on probe setup. The list is priority-ordered, so
+// the most likely-playable sources are probed first.
+const maxStreamProbes = 6
+
 // stageNames is the canonical stage list. Alias of health.AllStages so any
 // stage rename in the health package flows here automatically.
 var stageNames = health.AllStages
@@ -506,15 +519,31 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	// (ok.ru, uns.bio, vidnest.io, …) DYNAMICALLY, with no host list. If the
 	// pinned server turns out to be an embed, we transparently fall back to the
 	// best playable source rather than dead-ending.
+	//
+	// The loop is bounded by an overall wall-clock budget (streamGateBudget) AND
+	// a probe count cap (maxStreamProbes) so a cold episode with many embed
+	// sourceUrls can't serialize multiple multi-second ranged GETs (finding
+	// L704). Candidates are priority-ordered, so the most likely-playable
+	// sources are probed first. Verdicts are cached, so warm repeats stay cheap.
 	candidates := orderCandidates(sources, pinID)
+	gateCtx, cancel := context.WithTimeout(ctx, streamGateBudget)
+	defer cancel()
 	var pick *sourceURL
 	var streamURL string
+	probes := 0
 	for i := range candidates {
 		u := resolveSourceURL(candidates[i])
 		if u == "" {
 			continue // not a fully-qualified http(s) URL
 		}
-		if p.classify(ctx, u) != sourceprobe.Stream {
+		if gateCtx.Err() != nil {
+			break // budget exhausted — stop probing
+		}
+		if probes >= maxStreamProbes {
+			break // probe cap reached — stop probing
+		}
+		probes++
+		if p.classify(gateCtx, u) != sourceprobe.Stream {
 			continue // embed page / unprobeable — skip
 		}
 		pick = &candidates[i]

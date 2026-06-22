@@ -524,10 +524,19 @@ func main() {
 	// 18+ group — a SEPARATE orchestrator (adultOrch) that is NEVER given any
 	// EN provider, so 18+ content cannot leak into the OurEnglish failover.
 	// Served on the /anime18/* route family. The 18anime provider needs no
-	// credentials/sidecar — a plain HTTP client + the real 18anime.me base.
+	// credentials/sidecar — just the real 18anime.me base.
 	adultOrch := service.NewOrchestrator(log, registry, cache)
 	adultOrch.SetProviderTimeout(cfg.ProviderTimeout)
-	anime18Provider := eighteenanime.New(eighteenanime.Deps{Log: log})
+	// 18anime uses the shared BaseHTTPClient like every other provider (finding
+	// L690): per-host RPS limiter + retry backoff + cookie jar + the egress
+	// recording transport, tagged WithProvider so its upstream traffic emits
+	// provider-pivotable egress-effect rows (it was previously the sole provider
+	// on a bare http.Client emitting ZERO egress rows).
+	anime18BaseHTTP := domain.NewBaseHTTPClient(log,
+		domain.WithProvider("18anime"),
+		domain.WithTransport(egressTransport),
+	)
+	anime18Provider := eighteenanime.New(eighteenanime.Deps{HTTP: anime18BaseHTTP, Cache: redisCache, Log: log})
 	if cfg.Providers.IsEnabled(anime18Provider.Name()) {
 		adultOrch.Register(anime18Provider)
 		log.Infow("registered provider (adult group)", "name", anime18Provider.Name())
@@ -673,4 +682,3 @@ func main() {
 
 	log.Info("server stopped")
 }
-

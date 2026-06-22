@@ -27,17 +27,21 @@ const (
 	userAgent      = "AnimeEnigma-StreamProbe/1.0"
 )
 
-// Probe walks master m3u8 → first variant → first-segment HEAD and
+// Probe walks master m3u8 → first variant → first-segment check and
 // returns a structured Result. masterURL MUST be an absolute http(s) URL.
 // headers are merged into the outbound request (Referer is the most
 // common caller-supplied header).
 //
-// Per-step timeout: 4s (master GET, variant GET, segment HEAD each).
+// The first-segment check tries a cheap HEAD first; HEAD-hostile CDNs that
+// reject HEAD with 403/405 fall back to a tiny ranged GET so a genuinely
+// playable stream is not false-negatively dropped (finding L718).
+//
+// Per-step timeout: 4s (master GET, variant GET, segment HEAD/ranged-GET each).
 // Total budget: ≤ 10s via ctx with timeout.
 //
 // SSRF defense: rejects RFC1918 + loopback + link-local destinations
 // BEFORE dialling. Ad-CDN host-suffix blocklist short-circuits BEFORE
-// the HEAD probe (so we never leak our IP to TikTok's ad CDN).
+// the segment probe (so we never leak our IP to TikTok's ad CDN).
 func Probe(ctx context.Context, masterURL string, headers http.Header) Result {
 	ctx, cancel := context.WithTimeout(ctx, totalBudget)
 	defer cancel()
@@ -126,13 +130,30 @@ func checkSegments(ctx context.Context, client *http.Client, body []byte, base *
 	if herr != nil {
 		return Result{Reason: ReasonCDNUnreachable, Sampled: sampled}
 	}
-	if status == http.StatusForbidden {
-		return classify403(first, sampled)
+	if status >= 200 && status < 300 {
+		// Cheap path: HEAD-friendly CDN confirmed the segment is fetchable.
+		return Result{Playable: true, Reason: ReasonPlayable, Sampled: sampled}
 	}
-	if status < 200 || status >= 300 {
+	// HEAD-hostile CDNs reject HEAD with 403 (some WAFs) or 405 (Method Not
+	// Allowed) even though a real ranged GET succeeds. Fall back to a tiny
+	// ranged GET for exactly those two statuses so we don't false-negatively
+	// drop a genuinely-playable stream (finding L718). All other non-2xx HEAD
+	// statuses keep the original status_403 verdict (no extra round-trip).
+	if status != http.StatusForbidden && status != http.StatusMethodNotAllowed {
 		return Result{Reason: ReasonStatus403, Sampled: sampled}
 	}
-	return Result{Playable: true, Reason: ReasonPlayable, Sampled: sampled}
+	gstatus, gerr := doRangeGet(ctx, client, first, headers)
+	if gerr != nil {
+		return Result{Reason: ReasonCDNUnreachable, Sampled: sampled}
+	}
+	if gstatus >= 200 && gstatus < 300 {
+		// 200 (Range ignored) or 206 (Partial Content) — the segment is fetchable.
+		return Result{Playable: true, Reason: ReasonPlayable, Sampled: sampled}
+	}
+	if gstatus == http.StatusForbidden {
+		return classify403(first, sampled)
+	}
+	return Result{Reason: ReasonStatus403, Sampled: sampled}
 }
 
 // newHTTPClient builds a client with per-step timeout 4s.
@@ -178,6 +199,33 @@ func doHead(ctx context.Context, client *http.Client, raw string, headers http.H
 		return 0, err
 	}
 	req.Header.Set("User-Agent", userAgent)
+	for k, vv := range headers {
+		for _, v := range vv {
+			req.Header.Add(k, v)
+		}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+	return resp.StatusCode, nil
+}
+
+// doRangeGet issues a tiny ranged GET (bytes 0-1023) and returns the status,
+// discarding the (capped) body. It is the HEAD-hostile-CDN fallback for the
+// first-segment check (finding L718): some CDNs/WAFs 403 or 405 a HEAD but
+// serve a ranged GET with 200/206. Cost stays low — at most 1 KiB is read.
+func doRangeGet(ctx context.Context, client *http.Client, raw string, headers http.Header) (int, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, perStepTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, raw, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Range", "bytes=0-1023")
 	for k, vv := range headers {
 		for _, v := range vv {
 			req.Header.Add(k, v)

@@ -4,8 +4,8 @@ import "testing"
 
 func TestReason_AllReasons_Length(t *testing.T) {
 	got := AllReasons()
-	if len(got) != 7 {
-		t.Fatalf("AllReasons() returned %d values; want 7", len(got))
+	if len(got) != 9 {
+		t.Fatalf("AllReasons() returned %d values; want 9", len(got))
 	}
 }
 
@@ -22,6 +22,8 @@ func TestReason_ValuesMatchExpectedTokens(t *testing.T) {
 		{"signed_url_expired", ReasonSignedURLExpired, "signed_url_expired"},
 		{"cdn_unreachable", ReasonCDNUnreachable, "cdn_unreachable"},
 		{"empty_response", ReasonEmptyResponse, "empty_response"},
+		{"decode_failed", ReasonDecodeFailed, "decode_failed"},
+		{"invalid_video", ReasonInvalidVideo, "invalid_video"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,6 +52,8 @@ func TestReason_AllReasons_DeclarationOrder(t *testing.T) {
 		ReasonSignedURLExpired,
 		ReasonCDNUnreachable,
 		ReasonEmptyResponse,
+		ReasonDecodeFailed,
+		ReasonInvalidVideo,
 	}
 	got := AllReasons()
 	if len(got) != len(want) {

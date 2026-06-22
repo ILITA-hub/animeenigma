@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -574,6 +575,70 @@ func TestEpisodeSourceURLs_ForeignID_NotFound(t *testing.T) {
 	_, err = p.EpisodeSourceURLs(context.Background(), "gogoanime-slug-no-colon", domain.CategorySub)
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+// TestGetStream_CandidateProbeBudget asserts the candidate-probe loop is bounded
+// by an overall wall-clock budget (finding L704). With many candidates whose
+// probe each sleeps multiple seconds, GetStream must return within ~the budget
+// (deadline-exceeded surfaced as not-playable) rather than serializing every
+// probe (N × sleep). Without the budget, this test would block for N × 2s.
+func TestGetStream_CandidateProbeBudget(t *testing.T) {
+	const (
+		nCandidates = 12
+		probeSleep  = 2 * time.Second
+	)
+	var probeCount int32
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, ".embed"):
+			atomic.AddInt32(&probeCount, 1)
+			// Sleep, but bail out the moment the probe's context is cancelled by
+			// the budget deadline so the handler doesn't outlive the test.
+			select {
+			case <-time.After(probeSleep):
+			case <-r.Context().Done():
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte("<!doctype html><html><body>embed</body></html>"))
+		default:
+			// GraphQL: N candidate sources, all embed pages (so the loop never
+			// short-circuits on a Stream verdict and must probe many).
+			var b strings.Builder
+			b.WriteString(`{"data":{"episode":{"episodeString":"1","sourceUrls":[`)
+			for i := 0; i < nCandidates; i++ {
+				if i > 0 {
+					b.WriteString(",")
+				}
+				fmt.Fprintf(&b, `{"sourceUrl":"%s/c%d.embed","sourceName":"S%d","priority":%d}`, srv.URL, i, i, nCandidates-i)
+			}
+			b.WriteString(`]}}}`)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(b.String()))
+		}
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+
+	start := time.Now()
+	_, err := p.GetStream(context.Background(), "", "frieren_show_id:1", "", domain.CategorySub)
+	elapsed := time.Since(start)
+
+	// All candidates are embeds, so no playable source exists → an error either
+	// way. The point is the loop must NOT serialize all N probes.
+	if err == nil {
+		t.Fatal("expected an error (all candidates are embed pages)")
+	}
+	// Budget is streamGateBudget (8s). Allow generous slack for scheduling, but
+	// it MUST be well under the unbounded N × probeSleep (= 24s).
+	const maxAllowed = streamGateBudget + 4*time.Second
+	if elapsed > maxAllowed {
+		t.Fatalf("GetStream took %v, want < %v (candidate loop not budget-bounded)", elapsed, maxAllowed)
+	}
+	if got := atomic.LoadInt32(&probeCount); int(got) >= nCandidates {
+		t.Fatalf("probed %d candidates (all of them); expected the budget/cap to stop short of %d", got, nCandidates)
 	}
 }
 

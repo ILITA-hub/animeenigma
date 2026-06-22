@@ -280,6 +280,77 @@ func TestProbe_SegmentHEAD_403(t *testing.T) {
 	}
 }
 
+// TestProbe_SegmentHEADHostile_RangedGET: the segment CDN is HEAD-hostile —
+// it returns 405 Method Not Allowed to HEAD but serves a 206 to a ranged GET
+// (finding L718). The probe must fall back to a ranged GET and classify the
+// segment Playable, rather than false-negatively dropping a working stream.
+func TestProbe_SegmentHEADHostile_RangedGET(t *testing.T) {
+	var headHits, getHits int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(readFixture(t, "playable_master.m3u8"))
+	})
+	mux.HandleFunc("/variant_720.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(readFixture(t, "playable_variant.m3u8"))
+	})
+	mux.HandleFunc("/seg/001.ts", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodHead:
+			atomic.AddInt32(&headHits, 1)
+			w.WriteHeader(http.StatusMethodNotAllowed) // 405 — HEAD-hostile CDN
+		case http.MethodGet:
+			atomic.AddInt32(&getHits, 1)
+			if r.Header.Get("Range") == "" {
+				t.Errorf("fallback GET must carry a Range header")
+			}
+			w.WriteHeader(http.StatusPartialContent) // 206 — ranged GET works
+		default:
+			http.Error(w, "unexpected", 400)
+		}
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	got := Probe(context.Background(), ts.URL+"/master.m3u8", nil)
+	if !got.Playable {
+		t.Fatalf("Playable=false; want true (405-on-HEAD must fall back to ranged GET). Result=%+v", got)
+	}
+	if got.Reason != ReasonPlayable {
+		t.Fatalf("Reason=%q; want %q", got.Reason, ReasonPlayable)
+	}
+	if atomic.LoadInt32(&headHits) != 1 {
+		t.Fatalf("HEAD hits=%d; want 1 (cheap HEAD attempted first)", headHits)
+	}
+	if atomic.LoadInt32(&getHits) != 1 {
+		t.Fatalf("GET hits=%d; want 1 (ranged GET fallback)", getHits)
+	}
+}
+
+// TestProbe_SegmentHEAD403_FallbackGET_SignedExpired: the segment returns 403 to
+// HEAD; the ranged-GET fallback URL carries an expired `?e=<epoch>` so the GET's
+// 403 routes through classify403 → signed_url_expired (finding L718 — the
+// fallback path must still distinguish expired signed URLs from generic 403s).
+func TestProbe_SegmentHEAD403_FallbackGET_SignedExpired(t *testing.T) {
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		// Media playlist whose single segment is an absolute URL with an expired
+		// signed-URL epoch query param (so classify403 sees the `?e=` token).
+		seg := srv.URL + "/seg/001.ts?e=1000000000"
+		_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\n" + seg + "\n#EXT-X-ENDLIST\n"))
+	})
+	mux.HandleFunc("/seg/001.ts", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(403) // both HEAD and GET return 403
+	})
+	srv = httptest.NewServer(mux)
+	defer srv.Close()
+
+	got := Probe(context.Background(), srv.URL+"/master.m3u8", nil)
+	if got.Reason != ReasonSignedURLExpired {
+		t.Fatalf("Reason=%q; want %q (HEAD-403 fallback GET must still classify signed-url-expired). Result=%+v", got.Reason, ReasonSignedURLExpired, got)
+	}
+}
+
 // TestProbe_RelativeSegmentURI: variant uses relative /seg/001.ts path.
 // resolveURI should join it with the variant's base host so the HEAD
 // hits the same test server. End-to-end this is the same as the playable
@@ -339,7 +410,20 @@ func TestProbe_AllReasonsCovered(t *testing.T) {
 		ReasonCDNUnreachable:   "TestProbe_CDNUnreachable",
 		ReasonEmptyResponse:    "TestProbe_EmptyResponse",
 	}
+	// decode_failed / invalid_video are part of the public Reason enum but are
+	// NOT emitted by the Probe() primitive itself — they are classified by
+	// higher-level consumers (the analytics playability validator, which decodes
+	// the actual video bytes). The HLS probe in this package never returns them,
+	// so there is no TestProbe_* case to map; they are covered by the consumer's
+	// own tests, not this primitive's.
+	consumerEmitted := map[Reason]bool{
+		ReasonDecodeFailed: true,
+		ReasonInvalidVideo: true,
+	}
 	for _, r := range AllReasons() {
+		if consumerEmitted[r] {
+			continue
+		}
 		if _, ok := covered[r]; !ok {
 			t.Fatalf("Reason %q not covered by any TestProbe_* test", r)
 		}

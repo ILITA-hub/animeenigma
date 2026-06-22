@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
@@ -21,9 +22,15 @@ import (
 const providerName = "18anime"
 
 // Deps is the constructor input for New(). All fields optional — sensible
-// defaults are applied (real 18anime.me base, 8s HTTP client, default logger).
+// defaults are applied (real 18anime.me base, shared BaseHTTPClient, default
+// logger).
 type Deps struct {
-	HTTP       *http.Client
+	// HTTP is the shared scraper HTTP client. Like every other provider, 18anime
+	// uses domain.BaseHTTPClient so the per-host RPS limiter, retryablehttp
+	// backoff, cookie jar, and WithProvider egress-recording transport all apply
+	// (finding L690). Defaults to a fresh client tagged WithProvider("18anime").
+	HTTP       *domain.BaseHTTPClient
+	Cache      cache.Cache // optional; memoizes the parsed per-episode mirror list (finding L697). nil → cache-less.
 	Log        *logger.Logger
 	BaseURL    string // override for tests (search + page fetches); defaults to baseURL
 	SearchBase string // override for tests (search only); defaults to BaseURL
@@ -31,7 +38,8 @@ type Deps struct {
 
 // Provider implements domain.Provider for 18anime.me.
 type Provider struct {
-	http       *http.Client
+	http       *domain.BaseHTTPClient
+	cache      *cacheLayer
 	base       string
 	searchBase string
 	log        *logger.Logger
@@ -42,11 +50,11 @@ type Provider struct {
 
 // New constructs the 18anime provider.
 func New(d Deps) *Provider {
-	if d.HTTP == nil {
-		d.HTTP = &http.Client{Timeout: 8 * time.Second}
-	}
 	if d.Log == nil {
 		d.Log = logger.Default()
+	}
+	if d.HTTP == nil {
+		d.HTTP = domain.NewBaseHTTPClient(d.Log, domain.WithProvider(providerName))
 	}
 	if d.BaseURL == "" {
 		d.BaseURL = baseURL
@@ -56,6 +64,7 @@ func New(d Deps) *Provider {
 	}
 	return &Provider{
 		http:       d.HTTP,
+		cache:      newCacheLayer(d.Cache),
 		base:       strings.TrimRight(d.BaseURL, "/"),
 		searchBase: strings.TrimRight(d.SearchBase, "/"),
 		log:        d.Log,
@@ -76,7 +85,7 @@ func (p *Provider) fetch(ctx context.Context, u, referer string) (string, error)
 	if referer != "" {
 		req.Header.Set("Referer", referer)
 	}
-	resp, err := p.http.Do(req)
+	resp, err := p.http.Do(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -98,7 +107,7 @@ func (p *Provider) searchHTML(ctx context.Context, query string) (string, error)
 		return "", err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := p.http.Do(req)
+	resp, err := p.http.Do(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -167,16 +176,33 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 	return eps, nil
 }
 
+// episodeMirrors returns the parsed mirror list for an episode, fetching the
+// episode page at most once per TTL window. ListServers and GetStream share
+// this memo so a single playback no longer double-fetches the episode page
+// (finding L697). Mirror links rotate, so the cache TTL is intentionally short.
+func (p *Provider) episodeMirrors(ctx context.Context, episodeID string) ([]Mirror, error) {
+	if mirrors, ok := p.cache.getMirrors(ctx, episodeID); ok {
+		return mirrors, nil
+	}
+	page, err := p.fetch(ctx, EpisodeURL(episodeID), p.base+"/")
+	if err != nil {
+		return nil, err
+	}
+	mirrors := parseEpisodeMirrors(page)
+	p.cache.setMirrors(ctx, episodeID, mirrors)
+	return mirrors, nil
+}
+
 // ListServers fetches the episode page and exposes each supported mirror
 // (mp4upload, turbovid) as a server in failover order.
 func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string) ([]domain.Server, error) {
-	page, err := p.fetch(ctx, EpisodeURL(episodeID), p.base+"/")
+	mirrors, err := p.episodeMirrors(ctx, episodeID)
 	if err != nil {
 		p.markStage(health.StageServers, err)
 		return nil, err
 	}
 	var servers []domain.Server
-	for _, m := range supportedMirrors(parseEpisodeMirrors(page)) {
+	for _, m := range supportedMirrors(mirrors) {
 		id := serverIDFor(m.Link)
 		servers = append(servers, domain.Server{ID: id, Name: id, Type: domain.CategorySub})
 	}
@@ -191,12 +217,12 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 // GetStream resolves a playable source for an episode. An empty serverID runs
 // the mp4upload->turbovid failover; a non-empty serverID pins that mirror.
 func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverID string, _ domain.Category) (*domain.Stream, error) {
-	page, err := p.fetch(ctx, EpisodeURL(episodeID), p.base+"/")
+	mirrors, err := p.episodeMirrors(ctx, episodeID)
 	if err != nil {
 		p.markStage(health.StageStream, err)
 		return nil, err
 	}
-	src, err := p.resolveStream(ctx, parseEpisodeMirrors(page), serverID)
+	src, err := p.resolveStream(ctx, mirrors, serverID)
 	if err != nil {
 		p.markStage(health.StageStream, err)
 		return nil, err
