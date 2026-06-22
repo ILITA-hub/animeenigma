@@ -189,13 +189,17 @@ the frontend whether the three-phase loader's Phase 3 ran (SCRAPER-HEAL-04/07).
 the constraint is client identity (JA3 + HTTP/2 fingerprint + JS engine).
 
 **How it's triggered:** The `engine` column in `stream_providers` (catalog DB)
-controls whether gogoanime uses the Go scraper or the sidecar. When
-`engine = "browser"`, the Go scraper calls `sidecar.New(cfg.StealthScraperURL)`
-to delegate stream extraction (`main.go:305–311`):
+controls whether a provider uses the Go scraper or the sidecar. Both
+**gogoanime** and **nineanime** support `engine = "browser"`. When set, the Go
+scraper calls `sidecar.New(cfg.StealthScraperURL)` to delegate stream extraction
+(`main.go:305–311` for gogoanime, `main.go:446–449` for nineanime):
 
 ```go
 gogoUseBrowser := func() bool {
     return cfg.Providers.EngineOf("gogoanime") == config.EngineBrowser
+}
+nineUseBrowser := func() bool {
+    return cfg.Providers.EngineOf("nineanime") == config.EngineBrowser
 }
 ```
 
@@ -317,12 +321,15 @@ On each `RunOnce` call:
    The dominant non-playable reason (highest count; lexicographic tie-break)
    labels Degraded/Down verdicts.
 
-5. **Sinks** (`probe/reporter.go`):
+5. **Sinks** (`probe/reporter.go`, metric names from `libs/metrics/probe.go`):
    - Prometheus gauge `probe_provider_up{provider}` (1.0 / 0.5 / 0.0).
    - Prometheus counter `probe_runs_total{provider,slot,server,result,reason}`.
    - Prometheus gauge `probe_last_run_timestamp` (unix seconds of last run).
+   - Prometheus gauge `probe_provider_status{provider,status,reason}` (value
+     always 1; info-style rollup label series; reset each run to avoid stale
+     label cardinality).
    - ClickHouse table `analytics.probe_runs` (90-day TTL MergeTree):
-     `(run_ts, provider, anime_uuid, slot, server, stage, reason, playable)`.
+     `(run_ts, provider, anime_uuid, anime_name, slot, server, stage, reason, playable)`.
 
 The `InMemoryHealthCache` infrastructure (`services/scraper/internal/health/`)
 exists and is wired into the orchestrator's skip-unhealthy check
