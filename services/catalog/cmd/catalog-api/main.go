@@ -30,6 +30,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/capability"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/scraperprovider"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/subprobe"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/client"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/transport"
@@ -431,7 +432,21 @@ func main() {
 	idMapClient := idmapping.NewClient(
 		idmapping.WithTransport(tracing.WrapTransport(idmapping.NewIPv4Transport())),
 	)
-	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, idMapClient, animeRepo, redisCache, log)
+	// Active subtitle-provider probe (subprobe): pings the configured providers
+	// on a scheduler-fired cron and records up/degraded/down verdicts the
+	// aggregator overlays as provider_health. staleAfter = 15m (3× the 5-min
+	// cron) so a missed run downgrades to "unknown" rather than a stale "up".
+	subHealthStore := subprobe.NewStore(15 * time.Minute)
+	subPingers := map[string]subprobe.Pinger{}
+	if jimakuClient.IsConfigured() {
+		subPingers["jimaku"] = jimakuClient
+	}
+	if openSubsClient.IsConfigured() {
+		subPingers["opensubtitles"] = openSubsClient
+	}
+	subtitleProbe := subprobe.New(subHealthStore, subPingers, 2*time.Second, 8*time.Second, log)
+	internalSubtitleProbeHandler := handler.NewInternalSubtitleProbeHandler(subtitleProbe, log)
+	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, idMapClient, animeRepo, redisCache, subHealthStore, log)
 	subtitlesHandler := handler.NewSubtitlesHandler(subsAggregator, log)
 
 	// Workstream hero-spotlight, v1.0 Phase 3 (Plan 03-04) — hero spotlight
@@ -493,7 +508,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

@@ -28,6 +28,7 @@ func NewRouter(
 	internalEpisodesValidateHandler *handler.InternalEpisodesValidateHandler,
 	internalScraperProvidersHandler *handler.InternalScraperProvidersHandler,
 	internalProbeHandler *handler.InternalProbeHandler,
+	internalSubtitleProbeHandler *handler.InternalSubtitleProbeHandler,
 	spotlightHandler *handler.SpotlightHandler,
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
 	capabilitiesHandler *handler.CapabilitiesHandler,
@@ -97,6 +98,10 @@ func NewRouter(
 	// to catalog UUIDs). Same gateway-non-routing model as the endpoints above.
 	if internalProbeHandler != nil {
 		r.Get("/internal/probe/ae-targets", internalProbeHandler.AeTargets)
+	}
+
+	if internalSubtitleProbeHandler != nil {
+		r.Post("/internal/subtitle-probe/run", internalSubtitleProbeHandler.Run)
 	}
 
 	// Anidle guess-game pool (spec 2026-06-15) — Docker-network only.
