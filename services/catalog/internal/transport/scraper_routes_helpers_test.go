@@ -16,13 +16,13 @@ type stubScraperSvc struct {
 	err    error
 }
 
-func (s *stubScraperSvc) GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error) {
+func (s *stubScraperSvc) GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error) {
 	return s.status, s.body, s.err
 }
-func (s *stubScraperSvc) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string) (int, []byte, error) {
+func (s *stubScraperSvc) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string, exclusive bool) (int, []byte, error) {
 	return s.status, s.body, s.err
 }
-func (s *stubScraperSvc) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string) (int, []byte, error) {
+func (s *stubScraperSvc) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
 	return s.status, s.body, s.err
 }
 func (s *stubScraperSvc) GetScraperHealth(ctx context.Context) (int, []byte, error) {
