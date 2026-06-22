@@ -6,27 +6,41 @@
 
 ## Problem
 
-Subtitle providers (Jimaku especially — known to go down intermittently) have **no
-active health signal**. The aePlayer-subtitles observability spec (still pending)
-adds only *passive* uptime: `catalog_subtitle_provider_up` would be derived from
-real `/subtitles/all` resolve traffic. Passive metrics go **blind with no traffic** —
-a Jimaku outage at 4am won't register until someone opens the subtitle picker.
+Subtitle providers (Jimaku especially — known to go down intermittently) have only a
+**passive** health signal today. The passive observability **already shipped** to
+origin/main (commits `a8460701`, `0cd0c3ea`, `f990792d`, `fe60922e`): `libs/metrics/subtitles.go`
+emits `catalog_subtitle_provider_up{provider}`, `catalog_subtitle_resolve_total`, and
+`catalog_subtitle_resolve_duration_seconds` from `SubsAggregator.FetchAll`
+(`RecordSubtitleResolve`), and `docker/grafana/dashboards/subtitle-health.json` renders
+them. The aggregator response already carries `providers_down`, and `OtherSubsPanel.vue`
+already shows a passive "some sources didn't respond" note.
 
-We want an active probe that hits a cheap provider endpoint on a fixed interval so an
-outage is visible immediately regardless of traffic, **and** a user-facing note in the
-subtitle picker when a provider is currently degraded/down.
+The gap: passive metrics are **driven only by real `/subtitles/all` traffic**, so they go
+**blind with no traffic** — a Jimaku outage at 4am won't register until someone opens the
+subtitle picker. We want an *active* probe that hits a cheap provider endpoint on a fixed
+interval so an outage is visible immediately regardless of traffic, **and** a user-facing
+note in the subtitle picker when a provider is currently degraded/down (driven by the
+probe's last-known verdict, merged with the existing passive `providers_down`).
+
+> Correction note: an earlier draft of this spec was written against a stale base tree and
+> wrongly assumed passive observability did not exist yet. It does. This feature is purely
+> additive: a new `probe_`-prefixed gauge family, an extension of the existing dashboard,
+> and a `provider_health` overlay on the subs response.
 
 ## Scope (locked)
 
 In scope:
 - Active probe in **catalog** (reuses existing Jimaku + OpenSubtitles clients + API keys).
-- Prometheus gauge mirroring the video `probe_provider_up` pattern, + latency + last-run.
-- Grafana panel (new `subtitle-health` dashboard).
-- FE degraded note in the subtitle picker, driven by the probe's last-known verdict.
+- New `probe_`-prefixed Prometheus gauges mirroring the video `probe_provider_up` pattern,
+  + latency + last-run. Kept DISTINCT from the existing passive `catalog_subtitle_*` family.
+- **Extend** the existing `docker/grafana/dashboards/subtitle-health.json` with active-probe
+  panels (alongside the passive panels already there).
+- FE degraded note in the subtitle picker, driven by the probe's last-known verdict, merged
+  with the existing passive `providers_down`.
 
 Out of scope (this iteration):
 - Alert rule for "Jimaku down > N min" (deferred; owner chose "Probe + Grafana panel").
-- The passive `catalog_subtitle_provider_up` gauge / the pending aeplayer-subtitles spec.
+- Any change to the existing passive `catalog_subtitle_*` metrics (they stay as-is).
 
 ## Decisions (locked)
 
@@ -70,9 +84,8 @@ Out of scope (this iteration):
   returns `204` on success.
 - Scheduler: new `SubtitleProbeTriggerJob` (clone of `ProbeTriggerJob`) POSTs that endpoint.
   - New cron config `SUBTITLE_PROBE_CRON`, default `*/5 * * * *`.
-  - Needs catalog's internal base URL in scheduler config: add `CATALOG_INTERNAL_URL`
-    (default `http://catalog:8081`) to `services/scheduler/internal/config`. (Confirm during
-    planning whether an equivalent already exists; reuse if so.)
+  - **Reuse** the existing `JobsConfig.CatalogServiceURL` (default `http://catalog:8081`) —
+    confirmed present in `services/scheduler/internal/config/config.go`. No new URL var.
   - Registered in `services/scheduler/internal/service/job.go` + wired in
     `cmd/scheduler-api/main.go` exactly like the playback probe (metrics wrapper, last-run).
   - Short request timeout (the probe is two cheap HTTP pings, not a stream sweep) — ~30s.
@@ -113,12 +126,15 @@ Frontend — `OtherSubsPanel.vue`:
 - New i18n keys under `player.otherSubs.*` in `en.json`, `ru.json`, `ja.json` (locale
   parity test enforces all three).
 
-### 5. Grafana — `subtitle-health` dashboard
+### 5. Grafana — extend the existing `subtitle-health` dashboard
 
-- New dashboard JSON under the existing Grafana provisioning dir (alongside the playback
-  probe / bandwidth dashboards).
-- Panels: per-provider up-status stat (`probe_subtitle_provider_up`), latency timeseries
-  (`probe_subtitle_latency_seconds`), and a "last run" stat (`probe_subtitle_last_run_timestamp`).
+`docker/grafana/dashboards/subtitle-health.json` already exists (panels: Per-Provider
+Uptime, Resolve Rate by Status, Resolve Latency p50/p95, Tracks Returned, Providers
+Currently Down — all passive `catalog_subtitle_*`). Datasource `${DS_PROMETHEUS}`, panels
+on a 24-col grid. **Add** active-probe panels below the existing ones:
+- "Active Probe — Per-Provider Status" timeseries (`probe_subtitle_provider_up`).
+- "Active Probe — Latency" timeseries (`probe_subtitle_latency_seconds`).
+- "Active Probe — Last Run" stat (`probe_subtitle_last_run_timestamp`, unit dateTimeFromNow).
 - No alert rule this iteration.
 
 ## Data flow
@@ -187,9 +203,10 @@ confirm a healthy run flips it back to `1`.
 - `services/catalog/internal/transport/router.go` — internal route.
 - `services/catalog/cmd/catalog-api/main.go` — wire probe + store into aggregator + handler.
 - `services/scheduler/internal/jobs/subtitle_probe_trigger.go` (+ test) — new.
-- `services/scheduler/internal/config/config.go` — `SUBTITLE_PROBE_CRON`, `CATALOG_INTERNAL_URL`.
+- `services/scheduler/internal/config/config.go` — `SUBTITLE_PROBE_CRON` (reuse `CatalogServiceURL`).
 - `services/scheduler/internal/service/job.go` + `cmd/scheduler-api/main.go` — register.
-- `frontend/web/src/components/player/OtherSubsPanel.vue` (+ spec).
+- `frontend/web/src/components/player/OtherSubsPanel.vue` (+ `OtherSubsPanel.spec.ts`).
+- `frontend/web/src/types/raw.ts` — `ProviderHealth` + `provider_health` on `GroupedSubs`.
 - `frontend/web/src/locales/{en,ru,ja}.json` — note keys.
-- Grafana provisioning — `subtitle-health` dashboard JSON.
-- `docker-compose` / env docs — `SUBTITLE_PROBE_CRON`, `CATALOG_INTERNAL_URL` defaults.
+- `docker/grafana/dashboards/subtitle-health.json` — EXTEND with active-probe panels.
+- `docker/docker-compose.yml` (scheduler env) + CLAUDE.md env docs — `SUBTITLE_PROBE_CRON`.
