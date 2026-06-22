@@ -67,6 +67,31 @@ func TestCORS_EmptyStringsInOriginList(t *testing.T) {
 	}
 }
 
+// TestCORS_WildcardDoesNotAllowCredentials locks the fix for the
+// reflected-origin + Allow-Credentials:true vulnerability: a "*" allow-list
+// must emit a literal "Access-Control-Allow-Origin: *" WITHOUT
+// Access-Control-Allow-Credentials. Reflecting an arbitrary request Origin
+// together with credentials lets any website make cookie-bearing cross-origin
+// requests against the API.
+func TestCORS_WildcardDoesNotAllowCredentials(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := CORS([]string{"*"})(inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if got := w.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Errorf("wildcard CORS must NOT set Allow-Credentials; got %q", got)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("wildcard CORS must set Allow-Origin: * (not reflect the request origin); got %q", got)
+	}
+}
+
 func TestCORS_SpecificOriginAllowed(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

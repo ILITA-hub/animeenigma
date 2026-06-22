@@ -80,22 +80,32 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 
 			// Skip CORS headers entirely when no origins are configured
 			if len(filtered) > 0 {
-				// Check if origin is allowed
-				allowed := false
+				wildcard, exact := false, false
 				for _, o := range filtered {
-					if o == "*" || o == origin {
-						allowed = true
-						break
+					switch o {
+					case "*":
+						wildcard = true
+					case origin:
+						exact = true
 					}
 				}
 
-				if allowed && origin != "" {
+				switch {
+				case exact && origin != "":
+					// Explicitly allow-listed origin → safe to reflect it AND
+					// grant credentials. Vary:Origin keeps caches correct.
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
-					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
-					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Expose-Headers", "X-Token-Expired, X-Prefs-Version")
-					w.Header().Set("Access-Control-Max-Age", "86400")
+					w.Header().Set("Vary", "Origin")
+					setCORSCommonHeaders(w)
+				case wildcard:
+					// Wildcard: allow any origin but WITHOUT credentials. Never
+					// pair a reflected/"*" origin with Allow-Credentials:true —
+					// that lets ANY site make cookie-bearing cross-origin
+					// requests against the API. Credentialed cross-origin access
+					// must be granted via an explicit origin entry above.
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+					setCORSCommonHeaders(w)
 				}
 			}
 
@@ -107,6 +117,15 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// setCORSCommonHeaders sets the method/header/expose/max-age CORS headers
+// shared by the credentialed (exact-origin) and wildcard branches.
+func setCORSCommonHeaders(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Token-Expired, X-Prefs-Version")
+	w.Header().Set("Access-Control-Max-Age", "86400")
 }
 
 // SecurityHeaders adds security-related HTTP headers to all responses.
