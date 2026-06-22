@@ -18,6 +18,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/subprobe"
 )
 
 // animeRepoForSubs is a narrow interface for the repo methods used by SubsAggregator.
@@ -46,6 +47,7 @@ type SubsAggregator struct {
 	idmap     *idmapping.Client
 	animeRepo animeRepoForSubs
 	cache     *cache.RedisCache
+	health    HealthSnapshotter
 	log       *logger.Logger
 }
 
@@ -56,6 +58,7 @@ func NewSubsAggregator(
 	idMapClient *idmapping.Client,
 	animeRepo *repo.AnimeRepository,
 	redisCache *cache.RedisCache,
+	health HealthSnapshotter,
 	log *logger.Logger,
 ) *SubsAggregator {
 	return &SubsAggregator{
@@ -64,8 +67,24 @@ func NewSubsAggregator(
 		idmap:     idMapClient,
 		animeRepo: animeRepo,
 		cache:     redisCache,
+		health:    health,
 		log:       log,
 	}
+}
+
+// HealthSnapshotter exposes the active subtitle probe's latest per-provider
+// verdict. Satisfied by *subprobe.Store. Nil-safe: a nil snapshotter overlays
+// nothing.
+type HealthSnapshotter interface {
+	Snapshot() map[string]subprobe.Health
+}
+
+// ProviderHealth is one provider's surfaced health on the response. Only
+// degraded/down providers are included (the FE shows a note for those only).
+type ProviderHealth struct {
+	Provider  string `json:"provider"`
+	Status    string `json:"status"`
+	LatencyMS int64  `json:"latency_ms,omitempty"`
 }
 
 // SubtitleTrack is one subtitle file in the aggregated response.
@@ -80,9 +99,53 @@ type SubtitleTrack struct {
 
 // AggregateResponse is the handler payload.
 type AggregateResponse struct {
-	Languages     map[string][]SubtitleTrack `json:"languages"`
-	Episode       int                        `json:"episode"`
-	ProvidersDown []string                   `json:"providers_down,omitempty"`
+	Languages      map[string][]SubtitleTrack `json:"languages"`
+	Episode        int                        `json:"episode"`
+	ProvidersDown  []string                   `json:"providers_down,omitempty"`
+	ProviderHealth []ProviderHealth            `json:"provider_health,omitempty"`
+}
+
+// overlayHealth injects the active probe's verdict (merged with this request's
+// passive ProvidersDown) onto the response. It is called AFTER the Redis cache
+// get/set so health is always fresh and never frozen into a cached body. Only
+// degraded/down providers are surfaced (the FE shows a note for those only);
+// "down" (probe or passive) always wins over "degraded"/"up".
+func (s *SubsAggregator) overlayHealth(resp *AggregateResponse) {
+	if s.health == nil {
+		return
+	}
+	snap := s.health.Snapshot()
+	passiveDown := map[string]bool{}
+	for _, p := range resp.ProvidersDown {
+		passiveDown[p] = true
+	}
+	providers := map[string]bool{}
+	for p := range snap {
+		providers[p] = true
+	}
+	for p := range passiveDown {
+		providers[p] = true
+	}
+	out := make([]ProviderHealth, 0, len(providers))
+	for p := range providers {
+		st := subprobe.StatusUnknown
+		var lat int64
+		if h, ok := snap[p]; ok {
+			st = h.Status
+			lat = h.LatencyMS
+		}
+		if passiveDown[p] {
+			st = subprobe.StatusDown // worse-wins: a live failure this request beats any milder probe verdict
+		}
+		if st == subprobe.StatusDegraded || st == subprobe.StatusDown {
+			out = append(out, ProviderHealth{Provider: p, Status: string(st), LatencyMS: lat})
+		}
+	}
+	if len(out) == 0 {
+		return
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Provider < out[j].Provider })
+	resp.ProviderHealth = out
 }
 
 // FetchAll runs both providers in parallel and returns the merged result.
@@ -94,6 +157,7 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 	cacheKey := s.cacheKey(animeID, episode, langs)
 	var cached AggregateResponse
 	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		s.overlayHealth(&cached)
 		return &cached, nil
 	}
 
@@ -187,6 +251,7 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 
 	dedupe(resp.Languages)
 	_ = s.cache.Set(ctx, cacheKey, resp, subsCacheTTL(resp))
+	s.overlayHealth(resp)
 	return resp, nil
 }
 
