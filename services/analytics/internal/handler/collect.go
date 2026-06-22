@@ -174,7 +174,7 @@ func (h *CollectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ev := domain.Event{
 			EventID:     uuid.NewString(),
 			EventType:   domain.EventType(we.EventType),
-			EventName:   we.EventName,
+			EventName:   capString(we.EventName), // audit #1: bound length/cardinality (LowCardinality CH column)
 			AnonymousID: env.AnonymousID,
 			UserID:      env.UserID,
 			SessionID:   env.SessionID,

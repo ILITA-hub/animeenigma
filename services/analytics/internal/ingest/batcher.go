@@ -109,7 +109,10 @@ func (b *Batcher) run() {
 }
 
 func (b *Batcher) flush(events []domain.Event) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// 30s to match the ClickHouse store's max_execution_time:60 budget — a 5s
+	// flush deadline used to cancel batches the driver was configured to allow
+	// far longer for, silently dropping them under burst (audit #3).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	batch := make([]domain.Event, len(events))

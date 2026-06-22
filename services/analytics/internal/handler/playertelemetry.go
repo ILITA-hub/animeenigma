@@ -86,8 +86,14 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	now := time.Now().UTC()
 
 	for _, we := range events {
-		// Skip events with empty provider or unknown kind.
+		// Skip events with empty/unknown provider or unknown kind. The provider
+		// becomes the source-ranking GROUP BY target, so it MUST be whitelisted
+		// to stop an anonymous beacon injecting ranking rows (audit #2).
 		if we.Provider == "" {
+			continue
+		}
+		provider := whitelistProvider(we.Provider)
+		if provider == "" {
 			continue
 		}
 		var effectKind string
@@ -125,7 +131,7 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 		// Pack contextual dimensions into Properties JSON.
 		propMap := map[string]any{
-			"outcome":          we.Outcome,
+			"outcome":          capString(we.Outcome),
 			"reached_playback": we.ReachedPlayback,
 			"audio":            audio,
 			"lang":             lang,
@@ -144,7 +150,7 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 			// Effect dimensions
 			EffectKind: effectKind,
-			Target:     capString(we.Provider),
+			Target:     provider,
 			TargetKind: "provider",
 			AnimeID:    animeID,
 			DurationMS: durationMS,
