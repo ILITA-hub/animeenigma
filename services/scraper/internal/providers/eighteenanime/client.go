@@ -5,6 +5,7 @@
 package eighteenanime
 
 import (
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -102,16 +103,47 @@ func parseEpisodeMirrors(html string) []Mirror {
 	return out
 }
 
-// supportedServerOrder is the failover order of supported embed hosts; the
-// server ID exposed to clients is the host token ("mp4upload" / "turbovid").
-var supportedServerOrder = []string{"mp4upload", "turbovid"}
+// supportedServer maps a canonical embed host to its client-facing server ID
+// and extractor. Matching is by PARSED hostname (equality or strict subdomain),
+// never substring over the full URL — so https://mp4upload.evil.com/ or
+// https://x/?turbovid=1 do not pretend to match (finding #52).
+type supportedServer struct {
+	id        string // server ID exposed to clients ("mp4upload" / "turbovid")
+	host      string // canonical embed host
+	extractor func(string) (*ExtractedSource, error)
+}
+
+// supportedServers is the mp4upload->turbovid failover order.
+var supportedServers = []supportedServer{
+	{id: "mp4upload", host: "mp4upload.com", extractor: extractMP4Upload},
+	{id: "turbovid", host: "turbovidhls.com", extractor: extractTurbovid},
+}
+
+// hostMatches reports whether link's parsed host equals, or is a strict
+// subdomain of, want — rejecting non-http(s) schemes up front. Mirrors the
+// embeds/kwik.go Matches() policy so mirror selection can't be spoofed by a
+// host token appearing in the path/query or as a fake subdomain.
+func hostMatches(link, want string) bool {
+	u, err := url.Parse(link)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return false
+	}
+	return host == want || strings.HasSuffix(host, "."+want)
+}
 
 // supportedMirrors filters mirrors to supported embed hosts, in failover order.
 func supportedMirrors(all []Mirror) []Mirror {
 	var out []Mirror
-	for _, host := range supportedServerOrder {
+	for _, srv := range supportedServers {
 		for _, m := range all {
-			if strings.Contains(m.Link, host) {
+			if hostMatches(m.Link, srv.host) {
 				out = append(out, m)
 			}
 		}
@@ -136,23 +168,21 @@ func baseSlugAndEpisode(slug string) (string, int) {
 	return s, ep
 }
 
-// extractorFor picks an extractor function by embed host.
+// extractorFor picks an extractor function by parsed embed host.
 func extractorFor(link string) func(string) (*ExtractedSource, error) {
-	switch {
-	case strings.Contains(link, "mp4upload"):
-		return extractMP4Upload
-	case strings.Contains(link, "turbovid"):
-		return extractTurbovid
-	default:
-		return nil
+	for _, srv := range supportedServers {
+		if hostMatches(link, srv.host) {
+			return srv.extractor
+		}
 	}
+	return nil
 }
 
-// serverIDFor returns the host-token server ID for a mirror link.
+// serverIDFor returns the server ID for a mirror link, matched by parsed host.
 func serverIDFor(link string) string {
-	for _, host := range supportedServerOrder {
-		if strings.Contains(link, host) {
-			return host
+	for _, srv := range supportedServers {
+		if hostMatches(link, srv.host) {
+			return srv.id
 		}
 	}
 	return ""

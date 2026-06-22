@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 )
@@ -34,6 +36,30 @@ func newFixtureServer(t *testing.T) *httptest.Server {
 
 func newTestProvider(base string) *Provider {
 	return New(Deps{BaseURL: base, SearchBase: base})
+}
+
+// hostRouteTransport sends every request to the fixture server, preserving
+// path/query. It lets a test use a real embed host (mp4upload.com) in a Mirror
+// link — which strict parsed-host matching now requires — while the actual
+// fetch still lands on the local fixture's /embed- handler.
+type hostRouteTransport struct{ target *url.URL }
+
+func (t hostRouteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.URL.Scheme = t.target.Scheme
+	req.URL.Host = t.target.Host
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// newRoutedProvider builds a test provider whose HTTP client routes embed
+// fetches to the fixture regardless of the request host.
+func newRoutedProvider(t *testing.T, srv *httptest.Server) *Provider {
+	t.Helper()
+	target, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse fixture URL: %v", err)
+	}
+	hc := &http.Client{Timeout: 8 * time.Second, Transport: hostRouteTransport{target: target}}
+	return New(Deps{BaseURL: srv.URL, SearchBase: srv.URL, HTTP: hc})
 }
 
 func TestProvider_Name(t *testing.T) {
@@ -113,11 +139,11 @@ func TestProvider_ListServers(t *testing.T) {
 func TestProvider_resolveStream_Failover(t *testing.T) {
 	srv := newFixtureServer(t)
 	defer srv.Close()
-	p := newTestProvider(srv.URL)
+	p := newRoutedProvider(t, srv)
 
-	// Mirror link must contain the "mp4upload" host token (supportedMirrors
-	// filters on it) AND be fetchable from the fixture server (/embed- path).
-	mirrors := []Mirror{{Link: srv.URL + "/embed-mp4upload-x.html", Quality: "FullHD"}}
+	// Real embed host so strict parsed-host matching classifies it as mp4upload;
+	// the routed client sends the actual fetch to the fixture's /embed- handler.
+	mirrors := []Mirror{{Link: "https://www.mp4upload.com/embed-mp4upload-x.html", Quality: "FullHD"}}
 	src, err := p.resolveStream(context.Background(), mirrors, "")
 	if err != nil {
 		t.Fatalf("resolveStream: %v", err)
@@ -135,8 +161,8 @@ func TestProvider_resolveStream_ServerPin(t *testing.T) {
 	defer srv.Close()
 	p := newTestProvider(srv.URL)
 
-	// Pinning a server not present in the mirror list yields no supported mirror.
-	mirrors := []Mirror{{Link: srv.URL + "/embed-mp4upload-x.html"}} // mp4upload-only
+	// A real mp4upload mirror; pinning turbovid (absent) yields no supported mirror.
+	mirrors := []Mirror{{Link: "https://www.mp4upload.com/embed-mp4upload-x.html"}} // mp4upload-only
 	if _, err := p.resolveStream(context.Background(), mirrors, "turbovid"); err == nil {
 		t.Fatal("expected error pinning absent server")
 	}
