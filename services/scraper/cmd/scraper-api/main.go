@@ -581,7 +581,7 @@ func main() {
 	// boot via this fatal.
 	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
 	// → allanime → animefever (28-02) → miruro (28-04) → nineanime (28-05).
-	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "animefever", "miruro", "nineanime"}
+	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "okru", "animefever", "miruro", "nineanime"}
 	if cfg.AnimeKai.Enabled {
 		candidateProviders = append(candidateProviders, "animekai")
 	}
