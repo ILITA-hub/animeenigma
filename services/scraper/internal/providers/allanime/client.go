@@ -400,6 +400,48 @@ func translationTypeFor(c domain.Category) string {
 	}
 }
 
+// NamedSource is a public view of one decoded AllAnime source: its upstream
+// sourceName ("Ok", "Default", "S-mp4", …) and the decoded, fully-qualified
+// embed/stream URL. Exposed so sibling providers (e.g. okru) can reuse
+// AllAnime's GraphQL discovery + cache and resolve a specific source family
+// without duplicating the persisted-query / decrypt code.
+type NamedSource struct {
+	Name string
+	URL  string
+}
+
+// EpisodeSourceURLs returns the decoded sources for one episode+category via the
+// same fetchSources path (and Redis cache) used by ListServers/GetStream.
+// episodeID is "<showID>:<episodeString>". A foreign/invalid ID → ErrNotFound,
+// so a caller (okru) is skipped by the orchestrator instead of marked DOWN.
+func (p *Provider) EpisodeSourceURLs(ctx context.Context, episodeID string, category domain.Category) ([]NamedSource, error) {
+	showID, ep := splitEpisodeID(episodeID)
+	if showID == "" || ep == "" {
+		return nil, domain.WrapNotFound(
+			fmt.Errorf("invalid episode ID %q", episodeID),
+			"allanime: EpisodeSourceURLs")
+	}
+	tt := translationTypeFor(category)
+	srcs, hit := p.cache.getServers(ctx, showID, ep, tt)
+	if !hit {
+		fetched, ferr := p.fetchSources(ctx, showID, ep, tt)
+		if ferr != nil {
+			return nil, ferr
+		}
+		p.cache.setServers(ctx, showID, ep, tt, fetched)
+		srcs = fetched
+	}
+	out := make([]NamedSource, 0, len(srcs))
+	for _, s := range srcs {
+		name := s.SourceName
+		if name == "" {
+			name = "Default"
+		}
+		out = append(out, NamedSource{Name: name, URL: decodeSourceURL(s.SourceURL)})
+	}
+	return out, nil
+}
+
 func materializeServers(sources []sourceURL, cat domain.Category) []domain.Server {
 	out := make([]domain.Server, 0, len(sources))
 	for _, s := range sources {

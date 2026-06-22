@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -533,6 +534,46 @@ func TestGetStream_HonorsDubCategory(t *testing.T) {
 	_, _ = p.GetStream(context.Background(), "", "SHOW123:1", "Default", domain.CategoryDub)
 	if !gotDub {
 		t.Error("GetStream(dub) did not send translationType=dub upstream")
+	}
+}
+
+// --- EpisodeSourceURLs (exported accessor for sibling providers) ----------
+
+func TestEpisodeSourceURLs_FiltersAndDecodes(t *testing.T) {
+	// Upstream returns one plain "Ok" source + one "--"-encoded clock source.
+	// EpisodeSourceURLs must return BOTH, decoded, with names intact.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// minimal SourceUrls response: an Ok ok.ru embed + a Default clock source
+		fmt.Fprint(w, `{"data":{"episode":{"episodeString":"1","sourceUrls":[`+
+			`{"sourceUrl":"https://ok.ru/videoembed/123","sourceName":"Ok","type":"iframe"},`+
+			`{"sourceUrl":"https://cdn.example/x.m3u8","sourceName":"Default","type":"iframe"}`+
+			`]}}}`)
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+
+	got, err := p.EpisodeSourceURLs(context.Background(), "SHOW:1", domain.CategorySub)
+	if err != nil {
+		t.Fatalf("EpisodeSourceURLs: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 sources, got %d: %+v", len(got), got)
+	}
+	if got[0].Name != "Ok" || got[0].URL != "https://ok.ru/videoembed/123" {
+		t.Errorf("source[0] = %+v", got[0])
+	}
+}
+
+func TestEpisodeSourceURLs_ForeignID_NotFound(t *testing.T) {
+	log := logger.Default()
+	p, err := New(Deps{HTTP: domain.NewBaseHTTPClient(log), Cache: newInMemoryCache(), Log: log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = p.EpisodeSourceURLs(context.Background(), "gogoanime-slug-no-colon", domain.CategorySub)
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
 
