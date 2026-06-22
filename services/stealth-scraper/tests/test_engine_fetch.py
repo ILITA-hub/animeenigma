@@ -24,9 +24,11 @@ class _FetchPage:
         self._body, self._status, self._ctype = body, status, ctype
         self.calls = 0
 
-    async def evaluate(self, js, url):
+    async def evaluate(self, js, *args):
+        if not args:      # liveness probe `()=>1`
+            return 1
         self.calls += 1
-        return f"{self._status}|{self._ctype}|{url}|{base64.b64encode(self._body).decode()}"
+        return f"{self._status}|{self._ctype}|{args[0]}|{base64.b64encode(self._body).decode()}"
 
     async def close(self):
         pass
@@ -169,6 +171,46 @@ class TestPoisonFence(unittest.TestCase):
         self.assertEqual(ctx.exception.provider, "nineanime")
         self.assertNotIn(sess.id, eng._sessions, "wedged session must be closed")
         self.assertEqual(sess.profile.status, "crashed", "slot marked crashed for the reaper")
+
+
+class _DeadProbePage:
+    """Liveness probe `()=>1` raises (page is dead); used to assert the warm-
+    reuse path evicts the session rather than handing back a poisoned page."""
+    url = "https://9anime.me.uk/"
+
+    def __init__(self):
+        self.probed = False
+
+    async def evaluate(self, js, *args):
+        if not args:  # liveness probe
+            self.probed = True
+            raise RuntimeError("Target closed")
+        return 1
+
+    async def close(self):
+        pass
+
+
+class TestWarmReuseLiveness(unittest.TestCase):
+    def test_dead_warm_session_is_evicted_not_reused(self):
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
+        prof = eng.profiles.lease()
+        page = _DeadProbePage()
+        key = "fetch::nineanime::https://9anime.me.uk"
+        sess = Session(
+            id=key, profile=prof, proxy_id="direct", referer="https://9anime.me.uk",
+            user_agent="UA", cdn_host="9anime.me.uk", master_url="https://9anime.me.uk",
+            expires_at=time.time() + 600, page=page, player_url=page.url, provider="nineanime",
+        )
+        eng._sessions[key] = sess
+        # The dead session must NOT be returned by the reuse fast-path. Since the
+        # pool has no free profile after the dead one is released, recreation
+        # will raise PoolExhausted/RecipeError — but the dead session is gone.
+        from app.engine import PoolExhausted
+        with self.assertRaises((PoolExhausted, RecipeError)):
+            run(eng._warm_fetch_session("nineanime", "https://9anime.me.uk"))
+        self.assertTrue(page.probed, "reuse path must run the liveness probe")
+        self.assertNotIn(key, eng._sessions, "dead warm session must be evicted")
 
 
 if __name__ == "__main__":

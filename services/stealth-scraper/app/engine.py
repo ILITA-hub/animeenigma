@@ -576,7 +576,15 @@ class CamoufoxEngine:
         key = f"fetch::{provider}::{origin}"
         existing = self._sessions.get(key)
         if existing is not None and existing.page is not None:
-            return existing
+            # Poison-fence the REUSE path: a cheap liveness probe. A poisoned
+            # page (Target closed) would otherwise be handed back and re-navved
+            # on the next fetch (the AUTO-527 loop). On failure: evict + fall
+            # through to recreate a fresh warm session.
+            try:
+                await existing.page.evaluate("()=>1")
+                return existing
+            except Exception:  # noqa: BLE001
+                await self.aclose_session(key)
 
         profile = await self._acquire_profile()
         if profile is None:
