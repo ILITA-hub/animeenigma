@@ -4,7 +4,7 @@ import type { Combo, AudioKind, TrackLang } from '@/types/aePlayer'
 type LegacyPlayer = WatchCombo['player']
 
 // EN scraper chain -> coarse 'english'. Keep in sync with SCRAPER_IDS.
-const EN_SCRAPER_IDS = new Set(['allanime', 'animepahe', 'gogoanime', 'nineanime', 'animefever', 'miruro'])
+const EN_SCRAPER_IDS = new Set(['allanime', 'okru', 'animepahe', 'gogoanime', 'nineanime', 'animefever', 'miruro'])
 
 /** Map a granular unified provider id -> coarse legacy WatchCombo.player (or null if unmappable). */
 export function providerToLegacyPlayer(providerId: string): LegacyPlayer | null {

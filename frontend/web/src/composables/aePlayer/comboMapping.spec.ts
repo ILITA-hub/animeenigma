@@ -3,7 +3,7 @@ import { providerToLegacyPlayer, comboToWatchCombo, watchComboToPartialCombo, co
 
 describe('providerToLegacyPlayer', () => {
   it('maps EN scraper ids to english', () => {
-    for (const id of ['allanime', 'animepahe', 'gogoanime', 'nineanime', 'animefever', 'miruro']) {
+    for (const id of ['allanime', 'okru', 'animepahe', 'gogoanime', 'nineanime', 'animefever', 'miruro']) {
       expect(providerToLegacyPlayer(id)).toBe('english')
     }
   })
