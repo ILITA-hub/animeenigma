@@ -47,6 +47,7 @@ func TestIngestFromURL_DownloadsAndStores(t *testing.T) {
 
 	store := &fakeStore{}
 	svc := NewImageService(store)
+	svc.allowPrivate = true // reach the loopback httptest server
 
 	key, err := svc.IngestFromURL(context.Background(), srv.URL, "cards")
 	if err != nil {
@@ -85,6 +86,7 @@ func TestIngestFromURL_RejectsBadTypeAndTooLarge(t *testing.T) {
 
 	store := &fakeStore{}
 	svc := NewImageService(store)
+	svc.allowPrivate = true // reach the loopback httptest servers
 
 	_, err := svc.IngestFromURL(context.Background(), htmlSrv.URL, "cards")
 	if err == nil {
@@ -112,6 +114,40 @@ func TestIngestFromURL_RejectsBadTypeAndTooLarge(t *testing.T) {
 	appErr2, ok2 := err.(*apperrors.AppError)
 	if !ok2 || appErr2.Code != apperrors.CodeInvalidInput {
 		t.Errorf("expected InvalidInput for oversized, got %v", err)
+	}
+}
+
+// TestIngestFromURL_RejectsLoopbackServer points at a LIVE loopback test server.
+// Without the SSRF guard (finding #20) this fetch succeeds; the guard must
+// reject the 127.0.0.1 IP-literal host before fetching.
+func TestIngestFromURL_RejectsLoopbackServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte{0x89, 'P', 'N', 'G'})
+	}))
+	defer srv.Close()
+
+	svc := NewImageService(&fakeStore{}) // guard ON (production default)
+	if _, err := svc.IngestFromURL(context.Background(), srv.URL, "cards"); err == nil {
+		t.Fatal("expected SSRF guard to reject loopback server URL, got success")
+	}
+}
+
+// TestIngestFromURL_RejectsLoopbackViaHostname reaches the same live loopback
+// server through the "localhost" hostname: the cheap pre-flight passes (it is
+// not an IP literal) but the dial-time Control hook — the rebind-safe layer —
+// must reject the connection to 127.0.0.1.
+func TestIngestFromURL_RejectsLoopbackViaHostname(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte{0x89, 'P', 'N', 'G'})
+	}))
+	defer srv.Close()
+
+	u := strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)
+	svc := NewImageService(&fakeStore{}) // guard ON
+	if _, err := svc.IngestFromURL(context.Background(), u, "cards"); err == nil {
+		t.Fatal("expected dial-time guard to reject localhost (loopback), got success")
 	}
 }
 

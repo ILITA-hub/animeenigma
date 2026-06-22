@@ -5,11 +5,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
+	"github.com/ILITA-hub/animeenigma/libs/videoutils/netguard"
 	"github.com/google/uuid"
 )
 
@@ -41,17 +44,46 @@ type ImageService struct {
 	store    objectStore
 	client   *http.Client
 	maxBytes int64
+	// allowPrivate is a TEST-ONLY escape hatch. When true the SSRF guards
+	// (scheme + private/loopback IP rejection) are bypassed so unit tests can
+	// reach an httptest server on 127.0.0.1. Never set in production.
+	allowPrivate bool
 }
 
-// NewImageService creates an ImageService with a 10s HTTP client timeout.
+// NewImageService creates an ImageService with a 10s HTTP client timeout and an
+// SSRF-guarded dialer: the admin-supplied image URL (finding #20) is fetched by
+// a client whose net.Dialer.Control rejects any post-DNS connection to a
+// private/loopback/link-local address — closing DNS-rebind and redirect-to-
+// internal bypasses on every hop, not just the initial host.
 func NewImageService(store objectStore) *ImageService {
-	return &ImageService{
-		store: store,
-		client: &http.Client{
-			Timeout: 10 * time.Second,
+	s := &ImageService{store: store, maxBytes: maxImageBytes}
+	s.client = &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+				Control:   s.dialControl,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          10,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
 		},
-		maxBytes: maxImageBytes,
 	}
+	return s
+}
+
+// dialControl is the net.Dialer.Control hook. It runs on the concrete ip:port
+// the dialer is about to connect to (after DNS resolution), so it blocks
+// private targets reached via a hostname or a redirect, unless the test escape
+// hatch is set.
+func (s *ImageService) dialControl(network, address string, c syscall.RawConn) error {
+	if s.allowPrivate {
+		return nil
+	}
+	return netguard.DenyPrivateControl(network, address, c)
 }
 
 // resolveExt returns the file extension for a content type, or an error if
@@ -92,6 +124,15 @@ func makeKey(kind, ext string) string {
 func (s *ImageService) IngestFromURL(ctx context.Context, rawURL, kind string) (string, error) {
 	if !allowedKinds[kind] {
 		return "", apperrors.InvalidInput(fmt.Sprintf("invalid kind %q (must be cards or banners)", kind))
+	}
+
+	// Cheap pre-flight (no DNS): scheme must be http/https and an IP-literal
+	// host must not be private. The dial-time Control hook is the authoritative
+	// rebind-safe layer; this just yields a fast, clear rejection.
+	if !s.allowPrivate {
+		if err := netguard.ValidatePublicURL(rawURL); err != nil {
+			return "", apperrors.InvalidInput(fmt.Sprintf("disallowed image URL: %v", err))
+		}
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
