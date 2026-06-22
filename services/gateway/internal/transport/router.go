@@ -616,7 +616,13 @@ func NewRouterWithCleanup(
 			r.Get("/proxy-status", proxyHandler.ProxyToStreaming)
 			r.Get("/image-proxy", proxyHandler.ProxyToStreaming)
 			r.HandleFunc("/stream/*", proxyHandler.ProxyToStreaming)
-			r.HandleFunc("/internal/*", proxyHandler.ProxyToStreaming)
+			// NOTE: /internal/* is intentionally NOT proxied. Streaming's
+			// /api/v1/internal/token is a service-to-service stream-token minter;
+			// exposing it through the public gateway made it an unauthenticated
+			// internet-reachable minter. Per the platform convention every
+			// /internal/* endpoint is Docker-network-only — callers reach
+			// streaming directly at http://streaming:8082/api/v1/internal/*.
+			// Guarded by TestRouter_StreamingInternalNotProxied.
 
 			// Admin routes (protected)
 			r.Group(func(r chi.Router) {
