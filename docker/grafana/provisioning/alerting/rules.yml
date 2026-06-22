@@ -345,8 +345,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Scheduler job {{ $labels.exported_job }} hasn't run successfully"
-          description: "Scheduler job {{ $labels.exported_job }} hasn't succeeded in over 25 hours."
+          summary: "Scheduler job {{ if $labels.exported_job }}{{ $labels.exported_job }}{{ else }}(no-data — overnight jobs not yet run){{ end }} hasn't run successfully"
+          description: "Scheduler job {{ if $labels.exported_job }}{{ $labels.exported_job }}{{ else }}(no-data — overnight jobs not yet run){{ end }} hasn't succeeded in over 25 hours."
 
 
       - uid: scheduler-calendar-sync-stale
