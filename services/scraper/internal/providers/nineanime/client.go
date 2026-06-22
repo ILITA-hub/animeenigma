@@ -305,8 +305,10 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 	}
 
 	// Pitfall 4: WP REST API endpoint. T-28-05-01: url.QueryEscape on the
-	// search term to neutralize anything in ref.Title.
-	searchURL := fmt.Sprintf("%s/wp-json/wp/v2/search?search=%s&per_page=20",
+	// search term to neutralize anything in ref.Title. AUTO-534: 9anime.me.uk's
+	// WP changed so the default search returns [] without type=post; type=post
+	// results still carry subtype:"series", so the filter below is unaffected.
+	searchURL := fmt.Sprintf("%s/wp-json/wp/v2/search?search=%s&per_page=20&type=post",
 		p.baseURL, url.QueryEscape(query))
 
 	body, err := p.httpGetBody(ctx, searchURL, maxSeriesBodyBytes)
