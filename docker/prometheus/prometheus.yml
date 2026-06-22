@@ -105,3 +105,12 @@ scrape_configs:
     static_configs:
       - targets: ['vnstat-exporter:9100']
     metrics_path: /metrics
+
+  # M571: OTel Collector self-telemetry (otelcol_*). The collector exposes its own
+  # pipeline-health metrics on :8888 (service.telemetry.metrics in collector-config.yaml).
+  # Scraping it makes the trace/log pipeline observable (drop/send-failure counters)
+  # and puts the collector in the `up` series for liveness alerting.
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+    metrics_path: /metrics

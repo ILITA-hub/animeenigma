@@ -1,0 +1,39 @@
+# Build-context exclusions (audit M508).
+#
+# The repo-root build context (compose `context: ..`) is shared by every Go service
+# plus scraper / stealth-scraper / animepahe-resolver. Their Dockerfiles COPY only
+# go.work*, the libs/ and services/ trees, and per-module go.mod/go.sum — never the
+# paths below — so excluding these only shrinks the context tarball streamed to the
+# Docker daemon on each build; no image content changes. (web, megacloud-extractor
+# and vnstat-exporter declare their own narrower contexts and are unaffected.)
+#
+# DO NOT add libs/, services/, go.work, go.mod or go.sum here — they are required by
+# the Go builds.
+
+.git
+.gitignore
+.github
+.claude
+.planning
+.worktrees
+.vscode
+.idea
+
+# Frontend has its own build context (../frontend/web); never copied by Go builds.
+frontend
+**/node_modules
+
+# Docs / planning / markdown — never copied into any image.
+docs
+**/*.md
+
+# Python caches / venvs (sidecars copy app/ + requirements, not these).
+**/.venv
+**/__pycache__
+**/*.pyc
+
+# Checked-in host binary (maintenance runs on the host via systemd, not docker).
+services/maintenance/maintenance
+
+# Logs / local artifacts
+*.log

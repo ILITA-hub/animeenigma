@@ -16,6 +16,11 @@ services:
     image: postgres:16-alpine
     container_name: animeenigma-postgres
     restart: unless-stopped
+    # M725: raise max_connections from the default 100 to 200. The ~12 GORM
+    # services each cap their pool (libs/database now defaults MaxOpenConns=10),
+    # but the fleet ceiling still approaches the default 100 under load; 200 gives
+    # headroom for redeploys (old + new container briefly overlap) + psql/pgadmin.
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       # Single source of truth for the DB password: every service reads the
@@ -326,11 +331,9 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=15d"
       - "--web.enable-lifecycle"
-      # Accept span-metrics + service-graph remote_write at /prometheus/api/v1/write
-      # (AR-EFFECT-04, D-12). Receiver is reachable only on the Docker network. As of
-      # the 06-03 cutover the OTel Collector's spanmetrics/servicegraph connectors are
-      # the SOLE writer (Tempo's metrics_generator was retired).
-      - "--web.enable-remote-write-receiver"
+      # M557: --web.enable-remote-write-receiver removed 2026-06-22. Its sole writer
+      # was the OTel spanmetrics/servicegraph remote-write path, now deleted (no
+      # consumers + sampling-biased); all 19 prometheus.yml jobs are scrape-based.
       - "--web.external-url=/prometheus"
       - "--web.route-prefix=/prometheus"
     ports:
@@ -436,6 +439,7 @@ services:
     ports:
       - "127.0.0.1:4317:4317" # OTLP gRPC (services export here)
       - "127.0.0.1:4318:4318" # OTLP HTTP
+      - "127.0.0.1:8888:8888" # M571: collector self-telemetry (otelcol_* → Prometheus)
     depends_on:
       # 06-03 cutover: the tempo dep was removed (Tempo retired). ClickHouse +
       # Prometheus are the only export targets now.
@@ -545,20 +549,9 @@ services:
       TELEGRAM_BACKUP_CHAT_ID: ${TELEGRAM_BACKUP_CHAT_ID:-}
     restart: unless-stopped
 
-  admin-nginx:
-    logging: *default-logging
-    image: nginx:alpine
-    container_name: animeenigma-admin-nginx
-    restart: unless-stopped
-    ports:
-      # Phase 16 — moved off 8088 to avoid collision with `scraper` service.
-      # `8088` is reserved for scraper (see CLAUDE.md and `make health`).
-      - "127.0.0.1:8089:80"
-    volumes:
-      - ./nginx/admin.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - prometheus
-      - grafana
+  # admin-nginx REMOVED 2026-06-22 (audit M487): it lost the 127.0.0.1:8089 host-bind
+  # race to the `library` service (never started) and is superseded by the gateway
+  # /admin/* path route (CLAUDE.md). docker/nginx/admin.conf deleted with it.
 
   # =============================================================================
   # Backend Services
