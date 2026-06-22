@@ -129,6 +129,7 @@ func main() {
 	driftEngine := service.NewDriftEngine(log)
 	rateLimiter := service.NewRateLimiter()
 	catalogClient := service.NewCatalogClient(cfg.CatalogURL, log)
+	defer catalogClient.Stop() // end the cache-janitor goroutine on shutdown
 	inboundRouter := service.NewInboundRouter(roomRepo, wsHub, driftEngine, rateLimiter, catalogClient, log)
 
 	// Grace manager (Plan 05.1, WT-POLISH-02) — per-room reconnect-window

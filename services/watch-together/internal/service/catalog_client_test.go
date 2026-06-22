@@ -285,3 +285,34 @@ func TestCatalogClient_ValidateEpisode_ContextCancelled(t *testing.T) {
 		t.Errorf("ctx-cancel took %s, want <1s", elapsed)
 	}
 }
+
+// TestCatalogClient_EvictExpired purges only entries past their TTL (audit #32).
+func TestCatalogClient_EvictExpired(t *testing.T) {
+	c := NewCatalogClient("http://catalog.invalid", logger.Default())
+	defer c.Stop()
+	base := time.Now()
+	c.SetClockForTest(func() time.Time { return base })
+
+	c.mu.Lock()
+	c.cache["fresh"] = cachedValidation{result: ValidateResult{Valid: true}, expireAt: base.Add(time.Minute)}
+	c.cache["stale"] = cachedValidation{result: ValidateResult{Valid: true}, expireAt: base.Add(-time.Minute)}
+	c.mu.Unlock()
+
+	c.evictExpired()
+
+	c.mu.Lock()
+	_, freshOK := c.cache["fresh"]
+	_, staleOK := c.cache["stale"]
+	n := len(c.cache)
+	c.mu.Unlock()
+
+	if !freshOK {
+		t.Error("fresh entry must survive eviction")
+	}
+	if staleOK {
+		t.Error("expired entry must be evicted")
+	}
+	if n != 1 {
+		t.Errorf("cache size = %d, want 1", n)
+	}
+}

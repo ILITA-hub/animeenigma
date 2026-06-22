@@ -123,7 +123,7 @@ func (h *Hub) registerInternal(roomID, userID, username string, conn wsConn) *Co
 	firstInRoom := len(set) == 1
 	h.mu.Unlock()
 
-	ActiveConnections.WithLabelValues(roomID).Inc()
+	ActiveConnections.Inc()
 
 	if firstInRoom {
 		h.startRoomSubscriber(roomID)
@@ -168,7 +168,7 @@ func (h *Hub) Unregister(c *Connection) {
 	h.mu.Unlock()
 
 	if ok {
-		ActiveConnections.WithLabelValues(c.RoomID).Dec()
+		ActiveConnections.Dec()
 	}
 
 	// Fire the per-connection lifecycle hook (01.5 amendment) AFTER the

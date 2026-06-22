@@ -22,12 +22,16 @@ import "github.com/prometheus/client_golang/prometheus"
 // by the ~16 Msg* constants in domain/ws_message.go, well under Prometheus's
 // "low cardinality" guideline.
 var (
-	ActiveConnections = prometheus.NewGaugeVec(
+	// Plain Gauge (no room_id label): rooms are ephemeral UUIDs, so a per-room
+	// series was created for every room and never deleted on room end —
+	// unbounded Prometheus cardinality (audit #25). The only consumer is the
+	// dashboard's sum(wt_ws_connections_active), which already discards the
+	// label, so an aggregate gauge is an exact, bounded replacement.
+	ActiveConnections = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "wt_ws_connections_active",
-			Help: "Active WebSocket connections per watch-together room",
+			Help: "Active WebSocket connections across all watch-together rooms",
 		},
-		[]string{"room_id"},
 	)
 
 	MessagesReceivedTotal = prometheus.NewCounterVec(

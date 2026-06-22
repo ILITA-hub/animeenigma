@@ -81,7 +81,17 @@ type CatalogClient struct {
 	mu    sync.Mutex
 	cache map[string]cachedValidation // positive (Valid=true) results only
 	now   func() time.Time            // injectable for tests
+
+	stop     chan struct{} // closed by Stop() to end the janitor goroutine
+	stopOnce sync.Once
 }
+
+// catalogCacheJanitorInterval is how often the background sweep purges expired
+// positive-cache entries. The cache key is a high-cardinality tuple
+// (shikimori/player/episode/translation/watch_type), so without a sweep the map
+// grew unbounded — entries were only ever overwritten on a re-request, never
+// removed for keys that were never seen again (audit #32).
+const catalogCacheJanitorInterval = 10 * time.Minute
 
 // cachedValidation is the per-key positive-cache entry.
 type cachedValidation struct {
@@ -128,13 +138,49 @@ func NewCatalogClient(baseURL string, log *logger.Logger) *CatalogClient {
 	if log == nil {
 		log = logger.Default()
 	}
-	return &CatalogClient{
+	c := &CatalogClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		http:    &http.Client{Timeout: catalogClientTimeout},
 		log:     log,
 		cache:   make(map[string]cachedValidation),
 		now:     time.Now,
+		stop:    make(chan struct{}),
 	}
+	go c.runJanitor()
+	return c
+}
+
+// runJanitor periodically purges expired positive-cache entries so the cache
+// map cannot grow without bound (audit #32). Ends when Stop() is called.
+func (c *CatalogClient) runJanitor() {
+	ticker := time.NewTicker(catalogCacheJanitorInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.stop:
+			return
+		case <-ticker.C:
+			c.evictExpired()
+		}
+	}
+}
+
+// evictExpired removes every cache entry whose TTL has elapsed.
+func (c *CatalogClient) evictExpired() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := c.now()
+	for k, v := range c.cache {
+		if !now.Before(v.expireAt) {
+			delete(c.cache, k)
+		}
+	}
+}
+
+// Stop ends the background janitor goroutine. Idempotent; safe to call from a
+// service shutdown hook.
+func (c *CatalogClient) Stop() {
+	c.stopOnce.Do(func() { close(c.stop) })
 }
 
 // SetClockForTest swaps the wall-clock source for cache-TTL arithmetic. Only
@@ -174,8 +220,14 @@ func (c *CatalogClient) ValidateEpisode(
 	c.mu.Lock()
 	entry, ok := c.cache[key]
 	now := c.now()
+	if ok && !now.Before(entry.expireAt) {
+		// Lazily drop the expired entry on read so a key that turns invalid
+		// doesn't linger between janitor sweeps (audit #32).
+		delete(c.cache, key)
+		ok = false
+	}
 	c.mu.Unlock()
-	if ok && now.Before(entry.expireAt) {
+	if ok {
 		return entry.result, nil
 	}
 
