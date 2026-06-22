@@ -62,6 +62,11 @@ func (r *PreferenceRepository) GetUserTopCombos(ctx context.Context, userID stri
 	return results, err
 }
 
+// communityPopularityLimit bounds the combos returned — the resolver only
+// consults the most popular handful, so an unbounded result set was wasteful
+// (audit #14).
+const communityPopularityLimit = 50
+
 // GetCommunityPopularity returns the most popular combos for a specific anime
 func (r *PreferenceRepository) GetCommunityPopularity(ctx context.Context, animeID string) ([]domain.CommunityCombo, error) {
 	var results []domain.CommunityCombo
@@ -71,6 +76,7 @@ func (r *PreferenceRepository) GetCommunityPopularity(ctx context.Context, anime
 		Where("anime_id = ?", animeID).
 		Group("player, language, watch_type, translation_id, translation_title").
 		Order("viewers DESC").
+		Limit(communityPopularityLimit).
 		Scan(&results).Error
 	return results, err
 }

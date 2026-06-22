@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
@@ -11,10 +12,41 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 )
 
+// communityCacheTTL bounds how long per-anime community-popularity combos are
+// cached. They are anime-global and slow-moving, so a generous TTL keeps the
+// expensive COUNT(DISTINCT) GROUP BY off the hot /preferences/resolve path.
+const communityCacheTTL = 30 * time.Minute
+
 type PreferenceService struct {
 	prefRepo *repo.PreferenceRepository
 	log      *logger.Logger
 	tier2    Tier2Params
+
+	// communityCache is optional; when set, GetCommunityPopularity results are
+	// cached per anime. nil in unit tests (falls back to direct repo reads).
+	communityCache cache.Cache
+}
+
+// SetCommunityCache wires an optional Redis cache for community-popularity
+// lookups. main.go sets it after construction; leaving it nil (tests) disables
+// caching transparently.
+func (s *PreferenceService) SetCommunityCache(c cache.Cache) { s.communityCache = c }
+
+// communityPopularity returns the per-anime community combos, served from cache
+// when configured. On any cache error it falls back to a direct DB read so a
+// Redis blip never breaks resolve.
+func (s *PreferenceService) communityPopularity(ctx context.Context, animeID string) []domain.CommunityCombo {
+	if s.communityCache != nil {
+		var combos []domain.CommunityCombo
+		err := s.communityCache.GetOrSet(ctx, "community:"+animeID, &combos, communityCacheTTL, func() (interface{}, error) {
+			return s.prefRepo.GetCommunityPopularity(ctx, animeID)
+		})
+		if err == nil {
+			return combos
+		}
+	}
+	combos, _ := s.prefRepo.GetCommunityPopularity(ctx, animeID)
+	return combos
 }
 
 // Tier2Params carries the runtime-tunable Phase 6 inputs into the service.
@@ -69,6 +101,20 @@ func (s *PreferenceService) UpsertAnimePreference(ctx context.Context, userID st
 		UpdatedAt:        time.Now(),
 	}
 
+	// Dirty-check (audit #13): the watch heartbeat calls this every ~30s. When
+	// the saved combo is unchanged — the steady state during a single watch —
+	// skip the write entirely, avoiding the per-heartbeat prefs_version bump
+	// (and the cross-device FE cache invalidation it triggers). Only an actual
+	// combo change writes.
+	if existing, err := s.prefRepo.GetAnimePreference(ctx, userID, req.AnimeID); err == nil && existing != nil &&
+		existing.Player == pref.Player &&
+		existing.Language == pref.Language &&
+		existing.WatchType == pref.WatchType &&
+		existing.TranslationID == pref.TranslationID &&
+		existing.TranslationTitle == pref.TranslationTitle {
+		return
+	}
+
 	if err := s.prefRepo.UpsertAnimePreference(ctx, pref); err != nil {
 		s.log.Errorw("failed to upsert anime preference",
 			"user_id", userID,
@@ -114,8 +160,8 @@ func (s *PreferenceService) Resolve(ctx context.Context, userID string, req *dom
 		}
 	}
 
-	// Load Tier 3: community popularity for this anime
-	community, _ := s.prefRepo.GetCommunityPopularity(ctx, req.AnimeID)
+	// Load Tier 3: community popularity for this anime (cached per-anime).
+	community := s.communityPopularity(ctx, req.AnimeID)
 
 	// Load Tier 4: pinned translations for this anime
 	pinned, _ := s.prefRepo.GetPinnedTranslations(ctx, req.AnimeID)

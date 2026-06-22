@@ -310,6 +310,9 @@ func main() {
 		MaxHistoryRows: cfg.Tier2.MaxHistoryRows,
 		DurationFloor:  cfg.Tier2.DurationFloor,
 	})
+	// Cache per-anime community popularity (audit #14) so the COUNT(DISTINCT)
+	// GROUP BY stays off the hot /preferences/resolve path.
+	prefService.SetCommunityCache(redisCache)
 	// Phase 9 / TRIG-02 (Logic B): fire-and-forget player→library autocache
 	// demand producer. When an active JP-audio watcher starts episode N of a
 	// watching anime, UpdateProgress fires a next_ep demand for N+1 so the
