@@ -113,7 +113,7 @@ func Load() (*Config, error) {
 		// ae + kodik-noads carry custom probing rules (library uploads / scraped
 		// ad-free Kodik); the rest are EN scraper-chain providers. Order is the
 		// dashboard tie-break order.
-		ProbeProviders: getEnv("PROBE_PROVIDERS", "gogoanime,miruro,allanime,nineanime,animefever,ae,kodik-noads"),
+		ProbeProviders: getEnv("PROBE_PROVIDERS", "gogoanime,miruro,allanime,okru,nineanime,animefever,ae,kodik-noads"),
 	}, nil
 }
 
