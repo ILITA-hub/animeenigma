@@ -9,6 +9,11 @@
 SERVICES := auth catalog streaming player rooms scheduler gateway themes scraper library notifications watch-together gacha recs
 GO_BUILD_FLAGS := -ldflags="-s -w"
 DOCKER_REGISTRY ?= ghcr.io/ilita-hub/animeenigma
+# Host-wide deploy lock — serialize image builds so concurrent `make redeploy-*`
+# (multiple agents / the maintenance bot) can't pile up parallel docker/go builds
+# and OOM the box (2026-06-22 incident). redeploy-%/redeploy-all self-lock inside
+# redeploy.sh; the targets below build directly so they go through the lock here.
+DEPLOY_LOCK := $(CURDIR)/deploy/scripts/with-deploy-lock.sh
 
 # Colors
 GREEN  := $(shell tput -Txterm setaf 2)
@@ -249,7 +254,7 @@ docker-build: $(addprefix docker-build-,$(SERVICES)) ## Build all Docker images
 
 docker-build-%: ## Build Docker image for a specific service
 	@echo "Building Docker image for $*..."
-	docker build -t $(DOCKER_REGISTRY)/$*:latest -f services/$*/Dockerfile .
+	$(DEPLOY_LOCK) docker build -t $(DOCKER_REGISTRY)/$*:latest -f services/$*/Dockerfile .
 
 docker-push: $(addprefix docker-push-,$(SERVICES)) ## Push all Docker images
 	@echo "All Docker images pushed successfully"
@@ -269,7 +274,7 @@ type-check: ## Run TypeScript type check on frontend
 
 redeploy-web: i18n-lint lint-design type-check ## Rebuild and restart web frontend (runs i18n lint + design-system gate + type-check first)
 	@echo "Rebuilding web frontend..."
-	VITE_GIT_COMMIT="$$(git rev-parse --short HEAD 2>/dev/null)" docker compose -f docker/docker-compose.yml build web
+	VITE_GIT_COMMIT="$$(git rev-parse --short HEAD 2>/dev/null)" $(DEPLOY_LOCK) docker compose -f docker/docker-compose.yml build web
 	docker stop animeenigma-web || true
 	docker rm animeenigma-web || true
 	docker compose -f docker/docker-compose.yml up -d --no-deps web
@@ -277,7 +282,7 @@ redeploy-web: i18n-lint lint-design type-check ## Rebuild and restart web fronte
 
 redeploy-animepahe-resolver: ## Rebuild and restart the animepahe-resolver sidecar (Phase 27)
 	@echo "Rebuilding animepahe-resolver sidecar..."
-	docker compose -f docker/docker-compose.yml build animepahe-resolver
+	$(DEPLOY_LOCK) docker compose -f docker/docker-compose.yml build animepahe-resolver
 	docker compose -f docker/docker-compose.yml up -d --no-deps animepahe-resolver
 	@echo "animepahe-resolver redeployed"
 
@@ -319,7 +324,7 @@ run-cleanup-once: ## Trigger the notifications retention cleanup synchronously (
 .PHONY: redeploy-watch-together logs-watch-together restart-watch-together
 
 redeploy-watch-together: ## Rebuild and restart watch-together service
-	cd docker && docker compose build watch-together && docker compose up -d watch-together
+	cd docker && $(DEPLOY_LOCK) docker compose build watch-together && docker compose up -d watch-together
 
 logs-watch-together: ## Follow watch-together service logs
 	cd docker && docker compose logs -f watch-together

@@ -7,6 +7,15 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Serialize concurrent redeploys (OOM guard, 2026-06-22): re-exec under the
+# host-wide deploy lock so parallel `make redeploy-*` (multiple agents / the
+# maintenance bot) queue instead of piling up concurrent docker/go builds that
+# exhaust RAM + swap and freeze the box. See with-deploy-lock.sh for rationale.
+if [ -z "${ANIMEENIGMA_DEPLOY_LOCK_HELD:-}" ] && [ -x "$SCRIPT_DIR/with-deploy-lock.sh" ]; then
+    exec "$SCRIPT_DIR/with-deploy-lock.sh" "$0" "$@"
+fi
+
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 COMPOSE_FILE="$PROJECT_ROOT/docker/docker-compose.yml"
 
