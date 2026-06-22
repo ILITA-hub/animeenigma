@@ -32,6 +32,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/videoutils/netguard"
 )
 
 // provenanceTTL bounds how long a minted token stays valid. It MUST exceed a
@@ -105,6 +107,15 @@ func signProvenance(rawURL string, now time.Time) (exp, sig string) {
 		// simply falls back to the static allow-list.
 		return "", ""
 	}
+	// SSRF guard (finding #65): never mint a token for a URL whose scheme is
+	// not http/https or whose IP-literal host is private/loopback/link-local.
+	// A token bypasses the static host allow-list, so a compromised allow-listed
+	// CDN must not be able to self-mint authorization for http://169.254.169.254
+	// or http://10.x. Hostnames pass this cheap check; the dial-time guard in
+	// newIPv4Transport blocks any that resolve to a private address.
+	if !allowLoopbackForTest && netguard.ValidatePublicURL(rawURL) != nil {
+		return "", ""
+	}
 	exp = strconv.FormatInt(now.Add(provenanceTTL).Unix(), 10)
 	return exp, provenanceMAC(rawURL, exp)
 }
@@ -131,6 +142,13 @@ func validProvenanceToken(rawURL, expStr, sig string, now time.Time) bool {
 	if !provenanceEnabled() {
 		// Fail closed: with no configured secret, accept no tokens (a forged
 		// token computed from the old hardcoded default must not grant access).
+		return false
+	}
+	// Mirror the mint-side SSRF guard (finding #65): refuse to honor a token for
+	// a private/loopback/link-local IP-literal host or a non-http(s) scheme, even
+	// if it carries a valid MAC. Closes the case of a token minted before this
+	// guard (or otherwise forged) for an internal target.
+	if !allowLoopbackForTest && netguard.ValidatePublicURL(rawURL) != nil {
 		return false
 	}
 	if expStr == "" || sig == "" {

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/videoutils/netguard"
 )
 
 // VideoSource represents a source for video streaming
@@ -51,6 +53,13 @@ type ProxyConfig struct {
 	// is still used for allow-list checks, M3U8 rewriting, and provenance —
 	// the signer only affects the actual outbound GET. Not serialized.
 	UpstreamSigner func(rawURL string) (string, bool) `json:"-" yaml:"-"`
+
+	// FirstPartyHosts are internal service hosts the proxy legitimately reaches
+	// over the Docker network (MinIO object store, the stealth-scraper sidecar).
+	// They resolve to private IPs, so the dial-time SSRF guard (finding #64/#65)
+	// exempts EXACTLY these hosts; every other host is blocked from dialing a
+	// private/loopback/link-local address. Match is exact (case-insensitive).
+	FirstPartyHosts []string `json:"first_party_hosts" yaml:"first_party_hosts"`
 }
 
 // fetchURLFor returns the URL the proxy should actually GET for sourceURL:
@@ -90,15 +99,27 @@ type VideoProxy struct {
 
 // NewVideoProxy creates a new video proxy
 func NewVideoProxy(cfg ProxyConfig) *VideoProxy {
+	firstParty := cfg.FirstPartyHosts
 	return &VideoProxy{
 		client: &http.Client{
 			// No timeout on client level — context cancellation handles timeouts.
 			// A global timeout breaks streaming of large MP4 files (100s of MB).
-			Transport: newIPv4Transport(),
+			Transport: newIPv4Transport(firstParty),
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				// Follow redirects but preserve headers
 				if len(via) >= 10 {
 					return fmt.Errorf("too many redirects")
+				}
+				// Re-validate each redirect hop (finding #64): a redirect target
+				// whose scheme is not http/https or whose IP-literal host is
+				// private/loopback/link-local is rejected up front. (The dial-time
+				// guard below is the authoritative, rebind-safe layer; this gives a
+				// fast, explicit failure for the obvious cases.) First-party hosts
+				// are exempt so an internal 30x still works.
+				if !allowLoopbackForTest && !firstPartyAddr(req.URL.Host, firstParty) {
+					if err := netguard.ValidatePublicURL(req.URL.String()); err != nil {
+						return fmt.Errorf("redirect blocked: %w", err)
+					}
 				}
 				return nil
 			},
@@ -107,21 +128,55 @@ func NewVideoProxy(cfg ProxyConfig) *VideoProxy {
 	}
 }
 
-// newIPv4Transport returns an http.Transport whose dialer forces IPv4 ("tcp4").
-//
-// Several upstream CDNs (e.g. AnimePahe/Kwik's vault-*.owocdn.top edges) are
-// dual-stack and return AAAA records, but our containers have no working IPv6
-// egress. Go's default dual-stack dialer intermittently races the IPv6 address,
-// which black-holes (no RST/ICMP) and stalls each connection until the upstream
-// timeout fires — manifests/keys are tiny and usually slip through on the IPv4
-// fallback, but the steady flood of HLS segments keeps landing on the dead IPv6
-// path, so episodes load but never play. Forcing "tcp4" removes the IPv6 attempt
-// entirely and makes segment fetches deterministic.
-func newIPv4Transport() *http.Transport {
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
+// allowLoopbackForTest is a TEST-ONLY seam. When true, the SSRF guards (the
+// provenance URL check and the dial-time private-IP block) are relaxed so unit
+// tests can sign and fetch httptest fixtures on 127.0.0.1. Never set in
+// production. Mirrors libs/streamprobe's allowLoopbackForTests convention.
+var allowLoopbackForTest bool
+
+// firstPartyAddr reports whether the dial addr (host[:port]) targets a
+// configured first-party internal host — matched EXACTLY (case-insensitive,
+// port/trailing-dot tolerant). These hosts are the only ones permitted to dial
+// a private IP; the match is exact (not subdomain) so a "minio.evil.com" or
+// "api.minio" cannot borrow the exemption.
+func firstPartyAddr(addr string, firstParty []string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
 	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if host == "" {
+		return false
+	}
+	for _, fp := range firstParty {
+		if host == strings.ToLower(strings.TrimSpace(fp)) {
+			return true
+		}
+	}
+	return false
+}
+
+// newIPv4Transport returns an http.Transport whose dialer forces IPv4 ("tcp4")
+// and guards against SSRF to private addresses (finding #64/#65).
+//
+// IPv4: several upstream CDNs (e.g. AnimePahe/Kwik's vault-*.owocdn.top edges)
+// are dual-stack and return AAAA records, but our containers have no working
+// IPv6 egress. Go's default dual-stack dialer intermittently races the IPv6
+// address, which black-holes (no RST/ICMP) and stalls each connection until the
+// upstream timeout fires — manifests/keys are tiny and usually slip through on
+// the IPv4 fallback, but the steady flood of HLS segments keeps landing on the
+// dead IPv6 path, so episodes load but never play. Forcing "tcp4" removes the
+// IPv6 attempt entirely and makes segment fetches deterministic.
+//
+// SSRF: every non-first-party dial runs through netguard.DenyPrivateControl,
+// which rejects connections whose POST-DNS address is private/loopback/
+// link-local — closing DNS-rebind and redirect-to-internal bypasses for hosts
+// pulled from an upstream playlist. The configured firstParty hosts (MinIO,
+// stealth-scraper) legitimately resolve to Docker-private IPs, so they use a
+// plain dialer and skip the guard.
+func newIPv4Transport(firstParty []string) *http.Transport {
+	plain := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	guarded := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: netguard.DenyPrivateControl}
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		// Coerce any TCP dial to IPv4-only.
@@ -129,7 +184,10 @@ func newIPv4Transport() *http.Transport {
 		case "tcp", "tcp6":
 			network = "tcp4"
 		}
-		return dialer.DialContext(ctx, network, addr)
+		if allowLoopbackForTest || firstPartyAddr(addr, firstParty) {
+			return plain.DialContext(ctx, network, addr)
+		}
+		return guarded.DialContext(ctx, network, addr)
 	}
 	return t
 }

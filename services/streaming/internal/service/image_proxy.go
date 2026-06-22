@@ -6,10 +6,11 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"image"
-	"image/jpeg"
 	_ "image/gif" // register decoder for upstream GIF posters
+	"image/jpeg"
 	_ "image/png" // register decoder for upstream PNG posters
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
+	"github.com/ILITA-hub/animeenigma/libs/videoutils/netguard"
 	"github.com/minio/minio-go/v7"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // register decoder for upstream WebP posters
@@ -79,9 +81,31 @@ func NewImageProxyService(storage *videoutils.Storage, log *logger.Logger) *Imag
 		storage: storage,
 		httpClient: &http.Client{
 			Timeout: fetchTimeout,
+			// SSRF guard (finding #64): the image proxy fetches only public
+			// poster hosts (Shikimori / MyAnimeList) — MinIO reads use the SDK
+			// client, not this httpClient — so every dial may be blocked from
+			// reaching a private/loopback/link-local address. This closes both a
+			// redirect-to-internal hop and a rebinding upstream host.
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout:   10 * time.Second,
+					KeepAlive: 30 * time.Second,
+					Control:   netguard.DenyPrivateControl,
+				}).DialContext,
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          10,
+				IdleConnTimeout:       30 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 5 {
 					return fmt.Errorf("too many redirects")
+				}
+				// Re-validate the redirect target host/scheme up front (finding
+				// #64); the dial guard above is the authoritative rebind-safe layer.
+				if err := netguard.ValidatePublicURL(req.URL.String()); err != nil {
+					return fmt.Errorf("redirect blocked: %w", err)
 				}
 				return nil
 			},

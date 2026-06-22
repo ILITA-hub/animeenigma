@@ -40,6 +40,13 @@ func (s *Storage) BucketName() string {
 	return s.bucketName
 }
 
+// Endpoint returns the configured MinIO endpoint (host[:port]). Used to mark
+// MinIO as a first-party host for the HLS proxy's SSRF dial guard, since it
+// resolves to a Docker-private IP the proxy must still reach.
+func (s *Storage) Endpoint() string {
+	return s.endpoint
+}
+
 // NewStorage creates a new MinIO storage client
 func NewStorage(cfg StorageConfig) (*Storage, error) {
 	client, err := minio.New(cfg.Endpoint, &minio.Options{

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -39,12 +40,29 @@ func NewStreamHandler(streamingService *service.StreamingService, log *logger.Lo
 	return NewStreamHandlerWithSessions(streamingService, nil, log)
 }
 
+// minioHost strips the optional port from a MinIO endpoint
+// ("minio:9000" -> "minio"; a bare "minio" is returned unchanged).
+func minioHost(endpoint string) string {
+	if endpoint == "" {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(endpoint); err == nil {
+		return host
+	}
+	return endpoint
+}
+
 // NewStreamHandlerWithSessions wires the HLS egress aggregator (AR-EGRESS-04).
 // A nil aggregator degrades to no egress accounting (proxy behavior unchanged).
 func NewStreamHandlerWithSessions(streamingService *service.StreamingService, hlsSessions *service.HLSSessions, log *logger.Logger) *StreamHandler {
 	// Create video proxy with default config for HLS proxying
 	proxyCfg := videoutils.DefaultProxyConfig()
 	proxyCfg.AllowedDomains = videoutils.HLSProxyAllowedDomains
+	// First-party internal hosts the proxy legitimately reaches over the Docker
+	// network — they resolve to private IPs, so the SSRF dial guard (#64/#65)
+	// exempts EXACTLY these. The stealth-scraper sidecar /hls restreamer is one;
+	// the MinIO endpoint host is added below when storage is wired.
+	proxyCfg.FirstPartyHosts = []string{"stealth-scraper"}
 	// Self-hosted library (`ae` provider) HLS lives in a PRIVATE MinIO
 	// bucket. The proxy gates entry on our HMAC sig / provenance tokens,
 	// then presigns the actual MinIO read here so the bucket never needs to
@@ -53,6 +71,9 @@ func NewStreamHandlerWithSessions(streamingService *service.StreamingService, hl
 	if streamingService != nil {
 		if st := streamingService.Storage(); st != nil {
 			proxyCfg.UpstreamSigner = st.PresignURL
+			if host := minioHost(st.Endpoint()); host != "" {
+				proxyCfg.FirstPartyHosts = append(proxyCfg.FirstPartyHosts, host)
+			}
 		}
 	}
 
