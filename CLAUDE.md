@@ -358,6 +358,18 @@ fire-and-forget watch-activity hints from player; player config:
 `RECS_INTERNAL_URL` (default http://recs:8094), `RECS_HINT_ENABLED` (default true).
 Gateway: `RECS_SERVICE_URL` (default http://recs:8094).
 
+Scheduler service specific:
+```
+SUBTITLE_PROBE_CRON   # default */5 * * * * — active subtitle-provider health probe cadence.
+                      # Scheduler POSTs catalog's /internal/subtitle-probe/run; catalog
+                      # pings Jimaku + OpenSubtitles (cheap non-quota endpoints), records
+                      # up/degraded/down + latency → probe_subtitle_* gauges +
+                      # provider_health overlay on /subtitles/all.
+```
+Standard `DB_*` + `REDIS_HOST` + `JWT_SECRET` trio. Scheduler also runs periodic
+background jobs via `SHIKIMORI_SYNC_CRON`, `SCRAPER_PLAYABILITY_CANARY_CRON`, and
+`SUBTITLE_PROBE_CRON`.
+
 ## Feedback Triage Statuses (/admin/feedback)
 
 User feedback / error reports live as JSON files on the `docker_player_reports`

@@ -844,6 +844,7 @@ services:
       SHIKIMORI_SYNC_CRON: "0 2 * * *"
       # Phase 23 — scraper playability canary
       SCRAPER_PLAYABILITY_CANARY_CRON: "0 3 * * *"
+      SUBTITLE_PROBE_CRON: "${SUBTITLE_PROBE_CRON:-*/5 * * * *}"
       SCRAPER_BASE_URL: http://scraper:8088
       CANARY_REPORT_DIR: /data/reports/canary-runs
       TRACING_ENABLED: "true"
