@@ -90,3 +90,33 @@ func TestPoolStore_LookupAndSearch(t *testing.T) {
 	require.Len(t, res, 1)
 	assert.Equal(t, "frieren", res[0].ID)
 }
+
+// missCache always misses on Get (and no-ops Set) so each PoolStore.load()
+// re-fetches from the fetcher — lets the TTL-reload test count reloads.
+type missCache struct{}
+
+func (missCache) Get(_ context.Context, _ string, _ interface{}) error { return errCacheMiss }
+func (missCache) Set(_ context.Context, _ string, _ interface{}, _ time.Duration) error {
+	return nil
+}
+
+// TestPoolStore_ReloadsAfterTTL proves the in-memory pool refreshes once it is
+// older than ttl (audit #21) instead of loading once for the process lifetime.
+func TestPoolStore_ReloadsAfterTTL(t *testing.T) {
+	fetch := &fakeFetcher{pool: samplePool()}
+	store := NewPoolStore(missCache{}, fetch, time.Minute, nil)
+	base := time.Now()
+	store.now = func() time.Time { return base }
+	ctx := context.Background()
+
+	_, err := store.All(ctx)
+	require.NoError(t, err)
+	_, err = store.All(ctx) // still within ttl
+	require.NoError(t, err)
+	assert.Equal(t, 1, fetch.calls, "within ttl the in-memory pool must not reload")
+
+	base = base.Add(2 * time.Minute) // advance past ttl
+	_, err = store.All(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, fetch.calls, "past ttl the in-memory pool must reload")
+}

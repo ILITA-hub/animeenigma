@@ -34,20 +34,32 @@ type PoolStore struct {
 	ttl     time.Duration
 	log     *logger.Logger
 
-	mu     sync.RWMutex
-	byID   map[string]domain.PoolAnime
-	all    []domain.PoolAnime
-	loaded bool
+	mu       sync.RWMutex
+	byID     map[string]domain.PoolAnime
+	all      []domain.PoolAnime
+	loaded   bool
+	loadedAt time.Time
+	now      func() time.Time // injectable for tests
 }
 
 func NewPoolStore(c poolCache, f poolFetcher, ttl time.Duration, log *logger.Logger) *PoolStore {
-	return &PoolStore{cache: c, fetcher: f, ttl: ttl, log: log}
+	return &PoolStore{cache: c, fetcher: f, ttl: ttl, log: log, now: time.Now}
 }
 
-// All returns the full pool, loading it (Redis → catalog) on first use.
+// freshLocked reports whether the in-memory pool is loaded and still within its
+// TTL. The caller must hold at least the read lock. A non-positive ttl disables
+// in-memory expiry (load once — the historical behavior).
+func (s *PoolStore) freshLocked() bool {
+	return s.loaded && (s.ttl <= 0 || s.now().Before(s.loadedAt.Add(s.ttl)))
+}
+
+// All returns the full pool, loading it (Redis → catalog) on first use and
+// RELOADING once the in-memory copy is older than ttl. Previously the in-memory
+// index loaded once and never refreshed — ANIDLE_POOL_TTL only bounded the Redis
+// entry, so a long-lived process served a stale pool until restart (audit #21).
 func (s *PoolStore) All(ctx context.Context) ([]domain.PoolAnime, error) {
 	s.mu.RLock()
-	if s.loaded {
+	if s.freshLocked() {
 		all := s.all
 		s.mu.RUnlock()
 		return all, nil
@@ -64,7 +76,8 @@ func (s *PoolStore) All(ctx context.Context) ([]domain.PoolAnime, error) {
 func (s *PoolStore) load(ctx context.Context) ([]domain.PoolAnime, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.loaded {
+	if s.freshLocked() {
+		// Another goroutine refreshed while we waited for the write lock.
 		return s.all, nil
 	}
 
@@ -91,6 +104,7 @@ func (s *PoolStore) load(ctx context.Context) ([]domain.PoolAnime, error) {
 	}
 	s.all = pool
 	s.loaded = true
+	s.loadedAt = s.now()
 	return pool, nil
 }
 
