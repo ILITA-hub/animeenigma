@@ -91,18 +91,58 @@ Rules of thumb for choosing `risk`:
   "accidentally dropped" from "deliberately toggled off" — restoring visibility is a product decision that
   belongs to the admin. NEVER `auto_fix`, never edit code, never restore a "missing" element autonomously.
 
-**When a fix is applied (auto or button), this is the canonical apply path:**
-1. Make the code change (Edit/Write) — smallest change that fixes the root cause.
-2. **Run the `/animeenigma-after-update` skill** and follow its guidance: it lints + builds the affected code,
-   redeploys the changed services (`make redeploy-<service>`), runs health checks, appends a user-facing
-   changelog entry (Russian Trump-mode), commits with the standard co-authors, and pushes.
-3. **Verify**: confirm health/tests pass and the originally-broken signal recovers.
-4. **Rollback on ANY failure**: `git checkout HEAD -- <file>` (or `git revert` if already committed), redeploy,
-   then return `escalate` with the failure output. Never leave a half-applied or unverified fix live.
+**When a fix is applied (auto or button), the canonical apply path depends on whether it edits source.**
+
+You run inside `/data/animeenigma` (the shared `main` base tree) with your full toolset. Per
+`docs/git-workflow.md` the **golden rule is: never edit code directly in `/data/animeenigma`** — it is a
+read-only mirror of `origin/main` kept fresh by a cron, and a stray edit there pauses the auto-sync and
+tangles everyone's work. Your own state/issue-log files under `/data/animeenigma` (the maintenance
+state + issues.json the Go layer writes) are the ONLY exception. So:
+
+**(A) CODE fix — anything that edits source files (`code_fix`, a selector/allowlist/handler/CSS change).**
+Do the editing in an isolated worktree, NOT in the base tree:
+1. `git fetch origin`
+2. `git worktree add -b maint/<short-id> /tmp/ae-maint-fix-<short-id> origin/main` (branch off fresh
+   `origin/main`, never local HEAD). `<short-id>` = the issue id or a short slug.
+3. `cd /tmp/ae-maint-fix-<short-id>` — **all editing + testing happens here, with paths relative to this
+   worktree.** Frontend only: `bun install` first (worktrees don't share `node_modules`).
+4. Make the smallest change that fixes the root cause (Edit/Write) and **run the relevant tests/build in the
+   worktree** (e.g. `cd services/<svc> && go test ./...`, or `cd frontend/web && bunx vitest run && bunx vue-tsc --noEmit`).
+5. Commit with a conventional-commit message + the standard co-authors (the template in the Auto-Edit
+   Selector Workflow below).
+6. Push to `main` with the fetch→rebase→push retry loop (`origin/main` moves under you):
+   ```bash
+   for i in 1 2 3 4 5; do
+     git fetch origin main && git rebase origin/main && git push origin HEAD:main && break
+     echo "push race — retrying ($i)…"; sleep 2
+   done
+   ```
+7. `cd /data/animeenigma` — **return to the base tree.**
+8. **Run the `/animeenigma-after-update` skill FROM the base tree (main root), AFTER the push.** It deploys
+   from main root: lints + builds the affected code, redeploys the changed services (`make redeploy-<service>`),
+   runs health checks, appends a user-facing changelog entry (Russian Trump-mode), commits with the standard
+   co-authors, and pushes. Running it after the push means it deploys the true merged HEAD (catching any other
+   agent's commits that merged in the meantime).
+9. **Verify**: confirm health/tests pass and the originally-broken signal recovers.
+10. **Tear down**: `git worktree remove --force /tmp/ae-maint-fix-<short-id>` (then `git worktree prune`).
+11. **Rollback on ANY failure**: for a code fix, rollback is simply **discard the worktree** — if you have not
+    yet pushed (step 6), just `git worktree remove --force /tmp/ae-maint-fix-<short-id>` and return `escalate`
+    with the failure output; no `git checkout`/`git revert` in the base tree is ever needed. If the push already
+    landed and `/animeenigma-after-update` then failed, fix it in the still-existing worktree and re-run, or
+    push a revert from the worktree — never edit the base tree to undo it. Never leave a half-applied or
+    unverified fix live.
+
+**(B) OPERATIONAL fix — no source edit (`restart`, `redeploy`, `docker_pull`, `retry_job`).** Run these
+directly in the base tree (`/data/animeenigma`) as before — `make restart-<service>` / `make redeploy-<service>`,
+`docker pull` + recreate, the scheduler job-retry curl, the Pattern 2b network-alias re-add. No worktree, no
+`/animeenigma-after-update` (these don't change code or the changelog). Verify the signal recovers; rollback is
+just re-running the operation or restarting.
 
 The narrow `auto_edit_selectors` workflow below is the lowest-risk concrete instance of `risk: low` — its
-preconditions define the bar for "confident + mechanically verifiable." A broader code fix you're equally
-confident in (and can verify) may also be `low`; when in doubt between two levels, pick the higher one.
+preconditions define the bar for "confident + mechanically verifiable." It is a CODE fix, so it follows
+path (A): the single-constant edit + provider unit tests run **in the worktree**, then push + after-update
+from main root. A broader code fix you're equally confident in (and can verify) may also be `low`; when in
+doubt between two levels, pick the higher one.
 
 ## Diagnostic Commands
 
@@ -268,58 +308,75 @@ This is the ONLY code-edit auto-fix tier. It exists because the most common scra
 
 ### Workflow
 
+This is a CODE fix, so it follows apply-path (A) above: **edit + test in an isolated worktree**, then push,
+then redeploy from main root. Do NOT edit the selector constant directly in `/data/animeenigma` (golden rule).
+
+0. **Create the worktree** (off fresh `origin/main`) and work inside it — all paths below are relative to it:
+   ```bash
+   cd /data/animeenigma && git fetch origin
+   git worktree add -b maint/<short-id> /tmp/ae-maint-fix-<short-id> origin/main
+   cd /tmp/ae-maint-fix-<short-id>
+   ```
 1. **Fetch fresh upstream HTML** for the URL pattern the broken selector lives in (search page, category page, episode page). Use the scraper container's user-agent + referer to reproduce production behavior:
    ```bash
    docker exec animeenigma-scraper sh -c 'wget -qO- --user-agent="Mozilla/5.0 ... Chrome/131..." --header="Referer: <provider_base>/" "<url>"' > /tmp/current.html
    ```
 2. **Locate the structural element** the old selector USED to match. The element's text/href/attribute content is in the golden fixture or in a recent `parser_zero_match_total` log. Identify what the equivalent element is in the current HTML — e.g., `<p class="name">` became `<div class="title">`, or `/category/<slug>` became `/series/<slug>`.
 3. **Derive ONE candidate new selector.** Be precise: prefer attribute selectors with stable values over class names that look generic ("title", "name") and may match unintended elements.
-4. **Edit ONLY the relevant named constant** in `services/scraper/internal/providers/<name>/client.go`. Single-line change. Do not touch function bodies, types, struct fields, or anything outside the named selector constant.
-5. **Run the provider's unit tests**:
+4. **Edit ONLY the relevant named constant** in `services/scraper/internal/providers/<name>/client.go` (path relative to the worktree). Single-line change. Do not touch function bodies, types, struct fields, or anything outside the named selector constant.
+5. **Run the provider's unit tests in the worktree**:
    ```bash
-   cd /data/animeenigma/services/scraper && go test -count=1 ./internal/providers/<name>/...
+   cd services/scraper && go test -count=1 ./internal/providers/<name>/...
    ```
-   If ANY test fails, immediately revert the edit (`git checkout HEAD -- services/scraper/internal/providers/<name>/client.go`) and escalate. Do not redeploy a broken build.
-6. **Rebuild + restart scraper**:
-   ```bash
-   make redeploy-scraper
-   ```
-7. **Verify live**: wait 30 s, then probe the affected stage via the health endpoint:
-   ```bash
-   curl -s http://localhost:8000/api/anime/_/scraper/health | python3 -c 'import sys, json; d=json.load(sys.stdin); print(d["data"]["providers"]["<name>"]["stages"]["<stage>"])'
-   ```
-   If the stage is still DOWN after 30 s, revert + redeploy + escalate.
-8. **Commit + push** with a conventional-commit message and co-authors:
+   If ANY test fails, **discard the worktree** (rollback below) and escalate. Do not push or redeploy a broken build.
+6. **Commit + push** from the worktree with a conventional-commit message and co-authors, using the rebase-retry loop (`origin/main` moves under you):
    ```bash
    git add services/scraper/internal/providers/<name>/client.go
    git commit -m "$(cat <<'EOF'
    fix(scraper): auto-rotated <selector> for <provider> upstream HTML drift
 
    parser_zero_match_total{selector=<old_selector>} confirmed drift at <ISO timestamp>.
-   Verified fresh upstream HTML, ran provider unit tests, redeployed scraper.
+   Verified fresh upstream HTML, ran provider unit tests in an isolated worktree.
 
    Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
    Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
    Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>
    EOF
    )"
-   git push
+   for i in 1 2 3 4 5; do
+     git fetch origin main && git rebase origin/main && git push origin HEAD:main && break
+     echo "push race — retrying ($i)…"; sleep 2
+   done
    ```
-9. **Report** via Telegram with the diff + before/after health snapshot.
+7. **Rebuild + restart scraper from main root** (after the push):
+   ```bash
+   cd /data/animeenigma
+   make redeploy-scraper
+   ```
+   (Or run the full `/animeenigma-after-update` skill from main root for the changelog + co-author commit — see apply-path (A). At minimum redeploy scraper so the fix goes live.)
+8. **Verify live**: wait 30 s, then probe the affected stage via the health endpoint:
+   ```bash
+   curl -s http://localhost:8000/api/anime/_/scraper/health | python3 -c 'import sys, json; d=json.load(sys.stdin); print(d["data"]["providers"]["<name>"]["stages"]["<stage>"])'
+   ```
+   If the stage is still DOWN after 30 s, escalate (and push a revert from the worktree if the bad commit already landed).
+9. **Tear down + report**: `git worktree remove --force /tmp/ae-maint-fix-<short-id>` (then `git worktree prune`), and report via Telegram with the diff + before/after health snapshot.
 
 ### Rollback
 
-Any of these triggers an immediate revert + escalate:
+Any of these triggers an immediate rollback + escalate:
 - Unit tests fail after the edit.
 - `make redeploy-scraper` returns non-zero.
 - After 30 s, the affected stage's health is still DOWN.
 - Live health response shows a regression in another stage that was healthy before.
 
-Rollback steps:
+Rollback steps — **rollback for a code fix is just discarding the worktree** (no `git checkout`/`git revert` in the base tree):
 ```bash
-git checkout HEAD -- services/scraper/internal/providers/<name>/client.go
-make redeploy-scraper
-# Then: escalate with the failed-test output / health snapshot, do NOT retry.
+# If you have NOT pushed yet (failure at the test step), simply drop the worktree:
+git worktree remove --force /tmp/ae-maint-fix-<short-id>
+git worktree prune
+# If the bad commit ALREADY landed on main, push a revert FROM the worktree (rebase-retry loop), then redeploy:
+#   git revert --no-edit HEAD && <push retry loop> ; cd /data/animeenigma && make redeploy-scraper
+# Then: escalate with the failed-test output / health snapshot, do NOT retry the same edit.
 ```
 
 ### Hard "do NOT auto-edit" cases (these are `escalate`, not `auto_edit_selectors`)
@@ -402,11 +459,13 @@ make redeploy-scraper
 - `curl -X POST http://localhost:8085/api/v1/jobs/{job}` (retry scheduler job)
 - `make redeploy-scraper` ONLY as the final step of a successful `auto_edit_selectors` workflow (after a single named-constant edit passed unit tests). Never as a first response to any other alert.
 
-**Auto-edit-selectors ONLY these actions:**
+**Auto-edit-selectors ONLY these actions (performed inside the worktree per apply-path (A)):**
+- `git worktree add` a throwaway worktree off `origin/main`, edit there, `git worktree remove --force` when done.
 - Edit ONE named selector constant in `services/scraper/internal/providers/<name>/client.go`, on the lines defining that constant.
-- Run `go test -count=1 ./internal/providers/<name>/...` (test-only invocation).
-- `git add` + `git commit` of that single file + `git push`, with the conventional-commit message + co-authors template above.
-- Rollback via `git checkout HEAD -- <file>` if any verification step fails.
+- Run `go test -count=1 ./internal/providers/<name>/...` (test-only invocation) in the worktree.
+- `git add` + `git commit` of that single file + `git fetch`/`git rebase`/`git push` (rebase-retry loop), with the conventional-commit message + co-authors template above.
+- `make redeploy-scraper` from main root after the push.
+- Rollback = **discard the worktree** (`git worktree remove --force <path>`); if the commit already landed, push a `git revert` from the worktree. No `git checkout`/`git revert` in the base tree.
 
 **Never edit (even in auto_edit_selectors):**
 - Anything outside `services/scraper/internal/providers/<name>/client.go`.

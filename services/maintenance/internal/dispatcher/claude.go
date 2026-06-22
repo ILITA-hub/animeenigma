@@ -119,6 +119,11 @@ var allowedFixTools = []string{
 	"Bash(git diff:*)",
 	"Bash(git status:*)",
 	"Bash(git log:*)",
+	// Code fixes run in an isolated worktree off origin/main (docs/git-workflow.md):
+	// fetch → worktree add → edit/test there → push → after-update from main root.
+	"Bash(git worktree:*)",
+	"Bash(git fetch:*)",
+	"Bash(git rebase:*)",
 	"Bash(bun:*)",
 	"Bash(bunx:*)",
 	// Skill lets the fix run /animeenigma-after-update (lint → redeploy → changelog
