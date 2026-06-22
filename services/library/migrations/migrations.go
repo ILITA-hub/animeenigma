@@ -9,15 +9,15 @@
 // across restarts is safe.
 //
 // Apply order is FK-driven and must be preserved:
-//   1. LibraryJobsSQL          (Phase 03 — base)
-//   2. LibraryEpisodesSQL      (Phase 04 — references library_jobs(id))
-//   3. LibraryFilenamePatternsSQL (Phase 04 — independent)
-//   4. AutocachePoolSQL        (Phase 07 — alters library_episodes; must follow 002)
-//   5. AutocacheConfigSQL      (Phase 07 — singleton config table; independent)
-//   6. AutocacheDemandSQL      (Phase 08 — demand intake table; independent)
-//   7. AutocacheJobSourceSQL   (Phase 09 — extends the job_source enum; independent)
-//   8. LibraryJobsEpisodeSQL   (Phase 09 — alters library_jobs; must follow 001)
-//   9. AutocacheDemandOngoingSQL (Phase 09 — extends autocache_demand_reason enum; independent)
+//  1. LibraryJobsSQL          (Phase 03 — base)
+//  2. LibraryEpisodesSQL      (Phase 04 — references library_jobs(id))
+//  3. LibraryFilenamePatternsSQL (Phase 04 — independent)
+//  4. AutocachePoolSQL        (Phase 07 — alters library_episodes; must follow 002)
+//  5. AutocacheConfigSQL      (Phase 07 — singleton config table; independent)
+//  6. AutocacheDemandSQL      (Phase 08 — demand intake table; independent)
+//  7. AutocacheJobSourceSQL   (Phase 09 — extends the job_source enum; independent)
+//  8. LibraryJobsEpisodeSQL   (Phase 09 — alters library_jobs; must follow 001)
+//  9. AutocacheDemandOngoingSQL (Phase 09 — extends autocache_demand_reason enum; independent)
 package migrations
 
 import _ "embed"
@@ -130,3 +130,16 @@ var AutocacheDemandTitlesSQL string
 //
 //go:embed 012_autocache_trigger_log.sql
 var AutocacheTriggerLogSQL string
+
+// LibraryJobsEpisodeIndexSQL is migrations/013_library_jobs_episode_index.sql
+// embedded as a string. Adds two partial indexes on library_jobs that serve the
+// Phase-09 hot queries (audit finding L578): idx_library_jobs_shikimori_episode
+// on (shikimori_id, episode) for HasActiveForEpisode, and
+// idx_library_jobs_autocache_inflight on (source) for SumInflightJobBytes (which
+// runs on every EnsureRoom). Both are partial on the non-terminal set so they
+// stay small as the unbounded durable library_jobs audit table grows. Idempotent
+// CREATE INDEX IF NOT EXISTS; must follow 001 (created library_jobs) and 009
+// (added the episode column). Applied by main.go.
+//
+//go:embed 013_library_jobs_episode_index.sql
+var LibraryJobsEpisodeIndexSQL string

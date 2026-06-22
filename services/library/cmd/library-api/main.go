@@ -21,7 +21,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/library/internal/handler"
 	libmetrics "github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
 	lminio "github.com/ILITA-hub/animeenigma/services/library/internal/minio"
-	"github.com/ILITA-hub/animeenigma/services/library/migrations"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/animetosho"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/filename"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/jackett"
@@ -30,6 +29,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/library/internal/service"
 	libtorrent "github.com/ILITA-hub/animeenigma/services/library/internal/torrent"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/transport"
+	"github.com/ILITA-hub/animeenigma/services/library/migrations"
 )
 
 // animeToshoAdapter bridges between service.AnimeToshoSearcher (which
@@ -197,6 +197,15 @@ func main() {
 	// what-watched per user-driven trigger + the target episode). Independent table.
 	if err := db.DB.Exec(migrations.AutocacheTriggerLogSQL).Error; err != nil {
 		log.Fatalw("failed to apply autocache_trigger_log migration", "error", err)
+	}
+	// 013 (audit L578): two partial indexes on library_jobs serving the Phase-09
+	// hot queries — idx_library_jobs_shikimori_episode (HasActiveForEpisode) and
+	// idx_library_jobs_autocache_inflight (SumInflightJobBytes, on every
+	// EnsureRoom). Idempotent CREATE INDEX IF NOT EXISTS; must follow 001
+	// (library_jobs), 008 (the 'autocache' job_source enum value its partial
+	// predicate references) and 009 (episode column), all applied above.
+	if err := db.DB.Exec(migrations.LibraryJobsEpisodeIndexSQL).Error; err != nil {
+		log.Fatalw("failed to apply library_jobs_episode_index migration", "error", err)
 	}
 
 	// Start DB pool metrics collector.
