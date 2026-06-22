@@ -24,6 +24,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/recs/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs"
 	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs/signals"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -127,6 +128,11 @@ type RecsHandler struct {
 	cache recsCache
 	log   *logger.Logger
 
+	// sf collapses concurrent cache-miss recomputes for the same key so a cold
+	// cache (or a popular trending key) triggers ONE full-ensemble computation,
+	// not one per waiting request (audit #12).
+	sf singleflight.Group
+
 	// Composed signals — built once at construction. The DB handle is enough
 	// to wire them.
 	s11 *signals.S11Filter
@@ -202,8 +208,23 @@ func (h *RecsHandler) serveAnonymous(ctx context.Context, w http.ResponseWriter)
 		h.log.Warnw("recs cache read failed; recomputing", "error", err)
 	}
 
-	// 2. Compute fresh
-	envelope, err := h.computeFresh(ctx)
+	// 2. Compute fresh — singleflight on the single shared trending key so a
+	//    cold cache doesn't have every concurrent anonymous request run the
+	//    full trending compute at once (audit #12).
+	v, err, _ := h.sf.Do(PublicTrendingKey, func() (interface{}, error) {
+		var warm RecsEnvelope
+		if cerr := h.cache.Get(ctx, PublicTrendingKey, &warm); cerr == nil {
+			return warm, nil
+		}
+		env, cerr := h.computeFresh(ctx)
+		if cerr != nil {
+			return RecsEnvelope{}, cerr
+		}
+		if setErr := h.cache.Set(ctx, PublicTrendingKey, env, publicTrendingTTL); setErr != nil {
+			h.log.Warnw("recs cache write failed", "error", setErr)
+		}
+		return env, nil
+	})
 	if err != nil {
 		h.log.Errorw("recs compute failed", "error", err)
 		httputil.OK(w, RecsEnvelope{
@@ -216,12 +237,7 @@ func (h *RecsHandler) serveAnonymous(ctx context.Context, w http.ResponseWriter)
 		return
 	}
 
-	// 3. Cache the result
-	if setErr := h.cache.Set(ctx, PublicTrendingKey, envelope, publicTrendingTTL); setErr != nil {
-		h.log.Warnw("recs cache write failed", "error", setErr)
-	}
-
-	httputil.OK(w, envelope)
+	httputil.OK(w, v.(RecsEnvelope))
 }
 
 // serveLoggedIn serves the personalized Up Next row. Per-user cache,
@@ -239,8 +255,28 @@ func (h *RecsHandler) serveLoggedIn(ctx context.Context, w http.ResponseWriter, 
 			"user_id", userID, "error", err)
 	}
 
-	// 2. Compute fresh
-	envelope, err := h.computeFreshForUser(ctx, userID)
+	// 2. Compute fresh — collapse concurrent misses for this user via
+	//    singleflight so a cold cache triggers ONE full-ensemble run, not one
+	//    per in-flight request (audit #12).
+	key := userTopNKey(userID)
+	v, err, _ := h.sf.Do(key, func() (interface{}, error) {
+		// Re-check the cache inside the flight: a sibling request may have just
+		// populated it while we were queued.
+		var warm RecsEnvelope
+		if cerr := h.cache.Get(ctx, key, &warm); cerr == nil {
+			return warm, nil
+		}
+		env, cerr := h.computeFreshForUser(ctx, userID)
+		if cerr != nil {
+			return RecsEnvelope{}, cerr
+		}
+		// Cache (per-user, 6h TTL) once, inside the flight.
+		if setErr := h.cache.Set(ctx, key, env, userTopNTTL); setErr != nil {
+			h.log.Warnw("personalized recs cache write failed",
+				"user_id", userID, "error", setErr)
+		}
+		return env, nil
+	})
 	if err != nil {
 		h.log.Errorw("personalized recs compute failed",
 			"user_id", userID, "error", err)
@@ -254,12 +290,7 @@ func (h *RecsHandler) serveLoggedIn(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
-	// 3. Cache (per-user, 6h TTL).
-	if setErr := h.cache.Set(ctx, userTopNKey(userID), envelope, userTopNTTL); setErr != nil {
-		h.log.Warnw("personalized recs cache write failed",
-			"user_id", userID, "error", setErr)
-	}
-
+	envelope := v.(RecsEnvelope)
 	httputil.OK(w, envelope)
 }
 
