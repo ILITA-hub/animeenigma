@@ -169,5 +169,17 @@ class TestSelfHealConfig(unittest.TestCase):
         self.assertEqual(cfg.resurrect_max_fails, 5)
 
 
+class TestSelfHealMetrics(unittest.TestCase):
+    def test_metrics_exist(self):
+        from app import metrics
+        # Gauges accept .set(); the resurrect counter is labelled by result.
+        metrics.POOL_FREE.set(3)
+        metrics.POOL_CRASHED.set(1)
+        metrics.SLOT_RESURRECT_TOTAL.labels(result="ok").inc()
+        metrics.SLOT_RESURRECT_TOTAL.labels(result="fail").inc()
+        names = {m.name for m in metrics.SLOT_RESURRECT_TOTAL.collect()}
+        self.assertIn("stealth_slot_resurrect", names)
+
+
 if __name__ == "__main__":
     unittest.main()

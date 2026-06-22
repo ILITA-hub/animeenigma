@@ -59,3 +59,19 @@ BROWSER_RELAUNCH_TOTAL = Counter(
     "Browser (re)launches, by reason.",
     ["reason"],  # cold|recycle|crash|rotate
 )
+
+POOL_FREE = Gauge(
+    "stealth_pool_free",
+    "Browser profiles currently free (status=healthy and not leased).",
+)
+
+POOL_CRASHED = Gauge(
+    "stealth_pool_crashed",
+    "Browser profiles currently marked crashed (awaiting resurrection).",
+)
+
+SLOT_RESURRECT_TOTAL = Counter(
+    "stealth_slot_resurrect_total",
+    "Crashed-slot resurrection attempts in the reaper, by result.",
+    ["result"],  # ok|fail|retired
+)
