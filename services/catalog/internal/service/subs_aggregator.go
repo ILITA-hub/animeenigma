@@ -211,7 +211,7 @@ func subsCacheTTL(resp *AggregateResponse) time.Duration {
 
 func (s *SubsAggregator) fetchJimaku(ctx context.Context, anime *domain.Anime, episode int) ([]SubtitleTrack, error) {
 	if s.jimaku == nil || !s.jimaku.IsConfigured() {
-		return nil, errors.New("jimaku not configured")
+		return nil, errProviderUnconfigured
 	}
 	if anime.AniListID == "" {
 		// No AniList ID → Jimaku can't search.

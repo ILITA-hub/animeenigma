@@ -34,12 +34,6 @@ func (f *fakeSubsAnimeRepo) UpdateAniListID(_ context.Context, _ string, _ strin
 	return nil
 }
 
-// metricsTestCache is a lightweight in-memory cache that always misses on Get
-// and silently drops Sets — so FetchAll always takes the live (non-cached) path.
-type metricsTestCache struct {
-	*cache.RedisCache
-}
-
 // metricsTestRedis returns a Redis cache on DB 13, flushed before and after.
 // If Redis is unreachable the test is skipped.
 func metricsTestRedis(t *testing.T) *cache.RedisCache {

@@ -335,7 +335,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(catalog_subtitle_provider_up == 0)",
+          "expr": "count(catalog_subtitle_provider_up == 0) or vector(0)",
           "legendFormat": "Providers Down",
           "refId": "A"
         }
