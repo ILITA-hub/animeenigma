@@ -13,6 +13,7 @@ the engine attaches the live browser/context to a profile via ``attach``.
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,6 +29,14 @@ class Profile:
     browser: Any = None
     context: Any = None
     user_agent: str = ""
+    # -- self-heal health (Phase 1) ----------------------------------------- #
+    # "healthy": usable; "crashed": browser died, awaiting reaper resurrect;
+    # "warming": resurrect in progress (transient, set by the reaper).
+    status: str = "healthy"
+    consecutive_fail: int = 0   # failed resurrect attempts in a row
+    last_crash: float = 0.0     # time.time() of the most recent crash mark
+    next_resurrect_at: float = 0.0  # earliest time the reaper may retry this slot
+    last_error: str = ""            # most recent crash error string (for health())
 
     @property
     def launched(self) -> bool:
@@ -80,3 +89,32 @@ class ProfileManager:
 
     def reset_uses(self, profile: Profile) -> None:
         profile.uses = 0
+
+    # -- self-heal bookkeeping (Phase 1) ------------------------------------ #
+    def mark_crashed(self, profile: Profile, *, error: str = "") -> None:
+        """Flag a slot as crashed (browser dead). Increments the consecutive
+        failure counter (drives the retire-after-N rule) and stamps last_crash
+        so the reaper can apply an exponential per-slot backoff. The live
+        handles are cleared by the engine's _teardown; this only sets state."""
+        profile.status = "crashed"
+        profile.consecutive_fail += 1
+        profile.last_crash = time.time()
+        if error:
+            profile.last_error = error
+
+    def mark_healthy(self, profile: Profile) -> None:
+        """Clear crash state after a successful resurrect / launch."""
+        profile.status = "healthy"
+        profile.consecutive_fail = 0
+        profile.next_resurrect_at = 0.0
+
+    def crashed_idle(self) -> list[Profile]:
+        """Crashed slots that are NOT currently leased — the reaper may try to
+        resurrect these without racing an in-flight lease."""
+        return [p for p in self._profiles if p.status == "crashed" and not p.leased]
+
+    def status_counts(self) -> dict[str, int]:
+        counts = {"healthy": 0, "crashed": 0, "warming": 0}
+        for p in self._profiles:
+            counts[p.status] = counts.get(p.status, 0) + 1
+        return counts

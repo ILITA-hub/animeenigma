@@ -181,5 +181,36 @@ class TestSelfHealMetrics(unittest.TestCase):
         self.assertIn("stealth_slot_resurrect", names)
 
 
+class TestProfileHealth(unittest.TestCase):
+    def test_mark_crashed_and_healthy(self):
+        from app.profiles import ProfileManager
+        pm = ProfileManager("/tmp/ss-health-test", size=2)
+        p = pm.all()[0]
+        self.assertEqual(p.status, "healthy")
+        pm.mark_crashed(p, error="Target closed")
+        self.assertEqual(p.status, "crashed")
+        self.assertEqual(p.consecutive_fail, 1)
+        self.assertGreater(p.last_crash, 0.0)
+        # crashed_idle lists crashed, not-leased slots only.
+        self.assertIn(p, pm.crashed_idle())
+        p.leased = True
+        self.assertNotIn(p, pm.crashed_idle())
+        p.leased = False
+        pm.mark_crashed(p, error="again")
+        self.assertEqual(p.consecutive_fail, 2)
+        pm.mark_healthy(p)
+        self.assertEqual(p.status, "healthy")
+        self.assertEqual(p.consecutive_fail, 0)
+        self.assertNotIn(p, pm.crashed_idle())
+
+    def test_status_counts(self):
+        from app.profiles import ProfileManager
+        pm = ProfileManager("/tmp/ss-counts-test", size=3)
+        pm.mark_crashed(pm.all()[0])
+        counts = pm.status_counts()
+        self.assertEqual(counts["crashed"], 1)
+        self.assertEqual(counts["healthy"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
