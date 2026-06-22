@@ -56,6 +56,15 @@ export interface Combo {
   team: string | null
 }
 
+/** A subtitle track shipped alongside a provider stream (proxied + signed). */
+export interface SubtitleTrack {
+  url: string       // ready-to-fetch (proxied + signed for provider tracks)
+  provider: string  // 'gogoanime' | 'jimaku' | 'opensubtitles' | ...
+  lang: string      // 'en' | 'ja' | 'ru' | ...
+  label: string
+  format: string    // 'vtt' | 'srt' | 'ass'
+}
+
 /** Normalised stream descriptor returned by a provider adapter. */
 export interface StreamResult {
   url: string
@@ -66,4 +75,6 @@ export interface StreamResult {
   /** Quality the provider actually served (e.g. "720p") — shown next to Auto
    *  for per-URL ladders where hls.js has no level to report. */
   qualityLabel?: string
+  /** Subtitle tracks the provider shipped alongside the stream (signed). */
+  subtitles?: SubtitleTrack[]
 }

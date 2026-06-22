@@ -355,6 +355,48 @@ describe('useProviderResolver', () => {
     const resolver = makeResolver({} as any)
     await expect(resolver.listEpisodes('hanime', 'uuid')).rejects.toThrow(NotAvailableError)
   })
+
+  it('maps signed provider subtitle tracks into StreamResult.subtitles', async () => {
+    const scraperApi = {
+      getEpisodes: vi.fn().mockResolvedValue({
+        data: { data: { episodes: [{ id: 'ep1', number: 1 }], meta: { provider: 'gogoanime' } } },
+      }),
+      getServers: vi.fn().mockResolvedValue({
+        data: { data: { servers: [{ id: 's1', name: 'Server 1', type: 'sub' }] } },
+      }),
+      getStream: vi.fn().mockResolvedValue({
+        data: {
+          data: {
+            stream: {
+              sources: [{ url: 'https://cdn.example/v.m3u8', type: 'hls', exp: 'E', sig: 'S' }],
+              tracks: [
+                { file: 'https://cdn.example/en.vtt', label: 'English', kind: 'captions', exp: 'E2', sig: 'S2' },
+                { file: 'https://cdn.example/thumbs.vtt', label: 'thumbnails', kind: 'thumbnails' },
+              ],
+              headers: { Referer: 'https://gogo.example/' },
+            },
+          },
+        },
+      }),
+    }
+    const resolver = makeResolver({ scraperApi } as any)
+    const eps = await resolver.listEpisodes('gogoanime', 'anime-1')
+    const res = await resolver.resolveStream('gogoanime', 'anime-1', eps[0], {
+      audio: 'sub',
+      lang: 'en',
+      provider: 'gogoanime',
+      server: 's1',
+      team: null,
+    })
+    expect(res.subtitles).toHaveLength(1) // thumbnails excluded
+    const t = res.subtitles![0]
+    expect(t.provider).toBe('gogoanime')
+    expect(t.lang).toBe('en')
+    expect(t.format).toBe('vtt')
+    // URL is proxied AND carries the track's own exp/sig (not the source's)
+    expect(t.url).toContain('exp=E2')
+    expect(t.url).toContain('sig=S2')
+  })
 })
 
 describe('ProviderResolver.listTeams', () => {

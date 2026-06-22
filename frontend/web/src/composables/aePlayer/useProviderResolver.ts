@@ -31,8 +31,9 @@
 
 import { scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, Combo, AudioKind } from '@/types/aePlayer'
+import type { StreamResult, Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
 import { hlsProxyUrl } from '@/utils/streaming'
+import { buildSubtitleProxyUrl, detectSubFormat, langFromTrack } from '@/utils/subtitleProxy'
 
 // ─── Error ──────────────────────────────────────────────────────────────────
 
@@ -69,12 +70,20 @@ interface ScraperSource {
   sig?: string
 }
 
+interface ScraperTrack {
+  file: string
+  label?: string
+  kind?: string   // 'captions' | 'subtitles' | 'thumbnails'
+  exp?: string
+  sig?: string
+}
+
 interface ScraperEnvelope {
   episodes?: ScraperEpisode[]
   servers?: ScraperServer[]
   stream?: {
     sources: ScraperSource[]
-    tracks?: unknown[]
+    tracks?: ScraperTrack[]
     headers?: Record<string, string>
   }
   meta?: { tried?: string[]; provider?: string }
@@ -261,11 +270,23 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
       const source = stream.sources[0]
       const type: 'hls' | 'mp4' = source.type === 'mp4' ? 'mp4' : 'hls'
       const referer = stream.headers?.Referer || stream.headers?.referer || ''
+
+      const subtitles: SubtitleTrack[] = (stream.tracks ?? [])
+        .filter((t) => t.kind === 'captions' || t.kind === 'subtitles' || t.kind === undefined)
+        .map((t) => ({
+          url: buildSubtitleProxyUrl(t.file, t.exp, t.sig),
+          provider: resolvedPrefer || prefer || 'scraper',
+          lang: langFromTrack(t.label, t.file),
+          label: t.label || 'subtitle',
+          format: detectSubFormat(undefined, t.file) ?? 'vtt',
+        }))
+
       return {
         url: buildProxyUrl(source.url, referer, type, { exp: source.exp, sig: source.sig }),
         type,
         headers: stream.headers,
         servers: srvs.map((s) => ({ id: s.id, label: s.name })),
+        ...(subtitles.length ? { subtitles } : {}),
       }
     },
   }
