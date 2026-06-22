@@ -38,8 +38,11 @@ func (h *InternalHandler) Credit(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
-	if req.UserID == "" || req.Reason == "" {
-		httputil.BadRequest(w, "user_id and reason are required")
+	// ref is the idempotency key: the (user_id, reason, ref) dedup index is
+	// PARTIAL (WHERE ref <> ''), so an empty ref silently bypasses dedup and
+	// double-credits on producer retries. Require it (audit medium #18).
+	if req.UserID == "" || req.Reason == "" || req.Ref == "" {
+		httputil.BadRequest(w, "user_id, reason and ref (idempotency key) are required")
 		return
 	}
 	applied, err := h.svc.Credit(r.Context(), req.UserID, req.Amount, req.Reason, req.Ref)

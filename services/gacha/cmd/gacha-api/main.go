@@ -34,6 +34,9 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to load config", "error", err)
 	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalw("invalid gacha economy config", "error", err)
+	}
 
 	tracer, err := tracing.InitFromEnv(context.Background(), "gacha")
 	if err != nil {
