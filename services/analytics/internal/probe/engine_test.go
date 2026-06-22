@@ -2,10 +2,15 @@ package probe
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/libs/streamprobe"
 )
+
+type fakePool struct{ items []PopularAnime }
+
+func (f fakePool) Pool(_ context.Context) ([]PopularAnime, error) { return f.items, nil }
 
 type fakeAS struct{}
 
@@ -47,7 +52,7 @@ func target(p string, as AnimeSetResolver, res Resolver) ProbeTarget {
 
 func TestEngine_RunOnce(t *testing.T) {
 	rep := &capRep{}
-	e := NewEngine([]ProbeTarget{target("gogoanime", fakeAS{}, fakeRes{})}, fakeVal{}, rep, func() int64 { return 42 }, nil)
+	e := NewEngine([]ProbeTarget{target("gogoanime", fakeAS{}, fakeRes{})}, fakeVal{}, rep, fakePool{}, rand.New(rand.NewSource(1)), func() int64 { return 42 }, nil)
 	if err := e.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +77,7 @@ func (r errRes) Resolve(_ context.Context, u, name string, _ int, s AnimeSlot, p
 
 func TestEngine_ResolveError_SynthesizesCDNUnreachable(t *testing.T) {
 	rep := &capRep{}
-	e := NewEngine([]ProbeTarget{target("badprov", fakeAS{}, errRes{stage: StageServers})}, fakeVal{}, rep, func() int64 { return 1 }, nil)
+	e := NewEngine([]ProbeTarget{target("badprov", fakeAS{}, errRes{stage: StageServers})}, fakeVal{}, rep, fakePool{}, rand.New(rand.NewSource(1)), func() int64 { return 1 }, nil)
 	if err := e.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +115,7 @@ func TestEngine_ProviderPanic_Isolated(t *testing.T) {
 	e := NewEngine([]ProbeTarget{
 		target("bad", fakeAS{}, pr),
 		target("good", fakeAS{}, pr),
-	}, fakeVal{}, rep, func() int64 { return 7 }, nil)
+	}, fakeVal{}, rep, fakePool{}, rand.New(rand.NewSource(1)), func() int64 { return 7 }, nil)
 
 	if err := e.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
@@ -150,7 +155,7 @@ func TestEngine_PerTargetDispatch(t *testing.T) {
 	e := NewEngine([]ProbeTarget{
 		target("provA", fakeAS{}, recordingRes{seen: &seenA}),
 		target("provB", fakeAS{}, recordingRes{seen: &seenB}),
-	}, fakeVal{}, rep, func() int64 { return 1 }, nil)
+	}, fakeVal{}, rep, fakePool{}, rand.New(rand.NewSource(1)), func() int64 { return 1 }, nil)
 	if err := e.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +174,7 @@ func TestEngine_EmptyAnimeSet_SyntheticDown(t *testing.T) {
 	// A target whose anime-set resolves nothing must still appear, as Down, with
 	// exactly one synthetic empty_response verdict (so it lands a probe_runs row).
 	rep := &capRep{}
-	e := NewEngine([]ProbeTarget{target("ae", emptyAS{}, fakeRes{})}, fakeVal{}, rep, func() int64 { return 1 }, nil)
+	e := NewEngine([]ProbeTarget{target("ae", emptyAS{}, fakeRes{})}, fakeVal{}, rep, fakePool{}, rand.New(rand.NewSource(1)), func() int64 { return 1 }, nil)
 	if err := e.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -182,4 +187,68 @@ func TestEngine_EmptyAnimeSet_SyntheticDown(t *testing.T) {
 	if len(rep.run.ProviderVerdicts) != 1 || rep.run.ProviderVerdicts[0].Status != StatusDown {
 		t.Fatalf("provider verdict = %+v, want Down", rep.run.ProviderVerdicts)
 	}
+}
+
+// notFoundThenPlayRes returns ErrProbeNotFound for the anchor UUID, and a
+// playable stream for any other UUID (the re-roll candidate).
+type notFoundThenPlayRes struct{ anchorUUID string }
+
+func (r notFoundThenPlayRes) Resolve(_ context.Context, u, name string, _ int, s AnimeSlot, p string) ([]ResolvedStream, Stage, error) {
+	if u == r.anchorUUID {
+		return nil, StageSearch, ErrProbeNotFound
+	}
+	return []ResolvedStream{{Provider: p, AnimeUUID: u, AnimeName: name, Slot: s, Server: "srv", Stage: StageStream}}, StageStream, nil
+}
+
+func TestEngine_NotFound_RerollsOnce_Pass(t *testing.T) {
+	const anchorUUID = "anchor-uuid"
+	const poolUUID = "pool-uuid"
+
+	pool := fakePool{items: []PopularAnime{{UUID: poolUUID, Name: "Pool Anime"}}}
+	res := notFoundThenPlayRes{anchorUUID: anchorUUID}
+
+	as := struct{ AnimeSetResolver }{}
+	as.AnimeSetResolver = singleRefAS{ref: AnimeRef{UUID: anchorUUID, Name: "Anchor Title", Slot: SlotAnchor}}
+
+	rep := &capRep{}
+	e := NewEngine(
+		[]ProbeTarget{target("gogoanime", as.AnimeSetResolver, res)},
+		fakeVal{}, rep, pool, rand.New(rand.NewSource(1)),
+		func() int64 { return 1 }, nil,
+	)
+	if err := e.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Must have a zero_match verdict for the anchor UUID.
+	var hasZeroMatch, hasPlayable bool
+	var playableUUID string
+	for _, v := range rep.run.Verdicts {
+		if v.Reason == streamprobe.ReasonZeroMatch && v.Stage == StageSearch && v.AnimeUUID == anchorUUID {
+			hasZeroMatch = true
+		}
+		if v.Playable() {
+			hasPlayable = true
+			playableUUID = v.AnimeUUID
+		}
+	}
+	if !hasZeroMatch {
+		t.Fatalf("expected a zero_match/StageSearch verdict for the anchor; got verdicts: %+v", rep.run.Verdicts)
+	}
+	if !hasPlayable {
+		t.Fatalf("expected a playable re-roll verdict; got verdicts: %+v", rep.run.Verdicts)
+	}
+	if playableUUID != poolUUID {
+		t.Fatalf("playable verdict uuid = %q, want %q", playableUUID, poolUUID)
+	}
+	if len(rep.run.ProviderVerdicts) != 1 || rep.run.ProviderVerdicts[0].Status != StatusUp {
+		t.Fatalf("provider status = %+v, want StatusUp", rep.run.ProviderVerdicts)
+	}
+}
+
+// singleRefAS is an AnimeSetResolver returning exactly one ref.
+type singleRefAS struct{ ref AnimeRef }
+
+func (s singleRefAS) Resolve(_ context.Context) ([]AnimeRef, error) {
+	return []AnimeRef{s.ref}, nil
 }

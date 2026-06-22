@@ -2,6 +2,8 @@ package probe
 
 import (
 	"context"
+	"errors"
+	"math/rand"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/streamprobe"
@@ -22,12 +24,14 @@ type Engine struct {
 	targets []ProbeTarget
 	val     Validator
 	rep     Reporter
+	pool    PopularPool
+	rng     *rand.Rand
 	now     func() int64
 	log     *logger.Logger
 }
 
-func NewEngine(targets []ProbeTarget, val Validator, rep Reporter, now func() int64, log *logger.Logger) *Engine {
-	return &Engine{targets: targets, val: val, rep: rep, now: now, log: log}
+func NewEngine(targets []ProbeTarget, val Validator, rep Reporter, pool PopularPool, rng *rand.Rand, now func() int64, log *logger.Logger) *Engine {
+	return &Engine{targets: targets, val: val, rep: rep, pool: pool, rng: rng, now: now, log: log}
 }
 
 // probeProvider runs all anime refs for one target, recovering from any panic
@@ -47,10 +51,20 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 	for _, ref := range refs {
 		streams, stage, rerr := t.Resolver.Resolve(ctx, ref.UUID, ref.Name, ref.Episode, ref.Slot, t.Provider)
 		if rerr != nil {
-			verdicts = append(verdicts, Verdict{
-				Provider: t.Provider, AnimeUUID: ref.UUID, AnimeName: ref.Name, Slot: ref.Slot, Stage: stage,
-				Reason: streamprobe.ReasonCDNUnreachable,
-			})
+			if errors.Is(rerr, ErrProbeNotFound) {
+				// Provider has no catalogue entry for this anime: record a zero_match
+				// verdict, then attempt one re-roll with a different popular anime.
+				verdicts = append(verdicts, Verdict{
+					Provider: t.Provider, AnimeUUID: ref.UUID, AnimeName: ref.Name, Slot: ref.Slot,
+					Stage: StageSearch, Reason: streamprobe.ReasonZeroMatch,
+				})
+				verdicts = append(verdicts, e.reroll(ctx, t, ref)...)
+			} else {
+				verdicts = append(verdicts, Verdict{
+					Provider: t.Provider, AnimeUUID: ref.UUID, AnimeName: ref.Name, Slot: ref.Slot, Stage: stage,
+					Reason: streamprobe.ReasonCDNUnreachable,
+				})
+			}
 			continue
 		}
 		for _, s := range streams {
@@ -64,6 +78,38 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 		verdicts = append(verdicts, Verdict{Provider: t.Provider, Stage: StageEpisodes, Reason: streamprobe.ReasonEmptyResponse})
 	}
 	return verdicts
+}
+
+// resolveAndValidate resolves+validates one anime for a target, tagging the slot.
+func (e *Engine) resolveAndValidate(ctx context.Context, t ProbeTarget, uuid, name string, slot AnimeSlot) []Verdict {
+	streams, stage, err := t.Resolver.Resolve(ctx, uuid, name, 0, slot, t.Provider)
+	if err != nil {
+		return []Verdict{{Provider: t.Provider, AnimeUUID: uuid, AnimeName: name, Slot: slot, Stage: stage, Reason: streamprobe.ReasonCDNUnreachable}}
+	}
+	out := make([]Verdict, 0, len(streams))
+	for _, s := range streams {
+		out = append(out, e.val.Validate(ctx, s))
+	}
+	return out
+}
+
+// reroll picks one random pool anime (≠ exclude) and resolves+validates it under the SAME slot.
+func (e *Engine) reroll(ctx context.Context, t ProbeTarget, ref AnimeRef) []Verdict {
+	cands, err := e.pool.Pool(ctx)
+	if err != nil || len(cands) == 0 {
+		if e.log != nil {
+			e.log.Warnw("probe re-roll pool unavailable", "provider", t.Provider, "error", err)
+		}
+		return nil
+	}
+	start := e.rng.Intn(len(cands))
+	for i := 0; i < len(cands); i++ {
+		c := cands[(start+i)%len(cands)]
+		if c.UUID != ref.UUID {
+			return e.resolveAndValidate(ctx, t, c.UUID, c.Name, ref.Slot)
+		}
+	}
+	return nil
 }
 
 func (e *Engine) RunOnce(ctx context.Context) error {
