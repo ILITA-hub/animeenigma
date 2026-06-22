@@ -279,6 +279,69 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class TestReadyzAndKinds(unittest.TestCase):
+    def _set_engine(self, engine):
+        import app.main as m
+        m.app.state.engine = engine
+        return m
+
+    def test_healthz_stays_200_when_saturated(self):
+        import json
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
+        eng.profiles.lease()                      # saturate
+        m = self._set_engine(eng)
+        out = run(m.healthz())
+        # /healthz returns the health() dict directly (FastAPI -> 200).
+        self.assertEqual(out["status"], "degraded")  # body says degraded...
+        # ...but the route is 200 (no JSONResponse status override).
+
+    def test_readyz_503_on_sustained_saturation(self):
+        import json
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                    readyz_saturation_seconds=15))
+        eng.profiles.lease()
+        eng._saturated_since = time.time() - 20
+        m = self._set_engine(eng)
+        resp = run(m.readyz())
+        self.assertEqual(resp.status_code, 503)
+        self.assertFalse(json.loads(resp.body)["ready"])
+
+    def test_readyz_200_when_free(self):
+        import json
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
+        m = self._set_engine(eng)
+        resp = run(m.readyz())
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(json.loads(resp.body)["ready"])
+
+    def test_resolve_pool_exhausted_kind(self):
+        import json
+        from app.main import ResolveRequest
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
+
+        async def _none(*a, **k):
+            return None
+        eng._acquire_profile = _none
+        m = self._set_engine(eng)
+        resp = run(m.resolve(ResolveRequest(provider="gogoanime")))
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(json.loads(resp.body)["kind"], "pool_exhausted")
+
+    def test_resolve_provider_wedged_kind(self):
+        import json
+        from app.main import ResolveRequest
+        from app.engine import ProviderWedged
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
+
+        async def _wedge(*a, **k):
+            raise ProviderWedged("poisoned", provider="nineanime")
+        eng.resolve = _wedge
+        m = self._set_engine(eng)
+        resp = run(m.resolve(ResolveRequest(provider="nineanime")))
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(json.loads(resp.body)["kind"], "provider_wedged")
+
+
 class TestReaperResurrection(unittest.TestCase):
     def _eng(self):
         eng = CamoufoxEngine(Config(

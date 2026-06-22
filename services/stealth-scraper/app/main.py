@@ -23,7 +23,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
 from .config import Config
-from .engine import CamoufoxEngine, FetchTimeout, PoolExhausted, SessionGone
+from .engine import CamoufoxEngine, FetchTimeout, PoolExhausted, ProviderWedged, SessionGone
 from .recipes import ChallengeError, NotFoundError, RecipeError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -84,6 +84,20 @@ async def healthz() -> dict:
     return engine.health()
 
 
+@app.get("/readyz")
+async def readyz() -> JSONResponse:
+    """Readiness (observability only — D8: does NOT drive a Docker/k8s restart).
+    503 when the pool has been saturated continuously past the configured
+    window; 200 otherwise. /healthz stays 200 for process liveness so in-flight
+    streams keep playing while the pool self-heals."""
+    engine: CamoufoxEngine = app.state.engine
+    if engine.is_ready():
+        return JSONResponse({"ready": True}, status_code=200)
+    body = {"ready": False}
+    body.update(engine.health())
+    return JSONResponse(body, status_code=503)
+
+
 @app.get("/metrics")
 async def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
@@ -99,10 +113,17 @@ async def resolve(req: ResolveRequest) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": str(exc), "kind": "not_found"}, status_code=404
         )
+    except ProviderWedged as exc:
+        # Warm session poisoned (>= poison_max crashes) — 503 (retryable) so the
+        # Go orchestrator fails over; the Go breaker reads kind=provider_wedged.
+        return JSONResponse(
+            {"success": False, "error": str(exc), "kind": "provider_wedged"},
+            status_code=503,
+        )
     except PoolExhausted as exc:
         # Pool saturated — 503 (retryable) so the Go orchestrator fails over.
         return JSONResponse(
-            {"success": False, "error": str(exc), "kind": "exhausted"}, status_code=503
+            {"success": False, "error": str(exc), "kind": "pool_exhausted"}, status_code=503
         )
     except ChallengeError as exc:
         # All exits challenged — surface as 502 so the Go side fails over.
@@ -136,8 +157,10 @@ async def fetch(req: FetchRequest) -> JSONResponse:
         })
     except NotFoundError as exc:
         return JSONResponse({"success": False, "error": str(exc), "kind": "not_found"}, status_code=404)
+    except ProviderWedged as exc:
+        return JSONResponse({"success": False, "error": str(exc), "kind": "provider_wedged"}, status_code=503)
     except PoolExhausted as exc:
-        return JSONResponse({"success": False, "error": str(exc), "kind": "exhausted"}, status_code=503)
+        return JSONResponse({"success": False, "error": str(exc), "kind": "pool_exhausted"}, status_code=503)
     except ChallengeError as exc:
         return JSONResponse({"success": False, "error": str(exc), "kind": "challenge"}, status_code=502)
     except RecipeError as exc:
