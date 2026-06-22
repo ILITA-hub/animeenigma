@@ -1,9 +1,18 @@
+x-logging: &default-logging
+  # audit #26 — cap container logs so the uncapped json-file driver
+  # cannot fill the disk. Applied to every service below.
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   # =============================================================================
   # Infrastructure
   # =============================================================================
 
   postgres:
+    logging: *default-logging
     image: postgres:16-alpine
     container_name: animeenigma-postgres
     restart: unless-stopped
@@ -28,6 +37,7 @@ services:
       retries: 5
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     container_name: animeenigma-redis
     restart: unless-stopped
@@ -43,6 +53,7 @@ services:
       retries: 5
 
   minio:
+    logging: *default-logging
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: animeenigma-minio
     restart: unless-stopped
@@ -66,6 +77,7 @@ services:
       retries: 5
 
   nats:
+    logging: *default-logging
     image: nats:2.10-alpine
     container_name: animeenigma-nats
     restart: unless-stopped
@@ -82,6 +94,7 @@ services:
       retries: 3
 
   meilisearch:
+    logging: *default-logging
     image: getmeili/meilisearch:v1.6
     container_name: animeenigma-meilisearch
     restart: unless-stopped
@@ -99,6 +112,7 @@ services:
       retries: 3
 
   megacloud-extractor:
+    logging: *default-logging
     build:
       context: ./megacloud-extractor
       dockerfile: Dockerfile
@@ -124,6 +138,7 @@ services:
   # (T-27-03-02). The two-layer /healthz probe (T-27-03-03) ensures Chromium
   # is actually alive before the scraper depends_on flips green.
   animepahe-resolver:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/animepahe-resolver/Dockerfile
@@ -157,6 +172,7 @@ services:
   # (no host port; the scraper talks to it over the compose network). See
   # services/stealth-scraper/README.md.
   stealth-scraper:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/stealth-scraper/Dockerfile
@@ -192,6 +208,7 @@ services:
       start_period: 40s
 
   scraper:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/scraper/Dockerfile
@@ -274,6 +291,7 @@ services:
   # at :9100/metrics (scrape job 'vnstat'). Self-contained build (Ubuntu 24.04 →
   # vnstat 2.12, matching the host) so there is no DB-format skew.
   vnstat-exporter:
+    logging: *default-logging
     build:
       context: ./vnstat-exporter
     container_name: animeenigma-vnstat-exporter
@@ -296,6 +314,7 @@ services:
       retries: 3
 
   prometheus:
+    logging: *default-logging
     image: prom/prometheus:v2.50.1
     container_name: animeenigma-prometheus
     restart: unless-stopped
@@ -339,6 +358,7 @@ services:
   # NOT yet depend on CH (that wiring lands in 01-03).
   # =============================================================================
   clickhouse:
+    logging: *default-logging
     image: clickhouse/clickhouse-server:26.3.12.3
     container_name: animeenigma-clickhouse
     restart: unless-stopped
@@ -365,6 +385,7 @@ services:
       retries: 5
 
   clickhouse-backup:
+    logging: *default-logging
     image: altinity/clickhouse-backup:2.7.0
     container_name: animeenigma-clickhouse-backup
     restart: unless-stopped
@@ -386,6 +407,7 @@ services:
         condition: service_healthy
 
   otel-collector:
+    logging: *default-logging
     image: otel/opentelemetry-collector-contrib:0.103.1
     container_name: animeenigma-otel-collector
     restart: unless-stopped
@@ -420,6 +442,7 @@ services:
         condition: service_healthy
 
   grafana:
+    logging: *default-logging
     image: grafana/grafana:10.3.3
     container_name: animeenigma-grafana
     restart: unless-stopped
@@ -502,6 +525,7 @@ services:
         condition: service_healthy
 
   backup:
+    logging: *default-logging
     build: ./backup
     container_name: animeenigma-backup
     environment:
@@ -519,6 +543,7 @@ services:
     restart: unless-stopped
 
   admin-nginx:
+    logging: *default-logging
     image: nginx:alpine
     container_name: animeenigma-admin-nginx
     restart: unless-stopped
@@ -537,6 +562,7 @@ services:
   # =============================================================================
 
   gateway:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/gateway/Dockerfile
@@ -601,6 +627,7 @@ services:
       - anidle
 
   auth:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/auth/Dockerfile
@@ -638,6 +665,7 @@ services:
         condition: service_healthy
 
   catalog:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/catalog/Dockerfile
@@ -685,6 +713,7 @@ services:
         condition: service_started
 
   streaming:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/streaming/Dockerfile
@@ -715,6 +744,7 @@ services:
         condition: service_healthy
 
   player:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/player/Dockerfile
@@ -761,6 +791,7 @@ services:
         condition: service_healthy
 
   rooms:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/rooms/Dockerfile
@@ -778,6 +809,7 @@ services:
         condition: service_healthy
 
   scheduler:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/scheduler/Dockerfile
@@ -822,6 +854,7 @@ services:
         condition: service_started
 
   themes:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/themes/Dockerfile
@@ -854,6 +887,7 @@ services:
   # blocker that pushed library to 8089. Notifications therefore uses 8090
   # (next free port after library:8089). The maintenance bot remains on 8087.
   notifications:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/notifications/Dockerfile
@@ -903,6 +937,7 @@ services:
   # uses Shikimori /similar as a cold-start fallback (CATALOG_URL).
   # See .planning/phases/recs-service-extraction/
   recs:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/recs/Dockerfile
@@ -937,6 +972,7 @@ services:
 
   # anidle guessing game service (spec 2026-06-15) — port 8095.
   anidle:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/anidle/Dockerfile
@@ -973,6 +1009,7 @@ services:
   # WebSocket /ws for sync/chat/reactions, drift detection engine.
   # See .planning/workstreams/watch-together/phases/01-backend-foundation/
   watch-together:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/watch-together/Dockerfile
@@ -1015,6 +1052,7 @@ services:
   # cards/banners/pulls land in later phases. GACHA_ENABLED=false dark-ships
   # the backend (credit endpoint no-ops, service still boots).
   gacha:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/gacha/Dockerfile
@@ -1055,6 +1093,7 @@ services:
   # Clickstream analytics ingestion (Plan 1). Postgres-backed events +
   # identity stitching; ClickHouse consolidation deferred. Port 8092.
   analytics:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/analytics/Dockerfile
@@ -1104,6 +1143,7 @@ services:
   # 8089. The maintenance bot remains on 8087; player + scheduler reach it
   # via MAINTENANCE_URL=http://host-gateway:8087 unchanged.
   library:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: services/library/Dockerfile
@@ -1159,6 +1199,7 @@ services:
   # =============================================================================
 
   web:
+    logging: *default-logging
     build:
       context: ../frontend/web
       dockerfile: Dockerfile
@@ -1185,6 +1226,7 @@ services:
       - gateway
 
   jackett:
+    logging: *default-logging
     image: lscr.io/linuxserver/jackett:latest
     container_name: animeenigma-jackett
     restart: unless-stopped

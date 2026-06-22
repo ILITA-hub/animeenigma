@@ -80,6 +80,18 @@ scrape_configs:
       - targets: ['library:8089']
     metrics_path: /metrics
 
+  # audit #23 — anidle + gacha expose /metrics + emit traces but were not
+  # scraped, so they had no metrics and no outage alerting.
+  - job_name: 'anidle'
+    static_configs:
+      - targets: ['anidle:8095']
+    metrics_path: /metrics
+
+  - job_name: 'gacha'
+    static_configs:
+      - targets: ['gacha:8093']
+    metrics_path: /metrics
+
   # ClickHouse native self-metrics (v4.0 Activity Register Phase 1, AR-STORE-01).
   - job_name: 'clickhouse'
     static_configs:
