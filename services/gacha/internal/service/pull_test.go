@@ -205,14 +205,26 @@ func seqRand(seq []int) func(int) int {
 }
 
 // constRand always returns a value that lands in the N tier (cumulative pick 0).
-func constRand(v int) func(int) int { return func(n int) int { if n <= 0 { return 0 }; return v % n } }
+func constRand(v int) func(int) int {
+	return func(n int) int {
+		if n <= 0 {
+			return 0
+		}
+		return v % n
+	}
+}
 
 func newPullSvc(t *testing.T, db *gorm.DB, randInt func(int) int) *PullService {
+	t.Helper()
+	return newPullSvcEnabled(t, db, randInt, true)
+}
+
+func newPullSvcEnabled(t *testing.T, db *gorm.DB, randInt func(int) int, enabled bool) *PullService {
 	t.Helper()
 	pullRepo := repo.NewPullRepository(db)
 	bannerRepo := repo.NewBannerRepository(db)
 	contentRepo := repo.NewContentRepository(db)
-	return NewPullService(pullRepo, bannerRepo, contentRepo, testEconomy(), randInt, logger.Default())
+	return NewPullService(pullRepo, bannerRepo, contentRepo, testEconomy(), randInt, enabled, logger.Default())
 }
 
 func getBalance(t *testing.T, db *gorm.DB) int64 {
@@ -484,6 +496,63 @@ func TestPull_InactiveBannerRejected(t *testing.T) {
 	}
 	if getBalance(t, db) != 1000 {
 		t.Errorf("balance = %d; want 1000 (no debit on rejection)", getBalance(t, db))
+	}
+}
+
+func TestPull_DisabledRejected(t *testing.T) {
+	db := newPullSvcDB(t)
+	seedBalance(t, db, 1000)
+	seedBanner(t, db, bannerA, true)
+	seedCard(t, db, bannerA, "n1", domain.RarityN)
+	// Everything is valid (funded wallet, active banner, non-empty pool) — only
+	// the kill-switch is off. A disabled service must serve nothing and debit
+	// nothing.
+	svc := newPullSvcEnabled(t, db, constRand(0), false)
+
+	_, err := svc.Pull(context.Background(), svcUser, bannerA, "x1")
+	if err == nil {
+		t.Fatal("expected error when gacha is disabled")
+	}
+	if appErr, ok := apperrors.IsAppError(err); !ok || appErr.Code != apperrors.CodeInvalidInput {
+		t.Errorf("err = %v; want InvalidInput", err)
+	}
+	// No debit.
+	if getBalance(t, db) != 1000 {
+		t.Errorf("balance = %d; want 1000 (no debit when disabled)", getBalance(t, db))
+	}
+	// No pity / collection / ledger rows.
+	if getPity(t, db, bannerA) != 0 {
+		t.Errorf("pity = %d; want 0 (no roll when disabled)", getPity(t, db, bannerA))
+	}
+	var ledger, coll int64
+	db.Raw(`SELECT COUNT(*) FROM gacha_ledger`).Scan(&ledger)
+	db.Raw(`SELECT COUNT(*) FROM gacha_collection`).Scan(&coll)
+	if ledger != 0 || coll != 0 {
+		t.Errorf("ledger=%d collection=%d; want 0/0 (no side effects when disabled)", ledger, coll)
+	}
+}
+
+func TestPull_DisabledViewsServeEmpty(t *testing.T) {
+	db := newPullSvcDB(t)
+	seedBalance(t, db, 1000)
+	seedBanner(t, db, bannerA, true)
+	seedCard(t, db, bannerA, "n1", domain.RarityN)
+	svc := newPullSvcEnabled(t, db, constRand(0), false)
+
+	banners, err := svc.ActiveBannersView(context.Background(), svcUser)
+	if err != nil {
+		t.Fatalf("ActiveBannersView: %v", err)
+	}
+	if len(banners) != 0 {
+		t.Errorf("ActiveBannersView = %d banners; want 0 when disabled", len(banners))
+	}
+
+	col, err := svc.CollectionView(context.Background(), svcUser)
+	if err != nil {
+		t.Fatalf("CollectionView: %v", err)
+	}
+	if col == nil || len(col.Cards) != 0 {
+		t.Errorf("CollectionView cards = %v; want empty when disabled", col)
 	}
 }
 

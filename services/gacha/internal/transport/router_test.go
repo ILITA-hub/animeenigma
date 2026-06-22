@@ -104,7 +104,7 @@ func getTestRouter(t *testing.T) http.Handler {
 		pullSvc := service.NewPullService(pullRepo, bannerRepo, contentRepo, config.EconomyConfig{
 			PullCostX1: 100, PullCostX10: 900, PityThreshold: 90,
 			WeightN: 69, WeightR: 22, WeightSR: 8, WeightSSR: 1,
-		}, service.NewSecureRand(), log)
+		}, service.NewSecureRand(), true, log)
 		pullH := handler.NewPullHandler(pullSvc, log)
 
 		testRouter = NewRouter(walletH, internalH, adminH, imagesH, pullH, jwtCfg, log, mc)

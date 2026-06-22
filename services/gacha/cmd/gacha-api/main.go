@@ -106,7 +106,7 @@ func main() {
 	pullRepo := repo.NewPullRepository(db.DB)
 	contentSvc := service.NewContentService(contentRepo, bannerRepo)
 	imageSvc := service.NewImageService(&storageAdapter{storage})
-	pullSvc := service.NewPullService(pullRepo, bannerRepo, contentRepo, cfg.Economy, service.NewSecureRand(), log)
+	pullSvc := service.NewPullService(pullRepo, bannerRepo, contentRepo, cfg.Economy, service.NewSecureRand(), cfg.Enabled, log)
 
 	walletHandler := handler.NewWalletHandler(walletSvc, log)
 	internalHandler := handler.NewInternalHandler(walletSvc, log)

@@ -141,19 +141,24 @@ type PullService struct {
 	content *repo.ContentRepository
 	econ    config.EconomyConfig
 	randInt func(int) int
+	enabled bool
 	log     *logger.Logger
 }
 
 // NewPullService wires the pull engine. The DB is taken from the banner repo's
 // connection so the orchestration transaction shares the same handle. The
 // content repo is used by the player-facing views (collection album); it may
-// be nil in tests that exercise only Pull.
+// be nil in tests that exercise only Pull. enabled is the GACHA_ENABLED
+// dark-ship toggle: when false the spend/serve methods short-circuit so no
+// currency is debited and no collection/pity rows are written (mirrors the
+// WalletService gating).
 func NewPullService(
 	pullRepo *repo.PullRepository,
 	bannerRepo *repo.BannerRepository,
 	contentRepo *repo.ContentRepository,
 	econ config.EconomyConfig,
 	randInt func(int) int,
+	enabled bool,
 	log *logger.Logger,
 ) *PullService {
 	return &PullService{
@@ -163,6 +168,7 @@ func NewPullService(
 		content: contentRepo,
 		econ:    econ,
 		randInt: randInt,
+		enabled: enabled,
 		log:     log,
 	}
 }
@@ -185,6 +191,11 @@ func NewSecureRand() func(int) int {
 // one transaction — insufficient funds or any error rolls everything back with
 // no side effects.
 func (s *PullService) Pull(ctx context.Context, userID, bannerID, mode string) (*PullResult, error) {
+	// Kill-switch: a disabled service debits nothing and writes nothing.
+	if !s.enabled {
+		return nil, apperrors.InvalidInput("gacha is disabled")
+	}
+
 	// Mode → count + cost + ledger reason.
 	var count int
 	var cost int64
@@ -383,15 +394,15 @@ type BannerCardView struct {
 	Rarity    domain.Rarity `json:"rarity"`
 	ImagePath string        `json:"image_path"`
 	// BackPath is the optional card-back image key; frontend falls back to branded default when empty.
-	BackPath  string        `json:"back_path"`
-	Owned     bool          `json:"owned"`
+	BackPath string `json:"back_path"`
+	Owned    bool   `json:"owned"`
 }
 
 // BannerView is one active banner with its pool + the caller's pity progress.
 type BannerView struct {
-	ID            string           `json:"id"`
-	Name          string           `json:"name"`
-	Description   string           `json:"description"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 	// BackdropPath is the single banner background image key (slider/spin-page).
 	BackdropPath  string           `json:"backdrop_path"`
 	IsStandard    bool             `json:"is_standard"`
@@ -404,6 +415,10 @@ type BannerView struct {
 // pool (owned flags from the user's collection) and the user's pity progress
 // for that banner (GET /api/gacha/banners, spec §6.2).
 func (s *PullService) ActiveBannersView(ctx context.Context, userID string) ([]BannerView, error) {
+	// Kill-switch: a disabled service serves nothing (but never errors the page).
+	if !s.enabled {
+		return []BannerView{}, nil
+	}
 	banners, err := s.banners.ActiveNow(ctx, time.Now())
 	if err != nil {
 		return nil, err
@@ -465,6 +480,13 @@ type CollectionView struct {
 // the caller's owned flag / count / first-obtained timestamp, plus per-rarity
 // owned/total progress (GET /api/gacha/collection, spec §6.4).
 func (s *PullService) CollectionView(ctx context.Context, userID string) (*CollectionView, error) {
+	// Kill-switch: a disabled service serves an empty album (but never errors).
+	if !s.enabled {
+		return &CollectionView{
+			Cards:    []CollectionCardView{},
+			Progress: map[domain.Rarity]RarityProgress{},
+		}, nil
+	}
 	enabled := true
 	allCards, err := s.content.ListCards(ctx, repo.CardFilter{Enabled: &enabled})
 	if err != nil {
