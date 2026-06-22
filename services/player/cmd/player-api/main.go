@@ -131,6 +131,15 @@ func main() {
 		log.Fatalw("failed to create idx_watch_progress_updated_at", "error", err)
 	}
 
+	// Audit finding L599 (perf wave): composite (user_id, <timestamp> DESC)
+	// indexes for the continue-watching + Tier-2/history filtered-sort hot
+	// paths. AutoMigrate skips new indexes on existing tables, so these are
+	// backfilled via idempotent raw SQL (the GORM tags in domain/watch.go cover
+	// fresh DBs). See ensureWatchIndexes below for the full rationale.
+	if err := ensureWatchIndexes(db.DB); err != nil {
+		log.Fatalw("failed to create watch filtered-sort indexes", "error", err)
+	}
+
 	// Phase 1 (workstream: social) — one-shot idempotent migration that
 	// merges every legacy `reviews` row into `anime_list` then drops the
 	// `reviews` table. Guarded by db.Migrator().HasTable("reviews"); after
@@ -376,6 +385,10 @@ func main() {
 	// Dark-shipped under the same PROFILE_WALL_ADMIN_ONLY gateway gate.
 	compatRepo := repo.NewCompatibilityRepository(db.DB)
 	compatService := service.NewCompatibilityService(compatRepo)
+	// Audit L606: cache the computed result under an order-canonical pair key so
+	// a repeat profile view doesn't reload + recompute both full watchlists.
+	// Reuses the same Redis client already wired for prefService.SetCommunityCache.
+	compatService.SetCache(redisCache)
 	compatibilityHandler := handler.NewCompatibilityHandler(compatService, log)
 
 	// Initialize MAL export service
@@ -455,6 +468,44 @@ func main() {
 	}
 
 	log.Info("server stopped")
+}
+
+// ensureWatchIndexes backfills the two composite (user_id, <timestamp> DESC)
+// B-tree indexes that the continue-watching + Tier-2/history filtered-sort hot
+// paths depend on (audit finding L599, perf wave). The shapes:
+//
+//   - watch_progress(user_id, last_watched_at DESC) — repo.ListContinueWatching
+//     filters `WHERE user_id = ?` then `ORDER BY last_watched_at DESC LIMIT ?`.
+//   - watch_history(user_id, watched_at DESC) — repo.GetUserHistoryForTier2 and
+//     HistoryRepository.GetByUser do `WHERE user_id = ? ORDER BY watched_at DESC
+//     LIMIT ?`.
+//
+// The existing (user_id, ...) prefix indexes (idx_watch_progress_user_anime_ep,
+// idx_wh_user_combo) satisfy the user_id filter but Postgres cannot use them for
+// the timestamp sort, so the filtered-sort still degrades to a sort step over
+// the user's full slice. These additive composite indexes serve filter + sort
+// in one walk.
+//
+// AutoMigrate does NOT add new indexes to existing tables (see the
+// idx_watch_progress_updated_at comment block in main()), so the raw idempotent
+// CREATE INDEX IF NOT EXISTS here is the authoritative path for already-deployed
+// DBs; the GORM struct tags in domain/watch.go are the fresh-DB safety net.
+//
+// Takes `*gorm.DB` directly (not the project's `*database.DB` wrapper) so the
+// test in main_test.go can pass an in-memory SQLite DB.
+func ensureWatchIndexes(db *gorm.DB) error {
+	stmts := []string{
+		`CREATE INDEX IF NOT EXISTS idx_wp_user_lastwatched
+			ON watch_progress (user_id, last_watched_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_wh_user_watched
+			ON watch_history (user_id, watched_at DESC)`,
+	}
+	for _, sql := range stmts {
+		if err := db.Exec(sql).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // runSocialMigration is the one-shot idempotent bootstrap that merges legacy

@@ -15,13 +15,13 @@ func (GenreInfo) TableName() string { return "genres" }
 // It omits DeletedAt so GORM won't add "WHERE deleted_at IS NULL",
 // ensuring entries referencing soft-deleted anime still return data.
 type AnimeInfo struct {
-	ID            string      `gorm:"type:uuid;primaryKey" json:"id"`
-	Name          string      `json:"name"`
-	NameRU        string      `json:"name_ru,omitempty"`
-	NameJP        string      `json:"name_jp,omitempty"`
-	PosterURL     string      `json:"poster_url,omitempty"`
-	EpisodesCount int         `json:"episodes_count"`
-	EpisodesAired int         `json:"episodes_aired,omitempty"`
+	ID            string `gorm:"type:uuid;primaryKey" json:"id"`
+	Name          string `json:"name"`
+	NameRU        string `json:"name_ru,omitempty"`
+	NameJP        string `json:"name_jp,omitempty"`
+	PosterURL     string `json:"poster_url,omitempty"`
+	EpisodesCount int    `json:"episodes_count"`
+	EpisodesAired int    `json:"episodes_aired,omitempty"`
 	// Authoritative external IDs from the catalog-owned animes row (Shikimori ID == MAL ID).
 	// Read-only here; the player service mirrors these columns for export/lookup.
 	ShikimoriID string      `gorm:"column:shikimori_id" json:"shikimori_id,omitempty"`
@@ -36,13 +36,13 @@ func (AnimeInfo) TableName() string { return "animes" }
 const MaxRewatchCount = 9999
 
 type WatchProgress struct {
-	ID            string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID        string    `gorm:"type:uuid;uniqueIndex:idx_watch_progress_user_anime_ep,priority:1" json:"user_id"`
-	AnimeID       string    `gorm:"type:uuid;uniqueIndex:idx_watch_progress_user_anime_ep,priority:2" json:"anime_id"`
-	EpisodeNumber int       `gorm:"uniqueIndex:idx_watch_progress_user_anime_ep,priority:3" json:"episode_number"`
-	Progress      int       `json:"progress"`
-	Duration      int       `json:"duration"`
-	Completed     bool      `gorm:"default:false" json:"completed"`
+	ID            string `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID        string `gorm:"type:uuid;uniqueIndex:idx_watch_progress_user_anime_ep,priority:1;index:idx_wp_user_lastwatched,priority:1" json:"user_id"`
+	AnimeID       string `gorm:"type:uuid;uniqueIndex:idx_watch_progress_user_anime_ep,priority:2" json:"anime_id"`
+	EpisodeNumber int    `gorm:"uniqueIndex:idx_watch_progress_user_anime_ep,priority:3" json:"episode_number"`
+	Progress      int    `json:"progress"`
+	Duration      int    `json:"duration"`
+	Completed     bool   `gorm:"default:false" json:"completed"`
 	// WatchCount is incremented every time MarkCompleted is called on a row
 	// that already has completed=true. 1 = first watch, 2+ = rewatch. Phase 5
 	// gap-fill (G-02) — Tier 2 inference uses this to detect rewatch behavior
@@ -53,8 +53,15 @@ type WatchProgress struct {
 	// page without completing. Populated by the dropoff beacon endpoint when
 	// the user navigates away mid-episode. NULL when the episode was completed
 	// or never abandoned. Phase 5 gap-fill (G-01).
-	DroppedOffAt  *int      `json:"dropped_off_at,omitempty"`
-	LastWatchedAt time.Time `json:"last_watched_at"`
+	DroppedOffAt *int `json:"dropped_off_at,omitempty"`
+	// LastWatchedAt carries the trailing column of the composite
+	// idx_wp_user_lastwatched(user_id, last_watched_at DESC) index (audit L599)
+	// so ListContinueWatching's `WHERE user_id = ? ORDER BY last_watched_at DESC
+	// LIMIT ?` serves filter + sort from one index walk. sort:desc requests the
+	// descending column order; the authoritative DDL is the idempotent raw
+	// CREATE INDEX in cmd/player-api/main.go (ensureWatchIndexes) since
+	// AutoMigrate won't add it to already-existing tables.
+	LastWatchedAt time.Time `gorm:"index:idx_wp_user_lastwatched,priority:2,sort:desc" json:"last_watched_at"`
 	CreatedAt     time.Time `json:"created_at"`
 	// UpdatedAt carries a dedicated B-tree index (HSB-NF-02) so the
 	// workstream hero-spotlight v1.0 Phase 3 `now_watching` resolver's
@@ -69,23 +76,23 @@ func (WatchProgress) TableName() string {
 }
 
 type AnimeListEntry struct {
-	ID           string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID       string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime" json:"user_id"`
-	AnimeID      string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime" json:"anime_id"`
-	Anime        *AnimeInfo `gorm:"foreignKey:AnimeID" json:"anime,omitempty"`
-	Status       string     `gorm:"size:20;default:'watching';index" json:"status"`
-	Score        int        `json:"score"`
-	Episodes     int        `json:"episodes"`
-	Notes        string     `gorm:"type:text" json:"notes"`
-	Tags         string     `json:"tags"`
+	ID       string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID   string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime" json:"user_id"`
+	AnimeID  string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime" json:"anime_id"`
+	Anime    *AnimeInfo `gorm:"foreignKey:AnimeID" json:"anime,omitempty"`
+	Status   string     `gorm:"size:20;default:'watching';index" json:"status"`
+	Score    int        `json:"score"`
+	Episodes int        `json:"episodes"`
+	Notes    string     `gorm:"type:text" json:"notes"`
+	Tags     string     `json:"tags"`
 	// ReviewText / Username — Phase 1 (workstream: social). These columns
 	// absorb the legacy `reviews` table so a single anime_list row carries
 	// both the user's score AND their optional written review. NOT NULL with
 	// '' default so legacy rows remain valid pre-migration. See
 	// cmd/player-api/main.go runSocialMigration helper.
-	ReviewText   string     `gorm:"type:text;not null;default:''" json:"review_text"`
-	Username     string     `gorm:"size:32;not null;default:''" json:"username"`
-	IsRewatching bool       `gorm:"default:false" json:"is_rewatching"`
+	ReviewText   string `gorm:"type:text;not null;default:''" json:"review_text"`
+	Username     string `gorm:"size:32;not null;default:''" json:"username"`
+	IsRewatching bool   `gorm:"default:false" json:"is_rewatching"`
 	// RewatchCount = number of COMPLETED rewatches (MAL "times rewatched").
 	// Auto-incremented when a watching→completed transition occurs while
 	// IsRewatching is true; also settable manually and via import. Design
@@ -179,7 +186,7 @@ var AllowedReactionEmojis = map[string]bool{
 // WatchHistory records a watched episode with full combo context
 type WatchHistory struct {
 	ID               string `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID           string `gorm:"type:uuid;not null;index:idx_wh_user_combo" json:"user_id"`
+	UserID           string `gorm:"type:uuid;not null;index:idx_wh_user_combo;index:idx_wh_user_watched,priority:1" json:"user_id"`
 	AnimeID          string `gorm:"not null;index;index:idx_wh_anime_combo" json:"anime_id"`
 	EpisodeNumber    int    `gorm:"not null" json:"episode_number"`
 	Player           string `gorm:"size:20;not null;index:idx_wh_user_combo;index:idx_wh_anime_combo" json:"player"`
@@ -192,8 +199,14 @@ type WatchHistory struct {
 	// Heartbeat saves and the completion mark for the same playback share it,
 	// so Tier 2 aggregation can distinguish "fresh open" from "in-session
 	// resume". Phase 5 gap-fill (G-04-lite). Empty string for legacy rows.
-	SessionID string    `gorm:"size:36;index" json:"session_id"`
-	WatchedAt time.Time `gorm:"not null;default:now()" json:"watched_at"`
+	SessionID string `gorm:"size:36;index" json:"session_id"`
+	// WatchedAt carries the trailing column of the composite
+	// idx_wh_user_watched(user_id, watched_at DESC) index (audit L599) so
+	// GetUserHistoryForTier2 + HistoryRepository.GetByUser serve their
+	// `WHERE user_id = ? ORDER BY watched_at DESC LIMIT ?` from one index walk
+	// instead of a sort over the user's full history. Authoritative DDL is the
+	// idempotent raw CREATE INDEX in cmd/player-api/main.go (ensureWatchIndexes).
+	WatchedAt time.Time `gorm:"not null;default:now();index:idx_wh_user_watched,priority:2,sort:desc" json:"watched_at"`
 }
 
 func (WatchHistory) TableName() string {
@@ -246,13 +259,13 @@ type DropOffRequest struct {
 }
 
 type UpdateListRequest struct {
-	AnimeID      string     `json:"anime_id"`
-	Status       string     `json:"status"`
-	Score        *int       `json:"score,omitempty"`
-	Episodes     *int       `json:"episodes,omitempty"`
-	Notes        *string    `json:"notes,omitempty"`
-	Tags         *string    `json:"tags,omitempty"`
-	IsRewatching *bool      `json:"is_rewatching,omitempty"`
+	AnimeID      string  `json:"anime_id"`
+	Status       string  `json:"status"`
+	Score        *int    `json:"score,omitempty"`
+	Episodes     *int    `json:"episodes,omitempty"`
+	Notes        *string `json:"notes,omitempty"`
+	Tags         *string `json:"tags,omitempty"`
+	IsRewatching *bool   `json:"is_rewatching,omitempty"`
 	// RewatchCount — manual edit of completed-rewatch tally. nil = leave
 	// untouched (PATCH). Clamped to [0, MaxRewatchCount]. Design 2026-06-05.
 	RewatchCount *int       `json:"rewatch_count,omitempty"`

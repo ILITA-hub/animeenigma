@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"math"
 
+	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 )
 
@@ -14,15 +17,68 @@ type compatRepo interface {
 
 // CompatibilityService blends list overlap (0.5), score agreement (0.4) and
 // genre similarity (0.1) into a 0..100 percent compatibility score.
-type CompatibilityService struct{ repo compatRepo }
+type CompatibilityService struct {
+	repo compatRepo
+
+	// resultCache is optional; when set, a computed CompatibilityResult is
+	// cached under an order-canonical pair key so a repeat profile view
+	// doesn't reload + recompute both full watchlists (audit L606). nil in
+	// unit tests (Compute falls back to a direct compute).
+	resultCache cache.Cache
+}
 
 func NewCompatibilityService(r compatRepo) *CompatibilityService {
 	return &CompatibilityService{repo: r}
 }
 
+// SetCache wires an optional Redis cache for compatibility results. main.go
+// sets it after construction (same pattern as PreferenceService.SetCommunityCache);
+// leaving it nil (tests) disables caching transparently.
+func (s *CompatibilityService) SetCache(c cache.Cache) { s.resultCache = c }
+
+// compatCacheKey builds an order-canonical Redis key for the (a, b) pair.
+// Compatibility is symmetric, so (a,b) and (b,a) must hit the same entry —
+// sort the two IDs before composing the key.
+func compatCacheKey(a, b string) string {
+	if a > b {
+		a, b = b, a
+	}
+	return "compat:" + a + ":" + b
+}
+
 // Compute blends list overlap (0.5), score agreement (0.4) and genre
-// similarity (0.1) into a 0..100 percent.
+// similarity (0.1) into a 0..100 percent. Results are served from (and written
+// to) the optional cache under an order-canonical pair key when one is wired.
 func (s *CompatibilityService) Compute(ctx context.Context, viewerID, ownerID string) (*domain.CompatibilityResult, error) {
+	if s.resultCache != nil {
+		key := compatCacheKey(viewerID, ownerID)
+		var cached domain.CompatibilityResult
+		if err := s.resultCache.Get(ctx, key, &cached); err == nil {
+			metrics.CacheOperationsTotal.WithLabelValues("compat", "hit").Inc()
+			return &cached, nil
+		} else if !errors.Is(err, cache.ErrNotFound) {
+			// On a non-miss cache error fall through to a direct compute so a
+			// Redis blip never breaks the endpoint.
+			metrics.CacheOperationsTotal.WithLabelValues("compat", "error").Inc()
+		} else {
+			metrics.CacheOperationsTotal.WithLabelValues("compat", "miss").Inc()
+		}
+	}
+
+	res, err := s.compute(ctx, viewerID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	if s.resultCache != nil {
+		// Best-effort write — a cache-set failure must not fail the request.
+		_ = s.resultCache.Set(ctx, compatCacheKey(viewerID, ownerID), res, cache.TTLSearchResults)
+	}
+	return res, nil
+}
+
+// compute is the pure blend (no cache). Split out so Compute owns the cache
+// lookup/store and compute owns the math.
+func (s *CompatibilityService) compute(ctx context.Context, viewerID, ownerID string) (*domain.CompatibilityResult, error) {
 	ve, err := s.repo.ListEntries(ctx, viewerID)
 	if err != nil {
 		return nil, err

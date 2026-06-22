@@ -239,3 +239,52 @@ func TestSocialMigration_Idempotent(t *testing.T) {
 	assert.EqualValues(t, listCount, listCountAfter,
 		"second invocation must NOT mutate anime_list row count")
 }
+
+// TestEnsureWatchIndexes_CreatesFilteredSortIndexes is the RED→GREEN guard for
+// audit finding L599 (perf wave): the continue-watching + Tier-2/history
+// filtered-sort hot paths lacked composite (user_id, <ts> DESC) indexes.
+// ensureWatchIndexes runs idempotent CREATE INDEX IF NOT EXISTS statements; this
+// asserts both indexes exist after the call and that a SECOND call is a no-op
+// (idempotency — the production code re-runs it on every boot). SQLite supports
+// both `IF NOT EXISTS` and `DESC` index columns, so the Postgres DDL is
+// exercised faithfully here without a live Postgres.
+func TestEnsureWatchIndexes_CreatesFilteredSortIndexes(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err, "open in-memory sqlite")
+
+	// Minimal table shapes carrying only the columns the indexes reference.
+	require.NoError(t, db.Exec(`CREATE TABLE watch_progress (
+		user_id TEXT,
+		anime_id TEXT,
+		episode_number INTEGER,
+		last_watched_at DATETIME
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE watch_history (
+		user_id TEXT,
+		watched_at DATETIME
+	)`).Error)
+
+	indexExists := func(name string) bool {
+		var n int64
+		require.NoError(t, db.Raw(
+			`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?`,
+			name).Scan(&n).Error)
+		return n > 0
+	}
+
+	// RED precondition: neither index exists before the helper runs.
+	require.False(t, indexExists("idx_wp_user_lastwatched"))
+	require.False(t, indexExists("idx_wh_user_watched"))
+
+	// First run creates both.
+	require.NoError(t, ensureWatchIndexes(db), "first ensureWatchIndexes")
+	assert.True(t, indexExists("idx_wp_user_lastwatched"),
+		"watch_progress(user_id, last_watched_at DESC) index must exist")
+	assert.True(t, indexExists("idx_wh_user_watched"),
+		"watch_history(user_id, watched_at DESC) index must exist")
+
+	// Second run is a no-op (CREATE INDEX IF NOT EXISTS) — no error, indexes stay.
+	require.NoError(t, ensureWatchIndexes(db), "second ensureWatchIndexes must be idempotent")
+	assert.True(t, indexExists("idx_wp_user_lastwatched"))
+	assert.True(t, indexExists("idx_wh_user_watched"))
+}
