@@ -1,7 +1,11 @@
 import { ref, computed, unref, watch, type Ref, type ComputedRef } from 'vue'
 import { subtitlesApi } from '@/api/client'
 import type { SubtitleTrack } from '@/types/aePlayer'
-import type { SubTrack } from '@/components/player/aePlayer/BrowseSubsModal.vue'
+// SubTrack (the modal's prop shape) is field-identical to SubtitleTrack. Alias to
+// the .ts type rather than importing a named type from a .vue file — the ambient
+// `declare module '*.vue'` (default-export-only) shadows named exports under some
+// vue-tsc versions (TS2614), which breaks the production build.
+type SubTrack = SubtitleTrack
 
 interface BackendSubTrack {
   url: string; lang: string; label: string; format?: string; provider: string; release?: string

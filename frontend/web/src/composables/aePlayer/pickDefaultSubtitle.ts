@@ -1,4 +1,4 @@
-import type { SubTrack } from '@/components/player/aePlayer/BrowseSubsModal.vue'
+import type { SubtitleTrack as SubTrack } from '@/types/aePlayer'
 
 function providerRank(provider: string): number {
   if (provider === 'jimaku') return 0
