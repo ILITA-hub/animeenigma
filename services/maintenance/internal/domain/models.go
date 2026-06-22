@@ -190,6 +190,7 @@ type ReportRequest struct {
 	ErrorMessage  string `json:"error_message"`
 	Description   string `json:"description"`
 	URL           string `json:"url"`
+	Version       string `json:"version,omitempty"` // deployed build SHA (VITE_GIT_COMMIT) the user was running
 	ReportFile    string `json:"report_file"`
 }
 

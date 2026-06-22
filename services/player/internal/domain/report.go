@@ -18,6 +18,7 @@ type ErrorReport struct {
 	Description string `json:"description"`
 	// Browser context
 	URL        string `json:"url"`
+	Version    string `json:"version,omitempty"` // VITE_GIT_COMMIT — deployed build SHA the user was running
 	UserAgent  string `json:"user_agent"`
 	ScreenSize string `json:"screen_size"`
 	Language   string `json:"language"`

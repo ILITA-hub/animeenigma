@@ -203,6 +203,7 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 		"error_message":  report.ErrorMessage,
 		"description":    report.Description,
 		"url":            report.URL,
+		"version":        report.Version,
 		"user_agent":     report.UserAgent,
 		"screen_size":    report.ScreenSize,
 		"language":       report.Language,
@@ -238,6 +239,7 @@ func (h *ReportHandler) sendToMaintenance(claims *authz.Claims, report *domain.E
 		"error_message": report.ErrorMessage,
 		"description":   report.Description,
 		"url":           report.URL,
+		"version":       report.Version,
 		"report_file":   reportFile,
 	}
 	if report.EpisodeNumber != nil {

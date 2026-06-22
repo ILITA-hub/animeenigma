@@ -761,6 +761,12 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 	if report.URL != "" {
 		b.WriteString(fmt.Sprintf("\n🔗 %s", escTelegram(report.URL)))
 	}
+	if report.Version != "" {
+		// The deployed build (VITE_GIT_COMMIT) the user was running — the bot
+		// diagnoses against THIS commit first (see "Version-Anchored Diagnosis"
+		// in .claude/maintenance-prompt.md).
+		b.WriteString(fmt.Sprintf("\n🏷 <b>Build:</b> <code>%s</code>", escTelegram(report.Version)))
+	}
 	if report.ReportFile != "" {
 		b.WriteString(fmt.Sprintf("\n📁 <code>%s</code>", escTelegram(report.ReportFile)))
 	}
@@ -810,7 +816,7 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 		Text:       b.String(),
 		From:       domain.User{Username: report.Username},
 		FeedbackID: feedbackID,
-		RawJSON:    fmt.Sprintf(`{"report": {"player":"%s","category":"%s","anime":"%s","error":"%s","description":"%s","server":"%s","url":"%s","file":"%s"}}`, report.PlayerType, report.Category, report.AnimeName, report.ErrorMessage, report.Description, report.ServerName, report.URL, report.ReportFile),
+		RawJSON:    fmt.Sprintf(`{"report": {"player":"%s","category":"%s","anime":"%s","error":"%s","description":"%s","server":"%s","url":"%s","version":"%s","file":"%s"}}`, report.PlayerType, report.Category, report.AnimeName, report.ErrorMessage, report.Description, report.ServerName, report.URL, report.Version, report.ReportFile),
 	}
 
 	// Invoke Claude

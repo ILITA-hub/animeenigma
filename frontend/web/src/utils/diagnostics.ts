@@ -37,6 +37,7 @@ export interface PlayerContext {
 export interface DiagnosticReport {
   timestamp: string
   url: string
+  version: string                  // VITE_GIT_COMMIT — the deployed build the user was running (footer SHA)
   user_agent: string
   screen_size: string
   language: string
@@ -236,6 +237,7 @@ export function collectDiagnostics(
   return {
     timestamp: new Date().toISOString(),
     url: window.location.href,
+    version: (import.meta.env.VITE_GIT_COMMIT ?? '').trim(),
     user_agent: navigator.userAgent,
     screen_size: `${window.screen.width}x${window.screen.height}`,
     language: navigator.language,
