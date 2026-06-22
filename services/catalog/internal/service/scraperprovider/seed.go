@@ -160,8 +160,8 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "raw", Status: domain.StatusEnabled,
-		Reason:      "JP original-audio player (AllAnime raw, legacy, slated for retirement)",
-		Description: "Raw JP player (AllAnime fast4speed.rsvp + HLS). Retiring in favor of aePlayer (2026-06-17).",
+		Reason:      "JP original-audio player (library-only, self-hosted HLS)",
+		Description: "Raw JP player (MinIO library HLS, no AllAnime backend as of 2026-06-22). JP audio with no burned-in subs; subs overlay softly (Jimaku).",
 		SupportsSub: true, SupportsRaw: true, SubDelivery: "soft",
 		QualityCeiling: "1080p", PreferenceWeight: 0,
 	},

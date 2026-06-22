@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -12,79 +10,62 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
 )
 
-// Cache key prefixes. Kept as exported constants so the
-// invalidation endpoint (handler/internal_cache.go) can build the
-// SCAN patterns from a single source of truth.
+// Cache key prefixes. Kept as exported constants so the invalidation endpoint
+// (handler/internal_cache.go) can build the SCAN patterns from a single source
+// of truth. The raw provider is now LIBRARY-ONLY (AllAnime backend dropped
+// 2026-06-22), so the source-decision / per-stream caches are no longer
+// written; the constants remain so the invalidation endpoint keeps compiling
+// and any legacy keys are still swept on the next encode webhook.
 const (
-	// CacheKeySourceDecision is the per-(animeID, episode) memo of
-	// which backend served the last stream resolve — "library" or
-	// "allanime". 1h TTL; busted by the library service's
-	// post-encode webhook.
+	// CacheKeySourceDecision is a legacy per-(animeID, episode) memo of which
+	// backend served the last stream resolve. No longer written (library-only).
 	CacheKeySourceDecision = "raw:source-decision"
-	// CacheKeyStream is the per-(animeID, episode, quality) cached
-	// RawStream for the AllAnime path. 1h TTL.
+	// CacheKeyStream is a legacy per-(animeID, episode, quality) cached
+	// RawStream from the old AllAnime path. No longer written (library URLs
+	// are stable + signed per-request).
 	CacheKeyStream = "raw:stream"
-	// CacheKeyEpisodes is the per-animeID cached raw-episode list.
+	// CacheKeyEpisodes is the per-animeID cached raw-episode list (library).
 	CacheKeyEpisodes = "raw:episodes"
 )
 
-// RawResolver resolves "raw JP" provider video sources via the AllAnime
-// parser. Workstream raw-jp, Phase 01. Wraps the parser with:
-//   - shikimori-id → anime → AllAnime show-id lookup (cached 6h, negative
-//     cache 10m to dampen repeat lookups for absent titles).
-//   - episode listing cache (6h) and stream URL cache (1h, matching the
-//     existing per-provider TTL convention).
-//   - error wrapping into libs/errors.AppError so the handler maps to 503
-//     rather than 500 on upstream/transport failures.
+// RawResolver resolves the JP-original-audio "raw" provider STRICTLY from the
+// self-hosted library (MinIO HLS). RAW = Japanese audio with NO burned-in subs;
+// subtitles overlay softly at playback (Jimaku). The legacy AllAnime backend was
+// dropped 2026-06-22 — its sources were behind a Cloudflare-Turnstile clock and
+// duplicated the scraper's allanime provider — so raw now serves only titles
+// present in the library. libraryClient is optional; when nil, raw reports no
+// episodes / NotFound (defensive for environments without LIBRARY_API_URL).
 type RawResolver struct {
-	client  *allanime.Client
-	library *library.Client // optional — when nil, the library-first
-	// branch is skipped entirely (defensive for environments without
-	// LIBRARY_API_URL). Phase 06 (workstream raw-jp / v0.2).
+	library   *library.Client
 	animeRepo *repo.AnimeRepository
 	cache     *cache.RedisCache
 	log       *logger.Logger
 
-	// Per-anime lookup deduplication for in-flight AllAnime queries.
-	lookups sync.Map // map[string]*rawLookup
-
-	// serveSignalSem bounds the in-flight fire-and-forget ae serve-signal
-	// goroutines (WR-01). Each HIT/MISS resolution spawns a best-effort
-	// signal to the library /internal endpoint; without a cap, a request
-	// burst against a slow library would accumulate ~request_rate × 2s
-	// goroutines (each holding an idle TCP conn). The buffered channel is a
-	// counting semaphore with DROP-ON-FULL: when saturated, fireSignal skips
-	// the signal rather than blocking or spawning — matching the SERVE-03
-	// best-effort contract (signals never block or fail the resolution).
+	// serveSignalSem bounds the in-flight fire-and-forget library serve-signal
+	// goroutines (WR-01). Each HIT/MISS resolution spawns a best-effort signal
+	// to the library /internal endpoint; without a cap, a request burst against
+	// a slow library would accumulate goroutines (each holding an idle TCP
+	// conn). The buffered channel is a counting semaphore with DROP-ON-FULL:
+	// when saturated, fireSignal skips the signal rather than blocking — the
+	// signal must never block or fail the resolution.
 	serveSignalSem chan struct{}
 }
 
-// serveSignalConcurrency caps concurrent in-flight ae serve-signal goroutines.
-// Signals are cheap and dropping one is acceptable (popularity/observability,
-// not correctness), so a small bound is fine.
+// serveSignalConcurrency caps concurrent in-flight library serve-signal
+// goroutines. Signals are cheap and dropping one is acceptable (popularity /
+// observability, not correctness), so a small bound is fine.
 const serveSignalConcurrency = 64
 
-type rawLookup struct {
-	done chan struct{}
-	id   string
-	err  error
-}
-
-// NewRawResolver constructs the resolver. Pass a configured AllAnime
-// client from the main entry point. libraryClient is optional — when
-// nil, the Phase-06 library-first branch is skipped entirely and the
-// resolver behaves identically to v0.1 (AllAnime only). This is the
-// defensive path for deployments without LIBRARY_API_URL set.
-func NewRawResolver(client *allanime.Client, libraryClient *library.Client, animeRepo *repo.AnimeRepository, redisCache *cache.RedisCache, log *logger.Logger) *RawResolver {
+// NewRawResolver constructs the library-only raw resolver. libraryClient is
+// optional — when nil, raw returns empty episode lists / NotFound streams (the
+// defensive path for deployments without LIBRARY_API_URL set).
+func NewRawResolver(libraryClient *library.Client, animeRepo *repo.AnimeRepository, redisCache *cache.RedisCache, log *logger.Logger) *RawResolver {
 	return &RawResolver{
-		client:         client,
 		library:        libraryClient,
 		animeRepo:      animeRepo,
 		cache:          redisCache,
@@ -93,14 +74,15 @@ func NewRawResolver(client *allanime.Client, libraryClient *library.Client, anim
 	}
 }
 
-// fireSignal runs fn in a bounded best-effort goroutine for the ae serve-signal
-// path (WR-01). It acquires a slot from serveSignalSem; if the semaphore is
-// saturated it DROPS the signal (returns false) rather than blocking or
-// spawning an unbounded goroutine. The signal must NEVER block or fail the
-// playback resolution, so a drop is the correct degradation. Returns true when
-// the goroutine was spawned. A nil semaphore (e.g. a zero-value resolver in a
-// test) also drops. The caller is responsible for using context.WithoutCancel
-// inside fn so a client disconnect can't cancel the in-flight signal.
+// fireSignal runs fn in a bounded best-effort goroutine for the library
+// serve-signal path (WR-01). It acquires a slot from serveSignalSem; if the
+// semaphore is saturated it DROPS the signal (returns false) rather than
+// blocking or spawning an unbounded goroutine. The signal must NEVER block or
+// fail the playback resolution, so a drop is the correct degradation. Returns
+// true when the goroutine was spawned. A nil semaphore (e.g. a zero-value
+// resolver in a test) also drops. The caller is responsible for using
+// context.WithoutCancel inside fn so a client disconnect can't cancel the
+// in-flight signal.
 func (r *RawResolver) fireSignal(fn func()) bool {
 	if r.serveSignalSem == nil {
 		return false
@@ -128,18 +110,11 @@ type RawEpisode struct {
 
 // RawStream is the resolved playable stream + subtitle tracks.
 //
-// Phase 06 (workstream raw-jp / v0.2) added the Source field — its
-// value is "library" when served from the self-hosted MinIO HLS
-// ladder, or "allanime" when served from the v0.1 AllAnime path.
-// Existing cached entries from before the field existed deserialize
-// with Source == "" — the resolver normalizes that to "allanime" on
-// read for backward compatibility.
-// Exp/Sig (added 2026-06-13, workstream first-party / ae provider) carry the
-// HLS-proxy provenance signature for a self-hosted MinIO URL. MinIO is on the
-// internal docker network and is NOT in the proxy allowlist, so a library/ae
-// master-playlist request must arrive pre-signed; the proxy then mints child
-// segment tokens during m3u8 rewrite. Empty for AllAnime URLs (those pass via
-// the static allowlist / their own provenance seed).
+// Source is "library" — raw is served exclusively from the self-hosted MinIO
+// HLS ladder. Exp/Sig carry the HLS-proxy provenance signature for the
+// self-hosted MinIO URL: MinIO is on the internal docker network and is NOT in
+// the proxy allowlist, so a library master-playlist request must arrive
+// pre-signed; the proxy then mints child segment tokens during m3u8 rewrite.
 type RawStream struct {
 	URL       string        `json:"url"`
 	Type      string        `json:"type"`
@@ -151,7 +126,7 @@ type RawStream struct {
 	Sig       string        `json:"sig,omitempty"`
 }
 
-// RawSubtitle is an embedded subtitle track from the AllAnime source.
+// RawSubtitle is an embedded subtitle track.
 type RawSubtitle struct {
 	URL   string `json:"url"`
 	Lang  string `json:"lang"`
@@ -165,13 +140,14 @@ type EpisodesResponse struct {
 	Source    string       `json:"source"`
 }
 
-// GetEpisodes returns the raw-translation-type episode list for an anime.
-// On upstream failure, returns an empty available=false envelope when the
-// anime simply isn't on AllAnime, or an errors.ServiceUnavailable AppError
-// when the API is unreachable.
+// GetEpisodes returns the raw episode list, served from the library, with a
+// cache (6h on a hit, 10m on an empty result). Returns an empty
+// available=false envelope when the library is unconfigured, the anime has no
+// shikimori_id, or nothing is encoded yet. An errors.ServiceUnavailable
+// AppError surfaces when the library API is unreachable.
 func (r *RawResolver) GetEpisodes(ctx context.Context, animeID string) (_ *EpisodesResponse, retErr error) {
 	start := time.Now()
-	defer metrics.ObserveParser("allanime", "get_episodes", start, &retErr)
+	defer metrics.ObserveParser("library", "get_episodes", start, &retErr)
 
 	cacheKey := fmt.Sprintf("%s:%s", CacheKeyEpisodes, animeID)
 	var cached EpisodesResponse
@@ -179,175 +155,33 @@ func (r *RawResolver) GetEpisodes(ctx context.Context, animeID string) (_ *Episo
 		return &cached, nil
 	}
 
-	anime, err := r.animeRepo.GetByID(ctx, animeID)
+	resp, err := r.GetLibraryEpisodes(ctx, animeID)
 	if err != nil {
 		return nil, err
 	}
-	if anime == nil {
-		return nil, errors.NotFound("anime")
+	ttl := 10 * time.Minute
+	if resp.Available {
+		ttl = 6 * time.Hour
 	}
-
-	showID, err := r.resolveShowID(ctx, anime)
-	if err != nil {
-		// Anime not on AllAnime — return available=false rather than
-		// surfacing this as a 503. The frontend should hide the chip.
-		r.log.Infow("raw: anime not on allanime",
-			"anime_id", animeID, "name", anime.Name, "error", err)
-		resp := &EpisodesResponse{Episodes: []RawEpisode{}, Available: false, Source: "allanime"}
-		_ = r.cache.Set(ctx, cacheKey, resp, 10*time.Minute)
-		return resp, nil
-	}
-
-	eps, err := r.client.EpisodesByID(ctx, showID)
-	if err != nil {
-		// Distinguish "no episodes" (return empty) from "API unreachable" (503).
-		if isUpstreamFailure(err) {
-			return nil, errors.Wrap(err, errors.CodeUnavailable, "raw provider unavailable")
-		}
-		r.log.Warnw("raw: no episodes for show",
-			"anime_id", animeID, "show_id", showID, "error", err)
-		resp := &EpisodesResponse{Episodes: []RawEpisode{}, Available: false, Source: "allanime"}
-		_ = r.cache.Set(ctx, cacheKey, resp, 10*time.Minute)
-		return resp, nil
-	}
-
-	out := make([]RawEpisode, 0, len(eps))
-	for _, e := range eps {
-		out = append(out, RawEpisode{ID: e.ID, Number: e.Number, Title: e.Title})
-	}
-	resp := &EpisodesResponse{Episodes: out, Available: true, Source: "allanime"}
-	_ = r.cache.Set(ctx, cacheKey, resp, 6*time.Hour)
-
-	// Best-effort lazy backfill of has_raw column.
-	if !anime.HasRaw {
-		if uerr := r.animeRepo.SetHasRaw(ctx, anime.ID, true); uerr == nil {
-			r.log.Infow("raw: backfilled has_raw", "anime_id", anime.ID)
-		}
-	}
+	_ = r.cache.Set(ctx, cacheKey, resp, ttl)
 	return resp, nil
 }
 
-// GetStream resolves a playable HLS stream for an episode number on
-// an anime.
-//
-// Phase 06 (workstream raw-jp / v0.2) inserts a library-first branch
-// in front of the existing AllAnime path:
-//
-//  1. Read the per-(animeID, episode) source-decision cache. If
-//     "allanime", skip the library lookup entirely.
-//  2. Otherwise (cache empty or "library") and when r.library is
-//     non-nil and anime.ShikimoriID is set, call library.GetEpisode.
-//     200 → cache "library", return MinIO URL with Source="library".
-//     404 → cache "allanime" for 1h, fall through to AllAnime.
-//     5xx / timeout / transport error → do NOT cache (transient),
-//     fall through to AllAnime.
-//  3. AllAnime path runs unchanged; the returned RawStream now sets
-//     Source="allanime".
-//
-// Existing raw:stream:* cache entries from before the Source field
-// existed deserialize with Source == "" — we normalize that to
-// "allanime" on read.
+// GetStream resolves a playable raw HLS stream from the library only. A miss
+// returns errors.NotFound (after firing a best-effort autocache backfill
+// demand). Delegates to the shared library-stream path — raw and the
+// first-party "ae" provider both serve the self-hosted JP pool.
 func (r *RawResolver) GetStream(ctx context.Context, animeID string, episodeNumber int, quality string) (_ *RawStream, retErr error) {
 	start := time.Now()
-	defer metrics.ObserveParser("allanime", "get_stream", start, &retErr)
+	defer metrics.ObserveParser("library", "get_stream", start, &retErr)
 	metrics.EpisodeStreamRequestsTotal.WithLabelValues("raw").Inc()
-
-	cacheKey := fmt.Sprintf("%s:%s:%d:%s", CacheKeyStream, animeID, episodeNumber, quality)
-	var cached RawStream
-	if err := r.cache.Get(ctx, cacheKey, &cached); err == nil {
-		// Backward-compat: older cached entries lack the Source
-		// field — they all came from the AllAnime path.
-		if cached.Source == "" {
-			cached.Source = "allanime"
-		}
-		return &cached, nil
-	}
-
-	anime, err := r.animeRepo.GetByID(ctx, animeID)
-	if err != nil {
-		return nil, err
-	}
-	if anime == nil {
-		return nil, errors.NotFound("anime")
-	}
-
-	// Library-first branch (Phase 06).
-	sourceCacheKey := fmt.Sprintf("%s:%s:%d", CacheKeySourceDecision, animeID, episodeNumber)
-	var sourceDecision string
-	_ = r.cache.Get(ctx, sourceCacheKey, &sourceDecision)
-
-	if r.library != nil && anime.ShikimoriID != "" && sourceDecision != "allanime" {
-		resp, lerr := r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber)
-		switch {
-		case lerr == nil && resp != nil:
-			// Library hit. Cache the decision (1h) and return the
-			// MinIO URL. We do NOT write raw:stream:* on the library
-			// path — MinIO URLs derive from a stable path and the
-			// webhook invalidation handles structural changes.
-			_ = r.cache.Set(ctx, sourceCacheKey, "library", time.Hour)
-			out := newLibraryStream(resp.MinIOURL, quality)
-			if !anime.HasRaw {
-				_ = r.animeRepo.SetHasRaw(ctx, anime.ID, true)
-			}
-			return out, nil
-		case lerr == nil && resp == nil:
-			// Library 404. Cache "allanime" for 1h and fall through.
-			_ = r.cache.Set(ctx, sourceCacheKey, "allanime", time.Hour)
-		default:
-			// Library 5xx / timeout / transport error. Do NOT cache
-			// (transient). Fall through to AllAnime.
-			if r.log != nil {
-				r.log.Warnw("raw: library lookup failed; falling back to allanime",
-					"anime_id", animeID,
-					"shikimori_id", anime.ShikimoriID,
-					"episode", episodeNumber,
-					"error", lerr,
-				)
-			}
-		}
-	}
-
-	// AllAnime path (v0.1 — unchanged behavior; Source field added).
-	showID, err := r.resolveShowID(ctx, anime)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.CodeUnavailable, "raw provider unavailable")
-	}
-
-	// Episode ID is the composite "showID/episodeString" — episodes use a
-	// string representation (e.g. "1", "2.5"), so format from int directly.
-	episodeID := fmt.Sprintf("%s/%d", showID, episodeNumber)
-	stream, err := r.client.RawStream(ctx, episodeID)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.CodeUnavailable, "raw provider unavailable")
-	}
-
-	subs := make([]RawSubtitle, 0, len(stream.Subtitles))
-	for _, s := range stream.Subtitles {
-		subs = append(subs, RawSubtitle{URL: s.URL, Lang: s.Lang, Label: s.Label})
-	}
-
-	out := &RawStream{
-		URL:       stream.URL,
-		Type:      stream.Type,
-		Quality:   stream.Quality,
-		Subtitles: subs,
-		ExpiresAt: time.Now().Add(time.Hour),
-		Source:    "allanime",
-	}
-
-	// 1-hour cache — stream URLs typically expire upstream.
-	_ = r.cache.Set(ctx, cacheKey, out, time.Hour)
-
-	if !anime.HasRaw {
-		_ = r.animeRepo.SetHasRaw(ctx, anime.ID, true)
-	}
-	return out, nil
+	return r.GetLibraryStream(ctx, animeID, episodeNumber, quality)
 }
 
-// newLibraryStream builds a RawStream for a self-hosted MinIO HLS URL,
-// signing it with the HLS-proxy provenance HMAC so the (un-allowlisted)
-// minio host is trusted on the master-playlist request. Shared by the
-// auto raw path and the first-party ("ae") path.
+// newLibraryStream builds a RawStream for a self-hosted MinIO HLS URL, signing
+// it with the HLS-proxy provenance HMAC so the (un-allowlisted) minio host is
+// trusted on the master-playlist request. Shared by raw + the first-party
+// ("ae") path.
 func newLibraryStream(minioURL, quality string) *RawStream {
 	exp, sig := streamsign.Sign(minioURL)
 	return &RawStream{
@@ -362,12 +196,12 @@ func newLibraryStream(minioURL, quality string) *RawStream {
 	}
 }
 
-// GetLibraryEpisodes lists the episodes for an anime that are present in
-// the self-hosted library (MinIO). This is the first-party ("ae")
-// provider's episode source — it never touches AllAnime, so it works for
-// titles AllAnime has never heard of (e.g. Chinese donghua). Returns an
-// empty list (Available=false) when the library is unconfigured, the
-// anime has no shikimori_id, or nothing is encoded yet.
+// GetLibraryEpisodes lists the episodes for an anime that are present in the
+// self-hosted library (MinIO). This is the first-party ("ae") provider's
+// episode source AND (since 2026-06-22) the raw provider's source — it never
+// touches AllAnime, so it works for titles AllAnime has never heard of (e.g.
+// Chinese donghua). Returns an empty list (Available=false) when the library is
+// unconfigured, the anime has no shikimori_id, or nothing is encoded yet.
 func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*EpisodesResponse, error) {
 	empty := &EpisodesResponse{Episodes: []RawEpisode{}, Available: false, Source: "library"}
 	if r.library == nil {
@@ -402,11 +236,10 @@ func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*
 	return &EpisodesResponse{Episodes: out, Available: true, Source: "library"}, nil
 }
 
-// GetLibraryStream resolves an episode's playable HLS stream STRICTLY from
-// the self-hosted library — no AllAnime fallback. This backs the
-// first-party ("ae") provider, which must reflect on-prem availability
-// only (that's the whole point of the latency/load comparison). Returns
-// errors.NotFound when the episode is not encoded locally.
+// GetLibraryStream resolves an episode's playable HLS stream STRICTLY from the
+// self-hosted library — no AllAnime fallback. Backs the first-party ("ae")
+// provider AND the raw provider (both reflect on-prem availability only).
+// Returns errors.NotFound when the episode is not encoded locally.
 func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string) (*RawStream, error) {
 	if r.library == nil {
 		return nil, errors.NotFound("library not configured")
@@ -431,21 +264,15 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		return nil, errors.Wrap(err, errors.CodeUnavailable, "library unavailable")
 	}
 	if resp == nil {
-		// MISS: ae pool does not have this episode. Fire a non-blocking
+		// MISS: pool does not have this episode. Fire a non-blocking
 		// best-effort backfill demand so it's cached next time, then
-		// return the existing NotFound UNCHANGED — the caller's
-		// AllAnime-raw failover is untouched (SERVE-03 no regression).
-		// context.WithoutCancel so a client disconnect can't cancel the
-		// in-flight signal; the error is dropped (best-effort). Bounded +
-		// drop-on-full via fireSignal (WR-01) so a slow library can't leak
-		// goroutines under a request burst.
+		// return NotFound. context.WithoutCancel so a client disconnect
+		// can't cancel the in-flight signal; the error is dropped
+		// (best-effort). Bounded + drop-on-full via fireSignal (WR-01).
 		mal, ep := anime.ShikimoriID, episodeNumber
 		// Ordered fallback titles (name_jp → romaji → name_en) so the library
 		// Planner can search trackers by title; empties are dropped server-side.
 		titles := []string{anime.NameJP, anime.Name, anime.NameEN}
-		// Cause→effect: attribute the backfill to the user who hit this ae MISS
-		// (player=ae, the first-party source; watched + target episode are the same
-		// requested episode). Best-effort — empty when the request is unauthenticated.
 		trigger := &library.DemandTrigger{Player: "ae", WatchedEpisode: episodeNumber}
 		if claims, ok := authz.ClaimsFromContext(ctx); ok && claims != nil {
 			trigger.UserID = claims.UserID
@@ -460,101 +287,14 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 	if !anime.HasRaw {
 		_ = r.animeRepo.SetHasRaw(ctx, anime.ID, true)
 	}
-	// HIT: serving from the ae pool. Fire a non-blocking best-effort
-	// fetch signal (bumps last_fetch_at/fetch_count + serve_total{hit}
-	// on the library side) BEFORE returning the stream. drop-on-failure;
-	// the resolution never fails because this side effect errored. Bounded +
-	// drop-on-full via fireSignal (WR-01).
+	// HIT: serving from the pool. Fire a non-blocking best-effort fetch signal
+	// (bumps last_fetch_at/fetch_count + serve_total{hit} on the library side)
+	// BEFORE returning the stream. drop-on-failure; the resolution never fails
+	// because this side effect errored. Bounded + drop-on-full via fireSignal.
 	mal, ep := anime.ShikimoriID, episodeNumber
 	sigCtx := context.WithoutCancel(ctx)
 	r.fireSignal(func() {
 		_ = r.library.RecordFetch(sigCtx, mal, ep)
 	})
 	return newLibraryStream(resp.MinIOURL, quality), nil
-}
-
-// resolveShowID maps an anime to its AllAnime show ID, with a singleflight
-// to dedupe concurrent lookups for the same anime.
-func (r *RawResolver) resolveShowID(ctx context.Context, anime *domain.Anime) (string, error) {
-	cacheKey := fmt.Sprintf("raw:mapping:%s", anime.ID)
-	var cached string
-	if err := r.cache.Get(ctx, cacheKey, &cached); err == nil {
-		if cached == "" {
-			return "", fmt.Errorf("allanime: anime not found (cached)")
-		}
-		return cached, nil
-	}
-
-	flight := &rawLookup{done: make(chan struct{})}
-	if existing, loaded := r.lookups.LoadOrStore(anime.ID, flight); loaded {
-		ex := existing.(*rawLookup)
-		<-ex.done
-		return ex.id, ex.err
-	}
-	defer func() {
-		close(flight.done)
-		r.lookups.Delete(anime.ID)
-	}()
-
-	id, err := r.doSearch(ctx, anime, cacheKey)
-	flight.id = id
-	flight.err = err
-	return id, err
-}
-
-func (r *RawResolver) doSearch(ctx context.Context, anime *domain.Anime, cacheKey string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	// Try names in order of likelihood — English/romanized first (matches
-	// the catalog index AllAnime exposes), then native Japanese.
-	candidates := []string{}
-	for _, n := range []string{anime.Name, anime.NameEN, anime.NameJP, anime.NameRU} {
-		n = strings.TrimSpace(n)
-		if n != "" {
-			candidates = append(candidates, n)
-		}
-	}
-	if len(candidates) == 0 {
-		_ = r.cache.Set(ctx, cacheKey, "", 10*time.Minute)
-		return "", fmt.Errorf("allanime: no name candidates for anime %s", anime.ID)
-	}
-
-	var lastErr error
-	for _, name := range candidates {
-		results, err := r.client.Search(ctx, name)
-		if err != nil {
-			lastErr = err
-			if isUpstreamFailure(err) {
-				// Bubble up upstream failures so the caller wraps as 503.
-				return "", err
-			}
-			continue
-		}
-		if len(results) > 0 {
-			id := results[0].ID
-			_ = r.cache.Set(ctx, cacheKey, id, 6*time.Hour)
-			return id, nil
-		}
-	}
-
-	_ = r.cache.Set(ctx, cacheKey, "", 10*time.Minute)
-	if lastErr != nil {
-		return "", lastErr
-	}
-	return "", fmt.Errorf("allanime: no match for %s", anime.Name)
-}
-
-// isUpstreamFailure returns true for transport-level / server-side errors
-// (5xx, all-domains-unreachable) — these warrant a 503. 4xx-from-graphql
-// errors (no match, stale SHA on a single query) do NOT — they're per-request
-// outcomes and the caller decides how to surface them.
-func isUpstreamFailure(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "all domains unreachable") ||
-		strings.Contains(msg, "upstream 5") ||
-		strings.Contains(msg, "http ")
 }

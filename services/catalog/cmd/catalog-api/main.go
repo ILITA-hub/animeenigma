@@ -19,7 +19,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
@@ -340,27 +339,17 @@ func main() {
 	// Stateless handler with embedded http.Client + shared redis cache.
 	skipTimesHandler := handler.NewSkipTimesHandler(redisCache, log)
 
-	// Workstream raw-jp, Phase 01 — AllAnime parser exposes a raw-JP video
-	// provider via a separate resolver service + handler. The handler
-	// mounts /api/anime/{id}/raw/{episodes,stream}.
-	allanimeClient := allanime.NewClient(allanime.Config{
-		Domains:          cfg.AllAnime.Domains,
-		QuerySearchSHA:   cfg.AllAnime.QuerySearchSHA,
-		QueryEpisodesSHA: cfg.AllAnime.QueryEpisodesSHA,
-		QuerySourcesSHA:  cfg.AllAnime.QuerySourcesSHA,
-		HTTPTimeout:      cfg.AllAnime.HTTPTimeout,
-		Referer:          cfg.AllAnime.Referer,
-		UserAgent:        cfg.AllAnime.UserAgent,
-	})
-	// Workstream raw-jp, Phase 06 (v0.2) — hybrid resolver consults
-	// the self-hosted library service (MinIO HLS ladder) first, then
-	// falls back to AllAnime. nil-safe: an unreachable / unconfigured
-	// library client makes the resolver behave identically to v0.1.
+	// Raw JP provider — LIBRARY-ONLY (AllAnime backend dropped 2026-06-22; its
+	// sources were behind a Cloudflare-Turnstile clock and duplicated the
+	// scraper's allanime provider). The resolver serves JP-original-audio
+	// strictly from the self-hosted library (MinIO HLS ladder); nil-safe — an
+	// unreachable / unconfigured library client makes raw report no episodes.
+	// The handler mounts /api/anime/{id}/raw/{episodes,stream}.
 	libraryClient := library.NewClient(library.Config{
 		APIURL:  cfg.Library.APIURL,
 		Timeout: cfg.Library.Timeout,
 	})
-	rawResolver := service.NewRawResolver(allanimeClient, libraryClient, animeRepo, redisCache, log)
+	rawResolver := service.NewRawResolver(libraryClient, animeRepo, redisCache, log)
 	rawHandler := handler.NewRawHandler(rawResolver, log)
 
 	// Start Kodik + ae library liveness probes (reports via shared provider-health

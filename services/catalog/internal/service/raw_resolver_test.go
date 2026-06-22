@@ -1,30 +1,37 @@
 package service
 
-// Phase 06 (workstream raw-jp / v0.2) tests for the hybrid raw
-// resolver. Verifies the library-first branch, source-decision cache
-// behavior, RawStream.Source population, backward-compat normalization
-// of older raw:stream:* entries, and the fall-through to AllAnime on
-// library 404 / 5xx / timeout / nil-client / empty-shikimori_id.
+// Tests for the library-only raw (JP-audio) resolver. The AllAnime
+// backend was removed (2026-06-22): its sources decode to a
+// Cloudflare-Turnstile-walled /apivtwo/clock endpoint, unsolvable from
+// our egress, and its "Ok" (ok.ru) sources are now served by the
+// dedicated 'okru' scraper provider. RAW (JP audio, no burned-in subs,
+// soft Jimaku overlay) is therefore served from the self-hosted library
+// (MinIO HLS ladder) only — there is no fallback path.
 //
-// Tests require a reachable Redis (defaults to localhost:6379, DB 14
-// for isolation from the SetNX tests which use DB 15). On a missing
-// Redis we t.Skipf — the live smoke in Task 6 also exercises the
-// behavior end-to-end.
+// These tests verify:
+//   - library 200 → MinIO stream (Source="library", signed).
+//   - library 404 → NotFound (no fallback).
+//   - GetEpisodes empty / no-ShikimoriID → {Episodes:[], Available:false}.
+//   - has_raw lazy backfill on a library hit.
+//   - the existing GetLibraryEpisodes / GetLibraryStream surface (ae +
+//     serve-signal) is unchanged.
+//
+// Tests require a reachable Redis (defaults to localhost:6379, DB 14 for
+// isolation). On a missing Redis we t.Skipf.
 
 import (
 	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"gorm.io/driver/sqlite"
@@ -131,66 +138,12 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// rewriteTransport sends every HTTP request to the given host. Used
-// to point the AllAnime client at our httptest mock.
-type rewriteTransport struct {
-	to   string
-	base http.RoundTripper
-}
-
-func (rt *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.URL.Scheme = "http"
-	req.URL.Host = rt.to
-	return rt.base.RoundTrip(req)
-}
-
-// newAllAnimeMockClient builds an AllAnime client whose configured
-// domain points at the given httptest server. We expose only the
-// public NewClient (private fields are mutated via the package's own
-// test seam). For Phase 06 we never exercise the AllAnime path in
-// the library-hit cases — but several cases DO need it to succeed
-// after the library lookup falls through.
-func newAllAnimeMockClient(t *testing.T, srv *httptest.Server) *allanime.Client {
-	t.Helper()
-	c := allanime.NewClient(allanime.Config{
-		Domains:          []string{"mock.test"},
-		QuerySearchSHA:   "sha-search",
-		QueryEpisodesSHA: "sha-eps",
-		QuerySourcesSHA:  "sha-src",
-		HTTPTimeout:      2 * time.Second,
-		Referer:          "https://test/",
-		UserAgent:        "test-agent",
-	})
-	u, _ := url.Parse(srv.URL)
-	allanime.SetHTTPClientForTest(c, &http.Client{
-		Timeout:   2 * time.Second,
-		Transport: &rewriteTransport{to: u.Host, base: http.DefaultTransport},
-	})
-	return c
-}
-
-// allAnimeOKHandler returns a chained handler that responds to the
-// three persisted-query operations the AllAnime client issues during
-// a stream resolve: shows (search), show (episodes), episode
-// (sources).
-func allAnimeOKHandler(t *testing.T, hits *int) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, r *http.Request) {
-		(*hits)++
-		w.Header().Set("Content-Type", "application/json")
-		q := r.URL.Query().Get("variables")
-		// Variables payload contains a "search" key on search; "_id"
-		// on episodes; "showId" on sources. Use those as a coarse
-		// discriminator.
-		switch {
-		case strings.Contains(q, "search"):
-			fmt.Fprint(w, `{"data":{"shows":{"edges":[{"_id":"showXYZ","name":"Bocchi","englishName":"Bocchi","nativeName":"Bocchi","thumbnail":"","availableEpisodes":{"raw":12}}]}}}`)
-		case strings.Contains(q, "showId") || strings.Contains(q, "episodeString"):
-			fmt.Fprint(w, `{"data":{"episode":{"sourceUrls":[{"sourceUrl":"https://stream.example/playlist.m3u8","priority":5,"type":"hls"}]}}}`)
-		default:
-			fmt.Fprint(w, `{"data":{"show":{"_id":"showXYZ","availableEpisodesDetail":{"raw":["1","2","3","4"]}}}}`)
-		}
+// isNotFound reports whether err is a libs/errors AppError with CodeNotFound.
+func isNotFound(err error) bool {
+	if appErr, ok := errors.IsAppError(err); ok {
+		return appErr.Code == errors.CodeNotFound
 	}
+	return false
 }
 
 // ---- Tests ----
@@ -211,7 +164,8 @@ func makeAnime(hasRaw bool, shikimoriID string) *domain.Anime {
 	}
 }
 
-func TestRawResolver_LibraryHit_NoCache(t *testing.T) {
+// GetStream: library 200 → MinIO stream from the self-hosted library.
+func TestRawResolver_GetStream_LibraryHit(t *testing.T) {
 	cacheC := newTestRedis(t)
 	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
 
@@ -222,7 +176,7 @@ func TestRawResolver_LibraryHit_NoCache(t *testing.T) {
 	defer libSrv.Close()
 
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
 	got, err := r.GetStream(context.Background(), testAnimeID, 1, "")
 	if err != nil {
@@ -234,291 +188,93 @@ func TestRawResolver_LibraryHit_NoCache(t *testing.T) {
 	if !strings.HasPrefix(got.URL, "http://minio:9000/") {
 		t.Errorf("URL = %q, want minio prefix", got.URL)
 	}
-
-	// Source-decision cache must be set to "library".
-	var decision string
-	key := fmt.Sprintf("%s:%s:%d", CacheKeySourceDecision, testAnimeID, 1)
-	if err := cacheC.Get(context.Background(), key, &decision); err != nil {
-		t.Fatalf("source-decision cache: %v", err)
+	if got.Type != "hls" {
+		t.Errorf("Type = %q, want hls", got.Type)
 	}
-	if decision != "library" {
-		t.Errorf("source-decision = %q, want library", decision)
+	if got.Exp == "" || got.Sig == "" {
+		t.Errorf("expected signed minio URL (exp/sig), got exp=%q sig=%q", got.Exp, got.Sig)
 	}
 }
 
-func TestRawResolver_Library404_FallsThroughToAllAnime(t *testing.T) {
+// GetStream: library 404 → NotFound, no fallback.
+func TestRawResolver_GetStream_Library404_NotFound(t *testing.T) {
 	cacheC := newTestRedis(t)
 	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
 
-	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer libSrv.Close()
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 
-	allCalls := 0
-	aaSrv := httptest.NewServer(allAnimeOKHandler(t, &allCalls))
-	defer aaSrv.Close()
-	aaClient := newAllAnimeMockClient(t, aaSrv)
-
-	r := NewRawResolver(aaClient, libClient, animeRepo, cacheC, nil)
-	got, err := r.GetStream(context.Background(), testAnimeID, 1, "")
-	if err != nil {
-		t.Fatalf("GetStream: %v", err)
-	}
-	if got.Source != "allanime" {
-		t.Errorf("Source = %q, want allanime", got.Source)
-	}
-	// Decision cache must be set to "allanime".
-	var decision string
-	key := fmt.Sprintf("%s:%s:%d", CacheKeySourceDecision, testAnimeID, 1)
-	if err := cacheC.Get(context.Background(), key, &decision); err != nil {
-		t.Fatalf("source-decision cache: %v", err)
-	}
-	if decision != "allanime" {
-		t.Errorf("source-decision = %q, want allanime", decision)
-	}
-}
-
-func TestRawResolver_Library5xx_FallsThrough_NoCacheWrite(t *testing.T) {
-	cacheC := newTestRedis(t)
-	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
-
-	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer libSrv.Close()
-	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-
-	allCalls := 0
-	aaSrv := httptest.NewServer(allAnimeOKHandler(t, &allCalls))
-	defer aaSrv.Close()
-	aaClient := newAllAnimeMockClient(t, aaSrv)
-
-	r := NewRawResolver(aaClient, libClient, animeRepo, cacheC, nil)
-	got, err := r.GetStream(context.Background(), testAnimeID, 1, "")
-	if err != nil {
-		t.Fatalf("GetStream: %v", err)
-	}
-	if got.Source != "allanime" {
-		t.Errorf("Source = %q, want allanime", got.Source)
-	}
-
-	// Decision cache must NOT be set (transient failure).
-	var decision string
-	key := fmt.Sprintf("%s:%s:%d", CacheKeySourceDecision, testAnimeID, 1)
-	err = cacheC.Get(context.Background(), key, &decision)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+	_, err := r.GetStream(context.Background(), testAnimeID, 1, "")
 	if err == nil {
-		t.Errorf("source-decision cache should be empty on 5xx, found %q", decision)
+		t.Fatal("expected NotFound on library 404, got nil")
+	}
+	if !isNotFound(err) {
+		t.Fatalf("expected NotFound error, got %v", err)
 	}
 }
 
-func TestRawResolver_LibraryTimeout_FallsThrough_NoCacheWrite_Under2_5s(t *testing.T) {
-	cacheC := newTestRedis(t)
-	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
-
-	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Sleep past the library client timeout (100ms in this test).
-		time.Sleep(300 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer libSrv.Close()
-	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 100 * time.Millisecond})
-
-	allCalls := 0
-	aaSrv := httptest.NewServer(allAnimeOKHandler(t, &allCalls))
-	defer aaSrv.Close()
-	aaClient := newAllAnimeMockClient(t, aaSrv)
-
-	r := NewRawResolver(aaClient, libClient, animeRepo, cacheC, nil)
-	start := time.Now()
-	got, err := r.GetStream(context.Background(), testAnimeID, 1, "")
-	elapsed := time.Since(start)
-	if err != nil {
-		t.Fatalf("GetStream: %v", err)
-	}
-	if got.Source != "allanime" {
-		t.Errorf("Source = %q, want allanime", got.Source)
-	}
-	if elapsed > 2500*time.Millisecond {
-		t.Errorf("total wall time %s exceeds 2.5s SLA", elapsed)
-	}
-	// Decision cache must NOT be set on transient error.
-	var decision string
-	key := fmt.Sprintf("%s:%s:%d", CacheKeySourceDecision, testAnimeID, 1)
-	if err := cacheC.Get(context.Background(), key, &decision); err == nil {
-		t.Errorf("source-decision cache should be empty on timeout, found %q", decision)
-	}
-}
-
-func TestRawResolver_CachedLibrary_StillHitsLibrary(t *testing.T) {
-	cacheC := newTestRedis(t)
-	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
-
-	// Pre-seed the source-decision cache.
-	key := fmt.Sprintf("%s:%s:%d", CacheKeySourceDecision, testAnimeID, 1)
-	if err := cacheC.Set(context.Background(), key, "library", time.Hour); err != nil {
-		t.Fatalf("seed source-decision: %v", err)
-	}
-
-	libCalls := 0
-	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		libCalls++
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"success":true,"data":{"minio_url":"http://minio/x.m3u8","duration_sec":0,"size_bytes":0}}`)
-	}))
-	defer libSrv.Close()
-	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
-	got, err := r.GetStream(context.Background(), testAnimeID, 1, "")
-	if err != nil {
-		t.Fatalf("GetStream: %v", err)
-	}
-	if got.Source != "library" {
-		t.Errorf("Source = %q, want library", got.Source)
-	}
-	if libCalls != 1 {
-		t.Errorf("library calls = %d, want 1 (fresh fetch on cached library decision)", libCalls)
-	}
-}
-
-func TestRawResolver_CachedAllAnime_SkipsLibrary(t *testing.T) {
-	cacheC := newTestRedis(t)
-	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
-
-	key := fmt.Sprintf("%s:%s:%d", CacheKeySourceDecision, testAnimeID, 1)
-	if err := cacheC.Set(context.Background(), key, "allanime", time.Hour); err != nil {
-		t.Fatalf("seed source-decision: %v", err)
-	}
-
-	libCalls := 0
-	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		libCalls++
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"success":true,"data":{"minio_url":"http://minio/x.m3u8"}}`)
-	}))
-	defer libSrv.Close()
-	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-
-	allCalls := 0
-	aaSrv := httptest.NewServer(allAnimeOKHandler(t, &allCalls))
-	defer aaSrv.Close()
-	aaClient := newAllAnimeMockClient(t, aaSrv)
-
-	r := NewRawResolver(aaClient, libClient, animeRepo, cacheC, nil)
-	got, err := r.GetStream(context.Background(), testAnimeID, 1, "")
-	if err != nil {
-		t.Fatalf("GetStream: %v", err)
-	}
-	if got.Source != "allanime" {
-		t.Errorf("Source = %q, want allanime", got.Source)
-	}
-	if libCalls != 0 {
-		t.Errorf("library calls = %d, want 0 when source-decision is allanime", libCalls)
-	}
-}
-
-func TestRawResolver_NilLibraryClient_FallsToAllAnime(t *testing.T) {
-	cacheC := newTestRedis(t)
-	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
-
-	allCalls := 0
-	aaSrv := httptest.NewServer(allAnimeOKHandler(t, &allCalls))
-	defer aaSrv.Close()
-	aaClient := newAllAnimeMockClient(t, aaSrv)
-
-	r := NewRawResolver(aaClient, nil, animeRepo, cacheC, nil)
-	got, err := r.GetStream(context.Background(), testAnimeID, 1, "")
-	if err != nil {
-		t.Fatalf("GetStream: %v", err)
-	}
-	if got.Source != "allanime" {
-		t.Errorf("Source = %q, want allanime", got.Source)
-	}
-}
-
-func TestRawResolver_EmptyShikimoriID_FallsToAllAnime(t *testing.T) {
+// GetStream: empty shikimori_id → NotFound (no library key, no fallback).
+func TestRawResolver_GetStream_EmptyShikimoriID_NotFound(t *testing.T) {
 	cacheC := newTestRedis(t)
 	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, "")) // empty shikimori_id
 
 	libCalls := 0
-	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		libCalls++
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer libSrv.Close()
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 
-	allCalls := 0
-	aaSrv := httptest.NewServer(allAnimeOKHandler(t, &allCalls))
-	defer aaSrv.Close()
-	aaClient := newAllAnimeMockClient(t, aaSrv)
-
-	r := NewRawResolver(aaClient, libClient, animeRepo, cacheC, nil)
-	got, err := r.GetStream(context.Background(), testAnimeID, 1, "")
-	if err != nil {
-		t.Fatalf("GetStream: %v", err)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+	_, err := r.GetStream(context.Background(), testAnimeID, 1, "")
+	if err == nil {
+		t.Fatal("expected NotFound when shikimori_id is empty, got nil")
 	}
-	if got.Source != "allanime" {
-		t.Errorf("Source = %q, want allanime", got.Source)
+	if !isNotFound(err) {
+		t.Fatalf("expected NotFound error, got %v", err)
 	}
 	if libCalls != 0 {
 		t.Errorf("library calls = %d, want 0 when shikimori_id is empty", libCalls)
 	}
 }
 
-func TestRawResolver_BackwardCompat_OldCachedStream_NormalizedToAllAnime(t *testing.T) {
+// GetStream: nil library client → NotFound (library-only, no other source).
+func TestRawResolver_GetStream_NilLibraryClient_NotFound(t *testing.T) {
 	cacheC := newTestRedis(t)
-	_, animeRepo := newTestDBWithAnime(t, makeAnime(true, testShikimoriID))
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
 
-	// Pre-populate raw:stream:* WITHOUT Source (simulating a v0.1
-	// cache entry from before the field existed). We encode an old
-	// RawStream shape via a small local type.
-	type oldRawStream struct {
-		URL       string        `json:"url"`
-		Type      string        `json:"type"`
-		Quality   string        `json:"quality,omitempty"`
-		Subtitles []RawSubtitle `json:"subtitles,omitempty"`
-		ExpiresAt time.Time     `json:"expires_at"`
+	r := NewRawResolver(nil, animeRepo, cacheC, nil)
+	_, err := r.GetStream(context.Background(), testAnimeID, 1, "")
+	if err == nil {
+		t.Fatal("expected NotFound with nil library client, got nil")
 	}
-	streamKey := fmt.Sprintf("%s:%s:%d:%s", CacheKeyStream, testAnimeID, 5, "")
-	if err := cacheC.Set(context.Background(), streamKey, oldRawStream{
-		URL: "https://old.example/stream.m3u8", Type: "hls", ExpiresAt: time.Now().Add(time.Hour),
-	}, time.Hour); err != nil {
-		t.Fatalf("seed old stream cache: %v", err)
-	}
-
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), nil, animeRepo, cacheC, nil)
-	got, err := r.GetStream(context.Background(), testAnimeID, 5, "")
-	if err != nil {
-		t.Fatalf("GetStream: %v", err)
-	}
-	if got.Source != "allanime" {
-		t.Errorf("Source = %q, want allanime (normalized from empty)", got.Source)
-	}
-	if got.URL != "https://old.example/stream.m3u8" {
-		t.Errorf("URL = %q, want carried-through from old cache", got.URL)
+	if !isNotFound(err) {
+		t.Fatalf("expected NotFound error, got %v", err)
 	}
 }
 
-func TestRawResolver_LibraryHit_SetsHasRaw(t *testing.T) {
+// GetStream: library hit lazily backfills has_raw.
+func TestRawResolver_GetStream_LibraryHit_SetsHasRaw(t *testing.T) {
 	cacheC := newTestRedis(t)
 	db, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
 
-	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"success":true,"data":{"minio_url":"http://minio:9000/x.m3u8","duration_sec":0,"size_bytes":0}}`)
 	}))
 	defer libSrv.Close()
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 	if _, err := r.GetStream(context.Background(), testAnimeID, 1, ""); err != nil {
 		t.Fatalf("GetStream: %v", err)
 	}
 
-	// has_raw must now be 1.
 	var hasRaw int
 	if err := db.Raw(`SELECT has_raw FROM animes WHERE id = ?`, testAnimeID).Row().Scan(&hasRaw); err != nil {
 		t.Fatalf("read has_raw: %v", err)
@@ -527,6 +283,110 @@ func TestRawResolver_LibraryHit_SetsHasRaw(t *testing.T) {
 		t.Errorf("has_raw = %d, want 1 (lazy backfill on library hit)", hasRaw)
 	}
 }
+
+// GetEpisodes: happy path returns the library episode list.
+func TestRawResolver_GetEpisodes_LibraryHit(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/library/episodes/"+testShikimoriID {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[{"episode_number":1,"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8"},{"episode_number":2,"minio_url":"http://minio:9000/raw-library/57466/2/playlist.m3u8"}]}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetEpisodes(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("GetEpisodes: %v", err)
+	}
+	if !got.Available || got.Source != "library" {
+		t.Errorf("got Available=%v Source=%q, want true/library", got.Available, got.Source)
+	}
+	if len(got.Episodes) != 2 || got.Episodes[0].Number != 1 || got.Episodes[1].Number != 2 {
+		t.Errorf("episodes = %+v", got.Episodes)
+	}
+}
+
+// GetEpisodes: empty library → {Episodes:[], Available:false}.
+func TestRawResolver_GetEpisodes_EmptyNotAvailable(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[]}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetEpisodes(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("GetEpisodes: %v", err)
+	}
+	if got.Available {
+		t.Errorf("Available = true, want false for empty library")
+	}
+	if got.Episodes == nil {
+		t.Errorf("Episodes must be a non-nil empty slice (JSON [])")
+	}
+}
+
+// GetEpisodes: no shikimori_id → {Episodes:[], Available:false}.
+func TestRawResolver_GetEpisodes_NoShikimoriID_NotAvailable(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, "")) // empty shikimori_id
+
+	libCalls := 0
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		libCalls++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer libSrv.Close()
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+	got, err := r.GetEpisodes(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("GetEpisodes: %v", err)
+	}
+	if got.Available {
+		t.Errorf("Available = true, want false for anime with no shikimori_id")
+	}
+	if got.Episodes == nil {
+		t.Errorf("Episodes must be a non-nil empty slice (JSON [])")
+	}
+	if libCalls != 0 {
+		t.Errorf("library calls = %d, want 0 when shikimori_id is empty", libCalls)
+	}
+}
+
+// GetEpisodes: nil library client → {Episodes:[], Available:false}.
+func TestRawResolver_GetEpisodes_NilLibraryClient_NotAvailable(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	r := NewRawResolver(nil, animeRepo, cacheC, nil)
+	got, err := r.GetEpisodes(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("GetEpisodes: %v", err)
+	}
+	if got.Available {
+		t.Errorf("Available = true, want false with nil library client")
+	}
+	if got.Episodes == nil {
+		t.Errorf("Episodes must be a non-nil empty slice (JSON [])")
+	}
+}
+
+// ---- GetLibraryEpisodes / GetLibraryStream (ae provider surface) — unchanged ----
 
 func TestRawResolver_GetLibraryEpisodes_HappyPath(t *testing.T) {
 	cacheC := newTestRedis(t)
@@ -542,7 +402,7 @@ func TestRawResolver_GetLibraryEpisodes_HappyPath(t *testing.T) {
 	defer libSrv.Close()
 
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
 	got, err := r.GetLibraryEpisodes(context.Background(), testAnimeID)
 	if err != nil {
@@ -567,7 +427,7 @@ func TestRawResolver_GetLibraryEpisodes_EmptyNotAvailable(t *testing.T) {
 	defer libSrv.Close()
 
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
 	got, err := r.GetLibraryEpisodes(context.Background(), testAnimeID)
 	if err != nil {
@@ -592,7 +452,7 @@ func TestRawResolver_GetLibraryStream_SignedAndLibraryOnly(t *testing.T) {
 	defer libSrv.Close()
 
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
 	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
 	if err != nil {
@@ -616,7 +476,7 @@ func TestRawResolver_GetLibraryStream_404WhenAbsent(t *testing.T) {
 	defer libSrv.Close()
 
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
 	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 99, "")
 	if err == nil {
@@ -659,7 +519,7 @@ func TestRawResolver_GetLibraryStream_HIT_FiresRecordFetch(t *testing.T) {
 	defer libSrv.Close()
 
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
 	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
 	if err != nil {
@@ -688,7 +548,7 @@ func TestRawResolver_GetLibraryStream_MISS_FiresRecordDemand(t *testing.T) {
 	defer libSrv.Close()
 
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
 	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 99, "")
 	if err == nil {
@@ -715,7 +575,7 @@ func TestRawResolver_GetLibraryStream_SignalFailureDoesNotAffectResult(t *testin
 	defer libSrv.Close()
 
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
-	r := NewRawResolver(allanime.NewClient(allanime.Config{Domains: []string{"x"}}), libClient, animeRepo, cacheC, nil)
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
 	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
 	if err != nil {
