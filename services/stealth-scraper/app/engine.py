@@ -635,6 +635,13 @@ class CamoufoxEngine:
                 await existing.page.evaluate("()=>1")
                 return existing
             except Exception:  # noqa: BLE001
+                # Liveness probe failed: the page (and therefore the browser slot)
+                # is dead. Mark the profile crashed before releasing so the reaper
+                # handles resurrection — do NOT let the profile fall back to the
+                # healthy-leasable pool (that would be the AUTO-527 re-entry loop).
+                self.profiles.mark_crashed(
+                    existing.profile, error="liveness-probe: page dead"
+                )
                 await self.aclose_session(key)
 
         profile = await self._acquire_profile()

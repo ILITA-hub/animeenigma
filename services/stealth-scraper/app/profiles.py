@@ -60,9 +60,10 @@ class ProfileManager:
         return list(self._profiles)
 
     def lease(self) -> Profile | None:
-        """Lease a free profile, preferring already-launched ones (warm) with the
-        fewest uses."""
-        free = [p for p in self._profiles if not p.leased]
+        """Lease a free healthy profile, preferring already-launched ones (warm)
+        with the fewest uses. Crashed slots are excluded — the reaper resurrects
+        them; they must not be handed to a live request path."""
+        free = [p for p in self._profiles if not p.leased and p.status == "healthy"]
         if not free:
             return None
         free.sort(key=lambda p: (not p.launched, p.uses))
