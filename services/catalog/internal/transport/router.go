@@ -142,10 +142,19 @@ func NewRouter(
 			// Phase 13 (REC-SIG-06): Shikimori /similar endpoint feed for the
 			// player service's S6 pin cascade. Public read, no auth required.
 			r.Get("/{animeId}/similar", catalogHandler.GetSimilarAnime)
-			// Pinned translations (public)
+			// Pinned translations: reading the pins is public, but pinning is a
+			// GLOBAL curation action (PinnedTranslation has no user_id — a pin
+			// reorders the listing for everyone), so the writes are admin-only.
+			// They previously sat here unauthenticated, letting any anonymous
+			// caller pin/unpin (audit #4). URLs are unchanged; the FE admin UI
+			// sends the JWT and already handles the error path.
 			r.Get("/{animeId}/pinned-translations", catalogHandler.GetPinnedTranslations)
-			r.Post("/{animeId}/pin-translation", catalogHandler.PinTranslation)
-			r.Delete("/{animeId}/pin-translation/{translationId}", catalogHandler.UnpinTranslation)
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(cfg.JWT))
+				r.Use(AdminMiddleware)
+				r.Post("/{animeId}/pin-translation", catalogHandler.PinTranslation)
+				r.Delete("/{animeId}/pin-translation/{translationId}", catalogHandler.UnpinTranslation)
+			})
 			// Aniboom video sources
 			r.Get("/{animeId}/aniboom/translations", catalogHandler.GetAniboomTranslations)
 			r.Get("/{animeId}/aniboom/video", catalogHandler.GetAniboomVideo)

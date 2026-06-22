@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,9 +20,30 @@ const (
 )
 
 type Client struct {
-	httpClient   *http.Client
+	httpClient *http.Client
+
+	// mu guards token/tokenExpires. The Client is a singleton shared across all
+	// concurrent catalog requests (services/catalog: one kodik.NewClient reused
+	// for every request), so the lazy token refresh would otherwise be a data
+	// race — hanime and allanime guard the identical pattern with a lock.
+	mu           sync.RWMutex
 	token        string
 	tokenExpires time.Time
+}
+
+// tokenSnapshot returns the current token under a read lock.
+func (c *Client) tokenSnapshot() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.token
+}
+
+// storeToken atomically replaces the token and resets its 12h expiry.
+func (c *Client) storeToken(token string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.token = token
+	c.tokenExpires = time.Now().Add(12 * time.Hour)
 }
 
 // SearchResult represents an anime search result from Kodik
@@ -129,16 +151,20 @@ func NewClient() (*Client, error) {
 
 // refreshTokenIfNeeded refreshes the token if it's expired or about to expire
 func (c *Client) refreshTokenIfNeeded() error {
-	if time.Now().Before(c.tokenExpires) {
+	c.mu.RLock()
+	valid := time.Now().Before(c.tokenExpires)
+	c.mu.RUnlock()
+	if valid {
 		return nil
 	}
 
+	// getToken does network I/O — do NOT hold the lock across it. A rare
+	// concurrent double-fetch is harmless (last write wins).
 	token, err := c.getToken()
 	if err != nil {
 		return err
 	}
-	c.token = token
-	c.tokenExpires = time.Now().Add(12 * time.Hour)
+	c.storeToken(token)
 	return nil
 }
 
@@ -394,7 +420,7 @@ func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error)
 		}
 
 		params := url.Values{}
-		params.Set("token", c.token)
+		params.Set("token", c.tokenSnapshot())
 		params.Set("shikimori_id", shikimoriID)
 		params.Set("with_episodes", "true")
 		params.Set("with_material_data", "true")
@@ -411,8 +437,7 @@ func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error)
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			// Token might be invalid, try to refresh
 			if newToken, refreshErr := c.getToken(); refreshErr == nil {
-				c.token = newToken
-				c.tokenExpires = time.Now().Add(12 * time.Hour)
+				c.storeToken(newToken)
 				lastErr = fmt.Errorf("token refresh needed, retrying")
 				continue
 			}
@@ -457,7 +482,7 @@ func (c *Client) SearchByTitle(title string) ([]SearchResult, error) {
 		}
 
 		params := url.Values{}
-		params.Set("token", c.token)
+		params.Set("token", c.tokenSnapshot())
 		params.Set("title", title)
 		params.Set("types", "anime,anime-serial")
 		params.Set("with_episodes", "true")
@@ -474,8 +499,7 @@ func (c *Client) SearchByTitle(title string) ([]SearchResult, error) {
 
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			if newToken, refreshErr := c.getToken(); refreshErr == nil {
-				c.token = newToken
-				c.tokenExpires = time.Now().Add(12 * time.Hour)
+				c.storeToken(newToken)
 				lastErr = fmt.Errorf("token refresh needed, retrying")
 				continue
 			}
