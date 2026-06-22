@@ -10,6 +10,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/analytics/internal/observ"
 )
 
 type Config struct {
@@ -113,14 +114,22 @@ func (b *Batcher) flush(events []domain.Event) {
 
 	batch := make([]domain.Event, len(events))
 	copy(batch, events)
-	if err := b.store.InsertBatch(ctx, batch); err != nil && b.log != nil {
-		b.log.Errorw("analytics insert batch failed", "count", len(batch), "error", err)
+	if err := b.store.InsertBatch(ctx, batch); err != nil {
+		// The whole batch is lost — count every event so the loss is visible
+		// (audit #24), not just logged.
+		observ.EventsFlushFailed.WithLabelValues("insert").Add(float64(len(batch)))
+		if b.log != nil {
+			b.log.Errorw("analytics insert batch failed", "count", len(batch), "error", err)
+		}
 	}
 	// Identify events also upsert the anon→user mapping.
 	for _, e := range batch {
 		if e.EventType == domain.EventTypeIdentify && e.UserID != "" {
-			if err := b.store.UpsertIdentity(ctx, e.AnonymousID, e.UserID, e.Timestamp); err != nil && b.log != nil {
-				b.log.Errorw("analytics upsert identity failed", "anon", e.AnonymousID, "error", err)
+			if err := b.store.UpsertIdentity(ctx, e.AnonymousID, e.UserID, e.Timestamp); err != nil {
+				observ.EventsFlushFailed.WithLabelValues("identity").Inc()
+				if b.log != nil {
+					b.log.Errorw("analytics upsert identity failed", "anon", e.AnonymousID, "error", err)
+				}
 			}
 		}
 	}
