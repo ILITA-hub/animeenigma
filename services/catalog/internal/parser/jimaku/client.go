@@ -51,6 +51,17 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
+// NewClientWithURL creates a Jimaku client with a custom base URL (for tests).
+func NewClientWithURL(apiKey, baseURL string) *Client {
+	return &Client{
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		apiKey:  apiKey,
+		baseURL: baseURL,
+	}
+}
+
 // IsConfigured returns true if the client has an API key
 func (c *Client) IsConfigured() bool {
 	return c.apiKey != ""

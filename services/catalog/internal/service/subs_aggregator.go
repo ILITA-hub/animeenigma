@@ -13,11 +13,24 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 )
+
+// animeRepoForSubs is a narrow interface for the repo methods used by SubsAggregator.
+// *repo.AnimeRepository satisfies it; tests can inject a handwritten fake.
+type animeRepoForSubs interface {
+	GetByID(ctx context.Context, id string) (*domain.Anime, error)
+	UpdateExternalIDs(ctx context.Context, animeID string, imdb, tmdb *string) error
+	UpdateAniListID(ctx context.Context, animeID string, anilistID string) error
+}
+
+// errProviderUnconfigured marks a provider that is intentionally off (no key),
+// so metrics classify it as "unconfigured" rather than "down".
+var errProviderUnconfigured = errors.New("subtitle provider not configured")
 
 // SubsAggregator merges subtitle tracks from Jimaku (JP-only) and
 // OpenSubtitles (everything else, keyed by IMDb/TMDB). Workstream raw-jp,
@@ -31,7 +44,7 @@ type SubsAggregator struct {
 	jimaku    *jimaku.Client
 	opensubs  *opensubtitles.Client
 	idmap     *idmapping.Client
-	animeRepo *repo.AnimeRepository
+	animeRepo animeRepoForSubs
 	cache     *cache.RedisCache
 	log       *logger.Logger
 }
@@ -114,6 +127,8 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 	resultsCh := make(chan providerResult, 2)
 	var wg sync.WaitGroup
 
+	start := time.Now()
+
 	// Jimaku — JP only, keyed by AniList ID.
 	wg.Add(1)
 	go func() {
@@ -140,20 +155,35 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		Episode:   episode,
 	}
 
+	outcomes := make([]metrics.SubtitleProviderOutcome, 0, 2)
 	for r := range resultsCh {
 		if r.err != nil {
+			if errors.Is(r.err, errProviderUnconfigured) {
+				outcomes = append(outcomes, metrics.SubtitleProviderOutcome{Provider: r.name, Status: "unconfigured"})
+				continue // not "down", not in ProvidersDown
+			}
 			s.log.Warnw("subs aggregator: provider failed",
 				"provider", r.name, "anime_id", animeID, "episode", episode, "error", r.err)
 			resp.ProvidersDown = append(resp.ProvidersDown, r.name)
+			outcomes = append(outcomes, metrics.SubtitleProviderOutcome{Provider: r.name, Status: "down"})
 			continue
 		}
+		kept := 0
 		for _, t := range r.tracks {
 			if len(langs) > 0 && !containsLang(langs, t.Lang) {
 				continue
 			}
 			resp.Languages[t.Lang] = append(resp.Languages[t.Lang], t)
+			kept++
 		}
+		status := "ok"
+		if kept == 0 {
+			status = "empty"
+		}
+		outcomes = append(outcomes, metrics.SubtitleProviderOutcome{Provider: r.name, Status: status, Tracks: kept})
 	}
+
+	metrics.RecordSubtitleResolve(time.Since(start).Seconds(), outcomes)
 
 	dedupe(resp.Languages)
 	_ = s.cache.Set(ctx, cacheKey, resp, subsCacheTTL(resp))
@@ -221,7 +251,7 @@ func (s *SubsAggregator) fetchJimaku(ctx context.Context, anime *domain.Anime, e
 
 func (s *SubsAggregator) fetchOpenSubtitles(ctx context.Context, anime *domain.Anime, episode int, langs []string) ([]SubtitleTrack, error) {
 	if s.opensubs == nil || !s.opensubs.IsConfigured() {
-		return nil, errors.New("opensubtitles not configured")
+		return nil, errProviderUnconfigured
 	}
 
 	params := opensubtitles.SearchParams{
