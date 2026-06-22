@@ -39,6 +39,12 @@ type GrafanaConfig struct {
 	PollInterval int // seconds between Grafana alert checks
 	WebhookUser  string
 	WebhookPass  string
+	// APIUser/APIPass authenticate the OUTBOUND alertmanager poll (the
+	// safety-net reconcile). Distinct from WebhookUser/Pass (which secure the
+	// INBOUND webhook). When APIPass is empty the poll is skipped — webhook
+	// delivery still works.
+	APIUser string
+	APIPass string
 }
 
 type ServerConfig struct {
@@ -99,6 +105,8 @@ func Load() (*Config, error) {
 			PollInterval: getEnvInt("GRAFANA_POLL_INTERVAL", 600),
 			WebhookUser:  getEnv("GRAFANA_WEBHOOK_USER", "grafana"),
 			WebhookPass:  getEnv("GRAFANA_WEBHOOK_PASS", ""),
+			APIUser:      getEnv("GRAFANA_API_USER", "admin"),
+			APIPass:      getEnv("GRAFANA_API_PASS", ""),
 		},
 		Claude: ClaudeConfig{
 			Path:        getEnv("CLAUDE_PATH", "/root/.local/bin/claude"),

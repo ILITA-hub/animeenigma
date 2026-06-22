@@ -133,9 +133,13 @@ func main() {
 	}()
 
 	// Initialize Grafana client
-	gf := grafana.NewClient(cfg.Grafana.URL)
-	// Preflight: verify Grafana connectivity
-	if alerts, err := gf.GetFiringAlerts(); err != nil {
+	gf := grafana.NewClient(cfg.Grafana.URL, cfg.Grafana.APIUser, cfg.Grafana.APIPass)
+	grafanaPollEnabled := cfg.Grafana.APIPass != ""
+	// Preflight: verify Grafana connectivity (only when the poll is configured;
+	// the alertmanager API needs auth, so without GRAFANA_API_PASS it just 401s).
+	if !grafanaPollEnabled {
+		log.Infow("grafana reconcile poll disabled — set GRAFANA_API_PASS to enable the safety-net poll (primary alert delivery is via webhook)")
+	} else if alerts, err := gf.GetFiringAlerts(); err != nil {
 		log.Warnw("grafana check failed (will retry)", "error", err)
 	} else {
 		log.Infow("grafana connected", "active_alerts", len(alerts))
@@ -288,6 +292,9 @@ func (s *service) run(ctx context.Context) {
 	// (e.g. network blip, maintenance restart during burst, Grafana entrypoint failure).
 	// Do NOT remove — without it, a missed webhook silently drops an alert.
 	go func() {
+		if s.cfg.Grafana.APIPass == "" {
+			return // no GRAFANA_API_PASS: poll cannot authenticate; webhook still delivers.
+		}
 		interval := time.Duration(s.cfg.Grafana.PollInterval) * time.Second
 		if interval < 300*time.Second {
 			interval = 300 * time.Second
