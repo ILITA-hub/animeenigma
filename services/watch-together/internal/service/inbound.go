@@ -144,6 +144,15 @@ type InboundRouter struct {
 	catalog CatalogValidator
 	log     *logger.Logger
 
+	// roomCache is a TTL + write-invalidated in-process cache over repo's
+	// canonical Room read (audit L802). The drift engine reads through it on
+	// every 1Hz time_tick so an active co-watch no longer issues ~N
+	// HGETALL/sec/room — the cache serves the steady-state read and only
+	// re-fetches when this router invalidates it after a write. Constructed in
+	// NewInboundRouter over the same repo; this router is the SOLE writer of
+	// wt:room:{id}, so invalidating here keeps the cache exactly consistent.
+	roomCache *RoomCache
+
 	now   func() time.Time
 	newID func() string
 }
@@ -167,14 +176,15 @@ func NewInboundRouter(
 		log = logger.Default()
 	}
 	return &InboundRouter{
-		repo:    r,
-		hub:     h,
-		drift:   drift,
-		rl:      rl,
-		catalog: catalog,
-		log:     log,
-		now:     time.Now,
-		newID:   uuid.NewString,
+		repo:      r,
+		hub:       h,
+		drift:     drift,
+		rl:        rl,
+		catalog:   catalog,
+		log:       log,
+		roomCache: NewRoomCache(r),
+		now:       time.Now,
+		newID:     uuid.NewString,
 	}
 }
 
@@ -286,6 +296,9 @@ func (r *InboundRouter) handlePlaybackEvent(
 		)
 		return
 	}
+	// New playback anchor — drop the cached Room so the next time_tick reads
+	// fresh (audit L802 write-path invalidation).
+	r.roomCache.Invalidate(conn.RoomID)
 
 	// playback:event broadcast — excludes sender (they already know they
 	// did it; design doc §Server-outbound).
@@ -341,6 +354,9 @@ func (r *InboundRouter) handleSeek(ctx context.Context, conn ConnectionCtx, data
 		)
 		return
 	}
+	// New seek anchor — invalidate the cache so corrections aim at the new
+	// position on the next tick (audit L802).
+	r.roomCache.Invalidate(conn.RoomID)
 
 	// playback:event broadcast — exclude sender.
 	out, err := buildEnvelope(domain.MsgPlaybackEvent, domain.PlaybackEventData{
@@ -376,7 +392,11 @@ func (r *InboundRouter) handleTimeTick(ctx context.Context, conn ConnectionCtx, 
 	}
 
 	nowMs := r.now().UnixMilli()
-	correction, err := r.drift.OnTimeTick(ctx, r.repo, conn.RoomID, conn.UserID, payload.Time, nowMs)
+	// Read the canonical room through the in-process cache (audit L802) so an
+	// active co-watch's ~1Hz/member ticks collapse onto one cached Room read
+	// per roomCacheTTL instead of one HGETALL per tick. The cache is kept
+	// consistent by Invalidate calls on every write below.
+	correction, err := r.drift.OnTimeTick(ctx, r.roomCache, conn.RoomID, conn.UserID, payload.Time, nowMs)
 	if err != nil {
 		// Includes repo.ErrNotFound when the room TTL'd out mid-session.
 		// We don't close the connection from here — the WS handler will
@@ -401,7 +421,12 @@ func (r *InboundRouter) handleTimeTick(ctx context.Context, conn ConnectionCtx, 
 		// GetRoom round-trip is acceptable; on lookup error we fall back to
 		// "member" so the counter still bumps but is conservatively labelled.
 		role := "member"
-		if room, gerr := r.repo.GetRoom(ctx, conn.RoomID); gerr == nil && room.HostUserID == conn.UserID {
+		// Read via the same cache the drift engine used this tick (audit L802):
+		// the host_user_id is needed only to label the persistent-drift counter
+		// and this branch fires rarely (5th consecutive hard drift), so a
+		// possibly-1s-stale host id is fine — host_user_id never changes for a
+		// room's lifetime anyway.
+		if room, gerr := r.roomCache.GetRoom(ctx, conn.RoomID); gerr == nil && room.HostUserID == conn.UserID {
 			role = "host"
 		}
 		PersistentDriftTotal.WithLabelValues(role).Inc()
@@ -507,6 +532,9 @@ func (r *InboundRouter) applyStateChange(
 		)
 		return
 	}
+	// Episode/player/translation change reset playback_time=0 — invalidate so
+	// the drift engine sees the reset anchor immediately (audit L802).
+	r.roomCache.Invalidate(conn.RoomID)
 
 	out, err := buildEnvelope(domain.MsgRoomStateChanged, domain.RoomStateChangedData{
 		Field:    broadcastField,

@@ -31,7 +31,6 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/domain"
-	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/repo"
 )
 
 // DriftSeverity is the result band of a single drift evaluation.
@@ -176,10 +175,14 @@ func memberKey(roomID, userID string) string {
 //  1. Looks up (or creates) the per-member state. If already suspended,
 //     returns (nil, nil) immediately — no further corrections for this
 //     member until Reset.
-//  2. Fetches the canonical Room from Redis via the supplied repo. If the
-//     room has vanished (TTL expired mid-session, or someone Deleted it),
-//     returns (nil, repo.ErrNotFound) so the router can decide whether to
-//     close the connection.
+//  2. Fetches the canonical Room via the supplied roomGetter. In production
+//     the router injects a *RoomCache (TTL + write-invalidated) so the per-
+//     tick read collapses to near-zero Redis HGETALLs during active co-watch
+//     (audit L802); *repo.RoomRepo also satisfies roomGetter so the existing
+//     pure drift-band tests read straight through Redis unchanged. If the room
+//     has vanished (TTL expired mid-session, or someone Deleted it), returns
+//     (nil, repo.ErrNotFound) so the router can decide whether to close the
+//     connection.
 //  3. Computes drift via ComputeDrift.
 //  4. Applies the decision table from the package comment.
 //  5. Updates the member's counter + suspended flag accordingly.
@@ -190,7 +193,7 @@ func memberKey(roomID, userID string) string {
 // PERSISTENT_DRIFT code (Time+ServerTS ignored).
 func (e *DriftEngine) OnTimeTick(
 	ctx context.Context,
-	r *repo.RoomRepo,
+	r roomGetter,
 	roomID, userID string,
 	reportedTime float64,
 	nowMs int64,

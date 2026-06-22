@@ -96,24 +96,65 @@ func (h *Hub) InstanceID() string { return h.instanceID }
 // If the room set was empty before this call, Register also starts the
 // per-room pubsub subscriber goroutine. The subscriber is torn down on the
 // matching last-member Unregister.
+//
+// Register primes no first frame — callers that need the room:snapshot to be
+// the guaranteed FIRST drained frame must use RegisterWithFirstFrame instead.
 func (h *Hub) Register(roomID, userID, username string, conn *websocket.Conn) (*Connection, error) {
+	return h.RegisterWithFirstFrame(roomID, userID, username, conn, nil)
+}
+
+// RegisterWithFirstFrame is Register plus a guaranteed-first outbound frame.
+//
+// Audit L809: the old flow inserted the connection into the broadcast-eligible
+// room set and started the pumps BEFORE the handler enqueued the room:snapshot
+// (a separate post-Register c.Send). A concurrent Broadcast landing in that
+// window (another member's chat, a near-simultaneous member:joined) would be
+// localFanout'd onto this connection's FIFO sendCh first, so the writePump
+// delivered it BEFORE the snapshot — the client applied a state delta before
+// it had the base snapshot.
+//
+// Passing the marshalled snapshot here makes the snapshot enqueue happen under
+// the SAME critical section that makes the connection eligible: the frame goes
+// onto the fresh, empty sendCh BEFORE set[c]={} and BEFORE the pumps start, so
+// it is always the first thing the FIFO writePump drains. Pass nil firstFrame
+// for the legacy no-snapshot behavior.
+func (h *Hub) RegisterWithFirstFrame(roomID, userID, username string, conn *websocket.Conn, firstFrame []byte) (*Connection, error) {
 	if roomID == "" || userID == "" {
 		return nil, apperrors.InvalidInput("hub.Register: room_id and user_id are required")
 	}
 	if conn == nil {
 		return nil, apperrors.InvalidInput("hub.Register: conn is nil")
 	}
-	return h.registerInternal(roomID, userID, username, conn), nil
+	return h.registerInternalWithFirstFrame(roomID, userID, username, conn, firstFrame), nil
 }
 
 // registerInternal is the wsConn-typed core of Register, factored out so
 // hub_test.go can register fakeConn instances. The exported Register
 // keeps the public signature locked to *websocket.Conn per the 01.3 contract.
 func (h *Hub) registerInternal(roomID, userID, username string, conn wsConn) *Connection {
+	return h.registerInternalWithFirstFrame(roomID, userID, username, conn, nil)
+}
+
+// registerInternalWithFirstFrame is the wsConn-typed core that also primes an
+// optional first frame onto the connection's sendCh BEFORE the connection is
+// made broadcast-eligible and BEFORE the pumps start (audit L809). When
+// firstFrame is non-nil it is the guaranteed-first frame the writePump drains.
+func (h *Hub) registerInternalWithFirstFrame(roomID, userID, username string, conn wsConn, firstFrame []byte) *Connection {
 	c := newConnection(roomID, userID, username, conn, h.log)
 	c.hub = h
 
+	// Prime the first frame onto the fresh, empty sendCh BEFORE the connection
+	// enters the room set. The buffer is empty (64-deep) so this non-blocking
+	// Send can never drop. Doing it under the same h.mu critical section that
+	// flips eligibility guarantees FIFO ordering: any Broadcast that observes
+	// this connection as eligible was necessarily enqueued AFTER the snapshot.
 	h.mu.Lock()
+	if firstFrame != nil {
+		// Direct sendCh enqueue (not c.Send) — the connection is not yet
+		// eligible so there is no concurrent writer to race; the empty buffer
+		// makes this non-blocking.
+		c.sendCh <- firstFrame
+	}
 	set, ok := h.rooms[roomID]
 	if !ok {
 		set = make(map[*Connection]struct{})
@@ -375,10 +416,10 @@ func (h *Hub) localFanout(roomID string, payload []byte, eventType, excludeUserI
 // startRoomSubscriber spawns the per-room pubsub subscriber goroutine. The
 // subscriber:
 //
-//   1. Subscribes to wt:room:{id}:events via repo.Subscribe.
-//   2. For each incoming pubsubFrame, drops it if InstanceID == h.instanceID
-//      (own echo — v1.0 single-instance default path).
-//   3. Otherwise, does a local fanout of frame.Env (v2 horizontal scale path).
+//  1. Subscribes to wt:room:{id}:events via repo.Subscribe.
+//  2. For each incoming pubsubFrame, drops it if InstanceID == h.instanceID
+//     (own echo — v1.0 single-instance default path).
+//  3. Otherwise, does a local fanout of frame.Env (v2 horizontal scale path).
 //
 // Stored cancel function is invoked by stopRoomSubscriber on last-Unregister.
 func (h *Hub) startRoomSubscriber(roomID string) {

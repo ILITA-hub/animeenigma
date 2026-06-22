@@ -8,10 +8,13 @@
 //  4. websocket.Upgrader.Upgrade.
 //  5. Post-upgrade capacity check via hub.MemberCount → CAPACITY_FULL close frame.
 //  6. repo.AddMember (member meta persisted to Redis).
-//  7. hub.Register (starts read+write pumps via the 01.3 contract).
-//  8. Send room:snapshot (the FIRST envelope the client sees).
-//  9. Broadcast member:joined to everyone except the joining user.
-// 10. Install OnClose callback that on disconnect:
+//  7. Build the room:snapshot payload, then hub.RegisterWithFirstFrame primes
+//     it onto the connection's sendCh BEFORE the connection becomes
+//     broadcast-eligible and the pumps start — so room:snapshot is the
+//     guaranteed FIRST envelope the client sees even under a racing Broadcast
+//     during the join window (audit L809).
+//  8. Broadcast member:joined to everyone except the joining user.
+//  10. Install OnClose callback that on disconnect:
 //     a. RemoveMember from Redis ONLY when this is the user's last connection.
 //     b. Broadcast member:left to remaining members.
 //
@@ -242,10 +245,43 @@ func (h *WebSocketHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 6: Register with the hub. The 01.3 contract starts both pumps
-	// inside Register — we get back the *Connection so we can install
-	// OnMessage (stubbed for 01.6) and OnClose (cleanup callback below).
-	c, err := h.hub.Register(roomID, userID, username, conn)
+	// Step 6: Build the room:snapshot payload BEFORE registering. The snapshot
+	// is the FIRST frame the client must see (websocket.go:12, §lifecycle step
+	// 8). It contains the full RoomSnapshot (state + members + last 50 messages
+	// + protocol_version), built by the roomSvc.Get fast path against Redis —
+	// it already includes the just-added member because AddMember (Step 5) ran
+	// before this. Building it pre-Register lets us prime it onto the
+	// connection's sendCh under the same critical section that makes the
+	// connection broadcast-eligible (audit L809), guaranteeing the FIFO
+	// writePump drains it before any concurrent Broadcast (another member's
+	// chat / a near-simultaneous member:joined) that races the join window.
+	snapshotPayload, err := h.buildSnapshotPayload(ctx, roomID)
+	if err != nil {
+		h.log.Errorw("watch_together ws snapshot build failed",
+			"room_id", roomID,
+			"user_id", userID,
+			"err", err,
+		)
+		// Cannot serve a snapshot → don't bring the connection up. Undo the
+		// member add and close. (No hub registration happened yet, so no
+		// OnClose fires — clean up explicitly here.)
+		if rmErr := h.repo.RemoveMember(context.Background(), roomID, userID); rmErr != nil {
+			h.log.Warnw("watch_together ws remove_member after snapshot build failure",
+				"room_id", roomID,
+				"user_id", userID,
+				"err", rmErr,
+			)
+		}
+		_ = conn.Close()
+		return
+	}
+
+	// Step 7: Register with the hub, priming the snapshot as the guaranteed
+	// first frame. The 01.3 contract starts both pumps inside Register — we
+	// get back the *Connection so we can install OnMessage (01.6) and OnClose
+	// (cleanup callback below). The snapshot is already on the sendCh when the
+	// pumps start, so it is the first frame drained.
+	c, err := h.hub.RegisterWithFirstFrame(roomID, userID, username, conn, snapshotPayload)
 	if err != nil {
 		h.log.Errorw("watch_together ws hub register failed",
 			"room_id", roomID,
@@ -280,29 +316,11 @@ func (h *WebSocketHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Install the lifecycle cleanup hook BEFORE we send the snapshot so an
-	// abnormal early disconnect (TCP RST between Register and Send) still
-	// produces the proper member:left broadcast + repo.RemoveMember pair.
-	// The OnClose closure also chains into router.OnDisconnect to free
-	// the disconnected member's drift state + rate-limit buckets.
+	// Install the lifecycle cleanup hook so an abnormal disconnect produces the
+	// proper member:left broadcast + repo.RemoveMember pair. The OnClose
+	// closure also chains into router.OnDisconnect to free the disconnected
+	// member's drift state + rate-limit buckets.
 	c.OnClose = h.makeOnClose(roomID, userID)
-
-	// Step 7: Send the room:snapshot envelope. This is the FIRST frame the
-	// client sees and contains the full RoomSnapshot (state + members +
-	// last 50 messages + protocol_version). The snapshot is built by the
-	// roomSvc.Get fast path against Redis — it already includes the just-
-	// added member because AddMember (above) ran before Register.
-	if err := h.sendSnapshot(ctx, c, roomID); err != nil {
-		h.log.Errorw("watch_together ws snapshot send failed",
-			"room_id", roomID,
-			"user_id", userID,
-			"err", err,
-		)
-		// Snapshot failure → tear down the connection. The OnClose hook
-		// will fire via hub.Unregister and handle member:left + RemoveMember.
-		h.hub.Unregister(c)
-		return
-	}
 
 	// Step 8: Broadcast member:joined to everyone EXCEPT the joining user.
 	// Fire-and-forget — broadcast failure is non-fatal for the new
@@ -320,21 +338,21 @@ func (h *WebSocketHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	// OnClose for cleanup.
 }
 
-// sendSnapshot builds the canonical RoomSnapshot via the service layer and
-// pushes it onto the connection's outbound channel as a room:snapshot
-// envelope. Returns an error only if the snapshot fetch fails — a Send
-// drop (full buffer at this stage is essentially impossible since the
-// connection was just created with an empty buffer) is treated as a
-// silent failure since the connection is already in trouble.
-func (h *WebSocketHandler) sendSnapshot(ctx context.Context, c *hub.Connection, roomID string) error {
+// buildSnapshotPayload builds the canonical RoomSnapshot via the service layer
+// and marshals it into a room:snapshot envelope's wire bytes. Returns an error
+// only if the snapshot fetch or marshal fails. The caller primes the returned
+// payload onto the connection's sendCh via RegisterWithFirstFrame so it is the
+// guaranteed FIRST frame the client sees (audit L809) — no separate post-
+// Register c.Send that could be raced by a concurrent Broadcast.
+func (h *WebSocketHandler) buildSnapshotPayload(ctx context.Context, roomID string) ([]byte, error) {
 	snap, err := h.roomSvc.Get(ctx, roomID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	data, err := json.Marshal(snap)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	env := domain.Envelope{
@@ -343,21 +361,9 @@ func (h *WebSocketHandler) sendSnapshot(ctx context.Context, c *hub.Connection, 
 	}
 	payload, err := json.Marshal(env)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	if !c.Send(payload) {
-		// Buffer full at handshake time would imply a misconfigured
-		// sendBufferSize (default 64); log and return nil so the caller
-		// keeps the connection. The client will eventually time out
-		// waiting for the snapshot and reconnect — better than a hard
-		// failure that closes a healthy connection.
-		h.log.Warnw("watch_together ws snapshot send dropped at handshake",
-			"room_id", roomID,
-			"user_id", c.UserID,
-		)
-	}
-	return nil
+	return payload, nil
 }
 
 // broadcastMemberJoined emits a member:joined envelope to every connection
@@ -593,4 +599,3 @@ func buildWSOriginCheck(cfg *config.Config) func(r *http.Request) bool {
 		return ok
 	}
 }
-
