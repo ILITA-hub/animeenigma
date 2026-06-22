@@ -335,7 +335,10 @@ func materializeEpisodes(showID string, raw []string) []domain.Episode {
 func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string) ([]domain.Server, error) {
 	showID, ep := splitEpisodeID(episodeID)
 	if showID == "" || ep == "" {
-		err := domain.WrapExtractFailed(
+		// Foreign episode ID (e.g. gogoanime slug without colon separator) —
+		// signal "not found" so the orchestrator skips us without marking the
+		// stage DOWN, matching animepahe's foreign-ID guard.
+		err := domain.WrapNotFound(
 			fmt.Errorf("invalid episode ID %q", episodeID),
 			"allanime: ListServers")
 		p.markStage(health.StageServers, err)
@@ -419,7 +422,9 @@ func materializeServers(sources []sourceURL, cat domain.Category) []domain.Serve
 func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverID string, category domain.Category) (*domain.Stream, error) {
 	showID, ep := splitEpisodeID(episodeID)
 	if showID == "" || ep == "" {
-		err := domain.WrapExtractFailed(
+		// Foreign episode ID — return not-found so the orchestrator skips us
+		// gracefully without marking the stream stage DOWN.
+		err := domain.WrapNotFound(
 			fmt.Errorf("invalid episode ID %q", episodeID),
 			"allanime: GetStream")
 		p.markStage(health.StageStream, err)
