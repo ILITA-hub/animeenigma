@@ -142,6 +142,8 @@ func main() {
 	readThresholdJob := jobs.NewReadThresholdJob(&cfg.Jobs, log)
 	// Stage 2b — daily provider-ranking recompute trigger.
 	providerRankingJob := jobs.NewProviderRankingJob(&cfg.Jobs, log)
+	// Active subtitle-provider health probe trigger (every 5 min).
+	subtitleProbeJob := jobs.NewSubtitleProbeTriggerJob(&cfg.Jobs, log)
 	// Phase 09 — Logic A ongoing-push autocache producer (TRIG-01). Runs the
 	// shared-DB enumeration join itself and fires per-ongoing demand POSTs to the
 	// library /internal endpoint. Disabled (nil) when no library URL is configured
@@ -156,7 +158,7 @@ func main() {
 	autocachePredictionJob := jobs.NewAutocachePredictionJob(db.DB, cfg.Jobs.AutocacheActiveWatcherDays, cfg.Jobs.AutocacheAvgRawEpBytes, log)
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, probeTriggerJob, readThresholdJob, providerRankingJob, autocacheLogicAJob, autocachePredictionJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, probeTriggerJob, readThresholdJob, providerRankingJob, subtitleProbeJob, autocacheLogicAJob, autocachePredictionJob, log)
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler
@@ -168,6 +170,7 @@ func main() {
 		cfg.Jobs.PlaybackProbeCron,
 		cfg.Jobs.ReadThresholdCron,
 		cfg.Jobs.ProviderRankingCron,
+		cfg.Jobs.SubtitleProbeCron,
 		cfg.Jobs.AutocacheLogicACron,
 		cfg.Jobs.AutocachePredictionCron,
 	); err != nil {

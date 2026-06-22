@@ -64,6 +64,13 @@ type JobsConfig struct {
 	//   recompute endpoint; analytics owns the compute + Redis publish.
 	ProviderRankingCron string
 
+	// Active subtitle-provider health probe trigger. SubtitleProbeCron: cron for
+	// the probe (default `*/5 * * * *`, every 5 min — Jimaku/OpenSubtitles go down
+	// intermittently and the passive metrics go blind with no traffic, so a tight
+	// active cadence makes a 4am outage visible within minutes). The scheduler
+	// POSTs catalog's /internal/subtitle-probe/run (reuses CatalogServiceURL).
+	SubtitleProbeCron string
+
 	// Phase 09 (v4.1 download-triggers) — Logic A ongoing-push autocache producer
 	// (TRIG-01). AutocacheLogicACron: cron for the periodic sweep (default
 	//   `*/20 * * * *`, every 20 min — mirrors the library autocache_config
@@ -142,6 +149,7 @@ func Load() (*Config, error) {
 			AnalyticsInternalURL: getEnv("ANALYTICS_INTERNAL_URL", "http://analytics:8092"),
 			// Stage 2b — daily provider-ranking recompute trigger.
 			ProviderRankingCron: getEnv("PROVIDER_RANKING_CRON", "30 5 * * *"), // Daily 05:30 (after read-threshold 05:00)
+			SubtitleProbeCron:   getEnv("SUBTITLE_PROBE_CRON", "*/5 * * * *"),
 			// Phase 09 — Logic A ongoing-push autocache producer (TRIG-01).
 			AutocacheLogicACron:        getEnv("AUTOCACHE_LOGIC_A_CRON", "*/20 * * * *"), // Every 20 min (mirrors sweep_interval_min)
 			LibraryInternalURL:         getEnv("LIBRARY_INTERNAL_URL", getEnv("LIBRARY_SERVICE_URL", "http://library:8089")),

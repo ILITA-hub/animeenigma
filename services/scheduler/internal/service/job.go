@@ -19,6 +19,7 @@ type JobService struct {
 	probeTriggerJob            *jobs.ProbeTriggerJob
 	readThresholdJob           *jobs.ReadThresholdJob
 	providerRankingJob         *jobs.ProviderRankingJob
+	subtitleProbeJob           *jobs.SubtitleProbeTriggerJob
 	autocacheLogicAJob         *jobs.AutocacheLogicAJob
 	autocachePredictionJob     *jobs.AutocachePredictionJob
 	log                        *logger.Logger
@@ -29,6 +30,7 @@ type JobService struct {
 	lastProbeRun               time.Time
 	lastReadThresholdRun       time.Time
 	lastProviderRankingRun     time.Time
+	lastSubtitleProbeRun       time.Time
 	lastAutocacheLogicARun     time.Time
 	lastAutocachePredictionRun time.Time
 }
@@ -41,6 +43,7 @@ func NewJobService(
 	probeTriggerJob *jobs.ProbeTriggerJob,
 	readThresholdJob *jobs.ReadThresholdJob,
 	providerRankingJob *jobs.ProviderRankingJob,
+	subtitleProbeJob *jobs.SubtitleProbeTriggerJob,
 	autocacheLogicAJob *jobs.AutocacheLogicAJob,
 	autocachePredictionJob *jobs.AutocachePredictionJob,
 	log *logger.Logger,
@@ -54,6 +57,7 @@ func NewJobService(
 		probeTriggerJob:        probeTriggerJob,
 		readThresholdJob:       readThresholdJob,
 		providerRankingJob:     providerRankingJob,
+		subtitleProbeJob:       subtitleProbeJob,
 		autocacheLogicAJob:     autocacheLogicAJob,
 		autocachePredictionJob: autocachePredictionJob,
 		log:                    log,
@@ -61,7 +65,7 @@ func NewJobService(
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, playbackProbeCron, readThresholdCron, providerRankingCron, autocacheLogicACron, autocachePredictionCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, playbackProbeCron, readThresholdCron, providerRankingCron, subtitleProbeCron, autocacheLogicACron, autocachePredictionCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -230,6 +234,32 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		s.log.Info("registered job: provider_ranking_recompute")
 	}
 
+	// Schedule the active subtitle-provider health probe (every 5 min). The probe
+	// lives in catalog (owns the Jimaku/OpenSubtitles clients + keys), so this job
+	// just POSTs catalog's /internal/subtitle-probe/run. Nil-guarded for symmetry.
+	if s.subtitleProbeJob != nil {
+		_, err = s.cron.AddFunc(subtitleProbeCron, func() {
+			ctx := context.Background()
+			s.log.Info("starting scheduled subtitle-health probe")
+			start := time.Now()
+			if err := s.subtitleProbeJob.Run(ctx); err != nil {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("subtitle_probe", "error").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("subtitle_probe").Observe(time.Since(start).Seconds())
+				s.log.Errorw("subtitle-health probe failed", "error", err)
+			} else {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("subtitle_probe", "success").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("subtitle_probe").Observe(time.Since(start).Seconds())
+				metrics.SchedulerJobLastSuccess.WithLabelValues("subtitle_probe").SetToCurrentTime()
+				s.lastSubtitleProbeRun = time.Now()
+				s.log.Info("subtitle-health probe completed successfully")
+			}
+		})
+		if err != nil {
+			return err
+		}
+		s.log.Info("registered job: subtitle_probe")
+	}
+
 	// Schedule autocache Logic A ongoing-push producer (Phase 09 — TRIG-01).
 	// Unlike the analytics-trigger jobs above, this one runs the enumeration
 	// join itself (shared animeenigma DB) and fires per-ongoing demand POSTs to
@@ -385,6 +415,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"provider_ranking_recompute": map[string]interface{}{
 			"last_run": s.lastProviderRankingRun,
+		},
+		"subtitle_probe": map[string]interface{}{
+			"last_run": s.lastSubtitleProbeRun,
 		},
 		"autocache_logic_a": map[string]interface{}{
 			"last_run": s.lastAutocacheLogicARun,
