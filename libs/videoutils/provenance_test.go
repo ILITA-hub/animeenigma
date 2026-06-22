@@ -2,9 +2,13 @@ package videoutils
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -42,6 +46,40 @@ func TestProvenanceToken_RejectsTamperAndGarbage(t *testing.T) {
 		if got {
 			t.Errorf("%s: token unexpectedly validated", name)
 		}
+	}
+}
+
+// TestProvenance_FailsClosedWhenUnconfigured proves that with no signing
+// secret configured the token mechanism is DISABLED: minting yields an empty
+// token and validation rejects everything — including a token forged from the
+// old public hardcoded default. This is the fix for the SSRF/open-proxy hole
+// where a missing secret silently fell back to a guessable default.
+func TestProvenance_FailsClosedWhenUnconfigured(t *testing.T) {
+	_ = provenanceEnabled() // ensure the sync.Once has fired (TestMain set a secret)
+	origSecret, origConfigured := provenanceSecret, provenanceConfigured
+	t.Cleanup(func() { provenanceSecret, provenanceConfigured = origSecret, origConfigured })
+
+	// Simulate "no secret configured". The Once has already fired, so
+	// loadProvenanceSecret is a no-op and these values stick for the test.
+	provenanceSecret, provenanceConfigured = nil, false
+
+	if provenanceEnabled() {
+		t.Fatal("provenance must be disabled when no secret is configured")
+	}
+	now := time.Unix(1_700_000_000, 0)
+	raw := "https://attacker.example/internal/seg.ts"
+	if exp, sig := signProvenance(raw, now); exp != "" || sig != "" {
+		t.Fatalf("signProvenance must mint an empty token when disabled; got exp=%q sig=%q", exp, sig)
+	}
+	// A token forged with the OLD public default secret must NOT validate.
+	fm := hmac.New(sha256.New, []byte("animeenigma-hls-provenance-default"))
+	expStr := strconv.FormatInt(now.Add(time.Hour).Unix(), 10)
+	fm.Write([]byte(raw))
+	fm.Write([]byte("\n"))
+	fm.Write([]byte(expStr))
+	forgedSig := hex.EncodeToString(fm.Sum(nil))[:32]
+	if validProvenanceToken(raw, expStr, forgedSig, now) {
+		t.Fatal("a token forged from the old hardcoded default must be rejected when disabled")
 	}
 }
 

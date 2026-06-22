@@ -282,6 +282,44 @@ func (p *VideoProxy) GetStreamInfo(ctx context.Context, sourceURL string) (*Vide
 	}, nil
 }
 
+// matchHLSDomain reports whether host matches a single allow-list pattern.
+// host MUST already be lower-cased (and port-stripped if the caller strips
+// ports). Supported pattern forms:
+//
+//   - "example.com"   exact host OR any subdomain (host == p || host ends ".p")
+//   - "*.example.com" any subdomain of example.com
+//   - "htv-*.com"     prefix wildcard ANCHORED to a domain suffix: some DNS
+//     label begins with "htv-" AND the host ends with ".com". The suffix anchor
+//     is the fix for the SSRF allow-list bypass — the old unanchored "htv-*"
+//     matched ANY host starting with the prefix on ANY TLD (htv-evil.attacker.io
+//     passed), letting an attacker register a matching domain. Anchoring to the
+//     family's real TLD rejects every off-TLD lookalike.
+//   - "htv-*"         bare prefix wildcard (no suffix anchor) — legacy form,
+//     still honored for backward compatibility but discouraged; prefer a suffix.
+//
+// NOTE (residual, tracked): a prefix wildcard anchored to a registrable TLD
+// (.com/.top) still admits an attacker-registered same-TLD lookalike
+// (htv-evil.com). Fully closing that needs a dial-time private-IP SSRF guard
+// (block loopback/private/link-local/metadata targets) that is allow-list-aware
+// so it does not break the internal MinIO fetch path — see the audit follow-up.
+func matchHLSDomain(host, pattern string) bool {
+	pattern = strings.ToLower(pattern)
+	switch {
+	case strings.HasPrefix(pattern, "*."):
+		return strings.HasSuffix(host, pattern[1:]) // ".example.com"
+	case strings.Contains(pattern, "*"):
+		star := strings.IndexByte(pattern, '*')
+		prefix, suffix := pattern[:star], pattern[star+1:]
+		if suffix != "" && !strings.HasSuffix(host, suffix) {
+			return false
+		}
+		// Prefix must begin a DNS label: leftmost label, or right after a dot.
+		return strings.HasPrefix(host, prefix) || strings.Contains(host, "."+prefix)
+	default:
+		return host == pattern || strings.HasSuffix(host, "."+pattern)
+	}
+}
+
 // isDomainAllowed checks if a domain is in the allowed list.
 // Returns false when AllowedDomains is empty (fail-closed).
 func (p *VideoProxy) isDomainAllowed(host string) bool {
@@ -291,20 +329,7 @@ func (p *VideoProxy) isDomainAllowed(host string) bool {
 
 	host = strings.ToLower(host)
 	for _, allowed := range p.config.AllowedDomains {
-		allowed = strings.ToLower(allowed)
-		// Wildcard prefix: "*.example.com" matches "cdn.example.com"
-		// Also "htv-*" matches "htv-belias.com", "htv-hydaelyn.com", etc.
-		if strings.HasPrefix(allowed, "*.") {
-			suffix := allowed[1:] // ".example.com"
-			if strings.HasSuffix(host, suffix) {
-				return true
-			}
-		} else if strings.HasSuffix(allowed, "*") {
-			prefix := allowed[:len(allowed)-1] // "htv-"
-			if strings.HasPrefix(host, prefix) || strings.Contains(host, "."+prefix) {
-				return true
-			}
-		} else if host == allowed || strings.HasSuffix(host, "."+allowed) {
+		if matchHLSDomain(host, allowed) {
 			return true
 		}
 	}
@@ -394,9 +419,9 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	// Hanime video CDN family.
 	{Domain: "hanime.tv", Reason: "Hanime primary host", Owner: "@legacy", Added: "2026-05-20"},
 	{Domain: "highwinds-cdn.com", Reason: "Hanime Highwinds CDN", Owner: "@legacy", Added: "2026-05-20"},
-	{Domain: "htv-*", Reason: "Hanime htv-belias.com, htv-hydaelyn.com, etc. (prefix wildcard)", Owner: "@legacy", Added: "2026-05-20"},
-	{Domain: "hydaelyn-*", Reason: "Hanime hydaelyn-25x-00.top through 19.top (prefix wildcard)", Owner: "@legacy", Added: "2026-05-20"},
-	{Domain: "zodiark-*", Reason: "Hanime zodiark-25x-00.top through 09.top (prefix wildcard)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "htv-*.com", Reason: "Hanime htv-belias.com, htv-hydaelyn.com, etc. (prefix wildcard, anchored to .com to block off-TLD lookalikes)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "hydaelyn-*.top", Reason: "Hanime hydaelyn-25x-00.top through 19.top (prefix wildcard, anchored to .top)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "zodiark-*.top", Reason: "Hanime zodiark-25x-00.top through 09.top (prefix wildcard, anchored to .top)", Owner: "@legacy", Added: "2026-05-20"},
 
 	// 18anime (18+) embed CDN families — resolved stream hosts, NOT 18anime.me itself.
 	{Domain: "mp4upload.com", Reason: "18anime mp4upload progressive-MP4 mirror (aN.mp4upload.com:183) — requires Referer https://www.mp4upload.com/", Owner: "@18anime", Added: "2026-06-03"},
@@ -939,14 +964,7 @@ func isHLSDomainAllowed(host string) bool {
 	}
 
 	for _, allowed := range HLSProxyAllowedDomains {
-		allowed = strings.ToLower(allowed)
-		if strings.HasSuffix(allowed, "*") {
-			// Prefix wildcard: "htv-*" matches "htv-belias.com" and "p34.htv-hydaelyn.com"
-			prefix := allowed[:len(allowed)-1]
-			if strings.HasPrefix(host, prefix) || strings.Contains(host, "."+prefix) {
-				return true
-			}
-		} else if host == allowed || strings.HasSuffix(host, "."+allowed) {
+		if matchHLSDomain(host, allowed) {
 			return true
 		}
 	}

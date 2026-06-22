@@ -44,22 +44,44 @@ const provenanceTTL = 12 * time.Hour
 var (
 	provenanceSecretOnce sync.Once
 	provenanceSecret     []byte
+	provenanceConfigured bool
 )
 
 // loadProvenanceSecret resolves the signing key once from the environment.
 // STREAM_TOKEN_SECRET (already set for the streaming service) is preferred;
-// JWT_SECRET is the fallback; a build-time default is the last resort.
+// JWT_SECRET is the fallback.
+//
+// FAIL CLOSED when neither is set: previously this fell back to a public,
+// hardcoded default ("animeenigma-hls-provenance-default"). Because that value
+// lives in the source tree, anyone could compute a valid provenance MAC for an
+// ARBITRARY url and have the HLS proxy fetch it, bypassing the static host
+// allow-list entirely (SSRF / open-proxy — the provenance token is the
+// allow-list's "OR signed" half). With no real secret we now disable the token
+// mechanism instead: signing is a no-op and validation always fails, so the
+// proxy falls back to the static allow-list only. Legitimately-allow-listed
+// hosts are unaffected (they never carried a token); only the rotating-CDN
+// segment bypass stops working until STREAM_TOKEN_SECRET (or JWT_SECRET) is set
+// — which production always sets.
 func loadProvenanceSecret() []byte {
 	provenanceSecretOnce.Do(func() {
 		for _, env := range []string{"STREAM_TOKEN_SECRET", "JWT_SECRET"} {
 			if v := strings.TrimSpace(os.Getenv(env)); v != "" {
 				provenanceSecret = []byte(v)
+				provenanceConfigured = true
 				return
 			}
 		}
-		provenanceSecret = []byte("animeenigma-hls-provenance-default")
+		provenanceSecret = nil
+		provenanceConfigured = false
 	})
 	return provenanceSecret
+}
+
+// provenanceEnabled reports whether a real signing secret is configured. When
+// false the token mechanism is disabled (fail closed) — see loadProvenanceSecret.
+func provenanceEnabled() bool {
+	loadProvenanceSecret()
+	return provenanceConfigured
 }
 
 // provenanceMAC computes the 128-bit (32 hex char) HMAC-SHA256 over
@@ -77,6 +99,12 @@ func provenanceMAC(rawURL, expStr string) string {
 // rewritten proxy URL. exp is a unix-seconds expiry; sig authenticates
 // (rawURL, exp).
 func signProvenance(rawURL string, now time.Time) (exp, sig string) {
+	if !provenanceEnabled() {
+		// No secret configured → mint nothing. Callers append &exp=&sig= with
+		// empty values, which validProvenanceToken rejects, so the segment
+		// simply falls back to the static allow-list.
+		return "", ""
+	}
 	exp = strconv.FormatInt(now.Add(provenanceTTL).Unix(), 10)
 	return exp, provenanceMAC(rawURL, exp)
 }
@@ -100,6 +128,11 @@ func SignStreamURL(rawURL string) (exp, sig string) {
 // the token is unexpired. Constant-time over the signature. Missing/garbled
 // tokens return false (caller then falls back to the static allowlist).
 func validProvenanceToken(rawURL, expStr, sig string, now time.Time) bool {
+	if !provenanceEnabled() {
+		// Fail closed: with no configured secret, accept no tokens (a forged
+		// token computed from the old hardcoded default must not grant access).
+		return false
+	}
 	if expStr == "" || sig == "" {
 		return false
 	}
