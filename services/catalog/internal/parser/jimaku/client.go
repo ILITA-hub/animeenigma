@@ -1,6 +1,7 @@
 package jimaku
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -140,6 +141,30 @@ func FileFormat(filename string) string {
 	default:
 		return "unknown"
 	}
+}
+
+// Ping checks Jimaku reachability + API-key validity with the cheapest possible
+// authenticated call: a search for a stable AniList ID (1). Any 200 (even an
+// empty result array) proves the API answered. Returns the round-trip latency.
+// The caller is expected to supply a ctx with a timeout.
+func (c *Client) Ping(ctx context.Context) (time.Duration, error) {
+	start := time.Now()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/entries/search?anilist_id=1", nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", c.apiKey)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return time.Since(start), err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return time.Since(start), fmt.Errorf("jimaku: ping status %d", resp.StatusCode)
+	}
+	return time.Since(start), nil
 }
 
 func (c *Client) doRequest(method, path string, params url.Values) ([]byte, error) {

@@ -79,6 +79,36 @@ func (c *Client) IsConfigured() bool {
 	return c != nil && c.cfg.APIKey != ""
 }
 
+// Ping checks OpenSubtitles reachability + API-key validity via /infos/formats,
+// a static reference endpoint that needs only the Api-Key header and does NOT
+// consume the daily download quota. Returns round-trip latency. 401/403 →
+// ErrUnauthorized, 429 → ErrRateLimited, other non-2xx → a generic error.
+func (c *Client) Ping(ctx context.Context) (time.Duration, error) {
+	start := time.Now()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.cfg.BaseURL+"/infos/formats", nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Api-Key", c.cfg.APIKey)
+	req.Header.Set("User-Agent", c.cfg.UserAgent)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return time.Since(start), err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return time.Since(start), ErrUnauthorized
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return time.Since(start), ErrRateLimited
+	case resp.StatusCode >= 400:
+		return time.Since(start), fmt.Errorf("opensubtitles: ping status %d", resp.StatusCode)
+	}
+	return time.Since(start), nil
+}
+
 // SearchParams scopes a subtitle search.
 type SearchParams struct {
 	IMDbID        string   // e.g. "tt15302498" — preferred key
