@@ -117,3 +117,22 @@ func (r *DemandRepository) Delete(ctx context.Context, malID string, episode int
 	}
 	return nil
 }
+
+// DeleteExpired removes demand rows first requested before `cutoff` and returns
+// the count deleted. This is the expiry safety-valve (audit #20): the Planner's
+// FIFO drain (oldest requested_at first, capped at drainBatchLimit) could
+// otherwise be permanently starved by a head of unsatisfiable rows that are
+// never confirmed-present and so never deleted — newer demands behind them would
+// never be drained. Aging out stale rows bounds that starvation; it is safe
+// because producers re-assert live demand on watch activity (a still-wanted
+// episode is simply re-recorded with a fresh requested_at). Errors wrap
+// CodeInternal.
+func (r *DemandRepository) DeleteExpired(ctx context.Context, cutoff time.Time) (int64, error) {
+	res := r.db.WithContext(ctx).
+		Where("requested_at < ?", cutoff).
+		Delete(&domain.AutocacheDemand{})
+	if res.Error != nil {
+		return 0, liberrors.Wrap(res.Error, liberrors.CodeInternal, "delete expired demand")
+	}
+	return res.RowsAffected, nil
+}

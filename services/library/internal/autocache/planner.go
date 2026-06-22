@@ -25,6 +25,7 @@ import (
 type demandDrainer interface {
 	Drain(ctx context.Context, limit int) ([]domain.AutocacheDemand, error)
 	Delete(ctx context.Context, malID string, episode int) error
+	DeleteExpired(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
 // presenceChecker is the slice of *repo.EpisodeRepository the Planner needs.
@@ -95,6 +96,12 @@ const (
 	// no qualifying release is not re-searched within this window (RESEARCH
 	// Pitfall 4 — a not-yet-released episode otherwise re-searches every tick).
 	searchBackoff = time.Hour
+	// maxDemandAge is the expiry safety-valve (audit #20): a demand row first
+	// requested longer ago than this is aged out so an unsatisfiable head can't
+	// permanently starve newer rows behind the FIFO drain window. Producers
+	// re-assert live demand on watch activity, so a still-wanted episode is
+	// simply re-recorded with a fresh requested_at.
+	maxDemandAge = 14 * 24 * time.Hour
 	// minSweepInterval floors a misconfigured/zero sweep_interval_min so the loop
 	// can never busy-spin.
 	minSweepInterval = time.Minute
@@ -211,6 +218,18 @@ func (p *Planner) runOnce(ctx context.Context) time.Duration {
 	// older than searchBackoff no longer suppresses a re-search, so dropping it is
 	// behavior-preserving.
 	p.gcBackoff()
+
+	// Expiry safety-valve (audit #20): age out demand rows older than
+	// maxDemandAge so the FIFO drain can't be permanently starved by a head of
+	// unsatisfiable rows that never become present (and so are never deleted).
+	// Safe because producers re-assert live demand on watch activity.
+	if n, err := p.demand.DeleteExpired(ctx, time.Now().Add(-maxDemandAge)); err != nil {
+		if p.log != nil {
+			p.log.Warnw("autocache planner: expire stale demand failed", "error", err)
+		}
+	} else if n > 0 && p.log != nil {
+		p.log.Infow("autocache planner: expired stale demand rows", "count", n, "max_age", maxDemandAge.String())
+	}
 
 	rows, err := p.demand.Drain(ctx, drainBatchLimit)
 	if err != nil {

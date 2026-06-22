@@ -21,8 +21,9 @@ func promValue(t *testing.T, c prometheus.Counter) float64 {
 // fakeDrainer is an in-memory demandDrainer. drained is returned by Drain;
 // deletes records each Delete(malID, episode).
 type fakeDrainer struct {
-	drained []domain.AutocacheDemand
-	deletes [][2]any // {malID, episode}
+	drained       []domain.AutocacheDemand
+	deletes       [][2]any // {malID, episode}
+	expireCutoffs []time.Time
 }
 
 func (f *fakeDrainer) Drain(_ context.Context, limit int) ([]domain.AutocacheDemand, error) {
@@ -38,6 +39,13 @@ func (f *fakeDrainer) Drain(_ context.Context, limit int) ([]domain.AutocacheDem
 func (f *fakeDrainer) Delete(_ context.Context, malID string, episode int) error {
 	f.deletes = append(f.deletes, [2]any{malID, episode})
 	return nil
+}
+
+// expireCutoffs records each DeleteExpired cutoff so tests can assert the
+// expiry safety-valve runs (audit #20).
+func (f *fakeDrainer) DeleteExpired(_ context.Context, cutoff time.Time) (int64, error) {
+	f.expireCutoffs = append(f.expireCutoffs, cutoff)
+	return 0, nil
 }
 
 // fakePresence is an in-memory presenceChecker. present maps "mal:ep" → true

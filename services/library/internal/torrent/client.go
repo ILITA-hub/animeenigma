@@ -207,6 +207,11 @@ func (h *handle) run(ctx context.Context) {
 	case <-ctx.Done():
 		h.t.Drop()
 		return
+	case <-h.t.Closed():
+		// Cancel()/Drop() closed the torrent while we were awaiting metadata
+		// (a dead magnet never fires GotInfo()) — stop instead of leaking this
+		// goroutine forever (audit #30). Already dropped, so don't Drop again.
+		return
 	case <-h.t.GotInfo():
 	}
 
@@ -217,6 +222,9 @@ func (h *handle) run(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		h.t.Drop()
+		return
+	case <-h.t.Closed():
+		// Dropped mid-download — unblock (Complete() may never fire).
 		return
 	case <-h.t.Complete().On():
 		// Download complete — fall through to seed window.
@@ -232,6 +240,8 @@ func (h *handle) run(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		h.t.Drop()
+	case <-h.t.Closed():
+		// Cancelled mid-seed — already dropped, just stop.
 	case <-timer.C:
 		h.t.Drop()
 	}
