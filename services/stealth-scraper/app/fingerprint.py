@@ -76,6 +76,14 @@ def build_launch_options(
         "block_images": "image" in (cfg.block_resources or []),
         "i_know_what_im_doing": True,
     }
+    # Camoufox bundles uBlock Origin and loads it by default. Measured
+    # 2026-06-22 on both browser providers (gogoanime megaplay + nineanime
+    # 9anime): uBO blocks ZERO third-party requests on either surface yet adds
+    # ~1.7-2.5s to a cold session. It is net-negative here, so exclude it.
+    # (Lazy import keeps this module camoufox-free at import time.)
+    from camoufox.addons import DefaultAddons
+
+    opts["exclude_addons"] = [DefaultAddons.UBO]
     if proxy:
         opts["proxy"] = proxy
         opts["geoip"] = bool(cfg.geoip)
