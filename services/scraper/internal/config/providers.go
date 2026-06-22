@@ -13,7 +13,7 @@ import (
 // in scraper-providers.yaml. Anything else is a typo and fails validation.
 // Must match the registration names in cmd/scraper-api/main.go.
 var KnownProviders = []string{
-	"gogoanime", "animepahe", "allanime", "animefever", "miruro", "nineanime", "animekai",
+	"gogoanime", "animepahe", "allanime", "okru", "animefever", "miruro", "nineanime", "animekai",
 	"18anime",
 }
 

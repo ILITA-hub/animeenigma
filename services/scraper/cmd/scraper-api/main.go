@@ -27,6 +27,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/miruro"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/nineanime"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/okru"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/sidecar"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/transport"
@@ -358,6 +359,21 @@ func main() {
 		log.Fatalw("failed to construct AllAnime provider", "error", err)
 	}
 	registerByStatus(allAnimeProvider)
+
+	// okru — serves AllAnime's Ok (ok.ru) sources clock-free (no api.allanime.day
+	// clock endpoint). Registered immediately AFTER allanime so the EN failover
+	// order is gogoanime → animepahe → allanime → okru → animefever → …
+	okruBaseHTTP := domain.NewBaseHTTPClient(log,
+		domain.WithPerHostRPS("api.allanime.day", 1.0, 2),
+		domain.WithPerHostRPS("ok.ru", 1.0, 2),
+		domain.WithProvider("okru"),
+		domain.WithTransport(egressTransport),
+	)
+	okruProvider, err := okru.New(okru.Deps{HTTP: okruBaseHTTP, Cache: redisCache, Log: log})
+	if err != nil {
+		log.Fatalw("failed to construct okru provider", "error", err)
+	}
+	registerByStatus(okruProvider)
 
 	// Phase 28 (SCRAPER-HEAL-36) — AnimeFever as the FOURTH live EN provider.
 	// Failover slot 4 per CONTEXT.md D5. Always-on; operator disables/degrades it
