@@ -74,6 +74,25 @@ func main() {
 		log.Warnw("failed to auto-migrate tables", "error", err)
 	}
 
+	// anime_load_tasks indexes (audit #16). The table shipped with none (the SQL
+	// migration was never applied and the model declares no index tags), so the
+	// pending-poll (status + priority DESC + updated_at) and the dedup lookup
+	// (mal_id + status) seq-scanned. Created idempotently here so they apply to
+	// the live DB on deploy; mirrored in docker/postgres/init.sql for fresh
+	// installs. The partial UNIQUE enforces "one in-flight task per mal_id" — it
+	// is best-effort (logs and continues if pre-existing duplicates block it; the
+	// app-level dedup check at repo/task.go still guards correctness).
+	for _, stmt := range []string{
+		`CREATE INDEX IF NOT EXISTS idx_load_tasks_poll ON anime_load_tasks (status, priority DESC, updated_at ASC)`,
+		`CREATE INDEX IF NOT EXISTS idx_load_tasks_mal_status ON anime_load_tasks (mal_id, status)`,
+		`CREATE INDEX IF NOT EXISTS idx_load_tasks_export_job ON anime_load_tasks (export_job_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_load_tasks_unique_inflight ON anime_load_tasks (mal_id) WHERE status IN ('pending','processing')`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			log.Warnw("failed to create anime_load_tasks index", "stmt", stmt, "error", err)
+		}
+	}
+
 	// Initialize cache
 	redisCache, err := cache.New(cfg.Redis)
 	if err != nil {

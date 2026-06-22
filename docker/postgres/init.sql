@@ -217,6 +217,14 @@ CREATE TABLE anime_load_tasks (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+-- Indexes for the scheduler's hot queries (audit #16). Kept in sync with the
+-- idempotent CREATE INDEX block in services/scheduler/cmd/scheduler-api/main.go
+-- (which applies them to already-provisioned DBs on deploy).
+CREATE INDEX IF NOT EXISTS idx_load_tasks_poll ON anime_load_tasks (status, priority DESC, updated_at ASC);
+CREATE INDEX IF NOT EXISTS idx_load_tasks_mal_status ON anime_load_tasks (mal_id, status);
+CREATE INDEX IF NOT EXISTS idx_load_tasks_export_job ON anime_load_tasks (export_job_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_load_tasks_unique_inflight ON anime_load_tasks (mal_id) WHERE status IN ('pending','processing');
+
 CREATE TABLE mal_shikimori_mapping (
     mal_id INTEGER PRIMARY KEY,
     shikimori_id VARCHAR(50) NOT NULL,
