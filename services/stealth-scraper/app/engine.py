@@ -162,6 +162,10 @@ class CamoufoxEngine:
         # not GC'd before they run) + the background reaper handle.
         self._bg_tasks: set = set()
         self._reaper_task: Any = None
+        # Monotonic-wall time the pool became saturated (free==0), or 0.0 when
+        # not saturated. /readyz flips to 503 only once this persists past
+        # cfg.readyz_saturation_seconds (a transient burst stays ready).
+        self._saturated_since: float = 0.0
 
     def set_logger(self, log: Any) -> None:
         self._log = log
@@ -188,12 +192,33 @@ class CamoufoxEngine:
         metrics.ACTIVE_SESSIONS.set(0)
 
     def health(self) -> dict:
-        # degraded = every profile is leased (pool saturated). Surfaced for
-        # monitoring; /healthz still returns 200 so Docker does NOT restart-loop
-        # the container on transient saturation (the fetch timeout + reaper +
-        # 503-on-exhaustion self-heal the pool instead).
-        free = sum(1 for p in self.profiles.all() if not p.leased)
+        # /healthz consumes this and ALWAYS returns 200 (process liveness) — the
+        # body's per-provider/per-user breakdown is the observability surface;
+        # /readyz (is_ready) is the saturation signal. The reaper + poison-fence
+        # + 503-on-exhaustion self-heal the pool, so Docker must NOT restart-loop
+        # the container on transient saturation.
+        all_profiles = self.profiles.all()
+        counts = self.profiles.status_counts()
+        free = sum(1 for p in all_profiles if p.status == "healthy" and not p.leased)
+
+        providers: dict[str, dict] = {}
+        users: dict[str, dict] = {}
+        for s in self._sessions.values():
+            if s.provider:
+                pv = providers.setdefault(
+                    s.provider, {"held": 0, "crashed": 0, "last_error": ""}
+                )
+                pv["held"] += 1
+                if s.crash_count:
+                    pv["crashed"] += 1
+                if s.last_error:
+                    pv["last_error"] = s.last_error
+            uk = getattr(s, "user_key", "") or ""
+            if uk:
+                users.setdefault(uk, {"held": 0})["held"] += 1
+
         return {
+            # Legacy keys (back-compat for any existing scrape/consumer).
             "status": "degraded" if free == 0 else "ok",
             "pool_size": self.cfg.pool_size,
             "free_profiles": free,
@@ -203,7 +228,33 @@ class CamoufoxEngine:
                 {"id": e.id, "type": e.type, "blocked": e.total_blocked}
                 for e in self.pool.all()
             ],
+            # New self-heal breakdown (Phase 1).
+            "global": {
+                "free": free,
+                "crashed": counts.get("crashed", 0),
+                "warming": counts.get("warming", 0),
+                "live_browsers": len(self._handles),
+                "active_sessions": len(self._sessions),
+            },
+            "providers": providers,
+            "users": users,
         }
+
+    def is_ready(self) -> bool:
+        """Readiness for /readyz. NOT a liveness signal (see D8 — never drives a
+        restart; in-flight streams must keep playing). Returns False only when
+        the pool has been saturated (no healthy free slot) continuously for at
+        least cfg.readyz_saturation_seconds."""
+        free = sum(
+            1 for p in self.profiles.all() if p.status == "healthy" and not p.leased
+        )
+        now = time.time()
+        if free > 0:
+            self._saturated_since = 0.0
+            return True
+        if self._saturated_since == 0.0:
+            self._saturated_since = now
+        return (now - self._saturated_since) < self.cfg.readyz_saturation_seconds
 
     # -- launch / teardown -------------------------------------------------- #
     async def _ensure_browser(self, profile: Profile, proxy_id: str) -> Any:

@@ -232,6 +232,49 @@ class TestTeardownMarksCrashed(unittest.TestCase):
         self.assertEqual(p.status, "healthy")
 
 
+class TestHealthShape(unittest.TestCase):
+    def test_health_breakdown(self):
+        eng = CamoufoxEngine(Config(pool_size=2, warming_enabled=False))
+        h = eng.health()
+        self.assertIn("global", h)
+        self.assertIn("providers", h)
+        self.assertIn("users", h)
+        g = h["global"]
+        self.assertEqual(g["free"], 2)
+        self.assertEqual(g["crashed"], 0)
+        self.assertIn("warming", g)
+        # legacy keys retained for back-compat consumers.
+        self.assertEqual(h["status"], "ok")
+        self.assertEqual(h["pool_size"], 2)
+
+    def test_providers_breakdown_counts_warm_sessions(self):
+        eng = CamoufoxEngine(Config(pool_size=2, warming_enabled=False))
+        prof = eng.profiles.lease()
+        page = _Page()
+        sess = Session(
+            id="fetch::nineanime::https://9anime.me.uk", profile=prof,
+            proxy_id="d", referer="r", user_agent="UA", cdn_host="9anime.me.uk",
+            master_url="https://9anime.me.uk", expires_at=time.time() + 600,
+            page=page, player_url=page.url, provider="nineanime",
+        )
+        sess.last_error = "Target closed"
+        eng._sessions[sess.id] = sess
+        h = eng.health()
+        self.assertEqual(h["providers"]["nineanime"]["held"], 1)
+        self.assertEqual(h["providers"]["nineanime"]["last_error"], "Target closed")
+
+    def test_is_ready_only_after_sustained_saturation(self):
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                    readyz_saturation_seconds=15))
+        # Saturate: lease the only profile.
+        eng.profiles.lease()
+        # First observation: saturated NOW but window not elapsed -> still ready.
+        self.assertTrue(eng.is_ready())
+        # Simulate the saturation window having started 20s ago.
+        eng._saturated_since = time.time() - 20
+        self.assertFalse(eng.is_ready(), "sustained saturation -> not ready")
+
+
 if __name__ == "__main__":
     unittest.main()
 
