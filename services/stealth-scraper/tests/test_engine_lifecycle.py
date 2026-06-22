@@ -234,3 +234,83 @@ class TestTeardownMarksCrashed(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReaperResurrection(unittest.TestCase):
+    def _eng(self):
+        eng = CamoufoxEngine(Config(
+            pool_size=1, warming_enabled=False,
+            resurrect_backoff_base_seconds=1, resurrect_backoff_cap_seconds=30,
+            resurrect_max_fails=3,
+        ))
+        return eng
+
+    def test_backoff_curve(self):
+        eng = self._eng()
+        self.assertEqual(eng._resurrect_backoff(0), 1)
+        self.assertEqual(eng._resurrect_backoff(1), 2)
+        self.assertEqual(eng._resurrect_backoff(2), 4)
+        self.assertEqual(eng._resurrect_backoff(3), 8)
+        self.assertEqual(eng._resurrect_backoff(4), 16)
+        self.assertEqual(eng._resurrect_backoff(5), 30)   # capped
+        self.assertEqual(eng._resurrect_backoff(9), 30)   # still capped
+
+    def test_successful_resurrect_marks_healthy(self):
+        eng = self._eng()
+        p = eng.profiles.all()[0]
+        eng.profiles.mark_crashed(p)            # consecutive_fail=1, status=crashed
+        p.next_resurrect_at = 0.0               # eligible now
+
+        async def _ok_launch(profile, proxy_id):
+            return object()
+        eng._ensure_browser = _ok_launch
+
+        run(eng._resurrect_crashed_slot(p))
+        self.assertEqual(p.status, "healthy")
+        self.assertEqual(p.consecutive_fail, 0)
+
+    def test_resurrect_respects_backoff(self):
+        eng = self._eng()
+        p = eng.profiles.all()[0]
+        eng.profiles.mark_crashed(p)
+        p.next_resurrect_at = time.time() + 999  # not eligible yet
+        launched = {"n": 0}
+
+        async def _count(profile, proxy_id):
+            launched["n"] += 1
+            return object()
+        eng._ensure_browser = _count
+
+        run(eng._resurrect_crashed_slot(p))
+        self.assertEqual(launched["n"], 0, "must not attempt before backoff elapses")
+        self.assertEqual(p.status, "crashed")
+
+    def test_retire_after_three_failures(self):
+        eng = self._eng()
+        p = eng.profiles.all()[0]
+        p.uses = 7  # retirement must zero this
+
+        async def _boom(profile, proxy_id):
+            raise RuntimeError("relaunch failed")
+        eng._ensure_browser = _boom
+
+        # Original crash that landed the slot in the reaper's crashed pool
+        # (consecutive_fail == 1). Each failed relaunch then bumps the counter;
+        # at resurrect_max_fails (3) the slot is retired instead of revived.
+        eng.profiles.mark_crashed(p)
+        self.assertEqual(p.consecutive_fail, 1)
+
+        attempts = 0
+        # Drive failed relaunches until the slot retires (counter ownership lives
+        # in the except arm's mark_crashed -> +1 per failed relaunch; no manual
+        # re-mark in the loop or the failure would be double-counted).
+        while p.status == "crashed" and attempts < 10:
+            p.next_resurrect_at = 0.0          # clear backoff so we attempt now
+            run(eng._resurrect_crashed_slot(p))
+            attempts += 1
+
+        # 1 (original crash) + 2 failed relaunches == resurrect_max_fails -> retired.
+        self.assertEqual(attempts, 2, "should retire on the relaunch reaching max_fails")
+        self.assertEqual(p.status, "healthy")  # retired -> fresh identity in pool
+        self.assertEqual(p.consecutive_fail, 0)
+        self.assertEqual(p.uses, 0)

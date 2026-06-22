@@ -750,6 +750,82 @@ class CamoufoxEngine:
                 await self._teardown(p, reason="recycle")
                 _rm_dir(p.user_data_dir)
                 self.profiles.reset_uses(p)
+        # Resurrect crashed, not-in-use slots (background self-heal — no
+        # container restart). Each is gated by its own exponential backoff.
+        for p in self.profiles.crashed_idle():
+            await self._resurrect_crashed_slot(p)
+        self._publish_pool_gauges()
+
+    def _resurrect_backoff(self, consecutive_fail: int) -> float:
+        """Exponential per-slot backoff: base * 2**fail, capped. fail==0 -> base;
+        fail==1 -> 2*base; fail==2 -> 4*base; ... clamped to
+        resurrect_backoff_cap_seconds. (1 -> 2 -> 4 -> 8 -> 16 -> 30 with
+        base=1, cap=30 — the canonical 1→2→4→8→16→30s curve.)"""
+        base = self.cfg.resurrect_backoff_base_seconds
+        cap = self.cfg.resurrect_backoff_cap_seconds
+        steps = max(0, consecutive_fail)
+        return min(cap, base * (2 ** steps))
+
+    async def _resurrect_crashed_slot(self, profile: Profile) -> None:
+        """Attempt a cold relaunch of one crashed, not-in-use slot. Skips slots
+        still inside their backoff window. On success the slot returns to the
+        healthy pool; on the cfg.resurrect_max_fails-th consecutive failed
+        relaunch the slot is retired (user_data_dir wiped, counters reset)
+        rather than revived forever. Never raises — a failed relaunch is counted
+        toward retirement and the reaper loop must not die."""
+        if profile.leased or profile.status != "crashed":
+            return
+        now = time.time()
+        if profile.next_resurrect_at and now < profile.next_resurrect_at:
+            return
+        # Retire BEFORE attempting if we've already exhausted the budget.
+        if profile.consecutive_fail >= self.cfg.resurrect_max_fails:
+            await self._retire_crashed_slot(profile)
+            return
+
+        profile.status = "warming"
+        proxy = self.pool.select(sticky_key=profile.id)
+        proxy_id = proxy.id if proxy is not None else (profile.proxy_id or "")
+        try:
+            await self._ensure_browser(profile, proxy_id)
+            self.profiles.mark_healthy(profile)
+            metrics.SLOT_RESURRECT_TOTAL.labels(result="ok").inc()
+            if self._log:
+                self._log.info("resurrected crashed slot %s", profile.id)
+        except Exception as exc:  # noqa: BLE001
+            # Failed: re-mark crashed (bumps consecutive_fail toward the
+            # retire-after-N limit — this is the per-failed-relaunch counter),
+            # arm the next exponential backoff, and retire if we've hit the cap.
+            profile.last_error = str(exc)
+            await self._teardown(profile, reason="crash")  # mark_crashed -> fail+1
+            profile.next_resurrect_at = time.time() + self._resurrect_backoff(
+                profile.consecutive_fail
+            )
+            metrics.SLOT_RESURRECT_TOTAL.labels(result="fail").inc()
+            if self._log:
+                self._log.warning("resurrect failed for %s: %s", profile.id, exc)
+            if profile.consecutive_fail >= self.cfg.resurrect_max_fails:
+                await self._retire_crashed_slot(profile)
+
+    async def _retire_crashed_slot(self, profile: Profile) -> None:
+        """Give up on a slot: wipe its on-disk profile, zero its counters, and
+        return it to the healthy pool as a fresh identity (a future lease cold-
+        launches it)."""
+        await self._teardown(profile, reason="recycle")
+        _rm_dir(profile.user_data_dir)
+        self.profiles.reset_uses(profile)
+        self.profiles.mark_healthy(profile)
+        metrics.SLOT_RESURRECT_TOTAL.labels(result="retired").inc()
+        if self._log:
+            self._log.warning("retired crashed slot %s after %d failed resurrects",
+                              profile.id, self.cfg.resurrect_max_fails)
+
+    def _publish_pool_gauges(self) -> None:
+        counts = self.profiles.status_counts()
+        free = sum(1 for p in self.profiles.all()
+                   if p.status == "healthy" and not p.leased)
+        metrics.POOL_FREE.set(free)
+        metrics.POOL_CRASHED.set(counts.get("crashed", 0))
 
 
 class SessionGone(Exception):
