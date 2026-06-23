@@ -1,5 +1,6 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ANIME_KINDS } from '@/constants/animeKinds'
 
 // Phase 15 (UX-31) — multi-axis browse filter state. The composable owns
 // both directions of the URL <-> state sync: ?route.query is the source of
@@ -12,11 +13,8 @@ import { useRoute, useRouter } from 'vue-router'
 // the composable trivially test-mockable and the existing useAnime
 // composable untouched.
 
-export type Kind = '' | 'tv' | 'movie' | 'ova' | 'ona' | 'special'
 export type Provider = 'kodik' | 'dub' | 'raw' | 'ae'
 export type Sort = 'popularity' | 'rating' | 'year' | 'updated' | 'title'
-
-const KIND_VALUES: Kind[] = ['', 'tv', 'movie', 'ova', 'ona', 'special']
 const PROVIDER_VALUES: Provider[] = ['kodik', 'dub', 'raw', 'ae']
 const SORT_VALUES: Sort[] = ['popularity', 'rating', 'year', 'updated', 'title']
 const STATUS_VALUES = ['', 'ongoing', 'released', 'announced'] as const
@@ -32,7 +30,7 @@ export function useBrowseFilters() {
   const q = ref('')
   const genres = ref<string[]>([])
   const studios = ref<string[]>([])
-  const kind = ref<Kind>('')
+  const kinds = ref<string[]>([])
   const status = ref<Status>('')
   const season = ref<Season>('')
   const yearFrom = ref<number | null>(null)
@@ -66,8 +64,13 @@ export function useBrowseFilters() {
     if (newStudios.join(',') !== studios.value.join(',')) {
       studios.value = newStudios
     }
-    const rawKind = typeof qry.kind === 'string' ? (qry.kind as Kind) : ''
-    kind.value = KIND_VALUES.includes(rawKind) ? rawKind : ''
+    const newKinds = ((qry.kind as string) || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(k => (ANIME_KINDS as readonly string[]).includes(k))
+    if (newKinds.join(',') !== kinds.value.join(',')) {
+      kinds.value = newKinds
+    }
     const rawStatus = (typeof qry.status === 'string' ? qry.status : '') as Status
     status.value = (STATUS_VALUES as readonly string[]).includes(rawStatus) ? rawStatus : ''
     const rawSeason = (typeof qry.season === 'string' ? qry.season : '') as Season
@@ -97,7 +100,7 @@ export function useBrowseFilters() {
     next.q = q.value || undefined
     next.genre = genres.value.length ? genres.value.join(',') : undefined
     next.studio = studios.value.length ? studios.value.join(',') : undefined
-    next.kind = kind.value || undefined
+    next.kind = kinds.value.length ? kinds.value.join(',') : undefined
     next.status = status.value || undefined
     next.season = season.value || undefined
     next.year_from = yearFrom.value ? String(yearFrom.value) : undefined
@@ -117,7 +120,7 @@ export function useBrowseFilters() {
     if (q.value) p.q = q.value
     if (genres.value.length) p.genre = genres.value.join(',')
     if (studios.value.length) p.studio = studios.value.join(',')
-    if (kind.value) p.kind = kind.value
+    if (kinds.value.length) p.kind = kinds.value.join(',')
     if (status.value) p.status = status.value
     if (season.value) p.season = season.value
     if (yearFrom.value) p.year_from = yearFrom.value
@@ -135,7 +138,7 @@ export function useBrowseFilters() {
     let n = 0
     if (genres.value.length) n++
     if (studios.value.length) n++
-    if (kind.value) n++
+    if (kinds.value.length) n++
     if (status.value) n++
     if (season.value) n++
     if (yearFrom.value || yearTo.value) n++
@@ -148,7 +151,7 @@ export function useBrowseFilters() {
     q.value = ''
     genres.value = []
     studios.value = []
-    kind.value = ''
+    kinds.value = []
     status.value = ''
     season.value = ''
     yearFrom.value = null
@@ -179,7 +182,7 @@ export function useBrowseFilters() {
     q,
     genres,
     studios,
-    kind,
+    kinds,
     status,
     season,
     yearFrom,

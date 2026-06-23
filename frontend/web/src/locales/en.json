@@ -754,7 +754,21 @@
     "back": "Back",
     "next": "Next",
     "yesterday": "Yesterday",
-    "close": "Close"
+    "close": "Close",
+    "filters": {
+      "type": "Type",
+      "kind": {
+        "tv": "TV series",
+        "movie": "Movie",
+        "ova": "OVA",
+        "ona": "ONA",
+        "special": "Special",
+        "tv_special": "TV Special",
+        "music": "Music",
+        "cm": "Commercial",
+        "pv": "Promo"
+      }
+    }
   },
   "errors": {
     "fetchAnime": "Failed to load anime",
@@ -978,7 +992,6 @@
       "activeCount": "{count} active",
       "section": {
         "genres": "Genres",
-        "format": "Format",
         "status": "Status",
         "season": "Season",
         "year": "Year",
@@ -986,14 +999,6 @@
         "sort": "Sort",
         "score": "Score",
         "studios": "Studios"
-      },
-      "format": {
-        "any": "Any format",
-        "tv": "TV series",
-        "movie": "Movie",
-        "ova": "OVA",
-        "ona": "ONA",
-        "special": "Special"
       },
       "status": {
         "any": "Any status",

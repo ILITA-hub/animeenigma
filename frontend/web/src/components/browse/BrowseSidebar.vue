@@ -30,12 +30,17 @@
       />
     </FilterSection>
 
-    <!-- Format (kind) — single-select radio -->
+    <!-- Type (kind) — multi-select checkbox list (matches the List page) -->
     <FilterSection
-      :label="$t('browse.filters.section.format')"
-      :count="filters.kind.value ? 1 : 0"
+      :label="$t('common.filters.type')"
+      :count="filters.kinds.value.length"
     >
-      <RadioGroup :model-value="filters.kind.value" :options="kindOptions" @update:model-value="(v) => onKindChange(v as Kind)" />
+      <FilterCheckboxList
+        :items="kindItems"
+        :selected="filters.kinds.value"
+        :searchable="false"
+        @update:selected="onKindsChange"
+      />
     </FilterSection>
 
     <!-- Status — single-select radio -->
@@ -59,15 +64,14 @@
       :label="$t('browse.filters.section.year')"
       :count="filters.yearFrom.value || filters.yearTo.value ? 1 : 0"
     >
-      <div class="flex items-center gap-2">
-        <div class="w-1/2">
-          <Input type="number" size="sm" :min="MIN_YEAR" :max="MAX_YEAR" :model-value="filters.yearFrom.value != null ? String(filters.yearFrom.value) : ''" :placeholder="$t('browse.filters.year.from')" :aria-label="$t('browse.filters.year.from')" @change="onYearChange('from', ($event.target as HTMLInputElement).valueAsNumber)" />
-        </div>
-        <span class="text-white/40">—</span>
-        <div class="w-1/2">
-          <Input type="number" size="sm" :min="MIN_YEAR" :max="MAX_YEAR" :model-value="filters.yearTo.value != null ? String(filters.yearTo.value) : ''" :placeholder="$t('browse.filters.year.to')" :aria-label="$t('browse.filters.year.to')" @change="onYearChange('to', ($event.target as HTMLInputElement).valueAsNumber)" />
-        </div>
-      </div>
+      <FilterYearRange
+        :min="filters.yearFrom.value"
+        :max="filters.yearTo.value"
+        :floor-year="MIN_YEAR"
+        :ceil-year="MAX_YEAR"
+        @update:min="onYearMin"
+        @update:max="onYearMax"
+      />
     </FilterSection>
 
     <!-- Minimum score — range slider from 0-10, step 0.5 (AUTO-091) -->
@@ -154,13 +158,14 @@ import { useI18n } from 'vue-i18n'
 import {
   useBrowseFilters,
   type Provider,
-  type Kind,
   type Sort,
 } from '@/composables/useBrowseFilters'
+import { ANIME_KINDS } from '@/constants/animeKinds'
 import FilterSection from './FilterSection.vue'
 import FilterCheckboxList from '@/components/filters/FilterCheckboxList.vue'
+import FilterYearRange from '@/components/filters/FilterYearRange.vue'
 import { getLocalizedGenre } from '@/utils/title'
-import { Input, RadioGroup } from '@/components/ui'
+import { RadioGroup } from '@/components/ui'
 
 // Phase 15 (UX-31) — Browse.vue passes the genre list down (no
 // duplicate fetch) and the parent's useBrowseFilters instance so the
@@ -186,14 +191,9 @@ const { t } = useI18n()
 const MIN_YEAR = 1960
 const MAX_YEAR = new Date().getFullYear() + 1
 
-const kindOptions = computed<{ value: Kind; label: string }[]>(() => [
-  { value: '', label: t('browse.filters.format.any') },
-  { value: 'tv', label: t('browse.filters.format.tv') },
-  { value: 'movie', label: t('browse.filters.format.movie') },
-  { value: 'ova', label: t('browse.filters.format.ova') },
-  { value: 'ona', label: t('browse.filters.format.ona') },
-  { value: 'special', label: t('browse.filters.format.special') },
-])
+const kindItems = computed(() =>
+  ANIME_KINDS.map(k => ({ id: k, label: t('common.filters.kind.' + k) })),
+)
 
 const statusOptions = computed(() => [
   { value: '', label: t('browse.filters.status.any') },
@@ -269,8 +269,8 @@ function onProviderToggle(p: Provider, checked: boolean) {
   props.filters.writeUrl()
 }
 
-function onKindChange(v: Kind) {
-  props.filters.kind.value = v
+function onKindsChange(ids: string[]) {
+  props.filters.kinds.value = ids
   props.filters.writeUrl()
 }
 
@@ -290,20 +290,13 @@ function onSortChange(v: Sort) {
   props.filters.writeUrl()
 }
 
-function onYearChange(which: 'from' | 'to', n: number) {
-  const v = Number.isFinite(n) && n >= MIN_YEAR && n <= MAX_YEAR ? n : null
-  if (which === 'from') {
-    props.filters.yearFrom.value = v
-    // Client-side validation: from <= to (locked in CONTEXT.md specifics).
-    if (v && props.filters.yearTo.value && v > props.filters.yearTo.value) {
-      props.filters.yearTo.value = v
-    }
-  } else {
-    props.filters.yearTo.value = v
-    if (v && props.filters.yearFrom.value && v < props.filters.yearFrom.value) {
-      props.filters.yearFrom.value = v
-    }
-  }
+function onYearMin(v: number | null) {
+  props.filters.yearFrom.value = v
+  props.filters.writeUrl()
+}
+
+function onYearMax(v: number | null) {
+  props.filters.yearTo.value = v
   props.filters.writeUrl()
 }
 

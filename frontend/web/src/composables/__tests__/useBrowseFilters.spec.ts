@@ -75,3 +75,43 @@ describe('useBrowseFilters — season', () => {
     expect(api.season.value).toBe('')
   })
 })
+
+describe('useBrowseFilters — kinds', () => {
+  it('reads a comma-separated kind list from the URL into apiParams', () => {
+    mockState.query = { kind: 'tv,movie' }
+    const { api } = harness()
+    api.readUrl()
+    expect(api.kinds.value).toEqual(['tv', 'movie'])
+    expect(api.apiParams.value.kind).toBe('tv,movie')
+  })
+
+  it('drops invalid kind values', () => {
+    mockState.query = { kind: 'tv,bogus' }
+    const { api } = harness()
+    api.readUrl()
+    expect(api.kinds.value).toEqual(['tv'])
+  })
+
+  it('writes the kinds joined to the URL query', () => {
+    const { api } = harness()
+    api.kinds.value = ['ova', 'ona']
+    api.writeUrl()
+    expect(mockReplace).toHaveBeenCalledWith({
+      query: expect.objectContaining({ kind: 'ova,ona' }),
+    })
+  })
+
+  it('counts a non-empty kinds list as one active filter', () => {
+    const { api } = harness()
+    expect(api.activeCount.value).toBe(0)
+    api.kinds.value = ['tv', 'movie']
+    expect(api.activeCount.value).toBe(1)
+  })
+
+  it('reset clears the kinds', () => {
+    const { api } = harness()
+    api.kinds.value = ['special']
+    api.reset()
+    expect(api.kinds.value).toEqual([])
+  })
+})

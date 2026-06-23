@@ -754,7 +754,21 @@
     "back": "Назад",
     "next": "Далее",
     "yesterday": "Вчера",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "filters": {
+      "type": "Тип",
+      "kind": {
+        "tv": "ТВ-сериал",
+        "movie": "Фильм",
+        "ova": "OVA",
+        "ona": "ONA",
+        "special": "Спешл",
+        "tv_special": "ТВ-спешл",
+        "music": "Клип",
+        "cm": "Реклама",
+        "pv": "Промо"
+      }
+    }
   },
   "errors": {
     "fetchAnime": "Не удалось загрузить аниме",
@@ -978,7 +992,6 @@
       "activeCount": "{count} активный | {count} активных | {count} активных",
       "section": {
         "genres": "Жанры",
-        "format": "Формат",
         "status": "Статус",
         "season": "Сезон",
         "year": "Год",
@@ -986,14 +999,6 @@
         "sort": "Сортировка",
         "score": "Оценка",
         "studios": "Студии"
-      },
-      "format": {
-        "any": "Любой формат",
-        "tv": "ТВ-сериал",
-        "movie": "Фильм",
-        "ova": "OVA",
-        "ona": "ONA",
-        "special": "Спешл"
       },
       "status": {
         "any": "Любой статус",

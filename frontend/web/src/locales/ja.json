@@ -754,7 +754,21 @@
     "back": "戻る",
     "next": "次へ",
     "yesterday": "昨日",
-    "close": "閉じる"
+    "close": "閉じる",
+    "filters": {
+      "type": "種別",
+      "kind": {
+        "tv": "TVシリーズ",
+        "movie": "映画",
+        "ova": "OVA",
+        "ona": "ONA",
+        "special": "スペシャル",
+        "tv_special": "TVスペシャル",
+        "music": "ミュージック",
+        "cm": "CM",
+        "pv": "PV"
+      }
+    }
   },
   "errors": {
     "fetchAnime": "アニメの読み込みに失敗しました",
@@ -978,7 +992,6 @@
       "activeCount": "{count} 件",
       "section": {
         "genres": "ジャンル",
-        "format": "種別",
         "status": "状態",
         "season": "シーズン",
         "year": "年",
@@ -986,14 +999,6 @@
         "sort": "並び替え",
         "score": "評価",
         "studios": "スタジオ"
-      },
-      "format": {
-        "any": "すべての種別",
-        "tv": "TVシリーズ",
-        "movie": "映画",
-        "ova": "OVA",
-        "ona": "ONA",
-        "special": "スペシャル"
       },
       "status": {
         "any": "すべての状態",
