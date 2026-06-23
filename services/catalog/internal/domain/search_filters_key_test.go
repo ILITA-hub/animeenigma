@@ -48,8 +48,8 @@ func TestSearchFilters_CacheKey_DiscriminatesFilters(t *testing.T) {
 // to the order of equal-but-reordered GenreIDs / Providers slices (the handler
 // may produce them in any order). Same logical filter => same key => a cache hit.
 func TestSearchFilters_CacheKey_StableAcrossSliceOrder(t *testing.T) {
-	a := SearchFilters{Query: "q", Page: 1, GenreIDs: []string{"1", "2", "3"}, Providers: []string{"kodik", "animelib"}}
-	b := SearchFilters{Query: "q", Page: 1, GenreIDs: []string{"3", "1", "2"}, Providers: []string{"animelib", "kodik"}}
+	a := SearchFilters{Query: "q", Page: 1, GenreIDs: []string{"1", "2", "3"}, Providers: []string{"kodik", "animelib"}, Kinds: []string{"tv", "movie", "ova"}}
+	b := SearchFilters{Query: "q", Page: 1, GenreIDs: []string{"3", "1", "2"}, Providers: []string{"animelib", "kodik"}, Kinds: []string{"ova", "tv", "movie"}}
 	if a.CacheKey() != b.CacheKey() {
 		t.Fatalf("reordered-but-equal filters produced different keys:\n a=%s\n b=%s", a.CacheKey(), b.CacheKey())
 	}
