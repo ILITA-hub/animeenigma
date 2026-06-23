@@ -15,6 +15,7 @@ services:
     logging: *default-logging
     image: postgres:16-alpine
     container_name: animeenigma-postgres
+    mem_limit: 1g             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     # M725: raise max_connections from the default 100 to 200. The ~12 GORM
     # services each cap their pool (libs/database now defaults MaxOpenConns=10),
@@ -45,6 +46,7 @@ services:
     logging: *default-logging
     image: redis:7-alpine
     container_name: animeenigma-redis
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     command: redis-server --appendonly yes
     ports:
@@ -61,6 +63,7 @@ services:
     logging: *default-logging
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: animeenigma-minio
+    mem_limit: 1g             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -85,6 +88,7 @@ services:
     logging: *default-logging
     image: nats:2.10-alpine
     container_name: animeenigma-nats
+    mem_limit: 256m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     command: ["--jetstream", "--store_dir=/data", "--http_port=8222"]
     ports:
@@ -102,6 +106,7 @@ services:
     logging: *default-logging
     image: getmeili/meilisearch:v1.6
     container_name: animeenigma-meilisearch
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-masterkey}
@@ -125,6 +130,7 @@ services:
       context: ./megacloud-extractor
       dockerfile: Dockerfile
     container_name: animeenigma-megacloud-extractor
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     ports:
       - "127.0.0.1:3200:3200"
     environment:
@@ -221,6 +227,7 @@ services:
       context: ..
       dockerfile: services/scraper/Dockerfile
     container_name: animeenigma-scraper
+    mem_limit: 768m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8088
@@ -303,6 +310,7 @@ services:
     build:
       context: ./vnstat-exporter
     container_name: animeenigma-vnstat-exporter
+    mem_limit: 128m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       VNSTAT_DB_SRC: /host-vnstat/vnstat.db
@@ -325,6 +333,7 @@ services:
     logging: *default-logging
     image: prom/prometheus:v2.50.1
     container_name: animeenigma-prometheus
+    mem_limit: 1g             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -367,6 +376,7 @@ services:
     logging: *default-logging
     image: clickhouse/clickhouse-server:26.3.12.3
     container_name: animeenigma-clickhouse
+    mem_limit: 2g             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     ulimits:
       nofile:
@@ -394,6 +404,7 @@ services:
     logging: *default-logging
     image: altinity/clickhouse-backup:2.7.0
     container_name: animeenigma-clickhouse-backup
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c", "sleep infinity"]
     environment:
@@ -416,6 +427,7 @@ services:
     logging: *default-logging
     image: otel/opentelemetry-collector-contrib:0.103.1
     container_name: animeenigma-otel-collector
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     # The contrib image runs as uid 10001 by default, but /var/lib/docker/containers
     # is 0710 root:root (per-container log dirs are 0700) — a non-root user can't
@@ -452,6 +464,7 @@ services:
     logging: *default-logging
     image: grafana/grafana:10.3.3
     container_name: animeenigma-grafana
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     user: "0"
     entrypoint:
@@ -535,6 +548,7 @@ services:
     logging: *default-logging
     build: ./backup
     container_name: animeenigma-backup
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     environment:
       DB_HOST: ${DB_HOST:-postgres}
       DB_USER: ${DB_USER:-postgres}
@@ -563,6 +577,7 @@ services:
       context: ..
       dockerfile: services/gateway/Dockerfile
     container_name: animeenigma-gateway
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8000
@@ -628,6 +643,7 @@ services:
       context: ..
       dockerfile: services/auth/Dockerfile
     container_name: animeenigma-auth
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8080
@@ -666,6 +682,7 @@ services:
       context: ..
       dockerfile: services/catalog/Dockerfile
     container_name: animeenigma-catalog
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8081
@@ -714,6 +731,7 @@ services:
       context: ..
       dockerfile: services/streaming/Dockerfile
     container_name: animeenigma-streaming
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8082
@@ -745,6 +763,7 @@ services:
       context: ..
       dockerfile: services/player/Dockerfile
     container_name: animeenigma-player
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8083
@@ -797,6 +816,7 @@ services:
       context: ..
       dockerfile: services/rooms/Dockerfile
     container_name: animeenigma-rooms
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8084
@@ -815,6 +835,7 @@ services:
       context: ..
       dockerfile: services/scheduler/Dockerfile
     container_name: animeenigma-scheduler
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     # AUTO-381: pin nproc to the host ceiling so the Go runtime can always spawn
     # its background OS threads under load (prevents `fatal error: newosproc` /
@@ -861,6 +882,7 @@ services:
       context: ..
       dockerfile: services/themes/Dockerfile
     container_name: animeenigma-themes
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8086
@@ -894,6 +916,7 @@ services:
       context: ..
       dockerfile: services/notifications/Dockerfile
     container_name: animeenigma-notifications
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8090
@@ -944,6 +967,7 @@ services:
       context: ..
       dockerfile: services/recs/Dockerfile
     container_name: animeenigma-recs
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8094
@@ -979,6 +1003,7 @@ services:
       context: ..
       dockerfile: services/anidle/Dockerfile
     container_name: animeenigma-anidle
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8095
@@ -1016,6 +1041,7 @@ services:
       context: ..
       dockerfile: services/watch-together/Dockerfile
     container_name: animeenigma-watch-together
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8091
@@ -1059,6 +1085,7 @@ services:
       context: ..
       dockerfile: services/gacha/Dockerfile
     container_name: animeenigma-gacha
+    mem_limit: 384m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8093
@@ -1100,6 +1127,7 @@ services:
       context: ..
       dockerfile: services/analytics/Dockerfile
     container_name: animeenigma-analytics
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8092
@@ -1224,6 +1252,7 @@ services:
         # `make redeploy-web` exports it from `git rev-parse --short HEAD`.
         VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
     container_name: animeenigma-web
+    mem_limit: 256m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     ports:
       - "127.0.0.1:3003:80"
@@ -1234,6 +1263,7 @@ services:
     logging: *default-logging
     image: lscr.io/linuxserver/jackett:latest
     container_name: animeenigma-jackett
+    mem_limit: 512m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped
     environment:
       - PUID=911
