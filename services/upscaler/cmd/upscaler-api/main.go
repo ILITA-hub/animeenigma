@@ -18,9 +18,12 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/ffmpeg"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/handler"
+	upminio "github.com/ILITA-hub/animeenigma/services/upscaler/internal/minio"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/source"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/transport"
 )
 
@@ -123,6 +126,36 @@ func main() {
 	// Sweeper: re-leases expired segments and marks stale workers as gone.
 	sweeper := service.NewSweeperWithLogger(segmentRepo, workerRepo, log)
 
+	// Orchestrator: drives jobs queued→segmenting→upscaling→finalizing→done.
+	// Constructs the source/ffmpeg/minio collaborators it needs.
+	resolver := source.NewResolver(cfg.Upscaler.TorrentsDir, cfg.Upscaler.StagingDir)
+	prober := source.NewProber("")       // ffprobe on PATH
+	segmenter := ffmpeg.NewSegmenter("") // ffmpeg on PATH
+	finalizer := ffmpeg.NewFinalizer("")
+	upWriter, err := upminio.New(upminio.Config{
+		Endpoint:          cfg.Upscaler.MinIO.Endpoint,
+		AccessKey:         cfg.Upscaler.MinIO.AccessKey,
+		SecretKey:         cfg.Upscaler.MinIO.SecretKey,
+		Bucket:            cfg.Upscaler.MinIO.Bucket,
+		UseSSL:            cfg.Upscaler.MinIO.UseSSL,
+		UploadConcurrency: cfg.Upscaler.MinIO.UploadConcurrency,
+	}, log)
+	if err != nil {
+		log.Fatalw("failed to init minio writer", "error", err)
+	}
+	orchestrator := service.NewOrchestrator(service.OrchestratorDeps{
+		Jobs:           jobRepo,
+		Segments:       segmentRepo,
+		Resolver:       resolver,
+		Prober:         prober,
+		Segmenter:      segmenter,
+		Finalizer:      finalizer,
+		Writer:         upWriter,
+		StagingDir:     cfg.Upscaler.StagingDir,
+		SegmentSeconds: cfg.Upscaler.SegmentSeconds,
+		Log:            log,
+	})
+
 	// Segment data-plane handler (Task 11b): capability-verified GET/PUT of
 	// leased input/output segments on the {StagingDir}/{jobID} tree.
 	segmentHandler := handler.NewSegmentHandler(cfg.Upscaler.StagingDir, jobRepo, segmentRepo, log)
@@ -144,6 +177,10 @@ func main() {
 	// Start sweeper (re-leases stale segments + marks gone workers every 30s).
 	go sweeper.Run(context.Background())
 	defer sweeper.Stop()
+
+	// Start orchestrator (drives the job lifecycle every 10s + on startup).
+	go orchestrator.Run(context.Background())
+	defer orchestrator.Stop()
 
 	// Start server
 	go func() {
