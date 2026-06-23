@@ -119,9 +119,18 @@ groups:
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
+              # Traffic gate (same pattern as high-p95-latency): `and (denominator > 0)`
+              # drops providers with zero traffic entirely from the result vector.
+              # Degraded/disabled providers produce 0/0 = NaN which Grafana evaluates
+              # as `true` against any threshold — gate removes that false-positive class.
+              # noDataState: OK => zero-traffic providers correctly never alert.
               expr: |
-                sum(rate(parser_requests_total{status="error"}[30m])) by (provider)
-                / sum(rate(parser_requests_total[30m])) by (provider)
+                (
+                  sum(rate(parser_requests_total{status="error"}[30m])) by (provider)
+                  / sum(rate(parser_requests_total[30m])) by (provider)
+                )
+                and
+                (sum(rate(parser_requests_total[30m])) by (provider) > 0)
               instant: true
               refId: A
           - refId: B
