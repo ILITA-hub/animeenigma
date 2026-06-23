@@ -242,15 +242,18 @@ func (s *service) run(ctx context.Context) {
 				}
 				s.state.UpdateOffset(maxID)
 
-				// Intercept 💔-reply-to-👁️ abort commands HERE, in the poller,
-				// before queueing or classifying. The processor goroutine is
-				// blocked inside the analysis we want to cancel, so the abort
-				// must act out-of-band; and an admin 💔 reply would otherwise be
-				// classified as an admin message and spawn a NEW analysis.
+				// Handle message_reaction updates HERE, in the poller, and never
+				// queue them to the processor. A 💔 reaction on a message with a
+				// live analysis aborts it: the processor goroutine is blocked
+				// inside that very analysis, so the cancel must act out-of-band.
+				// The bot flips its own 👀→💔 reaction as the silent confirmation.
 				kept := updates[:0]
 				for _, u := range updates {
-					if watchMsgID, ok := isInterruptReply(u); ok {
-						s.handleInterrupt(watchMsgID, u)
+					if u.MessageReaction != nil {
+						if msgID, ok := isReactionAbort(u, s.tg.BotUserID()); ok && s.tryInterrupt(msgID) {
+							s.tg.SetReaction(msgID, heartBreak)
+							log.Infow("analysis aborted by admin 💔 reaction", "message_id", msgID)
+						}
 						continue
 					}
 					kept = append(kept, u)
@@ -1537,22 +1540,18 @@ func truncateForTelegram(s string) string {
 
 // --- Emoji interrupt protocol (AUTO-456) ---
 //
-// A long-running Claude invocation is fronted by a 👁️ "watching" message. The
-// admin aborts it by replying 💔 to that message. Detection happens in the
-// Telegram poller (NOT the processor), because the processor goroutine is
-// blocked inside the very analysis we want to cancel — so a reply queued behind
-// it could never reach a busy processor in time.
+// A long-running Claude invocation is interrupted by the admin reacting 💔 to
+// the source message. Detection happens in the Telegram poller (NOT the
+// processor), because the processor goroutine is blocked inside the very
+// analysis we want to cancel — so an update queued behind it could never reach
+// a busy processor in time.
 const (
-	// eyeBase is the bare eye codepoint U+1F441. Telegram echoes the sent
-	// "👁️" (eye + VS16) back in reply_to_message.text; matching the bare
-	// codepoint as a substring catches both the VS16 and non-VS16 forms.
-	eyeBase    = "\U0001F441" // 👁
 	heartBreak = "\U0001F494" // 💔
 	// interruptTTL bounds how long a cancel func lingers in the registry if a
 	// computation neither completes nor is interrupted (safety net only —
 	// runInterruptible always deregisters on return). Must exceed the claude
 	// analysis timeout (1h) so the sweeper never kills a legitimately running
-	// analysis before the admin can send 💔.
+	// analysis before the admin can react 💔.
 	interruptTTL = 90 * time.Minute
 )
 
@@ -1664,39 +1663,32 @@ func messageLabel(msg domain.ClassifiedMessage) string {
 	}
 }
 
-// isInterruptReply reports whether update u is a "💔 reply to a 👁️ bot message"
-// abort command, returning the watch message ID being aborted. The bot operates
-// in a single trusted chat (TELEGRAM_ADMIN_CHAT_ID) and cancellation is a
-// fail-safe action (it only stops work — it cannot start, escalate, or exfil),
-// so this is intentionally not gated beyond the structural match.
-func isInterruptReply(u telegram.Update) (watchMsgID int, ok bool) {
-	m := u.Message
-	if m == nil || m.ReplyTo == nil || m.ReplyTo.From == nil {
-		return 0, false
+// reactionsContain reports whether rs has an emoji reaction containing emoji
+// (bare-codepoint substring match, tolerant of VS16 variants).
+func reactionsContain(rs []telegram.ReactionType, emoji string) bool {
+	for _, r := range rs {
+		if r.Type == "emoji" && strings.Contains(r.Emoji, emoji) {
+			return true
+		}
 	}
-	if !m.ReplyTo.From.IsBot {
-		return 0, false
-	}
-	if !strings.Contains(m.ReplyTo.Text, eyeBase) {
-		return 0, false
-	}
-	if !strings.Contains(m.Text, heartBreak) {
-		return 0, false
-	}
-	return m.ReplyTo.MessageID, true
+	return false
 }
 
-// handleInterrupt cancels the computation behind a 👁️ message and confirms.
-func (s *service) handleInterrupt(watchMsgID int, u telegram.Update) {
-	replyTo := 0
-	if u.Message != nil {
-		replyTo = u.Message.MessageID
+// isReactionAbort reports whether update u is a 💔 reaction added by a human
+// (not the bot itself), returning the reacted message ID. The bot runs in a
+// single trusted admin chat and abort is fail-safe (it only stops work), so
+// this is intentionally not gated beyond the structural match. Whether that
+// message has a live analysis is decided by tryInterrupt at the call site.
+func isReactionAbort(u telegram.Update, botID int64) (msgID int, ok bool) {
+	r := u.MessageReaction
+	if r == nil {
+		return 0, false
 	}
-	if s.tryInterrupt(watchMsgID) {
-		log.Infow("computation interrupted by admin reply", "watch_msg_id", watchMsgID)
-		s.tg.SendReply(replyTo, "💔 Вычисление прервано.")
-		return
+	if r.User != nil && r.User.ID == botID { // ignore the bot's own 👀→💔 flip
+		return 0, false
 	}
-	log.Infow("interrupt reply for unknown/finished computation", "watch_msg_id", watchMsgID)
-	s.tg.SendReply(replyTo, "ℹ️ Нечего прерывать — вычисление уже завершено.")
+	if !reactionsContain(r.NewReaction, heartBreak) {
+		return 0, false
+	}
+	return r.MessageID, true
 }

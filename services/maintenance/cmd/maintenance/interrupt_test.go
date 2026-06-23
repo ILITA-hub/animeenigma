@@ -11,87 +11,72 @@ import (
 
 type domainResult = dom.AnalysisResult
 
-// botReply builds a Telegram update where a human replies (text) to a bot
-// message whose text is replyToText.
-func botReply(text, replyToText string, replyToID int) telegram.Update {
-	return telegram.Update{
-		Message: &telegram.Message{
-			MessageID: 999,
-			From:      &telegram.UserInfo{ID: 7, Username: "tNeymik", IsBot: false},
-			Text:      text,
-			ReplyTo: &telegram.Message{
-				MessageID: replyToID,
-				From:      &telegram.UserInfo{ID: 1, Username: "maint_bot", IsBot: true},
-				Text:      replyToText,
-			},
-		},
+// reactionUpdate builds a message_reaction update: userID changed their
+// reaction on msgID, with newEmojis now present.
+func reactionUpdate(msgID int, userID int64, newEmojis ...string) telegram.Update {
+	rs := make([]telegram.ReactionType, 0, len(newEmojis))
+	for _, e := range newEmojis {
+		rs = append(rs, telegram.ReactionType{Type: "emoji", Emoji: e})
 	}
+	return telegram.Update{MessageReaction: &telegram.MessageReactionUpdated{
+		MessageID:   msgID,
+		User:        &telegram.UserInfo{ID: userID},
+		NewReaction: rs,
+	}}
 }
 
-func TestIsInterruptReply(t *testing.T) {
-	const watchID = 4242
+func TestIsReactionAbort(t *testing.T) {
+	const botID = int64(1)
+	const heart = "\U0001F494" // 💔
 
 	tests := []struct {
-		name    string
-		update  telegram.Update
-		wantID  int
-		wantOK  bool
+		name   string
+		update telegram.Update
+		wantID int
+		wantOK bool
 	}{
 		{
-			name:   "valid abort: 💔 reply to 👁️ bot message (VS16 form)",
-			update: botReply("💔", "👁️ Analyzing alert…\nReply 💔 to this message to abort.", watchID),
-			wantID: watchID,
+			name:   "💔 reaction by admin → abort",
+			update: reactionUpdate(4242, 7, heart),
+			wantID: 4242,
 			wantOK: true,
 		},
 		{
-			name:   "valid abort: bare 👁 codepoint in watch text",
-			update: botReply("please stop 💔", "👁 working", watchID),
-			wantID: watchID,
+			name:   "💔 among several reactions → abort",
+			update: reactionUpdate(4242, 7, "\U0001F44D", heart),
+			wantID: 4242,
 			wantOK: true,
 		},
 		{
-			name:   "no heartbreak in new message",
-			update: botReply("stop please", "👁️ Analyzing…", watchID),
+			name:   "bot's own 💔 flip → ignored",
+			update: reactionUpdate(4242, botID, heart),
 			wantOK: false,
 		},
 		{
-			name:   "reply target is not the eye watch message",
-			update: botReply("💔", "🔧 Fix Applied", watchID),
+			name:   "non-💔 reaction (👍) → ignored",
+			update: reactionUpdate(4242, 7, "\U0001F44D"),
 			wantOK: false,
 		},
 		{
-			name:   "reply target is not a bot",
-			update: telegram.Update{Message: &telegram.Message{
-				Text: "💔",
-				From: &telegram.UserInfo{Username: "tNeymik"},
-				ReplyTo: &telegram.Message{
-					MessageID: watchID,
-					From:      &telegram.UserInfo{Username: "tNeymik", IsBot: false},
-					Text:      "👁️ Analyzing…",
-				},
-			}},
+			name:   "reaction cleared (empty new_reaction) → ignored",
+			update: reactionUpdate(4242, 7),
 			wantOK: false,
 		},
 		{
-			name:   "not a reply at all",
-			update: telegram.Update{Message: &telegram.Message{Text: "💔"}},
-			wantOK: false,
-		},
-		{
-			name:   "callback query (no message)",
-			update: telegram.Update{CallbackQuery: &telegram.CallbackQuery{Data: "fix:AUTO-1"}},
+			name:   "plain message update (no reaction) → ignored",
+			update: telegram.Update{Message: &telegram.Message{Text: "\U0001F494"}},
 			wantOK: false,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotID, gotOK := isInterruptReply(tc.update)
+			gotID, gotOK := isReactionAbort(tc.update, botID)
 			if gotOK != tc.wantOK {
-				t.Fatalf("isInterruptReply ok = %v, want %v", gotOK, tc.wantOK)
+				t.Fatalf("ok = %v, want %v", gotOK, tc.wantOK)
 			}
 			if tc.wantOK && gotID != tc.wantID {
-				t.Fatalf("isInterruptReply id = %d, want %d", gotID, tc.wantID)
+				t.Fatalf("id = %d, want %d", gotID, tc.wantID)
 			}
 		})
 	}
