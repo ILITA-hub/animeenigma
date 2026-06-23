@@ -66,3 +66,32 @@ func TestAnimeRepository_Search_StudioFilter_ORSet(t *testing.T) {
 	require.True(t, ids["a1"] && ids["a2"])
 	require.False(t, ids["a3"])
 }
+
+func TestAnimeRepository_Search_ProviderColumns(t *testing.T) {
+	db := setupBrowseFilterTestDB(t)
+	r := NewAnimeRepository(db)
+	ctx := context.Background()
+
+	seedBrowseAnime(t, db, "k", "Kodik only")
+	seedBrowseAnime(t, db, "d", "Dub only")
+	seedBrowseAnime(t, db, "rw", "Raw only")
+	seedBrowseAnime(t, db, "ae", "First-party only")
+	require.NoError(t, db.Exec(`UPDATE animes SET has_kodik=1 WHERE id='k'`).Error)
+	require.NoError(t, db.Exec(`UPDATE animes SET has_dub=1 WHERE id='d'`).Error)
+	require.NoError(t, db.Exec(`UPDATE animes SET has_raw=1 WHERE id='rw'`).Error)
+	require.NoError(t, db.Exec(`UPDATE animes SET has_video=1 WHERE id='ae'`).Error)
+
+	cases := []struct {
+		key, wantID string
+	}{
+		{"kodik", "k"}, {"dub", "d"}, {"raw", "rw"}, {"ae", "ae"},
+	}
+	for _, c := range cases {
+		got, total, err := r.Search(ctx, domain.SearchFilters{
+			Providers: []string{c.key}, Page: 1, PageSize: 20,
+		})
+		require.NoError(t, err, c.key)
+		require.Equal(t, int64(1), total, c.key)
+		require.Equal(t, c.wantID, got[0].ID, c.key)
+	}
+}

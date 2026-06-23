@@ -160,9 +160,10 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 	// mirrors this, so the inner branch is defence-in-depth.
 	if len(filters.Providers) > 0 {
 		colsByKey := map[string]string{
-			"kodik":    "has_kodik",
-			"animelib": "has_animelib",
-			"english":  "has_english",
+			"kodik": "has_kodik",
+			"dub":   "has_dub",
+			"raw":   "has_raw",
+			"ae":    "has_video",
 		}
 		var orParts []string
 		for _, p := range filters.Providers {
