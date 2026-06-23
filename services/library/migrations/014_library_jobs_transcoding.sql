@@ -1,0 +1,21 @@
+-- 014_library_jobs_transcoding.sql
+-- Adds an explicit "encode in progress" state to the job_status enum so the
+-- encoder can distinguish "ready to encode" (encoding — the download→encode
+-- handoff state) from "currently transcoding" (transcoding). Before this,
+-- 'encoding' meant BOTH: the encoder claimed an 'encoding' row, re-flipped it
+-- straight back to 'encoding', and left it there for the entire (minutes-long)
+-- ffmpeg run. The FOR UPDATE SKIP LOCKED claim only holds the row lock for the
+-- brief claim transaction, so once ffmpeg started the row sat in a claimable
+-- 'encoding' state with no lock — a second idle encoder worker re-claimed the
+-- SAME row and spawned a second ffmpeg (double-encode, wasted CPU, and a row
+-- that could be stranded when the process was killed mid-encode).
+--
+-- With 'transcoding' the in-progress state mirrors the download side's
+-- queued(ready) → downloading(in-progress) separation: nobody claims
+-- 'transcoding', so the row is no longer re-claimable while ffmpeg runs.
+--
+-- ALTER TYPE ... ADD VALUE is idempotent via IF NOT EXISTS (Postgres >= 12)
+-- and runs in its own autocommit Exec (NOT inside a multi-statement tx), so
+-- re-running across restarts is a safe no-op — same convention as
+-- 004 (jackett) / 008 (autocache) / 009 / 010.
+ALTER TYPE job_status ADD VALUE IF NOT EXISTS 'transcoding';

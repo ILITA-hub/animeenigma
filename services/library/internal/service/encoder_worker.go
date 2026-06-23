@@ -23,7 +23,10 @@ import (
 // declare a distinct interface here so the worker's tests don't have
 // to provide UpdateProgress / Cancel methods.
 type EncoderJobStore interface {
-	Claim(ctx context.Context, statuses ...domain.JobStatus) (*domain.Job, error)
+	// ClaimForEncoding atomically claims the oldest status='encoding' row
+	// and flips it to the non-claimable 'transcoding' state, returning it
+	// with Status='transcoding' (or (nil, nil) when none is available).
+	ClaimForEncoding(ctx context.Context) (*domain.Job, error)
 	GetByID(ctx context.Context, id string) (*domain.Job, error)
 	UpdateStatus(ctx context.Context, id string, newStatus domain.JobStatus, errorText string) error
 }
@@ -69,12 +72,17 @@ type EncodeMetrics interface {
 }
 
 // EncoderPool is N goroutines that race for status='encoding' jobs
-// via JobStore.Claim(...). Each goroutine drives one job at a time:
+// via JobStore.ClaimForEncoding(...). Each goroutine drives one job at a
+// time:
 //
-//   Claim(encoding) → re-flip status to encoding (Claim's cosmetic
-//     flip to downloading is undone) → resolve source → detect
-//     episode → Transcode → status=uploading → Upload → status=done
-//     (insert library_episodes row when shikimori_id != "").
+//   ClaimForEncoding() [encoding → transcoding, atomic + non-claimable] →
+//     resolve source → detect episode → Transcode → status=uploading →
+//     Upload → status=done (insert library_episodes row when
+//     shikimori_id != "").
+//
+// The atomic flip to 'transcoding' (a state nobody claims) is what stops a
+// second idle worker from re-claiming a row mid-ffmpeg — the row drops out
+// of the claimable 'encoding' set the instant it is claimed.
 //
 // Cancellation: ffmpeg / minio respect ctx.Done() via
 // exec.CommandContext + the SDK's ctx-aware client. Worker exits
@@ -164,7 +172,8 @@ func (p *EncoderPool) Stop(timeout time.Duration) error {
 	}
 }
 
-// runWorker claims an encoding row; on empty queue it sleeps
+// runWorker claims an encoding row (atomically flipping it to the
+// non-claimable 'transcoding' state); on empty queue it sleeps
 // pollInterval and retries.
 func (p *EncoderPool) runWorker(ctx context.Context, idx int) {
 	defer p.wg.Done()
@@ -172,7 +181,7 @@ func (p *EncoderPool) runWorker(ctx context.Context, idx int) {
 		if ctx.Err() != nil {
 			return
 		}
-		job, err := p.jobRepo.Claim(ctx, domain.JobStatusEncoding)
+		job, err := p.jobRepo.ClaimForEncoding(ctx)
 		if err != nil {
 			if p.log != nil {
 				p.log.Warnw("encoder claim failed", "worker", idx, "error", err)
@@ -220,20 +229,17 @@ func (p *EncoderPool) failJob(ctx context.Context, job *domain.Job, reason, errT
 	}
 }
 
-// processJob drives a single claimed job through encoding → uploading
-// → done|failed. The Claim() flips status to 'downloading' cosmetically;
-// we re-flip to 'encoding' immediately so the row never sits at
-// 'downloading' while the encoder owns it.
+// processJob drives a single claimed job through transcoding → uploading
+// → done|failed. The row arrives already in 'transcoding' (ClaimForEncoding
+// flipped it atomically) — a non-claimable state — so no second worker can
+// re-claim it while ffmpeg runs. We do NOT touch the status here at the
+// top; the next persisted transition is 'uploading' once the transcode
+// completes.
 func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
-	// 1. Re-flip status to 'encoding' (Claim flipped it to downloading).
-	if err := p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusEncoding, ""); err != nil {
-		if p.log != nil {
-			p.log.Errorw("re-flip encoding failed", "job_id", job.ID, "error", err)
-		}
-		return
-	}
+	// 1. The row is already 'transcoding' (claimed). Record the metric so
+	//    dashboards still see one "encode started" per job.
 	if p.metrics != nil {
-		p.metrics.IncJobsTotal(string(domain.JobStatusEncoding))
+		p.metrics.IncJobsTotal(string(domain.JobStatusTranscoding))
 	}
 
 	// 2. Derive infohash from the magnet.

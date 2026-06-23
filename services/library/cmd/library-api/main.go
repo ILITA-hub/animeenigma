@@ -207,6 +207,16 @@ func main() {
 	if err := db.DB.Exec(migrations.LibraryJobsEpisodeIndexSQL).Error; err != nil {
 		log.Fatalw("failed to apply library_jobs_episode_index migration", "error", err)
 	}
+	// 014: adds the 'transcoding' job_status value — the encoder's dedicated,
+	// non-claimable "encode in progress" state, distinct from 'encoding' (the
+	// download→encode handoff). Closes the double-encode race where a second
+	// idle encoder worker re-claimed a row already mid-ffmpeg. Idempotent ADD
+	// VALUE IF NOT EXISTS; must follow 001 (job_status enum). Applied in its own
+	// autocommit Exec, BEFORE the encoder pool starts, so the value exists by
+	// the time ClaimForEncoding writes it.
+	if err := db.DB.Exec(migrations.LibraryJobsTranscodingSQL).Error; err != nil {
+		log.Fatalw("failed to apply library_jobs_transcoding migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {

@@ -143,3 +143,15 @@ var AutocacheTriggerLogSQL string
 //
 //go:embed 013_library_jobs_episode_index.sql
 var LibraryJobsEpisodeIndexSQL string
+
+// LibraryJobsTranscodingSQL is migrations/014_library_jobs_transcoding.sql
+// embedded as a string. Adds the 'transcoding' value to the job_status enum so
+// the encoder has a dedicated, NON-claimable "encode in progress" state
+// distinct from 'encoding' (the download→encode handoff). Before this the row
+// sat in claimable 'encoding' for the whole ffmpeg run, letting a second idle
+// encoder worker re-claim it and double-encode. Idempotent ADD VALUE IF NOT
+// EXISTS (Postgres >= 12) — independent, no FK ordering constraint; must follow
+// 001 (which created the job_status enum). Applied by main.go.
+//
+//go:embed 014_library_jobs_transcoding.sql
+var LibraryJobsTranscodingSQL string

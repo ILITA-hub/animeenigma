@@ -23,17 +23,26 @@ const (
 
 // JobStatus is the locked state machine for a library_jobs row:
 //
-//	queued → downloading → encoding → uploading → done|failed|cancelled
+//	queued → downloading → encoding → transcoding → uploading → done|failed|cancelled
 //
 // Phase 3 implements queued → downloading and stops at the 'encoding'
 // boundary; Phase 4 picks up at 'encoding'. Values match the
 // `job_status` Postgres enum.
+//
+// 'encoding' vs 'transcoding' (migration 014): 'encoding' is the
+// download→encode HANDOFF state (download complete, waiting for an encoder
+// worker) — it is CLAIMABLE by the encoder. 'transcoding' is the
+// IN-PROGRESS state ClaimForEncoding flips it to for the duration of the
+// ffmpeg run — it is NOT claimable by anyone, which is what stops a second
+// idle worker from re-claiming a row mid-encode. Mirrors the download
+// side's queued(ready) → downloading(in-progress) separation.
 type JobStatus string
 
 const (
 	JobStatusQueued      JobStatus = "queued"
 	JobStatusDownloading JobStatus = "downloading"
 	JobStatusEncoding    JobStatus = "encoding"
+	JobStatusTranscoding JobStatus = "transcoding"
 	JobStatusUploading   JobStatus = "uploading"
 	JobStatusDone        JobStatus = "done"
 	JobStatusFailed      JobStatus = "failed"

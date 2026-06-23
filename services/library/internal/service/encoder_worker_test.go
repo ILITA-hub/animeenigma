@@ -43,7 +43,7 @@ func (s *stubJobStore) addPending(job *domain.Job) {
 	s.claimQueue = append(s.claimQueue, job)
 }
 
-func (s *stubJobStore) Claim(_ context.Context, _ ...domain.JobStatus) (*domain.Job, error) {
+func (s *stubJobStore) ClaimForEncoding(_ context.Context) (*domain.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.claimErr != nil {
@@ -54,12 +54,13 @@ func (s *stubJobStore) Claim(_ context.Context, _ ...domain.JobStatus) (*domain.
 	}
 	job := s.claimQueue[0]
 	s.claimQueue = s.claimQueue[1:]
-	// Mirror real Claim behavior: flip to 'downloading' transiently.
+	// Mirror real ClaimForEncoding: flip 'encoding' → 'transcoding' (the
+	// non-claimable in-progress state) atomically on claim.
 	if r, ok := s.rows[job.ID]; ok {
-		r.Status = domain.JobStatusDownloading
+		r.Status = domain.JobStatusTranscoding
 	}
 	out := *job
-	out.Status = domain.JobStatusDownloading
+	out.Status = domain.JobStatusTranscoding
 	return &out, nil
 }
 

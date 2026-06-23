@@ -210,6 +210,57 @@ func (r *JobRepository) Claim(ctx context.Context, statuses ...domain.JobStatus)
 	return claimed, nil
 }
 
+// ClaimForEncoding atomically picks the oldest row in status='encoding'
+// (the download→encode handoff state) and flips it to 'transcoding' (the
+// in-progress state) inside one FOR UPDATE SKIP LOCKED transaction. The
+// returned row carries Status='transcoding'.
+//
+// This is the encoder's counterpart to Claim() and exists specifically to
+// close the double-encode race. The old path called Claim(ctx, 'encoding')
+// — which (mis)flipped to 'downloading' — and the encoder then re-flipped
+// the row BACK to 'encoding' for the whole ffmpeg run. Because nobody held
+// a row lock during that minutes-long encode and 'encoding' is the
+// claimable state, a second idle encoder worker re-claimed the SAME row and
+// spawned a second ffmpeg. Flipping to the dedicated, non-claimable
+// 'transcoding' state instead means the row drops out of the claimable set
+// the instant it is claimed, so the second worker sees nothing.
+//
+// Returns (nil, nil) when no 'encoding' row is available — callers MUST
+// handle that as "back off and retry later".
+func (r *JobRepository) ClaimForEncoding(ctx context.Context) (*domain.Job, error) {
+	var claimed *domain.Job
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row domain.Job
+		res := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("status = ?", domain.JobStatusEncoding).
+			Order("created_at ASC").
+			Limit(1).
+			Take(&row)
+		if stderrors.Is(res.Error, gorm.ErrRecordNotFound) {
+			return nil // claimed stays nil
+		}
+		if res.Error != nil {
+			return res.Error
+		}
+		now := time.Now()
+		upd := tx.Model(&row).Updates(map[string]any{
+			"status":     domain.JobStatusTranscoding,
+			"updated_at": now,
+		})
+		if upd.Error != nil {
+			return upd.Error
+		}
+		row.Status = domain.JobStatusTranscoding
+		row.UpdatedAt = now
+		claimed = &row
+		return nil
+	})
+	if err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "claim job for encoding")
+	}
+	return claimed, nil
+}
+
 // UpdateProgress writes a new progress_pct (and bumps updated_at).
 // pct = clamp(downloadedBytes * 100 / totalBytes, 0, 100). When
 // totalBytes <= 0 (anacrolix hasn't received metadata yet) we leave
@@ -425,18 +476,29 @@ func (r *JobRepository) Retry(ctx context.Context, oldID string) (*domain.Job, e
 }
 
 // ResumeInterruptedEncodes is the Phase-04 analogue of
-// ResumeInterruptedDownloads. Any row left in status='encoding' or
-// 'uploading' from a previous process with stale updated_at (> 1
-// hour) is rewritten to 'queued' so a worker re-claims it from the
-// top of the pipeline. Note we only rewrite STALE rows because an
-// active encoder worker may legitimately hold a row in 'encoding'
-// for many minutes while ffmpeg crunches. Run once at boot.
+// ResumeInterruptedDownloads. Any row left in an IN-PROGRESS encode state
+// ('transcoding' = mid-ffmpeg, 'uploading' = mid-MinIO-push) from a
+// previous process is rewritten to 'queued' so a worker re-claims it from
+// the top of the pipeline. Run once at boot.
+//
+// No staleness guard (the old version only rewrote rows stale > 1h): this
+// hook runs ONCE at boot, BEFORE this process's encoder pool starts, and
+// the previous process is already dead (the deploy recreates the single
+// library container stop-then-start). So every 'transcoding'/'uploading'
+// row at boot is definitively an orphan — a recent updated_at just means it
+// was killed mid-encode, which is exactly the case the 1h guard used to
+// strand. This now mirrors ResumeInterruptedDownloads, which likewise
+// requeues ALL 'downloading' rows unconditionally at boot.
+//
+// 'encoding' (the download→encode handoff / ready state) is deliberately
+// NOT requeued: it is not in-progress, and the encoder will claim it
+// normally via ClaimForEncoding, so it is self-healing.
 //
 // Returns the number of rows touched.
 func (r *JobRepository) ResumeInterruptedEncodes(ctx context.Context) (int64, error) {
 	res := r.db.WithContext(ctx).Exec(
 		"UPDATE library_jobs SET status = 'queued', updated_at = now() " +
-			"WHERE status IN ('encoding', 'uploading') AND updated_at < now() - interval '1 hour'",
+			"WHERE status IN ('transcoding', 'uploading')",
 	)
 	if res.Error != nil {
 		return 0, fmt.Errorf("resume interrupted encodes: %w", res.Error)
