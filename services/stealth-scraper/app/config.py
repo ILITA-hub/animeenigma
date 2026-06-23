@@ -98,6 +98,19 @@ class Config:
     # over-used profiles without waiting for the next request.
     reaper_interval_seconds: float = 30.0
 
+    # -- RAM-budgeted capacity (Phase 2) ------------------------------------ #
+    # The pool is governed by the COMBINED Camoufox/Firefox RSS, not a fixed
+    # instance count. soft = stop warming + evict idle sessions (back-pressure);
+    # hard = refuse a new browser launch (503 kind=capacity) + evict the LRU
+    # not-in-use session to reclaim.
+    # STEALTH_POOL_SIZE survives only as a high fail-safe ceiling used when the
+    # /proc RSS read fails.
+    ram_soft_bytes: int = 4 * 1024 * 1024 * 1024   # 4 GiB
+    ram_hard_bytes: int = 6 * 1024 * 1024 * 1024   # 6 GiB
+    ram_sample_seconds: float = 5.0
+    # Max concurrent HELD sessions per user_key (fairness axis, Phase 2).
+    user_quota: int = 2
+
     # -- self-heal (Phase 1) ------------------------------------------------ #
     # After this many consecutive in-page-fetch crashes ("Target closed" /
     # "context was destroyed") on the SAME warm session, the profile is torn
@@ -143,6 +156,10 @@ class Config:
             max_body_bytes=_int(g("STEALTH_MAX_BODY_BYTES"), 64 * 1024 * 1024),
             unactivated_grace_seconds=_int(g("STEALTH_UNACTIVATED_GRACE_SECONDS"), 45),
             reaper_interval_seconds=float(_int(g("STEALTH_REAPER_INTERVAL_SECONDS"), 30)),
+            ram_soft_bytes=_int(g("STEALTH_RAM_SOFT_BYTES"), 4 * 1024 * 1024 * 1024),
+            ram_hard_bytes=_int(g("STEALTH_RAM_HARD_BYTES"), 6 * 1024 * 1024 * 1024),
+            ram_sample_seconds=float(_int(g("STEALTH_RAM_SAMPLE_SECONDS"), 5)),
+            user_quota=_int(g("STEALTH_USER_QUOTA"), 2),
             poison_max=_int(g("STEALTH_POISON_MAX"), 2),
             readyz_saturation_seconds=float(
                 _int(g("STEALTH_READYZ_SATURATION_SECONDS"), 15)
