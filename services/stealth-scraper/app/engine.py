@@ -63,6 +63,7 @@ from . import metrics
 from .config import Config
 from .fingerprint import build_launch_options, proxy_to_playwright
 from .profiles import Profile, ProfileManager
+from .ramsampler import process_tree_rss
 from .recipes import ChallengeError, NotFoundError, Recipe, RecipeContext, RecipeError
 from .recipes.base import host_allowed, host_of, looks_like_challenge
 from .recipes.gogoanime import GogoanimeRecipe
@@ -166,6 +167,11 @@ class CamoufoxEngine:
         # not saturated. /readyz flips to 503 only once this persists past
         # cfg.readyz_saturation_seconds (a transient burst stays ready).
         self._saturated_since: float = 0.0
+        # RAM-budgeted admission (Phase 2). _ram_bytes is refreshed by a
+        # background sampler; the admission gate reads the cache on the request
+        # path (cheap) and force-resamples on a near-hard read.
+        self._ram_bytes: int = 0
+        self._ram_task: Any = None
 
     def set_logger(self, log: Any) -> None:
         self._log = log
@@ -176,11 +182,15 @@ class CamoufoxEngine:
         metrics.BROWSER_POOL_SIZE.set(0)
         metrics.ACTIVE_SESSIONS.set(0)
         self._reaper_task = asyncio.create_task(self._reaper_loop())
+        self._ram_task = asyncio.create_task(self._ram_sampler_loop())
 
     async def stop(self) -> None:
         if self._reaper_task is not None:
             self._reaper_task.cancel()
             self._reaper_task = None
+        if self._ram_task is not None:
+            self._ram_task.cancel()
+            self._ram_task = None
         self._sessions.clear()
         for pid, handle in list(self._handles.items()):
             try:
@@ -224,6 +234,8 @@ class CamoufoxEngine:
             "free_profiles": free,
             "live_browsers": len(self._handles),
             "active_sessions": len(self._sessions),
+            # RAM-budgeted capacity (Phase 2): last sampled combined RSS.
+            "ram_bytes": self._ram_bytes,
             "proxies": [
                 {"id": e.id, "type": e.type, "blocked": e.total_blocked}
                 for e in self.pool.all()
@@ -260,6 +272,10 @@ class CamoufoxEngine:
     async def _ensure_browser(self, profile: Profile, proxy_id: str) -> Any:
         if profile.launched and profile.proxy_id == proxy_id:
             return profile.context
+        # RAM admission: refuse a launch over the hard budget (reclaiming LRU
+        # first). A warm reuse (profile already launched on the same proxy)
+        # returns above and skips the gate — it consumes no NEW memory.
+        self._admit_launch()
         if profile.launched:
             await self._teardown(profile, reason="rotate")
 
@@ -456,6 +472,87 @@ class CamoufoxEngine:
                 return p
             await asyncio.sleep(0.1)
         return None
+
+    # -- RAM-budgeted admission (Phase 2) ----------------------------------- #
+    def _sample_ram(self) -> int:
+        """Combined Camoufox/Firefox RSS (bytes). Fail-safe: on any /proc read
+        error return 0 so the gate admits (the pool_size ceiling still bounds)."""
+        try:
+            return process_tree_rss()
+        except Exception:  # noqa: BLE001
+            return 0
+
+    def _read_ram(self) -> int:
+        """Force a fresh fail-safe RSS read and refresh the cache. ``_sample_ram``
+        is the protected reader (returns 0 on /proc error), but a test/override
+        may itself raise — treat ANY failure as 0 (admit) so the gate never
+        crashes the request path. Both the warming check and the admission gate
+        read RAM through here so a burst between sampler ticks can't slip past
+        the budget."""
+        try:
+            ram = self._sample_ram()
+        except Exception:  # noqa: BLE001
+            ram = 0
+        self._ram_bytes = ram
+        return ram
+
+    async def _ram_sampler_loop(self) -> None:
+        while True:
+            try:
+                await asyncio.sleep(self.cfg.ram_sample_seconds)
+                self._ram_bytes = self._sample_ram()
+                metrics.RAM_BYTES.set(self._ram_bytes)
+            except asyncio.CancelledError:
+                break
+            except Exception:  # noqa: BLE001
+                if self._log:
+                    self._log.exception("ram sampler tick failed")
+
+    def _warming_allowed(self) -> bool:
+        """False once combined RSS reaches the soft budget — new profiles are
+        not warmed under back-pressure (existing leases untouched)."""
+        return self._read_ram() < self.cfg.ram_soft_bytes
+
+    def _evict_one_lru(self) -> bool:
+        """Evict the least-recently-used NOT-in-use session (smallest
+        expires_at) to reclaim a browser slot. Returns True if one was freed.
+        Never touches an in-use session (a concurrent /hls fetch is awaiting it)."""
+        candidates = [
+            (s.expires_at, sid, s)
+            for sid, s in self._sessions.items()
+            if s.in_use <= 0
+        ]
+        if not candidates:
+            return False
+        candidates.sort(key=lambda t: t[0])
+        _, sid, session = candidates[0]
+        self._sessions.pop(sid, None)
+        self._spawn(_safe_close_page(session.page))
+        self.profiles.release(session.profile, ok=True)
+        metrics.ACTIVE_SESSIONS.set(len(self._sessions))
+        return True
+
+    def _admit_launch(self) -> None:
+        """Admission gate at the single browser-launch chokepoint.
+
+          - ram < soft            → admit.
+          - soft <= ram < hard    → admit, but proactively evict idle/expired
+                                     not-in-use sessions (back-pressure).
+          - ram >= hard           → refuse (CapacityExceeded); evict the LRU
+                                     not-in-use session to reclaim, then raise.
+        Fail-safe: _read_ram() returns 0 on a /proc (or sampler) error → always
+        admits, and the pool_size ceiling still bounds the launch."""
+        ram = self._read_ram()
+        if ram >= self.cfg.ram_hard_bytes:
+            metrics.ADMISSION_TOTAL.labels(
+                action="hard_evict" if self._evict_one_lru() else "hard_refuse"
+            ).inc()
+            raise CapacityExceeded(
+                f"combined RSS {ram} >= hard budget {self.cfg.ram_hard_bytes}"
+            )
+        if ram >= self.cfg.ram_soft_bytes:
+            self._evict_expired()  # drop idle/expired not-in-use sessions
+            metrics.ADMISSION_TOTAL.labels(action="soft_evict").inc()
 
     async def _open_session(
         self, partial: dict, context: Any, proxy_id: str, profile: Profile, page: Any
