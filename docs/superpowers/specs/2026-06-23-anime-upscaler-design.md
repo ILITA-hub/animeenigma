@@ -9,7 +9,7 @@
 
 A new admin-only microservice **`services/upscaler/`** on the permanent server orchestrates AI upscaling of library anime episodes. It splits a source episode into segments, hands them one at a time to a **provider-agnostic GPU worker container** that runs on an external "secure GPU cloud," collects the upscaled segments + logs back, reassembles + remuxes the original audio/subtitles, and stores the result to MinIO.
 
-The worker is a **self-sustained, remote-controllable container handed manually to an untrusted third-party GPU operator**. It has no inbound ports, no provider API coupling, and no persistent secrets — it **dials home** over one authenticated outbound channel to a hardened, Cloudflare-proxied edge (`ext.animeenigma.org`). All control, logs, and updates flow through that single channel.
+The worker is a **self-sustained, remote-controllable container handed manually to an untrusted third-party GPU operator**. It has no inbound ports, no provider API coupling, and no persistent secrets — it **dials home** over one authenticated outbound channel to a hardened, Cloudflare-proxied edge (`ext.animeenigma.org`). All control, logs, **metrics, remote shell**, and updates flow through that single channel.
 
 Two delivery paths share one worker image:
 
@@ -51,6 +51,8 @@ Target: 720p–1080p → 2K–4K. Default 2× (720→1440 "2K", 1080→2160 "4K"
 | D10 | Edge = **`ext.animeenigma.org`**, Cloudflare orange-cloud, hardened, minimal worker-only surface | Dedicated external ingress isolated from the main app; CF provides TLS/DDoS/WAF/rate-limit. |
 | D11 | **No internal info in the artifact.** Env var is `SERVER_URL`; no `SVO_URL`/internal hostnames; neutral local console output | The operator can read the container; it must reveal nothing about our architecture or content. |
 | D12 | Output stored to MinIO as a new variant; **store now, serve later** | Matches the concrete ask ("send to this server for storage"); player wiring is a follow-up. |
+| D13 | **Remote shell over dial-home** — admin-initiated, server-relayed exec/PTY multiplexed over the worker's outbound channel | We have no SSH/provider access into the box; this is the only way to debug a live worker. Low blast-radius because the worker holds no secrets. Admin-only, audited, scoped to the container, instantly revocable, disableable. |
+| D14 | **Full dial-home telemetry** → Prometheus `upscale_*` + Grafana | Worker reports GPU/host/pipeline metrics over the channel; server adds fleet/control-plane metrics. Observability is a first-class requirement, not an afterthought. Label discipline to avoid `worker_id` cardinality blowup. |
 
 ## 4. Architecture Overview
 
@@ -137,13 +139,13 @@ A separate, minimal vhost exposing **only** the worker API (`/worker/*` control 
 
 Same worker image, `MODE=realtime`, fast model, GPU **pinned to one viewing session** (not spot — can't preempt mid-watch). The worker pulls the source progressively, upscales just-in-time into a live HLS playlist; the server's `streaming` proxy restreams it to the player as another HLS source. Latency-bound; one GPU per active viewer. The worker + protocol support it from day one; only the realtime session manager + streaming wiring are deferred.
 
-## 8. Control / logs / updates protocol
+## 8. Control / logs / metrics / shell / updates protocol
 
-Two deliberately split channels (D8):
+Two deliberately split channels (D8). The WebSocket is a **multiplexed** transport — commands, logs, heartbeat/metrics, and the remote-shell exec stream are distinct frame types over the one outbound connection:
 
 | Channel | Transport | Carries | Why |
 |---|---|---|---|
-| **Control/logs** | one persistent **WebSocket** (worker→server, outbound), long-poll fallback | commands ↓, logs ↑, heartbeat/progress ↕ | small, chatty, low-latency, NAT-friendly, instant push |
+| **Control/logs/metrics/shell** | one persistent **WebSocket** (worker→server, outbound), long-poll fallback (no shell over fallback) | commands ↓, logs ↑, heartbeat+metrics ↕, exec stdin ↓ / stdout+stderr ↑ | small, chatty, low-latency, NAT-friendly, instant push, multiplexed |
 | **Data** | authenticated **HTTPS** GET/PUT | segment download / upscaled-segment upload | bulk throughput; never via WS frames |
 
 **Registration** — on boot the worker exchanges `ENROLL_TOKEN` for a short-lived session credential, opens the WS, sends `register {worker_id, gpu_info, image_version, models_available, capabilities}`. Server records it in the fleet registry.
@@ -154,8 +156,21 @@ Two deliberately split channels (D8):
 - `shutdown` — drain then exit (operator's box frees up).
 - `reconfigure` — change runtime knobs live (log verbosity, heartbeat interval, encode params, concurrency) — no restart.
 - `update` — drain + exit so a new image can replace it.
+- `exec` — open a remote-shell session (see Remote shell below).
 
-**Heartbeat/progress** — every few seconds: `fps, ETA, %, segment idx, VRAM, GPU util, model@version`. Also the liveness signal (missed beats ⇒ expire lease ⇒ re-lease; identical to spot kill).
+**Heartbeat/metrics** — every few seconds the worker emits a telemetry frame (`fps, ETA, %, segment idx, VRAM, GPU util, model@version`, plus the full set in §12). Also the liveness signal (missed beats ⇒ expire lease ⇒ re-lease; identical to spot kill).
+
+### Remote shell (exec over dial-home) — D13
+
+Because we have no SSH/provider access into the operator's box, the only way to inspect a live worker (a stuck `ffmpeg`, GPU state via `nvidia-smi`, a sample frame) is to relay a shell over the channel the worker already holds open.
+
+- **Server-initiated, admin-authenticated only.** An admin opens a session from the upscaler admin UI → the server sends an `exec` command over the worker's WS → the worker spawns a PTY (or a one-shot command) **inside its own container** and multiplexes stdin/stdout/stderr as exec frames. The worker never opens a shell unsolicited; the operator cannot trigger it.
+- **Scoped to the container**, runs as the container's non-root user — container isolation keeps it off the operator's host. Two modes: full interactive **PTY** (default, for debug) or **command-allowlist** (hardening option).
+- **Disableable** (`REMOTE_SHELL_ENABLED`, default on) and **instantly revocable** — revoking the worker session kills any live shell.
+- **Fully audited** — every session and command logged server-side with admin identity, worker, job, and timestamps.
+- **Time/idle-bounded** sessions.
+- **Low blast-radius by construction** — the worker holds no secrets, no creds, and only one episode's segments, so even a full shell can't reach the catalog/DB/MinIO or other jobs.
+- Not available over the long-poll fallback (PTY needs the live socket); falls back to allowlisted one-shot commands only if WS is unavailable.
 
 **Logs** — worker tees agent + `ffmpeg` + model stdout/stderr, tags each line `{source, level, segment, ts}`, streams over WS. Server ring-buffers per job in Redis (capped), flushes to object storage on completion. Admin live-tails via SSE; history via REST.
 
@@ -171,7 +186,14 @@ Two deliberately split channels (D8):
 - The box only ever sees **encrypted video segments of one episode** — never the catalog, DB, MinIO creds, signing keys, or other jobs.
 - **Opaque signed capability handles** for segment GET/PUT (HMAC, scoped to one job, expiring) — reuses the `videoutils.SignStreamURL` pattern. A worker cannot infer storage layout or reach another job's data.
 - **Process-and-delete**: nothing retained on the operator's disk after a segment returns.
-- **Instant revocation is the kill switch** (drop session, refuse leases) — replaces the "force-stop via API" we don't have.
+- **Instant revocation is the kill switch** (drop session, refuse leases, kill any live shell) — replaces the "force-stop via API" we don't have.
+
+### Remote shell (D13)
+- **Admin-only + server-initiated.** Exec frames are accepted by the worker **only** as a response to an authenticated `exec` command on its established session; never operator-triggerable.
+- **Container-scoped, non-root.** Runs inside the worker container; container isolation keeps it off the operator's host.
+- **Audited + bounded.** Full server-side audit (admin identity, commands, timing); idle/time limits; killed on session revoke.
+- **Disableable** via `REMOTE_SHELL_ENABLED`; optional command-allowlist mode instead of full PTY.
+- **Low blast-radius** — the worker has no secrets and only one job's segments, so a shell cannot exfiltrate anything sensitive.
 
 ### Edge hardening (`ext.animeenigma.org`)
 - **Origin locked to Cloudflare** — Authenticated Origin Pulls (or CF Tunnel); origin refuses non-CF traffic.
@@ -210,21 +232,47 @@ MINIO_*                # writeback to raw-library
 EXT_HMAC_SECRET        # edge token signing, ISOLATED from JWT_SECRET
 SEGMENT_SECONDS        # default 45
 DEFAULT_SCALE          # default 2
+REMOTE_SHELL_ENABLED   # default true — gate the dial-home exec/PTY capability
 ```
 
-## 12. Testing
+Worker env (operator-supplied): `SERVER_URL`, `ENROLL_TOKEN`, `MODE` (see §5.2); `REMOTE_SHELL_ENABLED` is server-side policy (the server simply won't issue `exec` when disabled).
 
-- **Unit (Go, table-driven, fake MinIO like `library` tests):** segmenter boundaries, lease/resume ledger state machine, finalizer concat/remux argument building, token signing/verification, command queue delivery, edge auth (enrollment → session → per-job token), rate-limit + generic-error behavior.
-- **Integration / E2E with `model=mock` (no GPU, CI-runnable):** run the *same worker image* with `--gpus` omitted + `model=mock` against a tiny clip; exercise enrollment → dial-home → lease → segment download → "upscale" → upload → reassemble → remux → MinIO writeback → control commands → **kill-mid-job → resume → completion**.
+## 12. Metrics & observability (D14)
+
+Full dial-home telemetry is a first-class deliverable. The worker reports its own GPU/host/pipeline metrics over the control channel; the server derives fleet/control-plane metrics and exposes everything as Prometheus `upscale_*` at `services/upscaler` `/metrics` (port 8095), following the project `libs/metrics` + `/metrics` pattern. A Grafana dashboard (`upscaler-fleet` + `upscaler-jobs`) visualizes them.
+
+**Worker-reported (over heartbeat/metrics frame):**
+- **GPU** — `upscale_worker_gpu_util_ratio`, `upscale_worker_vram_used_bytes` / `_total_bytes`, `upscale_worker_gpu_temp_celsius`, `upscale_worker_gpu_power_watts` (labels: `gpu_model`, `image_version`).
+- **Host** — CPU %, RAM used, ephemeral disk free, net up/down throughput.
+- **Pipeline (per stage)** — `upscale_decode_fps`, `upscale_inference_fps`, `upscale_encode_fps`, end-to-end `upscale_segment_fps`, `upscale_model_load_seconds`, frames processed.
+
+**Server-derived (per job/segment):**
+- Segment timings — download/decode/inference/encode/upload durations + bytes, retries.
+- Job — `upscale_job_progress_ratio`, `upscale_job_eta_seconds`, segments done/total/leased/failed, wall-clock, throughput (frames/s, MB/s).
+- Queue — jobs `queued|active|done|failed`, segment queue depth.
+
+**Control-plane / fleet (server-side):**
+- `upscale_workers_connected` (gauge; labels `gpu_model`, `image_version`, `model`), WS connects / reconnects / long-poll fallbacks.
+- Heartbeat latency, missed heartbeats, **`upscale_lease_expired_total`** (= spot preemptions), re-leases.
+- `upscale_command_total{type}` (incl. `exec`), exec sessions opened/duration.
+- Edge: enrollment attempts, auth failures, rate-limit hits, bytes in/out.
+- Model registry: fetches, checksum failures.
+
+**Label discipline:** keep `worker_id` OUT of high-frequency counters/histograms (cardinality); it appears only on the bounded `upscale_workers_connected` fleet gauge and in logs/audit. Use `gpu_model` / `image_version` / `model` / `status` for aggregation.
+
+## 13. Testing
+
+- **Unit (Go, table-driven, fake MinIO like `library` tests):** segmenter boundaries, lease/resume ledger state machine, finalizer concat/remux argument building, token signing/verification, command queue delivery (incl. `exec`), exec-frame multiplexing + audit logging + `REMOTE_SHELL_ENABLED` gate, metrics frame parsing → Prometheus mapping (+ label-cardinality assertions), edge auth (enrollment → session → per-job token), rate-limit + generic-error behavior.
+- **Integration / E2E with `model=mock` (no GPU, CI-runnable):** run the *same worker image* with `--gpus` omitted + `model=mock` against a tiny clip; exercise enrollment → dial-home → lease → segment download → "upscale" → upload → reassemble → remux → MinIO writeback → control commands → **remote-shell round-trip (open exec, run a command, assert output + audit row)** → metrics scrape (`/metrics` exposes expected `upscale_*` series) → **kill-mid-job → resume → completion**.
 - **Mock the GPU/real models** — never hit a real GPU or rented cloud in tests.
 - Real models (`best-quality`, `realtime`) are thin swaps behind the same plugin interface; validated manually on a real GPU during rollout.
 
-## 13. Phasing
+## 14. Phasing
 
-- **Phase 1 (build):** batch path end-to-end — admin manual trigger, segmenter, lease/checkpoint/resume, dial-home control plane (WS + long-poll), logs, model registry, finalizer + MinIO writeback, hardened `ext.` edge, `mock` model + full E2E test, neutral worker artifact with `best-quality` baked.
+- **Phase 1 (build):** batch path end-to-end — admin manual trigger, segmenter, lease/checkpoint/resume, dial-home control plane (WS + long-poll), logs, **remote shell (exec/PTY)**, **full `upscale_*` metrics + Grafana dashboard**, model registry, finalizer + MinIO writeback, hardened `ext.` edge, `mock` model + full E2E test, neutral worker artifact with `best-quality` baked.
 - **Phase 2 (later):** realtime restream via `streaming`; player quality-variant wiring; optional provider auto-launcher; optional CF mTLS client certs.
 
-## 14. Open items / risks
+## 15. Open items / risks
 
 - **Source retention coupling** — original dropped after `library`'s 24h seed window. v1: admin triggers while present; copy-to-staging on request; re-acquire if gone. A proactive "pin/retain for upscale" flag on `library` is a possible enhancement.
 - **Throughput reality** — per-frame upscaling is slow (24-min ep ≈ 35k frames ⇒ tens of minutes to hours on one GPU). This is the cost driver and the reason for spot + chunking. Communicate ETA prominently in the admin UI.
