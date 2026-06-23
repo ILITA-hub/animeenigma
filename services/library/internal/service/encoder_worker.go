@@ -251,12 +251,23 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 		return
 	}
 
-	// 4. Detect episode number.
-	episode, ok := p.detector.DetectEpisode(filepath.Base(source), job.Uploader)
-	if !ok {
-		p.failJob(ctx, job, "episode_detect_failed",
-			fmt.Sprintf("could not detect episode number from filename: %s", filepath.Base(source)))
-		return
+	// 4. Determine episode number. Autocache (and admin-with-known-episode) jobs
+	// persist the INTENDED episode at enqueue time (migration 009) — trust it
+	// directly. Filename detection is a fragile fallback (the generic detector
+	// only matches "- NN (" / "- NN [" styles and fails on common release names
+	// like "...S04E10 VOSTFR ...-Tsundere-Raws (CR).mkv"), used only when the
+	// episode is unknown (e.g. a manual folder ingest).
+	var episode int
+	if job.Episode != nil && *job.Episode > 0 {
+		episode = *job.Episode
+	} else {
+		var ok bool
+		episode, ok = p.detector.DetectEpisode(filepath.Base(source), job.Uploader)
+		if !ok {
+			p.failJob(ctx, job, "episode_detect_failed",
+				fmt.Sprintf("could not detect episode number from filename: %s", filepath.Base(source)))
+			return
+		}
 	}
 
 	// 5. Transcode.

@@ -254,6 +254,65 @@ func newHappyPool(t *testing.T, job *domain.Job) (*EncoderPool, *stubJobStore, *
 	return pool, js, es, up, mt
 }
 
+// TestEncoder_PrefersKnownJobEpisode — autocache (and admin-with-known-episode)
+// jobs carry the INTENDED episode from enqueue time (migration 009). The encoder
+// must trust it and NOT depend on filename detection, which fails for many real
+// release names (e.g. "...S04E10 VOSTFR ...-Tsundere-Raws (CR).mkv" — the generic
+// detector only matches "- NN (" / "- NN ["). With a detector that returns
+// ok=false, a job whose Episode is set must still encode to that episode number.
+func TestEncoder_PrefersKnownJobEpisode(t *testing.T) {
+	ep := 10
+	job := &domain.Job{
+		ID:          "job-ep",
+		Magnet:      validMagnet,
+		Uploader:    "Tsundere-Raws",
+		ShikimoriID: "61316",
+		Episode:     &ep,
+		Status:      domain.JobStatusEncoding,
+	}
+	pool, js, es, _, _ := newHappyPool(t, job)
+	// Force filename detection to FAIL — the known job.Episode must be used.
+	pool.detector = &stubDetector{ep: 0, ok: false}
+
+	pool.processJob(context.Background(), &domain.Job{
+		ID:          "job-ep",
+		Magnet:      validMagnet,
+		Uploader:    "Tsundere-Raws",
+		ShikimoriID: "61316",
+		Episode:     &ep,
+	})
+
+	if len(js.statusHistory) == 0 || js.statusHistory[len(js.statusHistory)-1].status != domain.JobStatusDone {
+		t.Fatalf("status history did not end at done: %+v", js.statusHistory)
+	}
+	if len(es.created) != 1 || es.created[0].EpisodeNumber != 10 {
+		t.Fatalf("episode = %+v, want EpisodeNumber=10 (from job.Episode)", es.created)
+	}
+}
+
+// TestEncoder_FallsBackToDetectorWhenEpisodeUnknown — when job.Episode is nil
+// (e.g. a manual folder ingest with no pre-resolved episode), the encoder still
+// uses filename detection.
+func TestEncoder_FallsBackToDetectorWhenEpisodeUnknown(t *testing.T) {
+	job := &domain.Job{
+		ID:          "job-nodet",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "123",
+		Status:      domain.JobStatusEncoding,
+	}
+	pool, _, es, _, _ := newHappyPool(t, job) // default detector: ep=1, ok=true
+	pool.processJob(context.Background(), &domain.Job{
+		ID:          "job-nodet",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "123",
+	})
+	if len(es.created) != 1 || es.created[0].EpisodeNumber != 1 {
+		t.Fatalf("episode = %+v, want EpisodeNumber=1 (detector fallback)", es.created)
+	}
+}
+
 func TestEncoder_HappyPath_WithShikimoriID(t *testing.T) {
 	job := &domain.Job{
 		ID:          "job-1",
