@@ -32,6 +32,7 @@ func NewRouter(
 	spotlightHandler *handler.SpotlightHandler,
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
 	capabilitiesHandler *handler.CapabilitiesHandler,
+	internalProviderPolicyHandler *handler.InternalProviderPolicyHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -92,6 +93,14 @@ func NewRouter(
 	// Same gateway-non-routing security model as the internal endpoints above.
 	if internalScraperProvidersHandler != nil {
 		r.Get("/internal/scraper/providers", internalScraperProvidersHandler.List)
+	}
+
+	// Probe-result endpoint: applies a scraper verdict (pass/fail) via the
+	// Task-5 state machine (providerpolicy.ApplyVerdict) and persists the
+	// resulting policy/health transition. Reachable only from within the
+	// Docker network — same gateway-non-routing security model as peers above.
+	if internalProviderPolicyHandler != nil {
+		r.Post("/internal/providers/probe-result", internalProviderPolicyHandler.ProbeResult)
 	}
 
 	// Playback-probe ae target set (newest distinct-anime library uploads mapped

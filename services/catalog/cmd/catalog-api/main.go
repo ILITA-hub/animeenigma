@@ -435,6 +435,12 @@ func main() {
 	// microservice at boot + on a refresh interval. Same gateway-non-routing
 	// security model as the other /internal/* endpoints above.
 	internalScraperProvidersHandler := handler.NewInternalScraperProvidersHandler(db.DB, log)
+
+	// Probe-result endpoint (Task 6 / self-healing Phase 3). Receives a
+	// pass/fail verdict from the scheduler/scraper probe and drives the
+	// provider policy state machine (ApplyVerdict), persisting the result.
+	// Same gateway-non-routing security model as peers above.
+	internalProviderPolicyHandler := handler.NewInternalProviderPolicyHandler(db.DB, cfg.ProviderPolicy, log)
 	// ae playback-probe target set: newest distinct-anime library uploads mapped
 	// to catalog UUIDs (library client + anime repo).
 	internalProbeHandler := handler.NewInternalProbeHandler(libraryClient, animeRepo, log)
@@ -540,7 +546,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

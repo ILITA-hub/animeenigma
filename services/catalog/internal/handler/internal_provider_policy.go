@@ -1,0 +1,94 @@
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/httputil"
+	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/providerpolicy"
+	"gorm.io/gorm"
+)
+
+// InternalProviderPolicyHandler applies probe verdicts to the provider state
+// machine via POST /internal/providers/probe-result. Reachable only from
+// within the Docker network (the gateway does not proxy /internal/*).
+type InternalProviderPolicyHandler struct {
+	db  *gorm.DB
+	cfg config.ProviderPolicyConfig
+	log *logger.Logger
+}
+
+// NewInternalProviderPolicyHandler constructs the handler.
+func NewInternalProviderPolicyHandler(db *gorm.DB, cfg config.ProviderPolicyConfig, log *logger.Logger) *InternalProviderPolicyHandler {
+	return &InternalProviderPolicyHandler{db: db, cfg: cfg, log: log}
+}
+
+type probeResultReq struct {
+	Provider string `json:"provider"`
+	Pass     bool   `json:"pass"`
+	Reason   string `json:"reason"`
+}
+
+// ProbeResult handles POST /internal/providers/probe-result.
+//
+// Body: {"provider":"gogoanime","pass":false,"reason":"status_403"}
+// Response on success: {"success":true,"data":{"provider","policy","health"}}
+// Response on skip (disabled or !scraper_operated): {"success":true,"data":{..., "skipped":true}}
+//
+// The handler is idempotent: repeated calls with the same verdict converge
+// to the same state (ApplyVerdict is pure-functional over the DB row).
+func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *http.Request) {
+	var req probeResultReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Provider == "" {
+		http.Error(w, `{"success":false,"error":"bad request"}`, http.StatusBadRequest)
+		return
+	}
+
+	var p domain.ScraperProvider
+	if err := h.db.First(&p, "name = ?", req.Provider).Error; err != nil {
+		http.Error(w, `{"success":false,"error":"unknown provider"}`, http.StatusNotFound)
+		return
+	}
+
+	// disabled is the hard lock; non-scraper rows are not under policy management.
+	if p.Policy == domain.PolicyDisabled || !p.ScraperOperated {
+		httputil.OK(w, map[string]any{
+			"provider": p.Name,
+			"policy":   p.Policy,
+			"health":   p.Health,
+			"skipped":  true,
+		})
+		return
+	}
+
+	now := time.Now().UTC()
+	if req.Reason != "" {
+		p.Reason = req.Reason
+	}
+	providerpolicy.ApplyVerdict(&p, req.Pass, now, h.cfg.DemoteAfter, h.cfg.PromoteAfter)
+
+	if err := h.db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", p.Name).
+		Updates(map[string]any{
+			"policy":         p.Policy,
+			"health":         p.Health,
+			"health_since":   p.HealthSince,
+			"policy_since":   p.PolicySince,
+			"last_probed_at": p.LastProbedAt,
+			"reason":         p.Reason,
+		}).Error; err != nil {
+		h.log.Errorw("probe-result persist failed", "provider", p.Name, "error", err)
+		http.Error(w, `{"success":false,"error":"persist failed"}`, http.StatusInternalServerError)
+		return
+	}
+
+	httputil.OK(w, map[string]any{
+		"provider": p.Name,
+		"policy":   p.Policy,
+		"health":   p.Health,
+	})
+}

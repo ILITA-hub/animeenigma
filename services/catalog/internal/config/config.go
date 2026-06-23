@@ -9,6 +9,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
 type Config struct {
@@ -38,6 +39,9 @@ type Config struct {
 	// instant queries (workstream hero-spotlight). Default mirrors the
 	// gateway's PROMETHEUS_SERVICE_URL incl. the /prometheus route-prefix.
 	Prometheus PrometheusConfig
+	// ProviderPolicy — thresholds + cadences for the probe-result endpoint's
+	// ApplyVerdict state machine (Task 6 / self-healing Phase 3).
+	ProviderPolicy ProviderPolicyConfig
 }
 
 type ServerConfig struct {
@@ -112,6 +116,17 @@ type PrometheusConfig struct {
 	URL string
 }
 
+// ProviderPolicyConfig holds the thresholds and cadences used by the
+// probe-result endpoint (Task 6) to apply ApplyVerdict transitions.
+// DemoteAfter: how long a provider must be down before auto→manual.
+// PromoteAfter: how long a recovering provider must pass before up.
+// Cadence: per-health-state probe intervals + sample sizes.
+type ProviderPolicyConfig struct {
+	Cadence      domain.CadenceConfig
+	DemoteAfter  time.Duration
+	PromoteAfter time.Duration
+}
+
 func Load() (*Config, error) {
 	if getEnv("JWT_SECRET", "") == "" {
 		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
@@ -179,6 +194,17 @@ func Load() (*Config, error) {
 		SpotlightEnabled: getEnvBool("SPOTLIGHT_ENABLED", true),
 		Prometheus: PrometheusConfig{
 			URL: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090/prometheus"),
+		},
+		ProviderPolicy: ProviderPolicyConfig{
+			Cadence: domain.CadenceConfig{
+				Up:               getEnvDuration("PROBE_CADENCE_UP", 6*time.Hour),
+				Recovering:       getEnvDuration("PROBE_CADENCE_RECOVERING", 12*time.Hour),
+				Manual:           getEnvDuration("PROBE_CADENCE_MANUAL", 24*time.Hour),
+				RecoveringSample: getEnvInt("PROBE_RECOVERING_SAMPLE", 3),
+				FullSample:       getEnvInt("PROBE_FULL_SAMPLE", 5),
+			},
+			DemoteAfter:  getEnvDuration("PROVIDER_DEMOTE_AFTER", 24*time.Hour),
+			PromoteAfter: getEnvDuration("PROVIDER_PROMOTE_AFTER", 24*time.Hour),
 		},
 	}, nil
 }
