@@ -5,7 +5,7 @@ import (
 )
 
 // TestLoad_PlaybackProbeDefaults asserts the PlaybackProbeCron field defaults
-// to the locked-in value `0 3 * * *` (03:00 daily, off-peak). The env var is
+// to `0 */6 * * *` (every 6h — the policy-machine base tick). The env var is
 // PLAYBACK_PROBE_CRON (replaced SCRAPER_PLAYABILITY_CANARY_CRON in Phase A).
 func TestLoad_PlaybackProbeDefaults(t *testing.T) {
 	t.Setenv("PLAYBACK_PROBE_CRON", "")
@@ -14,7 +14,7 @@ func TestLoad_PlaybackProbeDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() err = %v; want nil", err)
 	}
-	if got, want := cfg.Jobs.PlaybackProbeCron, "0 3 * * *"; got != want {
+	if got, want := cfg.Jobs.PlaybackProbeCron, "0 */6 * * *"; got != want {
 		t.Errorf("PlaybackProbeCron = %q; want %q", got, want)
 	}
 }

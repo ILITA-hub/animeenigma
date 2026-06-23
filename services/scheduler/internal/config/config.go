@@ -38,10 +38,10 @@ type JobsConfig struct {
 	AnnouncedStaleHours int
 	ReleasedStaleHours  int
 
-	// Phase A — daily playback-health probe trigger (replaces Phase 23 canary).
-	// PlaybackProbeCron: cron expression for the daily probe run.
-	//   Default `0 3 * * *` (03:00 local time, off-peak). The scheduler
-	//   POSTs analytics' /internal/probe/run; analytics runs the full
+	// Phase A — playback-health probe trigger (replaces Phase 23 canary).
+	// PlaybackProbeCron: cron expression for the probe run.
+	//   Default `0 */6 * * *` (every 6h — the policy-machine base tick). The
+	//   scheduler POSTs analytics' /internal/probe/run; analytics runs the full
 	//   catalog-signed resolve → HLS proxy validation chain.
 	PlaybackProbeCron string
 
@@ -142,8 +142,8 @@ func Load() (*Config, error) {
 			OngoingStaleHours:   getEnvInt("ONGOING_STALE_HOURS", 12),
 			AnnouncedStaleHours: getEnvInt("ANNOUNCED_STALE_HOURS", 72),
 			ReleasedStaleHours:  getEnvInt("RELEASED_STALE_HOURS", 168),
-			// Phase A — daily playback-health probe trigger.
-			PlaybackProbeCron: getEnv("PLAYBACK_PROBE_CRON", "0 3 * * *"),
+			// Phase A — playback-health probe trigger (every 6h — policy-machine base tick).
+			PlaybackProbeCron: getEnv("PLAYBACK_PROBE_CRON", "0 */6 * * *"),
 			// Phase 03 (v4.0) — daily read-threshold recompute trigger.
 			ReadThresholdCron:    getEnv("READ_THRESHOLD_CRON", "0 5 * * *"),
 			AnalyticsInternalURL: getEnv("ANALYTICS_INTERNAL_URL", "http://analytics:8092"),

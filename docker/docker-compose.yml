@@ -864,8 +864,8 @@ services:
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
       CATALOG_SERVICE_URL: http://catalog:8081
       SHIKIMORI_SYNC_CRON: "0 2 * * *"
-      # Phase 23 — scraper playability canary
-      SCRAPER_PLAYABILITY_CANARY_CRON: "0 3 * * *"
+      # Policy-machine base tick — playback-health probe every 6h
+      PLAYBACK_PROBE_CRON: "0 */6 * * *"
       SUBTITLE_PROBE_CRON: "${SUBTITLE_PROBE_CRON:-*/5 * * * *}"
       SCRAPER_BASE_URL: http://scraper:8088
       CANARY_REPORT_DIR: /data/reports/canary-runs
