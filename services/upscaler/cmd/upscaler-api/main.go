@@ -15,6 +15,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/transport"
 )
 
@@ -58,8 +59,8 @@ func main() {
 		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
 	}
 
-	// Auto-migrate schema (empty for Task 1; models added in Task 2).
-	if err := db.AutoMigrate(); err != nil {
+	// Auto-migrate schema
+	if err := db.DB.AutoMigrate(&domain.UpscaleJob{}, &domain.UpscaleSegment{}, &domain.UpscaleWorker{}, &domain.UpscaleModel{}); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 
