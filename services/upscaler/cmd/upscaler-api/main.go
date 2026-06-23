@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Auto-migrate schema
-	if err := db.DB.AutoMigrate(&domain.UpscaleJob{}, &domain.UpscaleSegment{}, &domain.UpscaleWorker{}, &domain.UpscaleModel{}); err != nil {
+	if err := db.DB.AutoMigrate(&domain.UpscaleJob{}, &domain.UpscaleSegment{}, &domain.UpscaleWorker{}, &domain.UpscaleModel{}, &domain.UpscaleEnrollToken{}); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 

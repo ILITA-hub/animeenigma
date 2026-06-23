@@ -182,32 +182,35 @@ func TestIsValidType_RejectsUnknownTypes(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// Frame.Decode failure on type mismatch
+// Frame.Decode failure paths
 // --------------------------------------------------------------------------
 
-func TestFrame_Decode_FailsGracefullyOnTypeMismatch(t *testing.T) {
-	// Build a HeartbeatPayload frame, then try to decode it into MetricsPayload.
-	// JSON unmarshal won't error (numeric fields just get zero values) but the
-	// key test is that Decode does NOT panic and returns a usable (zero) struct.
-	hp := HeartbeatPayload{JobID: "j", SegmentIdx: 1, ProgressPct: 50, ETASeconds: 10}
-	f, err := NewFrame("heartbeat", 1, hp)
-	if err != nil {
-		t.Fatalf("NewFrame: %v", err)
+// TestFrame_Decode_FailsOnTypeMismatch asserts a real decode error when a
+// field's JSON type does not match the target Go type (string vs int).
+func TestFrame_Decode_FailsOnTypeMismatch(t *testing.T) {
+	// "seq" is a string in the payload but HeartbeatPayload.SegmentIdx is an int.
+	f := Frame{Type: "heartbeat", Seq: 1, Payload: json.RawMessage(`{"segment_idx": "not-an-int"}`)}
+	var hp HeartbeatPayload
+	if err := f.Decode(&hp); err == nil {
+		t.Error("Decode of a string into an int field should return an error")
 	}
 
-	// Decode into wrong type — should succeed (JSON is lenient) without panic.
-	var mp MetricsPayload
-	if err := f.Decode(&mp); err != nil {
-		// A decode error here is also acceptable for strict implementations.
-		t.Logf("Decode into wrong type returned error (ok): %v", err)
-	}
-	// No panic means the test passed.
-
-	// Explicitly broken JSON payload.
+	// Explicitly broken JSON payload also errors.
 	f2 := Frame{Type: "heartbeat", Seq: 2, Payload: json.RawMessage(`{broken`)}
 	var hp2 HeartbeatPayload
 	if err := f2.Decode(&hp2); err == nil {
 		t.Error("Decode on malformed JSON should return an error")
+	}
+}
+
+// TestFrame_Decode_NilPayload asserts a clean error (not a panic) when the
+// Frame has a nil/empty Payload — json.Unmarshal of nil returns "unexpected
+// end of JSON input".
+func TestFrame_Decode_NilPayload(t *testing.T) {
+	var f Frame // zero value: Payload is nil
+	var hp HeartbeatPayload
+	if err := f.Decode(&hp); err == nil {
+		t.Error("Decode of a nil payload should return an error, got nil")
 	}
 }
 
