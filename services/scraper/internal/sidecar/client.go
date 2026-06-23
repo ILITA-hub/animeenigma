@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/userkey"
 )
 
 const maxBody = 1 << 20 // 1 MiB — resolve responses are small JSON.
@@ -56,6 +57,7 @@ type resolveRequest struct {
 	Episode  int    `json:"episode,omitempty"`
 	Category string `json:"category,omitempty"`
 	BaseURL  string `json:"base_url,omitempty"`
+	UserKey  string `json:"user_key,omitempty"`
 }
 
 type subtitle struct {
@@ -110,6 +112,7 @@ func (c *Client) ResolveEmbed(
 		EmbedURL: embedURL,
 		Category: string(category),
 		BaseURL:  baseURL,
+		UserKey:  userkey.FromContext(ctx),
 	})
 }
 

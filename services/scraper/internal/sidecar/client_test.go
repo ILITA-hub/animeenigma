@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/userkey"
 )
 
 const okBody = `{"success":true,"data":{
@@ -203,6 +204,41 @@ func TestFetch_TransportErrorIsProviderDown(t *testing.T) {
 	_, _, err := c.Fetch(context.Background(), "nineanime", "https://9anime.me.uk/x")
 	if !errors.Is(err, domain.ErrProviderDown) {
 		t.Fatalf("want ErrProviderDown, got %v", err)
+	}
+}
+
+func TestResolveEmbed_ForwardsUserKeyFromContext(t *testing.T) {
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = decodeJSON(r, &gotReq)
+		_, _ = w.Write([]byte(okBody))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 5*time.Second)
+	ctx := userkey.WithUserKey(context.Background(), "alice")
+	if _, err := c.ResolveEmbed(ctx, "gogoanime", "https://x/y", domain.CategorySub, "https://b"); err != nil {
+		t.Fatalf("ResolveEmbed: %v", err)
+	}
+	if gotReq["user_key"] != "alice" {
+		t.Errorf("user_key = %v; want alice", gotReq["user_key"])
+	}
+}
+
+func TestResolveEmbed_OmitsUserKeyWhenAbsent(t *testing.T) {
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = decodeJSON(r, &gotReq)
+		_, _ = w.Write([]byte(okBody))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 5*time.Second)
+	if _, err := c.ResolveEmbed(context.Background(), "gogoanime", "https://x/y", domain.CategorySub, "https://b"); err != nil {
+		t.Fatalf("ResolveEmbed: %v", err)
+	}
+	if _, present := gotReq["user_key"]; present {
+		t.Errorf("user_key present on anon request: %v", gotReq)
 	}
 }
 

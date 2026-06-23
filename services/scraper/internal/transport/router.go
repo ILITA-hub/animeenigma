@@ -10,6 +10,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/userkey"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -124,6 +125,7 @@ func NewRouter(
 	// gate per D6, with the WR-10 private-IP defense-in-depth applied to
 	// the admin sub-route only).
 	r.Route("/scraper", func(r chi.Router) {
+		r.Use(userkey.Middleware)
 		r.Get("/episodes", scraperHandler.GetEpisodes)
 		r.Get("/servers", scraperHandler.GetServers)
 		r.Get("/stream", scraperHandler.GetStream)
