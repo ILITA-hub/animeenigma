@@ -273,16 +273,19 @@
     <div v-if="openMenu === 'subs'" ref="subsMenuEl" class="pl-floating pl-floating--btnmenu" @click.stop>
       <SubtitlesMenu
         :sub-lang="state.subLang.value"
-        :sub-langs="subLangsAvailable"
+        :available-sub-langs="availableSubLangs"
+        :provider-chip="providerChip"
+        :provider-active="providerActive"
         :hardsub-note="hardsubNote"
         :sub-size="state.subSize.value"
         :sub-bg="state.subBg.value"
         :sub-offset="state.subOffset.value"
-        @update:sub-lang="v => { state.subLang.value = v }"
+        @pick-lang="onPickSubLang"
+        @select-provider="onSelectProviderSub"
         @update:sub-size="v => { state.subSize.value = v }"
         @update:sub-bg="v => { state.subBg.value = v }"
         @update:sub-offset="v => { state.subOffset.value = v }"
-        @open-browse="() => { browseOpen = true; void ensureSubsLoaded() }"
+        @open-browse="() => { openMenu = null; browseOpen = true; void ensureSubsLoaded() }"
       />
     </div>
 
@@ -362,7 +365,7 @@ import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
-import { pickDefaultSubtitle } from '@/composables/aePlayer/pickDefaultSubtitle'
+import { pickDefaultSubtitle, pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
 import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
@@ -2196,7 +2199,10 @@ function autoSelectSubtitle() {
   if (subUserDecided || chosenSub.value) return
   if (state.combo.value.audio !== 'sub') return // only SUB/raw cuts
   if (hardsubNote.value) return                 // burned-in already
-  const pick = pickDefaultSubtitle(subtitleTracks.value, { lang: state.combo.value.lang })
+  // Prefer the provider's own bundled track; else best match for the audio language.
+  const pick =
+    providerBundledTracks.value[0] ??
+    pickDefaultSubtitle(subtitleTracks.value, { lang: state.combo.value.lang })
   if (pick) {
     chosenSub.value = pick
     state.subLang.value = pick.lang
@@ -2223,12 +2229,24 @@ watch(
 // Provider tracks (and late aggregation) can arrive after the first tick.
 watch(subtitleTracks, () => autoSelectSubtitle())
 
-// Real subtitle languages — only what's actually loaded as a soft track
-// (the menu renders the "Off" option itself). Provider hardsubs are burned
-// into the video and are NOT a selectable track, so a fresh stream offers
-// nothing here until the user browses one in.
-const subLangsAvailable = computed(() =>
-  chosenSub.value ? [chosenSub.value.lang] : [],
+// Real distinct languages that have a loaded soft track (provider-bundled +
+// aggregated Jimaku/OpenSubtitles). Drives which RU/EN/JP fast buttons are enabled.
+const availableSubLangs = computed(() =>
+  [...new Set(subtitleTracks.value.map((t) => t.lang))],
+)
+
+// Provider-bundled soft subs that shipped with the resolved stream.
+const providerBundledTracks = computed<SubTrack[]>(
+  () => (providerSubtitles.value ?? []) as SubTrack[],
+)
+const providerChip = computed<{ provider: string } | null>(() =>
+  providerBundledTracks.value.length > 0
+    ? { provider: providerBundledTracks.value[0].provider }
+    : null,
+)
+const providerBundledUrls = computed(() => new Set(providerBundledTracks.value.map((t) => t.url)))
+const providerActive = computed(
+  () => !!chosenSub.value && providerBundledUrls.value.has(chosenSub.value.url),
 )
 
 // Informational note for the subs menu: when there's no soft track but the
@@ -2236,6 +2254,7 @@ const subLangsAvailable = computed(() =>
 const hardsubNote = computed(() => {
   if (chosenSub.value) return null
   if (state.combo.value.audio !== 'sub') return null
+  if (subtitleTracks.value.length > 0) return null // soft tracks exist → not hardsubbed
   const prov = activeProviderName.value
   if (!prov) return null
   const langName =
@@ -2258,6 +2277,19 @@ function onSubtitlesOff() {
   chosenSub.value = null
   state.subLang.value = 'off'
   browseOpen.value = false
+}
+
+// Quick-chooser RU/EN/JP fast button → pick the best track for that language.
+function onPickSubLang(v: string) {
+  if (v === 'off') { onSubtitlesOff(); return }
+  const track = pickBestForLang(subtitleTracks.value, v)
+  if (track) onSelectSubTrack(track)
+}
+
+// Quick-chooser provider chip → select the provider's bundled track.
+function onSelectProviderSub() {
+  const t = providerBundledTracks.value[0]
+  if (t) onSelectSubTrack(t)
 }
 
 // ─── Resume pill ─────────────────────────────────────────────────────────────
