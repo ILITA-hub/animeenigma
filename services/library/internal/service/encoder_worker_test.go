@@ -268,6 +268,7 @@ func TestEncoder_PrefersKnownJobEpisode(t *testing.T) {
 		Uploader:    "Tsundere-Raws",
 		ShikimoriID: "61316",
 		Episode:     &ep,
+		Source:      domain.JobSourceAutocache,
 		Status:      domain.JobStatusEncoding,
 	}
 	pool, js, es, _, _ := newHappyPool(t, job)
@@ -280,6 +281,7 @@ func TestEncoder_PrefersKnownJobEpisode(t *testing.T) {
 		Uploader:    "Tsundere-Raws",
 		ShikimoriID: "61316",
 		Episode:     &ep,
+		Source:      domain.JobSourceAutocache,
 	})
 
 	if len(js.statusHistory) == 0 || js.statusHistory[len(js.statusHistory)-1].status != domain.JobStatusDone {
@@ -287,6 +289,17 @@ func TestEncoder_PrefersKnownJobEpisode(t *testing.T) {
 	}
 	if len(es.created) != 1 || es.created[0].EpisodeNumber != 10 {
 		t.Fatalf("episode = %+v, want EpisodeNumber=10 (from job.Episode)", es.created)
+	}
+	// Autocache jobs must tag the episode as autocache (storage class), with the
+	// freshness basis set, else the Accountant/Evictor mislabel it as admin.
+	if es.created[0].Source != domain.EpisodeSourceAutocache {
+		t.Fatalf("episode Source = %q, want autocache", es.created[0].Source)
+	}
+	if es.created[0].Track != domain.EpisodeTrackRaw {
+		t.Fatalf("episode Track = %q, want raw", es.created[0].Track)
+	}
+	if es.created[0].DownloadedAt == nil {
+		t.Fatalf("episode DownloadedAt is nil; want set (freshness rule-1 basis)")
 	}
 }
 
@@ -310,6 +323,10 @@ func TestEncoder_FallsBackToDetectorWhenEpisodeUnknown(t *testing.T) {
 	})
 	if len(es.created) != 1 || es.created[0].EpisodeNumber != 1 {
 		t.Fatalf("episode = %+v, want EpisodeNumber=1 (detector fallback)", es.created)
+	}
+	// A non-autocache (manual/admin ingest) job stays storage-class admin.
+	if es.created[0].Source != domain.EpisodeSourceAdmin {
+		t.Fatalf("episode Source = %q, want admin", es.created[0].Source)
 	}
 }
 

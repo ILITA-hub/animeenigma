@@ -325,6 +325,7 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 		jobIDCopy := job.ID
 		duration := result.DurationSec
 		size := result.SizeBytes
+		downloadedAt := time.Now()
 		ep := &domain.Episode{
 			ShikimoriID:   job.ShikimoriID,
 			EpisodeNumber: episode,
@@ -332,6 +333,15 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 			MinioPath:     prefix,
 			DurationSec:   &duration,
 			SizeBytes:     &size,
+			// Storage class drives the Accountant byte-accounting and the
+			// Evictor's order (autocache is evicted before admin) + freshness
+			// windows. Without this the column defaulted to 'admin', so every
+			// auto-downloaded episode was mislabelled as protected admin content.
+			Source: episodeSourceFor(job.Source),
+			Track:  domain.EpisodeTrackRaw,
+			// downloaded_at is the Fresh-rule-1 basis; set it to now (the
+			// download finished moments ago) so eviction freshness works.
+			DownloadedAt: &downloadedAt,
 		}
 		if err := p.episodeRepo.Create(ctx, ep); err != nil {
 			// Duplicate (re-encode of an existing episode) → log + continue.
@@ -381,6 +391,17 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 	if p.invalidator != nil && job.ShikimoriID != "" {
 		p.invalidator.Invalidate(ctx, job.ShikimoriID)
 	}
+}
+
+// episodeSourceFor maps a job's source to the episode storage class. Only the
+// Planner-driven autocache path produces 'autocache' content; every other path
+// (manual / nyaa / animetosho / jackett admin ingest) is 'admin' — longer
+// freshness, lower eviction priority.
+func episodeSourceFor(js domain.JobSource) domain.EpisodeSource {
+	if js == domain.JobSourceAutocache {
+		return domain.EpisodeSourceAutocache
+	}
+	return domain.EpisodeSourceAdmin
 }
 
 // ---- DefaultSourceResolver ----
