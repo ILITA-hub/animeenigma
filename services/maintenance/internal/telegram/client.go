@@ -66,9 +66,27 @@ type ChatMember struct {
 }
 
 type Update struct {
-	UpdateID      int64          `json:"update_id"`
-	Message       *Message       `json:"message,omitempty"`
-	CallbackQuery *CallbackQuery `json:"callback_query,omitempty"`
+	UpdateID        int64                   `json:"update_id"`
+	Message         *Message                `json:"message,omitempty"`
+	CallbackQuery   *CallbackQuery          `json:"callback_query,omitempty"`
+	MessageReaction *MessageReactionUpdated `json:"message_reaction,omitempty"`
+}
+
+// ReactionType is one element of a message's reaction list. Type is
+// "emoji" | "custom_emoji" | "paid"; Emoji is set only when Type == "emoji".
+type ReactionType struct {
+	Type  string `json:"type"`
+	Emoji string `json:"emoji,omitempty"`
+}
+
+// MessageReactionUpdated is a Bot API message_reaction update: a single user
+// changed their reaction on a message. User is absent for anonymous reactions.
+type MessageReactionUpdated struct {
+	Chat        Chat           `json:"chat"`
+	MessageID   int            `json:"message_id"`
+	User        *UserInfo      `json:"user,omitempty"`
+	OldReaction []ReactionType `json:"old_reaction"`
+	NewReaction []ReactionType `json:"new_reaction"`
 }
 
 type Message struct {
@@ -244,9 +262,14 @@ func (c *Client) GetChatMember(userID int64) (*ChatMember, error) {
 	return &member, nil
 }
 
+// allowedUpdates is the getUpdates allowed_updates filter. message_reaction is
+// required so the bot receives 💔-reaction aborts (delivered only because the
+// bot is a supergroup admin).
+const allowedUpdates = `["message","callback_query","message_reaction"]`
+
 // GetUpdates long-polls for new messages. Blocks up to timeoutSec.
 func (c *Client) GetUpdates(offset int64, timeoutSec int) ([]Update, error) {
-	url := fmt.Sprintf("getUpdates?offset=%d&timeout=%d&allowed_updates=[\"message\",\"callback_query\"]", offset, timeoutSec)
+	url := fmt.Sprintf("getUpdates?offset=%d&timeout=%d&allowed_updates=%s", offset, timeoutSec, allowedUpdates)
 	resp, err := c.get(url)
 	if err != nil {
 		return nil, err
