@@ -16,55 +16,85 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+// getenv returns the value of env var k, or def when unset/empty.
+func getenv(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+// openIntegrationDB provisions a FRESH per-test Postgres database (CREATE
+// DATABASE upscaler_it_<pid>_<nanotime>) so concurrent/parallel tests never
+// share state — mirrors the per-test-DB pattern in
+// services/library/internal/repo/*_integration_test.go. AutoMigrate is applied
+// twice to prove idempotence (the second apply must not error). The fresh DB is
+// dropped WITH (FORCE) in t.Cleanup.
 func openIntegrationDB(t *testing.T) *gorm.DB {
 	t.Helper()
-
-	dsn := os.Getenv("TEST_DB_DSN")
-	if dsn == "" {
-		host := os.Getenv("PGHOST")
-		if host == "" {
-			host = "localhost"
-		}
-		port := os.Getenv("PGPORT")
-		if port == "" {
-			port = "5432"
-		}
-		user := os.Getenv("PGUSER")
-		if user == "" {
-			user = "postgres"
-		}
-		password := os.Getenv("PGPASSWORD")
-		dbname := os.Getenv("PGDATABASE")
-		if dbname == "" {
-			dbname = "upscaler_integration_test"
-		}
-		dsn = fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-			host, port, user, password, dbname,
-		)
+	if os.Getenv("INTEGRATION") != "1" {
+		t.Skip("set INTEGRATION=1 to run upscaler integration tests")
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+	host := getenv("DB_HOST", getenv("PGHOST", "localhost"))
+	port := getenv("DB_PORT", getenv("PGPORT", "5432"))
+	user := getenv("DB_USER", getenv("PGUSER", "postgres"))
+	pass := getenv("DB_PASSWORD", getenv("PGPASSWORD", "postgres"))
+
+	dbName := fmt.Sprintf("upscaler_it_%d_%d", os.Getpid(), time.Now().UnixNano())
+
+	// 1. Connect to the admin (postgres) database to issue CREATE DATABASE.
+	adminDSN := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable",
+		host, port, user, pass,
+	)
+	adminDB, err := gorm.Open(postgres.Open(adminDSN), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
 		t.Skipf("integration postgres unavailable: %v", err)
 	}
+	if err := adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", dbName)).Error; err != nil {
+		t.Fatalf("create database %s: %v", dbName, err)
+	}
 
-	if err := db.AutoMigrate(
+	// 2. Open a connection to the fresh per-test database.
+	dsn := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, pass, dbName,
+	)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("connect test db %s: %v", dbName, err)
+	}
+
+	// 3. AutoMigrate, then re-apply to prove idempotence.
+	models := []interface{}{
 		&domain.UpscaleJob{},
 		&domain.UpscaleSegment{},
 		&domain.UpscaleWorker{},
 		&domain.UpscaleModel{},
-	); err != nil {
+	}
+	if err := db.AutoMigrate(models...); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
+	if err := db.AutoMigrate(models...); err != nil {
+		t.Fatalf("re-apply AutoMigrate must be idempotent: %v", err)
+	}
 
+	// 4. Close the connection and DROP the per-test database on cleanup.
 	t.Cleanup(func() {
-		db.Exec("DELETE FROM upscale_segments")
-		db.Exec("DELETE FROM upscale_jobs")
-		db.Exec("DELETE FROM upscale_workers")
-		db.Exec("DELETE FROM upscale_models")
+		if sqlDB, _ := db.DB(); sqlDB != nil {
+			_ = sqlDB.Close()
+		}
+		if err := adminDB.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", dbName)).Error; err != nil {
+			t.Logf("drop database %s (cleanup): %v", dbName, err)
+		}
+		if asqlDB, _ := adminDB.DB(); asqlDB != nil {
+			_ = asqlDB.Close()
+		}
 	})
 	return db
 }

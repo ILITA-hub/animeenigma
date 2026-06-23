@@ -117,7 +117,8 @@ func (r *SegmentRepository) ExpireStale(ctx context.Context, now time.Time) (int
 		Model(&domain.UpscaleSegment{}).
 		Where("status = ? AND lease_expires_at < ?", domain.SegLeased, now).
 		Updates(map[string]interface{}{
-			"status":    domain.SegPending,
+			"status": domain.SegPending,
+			// worker_id cleared to "" (sentinel) — WorkerID is non-pointer string by design; no query relies on NULL
 			"worker_id": "",
 		})
 	if result.Error != nil {
