@@ -342,13 +342,14 @@ type SearchFilters struct {
 	PageSize  int
 	Source    string
 	// Phase 15 (UX-31) — multi-axis browse sidebar filters.
-	// Kind matches the Shikimori-source enum: "tv" / "movie" / "ova" /
-	// "ona" / "special". Empty = no filter.
+	// Kinds is the OR-set of Shikimori kinds: "tv" / "movie" / "ova" /
+	// "ona" / "special" / "tv_special" / "music" / "cm" / "pv". A row
+	// passes when its kind matches ANY selected value. Empty = no filter.
 	// Providers is the OR-set of {"kodik","dub","raw","ae"} → columns
 	// has_kodik/has_dub/has_raw/has_video — a row passes when ANY of the
 	// selected columns is true. Empty = no filter. Unknown values dropped at
 	// the handler. StudioIDs is an OR-set over the anime_studios join.
-	Kind      string
+	Kinds     []string
 	Providers []string
 	// ScoreMin filters to anime with score >= this value. nil = no filter.
 	ScoreMin *float64

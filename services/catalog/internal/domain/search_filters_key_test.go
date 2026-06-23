@@ -22,7 +22,7 @@ func TestSearchFilters_CacheKey_DiscriminatesFilters(t *testing.T) {
 		"yearTo":    mutate(base, func(f *SearchFilters) { f.YearTo = intp(2020) }),
 		"season":    mutate(base, func(f *SearchFilters) { f.Season = "winter" }),
 		"status":    mutate(base, func(f *SearchFilters) { f.Status = "ongoing" }),
-		"kind":      mutate(base, func(f *SearchFilters) { f.Kind = "movie" }),
+		"kind":      mutate(base, func(f *SearchFilters) { f.Kinds = []string{"movie"} }),
 		"providers": mutate(base, func(f *SearchFilters) { f.Providers = []string{"kodik"} }),
 		"scoreMin":  mutate(base, func(f *SearchFilters) { f.ScoreMin = f64p(7.5) }),
 		"sort":      mutate(base, func(f *SearchFilters) { f.Sort = "year" }),

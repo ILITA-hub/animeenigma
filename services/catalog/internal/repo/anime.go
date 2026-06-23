@@ -148,11 +148,11 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 	if filters.Status != "" {
 		query = query.Where("status = ?", filters.Status)
 	}
-	// Phase 15 (UX-31) — Kind is a simple equality match against the
-	// Shikimori-source enum. Whitelisted at the handler so unknown values
-	// never reach the SQL.
-	if filters.Kind != "" {
-		query = query.Where("kind = ?", filters.Kind)
+	// Phase 15 (UX-31) — Kinds is an OR-set over the Shikimori kind enum.
+	// A row passes when its kind matches ANY selected value. Whitelisted at
+	// the handler so unknown values never reach the SQL.
+	if len(filters.Kinds) > 0 {
+		query = query.Where("kind IN ?", filters.Kinds)
 	}
 	// Phase 15 (UX-31) — Providers is an OR-set across the 4 has_{provider}
 	// boolean columns. A row passes when ANY of the selected providers is

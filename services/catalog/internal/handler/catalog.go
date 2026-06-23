@@ -665,13 +665,21 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		}
 	}
 
-	// Phase 15 (UX-31) — Kind filter. Whitelist matches the Shikimori-source
-	// enum and the frontend radio set. Unknown values silently drop to
-	// no-filter so a malicious value can't reach the SQL.
-	if kind := query.Get("kind"); kind != "" {
-		switch kind {
-		case "tv", "movie", "ova", "ona", "special":
-			filters.Kind = kind
+	// Phase 15 (UX-31) — Kinds filter (comma-separated, e.g. "tv,movie").
+	// Whitelist matches the canonical Shikimori kind set and the frontend
+	// FilterCheckboxList options. Unknown values silently drop so a malicious
+	// value can't reach the SQL. Duplicates collapse via `seen`.
+	if kinds := query.Get("kind"); kinds != "" {
+		seen := map[string]bool{}
+		for _, k := range strings.Split(kinds, ",") {
+			k = strings.TrimSpace(strings.ToLower(k))
+			switch k {
+			case "tv", "movie", "ova", "ona", "special", "tv_special", "music", "cm", "pv":
+				if !seen[k] {
+					filters.Kinds = append(filters.Kinds, k)
+					seen[k] = true
+				}
+			}
 		}
 	}
 

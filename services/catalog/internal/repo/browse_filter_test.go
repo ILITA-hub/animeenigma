@@ -96,6 +96,40 @@ func TestAnimeRepository_Search_ProviderColumns(t *testing.T) {
 	}
 }
 
+func TestAnimeRepository_Search_KindsFilter_ORSet(t *testing.T) {
+	db := setupBrowseFilterTestDB(t)
+	r := NewAnimeRepository(db)
+	ctx := context.Background()
+
+	seedBrowseAnime(t, db, "tv", "A TV Show")
+	seedBrowseAnime(t, db, "mv", "A Movie")
+	seedBrowseAnime(t, db, "ova", "An OVA")
+	require.NoError(t, db.Exec(`UPDATE animes SET kind='tv' WHERE id='tv'`).Error)
+	require.NoError(t, db.Exec(`UPDATE animes SET kind='movie' WHERE id='mv'`).Error)
+	require.NoError(t, db.Exec(`UPDATE animes SET kind='ova' WHERE id='ova'`).Error)
+
+	// OR-set: selecting tv+movie returns BOTH, not the (empty) intersection.
+	got, total, err := r.Search(ctx, domain.SearchFilters{
+		Kinds: []string{"tv", "movie"}, Page: 1, PageSize: 20,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	ids := map[string]bool{}
+	for _, a := range got {
+		ids[a.ID] = true
+	}
+	require.True(t, ids["tv"] && ids["mv"])
+	require.False(t, ids["ova"])
+
+	// Single kind still works.
+	got, total, err = r.Search(ctx, domain.SearchFilters{
+		Kinds: []string{"ova"}, Page: 1, PageSize: 20,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, "ova", got[0].ID)
+}
+
 func TestAnimeRepository_ListStudios_OrderedByCount(t *testing.T) {
 	db := setupBrowseFilterTestDB(t)
 	r := NewAnimeRepository(db)

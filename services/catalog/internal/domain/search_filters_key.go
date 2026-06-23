@@ -23,13 +23,15 @@ func (f SearchFilters) CacheKey() string {
 	sort.Strings(genres)
 	providers := append([]string(nil), f.Providers...)
 	sort.Strings(providers)
+	kinds := append([]string(nil), f.Kinds...)
+	sort.Strings(kinds)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "q=%s;page=%d;size=%d", f.Query, f.Page, f.PageSize)
 	fmt.Fprintf(&b, ";year=%s", intpStr(f.Year))
 	fmt.Fprintf(&b, ";yearFrom=%s", intpStr(f.YearFrom))
 	fmt.Fprintf(&b, ";yearTo=%s", intpStr(f.YearTo))
-	fmt.Fprintf(&b, ";season=%s;status=%s;kind=%s", f.Season, f.Status, f.Kind)
+	fmt.Fprintf(&b, ";season=%s;status=%s;kinds=%s", f.Season, f.Status, strings.Join(kinds, ","))
 	fmt.Fprintf(&b, ";scoreMin=%s", f64pStr(f.ScoreMin))
 	fmt.Fprintf(&b, ";sort=%s;order=%s", f.Sort, f.Order)
 	fmt.Fprintf(&b, ";genres=%s;providers=%s", strings.Join(genres, ","), strings.Join(providers, ","))
