@@ -368,7 +368,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Policy"
+              "options": "State"
             },
             "properties": [
               {
@@ -377,19 +377,29 @@
                   {
                     "type": "value",
                     "options": {
-                      "enabled": {
+                      "UP": {
                         "color": "green",
                         "index": 0,
-                        "text": "Auto"
+                        "text": "UP"
                       },
-                      "degraded": {
-                        "color": "orange",
+                      "Recovering": {
+                        "color": "yellow",
                         "index": 1,
+                        "text": "Recovering"
+                      },
+                      "Failing": {
+                        "color": "orange",
+                        "index": 2,
+                        "text": "Failing"
+                      },
+                      "Manual-only": {
+                        "color": "red",
+                        "index": 3,
                         "text": "Manual-only"
                       },
-                      "disabled": {
-                        "color": "red",
-                        "index": 2,
+                      "Off": {
+                        "color": "dark-red",
+                        "index": 4,
                         "text": "Off"
                       }
                     }
@@ -404,7 +414,7 @@
               },
               {
                 "id": "custom.width",
-                "value": 120
+                "value": 110
               }
             ]
           },
@@ -553,7 +563,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", status AS \"Policy\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", reason AS \"Note\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
+          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", policy AS \"Policy\", health AS \"Health\", CASE WHEN policy = 'disabled' THEN 'Off' WHEN policy = 'auto' AND health = 'up' THEN 'UP' WHEN health = 'recovering' THEN 'Recovering' WHEN policy = 'auto' AND health = 'down' THEN 'Failing' ELSE 'Manual-only' END AS \"State\", last_probed_at AS \"Last probed\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", reason AS \"Note\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
           "refId": "A"
         },
         {
@@ -586,11 +596,14 @@
             "indexByName": {
               "provider": 0,
               "Group": 1,
-              "Policy": 2,
-              "playability": 3,
-              "Resolved via": 4,
-              "reasons": 5,
-              "Note": 6
+              "State": 2,
+              "Policy": 3,
+              "Health": 4,
+              "Resolved via": 5,
+              "Last probed": 6,
+              "playability": 7,
+              "reasons": 8,
+              "Note": 9
             },
             "renameByName": {
               "provider": "Provider",
