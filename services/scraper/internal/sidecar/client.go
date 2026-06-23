@@ -92,6 +92,7 @@ type fetchRequest struct {
 	Provider string `json:"provider"`
 	URL      string `json:"url"`
 	Method   string `json:"method,omitempty"`
+	UserKey  string `json:"user_key,omitempty"`
 }
 
 type fetchResponse struct {
@@ -122,7 +123,9 @@ func (c *Client) ResolveEmbed(
 // exhausted / host denied / transport) return an error; an upstream 4xx/5xx is
 // returned as (status, body, nil) so the provider keeps its own status handling.
 func (c *Client) Fetch(ctx context.Context, provider, rawURL string) (int, []byte, error) {
-	reqBody, err := json.Marshal(fetchRequest{Provider: provider, URL: rawURL, Method: "GET"})
+	reqBody, err := json.Marshal(fetchRequest{
+		Provider: provider, URL: rawURL, Method: "GET", UserKey: userkey.FromContext(ctx),
+	})
 	if err != nil {
 		return 0, nil, domain.WrapProviderDown(err, "sidecar: marshal fetch")
 	}

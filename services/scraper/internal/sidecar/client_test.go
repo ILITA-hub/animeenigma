@@ -242,6 +242,43 @@ func TestResolveEmbed_OmitsUserKeyWhenAbsent(t *testing.T) {
 	}
 }
 
+func TestFetch_ForwardsUserKeyFromContext(t *testing.T) {
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = decodeJSON(r, &gotReq)
+		body := base64.StdEncoding.EncodeToString([]byte(`{"ok":1}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "status": 200, "body": body})
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 5*time.Second)
+	ctx := userkey.WithUserKey(context.Background(), "alice")
+	if _, _, err := c.Fetch(ctx, "nineanime", "https://9anime.me.uk/x"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if gotReq["user_key"] != "alice" {
+		t.Errorf("user_key = %v; want alice", gotReq["user_key"])
+	}
+}
+
+func TestFetch_OmitsUserKeyWhenAbsent(t *testing.T) {
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = decodeJSON(r, &gotReq)
+		body := base64.StdEncoding.EncodeToString([]byte(`{"ok":1}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "status": 200, "body": body})
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 5*time.Second)
+	if _, _, err := c.Fetch(context.Background(), "nineanime", "https://9anime.me.uk/x"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if _, present := gotReq["user_key"]; present {
+		t.Errorf("user_key present on anon request: %v", gotReq)
+	}
+}
+
 func decodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
