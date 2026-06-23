@@ -2,6 +2,16 @@
 
 > Extracted from `CLAUDE.md` (2026-06-03) to keep the root guidelines under the context-size budget. Use this framework for any future UI/UX audit on AnimeEnigma. The permanent test account it depends on is documented in [`ui-audit-test-user.md`](ui-audit-test-user.md). Reference: first audit `docs/issues/ui-audit-2026-04-07.md`.
 
+## Canonical methodology (precedence over generic GSD UI tooling)
+
+**This document is the single source of truth for UI/UX audits on AnimeEnigma.** It composes with the build-enforced Design-System gate (`frontend/web/scripts/design-system-lint.sh`) and `frontend/web/src/styles/DESIGN-SYSTEM.md`.
+
+GSD ships generic UI helpers — `gsd-ui-review` (retroactive 6-pillar audit → `.planning/ui-reviews/`) and `ui_phase` / `gsd-ui-researcher` (UI-SPEC design contracts). To stop two competing methodologies from drifting apart:
+
+- **Audits** use THIS framework (severity scale, citation rules, per-finding template, realistic scenarios) and land in `docs/issues/ui-audit-YYYY-MM-DD.md` — not `.planning/ui-reviews/`.
+- **Design contracts** defer to `DESIGN-SYSTEM.md` + the DS lint gate as the binding rules. A GSD UI agent must reference those, not invent a parallel token/contract set.
+- For per-change verification (not a full audit) run **`/frontend-verify`** (DS-lint, i18n en/ru/ja parity, real `bun run build`); reserve this framework for periodic/holistic reviews.
+
 ## Methodology
 
 Combined approach (no single technique catches everything):

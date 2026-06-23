@@ -10,6 +10,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/ds-lint-postedit.sh\"",
+            "timeout": 30,
+            "statusMessage": "DS-lint (frontend)…"
+          }
+        ]
+      }
     ]
   }
 }
