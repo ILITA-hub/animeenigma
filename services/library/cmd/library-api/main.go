@@ -346,6 +346,8 @@ func main() {
 		FfprobePath:    cfg.Encode.FfprobeBin,
 		Tmpdir:         cfg.Encode.Tmpdir,
 		MaxBitrateKbps: cfg.Encode.MaxBitrateKbps,
+		Threads:        cfg.Encode.Threads,
+		Nice:           cfg.Encode.Nice,
 	}, log)
 
 	// Phase 4: filename detector — patterns loaded once at startup.
@@ -388,6 +390,8 @@ func main() {
 	encoderPool.Start(rootCtx)
 	log.Infow("encoder pool started",
 		"workers", cfg.Encode.Workers,
+		"threads", cfg.Encode.Threads,
+		"nice", cfg.Encode.Nice,
 		"tmpdir", cfg.Encode.Tmpdir,
 		"ffmpeg_bin", cfg.Encode.FfmpegBin,
 		"max_bitrate_kbps", cfg.Encode.MaxBitrateKbps,

@@ -59,6 +59,8 @@ type EncodeConfig struct {
 	FfmpegBin      string
 	FfprobeBin     string
 	MaxBitrateKbps int
+	Threads        int
+	Nice           int
 }
 
 // MinioConfig drives services/library/internal/minio.Writer.
@@ -230,6 +232,8 @@ func Load() (*Config, error) {
 			FfmpegBin:      getEnv("LIBRARY_FFMPEG_BIN", "/usr/bin/ffmpeg"),
 			FfprobeBin:     getEnv("LIBRARY_FFPROBE_BIN", "/usr/bin/ffprobe"),
 			MaxBitrateKbps: getEnvInt("LIBRARY_ENCODE_MAX_BITRATE_KBPS", 5000),
+			Threads:        getEnvInt("LIBRARY_ENCODE_THREADS", 3),
+			Nice:           getEnvInt("LIBRARY_ENCODE_NICE", 15),
 		},
 		Minio: MinioConfig{
 			Endpoint:          getEnv("LIBRARY_MINIO_ENDPOINT", "minio:9000"),
