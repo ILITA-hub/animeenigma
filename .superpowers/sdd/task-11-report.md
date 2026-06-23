@@ -134,3 +134,77 @@ All changes are confined to `services/upscaler/`. No files outside this director
 3. **Leaser interfaces**: `jobEligibleRepo`, `segmentLeaserRepo`, `workerHeartbeater` are unexported interfaces in the service package. They're satisfied by `*repo.JobRepository`, `*repo.SegmentRepository`, `*repo.WorkerRepository` respectively. This is correct Go dependency injection — but the service package now implicitly depends on the repo package's method set rather than its types. This is intentional and keeps the leaser testable with pure fakes.
 
 4. **nil enrollStore in router_separation_test.go**: The test passes `nil` for the enroll store. The `POST /worker/enroll` handler calls `enrollStore.EnrollTx(...)` — if the test ever hits that endpoint, it will panic. The separation test only hits `/api/upscale/*` and `/worker/ws`-adjacent paths; the enroll endpoint is not exercised. A future hardening step could add a nil guard in the handler.
+
+---
+
+## Review Follow-up (opus review, post-merge)
+
+Four findings on Task 11's own code were addressed (the finalizing-flip liveness
+gap was correctly deferred to Task 11c and NOT touched here). Commit:
+`fix(upscaler): offload lease dispatch from read pump + Send reuse + heartbeat log + enroll nil-guard`.
+
+### I-2 (Important) — Don't block readPump on lease DB round-trips
+
+**Before:** `dispatch()` ran `leaser.OnLeaseReq` (NextEligible + LeaseNext TX +
+Heartbeat = 3+ DB round-trips) synchronously inside `readPump`. While it ran,
+`ReadMessage` wasn't called, so inbound PONG control frames weren't processed —
+under DB contention a lease taking >pongWait would tear the connection down.
+
+**Fix:** Added a per-`Conn` `leaseInFlight atomic.Bool` single-flight guard. On a
+`lease_req` frame, `handleLeaseReq(reqSeq)`:
+- `CompareAndSwap(false, true)` — if already set, the duplicate is dropped and
+  logged at WARN (a worker holds at most one lease at a time, so this is correct
+  and bounds lease goroutines to ≤1 per connection).
+- Otherwise spawns ONE goroutine that calls `OnLeaseReq`, builds the
+  `lease_grant`, sends it, and `defer`s `leaseInFlight.Store(false)`.
+- The goroutine `select`s on `c.ctx.Done()` before sending so it stops if the
+  conn closed mid-resolve.
+
+`readPump` now returns to `ReadMessage` immediately after dispatching a
+`lease_req`. `heartbeat` stays inline (one fast call), as specified.
+
+### M-1 — Route lease_grant through Hub.Send (kills M-4 dead code)
+
+The inline `json.Marshal` + non-blocking `select` in `dispatch` was replaced with
+`c.hub.Send(c.workerID, grant)`. `Send` already has identical non-blocking
+semantics and returns the previously-declared sentinels — so `errSendBufferFull`
+and `errWorkerNotFound` are now actually used (removes the M-4 dead-code). The
+goroutine branches on `errors.Is`: buffer-full → WARN drop; worker-not-found →
+benign (conn dropped between resolve and send); other → WARN.
+
+### M-2 / M-3 — Log the leaser's swallowed heartbeat error
+
+`leaser.go` previously did `_ = l.workers.Heartbeat(...)`. The `Leaser` now
+carries a `*logger.Logger` (via `NewLeaser` default + `NewLeaserWithLogger`).
+A heartbeat failure is logged at WARN for parity with the hub's heartbeat path;
+the lease itself is durable (LeaseNext already committed) so the lease is still
+granted — only logged, not failed.
+
+### M-3 (enroll) — Nil-guard the enroll handler
+
+`POST /worker/enroll` now returns a clean 500 (with an ERROR log) when
+`enrollStore == nil`, instead of panicking on the `EnrollTx` dereference. This
+matches the concern flagged in the original report (item 4) — the separation
+test passes `nil`.
+
+### New tests (TDD for I-2 + single-flight)
+
+Added to `hub_test.go` with a gate-controlled `slowLeaser` fake
+(`started`/`finished` atomics, a `gate` chan):
+- **`TestHub_SlowLeaseDoesNotBlockReadPump`** — fires a `lease_req`, waits for the
+  lease to begin, then sleeps `pongWait + 300ms` with the lease still blocked on
+  the gate. The connection MUST still be registered (read loop kept auto-ponging
+  the server's pings) — proving the lease runs off the read loop. Releasing the
+  gate then delivers the `lease_grant`.
+- **`TestHub_DuplicateLeaseReqIgnored`** — fires one `lease_req` (blocks on gate),
+  then 4 more while it's in flight; asserts `OnLeaseReq` started exactly once and
+  exactly one `lease_grant` arrives after the gate releases (the 4 WARN
+  "duplicate lease_req" log lines confirm the drops).
+
+### Verification
+
+- `go build ./services/upscaler/...` — clean.
+- `go vet ./services/upscaler/...` — clean.
+- `go test -race -count=1 ./services/upscaler/internal/controlplane/... ./services/upscaler/internal/service/...` — both packages **ok, 0 races**.
+- Full `go test -race -count=1 ./...` across the upscaler module — all packages ok, 0 races.
+- Git scope: only `services/upscaler/{internal/controlplane/hub.go, internal/controlplane/hub_test.go, internal/service/leaser.go, internal/transport/router.go}`. No `go work sync`.

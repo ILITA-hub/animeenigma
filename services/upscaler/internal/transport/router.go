@@ -113,6 +113,13 @@ func NewRouter(
 		// Uses GormEnrollStore.EnrollTx directly (transactional, durable
 		// single-use); NOT Handle+GormEnrollStore (non-transactional footgun).
 		r.Post("/enroll", func(w http.ResponseWriter, r *http.Request) {
+			// Nil-guard: a misconfigured wiring (or a test that passes nil)
+			// must return a clean 500, not panic on the EnrollTx dereference (M-3).
+			if enrollStore == nil {
+				log.Errorw("enroll: enrollStore is nil — service misconfigured")
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
 			var req controlplane.EnrollRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "invalid JSON", http.StatusBadRequest)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/capability"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
@@ -46,11 +47,20 @@ type Leaser struct {
 	jobs    jobEligibleRepo
 	segs    segmentLeaserRepo
 	workers workerHeartbeater
+	log     *logger.Logger
 }
 
-// NewLeaser constructs a Leaser.
+// NewLeaser constructs a Leaser with the default logger.
 func NewLeaser(jobs jobEligibleRepo, segs segmentLeaserRepo, workers workerHeartbeater) *Leaser {
-	return &Leaser{jobs: jobs, segs: segs, workers: workers}
+	return &Leaser{jobs: jobs, segs: segs, workers: workers, log: logger.Default()}
+}
+
+// NewLeaserWithLogger constructs a Leaser with an explicit logger.
+func NewLeaserWithLogger(jobs jobEligibleRepo, segs segmentLeaserRepo, workers workerHeartbeater, log *logger.Logger) *Leaser {
+	if log == nil {
+		log = logger.Default()
+	}
+	return &Leaser{jobs: jobs, segs: segs, workers: workers, log: log}
 }
 
 // OnLeaseReq handles a lease_req frame from the given worker:
@@ -110,8 +120,14 @@ func (l *Leaser) OnLeaseReq(ctx context.Context, workerID string) (*domain.Upsca
 		PutSig:    putSig,
 	}
 
-	// Record the worker's current assignment.
-	_ = l.workers.Heartbeat(ctx, workerID, job.ID, seg.Idx, time.Now())
+	// Record the worker's current assignment. A heartbeat failure here does NOT
+	// fail the lease — the segment lease (LeaseNext) is already durable, so the
+	// worker can proceed; the sweeper's liveness check is the safety net. Log at
+	// warn for parity with the hub's heartbeat path (M-2/M-3).
+	if err := l.workers.Heartbeat(ctx, workerID, job.ID, seg.Idx, time.Now()); err != nil {
+		l.log.Warnw("leaser: worker heartbeat update failed (lease still granted)",
+			"worker_id", workerID, "job_id", job.ID, "segment_idx", seg.Idx, "error", err)
+	}
 
 	return seg, handles, nil
 }

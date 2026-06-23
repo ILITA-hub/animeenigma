@@ -3,7 +3,9 @@ package controlplane
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -55,7 +57,7 @@ type WorkerHeartbeater interface {
 
 // Hub is the worker WebSocket connection registry keyed by worker_id.
 type Hub struct {
-	mu   sync.RWMutex
+	mu    sync.RWMutex
 	conns map[string]*Conn
 
 	leaser  Leaser
@@ -157,8 +159,8 @@ type hubError string
 func (e hubError) Error() string { return string(e) }
 
 const (
-	errWorkerNotFound  hubError = "hub: worker not connected"
-	errSendBufferFull  hubError = "hub: send buffer full"
+	errWorkerNotFound hubError = "hub: worker not connected"
+	errSendBufferFull hubError = "hub: send buffer full"
 )
 
 // ── Conn ─────────────────────────────────────────────────────────────────────
@@ -174,6 +176,13 @@ type Conn struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	closeOnce sync.Once
+
+	// leaseInFlight is a per-connection single-flight guard for the lease path.
+	// A worker only ever has one lease in flight at a time, so a second
+	// lease_req arriving while the first is still being resolved (NextEligible +
+	// LeaseNext TX + Heartbeat) is a duplicate and is dropped. This bounds the
+	// number of lease goroutines to ≤1 per connection.
+	leaseInFlight atomic.Bool
 }
 
 func newConn(workerID string, ws *gorillaws.Conn, hub *Hub) *Conn {
@@ -232,35 +241,19 @@ func (c *Conn) readPump() {
 }
 
 // dispatch routes a decoded frame to the appropriate handler.
+//
+// The lease path is offloaded to a goroutine so readPump returns to
+// ReadMessage immediately — otherwise the 3+ DB round-trips inside
+// OnLeaseReq (NextEligible + LeaseNext TX + Heartbeat) would block the read
+// loop, so an inbound PONG control frame couldn't be processed and a lease
+// taking >pongWait under DB contention would tear the connection down (I-2).
+// heartbeat stays inline — it is one fast DB call.
 func (c *Conn) dispatch(f Frame) {
 	ctx := c.ctx
 
 	switch f.Type {
 	case "lease_req":
-		seg, handles, err := c.hub.leaser.OnLeaseReq(ctx, c.workerID)
-		if err != nil {
-			c.hub.log.Warnw("controlplane: lease_req error", "worker_id", c.workerID, "error", err)
-			return
-		}
-		if seg == nil {
-			// Nothing to lease right now — silently ignore (worker will retry).
-			return
-		}
-		grant, err := NewFrame("lease_grant", f.Seq+1, LeaseGrantPayload{
-			JobID:   seg.JobID,
-			Idx:     seg.Idx,
-			Handles: handles,
-		})
-		if err != nil {
-			c.hub.log.Warnw("controlplane: marshal lease_grant", "worker_id", c.workerID, "error", err)
-			return
-		}
-		raw, _ := json.Marshal(grant)
-		select {
-		case c.send <- raw:
-		default:
-			c.hub.log.Warnw("controlplane: send buffer full, dropping lease_grant", "worker_id", c.workerID)
-		}
+		c.handleLeaseReq(f.Seq)
 
 	case "heartbeat":
 		var hb HeartbeatPayload
@@ -280,6 +273,64 @@ func (c *Conn) dispatch(f Frame) {
 		// Unknown frame types are silently ignored so new server-side frame types
 		// don't break old workers (forward-compat).
 	}
+}
+
+// handleLeaseReq resolves a lease OFF the read loop.
+//
+// Single-flight: if a lease is already being resolved for this connection the
+// duplicate request is dropped (a worker holds at most one lease at a time, so
+// this is correct and bounds lease goroutines to ≤1 per connection). The
+// goroutine clears the flag when done and stops if the connection closes.
+func (c *Conn) handleLeaseReq(reqSeq int) {
+	if !c.leaseInFlight.CompareAndSwap(false, true) {
+		// A lease is already in flight for this connection — drop the duplicate.
+		c.hub.log.Warnw("controlplane: duplicate lease_req while one is in flight, ignoring", "worker_id", c.workerID)
+		return
+	}
+
+	go func() {
+		defer c.leaseInFlight.Store(false)
+
+		seg, handles, err := c.hub.leaser.OnLeaseReq(c.ctx, c.workerID)
+		if err != nil {
+			c.hub.log.Warnw("controlplane: lease_req error", "worker_id", c.workerID, "error", err)
+			return
+		}
+		if seg == nil {
+			// Nothing to lease right now — silently ignore (worker will retry).
+			return
+		}
+
+		grant, err := NewFrame("lease_grant", reqSeq+1, LeaseGrantPayload{
+			JobID:   seg.JobID,
+			Idx:     seg.Idx,
+			Handles: handles,
+		})
+		if err != nil {
+			c.hub.log.Warnw("controlplane: marshal lease_grant", "worker_id", c.workerID, "error", err)
+			return
+		}
+
+		// Stop if the connection closed while we were resolving the lease.
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+		}
+
+		// Route through Hub.Send for identical non-blocking semantics + the
+		// declared sentinel errors (M-1 / removes the M-4 dead-code).
+		if err := c.hub.Send(c.workerID, grant); err != nil {
+			switch {
+			case errors.Is(err, errSendBufferFull):
+				c.hub.log.Warnw("controlplane: send buffer full, dropping lease_grant", "worker_id", c.workerID)
+			case errors.Is(err, errWorkerNotFound):
+				// Connection dropped between resolve and send — benign.
+			default:
+				c.hub.log.Warnw("controlplane: send lease_grant failed", "worker_id", c.workerID, "error", err)
+			}
+		}
+	}()
 }
 
 // writePump drains the send channel and periodically sends WS pings.
