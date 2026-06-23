@@ -227,6 +227,17 @@ func TestProviderEnabledAndInfo_Exist(t *testing.T) {
 	}
 }
 
+// TestProviderBreakerTripsTotal_Increments verifies the breaker-trip counter is
+// registered and increments under its provider label.
+func TestProviderBreakerTripsTotal_Increments(t *testing.T) {
+	before := testutil.ToFloat64(ProviderBreakerTripsTotal.WithLabelValues("nineanime_btt"))
+	ProviderBreakerTripsTotal.WithLabelValues("nineanime_btt").Inc()
+	after := testutil.ToFloat64(ProviderBreakerTripsTotal.WithLabelValues("nineanime_btt"))
+	if d := after - before; d != 1.0 {
+		t.Errorf("ProviderBreakerTripsTotal delta = %v; want 1.0", d)
+	}
+}
+
 // --- helpers ----------------------------------------------------------------
 
 // descMeta extracts (FQName, labelNames) from any collector via Describe().

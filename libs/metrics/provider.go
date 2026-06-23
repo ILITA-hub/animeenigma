@@ -116,4 +116,18 @@ var (
 		},
 		[]string{"provider", "status", "reason", "description"},
 	)
+
+	// ProviderBreakerTripsTotal counts circuit-breaker trips per provider: each
+	// time the scraper's in-memory breaker observes >=3 sidecar wedged-kind
+	// errors within 60s and forces the provider's health-cache entry DOWN
+	// (Camoufox pool self-heal, Phase 3). Cardinality is bounded by the provider
+	// set (~7). A rising rate means a browser provider is wedging the sidecar
+	// pool; pairs with stealth_pool_* sidecar metrics.
+	ProviderBreakerTripsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "provider_breaker_trips_total",
+			Help: "Total circuit-breaker trips per scraper provider (>=3 sidecar wedged-kind errors in 60s forced the provider health-cache DOWN)",
+		},
+		[]string{"provider"},
+	)
 )
