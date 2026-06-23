@@ -476,21 +476,25 @@ describe('FilterCheckboxList', () => {
     expect(w.text()).toContain('7')
   })
 
+  // NOTE: `Checkbox` and `Input` are reka-ui-based primitives (Checkbox renders
+  // <button role="checkbox">, NOT a native <input>), so interact via the
+  // component's update:modelValue event — matching the existing pattern in
+  // WatchlistFilters.spec.ts (findAllComponents({ name: 'Checkbox' })).
   it('emits update:selected adding a toggled id', async () => {
     const w = mount(FilterCheckboxList, { props: { items, selected: [] } })
-    await w.findAll('input[type="checkbox"]')[0].setValue(true)
+    await w.findAllComponents({ name: 'Checkbox' })[0].vm.$emit('update:modelValue', true)
     expect(w.emitted('update:selected')?.[0]).toEqual([['a']])
   })
 
   it('emits update:selected removing an already-selected id', async () => {
     const w = mount(FilterCheckboxList, { props: { items, selected: ['a'] } })
-    await w.findAll('input[type="checkbox"]')[0].setValue(false)
+    await w.findAllComponents({ name: 'Checkbox' })[0].vm.$emit('update:modelValue', false)
     expect(w.emitted('update:selected')?.[0]).toEqual([[]])
   })
 
   it('filters visible rows by the search query (case-insensitive)', async () => {
     const w = mount(FilterCheckboxList, { props: { items, selected: [], searchable: true } })
-    await w.find('input[type="text"]').setValue('com')
+    await w.findComponent({ name: 'Input' }).vm.$emit('update:modelValue', 'com')
     expect(w.text()).toContain('Comedy')
     expect(w.text()).not.toContain('Action')
   })
