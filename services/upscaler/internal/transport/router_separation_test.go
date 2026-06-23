@@ -12,6 +12,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/handler"
 )
 
 // shared collector for this test file — avoids duplicate registration panics.
@@ -46,7 +47,13 @@ func buildUpscalerRouter(t *testing.T) http.Handler {
 	log := logger.Default()
 	hub := controlplane.NewHub(&stubLeaser{}, &stubWorkerHB{}, log)
 	// nil GormEnrollStore is fine for separation tests — no enroll calls are made.
-	return NewRouter(log, sharedUpscalerCollector(), hub, nil)
+	// A real SegmentHandler (with nil repos) registers the /worker/segments/*
+	// routes; the separation tests only check route RESOLUTION, never invoking
+	// the handler bodies with a valid capability signature (so the nil repos are
+	// never dereferenced — capability verification rejects unsigned requests
+	// before any repo call).
+	segHandler := handler.NewSegmentHandler(t.TempDir(), nil, nil, log)
+	return NewRouter(log, sharedUpscalerCollector(), hub, nil, segHandler)
 }
 
 // TestUpscalerRouter_WorkerSurfaceReachable — /worker/* routes exist on the
@@ -136,6 +143,73 @@ func TestUpscalerRouter_HealthReachableWithoutHeader(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("/health: status = %d; want 200", rec.Code)
+	}
+}
+
+// TestUpscalerRouter_SegmentRoutesResolveOnWorkerSurface — the segment data
+// plane (GET+PUT /worker/segments/{job}/{idx}) is REGISTERED on the worker
+// surface. We confirm by sending an unsigned request: the route resolves and
+// the SegmentHandler rejects with 401 (generic "unauthorized"). A non-resolving
+// route would instead produce chi's plain-text "404 page not found".
+func TestUpscalerRouter_SegmentRoutesResolveOnWorkerSurface(t *testing.T) {
+	router := buildUpscalerRouter(t)
+
+	for _, m := range []string{http.MethodGet, http.MethodPut} {
+		// No exp/sig → capability verification fails → handler returns generic 401.
+		req := httptest.NewRequest(m, "/worker/segments/job-123/0", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		// Route resolves: handler runs and returns its own 401, NOT chi's 404.
+		if rec.Code == http.StatusNotFound {
+			t.Errorf("%s /worker/segments/{job}/{idx}: got 404 — route NOT registered on worker surface", m)
+		}
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s /worker/segments/{job}/{idx} unsigned: status = %d; want 401 (handler reached, capability rejected)", m, rec.Code)
+		}
+		// The generic 401 body must NOT be chi's plain 404 text.
+		if bodyContains(rec.Body.String(), "404 page not found") {
+			t.Errorf("%s /worker/segments/{job}/{idx}: body is chi 404 — route not registered: %q", m, rec.Body.String())
+		}
+	}
+}
+
+// TestUpscalerRouter_SegmentRoutesNotOnAdminSurface — /api/upscale/segments/*
+// must NOT resolve. The segment data plane lives ONLY on the worker surface;
+// the admin surface (/api/upscale/*) is a distinct group and has no segment
+// route. Even WITH the gateway header, /api/upscale/segments/{job}/{idx} 404s
+// because no such route is registered there.
+func TestUpscalerRouter_SegmentRoutesNotOnAdminSurface(t *testing.T) {
+	router := buildUpscalerRouter(t)
+
+	for _, m := range []string{http.MethodGet, http.MethodPut} {
+		req := httptest.NewRequest(m, "/api/upscale/segments/job-123/0", nil)
+		req.Header.Set(internalGatewayHeader, "1") // pass the admin gate
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		// No segment route on the admin surface → 404 (or 405), never 200/401.
+		if rec.Code == http.StatusOK || rec.Code == http.StatusUnauthorized || rec.Code == http.StatusNoContent {
+			t.Errorf("%s /api/upscale/segments/{job}/{idx}: status = %d — segment route LEAKED onto the admin surface", m, rec.Code)
+		}
+	}
+}
+
+// TestUpscalerRouter_AdminPathNotOnWorkerSurface — the worker surface must not
+// serve /api/upscale/* routes. A request to /worker/api/upscale/... or a direct
+// /api/upscale/* without the gateway header is gated/absent. This asserts the
+// inverse separation: /api/upscale/* does NOT resolve as a worker-surface route.
+func TestUpscalerRouter_AdminPathNotOnWorkerSurface(t *testing.T) {
+	router := buildUpscalerRouter(t)
+
+	// /api/upscale/* without the gateway header → 404 (admin gate fires).
+	// This is the worker-reachable scenario (the ext edge cannot set the header),
+	// proving admin routes are unreachable from the worker edge.
+	req := httptest.NewRequest(http.MethodGet, "/api/upscale/jobs", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("/api/upscale/jobs without gateway header: status = %d; want 404 (unreachable from worker edge)", rec.Code)
 	}
 }
 

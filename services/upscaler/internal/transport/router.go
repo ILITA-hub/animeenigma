@@ -8,6 +8,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/handler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -72,6 +73,7 @@ func NewRouter(
 	metricsCollector *metrics.Collector,
 	hub *controlplane.Hub,
 	enrollStore *controlplane.GormEnrollStore,
+	segmentHandler *handler.SegmentHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -142,6 +144,28 @@ func NewRouter(
 		// GET /worker/ws — WebSocket upgrade for the WS control-plane.
 		// Session verified via ?worker_id=&exp=&sig= query params.
 		r.Get("/ws", controlplane.UpgradeHandler(hub))
+
+		// Segment data plane (Task 11b) — the sole consumer of the capability
+		// verification. GET downloads the leased INPUT segment; PUT stores the
+		// upscaled OUTPUT segment. Auth is the per-segment HMAC capability handle
+		// (?exp=&sig=) bound to job+operation+idx — NOT the gateway header, NOT
+		// JWT. The SegmentHandler itself performs all 7 security controls
+		// (capability verify, idx bound-check, traversal defense, lease ownership,
+		// body cap, anti-overwrite/finalized guard, generic errors).
+		//
+		// Nil-guard: a misconfigured wiring must 503 cleanly, not panic on the
+		// handler method dispatch.
+		if segmentHandler != nil {
+			r.Get("/segments/{job}/{idx}", segmentHandler.GetSegment)
+			r.Put("/segments/{job}/{idx}", segmentHandler.PutSegment)
+		} else {
+			log.Warnw("segment data-plane handler not wired — /worker/segments/* disabled")
+			segDisabled := func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "segment data plane unavailable", http.StatusServiceUnavailable)
+			}
+			r.Get("/segments/{job}/{idx}", segDisabled)
+			r.Put("/segments/{job}/{idx}", segDisabled)
+		}
 	})
 
 	return r

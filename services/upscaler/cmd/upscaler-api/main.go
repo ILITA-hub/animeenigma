@@ -18,6 +18,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/transport"
@@ -122,8 +123,12 @@ func main() {
 	// Sweeper: re-leases expired segments and marks stale workers as gone.
 	sweeper := service.NewSweeperWithLogger(segmentRepo, workerRepo, log)
 
+	// Segment data-plane handler (Task 11b): capability-verified GET/PUT of
+	// leased input/output segments on the {StagingDir}/{jobID} tree.
+	segmentHandler := handler.NewSegmentHandler(cfg.Upscaler.StagingDir, jobRepo, segmentRepo, log)
+
 	// Initialize router
-	router := transport.NewRouter(log, metricsCollector, hub, enrollStore)
+	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler)
 
 	// Create HTTP server
 	srv := &http.Server{

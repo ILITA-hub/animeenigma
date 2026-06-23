@@ -157,6 +157,18 @@ func (r *SegmentRepository) Counts(ctx context.Context, jobID string) (pending, 
 	return
 }
 
+// Get returns the single segment identified by (jobID, idx), or
+// gorm.ErrRecordNotFound when the segment does not exist.
+func (r *SegmentRepository) Get(ctx context.Context, jobID string, idx int) (*domain.UpscaleSegment, error) {
+	var seg domain.UpscaleSegment
+	if err := r.db.WithContext(ctx).
+		Where("job_id = ? AND idx = ?", jobID, idx).
+		First(&seg).Error; err != nil {
+		return nil, err
+	}
+	return &seg, nil
+}
+
 // ListByJob returns all segments for a job ordered by idx ASC.
 func (r *SegmentRepository) ListByJob(ctx context.Context, jobID string) ([]domain.UpscaleSegment, error) {
 	var segs []domain.UpscaleSegment
