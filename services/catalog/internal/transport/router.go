@@ -101,6 +101,7 @@ func NewRouter(
 	// Docker network — same gateway-non-routing security model as peers above.
 	if internalProviderPolicyHandler != nil {
 		r.Post("/internal/providers/probe-result", internalProviderPolicyHandler.ProbeResult)
+		r.Get("/internal/providers/probe-plan", internalProviderPolicyHandler.ProbePlan)
 	}
 
 	// Playback-probe ae target set (newest distinct-anime library uploads mapped

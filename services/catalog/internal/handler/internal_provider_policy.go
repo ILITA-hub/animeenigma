@@ -92,3 +92,48 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 		"health":   p.Health,
 	})
 }
+
+type probePlanEntry struct {
+	Provider   string `json:"provider"`
+	SampleSize int    `json:"sample_size"`
+	FailFast   bool   `json:"fail_fast"`
+}
+
+// ProbePlan handles GET /internal/providers/probe-plan.
+//
+// Returns the cadence-gated due-set of providers that should be probed now,
+// together with per-provider sample size and fail-fast flag. Disabled providers
+// are always excluded. Non-scraper-operated providers use a fixed 24h cadence
+// with sample_size=1 and fail_fast=true. Scraper-operated providers use the
+// state-machine cadence (ProbeCadence/ProbeSample) from the domain helpers.
+//
+// Response: {"success":true,"data":{"plan":[{"provider":"...","sample_size":5,"fail_fast":false}]}}
+func (h *InternalProviderPolicyHandler) ProbePlan(w http.ResponseWriter, r *http.Request) {
+	var rows []domain.ScraperProvider
+	if err := h.db.Order("name asc").Find(&rows).Error; err != nil {
+		http.Error(w, `{"success":false,"error":"db"}`, http.StatusInternalServerError)
+		return
+	}
+	now := time.Now().UTC()
+	plan := make([]probePlanEntry, 0, len(rows))
+	for _, p := range rows {
+		if p.Policy == domain.PolicyDisabled {
+			continue
+		}
+		var cadence time.Duration
+		var size int
+		var ff bool
+		if p.ScraperOperated {
+			cadence = p.ProbeCadence(h.cfg.Cadence)
+			size, ff = p.ProbeSample(h.cfg.Cadence)
+		} else {
+			cadence = h.cfg.Cadence.Manual // non-scraper: fixed daily
+			size, ff = 1, true
+		}
+		if cadence <= 0 || now.Sub(p.LastProbedAt) < cadence {
+			continue
+		}
+		plan = append(plan, probePlanEntry{Provider: p.Name, SampleSize: size, FailFast: ff})
+	}
+	httputil.OK(w, map[string]any{"plan": plan})
+}
