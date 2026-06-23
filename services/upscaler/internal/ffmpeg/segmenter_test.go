@@ -97,8 +97,12 @@ esac
 
 # Font dump: no output file needed — DemuxSidecars uses cwd.
 # The last arg is the source file path; cwd is the fonts/ dir.
-# Write a fake font to simulate an attachment dump.
+# Capture this call's argv to a deterministic path (cwd = fonts dir) so
+# the test can assert -dump_attachment:t was passed, then write a fake
+# font to simulate an attachment dump.
 FONTSDIR="$(pwd)"
+: > "$FONTSDIR/font_argv.txt"
+for a in "$@"; do printf '%s\n' "$a" >> "$FONTSDIR/font_argv.txt"; done
 echo "fake font" > "$FONTSDIR/fake_font.ttf"
 exit 0
 `
@@ -227,6 +231,30 @@ exit 1
 	}
 	if !strings.Contains(err.Error(), "ffmpeg error") {
 		t.Errorf("error should contain stderr tail; got: %v", err)
+	}
+}
+
+func TestSegment_CreatesMissingOutDir(t *testing.T) {
+	dir := t.TempDir()
+	ffmpegBin := filepath.Join(dir, "fake_ffmpeg.sh")
+	writeScript(t, ffmpegBin, fakeFfmpegSegmentScript)
+
+	// outDir does NOT exist yet — Segment must create it.
+	outDir := filepath.Join(dir, "nested", "does", "not", "exist")
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Fatalf("precondition: outDir should not exist yet")
+	}
+
+	s := NewSegmenter(ffmpegBin)
+	segs, err := s.Segment(context.Background(), filepath.Join(dir, "src.mkv"), outDir, 45)
+	if err != nil {
+		t.Fatalf("Segment with missing outDir should succeed: %v", err)
+	}
+	if len(segs) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(segs))
+	}
+	if _, err := os.Stat(outDir); err != nil {
+		t.Errorf("outDir should have been created: %v", err)
 	}
 }
 
@@ -362,6 +390,23 @@ func TestDemuxSidecars_FontsCollected(t *testing.T) {
 			t.Errorf("FontPath %q not found: %v", fp, err)
 		}
 	}
+
+	// Assert the font-dump invocation actually passed -dump_attachment:t,
+	// and that it ran with cwd = the fonts dir. The fake script writes its
+	// argv to font_argv.txt in its cwd; finding that file inside fontsDir
+	// proves the cwd was set correctly, and its contents prove the flag.
+	fontArgv, err := os.ReadFile(filepath.Join(fontsDir, "font_argv.txt"))
+	if err != nil {
+		t.Fatalf("font_argv.txt not found in fonts dir — font dump did not run with cwd=fontsDir: %v", err)
+	}
+	fa := string(fontArgv)
+	if !strings.Contains(fa, "-dump_attachment:t") {
+		t.Errorf("font-dump argv missing -dump_attachment:t\nfull argv:\n%s", fa)
+	}
+	// The source path must be passed via -i so attachments are read from it.
+	if !strings.Contains(fa, "-i") {
+		t.Errorf("font-dump argv missing -i {src}\nfull argv:\n%s", fa)
+	}
 }
 
 func TestDemuxSidecars_EmptyOutputsNoError(t *testing.T) {
@@ -395,5 +440,29 @@ exit 0
 	}
 	if sidecars.ChaptersPath != "" {
 		t.Errorf("expected empty ChaptersPath, got %q", sidecars.ChaptersPath)
+	}
+}
+
+func TestDemuxSidecars_CreatesMissingOutDir(t *testing.T) {
+	dir := t.TempDir()
+	ffmpegBin := filepath.Join(dir, "fake_ffmpeg.sh")
+	writeScript(t, ffmpegBin, fakeFfmpegDemuxScript)
+
+	// outDir does NOT exist yet — DemuxSidecars must create it.
+	outDir := filepath.Join(dir, "nested", "demux", "out")
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Fatalf("precondition: outDir should not exist yet")
+	}
+
+	s := NewSegmenter(ffmpegBin)
+	sidecars, err := s.DemuxSidecars(context.Background(), filepath.Join(dir, "src.mkv"), outDir)
+	if err != nil {
+		t.Fatalf("DemuxSidecars with missing outDir should succeed: %v", err)
+	}
+	if _, err := os.Stat(outDir); err != nil {
+		t.Errorf("outDir should have been created: %v", err)
+	}
+	if sidecars.AudioPath == "" {
+		t.Error("AudioPath should be set (audio.mka written into created outDir)")
 	}
 }

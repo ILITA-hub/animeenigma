@@ -102,6 +102,10 @@ func NewSegmenter(ffmpegBin string) *Segmenter {
 // Returns the segment paths sorted lexically (lexical == numeric for
 // zero-padded filenames).
 func (s *Segmenter) Segment(ctx context.Context, srcVideoPath, outDir string, seconds int) ([]string, error) {
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return nil, fmt.Errorf("mkdir outDir: %w", err)
+	}
+
 	pattern := filepath.Join(outDir, "seg_%05d.mkv")
 
 	args := []string{
@@ -142,6 +146,10 @@ func (s *Segmenter) Segment(ctx context.Context, srcVideoPath, outDir string, se
 // Empty/zero-size outputs leave the corresponding fields empty — no error.
 func (s *Segmenter) DemuxSidecars(ctx context.Context, srcPath, outDir string) (Sidecars, error) {
 	var sc Sidecars
+
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return sc, fmt.Errorf("mkdir outDir: %w", err)
+	}
 
 	// 1. Audio ----------------------------------------------------------------
 	audioPath := filepath.Join(outDir, "audio.mka")
