@@ -470,21 +470,9 @@
       "genres": "Жанры",
       "genresHint": "все сразу",
       "searchGenres": "Поиск жанров…",
-      "types": "Тип",
       "typesHint": "любой из",
       "year": "Год",
-      "clear": "Сбросить всё",
-      "kind": {
-        "tv": "ТВ-сериал",
-        "movie": "Фильм",
-        "ova": "OVA",
-        "ona": "ONA",
-        "special": "Спешл",
-        "tv_special": "ТВ-спешл",
-        "music": "Клип",
-        "cm": "Реклама",
-        "pv": "Промо"
-      }
+      "clear": "Сбросить всё"
     },
     "memberSince": "Участник с",
     "uploadAvatar": "Загрузить аватар",

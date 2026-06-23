@@ -482,21 +482,9 @@
       "genres": "ジャンル",
       "genresHint": "すべて一致",
       "searchGenres": "ジャンルを検索…",
-      "types": "種類",
       "typesHint": "いずれか一致",
       "year": "年",
-      "clear": "すべてクリア",
-      "kind": {
-        "tv": "TVシリーズ",
-        "movie": "映画",
-        "ova": "OVA",
-        "ona": "ONA",
-        "special": "スペシャル",
-        "tv_special": "TVスペシャル",
-        "music": "ミュージック",
-        "cm": "CM",
-        "pv": "PV"
-      }
+      "clear": "すべてクリア"
     },
     "tabs": {
       "showcase": "ショーケース",

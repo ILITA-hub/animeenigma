@@ -9,39 +9,28 @@
           <span class="text-sm font-semibold text-white">{{ $t('profile.filters.genres') }}</span>
           <span class="text-xs text-muted-foreground">{{ $t('profile.filters.genresHint') }}</span>
         </header>
-        <Input
-          v-if="facets.genres.length > 8"
-          v-model="genreSearch"
-          size="sm"
-          :placeholder="$t('profile.filters.searchGenres')"
-          class="mb-2"
+        <FilterCheckboxList
+          :items="genreItems"
+          :selected="genreIds"
+          :searchable="facets.genres.length > 8"
+          :search-placeholder="$t('profile.filters.searchGenres')"
+          max-height-class="max-h-64"
+          @update:selected="(v) => emit('update:genreIds', v)"
         />
-        <ul class="space-y-0.5 max-h-64 overflow-y-auto pr-1">
-          <li v-for="g in filteredGenres" :key="g.id">
-            <label class="flex items-center gap-2 px-1 py-1 rounded-md hover:bg-white/5 cursor-pointer">
-              <Checkbox :model-value="genreIds.includes(g.id)" @update:model-value="() => toggleGenre(g.id)" />
-              <span class="text-sm text-white/90 flex-1 truncate">{{ localizedGenre(g) }}</span>
-              <span class="text-xs text-muted-foreground tabular-nums">{{ g.count }}</span>
-            </label>
-          </li>
-        </ul>
       </section>
 
       <!-- Types (OR) -->
       <section v-if="facets.kinds.length">
         <header class="flex items-center justify-between mb-2">
-          <span class="text-sm font-semibold text-white">{{ $t('profile.filters.types') }}</span>
+          <span class="text-sm font-semibold text-white">{{ $t('common.filters.type') }}</span>
           <span class="text-xs text-muted-foreground">{{ $t('profile.filters.typesHint') }}</span>
         </header>
-        <ul class="space-y-0.5 max-h-64 overflow-y-auto pr-1">
-          <li v-for="k in facets.kinds" :key="k.kind">
-            <label class="flex items-center gap-2 px-1 py-1 rounded-md hover:bg-white/5 cursor-pointer">
-              <Checkbox :model-value="kinds.includes(k.kind)" @update:model-value="() => toggleKind(k.kind)" />
-              <span class="text-sm text-white/90 flex-1">{{ $t('profile.filters.kind.' + k.kind) }}</span>
-              <span class="text-xs text-muted-foreground tabular-nums">{{ k.count }}</span>
-            </label>
-          </li>
-        </ul>
+        <FilterCheckboxList
+          :items="kindItems"
+          :selected="kinds"
+          :searchable="false"
+          @update:selected="(v) => emit('update:kinds', v)"
+        />
       </section>
 
       <!-- Year range -->
@@ -49,13 +38,14 @@
         <header class="mb-2">
           <span class="text-sm font-semibold text-white">{{ $t('profile.filters.year') }}</span>
         </header>
-        <div class="flex items-center gap-2">
-          <Select :model-value="yearMinStr" :options="yearMinOptions" size="sm" class="flex-1"
-            @update:model-value="(v) => emitYear('min', v as string)" />
-          <span class="text-white/40">—</span>
-          <Select :model-value="yearMaxStr" :options="yearMaxOptions" size="sm" class="flex-1"
-            @update:model-value="(v) => emitYear('max', v as string)" />
-        </div>
+        <FilterYearRange
+          :min="yearMin"
+          :max="yearMax"
+          :floor-year="facets.years.min as number"
+          :ceil-year="facets.years.max as number"
+          @update:min="(v) => emit('update:yearMin', v)"
+          @update:max="(v) => emit('update:yearMax', v)"
+        />
       </section>
     </div>
 
@@ -69,12 +59,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
-import Checkbox from '@/components/ui/Checkbox.vue'
-import Input from '@/components/ui/Input.vue'
-import Select from '@/components/ui/Select.vue'
+import FilterCheckboxList from '@/components/filters/FilterCheckboxList.vue'
+import FilterYearRange from '@/components/filters/FilterYearRange.vue'
 import type { WatchlistFacets, FacetGenre } from '@/types/watchlist-facets'
 import { activeFilterCount } from '@/types/watchlist-facets'
 
@@ -93,8 +82,7 @@ const emit = defineEmits<{
   'update:yearMax': [number | null]
 }>()
 
-const { locale } = useI18n()
-const genreSearch = ref('')
+const { locale, t } = useI18n()
 
 const count = computed(() =>
   activeFilterCount({ genreIds: props.genreIds, kinds: props.kinds, yearMin: props.yearMin, yearMax: props.yearMax }),
@@ -105,56 +93,13 @@ function localizedGenre(g: FacetGenre): string {
   return loc.startsWith('ru') && g.name_ru ? g.name_ru : g.name
 }
 
-const filteredGenres = computed(() => {
-  const q = genreSearch.value.trim().toLowerCase()
-  if (!q) return props.facets.genres
-  return props.facets.genres.filter((g) => localizedGenre(g).toLowerCase().includes(q))
-})
+const genreItems = computed(() =>
+  props.facets.genres.map((g) => ({ id: g.id, label: localizedGenre(g), count: g.count })),
+)
 
-function toggleGenre(id: string) {
-  const next = props.genreIds.includes(id)
-    ? props.genreIds.filter((x) => x !== id)
-    : [...props.genreIds, id]
-  emit('update:genreIds', next)
-}
-
-function toggleKind(kind: string) {
-  const next = props.kinds.includes(kind)
-    ? props.kinds.filter((x) => x !== kind)
-    : [...props.kinds, kind]
-  emit('update:kinds', next)
-}
-
-const years = computed(() => {
-  const lo = props.facets.years.min
-  const hi = props.facets.years.max
-  if (lo === null || hi === null) return []
-  const out: number[] = []
-  for (let y = hi; y >= lo; y--) out.push(y)
-  return out
-})
-
-// reka-ui's SelectItem forbids an empty-string value (it's reserved for
-// clearing the selection), so the "any year" option uses a non-empty sentinel.
-const ANY_YEAR = 'any'
-
-const yearMinStr = computed(() => (props.yearMin === null ? ANY_YEAR : String(props.yearMin)))
-const yearMaxStr = computed(() => (props.yearMax === null ? ANY_YEAR : String(props.yearMax)))
-
-const yearMinOptions = computed(() => [
-  { value: ANY_YEAR, label: '—' },
-  ...years.value.map((y) => ({ value: String(y), label: String(y) })),
-])
-const yearMaxOptions = computed(() => [
-  { value: ANY_YEAR, label: '—' },
-  ...years.value.map((y) => ({ value: String(y), label: String(y) })),
-])
-
-function emitYear(which: 'min' | 'max', v: string) {
-  const n = v === ANY_YEAR || v === '' ? null : Number(v)
-  if (which === 'min') emit('update:yearMin', n)
-  else emit('update:yearMax', n)
-}
+const kindItems = computed(() =>
+  props.facets.kinds.map((k) => ({ id: k.kind, label: t('common.filters.kind.' + k.kind), count: k.count })),
+)
 
 function clearAll() {
   emit('update:genreIds', [])

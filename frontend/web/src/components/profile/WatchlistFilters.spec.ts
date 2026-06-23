@@ -2,9 +2,13 @@ import { describe, it, expect, vi } from 'vitest'
 import { ref } from 'vue'
 import { mount } from '@vue/test-utils'
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ locale: ref('en') }),
-}))
+vi.mock('vue-i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-i18n')>()
+  return {
+    ...actual,
+    useI18n: () => ({ locale: ref('en'), t: (k: string) => k }),
+  }
+})
 
 import WatchlistFilters from './WatchlistFilters.vue'
 import type { WatchlistFacets } from '@/types/watchlist-facets'
@@ -49,9 +53,9 @@ describe('WatchlistFilters', () => {
 
   it('renders a row per kind with its count', () => {
     const wrapper = mountWith()
-    expect(wrapper.text()).toContain('profile.filters.kind.tv')
+    expect(wrapper.text()).toContain('common.filters.kind.tv')
     expect(wrapper.text()).toContain('7')
-    expect(wrapper.text()).toContain('profile.filters.kind.movie')
+    expect(wrapper.text()).toContain('common.filters.kind.movie')
   })
 
   it('emits update:genreIds when a genre is toggled on', async () => {
