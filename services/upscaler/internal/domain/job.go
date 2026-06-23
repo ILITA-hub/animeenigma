@@ -28,7 +28,7 @@ type UpscaleJob struct {
 	Episode       int        `gorm:"type:int;not null;column:episode" json:"episode"`
 	Model         string     `gorm:"type:text;not null;column:model" json:"model"`
 	Scale         int        `gorm:"type:int;not null;default:2;column:scale" json:"scale"`
-	Status        JobStatus  `gorm:"type:text;not null;default:queued;index;column:status" json:"status"`
+	Status        JobStatus  `gorm:"type:text;not null;default:'queued';index;column:status" json:"status"`
 	ProgressPct   int        `gorm:"type:int;not null;default:0;column:progress_pct" json:"progress_pct"`
 	SourceCodec   string     `gorm:"type:text;column:source_codec" json:"source_codec,omitempty"`
 	SourcePixFmt  string     `gorm:"type:text;column:source_pixfmt" json:"source_pixfmt,omitempty"`
