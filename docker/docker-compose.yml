@@ -1206,6 +1206,8 @@ services:
       LIBRARY_FFMPEG_BIN: /usr/bin/ffmpeg
       LIBRARY_FFPROBE_BIN: /usr/bin/ffprobe
       LIBRARY_ENCODE_MAX_BITRATE_KBPS: ${LIBRARY_ENCODE_MAX_BITRATE_KBPS:-5000}
+      LIBRARY_ENCODE_THREADS: ${LIBRARY_ENCODE_THREADS:-3}
+      LIBRARY_ENCODE_NICE: ${LIBRARY_ENCODE_NICE:-15}
       # Jackett primary search tier. The library container reaches Jackett by
       # its docker-network DNS name (NOT the host-bound 127.0.0.1:9117). An
       # empty JACKETT_API_KEY disables the tier → search falls back to
@@ -1226,6 +1228,7 @@ services:
         condition: service_healthy
       jackett:
         condition: service_healthy
+    cpu_shares: 256
     deploy:
       resources:
         limits:
