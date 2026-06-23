@@ -14,6 +14,57 @@ import (
 	"gorm.io/gorm"
 )
 
+func testNopLogger() *logger.Logger {
+	return &logger.Logger{SugaredLogger: zap.NewNop().Sugar()}
+}
+
+// TestList_DerivesWireStatus verifies that the List handler emits status derived
+// via WireStatus() (from policy+health) rather than the stored Status column,
+// and that policy/health appear in the wire output.
+func TestList_DerivesWireStatus(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	// gogoanime: policy=auto + health=up → WireStatus()=enabled
+	// allanime:  policy=manual + health=recovering → WireStatus()=degraded
+	// Both have Status="" (zero) in DB — proves we derive, not read the column.
+	if err := db.Create(&[]domain.ScraperProvider{
+		{Name: "gogoanime", Policy: domain.PolicyAuto, Health: domain.HealthUp, ScraperOperated: true},
+		{Name: "allanime", Policy: domain.PolicyManual, Health: domain.HealthRecovering, ScraperOperated: true},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	h := handler.NewInternalScraperProvidersHandler(db, testNopLogger())
+	rr := httptest.NewRecorder()
+	h.List(rr, httptest.NewRequest(http.MethodGet, "/internal/scraper/providers", nil))
+
+	var body struct {
+		Data struct {
+			Providers []map[string]any `json:"providers"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v (body=%s)", err, rr.Body.String())
+	}
+	got := map[string]map[string]any{}
+	for _, p := range body.Data.Providers {
+		got[p["name"].(string)] = p
+	}
+	if got["gogoanime"]["status"] != "enabled" {
+		t.Fatalf("gogoanime status=%v want enabled", got["gogoanime"]["status"])
+	}
+	if got["allanime"]["status"] != "degraded" {
+		t.Fatalf("allanime status=%v want degraded", got["allanime"]["status"])
+	}
+	if got["allanime"]["health"] != "recovering" || got["allanime"]["policy"] != "manual" {
+		t.Fatalf("allanime missing policy/health: %+v", got["allanime"])
+	}
+}
+
 func TestInternalScraperProviders_List(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -29,8 +80,7 @@ func TestInternalScraperProviders_List(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nopLog := &logger.Logger{SugaredLogger: zap.NewNop().Sugar()}
-	h := handler.NewInternalScraperProvidersHandler(db, nopLog)
+	h := handler.NewInternalScraperProvidersHandler(db, testNopLogger())
 	req := httptest.NewRequest(http.MethodGet, "/internal/scraper/providers", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
