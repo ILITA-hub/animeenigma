@@ -302,7 +302,10 @@
       "loadError": "Не удалось загрузить субтитры: {error}",
       "providersDown": "Некоторые источники не ответили: {providers}",
       "providerIssues": "Некоторые источники субтитров могут быть недоступны: {issues}",
-      "status": { "degraded": "сбои", "down": "недоступен" },
+      "status": {
+        "degraded": "сбои",
+        "down": "недоступен"
+      },
       "providerChip": {
         "jimaku": "Jimaku",
         "opensubtitles": "OpenSubtitles"
@@ -981,7 +984,8 @@
         "year": "Год",
         "provider": "Доступно на",
         "sort": "Сортировка",
-        "score": "Оценка"
+        "score": "Оценка",
+        "studios": "Студии"
       },
       "format": {
         "any": "Любой формат",
@@ -1010,12 +1014,15 @@
       },
       "provider": {
         "kodik": "Kodik (RU)",
-        "animelib": "AnimeLib (RU)",
-        "english": "Английский"
+        "dub": "Английский (озвучка)",
+        "raw": "RAW (JP)",
+        "ae": "AnimeEnigma"
       },
       "score": {
         "any": "Любая"
-      }
+      },
+      "searchGenres": "Поиск жанров",
+      "searchStudios": "Поиск студий"
     }
   },
   "themes": {

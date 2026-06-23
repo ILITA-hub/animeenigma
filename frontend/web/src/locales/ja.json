@@ -302,7 +302,10 @@
       "loadError": "字幕を読み込めませんでした: {error}",
       "providersDown": "一部のソースが応答しませんでした: {providers}",
       "providerIssues": "一部の字幕ソースが利用できない可能性があります: {issues}",
-      "status": { "degraded": "不安定", "down": "停止中" },
+      "status": {
+        "degraded": "不安定",
+        "down": "停止中"
+      },
       "providerChip": {
         "jimaku": "Jimaku",
         "opensubtitles": "OpenSubtitles"
@@ -981,7 +984,8 @@
         "year": "年",
         "provider": "配信元",
         "sort": "並び替え",
-        "score": "評価"
+        "score": "評価",
+        "studios": "スタジオ"
       },
       "format": {
         "any": "すべての種別",
@@ -1010,12 +1014,15 @@
       },
       "provider": {
         "kodik": "Kodik (RU)",
-        "animelib": "AnimeLib (RU)",
-        "english": "英語"
+        "dub": "英語（吹替）",
+        "raw": "RAW (JP)",
+        "ae": "AnimeEnigma"
       },
       "score": {
         "any": "すべて"
-      }
+      },
+      "searchGenres": "ジャンルを検索",
+      "searchStudios": "スタジオを検索"
     }
   },
   "themes": {

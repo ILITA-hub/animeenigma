@@ -4,24 +4,30 @@
       <h2 class="text-lg font-semibold text-white">{{ $t('browse.filters.title') }}</h2>
     </header>
 
-    <!-- Genres — multi-select checkbox list, scroll on overflow -->
+    <!-- Genres — searchable multi-select -->
     <FilterSection
       :label="$t('browse.filters.section.genres')"
       :count="filters.genres.value.length"
     >
-      <div class="max-h-48 overflow-y-auto pr-1 space-y-1">
-        <label
-          v-for="g in genres"
-          :key="g.id"
-          class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
-        >
-          <Checkbox
-            :model-value="filters.genres.value.includes(g.id)"
-            @update:model-value="(v) => onGenreToggle(g.id, v === true)"
-          />
-          <span>{{ localizedGenre(g) }}</span>
-        </label>
-      </div>
+      <FilterCheckboxList
+        :items="genreItems"
+        :selected="filters.genres.value"
+        :search-placeholder="$t('browse.filters.searchGenres')"
+        @update:selected="onGenresChange"
+      />
+    </FilterSection>
+
+    <!-- Studios — searchable multi-select -->
+    <FilterSection
+      :label="$t('browse.filters.section.studios')"
+      :count="filters.studios.value.length"
+    >
+      <FilterCheckboxList
+        :items="studios"
+        :selected="filters.studios.value"
+        :search-placeholder="$t('browse.filters.searchStudios')"
+        @update:selected="onStudiosChange"
+      />
     </FilterSection>
 
     <!-- Format (kind) — single-select radio -->
@@ -152,8 +158,9 @@ import {
   type Sort,
 } from '@/composables/useBrowseFilters'
 import FilterSection from './FilterSection.vue'
+import FilterCheckboxList from '@/components/filters/FilterCheckboxList.vue'
 import { getLocalizedGenre } from '@/utils/title'
-import { Input, Checkbox, RadioGroup } from '@/components/ui'
+import { Input, RadioGroup } from '@/components/ui'
 
 // Phase 15 (UX-31) — Browse.vue passes the genre list down (no
 // duplicate fetch) and the parent's useBrowseFilters instance so the
@@ -171,6 +178,7 @@ interface Genre {
 // composable itself.
 const props = defineProps<{
   genres: Genre[]
+  studios: { id: string; label: string }[]
   filters: ReturnType<typeof useBrowseFilters>
 }>()
 const { t } = useI18n()
@@ -202,7 +210,13 @@ const seasonOptions = computed(() => [
   { value: 'fall', label: t('browse.filters.season.fall') },
 ])
 
-// Per-provider Tailwind accent classes (locked in CONTEXT.md "specifics").
+function localizedGenre(g: Genre) {
+  return getLocalizedGenre(g.name, g.name_ru)
+}
+
+const genreItems = computed(() => props.genres.map(g => ({ id: g.id, label: localizedGenre(g) })))
+
+// Per-provider brand/identity accents (DS brand-exempt hues + a semantic token).
 const providerOptions = computed<{ value: Provider; label: string; accent: string }[]>(() => [
   {
     value: 'kodik',
@@ -210,16 +224,22 @@ const providerOptions = computed<{ value: Provider; label: string; accent: strin
     accent: 'text-cyan-500 focus:ring-cyan-500',
   },
   {
-    value: 'animelib',
-    // AnimeLib provider-identity hue (orange) — deliberate per-provider decorative
-    // accent (mirrors the --player-accent #f97316 allowlist seed), NOT a status token.
-    label: t('browse.filters.provider.animelib'),
-    accent: 'text-orange-500 focus:ring-orange-500',
+    value: 'dub',
+    // English-dub availability (has_dub) — semantic success token (EN surface).
+    label: t('browse.filters.provider.dub'),
+    accent: 'text-success focus:ring-success',
   },
   {
-    value: 'english',
-    label: t('browse.filters.provider.english'),
-    accent: 'text-success focus:ring-success',
+    value: 'raw',
+    // Raw (JP) provider-identity hue (rose) — brand-exempt decorative accent.
+    label: t('browse.filters.provider.raw'),
+    accent: 'text-rose-500 focus:ring-rose-500',
+  },
+  {
+    value: 'ae',
+    // First-party AnimeEnigma (has_video) — indigo brand-exempt accent.
+    label: t('browse.filters.provider.ae'),
+    accent: 'text-indigo-400 focus:ring-indigo-400',
   },
 ])
 
@@ -231,15 +251,13 @@ const sortOptions = computed<{ value: Sort; label: string }[]>(() => [
   { value: 'title', label: t('browse.sort.title') },
 ])
 
-function localizedGenre(g: Genre) {
-  return getLocalizedGenre(g.name, g.name_ru)
+function onGenresChange(ids: string[]) {
+  props.filters.genres.value = ids
+  props.filters.writeUrl()
 }
 
-function onGenreToggle(id: string, checked: boolean) {
-  const set = new Set(props.filters.genres.value)
-  if (checked) set.add(id)
-  else set.delete(id)
-  props.filters.genres.value = [...set]
+function onStudiosChange(ids: string[]) {
+  props.filters.studios.value = ids
   props.filters.writeUrl()
 }
 

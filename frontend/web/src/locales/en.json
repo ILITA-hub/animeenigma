@@ -302,7 +302,10 @@
       "loadError": "Couldn't load subtitles: {error}",
       "providersDown": "Some sources didn't respond: {providers}",
       "providerIssues": "Some subtitle sources may be unavailable: {issues}",
-      "status": { "degraded": "degraded", "down": "down" },
+      "status": {
+        "degraded": "degraded",
+        "down": "down"
+      },
       "providerChip": {
         "jimaku": "Jimaku",
         "opensubtitles": "OpenSubtitles"
@@ -981,7 +984,8 @@
         "year": "Year",
         "provider": "Available on",
         "sort": "Sort",
-        "score": "Score"
+        "score": "Score",
+        "studios": "Studios"
       },
       "format": {
         "any": "Any format",
@@ -1010,12 +1014,15 @@
       },
       "provider": {
         "kodik": "Kodik (RU)",
-        "animelib": "AnimeLib (RU)",
-        "english": "English"
+        "dub": "English (Dub)",
+        "raw": "RAW (JP)",
+        "ae": "AnimeEnigma"
       },
       "score": {
         "any": "Any"
-      }
+      },
+      "searchGenres": "Search genres",
+      "searchStudios": "Search studios"
     }
   },
   "themes": {
