@@ -9,6 +9,8 @@ export const badgeVariants = cva('inline-flex items-center font-medium', {
       success: 'bg-emerald-500/20 text-emerald-400',
       warning: 'bg-amber-500/20 text-amber-400',
       rating: 'bg-black/60 text-amber-400 backdrop-blur-sm',
+      // Task 13: lime for 'recovering' provider chip — lime is an exempt brand hue (DS-lint Rule 1).
+      recovering: 'bg-lime-500/20 text-lime-400',
       // Phase 5 (LIB-09): purple for Nyaa provider chip — intentional literal color.
       info: 'bg-purple-500/20 text-purple-400',
       // Phase 5 (LIB-09): red for failed-job status badges — intentional literal color.

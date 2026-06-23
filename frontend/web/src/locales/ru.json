@@ -255,6 +255,7 @@
     "sources": {
       "best": "Лучший",
       "degraded": "Деградирован",
+      "recovering": "Восстанавливается",
       "tryAnother": "Другой источник",
       "raw": "RAW",
       "subBurnedIn": "вшитые",

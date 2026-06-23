@@ -100,4 +100,25 @@ describe('computeProviderRows', () => {
     )
     expect(rows.find(r => r.def.id === 'allanime')!.state).toBe('irrelevant')
   })
+
+  it('maps health=recovering to recovering chip state (Task 13)', () => {
+    const rows = computeProviderRows(
+      [health({ name: 'gogoanime', status: 'degraded', health: 'recovering', enabled: true, up: true, reason: 'back online' })],
+      { audio: 'sub', lang: 'en', content: 'common' },
+    )
+    const r = rows.find(r => r.def.id === 'gogoanime')
+    expect(r).toBeDefined()
+    expect(r!.state).toBe('recovering')
+    expect(r!.reason).toContain('back online')
+  })
+
+  it('recovering ranks above degraded in STATE_RANK logic (active→recovering→degraded)', () => {
+    // recovering must beat degraded when status=degraded is NOT set but health=recovering is
+    const rows = computeProviderRows(
+      [health({ name: 'gogoanime', health: 'recovering', enabled: true, up: true, reason: 'coming back' })],
+      { audio: 'sub', lang: 'en', content: 'common' },
+    )
+    const r = rows.find(r => r.def.id === 'gogoanime')
+    expect(r!.state).toBe('recovering')
+  })
 })

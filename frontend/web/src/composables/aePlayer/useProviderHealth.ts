@@ -45,6 +45,13 @@ export function computeProviderRows(
     // For scraper-backed providers, consult live health.
     if (def.scraper) {
       const h = byName.get(def.id)
+      // Recovering: backend signals the provider is coming back online (Task 11).
+      // Takes priority over status=degraded — recovering is the more specific
+      // live signal; the provider is actively healing, so rank it above degraded.
+      // Selectable in hacker mode (same as degraded) but ranked above it.
+      if (h && h.health === 'recovering') {
+        return { def, state: 'recovering', reason: h.reason || h.description }
+      }
       // Soft-degraded wins over enabled/up: registered + manually selectable in
       // hacker mode, but never auto-used and ranked last (AUTO-484).
       if (h && h.status === 'degraded') {
@@ -94,12 +101,13 @@ function pollShared(): Promise<void> {
       // Axios puts the parsed JSON in resp.data, so the envelope is at resp.data.data.
       const rawProviders = (resp.data?.data?.providers ?? {}) as Record<
         string,
-        { enabled?: boolean; status?: string; up?: boolean; reason?: string; description?: string }
+        { enabled?: boolean; status?: string; health?: string; up?: boolean; reason?: string; description?: string }
       >
       sharedHealth.value = Object.entries(rawProviders).map(([name, v]) => ({
         name,
         enabled: v.enabled ?? true,
         status: (v.status as 'enabled' | 'degraded' | 'disabled' | undefined) ?? undefined,
+        health: (v.health as 'up' | 'recovering' | 'down' | undefined) ?? undefined,
         up: v.up ?? false,
         reason: v.reason,
         description: v.description,

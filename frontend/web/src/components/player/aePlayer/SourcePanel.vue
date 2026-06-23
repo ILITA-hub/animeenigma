@@ -243,11 +243,12 @@ const langIndex = computed(() =>
 // input order.
 const STATE_RANK: Record<ChipState, number> = {
   active: 0,
-  degraded: 1,
-  wip: 2,
-  down: 3,
-  disabled: 4,
-  irrelevant: 5,
+  recovering: 1,
+  degraded: 2,
+  wip: 3,
+  down: 4,
+  disabled: 5,
+  irrelevant: 6,
 }
 const sortedRows = computed(() => {
   const pos = (id: string) => {

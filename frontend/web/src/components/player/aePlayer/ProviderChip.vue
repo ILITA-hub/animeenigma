@@ -76,6 +76,11 @@
         class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--destructive)] font-mono"
       >DOWN</span>
       <span
+        v-else-if="row.state === 'recovering'"
+        data-test="cap-recovering"
+        class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-lime-400 font-mono"
+      >{{ $t('player.sources.recovering') }}</span>
+      <span
         v-else-if="row.state === 'degraded'"
         data-test="cap-degraded"
         class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-warning font-mono"
@@ -107,10 +112,13 @@ const emit = defineEmits<{
 const isSelected = computed(() => props.selected === true)
 const labels = computed(() => deriveCapLabels(props.cap))
 
-// Active is always selectable; a degraded provider is selectable ONLY in hacker
-// mode (never auto-selected — that path filters on state 'active'). AUTO-484.
+// Active is always selectable; degraded and recovering providers are selectable
+// ONLY in hacker mode (never auto-selected — that path filters on state 'active').
+// AUTO-484. 'recovering' ranks above 'degraded' but shares the same hacker-mode gate.
 const selectable = computed(
-  () => props.row.state === 'active' || (props.row.state === 'degraded' && props.hackerMode === true),
+  () =>
+    props.row.state === 'active' ||
+    ((props.row.state === 'degraded' || props.row.state === 'recovering') && props.hackerMode === true),
 )
 
 function onClick() {

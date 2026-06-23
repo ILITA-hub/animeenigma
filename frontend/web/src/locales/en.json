@@ -255,6 +255,7 @@
     "sources": {
       "best": "Best",
       "degraded": "Degraded",
+      "recovering": "Recovering",
       "tryAnother": "Try another source",
       "raw": "RAW",
       "subBurnedIn": "burned-in",

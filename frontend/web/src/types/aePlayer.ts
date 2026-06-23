@@ -25,7 +25,9 @@ export interface ProviderDef {
 
 // 'degraded' = registered + manually selectable in hacker mode, but never
 // auto-selected/auto-fallen-back-to and sorted last in the picker (AUTO-484).
-export type ChipState = 'active' | 'degraded' | 'disabled' | 'down' | 'irrelevant' | 'wip'
+// 'recovering' = backend signals health:'recovering' — provider is coming back
+// online; selectable in hacker mode (same as degraded) but ranked above degraded.
+export type ChipState = 'active' | 'recovering' | 'degraded' | 'disabled' | 'down' | 'irrelevant' | 'wip'
 
 /** A provider as rendered in the Source panel: definition + computed state. */
 export interface ProviderRow {
@@ -42,6 +44,9 @@ export interface ScraperProviderHealth {
   /** Tri-state from the DB (enabled|degraded|disabled). 'degraded' => registered
    *  but excluded from auto-failover; surfaced as a hacker-mode-only pick. */
   status?: 'enabled' | 'degraded' | 'disabled'
+  /** Live recovery state from the scraper health endpoint (Task 11).
+   *  'recovering' = provider is coming back online after downtime. */
+  health?: 'up' | 'recovering' | 'down'
   up: boolean
   reason?: string
   description?: string

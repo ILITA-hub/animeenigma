@@ -255,6 +255,7 @@
     "sources": {
       "best": "ベスト",
       "degraded": "低品質",
+      "recovering": "回復中",
       "tryAnother": "別のソースを試す",
       "raw": "RAW",
       "subBurnedIn": "焼き込み",
