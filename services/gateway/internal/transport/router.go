@@ -292,6 +292,7 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/anime", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/anime/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/genres", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/studios", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/kodik/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/animelib/*", proxyHandler.ProxyToCatalog)
 		// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTA timestamps.
