@@ -36,7 +36,7 @@ These are the judgment calls baked into this plan. Confirm or override before ex
 
 - **No direct changes in `/data/animeenigma`** (base tree). All work in the worktree `/data/ae-upscaler` (branch `feat/upscaler-service`). Exception: `.env`/secrets only.
 - **Go workspace:** module path `github.com/ILITA-hub/animeenigma/services/upscaler`; add to root `go.work`; `replace` directives for all `libs/*` (relative `../../libs/*`). Build from repo root.
-- **Schema source of truth:** `db.AutoMigrate(...)` in `main.go` (CD-3). No SQL migration runner.
+- **Schema source of truth:** `db.AutoMigrate(...)` in `main.go` (CD-3). No SQL migration runner. **GORM string-literal defaults MUST be single-quoted** (`default:'queued'`) — GORM v1.30.0 emits `DEFAULT <value>` raw, so an unquoted `default:queued` becomes an invalid Postgres identifier and AutoMigrate fails at boot (numeric/bool defaults stay unquoted).
 - **Port 8096** must be added to: `docker/prometheus/prometheus.yml`, `docker/docker-compose.yml`, `deploy/scripts/redeploy.sh` SERVICE_PORTS array, gateway config (CD-1).
 - **Non-root container** (`USER app`), listens on >1024, no root syscalls. Two-stage Dockerfile, build context is repo root (`..`).
 - **No `testify/mock`.** Handwritten fakes with `sync.Mutex`/`atomic.*`; table-driven `t.Run`; `t.Helper()`; `t.Cleanup()`; `t.TempDir()`. Integration tests gated `//go:build integration` (line 1) + `INTEGRATION=1`.
@@ -179,7 +179,7 @@ type UpscaleJob struct {
 	Episode       int        `gorm:"type:int;not null;column:episode" json:"episode"`
 	Model         string     `gorm:"type:text;not null;column:model" json:"model"`
 	Scale         int        `gorm:"type:int;not null;default:2;column:scale" json:"scale"`
-	Status        JobStatus  `gorm:"type:text;not null;default:queued;index;column:status" json:"status"`
+	Status        JobStatus  `gorm:"type:text;not null;default:'queued';index;column:status" json:"status"`
 	ProgressPct   int        `gorm:"type:int;not null;default:0;column:progress_pct" json:"progress_pct"`
 	SourceCodec   string     `gorm:"type:text;column:source_codec" json:"source_codec,omitempty"`
 	SourcePixFmt  string     `gorm:"type:text;column:source_pixfmt" json:"source_pixfmt,omitempty"`
@@ -205,7 +205,7 @@ const (
 type UpscaleSegment struct {
 	JobID          string        `gorm:"type:uuid;primaryKey;column:job_id" json:"job_id"`
 	Idx            int           `gorm:"type:int;primaryKey;column:idx" json:"idx"`
-	Status         SegmentStatus `gorm:"type:text;not null;default:pending;index;column:status" json:"status"`
+	Status         SegmentStatus `gorm:"type:text;not null;default:'pending';index;column:status" json:"status"`
 	LeaseExpiresAt *time.Time    `gorm:"column:lease_expires_at" json:"lease_expires_at,omitempty"`
 	WorkerID       string        `gorm:"type:text;column:worker_id" json:"worker_id,omitempty"`
 	InBytes        int64         `gorm:"type:bigint;not null;default:0;column:in_bytes" json:"in_bytes"`
@@ -223,7 +223,7 @@ type UpscaleWorker struct {
 	GPUInfo          string     `gorm:"type:text;column:gpu_info" json:"gpu_info,omitempty"`
 	ImageVersion     string     `gorm:"type:text;column:image_version" json:"image_version,omitempty"`
 	ModelsAvailable  string     `gorm:"type:text;column:models_available" json:"models_available,omitempty"` // csv
-	Status           string     `gorm:"type:text;not null;default:idle;column:status" json:"status"`           // idle|busy|draining|gone
+	Status           string     `gorm:"type:text;not null;default:'idle';column:status" json:"status"`           // idle|busy|draining|gone
 	CurrentJobID     string     `gorm:"type:uuid;column:current_job_id" json:"current_job_id,omitempty"`
 	CurrentSegment   int        `gorm:"type:int;column:current_segment" json:"current_segment"`
 	SessionExpiresAt *time.Time `gorm:"column:session_expires_at" json:"session_expires_at,omitempty"`
