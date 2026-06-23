@@ -2,11 +2,69 @@ package domain_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func TestWireStatus(t *testing.T) {
+	cases := []struct {
+		name   string
+		policy domain.ProviderPolicy
+		health domain.ProviderHealth
+		want   domain.ProviderStatus
+	}{
+		{"auto+up eligible", domain.PolicyAuto, domain.HealthUp, domain.StatusEnabled},
+		{"auto+down failing", domain.PolicyAuto, domain.HealthDown, domain.StatusDegraded},
+		{"auto+recovering", domain.PolicyAuto, domain.HealthRecovering, domain.StatusDegraded},
+		{"manual+down", domain.PolicyManual, domain.HealthDown, domain.StatusDegraded},
+		{"manual+recovering", domain.PolicyManual, domain.HealthRecovering, domain.StatusDegraded},
+		{"disabled", domain.PolicyDisabled, domain.HealthDown, domain.StatusDisabled},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := domain.ScraperProvider{Policy: c.policy, Health: c.health}
+			if got := p.WireStatus(); got != c.want {
+				t.Fatalf("WireStatus()=%q want %q", got, c.want)
+			}
+			if got := p.Eligible(); got != (c.want == domain.StatusEnabled) {
+				t.Fatalf("Eligible()=%v want %v", got, c.want == domain.StatusEnabled)
+			}
+		})
+	}
+}
+
+func TestProbeCadenceAndSample(t *testing.T) {
+	cfg := domain.CadenceConfig{Up: 6 * time.Hour, Recovering: 12 * time.Hour, Manual: 24 * time.Hour, RecoveringSample: 3, FullSample: 5}
+	cases := []struct {
+		name        string
+		policy      domain.ProviderPolicy
+		health      domain.ProviderHealth
+		wantCadence time.Duration
+		wantSize    int
+		wantFF      bool
+	}{
+		{"up", domain.PolicyAuto, domain.HealthUp, 6 * time.Hour, 5, false},
+		{"recovering", domain.PolicyManual, domain.HealthRecovering, 12 * time.Hour, 3, true},
+		{"manual-down", domain.PolicyManual, domain.HealthDown, 24 * time.Hour, 1, true},
+		{"failing auto-down", domain.PolicyAuto, domain.HealthDown, 6 * time.Hour, 5, true},
+		{"disabled never", domain.PolicyDisabled, domain.HealthDown, 0, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := domain.ScraperProvider{Policy: c.policy, Health: c.health}
+			if got := p.ProbeCadence(cfg); got != c.wantCadence {
+				t.Fatalf("ProbeCadence()=%v want %v", got, c.wantCadence)
+			}
+			size, ff := p.ProbeSample(cfg)
+			if size != c.wantSize || ff != c.wantFF {
+				t.Fatalf("ProbeSample()=(%d,%v) want (%d,%v)", size, ff, c.wantSize, c.wantFF)
+			}
+		})
+	}
+}
 
 func TestScraperProviderSchema_AutoMigrate(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

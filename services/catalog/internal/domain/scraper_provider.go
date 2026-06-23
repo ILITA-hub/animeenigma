@@ -2,6 +2,34 @@ package domain
 
 import "time"
 
+// ProviderPolicy is the admin/machine intent dimension. disabled is the only
+// hard admin lock; auto<->manual are machine-driven by the probe state machine.
+type ProviderPolicy string
+
+const (
+	PolicyAuto     ProviderPolicy = "auto"
+	PolicyManual   ProviderPolicy = "manual"
+	PolicyDisabled ProviderPolicy = "disabled"
+)
+
+// ProviderHealth is the probe-observed dimension.
+type ProviderHealth string
+
+const (
+	HealthUp         ProviderHealth = "up"
+	HealthRecovering ProviderHealth = "recovering"
+	HealthDown       ProviderHealth = "down"
+)
+
+// CadenceConfig holds the tunable probe cadences + sample sizes (from env).
+type CadenceConfig struct {
+	Up               time.Duration
+	Recovering       time.Duration
+	Manual           time.Duration
+	RecoveringSample int
+	FullSample       int
+}
+
 // ProviderStatus is the tri-state lifecycle of a scraper EN-provider.
 //
 //   - StatusEnabled  — normal: in the auto-failover chain, auto-selectable.
@@ -33,6 +61,13 @@ type ScraperProvider struct {
 	// former Enabled bool (migrated 2026-06-17). Controls failover participation:
 	// only StatusEnabled providers join the auto-failover chain.
 	Status ProviderStatus `gorm:"size:16;default:'enabled'" json:"status"`
+	// Policy/Health are the machine-managed self-healing dimensions (spec
+	// 2026-06-23). Status above is DERIVED for the wire via WireStatus().
+	Policy       ProviderPolicy `gorm:"size:16;default:'auto'" json:"policy"`
+	Health       ProviderHealth `gorm:"size:16;default:'up'" json:"health"`
+	HealthSince  time.Time      `json:"health_since"`
+	PolicySince  time.Time      `json:"policy_since"`
+	LastProbedAt time.Time      `json:"last_probed_at"`
 	// Group is intrinsic: "en" (default) or "adult". `group` is a reserved word
 	// in some SQL dialects — keep the column name explicit via the tag.
 	Group string `gorm:"column:group;size:16;default:'en'" json:"group"`
@@ -84,3 +119,56 @@ func (p ScraperProvider) IsDegraded() bool { return p.Status == StatusDegraded }
 // IsRegistered reports whether the provider is registered at all (enabled OR
 // degraded). Disabled providers are not registered.
 func (p ScraperProvider) IsRegistered() bool { return p.Status != StatusDisabled }
+
+// Eligible reports auto-failover eligibility: policy auto AND health up.
+func (p ScraperProvider) Eligible() bool { return p.Policy == PolicyAuto && p.Health == HealthUp }
+
+// WireStatus derives the legacy tri-state the scraper failover gate consumes.
+func (p ScraperProvider) WireStatus() ProviderStatus {
+	switch p.Policy {
+	case PolicyDisabled:
+		return StatusDisabled
+	case PolicyAuto:
+		if p.Health == HealthUp {
+			return StatusEnabled
+		}
+		return StatusDegraded
+	default: // manual
+		return StatusDegraded
+	}
+}
+
+// ProbeCadence returns how often this provider should be probed; 0 = never.
+func (p ScraperProvider) ProbeCadence(c CadenceConfig) time.Duration {
+	if p.Policy == PolicyDisabled {
+		return 0
+	}
+	switch p.Health {
+	case HealthUp:
+		return c.Up
+	case HealthRecovering:
+		return c.Recovering
+	default: // down
+		if p.Policy == PolicyManual {
+			return c.Manual
+		}
+		return c.Up // auto+down (Failing): probe fast to confirm/recover
+	}
+}
+
+// ProbeSample returns the title sample size + fail-fast flag for a run.
+func (p ScraperProvider) ProbeSample(c CadenceConfig) (int, bool) {
+	if p.Policy == PolicyDisabled {
+		return 0, false
+	}
+	switch {
+	case p.Health == HealthUp:
+		return c.FullSample, false // full picture, no abort
+	case p.Health == HealthRecovering:
+		return c.RecoveringSample, true
+	case p.Policy == PolicyManual: // manual+down
+		return 1, true // cheapest "is it back?"
+	default: // auto+down (Failing)
+		return c.FullSample, true
+	}
+}
