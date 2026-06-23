@@ -26,6 +26,10 @@ type UpscaleJob struct {
 	ID            string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid();column:id" json:"id"`
 	ShikimoriID   string     `gorm:"type:text;not null;index;column:shikimori_id" json:"shikimori_id"`
 	Episode       int        `gorm:"type:int;not null;column:episode" json:"episode"`
+	// LibraryInfohash is the anacrolix torrent infohash for the source file
+	// on the library_torrents volume. Set by the admin trigger (CD-6).
+	// Used by source.Resolver to locate {TorrentsDir}/{LibraryInfohash}/...
+	LibraryInfohash string    `gorm:"type:text;column:library_infohash" json:"library_infohash,omitempty"`
 	Model         string     `gorm:"type:text;not null;column:model" json:"model"`
 	Scale         int        `gorm:"type:int;not null;default:2;column:scale" json:"scale"`
 	Status        JobStatus  `gorm:"type:text;not null;default:'queued';index;column:status" json:"status"`
