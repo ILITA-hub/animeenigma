@@ -83,7 +83,7 @@ func (f *fakeScraperForwarder) GetServers(ctx context.Context, malID int, title 
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool, userKey string) (int, []byte, error) {
 	f.gotStreamMALID = malID
 	f.gotStreamTitle = title
 	f.gotStreamAlt = altTitles

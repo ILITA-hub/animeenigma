@@ -116,7 +116,9 @@ func (c *Client) GetServers(ctx context.Context, malID int, title string, altTit
 
 // GetStream forwards GET /scraper/stream?mal_id=...&title=...&episode=...&server=...&category=...&prefer=...
 // When exclusive is true, ?exclusive=true is appended so the scraper skips failover.
-func (c *Client) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
+// When userKey is non-empty, an X-AE-User header is added so the sidecar can
+// enforce per-user session quotas (Phase 2 RAM-budgeted pool).
+func (c *Client) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool, userKey string) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
 	if title != "" {
@@ -134,7 +136,11 @@ func (c *Client) GetStream(ctx context.Context, malID int, title string, altTitl
 	if exclusive {
 		q.Set("exclusive", "true")
 	}
-	return c.doGET(ctx, "/scraper/stream", q)
+	var hdr http.Header
+	if userKey != "" {
+		hdr = http.Header{"X-AE-User": []string{userKey}}
+	}
+	return c.doGET(ctx, "/scraper/stream", q, hdr)
 }
 
 // GetHealth forwards GET /scraper/health (no query params).
@@ -182,7 +188,11 @@ func (c *Client) GetAnime18Stream(ctx context.Context, malID, title string, altT
 //     caller can errors.Is-match it and map to 502 Bad Gateway.
 //   - 2xx/3xx/4xx: returned with err==nil.
 //   - Transport / context errors: returned with status=0, body=nil, err=cause.
-func (c *Client) doGET(ctx context.Context, path string, q url.Values) (int, []byte, error) {
+//
+// The optional hdr argument merges extra headers into the outbound request.
+// Callers that need no extra headers may omit it entirely (variadic keeps
+// the existing GetEpisodes/GetServers/GetHealth/anime18 call-sites unchanged).
+func (c *Client) doGET(ctx context.Context, path string, q url.Values, hdr ...http.Header) (int, []byte, error) {
 	full := c.baseURL + path
 	if q != nil && len(q) > 0 {
 		full += "?" + q.Encode()
@@ -193,6 +203,13 @@ func (c *Client) doGET(ctx context.Context, path string, q url.Values) (int, []b
 		return 0, nil, fmt.Errorf("build scraper request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	if len(hdr) > 0 && hdr[0] != nil {
+		for k, vs := range hdr[0] {
+			for _, v := range vs {
+				req.Header.Add(k, v)
+			}
+		}
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

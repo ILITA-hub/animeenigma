@@ -40,7 +40,7 @@ type animeFetcher interface {
 type scraperForwarder interface {
 	GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string, exclusive bool) (int, []byte, error)
 	GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string, exclusive bool) (int, []byte, error)
-	GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error)
+	GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string, exclusive bool, userKey string) (int, []byte, error)
 	GetHealth(ctx context.Context) (int, []byte, error)
 }
 
@@ -169,7 +169,7 @@ func (o *scraperOps) GetScraperStream(ctx context.Context, animeID, episodeID, s
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetStream(ctx, malID, title, altTitles, episodeID, serverID, category, prefer, exclusive)
+	return o.scraperClient.GetStream(ctx, malID, title, altTitles, episodeID, serverID, category, prefer, exclusive, "")
 }
 
 // GetScraperHealth bypasses the animeRepo entirely — the scraper's

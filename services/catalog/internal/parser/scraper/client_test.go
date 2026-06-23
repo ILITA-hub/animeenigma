@@ -143,7 +143,7 @@ func TestClient_GetStream_BuildsURL(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, time.Second)
-	_, _, err := c.GetStream(context.Background(), 7, "Bleach", nil, "ep-2", "srv-1", "sub", "animepahe", false)
+	_, _, err := c.GetStream(context.Background(), 7, "Bleach", nil, "ep-2", "srv-1", "sub", "animepahe", false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,6 +154,43 @@ func TestClient_GetStream_BuildsURL(t *testing.T) {
 		if !strings.Contains(capturedQuery, want) {
 			t.Errorf("query = %q, missing %q", capturedQuery, want)
 		}
+	}
+}
+
+func TestGetStream_SendsUserKeyHeader(t *testing.T) {
+	var gotUser string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser = r.Header.Get("X-AE-User")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true,"data":{}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, 5*time.Second)
+	_, _, err := c.GetStream(context.Background(), 1, "t", nil, "ep", "srv", "sub", "gogoanime", false, "alice")
+	if err != nil {
+		t.Fatalf("GetStream: %v", err)
+	}
+	if gotUser != "alice" {
+		t.Errorf("X-AE-User = %q; want alice", gotUser)
+	}
+}
+
+func TestGetStream_OmitsUserKeyHeaderWhenEmpty(t *testing.T) {
+	var present bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, present = r.Header["X-Ae-User"] // canonicalized
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true,"data":{}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, 5*time.Second)
+	if _, _, err := c.GetStream(context.Background(), 1, "t", nil, "ep", "srv", "sub", "gogoanime", false, ""); err != nil {
+		t.Fatalf("GetStream: %v", err)
+	}
+	if present {
+		t.Error("X-AE-User header present on anon stream call")
 	}
 }
 
