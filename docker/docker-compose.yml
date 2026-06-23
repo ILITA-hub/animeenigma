@@ -199,11 +199,18 @@ services:
     # Each active stream retains its resolving browser (the CDN is Cloudflare-
     # fingerprint-gated, so segments are restreamed through that browser's in-page
     # fetch). Pool size = max concurrent EN streams; sized for a small group.
-    mem_limit: 3500m            # ~4 Camoufox profiles + Xvfb headroom
+    mem_limit: 7g               # 6 GiB hard RAM budget (in-process admission) + Xvfb/python overhead
     cpus: "2.0"
     environment:
       STEALTH_HEADLESS: ${STEALTH_HEADLESS:-virtual}
       STEALTH_POOL_SIZE: ${STEALTH_POOL_SIZE:-4}
+      # RAM-budgeted capacity (Phase 2). STEALTH_POOL_SIZE survives only as a
+      # high fail-safe ceiling used when the /proc RSS read fails; the live cap
+      # is the combined Camoufox RSS soft/hard budget below.
+      STEALTH_RAM_SOFT_BYTES: ${STEALTH_RAM_SOFT_BYTES:-4294967296}
+      STEALTH_RAM_HARD_BYTES: ${STEALTH_RAM_HARD_BYTES:-6442450944}
+      STEALTH_RAM_SAMPLE_SECONDS: ${STEALTH_RAM_SAMPLE_SECONDS:-5}
+      STEALTH_USER_QUOTA: ${STEALTH_USER_QUOTA:-2}
       STEALTH_SESSION_TTL_SECONDS: ${STEALTH_SESSION_TTL_SECONDS:-600}
       STEALTH_GEOIP: ${STEALTH_GEOIP:-true}
       STEALTH_HUMANIZE: ${STEALTH_HUMANIZE:-true}
@@ -715,6 +722,7 @@ services:
       # analytics /internal/effects via this Docker-network-only URL. Non-secret
       # service-discovery URL (T-02-ENV).
       ANALYTICS_INTERNAL_URL: ${ANALYTICS_INTERNAL_URL:-http://analytics:8092}
+      CATALOG_IP_SALT: ${CATALOG_IP_SALT:-}
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:
