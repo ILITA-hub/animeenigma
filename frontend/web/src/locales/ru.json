@@ -439,7 +439,10 @@
         "retry": "Повторить",
         "off": "Без субтитров",
         "empty": "Нет субтитров по запросу.",
-        "providersDown": "Недоступно: {providers}"
+        "providersDown": "Недоступно: {providers}",
+        "noTrack": "Нет субтитров для этого языка",
+        "moreLanguages": "Ещё языки ({count})",
+        "fromProvider": "Субтитры от {provider}"
       }
     }
   },

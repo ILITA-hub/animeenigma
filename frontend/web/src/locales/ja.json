@@ -439,7 +439,10 @@
         "retry": "再試行",
         "off": "字幕オフ",
         "empty": "条件に一致する字幕がありません。",
-        "providersDown": "接続できません: {providers}"
+        "providersDown": "接続できません: {providers}",
+        "noTrack": "この言語の字幕はありません",
+        "moreLanguages": "他の言語 ({count})",
+        "fromProvider": "{provider}の字幕"
       }
     }
   },

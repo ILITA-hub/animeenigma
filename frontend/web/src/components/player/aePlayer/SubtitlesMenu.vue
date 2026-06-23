@@ -7,43 +7,52 @@
       </span>
     </div>
 
-    <!-- Language selection -->
-    <div class="flex items-center gap-2.5 px-2.5 py-[9px]">
-      <span class="text-[14px] text-[var(--ink-2)] flex-shrink-0">Language</span>
-      <div class="flex flex-wrap gap-[5px] justify-end flex-1">
-        <!-- Off option -->
-        <button
-          :class="[
-            'px-[9px] py-1 rounded-full text-[12px] font-medium border transition-all',
-            subLang === 'off'
-              ? 'border-[var(--accent-line)] text-[var(--brand-cyan)]'
-              : 'bg-white/[0.08] border-transparent text-[var(--muted-foreground)] hover:bg-white/[0.14] hover:text-white',
-          ]"
-          :style="subLang === 'off' ? 'background: var(--cyan-a20)' : ''"
-          @click="emit('update:subLang', 'off')"
-        >
-          Off
-        </button>
-        <button
-          v-for="lang in subLangs"
-          :key="lang"
-          :class="[
-            'px-[9px] py-1 rounded-full text-[12px] font-medium border transition-all',
-            subLang === lang
-              ? 'border-[var(--accent-line)] text-[var(--brand-cyan)]'
-              : 'bg-white/[0.08] border-transparent text-[var(--muted-foreground)] hover:bg-white/[0.14] hover:text-white',
-          ]"
-          :style="subLang === lang ? 'background: var(--cyan-a20)' : ''"
-          @click="emit('update:subLang', lang)"
-        >
-          {{ langLabel(lang) }}
-        </button>
-      </div>
+    <!-- Fast chooser: [provider] Off RU EN JP -->
+    <div class="flex flex-wrap items-center gap-[5px] px-2.5 py-[9px]">
+      <!-- Provider chip (bundled subs from the resolved stream) -->
+      <button
+        v-if="providerChip"
+        data-test="sub-provider-chip"
+        :title="$t('player.aePlayer.subs.fromProvider', { provider: providerChip.provider })"
+        :class="pillClass(providerActive)"
+        :style="providerActive ? 'background: var(--cyan-a20)' : ''"
+        @click="emit('select-provider')"
+      >
+        {{ providerChip.provider }}
+      </button>
+
+      <!-- Off -->
+      <button
+        data-test="subs-off"
+        :class="pillClass(subLang === 'off')"
+        :style="subLang === 'off' ? 'background: var(--cyan-a20)' : ''"
+        @click="emit('pick-lang', 'off')"
+      >
+        {{ $t('player.aePlayer.subs.off') }}
+      </button>
+
+      <!-- Fixed RU / EN / JP fast buttons -->
+      <button
+        v-for="lang in FAST_LANGS"
+        :key="lang"
+        data-test="fast-lang"
+        :data-lang="lang"
+        :disabled="!availableSubLangs.includes(lang)"
+        :title="availableSubLangs.includes(lang) ? undefined : $t('player.aePlayer.subs.noTrack')"
+        :class="[
+          pillClass(!providerActive && subLang === lang),
+          availableSubLangs.includes(lang) ? '' : 'opacity-40 cursor-not-allowed',
+        ]"
+        :style="(!providerActive && subLang === lang) ? 'background: var(--cyan-a20)' : ''"
+        @click="onFast(lang)"
+      >
+        {{ FAST_LABELS[lang] }}
+      </button>
     </div>
 
-    <!-- Hardsub note: no soft tracks loaded, subs are burned in by the provider -->
+    <!-- Hardsub note: no soft tracks at all, subs are burned in by the provider -->
     <div
-      v-if="hardsubNote && subLangs.length === 0"
+      v-if="hardsubNote && availableSubLangs.length === 0"
       class="px-2.5 pb-1.5 text-[11px] leading-snug text-[var(--muted-foreground)]"
       data-test="hardsub-note"
     >
@@ -122,6 +131,7 @@
 
     <!-- Browse all subtitles -->
     <button
+      data-test="open-browse"
       class="w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-[var(--r-sm)] bg-transparent border-0 text-[14px] text-left transition-colors hover:bg-white/[0.08] hover:text-white text-[var(--brand-cyan)]"
       @click="emit('open-browse')"
     >
@@ -134,13 +144,21 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { List, ChevronRight } from 'lucide-vue-next'
 import Stepper from '@/components/ui/Stepper.vue'
 
+const { t: $t } = useI18n()
+
 const props = defineProps<{
   subLang: string
-  subLangs: string[]
-  /** shown when no soft track is loaded but the stream has burned-in subs */
+  /** Real distinct languages that have a loaded track. */
+  availableSubLangs: string[]
+  /** Bundled-subs provider from the resolved stream; null hides the chip. */
+  providerChip: { provider: string } | null
+  /** True when the active subtitle is the provider's bundled track. */
+  providerActive: boolean
+  /** Shown only when there are NO soft tracks but the stream has burned-in subs. */
   hardsubNote?: string | null
   subSize: number
   subBg: number
@@ -148,21 +166,29 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:subLang', value: string): void
+  (e: 'pick-lang', value: string): void
+  (e: 'select-provider'): void
   (e: 'update:subSize', value: number): void
   (e: 'update:subBg', value: number): void
   (e: 'update:subOffset', value: number): void
   (e: 'open-browse'): void
 }>()
 
-const LANG_LABELS: Record<string, string> = {
-  en: 'English',
-  ru: 'Русский',
-  ja: '日本語',
+const FAST_LANGS = ['ru', 'en', 'ja'] as const
+const FAST_LABELS: Record<string, string> = { ru: 'RU', en: 'EN', ja: 'JP' }
+
+function pillClass(active: boolean): string[] {
+  return [
+    'px-[9px] py-1 rounded-full text-[12px] font-medium border transition-all',
+    active
+      ? 'border-[var(--accent-line)] text-[var(--brand-cyan)]'
+      : 'bg-white/[0.08] border-transparent text-[var(--muted-foreground)] hover:bg-white/[0.14] hover:text-white',
+  ]
 }
 
-function langLabel(code: string): string {
-  return LANG_LABELS[code] ?? code.toUpperCase()
+function onFast(lang: string) {
+  if (!props.availableSubLangs.includes(lang)) return
+  emit('pick-lang', lang)
 }
 
 const offsetHint = computed(() => {
@@ -171,5 +197,4 @@ const offsetHint = computed(() => {
   const abs = Math.abs(v).toFixed(1)
   return v > 0 ? `${abs}s later` : `${abs}s earlier`
 })
-
 </script>

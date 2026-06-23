@@ -439,7 +439,10 @@
         "retry": "Retry",
         "off": "Subtitles off",
         "empty": "No subtitles match your search.",
-        "providersDown": "Couldn't reach: {providers}"
+        "providersDown": "Couldn't reach: {providers}",
+        "noTrack": "No subtitles for this language",
+        "moreLanguages": "More languages ({count})",
+        "fromProvider": "Subtitles from {provider}"
       }
     }
   },
