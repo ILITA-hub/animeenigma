@@ -632,6 +632,12 @@ services:
       # /api/users/export/json with our ak_ key + UA "node". Change + `make
       # restart-gateway` (no rebuild). Empty = feature off.
       POISON_CLIENT_IPS: ${POISON_CLIENT_IPS:-159.195.37.56}
+      # Worker edge (ext.animeenigma.org) — static API key shared with GPU workers.
+      # Fail-closed: empty = all /worker/* requests rejected (403).
+      # Rotate: set a new value in docker/.env + make restart-gateway (no rebuild).
+      # This is COARSE defense-in-depth; real per-worker auth is the
+      # enroll→session→capability chain (Tasks 5/10).
+      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

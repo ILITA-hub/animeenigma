@@ -46,6 +46,13 @@ type Config struct {
 	// corrupting the abuser's dataset instead of an obvious 403. Empty by
 	// default (feature off). Change + `make restart-gateway` (no rebuild).
 	PoisonClientIPs []string
+	// ExternalAPIKey is the static shared secret for the /worker/* edge
+	// (EXTERNAL_API_KEY env). Compared via subtle.ConstantTimeCompare.
+	// Fail-closed: empty = reject all /worker/* requests. This is a COARSE
+	// defense-in-depth filter, NOT the auth boundary — real per-worker auth
+	// is the enroll→session→idx-bound-capability chain (Tasks 5/10).
+	// Rotate: set a new value + `make restart-gateway` (no rebuild).
+	ExternalAPIKey string
 }
 
 type ServerConfig struct {
@@ -192,6 +199,8 @@ func Load() (*Config, error) {
 		ProfileWallAdminOnly: getEnvBool("PROFILE_WALL_ADMIN_ONLY", true),
 		// Anti-scrape poison target list — empty = feature off.
 		PoisonClientIPs: httputil.ParseCommaList(getEnv("POISON_CLIENT_IPS", "")),
+		// Worker edge API key — empty = reject all /worker/* (fail-closed).
+		ExternalAPIKey: getEnv("EXTERNAL_API_KEY", ""),
 	}
 
 	// DevMode is only permitted in known development environments. Any
