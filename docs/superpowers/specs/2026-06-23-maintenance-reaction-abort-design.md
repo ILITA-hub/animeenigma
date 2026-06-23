@@ -47,7 +47,7 @@ The bot is a **non-anonymous administrator** in the admin supergroup (`getChatMe
 | Abort | reply *text* 💔 to the 👁️ msg | **react 💔** to the source msg |
 | Done / Fail | flip 👀→👍/💔 reaction **+** edit text msg to ✅/❌/💔 | flip 👀→👍/💔 reaction only |
 
-Abort confirmation is **silent**: the call site already flips the bot's 👀→💔 reaction when `fn` returns `errInterrupted`. That flip (plus the admin's own visible 💔) is the confirmation. No text reply.
+Abort confirmation is **silent**: the **poller** flips the bot's 👀→💔 reaction the instant it detects a valid abort (immediate, and uniform across all call sites — today only `applyFix` sets 💔 on abort; the two analysis sites do not). That flip (plus the admin's own visible 💔) is the confirmation. No text reply. The existing `SetReaction(replyToID,"💔")` in `applyFix`'s `errInterrupted` branch becomes a harmless idempotent no-op and is left in place.
 
 ### Components
 
@@ -101,7 +101,7 @@ func isReactionAbort(u telegram.Update, botID int64) (msgID int, ok bool) {
 ```
 
 - `reactionsContain` matches a `ReactionType{Type:"emoji"}` whose `Emoji` contains the 💔 codepoint (bare-codepoint substring, mirroring the existing VS16-tolerant match).
-- On match: `if s.tryInterrupt(msgID) { log… }`. `tryInterrupt` is a no-op for an unregistered/finished message, so a late 💔 on a done analysis is harmless. No text reply (silent).
+- On match: `if s.tryInterrupt(msgID) { s.tg.SetReaction(msgID, heartBreak); log… }` — cancel the analysis and flip the bot's 👀→💔 reaction as the silent confirmation. `tryInterrupt` is a no-op for an unregistered/finished message (returns false → no reaction flip), so a late 💔 on a done analysis is harmless. No text reply.
 - **All `message_reaction` updates are handled in-poller and dropped from `kept`** — they are never queued to the processor (they have `Message == nil`).
 - `botID` is fetched once at startup via `getMe` and stored on `service` (or the telegram client). Offset advancement is unchanged (already done for every update before the filter).
 
@@ -109,7 +109,9 @@ Delete `handleInterrupt` and call `s.tryInterrupt(msgID)` directly from the poll
 
 **4. Tests**
 
-- Replace `cmd/maintenance/interrupt_test.go` and the 💔-reply cases in `autofix_test.go` with `isReactionAbort` table tests:
+- In `cmd/maintenance/interrupt_test.go`: replace `TestIsInterruptReply` + its `botReply` helper with `TestIsReactionAbort` + a `reactionUpdate` helper. The registry-lifecycle tests (`TestInterruptRegistryLifecycle`, `TestClearInterruptDoesNotCancel`, `TestSweepInterruptsTTL`, `TestTryInterruptCancelsContext`) are unchanged — keep them.
+- In `cmd/maintenance/autofix_test.go`: delete `TestWatchTerminalHTML` (it tested the removed `watchTerminalHTML`/`eyeBase`).
+- `isReactionAbort` table tests:
   - 💔 added (`new_reaction` contains 💔) to a registered msg → `(msgID, true)`.
   - bot's own reaction (`User.ID == botID`) → `(0, false)`.
   - non-💔 reaction (👍/👀) → `(0, false)`.
