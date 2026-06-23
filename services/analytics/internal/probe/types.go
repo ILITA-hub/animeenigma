@@ -31,6 +31,9 @@ const (
 	StageServers  Stage = "servers"
 	StageStream   Stage = "stream"
 	StagePlayback Stage = "playback"
+	// StageNotTried marks refs that were skipped because an earlier ref failed
+	// and fail_fast was enabled. These are excluded from Rollup scoring.
+	StageNotTried Stage = "not_tried"
 )
 
 // AnimeSlot labels which of the 4 per-run anime a probe targeted.

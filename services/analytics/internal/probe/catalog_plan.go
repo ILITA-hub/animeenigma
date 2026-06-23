@@ -6,7 +6,36 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
+
+// PlanClient abstracts the catalog probe-plan API so the engine can be tested
+// without a real HTTP server.
+type PlanClient interface {
+	FetchPlan(ctx context.Context) ([]PlanEntry, error)
+	PostVerdict(ctx context.Context, provider string, pass bool, reason string) error
+}
+
+type httpPlanClient struct {
+	catalogURL string
+	hc         *http.Client
+}
+
+// NewHTTPPlanClient returns a PlanClient backed by catalog's internal API.
+func NewHTTPPlanClient(catalogURL string, hc *http.Client) PlanClient {
+	if hc == nil {
+		hc = &http.Client{Timeout: 15 * time.Second}
+	}
+	return &httpPlanClient{catalogURL: catalogURL, hc: hc}
+}
+
+func (c *httpPlanClient) FetchPlan(ctx context.Context) ([]PlanEntry, error) {
+	return FetchPlan(ctx, c.catalogURL, c.hc)
+}
+
+func (c *httpPlanClient) PostVerdict(ctx context.Context, p string, pass bool, reason string) error {
+	return PostVerdict(ctx, c.catalogURL, c.hc, p, pass, reason)
+}
 
 // PlanEntry is one provider the catalog says is due to probe this tick.
 type PlanEntry struct {

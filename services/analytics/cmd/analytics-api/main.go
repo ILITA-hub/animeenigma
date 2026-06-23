@@ -187,6 +187,7 @@ func main() {
 			}
 
 			pool := probe.NewHTTPPopularPool(cfg.CatalogURL, nil)
+			planClient := probe.NewHTTPPlanClient(cfg.CatalogURL, &http.Client{Timeout: 15 * time.Second})
 			engine := probe.NewEngine(
 				targets,
 				validator,
@@ -194,6 +195,7 @@ func main() {
 				pool, rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
 				func() int64 { return time.Now().Unix() },
 				log,
+				planClient,
 			)
 			probeHandler = handler.NewProbeHandler(engine)
 		}
