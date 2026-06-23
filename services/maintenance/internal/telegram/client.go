@@ -376,7 +376,6 @@ func (c *Client) SendMessage(html string) (int, error) {
 	return msg.MessageID, nil
 }
 
-
 func (c *Client) AnswerCallbackQuery(callbackID string, text string) error {
 	body := map[string]interface{}{
 		"callback_query_id": callbackID,
