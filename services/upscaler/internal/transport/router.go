@@ -1,11 +1,13 @@
 package transport
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -68,6 +70,8 @@ func requireGatewayInternal(next http.Handler) http.Handler {
 func NewRouter(
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
+	hub *controlplane.Hub,
+	enrollStore *controlplane.GormEnrollStore,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -100,12 +104,37 @@ func NewRouter(
 		// placeholder — handlers wired in Task 4+
 	})
 
-	// Worker routes (/worker/*) — filled in later tasks (Tasks 5/7+).
+	// Worker routes (/worker/*) — worker-facing enroll + WS upgrade.
 	// These are reached from the internet via the gateway's /worker/* group
 	// (ExternalAPIKeyMiddleware + WS proxy). No additional gate here; auth
-	// is the API-key (gateway) + session/capability chain (Task 5/10).
+	// is the API-key (gateway) + session/capability chain.
 	r.Route("/worker", func(r chi.Router) {
-		// placeholder — handlers wired in Tasks 5/7+
+		// POST /worker/enroll — one-time-token enroll flow.
+		// Uses GormEnrollStore.EnrollTx directly (transactional, durable
+		// single-use); NOT Handle+GormEnrollStore (non-transactional footgun).
+		r.Post("/enroll", func(w http.ResponseWriter, r *http.Request) {
+			var req controlplane.EnrollRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+			resp, err := enrollStore.EnrollTx(r.Context(), req, controlplane.SessionTTL)
+			if err != nil {
+				if err == controlplane.ErrTokenNotFound {
+					http.Error(w, "token not found or already used", http.StatusUnauthorized)
+					return
+				}
+				log.Warnw("enroll: EnrollTx error", "error", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+		})
+
+		// GET /worker/ws — WebSocket upgrade for the WS control-plane.
+		// Session verified via ?worker_id=&exp=&sig= query params.
+		r.Get("/ws", controlplane.UpgradeHandler(hub))
 	})
 
 	return r

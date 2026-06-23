@@ -16,7 +16,10 @@ import (
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/capability"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/transport"
 )
 
@@ -100,8 +103,27 @@ func main() {
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("upscaler")
 
+	// ── Repositories ──────────────────────────────────────────────────────────
+	jobRepo := repo.NewJobRepository(db.DB)
+	segmentRepo := repo.NewSegmentRepository(db.DB)
+	workerRepo := repo.NewWorkerRepository(db.DB)
+
+	// ── Services ──────────────────────────────────────────────────────────────
+
+	// Leaser: picks the next eligible job/segment and mints capability handles.
+	leaser := service.NewLeaser(jobRepo, segmentRepo, workerRepo)
+
+	// WS Hub: manages worker WebSocket connections.
+	hub := controlplane.NewHub(leaser, workerRepo, log)
+
+	// Enroll store: production transactional enroll path (EnrollTx, NOT Handle).
+	enrollStore := controlplane.NewGormEnrollStore(db.DB)
+
+	// Sweeper: re-leases expired segments and marks stale workers as gone.
+	sweeper := service.NewSweeperWithLogger(segmentRepo, workerRepo, log)
+
 	// Initialize router
-	router := transport.NewRouter(log, metricsCollector)
+	router := transport.NewRouter(log, metricsCollector, hub, enrollStore)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -111,6 +133,12 @@ func main() {
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+
+	// ── Background goroutines ─────────────────────────────────────────────────
+
+	// Start sweeper (re-leases stale segments + marks gone workers every 30s).
+	go sweeper.Run(context.Background())
+	defer sweeper.Stop()
 
 	// Start server
 	go func() {

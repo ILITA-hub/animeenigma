@@ -1,13 +1,17 @@
 package transport
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 )
 
 // shared collector for this test file — avoids duplicate registration panics.
@@ -23,9 +27,26 @@ func sharedUpscalerCollector() *metrics.Collector {
 	return upscalerTestCollector
 }
 
+// stubLeaser satisfies controlplane.Leaser but returns nothing (no jobs).
+type stubLeaser struct{}
+
+func (s *stubLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSegment, controlplane.LeaseHandles, error) {
+	return nil, controlplane.LeaseHandles{}, nil
+}
+
+// stubWorkerHB satisfies controlplane.WorkerHeartbeater (no-op).
+type stubWorkerHB struct{}
+
+func (s *stubWorkerHB) Heartbeat(_ context.Context, _, _ string, _ int, _ time.Time) error {
+	return nil
+}
+
 func buildUpscalerRouter(t *testing.T) http.Handler {
 	t.Helper()
-	return NewRouter(logger.Default(), sharedUpscalerCollector())
+	log := logger.Default()
+	hub := controlplane.NewHub(&stubLeaser{}, &stubWorkerHB{}, log)
+	// nil GormEnrollStore is fine for separation tests — no enroll calls are made.
+	return NewRouter(log, sharedUpscalerCollector(), hub, nil)
 }
 
 // TestUpscalerRouter_WorkerSurfaceReachable — /worker/* routes exist on the
