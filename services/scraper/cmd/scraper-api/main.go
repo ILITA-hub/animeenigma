@@ -568,7 +568,7 @@ func main() {
 	anime18Handler.WithProvidersConfig(&cfg.Providers)
 
 	// Hot-reload provider config from catalog (enable/disable without restart).
-	config.StartProvidersRefresher(context.Background(), &cfg.Providers, cfg.CatalogURL, cfg.ProvidersRefresh, log)
+	config.StartProvidersRefresher(context.Background(), &cfg.Providers, cfg.CatalogURL, cfg.ProvidersRefresh, log, nil)
 
 	router := transport.NewRouter(scraperHandler, anime18Handler, cfg, log, metricsCollector)
 

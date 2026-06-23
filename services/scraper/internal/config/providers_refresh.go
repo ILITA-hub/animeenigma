@@ -16,7 +16,12 @@ type Logger interface {
 // and atomically swaps it into target via Replace. Runs until ctx is canceled.
 // A failed refresh keeps the last-good config (logged at WARN). No-op if
 // catalogURL is empty or interval <= 0.
-func StartProvidersRefresher(ctx context.Context, target *ProvidersConfig, catalogURL string, interval time.Duration, log Logger) {
+//
+// onRefresh (nil-safe) is invoked AFTER each successful Replace, on the
+// refresher goroutine. The scraper wires it to Orchestrator.ApplyStatuses so a
+// catalog status change re-gates the failover roster without a restart. It is
+// called every poll (idempotent) — ApplyStatuses is a cheap map walk.
+func StartProvidersRefresher(ctx context.Context, target *ProvidersConfig, catalogURL string, interval time.Duration, log Logger, onRefresh func()) {
 	if catalogURL == "" || interval <= 0 || target == nil {
 		return
 	}
@@ -42,6 +47,9 @@ func StartProvidersRefresher(ctx context.Context, target *ProvidersConfig, catal
 				target.Replace(entries)
 				if log != nil {
 					log.Infow("provider config refreshed", "disabled", target.DisabledNames())
+				}
+				if onRefresh != nil {
+					onRefresh()
 				}
 			}
 		}
