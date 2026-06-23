@@ -142,6 +142,9 @@ func TestResolve_EmptyInfohash_Error(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Resolve() error = nil, want error for empty infohash")
 	}
+	if !errors.Is(err, ErrSourceGone) {
+		t.Errorf("Resolve() error = %v, want errors.Is(err, ErrSourceGone)", err)
+	}
 }
 
 func TestResolve_PicksMKVOverMp4WhenMKVIsLarger(t *testing.T) {
@@ -199,5 +202,45 @@ func TestResolve_Idempotent_OverwritesExistingStaging(t *testing.T) {
 
 	if p1 != p2 {
 		t.Errorf("idempotent resolve returned different paths: %q vs %q", p1, p2)
+	}
+}
+
+func TestResolve_ContextCancelled_NoPartialFile(t *testing.T) {
+	torrentsDir := t.TempDir()
+	stagingDir := t.TempDir()
+
+	const infohash = "cancel-hash"
+	jobDir := filepath.Join(torrentsDir, infohash)
+	// Non-empty source so the copy loop body runs at least once; the
+	// pre-cancelled ctx trips the ctx.Err() guard at the top of the loop.
+	makeFile(t, filepath.Join(jobDir, "episode.mkv"), 64*1024)
+
+	job := &domain.UpscaleJob{
+		ID:              "job-cancel-001",
+		LibraryInfohash: infohash,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before Resolve so the copy aborts mid-stream
+
+	resolver := NewResolver(torrentsDir, stagingDir)
+	_, err := resolver.Resolve(ctx, job)
+	if err == nil {
+		t.Fatalf("Resolve() error = nil, want context cancellation error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Resolve() error = %v, want errors.Is(err, context.Canceled)", err)
+	}
+
+	// No destination file must remain (atomic copy removes the .tmp and
+	// never renames into place on failure).
+	destPath := filepath.Join(stagingDir, job.ID, "source.mkv")
+	if _, statErr := os.Stat(destPath); !os.IsNotExist(statErr) {
+		t.Errorf("dest file %q must NOT exist after cancelled copy; stat err = %v", destPath, statErr)
+	}
+	// The temp file must also be gone.
+	tmpPath := destPath + ".tmp"
+	if _, statErr := os.Stat(tmpPath); !os.IsNotExist(statErr) {
+		t.Errorf("temp file %q must NOT exist after cancelled copy; stat err = %v", tmpPath, statErr)
 	}
 }

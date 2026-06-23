@@ -136,6 +136,74 @@ echo "Error: Invalid data" 1>&2
 exit 1
 `
 
+// fakeFFprobeCoverArtPlusReal emits a cover-art "video" stream
+// (disposition.attached_pic=1) AND a real video stream. The cover art is
+// declared LARGER (4000x4000) than the real stream (1280x720) on purpose:
+// a naive largest-area selector would pick the cover art, so this proves the
+// attached_pic=1 skip is load-bearing — the real stream must still win.
+const fakeFFprobeCoverArtPlusReal = `#!/bin/sh
+cat <<'JSON'
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_type": "video",
+      "codec_name": "mjpeg",
+      "pix_fmt": "yuvj420p",
+      "width": 4000,
+      "height": 4000,
+      "avg_frame_rate": "90000/3753",
+      "disposition": { "attached_pic": 1 }
+    },
+    {
+      "index": 1,
+      "codec_type": "video",
+      "codec_name": "h264",
+      "pix_fmt": "yuv420p",
+      "width": 1280,
+      "height": 720,
+      "avg_frame_rate": "24000/1001",
+      "disposition": { "attached_pic": 0 }
+    },
+    {
+      "index": 2,
+      "codec_type": "audio",
+      "codec_name": "aac"
+    }
+  ],
+  "format": { "duration": "1410.5", "bit_rate": "5000000" }
+}
+JSON
+`
+
+// fakeFFprobeOnlyCoverArt emits a SINGLE video stream which is cover art
+// (attached_pic=1) and nothing else. Probe must FAIL — there is no real
+// video stream.
+const fakeFFprobeOnlyCoverArt = `#!/bin/sh
+cat <<'JSON'
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_type": "video",
+      "codec_name": "png",
+      "pix_fmt": "rgba",
+      "width": 1000,
+      "height": 1500,
+      "avg_frame_rate": "0/0",
+      "disposition": { "attached_pic": 1 }
+    },
+    {
+      "index": 1,
+      "codec_type": "audio",
+      "codec_name": "mp3"
+    }
+  ],
+  "format": { "duration": "1410.5", "bit_rate": "320000" }
+}
+JSON
+`
+
 func TestProbe_HEVCWith10Bit(t *testing.T) {
 	dir := t.TempDir()
 	probeBin := filepath.Join(dir, "fake_ffprobe.sh")
@@ -226,5 +294,43 @@ func TestProbe_MultipleVideoStreams_PicksLargest(t *testing.T) {
 	}
 	if !result.HasAudio {
 		t.Errorf("HasAudio = false, want true (flac stream present)")
+	}
+}
+
+func TestProbe_CoverArtSkipped_RealVideoWins(t *testing.T) {
+	dir := t.TempDir()
+	probeBin := filepath.Join(dir, "fake_ffprobe_cover.sh")
+	writeScript(t, probeBin, fakeFFprobeCoverArtPlusReal)
+
+	prober := NewProber(probeBin)
+
+	result, err := prober.Probe(context.Background(), filepath.Join(dir, "fake.mkv"))
+	if err != nil {
+		t.Fatalf("Probe() error = %v, want nil", err)
+	}
+
+	// The mjpeg cover-art stream (attached_pic=1) must be skipped; the real
+	// h264 720p stream wins.
+	if result.Codec != "h264" {
+		t.Errorf("Codec = %q, want %q (real stream, cover art skipped)", result.Codec, "h264")
+	}
+	if result.Width != 1280 || result.Height != 720 {
+		t.Errorf("dims = %dx%d, want 1280x720 (real stream)", result.Width, result.Height)
+	}
+	if result.PixFmt != "yuv420p" {
+		t.Errorf("PixFmt = %q, want %q (real stream, not cover art's yuvj420p)", result.PixFmt, "yuv420p")
+	}
+}
+
+func TestProbe_OnlyCoverArt_Error(t *testing.T) {
+	dir := t.TempDir()
+	probeBin := filepath.Join(dir, "fake_ffprobe_only_cover.sh")
+	writeScript(t, probeBin, fakeFFprobeOnlyCoverArt)
+
+	prober := NewProber(probeBin)
+
+	_, err := prober.Probe(context.Background(), filepath.Join(dir, "fake.mkv"))
+	if err == nil {
+		t.Fatalf("Probe() error = nil, want non-nil (only cover art, no real video stream)")
 	}
 }

@@ -51,6 +51,12 @@ type ffprobeStream struct {
 	Width        int    `json:"width"`
 	Height       int    `json:"height"`
 	AvgFrameRate string `json:"avg_frame_rate"`
+	Disposition  struct {
+		// AttachedPic == 1 marks a cover-art / poster image carried as a
+		// codec_type=video stream. It is NOT the real video and must be
+		// skipped during video-stream selection.
+		AttachedPic int `json:"attached_pic"`
+	} `json:"disposition"`
 }
 
 // Prober runs ffprobe against a video file and parses the streams array.
@@ -108,6 +114,11 @@ func (p *Prober) Probe(ctx context.Context, path string) (ProbeResult, error) {
 	for _, s := range parsed.Streams {
 		switch s.CodecType {
 		case "video":
+			// Skip cover-art / poster streams (attached_pic=1) — they are
+			// embedded images masquerading as video, not the real picture.
+			if s.Disposition.AttachedPic == 1 {
+				continue
+			}
 			area := s.Width * s.Height
 			if !foundVideo || area > bestVideoArea {
 				result.Codec = s.CodecName

@@ -106,28 +106,42 @@ func (r *Resolver) Resolve(ctx context.Context, job *domain.UpscaleJob) (string,
 	ext := filepath.Ext(bestPath)
 	destPath := filepath.Join(jobStaging, "source"+ext)
 
-	if err := copyFile(ctx, bestPath, destPath); err != nil {
+	if err := copyFileAtomic(ctx, bestPath, destPath); err != nil {
 		return "", fmt.Errorf("copying %q → %q: %w", bestPath, destPath, err)
 	}
 
 	return destPath, nil
 }
 
-// copyFile copies src to dst, creating or truncating dst. The copy is
-// context-aware: it checks for cancellation before writing each chunk.
-func copyFile(ctx context.Context, src, dst string) error {
+// copyFileAtomic copies src to dst atomically: it writes to dst+".tmp",
+// fsyncs, then renames to dst on success. On ANY error (open/read/write/
+// fsync/ctx-cancel) the temp file is removed so no partial or corrupt file
+// is ever left at dst. Rename is atomic on the same filesystem, which holds
+// because staging is a single volume. This also closes the
+// ctx-cancel-mid-copy leak (a cancelled copy leaves nothing behind).
+func copyFileAtomic(ctx context.Context, src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
 	}
 	defer srcFile.Close()
 
-	// O_TRUNC so idempotent re-runs overwrite the previous copy.
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	tmp := dst + ".tmp"
+	// O_TRUNC so a leftover .tmp from a prior aborted run is overwritten.
+	tmpFile, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return fmt.Errorf("open dest: %w", err)
+		return fmt.Errorf("open temp dest: %w", err)
 	}
-	defer dstFile.Close()
+
+	// On any failure path, remove the temp file. committed is set true only
+	// after the rename succeeds, so a good destination file is never deleted.
+	committed := false
+	defer func() {
+		tmpFile.Close() // idempotent; safe even after an explicit Close below
+		if !committed {
+			_ = os.Remove(tmp)
+		}
+	}()
 
 	buf := make([]byte, 32*1024)
 	for {
@@ -136,8 +150,8 @@ func copyFile(ctx context.Context, src, dst string) error {
 		}
 		n, readErr := srcFile.Read(buf)
 		if n > 0 {
-			if _, writeErr := dstFile.Write(buf[:n]); writeErr != nil {
-				return fmt.Errorf("write dest: %w", writeErr)
+			if _, writeErr := tmpFile.Write(buf[:n]); writeErr != nil {
+				return fmt.Errorf("write temp dest: %w", writeErr)
 			}
 		}
 		if readErr != nil {
@@ -148,5 +162,17 @@ func copyFile(ctx context.Context, src, dst string) error {
 		}
 	}
 
-	return dstFile.Sync()
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("fsync temp dest: %w", err)
+	}
+	// Close before rename so all buffered data is flushed.
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp dest: %w", err)
+	}
+
+	if err := os.Rename(tmp, dst); err != nil {
+		return fmt.Errorf("rename temp dest: %w", err)
+	}
+	committed = true
+	return nil
 }
