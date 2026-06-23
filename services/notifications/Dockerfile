@@ -57,6 +57,11 @@ WORKDIR /app
 
 COPY --from=builder /notifications-api .
 
+# M501: drop root — run as non-root 'app'. Binary listens on a >1024 port and
+# writes nothing to local disk (state is in postgres/redis/MinIO), so this is free.
+RUN addgroup -S app && adduser -S -G app app && chown -R app:app /app
+USER app
+
 EXPOSE 8090
 
 CMD ["./notifications-api"]
