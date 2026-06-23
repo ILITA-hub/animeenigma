@@ -3,7 +3,7 @@
 	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod \
 	migrate migrate-down migrate-force migrate-version migrate-auth migrate-catalog migrate-player migrate-rooms migrate-all migrate-create migrate-status db-shell \
 	redeploy-all redeploy-web redeploy-animepahe-resolver type-check lint-design \
-	backfill-attributes build-backfill-attributes
+	backfill-attributes build-backfill-attributes favicons
 
 # Variables
 SERVICES := auth catalog streaming player rooms scheduler gateway themes scraper library notifications watch-together gacha recs
@@ -180,6 +180,10 @@ generate-openapi: ## Generate OpenAPI clients
 generate-graphql: ## Generate GraphQL code
 	@echo "Generating GraphQL code..."
 	cd frontend/web && pnpm graphql-codegen
+
+favicons: ## Render the site favicon set (favicon.ico + PNGs) from frontend/web/public/logo.png
+	@echo "Rendering favicons from logo.png..."
+	python3 frontend/web/scripts/generate-favicons.py
 
 # ============================================================================
 # Database (golang-migrate)
