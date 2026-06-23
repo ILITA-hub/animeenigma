@@ -95,3 +95,21 @@ func TestAnimeRepository_Search_ProviderColumns(t *testing.T) {
 		require.Equal(t, c.wantID, got[0].ID, c.key)
 	}
 }
+
+func TestAnimeRepository_ListStudios_OrderedByCount(t *testing.T) {
+	db := setupBrowseFilterTestDB(t)
+	r := NewAnimeRepository(db)
+	ctx := context.Background()
+
+	seedBrowseAnime(t, db, "a1", "A1")
+	seedBrowseAnime(t, db, "a2", "A2")
+	require.NoError(t, db.Exec(`INSERT INTO studios (id, name) VALUES ('s-big','Big'),('s-small','Small'),('s-empty','Empty')`).Error)
+	// Big has 2 anime, Small has 1, Empty has 0 (must be excluded).
+	require.NoError(t, db.Exec(`INSERT INTO anime_studios (anime_id, studio_id) VALUES ('a1','s-big'),('a2','s-big'),('a1','s-small')`).Error)
+
+	got, err := r.ListStudios(ctx)
+	require.NoError(t, err)
+	require.Len(t, got, 2) // Empty excluded (no anime)
+	require.Equal(t, "s-big", got[0].ID)   // count 2 first
+	require.Equal(t, "s-small", got[1].ID) // count 1 second
+}

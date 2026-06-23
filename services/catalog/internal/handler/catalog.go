@@ -454,6 +454,17 @@ func (h *CatalogHandler) GetGenres(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, genres)
 }
 
+// GetStudios handles getting all studios that have anime (browse filter options)
+func (h *CatalogHandler) GetStudios(w http.ResponseWriter, r *http.Request) {
+	studios, err := h.catalogService.GetStudios(r.Context())
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, studios)
+}
+
 // GetAniboomTranslations gets available translations from Aniboom
 func (h *CatalogHandler) GetAniboomTranslations(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")

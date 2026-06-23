@@ -231,6 +231,7 @@ func NewRouter(
 		r.Get("/skip-times/{malId}/{episode}", skipTimesHandler.Get)
 
 		r.Get("/genres", catalogHandler.GetGenres)
+		r.Get("/studios", catalogHandler.GetStudios)
 
 		// Phase 17 (UX-33) — public editorial collections. Registered
 		// BEFORE the /admin group so chi's longest-prefix match resolves

@@ -222,6 +222,22 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 	return animes, total, nil
 }
 
+// ListStudios returns every studio that has at least one anime, ordered by
+// anime count DESC then name ASC. The JOIN excludes zero-anime studios.
+func (r *AnimeRepository) ListStudios(ctx context.Context) ([]domain.Studio, error) {
+	var studios []domain.Studio
+	err := r.db.WithContext(ctx).
+		Model(&domain.Studio{}).
+		Joins("JOIN anime_studios ON anime_studios.studio_id = studios.id").
+		Group("studios.id").
+		Order("COUNT(anime_studios.anime_id) DESC, studios.name ASC").
+		Find(&studios).Error
+	if err != nil {
+		return nil, fmt.Errorf("list studios: %w", err)
+	}
+	return studios, nil
+}
+
 func (r *AnimeRepository) GetBySeason(ctx context.Context, year int, season string, page, pageSize int) ([]*domain.Anime, int64, error) {
 	filters := domain.SearchFilters{
 		Year:     &year,

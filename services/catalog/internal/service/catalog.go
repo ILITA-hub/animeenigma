@@ -1031,6 +1031,23 @@ func (s *CatalogService) GetOngoingAnime(ctx context.Context, page, pageSize int
 	return animes, total, nil
 }
 
+// GetStudios gets all studios that have anime (browse filter options).
+func (s *CatalogService) GetStudios(ctx context.Context) ([]domain.Studio, error) {
+	cacheKey := "studios:all"
+	var studios []domain.Studio
+	if err := s.cache.Get(ctx, cacheKey, &studios); err == nil {
+		return studios, nil
+	}
+
+	studios, err := s.animeRepo.ListStudios(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = s.cache.Set(ctx, cacheKey, studios, cache.TTLGenreList)
+	return studios, nil
+}
+
 // GetGenres gets all genres
 func (s *CatalogService) GetGenres(ctx context.Context) ([]domain.Genre, error) {
 	// Try cache
