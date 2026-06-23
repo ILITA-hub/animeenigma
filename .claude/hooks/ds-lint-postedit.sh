@@ -32,9 +32,11 @@ case "$FILE" in
   *) exit 0 ;;
 esac
 
-# Resolve repo root: prefer the harness-provided var, else ask git from the file's dir.
-ROOT="${CLAUDE_PROJECT_DIR:-}"
-[ -n "$ROOT" ] || ROOT="$(git -C "$(dirname "$FILE")" rev-parse --show-toplevel 2>/dev/null || true)"
+# Resolve repo root from the EDITED FILE's tree first, so a base-tree session
+# editing a worktree file lints THAT worktree (not the base tree). Fall back to
+# the harness project dir for relative paths / non-git files.
+ROOT="$(git -C "$(dirname "$FILE")" rev-parse --show-toplevel 2>/dev/null || true)"
+[ -n "$ROOT" ] || ROOT="${CLAUDE_PROJECT_DIR:-}"
 [ -n "$ROOT" ] || exit 0
 
 SCRIPT="$ROOT/frontend/web/scripts/design-system-lint.sh"
