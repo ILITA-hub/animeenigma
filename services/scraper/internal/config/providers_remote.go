@@ -30,6 +30,7 @@ type remoteProvider struct {
 	PreferenceWeight int    `json:"preference_weight"`
 	Engine           string `json:"engine"`
 	BaseURL          string `json:"base_url"`
+	Health           string `json:"health"`
 }
 
 // statusOf resolves the tri-state: prefer the new status field; fall back to the
@@ -122,6 +123,7 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 			PreferenceWeight: p.PreferenceWeight,
 			Engine:           p.Engine,
 			BaseURL:          p.BaseURL,
+			Health:           p.Health,
 		}
 	}
 	return newProvidersConfig(metas, "remote"), nil

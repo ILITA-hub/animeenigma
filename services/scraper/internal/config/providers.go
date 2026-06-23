@@ -86,6 +86,11 @@ type ProviderMeta struct {
 	// BaseURL is the provider's mirror origin from the DB (replaces the former
 	// SCRAPER_<NAME>_BASE_URL envs). Empty ⇒ the provider's built-in default.
 	BaseURL string
+	// Health carries the operator-facing health signal (up|recovering|down).
+	// This is a display-only field passed through to the /health response for
+	// the frontend pill — it does NOT gate the auto-failover chain (that stays
+	// keyed on Status/IsEnabled).
+	Health string
 }
 
 // EngineHTTP / EngineBrowser are the ProviderMeta.Engine values.
@@ -184,6 +189,11 @@ func (p ProvidersConfig) Status(name string) ProviderStatus {
 	}
 	return StatusEnabled
 }
+
+// Health returns the operator-facing health signal (up|recovering|down) for a
+// provider. Empty string when the provider is absent or the field is unset.
+// This is a display-only passthrough — the failover gate stays on Status.
+func (p ProvidersConfig) Health(name string) string { return p.Meta(name).Health }
 
 // IsEnabled reports whether a provider is in the normal auto-failover chain.
 // Absent names default to enabled.

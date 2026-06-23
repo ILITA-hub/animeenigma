@@ -374,6 +374,10 @@ type providerEnriched struct {
 	Up          bool   `json:"up"`
 	Reason      string `json:"reason,omitempty"`
 	Description string `json:"description,omitempty"`
+	// Health is the operator-facing health signal (up|recovering|down) forwarded
+	// from the DB for the frontend pill. Omitted when empty (unknown/unset).
+	// The auto-failover gate is NOT affected — it stays on Status.
+	Health string `json:"health,omitempty"`
 }
 
 // healthUp derives a coarse boolean "is this provider up?" from its live
@@ -462,6 +466,7 @@ func (h *ScraperHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 			// IsEnabled defaults to true for absent providers; reflect that.
 			entry.Enabled = h.providersCfg.IsEnabled(prov)
 			entry.Status = string(h.providersCfg.Status(prov))
+			entry.Health = h.providersCfg.Health(prov)
 			entry.Reason = meta.Reason
 			entry.Description = meta.Description
 		}

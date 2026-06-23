@@ -1546,6 +1546,43 @@ func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
 	}
 }
 
+// TestGetHealth_IncludesHealthField verifies that the `health` field (up|recovering|down)
+// is passed through from ProviderMeta to the /health JSON response per-provider object.
+// The failover gate (Status/IsEnabled) is NOT changed by this test — it remains on the
+// existing `status` wire.
+func TestGetHealth_IncludesHealthField(t *testing.T) {
+	t.Parallel()
+
+	pc := config.NewProvidersConfigForTest([]config.ProviderMeta{
+		{Name: "gogoanime", Status: config.StatusEnabled, Health: "recovering"},
+	})
+
+	gogo := &fakeProvider{
+		name: "gogoanime",
+		health: domain.Health{
+			Provider: "gogoanime",
+			Stages:   map[string]domain.StageHealth{"search": {Up: true}},
+		},
+	}
+
+	log := logger.Default()
+	o := service.NewOrchestrator(log, domain.NewRegistry(), nil)
+	o.Register(gogo)
+	h := NewScraperHandler(o, nil, log)
+	h.WithProvidersConfig(&pc)
+
+	rr := httptest.NewRecorder()
+	h.GetHealth(rr, httptest.NewRequest(http.MethodGet, "/scraper/health", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"health":"recovering"`) {
+		t.Fatalf("health field missing or wrong in response: %s", body)
+	}
+}
+
 // TestGetEpisodes_ForwardsExclusive — exclusive=true query param must be
 // forwarded to OrderedProviderNames (and through the full resolve chain).
 // With two registered providers and prefer=first&exclusive=true, the handler
