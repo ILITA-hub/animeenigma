@@ -14,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/capability"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/transport"
@@ -28,6 +29,12 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalw("failed to load config", "error", err)
+	}
+
+	// Initialise job-capability HMAC signing (fail-closed when secret is empty).
+	capability.Init(cfg.Upscaler.JobCapabilitySecret)
+	if !capability.Enabled() {
+		log.Warnw("job capability handles DISABLED — set JOB_CAPABILITY_SECRET to enable worker auth")
 	}
 
 	// Distributed tracing — no-op unless TRACING_ENABLED=true.
