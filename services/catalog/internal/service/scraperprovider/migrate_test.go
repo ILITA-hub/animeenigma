@@ -2,6 +2,7 @@ package scraperprovider_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/scraperprovider"
@@ -436,5 +437,52 @@ func TestSplitKodik_Idempotent(t *testing.T) {
 	db.Model(&domain.ScraperProvider{}).Where("name = ?", "kodik-iframe").Count(&iframe)
 	if iframe != 1 {
 		t.Errorf("kodik-iframe count = %d, want 1 after double-run", iframe)
+	}
+}
+
+func TestBackfillPolicyHealth(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	seed := []domain.ScraperProvider{
+		{Name: "gogoanime", Status: domain.StatusEnabled, UpdatedAt: now},
+		{Name: "allanime", Status: domain.StatusDegraded, UpdatedAt: now},
+		{Name: "deadguy", Status: domain.StatusDisabled, UpdatedAt: now},
+	}
+	if err := db.Create(&seed).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraperprovider.BackfillPolicyHealth(db); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+
+	want := map[string][2]string{
+		"gogoanime": {"auto", "up"},
+		"allanime":  {"manual", "down"},
+		"deadguy":   {"disabled", "down"},
+	}
+	for name, exp := range want {
+		var p domain.ScraperProvider
+		db.First(&p, "name = ?", name)
+		if string(p.Policy) != exp[0] || string(p.Health) != exp[1] {
+			t.Fatalf("%s: got (%s,%s) want (%s,%s)", name, p.Policy, p.Health, exp[0], exp[1])
+		}
+		if p.HealthSince.IsZero() || p.PolicySince.IsZero() {
+			t.Fatalf("%s: timestamps not set", name)
+		}
+	}
+
+	// Idempotent: second run is a no-op (guard).
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "gogoanime").Update("policy", "manual")
+	if err := scraperprovider.BackfillPolicyHealth(db); err != nil {
+		t.Fatal(err)
+	}
+	var g domain.ScraperProvider
+	db.First(&g, "name = ?", "gogoanime")
+	if g.Policy != "manual" {
+		t.Fatalf("guard failed: backfill re-ran and clobbered operator edit")
 	}
 }

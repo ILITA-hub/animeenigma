@@ -305,6 +305,69 @@ func NineanimeBrowser(db *gorm.DB) error {
 	return nil
 }
 
+// backfillPolicyHealthGuardKey marks BackfillPolicyHealth as applied.
+const backfillPolicyHealthGuardKey = "backfill_policy_health_v1"
+
+// BackfillPolicyHealth maps the legacy status tri-state onto the new
+// (policy, health) dimensions exactly once. Guarded so it never clobbers
+// later machine/operator writes on reboot.
+//
+//   - enabled  → policy=auto,     health=up
+//   - degraded → policy=manual,   health=down
+//   - disabled → policy=disabled, health=down
+//
+// Idempotent; safe to call every boot.
+func BackfillPolicyHealth(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", backfillPolicyHealthGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check backfill-policy-health guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber later machine/operator writes
+	}
+
+	now := time.Now().UTC()
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("status = ?", domain.StatusEnabled).
+		Updates(map[string]any{
+			"policy":       string(domain.PolicyAuto),
+			"health":       string(domain.HealthUp),
+			"health_since": now,
+			"policy_since": now,
+		}).Error; err != nil {
+		return fmt.Errorf("backfill enabled → auto/up: %w", err)
+	}
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("status = ?", domain.StatusDegraded).
+		Updates(map[string]any{
+			"policy":       string(domain.PolicyManual),
+			"health":       string(domain.HealthDown),
+			"health_since": now,
+			"policy_since": now,
+		}).Error; err != nil {
+		return fmt.Errorf("backfill degraded → manual/down: %w", err)
+	}
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("status = ?", domain.StatusDisabled).
+		Updates(map[string]any{
+			"policy":       string(domain.PolicyDisabled),
+			"health":       string(domain.HealthDown),
+			"health_since": now,
+			"policy_since": now,
+		}).Error; err != nil {
+		return fmt.Errorf("backfill disabled → disabled/down: %w", err)
+	}
+
+	if err := db.Create(&migrationGuard{Key: backfillPolicyHealthGuardKey}).Error; err != nil {
+		return fmt.Errorf("write backfill-policy-health guard: %w", err)
+	}
+	return nil
+}
+
 // AllAnimeDegrade flips allanime to status=degraded exactly once. AllAnime's
 // stream leg is dead (its sources decode to /apivtwo/clock.json behind a
 // Cloudflare Turnstile, unsolvable from our egress); the ok.ru sources are

@@ -257,6 +257,14 @@ func main() {
 		log.Errorw("nineanime browser migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) back-fill of the legacy status tri-state onto the new
+	// (policy, health) dimensions: enabled→auto/up, degraded→manual/down,
+	// disabled→disabled/down. Run-once via the catalog_migration_guards ledger;
+	// later machine/operator writes to policy or health are never clobbered.
+	if err := scraperprovider.BackfillPolicyHealth(db.DB); err != nil {
+		log.Errorw("policy/health backfill failed (continuing)", "error", err)
+	}
+
 	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
 	// provider_info/provider_enabled management metrics. Runs after the roster is
 	// fully migrated/seeded/backfilled so names + flags are authoritative. The
