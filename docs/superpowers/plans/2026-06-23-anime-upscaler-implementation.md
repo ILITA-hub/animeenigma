@@ -19,14 +19,17 @@ These are the judgment calls baked into this plan. Confirm or override before ex
 | **CD-1** | Service port | **8096** (8095 is taken by `anidle`) | any other free port | M1, compose, prometheus, gateway |
 | **CD-2** | Worker language | **Go** (reuse gorilla/websocket client, single static neutral binary, shells out to `realesrgan-ncnn-vulkan`+`ffmpeg`) | Python/FastAPI (matches `stealth-scraper`, ncnn pip wheel) | M5 entirely |
 | **CD-3** | Schema management | **GORM `AutoMigrate`** (recent-service pattern: themes/recs/notifications) | SQL migration files (library pattern) | M1 (spec §10 said "SQL migrations" — corrected here) |
-| **CD-4** | Capability auth | isolated **`JOB_CAPABILITY_SECRET`** (fail-closed, no fallback) + `MintJobHandle`/`VerifyJobHandle`, handle `{jobID}:{operation}`, 48h TTL | reuse `STREAM_TOKEN_SECRET` | M2, M4 |
+| **CD-4** | Capability auth | isolated **`JOB_CAPABILITY_SECRET`** (fail-closed, no fallback) + `MintJobHandle`/`VerifyJobHandle`, handle **`{jobID}:{operation}:{idx}`** (idx-bound), TTL = **lease TTL + grace (~10 min)**, optionally worker-bound | reuse `STREAM_TOKEN_SECRET`; coarser `{jobID}:{op}` 48h handle | M2, M4 — *revised after review: idx-binding + short TTL closes cross-segment/expired-lease abuse* |
 | **CD-5** | Edge ingress | separate **nginx vhost** for `ext.animeenigma.org` → gateway external handler (no JWT, IP rate-limited, `ExternalAPIKeyMiddleware`) behind **Cloudflare orange-cloud + Authenticated Origin Pulls** | Cloudflare Tunnel | M2 |
 | **CD-6** | Source acquisition | shared **`library_torrents`** volume + copy `{downloadDir}/{infohash}/*` to upscaler staging at `job.Status=encoding` | new library `/internal` streaming endpoint | M3 |
 | **CD-7** | Source-retention | **opportunistic** (trigger while present; re-acquire via library if dropped after 24h seed) | add proactive "pin-for-upscale" retain flag to library | M3 (+ library change if pinned) |
 | **CD-8** | Output codec | **H.264 HLS** (matches hls.js stack), CRF/bitrate configurable | also keep a HEVC archival master | M3 finalizer |
-| **CD-9** | Edge mTLS | **opt-in** (penciled, not built in Phase 1) | mandatory CF mTLS client certs at handoff | M2, worker handoff |
+| **CD-9** | Edge mTLS | **RECOMMENDED for Phase 1** (review: a static shared `X-API-Key` across untrusted operators is a weak primary gate; per-handoff CF mTLS client certs give real per-worker identity + per-operator revocation) | opt-in only | M2, worker handoff — *needs your call* |
 | **CD-10** | Realtime path | **excluded** from Phase 1 (designed-for in spec §7) | include a thin realtime slice now | scope |
 | **CD-11** | Worker image registry | neutral name on **GHCR private** (`ghcr.io/<neutral>/worker`) | self-hosted registry | M5 packaging |
+| **CD-12** | Bulk segment transport | **stream through gateway→upscaler** (`/worker/segments`), excluded from the per-IP rate limiter, no-buffer proxy | **MinIO presigned-URL direct** (worker↔MinIO via edge; bytes never traverse gateway — avoids OOM, matches `SignStreamURL` reuse) | M2/M3 — *needs your call; review flagged OOM risk of GBs through the gateway* |
+| **CD-13** | Model distribution | **baked-in only for Phase 1** (`best-quality`+`realtime` in the image; hot-fetch `model@version` serving deferred to Phase 2) | build the `/worker/models` serving path now (true hot model updates, no redeploy) | M4/M5 — *needs your call; spec D9 sells hot model updates* |
+| **CD-14** | Enroll-token source | **per-handoff random tokens** persisted server-side in Postgres with a `consumed` flag (durable single-use, **fail-closed** if store unreachable), session bound to `worker_id` | one shared `ENROLL_TOKENS` CSV in config | M4 — revised after review (one-time-use must be durable, not Redis-fail-open) |
 
 ## Global Constraints
 
@@ -59,8 +62,10 @@ Produces a running `upscaler` service (`/health`, `/metrics`) registered in comp
 - Test: `services/upscaler/internal/config/config_test.go`
 
 **Interfaces:**
-- Produces: `config.Config{Server, Database, Redis, Upscaler}` where `Upscaler` holds `LibraryURL string`, `MinIO minio.Config`, `JobCapabilitySecret string`, `SegmentSeconds int` (default 45), `DefaultScale int` (default 2), `RemoteShellEnabled bool` (default true), `StagingDir string` (default `/data/upscale-staging`), `TorrentsDir string` (default `/data/torrents`). `config.Load() *Config`.
-- Produces: `transport.NewRouter(deps RouterDeps) http.Handler` exposing `GET /health`, `GET /metrics`.
+- Produces: `config.Config{Server, Database, Redis, Upscaler}` where `Upscaler` holds `LibraryURL string`, `MinIO minio.Config`, `JobCapabilitySecret string`, `SegmentSeconds int` (default 45), `DefaultScale int` (default 2), `RemoteShellEnabled bool` (default true), `StagingDir string` (default `/data/upscale-staging`), `TorrentsDir string` (default `/data/torrents`). `config.Load() (*Config, error)` (returns error if `JWT_SECRET` unset — caller `log.Fatalw`s; matches real themes/library signature). `Server.Port` is an **int** with `Server.Address()` helper.
+- Produces: `transport.NewRouter(...)` `http.Handler` (positional handler args, mirroring themes) exposing `GET /health`, `GET /metrics` (`metrics.Handler()` package-level), middleware `RequestID → metrics.Collector.Middleware → RequestLogger → Recoverer → httputil.CORS → RealIP`.
+
+> **Review correction:** mirror the **config package from `services/library`** (NOT themes) — library is the only template that carries `getEnvBool` **and** the MinIO config block (`loadMinIO`/`minio.Config`); themes has neither (`getEnv`/`getEnvInt`/`getEnvDuration` only) and is not a WS/MinIO service. `go.mod` deps: base shape from themes (libs + chi + gorm), **add** `github.com/gorilla/websocket v1.5.1` (from `services/rooms` go.mod) + `github.com/minio/minio-go/v7` (from `services/library` go.mod) + the `libs/videoutils` replace directive (none of these are in themes).
 
 - [ ] **Step 1: Write the failing config test**
 
@@ -76,9 +81,12 @@ func TestLoad_DefaultsAndOverrides(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret")
 	t.Setenv("SERVER_PORT", "8096")
 	t.Setenv("SEGMENT_SECONDS", "")     // unset → default 45
-	cfg := Load()
-	if cfg.Server.Port != "8096" {
-		t.Fatalf("port = %q, want 8096", cfg.Server.Port)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Server.Port != 8096 {
+		t.Fatalf("port = %d, want 8096", cfg.Server.Port)
 	}
 	if cfg.Upscaler.SegmentSeconds != 45 {
 		t.Fatalf("SegmentSeconds = %d, want 45 default", cfg.Upscaler.SegmentSeconds)
@@ -101,7 +109,7 @@ Copy `services/themes/go.mod`, change `module github.com/ILITA-hub/animeenigma/s
 
 - [ ] **Step 4: Write `internal/config/config.go`**
 
-Mirror `services/themes/internal/config/config.go` (struct + `getEnv`/`getEnvInt`/`getEnvBool` helpers; `log.Fatalw` if `JWT_SECRET` unset). Add the `Upscaler` sub-struct and load:
+Mirror `services/library/internal/config/config.go` (it has `getEnv`/`getEnvInt`/`getEnvBool` **and** the `loadMinIO()`/`minio.Config` block — themes has neither). `Load()` returns `(*Config, error)` (error if `JWT_SECRET` unset); the caller in `main.go` does `log.Fatalw` on error. Add the `Upscaler` sub-struct and load:
 ```go
 Upscaler: UpscalerConfig{
 	LibraryURL:          getEnv("LIBRARY_URL", "http://library:8089"),
@@ -121,7 +129,7 @@ Mirror `services/themes/internal/transport/router.go`: chi router, middleware `R
 
 - [ ] **Step 6: Write `cmd/upscaler-api/main.go`**
 
-Mirror `services/themes/cmd/themes-api/main.go`: `logger.Default()` → `config.Load()` → `database.New(cfg.Database)` → `db.AutoMigrate()` (empty for now, models added Task 2) → `cache.New(cfg.Redis)` → `metrics.NewCollector("upscaler")` → `transport.NewRouter(...)` → `http.Server{Addr: ":"+cfg.Server.Port}` → SIGINT/SIGTERM → `srv.Shutdown(30s)`.
+Mirror `services/themes/cmd/themes-api/main.go`: `logger.Default()` → `cfg, err := config.Load()` (`log.Fatalw` on err) → `database.New(cfg.Database)` → `db.AutoMigrate()` (empty for now, models added Task 2) → `cache.New(cfg.Redis)` → `metrics.NewCollector("upscaler")` → `transport.NewRouter(...)` → `http.Server{Addr: cfg.Server.Address()}` → SIGINT/SIGTERM → `srv.Shutdown(30s)`.
 
 - [ ] **Step 7: Write `Dockerfile`** — copy `services/themes/Dockerfile`, swap `themes`→`upscaler`, `EXPOSE 8096`. Add `ffmpeg` to the runtime stage: `RUN apk add --no-cache ca-certificates tzdata ffmpeg` (orchestrator needs ffmpeg for segmenting/finalizing).
 
@@ -255,7 +263,8 @@ func (UpscaleModel) TableName() string { return "upscale_models" }
 
 **Interfaces:**
 - Produces:
-  - `JobRepository`: `Create(ctx, *UpscaleJob) error`, `Get(ctx, id) (*UpscaleJob, error)`, `List(ctx, JobFilter) ([]UpscaleJob, error)`, `UpdateStatus(ctx, id, JobStatus, errText string) error`, `SetProgress(ctx, id, pct int) error`, `SetSourceMeta(ctx, id, codec, pixfmt, fps string, segCount int) error`, `SetOutputPrefix(ctx,id,prefix string) error`.
+  - `JobRepository`: `Create(ctx, *UpscaleJob) error`, `Get(ctx, id) (*UpscaleJob, error)`, `List(ctx, JobFilter) ([]UpscaleJob, error)`, `UpdateStatus(ctx, id, JobStatus, errText string) error`, `SetProgress(ctx, id, pct int) error`, `SetSourceMeta(ctx, id, codec, pixfmt, fps string, segCount int) error`, `SetOutputPrefix(ctx,id,prefix string) error`, `NextEligible(ctx) (*UpscaleJob, error)` (oldest non-terminal job with pending/expired-leased segments — drives worker→job assignment, see Task 11).
+  - Define `JobFilter{Status JobStatus; ShikimoriID string; Limit, Offset int}` (empty fields = unfiltered) in `repo/job.go`.
   - `SegmentRepository`: `BulkInsertPending(ctx, jobID string, n int) error`, `LeaseNext(ctx, jobID, workerID string, ttl time.Duration) (*UpscaleSegment, error)`, `MarkDone(ctx, jobID string, idx int, outBytes int64) error`, `ExpireStale(ctx, now time.Time) (int, error)`, `Counts(ctx, jobID) (pending, leased, done int, err error)`, `ListByJob(ctx, jobID) ([]UpscaleSegment, error)`.
   - `WorkerRepository`: `Upsert(ctx, *UpscaleWorker) error`, `Heartbeat(ctx, workerID string, jobID string, seg int, now time.Time) error`, `MarkGone(ctx, workerID string) error`, `ListConnected(ctx, since time.Time) ([]UpscaleWorker, error)`.
   - `ModelRepository`: `Upsert(ctx, *UpscaleModel) error`, `Get(ctx, name, version string) (*UpscaleModel, error)`, `List(ctx) ([]UpscaleModel, error)`.
@@ -287,8 +296,8 @@ Key logic to get right (rest mirrors `services/themes/internal/repo/theme.go` GO
 **Interfaces:**
 - Produces: gateway route `/api/upscale/*` → `upscaler:8096` (admin-gated); env `UPSCALER_SERVICE_URL=http://upscaler:8096`.
 
-- [ ] **Step 1: Add the compose `upscaler:` block** after `library:` — copy the library block shape: `x-logging: *default-logging`, `build.context: ..`, `dockerfile: services/upscaler/Dockerfile`, `container_name: animeenigma-upscaler`, `mem_limit: 1g` (ffmpeg segment/finalize), `restart: unless-stopped`, env (`SERVER_PORT: 8096`, `DB_*`, `JWT_SECRET`, `REDIS_*`, `LIBRARY_URL`, `MINIO_*`, `JOB_CAPABILITY_SECRET`, `SEGMENT_SECONDS`, `DEFAULT_SCALE`, `REMOTE_SHELL_ENABLED`, `EXT_HMAC_SECRET`, `TRACING_ENABLED: "false"`), `ports: ["127.0.0.1:8096:8096"]`, `volumes: [library_torrents:/data/torrents:ro, upscale_staging:/data/upscale-staging]`, `depends_on: postgres/redis service_healthy`. Add `upscale_staging:` to the top-level `volumes:` map.
-- [ ] **Step 2: Gateway registration** — add `UpscalerService: getEnv("UPSCALER_SERVICE_URL", "http://upscaler:8096")` to `ServiceURLs`; add `ProxyToUpscaler(w,r){ h.proxy(w,r,"upscaler") }`; in `router.go` add `r.Route("/upscale", func(r chi.Router){ r.Use(JWTValidationMiddleware); r.Use(AdminRoleMiddleware); r.HandleFunc("/*", proxyHandler.ProxyToUpscaler) })` under `/api`. (Keep `/api/upscale/*` path as-is — no rewrite case needed.)
+- [ ] **Step 1: Add the compose `upscaler:` block** after `library:` — copy the library block shape: `x-logging: *default-logging`, `build.context: ..`, `dockerfile: services/upscaler/Dockerfile`, `container_name: animeenigma-upscaler`, `mem_limit: 1g` (ffmpeg segment/finalize), `restart: unless-stopped`, env (`SERVER_PORT: 8096`, `DB_*`, `JWT_SECRET`, `REDIS_*`, `LIBRARY_URL`, `MINIO_*`, `JOB_CAPABILITY_SECRET`, `SEGMENT_SECONDS`, `DEFAULT_SCALE`, `REMOTE_SHELL_ENABLED`, `TRACING_ENABLED: "false"`), `ports: ["127.0.0.1:8096:8096"]`, `volumes: [library_torrents:/data/torrents:ro, upscale_staging:/data/upscale-staging]`, `depends_on: postgres/redis service_healthy`. Add `upscale_staging:` to the top-level `volumes:` map. **Review fix:** do NOT add `EXT_HMAC_SECRET` (dead — segment handles use `JOB_CAPABILITY_SECRET`); `EXTERNAL_API_KEY` lives on the **gateway** block (Task 6), not here; enroll tokens are minted/stored server-side (CD-14), not an env secret.
+- [ ] **Step 2: Gateway registration** — add `UpscalerService: getEnv("UPSCALER_SERVICE_URL", "http://upscaler:8096")` to `ServiceURLs`; add `ProxyToUpscaler(w,r){ h.proxy(w,r,"upscaler") }`; in `router.go` add `r.Route("/upscale", func(r chi.Router){ r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService)); r.Use(AdminRoleMiddleware); r.HandleFunc("/*", proxyHandler.ProxyToUpscaler) })` under `/api`. (Note the real `JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService)` two-arg signature — verified at gateway router.go:152; `AdminRoleMiddleware` is bare. Keep `/api/upscale/*` path as-is — no rewrite case needed.)
 - [ ] **Step 3: Prometheus** — add `- job_name: 'upscaler'` / `static_configs: targets: ['upscaler:8096']` / `metrics_path: /metrics`.
 - [ ] **Step 4: redeploy.sh** — add `upscaler:8096` to the SERVICE_PORTS array used for health verification.
 - [ ] **Step 5: Validate compose** — `docker compose -f docker/docker-compose.yml config -q` → no error.
@@ -306,11 +315,13 @@ Key logic to get right (rest mirrors `services/themes/internal/repo/theme.go` GO
 - Test: `services/upscaler/internal/capability/capability_test.go`
 
 **Interfaces:**
-- Produces: `capability.Init(secret string)`; `capability.Enabled() bool`; `capability.MintJobHandle(jobID, operation string, ttl time.Duration) (handle, exp, sig string)`; `capability.VerifyJobHandle(jobID, operation, exp, sig string, now time.Time) bool`.
+- Produces: `capability.Init(secret string)`; `capability.Enabled() bool`; `capability.MintJobHandle(jobID, operation string, idx int, ttl time.Duration) (handle, exp, sig string)`; `capability.VerifyJobHandle(jobID, operation string, idx int, exp, sig string, now time.Time) bool`.
 
-Mirror `libs/videoutils/provenance.go` exactly: `handle = jobID + ":" + operation`; `sig = hex(HMAC_SHA256(secret, handle + "\n" + exp))[:32]`; `exp = strconv Unix seconds`; `subtle.ConstantTimeCompare`. Fail-closed when `secret == ""` (mint returns `("","","")`, verify returns `false`). `sync.Once`-gated secret load.
+Follow the **HMAC pattern** of `libs/videoutils/provenance.go` (NOT a 1:1 mirror — that file exposes only `SignStreamURL`; this is a new idx-bound API): `handle = jobID + ":" + operation + ":" + strconv.Itoa(idx)`; `sig = hex(HMAC_SHA256(secret, handle + "\n" + exp))[:32]`; `exp = strconv Unix seconds`; `subtle.ConstantTimeCompare`. Fail-closed when `secret == ""` (mint returns `("","","")`, verify returns `false`). `sync.Once`-gated secret load.
 
-- [ ] **Step 1: Write table-driven test** — `TestMintVerify`: init with secret; mint `("job-1","segment-get",48h)`; verify same → true; verify at `exp` boundary; verify expired (now after exp) → false; verify tampered sig → false; verify wrong jobID → false; verify wrong operation (`segment-put`) → false. `TestFailClosedWhenUnset`: `Init("")` → mint returns empty, verify returns false.
+> **Review fix (critical):** the handle is bound to **`{jobID}:{operation}:{idx}`** (not just `{jobID}:{operation}`) so a worker that leased segment 0 cannot GET/PUT another idx; TTL is short (**lease TTL + ~10 min grace**, NOT 48h) so an expired-lease worker cannot keep writing.
+
+- [ ] **Step 1: Write table-driven test** — `TestMintVerify`: init with secret; mint `("job-1","segment-get",0,15*time.Minute)`; verify same → true; verify at `exp` boundary; verify expired → false; verify tampered sig → false; verify wrong jobID → false; verify wrong operation (`segment-put`) → false; **verify wrong idx (1) → false**. `TestFailClosedWhenUnset`: `Init("")` → mint returns empty, verify returns false.
 - [ ] **Step 2: Run → FAIL.**
 - [ ] **Step 3: Implement `capability.go`.**
 - [ ] **Step 4: Run → PASS.**
@@ -330,7 +341,9 @@ Mirror `libs/videoutils/provenance.go` exactly: `handle = jobID + ":" + operatio
 - Test: `services/gateway/internal/middleware/external_api_key_test.go`, `services/gateway/internal/handler/external_api_test.go`
 
 **Interfaces:**
-- Produces: edge routes `/worker/enroll`, `/worker/ws`, `/worker/segments/*`, `/worker/models/*` proxied to `upscaler:8096` with **no JWT**, gated by `ExternalAPIKeyMiddleware` (static `X-API-Key`) + per-IP rate limit; generic error bodies.
+- Produces: edge routes `/worker/enroll`, `/worker/ws`, `/worker/segments/*` proxied to `upscaler:8096` with **no JWT**, gated by `ExternalAPIKeyMiddleware` (static `X-API-Key`) + per-IP rate limit; generic error bodies. (`/worker/models/*` is **out of Phase 1** — CD-13 bakes models into the image; add it only if CD-13 flips to server-served.)
+
+> **Review fixes:** (1) `EXTERNAL_API_KEY` is a **coarse defense-in-depth filter, NOT the auth boundary** — real per-worker auth is the enroll→session→idx-bound-capability chain (and CF mTLS if CD-9 is adopted). A single shared key across untrusted operators is weak; document rotation + prefer per-operator keys/mTLS. (2) **Segment bytes must stream** (no full-body buffering: `FlushInterval -1` director like `ws_proxy.go`) and `/worker/segments/*` must be **excluded from the per-IP rate limiter** (keep the limit on `/worker/enroll` + `/worker/ws` only) — GBs through the gateway risk OOM + rate-limit false-trips (see CD-12; presigned-direct is the alternative that avoids this entirely). (3) The upscaler's own `/worker/*` handlers must return **generic error bodies** (`{"error":"bad_request"}`), details logged server-side only — a raw `dial library:8089` / `/data/torrents/{infohash}` / `bucket raw-library` string would leak topology to the operator; add a test asserting no internal host/path/bucket substring appears in any `/worker/*` response.
 
 - [ ] **Step 1: Write `external_api_key_test.go`** — request without `X-API-Key` → 401 with body `{"error":"unauthorized"}` (no internal detail); with correct key → passes to next; with wrong key → 401. Constant-time compare.
 - [ ] **Step 2: Run → FAIL.**
@@ -339,8 +352,9 @@ Mirror `libs/videoutils/provenance.go` exactly: `handle = jobID + ":" + operatio
 - [ ] **Step 5: Mount in `router.go`** — `r.Route("/worker", func(r chi.Router){ r.Use(perIPRateLimit); r.Use(ExternalAPIKeyMiddleware); r.Handle("/ws", wtStyleWSProxyForUpscaler); r.HandleFunc("/*", externalHandler.Proxy) })` at router root (NOT under `/api`, NOT under any admin/JWT group). Ensure registered before any catch-all.
 - [ ] **Step 6: Write `external_api_test.go`** — httptest: `/worker/segments/x` without key → 401; with key → forwarded (assert upstream hit via a stub). Assert no `Set-Cookie`/internal headers leak.
 - [ ] **Step 7: Run → PASS.**
-- [ ] **Step 8: Write the nginx vhost** `infra/nginx/ext.animeenigma.org.conf`: server_name `ext.animeenigma.org`, TLS, `location /worker/ { proxy_pass http://gateway:8000; proxy_set_header X-Real-IP $remote_addr; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; }`. No other locations. Document in `docs/upscaler-edge-setup.md`: Cloudflare orange-cloud, **Authenticated Origin Pulls** (origin rejects non-CF), WAF managed rules + rate-limit rules, that nginx must sit between CF and gateway so `X-Real-IP` chain holds, and the opt-in mTLS (CD-9) steps.
-- [ ] **Step 9: Commit** — `feat(gateway): hardened ext.animeenigma.org worker edge (API-key, IP-limit, WS proxy)`.
+- [ ] **Step 8: Write the nginx vhost** `infra/nginx/ext.animeenigma.org.conf`: server_name `ext.animeenigma.org`, TLS, `client_max_body_size` (cap segment uploads), proxy read/send timeouts, `location /worker/ { proxy_pass http://gateway:8000; proxy_request_buffering off; proxy_buffering off; proxy_set_header X-Real-IP $remote_addr; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade; }` plus an explicit **`location / { return 404; }`** default (no fallthrough to any app route). Document in `docs/upscaler-edge-setup.md`: Cloudflare orange-cloud, **mandatory Authenticated Origin Pulls** (origin firewall hard-refuses non-CF IPs, not just nginx), WAF managed + rate-limit rules, that nginx must sit between CF and gateway so the `X-Real-IP` chain holds, and the **recommended** CF mTLS client-cert flow (CD-9) for per-worker identity + per-operator revocation.
+- [ ] **Step 9 (backend defense-in-depth):** in the **upscaler** router, gate the `/api/upscale/*` admin group behind an internal check (a header the gateway injects that the ext edge cannot, or a separate internal secret) so the admin surface is not served merely because a path reached the backend. Add a router test asserting `/api/upscale/*` returns 401/404 when hit via the worker/external path, and that only `/worker/{enroll,ws,segments}` resolve on the worker surface.
+- [ ] **Step 10: Commit** — `feat(gateway): hardened ext.animeenigma.org worker edge (API-key, IP-limit, WS proxy, backend route separation)`.
 
 ---
 
@@ -356,8 +370,8 @@ Mirror `libs/videoutils/provenance.go` exactly: `handle = jobID + ":" + operatio
 - Produces: `source.Resolver` interface `Resolve(ctx, job *UpscaleJob) (localPath string, err error)`; `source.Probe(ctx, path string) (ProbeResult, error)` where `ProbeResult{VideoPath, Codec, PixFmt, FPS string, Width, Height int, HasAudio bool, SubTracks []int, FontAttachments int}`.
 
 Logic:
-- `Resolve` needs the job's torrent infohash. Phase-1 acquisition (CD-6): the admin trigger supplies the library `job_id`/`infohash`; the resolver looks under `{TorrentsDir}/{infohash}/` (and the known flat `{TorrentsDir}/{name}` fallback — note the library autocache flat-vs-infohash-dir defect) for the largest video file, copies it to `{StagingDir}/{upscaleJobID}/source.<ext>`. If absent (dropped after 24h seed) return a typed `ErrSourceGone` so the handler can surface "re-acquire via library" (CD-7).
-- `Probe` runs `ffprobe -v error -print_format json -show_format -show_streams` (mirror `services/library/internal/ffmpeg/transcoder.go probe()`), picks the real video stream (codec_type=video, largest), records codec/pix_fmt/avg_frame_rate/width/height, counts audio + subtitle streams + `attachment` streams (fonts). Soft-fail to zero values is NOT acceptable here (unlike library) — a probe failure must fail the job (we need accurate metadata for remux).
+- `Resolve` needs the job's torrent infohash. Phase-1 acquisition (CD-6): the admin trigger supplies the library `job_id`/`infohash`; the resolver looks under `{TorrentsDir}/{infohash}/` for the largest video file (anacrolix writes `{infohash}/{name}.mkv` — **review note: the old flat-file defect is already FIXED in this worktree** by `torrent/client.go`'s `InfoHashDir`, so resolve under `{infohash}/` directly; no flat fallback needed), copies it to `{StagingDir}/{upscaleJobID}/source.<ext>`. If absent (dropped after 24h seed) return a typed `ErrSourceGone` so the handler can surface "re-acquire via library" (CD-7).
+- `Probe` runs `ffprobe -v error -print_format json -show_format -show_streams` (the **ffprobe invocation** matches `services/library/internal/ffmpeg/transcoder.go probe()`, but the **streams[] parsing is net-new** — library's `probe()` only reads `format.duration`/`bit_rate`, not the streams array). Pick the real video stream (codec_type=video, largest), record codec/pix_fmt/avg_frame_rate/width/height, count audio + subtitle streams + `attachment` streams (fonts). Soft-fail to zero values is NOT acceptable here (unlike library) — a probe failure must fail the job (we need accurate metadata for remux).
 
 - [ ] **Step 1: Write `probe_test.go`** — fake `ffprobe` shell script (transcoder_test.go pattern) emitting JSON with a 10-bit HEVC video stream + 1 audio + 2 subtitle + 3 attachment streams; assert `ProbeResult{Codec:"hevc", PixFmt:"yuv420p10le", HasAudio:true, SubTracks len 2, FontAttachments 3}`.
 - [ ] **Step 2: Run → FAIL.** **Step 3: Implement `probe.go`.** **Step 4: Run → PASS.**
@@ -420,7 +434,16 @@ Finalizer logic (CD-8, H.264 HLS):
 - Test: `controlplane/{protocol_test.go, enroll_test.go}`
 
 **Interfaces:**
-- Produces: `protocol.Frame{Type string; Seq int; Payload json.RawMessage}` with `Type ∈ {register, command, log, heartbeat, metrics, exec_open, exec_data, exec_close, lease_req, lease_grant}`; typed payload structs `RegisterPayload`, `CommandPayload{Cmd string}`, `HeartbeatPayload{...}`, `MetricsPayload{...}`, `ExecPayload{...}`. `enroll.Handle(...)` exchanges a one-time `ENROLL_TOKEN` for a session credential (capability handle, op=`session`, TTL 12h) + assigns a `worker_id`.
+- Produces: `protocol.Frame{Type string; Seq int; Payload json.RawMessage}` with `Type ∈ {register, command, log, heartbeat, metrics, exec_open, exec_data, exec_close, lease_req, lease_grant}`; typed payload structs (all fields defined to kill producer/consumer drift):
+  - `RegisterPayload{WorkerID, GPUInfo, ImageVersion string; ModelsAvailable []string}`
+  - `CommandPayload{Cmd string; Args json.RawMessage}`
+  - `HeartbeatPayload{JobID string; SegmentIdx, ProgressPct int; ETASeconds int}`
+  - `MetricsPayload{GPUModel, ImageVersion string; GPUUtil, VRAMUsedBytes, VRAMTotalBytes, GPUTempC, GPUPowerW, DecodeFPS, InferenceFPS, EncodeFPS float64}`
+  - `LeaseReqPayload{}` (empty — server picks the job, see Task 11; no jobID from the worker)
+  - **`LeaseHandles{GetHandle, GetExp, GetSig, PutHandle, PutExp, PutSig string}`**
+  - **`LeaseGrantPayload{JobID string; Idx int; Handles LeaseHandles}`** (worker builds the URL `{SERVER_URL}/worker/segments/{JobID}/{Idx}` and appends `?handle=&exp=&sig=` from `Handles` — NOT pre-built getURL/putURL)
+  - `ExecPayload{SessionID string; Data []byte; Cols, Rows int; ExitCode *int}` (shared by exec_open/exec_data/exec_close)
+- `enroll.Handle(...)` exchanges a one-time enroll token (CD-14: per-handoff, Postgres-backed, durable single-use, **fail-closed** if store unreachable) for a session credential (capability handle, op=`session`, idx=0, TTL 12h) **bound to the assigned `worker_id`** + returns the `worker_id`.
 
 - [ ] **Step 1: Write `protocol_test.go`** — round-trip marshal/unmarshal each frame type; unknown type rejected.
 - [ ] **Step 2: Run → FAIL.** **Step 3: Implement `protocol.go`.** **Step 4: Run → PASS.**
@@ -441,9 +464,11 @@ Finalizer logic (CD-8, H.264 HLS):
 
 **Interfaces:**
 - Consumes: `SegmentRepository`, `JobRepository`, `WorkerRepository`, `protocol`, `minio.Writer`, `capability`.
-- Produces: `hub.Hub` with `Register(conn)`, `Unregister(id)`, `Send(workerID, Frame) error`, `Broadcast(Frame)`; `leaser.OnLeaseReq(workerID, jobID) (*UpscaleSegment, handles, error)`; `sweeper.Run(ctx)` (ticker: `ExpireStale(now)` re-leases preempted segments + `WorkerRepository` rows with `last_heartbeat_at < now-Nx` → `MarkGone`).
+- Produces: `hub.Hub` with `Register(conn)`, `Unregister(id)`, `Send(workerID, Frame) error`, `Broadcast(Frame)`; **`leaser.OnLeaseReq(ctx, workerID string) (*UpscaleSegment, protocol.LeaseHandles, error)`** — internally picks the next eligible job via `JobRepository.NextEligible` (oldest non-terminal job with pending/expired-leased segments), leases its next segment via `SegmentRepository.LeaseNext`, persists `current_job_id` on the worker, and mints **idx-bound** `segment-get`/`segment-put` handles (TTL = lease TTL + grace). Returns `(nil, zero, nil)` when no work. `sweeper.Run(ctx)` (ticker: `ExpireStale(now)` re-leases preempted segments + `WorkerRepository` rows with `last_heartbeat_at < now-Nx` → `MarkGone`).
 
-WS specifics (gorilla, from research): `newWSUpgrader()` with `CheckOrigin`; `readPump` sets `SetReadLimit`, `SetReadDeadline(now+pongWait)`, `SetPongHandler` resetting deadline; `writePump` ticker `pingPeriod=30s`, `pongWait=60s`, write deadline on every write; 2 goroutines/conn; graceful close via `sync.Once` + context. On `lease_req` frame → `leaser.OnLeaseReq` → reply `lease_grant` with segment idx + minted `segment-get`/`segment-put` handles (op-scoped, 48h). On `heartbeat` → `WorkerRepository.Heartbeat` + record metrics. On preempt (conn drop) → `Unregister`; the sweeper re-leases via TTL.
+WS specifics (gorilla, from research): `newWSUpgrader()` with `CheckOrigin` — **return true for no-Origin (server clients) / reject browser Origins**; authZ is the API-key + session, not Origin (add a test). `readPump` sets `SetReadLimit`, `SetReadDeadline(now+pongWait)`, `SetPongHandler` resetting deadline; `writePump` ticker `pingPeriod=30s`, `pongWait=60s`, `writeWait=10s` write deadline on every write; 2 goroutines/conn; graceful close via `sync.Once` + context. On `lease_req` frame → `leaser.OnLeaseReq(ctx, workerID)` → reply `lease_grant` carrying `JobID`, `Idx`, and the minted `LeaseHandles`. On `heartbeat` → `WorkerRepository.Heartbeat` + record metrics. On preempt (conn drop) → `Unregister`; the sweeper re-leases via TTL.
+
+> **Review fix:** because complex concurrency code (pumps, lease assembly) shouldn't be a one-liner, Step 11 below must show the exact pump skeleton + the `lease_req→lease_grant` handler, not just "implement hub.go". Include the const block (`pongWait=60*time.Second; pingPeriod=30*time.Second; writeWait=10*time.Second`) and the `Send`/`Register`/`Unregister` signatures verbatim.
 
 - [ ] **Step 1: Write `sweeper_test.go`** — seed a `leased` segment with expired lease + a worker with stale heartbeat; run one sweep tick; assert segment→`pending`, worker→`gone`. (No WS; pure repo logic.)
 - [ ] **Step 2: Run → FAIL.** **Step 3: Implement `sweeper.go`.** **Step 4: Run → PASS.**
@@ -451,7 +476,57 @@ WS specifics (gorilla, from research): `newWSUpgrader()` with `CheckOrigin`; `re
 - [ ] **Step 6: Run → FAIL.** **Step 7: Implement `leaser.go`.** **Step 8: Run → PASS.**
 - [ ] **Step 9: Write `hub_test.go`** — real `httptest.Server` + gorilla `Dialer` (rooms `websocket_test.go` pattern, 100–500ms timings): connect, send `lease_req`, assert `lease_grant` received; drop conn, assert `Unregister`; keepalive ping/pong.
 - [ ] **Step 10: Run → FAIL.** **Step 11: Implement `hub.go` + `ws_handler.go`.** **Step 12: Run → PASS.**
-- [ ] **Step 13: Wire** `sweeper.Run` (goroutine) + hub into `main.go`; mount `/worker/ws` + `/worker/enroll` on the upscaler router (these are reached via the gateway `/worker/*` edge from M2). **Commit** — `feat(upscaler): WS hub + lease delivery + spot-resume sweeper`.
+- [ ] **Step 13: Wire** `sweeper.Run` (goroutine) + hub into `main.go`; mount `/worker/ws` + `/worker/enroll` on the upscaler router. (Segment + full `/worker/*` route mounting + completeness test is Task 11b.) **Commit** — `feat(upscaler): WS hub + lease delivery + spot-resume sweeper`.
+
+---
+
+### Task 11b: Segment data-plane handler (`/worker/segments/{job}/{idx}`) — **CRITICAL, added in review**
+
+The only consumer of `capability.VerifyJobHandle` and the entire data path the worker (Task 15) + edge (Task 6) point at. It was missing from the first draft.
+
+**Files:**
+- Create: `services/upscaler/internal/handler/segments.go`
+- Modify: `services/upscaler/internal/transport/router.go` (mount `/worker/segments/{job}/{idx}` GET+PUT; assert full `/worker/*` surface)
+- Test: `services/upscaler/internal/handler/segments_test.go`
+
+**Interfaces:**
+- Consumes: `capability.VerifyJobHandle`, `SegmentRepository` (lease-ownership check + `MarkDone`), `JobRepository` (status guard), `config.Upscaler.StagingDir`.
+- Produces: `GET /worker/segments/{job}/{idx}` (download leased input segment) + `PUT /worker/segments/{job}/{idx}` (store upscaled output).
+
+Security requirements (each is a test case):
+1. `VerifyJobHandle(job, "segment-get"|"segment-put", idx, exp, sig, now)` — reject cross-op, wrong-job, wrong-idx, expired → generic 401.
+2. `idx` via `strconv.Atoi`, bound-checked `0 <= idx < job.SegmentCount` → generic 400.
+3. Path `filepath.Join(stagingRoot, job, fmt.Sprintf("seg_%05d.mkv", idx))`, assert cleaned path keeps `stagingRoot/job` prefix (traversal defense).
+4. Confirm via `SegmentRepository` the idx is currently **leased to the requesting worker** before serving/accepting.
+5. PUT body capped via `http.MaxBytesReader` (~4× expected segment size) → DoS guard on shared `upscale_staging`.
+6. PUT rejected if segment already `done` or job `IsTerminal()`/`finalizing`; temp file + atomic `os.Rename`; then `SegmentRepository.MarkDone(job, idx, outBytes)`.
+7. Generic error bodies only (no internal path/host/bucket leak).
+
+- [ ] **Step 1: Write `segments_test.go`** — valid get/put round-trip (temp staging); wrong-op→401; expired→401; out-of-range idx→400; `../` idx→400; oversized PUT→413; double-PUT of `done`→409; PUT to finalizing job→409; assert no body contains `stagingRoot`/`library`/`raw-library`.
+- [ ] **Step 2: Run → FAIL.** **Step 3: Implement `segments.go`.** **Step 4: Run → PASS.**
+- [ ] **Step 5: Mount** GET+PUT; router test asserts `/worker/{enroll,ws,segments/{job}/{idx}}` resolve and `/api/upscale/*` does NOT on the worker surface.
+- [ ] **Step 6: Commit** — `feat(upscaler): capability-verified segment data plane (idx-bound, traversal/DoS/overwrite guarded)`.
+
+---
+
+### Task 11c: Job lifecycle orchestrator — **CRITICAL, added in review**
+
+Drives `queued→segmenting→upscaling→finalizing→done`. Without it M3's source/segmenter/finalizer are dead code and no job progresses.
+
+**Files:**
+- Create: `services/upscaler/internal/service/orchestrator.go`
+- Modify: `services/upscaler/cmd/upscaler-api/main.go` (start the orchestrator poller goroutine)
+- Test: `services/upscaler/internal/service/orchestrator_test.go`
+
+**Interfaces:**
+- Consumes: `JobRepository`, `SegmentRepository`, `source.Resolver`, `source.Probe`, `ffmpeg.Segmenter`, `ffmpeg.Finalizer`, `minio.Writer`, `logbuffer` (Task 12).
+- Produces: `orchestrator.Run(ctx)` poller. Transitions:
+  - **queued→segmenting→upscaling:** `source.Resolve` → `source.Probe` (`SetSourceMeta` codec/pixfmt/fps + `SegmentCount`) → `Segmenter.Segment` + `DemuxSidecars` → `SegmentRepository.BulkInsertPending(jobID, n)` → `UpdateStatus(upscaling)`.
+  - **finalizing→done:** when `SegmentRepository.Counts` shows all done → `Finalizer.Concat` → `minio.Writer.Upload(UpscaledPrefix(...), files)` → `SetOutputPrefix` → flush `logbuffer` to MinIO under the job prefix (spec §8 log durability) → `UpdateStatus(done)`.
+
+- [ ] **Step 1: Write `orchestrator_test.go`** — fake repos + fake ffmpeg/minio; `queued` job → `upscaling` with `SegmentCount==n` pending + source meta set; all-done → finalize runs **exactly once** (idempotent guard), uploads playlist+segments, sets output prefix, `done`; resolve/probe failure → `UpdateStatus(failed, errText)`.
+- [ ] **Step 2: Run → FAIL.** **Step 3: Implement `orchestrator.go`.** **Step 4: Run → PASS.**
+- [ ] **Step 5: Start** `orchestrator.Run` goroutine in `main.go`. **Commit** — `feat(upscaler): job lifecycle orchestrator (segment→upscale→finalize→store)`.
 
 ---
 
@@ -484,7 +559,9 @@ WS specifics (gorilla, from research): `newWSUpgrader()` with `CheckOrigin`; `re
 - Test: `controlplane/exec_test.go`
 
 **Interfaces:**
-- Produces: `exec.Open(workerID, adminID string) (sessionID string, err error)` (refuses when `!RemoteShellEnabled`); relays `exec_data` frames both directions over the worker's WS; `exec_close` on either side ends + writes an audit row/log; idle timeout enforced.
+- Produces: `exec.Open(workerID, adminID string, pty bool) (sessionID string, err error)` (refuses when `!RemoteShellEnabled`); relays `ExecPayload` frames both directions over the worker's WS; `exec_close` on either side ends + writes an audit row/log; idle timeout enforced.
+
+> **Review fix:** default to **command-allowlist mode** (`pty=false`) on the untrusted-operator threat model; full interactive PTY is **explicit per-session opt-in** (`pty=true`). The worker (Task 18) accepts `exec_open` ONLY on the live server-authenticated session and never self-initiates; capability handles live only in memory for one transfer (never logged/env) so a PTY can't scrape them.
 
 - [ ] **Step 1: Write `exec_test.go`** — `Open` when `RemoteShellEnabled=false` → error (no frame sent). When true → `exec_open` frame sent to worker, audit log line appended (admin id, worker id, ts). A stub worker echoes `exec_data`; assert relay back to the admin channel. Session revoke (worker `MarkGone`) → `exec_close` emitted.
 - [ ] **Step 2: Run → FAIL.** **Step 3: Implement `exec.go` + `handler/exec.go`.** **Step 4: Run → PASS.**
@@ -520,7 +597,9 @@ WS specifics (gorilla, from research): `newWSUpgrader()` with `CheckOrigin`; `re
 - Test: `worker/internal/agent/{leaseloop_test.go, transfer_test.go}`
 
 **Interfaces:**
-- Produces: lease loop: send `lease_req` → receive `lease_grant{idx, getURL, putURL}` → `transfer.Download(getURL) → process → transfer.Upload(putURL)` → loop; deletes local files after each upload (process-and-delete). `transfer` attaches `?handle=&exp=&sig=` to `{ServerURL}/worker/segments/{job}/{idx}` and the `X-API-Key`.
+- Consumes: `protocol.LeaseGrantPayload{JobID, Idx, Handles}` (Task 10).
+- Produces: lease loop: send `lease_req` (empty) → receive `lease_grant{JobID, Idx, Handles}` → build URL `{SERVER_URL}/worker/segments/{JobID}/{Idx}` + append `?handle=&exp=&sig=` from `Handles.Get*` (download) / `Handles.Put*` (upload) → `transfer.Download → processor.Process → transfer.Upload` → `MarkDone` implied by the PUT → delete local files (process-and-delete) → loop; idles when grant is empty. `transfer` also sends `X-API-Key` (CD-9 note: if CF mTLS is adopted, the client cert replaces/augments this; see secret reconciliation).
+- Produces: `agent.Processor` interface `Process(ctx, inSeg, outSeg string) (Stats, error)` — the DI seam. **Task 15 ships a stub Processor; the real decode→model→encode arrives in Task 17.** The worker is intentionally non-functional end-to-end until Task 17 wires the real pipeline.
 
 - [ ] **Step 1: Write `transfer_test.go`** — httptest verifies GET includes the capability query + `X-API-Key`; PUT streams the file; 401 path retried/aborted appropriately.
 - [ ] **Step 2: Run → FAIL.** **Step 3: Implement `transfer.go`.** **Step 4: Run → PASS.**
@@ -588,7 +667,7 @@ WS specifics (gorilla, from research): `newWSUpgrader()` with `CheckOrigin`; `re
 - Test: `libs/metrics/upscaler_test.go`
 
 **Interfaces:**
-- Produces (cardinality-disciplined): `UpscaleWorkersConnected` gauge `{gpu_model,image_version,model}`; counters `UpscaleLeaseExpiredTotal`, `UpscaleCommandTotal{type}`, `UpscaleEnrollTotal{result}`, `UpscaleModelFetchTotal{result}`, `UpscaleEdgeRequestsTotal{path,status}`; histograms `UpscaleSegmentDuration{stage}`, gauges `UpscaleJobProgressRatio`, `UpscaleJobEtaSeconds`, `UpscaleQueueDepth{status}`; worker-reported gauges `UpscaleWorkerGPUUtil`, `UpscaleWorkerVRAMUsedBytes`, `UpscaleDecodeFPS/InferenceFPS/EncodeFPS` (labels `gpu_model`,`image_version`). Helper `RecordWorkerTelemetry(MetricsPayload)`.
+- Produces (cardinality-disciplined): `UpscaleWorkersConnected` gauge `{gpu_model,image_version,model}`; counters `UpscaleLeaseExpiredTotal`, `UpscaleCommandTotal{type}`, `UpscaleEnrollTotal{result}`, `UpscaleModelFetchTotal{result}`, `UpscaleEdgeRequestsTotal{path,status}`; histograms `UpscaleSegmentDuration{stage}`, gauges `UpscaleJobProgressRatio`, `UpscaleJobEtaSeconds`, `UpscaleQueueDepth{status}`; worker-reported gauges `UpscaleWorkerGPUUtil`, `UpscaleWorkerVRAMUsedBytes`, `UpscaleDecodeFPS/InferenceFPS/EncodeFPS` (labels `gpu_model`,`image_version`). Helper `RecordWorkerTelemetry(gpuModel, imageVersion string, gpuUtil, vramBytes, decodeFPS, inferenceFPS, encodeFPS float64)` — **takes primitives, NOT `protocol.MetricsPayload`** (a shared lib must not import a service-internal package; the controlplane caller unpacks the payload at the call site). Drop `UpscaleModelFetchTotal` for Phase 1 (CD-13 bakes models in; no fetch path) — re-add if CD-13 flips.
 
 - [ ] **Step 1: Write `upscaler_test.go`** — `prometheus.NewRegistry()` + `testutil.ToFloat64`; assert each metric registers and `{type=cancel}` increments independently; assert NO `worker_id` label on counters/histograms.
 - [ ] **Step 2: Run → FAIL.** **Step 3: Implement `libs/metrics/upscaler.go`** (mirror `libs/metrics/probe.go` style). **Step 4: Run → PASS.**
@@ -611,7 +690,7 @@ WS specifics (gorilla, from research): `newWSUpgrader()` with `CheckOrigin`; `re
 
 **Files:**
 - Create: `services/upscaler/internal/e2e/mock_e2e_test.go` (`//go:build integration`)
-- Create: `services/upscaler/internal/e2e/testdata/tiny.mkv` (a few seconds, generated via ffmpeg in a setup step or committed tiny fixture)
+- Fixture generated in `TestMain` (deterministic, no committed binary): `ffmpeg -f lavfi -i testsrc=duration=8:size=640x360:rate=24 -f lavfi -i sine=frequency=440:duration=8 -c:v libx264 -c:a aac -t 8 {tmp}/tiny.mkv` → an 8s clip that segments into ≥2 chunks at `SEGMENT_SECONDS` small-override (e.g. 3s) so the mid-job resume path has multiple segments.
 
 **Interfaces:**
 - Consumes: the real orchestrator (in-process: hub + leaser + sweeper + repos on Postgres + fake MinIO) and the real worker agent (in-process, `MODE=batch`, `model=mock`, no GPU).
@@ -624,11 +703,16 @@ WS specifics (gorilla, from research): `newWSUpgrader()` with `CheckOrigin`; `re
 
 ## Self-Review
 
-Run after the plan is written (done inline below; fixes applied):
-1. **Spec coverage** — every spec §4–§12 + D1–D14 maps to a task (see the coverage matrix the review workflow produces). Realtime (§7) intentionally deferred (CD-10).
-2. **Placeholder scan** — no "TBD/handle errors/etc."; ffmpeg arg lists, token math, lease SQL, metric names are concrete.
-3. **Type consistency** — `MintJobHandle`/`VerifyJobHandle`, `LeaseNext`/`ExpireStale`, `protocol.Frame`, `upscale.Model` names are stable across consuming tasks.
+1. **Spec coverage** — every spec §1–§6, §8–§14 + D1–D14 maps to a task. Realtime (§7, CD-10) deferred.
+2. **Placeholder scan** — ffmpeg arg lists, token math, lease SQL, metric names, security test cases are concrete.
+3. **Type consistency** — `MintJobHandle`/`VerifyJobHandle` (idx-bound), `LeaseNext`/`ExpireStale`, `protocol.{Frame,LeaseGrantPayload,LeaseHandles,MetricsPayload,ExecPayload}`, `JobFilter`, `upscale.Model`, `agent.Processor` defined where consumed.
 4. **Scope** — Phase 1 only; worker is a separate module/artifact; admin UI deferred.
+
+## Adversarial-review resolutions (2026-06-23)
+
+A 6-dimension review found and the plan now fixes: **(critical)** the missing segment data-plane handler → **Task 11b**; the missing job lifecycle driver → **Task 11c**; worker→job assignment (`OnLeaseReq(workerID)` picks the job) → Task 11; capability handle now **idx-bound + short-TTL** → CD-4/Task 5. **(high)** undefined `LeaseReqPayload`/`LeaseGrantPayload`/`LeaseHandles` + `JobFilter` defined → Task 10/3; wrong "mirror themes" premises (config from **library**, `Load()→(*Config,error)`, `getEnvBool`/MinIO sourcing, go.mod deps from rooms+library, `JWTValidationMiddleware(cfg.JWT,cfg.Services.AuthService)`) → Task 1/4; secret reconciliation (drop dead `EXT_HMAC_SECRET`; `EXTERNAL_API_KEY`=defense-in-depth; CD-9 mTLS recommended; CD-14 durable enroll tokens); backend route separation + nginx default-404 → Task 6; generic `/worker/*` error bodies → Task 6. **(medium/low)** telemetry helper takes primitives → Task 19; stale flat-file premise dropped → Task 7; probe streams-parse is net-new → Task 7; remote shell defaults to allowlist → Task 13; E2E fixture generated in `TestMain` → Task 21; CheckOrigin policy pinned → Task 11.
+
+**Deferred to Phase 2 (review-confirmed, not gaps):** long-poll control fallback (WS-only is fine for Phase 1; shell/realtime need WS anyway — D8's fallback half is Phase 2); **hot model fetch** `/worker/models/*` serving (CD-13 bakes `best-quality`+`realtime` into the image for Phase 1). Per-job log durability to MinIO is **kept in Phase 1** (folded into Task 11c finalize).
 
 ## Execution Handoff
 

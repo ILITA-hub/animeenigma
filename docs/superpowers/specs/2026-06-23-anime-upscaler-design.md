@@ -184,7 +184,7 @@ Because we have no SSH/provider access into the operator's box, the only way to 
 ### Untrusted operator + untrusted box
 - **No baked secrets.** One-time `ENROLL_TOKEN` → short-lived session credential → per-job scoped tokens minted by the server. The operator never holds anything reusable or broad.
 - The box only ever sees **encrypted video segments of one episode** — never the catalog, DB, MinIO creds, signing keys, or other jobs.
-- **Opaque signed capability handles** for segment GET/PUT (HMAC, scoped to one job, expiring) — reuses the `videoutils.SignStreamURL` pattern. A worker cannot infer storage layout or reach another job's data.
+- **Signed capability handles** for segment GET/PUT (HMAC, scoped to one job **and one segment idx and one operation**, short-TTL) — follows the `videoutils.SignStreamURL` pattern with an isolated secret. A worker can reach only the exact segment it currently holds a lease for, in the direction granted, until the lease expires — not other segments, other jobs, or after preemption. (The worker-facing URL does carry `{jobID}/{idx}`; the binding above is what prevents abuse. An opaque per-segment ticket that hides even those is a possible Phase-2 hardening.)
 - **Process-and-delete**: nothing retained on the operator's disk after a segment returns.
 - **Instant revocation is the kill switch** (drop session, refuse leases, kill any live shell) — replaces the "force-stop via API" we don't have.
 
@@ -216,7 +216,7 @@ Because we have no SSH/provider access into the operator's box, the only way to 
 - **`upscale_workers`** (fleet) — `worker_id`, `gpu_info`, `image_version`, `models_available`, `session_expires_at`, `last_heartbeat_at`, `current_job_id`, `current_segment_idx`, `status`.
 - **Model registry** — `name`, `version`, `checksum`, `object_path`, `created_at`.
 
-Migrations follow the project pattern (SQL migrations as source of truth, mirrored by domain structs).
+Schema management follows the **recent-service pattern: GORM `AutoMigrate` in `main.go` is the source of truth** (themes/recs/notifications; library's older SQL-migration runner is not used for new services). Domain structs carry the GORM tags + `TableName()`.
 
 ## 11. Gateway / routing
 
