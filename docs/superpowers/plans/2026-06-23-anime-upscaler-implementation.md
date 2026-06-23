@@ -24,12 +24,13 @@ These are the judgment calls baked into this plan. Confirm or override before ex
 | **CD-6** | Source acquisition | shared **`library_torrents`** volume + copy `{downloadDir}/{infohash}/*` to upscaler staging at `job.Status=encoding` | new library `/internal` streaming endpoint | M3 |
 | **CD-7** | Source-retention | **opportunistic** (trigger while present; re-acquire via library if dropped after 24h seed) | add proactive "pin-for-upscale" retain flag to library | M3 (+ library change if pinned) |
 | **CD-8** | Output codec | **H.264 HLS** (matches hls.js stack), CRF/bitrate configurable | also keep a HEVC archival master | M3 finalizer |
-| **CD-9** | Edge mTLS | **RECOMMENDED for Phase 1** (review: a static shared `X-API-Key` across untrusted operators is a weak primary gate; per-handoff CF mTLS client certs give real per-worker identity + per-operator revocation) | opt-in only | M2, worker handoff — *needs your call* |
+| **CD-9** | Edge mTLS | **API-key only for Phase 1 (owner decision 2026-06-23)** — rely on enroll→session→idx-bound-capability + static `X-API-Key` + **mandatory Authenticated Origin Pulls**; CF mTLS deferred to Phase 2. **Accepted residual risk:** a leaked shared key opens the edge until rotated → mitigate with per-operator keys + documented rotation; the real per-worker boundary is the enroll/session/capability chain | mandatory mTLS now | M2 — owner-confirmed |
 | **CD-10** | Realtime path | **excluded** from Phase 1 (designed-for in spec §7) | include a thin realtime slice now | scope |
 | **CD-11** | Worker image registry | neutral name on **GHCR private** (`ghcr.io/<neutral>/worker`) | self-hosted registry | M5 packaging |
 | **CD-12** | Bulk segment transport | **stream through gateway→upscaler** (`/worker/segments`), excluded from the per-IP rate limiter, no-buffer proxy | **MinIO presigned-URL direct** (worker↔MinIO via edge; bytes never traverse gateway — avoids OOM, matches `SignStreamURL` reuse) | M2/M3 — *needs your call; review flagged OOM risk of GBs through the gateway* |
 | **CD-13** | Model distribution | **baked-in only for Phase 1** (`best-quality`+`realtime` in the image; hot-fetch `model@version` serving deferred to Phase 2) | build the `/worker/models` serving path now (true hot model updates, no redeploy) | M4/M5 — *needs your call; spec D9 sells hot model updates* |
 | **CD-14** | Enroll-token source | **per-handoff random tokens** persisted server-side in Postgres with a `consumed` flag (durable single-use, **fail-closed** if store unreachable), session bound to `worker_id` | one shared `ENROLL_TOKENS` CSV in config | M4 — revised after review (one-time-use must be durable, not Redis-fail-open) |
+| **CD-15** | GPU telemetry → ClickHouse | **dedicated `analytics.upscale_worker_telemetry` table owned by `analytics`** (mirrors `probe_runs`); upscaler **forwards** worker telemetry to `analytics POST /internal/upscale-telemetry` (the upscaler is the ext-edge proxy; worker never touches analytics/CH); Grafana CH dashboard on datasource `aenigma-clickhouse` | cram into generic `events` (`effect_kind=gpu_telemetry`, zero analytics change) **or** upscaler owns its own CH client | M6 — owner-requested 2026-06-23 |
 
 ## Global Constraints
 
@@ -675,14 +676,71 @@ Drives `queued→segmenting→upscaling→finalizing→done`. Without it M3's so
 
 ---
 
-### Task 20: Grafana dashboard
+### Task 19b: GPU telemetry → ClickHouse, proxied via the `ext.` edge (CD-15)
+
+High-cardinality per-worker GPU history goes to ClickHouse (not Prometheus). `analytics` owns the CH write (mirrors `probe_runs`); the upscaler forwards worker telemetry to it. The worker never touches analytics/CH — the upscaler is the proxy.
 
 **Files:**
-- Create: `docker/grafana/dashboards/upscaler.json`
-- Test: `docker/grafana/dashboards/upscaler_test.go` (or a `bash` JSON-validity + datasource-uid check, mirroring existing dashboard tests if present)
+- Modify: `services/analytics/internal/repo/clickhouse_schema.go` (add `upscale_worker_telemetry` DDL to `EnsureSchema`)
+- Modify: `services/analytics/internal/repo/clickhouse_store.go` (add `InsertUpscaleTelemetry(ctx, rows)` — `PrepareBatch` + `Append` in DDL column order)
+- Create: `services/analytics/internal/handler/upscale_telemetry.go` (`POST /internal/upscale-telemetry`) + mount in `services/analytics/internal/transport/router.go` (Docker-network-only, NOT gateway-proxied)
+- Create: `services/upscaler/internal/analyticsclient/client.go` (non-blocking, drop-on-full producer → POST to `ANALYTICS_INTERNAL_URL`)
+- Modify: `services/upscaler/internal/config/config.go` (add `AnalyticsInternalURL`, default `http://analytics:8092`) + `docker/docker-compose.yml` upscaler env (`ANALYTICS_INTERNAL_URL`) + `services/upscaler/internal/controlplane/hub.go` (on `metrics` frame: `RecordWorkerTelemetry` **and** `analyticsclient.Send`)
+- Test: `services/analytics/internal/repo/upscale_telemetry_test.go` (testcontainers CH), `services/upscaler/internal/analyticsclient/client_test.go`
 
-- [ ] **Step 1:** Build `upscaler.json` with rows: Fleet (`upscale_workers_connected`, GPU util/VRAM per `image_version`), Jobs (progress, ETA, queue depth by status, `upscale_lease_expired_total` rate = preemptions), Pipeline (decode/inference/encode fps), Edge (requests/auth-failures/rate-limit). Datasource uid = Prometheus (match existing dashboards).
-- [ ] **Step 2:** Validate JSON parses + references the correct datasource uid. **Step 3: Commit** — `feat(upscaler): Grafana fleet+jobs dashboard`. (Note the known base-tree bind-mount gotcha — dashboard renders only after base-tree autosync picks it up post-merge.)
+**Interfaces:**
+- Produces (analytics): table `analytics.upscale_worker_telemetry`:
+  ```sql
+  CREATE TABLE IF NOT EXISTS upscale_worker_telemetry (
+      ts             DateTime64(3) CODEC(Delta, ZSTD(1)),
+      worker_id      String        CODEC(ZSTD(1)),
+      gpu_model      LowCardinality(String),
+      image_version  LowCardinality(String),
+      job_id         String        CODEC(ZSTD(1)),
+      segment_idx    Int32,
+      gpu_util       Float32,
+      vram_used_b    UInt64        CODEC(Delta, ZSTD(1)),
+      vram_total_b   UInt64        CODEC(Delta, ZSTD(1)),
+      gpu_temp_c     Float32,
+      gpu_power_w    Float32,
+      decode_fps     Float32,
+      inference_fps  Float32,
+      encode_fps     Float32
+  ) ENGINE = MergeTree
+    PARTITION BY toYYYYMM(ts)
+    ORDER BY (worker_id, ts)
+    TTL toDateTime(ts) + INTERVAL 90 DAY DELETE
+    SETTINGS index_granularity = 8192;
+  ```
+  `InsertUpscaleTelemetry(ctx, []UpscaleTelemetryRow) error`; `POST /internal/upscale-telemetry` accepts a JSON batch of rows.
+- Produces (upscaler): `analyticsclient.Client.Send(row UpscaleTelemetryRow)` — buffered channel + worker goroutine, **drop-on-full**, fire-and-forget (mirror the existing egress producer in catalog/streaming; an analytics outage must never block a job or the WS read pump).
+
+- [ ] **Step 1: Write `upscale_telemetry_test.go`** (analytics, testcontainers CH, `-short` skip) — `EnsureSchema` creates the table (idempotent re-apply); `InsertUpscaleTelemetry` of 3 rows → `SELECT count()` == 3 + a `SELECT worker_id, gpu_util` round-trip.
+- [ ] **Step 2: Run → FAIL.** **Step 3: Add DDL + `InsertUpscaleTelemetry`** (column order must match DDL exactly — copy the `clickhouse_store.go:InsertBatch` discipline). **Step 4: Run → PASS** (`INTEGRATION=1 go test -tags=integration ./internal/repo/...`).
+- [ ] **Step 5: Write `upscale_telemetry` handler test** — `POST /internal/upscale-telemetry` with a JSON batch → 202, enqueues to the store (fake store captures); malformed body → 400; assert the route is NOT registered on any gateway-proxied path.
+- [ ] **Step 6: Run → FAIL.** **Step 7: Implement the handler + mount** on the analytics internal router. **Step 8: Run → PASS.**
+- [ ] **Step 9: Write `analyticsclient/client_test.go`** (upscaler) — `Send` enqueues; httptest analytics stub receives the batched POST; **buffer full → drop (no block)**; analytics 5xx/unreachable → logged, never propagated.
+- [ ] **Step 10: Run → FAIL.** **Step 11: Implement `analyticsclient` + wire into `hub.go`** metrics-frame handler (alongside `RecordWorkerTelemetry`) + add `ANALYTICS_INTERNAL_URL` to config + compose. **Step 12: Run → PASS.**
+- [ ] **Step 13: Commit** — `feat(upscaler+analytics): per-worker GPU telemetry → ClickHouse (ext-proxied, drop-on-full)`.
+
+---
+
+### Task 20: Grafana dashboards (Prometheus fleet + ClickHouse GPU history)
+
+**Files:**
+- Create: `docker/grafana/dashboards/upscaler.json` (Prometheus datasource — fleet/jobs/edge)
+- Create: `docker/grafana/dashboards/upscaler-gpu.json` (ClickHouse datasource `aenigma-clickhouse` — per-worker GPU history)
+- Test: a `bash` JSON-validity + datasource-uid check (mirror existing dashboard validation)
+
+- [ ] **Step 1:** Build `upscaler.json` (Prometheus) with rows: Fleet (`upscale_workers_connected`, GPU util/VRAM per `image_version`), Jobs (progress, ETA, queue depth by status, `upscale_lease_expired_total` rate = preemptions), Pipeline (decode/inference/encode fps), Edge (requests/auth-failures/rate-limit). Datasource uid = Prometheus.
+- [ ] **Step 2:** Build `upscaler-gpu.json` (datasource `grafana-clickhouse-datasource` uid `aenigma-clickhouse`) querying `analytics.upscale_worker_telemetry` — **per-worker time-series** GPU util / VRAM used vs total / temp / power, and decode/inference/encode fps, with a `worker_id` template variable and `$__timeFilter(ts)` on every query (partition pruning). Mirror the CH-query panel shape from `docker/grafana/dashboards/playback-health.json`. Example:
+  ```sql
+  SELECT ts AS time, worker_id, gpu_util
+  FROM upscale_worker_telemetry
+  WHERE $__timeFilter(ts) AND worker_id IN (${worker:sql})
+  ORDER BY ts
+  ```
+- [ ] **Step 3:** Validate both JSONs parse + reference the correct datasource uids (Prometheus vs `aenigma-clickhouse`). **Step 4: Commit** — `feat(upscaler): Grafana fleet (Prometheus) + GPU-history (ClickHouse) dashboards`. (Known base-tree bind-mount gotcha: dashboards render only after base-tree autosync picks them up post-merge; the `grafana-clickhouse-datasource` plugin must be installed — it already is, per the provisioned `aenigma-clickhouse` datasource.)
 
 ---
 

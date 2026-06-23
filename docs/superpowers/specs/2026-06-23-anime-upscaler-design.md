@@ -258,7 +258,36 @@ Full dial-home telemetry is a first-class deliverable. The worker reports its ow
 - Edge: enrollment attempts, auth failures, rate-limit hits, bytes in/out.
 - Model registry: fetches, checksum failures.
 
-**Label discipline:** keep `worker_id` OUT of high-frequency counters/histograms (cardinality); it appears only on the bounded `upscale_workers_connected` fleet gauge and in logs/audit. Use `gpu_model` / `image_version` / `model` / `status` for aggregation.
+**Label discipline:** keep `worker_id` OUT of high-frequency Prometheus counters/histograms (cardinality); it appears only on the bounded `upscale_workers_connected` fleet gauge and in logs/audit. Use `gpu_model` / `image_version` / `model` / `status` for aggregation.
+
+### Two sinks, by purpose
+
+| Sink | Holds | Why | Grafana datasource |
+|------|-------|-----|--------------------|
+| **Prometheus** `upscale_*` | low-cardinality fleet gauges + control-plane counters; **current state + alerting** | pull-based, no `worker_id` (cardinality) | Prometheus |
+| **ClickHouse** `analytics.upscale_worker_telemetry` | **high-cardinality per-worker / per-job time-series history** of GPU telemetry (`worker_id`, `gpu_model`, util, vram, temp, power, decode/inference/encode fps, segment idx, job) | append-only event store handles `worker_id` cardinality + retains history for dashboards | `grafana-clickhouse-datasource` (uid `aenigma-clickhouse`) |
+
+### Remote-GPU telemetry → ClickHouse, **proxied via the `ext.` edge**
+
+The untrusted worker never reaches `analytics` or ClickHouse directly. The path is:
+
+```
+GPU worker ──metrics frame (WS)──▶ ext.animeenigma.org ──▶ upscaler controlplane
+   (the upscaler is the proxy)            │
+                                          ├─▶ Prometheus gauges (RecordWorkerTelemetry)
+                                          └─▶ POST analytics /internal/upscale-telemetry
+                                                  (Docker-network-only, non-blocking,
+                                                   drop-on-full — an analytics outage
+                                                   never affects a job)
+                                                       │
+                                                       ▼
+                                          analytics → ClickHouse upscale_worker_telemetry
+                                                       │
+                                                       ▼
+                                          Grafana ClickHouse dashboard (per-worker GPU history)
+```
+
+`analytics` **owns the ClickHouse write** (a dedicated `upscale_worker_telemetry` MergeTree table added to its `EnsureSchema`, plus a `POST /internal/upscale-telemetry` ingestion endpoint), mirroring the existing `probe_runs` precedent — the upscaler just forwards. This reuses analytics' batcher + durability + PG-fallback and keeps the upscaler free of a ClickHouse client.
 
 ## 13. Testing
 
