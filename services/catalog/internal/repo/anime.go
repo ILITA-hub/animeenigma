@@ -174,6 +174,13 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 			query = query.Where("(" + strings.Join(orParts, " OR ") + ")")
 		}
 	}
+	// Studio filter — OR-set (a row passes if it has ANY selected studio).
+	// Unlike genres (AND-set via HAVING COUNT), an anime rarely has >1
+	// studio, so AND would near-always return empty. Mirrors the anime_studios
+	// m2m join (column studio_id).
+	if len(filters.StudioIDs) > 0 {
+		query = query.Where("id IN (SELECT anime_id FROM anime_studios WHERE studio_id IN ?)", filters.StudioIDs)
+	}
 	if len(filters.GenreIDs) > 0 {
 		query = query.Where("id IN (SELECT anime_id FROM anime_genres WHERE genre_id IN ? GROUP BY anime_id HAVING COUNT(DISTINCT genre_id) = ?)", filters.GenreIDs, len(filters.GenreIDs))
 	}

@@ -334,7 +334,8 @@ type SearchFilters struct {
 	YearTo   *int
 	Season   string
 	Status   AnimeStatus
-	GenreIDs []string
+	GenreIDs  []string
+	StudioIDs []string
 	Sort     string
 	Order    string
 	Page     int

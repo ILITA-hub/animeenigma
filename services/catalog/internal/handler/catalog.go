@@ -683,6 +683,17 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		}
 	}
 
+	// Studios — same comma-joined OR multi-value forms as genres (?studio=id1,id2).
+	if studios := query["studio"]; len(studios) > 0 {
+		for _, s := range studios {
+			for _, id := range strings.Split(s, ",") {
+				if id = strings.TrimSpace(id); id != "" {
+					filters.StudioIDs = append(filters.StudioIDs, id)
+				}
+			}
+		}
+	}
+
 	// Frontend sends genres as a single comma-joined query param (?genre=id1,id2).
 	// Handle both that form and the multi-value form (?genre=id1&genre=id2).
 	if genres := query["genre"]; len(genres) > 0 {
