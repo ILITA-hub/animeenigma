@@ -16,3 +16,9 @@ export function pickDefaultSubtitle(tracks: SubTrack[], opts: { lang: string }):
   const matches = tracks.filter((t) => t.lang === opts.lang)
   return best(matches) ?? best(tracks)
 }
+
+// Best track for EXACTLY this language (no cross-language fallback). Used by the
+// quick chooser's RU/EN/JP fast buttons.
+export function pickBestForLang(tracks: SubTrack[], lang: string): SubTrack | null {
+  return best(tracks.filter((t) => t.lang === lang))
+}

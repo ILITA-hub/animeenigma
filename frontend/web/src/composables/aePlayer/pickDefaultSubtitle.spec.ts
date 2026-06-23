@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickDefaultSubtitle } from './pickDefaultSubtitle'
+import { pickDefaultSubtitle, pickBestForLang } from './pickDefaultSubtitle'
 
 const T = (provider: string, lang: string, url = `${provider}-${lang}`) => ({ url, provider, lang, label: url, format: 'srt' })
 
@@ -18,5 +18,26 @@ describe('pickDefaultSubtitle', () => {
   it('falls back across langs when no lang match (jimaku first)', () => {
     const r = pickDefaultSubtitle([T('opensubtitles', 'en'), T('jimaku', 'ja')], { lang: 'ru' })
     expect(r?.provider).toBe('jimaku')
+  })
+})
+
+describe('pickBestForLang', () => {
+  const tracks = [
+    T('opensubtitles', 'en', 'en-os'),
+    T('gogoanime', 'en', 'en-own'),
+    T('jimaku', 'ja', 'ja-ji'),
+  ]
+  it('returns null when no track matches the language', () => {
+    expect(pickBestForLang(tracks, 'ru')).toBeNull()
+  })
+  it('prefers provider-own over opensubtitles for the same language', () => {
+    expect(pickBestForLang(tracks, 'en')?.url).toBe('en-own')
+  })
+  it('returns the only match for a language', () => {
+    expect(pickBestForLang(tracks, 'ja')?.url).toBe('ja-ji')
+  })
+  it('does NOT fall back to another language (unlike pickDefaultSubtitle)', () => {
+    expect(pickBestForLang([tracks[2]], 'en')).toBeNull()
+    expect(pickDefaultSubtitle([tracks[2]], { lang: 'en' })?.url).toBe('ja-ji')
   })
 })
