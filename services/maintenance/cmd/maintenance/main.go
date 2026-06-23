@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -169,6 +170,7 @@ func main() {
 		cfg:      cfg,
 		workChan: workChan,
 		fb:       feedback.NewClient(cfg.PlayerInternalURL, log),
+		http:     &http.Client{Timeout: 10 * time.Second},
 	}
 
 	go svc.run(ctx)
@@ -196,6 +198,7 @@ type service struct {
 	cfg      *config.Config
 	workChan chan workItem
 	fb       *feedback.Client
+	http     *http.Client
 	mu       sync.Mutex
 
 	// interrupts maps a source message ID (the message wearing the 👀 reaction)
@@ -605,6 +608,18 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 		if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
 			svc := msg.Alerts[0].Service
 			if s.state.WasRecentlyFixed(svc, 10*time.Minute) {
+				continue
+			}
+		}
+
+		// Provider-policy suppress gate: skip escalation if provider is already
+		// under manual management (policy != "auto"). Fail-open on catalog errors.
+		if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
+			if s.shouldSuppressForProvider(msg.Alerts[0].Service) {
+				log.Infow("suppressing escalation: provider already managed (policy!=auto)",
+					"provider", msg.Alerts[0].Service,
+					"alert", msg.Alerts[0].Name,
+				)
 				continue
 			}
 		}
@@ -1057,6 +1072,44 @@ func isCapturedTodo(issueStatus string) bool {
 	return false
 }
 
+// shouldSuppressForProvider returns true when the provider is already under
+// manual management (policy != "" && policy != "auto"). On any error or
+// timeout the function returns false (fail-open) so a catalog blip never
+// silences a real escalation.
+func (s *service) shouldSuppressForProvider(provider string) bool {
+	if provider == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.CatalogURL+"/internal/scraper/providers", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return false // fail-open: catalog blip must not block real escalations
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Data struct {
+			Providers []struct {
+				Name   string `json:"name"`
+				Policy string `json:"policy"`
+			} `json:"providers"`
+		} `json:"data"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&body) != nil {
+		return false
+	}
+	for _, p := range body.Data.Providers {
+		if strings.EqualFold(p.Name, provider) {
+			return p.Policy != "" && p.Policy != "auto"
+		}
+	}
+	return false
+}
+
 func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage, result *domain.AnalysisResult) {
 	// Create issue
 	source := "grafana_alert"
@@ -1084,19 +1137,47 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		}
 	}
 
-	issueID := s.state.CreateIssue(domain.Issue{
-		Source:            source,
-		Category:          domain.IssueCategory(result.Issue.Category),
-		Priority:          result.Issue.Priority,
-		Status:            domain.IssueStatus(result.Issue.Status),
-		Title:             result.Issue.Title,
-		Reporter:          reporter,
-		TelegramMessageID: msg.MessageID,
-		AffectedService:   affectedService,
-		Actions:           result.ActionsTaken,
-		FeedbackID:        msg.FeedbackID,
-		Attachments:       attachmentPaths,
-	})
+	var issueID string
+	if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
+		if existing := s.state.FindOpenIssueByAlert(msg.Alerts[0].Name, msg.Alerts[0].Service); existing != nil {
+			log.Infow("reusing open issue instead of duplicate",
+				"issue", existing.ID,
+				"service", msg.Alerts[0].Service,
+			)
+			s.state.UpdateIssue(existing.ID, func(i *domain.Issue) {
+				i.Status = domain.IssueStatus(result.Issue.Status)
+			})
+			issueID = existing.ID
+		} else {
+			issueID = s.state.CreateIssue(domain.Issue{
+				Source:            source,
+				Category:          domain.IssueCategory(result.Issue.Category),
+				Priority:          result.Issue.Priority,
+				Status:            domain.IssueStatus(result.Issue.Status),
+				Title:             result.Issue.Title,
+				Reporter:          reporter,
+				TelegramMessageID: msg.MessageID,
+				AffectedService:   affectedService,
+				Actions:           result.ActionsTaken,
+				FeedbackID:        msg.FeedbackID,
+				Attachments:       attachmentPaths,
+			})
+		}
+	} else {
+		issueID = s.state.CreateIssue(domain.Issue{
+			Source:            source,
+			Category:          domain.IssueCategory(result.Issue.Category),
+			Priority:          result.Issue.Priority,
+			Status:            domain.IssueStatus(result.Issue.Status),
+			Title:             result.Issue.Title,
+			Reporter:          reporter,
+			TelegramMessageID: msg.MessageID,
+			AffectedService:   affectedService,
+			Actions:           result.ActionsTaken,
+			FeedbackID:        msg.FeedbackID,
+			Attachments:       attachmentPaths,
+		})
+	}
 	log.Infow("issue created",
 		"issue_id", issueID,
 		"title", result.Issue.Title,

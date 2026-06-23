@@ -37,7 +37,8 @@ type Config struct {
 	// integration tests can post synthetic alerts at a live binary without
 	// triggering a real fix. Plan 23-03 only plumbs the field; consuming
 	// callers land in a future plan.
-	TestMode bool
+	TestMode   bool
+	CatalogURL string
 }
 
 type GrafanaConfig struct {
@@ -131,6 +132,7 @@ func Load() (*Config, error) {
 		AttachmentsDir:    getEnv("ATTACHMENTS_DIR", ".claude/maintenance-attachments"),
 		FeedbackBaseURL:   getEnv("FEEDBACK_BASE_URL", "https://animeenigma.org"),
 		TestMode:          getEnvBool("MAINTENANCE_TEST_MODE", false),
+		CatalogURL:        getEnv("CATALOG_URL", "http://catalog:8081"),
 	}, nil
 }
 

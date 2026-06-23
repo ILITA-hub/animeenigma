@@ -298,7 +298,8 @@ func (m *Manager) FindOpenIssueByAlert(alertName, service string) *domain.Issue 
 	defer m.mu.Unlock()
 	for i := len(m.issues.Issues) - 1; i >= 0; i-- {
 		issue := &m.issues.Issues[i]
-		if issue.Status != domain.StatusResolved && issue.Status != domain.StatusWontFix {
+		switch issue.Status {
+		case domain.StatusOpen, domain.StatusInvestigating, domain.StatusEscalated:
 			if issue.AffectedService == service && issue.Title != "" {
 				return issue
 			}
