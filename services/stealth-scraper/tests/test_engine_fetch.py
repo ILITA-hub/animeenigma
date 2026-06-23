@@ -309,5 +309,83 @@ class TestWarmReuseLivenessResurrectionSeam(unittest.TestCase):
         self.assertNotIn(prof.id, eng._handles)
 
 
+def _held_fetch_session(eng, sid, *, user_key=None, expires_in=600, in_use=0):
+    """Pin a held warm session attributed to ``user_key`` (no live page needed —
+    only its presence in eng._sessions matters for the quota count)."""
+    prof = eng.profiles.lease()
+    sess = Session(
+        id=sid, profile=prof, proxy_id="direct", referer="r", user_agent="UA",
+        cdn_host="h", master_url="m", expires_at=time.time() + expires_in,
+        page=None, player_url="p", user_key=user_key,
+    )
+    sess.in_use = in_use
+    eng._sessions[sid] = sess
+    return sess
+
+
+class TestWarmFetchUserQuota(unittest.TestCase):
+    """The /fetch (warm-fetch discovery) path must enforce the per-user quota the
+    same way resolve() does — a long-lived warm session is the exact poison-prone
+    resource the quota bounds."""
+
+    def test_third_warm_fetch_for_same_user_raises_user_quota(self):
+        from app.engine import UserQuotaExceeded
+        eng = CamoufoxEngine(Config(pool_size=4, warming_enabled=False))
+        eng.cfg.user_quota = 2
+        eng._sample_ram = lambda: 0  # RAM never the limiter here
+        # alice already holds 2 warm sessions on other origins.
+        _held_fetch_session(eng, "fetch::nineanime::https://a.example", user_key="alice")
+        _held_fetch_session(eng, "fetch::nineanime::https://b.example", user_key="alice")
+        # A 3rd, for a FRESH origin (no reuse fast-path), must trip the quota.
+        with self.assertRaises(UserQuotaExceeded):
+            run(eng._warm_fetch_session("nineanime", "https://9anime.me.uk", user_key="alice"))
+
+    def test_fetch_route_user_quota_is_503_kind_user_quota(self):
+        import json
+        from app.main import FetchRequest
+        eng = CamoufoxEngine(Config(pool_size=4, warming_enabled=False))
+        eng.cfg.user_quota = 2
+        eng._sample_ram = lambda: 0
+        _held_fetch_session(eng, "fetch::nineanime::https://a.example", user_key="alice")
+        _held_fetch_session(eng, "fetch::nineanime::https://b.example", user_key="alice")
+        import app.main as m
+        m.app.state.engine = eng
+        resp = run(m.fetch(FetchRequest(
+            provider="nineanime", url="https://9anime.me.uk/x", user_key="alice")))
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(json.loads(resp.body)["kind"], "user_quota")
+
+
+class TestWarmFetchCapacitySurfacing(unittest.TestCase):
+    """A CapacityExceeded raised inside the warm path (e.g. _ensure_browser →
+    _admit_launch refusing a launch over the hard RAM budget) must keep its
+    concrete class so the /fetch handler emits kind=capacity — NOT be flattened
+    to a generic RecipeError (kind=error) by the warm-path catch-all."""
+
+    def test_capacity_in_warm_path_surfaces_as_capacity(self):
+        from app.engine import CapacityExceeded
+        # ram >= hard ⇒ _admit_launch (called inside _ensure_browser) raises
+        # CapacityExceeded. No held session ⇒ nothing to evict ⇒ it propagates.
+        eng = CamoufoxEngine(Config(pool_size=4, warming_enabled=False,
+                                    ram_soft_bytes=1000, ram_hard_bytes=2000))
+        eng._sample_ram = lambda: 2500
+        with self.assertRaises(CapacityExceeded):
+            run(eng._warm_fetch_session("nineanime", "https://9anime.me.uk", user_key="alice"))
+
+    def test_fetch_route_capacity_in_warm_path_is_503_kind_capacity(self):
+        import json
+        from app.main import FetchRequest
+        eng = CamoufoxEngine(Config(pool_size=4, warming_enabled=False,
+                                    ram_soft_bytes=1000, ram_hard_bytes=2000))
+        eng._sample_ram = lambda: 2500
+        import app.main as m
+        m.app.state.engine = eng
+        resp = run(m.fetch(FetchRequest(
+            provider="nineanime", url="https://9anime.me.uk/x", user_key="alice")))
+        self.assertEqual(resp.status_code, 503)
+        # The whole point: kind=capacity, NOT kind=error (the pre-fix flattening).
+        self.assertEqual(json.loads(resp.body)["kind"], "capacity")
+
+
 if __name__ == "__main__":
     unittest.main()

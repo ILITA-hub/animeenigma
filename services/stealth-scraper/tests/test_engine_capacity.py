@@ -130,6 +130,80 @@ class TestUserQuota(unittest.TestCase):
         eng._enforce_user_quota("")
 
 
+class _FakePage:
+    async def evaluate(self, js, *args):
+        return "FakeUA/1.0"
+
+    async def close(self):
+        pass
+
+
+class _FakeContext:
+    async def new_page(self):
+        return _FakePage()
+
+
+class _FakeHandle:
+    def __init__(self, opts):
+        self._opts = opts
+
+    async def open(self):
+        return _FakeContext()
+
+
+class TestWarmingTrigger(unittest.TestCase):
+    """The ONLY warming trigger (_ensure_browser) must consult _warming_allowed()
+    so the soft-budget back-pressure actually stops warming — not just expose a
+    dead helper. Patches the launch internals so no real Camoufox is spawned."""
+
+    def _engine_under(self, *, ram, soft=1000, hard=10**12):
+        eng = CamoufoxEngine(Config(
+            pool_size=2, warming_enabled=True,
+            ram_soft_bytes=soft, ram_hard_bytes=hard,
+        ))
+        eng._sample_ram = lambda: ram
+        return eng
+
+    def _run_ensure_with_recorder(self, eng):
+        """Drive the real _ensure_browser with fake launch internals; return True
+        iff warm_profile was invoked by the warming trigger."""
+        import app.engine as e
+        import app.warming as w
+
+        called = {"warmed": False}
+
+        async def _fake_warm(page, sites, log, *, nav_timeout_ms):
+            called["warmed"] = True
+
+        orig_handle, orig_build = e._CamoufoxHandle, e.build_launch_options
+        orig_warm = w.warm_profile
+        e._CamoufoxHandle = _FakeHandle
+        e.build_launch_options = lambda **k: {}
+        w.warm_profile = _fake_warm
+        try:
+            profile = eng.profiles.lease()
+            run(eng._ensure_browser(profile, "direct"))
+        finally:
+            e._CamoufoxHandle, e.build_launch_options = orig_handle, orig_build
+            w.warm_profile = orig_warm
+        return called["warmed"]
+
+    def test_warming_fires_below_soft(self):
+        eng = self._engine_under(ram=500)            # ram < soft ⇒ allowed
+        self.assertTrue(eng._warming_allowed())
+        self.assertTrue(self._run_ensure_with_recorder(eng),
+                        "warm_profile must run when below the soft budget")
+
+    def test_warming_suppressed_under_soft_pressure(self):
+        eng = self._engine_under(ram=1500)           # soft <= ram < hard
+        self.assertFalse(eng._warming_allowed())
+        # The trigger must CONSULT _warming_allowed() — proves the gate is live,
+        # not that the helper returns False in isolation. Pre-fix (ungated) this
+        # would warm regardless and the assertion would fail.
+        self.assertFalse(self._run_ensure_with_recorder(eng),
+                         "warm_profile must NOT run once at/over the soft budget")
+
+
 class TestErrorBodies(unittest.TestCase):
     def _set_engine(self, engine):
         import app.main as m

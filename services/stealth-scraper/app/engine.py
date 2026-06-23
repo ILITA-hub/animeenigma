@@ -302,7 +302,7 @@ class CamoufoxEngine:
         try:
             page = await context.new_page()
             profile.user_agent = await page.evaluate("() => navigator.userAgent")
-            if self.cfg.warming_enabled:
+            if self.cfg.warming_enabled and self._warming_allowed():
                 from .warming import warm_profile
 
                 await warm_profile(
@@ -839,6 +839,14 @@ class CamoufoxEngine:
             metrics.ACTIVE_SESSIONS.set(len(self._sessions))
             return session
         except ChallengeError:
+            raise
+        except (CapacityExceeded, UserQuotaExceeded, PoolExhausted, ProviderWedged):
+            # Typed back-pressure/quota signals (e.g. _ensure_browser → _admit_launch
+            # raising CapacityExceeded mid-launch) MUST keep their concrete class so
+            # the /fetch handler emits the right `kind` (capacity / user_quota /
+            # pool_exhausted / provider_wedged) instead of a flattened error. The
+            # browser handle never opened on these paths, so there is nothing to tear
+            # down here — let them propagate unchanged.
             raise
         except Exception as exc:  # noqa: BLE001
             await self._teardown(profile, reason="crash")
