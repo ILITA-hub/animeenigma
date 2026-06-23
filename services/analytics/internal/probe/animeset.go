@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math/rand"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -16,6 +17,9 @@ type AnimeRef struct {
 	// target set sets this to the uploaded episode; scraper/kodik sets leave it 0.
 	Episode int
 	Slot    AnimeSlot
+	// Score is the Shikimori/MAL score (0–10). Used to order probe titles
+	// most-popular-first so high-visibility anime surface failures first.
+	Score float64
 }
 
 // animeName carries the title fields a catalog anime object exposes. The probe
@@ -55,36 +59,50 @@ func NewHTTPAnimeSet(catalogBaseURL, anchorUUID string, hc *http.Client, rng *ra
 	return &HTTPAnimeSet{base: strings.TrimRight(catalogBaseURL, "/"), anchor: anchorUUID, hc: hc, rng: rng}
 }
 
-// fetchName best-effort resolves a single anime's display title via the catalog
-// detail endpoint. Returns "" on any failure (the name column is decorative).
-func (a *HTTPAnimeSet) fetchName(ctx context.Context, uuid string) string {
+// animeDetail bundles the fields returned by the catalog anime-detail endpoint
+// that the probe cares about: display name + popularity score.
+type animeDetail struct {
+	animeName
+	Score float64 `json:"score"`
+}
+
+// fetchDetail best-effort resolves a single anime's display title and score via
+// the catalog detail endpoint. Returns zero values on any failure.
+func (a *HTTPAnimeSet) fetchDetail(ctx context.Context, uuid string) (name string, score float64) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.base+"/api/anime/"+uuid, nil)
 	if err != nil {
-		return ""
+		return "", 0
 	}
 	resp, err := a.hc.Do(req)
 	if err != nil {
-		return ""
+		return "", 0
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return ""
+		return "", 0
 	}
 	var env struct {
-		Data *animeName `json:"data"`
-		animeName
+		Data *animeDetail `json:"data"`
+		animeDetail
 	}
 	if json.NewDecoder(resp.Body).Decode(&env) != nil {
-		return ""
+		return "", 0
 	}
 	if env.Data != nil {
-		return env.Data.pick()
+		return env.Data.pick(), env.Data.Score
 	}
-	return env.animeName.pick()
+	return env.animeDetail.pick(), env.animeDetail.Score
+}
+
+// fetchName is kept for call sites that only need the display title.
+func (a *HTTPAnimeSet) fetchName(ctx context.Context, uuid string) string {
+	name, _ := a.fetchDetail(ctx, uuid)
+	return name
 }
 
 func (a *HTTPAnimeSet) Resolve(ctx context.Context) ([]AnimeRef, error) {
-	refs := []AnimeRef{{UUID: a.anchor, Name: a.fetchName(ctx, a.anchor), Slot: SlotAnchor}}
+	anchorName, anchorScore := a.fetchDetail(ctx, a.anchor)
+	refs := []AnimeRef{{UUID: a.anchor, Name: anchorName, Slot: SlotAnchor, Score: anchorScore}}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.base+"/api/home/spotlight", nil)
 	if err != nil {
@@ -117,10 +135,12 @@ func (a *HTTPAnimeSet) Resolve(ctx context.Context) ([]AnimeRef, error) {
 	var featuredID string
 	var pool []string
 	names := map[string]string{}
+	scores := map[string]float64{}
 	for _, c := range env.Cards {
 		var h struct {
 			Anime struct {
-				ID string `json:"id"`
+				ID    string  `json:"id"`
+				Score float64 `json:"score"`
 				animeName
 			} `json:"anime"`
 		}
@@ -136,6 +156,7 @@ func (a *HTTPAnimeSet) Resolve(ctx context.Context) ([]AnimeRef, error) {
 		}
 		if _, seen := names[id]; !seen {
 			names[id] = h.Anime.animeName.pick()
+			scores[id] = h.Anime.Score
 		}
 		pool = append(pool, id)
 	}
@@ -149,15 +170,24 @@ func (a *HTTPAnimeSet) Resolve(ctx context.Context) ([]AnimeRef, error) {
 	if slotFeaturedID == "" {
 		slotFeaturedID = pool[0]
 	}
-	refs = append(refs, AnimeRef{UUID: slotFeaturedID, Name: names[slotFeaturedID], Slot: SlotFeatured})
+	refs = append(refs, AnimeRef{UUID: slotFeaturedID, Name: names[slotFeaturedID], Slot: SlotFeatured, Score: scores[slotFeaturedID]})
 
 	// SlotSpotlightRandom: random pick from pool.
 	pick := pool[a.rng.Intn(len(pool))]
-	refs = append(refs, AnimeRef{UUID: pick, Name: names[pick], Slot: SlotSpotlightRandom})
+	refs = append(refs, AnimeRef{UUID: pick, Name: names[pick], Slot: SlotSpotlightRandom, Score: scores[pick]})
 
 	// SlotRandom: another random pick from pool (may coincide — acceptable).
 	other := pool[a.rng.Intn(len(pool))]
-	refs = append(refs, AnimeRef{UUID: other, Name: names[other], Slot: SlotRandom})
+	refs = append(refs, AnimeRef{UUID: other, Name: names[other], Slot: SlotRandom, Score: scores[other]})
 
-	return refs, nil
+	return sortByPopularity(refs), nil
+}
+
+// sortByPopularity returns a copy of refs sorted by Score descending (stable,
+// so refs with identical scores retain their original relative order).
+func sortByPopularity(refs []AnimeRef) []AnimeRef {
+	out := make([]AnimeRef, len(refs))
+	copy(out, refs)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	return out
 }

@@ -159,3 +159,78 @@ func TestAnimeSet_OnlyNonAnimeCards_AnchorOnly(t *testing.T) {
 		t.Fatalf("want anchor-only for non-anime payload, got %+v", refs)
 	}
 }
+
+func TestSortByPopularity(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      []AnimeRef
+		wantIDs []string
+	}{
+		{
+			name: "out-of-order scores sorted descending",
+			in: []AnimeRef{
+				{UUID: "a", Score: 6.1},
+				{UUID: "b", Score: 8.9},
+				{UUID: "c", Score: 7.5},
+			},
+			wantIDs: []string{"b", "c", "a"},
+		},
+		{
+			name: "already sorted stays sorted",
+			in: []AnimeRef{
+				{UUID: "x", Score: 9.0},
+				{UUID: "y", Score: 7.0},
+				{UUID: "z", Score: 5.0},
+			},
+			wantIDs: []string{"x", "y", "z"},
+		},
+		{
+			name: "equal scores preserve original order (stable)",
+			in: []AnimeRef{
+				{UUID: "p", Score: 8.0},
+				{UUID: "q", Score: 8.0},
+				{UUID: "r", Score: 5.0},
+			},
+			wantIDs: []string{"p", "q", "r"},
+		},
+		{
+			name: "single element",
+			in:   []AnimeRef{{UUID: "solo", Score: 7.7}},
+			wantIDs: []string{"solo"},
+		},
+		{
+			name:    "empty slice",
+			in:      []AnimeRef{},
+			wantIDs: []string{},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := sortByPopularity(tc.in)
+			if len(got) != len(tc.wantIDs) {
+				t.Fatalf("len=%d want %d", len(got), len(tc.wantIDs))
+			}
+			for i, id := range tc.wantIDs {
+				if got[i].UUID != id {
+					t.Errorf("pos %d: got %q want %q (full: %v)", i, got[i].UUID, id, uuids(got))
+				}
+			}
+			// Original slice must not be mutated.
+			for i, orig := range tc.in {
+				if orig.UUID != tc.in[i].UUID {
+					t.Errorf("input mutated at pos %d", i)
+				}
+			}
+		})
+	}
+}
+
+func uuids(refs []AnimeRef) []string {
+	ids := make([]string, len(refs))
+	for i, r := range refs {
+		ids[i] = r.UUID
+	}
+	return ids
+}
