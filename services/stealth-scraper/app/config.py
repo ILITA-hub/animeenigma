@@ -105,8 +105,11 @@ class Config:
     # not-in-use session to reclaim.
     # STEALTH_POOL_SIZE survives only as a high fail-safe ceiling used when the
     # /proc RSS read fails.
-    ram_soft_bytes: int = 4 * 1024 * 1024 * 1024   # 4 GiB
-    ram_hard_bytes: int = 6 * 1024 * 1024 * 1024   # 6 GiB
+    # Host-fit budget: this deployment's box is RAM-tight (already swapping), so
+    # the combined Camoufox RSS budget lives INSIDE the existing 3500m container
+    # (mem_limit unchanged) — admission refuses at 3 GiB before the kernel OOMs.
+    ram_soft_bytes: int = 2 * 1024 * 1024 * 1024   # 2 GiB
+    ram_hard_bytes: int = 3 * 1024 * 1024 * 1024   # 3 GiB
     ram_sample_seconds: float = 5.0
     # Max concurrent HELD sessions per user_key (fairness axis, Phase 2).
     user_quota: int = 2
@@ -156,8 +159,8 @@ class Config:
             max_body_bytes=_int(g("STEALTH_MAX_BODY_BYTES"), 64 * 1024 * 1024),
             unactivated_grace_seconds=_int(g("STEALTH_UNACTIVATED_GRACE_SECONDS"), 45),
             reaper_interval_seconds=float(_int(g("STEALTH_REAPER_INTERVAL_SECONDS"), 30)),
-            ram_soft_bytes=_int(g("STEALTH_RAM_SOFT_BYTES"), 4 * 1024 * 1024 * 1024),
-            ram_hard_bytes=_int(g("STEALTH_RAM_HARD_BYTES"), 6 * 1024 * 1024 * 1024),
+            ram_soft_bytes=_int(g("STEALTH_RAM_SOFT_BYTES"), 2 * 1024 * 1024 * 1024),
+            ram_hard_bytes=_int(g("STEALTH_RAM_HARD_BYTES"), 3 * 1024 * 1024 * 1024),
             ram_sample_seconds=float(_int(g("STEALTH_RAM_SAMPLE_SECONDS"), 5)),
             user_quota=_int(g("STEALTH_USER_QUOTA"), 2),
             poison_max=_int(g("STEALTH_POISON_MAX"), 2),

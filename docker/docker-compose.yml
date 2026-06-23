@@ -199,7 +199,7 @@ services:
     # Each active stream retains its resolving browser (the CDN is Cloudflare-
     # fingerprint-gated, so segments are restreamed through that browser's in-page
     # fetch). Pool size = max concurrent EN streams; sized for a small group.
-    mem_limit: 7g               # 6 GiB hard RAM budget (in-process admission) + Xvfb/python overhead
+    mem_limit: 3500m            # host-fit: 3 GiB hard RAM budget (in-process admission) lives INSIDE this cap + Xvfb/python overhead; box is RAM-tight, no bump
     cpus: "2.0"
     environment:
       STEALTH_HEADLESS: ${STEALTH_HEADLESS:-virtual}
@@ -207,8 +207,8 @@ services:
       # RAM-budgeted capacity (Phase 2). STEALTH_POOL_SIZE survives only as a
       # high fail-safe ceiling used when the /proc RSS read fails; the live cap
       # is the combined Camoufox RSS soft/hard budget below.
-      STEALTH_RAM_SOFT_BYTES: ${STEALTH_RAM_SOFT_BYTES:-4294967296}
-      STEALTH_RAM_HARD_BYTES: ${STEALTH_RAM_HARD_BYTES:-6442450944}
+      STEALTH_RAM_SOFT_BYTES: ${STEALTH_RAM_SOFT_BYTES:-2147483648}
+      STEALTH_RAM_HARD_BYTES: ${STEALTH_RAM_HARD_BYTES:-3221225472}
       STEALTH_RAM_SAMPLE_SECONDS: ${STEALTH_RAM_SAMPLE_SECONDS:-5}
       STEALTH_USER_QUOTA: ${STEALTH_USER_QUOTA:-2}
       STEALTH_SESSION_TTL_SECONDS: ${STEALTH_SESSION_TTL_SECONDS:-600}
