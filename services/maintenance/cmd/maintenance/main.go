@@ -1550,8 +1550,10 @@ const (
 	heartBreak = "\U0001F494" // 💔
 	// interruptTTL bounds how long a cancel func lingers in the registry if a
 	// computation neither completes nor is interrupted (safety net only —
-	// runInterruptible always deregisters on return).
-	interruptTTL = 10 * time.Minute
+	// runInterruptible always deregisters on return). Must exceed the claude
+	// analysis timeout (1h) so the sweeper never kills a legitimately running
+	// analysis before the admin can send 💔.
+	interruptTTL = 90 * time.Minute
 )
 
 // errInterrupted is returned by runInterruptible when the computation's context
