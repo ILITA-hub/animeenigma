@@ -1642,8 +1642,9 @@ func (s *service) runInterruptible(ctx context.Context, srcMsgID int, label stri
 	return result, err
 }
 
-// messageLabel renders a short human description of a message for the 👁️ watch
-// message (e.g. "alert HighErrorRate", "report from @user", "admin request").
+// messageLabel returns a short human-readable label for a classified message,
+// used as the label argument to runInterruptible (which uses it only for a
+// status log line). Examples: "alert HighErrorRate", "report from @user", "admin request".
 func messageLabel(msg domain.ClassifiedMessage) string {
 	switch msg.Type {
 	case domain.MessageAlertFiring:
@@ -1684,7 +1685,7 @@ func isReactionAbort(u telegram.Update, botID int64) (msgID int, ok bool) {
 	if r == nil {
 		return 0, false
 	}
-	if r.User != nil && r.User.ID == botID { // ignore the bot's own 👀→💔 flip
+	if r.User != nil && r.User.ID == botID { // belt-and-suspenders: Telegram never delivers bot-set reactions back, so this guard is defense-in-depth
 		return 0, false
 	}
 	if !reactionsContain(r.NewReaction, heartBreak) {
