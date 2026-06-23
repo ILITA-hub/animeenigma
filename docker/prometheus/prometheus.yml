@@ -92,6 +92,11 @@ scrape_configs:
       - targets: ['gacha:8093']
     metrics_path: /metrics
 
+  - job_name: 'upscaler'
+    static_configs:
+      - targets: ['upscaler:8096']
+    metrics_path: /metrics
+
   # ClickHouse native self-metrics (v4.0 Activity Register Phase 1, AR-STORE-01).
   - job_name: 'clickhouse'
     static_configs:

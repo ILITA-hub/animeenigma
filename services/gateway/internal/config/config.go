@@ -92,7 +92,10 @@ type ServiceURLs struct {
 	RecsService string
 	// AnidleService — anime guessing game service (spec 2026-06-15). Port 8095.
 	AnidleService string
-	WebService    string
+	// UpscalerService — video upscaler service. Port 8096. Admin-gated REST
+	// (/api/upscale/*). Internal segment-handle endpoints are Docker-network-only.
+	UpscalerService string
+	WebService      string
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
@@ -146,6 +149,7 @@ func Load() (*Config, error) {
 			GachaService:         getEnv("GACHA_SERVICE_URL", "http://gacha:8093"),
 			RecsService:          getEnv("RECS_SERVICE_URL", "http://recs:8094"),
 			AnidleService:        getEnv("ANIDLE_SERVICE_URL", "http://anidle:8095"),
+			UpscalerService:      getEnv("UPSCALER_SERVICE_URL", "http://upscaler:8096"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),

@@ -601,6 +601,15 @@ func NewRouterWithCleanup(
 			})
 		})
 
+		// Upscaler service routes (admin-gated, port 8096). All /api/upscale/*
+		// paths require JWT + admin role. Internal segment-handle endpoints are
+		// Docker-network-only (D-05 security model).
+		r.Route("/upscale", func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(AdminRoleMiddleware)
+			r.HandleFunc("/*", proxyHandler.ProxyToUpscaler)
+		})
+
 		// Library service routes (workstream raw-jp / v0.2). Phase 2 adds
 		// /search behind admin auth; /health remains public so the docker
 		// healthcheck + ops probes still work without credentials. All other

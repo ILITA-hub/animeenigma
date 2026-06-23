@@ -147,6 +147,7 @@ declare -A SERVICE_PORTS=(
     [scheduler]=8085
     [gateway]=8000
     [themes]=8086
+    [upscaler]=8096
 )
 
 # Health check redeployed services
