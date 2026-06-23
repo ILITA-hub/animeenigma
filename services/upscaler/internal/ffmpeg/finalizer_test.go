@@ -369,6 +369,70 @@ func TestFinalizer_Remux_NoSubs_OmitsSubsInput(t *testing.T) {
 	}
 }
 
+// TestFinalizer_Remux_NoAudio_SubsPresent is the critical guard for the dynamic
+// -map index arithmetic: with audio ABSENT but subs PRESENT, subs must shift
+// from input slot 2 to slot 1 (since the audio -i is omitted) and be mapped
+// `-map 1:s?`, NOT a hardcoded `-map 2:s?`. A regression that hardcoded subs
+// to index 2 would pass the audio+subs and no-subs cases but FAIL here:
+//   - inputCount would still be 2 (video + subs), but
+//   - the argv would contain `2:s?` (WRONG — no input 2 exists) and
+//     would NOT contain `1:s?`.
+// So this test fails on a hardcoded `2:s?` impl, which is exactly the
+// refactor-safety we want.
+func TestFinalizer_Remux_NoAudio_SubsPresent(t *testing.T) {
+	dir := t.TempDir()
+	ffmpegBin := filepath.Join(dir, "fake_ffmpeg.sh")
+	writeFakeScript(t, ffmpegBin, fakeFfmpegFinalizerScript)
+
+	segDir := filepath.Join(dir, "segs")
+	_ = os.MkdirAll(segDir, 0o755)
+	writeFakeSegments(t, segDir, []string{"seg_00000.mkv"})
+
+	outDir := filepath.Join(dir, "out_noaudio_subs")
+	probe := source.ProbeResult{PixFmt: "yuv420p", FPS: "24/1"}
+	// Audio ABSENT, subs PRESENT — subs must become input index 1.
+	sc := Sidecars{AudioPath: "", SubPaths: []string{filepath.Join(dir, "subs.mks")}}
+
+	f := NewFinalizer(ffmpegBin)
+	if err := f.Concat(context.Background(), segDir, sc, probe, outDir); err != nil {
+		t.Fatalf("Concat: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(outDir, "remux_argv.txt"))
+	if err != nil {
+		t.Fatalf("remux_argv.txt: %v", err)
+	}
+	a := string(data)
+
+	lines := strings.Split(a, "\n")
+	inputCount := 0
+	for _, l := range lines {
+		if l == "-i" {
+			inputCount++
+		}
+	}
+	// video.mkv + subs.mks = 2 inputs; no audio.
+	if inputCount != 2 {
+		t.Errorf("no-audio+subs case: expected 2 -i, got %d; argv:\n%s", inputCount, a)
+	}
+	// Video must always be mapped.
+	if !strings.Contains(a, "0:v") {
+		t.Errorf("no-audio+subs case: argv must contain -map 0:v; argv:\n%s", a)
+	}
+	// Subs shifted to index 1.
+	if !strings.Contains(a, "1:s?") {
+		t.Errorf("no-audio+subs case: argv must contain -map 1:s? (subs at index 1); argv:\n%s", a)
+	}
+	// Subs must NOT be hardcoded at index 2.
+	if strings.Contains(a, "2:s?") {
+		t.Errorf("no-audio+subs case: argv must NOT contain -map 2:s? (hardcoded index regression); argv:\n%s", a)
+	}
+	// No audio map of any form.
+	if strings.Contains(a, "1:a?") || strings.Contains(a, "1:a\n") {
+		t.Errorf("no-audio+subs case: argv must NOT contain any -map 1:a; argv:\n%s", a)
+	}
+}
+
 func TestFinalizer_Remux_ProducesHLSOutputFiles(t *testing.T) {
 	dir := t.TempDir()
 	ffmpegBin := filepath.Join(dir, "fake_ffmpeg.sh")
