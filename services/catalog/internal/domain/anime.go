@@ -328,25 +328,26 @@ type ExternalIDs struct {
 
 // SearchFilters for anime search
 type SearchFilters struct {
-	Query    string
-	Year     *int
-	YearFrom *int
-	YearTo   *int
-	Season   string
-	Status   AnimeStatus
+	Query     string
+	Year      *int
+	YearFrom  *int
+	YearTo    *int
+	Season    string
+	Status    AnimeStatus
 	GenreIDs  []string
 	StudioIDs []string
-	Sort     string
-	Order    string
-	Page     int
-	PageSize int
-	Source   string
+	Sort      string
+	Order     string
+	Page      int
+	PageSize  int
+	Source    string
 	// Phase 15 (UX-31) — multi-axis browse sidebar filters.
 	// Kind matches the Shikimori-source enum: "tv" / "movie" / "ova" /
 	// "ona" / "special". Empty = no filter.
-	// Providers is the OR-set of {"kodik","animelib"}
-	// — a row passes when ANY of the selected has_{provider} columns is
-	// true. Empty = no filter. Unknown values are dropped at the handler.
+	// Providers is the OR-set of {"kodik","dub","raw","ae"} → columns
+	// has_kodik/has_dub/has_raw/has_video — a row passes when ANY of the
+	// selected columns is true. Empty = no filter. Unknown values dropped at
+	// the handler. StudioIDs is an OR-set over the anime_studios join.
 	Kind      string
 	Providers []string
 	// ScoreMin filters to anime with score >= this value. nil = no filter.
