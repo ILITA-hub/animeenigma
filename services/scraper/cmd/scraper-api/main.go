@@ -212,6 +212,14 @@ func main() {
 	// the orchestrator gates dispatch on cache.IsHealthy and the probe
 	// runner (spawned below) populates the cache on each tick.
 	cache := health.NewInMemoryHealthCache()
+
+	// Phase 3 (Camoufox self-heal) — per-provider circuit breaker that drives the
+	// same health cache the orchestrator skip-gates on. The sidecar-call closures
+	// below feed it; >=3 wedged-kind sidecar errors/60s force the provider DOWN so
+	// the orchestrator skips it per-request (protecting the healthy provider in
+	// real time, not in 15 min).
+	breaker := health.NewBreaker(cache)
+
 	orchestrator := service.NewOrchestrator(log, registry, cache)
 	// ISS-022: bound per-provider failover time so one hung provider (e.g.
 	// animepahe when animepahe.pw is down) cannot consume the whole request
@@ -308,7 +316,14 @@ func main() {
 		return cfg.Providers.EngineOf("gogoanime") == config.EngineBrowser
 	}
 	gogoBrowserResolve := func(ctx context.Context, embedURL string, category domain.Category) (*domain.Stream, error) {
-		return stealthClient.ResolveEmbed(ctx, "gogoanime", embedURL, category, cfg.Providers.BaseURLOf("gogoanime"))
+		st, err := stealthClient.ResolveEmbed(ctx, "gogoanime", embedURL, category, cfg.Providers.BaseURLOf("gogoanime"))
+		// Phase 3 — feed the breaker. IsWedged(nil) returns ("", false), so a
+		// success records wedged=false and clears any tripped breaker; a
+		// non-wedged error also records false (a challenge is not pool-wedge
+		// evidence). Only a wedged-kind sidecar error counts toward the trip.
+		_, wedged := sidecar.IsWedged(err)
+		breaker.Record("gogoanime", wedged)
+		return st, err
 	}
 
 	gogoanimeProvider, err := gogoanime.New(gogoanime.Deps{
@@ -465,10 +480,16 @@ func main() {
 		return cfg.Providers.EngineOf("nineanime") == config.EngineBrowser
 	}
 	nineBrowserResolve := func(ctx context.Context, embedURL string, category domain.Category) (*domain.Stream, error) {
-		return stealthClient.ResolveEmbed(ctx, "nineanime", embedURL, category, cfg.Providers.BaseURLOf("nineanime"))
+		st, err := stealthClient.ResolveEmbed(ctx, "nineanime", embedURL, category, cfg.Providers.BaseURLOf("nineanime"))
+		_, wedged := sidecar.IsWedged(err)
+		breaker.Record("nineanime", wedged)
+		return st, err
 	}
 	nineBrowserFetch := func(ctx context.Context, provider, url string) (int, []byte, error) {
-		return stealthClient.Fetch(ctx, provider, url)
+		status, body, err := stealthClient.Fetch(ctx, provider, url)
+		_, wedged := sidecar.IsWedged(err)
+		breaker.Record(provider, wedged)
+		return status, body, err
 	}
 	nineAnimeProvider, err := nineanime.New(nineanime.Deps{
 		BaseURL:        cfg.NineAnime.BaseURL,
@@ -567,8 +588,43 @@ func main() {
 	anime18Handler := handler.NewScraperHandler(adultOrch, cache, log)
 	anime18Handler.WithProvidersConfig(&cfg.Providers)
 
-	// Hot-reload provider config from catalog (enable/disable without restart).
-	config.StartProvidersRefresher(context.Background(), &cfg.Providers, cfg.CatalogURL, cfg.ProvidersRefresh, log, nil)
+	// Phase 19/28 candidate set — also drives the Phase-3 runtime re-gate below
+	// and the wiring-invariant + Prometheus-reflection blocks further down.
+	// (Moved up from the wiring-invariant block so the regate closure can range
+	// over it; the invariant block still reads this same slice.)
+	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
+	// → allanime → animefever (28-02) → miruro (28-04) → nineanime (28-05).
+	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "okru", "animefever", "miruro", "nineanime"}
+	if cfg.AnimeKai.Enabled {
+		candidateProviders = append(candidateProviders, "animekai")
+	}
+
+	// Phase 3 — runtime re-gate: each catalog refresh moves providers in/out of
+	// the orchestrator's degraded failover map without a restart. Only EN-group
+	// candidate providers that are REGISTERED (enabled or degraded at boot) are
+	// re-gated; disabled providers were never registered and stay restart-gated
+	// (D5). The adult orchestrator is intentionally NOT re-gated (single fixed
+	// 18+ provider).
+	regate := func() {
+		statuses := make(map[string]string, len(candidateProviders))
+		for _, name := range candidateProviders {
+			switch cfg.Providers.Status(name) {
+			case config.StatusEnabled:
+				statuses[name] = "enabled"
+			case config.StatusDegraded:
+				statuses[name] = "degraded"
+				// StatusDisabled: omitted — never re-gated at runtime (D5).
+			}
+		}
+		orchestrator.ApplyStatuses(statuses)
+		log.Infow("orchestrator re-gated from catalog status",
+			"degraded", cfg.Providers.DegradedNames(),
+			"disabled", cfg.Providers.DisabledNames())
+	}
+
+	// Hot-reload provider config from catalog (enable/disable without restart) and
+	// re-gate the failover roster after each successful refresh.
+	config.StartProvidersRefresher(context.Background(), &cfg.Providers, cfg.CatalogURL, cfg.ProvidersRefresh, log, regate)
 
 	router := transport.NewRouter(scraperHandler, anime18Handler, cfg, log, metricsCollector)
 
@@ -590,10 +646,8 @@ func main() {
 	// boot via this fatal.
 	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
 	// → allanime → animefever (28-02) → miruro (28-04) → nineanime (28-05).
-	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "okru", "animefever", "miruro", "nineanime"}
-	if cfg.AnimeKai.Enabled {
-		candidateProviders = append(candidateProviders, "animekai")
-	}
+	// (candidateProviders is declared above the StartProvidersRefresher call so
+	// the Phase-3 re-gate closure can range over the same slice this block uses.)
 	expectedProviders := 0
 	for _, name := range candidateProviders {
 		if cfg.Providers.IsRegistered(name) {

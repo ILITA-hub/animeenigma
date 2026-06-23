@@ -1040,9 +1040,11 @@ func TestOrchestrator_GetStreamGated_CallerPin_StillGated(t *testing.T) {
 func TestOrchestrator_StaleCache_DoesNotSkip(t *testing.T) {
 	t.Parallel()
 
-	// now() returns "70 seconds in the future" so the entry's LastUpdated
-	// (real wall-clock now) is treated as stale.
-	staleNow := time.Now().Add(70 * time.Second)
+	// now() returns a time well past the health cache's stale TTL (cacheStaleTTL,
+	// 30min as of the audit #19 fix) so the entry's LastUpdated (real wall-clock
+	// now) is treated as stale and the orchestrator fails open. Was 70s, which
+	// stopped being stale when the TTL was raised 60s→30min.
+	staleNow := time.Now().Add(31 * time.Minute)
 	cache := health.NewInMemoryHealthCacheWithNow(func() time.Time { return staleNow })
 	cache.Update("stale_provider", health.ProviderHealth{
 		Stages:      map[string]health.StageStatus{health.StageStreamSegment: {Up: false}},
