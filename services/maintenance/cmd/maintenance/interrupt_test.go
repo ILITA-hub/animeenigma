@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	dom "github.com/ILITA-hub/animeenigma/services/maintenance/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/telegram"
 )
+
+type domainResult = dom.AnalysisResult
 
 // botReply builds a Telegram update where a human replies (text) to a bot
 // message whose text is replyToText.
@@ -188,5 +191,41 @@ func TestTryInterruptCancelsContext(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("context was not cancelled within 2s after tryInterrupt")
+	}
+}
+
+// TestRunInterruptibleKeysBySourceMessage proves runInterruptible registers the
+// interrupt under the source message id (the one wearing 👀) and sends NO bot
+// message (tg is nil and must never be dereferenced), and that cancelling that
+// registered context surfaces as errInterrupted.
+func TestRunInterruptibleKeysBySourceMessage(t *testing.T) {
+	s := &service{} // tg is nil — a watch message would panic
+
+	const srcMsgID = 4242
+	started := make(chan struct{})
+	got := make(chan error, 1)
+	go func() {
+		_, err := s.runInterruptible(context.Background(), srcMsgID, "Analyzing alert X", func(c context.Context) (*domainResult, error) {
+			close(started)
+			<-c.Done() // block until interrupted
+			return nil, c.Err()
+		})
+		got <- err
+	}()
+
+	<-started
+	if _, ok := s.interrupts.Load(srcMsgID); !ok {
+		t.Fatalf("interrupt not registered under source message id %d", srcMsgID)
+	}
+	if !s.tryInterrupt(srcMsgID) {
+		t.Fatal("tryInterrupt returned false for the registered source message")
+	}
+	select {
+	case err := <-got:
+		if err != errInterrupted {
+			t.Fatalf("err = %v, want errInterrupted", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("runInterruptible did not return within 2s after interrupt")
 	}
 }

@@ -198,11 +198,11 @@ type service struct {
 	fb       *feedback.Client
 	mu       sync.Mutex
 
-	// interrupts maps a 👁️ "watching" bot message ID → *interruptEntry. Each
-	// long-running Claude invocation sends a 👁️ message and registers its
-	// context.CancelFunc here; an admin can abort the computation by replying
-	// 💔 to that message (detected in the Telegram poller, AUTO-456). Entries
-	// are removed on completion, on interrupt, or by the 10-minute TTL sweeper.
+	// interrupts maps a source message ID (the message wearing the 👀 reaction)
+	// → *interruptEntry. Each long-running Claude invocation registers its
+	// context.CancelFunc here; an admin aborts by reacting 💔 to that message
+	// (detected in the Telegram poller). Entries are removed on completion, on
+	// interrupt, or by the TTL sweeper.
 	interrupts sync.Map // map[int]*interruptEntry
 }
 
@@ -1609,80 +1609,38 @@ func (s *service) sweepInterrupts(now time.Time) {
 	})
 }
 
-// runInterruptible sends a 👁️ watch message (threaded under replyTo when > 0),
-// runs fn under a cancellable context registered against that message, and
-// cleans up on return. Replying 💔 to the watch message cancels fn's context,
-// SIGKILLing the Claude subprocess. If fn was cancelled by an admin interrupt
-// (and not by service shutdown), it returns errInterrupted so the caller can
-// suppress its normal failure reply.
-func (s *service) runInterruptible(ctx context.Context, replyTo int, label string, fn func(context.Context) (*domain.AnalysisResult, error)) (*domain.AnalysisResult, error) {
+// runInterruptible runs fn under a cancellable context registered against the
+// source message (srcMsgID — the message already wearing the 👀 reaction). An
+// admin aborts by reacting 💔 to that message; the Telegram poller detects the
+// reaction out-of-band (the processor goroutine is blocked inside fn) and
+// cancels this context, SIGKILLing the Claude subprocess. If fn was cancelled
+// by an admin interrupt (and not by service shutdown) it returns errInterrupted
+// so the caller suppresses its normal failure reply. The "watching" status is
+// shown entirely by the 👀→👍/💔 reaction lifecycle the callers drive on
+// srcMsgID — runInterruptible sends no message of its own.
+func (s *service) runInterruptible(ctx context.Context, srcMsgID int, label string, fn func(context.Context) (*domain.AnalysisResult, error)) (*domain.AnalysisResult, error) {
 	aCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	watchHTML := fmt.Sprintf("👁️ <i>%s…</i>\nReply 💔 to this message to abort.", escTelegram(label))
-	var watchID int
-	var sendErr error
-	if replyTo > 0 {
-		watchID, sendErr = s.tg.SendReply(replyTo, watchHTML)
-	} else {
-		watchID, sendErr = s.tg.SendMessage(watchHTML)
-	}
-	if sendErr != nil || watchID == 0 {
-		// Watch message failed to post — degrade gracefully and run without an
-		// abort handle rather than refusing to do the work.
-		log.Warnw("interrupt watch message failed — running without abort path", "error", sendErr)
+	if srcMsgID <= 0 {
+		// No source message to react to → no abort handle; run anyway.
 		return fn(aCtx)
 	}
 
-	s.registerInterrupt(watchID, cancel)
-	defer s.clearInterrupt(watchID)
+	if log != nil {
+		log.Infow("running interruptible analysis", "label", label, "src_msg_id", srcMsgID)
+	}
+	s.registerInterrupt(srcMsgID, cancel)
+	defer s.clearInterrupt(srcMsgID)
 
 	result, err := fn(aCtx)
-
-	// Flip the 👁️ watch message to a terminal ✅/❌/💔 state. It previously had
-	// no completion update, so every applied fix left a frozen "Applying fix …"
-	// line that read as still-in-progress forever. Editing is best-effort
-	// cosmetic cleanup — EditMessageText swallows its own errors.
 
 	// Distinguish an admin interrupt (only aCtx cancelled) from a shutdown
 	// (parent ctx cancelled too). Only the former gets the dedicated sentinel.
 	if err != nil && aCtx.Err() != nil && ctx.Err() == nil {
-		s.tg.EditMessageText(watchID, watchTerminalHTML(label, watchAborted))
 		return nil, errInterrupted
 	}
-	if err != nil {
-		s.tg.EditMessageText(watchID, watchTerminalHTML(label, watchFailed))
-		return result, err
-	}
-	s.tg.EditMessageText(watchID, watchTerminalHTML(label, watchDone))
 	return result, err
-}
-
-// watchTerminalState is the resolved outcome a 👁️ watch message is edited to.
-type watchTerminalState int
-
-const (
-	watchDone watchTerminalState = iota
-	watchFailed
-	watchAborted
-)
-
-// watchTerminalHTML renders the terminal replacement for a 👁️ watch message.
-// It retains the leading 👁 marker — so a late 💔 reply still matches
-// isInterruptReply and resolves to "nothing to interrupt" rather than spawning
-// a fresh analysis — but drops the "Reply 💔 to abort" line and the trailing
-// "…" and appends a status line, so the message no longer reads as in-progress.
-func watchTerminalHTML(label string, state watchTerminalState) string {
-	var status string
-	switch state {
-	case watchAborted:
-		status = "💔 прервано."
-	case watchFailed:
-		status = "❌ не удалось."
-	default:
-		status = "✅ готово."
-	}
-	return fmt.Sprintf("👁️ <i>%s</i>\n%s", escTelegram(label), status)
 }
 
 // messageLabel renders a short human description of a message for the 👁️ watch
