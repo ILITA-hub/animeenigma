@@ -52,4 +52,29 @@ describe('BrowseSubsModal', () => {
     await w.find('[data-test="subs-off"]').trigger('click')
     expect(w.emitted('off')).toBeTruthy()
   })
+
+  const mixed = [
+    { url: 'en1', provider: 'opensubtitles', lang: 'en', label: 'EN', format: 'srt' },
+    { url: 'de1', provider: 'opensubtitles', lang: 'de', label: 'DE', format: 'srt' },
+  ]
+
+  it('hides non RU/EN/JP language groups by default', () => {
+    const w = mount(BrowseSubsModal, { props: { tracks: mixed, selectedUrl: null } })
+    const langs = w.findAll('[data-test="lang-group"]').map((g) => g.find('h3').text())
+    expect(langs.some((l) => l.startsWith('EN'))).toBe(true)
+    expect(langs.some((l) => l.startsWith('DE'))).toBe(false)
+    expect(w.find('[data-test="more-languages"]').exists()).toBe(true)
+  })
+
+  it('reveals other-language groups when "More languages" is clicked', async () => {
+    const w = mount(BrowseSubsModal, { props: { tracks: mixed, selectedUrl: null } })
+    await w.find('[data-test="more-languages"]').trigger('click')
+    const langs = w.findAll('[data-test="lang-group"]').map((g) => g.find('h3').text())
+    expect(langs.some((l) => l.startsWith('DE'))).toBe(true)
+  })
+
+  it('does not show "More languages" when only RU/EN/JP exist', () => {
+    const w = mount(BrowseSubsModal, { props: { tracks, selectedUrl: null } })
+    expect(w.find('[data-test="more-languages"]').exists()).toBe(false)
+  })
 })

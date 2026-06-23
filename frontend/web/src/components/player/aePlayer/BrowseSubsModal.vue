@@ -81,11 +81,11 @@
           </button>
         </div>
 
-        <!-- Language chips -->
+        <!-- Language chips (RU/EN/JP by default; More languages reveals the rest) -->
         <div v-if="distinctLangs.length > 1" class="flex flex-wrap items-center gap-[7px]">
           <span class="text-[11px] uppercase tracking-[0.05em] text-[var(--muted-foreground)] mr-0.5">Lang</span>
           <button
-            v-for="lang in distinctLangs"
+            v-for="lang in visibleLangChips"
             :key="lang"
             :class="[
               'px-3 py-[5px] rounded-full text-[13px] border transition-all',
@@ -97,6 +97,14 @@
             @click="activeLang = activeLang === lang ? null : lang"
           >
             {{ lang.toUpperCase() }}
+          </button>
+          <button
+            v-if="!showAllLangs && otherLangCount > 0"
+            data-test="more-languages"
+            class="px-3 py-[5px] rounded-full text-[13px] border border-transparent bg-white/[0.06] text-[var(--ink-2)] hover:bg-white/[0.12] hover:text-white transition-all"
+            @click="showAllLangs = true"
+          >
+            {{ $t('player.aePlayer.subs.moreLanguages', { count: otherLangCount }) }}
           </button>
         </div>
       </div>
@@ -203,6 +211,16 @@
               </li>
             </ul>
           </div>
+
+          <!-- More languages (bottom affordance when the chip row is hidden) -->
+          <button
+            v-if="!showAllLangs && otherLangCount > 0 && distinctLangs.length <= 1"
+            data-test="more-languages"
+            class="w-full mt-1 px-3 py-[7px] rounded-[var(--r-md)] border border-transparent bg-white/[0.05] text-[14px] text-[var(--ink-2)] hover:bg-white/[0.1] hover:text-white transition-all text-left"
+            @click="showAllLangs = true"
+          >
+            {{ $t('player.aePlayer.subs.moreLanguages', { count: otherLangCount }) }}
+          </button>
         </template>
       </div>
     </div>
@@ -249,12 +267,24 @@ const q = ref('')
 const activeProvider = ref<string | null>(null)
 const activeLang = ref<string | null>(null)
 
+// The browser is scoped to RU/EN/JP by default; "More languages" reveals the rest.
+const PRIMARY_LANGS = ['ru', 'en', 'ja']
+const showAllLangs = ref(false)
+
 const distinctProviders = computed(() =>
   [...new Set(props.tracks.map((t) => t.provider))],
 )
 
 const distinctLangs = computed(() =>
   [...new Set(props.tracks.map((t) => t.lang))],
+)
+
+const otherLangCount = computed(
+  () => new Set(props.tracks.filter((t) => !PRIMARY_LANGS.includes(t.lang)).map((t) => t.lang)).size,
+)
+
+const visibleLangChips = computed(() =>
+  showAllLangs.value ? distinctLangs.value : distinctLangs.value.filter((l) => PRIMARY_LANGS.includes(l)),
 )
 
 const filteredTracks = computed(() => {
@@ -276,8 +306,11 @@ interface TrackGroup {
 }
 
 const groupedTracks = computed<TrackGroup[]>(() => {
+  const inScope = filteredTracks.value.filter(
+    (t) => showAllLangs.value || PRIMARY_LANGS.includes(t.lang) || t.lang === activeLang.value,
+  )
   const map = new Map<string, SubTrack[]>()
-  for (const track of filteredTracks.value) {
+  for (const track of inScope) {
     const existing = map.get(track.lang)
     if (existing) {
       existing.push(track)
