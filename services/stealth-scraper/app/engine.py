@@ -932,6 +932,22 @@ class PoolExhausted(RecipeError):
     over) and a dedicated metric can alert on saturation."""
 
 
+class CapacityExceeded(RecipeError):
+    """A new browser launch was refused because the combined Camoufox RSS is at
+    or above the hard RAM budget. 503 (retryable) so the Go orchestrator fails
+    over; the LRU not-in-use session is evicted to reclaim headroom."""
+
+    kind = "capacity"
+
+
+class UserQuotaExceeded(RecipeError):
+    """The requesting user_key already holds >= STEALTH_USER_QUOTA sessions.
+    503 (retryable); bounds a single user's pool footprint so one viewer cannot
+    starve the shared pool."""
+
+    kind = "user_quota"
+
+
 class ProviderWedged(RecipeError):
     """A warm session for a provider has poisoned itself (>= cfg.poison_max
     in-page-fetch crashes). The profile is torn down + marked crashed for the

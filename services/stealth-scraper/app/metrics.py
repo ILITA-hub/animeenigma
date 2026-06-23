@@ -102,3 +102,19 @@ STEALTH_PROXY_FETCH_BYTES = Histogram(
         32 * 1024 * 1024,
     ),
 )
+
+RAM_BYTES = Gauge(
+    "stealth_ram_bytes",
+    "Combined RSS of the Camoufox/Firefox process tree, last sample.",
+)
+
+ADMISSION_TOTAL = Counter(
+    "stealth_admission_total",
+    "Admission-controller actions by type.",
+    ["action"],  # soft_evict|hard_refuse|hard_evict
+)
+
+USER_QUOTA_REJECTED_TOTAL = Counter(
+    "stealth_user_quota_rejected_total",
+    "Resolves/fetches rejected because the user_key held >= quota sessions.",
+)
