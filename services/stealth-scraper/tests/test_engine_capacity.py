@@ -105,5 +105,74 @@ class TestAdmission(unittest.TestCase):
         eng._admit_launch()                # fail-safe: admit, don't crash
 
 
+class TestUserQuota(unittest.TestCase):
+    def test_third_session_for_same_user_rejected(self):
+        eng = _engine(10**12, 10**12, ram=0)   # RAM never the limiter here
+        eng.cfg.user_quota = 2
+        _mk_session(eng, "s1", user_key="alice")
+        _mk_session(eng, "s2", user_key="alice")
+        with self.assertRaises(UserQuotaExceeded):
+            eng._enforce_user_quota("alice")
+
+    def test_other_user_unaffected(self):
+        eng = _engine(10**12, 10**12, ram=0)
+        eng.cfg.user_quota = 2
+        _mk_session(eng, "s1", user_key="alice")
+        _mk_session(eng, "s2", user_key="alice")
+        eng._enforce_user_quota("bob")          # bob has 0 → ok
+
+    def test_empty_user_key_is_unbounded(self):
+        eng = _engine(10**12, 10**12, ram=0)
+        eng.cfg.user_quota = 1
+        _mk_session(eng, "s1", user_key=None)
+        _mk_session(eng, "s2", user_key=None)
+        eng._enforce_user_quota(None)           # no key → never rejected
+        eng._enforce_user_quota("")
+
+
+class TestErrorBodies(unittest.TestCase):
+    def _set_engine(self, engine):
+        import app.main as m
+        m.app.state.engine = engine
+        return m
+
+    def test_resolve_capacity_is_503_kind_capacity(self):
+        import json
+        from app.main import ResolveRequest
+        from app.engine import CapacityExceeded
+
+        eng = _engine(1, 1, ram=0)
+
+        async def _boom(*a, **k):
+            raise CapacityExceeded("hard")
+        eng.resolve = _boom
+        m = self._set_engine(eng)
+        resp = run(m.resolve(ResolveRequest(provider="gogoanime", embed_url="https://x/y")))
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(json.loads(resp.body)["kind"], "capacity")
+
+    def test_resolve_user_quota_is_503_kind_user_quota(self):
+        import json
+        from app.main import ResolveRequest
+        from app.engine import UserQuotaExceeded
+
+        eng = _engine(1, 1, ram=0)
+
+        async def _boom(*a, **k):
+            raise UserQuotaExceeded("over")
+        eng.resolve = _boom
+        m = self._set_engine(eng)
+        resp = run(m.resolve(ResolveRequest(provider="gogoanime", embed_url="https://x/y")))
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(json.loads(resp.body)["kind"], "user_quota")
+
+    def test_request_models_accept_user_key(self):
+        from app.main import ResolveRequest, FetchRequest
+        r = ResolveRequest(provider="gogoanime", embed_url="https://x/y", user_key="alice")
+        f = FetchRequest(provider="nineanime", url="https://9anime.me.uk/x", user_key="bob")
+        self.assertEqual(r.user_key, "alice")
+        self.assertEqual(f.user_key, "bob")
+
+
 if __name__ == "__main__":
     unittest.main()

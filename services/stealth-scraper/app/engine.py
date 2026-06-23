@@ -110,6 +110,9 @@ class Session:
     # Provider that owns this session (set for warm fetch:: sessions); used to
     # tag the wedge error so the Go breaker can attribute it.
     provider: str = ""
+    # Quota accounting key (opaque user id or salted IP hash; never logged in
+    # clear). None ⇒ unbounded (the caller opted out of per-user accounting).
+    user_key: str | None = None
 
 
 class _CamoufoxHandle:
@@ -357,12 +360,13 @@ class CamoufoxEngine:
             pass
 
     # -- resolve ------------------------------------------------------------ #
-    async def resolve(self, provider: str, params: dict) -> dict:
+    async def resolve(self, provider: str, params: dict, user_key: str | None = None) -> dict:
         recipe = self._recipes.get(provider)
         if recipe is None:
             raise RecipeError(f"unknown provider: {provider}")
 
         self._evict_expired()
+        self._enforce_user_quota(user_key)
         started = time.monotonic()
         tried: set[str] = set()
         last_err: Exception | None = None
@@ -402,7 +406,7 @@ class CamoufoxEngine:
                 # only be fetched through THIS browser page (in-page fetch). The
                 # page stays open (NOT closed) and the profile stays leased until
                 # the session expires / is closed.
-                session = await self._open_session(partial, context, proxy.id, profile, page)
+                session = await self._open_session(partial, context, proxy.id, profile, page, user_key)
                 self.pool.mark_ok(proxy.id)
                 metrics.RESOLVE_TOTAL.labels(provider=provider, result="ok").inc()
                 metrics.RESOLVE_DURATION.labels(provider=provider).observe(
@@ -532,6 +536,21 @@ class CamoufoxEngine:
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         return True
 
+    def _held_for_user(self, user_key: str) -> int:
+        return sum(1 for s in self._sessions.values() if s.user_key == user_key)
+
+    def _enforce_user_quota(self, user_key: str | None) -> None:
+        """Reject a NEW held session when user_key already holds >= quota. A
+        falsy user_key is unbounded (the catalog always supplies one — a salted
+        IP hash for anon — so a missing key here is an explicit opt-out)."""
+        if not user_key:
+            return
+        if self._held_for_user(user_key) >= self.cfg.user_quota:
+            metrics.USER_QUOTA_REJECTED_TOTAL.inc()
+            raise UserQuotaExceeded(
+                f"user {user_key[:8]}… holds >= quota ({self.cfg.user_quota})"
+            )
+
     def _admit_launch(self) -> None:
         """Admission gate at the single browser-launch chokepoint.
 
@@ -555,7 +574,8 @@ class CamoufoxEngine:
             metrics.ADMISSION_TOTAL.labels(action="soft_evict").inc()
 
     async def _open_session(
-        self, partial: dict, context: Any, proxy_id: str, profile: Profile, page: Any
+        self, partial: dict, context: Any, proxy_id: str, profile: Profile, page: Any,
+        user_key: str | None = None,
     ) -> Session:
         master = partial.get("master_url")
         player_url = ""
@@ -579,6 +599,7 @@ class CamoufoxEngine:
             expires_at=time.time() + self.cfg.unactivated_grace_seconds,
             page=page,
             player_url=player_url,
+            user_key=user_key,
         )
         self._sessions[sid] = session
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
@@ -705,7 +726,7 @@ class CamoufoxEngine:
             metrics.STEALTH_PROXY_FETCH_BYTES.observe(body_bytes)
 
     # -- discovery fetch (challenge-gated sites: warm session + in-page fetch) -- #
-    async def browser_fetch(self, provider: str, url: str) -> dict:
+    async def browser_fetch(self, provider: str, url: str, user_key: str | None = None) -> dict:
         """GET ``url`` through a warm, challenge-solved session keyed by
         (provider, origin), returning the RAW body (no playlist rewrite). For
         providers whose whole site is challenge-gated (e.g. 9anime DDoS-Guard):
@@ -720,7 +741,7 @@ class CamoufoxEngine:
 
         self._evict_expired()
         origin = _origin_of(url)
-        session = await self._warm_fetch_session(provider, origin)
+        session = await self._warm_fetch_session(provider, origin, user_key)
         session.in_use += 1
         try:
             status, ctype, _final, body = await self._in_page_fetch(session, url)
@@ -740,9 +761,14 @@ class CamoufoxEngine:
         session.expires_at = time.time() + self.cfg.session_ttl_seconds
         return {"status": status, "content_type": ctype, "body": body}
 
-    async def _warm_fetch_session(self, provider: str, origin: str) -> Session:
+    async def _warm_fetch_session(
+        self, provider: str, origin: str, user_key: str | None = None
+    ) -> Session:
         """Get-or-create a session warmed on ``origin`` (navigates it once to
-        solve the site challenge; later fetches reuse its cookies)."""
+        solve the site challenge; later fetches reuse its cookies). The warm
+        session is keyed by (provider, origin) and SHARED — so it is attributed
+        to the FIRST user_key that creates it, and the quota is enforced only
+        when a NEW session must be opened (an existing warm reuse is free)."""
         key = f"fetch::{provider}::{origin}"
         existing = self._sessions.get(key)
         if existing is not None and existing.page is not None:
@@ -769,6 +795,10 @@ class CamoufoxEngine:
                 dead.last_error = existing.last_error or "liveness-probe: page dead"
                 await self.aclose_session(key)
                 await self._teardown(dead, reason="crash")
+
+        # A NEW warm session is about to be opened — enforce the per-user quota
+        # (the reuse path above returns before here, so a shared hit is free).
+        self._enforce_user_quota(user_key)
 
         profile = await self._acquire_profile()
         if profile is None:
@@ -803,7 +833,7 @@ class CamoufoxEngine:
                 id=key, profile=profile, proxy_id=proxy.id, referer=origin,
                 user_agent=profile.user_agent, cdn_host=host_of(origin),
                 master_url=origin, expires_at=time.time() + self.cfg.session_ttl_seconds,
-                page=page, player_url=origin, provider=provider,
+                page=page, player_url=origin, provider=provider, user_key=user_key,
             )
             self._sessions[key] = session
             metrics.ACTIVE_SESSIONS.set(len(self._sessions))

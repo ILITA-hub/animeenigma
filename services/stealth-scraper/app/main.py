@@ -23,7 +23,15 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
 from .config import Config
-from .engine import CamoufoxEngine, FetchTimeout, PoolExhausted, ProviderWedged, SessionGone
+from .engine import (
+    CamoufoxEngine,
+    CapacityExceeded,
+    FetchTimeout,
+    PoolExhausted,
+    ProviderWedged,
+    SessionGone,
+    UserQuotaExceeded,
+)
 from .recipes import ChallengeError, NotFoundError, RecipeError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -47,9 +55,13 @@ class ResolveRequest(BaseModel):
     # passed by the Go scraper — the sidecar holds no provider URL consts/envs.
     base_url: str | None = Field(default=None, max_length=256)
     proxy_type: str | None = Field(default=None, max_length=16)
+    # Opaque quota key (authed user id, or a salted client-IP hash for anon),
+    # set by the catalog→scraper hop. Used only for per-user concurrency
+    # accounting; never persisted or logged in clear.
+    user_key: str | None = Field(default=None, max_length=128)
 
     def params(self) -> dict[str, Any]:
-        return self.model_dump(exclude={"provider"}, exclude_none=True)
+        return self.model_dump(exclude={"provider", "user_key"}, exclude_none=True)
 
 
 class FetchRequest(BaseModel):
@@ -57,6 +69,7 @@ class FetchRequest(BaseModel):
     url: str = Field(..., max_length=8192)
     # GET-only for now (nineanime discovery). POST is wired for future allanime.
     method: str = Field(default="GET", pattern="^(GET|POST)$")
+    user_key: str | None = Field(default=None, max_length=128)
 
 
 @asynccontextmanager
@@ -107,11 +120,19 @@ async def metrics() -> Response:
 async def resolve(req: ResolveRequest) -> JSONResponse:
     engine: CamoufoxEngine = app.state.engine
     try:
-        session = await engine.resolve(req.provider, req.params())
+        session = await engine.resolve(req.provider, req.params(), user_key=req.user_key)
         return JSONResponse({"success": True, "data": session})
     except NotFoundError as exc:
         return JSONResponse(
             {"success": False, "error": str(exc), "kind": "not_found"}, status_code=404
+        )
+    except CapacityExceeded as exc:
+        return JSONResponse(
+            {"success": False, "error": str(exc), "kind": "capacity"}, status_code=503
+        )
+    except UserQuotaExceeded as exc:
+        return JSONResponse(
+            {"success": False, "error": str(exc), "kind": "user_quota"}, status_code=503
         )
     except ProviderWedged as exc:
         # Warm session poisoned (>= poison_max crashes) — 503 (retryable) so the
@@ -148,7 +169,7 @@ async def fetch(req: FetchRequest) -> JSONResponse:
     scraper keeps its parsers and only swaps transport when engine=browser."""
     engine: CamoufoxEngine = app.state.engine
     try:
-        out = await engine.browser_fetch(req.provider, req.url)
+        out = await engine.browser_fetch(req.provider, req.url, user_key=req.user_key)
         return JSONResponse({
             "success": True,
             "status": out["status"],
@@ -157,6 +178,10 @@ async def fetch(req: FetchRequest) -> JSONResponse:
         })
     except NotFoundError as exc:
         return JSONResponse({"success": False, "error": str(exc), "kind": "not_found"}, status_code=404)
+    except CapacityExceeded as exc:
+        return JSONResponse({"success": False, "error": str(exc), "kind": "capacity"}, status_code=503)
+    except UserQuotaExceeded as exc:
+        return JSONResponse({"success": False, "error": str(exc), "kind": "user_quota"}, status_code=503)
     except ProviderWedged as exc:
         return JSONResponse({"success": False, "error": str(exc), "kind": "provider_wedged"}, status_code=503)
     except PoolExhausted as exc:
