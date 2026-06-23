@@ -33,6 +33,7 @@ type fakeScraperService struct {
 	gotServer   string
 	gotCategory string
 	gotPrefer   string
+	gotUserKey  string
 
 	healthCalls int32
 }
@@ -50,12 +51,13 @@ func (f *fakeScraperService) GetScraperServers(ctx context.Context, animeID, epi
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperService) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
+func (f *fakeScraperService) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool, userKey string) (int, []byte, error) {
 	f.gotAnimeID = animeID
 	f.gotEpisode = episodeID
 	f.gotServer = serverID
 	f.gotCategory = category
 	f.gotPrefer = prefer
+	f.gotUserKey = userKey
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
@@ -212,6 +214,26 @@ func TestCatalogHandler_GetScraperStream_RequiresEpisodeServerCategory(t *testin
 	}
 }
 
+// Test 6d — P2.8: an anonymous stream request (no JWT) derives a non-empty,
+// salted-IP-prefixed user_key from the request's client IP and forwards it.
+func TestCatalogHandler_GetScraperStream_DerivesUserKey(t *testing.T) {
+	svc := &fakeScraperService{replyStatus: 503, replyBody: []byte(`{}`)}
+	h := newTestHandler(svc)
+
+	rec := fireRequest(t, h.GetScraperStream, "uuid-1",
+		http.MethodGet, "/api/anime/uuid-1/scraper/stream?episode=ep-1&server=srv-1")
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	if svc.gotUserKey == "" {
+		t.Fatal("user_key was empty; want a non-empty salted-IP key for an anonymous request")
+	}
+	if !strings.HasPrefix(svc.gotUserKey, "ip:") {
+		t.Errorf("user_key = %q, want an ip: prefix for an anonymous (no-JWT) request", svc.gotUserKey)
+	}
+}
+
 // Test 7 — Health handler does not require ?episode= or any query;
 // service is called once even though animeId is in the path.
 func TestCatalogHandler_GetScraperHealth_NoAnimeIDRequired(t *testing.T) {
@@ -332,7 +354,7 @@ func (s *uuidToMalIDStub) GetScraperEpisodes(ctx context.Context, animeID, prefe
 func (s *uuidToMalIDStub) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string, exclusive bool) (int, []byte, error) {
 	return 0, nil, errors.New("not implemented in stub")
 }
-func (s *uuidToMalIDStub) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
+func (s *uuidToMalIDStub) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool, userKey string) (int, []byte, error) {
 	return 0, nil, errors.New("not implemented in stub")
 }
 func (s *uuidToMalIDStub) GetScraperHealth(ctx context.Context) (int, []byte, error) {

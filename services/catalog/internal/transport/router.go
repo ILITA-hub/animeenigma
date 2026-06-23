@@ -177,7 +177,12 @@ func NewRouter(
 			// Phase 16+ plugs in real provider implementations.)
 			r.Get("/{animeId}/scraper/episodes", catalogHandler.GetScraperEpisodes)
 			r.Get("/{animeId}/scraper/servers", catalogHandler.GetScraperServers)
-			r.Get("/{animeId}/scraper/stream", catalogHandler.GetScraperStream)
+			// P2.8: wrap ONLY the stream route with OptionalAuthMiddleware so an
+			// authed caller's JWT user id can seed the per-user quota key
+			// (scraperUserKey) for the stealth-scraper sidecar's per-user
+			// admission. The middleware NEVER 401s — anonymous playback proceeds
+			// without claims and falls through to the salted-IP key.
+			r.With(OptionalAuthMiddleware(cfg.JWT)).Get("/{animeId}/scraper/stream", catalogHandler.GetScraperStream)
 			r.Get("/{animeId}/scraper/health", catalogHandler.GetScraperHealth)
 			// Ranked capability report (spec 2026-06-15 P4 — EN family in v1).
 			// Public, no auth — same as the scraper routes above.

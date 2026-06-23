@@ -57,6 +57,7 @@ type fakeScraperForwarder struct {
 	gotStreamServer   string
 	gotStreamCategory string
 	gotStreamPrefer   string
+	gotStreamUserKey  string
 
 	gotHealthCalls int32
 
@@ -91,6 +92,7 @@ func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, title s
 	f.gotStreamServer = serverID
 	f.gotStreamCategory = category
 	f.gotStreamPrefer = prefer
+	f.gotStreamUserKey = userKey
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
@@ -228,7 +230,7 @@ func TestCatalogService_GetScraperStream_PassesAllQuery(t *testing.T) {
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperStream(context.Background(), "66666666-6666-4666-8666-666666666666", "ep-2", "srv-1", "sub", "animepahe", false)
+	_, _, err := ops.GetScraperStream(context.Background(), "66666666-6666-4666-8666-666666666666", "ep-2", "srv-1", "sub", "animepahe", false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -246,6 +248,22 @@ func TestCatalogService_GetScraperStream_PassesAllQuery(t *testing.T) {
 	}
 	if scr.gotStreamPrefer != "animepahe" {
 		t.Errorf("scraper got prefer=%q, want animepahe", scr.gotStreamPrefer)
+	}
+}
+
+// TestGetScraperStream_ForwardsUserKey — P2.8: the opaque per-user quota key
+// derived by the handler must be threaded through scraperOps.GetScraperStream
+// to the forwarder unchanged.
+func TestGetScraperStream_ForwardsUserKey(t *testing.T) {
+	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "77777777-7777-4777-8777-777777777777", ShikimoriID: "123"}}
+	scr := &fakeScraperForwarder{replyStatus: 200, replyBody: []byte(`{"success":true}`)}
+	ops := newScraperOps(repo, scr)
+
+	if _, _, err := ops.GetScraperStream(context.Background(), "77777777-7777-4777-8777-777777777777", "ep", "srv", "sub", "gogoanime", false, "alice"); err != nil {
+		t.Fatalf("GetScraperStream: %v", err)
+	}
+	if scr.gotStreamUserKey != "alice" {
+		t.Errorf("forwarded user_key = %q; want alice", scr.gotStreamUserKey)
 	}
 }
 

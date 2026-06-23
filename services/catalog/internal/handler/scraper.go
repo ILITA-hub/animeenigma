@@ -9,10 +9,17 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"os"
+	"strings"
+	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -26,7 +33,7 @@ import (
 type scraperServiceAPI interface {
 	GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error)
 	GetScraperServers(ctx context.Context, animeID, episodeID, prefer string, exclusive bool) (int, []byte, error)
-	GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error)
+	GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool, userKey string) (int, []byte, error)
 	GetScraperHealth(ctx context.Context) (int, []byte, error)
 }
 
@@ -118,7 +125,8 @@ func (h *ScraperEndpointsHandler) GetScraperStream(w http.ResponseWriter, r *htt
 	prefer := r.URL.Query().Get("prefer")
 	exclusive := r.URL.Query().Get("exclusive") == "true"
 
-	status, body, err := h.scraperSvc.GetScraperStream(r.Context(), animeID, episodeID, serverID, category, prefer, exclusive)
+	userKey := scraperUserKey(r)
+	status, body, err := h.scraperSvc.GetScraperStream(r.Context(), animeID, episodeID, serverID, category, prefer, exclusive, userKey)
 	if err != nil {
 		h.writeScraperError(w, err)
 		return
@@ -178,4 +186,37 @@ func (h *ScraperEndpointsHandler) writeScraperError(w http.ResponseWriter, err e
 		h.log.Errorw("scraper endpoint error", "error", err)
 	}
 	httputil.Error(w, err)
+}
+
+// scraperUserKey derives the opaque per-user quota key forwarded to the
+// stealth-scraper sidecar (via the scraper service's X-AE-User header):
+//   - authenticated → "u:" + the JWT user id (OptionalAuthMiddleware populated
+//     claims when a Bearer token was sent);
+//   - anonymous → "ip:" + sha256(clientIP | salt | UTC-day) so anon traffic is
+//     still bounded per source, never globally shared, and the raw IP is never
+//     forwarded or logged. Salt = CATALOG_IP_SALT (empty salt still hashes).
+//
+// Returns "" only when there is neither an authed user nor a usable client IP.
+func scraperUserKey(r *http.Request) string {
+	if uid := authz.UserIDFromContext(r.Context()); uid != "" {
+		return "u:" + uid
+	}
+	ip := clientIP(r)
+	if ip == "" {
+		return ""
+	}
+	day := time.Now().UTC().Format("2006-01-02")
+	sum := sha256.Sum256([]byte(ip + "|" + os.Getenv("CATALOG_IP_SALT") + "|" + day))
+	return "ip:" + hex.EncodeToString(sum[:])
+}
+
+// clientIP extracts the best-effort client IP. The catalog router runs
+// chi middleware.RealIP, which rewrites r.RemoteAddr from X-Forwarded-For /
+// X-Real-IP, so RemoteAddr is the trusted source here.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return strings.TrimSpace(r.RemoteAddr)
+	}
+	return host
 }

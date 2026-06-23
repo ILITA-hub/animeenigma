@@ -163,13 +163,15 @@ func (o *scraperOps) GetScraperServers(ctx context.Context, animeID, episodeID, 
 	return o.scraperClient.GetServers(ctx, malID, title, altTitles, episodeID, prefer, exclusive)
 }
 
-// GetScraperStream resolves animeID -> MAL ID + title and forwards.
-func (o *scraperOps) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
+// GetScraperStream resolves animeID -> MAL ID + title and forwards. userKey
+// is the opaque per-user quota key (authed id / salted-IP fallback) threaded
+// from the handler to the scraper service for sidecar per-user admission.
+func (o *scraperOps) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool, userKey string) (int, []byte, error) {
 	malID, title, altTitles, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetStream(ctx, malID, title, altTitles, episodeID, serverID, category, prefer, exclusive, "")
+	return o.scraperClient.GetStream(ctx, malID, title, altTitles, episodeID, serverID, category, prefer, exclusive, userKey)
 }
 
 // GetScraperHealth bypasses the animeRepo entirely — the scraper's
@@ -193,8 +195,8 @@ func (s *CatalogService) GetScraperServers(ctx context.Context, animeID, episode
 }
 
 // GetScraperStream — see GetScraperEpisodes.
-func (s *CatalogService) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool) (int, []byte, error) {
-	return s.scraperOps().GetScraperStream(ctx, animeID, episodeID, serverID, category, prefer, exclusive)
+func (s *CatalogService) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string, exclusive bool, userKey string) (int, []byte, error) {
+	return s.scraperOps().GetScraperStream(ctx, animeID, episodeID, serverID, category, prefer, exclusive, userKey)
 }
 
 // GetScraperHealth — see GetScraperEpisodes.
