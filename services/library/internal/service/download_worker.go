@@ -169,7 +169,20 @@ func (p *WorkerPool) processJob(ctx context.Context, job *domain.Job) {
 
 	p.registerHandle(job.ID, handle)
 	defer p.unregisterHandle(job.ID)
-	defer handle.Cancel() // defensive — releases peers on any exit path
+
+	// On any NON-success exit we Cancel() the handle to release peers and
+	// stop the download. On a SUCCESSFUL completion we deliberately do NOT
+	// cancel: the torrent's own lifecycle goroutine keeps seeding for the
+	// configured window while the encoder pool (separate workers) picks the
+	// job up. The old code blocked on handle.Done(), which only fires AFTER
+	// the 24h seed window — pinning this worker slot and deadlocking the
+	// pool. We now hand off at completion and release the slot immediately.
+	success := false
+	defer func() {
+		if !success {
+			handle.Cancel()
+		}
+	}()
 
 	lastNonZeroPeerAt := time.Now()
 	var lastReportedBytes int64
@@ -185,36 +198,45 @@ func (p *WorkerPool) processJob(ctx context.Context, job *domain.Job) {
 			return
 
 		case <-handle.Done():
-			// Download finished (or Cancel() fired). Re-read the row
-			// to decide whether to transition to encoding or accept
-			// the cancellation already written by the DELETE path.
-			fresh, err := p.jobRepo.GetByID(ctx, job.ID)
-			if err == nil && fresh != nil && fresh.Status == domain.JobStatusCancelled {
-				if p.metrics != nil {
-					p.metrics.IncJobsTotal(string(domain.JobStatusCancelled))
-				}
+			// Done() fires on Cancel() (DELETE path) or after the
+			// torrent's seed window. Accept an already-written
+			// cancellation; otherwise decide by completion — a finished
+			// torrent advances to encoding, an early/abnormal drop fails.
+			if p.observeCancelled(ctx, job.ID) {
 				return
 			}
-			// Otherwise drive to encoding — Phase 4 picks up here.
-			if err := p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusEncoding, ""); err != nil {
-				if p.log != nil {
-					p.log.Errorw("update status encoding", "job_id", job.ID, "error", err)
-				}
+			downloaded, total, _ := handle.Progress()
+			if total > 0 && downloaded >= total {
+				success = p.transitionToEncoding(ctx, job.ID)
 				return
 			}
+			_ = p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusFailed, "download ended before completion")
 			if p.metrics != nil {
-				p.metrics.IncJobsTotal(string(domain.JobStatusEncoding))
+				p.metrics.IncJobsTotal(string(domain.JobStatusFailed))
 			}
 			return
 
 		case <-tick.C:
 			downloaded, total, peers := handle.Progress()
 
-			// Stall detection FIRST — if we've been at zero peers
-			// for >= stallTimeout, fail the job and exit. We update
-			// lastNonZeroPeerAt only when peers>0 so a long
-			// peer-drought ages out the timestamp naturally.
-			if peers > 0 {
+			// Completion FIRST: once every piece is on disk, hand off to
+			// the encoder and release this worker slot. Seeding continues
+			// independently on the torrent's own goroutine. (Detecting
+			// completion here — instead of waiting on handle.Done() — is
+			// the fix for the 24h-seed-window deadlock.)
+			if total > 0 && downloaded >= total {
+				if p.observeCancelled(ctx, job.ID) {
+					return
+				}
+				success = p.transitionToEncoding(ctx, job.ID)
+				return
+			}
+
+			// Liveness: a download still making forward progress is NOT
+			// stalled even if PeerConns momentarily reads zero. We refresh
+			// the timer on peers>0 OR on advancing bytes so an in-progress
+			// download is never mislabelled "no peers".
+			if peers > 0 || downloaded > lastReportedBytes {
 				lastNonZeroPeerAt = time.Now()
 			}
 			if time.Since(lastNonZeroPeerAt) >= p.stallTimeout {
@@ -236,22 +258,49 @@ func (p *WorkerPool) processJob(ctx context.Context, job *domain.Job) {
 			}
 			if p.metrics != nil && downloaded > lastReportedBytes {
 				p.metrics.AddDownloadBytes(downloaded - lastReportedBytes)
+			}
+			if downloaded > lastReportedBytes {
 				lastReportedBytes = downloaded
 			}
 
 			// Re-read the row — if it's cancelled, exit. The DELETE
 			// handler already wrote status=cancelled before signalling
-			// the handle; we observe it on the next tick and exit
-			// cleanly.
-			fresh, err := p.jobRepo.GetByID(ctx, job.ID)
-			if err == nil && fresh != nil && fresh.Status == domain.JobStatusCancelled {
-				if p.metrics != nil {
-					p.metrics.IncJobsTotal(string(domain.JobStatusCancelled))
-				}
+			// the handle; we observe it on the next tick and exit cleanly.
+			if p.observeCancelled(ctx, job.ID) {
 				return
 			}
 		}
 	}
+}
+
+// observeCancelled returns true when the job row has been flipped to
+// 'cancelled' (the DELETE path writes the status before signalling the
+// in-memory handle). It bumps the cancelled counter on observation.
+func (p *WorkerPool) observeCancelled(ctx context.Context, jobID string) bool {
+	fresh, err := p.jobRepo.GetByID(ctx, jobID)
+	if err == nil && fresh != nil && fresh.Status == domain.JobStatusCancelled {
+		if p.metrics != nil {
+			p.metrics.IncJobsTotal(string(domain.JobStatusCancelled))
+		}
+		return true
+	}
+	return false
+}
+
+// transitionToEncoding flips a completed download to status=encoding so the
+// encoder pool claims it. Returns true on a successful flip — the caller uses
+// that to skip the defensive handle.Cancel(), letting the torrent keep seeding.
+func (p *WorkerPool) transitionToEncoding(ctx context.Context, jobID string) bool {
+	if err := p.jobRepo.UpdateStatus(ctx, jobID, domain.JobStatusEncoding, ""); err != nil {
+		if p.log != nil {
+			p.log.Errorw("update status encoding", "job_id", jobID, "error", err)
+		}
+		return false
+	}
+	if p.metrics != nil {
+		p.metrics.IncJobsTotal(string(domain.JobStatusEncoding))
+	}
+	return true
 }
 
 // CancelJob is the public cancel path called by the DELETE handler.

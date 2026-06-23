@@ -149,11 +149,13 @@ type fakeHandle struct {
 	id   string
 	done chan struct{}
 
-	mu         sync.Mutex
-	downloaded int64
-	total      int64
-	peers      int
-	cancelled  bool
+	mu          sync.Mutex
+	downloaded  int64
+	total       int64
+	peers       int
+	cancelled   bool
+	cancelCalls int   // total Cancel() invocations (success path must NOT cancel)
+	autoAdvance int64 // when >0, each Progress() adds this to downloaded (caps at total)
 }
 
 func newFakeHandle(id string, total int64) *fakeHandle {
@@ -165,17 +167,30 @@ func (h *fakeHandle) ID() string { return h.id }
 func (h *fakeHandle) Progress() (int64, int64, int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.autoAdvance > 0 && h.downloaded < h.total {
+		h.downloaded += h.autoAdvance
+		if h.downloaded > h.total {
+			h.downloaded = h.total
+		}
+	}
 	return h.downloaded, h.total, h.peers
 }
 
 func (h *fakeHandle) Cancel() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.cancelCalls++
 	if h.cancelled {
 		return
 	}
 	h.cancelled = true
 	close(h.done)
+}
+
+func (h *fakeHandle) cancelCallCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.cancelCalls
 }
 
 func (h *fakeHandle) Done() <-chan struct{} { return h.done }
@@ -298,6 +313,87 @@ func TestWorkerPool_ProcessJob_Stall(t *testing.T) {
 	}
 	if got.ErrorText != stallErrorText {
 		t.Fatalf("error_text = %q, want %q", got.ErrorText, stallErrorText)
+	}
+}
+
+// TestWorkerPool_ProcessJob_CompletesViaProgress_NoCancel — when a download
+// reaches downloaded==total via the progress tick (NOT via handle.Done()), the
+// worker transitions to encoding AND must NOT cancel the handle. Cancelling
+// would drop the torrent's seed window; more importantly, the OLD code blocked
+// on handle.Done() which only fires after the 24h seed window — pinning the
+// worker slot and deadlocking the pool. Completion detection via the tick frees
+// the slot immediately while the torrent's own goroutine keeps seeding.
+func TestWorkerPool_ProcessJob_CompletesViaProgress_NoCancel(t *testing.T) {
+	store := newFakeJobStore()
+	job := &domain.Job{ID: "jc", Magnet: "m", Status: domain.JobStatusDownloading, Source: domain.JobSourceManual, Title: "t"}
+	store.put(job)
+
+	h := newFakeHandle("hash", 1000)
+	h.advance(1000, 5) // already complete; Done() is NOT closed
+	adder := &fakeAdder{next: h}
+	p, _ := newTestPool(t, store, adder, 30*time.Minute, 10*time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p.processJob(ctx, job)
+
+	got := store.snapshot(job.ID)
+	if got.Status != domain.JobStatusEncoding {
+		t.Fatalf("status = %q, want encoding (completion detected via progress tick)", got.Status)
+	}
+	if h.cancelCallCount() != 0 {
+		t.Fatalf("handle cancelled %d times on success; want 0 (seeding must continue)", h.cancelCallCount())
+	}
+}
+
+// TestWorkerPool_ProcessJob_CompleteTorrentNotStalled — THE root-cause
+// regression. A torrent that has finished downloading (downloaded==total) but
+// has zero peers (all leechers disconnected once it became a seed) must NOT be
+// mislabelled "stalled: no peers for 30 minutes". It must advance to encoding.
+// 110 already-complete torrents were failed this way, so 0 episodes ever landed.
+func TestWorkerPool_ProcessJob_CompleteTorrentNotStalled(t *testing.T) {
+	store := newFakeJobStore()
+	job := &domain.Job{ID: "jcs", Magnet: "m", Status: domain.JobStatusDownloading, Source: domain.JobSourceManual, Title: "t"}
+	store.put(job)
+
+	h := newFakeHandle("hash", 1000)
+	h.advance(1000, 0) // complete + zero peers — the exact failure shape
+	adder := &fakeAdder{next: h}
+	p, _ := newTestPool(t, store, adder, 30*time.Millisecond, 10*time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p.processJob(ctx, job)
+
+	got := store.snapshot(job.ID)
+	if got.Status != domain.JobStatusEncoding {
+		t.Fatalf("status = %q (err=%q), want encoding — complete torrent must never stall", got.Status, got.ErrorText)
+	}
+}
+
+// TestWorkerPool_ProcessJob_ProgressingDownloadNotStalled — a download still
+// making forward progress (bytes advancing) with zero peers must NOT be failed
+// as stalled. The stall timer resets on progress, not only on peers>0. We run
+// well past the stall timeout while bytes keep advancing and assert the job is
+// not failed.
+func TestWorkerPool_ProcessJob_ProgressingDownloadNotStalled(t *testing.T) {
+	store := newFakeJobStore()
+	job := &domain.Job{ID: "jp", Magnet: "m", Status: domain.JobStatusDownloading, Source: domain.JobSourceManual, Title: "t"}
+	store.put(job)
+
+	h := newFakeHandle("hash", 1_000_000) // large: won't complete during the test
+	h.peers = 0
+	h.autoAdvance = 1000 // +1000 bytes every Progress() call, peers stays 0
+	adder := &fakeAdder{next: h}
+	p, _ := newTestPool(t, store, adder, 30*time.Millisecond, 5*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	p.processJob(ctx, job) // returns via ctx.Done() (shutdown path)
+
+	got := store.snapshot(job.ID)
+	if got.Status == domain.JobStatusFailed {
+		t.Fatalf("progressing download mislabelled failed: %q", got.ErrorText)
 	}
 }
 

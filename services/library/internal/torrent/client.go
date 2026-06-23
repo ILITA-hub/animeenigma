@@ -17,13 +17,25 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	anacrolix "github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/storage"
 	"golang.org/x/time/rate"
 )
+
+// InfoHashDir is the per-torrent storage directory: {downloadDir}/{infohash}/.
+// It is the single source of truth for the on-disk layout — the torrent client
+// writes each torrent's payload here (via the storage path maker below) and the
+// encoder's DefaultSourceResolver reads from the same place. Keeping both sides
+// behind this one helper prevents the layout drift that produced zero autocache
+// episodes (client wrote flat files; resolver looked under {infohash}/).
+func InfoHashDir(downloadDir, infoHashHex string) string {
+	return filepath.Join(downloadDir, infoHashHex)
+}
 
 // Config controls the per-client tuning. Defaults are picked to be
 // gentle on a self-hosted home server (80 connected peers / 1MiB/s
@@ -63,6 +75,10 @@ type DownloadHandle interface {
 type Client struct {
 	cfg      Config
 	anacrolix *anacrolix.Client
+	// storage is the file storage we hand to anacrolix. anacrolix only
+	// auto-closes the storage it creates itself (when DefaultStorage is
+	// nil); a caller-provided one is ours to Close().
+	storage storage.ClientImplCloser
 }
 
 // NewClient builds the underlying anacrolix client with the supplied
@@ -84,8 +100,21 @@ func NewClient(cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("torrent: mkdir download dir: %w", err)
 	}
 
+	// Store each torrent's payload under {DownloadDir}/{infohash}/ instead of
+	// anacrolix's default flat-by-name layout, so the encoder's resolver (which
+	// stats {DownloadDir}/{infohash}/) finds it. Without this, completed
+	// downloads sat flat on disk and every encode failed "resolve source: stat
+	// .../<infohash>: no such file or directory" — the autocache pool stayed
+	// empty. We own this storage and Close() it in Client.Close().
+	store := storage.NewFileOpts(storage.NewFileClientOpts{
+		ClientBaseDir: cfg.DownloadDir,
+		TorrentDirMaker: func(baseDir string, _ *metainfo.Info, infoHash metainfo.Hash) string {
+			return InfoHashDir(baseDir, infoHash.HexString())
+		},
+	})
+
 	acfg := anacrolix.NewDefaultClientConfig()
-	acfg.DataDir = cfg.DownloadDir
+	acfg.DefaultStorage = store
 	acfg.Seed = true
 	acfg.EstablishedConnsPerTorrent = cfg.MaxPeers
 	if cfg.UploadRateKBPS > 0 {
@@ -95,9 +124,10 @@ func NewClient(cfg Config) (*Client, error) {
 
 	c, err := anacrolix.NewClient(acfg)
 	if err != nil {
+		_ = store.Close()
 		return nil, fmt.Errorf("torrent: new client: %w", err)
 	}
-	return &Client{cfg: cfg, anacrolix: c}, nil
+	return &Client{cfg: cfg, anacrolix: c, storage: store}, nil
 }
 
 // Add validates the magnet URI, registers it with anacrolix, and
@@ -127,7 +157,17 @@ func (c *Client) Close() error {
 	if c == nil || c.anacrolix == nil {
 		return nil
 	}
-	if errs := c.anacrolix.Close(); len(errs) > 0 {
+	var errs []error
+	if cerrs := c.anacrolix.Close(); len(cerrs) > 0 {
+		errs = append(errs, fmt.Errorf("torrent: close client: %v", cerrs))
+	}
+	// anacrolix does NOT close a caller-provided DefaultStorage; we own it.
+	if c.storage != nil {
+		if err := c.storage.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("torrent: close storage: %w", err))
+		}
+	}
+	if len(errs) > 0 {
 		return fmt.Errorf("torrent: close: %v", errs)
 	}
 	return nil
