@@ -13,11 +13,11 @@ import { useRoute, useRouter } from 'vue-router'
 // composable untouched.
 
 export type Kind = '' | 'tv' | 'movie' | 'ova' | 'ona' | 'special'
-export type Provider = 'kodik' | 'animelib' | 'english'
+export type Provider = 'kodik' | 'dub' | 'raw' | 'ae'
 export type Sort = 'popularity' | 'rating' | 'year' | 'updated' | 'title'
 
 const KIND_VALUES: Kind[] = ['', 'tv', 'movie', 'ova', 'ona', 'special']
-const PROVIDER_VALUES: Provider[] = ['kodik', 'animelib', 'english']
+const PROVIDER_VALUES: Provider[] = ['kodik', 'dub', 'raw', 'ae']
 const SORT_VALUES: Sort[] = ['popularity', 'rating', 'year', 'updated', 'title']
 const STATUS_VALUES = ['', 'ongoing', 'released', 'announced'] as const
 type Status = (typeof STATUS_VALUES)[number]
@@ -31,6 +31,7 @@ export function useBrowseFilters() {
 
   const q = ref('')
   const genres = ref<string[]>([])
+  const studios = ref<string[]>([])
   const kind = ref<Kind>('')
   const status = ref<Status>('')
   const season = ref<Season>('')
@@ -57,6 +58,13 @@ export function useBrowseFilters() {
       .filter(Boolean)
     if (newGenres.join(',') !== genres.value.join(',')) {
       genres.value = newGenres
+    }
+    const newStudios = ((qry.studio as string) || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+    if (newStudios.join(',') !== studios.value.join(',')) {
+      studios.value = newStudios
     }
     const rawKind = typeof qry.kind === 'string' ? (qry.kind as Kind) : ''
     kind.value = KIND_VALUES.includes(rawKind) ? rawKind : ''
@@ -88,6 +96,7 @@ export function useBrowseFilters() {
     >
     next.q = q.value || undefined
     next.genre = genres.value.length ? genres.value.join(',') : undefined
+    next.studio = studios.value.length ? studios.value.join(',') : undefined
     next.kind = kind.value || undefined
     next.status = status.value || undefined
     next.season = season.value || undefined
@@ -107,6 +116,7 @@ export function useBrowseFilters() {
     const p: Record<string, string | number> = { sort: sort.value }
     if (q.value) p.q = q.value
     if (genres.value.length) p.genre = genres.value.join(',')
+    if (studios.value.length) p.studio = studios.value.join(',')
     if (kind.value) p.kind = kind.value
     if (status.value) p.status = status.value
     if (season.value) p.season = season.value
@@ -124,6 +134,7 @@ export function useBrowseFilters() {
   const activeCount = computed(() => {
     let n = 0
     if (genres.value.length) n++
+    if (studios.value.length) n++
     if (kind.value) n++
     if (status.value) n++
     if (season.value) n++
@@ -136,6 +147,7 @@ export function useBrowseFilters() {
   function reset() {
     q.value = ''
     genres.value = []
+    studios.value = []
     kind.value = ''
     status.value = ''
     season.value = ''
@@ -166,6 +178,7 @@ export function useBrowseFilters() {
   return {
     q,
     genres,
+    studios,
     kind,
     status,
     season,

@@ -34,7 +34,7 @@
       <div class="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6">
         <!-- Desktop sidebar -->
         <div class="hidden md:block">
-          <BrowseSidebar :genres="browseGenres" :filters="filters" />
+          <BrowseSidebar :genres="browseGenres" :studios="browseStudios" :filters="filters" />
         </div>
 
         <!-- Results column -->
@@ -187,7 +187,7 @@
               <X class="size-5" aria-hidden="true" />
             </button>
           </div>
-          <BrowseSidebar :genres="browseGenres" :filters="filters" />
+          <BrowseSidebar :genres="browseGenres" :studios="browseStudios" :filters="filters" />
         </div>
       </div>
     </Transition>
@@ -311,6 +311,9 @@ const browseGenres = computed(() =>
   genres.value.map(g => ({ id: g.id, name: g.name, name_ru: g.name_ru })),
 )
 
+const studios = ref<{ id: string; name: string }[]>([])
+const browseStudios = computed(() => studios.value.map(s => ({ id: s.id, label: s.name })))
+
 // ─── Mobile drawer state + a11y ────────────────────────────────────────
 const drawerOpen = ref(false)
 const drawerRef = ref<HTMLElement | null>(null)
@@ -421,8 +424,17 @@ onMounted(async () => {
       console.error('Failed to load genres:', err)
     })
 
+  const studioPromise = animeApi
+    .getStudios()
+    .then(response => {
+      studios.value = response.data?.data || response.data || []
+    })
+    .catch(err => {
+      console.error('Failed to load studios:', err)
+    })
+
   const watchlistPromise = fetchWatchlistMap()
-  await Promise.all([genrePromise, watchlistPromise])
+  await Promise.all([genrePromise, studioPromise, watchlistPromise])
 
   // Store pending MAL bind for later resolution on Anime page
   if (route.query.bind_mal) {

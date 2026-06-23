@@ -386,7 +386,8 @@ export const animeApi = {
   getTop: (limit = 20) => apiClient.get('/anime/trending', { params: { page_size: limit } }),
   refresh: (id: string) => apiClient.post(`/anime/${id}/refresh`),
   resolveMAL: (malId: string) => apiClient.get(`/anime/mal/${malId}`),
-  getGenres: () => apiClient.get('/genres'),
+  getGenres: () => apiClient.get("/genres"),
+  getStudios: () => apiClient.get("/studios"),
   getNews: () => apiClient.get('/anime/news'),
   getRelated: (animeId: string) => apiClient.get(`/anime/${animeId}/related`),
   // Phase 14 / UX-28 — soft social-proof: how many users have this anime
