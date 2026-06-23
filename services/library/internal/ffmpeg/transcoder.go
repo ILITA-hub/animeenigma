@@ -37,6 +37,8 @@ type Config struct {
 	FfprobePath    string // path to ffprobe, e.g. /usr/bin/ffprobe
 	Tmpdir         string // root scratch dir; per-call subdir is auto-created
 	MaxBitrateKbps int    // bitrate cap; default 5000 if <= 0
+	Threads        int    // libx264 thread cap; 0 = auto (omit -threads)
+	Nice           int    // child scheduling niceness; 0 = don't reprioritize (Task 2)
 }
 
 // Result is what Transcode returns on success.
@@ -194,6 +196,11 @@ func (t *Transcoder) Transcode(ctx context.Context, sourcePath string) (*Result,
 		"-hide_banner", "-nostats", "-y",
 		"-i", sourcePath,
 		"-c:v", "libx264", "-preset", "veryfast",
+	}
+	if t.cfg.Threads > 0 {
+		args = append(args, "-threads", strconv.Itoa(t.cfg.Threads))
+	}
+	args = append(args,
 		"-b:v", fmt.Sprintf("%dk", bv),
 		"-maxrate", fmt.Sprintf("%dk", bv),
 		"-bufsize", fmt.Sprintf("%dk", bv*2),
@@ -202,7 +209,7 @@ func (t *Transcoder) Transcode(ctx context.Context, sourcePath string) (*Result,
 		"-hls_playlist_type", "vod",
 		"-hls_segment_filename", segmentTemplate,
 		playlistPath,
-	}
+	)
 	cmd := exec.CommandContext(ctx, t.cfg.BinaryPath, args...)
 	ring := newRingBuffer(2048)
 	cmd.Stderr = ring

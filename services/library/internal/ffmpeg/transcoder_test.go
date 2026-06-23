@@ -309,3 +309,72 @@ echo '{"format":{"duration":"60","bit_rate":"100000"}}'
 		t.Errorf("expected bv floored to 500k; argv:\n%s", string(argv))
 	}
 }
+
+func TestTranscode_ThreadsFlagEmittedWhenSet(t *testing.T) {
+	dir := t.TempDir()
+	ffmpeg := filepath.Join(dir, "ffmpeg.sh")
+	ffprobe := filepath.Join(dir, "ffprobe.sh")
+	writeScript(t, ffmpeg, fakeFfmpegSucceedScript)
+	writeScript(t, ffprobe, fakeFfprobeScript)
+	source := filepath.Join(dir, "in.mkv")
+	if err := os.WriteFile(source, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tr := NewTranscoder(Config{
+		BinaryPath: ffmpeg, FfprobePath: ffprobe, Tmpdir: dir,
+		MaxBitrateKbps: 5000, Threads: 3,
+	}, nil)
+	res, err := tr.Transcode(context.Background(), source)
+	if err != nil {
+		t.Fatalf("Transcode: %v", err)
+	}
+	argv, err := os.ReadFile(filepath.Join(filepath.Dir(res.PlaylistPath), "argv.txt"))
+	if err != nil {
+		t.Fatalf("read argv: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(argv)), "\n")
+	if !hasAdjacent(lines, "-threads", "3") {
+		t.Fatalf("argv missing `-threads 3`: %v", lines)
+	}
+}
+
+func TestTranscode_ThreadsFlagOmittedWhenZero(t *testing.T) {
+	dir := t.TempDir()
+	ffmpeg := filepath.Join(dir, "ffmpeg.sh")
+	ffprobe := filepath.Join(dir, "ffprobe.sh")
+	writeScript(t, ffmpeg, fakeFfmpegSucceedScript)
+	writeScript(t, ffprobe, fakeFfprobeScript)
+	source := filepath.Join(dir, "in.mkv")
+	if err := os.WriteFile(source, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tr := NewTranscoder(Config{
+		BinaryPath: ffmpeg, FfprobePath: ffprobe, Tmpdir: dir,
+		MaxBitrateKbps: 5000, Threads: 0,
+	}, nil)
+	res, err := tr.Transcode(context.Background(), source)
+	if err != nil {
+		t.Fatalf("Transcode: %v", err)
+	}
+	argv, err := os.ReadFile(filepath.Join(filepath.Dir(res.PlaylistPath), "argv.txt"))
+	if err != nil {
+		t.Fatalf("read argv: %v", err)
+	}
+	for _, l := range strings.Split(string(argv), "\n") {
+		if l == "-threads" {
+			t.Fatalf("argv should not contain -threads when Threads=0: %s", string(argv))
+		}
+	}
+}
+
+// hasAdjacent reports whether lines contains a, immediately followed by b.
+func hasAdjacent(lines []string, a, b string) bool {
+	for i := 0; i+1 < len(lines); i++ {
+		if lines[i] == a && lines[i+1] == b {
+			return true
+		}
+	}
+	return false
+}
