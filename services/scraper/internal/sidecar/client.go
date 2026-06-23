@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +31,63 @@ import (
 const maxBody = 1 << 20 // 1 MiB — resolve responses are small JSON.
 
 const maxFetchBody = 16 << 20 // 16 MiB — discovery pages (HTML/JSON) base64-inflated.
+
+// wedgedKinds is the set of sidecar `kind` values that mean "this provider is
+// wedged / over budget" (as opposed to a transient upstream challenge or a
+// genuine stream failure). The Go circuit breaker (internal/health.Breaker)
+// counts these per provider; the legacy `exhausted` alias is normalized to
+// `pool_exhausted` so the breaker works whether or not the Phase-1 sidecar
+// rename has shipped yet.
+//
+// Phase 1 sidecar kinds: provider_wedged, pool_exhausted (was `exhausted`).
+// Phase 2 sidecar kinds: capacity, user_quota.
+var wedgedKinds = map[string]string{
+	"provider_wedged": "provider_wedged",
+	"pool_exhausted":  "pool_exhausted",
+	"exhausted":       "pool_exhausted", // legacy alias (pre-Phase-1 sidecar)
+	"capacity":        "capacity",
+	"user_quota":      "user_quota",
+}
+
+// ProviderWedgedError wraps domain.ErrProviderDown for the subset of sidecar
+// failures that indicate the browser pool is wedged or over budget for this
+// provider. It still satisfies errors.Is(err, domain.ErrProviderDown) (so the
+// orchestrator's failover classifier treats it as retryable exactly as before),
+// but it ALSO carries the machine-readable Kind so the circuit breaker can
+// inspect the cause via sidecar.IsWedged / errors.As.
+type ProviderWedgedError struct {
+	Kind string
+	err  error // the underlying domain.WrapProviderDown(...) value
+}
+
+func (e *ProviderWedgedError) Error() string {
+	return fmt.Sprintf("sidecar provider wedged (kind=%s): %v", e.Kind, e.err)
+}
+
+// Unwrap exposes the wrapped domain.ErrProviderDown chain so errors.Is keeps
+// matching the sentinel.
+func (e *ProviderWedgedError) Unwrap() error { return e.err }
+
+// IsWedged reports whether err is (or wraps) a *ProviderWedgedError and returns
+// its normalized Kind. The breaker uses this; non-wedged errors return ("",false).
+func IsWedged(err error) (string, bool) {
+	var pwe *ProviderWedgedError
+	if errors.As(err, &pwe) {
+		return pwe.Kind, true
+	}
+	return "", false
+}
+
+// classifyDown builds the error for a sidecar non-OK response. When `kind` is a
+// wedged kind it returns a *ProviderWedgedError (wrapping the ErrProviderDown
+// value `base`); otherwise it returns `base` unchanged. Centralizes the wedged
+// decision so resolve() and Fetch() stay in sync.
+func classifyDown(kind string, base error) error {
+	if norm, ok := wedgedKinds[kind]; ok {
+		return &ProviderWedgedError{Kind: norm, err: base}
+	}
+	return base
+}
 
 // Client is a thin HTTP wrapper around the stealth-scraper sidecar.
 type Client struct {
@@ -154,9 +212,10 @@ func (c *Client) Fetch(ctx context.Context, provider, rawURL string) (int, []byt
 			fmt.Errorf("sidecar fetch 404 (kind=%s): %s", out.Kind, snippet(raw)), "sidecar: fetch not found")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return 0, nil, domain.WrapProviderDown(
+		base := domain.WrapProviderDown(
 			fmt.Errorf("sidecar fetch %d (kind=%s): %s", resp.StatusCode, out.Kind, snippet(raw)),
 			"sidecar: fetch")
+		return 0, nil, classifyDown(out.Kind, base)
 	}
 	if decodeErr != nil {
 		return 0, nil, domain.WrapProviderDown(decodeErr, "sidecar: decode fetch response")
@@ -208,10 +267,11 @@ func (c *Client) resolve(ctx context.Context, req resolveRequest) (*domain.Strea
 			fmt.Errorf("sidecar 404 (kind=%s): %s", out.Kind, snippet(raw)), "sidecar: not found")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, domain.WrapProviderDown(
+		base := domain.WrapProviderDown(
 			fmt.Errorf("sidecar status %d (kind=%s): %s", resp.StatusCode, out.Kind, snippet(raw)),
 			"sidecar: resolve",
 		)
+		return nil, classifyDown(out.Kind, base)
 	}
 	if decodeErr != nil {
 		return nil, domain.WrapProviderDown(decodeErr, "sidecar: decode response")

@@ -282,3 +282,111 @@ func TestFetch_OmitsUserKeyWhenAbsent(t *testing.T) {
 func decodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
+
+// --- Phase 3: typed ProviderWedgedError on wedged-kind 503 -------------------
+
+// TestResolveEmbed_WedgedKind_SurfacesTypedError verifies that a sidecar 503
+// carrying a wedged `kind` (provider_wedged | pool_exhausted | the legacy
+// `exhausted` alias | capacity | user_quota) surfaces a *ProviderWedgedError
+// that (a) still satisfies errors.Is(err, domain.ErrProviderDown) so failover
+// classification is unchanged, and (b) exposes Kind via sidecar.IsWedged so the
+// circuit breaker can count it.
+func TestResolveEmbed_WedgedKind_SurfacesTypedError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		status   int
+		body     string
+		wantKind string
+	}{
+		{"provider_wedged_503", http.StatusServiceUnavailable, `{"success":false,"error":"target closed","kind":"provider_wedged"}`, "provider_wedged"},
+		{"pool_exhausted_503", http.StatusServiceUnavailable, `{"success":false,"error":"pool spin","kind":"pool_exhausted"}`, "pool_exhausted"},
+		{"legacy_exhausted_503", http.StatusServiceUnavailable, `{"success":false,"error":"pool spin","kind":"exhausted"}`, "pool_exhausted"},
+		{"capacity_503", http.StatusServiceUnavailable, `{"success":false,"error":"ram hard","kind":"capacity"}`, "capacity"},
+		{"user_quota_503", http.StatusServiceUnavailable, `{"success":false,"error":"3rd session","kind":"user_quota"}`, "user_quota"},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+			c := New(srv.URL, 5*time.Second)
+			_, err := c.ResolveEmbed(context.Background(), "gogoanime", "e", domain.CategorySub, "")
+			if !errors.Is(err, domain.ErrProviderDown) {
+				t.Fatalf("err = %v; want still errors.Is ErrProviderDown (failover unchanged)", err)
+			}
+			kind, ok := IsWedged(err)
+			if !ok {
+				t.Fatalf("IsWedged(%v) = (_, false); want a wedged kind", err)
+			}
+			if kind != tc.wantKind {
+				t.Errorf("kind = %q; want %q", kind, tc.wantKind)
+			}
+			var pwe *ProviderWedgedError
+			if !errors.As(err, &pwe) {
+				t.Errorf("errors.As(*ProviderWedgedError) = false; want true")
+			}
+		})
+	}
+}
+
+// TestResolveEmbed_NonWedgedKind_NotTyped verifies that a NON-wedged failure
+// (502 challenge, plain error) stays a bare ErrProviderDown wrap — IsWedged is
+// false so the breaker never counts a transient upstream challenge.
+func TestResolveEmbed_NonWedgedKind_NotTyped(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"challenge_502", http.StatusBadGateway, `{"success":false,"kind":"challenge"}`},
+		{"error_502", http.StatusBadGateway, `{"success":false,"kind":"error"}`},
+		{"internal_500", http.StatusInternalServerError, `{"success":false,"kind":"internal"}`},
+		{"empty_kind_503", http.StatusServiceUnavailable, `{"success":false,"kind":""}`},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+			c := New(srv.URL, 5*time.Second)
+			_, err := c.ResolveEmbed(context.Background(), "gogoanime", "e", domain.CategorySub, "")
+			if !errors.Is(err, domain.ErrProviderDown) {
+				t.Fatalf("err = %v; want ErrProviderDown", err)
+			}
+			if kind, ok := IsWedged(err); ok {
+				t.Errorf("IsWedged = (%q, true); want false for non-wedged kind", kind)
+			}
+		})
+	}
+}
+
+// TestFetch_WedgedKind_SurfacesTypedError mirrors the resolve test for the
+// /fetch path (nineanime discovery).
+func TestFetch_WedgedKind_SurfacesTypedError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false, "kind": "provider_wedged", "error": "target closed",
+		})
+	}))
+	defer srv.Close()
+	c := New(srv.URL, 5*time.Second)
+	_, _, err := c.Fetch(context.Background(), "nineanime", "https://9anime.me.uk/x")
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Fatalf("err = %v; want ErrProviderDown", err)
+	}
+	if kind, ok := IsWedged(err); !ok || kind != "provider_wedged" {
+		t.Errorf("IsWedged = (%q, %v); want (provider_wedged, true)", kind, ok)
+	}
+}
