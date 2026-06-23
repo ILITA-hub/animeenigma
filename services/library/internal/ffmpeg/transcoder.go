@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
@@ -213,7 +214,18 @@ func (t *Transcoder) Transcode(ctx context.Context, sourcePath string) (*Result,
 	cmd := exec.CommandContext(ctx, t.cfg.BinaryPath, args...)
 	ring := newRingBuffer(2048)
 	cmd.Stderr = ring
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("ffmpeg start failed: %s", err)
+	}
+	// Best-effort: run the transcode at low scheduling priority so it yields
+	// to interactive work. NEVER fail the transcode over priority.
+	if t.cfg.Nice > 0 {
+		if err := syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, t.cfg.Nice); err != nil && t.log != nil {
+			t.log.Debugw("setpriority(ffmpeg) failed; continuing at default priority",
+				"pid", cmd.Process.Pid, "nice", t.cfg.Nice, "error", err)
+		}
+	}
+	if err := cmd.Wait(); err != nil {
 		return nil, fmt.Errorf("ffmpeg failed: %s\nstderr tail:\n%s", err, ring.String())
 	}
 

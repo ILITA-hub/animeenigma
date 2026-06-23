@@ -378,3 +378,27 @@ func hasAdjacent(lines []string, a, b string) bool {
 	}
 	return false
 }
+
+func TestTranscode_SuccessWithNiceSet(t *testing.T) {
+	dir := t.TempDir()
+	ffmpeg := filepath.Join(dir, "ffmpeg.sh")
+	ffprobe := filepath.Join(dir, "ffprobe.sh")
+	writeScript(t, ffmpeg, fakeFfmpegSucceedScript)
+	writeScript(t, ffprobe, fakeFfprobeScript)
+	source := filepath.Join(dir, "in.mkv")
+	if err := os.WriteFile(source, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tr := NewTranscoder(Config{
+		BinaryPath: ffmpeg, FfprobePath: ffprobe, Tmpdir: dir,
+		MaxBitrateKbps: 5000, Nice: 15,
+	}, nil)
+	res, err := tr.Transcode(context.Background(), source)
+	if err != nil {
+		t.Fatalf("Transcode with Nice=15 must still succeed: %v", err)
+	}
+	if len(res.SegmentPaths) == 0 {
+		t.Fatalf("expected segments produced")
+	}
+}
