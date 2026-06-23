@@ -153,6 +153,12 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 	} else {
 		pass = topPlayed
 	}
+
+	// An empty sample (no refs probed) must never count as a pass — it would
+	// wrongly feed a recovering/promote signal to the catalog state machine.
+	if n == 0 {
+		pass = false
+	}
 	return verdicts, pass
 }
 

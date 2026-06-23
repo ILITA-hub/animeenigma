@@ -477,6 +477,21 @@ func TestEngine_TargetNotInPlan_NotProbed(t *testing.T) {
 	}
 }
 
+// TestProbeProvider_EmptyRefs_NeverPass verifies that when the anime-set resolves
+// to zero refs, probeProvider always returns pass=false regardless of failFast —
+// an empty sample must never feed a recovering/promote signal to the state machine.
+func TestProbeProvider_EmptyRefs_NeverPass(t *testing.T) {
+	e := newEngine(nil, fakeVal{}, &capRep{}, fakePool{}, &fakePlan{})
+	tgt := target("ae", emptyAS{}, fakeRes{})
+
+	for _, ff := range []bool{true, false} {
+		_, pass := e.probeProvider(context.Background(), tgt, nil, 0, ff)
+		if pass {
+			t.Errorf("failFast=%v: empty refs returned pass=true, want false", ff)
+		}
+	}
+}
+
 // TestEngine_PlanFetchError_FallbackLegacy verifies that when FetchPlan errors,
 // the engine falls back to probing ALL targets (no plan gating) and does NOT
 // call PostVerdict.
