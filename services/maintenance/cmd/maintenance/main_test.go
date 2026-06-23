@@ -55,3 +55,17 @@ func TestShouldSuppressForProvider_FailOpen(t *testing.T) {
 		t.Fatal("unreachable catalog must fail open (return false)")
 	}
 }
+
+func TestShouldSuppressForProvider_Non200(t *testing.T) {
+	// Catalog returning a non-200 status must fail open so a catalog outage
+	// never silently blocks escalation of a real provider incident.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	s := newTestServiceWithHTTP(t, srv.URL, srv.Client())
+	if s.shouldSuppressForProvider("allanime") {
+		t.Fatal("catalog 503 must fail open (return false)")
+	}
+}

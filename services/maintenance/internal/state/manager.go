@@ -292,7 +292,13 @@ func (m *Manager) UpdateIssue(id string, fn func(*domain.Issue)) {
 	}
 }
 
-// FindOpenIssueByAlert finds an open issue matching an alert+service combination.
+// FindOpenIssueByAlert finds an open issue for the given service.
+//
+// Dedup is intentionally by AffectedService only — all alert types for the
+// same provider collapse into one open issue to kill duplicate-escalation churn
+// (e.g. "stream DOWN" and "latency HIGH" for allanime share a single ticket).
+// alertName is accepted for future per-alert-type granularity but is not
+// currently used in the match; callers must not assume it narrows the result.
 func (m *Manager) FindOpenIssueByAlert(alertName, service string) *domain.Issue {
 	m.mu.Lock()
 	defer m.mu.Unlock()

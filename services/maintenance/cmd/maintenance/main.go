@@ -1091,6 +1091,9 @@ func (s *service) shouldSuppressForProvider(provider string) bool {
 		return false // fail-open: catalog blip must not block real escalations
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false // fail-open: catalog unhealthy must never block escalation
+	}
 	var body struct {
 		Data struct {
 			Providers []struct {
