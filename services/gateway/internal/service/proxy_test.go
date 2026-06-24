@@ -472,3 +472,97 @@ func TestProxyService_Forward_GrafanaAuthProxy_NoClaimsStripsForgedHeader(t *tes
 		t.Errorf("Grafana received X-Webauth-User = %q with no claims; forged header must be stripped", got)
 	}
 }
+
+// newTestUpscalerProxy points the upscaler service URL at a test backend.
+func newTestUpscalerProxy(upscalerURL string) *ProxyService {
+	return NewProxyService(config.ServiceURLs{
+		UpscalerService: upscalerURL,
+	}, logger.Default())
+}
+
+// TestProxyService_Upscaler_InjectsGatewayInternalHeader asserts that forwarding
+// a request to the "upscaler" service sets X-Gateway-Internal: "1" on the
+// outbound request. This is the positive case: an admin request without any
+// client-supplied header still receives the injected value.
+func TestProxyService_Upscaler_InjectsGatewayInternalHeader(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestUpscalerProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/upscale/jobs", nil)
+	resp, err := p.Forward(req, "upscaler")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	got := headers.Get("X-Gateway-Internal")
+	if got != "1" {
+		t.Errorf("upscaler backend received X-Gateway-Internal = %q; want \"1\"", got)
+	}
+}
+
+// TestProxyService_Upscaler_StripsForgedGatewayInternalHeader asserts the
+// strip-then-set security property: a client-supplied X-Gateway-Internal header
+// is stripped and replaced with the gateway-trusted value. A rogue client
+// sending any X-Gateway-Internal value cannot control what the upscaler sees.
+func TestProxyService_Upscaler_StripsForgedGatewayInternalHeader(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestUpscalerProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/upscale/jobs", nil)
+	// Attacker tries to supply any header value — gateway must wipe and replace.
+	req.Header.Set("X-Gateway-Internal", "attacker-forged-value")
+
+	resp, err := p.Forward(req, "upscaler")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	got := headers.Get("X-Gateway-Internal")
+	// The backend must see exactly "1", not the attacker's value.
+	if got != "1" {
+		t.Errorf("upscaler backend received X-Gateway-Internal = %q; want \"1\" (forged value must be overwritten)", got)
+	}
+}
+
+// TestProxyService_NonUpscaler_DoesNotInjectGatewayInternalHeader asserts that
+// the X-Gateway-Internal injection is scoped to the "upscaler" service only —
+// other services MUST NOT receive this header (defence-in-depth isolation).
+func TestProxyService_NonUpscaler_DoesNotInjectGatewayInternalHeader(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	// Use the scraper (non-upscaler) service as the target.
+	p := newTestProxy(backend.URL) // newTestProxy wires ScraperService
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/scraper/health", nil)
+	resp, err := p.Forward(req, "scraper")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	if got := headers.Get("X-Gateway-Internal"); got != "" {
+		t.Errorf("scraper backend received X-Gateway-Internal = %q; must be absent for non-upscaler services", got)
+	}
+}

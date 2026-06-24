@@ -160,8 +160,20 @@ func main() {
 	// leased input/output segments on the {StagingDir}/{jobID} tree.
 	segmentHandler := handler.NewSegmentHandler(cfg.Upscaler.StagingDir, jobRepo, segmentRepo, log)
 
+	// Admin handler (Task 12a): CRUD for upscale jobs + fleet status.
+	// Reached only via the gateway's admin-gated /api/upscale/* proxy that
+	// injects X-Gateway-Internal; the router's requireGatewayInternal blocks
+	// direct dials to upscaler:8096 that lack the header.
+	adminHandler := handler.NewAdminHandler(
+		jobRepo,
+		workerRepo,
+		cfg.Upscaler.DefaultScale,
+		"", // defaultModel: admin must supply "model" in POST body
+		log,
+	)
+
 	// Initialize router
-	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler)
+	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler)
 
 	// Create HTTP server
 	srv := &http.Server{

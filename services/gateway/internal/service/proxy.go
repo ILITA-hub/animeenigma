@@ -277,6 +277,30 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 		}
 	}
 
+	// Upscaler admin gate (defense-in-depth): the /api/upscale/* admin routes
+	// are only reachable at upscaler:8096 if X-Gateway-Internal is present.
+	// The upscaler's requireGatewayInternal middleware checks for a non-empty
+	// value; the worker-facing /worker/* routes do NOT go through this branch
+	// (they use the ExternalAPIKeyMiddleware group in the gateway router, which
+	// calls a different handler — not ProxyToUpscaler → forwardWith).
+	//
+	// Strip-then-set pattern: Del removes any client-supplied value that survived
+	// copyForwardHeaders (copyForwardHeaders passes through arbitrary headers it
+	// doesn't know about), then Set injects the gateway-trusted value. This
+	// ensures a rogue client cannot forge the header by sending it directly.
+	//
+	// FOLLOW-UP (Phase 2): replace the static "1" with an HMAC-SHA256 signed
+	// token (rotated per deploy) so a leaked Docker-network access cannot
+	// trivially impersonate the gateway. The upscaler's requireGatewayInternal
+	// will need a matching verifier. For Phase 1 the static value is sufficient
+	// because upscaler:8096 is not internet-exposed (Docker-internal only) and
+	// the gateway router already enforces JWT + AdminRole before calling this
+	// proxy path.
+	if service == "upscaler" {
+		req.Header.Del("X-Gateway-Internal")
+		req.Header.Set("X-Gateway-Internal", "1")
+	}
+
 	// For auth service only: selectively re-forward the refresh_token
 	// cookie so that /api/auth/refresh and /api/auth/logout can read it.
 	// Other services MUST NOT receive browser cookies (REVIEW.md BLK-02).

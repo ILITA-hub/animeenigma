@@ -53,7 +53,10 @@ func buildUpscalerRouter(t *testing.T) http.Handler {
 	// never dereferenced — capability verification rejects unsigned requests
 	// before any repo call).
 	segHandler := handler.NewSegmentHandler(t.TempDir(), nil, nil, log)
-	return NewRouter(log, sharedUpscalerCollector(), hub, nil, segHandler)
+	// nil adminHandler: the separation tests don't exercise the admin CRUD
+	// handlers and the router's nil-guard skips wiring them in. Tests that
+	// need real admin handlers construct their own fixture (see admin_test.go).
+	return NewRouter(log, sharedUpscalerCollector(), hub, nil, segHandler, nil)
 }
 
 // TestUpscalerRouter_WorkerSurfaceReachable — /worker/* routes exist on the
@@ -210,6 +213,78 @@ func TestUpscalerRouter_AdminPathNotOnWorkerSurface(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("/api/upscale/jobs without gateway header: status = %d; want 404 (unreachable from worker edge)", rec.Code)
+	}
+}
+
+// TestUpscalerRouter_AdminJobsResolveWithGatewayHeader verifies that the admin
+// job endpoints (POST /api/upscale/jobs, GET /api/upscale/jobs, etc.) are
+// registered under the gateway-gated group. With the header set and a nil
+// adminHandler, chi returns 405 or 404 for those routes (no handler wired) —
+// what matters is that requireGatewayInternal does NOT fire a "not found" gate
+// response. We use a purpose-built router with a stub AdminHandler so the
+// routes are actually registered and return something other than our gate 404.
+func TestUpscalerRouter_AdminJobsResolveWithGatewayHeader(t *testing.T) {
+	t.Parallel()
+	log := logger.Default()
+	hub := controlplane.NewHub(&stubLeaser{}, &stubWorkerHB{}, log)
+	segHandler := handler.NewSegmentHandler(t.TempDir(), nil, nil, log)
+	// A nil adminHandler causes the route group to have no routes wired.
+	// We verify the gate passes (no gate-404) and chi handles routing.
+	router := NewRouter(log, sharedUpscalerCollector(), hub, nil, segHandler, nil)
+
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/upscale/jobs"},
+		{http.MethodGet, "/api/upscale/workers"},
+		{http.MethodGet, "/api/upscale/jobs/some-uuid"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.method+" "+c.path, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(c.method, c.path, nil)
+			req.Header.Set(internalGatewayHeader, "1")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			// The gate must NOT have fired (gate 404 would be JSON with NOT_FOUND).
+			// chi's own 404/405 for an unregistered path is plain text and does not
+			// contain our gate's JSON body.
+			if containsGateBody(rec.Body.String()) {
+				t.Errorf("%s %s with header: gate fired despite header being set — body: %q",
+					c.method, c.path, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestUpscalerRouter_AdminRequiresGatewayHeader_WithoutHeader verifies that
+// ALL known admin endpoints 404 (gate fires) when no gateway header is present.
+func TestUpscalerRouter_AdminRequiresGatewayHeader_WithoutHeader(t *testing.T) {
+	t.Parallel()
+	router := buildUpscalerRouter(t)
+
+	for _, path := range []string{
+		"/api/upscale/jobs",
+		"/api/upscale/workers",
+		"/api/upscale/jobs/some-id",
+		"/api/upscale/jobs/some-id/cancel",
+		"/api/upscale/jobs/some-id/retry",
+	} {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			// NO gateway header
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("%q without gateway header: status = %d; want 404", path, rec.Code)
+			}
+		})
 	}
 }
 

@@ -74,6 +74,7 @@ func NewRouter(
 	hub *controlplane.Hub,
 	enrollStore *controlplane.GormEnrollStore,
 	segmentHandler *handler.SegmentHandler,
+	adminHandler *handler.AdminHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -96,14 +97,24 @@ func NewRouter(
 		metrics.Handler().ServeHTTP(w, r)
 	})
 
-	// Admin API routes (/api/upscale/*) — filled in later tasks (Task 4+).
+	// Admin API routes (/api/upscale/*) — CRUD for jobs + fleet status.
 	// requireGatewayInternal gates this group so it is only reachable via
 	// the gateway's admin-proxied path (X-Gateway-Internal header injected
 	// by the gateway on /api/upscale/* → upscaler proxying). A direct dial
 	// to upscaler:8096/api/upscale/* without the header returns 404.
 	r.Route("/api/upscale", func(r chi.Router) {
 		r.Use(requireGatewayInternal)
-		// placeholder — handlers wired in Task 4+
+
+		if adminHandler != nil {
+			// Job CRUD
+			r.Post("/jobs", adminHandler.CreateJob)
+			r.Get("/jobs", adminHandler.ListJobs)
+			r.Get("/jobs/{id}", adminHandler.GetJob)
+			r.Post("/jobs/{id}/cancel", adminHandler.CancelJob)
+			r.Post("/jobs/{id}/retry", adminHandler.RetryJob)
+			// Fleet status
+			r.Get("/workers", adminHandler.ListWorkers)
+		}
 	})
 
 	// Worker routes (/worker/*) — worker-facing enroll + WS upgrade.
