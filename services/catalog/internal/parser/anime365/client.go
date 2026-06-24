@@ -78,11 +78,13 @@ func (c *Client) getJSON(ctx context.Context, path string, out interface{}) erro
 func (c *Client) SearchSeriesByMAL(ctx context.Context, malID, title string) (int, error) {
 	mal, err := strconv.Atoi(strings.TrimSpace(malID))
 	if err != nil || mal <= 0 {
-		return 0, fmt.Errorf("anime365: invalid mal id %q", malID)
+		// Unresolvable mal id → treat as "not on anime365" (fail-soft), not an
+		// error, so the aggregator doesn't mark the provider down.
+		return 0, nil
 	}
 	q := url.Values{}
 	q.Set("query", title)
-	q.Set("limit", "20")
+	q.Set("limit", "20") // top matches; we filter by exact myAnimeListId below
 	var env struct {
 		Data []series `json:"data"`
 	}
@@ -101,7 +103,7 @@ func (c *Client) SearchSeriesByMAL(ctx context.Context, malID, title string) (in
 func (c *Client) ListEpisodes(ctx context.Context, seriesID int) ([]Episode, error) {
 	q := url.Values{}
 	q.Set("seriesId", strconv.Itoa(seriesID))
-	q.Set("limit", "1000")
+	q.Set("limit", "1000") // covers the longest series; revisit if a series exceeds this
 	var env struct {
 		Data []Episode `json:"data"`
 	}

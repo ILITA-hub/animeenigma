@@ -7,6 +7,16 @@ import (
 	"testing"
 )
 
+func TestSearchSeriesByMAL_InvalidIDReturnsZeroNoError(t *testing.T) {
+	c := NewClient(Config{BaseURL: "http://127.0.0.1:0", Enabled: true})
+	for _, bad := range []string{"", "0", "-5", "abc"} {
+		id, err := c.SearchSeriesByMAL(context.Background(), bad, "x")
+		if err != nil || id != 0 {
+			t.Fatalf("mal %q: got (%d, %v), want (0, nil)", bad, id, err)
+		}
+	}
+}
+
 func TestSearchSeriesByMAL_MatchesMyAnimeListID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/series" {
