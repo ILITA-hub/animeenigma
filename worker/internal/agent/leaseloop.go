@@ -97,9 +97,14 @@ func (c *Client) processSegment(ctx context.Context, workerID string, grant wire
 	// Build the base segment URL on the server's data plane.
 	segBaseURL := fmt.Sprintf("%s/worker/segments/%s/%d", c.cfg.ServerURL, grant.JobID, grant.Idx)
 
-	// Temp paths for local in/out files.
-	inPath := fmt.Sprintf("%s/seg-%s-%d-in", os.TempDir(), grant.JobID, grant.Idx)
-	outPath := fmt.Sprintf("%s/seg-%s-%d-out", os.TempDir(), grant.JobID, grant.Idx)
+	// Temp paths for local in/out files. Use cfg.WorkDir so the operator can
+	// point the worker at a fast NVMe scratch volume for segment staging.
+	workDir := c.cfg.WorkDir
+	if workDir == "" {
+		workDir = os.TempDir()
+	}
+	inPath := fmt.Sprintf("%s/seg-%s-%d-in", workDir, grant.JobID, grant.Idx)
+	outPath := fmt.Sprintf("%s/seg-%s-%d-out", workDir, grant.JobID, grant.Idx)
 
 	// Always clean up local files regardless of outcome.
 	defer func() {

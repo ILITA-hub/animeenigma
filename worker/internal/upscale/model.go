@@ -24,7 +24,13 @@ var registry = map[string]Model{}
 
 // Register adds m to the global registry. It is called from init() in
 // each model's source file (mock.go, realesrgan.go, …).
+// Panics if a model with the same name has already been registered — this
+// catches accidental double-registration at startup rather than silently
+// overwriting a model.
 func Register(m Model) {
+	if _, exists := registry[m.Name()]; exists {
+		panic("upscale: model already registered: " + m.Name())
+	}
 	registry[m.Name()] = m
 }
 

@@ -17,6 +17,24 @@ import (
 	"github.com/ILITA-hub/animeenigma/worker/internal/wire"
 )
 
+// chanLeaseConn implements leaseConn by reading from a channel of
+// LeaseGrantPayload values. Used to bridge the WS dispatch path to RunLeaseLoop.
+type chanLeaseConn struct {
+	ch <-chan wire.LeaseGrantPayload
+}
+
+func (c chanLeaseConn) ReadGrant(ctx context.Context) (wire.LeaseGrantPayload, error) {
+	select {
+	case <-ctx.Done():
+		return wire.LeaseGrantPayload{}, ctx.Err()
+	case g, ok := <-c.ch:
+		if !ok {
+			return wire.LeaseGrantPayload{}, fmt.Errorf("grant channel closed")
+		}
+		return g, nil
+	}
+}
+
 const (
 	// pongWait is the read deadline extension on each pong received from the server.
 	// Must match the server's pongWait (60s).
@@ -54,6 +72,16 @@ type Client struct {
 	// stdout is the writer for the neutral console tokens. Defaults to os.Stdout.
 	// Overridable in tests. Always accessed under stdoutMu.
 	stdout io.Writer
+
+	// connMu guards grantCh — reset at the start of every runOnce call and
+	// closed when the connection drops so RunLeaseLoop exits cleanly.
+	connMu  sync.Mutex
+	grantCh chan wire.LeaseGrantPayload
+
+	// processorFn, when non-nil, overrides the default NewPipelineProcessor
+	// factory. Tests set this to inject CopyProcessor (or another stub) so
+	// the end-to-end WS wiring test does not require a real ffmpeg binary.
+	processorFn func(cfg Config) (Processor, error)
 }
 
 // NewClient constructs a Client with default backoff settings.
@@ -209,12 +237,67 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 
 	c.print("idle")
 
+	// Create a per-connection grant channel. dispatch() pushes lease_grant
+	// frames here; RunLeaseLoop drains it via chanLeaseConn.
+	grantCh := make(chan wire.LeaseGrantPayload, 8)
+	c.connMu.Lock()
+	c.grantCh = grantCh
+	c.connMu.Unlock()
+
+	// Build the Processor for this connection. Tests may inject processorFn;
+	// production uses NewPipelineProcessor with the configured model.
+	var proc Processor
+	if c.processorFn != nil {
+		var err error
+		proc, err = c.processorFn(c.cfg)
+		if err != nil {
+			// Fallback to CopyProcessor so the WS machinery stays alive.
+			fmt.Fprintf(os.Stderr, "worker: processorFn error, falling back to CopyProcessor: %v\n", err)
+			proc = CopyProcessor{}
+		}
+	} else if c.cfg.Model != "" {
+		workDir := c.cfg.WorkDir
+		if workDir == "" {
+			workDir = os.TempDir()
+		}
+		pp, ppErr := NewPipelineProcessor(c.cfg.Model, 2, workDir)
+		if ppErr != nil {
+			// Model not found (e.g. unregistered name).
+			// Fall back to CopyProcessor so connectivity remains functional.
+			fmt.Fprintf(os.Stderr, "worker: NewPipelineProcessor(%q): %v; falling back to CopyProcessor\n", c.cfg.Model, ppErr)
+			proc = CopyProcessor{}
+		} else {
+			proc = pp
+		}
+	} else {
+		// No model configured — use the no-op CopyProcessor (Task-15 stub).
+		proc = CopyProcessor{}
+	}
+
+	// Start the lease loop in a goroutine; it exits when loopCtx is cancelled
+	// or grantCh is closed (connection dropped).
+	loopCtx, cancelLoop := context.WithCancel(ctx)
+	defer cancelLoop()
+	go func() {
+		c.RunLeaseLoop(loopCtx, enroll.WorkerID, proc, chanLeaseConn{ch: grantCh}) //nolint:errcheck
+	}()
+
 	// Run pumps; readPump returns when the connection closes and signals writePump
 	// via the done channel.
 	done := make(chan struct{})
 	go c.writePump(ctx, conn, done)
 
 	err = c.readPump(conn)
+
+	// Close grantCh so chanLeaseConn.ReadGrant returns an error and the
+	// lease loop goroutine exits cleanly.
+	c.connMu.Lock()
+	if c.grantCh != nil {
+		close(c.grantCh)
+		c.grantCh = nil
+	}
+	c.connMu.Unlock()
+
 	close(done)
 	return err
 }
@@ -271,7 +354,21 @@ func (c *Client) writePump(ctx context.Context, conn *gorillaws.Conn, done <-cha
 func (c *Client) dispatch(f wire.Frame) {
 	switch f.Type {
 	case "lease_grant":
-		c.print("leased")
+		var g wire.LeaseGrantPayload
+		if err := f.Decode(&g); err != nil {
+			fmt.Fprintf(os.Stderr, "worker: decode lease_grant: %v\n", err)
+			return
+		}
+		c.connMu.Lock()
+		ch := c.grantCh
+		c.connMu.Unlock()
+		if ch != nil {
+			select {
+			case ch <- g:
+			default:
+				fmt.Fprintf(os.Stderr, "worker: grant channel full, dropping lease_grant for job %s/%d\n", g.JobID, g.Idx)
+			}
+		}
 	case "command":
 		c.print("processing")
 	default:

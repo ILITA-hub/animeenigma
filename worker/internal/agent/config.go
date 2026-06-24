@@ -20,6 +20,14 @@ type Config struct {
 	// segment GET/PUT requests. Read from env API_KEY. When CF mTLS is
 	// adopted the client cert will replace/augment this (CD-9).
 	APIKey string
+
+	// Model is the name of the upscale model to use from the registry.
+	// Read from env MODEL; defaults to "mock".
+	Model string
+
+	// WorkDir is the directory where temporary frame files are written during
+	// processing. Read from env WORK_DIR; defaults to os.TempDir().
+	WorkDir string
 }
 
 // LoadConfig reads the worker configuration from environment variables.
@@ -28,10 +36,20 @@ func LoadConfig() Config {
 	if mode == "" {
 		mode = "batch"
 	}
+	model := os.Getenv("MODEL")
+	if model == "" {
+		model = "mock"
+	}
+	workDir := os.Getenv("WORK_DIR")
+	if workDir == "" {
+		workDir = os.TempDir()
+	}
 	return Config{
 		ServerURL:   os.Getenv("SERVER_URL"),
 		EnrollToken: os.Getenv("ENROLL_TOKEN"),
 		Mode:        mode,
 		APIKey:      os.Getenv("API_KEY"),
+		Model:       model,
+		WorkDir:     workDir,
 	}
 }

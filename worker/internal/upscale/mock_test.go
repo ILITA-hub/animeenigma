@@ -52,3 +52,14 @@ func TestGet_Unknown(t *testing.T) {
 		t.Fatal("expected error for unknown model, got nil")
 	}
 }
+
+// TestRegisterDuplicatePanics verifies that registering a model name that has
+// already been registered panics rather than silently overwriting it.
+func TestRegisterDuplicatePanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on duplicate Register, but no panic occurred")
+		}
+	}()
+	Register(mockModel{}) // "mock" is already registered in init()
+}

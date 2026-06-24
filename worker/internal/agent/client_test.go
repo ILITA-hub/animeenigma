@@ -17,6 +17,112 @@ import (
 	"github.com/ILITA-hub/animeenigma/worker/internal/wire"
 )
 
+// ── Test 8: live-WS lease_grant drives RunLeaseLoop → GET + PUT ─────────────
+
+// TestLeaseGrantDrivesLeaseLoop verifies the end-to-end WS wiring:
+// a lease_grant frame received over the live WebSocket connection is forwarded
+// to RunLeaseLoop, which downloads the input segment (GET) and uploads the
+// output segment (PUT). This discharges the Task-15 contract: "wiring the lease
+// loop into the real WS dispatch".
+//
+// The test uses CopyProcessor (via processorFn) so it does not require ffmpeg.
+func TestLeaseGrantDrivesLeaseLoop(t *testing.T) {
+	t.Parallel()
+
+	var putCount atomic.Int64
+
+	// Combined server: enroll + WS control plane + segment data plane.
+	mux := http.NewServeMux()
+
+	// POST /worker/enroll
+	mux.HandleFunc("/worker/enroll", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(fakeEnrollResp) //nolint:errcheck
+	})
+
+	// Segment data plane: GET returns fake content; PUT records the upload.
+	mux.HandleFunc("/worker/segments/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("segment-data")) //nolint:errcheck
+		case http.MethodPut:
+			putCount.Add(1)
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// WS control plane: wait for register frame, then send a lease_grant.
+	mux.HandleFunc("/worker/ws", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := testUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// Read (and discard) the register frame.
+		_, _, err = conn.ReadMessage()
+		if err != nil {
+			return
+		}
+
+		// Send a lease_grant pointing at the segment server above.
+		grant := wire.LeaseGrantPayload{
+			JobID: "test-job",
+			Idx:   0,
+			Handles: wire.LeaseHandles{
+				GetHandle: "gh", GetExp: "9999999999", GetSig: "gs",
+				PutHandle: "ph", PutExp: "9999999999", PutSig: "ps",
+			},
+		}
+		f, err := wire.NewFrame("lease_grant", 10, grant)
+		if err != nil {
+			return
+		}
+		raw, err := json.Marshal(f)
+		if err != nil {
+			return
+		}
+		conn.WriteMessage(gorillaws.TextMessage, raw) //nolint:errcheck
+
+		// Keep the connection open long enough for the lease loop to complete.
+		// The test context will cancel first; gorilla will see a close message.
+		time.Sleep(5 * time.Second)
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := Config{
+		ServerURL:   srv.URL,
+		EnrollToken: "tok",
+		Mode:        "batch",
+		Model:       "mock",
+		WorkDir:     t.TempDir(),
+	}
+	c := NewClient(cfg)
+	c.backoff = BackoffConfig{Initial: 10 * time.Millisecond, Max: 50 * time.Millisecond}
+
+	// Inject CopyProcessor so no ffmpeg binary is needed in this integration test.
+	c.processorFn = func(_ Config) (Processor, error) {
+		return CopyProcessor{}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+
+	go c.Run(ctx) //nolint:errcheck
+
+	// Wait for at least one PUT (proves lease loop downloaded, processed, and uploaded).
+	if !waitFor(t, 5*time.Second, func() bool { return putCount.Load() >= 1 }) {
+		t.Fatalf("expected at least 1 PUT upload (lease loop processed segment), got %d", putCount.Load())
+	}
+
+	cancel()
+}
+
 // safeBuffer is a goroutine-safe bytes.Buffer for capturing stdout in tests.
 type safeBuffer struct {
 	mu  sync.Mutex
