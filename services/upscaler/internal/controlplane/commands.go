@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 )
 
 // ErrWorkerNotConnected is returned by Issuer.Issue when the target worker is
@@ -53,5 +55,6 @@ func (is *Issuer) Issue(workerID, cmd string, args json.RawMessage) error {
 		}
 		return err
 	}
+	metrics.UpscaleCommandTotal.WithLabelValues(cmd).Inc()
 	return nil
 }

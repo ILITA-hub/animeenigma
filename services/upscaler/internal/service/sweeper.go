@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/repo"
 )
 
@@ -95,6 +96,7 @@ func (s *Sweeper) sweep(ctx context.Context) {
 		s.log.Warnw("sweeper: ExpireStale failed", "error", err)
 	} else if n > 0 {
 		s.log.Infow("sweeper: expired stale segment leases", "count", n)
+		metrics.UpscaleLeaseExpiredTotal.Add(float64(n))
 	}
 
 	// 2. Mark stale workers as gone.

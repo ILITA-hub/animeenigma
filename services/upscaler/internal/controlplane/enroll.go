@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -101,6 +102,11 @@ func Handle(ctx context.Context, store EnrollTokenStore, workers WorkerUpserter,
 	// 4. Consume the single-use token (fail-closed). Nothing has been mutated
 	//    before this point, so a C-1 rejection above never burns the token.
 	if err := store.Consume(ctx, req.Token); err != nil {
+		if errors.Is(err, ErrTokenNotFound) {
+			metrics.UpscaleEnrollTotal.WithLabelValues("bad_token").Inc()
+		} else {
+			metrics.UpscaleEnrollTotal.WithLabelValues("error").Inc()
+		}
 		return EnrollResponse{}, err
 	}
 
@@ -111,10 +117,12 @@ func Handle(ctx context.Context, store EnrollTokenStore, workers WorkerUpserter,
 		SessionExpiresAt: sessionExp,
 	}
 	if err := workers.Upsert(ctx, w); err != nil {
+		metrics.UpscaleEnrollTotal.WithLabelValues("error").Inc()
 		return EnrollResponse{}, err
 	}
 
 	// 6. Return the response.
+	metrics.UpscaleEnrollTotal.WithLabelValues("ok").Inc()
 	return EnrollResponse{
 		WorkerID: workerID,
 		Handle:   handle,

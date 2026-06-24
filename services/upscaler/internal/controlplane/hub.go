@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	gorillaws "github.com/gorilla/websocket"
 )
@@ -291,6 +292,14 @@ func (c *Conn) dispatch(f Frame) {
 		if err := c.hub.workers.Heartbeat(ctx, c.workerID, hb.JobID, hb.SegmentIdx, time.Now()); err != nil {
 			c.hub.log.Warnw("controlplane: heartbeat DB error", "worker_id", c.workerID, "error", err)
 		}
+
+	case "metrics":
+		var mp MetricsPayload
+		if err := f.Decode(&mp); err != nil {
+			c.hub.log.Warnw("controlplane: bad metrics payload", "worker_id", c.workerID, "error", err)
+			return
+		}
+		metrics.RecordWorkerTelemetry(mp.GPUModel, mp.ImageVersion, mp.GPUUtil, mp.VRAMUsedBytes, mp.DecodeFPS, mp.InferenceFPS, mp.EncodeFPS)
 
 	case "register":
 		// Optional — worker metadata update. Currently a no-op: the enrollment
