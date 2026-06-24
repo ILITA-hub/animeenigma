@@ -26,6 +26,9 @@ Phase 23) reads the same source.
 | File | Rules | Routes to | Owner phase |
 |------|-------|-----------|-------------|
 | `scraper.yaml` | `ScraperPlayabilityRegression` (warning), `ScraperAdDecoySurge` (warning), `ScraperUnplayableSpike` (critical) | `maintenance-webhook` contact point → services/maintenance `/api/grafana-webhook` | Phase 23 / v3.1 |
+| `anomaly.yaml` | `EgressVolumeAnomaly` (warning), `ScraperStreamCascadeLatency` (warning) | `maintenance-webhook` (no provider/server/reason triple → escalate-to-admin) | 2026-06-24 anomaly-alerts spec |
+
+> **`anomaly.yaml` is ClickHouse-datasource** (`aenigma-clickhouse`), not Prometheus. Provisioned CH alert queries MUST use the numeric `format: 1` — the backend plugin rejects the string `"table"` that dashboard panels use (`reference_grafana_clickhouse_format_enum`).
 
 ## Label contract
 

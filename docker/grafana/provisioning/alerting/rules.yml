@@ -792,3 +792,158 @@ groups:
           provider: '{{ $labels.provider }}'
           server: '{{ $labels.server }}'
           reason: '{{ $labels.reason }}'
+
+  # ============================================================================
+  # Anomaly Alerts — spec docs/superpowers/specs/2026-06-24-anomaly-alerts-design.md
+  # ============================================================================
+  # Source-of-truth: infra/grafana/alerts/anomaly.yaml
+  # KEEP IN SYNC: any edit here MUST also be reflected in that file (and vice
+  # versa). Verbatim copy appended inline so Grafana's single-file provisioning
+  # provider loads it without a second provider entry.
+  #
+  # Two ClickHouse-datasource (aenigma-clickhouse) rules over analytics.events.
+  # NB: provisioned CH alert queries use the NUMERIC `format: 1` (not the string
+  # "table" dashboards use) — the backend plugin rejects a string format
+  # (reference_grafana_clickhouse_format_enum). Validated via POST /api/ds/query.
+  # Both route to maintenance-webhook; no provider/server triple => escalate.
+  - orgId: 1
+    name: Anomaly Alerts
+    folder: Alerts
+    interval: 5m
+    rules:
+      # EgressVolumeAnomaly (warning) — last complete hour > baseline + 3-sigma
+      # AND > 500 MiB/h floor, per egress operation over a trailing 168h window.
+      - uid: egress-volume-anomaly
+        title: EgressVolumeAnomaly
+        noDataState: OK
+        execErrState: Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: aenigma-clickhouse
+            model:
+              refId: A
+              datasource:
+                type: grafana-clickhouse-datasource
+                uid: aenigma-clickhouse
+              queryType: sql
+              format: 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              rawSql: |
+                SELECT count() AS value FROM (
+                  WITH hourly AS (
+                    SELECT operation, toStartOfHour(timestamp) AS h, sum(bytes_out + bytes_in) AS b
+                    FROM analytics.events
+                    WHERE timestamp >= now() - INTERVAL 168 HOUR
+                      AND effect_kind = 'egress' AND source = 'be'
+                    GROUP BY operation, h),
+                  stats AS (
+                    SELECT operation,
+                      avgIf(b,       h <  toStartOfHour(now()))                   AS baseline_avg,
+                      stddevPopIf(b, h <  toStartOfHour(now()))                   AS baseline_sd,
+                      anyIf(b,       h =  toStartOfHour(now() - INTERVAL 1 HOUR)) AS last_hour
+                    FROM hourly GROUP BY operation)
+                  SELECT operation FROM stats
+                  WHERE baseline_avg > 0
+                    AND last_hour > baseline_avg + 3 * baseline_sd
+                    AND last_hour > 524288000)
+          - refId: B
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+        for: 0s
+        labels:
+          severity: warning
+          component: streaming
+          reason: egress_anomaly
+        annotations:
+          summary: 'Egress volume anomaly: {{ $values.B }} operation(s) over hourly baseline (>3σ, >500 MiB/h)'
+          description: 'One or more egress operations sent abnormally high volume in the last complete hour (> baseline_avg + 3·σ over the trailing 168h, and > 500 MiB/h). Almost always the video HLS proxy. Open the "Activity Register — Overview" dashboard to see which operation and the volume vs baseline.'
+          reason: egress_anomaly
+
+      # ScraperStreamCascadeLatency (warning) — >=3 stream resolves >12s in 1h
+      - uid: scraper-stream-cascade-latency
+        title: ScraperStreamCascadeLatency
+        noDataState: OK
+        execErrState: Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: aenigma-clickhouse
+            model:
+              refId: A
+              datasource:
+                type: grafana-clickhouse-datasource
+                uid: aenigma-clickhouse
+              queryType: sql
+              format: 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              rawSql: |
+                SELECT count() AS value
+                FROM analytics.events
+                WHERE operation = 'scraper GET /scraper/stream'
+                  AND timestamp >= now() - INTERVAL 1 HOUR
+                  AND duration_ms > 12000
+          - refId: B
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params: [2]
+                    type: gt
+                  operator:
+                    type: and
+        for: 0s
+        labels:
+          severity: warning
+          component: scraper
+          reason: stream_cascade_latency
+        annotations:
+          summary: 'Scraper stream cascade: {{ $values.B }} resolutions over 12s in the last hour'
+          description: 'At least 3 `scraper GET /scraper/stream` resolutions exceeded 12 s in the last hour — a multi-provider failover cascade (normal is sub-second warm / 8 s single-gate). Check provider health (/api/anime/_/scraper/health), the Scraper dashboards, and recent parser_fallback_total.'
+          reason: stream_cascade_latency
