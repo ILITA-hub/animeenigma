@@ -323,8 +323,9 @@ const groupedTracks = computed<TrackGroup[]>(() => {
 
 // Simple provider → hue mapping for badges
 const PROVIDER_HUES: Record<string, string> = {
-  Jimaku: 'background: var(--accent-line); color: var(--brand-cyan)',
-  OpenSubtitles: 'background: var(--line-strong); color: var(--ink-2)',
+  jimaku: 'background: var(--accent-line); color: var(--brand-cyan)',
+  opensubtitles: 'background: var(--line-strong); color: var(--ink-2)',
+  anime365: 'background: var(--accent-line); color: var(--brand-violet)',
 }
 
 function providerBadgeStyle(provider: string): string {
