@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -122,4 +123,60 @@ func (c *Client) ListTranslations(ctx context.Context, episodeID int) ([]Transla
 		return nil, err
 	}
 	return env.Data.Translations, nil
+}
+
+// DownloadSubtitle fetches the subtitle file for a translation. It prefers the
+// ASS form (preserves styling; rendered by the frontend SubtitleOverlay via
+// ass-compiler) and falls back to the pre-converted VTT when the ASS request
+// fails or returns a body that is not valid ASS.
+func (c *Client) DownloadSubtitle(ctx context.Context, transID int) ([]byte, string, error) {
+	assBody, assErr := c.fetchRaw(ctx, fmt.Sprintf("/episodeTranslations/%d.ass?willcache", transID))
+	if assErr == nil && isValidASS(assBody) {
+		return assBody, "ass", nil
+	}
+	vttBody, vttErr := c.fetchRaw(ctx, fmt.Sprintf("/translations/vtt/%d", transID))
+	if vttErr != nil {
+		if assErr != nil {
+			return nil, "", fmt.Errorf("anime365: ass failed (%v) and vtt failed: %w", assErr, vttErr)
+		}
+		return nil, "", fmt.Errorf("anime365: ass invalid and vtt failed: %w", vttErr)
+	}
+	return vttBody, "vtt", nil
+}
+
+// Ping checks anime365 reachability via a cheap search query. Returns latency.
+func (c *Client) Ping(ctx context.Context) (time.Duration, error) {
+	start := time.Now()
+	q := url.Values{}
+	q.Set("query", "naruto")
+	q.Set("limit", "1")
+	var env struct {
+		Data []series `json:"data"`
+	}
+	err := c.getJSON(ctx, "/api/series?"+q.Encode(), &env)
+	return time.Since(start), err
+}
+
+func (c *Client) fetchRaw(ctx context.Context, path string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", c.userAgent)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("anime365: GET %s: status %d", path, resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// isValidASS does a cheap structural check so an HTML error/paywall page never
+// reaches the player as a "subtitle".
+func isValidASS(b []byte) bool {
+	s := string(b)
+	return strings.Contains(s, "[Script Info]") && strings.Contains(s, "Dialogue:")
 }
