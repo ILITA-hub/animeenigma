@@ -82,15 +82,25 @@ type Client struct {
 	// factory. Tests set this to inject CopyProcessor (or another stub) so
 	// the end-to-end WS wiring test does not require a real ffmpeg binary.
 	processorFn func(cfg Config) (Processor, error)
+
+	// commandHandler handles server-sent command frames (cancel, drain, shutdown, etc.).
+	commandHandler *CommandHandler
+
+	// execHandler handles server-sent exec_open frames.
+	execHandler *ExecHandler
 }
 
 // NewClient constructs a Client with default backoff settings.
 func NewClient(cfg Config) *Client {
+	send := make(chan []byte, sendBuf)
+	_, noopCancel := context.WithCancel(context.Background())
 	return &Client{
-		cfg:     cfg,
-		backoff: defaultBackoff,
-		send:    make(chan []byte, sendBuf),
-		stdout:  os.Stdout,
+		cfg:            cfg,
+		backoff:        defaultBackoff,
+		send:           send,
+		stdout:         os.Stdout,
+		commandHandler: NewCommandHandler(noopCancel),
+		execHandler:    NewExecHandler(send),
 	}
 }
 
@@ -260,7 +270,7 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 		if workDir == "" {
 			workDir = os.TempDir()
 		}
-		pp, ppErr := NewPipelineProcessor(c.cfg.Model, 2, workDir)
+		pp, ppErr := NewPipelineProcessor(c.cfg.Model, c.cfg.Scale, workDir)
 		if ppErr != nil {
 			// Model not found (e.g. unregistered name).
 			// Fall back to CopyProcessor so connectivity remains functional.
@@ -370,7 +380,21 @@ func (c *Client) dispatch(f wire.Frame) {
 			}
 		}
 	case "command":
-		c.print("processing")
+		var p wire.CommandPayload
+		if err := f.Decode(&p); err != nil {
+			fmt.Fprintf(os.Stderr, "worker: decode command payload: %v\n", err)
+			return
+		}
+		if err := c.commandHandler.Handle(p.Cmd, p.Args); err != nil {
+			fmt.Fprintf(os.Stderr, "worker: command %q: %v\n", p.Cmd, err)
+		}
+	case "exec_open":
+		var p wire.ExecPayload
+		if err := f.Decode(&p); err != nil {
+			fmt.Fprintf(os.Stderr, "worker: decode exec_open payload: %v\n", err)
+			return
+		}
+		c.execHandler.Handle(context.Background(), p)
 	default:
 		// Forward-compat: unknown frames are ignored silently.
 	}

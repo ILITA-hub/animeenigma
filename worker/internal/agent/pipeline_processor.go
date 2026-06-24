@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/ILITA-hub/animeenigma/worker/internal/upscale"
 )
@@ -32,16 +33,28 @@ func NewPipelineProcessor(modelName string, scale int, workDir string) (*Pipelin
 
 // Process runs the full decode→model→encode pipeline for a single video segment.
 //
-// The Stats fields BytesRead and BytesWritten are set to int64(frames) as a
-// pragmatic proxy for throughput reporting (the caller cares about frame counts,
-// not raw byte sizes, at this layer).
+// BytesRead and BytesWritten are set from the actual file sizes of inSeg and
+// outSeg respectively. Pipeline fps metrics are surfaced from the upscale.Stats.
 func (p *PipelineProcessor) Process(ctx context.Context, inSeg, outSeg string) (Stats, error) {
 	pStats, err := upscale.Process(ctx, inSeg, outSeg, p.model, p.scale, p.workDir)
 	if err != nil {
 		return Stats{}, err
 	}
+
+	var bytesRead, bytesWritten int64
+	if fi, err := os.Stat(inSeg); err == nil {
+		bytesRead = fi.Size()
+	}
+	if fi, err := os.Stat(outSeg); err == nil {
+		bytesWritten = fi.Size()
+	}
+
 	return Stats{
-		BytesRead:    int64(pStats.Frames),
-		BytesWritten: int64(pStats.Frames),
+		BytesRead:    bytesRead,
+		BytesWritten: bytesWritten,
+		DecodeFPS:    pStats.DecodeFPS,
+		InferenceFPS: pStats.InferenceFPS,
+		EncodeFPS:    pStats.EncodeFPS,
+		Frames:       pStats.Frames,
 	}, nil
 }

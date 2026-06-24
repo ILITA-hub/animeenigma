@@ -12,6 +12,14 @@ type Stats struct {
 	BytesRead int64
 	// BytesWritten is the size of the output segment in bytes.
 	BytesWritten int64
+	// DecodeFPS is the frame extraction rate (frames decoded per second).
+	DecodeFPS float64
+	// InferenceFPS is the model throughput (frames upscaled per second).
+	InferenceFPS float64
+	// EncodeFPS is the encoding rate (frames encoded per second).
+	EncodeFPS float64
+	// Frames is the total number of frames processed.
+	Frames int
 }
 
 // Processor is the DI seam for the segment processing pipeline.

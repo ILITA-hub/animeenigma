@@ -1,6 +1,9 @@
 package agent
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 // Config holds the worker agent configuration loaded from environment variables.
 type Config struct {
@@ -28,6 +31,10 @@ type Config struct {
 	// WorkDir is the directory where temporary frame files are written during
 	// processing. Read from env WORK_DIR; defaults to os.TempDir().
 	WorkDir string
+
+	// Scale is the integer upscale factor (e.g. 2 or 4).
+	// Read from env SCALE; defaults to 2.
+	Scale int
 }
 
 // LoadConfig reads the worker configuration from environment variables.
@@ -44,6 +51,12 @@ func LoadConfig() Config {
 	if workDir == "" {
 		workDir = os.TempDir()
 	}
+	scale := 2
+	if s := os.Getenv("SCALE"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			scale = n
+		}
+	}
 	return Config{
 		ServerURL:   os.Getenv("SERVER_URL"),
 		EnrollToken: os.Getenv("ENROLL_TOKEN"),
@@ -51,5 +64,6 @@ func LoadConfig() Config {
 		APIKey:      os.Getenv("API_KEY"),
 		Model:       model,
 		WorkDir:     workDir,
+		Scale:       scale,
 	}
 }

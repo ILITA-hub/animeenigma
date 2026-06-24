@@ -88,3 +88,27 @@ type LeaseGrantPayload struct {
 	Idx     int          `json:"idx"`
 	Handles LeaseHandles `json:"handles"`
 }
+
+// MetricsPayload is sent by the worker to report GPU and processing metrics.
+type MetricsPayload struct {
+	GPUModel       string  `json:"gpu_model"`
+	ImageVersion   string  `json:"image_version"`
+	GPUUtil        float64 `json:"gpu_util"`
+	VRAMUsedBytes  float64 `json:"vram_used_bytes"`
+	VRAMTotalBytes float64 `json:"vram_total_bytes"`
+	GPUTempC       float64 `json:"gpu_temp_c"`
+	GPUPowerW      float64 `json:"gpu_power_w"`
+	DecodeFPS      float64 `json:"decode_fps"`
+	InferenceFPS   float64 `json:"inference_fps"`
+	EncodeFPS      float64 `json:"encode_fps"`
+}
+
+// ExecPayload is used for exec_open/exec_data/exec_close frames.
+type ExecPayload struct {
+	SessionID string `json:"session_id"`
+	Data      []byte `json:"data"`
+	Cols      int    `json:"cols"`
+	Rows      int    `json:"rows"`
+	ExitCode  *int   `json:"exit_code,omitempty"`
+	Pty       bool   `json:"pty,omitempty"`
+}
