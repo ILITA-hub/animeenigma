@@ -13,19 +13,20 @@ import (
 
 // NewRouter builds the analytics chi router.
 //
-//	GET  /health                  (public)
-//	HEAD /health                  (public — Docker healthcheck wget --spider)
-//	GET  /metrics                  (public, prom format)
-//	POST /api/analytics/collect    (public — anonymous users tracked; gateway
-//	                                forwards the full path UNCHANGED, same as
-//	                                every other service serves /api/<name>/...)
-//	POST /api/analytics/client-errors (public — FE error log sink, log-only)
-//	POST /api/analytics/player-events (public — player resolve/stall telemetry)
-//	POST /internal/effects         (internal — BE egress producer sink)
-//	POST /internal/erase           (internal — gateway never proxies /internal/*)
+//	GET  /health                      (public)
+//	HEAD /health                      (public — Docker healthcheck wget --spider)
+//	GET  /metrics                      (public, prom format)
+//	POST /api/analytics/collect        (public — anonymous users tracked; gateway
+//	                                    forwards the full path UNCHANGED, same as
+//	                                    every other service serves /api/<name>/...)
+//	POST /api/analytics/client-errors  (public — FE error log sink, log-only)
+//	POST /api/analytics/player-events  (public — player resolve/stall telemetry)
+//	POST /internal/effects             (internal — BE egress producer sink)
+//	POST /internal/erase               (internal — gateway never proxies /internal/*)
 //	POST /internal/read-thresholds/recompute (internal — scheduler daily trigger)
-//	POST /internal/player-ranking/recompute (internal — scheduler daily trigger)
-//	POST /internal/probe/run       (internal — scheduler daily trigger; on-demand probe)
+//	POST /internal/player-ranking/recompute  (internal — scheduler daily trigger)
+//	POST /internal/probe/run           (internal — scheduler daily trigger; on-demand probe)
+//	POST /internal/upscale-telemetry   (internal — GPU telemetry from upscaler; CD-15; never gateway-proxied)
 func NewRouter(
 	collect *handler.CollectHandler,
 	clientError *handler.ClientErrorHandler,
@@ -35,6 +36,7 @@ func NewRouter(
 	readThresholds *handler.ReadThresholdHandler,
 	playerRanking *handler.PlayerRankingHandler,
 	probe *handler.ProbeHandler,
+	upscaleTelemetry *handler.UpscaleTelemetryHandler,
 	log *logger.Logger,
 	collector *metrics.Collector,
 ) http.Handler {
@@ -98,6 +100,13 @@ func NewRouter(
 	// never gateway-proxied.
 	if probe != nil {
 		r.Post("/internal/probe/run", probe.ServeHTTP)
+	}
+	// /internal/upscale-telemetry ingests per-worker GPU telemetry batches from
+	// the upscaler service (CD-15). The upscaler is the trust boundary — the
+	// untrusted worker never touches analytics directly. Docker-network only —
+	// never gateway-proxied.
+	if upscaleTelemetry != nil {
+		r.Post("/internal/upscale-telemetry", upscaleTelemetry.ServeHTTP)
 	}
 
 	return r

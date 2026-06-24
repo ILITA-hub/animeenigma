@@ -1269,6 +1269,7 @@ services:
       DEFAULT_SCALE: ${UPSCALER_DEFAULT_SCALE:-2}
       REMOTE_SHELL_ENABLED: ${UPSCALER_REMOTE_SHELL_ENABLED:-false}
       TRACING_ENABLED: "false"
+      ANALYTICS_INTERNAL_URL: http://analytics:8092
     ports:
       - "127.0.0.1:8096:8096"
     volumes:

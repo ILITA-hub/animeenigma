@@ -14,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/analyticsclient"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/capability"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
@@ -86,14 +87,18 @@ func main() {
 	defer redisCache.Close()
 
 	// Activity-register effect producer (non-blocking, drop-on-full).
-	analyticsURL := os.Getenv("ANALYTICS_INTERNAL_URL")
-	if analyticsURL == "" {
-		analyticsURL = "http://analytics:8092"
-	}
+	analyticsURL := cfg.Upscaler.AnalyticsInternalURL
 	effectProducer := tracing.NewProducer(tracing.ProducerConfig{AnalyticsURL: analyticsURL})
 	effectProducer.Start()
 	defer effectProducer.Stop()
 	tracing.SetGlobalSink(effectProducer)
+
+	// Per-worker GPU telemetry producer (CD-15): high-cardinality data → CH via
+	// the analytics service. Separate from the effect producer — different wire
+	// format and endpoint. Drop-on-full; an analytics outage is swallowed.
+	gpuTelemetryClient := analyticsclient.New(analyticsURL, analyticsclient.DefaultConfig())
+	gpuTelemetryClient.Start()
+	defer gpuTelemetryClient.Stop()
 
 	// DB effect callbacks + daily P95 ReadGate refresher.
 	dbEffectsCtx, dbEffectsCancel := context.WithCancel(context.Background())
@@ -119,6 +124,8 @@ func main() {
 
 	// WS Hub: manages worker WebSocket connections.
 	hub := controlplane.NewHub(leaser, workerRepo, log)
+	// Wire the GPU telemetry producer so the hub forwards metrics frames to CH.
+	hub.SetAnalyticsClient(gpuTelemetryClient)
 
 	// Enroll store: production transactional enroll path (EnrollTx, NOT Handle).
 	enrollStore := controlplane.NewGormEnrollStore(db.DB)

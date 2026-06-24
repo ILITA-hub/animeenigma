@@ -371,3 +371,59 @@ func (s *ClickHouseStore) InsertProbeRows(ctx context.Context, rows []probe.Prob
 
 // Compile-time assertion: ClickHouseStore must satisfy probe.CHWriter.
 var _ probe.CHWriter = (*ClickHouseStore)(nil)
+
+// UpscaleTelemetryRow is one per-worker GPU telemetry sample forwarded from
+// the upscaler service. JSON tags match the wire shape the upscaler's
+// analyticsclient sends, in DDL column order (CD-15).
+type UpscaleTelemetryRow struct {
+	TS           time.Time `json:"ts"`
+	WorkerID     string    `json:"worker_id"`
+	GPUModel     string    `json:"gpu_model"`
+	ImageVersion string    `json:"image_version"`
+	JobID        string    `json:"job_id"`
+	SegmentIdx   int32     `json:"segment_idx"`
+	GPUUtil      float32   `json:"gpu_util"`
+	VRAMUsedB    uint64    `json:"vram_used_b"`
+	VRAMTotalB   uint64    `json:"vram_total_b"`
+	GPUTempC     float32   `json:"gpu_temp_c"`
+	GPUPowerW    float32   `json:"gpu_power_w"`
+	DecodeFPS    float32   `json:"decode_fps"`
+	InferenceFPS float32   `json:"inference_fps"`
+	EncodeFPS    float32   `json:"encode_fps"`
+}
+
+// InsertUpscaleTelemetry persists a batch of GPU telemetry rows to the
+// upscale_worker_telemetry table. Empty batches are a no-op. Each row is
+// appended in exact DDL column order using the PrepareBatch/Append/Send
+// idiom (mirrors InsertBatch and InsertProbeRows).
+func (s *ClickHouseStore) InsertUpscaleTelemetry(ctx context.Context, rows []UpscaleTelemetryRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO upscale_worker_telemetry")
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		// Column order MUST match createUpscaleTelemetryTableDDL exactly.
+		if err := batch.Append(
+			r.TS,           // ts             DateTime64(3)
+			r.WorkerID,     // worker_id      String
+			r.GPUModel,     // gpu_model      LowCardinality(String)
+			r.ImageVersion, // image_version  LowCardinality(String)
+			r.JobID,        // job_id         String
+			r.SegmentIdx,   // segment_idx    Int32
+			r.GPUUtil,      // gpu_util       Float32
+			r.VRAMUsedB,    // vram_used_b    UInt64
+			r.VRAMTotalB,   // vram_total_b   UInt64
+			r.GPUTempC,     // gpu_temp_c     Float32
+			r.GPUPowerW,    // gpu_power_w    Float32
+			r.DecodeFPS,    // decode_fps     Float32
+			r.InferenceFPS, // inference_fps  Float32
+			r.EncodeFPS,    // encode_fps     Float32
+		); err != nil {
+			return err
+		}
+	}
+	return batch.Send()
+}

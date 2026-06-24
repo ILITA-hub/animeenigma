@@ -52,6 +52,7 @@ type UpscalerConfig struct {
 	RemoteShellEnabled  bool
 	StagingDir          string
 	TorrentsDir         string
+	AnalyticsInternalURL string // default http://analytics:8092 (CD-15: GPU telemetry → CH)
 }
 
 // Load reads environment variables and returns a validated Config.
@@ -87,14 +88,15 @@ func Load() (*Config, error) {
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Upscaler: UpscalerConfig{
-			LibraryURL:          getEnv("LIBRARY_URL", "http://library:8089"),
-			JobCapabilitySecret: getEnv("JOB_CAPABILITY_SECRET", ""),
-			SegmentSeconds:      getEnvInt("SEGMENT_SECONDS", 45),
-			DefaultScale:        getEnvInt("DEFAULT_SCALE", 2),
-			RemoteShellEnabled:  getEnvBool("REMOTE_SHELL_ENABLED", true),
-			StagingDir:          getEnv("UPSCALE_STAGING_DIR", "/data/upscale-staging"),
-			TorrentsDir:         getEnv("LIBRARY_TORRENTS_DIR", "/data/torrents"),
-			MinIO:               loadMinIO(),
+			LibraryURL:           getEnv("LIBRARY_URL", "http://library:8089"),
+			JobCapabilitySecret:  getEnv("JOB_CAPABILITY_SECRET", ""),
+			SegmentSeconds:       getEnvInt("SEGMENT_SECONDS", 45),
+			DefaultScale:         getEnvInt("DEFAULT_SCALE", 2),
+			RemoteShellEnabled:   getEnvBool("REMOTE_SHELL_ENABLED", true),
+			StagingDir:           getEnv("UPSCALE_STAGING_DIR", "/data/upscale-staging"),
+			TorrentsDir:          getEnv("LIBRARY_TORRENTS_DIR", "/data/torrents"),
+			MinIO:                loadMinIO(),
+			AnalyticsInternalURL: getEnv("ANALYTICS_INTERNAL_URL", "http://analytics:8092"),
 		},
 	}, nil
 }

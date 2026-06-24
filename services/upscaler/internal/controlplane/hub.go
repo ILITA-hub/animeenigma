@@ -10,6 +10,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/analyticsclient"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	gorillaws "github.com/gorilla/websocket"
 )
@@ -61,11 +62,12 @@ type Hub struct {
 	mu    sync.RWMutex
 	conns map[string]*Conn
 
-	leaser     Leaser
-	workers    WorkerHeartbeater
-	log        *logger.Logger
-	cfg        HubConfig
-	execRouter ExecRouter // optional; nil = ignore exec frames
+	leaser          Leaser
+	workers         WorkerHeartbeater
+	log             *logger.Logger
+	cfg             HubConfig
+	execRouter      ExecRouter             // optional; nil = ignore exec frames
+	analyticsClient *analyticsclient.Client // optional; nil = telemetry forwarding disabled
 }
 
 // SetExecRouter wires an ExecRouter to handle exec_data and exec_close frames
@@ -73,6 +75,16 @@ type Hub struct {
 func (h *Hub) SetExecRouter(r ExecRouter) {
 	h.mu.Lock()
 	h.execRouter = r
+	h.mu.Unlock()
+}
+
+// SetAnalyticsClient wires an analyticsclient.Client to forward per-worker
+// GPU telemetry to ClickHouse via the analytics service (CD-15). A nil client
+// disables telemetry forwarding (safe no-op on Send). Must be called before
+// any worker connects.
+func (h *Hub) SetAnalyticsClient(c *analyticsclient.Client) {
+	h.mu.Lock()
+	h.analyticsClient = c
 	h.mu.Unlock()
 }
 
@@ -211,14 +223,24 @@ type Conn struct {
 	// LeaseNext TX + Heartbeat) is a duplicate and is dropped. This bounds the
 	// number of lease goroutines to ≤1 per connection.
 	leaseInFlight atomic.Bool
+
+	// lastJobID and lastSegmentIdx carry the job/segment attribution for the
+	// most recent heartbeat frame. They are READ by the metrics frame handler
+	// and WRITTEN by the heartbeat frame handler. Both fields are accessed only
+	// from the single per-connection read-pump goroutine (dispatch is called
+	// sequentially by readPump; only the lease path is offloaded to a goroutine
+	// and it does NOT touch these fields) — so NO locking is needed.
+	lastJobID      string
+	lastSegmentIdx int // initialised to -1 (sentinel: no heartbeat yet; 0 is a valid first segment)
 }
 
 func newConn(workerID string, ws *gorillaws.Conn, hub *Hub) *Conn {
 	return &Conn{
-		workerID: workerID,
-		ws:       ws,
-		send:     make(chan []byte, connSendBuf),
-		hub:      hub,
+		workerID:       workerID,
+		ws:             ws,
+		send:           make(chan []byte, connSendBuf),
+		hub:            hub,
+		lastSegmentIdx: -1, // sentinel: no heartbeat received yet
 	}
 }
 
@@ -289,6 +311,11 @@ func (c *Conn) dispatch(f Frame) {
 			c.hub.log.Warnw("controlplane: bad heartbeat payload", "worker_id", c.workerID, "error", err)
 			return
 		}
+		// Update job/segment attribution for the next metrics frame.
+		// Safe without a lock: both fields are accessed only from this
+		// single per-connection read-pump goroutine.
+		c.lastJobID = hb.JobID
+		c.lastSegmentIdx = hb.SegmentIdx
 		if err := c.hub.workers.Heartbeat(ctx, c.workerID, hb.JobID, hb.SegmentIdx, time.Now()); err != nil {
 			c.hub.log.Warnw("controlplane: heartbeat DB error", "worker_id", c.workerID, "error", err)
 		}
@@ -299,7 +326,31 @@ func (c *Conn) dispatch(f Frame) {
 			c.hub.log.Warnw("controlplane: bad metrics payload", "worker_id", c.workerID, "error", err)
 			return
 		}
+		// Prometheus (low-cardinality, reduced field set) — keep exactly as-is.
 		metrics.RecordWorkerTelemetry(mp.GPUModel, mp.ImageVersion, mp.GPUUtil, mp.VRAMUsedBytes, mp.DecodeFPS, mp.InferenceFPS, mp.EncodeFPS)
+		// ClickHouse (high-cardinality, full payload) via analyticsclient (CD-15).
+		// worker_id and ts are stamped SERVER-SIDE; job_id/segment_idx come from
+		// the last heartbeat frame (both read from the same read-pump goroutine —
+		// no lock needed). A nil client is a safe no-op.
+		c.hub.mu.RLock()
+		ac := c.hub.analyticsClient
+		c.hub.mu.RUnlock()
+		ac.Send(analyticsclient.UpscaleTelemetryRow{
+			TS:           time.Now(),
+			WorkerID:     c.workerID,
+			GPUModel:     mp.GPUModel,
+			ImageVersion: mp.ImageVersion,
+			JobID:        c.lastJobID,
+			SegmentIdx:   int32(c.lastSegmentIdx),
+			GPUUtil:      float32(mp.GPUUtil),
+			VRAMUsedB:    uint64(mp.VRAMUsedBytes),
+			VRAMTotalB:   uint64(mp.VRAMTotalBytes),
+			GPUTempC:     float32(mp.GPUTempC),
+			GPUPowerW:    float32(mp.GPUPowerW),
+			DecodeFPS:    float32(mp.DecodeFPS),
+			InferenceFPS: float32(mp.InferenceFPS),
+			EncodeFPS:    float32(mp.EncodeFPS),
+		})
 
 	case "register":
 		// Optional — worker metadata update. Currently a no-op: the enrollment
