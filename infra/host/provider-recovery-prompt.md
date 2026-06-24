@@ -77,10 +77,13 @@ gogoanime → animepahe → allanime → animefever → miruro → nineanime →
    handed-off / fix-shipped <commit>), and next step. This is the dedup memory for
    step 2.
 
-7) REPORT TO TELEGRAM (admin chat)
-   Send one concise HTML message (vars from docker/.env — TELEGRAM_ALERTS_BOT_TOKEN,
-   TELEGRAM_ADMIN_CHAT_ID):
-     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_ALERTS_BOT_TOKEN}/sendMessage" \
+7) REPORT TO TELEGRAM (admin chat) — as the MAINTENANCE bot
+   Reuse the maintenance bot identity, NOT the alerts bot. Its token lives in
+   docker/maintenance.env (the EnvironmentFile the host maintenance service runs
+   with) — docker/.env's TELEGRAM_BOT_TOKEN is a DIFFERENT bot, so source the
+   maintenance env explicitly. Send one concise HTML message:
+     set -a; . docker/maintenance.env; set +a   # loads TELEGRAM_BOT_TOKEN + TELEGRAM_ADMIN_CHAT_ID
+     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
        -d "chat_id=${TELEGRAM_ADMIN_CHAT_ID}" --data-urlencode text@- -d parse_mode=HTML
    Format:
      🔧 <b>Provider recovery — &lt;provider&gt;</b>
