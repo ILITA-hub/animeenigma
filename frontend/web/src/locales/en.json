@@ -446,7 +446,27 @@
         "providersDown": "Couldn't reach: {providers}",
         "noTrack": "No subtitles for this language",
         "moreLanguages": "More languages ({count})",
-        "fromProvider": "Subtitles from {provider}"
+        "fromProvider": "Subtitles from {provider}",
+        "title": "Subtitles",
+        "appearance": "Appearance",
+        "back": "Back",
+        "sample": "Sample subtitle",
+        "textSize": "Text size",
+        "background": "Background",
+        "timing": "Timing",
+        "inSync": "In sync",
+        "offsetLater": "{seconds}s later",
+        "offsetEarlier": "{seconds}s earlier",
+        "reset": "Reset",
+        "browseTitle": "All subtitles",
+        "browseAll": "All subtitles ({count})",
+        "browseAllNoCount": "All subtitles",
+        "tracksCount": "{count} tracks",
+        "searchPlaceholder": "Search by label or provider…",
+        "providerLabel": "Provider",
+        "langLabel": "Lang",
+        "clearSearch": "Clear search",
+        "hardsub": "Subtitles are burned into the video by {provider}"
       }
     }
   },

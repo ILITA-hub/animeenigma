@@ -5,7 +5,10 @@ import BrowseSubsModal from './BrowseSubsModal.vue'
 // BrowseSubsModal uses $t() in template; stub vue-i18n so tests mount without
 // a real plugin — keys are returned as-is (good enough for DOM presence checks).
 vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (k: string) => k }),
+  useI18n: () => ({
+    t: (k: string, params?: Record<string, unknown>) =>
+      params ? `${k} ${JSON.stringify(params)}` : k,
+  }),
 }))
 
 const tracks = [
@@ -13,21 +16,40 @@ const tracks = [
   { url: 't2', provider: 'OpenSubtitles', lang: 'en', label: 'Re:Zero 12 HorribleSubs', format: 'srt' },
 ]
 
+// >8 tracks so the adaptive search/filter chrome renders.
+const many = Array.from({ length: 9 }, (_, i) => ({
+  url: `m${i}`,
+  provider: i % 2 ? 'opensubtitles' : 'jimaku',
+  lang: i % 2 ? 'en' : 'ja',
+  label: i === 0 ? 'HorribleSubs special' : `Track ${i}`,
+  format: 'srt',
+}))
+
 describe('BrowseSubsModal', () => {
   it('groups tracks by language', () => {
     const w = mount(BrowseSubsModal, { props: { tracks, selectedUrl: null } })
     expect(w.findAll('[data-test="lang-group"]').length).toBe(2)
   })
-  it('search narrows the visible tracks', async () => {
+
+  it('the whole track row is the click target and emits select', async () => {
     const w = mount(BrowseSubsModal, { props: { tracks, selectedUrl: null } })
-    await w.find('[data-test="search"]').setValue('horriblesubs')
-    expect(w.findAll('[data-test="track"]').length).toBe(1)
-  })
-  it('emits select with the track', async () => {
-    const w = mount(BrowseSubsModal, { props: { tracks, selectedUrl: null } })
-    await w.find('[data-test="track"] [data-test="select"]').trigger('click')
+    await w.find('[data-test="track"]').trigger('click')
     expect(w.emitted('select')).toBeTruthy()
   })
+
+  it('hides search/filter chrome for small track counts', () => {
+    const w = mount(BrowseSubsModal, { props: { tracks, selectedUrl: null } })
+    expect(w.find('[data-test="search"]').exists()).toBe(false)
+  })
+
+  it('shows search past the threshold and narrows the visible tracks', async () => {
+    const w = mount(BrowseSubsModal, { props: { tracks: many, selectedUrl: null } })
+    const search = w.find('[data-test="search"]')
+    expect(search.exists()).toBe(true)
+    await search.setValue('horriblesubs')
+    expect(w.findAll('[data-test="track"]').length).toBe(1)
+  })
+
   it('closes on Escape', () => {
     const w = mount(BrowseSubsModal, { props: { tracks, selectedUrl: null } })
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
@@ -47,7 +69,7 @@ describe('BrowseSubsModal', () => {
     expect(w.emitted('retry')).toBeTruthy()
   })
 
-  it('emits off when "Subtitles off" is clicked', async () => {
+  it('emits off when the "Subtitles off" row is clicked', async () => {
     const w = mount(BrowseSubsModal, { props: { tracks: [{ url: 'u', provider: 'jimaku', lang: 'ja', label: 'L', format: 'srt' }], selectedUrl: 'u' } })
     await w.find('[data-test="subs-off"]').trigger('click')
     expect(w.emitted('off')).toBeTruthy()

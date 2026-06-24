@@ -274,14 +274,13 @@
       <SubtitlesMenu
         :sub-lang="state.subLang.value"
         :available-sub-langs="availableSubLangs"
-        :provider-chip="providerChip"
-        :provider-active="providerActive"
+        :lang-sources="langSources"
+        :browse-count="subtitleTracks.length"
         :hardsub-note="hardsubNote"
         :sub-size="state.subSize.value"
         :sub-bg="state.subBg.value"
         :sub-offset="state.subOffset.value"
         @pick-lang="onPickSubLang"
-        @select-provider="onSelectProviderSub"
         @update:sub-size="v => { state.subSize.value = v }"
         @update:sub-bg="v => { state.subBg.value = v }"
         @update:sub-offset="v => { state.subOffset.value = v }"
@@ -2214,15 +2213,17 @@ const availableSubLangs = computed(() =>
 const providerBundledTracks = computed<SubTrack[]>(
   () => (providerSubtitles.value ?? []) as SubTrack[],
 )
-const providerChip = computed<{ provider: string } | null>(() =>
-  providerBundledTracks.value.length > 0
-    ? { provider: providerBundledTracks.value[0].provider }
-    : null,
-)
-const providerBundledUrls = computed(() => new Set(providerBundledTracks.value.map((t) => t.url)))
-const providerActive = computed(
-  () => !!chosenSub.value && providerBundledUrls.value.has(chosenSub.value.url),
-)
+
+// Per-language source label for the quick menu rows ("Русский · Crunchyroll").
+// The best track for a language (bundled-first) supplies the meta line.
+const langSources = computed<Record<string, string>>(() => {
+  const m: Record<string, string> = {}
+  for (const l of ['ru', 'en', 'ja']) {
+    const best = pickBestForLang(subtitleTracks.value, l)
+    if (best) m[l] = best.label
+  }
+  return m
+})
 
 // Informational note for the subs menu: when there's no soft track but the
 // stream is a SUB cut, the subs the user sees are hardsubbed by the provider.
@@ -2232,11 +2233,7 @@ const hardsubNote = computed(() => {
   if (subtitleTracks.value.length > 0) return null // soft tracks exist → not hardsubbed
   const prov = activeProviderName.value
   if (!prov) return null
-  const langName =
-    state.combo.value.lang === 'ru' ? 'Russian'
-    : state.combo.value.lang === 'ja' ? 'Japanese'
-    : 'English'
-  return `${langName} subtitles are burned into the video by ${prov}`
+  return t('player.aePlayer.subs.hardsub', { provider: prov })
 })
 
 function onSelectSubTrack(track: SubTrack) {
@@ -2254,17 +2251,11 @@ function onSubtitlesOff() {
   browseOpen.value = false
 }
 
-// Quick-chooser RU/EN/JP fast button → pick the best track for that language.
+// Quick-chooser RU/EN/JP language row → pick the best track for that language.
 function onPickSubLang(v: string) {
   if (v === 'off') { onSubtitlesOff(); return }
   const track = pickBestForLang(subtitleTracks.value, v)
   if (track) onSelectSubTrack(track)
-}
-
-// Quick-chooser provider chip → select the provider's bundled track.
-function onSelectProviderSub() {
-  const t = providerBundledTracks.value[0]
-  if (t) onSelectSubTrack(t)
 }
 
 // ─── Resume pill ─────────────────────────────────────────────────────────────

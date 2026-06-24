@@ -1,10 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SubtitlesMenu from './SubtitlesMenu.vue'
 
 // SubtitlesMenu uses $t() in template; stub vue-i18n so tests mount without a
 // real plugin — keys/params are returned as a readable string.
-import { vi } from 'vitest'
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (k: string, params?: Record<string, unknown>) =>
@@ -15,8 +14,7 @@ vi.mock('vue-i18n', () => ({
 const base = {
   subLang: 'off',
   availableSubLangs: ['en', 'ja'],
-  providerChip: null as { provider: string } | null,
-  providerActive: false,
+  langSources: { en: 'SubsPlease', ja: 'Kitsunekko' } as Record<string, string>,
   subSize: 100,
   subBg: 50,
   subOffset: 0,
@@ -25,25 +23,39 @@ const base = {
 const stubs = { Stepper: true }
 
 describe('SubtitlesMenu', () => {
-  it('renders fixed Off/RU/EN/JP fast buttons', () => {
+  it('renders Off plus three native language rows (RU/EN/JP)', () => {
     const w = mount(SubtitlesMenu, { props: { ...base }, global: { stubs } })
-    const labels = w.findAll('[data-test="fast-lang"]').map((b) => b.text())
-    expect(labels).toEqual(['RU', 'EN', 'JP'])
     expect(w.find('[data-test="subs-off"]').exists()).toBe(true)
+    const langs = w.findAll('[data-test="lang-row"]').map((b) => b.attributes('data-lang'))
+    expect(langs).toEqual(['ru', 'en', 'ja'])
+    // Native autonyms, not codes
+    const ru = w.find('[data-test="lang-row"][data-lang="ru"]')
+    expect(ru.text()).toContain('Русский')
   })
 
   it('disables a language with no available track (RU here)', () => {
     const w = mount(SubtitlesMenu, { props: { ...base }, global: { stubs } })
-    const ru = w.find('[data-test="fast-lang"][data-lang="ru"]')
+    const ru = w.find('[data-test="lang-row"][data-lang="ru"]')
     expect(ru.attributes('disabled')).toBeDefined()
-    const en = w.find('[data-test="fast-lang"][data-lang="en"]')
+    const en = w.find('[data-test="lang-row"][data-lang="en"]')
     expect(en.attributes('disabled')).toBeUndefined()
   })
 
-  it('emits pick-lang with the language code when an enabled button is clicked', async () => {
+  it('shows the source label as row meta for an available language', () => {
     const w = mount(SubtitlesMenu, { props: { ...base }, global: { stubs } })
-    await w.find('[data-test="fast-lang"][data-lang="en"]').trigger('click')
+    expect(w.find('[data-test="lang-row"][data-lang="en"]').text()).toContain('SubsPlease')
+  })
+
+  it('emits pick-lang with the language code when an enabled row is clicked', async () => {
+    const w = mount(SubtitlesMenu, { props: { ...base }, global: { stubs } })
+    await w.find('[data-test="lang-row"][data-lang="en"]').trigger('click')
     expect(w.emitted('pick-lang')?.[0]).toEqual(['en'])
+  })
+
+  it('does not emit pick-lang for a disabled row', async () => {
+    const w = mount(SubtitlesMenu, { props: { ...base }, global: { stubs } })
+    await w.find('[data-test="lang-row"][data-lang="ru"]').trigger('click')
+    expect(w.emitted('pick-lang')).toBeFalsy()
   })
 
   it('emits pick-lang off when Off is clicked', async () => {
@@ -52,30 +64,24 @@ describe('SubtitlesMenu', () => {
     expect(w.emitted('pick-lang')?.[0]).toEqual(['off'])
   })
 
-  it('hides the provider chip when there are no bundled subs', () => {
+  it('toggles to the appearance face and back', async () => {
     const w = mount(SubtitlesMenu, { props: { ...base }, global: { stubs } })
-    expect(w.find('[data-test="sub-provider-chip"]').exists()).toBe(false)
+    // Captions face shows language rows; appearance controls hidden
+    expect(w.find('[data-test="sub-size"]').exists()).toBe(false)
+    await w.find('[data-test="style-toggle"]').trigger('click')
+    expect(w.find('[data-test="sub-size"]').exists()).toBe(true)
+    expect(w.find('[data-test="lang-row"]').exists()).toBe(false)
+    await w.find('[data-test="style-back"]').trigger('click')
+    expect(w.find('[data-test="lang-row"]').exists()).toBe(true)
   })
 
-  it('shows the provider chip and emits select-provider when bundled subs exist', async () => {
-    const w = mount(SubtitlesMenu, {
-      props: { ...base, providerChip: { provider: 'gogoanime' } },
-      global: { stubs },
-    })
-    const chip = w.find('[data-test="sub-provider-chip"]')
-    expect(chip.exists()).toBe(true)
-    expect(chip.text()).toContain('gogoanime')
-    await chip.trigger('click')
-    expect(w.emitted('select-provider')).toBeTruthy()
-  })
-
-  it('highlights the provider chip (not the lang button) when providerActive', () => {
-    const w = mount(SubtitlesMenu, {
-      props: { ...base, subLang: 'en', providerChip: { provider: 'gogoanime' }, providerActive: true },
-      global: { stubs },
-    })
-    expect(w.find('[data-test="sub-provider-chip"]').classes().join(' ')).toContain('text-[var(--brand-cyan)]')
-    expect(w.find('[data-test="fast-lang"][data-lang="en"]').classes().join(' ')).not.toContain('text-[var(--brand-cyan)]')
+  it('emits update:subSize when the size slider changes', async () => {
+    const w = mount(SubtitlesMenu, { props: { ...base }, global: { stubs } })
+    await w.find('[data-test="style-toggle"]').trigger('click')
+    const size = w.find('[data-test="sub-size"]')
+    ;(size.element as HTMLInputElement).value = '150'
+    await size.trigger('input')
+    expect(w.emitted('update:subSize')?.[0]).toEqual([150])
   })
 
   it('emits open-browse', async () => {

@@ -446,7 +446,27 @@
         "providersDown": "Недоступно: {providers}",
         "noTrack": "Нет субтитров для этого языка",
         "moreLanguages": "Ещё языки ({count})",
-        "fromProvider": "Субтитры от {provider}"
+        "fromProvider": "Субтитры от {provider}",
+        "title": "Субтитры",
+        "appearance": "Вид",
+        "back": "Назад",
+        "sample": "Пример субтитров",
+        "textSize": "Размер",
+        "background": "Фон",
+        "timing": "Сдвиг",
+        "inSync": "в синхроне",
+        "offsetLater": "на {seconds}с позже",
+        "offsetEarlier": "на {seconds}с раньше",
+        "reset": "Сброс",
+        "browseTitle": "Все субтитры",
+        "browseAll": "Все субтитры ({count})",
+        "browseAllNoCount": "Все субтитры",
+        "tracksCount": "дорожек: {count}",
+        "searchPlaceholder": "Поиск по группе или провайдеру…",
+        "providerLabel": "Провайдер",
+        "langLabel": "Язык",
+        "clearSearch": "Очистить поиск",
+        "hardsub": "Субтитры вшиты в видео ({provider})"
       }
     }
   },

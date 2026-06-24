@@ -446,7 +446,27 @@
         "providersDown": "接続できません: {providers}",
         "noTrack": "この言語の字幕はありません",
         "moreLanguages": "他の言語 ({count})",
-        "fromProvider": "{provider}の字幕"
+        "fromProvider": "{provider}の字幕",
+        "title": "字幕",
+        "appearance": "表示",
+        "back": "戻る",
+        "sample": "字幕のサンプル",
+        "textSize": "サイズ",
+        "background": "背景",
+        "timing": "タイミング",
+        "inSync": "同期中",
+        "offsetLater": "{seconds}秒 遅らせる",
+        "offsetEarlier": "{seconds}秒 早める",
+        "reset": "リセット",
+        "browseTitle": "すべての字幕",
+        "browseAll": "すべての字幕 ({count})",
+        "browseAllNoCount": "すべての字幕",
+        "tracksCount": "{count} 件",
+        "searchPlaceholder": "ラベルやプロバイダーで検索…",
+        "providerLabel": "プロバイダー",
+        "langLabel": "言語",
+        "clearSearch": "検索をクリア",
+        "hardsub": "字幕は{provider}によって映像に焼き込まれています"
       }
     }
   },
