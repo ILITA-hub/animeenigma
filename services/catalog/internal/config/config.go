@@ -27,6 +27,8 @@ type Config struct {
 	// OpenSubtitles — workstream raw-jp, Phase 02. Multi-language
 	// subtitle source merged with Jimaku by the subs aggregator.
 	OpenSubtitles OpenSubtitlesConfig
+	// Anime365 — RU fansub aggregator (smotret-anime). Spec 2026-06-24.
+	Anime365 Anime365Config
 	// Library — self-hosted MinIO HLS source for the first-party ("ae")
 	// provider and the raw JP provider (library-only since 2026-06-22).
 	Library LibraryConfig
@@ -95,6 +97,13 @@ type OpenSubtitlesConfig struct {
 	APIKey    string
 	UserAgent string
 	Timeout   time.Duration
+}
+
+// Anime365Config — Russian subtitle source (smotret-anime / anime365).
+// No API key; only a base URL + enable flag.
+type Anime365Config struct {
+	BaseURL string
+	Enabled bool
 }
 
 // LibraryConfig configures the catalog → library HTTP client used by
@@ -186,6 +195,10 @@ func Load() (*Config, error) {
 			APIKey:    getEnv("OPENSUBTITLES_API_KEY", ""),
 			UserAgent: getEnv("OPENSUBTITLES_USER_AGENT", "AnimeEnigma/1.0"),
 			Timeout:   getEnvDuration("OPENSUBTITLES_TIMEOUT", 10*time.Second),
+		},
+		Anime365: Anime365Config{
+			BaseURL: getEnv("ANIME365_BASE_URL", "https://smotret-anime.org"),
+			Enabled: getEnvBool("ANIME365_ENABLED", true),
 		},
 		Library: LibraryConfig{
 			APIURL:  getEnv("LIBRARY_API_URL", "http://library:8089"),

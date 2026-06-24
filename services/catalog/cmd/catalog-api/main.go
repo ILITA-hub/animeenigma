@@ -19,6 +19,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/anime365"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
@@ -476,6 +477,13 @@ func main() {
 		Logger:    log,
 		Transport: tracing.WrapTransport(nil),
 	})
+	// anime365 (smotret-anime) — Russian fansubs, no key. Spec 2026-06-24.
+	anime365Client := anime365.NewClient(anime365.Config{
+		BaseURL:   cfg.Anime365.BaseURL,
+		Enabled:   cfg.Anime365.Enabled,
+		Timeout:   8 * time.Second,
+		Transport: tracing.WrapTransport(nil),
+	})
 	// Wrap idmapping's IPv4-forced transport (preserve the dialer; add recording).
 	idMapClient := idmapping.NewClient(
 		idmapping.WithTransport(tracing.WrapTransport(idmapping.NewIPv4Transport())),
@@ -492,9 +500,12 @@ func main() {
 	if openSubsClient.IsConfigured() {
 		subPingers["opensubtitles"] = openSubsClient
 	}
+	if anime365Client.IsConfigured() {
+		subPingers["anime365"] = anime365Client
+	}
 	subtitleProbe := subprobe.New(subHealthStore, subPingers, 2*time.Second, 8*time.Second, log)
 	internalSubtitleProbeHandler := handler.NewInternalSubtitleProbeHandler(subtitleProbe, log)
-	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, idMapClient, animeRepo, redisCache, subHealthStore, log)
+	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, anime365Client, idMapClient, animeRepo, redisCache, subHealthStore, log)
 	subtitlesHandler := handler.NewSubtitlesHandler(subsAggregator, log)
 
 	// Workstream hero-spotlight, v1.0 Phase 3 (Plan 03-04) — hero spotlight
