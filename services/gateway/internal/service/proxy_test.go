@@ -566,3 +566,96 @@ func TestProxyService_NonUpscaler_DoesNotInjectGatewayInternalHeader(t *testing.
 		t.Errorf("scraper backend received X-Gateway-Internal = %q; must be absent for non-upscaler services", got)
 	}
 }
+
+// TestProxyService_Upscaler_InjectsAdminIDFromClaims (I1): the upscaler proxy
+// must inject X-Admin-ID from the authenticated JWT subject (claims.UserID) so
+// the upscaler's remote-shell audit log attributes actions to the real admin.
+func TestProxyService_Upscaler_InjectsAdminIDFromClaims(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestUpscalerProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/upscale/workers/w1/shell", nil)
+	req = req.WithContext(authz.ContextWithClaims(req.Context(), &authz.Claims{
+		UserID:   "admin-uuid-123",
+		Username: "alice",
+		Role:     authz.RoleAdmin,
+	}))
+
+	resp, err := p.Forward(req, "upscaler")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	if got := headers.Get("X-Admin-ID"); got != "admin-uuid-123" {
+		t.Errorf("upscaler backend received X-Admin-ID = %q; want %q (JWT subject)", got, "admin-uuid-123")
+	}
+}
+
+// TestProxyService_Upscaler_StripsForgedAdminID (I1): a client-supplied X-Admin-ID
+// must be stripped and replaced with the JWT-derived identity — an admin must not
+// be able to spoof another admin in the non-repudiation audit trail.
+func TestProxyService_Upscaler_StripsForgedAdminID(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestUpscalerProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/upscale/workers/w1/shell", nil)
+	// Attacker tries to impersonate another admin in the audit trail.
+	req.Header.Set("X-Admin-ID", "victim-admin")
+	req = req.WithContext(authz.ContextWithClaims(req.Context(), &authz.Claims{
+		UserID: "attacker-uuid",
+		Role:   authz.RoleAdmin,
+	}))
+
+	resp, err := p.Forward(req, "upscaler")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	if got := headers.Get("X-Admin-ID"); got != "attacker-uuid" {
+		t.Errorf("upscaler backend received X-Admin-ID = %q; want %q (forged value must be overwritten with JWT subject)", got, "attacker-uuid")
+	}
+}
+
+// TestProxyService_Upscaler_StripsAdminIDWhenNoClaims (I1): with no authenticated
+// claims in context, any client-supplied X-Admin-ID must still be stripped (never
+// forwarded), so a forged header can never reach the audit log unverified.
+func TestProxyService_Upscaler_StripsAdminIDWhenNoClaims(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestUpscalerProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/upscale/workers/w1/shell", nil)
+	req.Header.Set("X-Admin-ID", "forged-no-auth")
+
+	resp, err := p.Forward(req, "upscaler")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	if got := headers.Get("X-Admin-ID"); got != "" {
+		t.Errorf("upscaler backend received X-Admin-ID = %q; want empty (forged header must be stripped when no claims)", got)
+	}
+}

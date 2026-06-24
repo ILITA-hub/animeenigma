@@ -205,6 +205,19 @@ func (h *SegmentHandler) GetSegment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
+	// Clear the server's absolute per-response write deadline before streaming the
+	// segment body. Input segments can be large (a 30-45s upscale segment is tens
+	// of MiB) and a slow worker link can exceed the global http.Server.WriteTimeout
+	// (120s), which is an ABSOLUTE deadline from when the response started — so
+	// without clearing it a large/slow GET is severed mid-stream. A zero time means
+	// "no deadline"; normal short requests are unaffected (they finish well inside it).
+	if rc := http.NewResponseController(w); rc != nil {
+		if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+			// Not fatal — fall through and stream under the global deadline.
+			h.log.Warnw("segments: clear write deadline failed", "job_id", jobID, "idx", idx, "error", err)
+		}
+	}
+
 	w.Header().Set("Content-Type", "video/x-matroska")
 	w.WriteHeader(http.StatusOK)
 	if _, err := io.Copy(w, f); err != nil {

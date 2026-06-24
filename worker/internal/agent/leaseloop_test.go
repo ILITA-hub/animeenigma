@@ -409,6 +409,153 @@ func TestLeaseLoop_ContextCancellation(t *testing.T) {
 	}
 }
 
+// blockingProc blocks in Process until its context is cancelled, then returns
+// ctx.Err(). It records whether it was invoked. Used to verify a server "cancel"
+// command aborts the in-flight segment (I4).
+type blockingProc struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (p *blockingProc) Process(ctx context.Context, _, outSeg string) (Stats, error) {
+	p.once.Do(func() { close(p.started) })
+	<-ctx.Done()
+	return Stats{}, ctx.Err()
+}
+
+// TestLeaseLoop_CancelAbortsInFlightSegment (I4): a server "cancel" command,
+// dispatched through CommandHandler, cancels the per-segment context so the
+// in-flight Process returns immediately instead of burning metered GPU.
+func TestLeaseLoop_CancelAbortsInFlightSegment(t *testing.T) {
+	t.Parallel()
+
+	c, _, _ := buildLeaseClient(t, "input-data")
+
+	proc := &blockingProc{started: make(chan struct{})}
+	conn := &fakeConn{
+		grants: []wire.LeaseGrantPayload{
+			{JobID: "job-cancel", Idx: 0, Handles: wire.LeaseHandles{
+				GetHandle: "gh", GetExp: "99", GetSig: "gs",
+				PutHandle: "ph", PutExp: "99", PutSig: "ps",
+			}},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.RunLeaseLoop(ctx, "w", proc, conn) //nolint:errcheck
+	}()
+
+	// Wait until the segment is in flight (Process entered), then issue cancel.
+	select {
+	case <-proc.started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("processor never started")
+	}
+
+	// Dispatch a "cancel" command exactly as the WS read pump would.
+	if err := c.commandHandler.Handle("cancel", nil); err != nil {
+		t.Fatalf("Handle cancel: %v", err)
+	}
+
+	// The Process call must unblock promptly (its segCtx was cancelled). After it
+	// returns, the loop requests another lease (empty grant → idle), so the loop
+	// keeps running; we just confirm it didn't hang by cancelling + joining.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("lease loop did not exit after cancel (in-flight segment not aborted)")
+	}
+}
+
+// TestLeaseLoop_DrainStopsNewLeases (B4): after a "drain" command, the loop stops
+// requesting NEW leases and idles until ctx is cancelled. We assert it does NOT
+// emit further lease_req frames once drained.
+func TestLeaseLoop_DrainStopsNewLeases(t *testing.T) {
+	t.Parallel()
+
+	c, _, _ := buildLeaseClient(t, "")
+
+	// Drain BEFORE the loop starts: the very first iteration must skip requesting
+	// a lease and go straight to idle (block on ctx).
+	c.commandHandler.Drain()
+
+	conn := &fakeConn{grants: []wire.LeaseGrantPayload{}} // would idle anyway
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.RunLeaseLoop(ctx, "w", CopyProcessor{}, conn) //nolint:errcheck
+	}()
+
+	// Give the loop a moment to reach the drain-park select.
+	time.Sleep(100 * time.Millisecond)
+
+	// No lease_req should have been enqueued on the send channel (drained pre-start).
+	if n := len(c.send); n != 0 {
+		t.Errorf("expected 0 lease_req frames after drain, got %d queued", n)
+	}
+
+	// The loop must exit cleanly once ctx is cancelled (it parked on ctx.Done()).
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("drained lease loop did not exit after ctx cancellation")
+	}
+}
+
+// TestRun_ShutdownExits (B4): a "shutdown" command closes ShutdownCh, which the
+// Run watcher turns into a root-context cancel, so Run returns cleanly.
+func TestRun_ShutdownExits(t *testing.T) {
+	t.Parallel()
+
+	// Enroll server returns a session so Run gets past enroll; the WS dial will
+	// fail (no WS server), so Run enters its reconnect-backoff loop — which is
+	// where the shutdown watcher must break it out.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/worker/enroll" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"worker_id":"w1","exp":"9999999999","sig":"sig"}`)) //nolint:errcheck
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	cfg := Config{ServerURL: srv.URL, EnrollToken: "tok"}
+	c := NewClient(cfg)
+	c.backoff = BackoffConfig{Initial: 20 * time.Millisecond, Max: 50 * time.Millisecond}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- c.Run(context.Background())
+	}()
+
+	// Let Run enroll + enter the reconnect loop, then command shutdown.
+	time.Sleep(150 * time.Millisecond)
+	if err := c.commandHandler.Handle("shutdown", nil); err != nil {
+		t.Fatalf("Handle shutdown: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil && err != context.Canceled {
+			t.Errorf("Run returned unexpected error after shutdown: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not exit after shutdown command")
+	}
+}
+
 // TestLeaseLoop_SendChannelFull verifies that a full send channel results in
 // an error (not a hang).
 func TestLeaseLoop_SendChannelFull(t *testing.T) {

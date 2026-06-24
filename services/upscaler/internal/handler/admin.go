@@ -427,6 +427,18 @@ func (h *AdminHandler) StreamJobLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
+	// Clear the server's absolute per-response write deadline for this long-lived
+	// SSE stream. The global http.Server.WriteTimeout (120s) is an ABSOLUTE
+	// deadline from when the response started, so without clearing it the log tail
+	// is severed after 120s no matter how recently a line was written (a heartbeat
+	// cannot rescue an absolute deadline). A zero time means "no deadline".
+	if rc := http.NewResponseController(w); rc != nil {
+		if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+			// Not fatal — fall through and stream under the global deadline.
+			h.log.Warnw("upscaler: clear SSE write deadline failed", "job_id", id, "error", err)
+		}
+	}
+
 	// Subscribe BEFORE reading the Tail backlog so no line appended in the gap
 	// between the two is lost. A duplicate of the most-recent line is acceptable;
 	// dropping one is not.

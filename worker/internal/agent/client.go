@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,16 +137,69 @@ type errUnauthorized struct{ msg string }
 
 func (e errUnauthorized) Error() string { return e.msg }
 
+// ErrSessionRejected is a TERMINAL error: the worker's credential was rejected
+// and could not be recovered by re-enrollment. With permanent sessions
+// (SessionTTL ~= 100yr) a 401 no longer means "session expired, just re-enroll";
+// it means the credential is genuinely invalid/consumed — a terminal state the
+// operator must resolve by re-provisioning the worker with a fresh enroll token.
+// main() maps this to a distinct non-zero exit code (ExitCodeSessionRejected)
+// so an orchestrator does NOT silently restart into an infinite crash-loop.
+type ErrSessionRejected struct{ msg string }
+
+func (e ErrSessionRejected) Error() string { return e.msg }
+
+// ExitCodeSessionRejected is the distinct process exit code main() uses when
+// Run returns ErrSessionRejected — lets the operator/orchestrator tell a
+// terminal credential failure apart from a transient/network fatal (exit 1).
+const ExitCodeSessionRejected = 2
+
+// errEnrollUnauthorized reports whether err is an enroll failure caused by the
+// server rejecting the (single-use) enroll token with 401 — i.e. the token was
+// already consumed or revoked. This is the terminal-credential signal.
+func errEnrollUnauthorized(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "server returned 401")
+}
+
 // Run enrolls the worker with the server and then maintains a persistent
 // WebSocket connection, reconnecting with exponential backoff on disconnect.
-// On 401 (session expired after SessionTTL), it re-enrolls automatically.
-// It returns when ctx is cancelled.
+//
+// Server sessions are effectively permanent (SessionTTL ~= 100yr), so a 401 on
+// the WS upgrade now means the credential is genuinely invalid/consumed rather
+// than merely expired. Run still attempts ONE re-enroll on 401 (covers the rare
+// case of a server-side session-row eviction where the original enroll token is
+// still valid); if that re-enroll is itself rejected with 401, the single-use
+// token is consumed and the state is terminal — Run returns ErrSessionRejected
+// so main() exits with a distinct code instead of crash-looping forever.
+//
+// Run honours a server-sent shutdown/update command: a watcher goroutine cancels
+// the root context when CommandHandler.ShutdownCh closes, so the in-flight
+// segment finishes and the worker exits cleanly. It returns when ctx is cancelled.
 func (c *Client) Run(ctx context.Context) error {
 	c.print("starting")
+
+	// Derive a cancellable root context so a server "shutdown"/"update" command
+	// can stop the worker after the in-flight segment (B4: ShutdownCh wiring).
+	ctx, cancelRoot := context.WithCancel(ctx)
+	defer cancelRoot()
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-c.commandHandler.ShutdownCh:
+			// Drain has already been signalled by Shutdown(); cancelling the root
+			// context tears down the active connection + lease loop after the
+			// in-flight segment completes, and Run returns ctx.Err()==Canceled.
+			fmt.Fprintln(os.Stderr, "worker: shutdown command received; exiting after in-flight segment")
+			cancelRoot()
+		}
+	}()
 
 	enroll, err := c.enroll(ctx)
 	if err != nil {
 		c.print("error")
+		if errEnrollUnauthorized(err) {
+			fmt.Fprintln(os.Stderr, "worker: enroll token rejected (401); re-provision this worker with a fresh enroll token")
+			return ErrSessionRejected{msg: fmt.Sprintf("enroll: %v", err)}
+		}
 		return fmt.Errorf("enroll: %w", err)
 	}
 
@@ -159,14 +213,21 @@ func (c *Client) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		// If the WS upgrade was rejected with 401, the session has expired.
-		// Re-enroll to get a fresh session before the next reconnect attempt.
+		// If the WS upgrade was rejected with 401, the session row is gone.
+		// Attempt ONE re-enroll. With permanent sessions a 401 is no longer the
+		// expected "session expired" path, so a re-enroll that ALSO 401s means
+		// the single-use enroll token is consumed/revoked — a terminal state.
 		if _, is401 := wsErr.(errUnauthorized); is401 {
 			c.print("reconnecting")
 			fresh, err := c.enroll(ctx)
 			if err != nil {
-				// If re-enroll also fails (e.g. token revoked), surface the error.
 				c.print("error")
+				if errEnrollUnauthorized(err) {
+					// Terminal: token already consumed. Clean exit, distinct code.
+					fmt.Fprintln(os.Stderr, "worker: session rejected; re-provision this worker with a fresh enroll token")
+					return ErrSessionRejected{msg: fmt.Sprintf("re-enroll after 401: %v", err)}
+				}
+				// Re-enroll failed for a transient/network reason — surface it.
 				return fmt.Errorf("re-enroll after 401: %w", err)
 			}
 			enroll = fresh

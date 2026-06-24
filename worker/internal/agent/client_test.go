@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +17,48 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/worker/internal/wire"
 )
+
+// TestRun_EnrollUnauthorizedIsTerminal (B2b): when the server rejects the enroll
+// token with 401 (single-use token already consumed/revoked), Run must return the
+// TERMINAL ErrSessionRejected rather than retrying forever — so main() can exit
+// with a distinct code instead of crash-looping. With permanent sessions a 401 is
+// no longer the expected "session expired" path.
+func TestRun_EnrollUnauthorizedIsTerminal(t *testing.T) {
+	t.Parallel()
+
+	var enrollHits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/worker/enroll" {
+			enrollHits.Add(1)
+			w.WriteHeader(http.StatusUnauthorized) // consumed/revoked token
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	cfg := Config{ServerURL: srv.URL, EnrollToken: "already-used"}
+	c := NewClient(cfg)
+	c.backoff = BackoffConfig{Initial: 5 * time.Millisecond, Max: 20 * time.Millisecond}
+
+	done := make(chan error, 1)
+	go func() { done <- c.Run(context.Background()) }()
+
+	select {
+	case err := <-done:
+		var rejected ErrSessionRejected
+		if !errors.As(err, &rejected) {
+			t.Fatalf("Run returned %v (%T); want ErrSessionRejected", err, err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not exit on terminal 401 (likely crash-looping)")
+	}
+
+	// It must NOT have retried enroll many times — a terminal 401 is one-and-done.
+	if n := enrollHits.Load(); n != 1 {
+		t.Errorf("expected exactly 1 enroll attempt on terminal 401, got %d", n)
+	}
+}
 
 // ── Test 8: live-WS lease_grant drives RunLeaseLoop → GET + PUT ─────────────
 

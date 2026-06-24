@@ -199,11 +199,39 @@ func (o *Orchestrator) Stop() {
 	}
 }
 
-// tick performs one full poll cycle across all three lifecycle stages.
+// tick performs one full poll cycle across every lifecycle stage. processSegmenting
+// runs first so a job stranded in `segmenting` by an OOM/restart mid-segmentation
+// is reclaimed (the first tick fires immediately on startup — see Run — giving
+// startup recovery; subsequent ticks give periodic recovery).
 func (o *Orchestrator) tick(ctx context.Context) {
+	o.processSegmenting(ctx)
 	o.processQueued(ctx)
 	o.detectAllDone(ctx)
 	o.processFinalizing(ctx)
+}
+
+// processSegmenting reclaims jobs left stuck in `segmenting` by an OOM/crash/
+// restart that interrupted the (otherwise synchronous) segmentJob transition.
+// Without this sweep such a job livelocks forever: no other code path re-selects
+// a `segmenting` job (processQueued only lists `queued`), so the threat-model's
+// "restart mid-segmentation" case would strand the job permanently.
+//
+// segmentJob is idempotent — it re-runs Resolve/Probe/Segment (which overwrite
+// the per-job staging dir) and BulkInsertPending (documented "idempotent — safe
+// on retry") — so re-driving a `segmenting` job cleanly re-segments and advances
+// it to `upscaling`. This mirrors the library service's ResumeInterruptedEncodes
+// startup sweep.
+func (o *Orchestrator) processSegmenting(ctx context.Context) {
+	jobs, err := o.jobs.List(ctx, repo.JobFilter{Status: domain.JobSegmenting, Limit: 50})
+	if err != nil {
+		o.log.Warnw("orchestrator: list segmenting jobs failed", "error", err)
+		return
+	}
+	for i := range jobs {
+		job := jobs[i] // copy; job is value
+		o.log.Infow("orchestrator: reclaiming job stuck in segmenting (restart recovery)", "job_id", job.ID)
+		o.runJob(job.ID, func() { o.segmentJob(ctx, &job) })
+	}
 }
 
 // processQueued advances queued jobs through segmenting → upscaling.

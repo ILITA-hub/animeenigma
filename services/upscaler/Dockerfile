@@ -61,6 +61,14 @@ COPY --from=builder /upscaler-api .
 # Drop root — run as non-root 'app'. Binary listens on 8096 (>1024)
 # and uses /data/upscale-staging + /data/torrents mounted as volumes.
 RUN addgroup -S app && adduser -S -G app app && chown -R app:app /app
+
+# Pre-create the volume mount points OWNED BY app BEFORE switching to USER app.
+# Docker seeds an empty named volume (upscale_staging:/data/upscale-staging) from
+# the image's existing directory ownership on first mount; without this the volume
+# root is root:root and the non-root binary's source.acquire MkdirAll fails EACCES
+# on the very first job. /data/torrents is the read-only torrents mount — harmless
+# to pre-create so /data itself is app-owned.
+RUN mkdir -p /data/upscale-staging /data/torrents && chown -R app:app /data
 USER app
 
 EXPOSE 8096

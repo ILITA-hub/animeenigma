@@ -17,6 +17,7 @@ type stubCapture struct {
 	path    string
 	hasCookie bool
 	hasSetCookie bool
+	gatewayInternal string
 }
 
 func buildExternalHandlerWithStub(t *testing.T) (*handler.ExternalAPIHandler, *httptest.Server, chan stubCapture) {
@@ -24,9 +25,10 @@ func buildExternalHandlerWithStub(t *testing.T) (*handler.ExternalAPIHandler, *h
 	captured := make(chan stubCapture, 4)
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured <- stubCapture{
-			path:         r.URL.Path,
-			hasCookie:    r.Header.Get("Cookie") != "",
-			hasSetCookie: r.Header.Get("Set-Cookie") != "",
+			path:            r.URL.Path,
+			hasCookie:       r.Header.Get("Cookie") != "",
+			hasSetCookie:    r.Header.Get("Set-Cookie") != "",
+			gatewayInternal: r.Header.Get("X-Gateway-Internal"),
 		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
@@ -101,6 +103,29 @@ func TestExternalAPIHandler_NoSetCookieForwarded(t *testing.T) {
 	case c := <-captured:
 		if c.hasSetCookie {
 			t.Error("Set-Cookie header was forwarded to the upscaler — must be stripped")
+		}
+	default:
+		t.Fatal("stub never received the request")
+	}
+}
+
+// TestExternalAPIHandler_StripsGatewayInternal — a client-supplied
+// X-Gateway-Internal on the internet-facing /worker/* edge must be stripped
+// before forwarding (defence-in-depth): an external worker must never be able to
+// spoof the gateway-internal admin marker (cheap-minor 3).
+func TestExternalAPIHandler_StripsGatewayInternal(t *testing.T) {
+	h, stub, captured := buildExternalHandlerWithStub(t)
+	defer stub.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/worker/enroll", nil)
+	req.Header.Set("X-Gateway-Internal", "1") // attacker tries to forge the marker
+	rec := httptest.NewRecorder()
+	h.ProxyWorker(rec, req)
+
+	select {
+	case c := <-captured:
+		if c.gatewayInternal != "" {
+			t.Errorf("X-Gateway-Internal = %q forwarded to upstream; must be stripped on the public edge", c.gatewayInternal)
 		}
 	default:
 		t.Fatal("stub never received the request")

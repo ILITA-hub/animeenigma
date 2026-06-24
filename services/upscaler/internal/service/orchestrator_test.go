@@ -356,6 +356,57 @@ func TestSegmentJobAdvancesQueuedToUpscaling(t *testing.T) {
 	}
 }
 
+// TestProcessSegmentingReclaimsStuckJob (I2): a job stranded in `segmenting` by
+// an OOM/restart mid-segmentation is reclaimed by the processSegmenting sweep —
+// segmentJob re-runs idempotently and the job advances to upscaling. Without the
+// sweep no code path re-selects a `segmenting` job, so it would livelock forever.
+func TestProcessSegmentingReclaimsStuckJob(t *testing.T) {
+	// Job left in `segmenting` (the threat-model "restart mid-segmentation" case).
+	job := &domain.UpscaleJob{ID: "stuck-1", ShikimoriID: "999", Episode: 7, Scale: 2, Status: domain.JobSegmenting}
+	jobs := newOrchFakeJobRepo(job)
+	h := newOrchHarness(t, jobs)
+	h.seg.segPaths = []string{"a.mkv", "b.mkv"} // n = 2
+
+	// A normal tick (which fires processSegmenting first) reclaims it.
+	h.o.tick(context.Background())
+
+	// segmentJob re-drove the job: it re-flipped to segmenting then to upscaling.
+	if got := jobs.statusCountFor("stuck-1", domain.JobUpscaling); got != 1 {
+		t.Errorf("expected the stuck job to advance to upscaling once, got %d", got)
+	}
+	if got := jobs.statusCountFor("stuck-1", domain.JobFailed); got != 0 {
+		t.Errorf("expected 0 failed flips, got %d", got)
+	}
+	// Idempotent re-segmentation: segments were (re)seeded with the real count.
+	if got := h.segs.bulkInserts["stuck-1"]; got != 2 {
+		t.Errorf("expected 2 segments seeded on recovery, got %d", got)
+	}
+	if h.seg.segCalls != 1 {
+		t.Errorf("expected the segmenter to run once on recovery, got %d", h.seg.segCalls)
+	}
+	// Final state is upscaling.
+	if j := jobs.jobs["stuck-1"]; j.Status != domain.JobUpscaling {
+		t.Errorf("expected final status upscaling, got %q", j.Status)
+	}
+}
+
+// TestProcessSegmentingNoOpWhenNoneStuck: the sweep is inert when no job is in
+// `segmenting` — it must not touch queued/upscaling/done jobs.
+func TestProcessSegmentingNoOpWhenNoneStuck(t *testing.T) {
+	job := &domain.UpscaleJob{ID: "up-1", ShikimoriID: "1", Episode: 1, Scale: 2, Status: domain.JobUpscaling}
+	jobs := newOrchFakeJobRepo(job)
+	h := newOrchHarness(t, jobs)
+
+	h.o.processSegmenting(context.Background())
+
+	if h.seg.segCalls != 0 {
+		t.Errorf("expected segmenter NOT to run, got %d calls", h.seg.segCalls)
+	}
+	if got := jobs.statusCountFor("up-1", domain.JobSegmenting); got != 0 {
+		t.Errorf("expected no segmenting flips, got %d", got)
+	}
+}
+
 // TestIndependentAllDoneFlip: with NO lease_req, the orchestrator flips an
 // upscaling job to finalizing when Counts shows all done (the I-1 liveness fix).
 func TestIndependentAllDoneFlip(t *testing.T) {

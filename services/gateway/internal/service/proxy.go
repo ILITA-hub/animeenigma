@@ -299,6 +299,20 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 	if service == "upscaler" {
 		req.Header.Del("X-Gateway-Internal")
 		req.Header.Set("X-Gateway-Internal", "1")
+
+		// Admin audit attribution (non-repudiation): the upscaler's remote-shell
+		// handler reads X-Admin-ID for its audit log. Strip any client-supplied
+		// value (a client could otherwise spoof another admin in the audit trail),
+		// then inject the authenticated identity from the validated JWT subject —
+		// the same strip-then-set discipline as X-Gateway-Internal above and the
+		// grafana X-Webauth-User pattern. Done post-copyForwardHeaders so a smuggled
+		// `Connection: X-Admin-ID` cannot drop the injected value. The /api/upscale/*
+		// routes already passed JWTValidationMiddleware + AdminRoleMiddleware, so
+		// claims are present and the caller is an admin.
+		req.Header.Del("X-Admin-ID")
+		if claims, ok := authz.ClaimsFromContext(r.Context()); ok && claims != nil && claims.UserID != "" {
+			req.Header.Set("X-Admin-ID", claims.UserID)
+		}
 	}
 
 	// For auth service only: selectively re-forward the refresh_token

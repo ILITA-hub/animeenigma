@@ -61,6 +61,12 @@ func NewExternalAPIHandler(targetBaseURL string, log *logger.Logger) (*ExternalA
 		// Strip Set-Cookie from the inbound request (defence-in-depth; Set-Cookie
 		// is a response header but some clients forward it).
 		req.Header.Del("Set-Cookie")
+		// Strip X-Gateway-Internal on this INTERNET-FACING edge (defence-in-depth;
+		// mirrors the admin proxy's strip-then-set). The /worker/* surface is the
+		// only public-facing path to the upscaler; an external client must never be
+		// able to spoof the gateway-internal admin marker so a converging route
+		// (admin gate at upscaler:8096) can never be tricked into trusting it.
+		req.Header.Del("X-Gateway-Internal")
 	}
 
 	// FlushInterval=-1 flushes after every write. This is MANDATORY for
@@ -124,6 +130,9 @@ func NewWorkerWSProxy(targetBaseURL string, log *logger.Logger) (http.HandlerFun
 		req.Host = target.Host
 		req.Header.Del("Cookie")
 		req.Header.Del("Set-Cookie")
+		// Strip X-Gateway-Internal on the internet-facing WS edge too (defence-in-
+		// depth) — an external worker must never spoof the gateway-internal marker.
+		req.Header.Del("X-Gateway-Internal")
 	}
 
 	// FlushInterval=-1: mandatory for streaming WS frames (same as watch-together

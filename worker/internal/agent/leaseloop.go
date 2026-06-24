@@ -34,10 +34,31 @@ const (
 // workerID is the session worker_id from enrollment, used to bind data-plane
 // requests to the lease (X-Worker-Id header).
 func (c *Client) RunLeaseLoop(ctx context.Context, workerID string, proc Processor, conn leaseConn) error {
+	// drainCh is the server-sent "drain" signal: once closed, the worker stops
+	// requesting NEW leases, finishes any in-flight segment, and then idles until
+	// ctx is cancelled (B4 graceful-drain wiring). nil-safe: a nil commandHandler
+	// (only possible in narrow unit tests) yields a nil channel, which a select
+	// treats as "never ready" — i.e. drain is simply inert.
+	var drainCh <-chan struct{}
+	if c.commandHandler != nil {
+		drainCh = c.commandHandler.DrainCh
+	}
+
 	seq := leaseReqSeqStart
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+
+		// If a drain was requested, stop requesting new work and park until the
+		// connection/root context is torn down. Any segment already in flight has
+		// completed by this point (processSegment below is synchronous).
+		select {
+		case <-drainCh:
+			c.print("idle")
+			<-ctx.Done()
+			return ctx.Err()
+		default:
 		}
 
 		// Request a lease.
@@ -52,11 +73,16 @@ func (c *Client) RunLeaseLoop(ctx context.Context, workerID string, proc Process
 			return fmt.Errorf("read lease_grant: %w", err)
 		}
 
-		// Empty grant = no work; idle and retry.
+		// Empty grant = no work; idle and retry. Honour drain during the idle wait
+		// so a drain that arrives while idle is acted on without a full idleDelay.
 		if grant.JobID == "" {
 			c.print("idle")
 			select {
 			case <-ctx.Done():
+				return ctx.Err()
+			case <-drainCh:
+				c.print("idle")
+				<-ctx.Done()
 				return ctx.Err()
 			case <-time.After(idleDelay):
 			}
@@ -112,16 +138,25 @@ func (c *Client) processSegment(ctx context.Context, workerID string, grant wire
 		os.Remove(outPath) //nolint:errcheck
 	}()
 
-	// Start per-segment telemetry: heartbeat (keeps the worker row's
-	// current_job_id/current_segment fresh + feeds the server's cancel-in-flight
-	// FindByJob) + metrics (GPU + pipeline fps → server Prometheus / ClickHouse).
-	// Bound to a child context cancelled when this segment finishes, so the
-	// (jobID, segIdx) attribution Telemetry.Run stamps is always for the segment
-	// actually in flight. statsFn surfaces the processor's REAL measured fps when
-	// it implements StatsSource (PipelineProcessor); processors that don't (the
-	// CopyProcessor stub) contribute zero fps but still emit GPU/heartbeat data.
-	segCtx, cancelTel := context.WithCancel(ctx)
-	defer cancelTel()
+	// Per-segment cancellable context (I4): a server "cancel" command aborts the
+	// in-flight download/ffmpeg/upload so the worker stops burning metered GPU on
+	// a job the server no longer wants. segCtx is derived from the loop ctx, so it
+	// is also cancelled when the connection drops or the worker shuts down. Its
+	// cancel func is registered with the command handler for the duration of this
+	// segment and reset to a no-op in the defer once the segment finishes, so a
+	// late cancel can never tear down the NEXT segment. The same context bounds
+	// per-segment telemetry, so the (jobID, segIdx) attribution Telemetry.Run
+	// stamps is always for the segment actually in flight.
+	segCtx, cancelSeg := context.WithCancel(ctx)
+	defer cancelSeg()
+	if c.commandHandler != nil {
+		c.commandHandler.SetCancel(cancelSeg)
+		defer c.commandHandler.SetCancel(nil) // reset to no-op when the segment ends
+	}
+
+	// statsFn surfaces the processor's REAL measured fps when it implements
+	// StatsSource (PipelineProcessor); processors that don't (the CopyProcessor
+	// stub) contribute zero fps but still emit GPU/heartbeat data.
 	var statsFn func() Stats
 	if ss, ok := proc.(StatsSource); ok {
 		statsFn = ss.LiveStats
@@ -132,7 +167,7 @@ func (c *Client) processSegment(ctx context.Context, workerID string, grant wire
 	c.print("processing")
 
 	// 1. Download input segment using the GET capability handle.
-	if err := Download(ctx, c.cfg, workerID,
+	if err := Download(segCtx, c.cfg, workerID,
 		segBaseURL,
 		grant.Handles.GetHandle,
 		grant.Handles.GetExp,
@@ -142,14 +177,15 @@ func (c *Client) processSegment(ctx context.Context, workerID string, grant wire
 		return fmt.Errorf("download: %w", err)
 	}
 
-	// 2. Process the segment (stub in Task 15; real pipeline in Task 17).
-	if _, err := proc.Process(ctx, inPath, outPath); err != nil {
+	// 2. Process the segment via the per-segment cancellable context so a server
+	// cancel aborts the in-flight ffmpeg/model run.
+	if _, err := proc.Process(segCtx, inPath, outPath); err != nil {
 		return fmt.Errorf("process: %w", err)
 	}
 
 	// 3. Upload output segment using the PUT capability handle.
 	// A successful PUT implicitly marks the segment done on the server.
-	if err := Upload(ctx, c.cfg, workerID,
+	if err := Upload(segCtx, c.cfg, workerID,
 		segBaseURL,
 		grant.Handles.PutHandle,
 		grant.Handles.PutExp,
