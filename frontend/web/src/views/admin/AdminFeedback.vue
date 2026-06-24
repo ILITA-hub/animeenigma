@@ -66,7 +66,7 @@
           <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('admin.feedback.filters.dateFrom') }}</label>
           <DatePicker
             v-model="filterDateFrom"
-            class="w-full h-9"
+            class="w-full"
             :placeholder="$t('admin.feedback.filters.dateFrom')"
             :title="$t('admin.feedback.filters.dateFrom')"
           />
@@ -75,7 +75,7 @@
           <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('admin.feedback.filters.dateTo') }}</label>
           <DatePicker
             v-model="filterDateTo"
-            class="w-full h-9"
+            class="w-full"
             :placeholder="$t('admin.feedback.filters.dateTo')"
             :title="$t('admin.feedback.filters.dateTo')"
           />
