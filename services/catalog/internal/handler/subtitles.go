@@ -116,8 +116,11 @@ func (h *SubtitlesHandler) GetAnime365File(w http.ResponseWriter, r *http.Reques
 
 	body, _, err := h.aggregator.ResolveAnime365File(r.Context(), transID)
 	if err != nil {
-		h.log.Errorw("anime365 file resolve failed", "trans_id", transID, "error", err)
-		httputil.Error(w, err)
+		// anime365 has no auth/quota; any failure here is an upstream availability
+		// problem (timeout, 404, paywall), so return 503 rather than a 500 that
+		// would page as an internal error. Mirrors GetOpenSubtitlesFile's intent.
+		h.log.Warnw("anime365 file resolve failed", "trans_id", transID, "error", err)
+		httputil.Error(w, liberrors.ServiceUnavailable("Russian subtitles are temporarily unavailable."))
 		return
 	}
 

@@ -89,3 +89,25 @@ func TestFetchAnime365_DisabledIsUnconfigured(t *testing.T) {
 		t.Fatalf("err = %v, want errProviderUnconfigured", err)
 	}
 }
+
+func TestFetchAnime365_FallsBackToShikimoriID(t *testing.T) {
+	srv := anime365TestServer(t)
+	defer srv.Close()
+
+	a365 := anime365.NewClient(anime365.Config{BaseURL: srv.URL, Enabled: true})
+	agg := NewSubsAggregator(nil, nil, a365, nil, nil, resolveTestRedis(t), nil, logger.Default())
+
+	anime := &domain.Anime{ID: "uuid-3", MALID: "", ShikimoriID: "51553", Name: "Tongari Boushi no Atelier", Kind: "tv"}
+	tracks, err := agg.fetchAnime365(context.Background(), anime, 12)
+	if err != nil {
+		t.Fatalf("fetchAnime365: %v", err)
+	}
+	if len(tracks) != 2 {
+		t.Fatalf("got %d tracks via ShikimoriID fallback, want 2", len(tracks))
+	}
+	for _, tr := range tracks {
+		if tr.Provider != "anime365" || tr.Lang != "ru" {
+			t.Fatalf("bad track via fallback: %+v", tr)
+		}
+	}
+}

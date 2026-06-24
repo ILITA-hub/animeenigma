@@ -231,7 +231,7 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		Episode:   episode,
 	}
 
-	outcomes := make([]metrics.SubtitleProviderOutcome, 0, 2)
+	outcomes := make([]metrics.SubtitleProviderOutcome, 0, 3)
 	for r := range resultsCh {
 		if r.err != nil {
 			if errors.Is(r.err, errProviderUnconfigured) {
@@ -403,6 +403,9 @@ func (s *SubsAggregator) fetchAnime365(ctx context.Context, anime *domain.Anime,
 	if err != nil {
 		return nil, err
 	}
+	// anime365 episodeInt is a string; we match exact integer episodes only.
+	// Decimal/recap episodes (e.g. "6.5") won't match and yield nil,nil
+	// (fail-soft) — an accepted v1 limitation matching the integer-episode scope.
 	target := strconv.Itoa(episode)
 	if strings.EqualFold(anime.Kind, "movie") {
 		target = "1"
