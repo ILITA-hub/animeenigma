@@ -590,6 +590,27 @@ type cachedSubFile struct {
 	Format string `json:"format"`
 }
 
+// ResolveAnime365File turns an anime365 translation id into the subtitle bytes,
+// caching the result for 24h so re-watches cost no upstream fetch.
+func (s *SubsAggregator) ResolveAnime365File(ctx context.Context, transID int) ([]byte, string, error) {
+	if s.anime365 == nil || !s.anime365.IsConfigured() {
+		return nil, "", errProviderUnconfigured
+	}
+	cacheKey := fmt.Sprintf("subsfile:anime365:%d", transID)
+
+	var hit cachedSubFile
+	if err := s.cache.Get(ctx, cacheKey, &hit); err == nil && len(hit.Body) > 0 {
+		return hit.Body, hit.Format, nil
+	}
+
+	body, format, err := s.anime365.DownloadSubtitle(ctx, transID)
+	if err != nil {
+		return nil, "", err
+	}
+	_ = s.cache.Set(ctx, cacheKey, cachedSubFile{Body: body, Format: format}, 24*time.Hour)
+	return body, format, nil
+}
+
 // ResolveOpenSubtitlesFile turns a numeric OpenSubtitles file_id into the
 // actual subtitle bytes. It spends one download quota unit on a cache miss,
 // then caches the result for 24h so re-watches cost nothing (RAW-NF-01).
