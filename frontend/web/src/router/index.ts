@@ -4,6 +4,7 @@ import i18n from '@/i18n'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { GACHA_ADMIN_ONLY } from '@/utils/gachaGate'
 import { stashPrefetch } from '@/utils/pagePrefetch'
+import { setFaviconVariant, faviconVariantForPath } from '@/utils/favicon'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -305,6 +306,9 @@ router.beforeEach((to, _from, next) => {
   } else {
     document.title = 'AnimeEnigma'
   }
+
+  // Tab favicon: brand-mark on the main site, legacy cat seal on /admin/*.
+  setFaviconVariant(faviconVariantForPath(to.path))
 
   // Check authentication
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
