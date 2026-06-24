@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/service"
 	"github.com/go-chi/chi/v5"
 	"gorm.io/gorm"
 )
@@ -27,6 +30,18 @@ type adminJobRepo interface {
 // adminWorkerRepo is the minimal WorkerRepository surface needed by AdminHandler.
 type adminWorkerRepo interface {
 	ListConnected(ctx context.Context, since time.Time) ([]domain.UpscaleWorker, error)
+	FindByJob(ctx context.Context, jobID string) ([]domain.UpscaleWorker, error)
+}
+
+// commander issues typed commands to workers via the control-plane hub.
+type commander interface {
+	Issue(workerID, cmd string, args json.RawMessage) error
+}
+
+// adminLogBuffer provides per-job log ring-buffer access and live subscriptions.
+type adminLogBuffer interface {
+	Tail(jobID string, n int) []service.LogLine
+	Subscribe(jobID string) (<-chan service.LogLine, func())
 }
 
 // AdminHandler implements the /api/upscale/* admin REST API.
@@ -41,6 +56,10 @@ type AdminHandler struct {
 	defaultScale int
 	defaultModel string
 	log          *logger.Logger
+
+	// Optional extensions wired via With* setters.
+	cmd    commander
+	logBuf adminLogBuffer
 }
 
 // NewAdminHandler constructs an AdminHandler. defaultScale comes from
@@ -138,6 +157,13 @@ func (h *AdminHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		Status:      domain.JobStatus(q.Get("status")),
 		ShikimoriID: q.Get("shikimori_id"),
 	}
+	// Reject an unknown status filter rather than silently returning an empty
+	// list — an empty status (no filter) is allowed; a non-empty invalid one is a
+	// client error.
+	if f.Status != "" && !f.Status.IsValid() {
+		httputil.BadRequest(w, "invalid status: "+string(f.Status))
+		return
+	}
 	if limitStr := q.Get("limit"); limitStr != "" {
 		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 {
 			f.Limit = v
@@ -178,6 +204,14 @@ func (h *AdminHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 // CancelJob handles POST /api/upscale/jobs/{id}/cancel.
 // Sets status to "cancelled" if the job is not already in a terminal state.
 // Returns 409 when already terminal.
+//
+// Beyond flipping the DB status, CancelJob ALSO delivers a `cancel` command over
+// the WS control plane to any worker currently processing the job, so a worker
+// mid-segment aborts promptly instead of finishing then discovering the job is
+// gone. The worker delivery is best-effort: a worker that is not connected (or a
+// nil commander) does not fail the request — the DB cancel still applies, and the
+// segment lease will expire on its own. (If no worker is bound to the job,
+// DB-cancel is the entire effect.)
 func (h *AdminHandler) CancelJob(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	job, err := h.jobs.Get(r.Context(), id)
@@ -202,13 +236,44 @@ func (h *AdminHandler) CancelJob(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
+
+	// Best-effort: tell the worker(s) running this job to abort now.
+	h.deliverCancelToWorkers(r.Context(), id)
+
 	job.Status = domain.JobCancelled
 	httputil.OK(w, job)
+}
+
+// deliverCancelToWorkers issues a `cancel` command over the WS control plane to
+// every non-gone worker currently bound to jobID. It is best-effort and never
+// affects the cancel request outcome: a nil commander, a worker-lookup error, or
+// a not-connected worker are all logged and swallowed (the DB status is already
+// cancelled, and the segment lease will expire regardless).
+func (h *AdminHandler) deliverCancelToWorkers(ctx context.Context, jobID string) {
+	if h.cmd == nil {
+		return
+	}
+	workers, err := h.workers.FindByJob(ctx, jobID)
+	if err != nil {
+		h.log.Warnw("admin: cancel job — worker lookup failed (DB cancel still applied)", "job_id", jobID, "error", err)
+		return
+	}
+	args := json.RawMessage(`{"job_id":"` + jobID + `"}`)
+	for _, wk := range workers {
+		if err := h.cmd.Issue(wk.WorkerID, "cancel", args); err != nil {
+			h.log.Warnw("admin: cancel job — deliver cancel command failed (best-effort)",
+				"job_id", jobID, "worker_id", wk.WorkerID, "error", err)
+		}
+	}
 }
 
 // RetryJob handles POST /api/upscale/jobs/{id}/retry.
 // Re-queues a failed job (status → queued, error_text cleared).
 // Returns 400 when the job is not in the "failed" state.
+//
+// NOTE: Retry does NOT reset segment state; retrying a finalization-failed job
+// (all segments done) will re-finalize from stale state without re-upscaling.
+// Phase 2 should add a segment reset before re-queuing.
 func (h *AdminHandler) RetryJob(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	job, err := h.jobs.Get(r.Context(), id)
@@ -247,4 +312,147 @@ func (h *AdminHandler) ListWorkers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.OK(w, workers)
+}
+
+// WithCommander wires a command issuer (e.g. *controlplane.Issuer) for
+// PostWorkerCommand. Returns the handler for chaining.
+func (h *AdminHandler) WithCommander(c commander) *AdminHandler {
+	h.cmd = c
+	return h
+}
+
+// WithLogBuffer wires a per-job log ring-buffer for GetJobLogs and StreamJobLogs.
+// Returns the handler for chaining.
+func (h *AdminHandler) WithLogBuffer(lb adminLogBuffer) *AdminHandler {
+	h.logBuf = lb
+	return h
+}
+
+// workerCommandRequest is the body for POST /api/upscale/workers/{id}/commands.
+type workerCommandRequest struct {
+	Cmd  string          `json:"cmd"`
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
+// PostWorkerCommand handles POST /api/upscale/workers/{id}/commands.
+// Issues a typed command (cancel|drain|shutdown|reconfigure|update) to the named worker.
+// Returns 400 for unknown/disallowed commands, 503 when the worker is not connected.
+func (h *AdminHandler) PostWorkerCommand(w http.ResponseWriter, r *http.Request) {
+	if h.cmd == nil {
+		httputil.JSON(w, http.StatusServiceUnavailable,
+			map[string]string{"error": "command issuer not configured"})
+		return
+	}
+	workerID := chi.URLParam(r, "id")
+	if strings.TrimSpace(workerID) == "" {
+		httputil.BadRequest(w, "worker id is required")
+		return
+	}
+
+	var req workerCommandRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.BadRequest(w, "invalid JSON: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Cmd) == "" {
+		httputil.BadRequest(w, "cmd is required")
+		return
+	}
+	// Default args to empty object when omitted.
+	if req.Args == nil {
+		req.Args = json.RawMessage(`{}`)
+	}
+
+	if err := h.cmd.Issue(workerID, req.Cmd, req.Args); err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "not allowed") || strings.Contains(errMsg, "whitelist") {
+			httputil.BadRequest(w, errMsg)
+			return
+		}
+		// Worker not connected or send buffer full.
+		h.log.Warnw("admin: issue command to worker failed", "worker_id", workerID, "cmd", req.Cmd, "error", err)
+		httputil.JSON(w, http.StatusServiceUnavailable, map[string]string{"error": errMsg})
+		return
+	}
+	httputil.OK(w, map[string]string{"status": "queued", "worker_id": workerID, "cmd": req.Cmd})
+}
+
+// GetJobLogs handles GET /api/upscale/jobs/{id}/logs.
+// Returns the last N log lines from the ring-buffer (?n=<count>, default 100).
+func (h *AdminHandler) GetJobLogs(w http.ResponseWriter, r *http.Request) {
+	if h.logBuf == nil {
+		httputil.JSON(w, http.StatusServiceUnavailable,
+			map[string]string{"error": "log buffer not configured"})
+		return
+	}
+	id := chi.URLParam(r, "id")
+	n := 100
+	if nStr := r.URL.Query().Get("n"); nStr != "" {
+		if v, err := strconv.Atoi(nStr); err == nil && v > 0 {
+			n = v
+		}
+	}
+	lines := h.logBuf.Tail(id, n)
+	if lines == nil {
+		lines = []service.LogLine{}
+	}
+	httputil.OK(w, lines)
+}
+
+// StreamJobLogs handles GET /api/upscale/jobs/{id}/logs/stream.
+// Streams live log lines as SSE (text/event-stream). Closes when the client
+// disconnects or the context is cancelled.
+func (h *AdminHandler) StreamJobLogs(w http.ResponseWriter, r *http.Request) {
+	if h.logBuf == nil {
+		httputil.JSON(w, http.StatusServiceUnavailable,
+			map[string]string{"error": "log buffer not configured"})
+		return
+	}
+	id := chi.URLParam(r, "id")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		httputil.JSON(w, http.StatusInternalServerError,
+			map[string]string{"error": "streaming not supported"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	// Subscribe BEFORE reading the Tail backlog so no line appended in the gap
+	// between the two is lost. A duplicate of the most-recent line is acceptable;
+	// dropping one is not.
+	ch, cancel := h.logBuf.Subscribe(id)
+	defer cancel()
+
+	// Replay recent history first so a client connecting mid-job sees context.
+	for _, line := range h.logBuf.Tail(id, 100) {
+		raw, err := json.Marshal(line)
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(w, "data: %s\n\n", raw)
+	}
+	flusher.Flush()
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case line, ok := <-ch:
+			if !ok {
+				return
+			}
+			raw, err := json.Marshal(line)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", raw)
+			flusher.Flush()
+		}
+	}
 }

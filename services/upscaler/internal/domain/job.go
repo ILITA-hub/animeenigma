@@ -22,6 +22,15 @@ func (s JobStatus) IsTerminal() bool {
 	return false
 }
 
+// IsValid reports whether s is one of the seven defined job statuses.
+func (s JobStatus) IsValid() bool {
+	switch s {
+	case JobQueued, JobSegmenting, JobUpscaling, JobFinalizing, JobDone, JobFailed, JobCancelled:
+		return true
+	}
+	return false
+}
+
 type UpscaleJob struct {
 	ID          string `gorm:"type:uuid;primaryKey;default:gen_random_uuid();column:id" json:"id"`
 	ShikimoriID string `gorm:"type:text;not null;index;column:shikimori_id" json:"shikimori_id"`

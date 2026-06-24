@@ -103,6 +103,7 @@ type Orchestrator struct {
 	finalizer orchFinalizer
 	writer    orchWriter
 	listHLS   hlsLister
+	logBuf    orchLogFlusher // optional; nil = no flush
 
 	stagingDir     string
 	segmentSeconds int
@@ -111,9 +112,15 @@ type Orchestrator struct {
 	stopCh chan struct{}
 }
 
+// orchLogFlusher is the minimal interface the Orchestrator needs from LogBuffer
+// to flush per-job logs to object storage when a job completes.
+type orchLogFlusher interface {
+	Flush(ctx context.Context, jobID string) error
+}
+
 // OrchestratorDeps bundles the orchestrator's collaborators. All fields are
-// required except ListHLS (defaults to listHLSFiles) and Log (defaults to the
-// package logger).
+// required except ListHLS (defaults to listHLSFiles), Log (defaults to the
+// package logger), and LogBuffer (optional; log flush is skipped if nil).
 type OrchestratorDeps struct {
 	Jobs      orchJobRepo
 	Segments  orchSegmentRepo
@@ -123,6 +130,7 @@ type OrchestratorDeps struct {
 	Finalizer orchFinalizer
 	Writer    orchWriter
 	ListHLS   hlsLister
+	LogBuffer orchLogFlusher
 
 	StagingDir     string
 	SegmentSeconds int
@@ -152,6 +160,7 @@ func NewOrchestrator(d OrchestratorDeps) *Orchestrator {
 		finalizer:      d.Finalizer,
 		writer:         d.Writer,
 		listHLS:        listHLS,
+		logBuf:         d.LogBuffer,
 		stagingDir:     d.StagingDir,
 		segmentSeconds: secs,
 		log:            log,
@@ -391,6 +400,12 @@ func (o *Orchestrator) finalizeJob(ctx context.Context, job *domain.UpscaleJob) 
 	if err := o.jobs.UpdateStatus(ctx, job.ID, domain.JobDone, ""); err != nil {
 		o.log.Warnw("orchestrator: flip to done failed", "job_id", job.ID, "error", err)
 		return
+	}
+
+	if o.logBuf != nil {
+		if err := o.logBuf.Flush(ctx, job.ID); err != nil {
+			o.log.Warnw("orchestrator: log flush failed", "job_id", job.ID, "error", err)
+		}
 	}
 
 	o.log.Infow("orchestrator: job finalized", "job_id", job.ID, "prefix", prefix)

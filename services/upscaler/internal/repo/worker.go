@@ -52,6 +52,21 @@ func (r *WorkerRepository) MarkGone(ctx context.Context, workerID string) error 
 		Update("status", "gone").Error
 }
 
+// FindByJob returns the non-gone workers whose current_job_id matches jobID.
+// Used by the admin cancel path to deliver an in-flight cancel command to the
+// worker(s) actively processing a job. Returns an empty slice (not an error)
+// when no worker is currently bound to the job.
+func (r *WorkerRepository) FindByJob(ctx context.Context, jobID string) ([]domain.UpscaleWorker, error) {
+	var workers []domain.UpscaleWorker
+	if err := r.db.WithContext(ctx).
+		Where("current_job_id = ? AND status != ?", jobID, "gone").
+		Order("worker_id ASC").
+		Find(&workers).Error; err != nil {
+		return nil, err
+	}
+	return workers, nil
+}
+
 // ListConnected returns workers whose last_heartbeat_at is at or after since
 // and whose status is not 'gone'.
 func (r *WorkerRepository) ListConnected(ctx context.Context, since time.Time) ([]domain.UpscaleWorker, error) {

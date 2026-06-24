@@ -27,9 +27,10 @@ import (
 //
 // The gateway sets X-Gateway-Internal: "1" on /api/upscale/* proxied requests
 // (see services/gateway/internal/service/proxy.go — forwardWith injects it
-// when service=="upscaler" via the standard copyForwardHeaders path). Until
-// that injection lands in a later task, this gate serves as a documented
-// separation point: see docs/upscaler-edge-setup.md §Backend defense-in-depth.
+// when service=="upscaler" via the standard copyForwardHeaders path);
+// the gateway injects X-Gateway-Internal on all /api/upscale/* proxy requests
+// (injected by the gateway's admin-gated proxy); this gate is the server-side
+// enforcement of that contract.
 const internalGatewayHeader = "X-Gateway-Internal"
 
 // requireGatewayInternal is middleware that ensures the request came through
@@ -112,8 +113,12 @@ func NewRouter(
 			r.Get("/jobs/{id}", adminHandler.GetJob)
 			r.Post("/jobs/{id}/cancel", adminHandler.CancelJob)
 			r.Post("/jobs/{id}/retry", adminHandler.RetryJob)
-			// Fleet status
+			// Job log ring-buffer (REST tail + SSE stream)
+			r.Get("/jobs/{id}/logs", adminHandler.GetJobLogs)
+			r.Get("/jobs/{id}/logs/stream", adminHandler.StreamJobLogs)
+			// Fleet status + control-plane commands
 			r.Get("/workers", adminHandler.ListWorkers)
+			r.Post("/workers/{id}/commands", adminHandler.PostWorkerCommand)
 		}
 	})
 

@@ -2,6 +2,9 @@ package transport
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -13,6 +16,12 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/repo"
+	"github.com/google/uuid"
+	sqlite3 "github.com/mattn/go-sqlite3"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // shared collector for this test file — avoids duplicate registration panics.
@@ -304,4 +313,133 @@ func bodyContains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// ── Integration test: real SQLite-backed AdminHandler ─────────────────────────
+
+var (
+	transportSQLiteOnce sync.Once
+)
+
+func transportGenUUID() string {
+	b := make([]byte, 16)
+	rand.Read(b) //nolint:gosec // test-only
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+func transportRegisterSQLite() {
+	transportSQLiteOnce.Do(func() {
+		sql.Register("sqlite3_transport_now", &sqlite3.SQLiteDriver{
+			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+				if err := conn.RegisterFunc("now", func() string {
+					return time.Now().UTC().Format("2006-01-02 15:04:05")
+				}, true); err != nil {
+					return err
+				}
+				return conn.RegisterFunc("gen_random_uuid", transportGenUUID, false)
+			},
+		})
+	})
+}
+
+// openTransportTestDB returns a fresh in-memory SQLite DB with the upscale_jobs
+// and upscale_workers tables, suitable for constructing a real AdminHandler in
+// transport-layer tests.
+func openTransportTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	transportRegisterSQLite()
+	dsn := fmt.Sprintf("file:upscaler_transport_%s?mode=memory&cache=shared", uuid.New().String())
+	db, err := gorm.Open(&sqlite.Dialector{
+		DriverName: "sqlite3_transport_now",
+		DSN:        dsn,
+	}, &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	if err != nil {
+		t.Skipf("sqlite driver unavailable: %v", err)
+	}
+	ddls := []string{
+		`CREATE TABLE IF NOT EXISTS upscale_jobs (
+			id                TEXT NOT NULL PRIMARY KEY,
+			shikimori_id      TEXT NOT NULL,
+			episode           INTEGER NOT NULL,
+			library_infohash  TEXT,
+			model             TEXT NOT NULL,
+			scale             INTEGER NOT NULL DEFAULT 2,
+			status            TEXT NOT NULL DEFAULT 'queued',
+			progress_pct      INTEGER NOT NULL DEFAULT 0,
+			source_codec      TEXT,
+			source_pixfmt     TEXT,
+			source_fps        TEXT,
+			source_height     INTEGER NOT NULL DEFAULT 0,
+			segment_count     INTEGER NOT NULL DEFAULT 0,
+			output_prefix     TEXT,
+			error_text        TEXT,
+			created_at        DATETIME,
+			updated_at        DATETIME,
+			completed_at      DATETIME
+		)`,
+		`CREATE TABLE IF NOT EXISTS upscale_workers (
+			worker_id          TEXT NOT NULL PRIMARY KEY,
+			gpu_info           TEXT,
+			image_version      TEXT,
+			models_available   TEXT,
+			status             TEXT NOT NULL DEFAULT 'idle',
+			current_job_id     TEXT,
+			current_segment    INTEGER,
+			session_expires_at DATETIME,
+			last_heartbeat_at  DATETIME,
+			created_at         DATETIME
+		)`,
+	}
+	for _, ddl := range ddls {
+		if err := db.Exec(ddl).Error; err != nil {
+			t.Skipf("create table: %v", err)
+		}
+	}
+	return db
+}
+
+// TestRouter_AdminJobsWithRealHandler builds a router with a real SQLite-backed
+// AdminHandler, sends GET /api/upscale/jobs WITH the gateway header, and asserts 200.
+func TestRouter_AdminJobsWithRealHandler(t *testing.T) {
+	t.Parallel()
+	log := logger.Default()
+	db := openTransportTestDB(t)
+
+	jobs := repo.NewJobRepository(db)
+	workers := repo.NewWorkerRepository(db)
+	adminH := handler.NewAdminHandler(jobs, workers, 2, "realesrgan-x4plus-anime", log)
+
+	hub := controlplane.NewHub(&stubLeaser{}, &stubWorkerHB{}, log)
+	segH := handler.NewSegmentHandler(t.TempDir(), nil, nil, log)
+	router := NewRouter(log, sharedUpscalerCollector(), hub, nil, segH, adminH)
+
+	// Seed one queued job so the list returns non-empty.
+	ctx := context.Background()
+	seeded := &domain.UpscaleJob{
+		ID:          uuid.New().String(),
+		ShikimoriID: "99",
+		Episode:     1,
+		Model:       "realesrgan-x4plus-anime",
+		Scale:       2,
+		Status:      domain.JobQueued,
+	}
+	if err := jobs.Create(ctx, seeded); err != nil {
+		t.Fatalf("seed job: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/upscale/jobs", nil)
+	req.Header.Set(internalGatewayHeader, "1")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("GET /api/upscale/jobs with real handler: status = %d; want 200 (body: %s)",
+			rec.Code, rec.Body.String())
+	}
+	// Body must NOT be our gate 404.
+	if containsGateBody(rec.Body.String()) {
+		t.Errorf("GET /api/upscale/jobs: gate fired despite header being set")
+	}
 }
