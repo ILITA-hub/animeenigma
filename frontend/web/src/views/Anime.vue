@@ -411,6 +411,7 @@
             :mal-id="anime.shikimoriId"
             @toggle-theater="setTheater(!theaterMode)"
             @combo-change="aeWtSeed = $event"
+            @url-sync="onUrlSync"
           />
         </div>
 
@@ -893,6 +894,7 @@ const InviteButton = defineAsyncComponent(() => import('@/components/watch-toget
 import type { PlayerKind } from '@/types/watch-together'
 import type { WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { resolveInitialPlayerPref, CLASSIC_KODIK_KEY } from './animePlayerPrefs'
+import { nextWatchQuery, watchQueryChanged, type WatchUrlState } from './watchUrlSync'
 import ResumePill from '@/components/player/ResumePill.vue'
 import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
@@ -1320,12 +1322,24 @@ const resolvedCombo = computed(() => preferenceState.value?.resolvedCombo ?? nul
 // Null until AePlayer has a resolved source (or when aePlayer isn't selected).
 const aeWtSeed = ref<WtCreateSeed | null>(null)
 
-// NOTE: two-way URL sync (writing ?provider/?team/?episode as the player
-// switches source) was reverted — it made a reload pin the last-played source
-// via applyInitialProvider, overriding the deterministic BEST default that the
-// product rule requires. `?provider`/`?team`/`?episode` stay READ-only deep-link
-// hints (notifications / shared links). Whether to bring back shareable-source
-// URLs (done right — e.g. only on a manual source pick) is a parked TODO.
+// Two-way URL sync — DONE RIGHT (reintroduced after the 2026-06-21 revert).
+// AePlayer emits `url-sync` with the live source/team/episode; provider/team are
+// EMPTY for an auto/smart-default selection and populated only for a user-pinned
+// source (manual pick or `?provider=` deep-link). We mirror exactly that into
+// `?provider/?team/?episode` so the address bar is shareable + bookmarkable —
+// WITHOUT the old bug: because the smart default emits no provider, a plain
+// reload writes no `?provider` and re-runs the deterministic BEST default (the
+// product rule a previously-watched source must not override). The read path
+// (queryProvider/queryTeam/queryEpisode → :initial-* props) is one-shot at
+// mount, so writing here never re-triggers it. router.replace (not push) keeps
+// history clean; we only write on a real diff. AePlayer suppresses the emit
+// inside WT rooms, and Anime.vue is never a room — so no churn there.
+function onUrlSync(s: WatchUrlState) {
+  const next = nextWatchQuery(route.query, s)
+  if (watchQueryChanged(route.query, next)) {
+    void router.replace({ query: next }).catch(() => {})
+  }
+}
 
 // The Invite button's create-room payload. WatchTogether is aePlayer-only
 // (Kodik retired from WT 2026-06-19 — aePlayer plays Kodik content internally).

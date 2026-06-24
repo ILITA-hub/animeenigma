@@ -357,7 +357,7 @@ import { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
 import { providerById, CURATED_TIER, PROVIDER_REGISTRY } from './providerRegistry'
 import { pickSmartDefault } from '@/composables/aePlayer/smartDefault'
-import { pickInitialProvider } from '@/composables/aePlayer/initialProvider'
+import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rankedProviderIds } from '@/composables/aePlayer/rankedProviderIds'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
@@ -417,6 +417,12 @@ const emit = defineEmits<{
    *  button can create the room AS aeplayer seeded with the current combo.
    *  `null` ⇒ no usable source yet (the InviteButton keeps the legacy default). */
   (e: 'combo-change', seed: WtCreateSeed | null): void
+  /** Shareable-URL sync (outside a room). Reflects the live source/team/episode
+   *  so the parent view can mirror them into `?provider/?team/?episode`. The
+   *  provider/team are EMPTY for an auto/smart-default selection (so a plain
+   *  reload re-runs the deterministic BEST default) and populated only for a
+   *  user-pinned source (manual pick or `?provider=` deep-link). */
+  (e: 'url-sync', state: { provider: string; team: string; episode: number }): void
 }>()
 
 // ─── Core state ──────────────────────────────────────────────────────────────
@@ -646,7 +652,9 @@ const displayRows = computed<ProviderRow[]>(() =>
 // props.animeId can change without a remount (no :key on the player), so the
 // per-anime ae availability probe must be invalidated when the title changes.
 // Also reset saved-combo fallback state so the new title gets a fresh attempt.
-let providerAutoSelected = false
+// Reactive so the shareable-URL sync (urlSyncState) can distinguish a
+// user-pinned source from an auto/smart-default one.
+const providerAutoSelected = ref(false)
 
 // Dynamic-BEST source switching: when an AUTO-selected source fails to actually
 // play (a dead playlist at playback — e.g. a megaplay CDN host that 403/502s our
@@ -670,7 +678,7 @@ function resetSourceSwitching() {
 watch(() => props.animeId, () => {
   aeAvailableCache = null
   aeAvailable.value = null
-  providerAutoSelected = false
+  providerAutoSelected.value = false
   resetSourceSwitching()
   resetFallbackIntents()
   availability.reset()
@@ -697,7 +705,7 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
   // covered because providerAutoSelected stays false in room mode, but guard
   // explicitly so a future change to that flag can't reintroduce divergence.
   if (roomPinned.value) return false
-  if (!providerAutoSelected) return false
+  if (!providerAutoSelected.value) return false
   if (sourceSwitchAttempts >= MAX_SOURCE_SWITCHES) return false
   const provider = state.combo.value.provider
   const server = state.combo.value.server || resolvedServers.value[0]?.id || ''
@@ -751,7 +759,7 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
   if (switchServerId) {
     state.setServer(switchServerId) // combo watcher re-resolves the stream
   } else {
-    providerAutoSelected = true
+    providerAutoSelected.value = true
     state.setProvider(toProvider, '') // provider watcher re-lists + re-resolves
   }
   recordFallbackIntent({ from: provider, to: toProvider, reason, acted: true })
@@ -831,19 +839,33 @@ function applyResolvedCombo() {
   if (team) state.setTeam(team)
 }
 
-// Notification deep-link override: pin the provider the user was watching
-// BEFORE the smart default runs. Honored only for a real, active provider
-// row (coarse/legacy/unavailable values fall through to the smart default).
-// Runs after applyResolvedCombo so initialTeam wins over the saved-pref team,
-// and after setAudio/setLang (which reset team → null) so the team sticks.
+// Notification / shared-link `?provider=` override: pin that source BEFORE the
+// smart default runs. Honored for any real, content-compatible, non-static-
+// disabled provider def (coarse/legacy/unavailable values fall through to the
+// smart default). Runs after applyResolvedCombo so initialTeam wins over the
+// saved-pref team, and after setAudio/setLang (which reset team → null) so the
+// team sticks.
+//
+// CRUCIAL: clamp audio/lang to what the provider serves. A row is only `active`
+// (and thus pinnable) when it matches the live audio/lang/content filter, and
+// the default combo is sub/en — so a ?provider=kodik (RU) pin would otherwise
+// land an `irrelevant` row and silently fall through to BEST. Switching the
+// facet first makes the deep-linked row relevant so the explicit choice holds.
 function applyInitialProvider() {
   if (state.combo.value.provider) return
-  const id = pickInitialProvider(props.initialProvider, rows.value)
-  if (!id) return
-  providerAutoSelected = false // user-intent pin, not an auto-selection
-  state.setProvider(id, '')
-  // audio/lang intentionally left as-resolved (saved prefs / defaults); the team
-  // title is matched best-effort within them by the downstream resolver.
+  const pin = resolveDeepLinkProvider(
+    props.initialProvider,
+    state.combo.value,
+    props.isHentai ? 'hentai' : 'common',
+    PROVIDER_REGISTRY,
+  )
+  if (!pin) return
+  providerAutoSelected.value = false // user-intent pin, not an auto-selection
+  // setAudio/setLang each reset team → null, so they must come BEFORE setProvider
+  // + setTeam (which is why initialTeam is applied last).
+  state.setAudio(pin.audio)
+  state.setLang(pin.lang)
+  state.setProvider(pin.provider, '')
   if (props.initialTeam) state.setTeam(props.initialTeam)
   recordDecision('deep-link — pinned from the ?provider/?team URL')
 }
@@ -907,7 +929,7 @@ watch(
       // still active in the latest rows (filter may have changed mid-probe).
       if (id && !state.combo.value.provider &&
           rows.value.some((r) => r.def.id === id && r.state === 'active')) {
-        providerAutoSelected = true
+        providerAutoSelected.value = true
         state.setProvider(id, '')
         const rank = orderedProviderIds.value.indexOf(id)
         recordDecision(
@@ -1014,6 +1036,38 @@ watch(
   (seed) => {
     if (props.room) return
     emit('combo-change', seed)
+  },
+  { immediate: true },
+)
+
+// ─── Shareable-URL sync ──────────────────────────────────────────────────────
+// Reflect the live source/team/episode so the parent view can mirror them into
+// `?provider/?team/?episode` (shareable + bookmarkable links). DONE RIGHT after
+// the 2026-06-21 revert: provider/team are emitted ONLY for a USER-PINNED source
+// (manual pick or `?provider=` deep-link → providerAutoSelected=false). For an
+// auto/smart-default selection they are emitted EMPTY, so the parent strips them
+// and a plain reload re-runs the deterministic BEST default (the product rule a
+// previously-watched source must not override). Suppressed inside a WT room.
+const urlSyncState = computed(() => {
+  const ep = selectedEpisode.value?.number ?? 0
+  const pinned = !providerAutoSelected.value && !!state.combo.value.provider
+  return {
+    provider: pinned ? state.combo.value.provider : '',
+    team: pinned ? (state.combo.value.team ?? '') : '',
+    episode: ep > 0 ? ep : 0,
+  }
+})
+// Gate on preferenceSettled: applyInitialProvider() (which CONSUMES the
+// `?provider=` deep-link from props) runs in resolvePreference().finally() right
+// before preferenceSettled flips true. Emitting earlier would let the initial
+// empty/auto state strip the deep-link param from the URL before the read path
+// reads it. Once settled, every later source/team/episode change syncs through.
+watch(
+  [preferenceSettled, urlSyncState],
+  ([settled, s]) => {
+    if (props.room) return
+    if (!settled) return
+    emit('url-sync', s as { provider: string; team: string; episode: number })
   },
   { immediate: true },
 )
@@ -1436,7 +1490,7 @@ async function repickProviderForFacet() {
     sourceError.value = 'No source for this language / audio'
     return
   }
-  providerAutoSelected = true
+  providerAutoSelected.value = true
   state.setProvider(id, '') // provider watcher re-lists episodes + refreshes teams
   recordDecision('re-picked best source for the new audio / language')
 }
@@ -1444,7 +1498,7 @@ async function repickProviderForFacet() {
 // ─── Provider selection helper ────────────────────────────────────────────────
 
 function onSelectProvider(id: string) {
-  providerAutoSelected = false
+  providerAutoSelected.value = false
   resetSourceSwitching() // manual pick — fresh state, and don't auto-switch it
   state.setProvider(id, '')
   if (state.hackerMode.value && scraperProviderIds.has(id)) {
