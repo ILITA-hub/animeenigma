@@ -162,7 +162,9 @@ func (h *ExecShellHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.log.Warnw("exec: SendToWorker failed", "worker_id", workerID, "session_id", sessionID, "error", err)
 			}
 		case "exec_close":
-			h.relay.CloseSession(sessionID, nil)
+			// Admin requested close — fall through to the single cleanup close
+			// below (do NOT call CloseSession here too, or the worker gets a
+			// duplicate exec_close and the relay logs a spurious second close).
 			goto cleanup
 		default:
 			h.log.Warnw("exec: unexpected frame type from admin", "type", f.Type)

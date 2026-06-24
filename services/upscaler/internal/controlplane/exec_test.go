@@ -226,7 +226,6 @@ func TestExec_CloseAudited(t *testing.T) {
 // TestExec_WorkerGoneEnds verifies that WorkerGone terminates all active
 // sessions for the worker and delivers exec_close to their admin channels.
 func TestExec_WorkerGoneEnds(t *testing.T) {
-	t.Helper()
 	var audit bytes.Buffer
 	relay, _ := buildRelay(t, true, &audit)
 
@@ -366,6 +365,85 @@ func TestExec_ConcurrentIsolated(t *testing.T) {
 				t.Errorf("worker %d session received frame from worker_idx=%d (cross-contamination!)", i, int(idx))
 			}
 		}
+	}
+}
+
+// TestExec_ConcurrentCloseAndDeliverSameSession is the regression test for the
+// close/deliver data race + send-on-closed-channel panic. It drives
+// DeliverFromWorker and CloseSession against the SAME session concurrently in a
+// tight loop. Without the fix (sess.closed guard + timer/channel ops under the
+// relay lock), this reliably trips the race detector on the *time.Timer and/or
+// panics with "send on closed channel". With the fix it is a clean no-op once
+// the session is closed.
+//
+// Run under -race for full coverage.
+func TestExec_ConcurrentCloseAndDeliverSameSession(t *testing.T) {
+	const iterations = 200
+
+	for it := 0; it < iterations; it++ {
+		var audit bytes.Buffer
+		relay, _ := buildRelay(t, true, &audit)
+
+		workerID := "worker-race"
+		sid, err := relay.Open(workerID, "admin-race", false)
+		if err != nil {
+			t.Fatalf("iter %d: Open: %v", it, err)
+		}
+
+		ch := relay.Subscribe(sid)
+		if ch == nil {
+			t.Fatalf("iter %d: nil Subscribe channel", it)
+		}
+
+		// Drain the admin channel so DeliverFromWorker sends don't all bounce off
+		// a full buffer (we want real sends racing the close).
+		drained := make(chan struct{})
+		go func() {
+			defer close(drained)
+			for range ch {
+			}
+		}()
+
+		var wg sync.WaitGroup
+
+		// Goroutine A: hammer DeliverFromWorker with exec_data on the SAME session.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				f, _ := NewFrame("exec_data", 0, ExecPayload{
+					SessionID: sid,
+					Data:      []byte("x"),
+				})
+				// Must never panic (send-on-closed) and must be race-clean on the
+				// timer even when CloseSession runs concurrently.
+				relay.DeliverFromWorker(f)
+			}
+		}()
+
+		// Goroutine B: hammer SendToWorker (admin→worker) which also touches the
+		// timer — another concurrent timer accessor.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				_ = relay.SendToWorker(sid, []byte("y"))
+			}
+		}()
+
+		// Goroutine C: close the session partway through the storm.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			relay.CloseSession(sid, nil)
+		}()
+
+		wg.Wait()
+		// CloseSession closed the admin channel; the drain goroutine exits.
+		<-drained
+
+		// A redundant second close must be a clean idempotent no-op (no panic).
+		relay.CloseSession(sid, nil)
 	}
 }
 

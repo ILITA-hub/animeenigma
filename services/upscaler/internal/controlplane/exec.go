@@ -38,14 +38,22 @@ type ExecRelayConfig struct {
 }
 
 // execSession holds per-session state.
+//
+// Concurrency: timer, toAdmin, and closed are all guarded by ExecRelay.mu.
+// A frame is only ever sent on toAdmin (or the timer touched) while holding mu
+// AND after checking !closed, so a send can never race the close(toAdmin) /
+// timer.Stop() that closeSessionInternal performs under the same lock. This
+// rules out both the data race on *time.Timer and the send-on-closed-channel
+// panic.
 type execSession struct {
 	sessionID string
 	workerID  string
 	adminID   string
 	pty       bool
-	toAdmin   chan Frame     // relay writes worker frames here; admin reads
+	toAdmin   chan Frame // relay writes worker frames here; admin reads (guarded by ExecRelay.mu)
 	cancel    context.CancelFunc
-	timer     *time.Timer
+	timer     *time.Timer // guarded by ExecRelay.mu
+	closed    bool        // set true by closeSessionInternal; guarded by ExecRelay.mu
 	openedAt  time.Time
 }
 
@@ -115,8 +123,11 @@ func (r *ExecRelay) Open(workerID, adminID string, pty bool) (string, error) {
 	}
 
 	// Create the session before sending the frame so DeliverFromWorker can
-	// route a very fast response back without racing.
-	ctx, cancel := context.WithCancel(context.Background())
+	// route a very fast response back without racing. The cancel func is the
+	// session's teardown signal (sess.cancel); the ctx itself is not read by the
+	// relay today (no per-session goroutine selects on ctx.Done()), so we keep
+	// only cancel.
+	_, cancel := context.WithCancel(context.Background())
 
 	sess := &execSession{
 		sessionID: sessionID,
@@ -162,7 +173,6 @@ func (r *ExecRelay) Open(workerID, adminID string, pty bool) (string, error) {
 	r.writeAudit(fmt.Sprintf("EXEC_OPEN  ts=%s session=%s worker=%s admin=%s pty=%v",
 		time.Now().UTC().Format(time.RFC3339), sessionID, workerID, adminID, pty))
 
-	_ = ctx // held by timer goroutine via cancel
 	return sessionID, nil
 }
 
@@ -177,12 +187,15 @@ func (r *ExecRelay) DeliverFromWorker(f Frame) {
 	}
 	sessionID := payload.SessionID
 
+	// Hold the lock across the !closed check, the timer reset, AND the send to
+	// toAdmin. closeSessionInternal sets sess.closed, stops the timer, and closes
+	// toAdmin under this same lock, so neither the *time.Timer access nor the
+	// channel send can race the teardown (no data race, no send-on-closed panic).
 	r.mu.Lock()
 	sess, ok := r.sessions[sessionID]
-	r.mu.Unlock()
-
-	if !ok {
+	if !ok || sess.closed {
 		// Session already closed or unknown — silently ignore.
+		r.mu.Unlock()
 		return
 	}
 
@@ -192,13 +205,18 @@ func (r *ExecRelay) DeliverFromWorker(f Frame) {
 	}
 
 	// Forward the frame to the admin channel (non-blocking drop on full buffer).
+	// Safe under the lock because toAdmin is only closed under this lock after
+	// sess.closed is set, which we checked above.
 	select {
 	case sess.toAdmin <- f:
 	default:
 		r.log.Warnw("exec: admin channel full, dropping frame", "session_id", sessionID, "type", f.Type)
 	}
+	r.mu.Unlock()
 
 	// If the worker sent exec_close, terminate the session from the worker side.
+	// closeSessionInternal re-acquires the lock and is idempotent (the second
+	// caller finds the session already removed and returns).
 	if f.Type == "exec_close" {
 		r.closeSessionInternal(sessionID, payload.ExitCode, false /* already delivered exec_close */)
 	}
@@ -208,14 +226,14 @@ func (r *ExecRelay) DeliverFromWorker(f Frame) {
 func (r *ExecRelay) SendToWorker(sessionID string, data []byte) error {
 	r.mu.Lock()
 	sess, ok := r.sessions[sessionID]
-	r.mu.Unlock()
-
-	if !ok {
+	if !ok || sess.closed {
+		r.mu.Unlock()
 		return ErrSessionNotFound
 	}
-
-	// Reset idle timer on admin activity.
+	// Reset idle timer on admin activity under the lock (timer is guarded by mu).
 	sess.timer.Reset(r.cfg.IdleTimeout)
+	workerID := sess.workerID
+	r.mu.Unlock()
 
 	payload := ExecPayload{
 		SessionID: sessionID,
@@ -225,7 +243,7 @@ func (r *ExecRelay) SendToWorker(sessionID string, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("controlplane: marshal exec_data: %w", err)
 	}
-	if err := r.hub.Send(sess.workerID, f); err != nil {
+	if err := r.hub.Send(workerID, f); err != nil {
 		if errors.Is(err, errWorkerNotFound) {
 			return ErrWorkerNotConnected
 		}
@@ -247,19 +265,27 @@ func (r *ExecRelay) CloseSession(sessionID string, exitCode *int) {
 func (r *ExecRelay) closeSessionInternal(sessionID string, exitCode *int, sendToWorker bool) {
 	r.mu.Lock()
 	sess, ok := r.sessions[sessionID]
-	if !ok {
+	if !ok || sess.closed {
+		// Already torn down — idempotent: a second close (e.g. worker exec_close
+		// after an admin/timeout close, or the handler's belt-and-suspenders
+		// cleanup) is a no-op.
 		r.mu.Unlock()
 		return
 	}
+	// Mark closed, stop the timer, and close the admin channel ALL under the
+	// lock so a concurrent DeliverFromWorker/SendToWorker (which check
+	// !sess.closed and touch timer/toAdmin under this same lock) can neither
+	// race the *time.Timer nor send on the closed channel.
+	sess.closed = true
 	delete(r.sessions, sessionID)
 	if ws := r.workerSessions[sess.workerID]; ws != nil {
 		delete(ws, sessionID)
 	}
+	sess.timer.Stop()
+	close(sess.toAdmin)
 	r.mu.Unlock()
 
-	// Stop the idle timer.
-	sess.timer.Stop()
-	// Cancel the session context.
+	// Cancel the session context (safe outside the lock — idempotent).
 	sess.cancel()
 
 	if sendToWorker {
@@ -273,10 +299,8 @@ func (r *ExecRelay) closeSessionInternal(sessionID string, exitCode *int, sendTo
 		}
 	}
 
-	// Close the admin channel so Subscribe readers exit.
-	close(sess.toAdmin)
-
-	// Audit: EXEC_CLOSE.
+	// Audit: EXEC_CLOSE. (The admin channel was already closed under the lock
+	// above so Subscribe readers have unblocked.)
 	exitStr := "nil"
 	if exitCode != nil {
 		exitStr = fmt.Sprintf("%d", *exitCode)
@@ -296,20 +320,18 @@ func (r *ExecRelay) WorkerGone(workerID string) {
 	r.mu.Unlock()
 
 	for _, sid := range sessionIDs {
-		// Deliver exec_close to the admin channel before teardown.
-		r.mu.Lock()
-		sess, ok := r.sessions[sid]
-		r.mu.Unlock()
-
-		if ok {
-			// Push an exec_close frame to the admin channel so the WS handler
-			// can relay it to the admin before the channel closes.
-			if f, err := NewFrame("exec_close", 0, ExecPayload{SessionID: sid}); err == nil {
+		// Deliver exec_close to the admin channel before teardown. The send is
+		// done under the lock and gated on !closed so it can't race a concurrent
+		// CloseSession that closes toAdmin (no send-on-closed panic).
+		if f, err := NewFrame("exec_close", 0, ExecPayload{SessionID: sid}); err == nil {
+			r.mu.Lock()
+			if sess, ok := r.sessions[sid]; ok && !sess.closed {
 				select {
 				case sess.toAdmin <- f:
 				default:
 				}
 			}
+			r.mu.Unlock()
 		}
 
 		// Tear down the session (don't send exec_close back to worker — it's gone).
