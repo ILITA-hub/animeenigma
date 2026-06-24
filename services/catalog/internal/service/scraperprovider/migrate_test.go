@@ -1,6 +1,7 @@
 package scraperprovider_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -484,5 +485,44 @@ func TestBackfillPolicyHealth(t *testing.T) {
 	db.First(&g, "name = ?", "gogoanime")
 	if g.Policy != "manual" {
 		t.Fatalf("guard failed: backfill re-ran and clobbered operator edit")
+	}
+}
+
+func TestAnimepaheSidecarRetired_RefreshesRecordOnceIdempotent(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Pre-existing live-DB state: animepahe disabled with the OLD reason that
+	// still cites the now-deleted sidecar.
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "animepahe", Status: domain.StatusDisabled, Reason: "Cloudflare challenge",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraperprovider.AnimepaheSidecarRetired(db); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	var row domain.ScraperProvider
+	db.Where("name = ?", "animepahe").First(&row)
+	if row.Status != domain.StatusDisabled {
+		t.Fatalf("status = %q, want disabled", row.Status)
+	}
+	if row.Reason != "Off — animepahe-resolver sidecar retired (2026-06-24)" {
+		t.Fatalf("reason not refreshed: %q", row.Reason)
+	}
+	if !strings.Contains(row.Description, "retired 2026-06-24") || !strings.Contains(row.Description, "can be revived") {
+		t.Fatalf("description not refreshed to the retired+revivable story: %q", row.Description)
+	}
+
+	// Operator revives animepahe; a second run must NOT clobber it (guard written).
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "animepahe").Update("status", domain.StatusEnabled)
+	if err := scraperprovider.AnimepaheSidecarRetired(db); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	db.Where("name = ?", "animepahe").First(&row)
+	if row.Status != domain.StatusEnabled {
+		t.Fatalf("status = %q after operator re-enable + rerun, want enabled (not clobbered)", row.Status)
 	}
 }

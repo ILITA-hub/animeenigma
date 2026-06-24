@@ -186,6 +186,9 @@ const nineanimeBrowserGuardKey = "nineanime_browser"
 // allanimeDegradeGuardKey marks AllAnimeDegrade as applied.
 const allanimeDegradeGuardKey = "allanime_degrade"
 
+// animepaheSidecarRetiredGuardKey marks AnimepaheSidecarRetired as applied.
+const animepaheSidecarRetiredGuardKey = "animepahe_sidecar_retired"
+
 // MiruroDubOnly flips the miruro roster row to supports_sub=false exactly once.
 // Miruro's upstream stopped serving sub streams (only English dub plays), so it
 // must not advertise/auto-select for SUB (original-Japanese-audio) playback. The
@@ -402,6 +405,51 @@ func AllAnimeDegrade(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: allanimeDegradeGuardKey}).Error; err != nil {
 		return fmt.Errorf("write allanime-degrade guard: %w", err)
+	}
+	return nil
+}
+
+// AnimepaheSidecarRetired records, exactly once, that the dedicated
+// animepahe-resolver stealth-Chromium sidecar was retired (2026-06-24) and that
+// animepahe is OFF but intentionally KEPT in the roster for possible later revival.
+// animepahe was already disabled (Cloudflare challenge, 0% solve rate, 2026-06-03);
+// this carries a refreshed reason/description to live DBs so the roster row tells the
+// true current story (sidecar gone, revivable) instead of citing a sidecar that no
+// longer exists. status is re-asserted as disabled (a no-op on the live row, which is
+// already disabled) so the intended terminal state is explicit. The seed is
+// insert-if-absent and never updates an existing prod row, so this RUN-ONCE guarded
+// migration is the only thing that flips live DBs. Guarded via the
+// catalog_migration_guards ledger so it is a no-op on every later boot and never
+// clobbers a later operator re-enable. Idempotent; safe to call every boot.
+func AnimepaheSidecarRetired(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", animepaheSidecarRetiredGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check animepahe-sidecar-retired guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator re-enable
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "animepahe").
+		Updates(map[string]interface{}{
+			"status":      domain.StatusDisabled,
+			"reason":      "Off — animepahe-resolver sidecar retired (2026-06-24)",
+			"description": "animepahe.pw migrated DDoS-Guard -> Cloudflare managed challenge that the stealth-Chromium sidecar couldn't solve (0% solve rate, ISS-023); disabled 2026-06-03. The dedicated animepahe-resolver sidecar was retired 2026-06-24 (no separate anti-DDoS-Guard browser is run anymore — Camoufox covers the live providers). The Go provider is KEPT in the failover roster so animepahe can be revived: flip this row to enabled and restore a transport (the sidecar from git history, or point SCRAPER_ANIMEPAHE_RESOLVER_URL at a new resolver).",
+		})
+	if result.Error != nil {
+		return fmt.Errorf("animepahe sidecar-retired: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No animepahe row to update (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("animepahe sidecar-retired: no row found for name=animepahe")
+	}
+	if err := db.Create(&migrationGuard{Key: animepaheSidecarRetiredGuardKey}).Error; err != nil {
+		return fmt.Errorf("write animepahe-sidecar-retired guard: %w", err)
 	}
 	return nil
 }

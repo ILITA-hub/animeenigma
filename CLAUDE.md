@@ -43,7 +43,7 @@ Videos are sourced in four ways:
 1. **Kodik iframe** — Frontend embeds Kodik's player iframe (no direct video control)
 2. **Backend proxy/restream** — Backend proxies MP4/HLS streams from AniLib, AnimePahe (Kwik), AllAnime (`fast4speed.rsvp`), AnimeFever, Miruro, 9anime, and Hanime CDNs through `services/streaming` HLS proxy for CORS + Referer injection
 3. **Self-hosted storage** — Admin-uploaded videos stored in MinIO
-4. **Stealth-Chromium sidecar** — `services/animepahe-resolver/` (Phase 27) solves DDoS-Guard on `animepahe.pw` so the Go scraper can hit the upstream API; sidecar is internal-only, capped at 500 MB RSS
+4. **Stealth browser sidecar** — `services/stealth-scraper/` (Camoufox anti-detect Firefox) resolves providers whose DB `engine` is `browser` (gogoanime, nineanime: JS-runtime stream id + Referer-gated rotating CDN); internal-only. _(The earlier `services/animepahe-resolver/` puppeteer sidecar that fronted `animepahe.pw` was **retired 2026-06-24** — animepahe is disabled and kept in the roster for possible revival.)_
 
 ### On-Demand Catalog Population
 
@@ -60,7 +60,7 @@ Primary data sources:
 - **Shikimori** — Anime metadata (titles, descriptions, posters, genres)
 - **Kodik** — RU video streaming (iframe embed). Parser: `services/catalog/internal/parser/kodik/`
 - **AniLib** — RU video streaming (direct MP4). Parser: `services/catalog/internal/parser/animelib/`
-- **OurEnglish (`services/scraper/`)** — EN video streaming via failover orchestrator. Providers (in order): `gogoanime` → `animepahe` (Kwik via stealth sidecar) → `allanime` → `animefever` → `miruro` (secure-pipe pure-Go obfuscation) → `nineanime` (MP4-only last-resort) → optional `animekai`. Provider impls live at `services/scraper/internal/providers/{name}/`. Embed extractors at `services/scraper/internal/embeds/`.
+- **OurEnglish (`services/scraper/`)** — EN video streaming via failover orchestrator. Providers (in order): `gogoanime` → `animepahe` _(disabled 2026-06-24 — resolver sidecar retired; provider code kept in the roster for revival, so it stays in `candidateProviders` but is never registered while disabled)_ → `allanime` → `animefever` → `miruro` (secure-pipe pure-Go obfuscation) → `nineanime` (MP4-only last-resort) → optional `animekai`. Provider impls live at `services/scraper/internal/providers/{name}/`. Embed extractors at `services/scraper/internal/embeds/`.
 - **Hanime** — 18+ video streaming. Parser: `services/catalog/internal/parser/hanime/`
 - **AllAnime raw-JP** — Original-audio JP video (Raw player). Library/parser: `services/catalog/internal/parser/allanime/` (+ `services/scraper/internal/providers/allanime/`).
 - **Jimaku.cc** — Japanese subtitle files (ASS/SRT/VTT). Consumed by `OurEnglish`, `Raw` players via `SubtitleOverlay.vue`.

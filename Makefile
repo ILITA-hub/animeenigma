@@ -2,7 +2,7 @@
 	k8s-apply k8s-delete k8s-diff k8s-wait k8s-status k8s-restart k8s-logs k8s-port-forward \
 	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod \
 	migrate migrate-down migrate-force migrate-version migrate-auth migrate-catalog migrate-player migrate-rooms migrate-all migrate-create migrate-status db-shell \
-	redeploy-all redeploy-web redeploy-animepahe-resolver type-check lint-design \
+	redeploy-all redeploy-web type-check lint-design \
 	backfill-attributes build-backfill-attributes favicons
 
 # Variables
@@ -283,12 +283,6 @@ redeploy-web: i18n-lint lint-design type-check ## Rebuild and restart web fronte
 	docker rm animeenigma-web || true
 	docker compose -f docker/docker-compose.yml up -d --no-deps web
 	@echo "Web frontend redeployed"
-
-redeploy-animepahe-resolver: ## Rebuild and restart the animepahe-resolver sidecar (Phase 27)
-	@echo "Rebuilding animepahe-resolver sidecar..."
-	$(DEPLOY_LOCK) docker compose -f docker/docker-compose.yml build animepahe-resolver
-	docker compose -f docker/docker-compose.yml up -d --no-deps animepahe-resolver
-	@echo "animepahe-resolver redeployed"
 
 redeploy-%: ## Rebuild and restart a service (e.g., make redeploy-gateway)
 	./deploy/scripts/redeploy.sh $*

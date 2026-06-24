@@ -1,7 +1,7 @@
 # Build-context exclusions (audit M508).
 #
 # The repo-root build context (compose `context: ..`) is shared by every Go service
-# plus scraper / stealth-scraper / animepahe-resolver. Their Dockerfiles COPY only
+# plus scraper / stealth-scraper. Their Dockerfiles COPY only
 # go.work*, the libs/ and services/ trees, and per-module go.mod/go.sum — never the
 # paths below — so excluding these only shrinks the context tarball streamed to the
 # Docker daemon on each build; no image content changes. (web, megacloud-extractor

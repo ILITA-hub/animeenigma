@@ -247,6 +247,16 @@ func main() {
 		log.Errorw("allanime degrade migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) refresh of the animepahe roster row: its dedicated
+	// animepahe-resolver stealth-Chromium sidecar was retired 2026-06-24. animepahe
+	// stays OFF (disabled) but is KEPT in the roster + candidateProviders so it can be
+	// revived later; this only updates the reason/description so the row stops citing a
+	// sidecar that no longer exists. Run-once via the ledger; a later operator re-enable
+	// in the DB is never clobbered.
+	if err := scraperprovider.AnimepaheSidecarRetired(db.DB); err != nil {
+		log.Errorw("animepahe sidecar-retired migration failed (continuing)", "error", err)
+	}
+
 	// One-time (guarded) flip of nineanime to engine=browser + base_url:
 	// 9anime.me.uk is DDoS-Guard/JS-gated and its megaplay player resolves the
 	// stream id + rotating CDN at runtime, so it must be scraped via the Camoufox

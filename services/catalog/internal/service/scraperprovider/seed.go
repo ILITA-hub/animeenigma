@@ -96,11 +96,22 @@ var defaultProviders = []domain.ScraperProvider{
 		QualityCeiling: "720p", PreferenceWeight: 40,
 	},
 	{
+		// KEPT in the roster (and in candidateProviders + the Go provider package)
+		// on purpose: animepahe is OFF but revivable. Disabled 2026-06-03 (Cloudflare
+		// challenge, 0% solve); its dedicated animepahe-resolver stealth-Chromium
+		// sidecar was RETIRED 2026-06-24 (no separate anti-DDoS-Guard browser is run
+		// anymore — Camoufox covers the live providers). To revive: flip this row to
+		// enabled and restore a transport (the sidecar from git history, or point
+		// SCRAPER_ANIMEPAHE_RESOLVER_URL at a new resolver). See AnimepaheSidecarRetired.
 		Name: "animepahe", Status: domain.StatusDisabled,
-		Reason: "Cloudflare challenge",
-		Description: "animepahe.pw migrated DDoS-Guard -> Cloudflare managed challenge; the " +
-			"stealth-Chromium sidecar can't solve it (0% solve rate). See ISS-023. " +
-			"Disabled 2026-06-03.",
+		Reason: "Off — animepahe-resolver sidecar retired (2026-06-24)",
+		Description: "animepahe.pw migrated DDoS-Guard -> Cloudflare managed challenge that the " +
+			"stealth-Chromium sidecar couldn't solve (0% solve rate, ISS-023); disabled 2026-06-03. " +
+			"The dedicated animepahe-resolver sidecar was retired 2026-06-24 (no separate " +
+			"anti-DDoS-Guard browser is run anymore — Camoufox covers the live providers). The Go " +
+			"provider is KEPT in the failover roster so animepahe can be revived: flip this row to " +
+			"enabled and restore a transport (the sidecar from git history, or point " +
+			"SCRAPER_ANIMEPAHE_RESOLVER_URL at a new resolver).",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 30,
 	},

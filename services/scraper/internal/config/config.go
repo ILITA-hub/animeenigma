@@ -93,14 +93,19 @@ type RedisConfig struct {
 // AnimePaheConfig is the per-provider override surface for animepahe.Provider.
 //
 // Phase 27 SCRAPER-HEAL-30: the Go parser no longer talks to animepahe.*
-// directly. ResolverURL points at the stealth-Chromium sidecar
-// (`services/animepahe-resolver/`) which owns the upstream challenge stack
-// (DDoS-Guard, browser-fingerprint, etc.). Defaults to the docker-compose
-// service name `http://animepahe-resolver:3000`. Override via
-// SCRAPER_ANIMEPAHE_RESOLVER_URL when running on a non-default port or
-// rotating the sidecar in place. The pre-Phase-27 BaseURL field (paired
-// with the old upstream-URL env binding) has been removed entirely — there
-// is no fallback to upstream animepahe.* hosts.
+// directly. ResolverURL points at a stealth-Chromium resolver sidecar which
+// owns the upstream challenge stack (DDoS-Guard, browser-fingerprint, etc.).
+// The pre-Phase-27 BaseURL field has been removed entirely — there is no
+// fallback to upstream animepahe.* hosts.
+//
+// RETIRED 2026-06-24: animepahe is disabled in the roster and its dedicated
+// `services/animepahe-resolver/` sidecar was deleted (no separate
+// anti-DDoS-Guard browser is run anymore — Camoufox covers the live
+// providers). This struct + the `http://animepahe-resolver:3000` default are
+// KEPT so the provider still constructs at boot (New() only validates the URL
+// string, never dials) and animepahe can be revived later: re-add a resolver
+// and point SCRAPER_ANIMEPAHE_RESOLVER_URL at it. While disabled the field is
+// never used (the orchestrator never registers/dispatches the provider).
 type AnimePaheConfig struct {
 	ResolverURL string
 }

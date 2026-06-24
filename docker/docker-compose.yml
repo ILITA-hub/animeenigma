@@ -144,40 +144,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # Phase 27 / SCRAPER-HEAL-29..33 — stealth-Chromium sidecar that fronts the
-  # animepahe upstream. The scraper service talks to this container over the
-  # docker-compose network (no host port exposed). Hard ship-gate caps from
-  # CONTEXT.md D5: 500 MB memory + 0.5 CPU. seccomp:unconfined is the
-  # documented sandbox-bypass; cap_add SYS_ADMIN is intentionally NOT granted
-  # (T-27-03-02). The two-layer /healthz probe (T-27-03-03) ensures Chromium
-  # is actually alive before the scraper depends_on flips green.
-  animepahe-resolver:
-    logging: *default-logging
-    build:
-      context: ..
-      dockerfile: services/animepahe-resolver/Dockerfile
-    container_name: animeenigma-animepahe-resolver
-    restart: unless-stopped
-    init: true                  # SIGTERM cleanup for Chromium subprocesses
-    shm_size: 256m              # paired with --disable-dev-shm-usage; Chrome still wants some shm
-    security_opt:
-      - seccomp:unconfined      # documented exception — Chrome's internal sandbox needs userns
-    mem_limit: 500m             # HARD ship gate per CONTEXT.md D5 + T-27-03-01
-    cpus: "0.5"
-    environment:
-      NODE_ENV: production
-      LOG_LEVEL: info
-      # NOTE: the sidecar HARDCODES https://animepahe.pw in server.js + browser.js
-      # (T-27-01-01 — not overridable via env). The line below is audit documentation
-      # only; changing it does NOT change sidecar behavior.
-      _HARDCODED_UPSTREAM: "https://animepahe.pw (see server.js:37, browser.js:31)"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-
   # Camoufox stealth-scraper sidecar — resolves providers whose DB `engine`
   # column is "browser" (gogoanime → megaplay: JS-runtime stream id + rotating
   # CDN that curl-class scraping can't reach). Drives a real anti-detect Firefox
@@ -247,10 +213,6 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
       REDIS_DB: 0
-      # Phase 27 / SCRAPER-HEAL-31 — animepahe-resolver is the new transport
-      # for animepahe (replaces direct upstream fetch). See
-      # services/animepahe-resolver/.
-      SCRAPER_ANIMEPAHE_RESOLVER_URL: http://animepahe-resolver:3000
       # Camoufox stealth-scraper sidecar — used for providers whose DB engine
       # column is "browser" (e.g. gogoanime). Non-secret service-discovery URL.
       STEALTH_SCRAPER_URL: ${STEALTH_SCRAPER_URL:-http://stealth-scraper:3000}
@@ -286,8 +248,6 @@ services:
       - "127.0.0.1:8088:8088"
     depends_on:
       megacloud-extractor:
-        condition: service_healthy
-      animepahe-resolver:
         condition: service_healthy
       redis:
         condition: service_healthy
