@@ -90,6 +90,13 @@ func firstNonComment(manifest []byte) string {
 	return ""
 }
 
+// hasAES128 reports whether an HLS manifest declares AES-128 segment encryption.
+// AES-128 segments are valid content but ffprobe cannot decode the ciphertext
+// without the key, so callers should skip the video-decode gate for such streams.
+func hasAES128(manifest []byte) bool {
+	return strings.Contains(string(manifest), "#EXT-X-KEY:METHOD=AES-128")
+}
+
 func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict {
 	ctx, cancel := context.WithTimeout(ctx, validatorBudget)
 	defer cancel()
@@ -108,6 +115,11 @@ func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict
 		verdict.Reason = streamprobe.ReasonEmptyResponse
 		return verdict
 	}
+
+	// Track AES-128 encryption across the manifest chain. When segments are
+	// AES-128 encrypted the ciphertext is opaque to ffprobe; we trust
+	// reachability (HTTP 200 + non-empty bytes) instead of video decode.
+	encrypted := hasAES128(master)
 
 	// master -> first variant (if present) -> first segment.
 	cur := master
@@ -132,12 +144,23 @@ func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict
 		}
 		if !strings.Contains(string(body[:min(len(body), 64)]), "#EXTM3U") {
 			// reached a media segment
+			if encrypted {
+				// Segment is AES-128 ciphertext — ffprobe would see random bytes
+				// and report no video stream. Reachability is sufficient here.
+				verdict.Reason = streamprobe.ReasonPlayable
+				return verdict
+			}
 			if perr := v.prober.Probe(ctx, body); perr != nil {
 				verdict.Reason = streamprobe.ReasonDecodeFailed
 				return verdict
 			}
 			verdict.Reason = streamprobe.ReasonPlayable
 			return verdict
+		}
+		// Propagate encryption flag from sub-manifests (variant playlists can
+		// carry their own #EXT-X-KEY even when the master does not).
+		if hasAES128(body) {
+			encrypted = true
 		}
 		cur = body
 	}

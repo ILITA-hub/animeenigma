@@ -104,6 +104,34 @@ func TestValidator_InnerFetchTransportError(t *testing.T) {
 	}
 }
 
+// TestValidator_AES128SkipsFFprobe verifies that AES-128 encrypted segments are
+// accepted without the video-decode gate. kiwi (miruro's inner provider) serves
+// AES-128 HLS; encrypted bytes look like random noise to ffprobe, so the probe
+// would always return decode_failed even for healthy streams. The validator now
+// detects the #EXT-X-KEY:METHOD=AES-128 tag and trusts reachability instead.
+func TestValidator_AES128SkipsFFprobe(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := r.URL.Query().Get("url")
+		switch {
+		case strings.Contains(u, "master"):
+			// Flat AES-128 playlist (no variant level — kiwi omits #EXT-X-STREAM-INF).
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			w.Write([]byte("#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"/api/streaming/hls-proxy?url=key\"\n#EXTINF:4,\n/api/streaming/hls-proxy?url=seg0\n"))
+		default:
+			// seg0 — opaque ciphertext (from ffprobe's perspective).
+			w.Write([]byte("ENCRYPTEDCIPHERTEXTDATA"))
+		}
+	}))
+	defer s.Close()
+
+	// prober returns an error as it would for encrypted bytes; fix must skip it.
+	v := NewHTTPValidator(s.URL, s.Client(), fakeProber{err: errors.New("no video stream")})
+	got := v.Validate(context.Background(), ResolvedStream{MasterURL: "https://cdn/master.m3u8", Provider: "miruro", Server: "kiwi"})
+	if got.Reason != streamprobe.ReasonPlayable {
+		t.Fatalf("want playable for AES-128 stream, got %s", got.Reason)
+	}
+}
+
 // TestValidator_UsesNativeProxyPath is the regression test for the deploy bug:
 // the probe calls streaming DIRECTLY, so it must hit the native /api/v1/hls-proxy
 // route, not the public /api/streaming/hls-proxy path the gateway rewrites. This
