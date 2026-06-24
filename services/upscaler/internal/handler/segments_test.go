@@ -83,6 +83,7 @@ func openHandlerTestDB(t *testing.T) *gorm.DB {
 			source_codec      TEXT,
 			source_pixfmt     TEXT,
 			source_fps        TEXT,
+			source_height     INTEGER NOT NULL DEFAULT 0,
 			segment_count     INTEGER NOT NULL DEFAULT 0,
 			output_prefix     TEXT,
 			error_text        TEXT,

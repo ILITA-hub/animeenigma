@@ -158,7 +158,7 @@ func TestJobRepository_SetSourceMeta(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := r.SetSourceMeta(ctx, job.ID, "h264", "yuv420p", "23.976", 120); err != nil {
+	if err := r.SetSourceMeta(ctx, job.ID, "h264", "yuv420p", "23.976", 540, 120); err != nil {
 		t.Fatalf("SetSourceMeta: %v", err)
 	}
 
@@ -174,6 +174,9 @@ func TestJobRepository_SetSourceMeta(t *testing.T) {
 	}
 	if got.SourceFPS != "23.976" {
 		t.Fatalf("SourceFPS = %q, want 23.976", got.SourceFPS)
+	}
+	if got.SourceHeight != 540 {
+		t.Fatalf("SourceHeight = %d, want 540", got.SourceHeight)
 	}
 	if got.SegmentCount != 120 {
 		t.Fatalf("SegmentCount = %d, want 120", got.SegmentCount)

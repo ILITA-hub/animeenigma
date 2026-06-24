@@ -25,7 +25,7 @@ var sqliteOnce sync.Once
 // substitute for Postgres's gen_random_uuid() builtin.
 func genRandomUUID() string {
 	b := make([]byte, 16)
-	rand.Read(b) //nolint:gosec // test-only, non-cryptographic use
+	rand.Read(b)                //nolint:gosec // test-only, non-cryptographic use
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
@@ -84,6 +84,7 @@ func openTestDB(t *testing.T) *gorm.DB {
 			source_codec      TEXT,
 			source_pixfmt     TEXT,
 			source_fps        TEXT,
+			source_height     INTEGER NOT NULL DEFAULT 0,
 			segment_count     INTEGER NOT NULL DEFAULT 0,
 			output_prefix     TEXT,
 			error_text        TEXT,

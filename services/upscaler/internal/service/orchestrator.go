@@ -34,7 +34,7 @@ const (
 type orchJobRepo interface {
 	List(ctx context.Context, f repo.JobFilter) ([]domain.UpscaleJob, error)
 	UpdateStatus(ctx context.Context, id string, status domain.JobStatus, errText string) error
-	SetSourceMeta(ctx context.Context, id, codec, pixfmt, fps string, segCount int) error
+	SetSourceMeta(ctx context.Context, id, codec, pixfmt, fps string, height, segCount int) error
 	SetOutputPrefix(ctx context.Context, id, prefix string) error
 }
 
@@ -298,10 +298,12 @@ func (o *Orchestrator) segmentJob(ctx context.Context, job *domain.UpscaleJob) {
 
 	n := len(segPaths)
 
-	// Persist source metadata + the ACTUAL segment count (so the finalizer can
-	// reconstruct a ProbeResult without re-reading the possibly-gone source, and
-	// so the leaser/worker pool knows how many segments to expect).
-	if err := o.jobs.SetSourceMeta(ctx, job.ID, probe.Codec, probe.PixFmt, probe.FPS, n); err != nil {
+	// Persist source metadata (codec/pixfmt/fps/HEIGHT) + the ACTUAL segment
+	// count. Height is persisted so the finalizer can derive the
+	// UPSCALED-{height}p prefix deterministically (height × scale) WITHOUT
+	// re-reading the possibly-gone source; the segment count lets the
+	// leaser/worker pool know how many segments to expect.
+	if err := o.jobs.SetSourceMeta(ctx, job.ID, probe.Codec, probe.PixFmt, probe.FPS, probe.Height, n); err != nil {
 		o.failJob(ctx, job.ID, fmt.Sprintf("set source meta: %v", err))
 		return
 	}
@@ -368,11 +370,12 @@ func (o *Orchestrator) finalizeJob(ctx context.Context, job *domain.UpscaleJob) 
 		return
 	}
 
-	// scaleHeight = source height × job.Scale. The source height is recovered
-	// from the staged source copy (still present in staging until cleanup); if
-	// it cannot be probed we fall back to job.Scale alone so the prefix is still
-	// deterministic rather than crashing the finalize.
-	scaleHeight := o.scaleHeight(ctx, jobStaging, job)
+	// scaleHeight = persisted source height × job.Scale. Both are durable
+	// columns set at segmenting time, so the prefix is deterministic and needs
+	// NO filesystem access at finalize. When SourceHeight is 0 (legacy/unprobed
+	// job) we fall back to job.Scale alone so the prefix stays well-formed; this
+	// is logged at warn since the resolution label will be wrong.
+	scaleHeight := o.scaleHeight(job)
 
 	prefix := autocache.UpscaledPrefix(job.ShikimoriID, job.Episode, scaleHeight)
 	if _, err := o.writer.Upload(ctx, prefix, hlsFiles); err != nil {
@@ -393,29 +396,22 @@ func (o *Orchestrator) finalizeJob(ctx context.Context, job *domain.UpscaleJob) 
 	o.log.Infow("orchestrator: job finalized", "job_id", job.ID, "prefix", prefix)
 }
 
-// scaleHeight computes the target output height = sourceHeight × job.Scale.
-// It re-probes the staged source copy ({staging}/source.*) to recover the source
-// height (NOT stored in a dedicated job column). If the staged source is gone or
-// unprobeable, it returns job.Scale (a deterministic, non-zero fallback) so the
-// MinIO prefix is still well-formed.
-func (o *Orchestrator) scaleHeight(ctx context.Context, jobStaging string, job *domain.UpscaleJob) int {
+// scaleHeight computes the target output height = job.SourceHeight × job.Scale,
+// reading ONLY the durable columns persisted at segmenting time — no filesystem
+// access. When SourceHeight is 0 (a legacy/unprobed job) it falls back to scale
+// alone so the MinIO prefix is still well-formed, logging a warn because the
+// resolution label will be inaccurate.
+func (o *Orchestrator) scaleHeight(job *domain.UpscaleJob) int {
 	scale := job.Scale
 	if scale <= 0 {
 		scale = 1
 	}
-	srcPath := findStagedSource(jobStaging)
-	if srcPath == "" {
-		o.log.Warnw("orchestrator: staged source absent for scaleHeight; using scale fallback",
+	if job.SourceHeight <= 0 {
+		o.log.Warnw("orchestrator: SourceHeight not persisted; using scale fallback for prefix",
 			"job_id", job.ID, "scale", scale)
 		return scale
 	}
-	probe, err := o.prober.Probe(ctx, srcPath)
-	if err != nil || probe.Height <= 0 {
-		o.log.Warnw("orchestrator: re-probe for scaleHeight failed; using scale fallback",
-			"job_id", job.ID, "scale", scale, "error", err)
-		return scale
-	}
-	return probe.Height * scale
+	return job.SourceHeight * scale
 }
 
 // failJob flips a job to failed with the given error text. Logged at warn.
@@ -490,25 +486,4 @@ func globDir(dir string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// findStagedSource returns the staged source copy path ({staging}/source.*),
-// or "" when no such file exists. The Resolver writes the original to
-// {staging}/source{ext}; we glob for it to recover the extension.
-func findStagedSource(jobStaging string) string {
-	matches, err := filepath.Glob(filepath.Join(jobStaging, "source.*"))
-	if err != nil || len(matches) == 0 {
-		return ""
-	}
-	sort.Strings(matches)
-	// Skip in-progress copies (source.*.tmp) — prefer a committed file.
-	for _, m := range matches {
-		if filepath.Ext(m) == ".tmp" {
-			continue
-		}
-		if nonEmptyFile(m) {
-			return m
-		}
-	}
-	return ""
 }

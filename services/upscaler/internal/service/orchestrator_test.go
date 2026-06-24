@@ -38,6 +38,7 @@ type orchStatusCall struct {
 
 type orchSourceMeta struct {
 	codec, pixfmt, fps string
+	height             int
 	segCount           int
 }
 
@@ -82,14 +83,15 @@ func (f *orchFakeJobRepo) UpdateStatus(_ context.Context, id string, status doma
 	return nil
 }
 
-func (f *orchFakeJobRepo) SetSourceMeta(_ context.Context, id, codec, pixfmt, fps string, segCount int) error {
+func (f *orchFakeJobRepo) SetSourceMeta(_ context.Context, id, codec, pixfmt, fps string, height, segCount int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.sourceMeta[id] = orchSourceMeta{codec: codec, pixfmt: pixfmt, fps: fps, segCount: segCount}
+	f.sourceMeta[id] = orchSourceMeta{codec: codec, pixfmt: pixfmt, fps: fps, height: height, segCount: segCount}
 	if j, ok := f.jobs[id]; ok {
 		j.SourceCodec = codec
 		j.SourcePixFmt = pixfmt
 		j.SourceFPS = fps
+		j.SourceHeight = height
 		j.SegmentCount = segCount
 	}
 	return nil
@@ -341,6 +343,10 @@ func TestSegmentJobAdvancesQueuedToUpscaling(t *testing.T) {
 	if meta.codec != "hevc" || meta.pixfmt != "yuv420p10le" || meta.fps != "24000/1001" {
 		t.Errorf("unexpected source meta: %+v", meta)
 	}
+	// source height (from the probe) is persisted for the finalizer's prefix.
+	if meta.height != 540 {
+		t.Errorf("expected persisted source height 540, got %d", meta.height)
+	}
 	// segments seeded.
 	if got := h.segs.bulkInserts["job-1"]; got != 3 {
 		t.Errorf("expected 3 segments seeded, got %d", got)
@@ -402,20 +408,17 @@ func TestNoFlipWhileSegmentsOutstanding(t *testing.T) {
 }
 
 // TestFinalizeJobUploadsAndCompletes: a finalizing job runs Concat once, uploads
-// to the correct UpscaledPrefix, sets the output prefix, and flips to done.
+// to the REAL height-based UpscaledPrefix derived from the persisted SourceHeight
+// (540) × Scale (2) = 1080 — NOT the scale-only fallback — sets the output
+// prefix, and flips to done. No filesystem re-probe is involved at finalize.
 func TestFinalizeJobUploadsAndCompletes(t *testing.T) {
 	// Source meta persisted at segment time: 540p source, scale 2 -> 1080p.
 	job := &domain.UpscaleJob{
 		ID: "job-3", ShikimoriID: "777", Episode: 12, Scale: 2,
-		Status: domain.JobFinalizing, SourcePixFmt: "yuv420p10le",
+		Status: domain.JobFinalizing, SourcePixFmt: "yuv420p10le", SourceHeight: 540,
 	}
 	jobs := newOrchFakeJobRepo(job)
 	h := newOrchHarness(t, jobs)
-	// scaleHeight re-probes staged source; our fake prober returns Height=540.
-	// findStagedSource will return "" (no real file) so scaleHeight falls back to
-	// job.Scale. To exercise the height path deterministically we override the
-	// prober to a known height and rely on the fallback when no staged file:
-	// here there is no staged file, so prefix uses scaleHeight == job.Scale (2).
 
 	h.o.processFinalizing(context.Background())
 
@@ -428,8 +431,8 @@ func TestFinalizeJobUploadsAndCompletes(t *testing.T) {
 	if h.wr.uploadCalls != 1 {
 		t.Errorf("expected Upload once, got %d", h.wr.uploadCalls)
 	}
-	// No staged source on disk -> scaleHeight falls back to job.Scale (2).
-	wantPrefix := "aeProvider/777/UPSCALED-2p/12/"
+	// scaleHeight = SourceHeight(540) × Scale(2) = 1080 → the REAL prefix.
+	wantPrefix := "aeProvider/777/UPSCALED-1080p/12/"
 	if h.wr.lastPrefix != wantPrefix {
 		t.Errorf("upload prefix = %q, want %q", h.wr.lastPrefix, wantPrefix)
 	}
@@ -441,6 +444,29 @@ func TestFinalizeJobUploadsAndCompletes(t *testing.T) {
 	}
 	if got := jobs.statusCountFor("job-3", domain.JobFailed); got != 0 {
 		t.Errorf("expected no failed flip, got %d", got)
+	}
+}
+
+// TestFinalizeLegacyHeightFallback: a legacy job with SourceHeight==0 (e.g.
+// queued before height was persisted) falls back to Scale alone for the prefix
+// so the upload stays well-formed rather than crashing.
+func TestFinalizeLegacyHeightFallback(t *testing.T) {
+	job := &domain.UpscaleJob{
+		ID: "legacy", ShikimoriID: "888", Episode: 4, Scale: 2,
+		Status: domain.JobFinalizing, SourceHeight: 0,
+	}
+	jobs := newOrchFakeJobRepo(job)
+	h := newOrchHarness(t, jobs)
+
+	h.o.processFinalizing(context.Background())
+
+	// SourceHeight==0 → fallback to Scale (2) → UPSCALED-2p.
+	wantPrefix := "aeProvider/888/UPSCALED-2p/4/"
+	if h.wr.lastPrefix != wantPrefix {
+		t.Errorf("legacy fallback prefix = %q, want %q", h.wr.lastPrefix, wantPrefix)
+	}
+	if got := jobs.statusCountFor("legacy", domain.JobDone); got != 1 {
+		t.Errorf("expected done flip once, got %d", got)
 	}
 }
 

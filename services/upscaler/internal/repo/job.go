@@ -96,7 +96,9 @@ func (r *JobRepository) SetProgress(ctx context.Context, id string, pct int) err
 }
 
 // SetSourceMeta records video source metadata discovered during segmentation.
-func (r *JobRepository) SetSourceMeta(ctx context.Context, id, codec, pixfmt, fps string, segCount int) error {
+// height is the source video height in pixels (from ffprobe); it is persisted so
+// the finalizer can derive the UPSCALED-{height}p prefix deterministically.
+func (r *JobRepository) SetSourceMeta(ctx context.Context, id, codec, pixfmt, fps string, height, segCount int) error {
 	return r.db.WithContext(ctx).
 		Model(&domain.UpscaleJob{}).
 		Where("id = ?", id).
@@ -104,6 +106,7 @@ func (r *JobRepository) SetSourceMeta(ctx context.Context, id, codec, pixfmt, fp
 			"source_codec":  codec,
 			"source_pixfmt": pixfmt,
 			"source_fps":    fps,
+			"source_height": height,
 			"segment_count": segCount,
 		}).Error
 }
