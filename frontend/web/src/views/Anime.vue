@@ -903,6 +903,15 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { parseDescription } from '@/utils/description-parser'
 import { getImageUrl } from '@/composables/useImageProxy'
+import {
+  runeLen,
+  formatReviewStats as formatReviewStatsPure,
+  isReviewFlagged as isReviewFlaggedPure,
+  formatEpisodeCount as formatEpisodeCountPure,
+  formatCount as formatCountPure,
+  formatAiredAgo as formatAiredAgoPure,
+  parseLastWatchedEpisode,
+} from '@/composables/anime/animeFormatters'
 
 interface AnimeWithExtras {
   japaneseTitle?: string
@@ -1161,23 +1170,8 @@ const resume = useResumeStateMachine({
 })
 
 function loadLastEpisode(animeId: string) {
-  const raw = localStorage.getItem(`watch_progress:${animeId}`)
-  if (!raw) return
-  try {
-    const data = JSON.parse(raw) as Record<string, { updatedAt?: number }>
-    let latest = 0
-    let latestEp: number | undefined
-    for (const [ep, info] of Object.entries(data)) {
-      if (info.updatedAt && info.updatedAt > latest) {
-        latest = info.updatedAt
-        // WR-10: explicit radix 10 to defend against the historic octal-on-
-        // leading-zero foot-gun ("08" -> 0 in pre-ES5 engines) and to satisfy
-        // ESLint's `radix` rule.
-        latestEp = parseInt(ep, 10)
-      }
-    }
-    if (latestEp && !isNaN(latestEp)) lastEpisode.value = latestEp
-  } catch { /* ignore corrupted data */ }
+  const ep = parseLastWatchedEpisode(localStorage.getItem(`watch_progress:${animeId}`))
+  if (ep !== undefined) lastEpisode.value = ep
 }
 
 // Once the resume state machine loads from server, it overrides the
@@ -1427,10 +1421,6 @@ const editError = ref('')
 const editSaving = ref(false)
 const deleteError = ref('')
 
-// Rune-count helper (UTF-8 code points; matches the backend's 1–2000 rune
-// validation rather than UTF-16 length).
-const runeLen = (s: string) => [...s].length
-
 const statusLabels = computed((): Record<string, string> => ({
   watching: t('profile.watchlist.watching'),
   plan_to_watch: t('profile.watchlist.planToWatch'),
@@ -1480,51 +1470,9 @@ const premiereDate = computed(() =>
   anime.value?.airedOn ? formatDate(anime.value.airedOn) : ''
 )
 
-const formatReviewStats = (review: Review): string => {
-  const status = review.status || 'watching'
-  const episodes = review.episodes ?? 0
-  const total = review.anime?.episodes_count ?? 0
+const formatReviewStats = (review: Review): string => formatReviewStatsPure(review, t)
 
-  // Map raw status enum -> existing watchlist.* i18n keys.
-  const statusKeyMap: Record<string, string> = {
-    watching: 'profile.watchlist.watching',
-    completed: 'profile.watchlist.completed',
-    on_hold: 'profile.watchlist.onHold',
-    dropped: 'profile.watchlist.dropped',
-    plan_to_watch: 'profile.watchlist.planToWatch',
-  }
-  const statusLabel = t(statusKeyMap[status] || statusKeyMap.watching)
-
-  // Pick template variant: closed (total known) vs open (total unknown);
-  // flagged (plan_to_watch OR episodes==0) vs normal.
-  const flagged = status === 'plan_to_watch' || episodes === 0
-  const open = total === 0
-
-  let key: string
-  if (flagged && status === 'plan_to_watch' && open) {
-    key = 'anime.reviewStats.planToWatchOpenFlag'
-  } else if (flagged && status === 'plan_to_watch') {
-    key = 'anime.reviewStats.planToWatchFlag'
-  } else if (flagged && open) {
-    key = 'anime.reviewStats.noProgressOpen'
-  } else if (flagged) {
-    key = 'anime.reviewStats.noProgress'
-  } else if (open) {
-    key = 'anime.reviewStats.watchedOpen'
-  } else {
-    key = 'anime.reviewStats.watched'
-  }
-
-  const base = t(key, { watched: episodes, total, status: statusLabel })
-  // Append the rewatch segment when the reviewer is rewatching.
-  return review.is_rewatching ? `${base} · ${t('anime.reviewStats.rewatch')}` : base
-}
-
-const isReviewFlagged = (review: Review): boolean => {
-  const status = review.status || 'watching'
-  const episodes = review.episodes ?? 0
-  return status === 'plan_to_watch' || episodes === 0
-}
+const isReviewFlagged = (review: Review): boolean => isReviewFlaggedPure(review)
 
 const { timezone: userTimezone } = useUserTimezone()
 
@@ -1551,46 +1499,15 @@ const formatNextEpisode = (dateStr: string) => {
 }
 
 // Localized "N ago" for an episode that already aired (episode-not-loaded-yet).
-// Uses Intl.RelativeTimeFormat so pluralization + the "ago"/"назад"/"前" suffix
-// are correct per-locale. Picks the coarsest sensible unit.
-const formatAiredAgo = (agoMs: number) => {
-  const loc = locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US'
-  const rtf = new Intl.RelativeTimeFormat(loc, { numeric: 'always' })
-  const sec = Math.max(0, Math.floor(agoMs / 1000))
-  if (sec < 3600) return rtf.format(-Math.max(1, Math.round(sec / 60)), 'minute')
-  if (sec < 86400) return rtf.format(-Math.round(sec / 3600), 'hour')
-  return rtf.format(-Math.round(sec / 86400), 'day')
-}
+const formatAiredAgo = (agoMs: number) => formatAiredAgoPure(agoMs, locale.value)
 
-const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: number; status?: string }) => {
-  const aired = anime.episodesAired || 0
-  const total = anime.totalEpisodes || 0
-
-  if (total > 0) {
-    // Total known - show "aired / total" for ongoing, or just "total" for completed
-    if (anime.status === 'ongoing' && aired > 0 && aired < total) {
-      return t('anime.episodeProgress', { aired, total })
-    }
-    return t('anime.episodeTotal', { total })
-  } else if (aired > 0) {
-    // Total unknown but some aired
-    return t('anime.episodeAiredUnknown', { aired })
-  }
-  // Nothing known
-  return t('anime.episodeUnknown')
-}
+const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: number; status?: string }) =>
+  formatEpisodeCountPure(anime, t)
 
 // Phase 14 / UX-28 — render compact watchers count ("1.2K", "12K") via the
 // platform's Intl.NumberFormat. Locale-aware: passes the active i18n locale
 // so the grouping/notation matches the user's language settings.
-const formatCount = (n: number): string => {
-  try {
-    return new Intl.NumberFormat(locale.value, { notation: 'compact', maximumFractionDigits: 1 }).format(n)
-  } catch {
-    // Old browser / unknown locale — graceful degradation.
-    return n.toString()
-  }
-}
+const formatCount = (n: number): string => formatCountPure(n, locale.value)
 
 // Phase 14 / UX-28 — soft social-proof fetch. Public endpoint, no auth.
 // Errors are swallowed: missing badge is preferable to a noisy console for

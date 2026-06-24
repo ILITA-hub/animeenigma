@@ -302,7 +302,7 @@ describe('AePlayer — WT room sync (Sub-Part B: pin to room combo)', () => {
 
 // Invoke the exposed __setProvider seam to simulate a genuine local user pick.
 function setProvider(wrapper: ReturnType<typeof mountPlayer>, id: string, server: string) {
-  ;(wrapper.vm as unknown as { __setProvider: (id: string, server: string) => void }).__setProvider(
+  (wrapper.vm as unknown as { __setProvider: (id: string, server: string) => void }).__setProvider(
     id,
     server,
   )

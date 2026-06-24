@@ -362,6 +362,7 @@ import { pickInitialProvider } from '@/composables/aePlayer/initialProvider'
 import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rankedProviderIds } from '@/composables/aePlayer/rankedProviderIds'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
+import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
@@ -952,26 +953,6 @@ const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.
 
 const epProgress = ref<Record<number, { pct: number; sec: number; completed: boolean }>>({})
 
-type ProgressRow = {
-  episode_number?: number
-  progress?: number
-  duration?: number
-  completed?: boolean
-}
-
-function progressRowsToMap(rows: ProgressRow[]) {
-  const map: Record<number, { pct: number; sec: number; completed: boolean }> = {}
-  for (const r of rows) {
-    if (!r.episode_number) continue
-    map[r.episode_number] = {
-      pct: r.duration ? Math.min(1, (r.progress ?? 0) / r.duration) : 0,
-      sec: r.progress ?? 0,
-      completed: !!r.completed,
-    }
-  }
-  return map
-}
-
 // Page-fetch optimization (2026-06-11): the FIRST load per anime consumes the
 // viewer-context aggregate Anime.vue already fetched, killing the duplicate
 // GET /users/progress/{id} on mount. Post-mutation reloads go to the network.
@@ -1104,12 +1085,6 @@ const resumeChipVisible = computed(() => {
   if (hasStarted.value && currentTime.value > 5) return false
   return true
 })
-
-function fmtResume(s: number): string {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${sec.toString().padStart(2, '0')}`
-}
 
 function onResumeFromSaved() {
   const v = videoRef.value

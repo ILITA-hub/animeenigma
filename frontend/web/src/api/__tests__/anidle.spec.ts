@@ -130,7 +130,7 @@ describe('buildShareText', () => {
   it('produces 8 emoji characters per guess row', () => {
     const outcome = makeOutcome(1)
     const text = buildShareText([outcome], '2026-06-15', false)
-    const lines = text.split('\n').filter(l => l.match(/[🟩🟨⬜]/))
+    const lines = text.split('\n').filter(l => l.match(/[🟩🟨⬜]/u))
     expect(lines).toHaveLength(1)
     const emojiCount = (lines[0].match(/🟩|🟨|⬜/g) ?? []).length
     expect(emojiCount).toBe(8)

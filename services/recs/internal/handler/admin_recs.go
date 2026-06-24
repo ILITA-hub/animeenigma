@@ -226,6 +226,31 @@ var adminSignalVersions = map[string]string{
 	"s7": "v1.0",
 }
 
+// resolveAdminUserID reads the {user_id} URL param, resolves it to a canonical
+// UUID (username / public_id → UUID via resolveUserID), and writes the
+// appropriate error response on failure. It returns (userID, true) on success
+// and ("", false) when the caller should return immediately — the response has
+// already been written in the false case. logTag scopes the structured-log
+// message to the calling endpoint.
+func (h *AdminRecsHandler) resolveAdminUserID(w http.ResponseWriter, r *http.Request, logTag string) (string, bool) {
+	rawID := chi.URLParam(r, "user_id")
+	if rawID == "" {
+		httputil.BadRequest(w, "user_id is required")
+		return "", false
+	}
+	userID, resolveErr := h.resolveUserID(r.Context(), rawID)
+	if resolveErr != nil {
+		h.log.Errorw(logTag+": resolve user_id failed", "raw", rawID, "error", resolveErr)
+		httputil.Error(w, resolveErr)
+		return "", false
+	}
+	if userID == "" {
+		httputil.NotFound(w, "user not found: "+rawID)
+		return "", false
+	}
+	return userID, true
+}
+
 // GetAdminRecs handles GET /api/admin/recs/{user_id}. Builds the full Phase-12
 // ensemble against S11.CandidatePoolForUser, runs RankWithBreakdown, slices
 // to top-50, hydrates anime metadata, surfaces the S5 TF-IDF top-3 terms on
@@ -233,22 +258,12 @@ var adminSignalVersions = map[string]string{
 // returns the filtered_out audit alongside.
 func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rawID := chi.URLParam(r, "user_id")
-	if rawID == "" {
-		httputil.BadRequest(w, "user_id is required")
-		return
-	}
 
 	// Resolve username / public_id to UUID so admins can hit
-	// /admin/recs/{username} without memorizing UUIDs.
-	userID, resolveErr := h.resolveUserID(ctx, rawID)
-	if resolveErr != nil {
-		h.log.Errorw("admin recs: resolve user_id failed", "raw", rawID, "error", resolveErr)
-		httputil.Error(w, resolveErr)
-		return
-	}
-	if userID == "" {
-		httputil.NotFound(w, "user not found: "+rawID)
+	// /admin/recs/{username} without memorizing UUIDs. Writes the error/404
+	// response itself and returns ok==false when the caller should stop.
+	userID, ok := h.resolveAdminUserID(w, r, "admin recs")
+	if !ok {
 		return
 	}
 
@@ -351,35 +366,14 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 		preS12Rank[string(r.AnimeID)] = i + 1
 	}
 
-	// 6c. S12 diversification re-rank. Project the breakdown rows to the narrow
-	// []recs.Recommendation the Diversifier consumes, re-rank (pin-seeded,
-	// non-fatal), then reorder `top` to match the diversified order so the
-	// admin response mirrors exactly what the public API serves.
+	// 6c. S12 diversification re-rank (pin-seeded, non-fatal). Reorders `top` to
+	// match the diversified order so the admin response mirrors exactly what the
+	// public API serves.
 	pinSeedID := ""
 	if pin != nil {
 		pinSeedID = pin.AnimeID
 	}
-	projection := make([]recs.Recommendation, len(top))
-	for i, r := range top {
-		projection[i] = recs.Recommendation{AnimeID: r.AnimeID, Final: r.Final}
-	}
-	if diversified, dErr := h.diversifier.Rerank(ctx, projection, pinSeedID, s12Lambda); dErr != nil {
-		h.log.Warnw("admin recs: s12 rerank failed (non-fatal); serving undiversified", "user_id", userID, "error", dErr)
-	} else {
-		// Reorder `top` (the breakdown-carrying slice) to the diversified
-		// AnimeID order. Build an index then emit in diversified sequence.
-		byID := make(map[recs.AnimeID]recs.RecommendationWithBreakdown, len(top))
-		for _, r := range top {
-			byID[r.AnimeID] = r
-		}
-		reordered := make([]recs.RecommendationWithBreakdown, 0, len(top))
-		for _, d := range diversified {
-			if r, ok := byID[d.AnimeID]; ok {
-				reordered = append(reordered, r)
-			}
-		}
-		top = reordered
-	}
+	top = h.diversifyTop(ctx, userID, top, pinSeedID)
 
 	// 7. Hydrate anime metadata (reuse the public handler's helper via a
 	// fresh inline implementation — keeps admin handler decoupled).
@@ -434,46 +428,7 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 	// could seed the MMR similarity). If it fired, prepend a Pinned row at
 	// rank 1, dedup the underlying anime from the ensemble tail, and re-rank
 	// rank 2..N.
-	if pin != nil {
-		pinHydrated, hydrateErr := h.hydrateAnime(ctx, []string{pin.AnimeID})
-		if hydrateErr == nil {
-			if anime, ok := pinHydrated[pin.AnimeID]; ok {
-				// Dedup: drop the pin's anime from the ensemble tail.
-				deduped := make([]AdminRecRow, 0, len(rows))
-				for _, it := range rows {
-					if it.Anime.ID != pin.AnimeID {
-						deduped = append(deduped, it)
-					}
-				}
-				for i := range deduped {
-					deduped[i].Rank = i + 2
-				}
-				pinRow := AdminRecRow{
-					Rank:           1,
-					Anime:          anime,
-					Final:          0,                    // spec §B7: float64-zero approximates null; frontend gates on Pinned
-					Breakdown:      map[string]float64{}, // not from ensemble
-					Weights:        weightsAsFloat64,
-					TopContributor: "s6_pin", // locked Phase-13 hand-off
-					Pinned:         true,
-					PinReason:      "Because you finished " + pin.SeedName,       // legacy English fallback
-					PinReasonKey:   "recs.pinReason.becauseYouFinished",          // UX-09 (Phase 3) — i18n key
-					PinReasonData:  map[string]interface{}{"name": pin.SeedName}, // UX-09 (Phase 3) — interpolation values
-					PinSeedAnimeID: pin.SeedAnimeID,
-					PinSource:      pin.Source,
-					ContributorDetail: map[string]interface{}{
-						"pin_source":        pin.Source,
-						"pin_seed_anime_id": pin.SeedAnimeID,
-						"pin_seed_name":     pin.SeedName,
-					},
-				}
-				rows = append([]AdminRecRow{pinRow}, deduped...)
-			}
-		} else {
-			h.log.Warnw("admin recs: s6 pin hydrate failed (non-fatal)",
-				"user_id", userID, "pin_anime_id", pin.AnimeID, "error", hydrateErr)
-		}
-	}
+	rows = h.prependPinRow(ctx, userID, rows, pin, weightsAsFloat64)
 
 	httputil.OK(w, AdminRecsResponse{
 		Recs:           rows,
@@ -482,6 +437,86 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 		SignalVersions: adminSignalVersions,
 		UserID:         userID,
 	})
+}
+
+// diversifyTop applies the S12 greedy-MMR re-rank to the breakdown-carrying
+// `top` slice and returns it reordered to match the diversified AnimeID order,
+// so the admin response mirrors exactly what the public API serves. The
+// Diversifier consumes only a narrow []recs.Recommendation projection. A
+// re-rank error is non-fatal: the original (undiversified) slice is returned.
+func (h *AdminRecsHandler) diversifyTop(ctx context.Context, userID string, top []recs.RecommendationWithBreakdown, pinSeedID string) []recs.RecommendationWithBreakdown {
+	projection := make([]recs.Recommendation, len(top))
+	for i, r := range top {
+		projection[i] = recs.Recommendation{AnimeID: r.AnimeID, Final: r.Final}
+	}
+	diversified, dErr := h.diversifier.Rerank(ctx, projection, pinSeedID, s12Lambda)
+	if dErr != nil {
+		h.log.Warnw("admin recs: s12 rerank failed (non-fatal); serving undiversified", "user_id", userID, "error", dErr)
+		return top
+	}
+	// Reorder `top` to the diversified AnimeID order: index then emit in sequence.
+	byID := make(map[recs.AnimeID]recs.RecommendationWithBreakdown, len(top))
+	for _, r := range top {
+		byID[r.AnimeID] = r
+	}
+	reordered := make([]recs.RecommendationWithBreakdown, 0, len(top))
+	for _, d := range diversified {
+		if r, ok := byID[d.AnimeID]; ok {
+			reordered = append(reordered, r)
+		}
+	}
+	return reordered
+}
+
+// prependPinRow handles the S6 pin (resolved before the S12 re-rank so it could
+// seed the MMR similarity). When the pin fired and hydrates cleanly, it prepends
+// a Pinned row at rank 1, dedups the pin's anime from the ensemble tail, and
+// re-ranks the tail rank 2..N. All failure paths (nil pin, hydrate error, pin
+// anime absent) are non-fatal and return `rows` unchanged.
+func (h *AdminRecsHandler) prependPinRow(ctx context.Context, userID string, rows []AdminRecRow, pin *signals.PinCandidate, weights map[string]float64) []AdminRecRow {
+	if pin == nil {
+		return rows
+	}
+	pinHydrated, hydrateErr := h.hydrateAnime(ctx, []string{pin.AnimeID})
+	if hydrateErr != nil {
+		h.log.Warnw("admin recs: s6 pin hydrate failed (non-fatal)",
+			"user_id", userID, "pin_anime_id", pin.AnimeID, "error", hydrateErr)
+		return rows
+	}
+	anime, ok := pinHydrated[pin.AnimeID]
+	if !ok {
+		return rows
+	}
+	// Dedup: drop the pin's anime from the ensemble tail.
+	deduped := make([]AdminRecRow, 0, len(rows))
+	for _, it := range rows {
+		if it.Anime.ID != pin.AnimeID {
+			deduped = append(deduped, it)
+		}
+	}
+	for i := range deduped {
+		deduped[i].Rank = i + 2
+	}
+	pinRow := AdminRecRow{
+		Rank:           1,
+		Anime:          anime,
+		Final:          0,                    // spec §B7: float64-zero approximates null; frontend gates on Pinned
+		Breakdown:      map[string]float64{}, // not from ensemble
+		Weights:        weights,
+		TopContributor: "s6_pin", // locked Phase-13 hand-off
+		Pinned:         true,
+		PinReason:      "Because you finished " + pin.SeedName,       // legacy English fallback
+		PinReasonKey:   "recs.pinReason.becauseYouFinished",          // UX-09 (Phase 3) — i18n key
+		PinReasonData:  map[string]interface{}{"name": pin.SeedName}, // UX-09 (Phase 3) — interpolation values
+		PinSeedAnimeID: pin.SeedAnimeID,
+		PinSource:      pin.Source,
+		ContributorDetail: map[string]interface{}{
+			"pin_source":        pin.Source,
+			"pin_seed_anime_id": pin.SeedAnimeID,
+			"pin_seed_name":     pin.SeedName,
+		},
+	}
+	return append([]AdminRecRow{pinRow}, deduped...)
 }
 
 // ForceRecompute handles POST /api/admin/recs/{user_id}/recompute.
@@ -497,20 +532,9 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 // recommendations?").
 func (h *AdminRecsHandler) ForceRecompute(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rawID := chi.URLParam(r, "user_id")
-	if rawID == "" {
-		httputil.BadRequest(w, "user_id is required")
-		return
-	}
 
-	userID, resolveErr := h.resolveUserID(ctx, rawID)
-	if resolveErr != nil {
-		h.log.Errorw("admin recs recompute: resolve user_id failed", "raw", rawID, "error", resolveErr)
-		httputil.Error(w, resolveErr)
-		return
-	}
-	if userID == "" {
-		httputil.NotFound(w, "user not found: "+rawID)
+	userID, ok := h.resolveAdminUserID(w, r, "admin recs recompute")
+	if !ok {
 		return
 	}
 

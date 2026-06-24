@@ -103,11 +103,7 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 	// Step 1 — collect hot combos.
 	combos, err := j.hotCombos.Collect(ctx)
 	if err != nil {
-		j.recordOutcome("failed", &report)
-		if j.log != nil {
-			j.log.Errorw("detector hot-combos collect failed", "error", err)
-		}
-		return report, err
+		return j.fail(&report, "detector hot-combos collect failed", err)
 	}
 	report.CombosScanned = len(combos)
 	NotificationsDetectorCombosScanned.Set(float64(len(combos)))
@@ -122,33 +118,115 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 	// Step 2 — bulk-load prior snapshots.
 	snapshotMap, err := j.snapshots.BulkLoad(ctx, combos)
 	if err != nil {
-		j.recordOutcome("failed", &report)
-		if j.log != nil {
-			j.log.Errorw("detector snapshot bulk-load failed", "error", err)
-		}
-		return report, err
+		return j.fail(&report, "detector snapshot bulk-load failed", err)
 	}
 
-	// Step 3 — fan-out per-combo parser lookups. The check result carries
-	// both the latest episode number (drives the diff) and the per-player
-	// translation title (rides into the new_episode payload).
+	// Step 3 — fan-out per-combo parser lookups.
+	resultPerCombo, parserFailures := j.checkCombos(ctx, combos)
+	report.ParserFailures = parserFailures
+
+	// Step 4 — diff + bootstrap protection (NOTIF-DET-06) + never-lower
+	// snapshot invariant (NOTIF-DET-10).
+	affected, snapUpdates := diffSnapshots(resultPerCombo, snapshotMap)
+	report.AffectedCombos = len(affected)
+
+	// Step 5 — BulkUpsert snapshots BEFORE notifications. A mid-run crash
+	// re-runs parser calls (idempotent) but does not re-fire notifications
+	// against a now-newer snapshot.
+	if err := j.snapshots.BulkUpsert(ctx, snapUpdates); err != nil {
+		return j.fail(&report, "detector snapshot bulk-upsert failed", err)
+	}
+
+	if len(affected) == 0 {
+		// No diffs after bootstrap + never-lower filter — success even if
+		// parser had some failures (the failures just mean we couldn't
+		// confirm; next hour retries).
+		if parserFailures > 0 {
+			j.recordOutcome("partial", &report)
+		} else {
+			j.recordOutcome("success", &report)
+		}
+		j.logCompleted(report)
+		return report, nil
+	}
+
+	// Step 6 — UPSERT notifications per (user, combo). MaxWatched queries
+	// watch_history (no shikimori_id column), so normalise the affected
+	// combo keys before passing in — keeps ForCombos's returned map keys
+	// shape-stable with the snapKey lookup below.
+	affectedForLookup := make([]domain.Combo, len(affected))
+	for i, c := range affected {
+		affectedForLookup[i] = snapKey(c)
+	}
+	maxByCombo, err := j.maxWatched.ForCombos(ctx, affectedForLookup)
+	if err != nil {
+		return j.fail(&report, "detector max-watched lookup failed", err)
+	}
+
+	upserted := j.upsertNotifications(ctx, affected, resultPerCombo, maxByCombo)
+	report.NotificationsUpserted = upserted
+
+	// Outcome derivation (matches plan touch-list exactly):
+	//   parserFailures == 0           → success (regardless of upserted)
+	//   parserFailures > 0 && upserted>0 → partial
+	//   parserFailures > 0 && upserted==0 → failed
+	switch {
+	case parserFailures == 0:
+		j.recordOutcome("success", &report)
+	case upserted > 0:
+		j.recordOutcome("partial", &report)
+	default:
+		j.recordOutcome("failed", &report)
+	}
+	j.logCompleted(report)
+	return report, nil
+}
+
+// fail stamps the "failed" outcome, logs the infrastructure error, and returns
+// the report + err — the canonical exit for the four abort-the-run paths
+// (collect, bulk-load, bulk-upsert, max-watched lookup).
+func (j *NewEpisodeDetectorJob) fail(report *RunReport, msg string, err error) (RunReport, error) {
+	j.recordOutcome("failed", report)
+	if j.log != nil {
+		j.log.Errorw(msg, "error", err)
+	}
+	return *report, err
+}
+
+// snapKey drops shikimori_id from a combo. Snapshot rows and watch_history
+// (both keyed by parser identity) carry no shikimori_id, while combos from
+// HotCombosCollector do — so every cross-lookup against those maps must
+// normalise first, else lookups miss and we silently re-bootstrap forever
+// (NOTIF-DET-06 violation).
+func snapKey(c domain.Combo) domain.Combo {
+	c.ShikimoriID = ""
+	return c
+}
+
+// checkCombos fans out per-combo parser lookups (errgroup capped by
+// WorkerLimit, per-call ParserTimeout). The result carries both the latest
+// episode number (drives the diff) and the per-player translation title
+// (rides into the new_episode payload). Per-combo failures are LOGGED +
+// COUNTED but never abort the run; episode-not-found is a normal "no episode
+// yet" signal and is NOT counted as a failure.
+func (j *NewEpisodeDetectorJob) checkCombos(ctx context.Context, combos []domain.Combo) (map[domain.Combo]service.EpisodeCheckResult, int) {
 	resultPerCombo := make(map[domain.Combo]service.EpisodeCheckResult, len(combos))
 	var (
 		mu             sync.Mutex
 		parserFailures atomic.Int64
 	)
-	g, gctx := errgroup.WithContext(ctx)
+
 	workerLimit := j.cfg.WorkerLimit
 	if workerLimit <= 0 {
 		workerLimit = 5
 	}
-	g.SetLimit(workerLimit)
-
 	timeout := j.cfg.ParserTimeout
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
 
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(workerLimit)
 	for _, combo := range combos {
 		combo := combo
 		g.Go(func() error {
@@ -181,87 +259,55 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 		})
 	}
 	_ = g.Wait()
-	report.ParserFailures = int(parserFailures.Load())
+	return resultPerCombo, int(parserFailures.Load())
+}
 
-	// Step 4 — diff + bootstrap protection (NOTIF-DET-06) + never-lower
-	// snapshot invariant (NOTIF-DET-10).
-	//
-	// IMPORTANT: snapshotMap keys are built from parser_episode_snapshots
-	// rows (which do NOT carry shikimori_id). The combos collected by
-	// HotCombosCollector DO carry shikimori_id (for the catalog HTTP call).
-	// We must drop shikimori_id before keying into snapshotMap, otherwise
-	// every lookup returns hadSnapshot=false and we accidentally bootstrap
-	// every run forever (silent NOTIF-DET-06 violation).
-	affected := make([]domain.Combo, 0, len(resultPerCombo))
-	snapUpdates := make(map[domain.Combo]int, len(resultPerCombo))
-	snapKey := func(c domain.Combo) domain.Combo {
-		c.ShikimoriID = ""
-		return c
-	}
+// diffSnapshots applies bootstrap protection (NOTIF-DET-06) and the
+// never-lower invariant (NOTIF-DET-10) to each parser result, returning the
+// combos with a genuine new episode plus the full set of snapshot writes
+// (snapKey-normalised) for the BulkUpsert. snapshotMap is keyed by
+// snapKey-normalised combos (parser_episode_snapshots rows carry no
+// shikimori_id).
+func diffSnapshots(
+	resultPerCombo map[domain.Combo]service.EpisodeCheckResult,
+	snapshotMap map[domain.Combo]int,
+) (affected []domain.Combo, snapUpdates map[domain.Combo]int) {
+	affected = make([]domain.Combo, 0, len(resultPerCombo))
+	snapUpdates = make(map[domain.Combo]int, len(resultPerCombo))
 	for combo, result := range resultPerCombo {
 		key := snapKey(combo)
 		prev, hadSnapshot := snapshotMap[key]
-		if !hadSnapshot {
+		switch {
+		case !hadSnapshot:
 			// BOOTSTRAP PROTECTION (NOTIF-DET-06): first time we see a
 			// combo, record the snapshot but DO NOT fire a notification —
 			// otherwise every existing user gets spammed about every
 			// in-progress anime on first deploy.
 			snapUpdates[key] = result.Latest
-			continue
-		}
-		if result.Latest <= prev {
+		case result.Latest <= prev:
 			// Never lower the snapshot. Refresh checked_at by re-writing
 			// the same value.
 			snapUpdates[key] = prev
-			continue
+		default:
+			// Genuine new episode discovered.
+			snapUpdates[key] = result.Latest
+			affected = append(affected, combo)
 		}
-		// Genuine new episode discovered.
-		snapUpdates[key] = result.Latest
-		affected = append(affected, combo)
 	}
-	report.AffectedCombos = len(affected)
+	return affected, snapUpdates
+}
 
-	// Step 5 — BulkUpsert snapshots BEFORE notifications. A mid-run crash
-	// re-runs parser calls (idempotent) but does not re-fire notifications
-	// against a now-newer snapshot.
-	if err := j.snapshots.BulkUpsert(ctx, snapUpdates); err != nil {
-		j.recordOutcome("failed", &report)
-		if j.log != nil {
-			j.log.Errorw("detector snapshot bulk-upsert failed", "error", err)
-		}
-		return report, err
-	}
-
-	if len(affected) == 0 {
-		// No diffs after bootstrap + never-lower filter — success even if
-		// parser had some failures (the failures just mean we couldn't
-		// confirm; next hour retries).
-		if parserFailures.Load() > 0 {
-			j.recordOutcome("partial", &report)
-		} else {
-			j.recordOutcome("success", &report)
-		}
-		j.logCompleted(report)
-		return report, nil
-	}
-
-	// Step 6 — UPSERT notifications per (user, combo). MaxWatched queries
-	// watch_history (no shikimori_id column), so normalise the affected
-	// combo keys before passing in — keeps ForCombos's returned map keys
-	// shape-stable with the snapKey lookup below.
-	affectedForLookup := make([]domain.Combo, len(affected))
-	for i, c := range affected {
-		affectedForLookup[i] = snapKey(c)
-	}
-	maxByCombo, err := j.maxWatched.ForCombos(ctx, affectedForLookup)
-	if err != nil {
-		j.recordOutcome("failed", &report)
-		if j.log != nil {
-			j.log.Errorw("detector max-watched lookup failed", "error", err)
-		}
-		return report, err
-	}
-
+// upsertNotifications UPSERTs a new_episode notification per (user, combo)
+// for every affected combo (D-DET-01 — in-process NotificationService, not
+// HTTP self-loopback). maxByCombo is keyed by snapKey-normalised combos
+// (watch_history has no shikimori_id column). Anime metadata is memoized
+// across combos sharing an animeID. Returns the count successfully upserted.
+func (j *NewEpisodeDetectorJob) upsertNotifications(
+	ctx context.Context,
+	affected []domain.Combo,
+	resultPerCombo map[domain.Combo]service.EpisodeCheckResult,
+	maxByCombo map[domain.Combo]map[string]int,
+) int {
 	// Memoize anime metadata across combos sharing animeID. Typical user
 	// has multiple translation combos for the same anime — single fetch
 	// covers them all.
@@ -335,22 +381,7 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 			upserted++
 		}
 	}
-	report.NotificationsUpserted = upserted
-
-	// Outcome derivation (matches plan touch-list exactly):
-	//   parserFailures == 0           → success (regardless of upserted)
-	//   parserFailures > 0 && upserted>0 → partial
-	//   parserFailures > 0 && upserted==0 → failed
-	switch {
-	case parserFailures.Load() == 0:
-		j.recordOutcome("success", &report)
-	case upserted > 0:
-		j.recordOutcome("partial", &report)
-	default:
-		j.recordOutcome("failed", &report)
-	}
-	j.logCompleted(report)
-	return report, nil
+	return upserted
 }
 
 // recordOutcome stamps the outcome on the report AND bumps the runs counter.

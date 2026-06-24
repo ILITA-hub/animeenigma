@@ -442,7 +442,15 @@ func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*do
 			"mal_id", malID, "error", err)
 	}
 
-	// Step 3: Fall back to Jikan title matching (for IDs Shikimori doesn't recognize)
+	// Step 3+: Fall back to Jikan title matching (for IDs Shikimori doesn't recognize)
+	return s.resolveMALViaJikan(ctx, malID)
+}
+
+// resolveMALViaJikan resolves a MAL ID that direct Shikimori lookup couldn't find,
+// by fetching MAL metadata via Jikan, searching Shikimori by romanized title, and
+// matching on exact name. Returns an "ambiguous" result (never an error) when the
+// Jikan fetch, Shikimori search, or title match fails; a "resolved" result on match.
+func (s *CatalogService) resolveMALViaJikan(ctx context.Context, malID string) (*domain.MALResolveResult, error) {
 	s.log.Infow("resolving MAL ID via Jikan", "mal_id", malID)
 
 	malInfo, err := s.jikanClient.GetAnimeByID(ctx, malID)
@@ -454,7 +462,7 @@ func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*do
 		}, nil
 	}
 
-	// Step 4: Search Shikimori by romanized title
+	// Search Shikimori by romanized title
 	searchTitle := malInfo.Title
 	if searchTitle == "" {
 		searchTitle = malInfo.TitleEnglish
@@ -471,7 +479,7 @@ func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*do
 		}, nil
 	}
 
-	// Step 5: Look for an exact name match
+	// Look for an exact name match
 	var matched *domain.Anime
 	for _, anime := range shikimoriAnimes {
 		if titlesMatch(anime.Name, malInfo.Title) ||
@@ -490,7 +498,7 @@ func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*do
 		}, nil
 	}
 
-	// Step 6: Store matched anime, backfill MAL ID
+	// Store matched anime, backfill MAL ID
 	if err := s.upsertAnimeFromExternal(ctx, matched); err != nil {
 		return nil, fmt.Errorf("store resolved anime: %w", err)
 	}
@@ -561,20 +569,7 @@ func (s *CatalogService) RefreshAnimeFromShikimori(ctx context.Context, animeID 
 	}
 
 	// Update genres
-	for _, genre := range shikimoriAnime.Genres {
-		if err := s.genreRepo.Upsert(ctx, &genre); err != nil {
-			s.log.Warnw("failed to upsert genre", "error", err)
-		}
-	}
-	genreIDs := make([]string, len(shikimoriAnime.Genres))
-	for i, g := range shikimoriAnime.Genres {
-		genreIDs[i] = g.ID
-	}
-	if len(genreIDs) > 0 {
-		if err := s.genreRepo.SetAnimeGenres(ctx, shikimoriAnime.ID, genreIDs); err != nil {
-			s.log.Warnw("failed to set anime genres", "error", err)
-		}
-	}
+	s.persistAnimeGenres(ctx, shikimoriAnime)
 
 	// Invalidate cache
 	_ = s.cache.Delete(ctx, cache.KeyAnime(animeID))
@@ -641,41 +636,10 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 			if !ok {
 				continue
 			}
-
-			// Preserve local fields
-			fresh.ID = existing.ID
-			fresh.HasVideo = existing.HasVideo
-			fresh.CreatedAt = existing.CreatedAt
-
-			// Preserve or fetch MAL poster if Shikimori has none
-			if fresh.PosterURL == "" {
-				if existing.PosterURL != "" {
-					fresh.PosterURL = existing.PosterURL
-				} else {
-					s.fetchMALPosterIfMissing(ctx, fresh)
-				}
-			}
-
-			if err := s.animeRepo.Update(ctx, fresh); err != nil {
-				s.log.Warnw("failed to update anime", "id", existing.ID, "error", err)
+			if err := s.refreshStaleAnime(ctx, fresh, existing); err != nil {
 				failed++
 				continue
 			}
-
-			// Upsert genres
-			for _, genre := range fresh.Genres {
-				_ = s.genreRepo.Upsert(ctx, &genre)
-			}
-			genreIDs := make([]string, len(fresh.Genres))
-			for j, g := range fresh.Genres {
-				genreIDs[j] = g.ID
-			}
-			if len(genreIDs) > 0 {
-				_ = s.genreRepo.SetAnimeGenres(ctx, fresh.ID, genreIDs)
-			}
-
-			// Invalidate cache
-			_ = s.cache.Delete(ctx, cache.KeyAnime(existing.ID))
 			refreshed++
 		}
 
@@ -693,6 +657,48 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 	return refreshed, failed, nil
 }
 
+// refreshStaleAnime updates a single stale anime in place with fresh Shikimori
+// data, preserving local-only fields (ID, HasVideo, CreatedAt) and the existing
+// MAL poster, then relinks genres and invalidates the per-anime cache. Genre
+// upsert/link errors are intentionally ignored here (best-effort). Returns an
+// error only when the primary anime row update fails.
+func (s *CatalogService) refreshStaleAnime(ctx context.Context, fresh, existing *domain.Anime) error {
+	// Preserve local fields
+	fresh.ID = existing.ID
+	fresh.HasVideo = existing.HasVideo
+	fresh.CreatedAt = existing.CreatedAt
+
+	// Preserve or fetch MAL poster if Shikimori has none
+	if fresh.PosterURL == "" {
+		if existing.PosterURL != "" {
+			fresh.PosterURL = existing.PosterURL
+		} else {
+			s.fetchMALPosterIfMissing(ctx, fresh)
+		}
+	}
+
+	if err := s.animeRepo.Update(ctx, fresh); err != nil {
+		s.log.Warnw("failed to update anime", "id", existing.ID, "error", err)
+		return err
+	}
+
+	// Upsert genres
+	for _, genre := range fresh.Genres {
+		_ = s.genreRepo.Upsert(ctx, &genre)
+	}
+	genreIDs := make([]string, len(fresh.Genres))
+	for j, g := range fresh.Genres {
+		genreIDs[j] = g.ID
+	}
+	if len(genreIDs) > 0 {
+		_ = s.genreRepo.SetAnimeGenres(ctx, fresh.ID, genreIDs)
+	}
+
+	// Invalidate cache
+	_ = s.cache.Delete(ctx, cache.KeyAnime(existing.ID))
+	return nil
+}
+
 // GetSeasonalAnime gets anime for a specific season
 func (s *CatalogService) GetSeasonalAnime(ctx context.Context, year int, season string, page, pageSize int) ([]*domain.Anime, int64, error) {
 	// Try local first
@@ -703,9 +709,7 @@ func (s *CatalogService) GetSeasonalAnime(ctx context.Context, year int, season 
 
 	// If we have local results, return them
 	if len(animes) > 0 {
-		for _, anime := range animes {
-			s.enrichAnime(ctx, anime)
-		}
+		s.enrichAll(ctx, animes)
 		return animes, total, nil
 	}
 
@@ -723,9 +727,7 @@ func (s *CatalogService) GetSeasonalAnime(ctx context.Context, year int, season 
 		}
 	}
 
-	for _, anime := range shikimoriAnimes {
-		s.enrichAnime(ctx, anime)
-	}
+	s.enrichAll(ctx, shikimoriAnimes)
 
 	return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
 }
@@ -737,14 +739,8 @@ func (s *CatalogService) GetTrendingAnime(ctx context.Context, page, pageSize in
 	if page == 1 {
 		var cached []*domain.Anime
 		if err := s.cache.Get(ctx, cache.KeyTopAnime(), &cached); err == nil && len(cached) > 0 {
-			// Slice to requested page size
-			result := cached
-			if pageSize < len(result) {
-				result = result[:pageSize]
-			}
-			for _, anime := range result {
-				s.enrichAnime(ctx, anime)
-			}
+			result := sliceToPageSize(cached, pageSize)
+			s.enrichAll(ctx, result)
 			return result, int64(len(cached)), nil
 		}
 	}
@@ -768,9 +764,7 @@ func (s *CatalogService) GetTrendingAnime(ctx context.Context, page, pageSize in
 		if dbErr != nil {
 			return nil, 0, dbErr
 		}
-		for _, anime := range animes {
-			s.enrichAnime(ctx, anime)
-		}
+		s.enrichAll(ctx, animes)
 		return animes, total, nil
 	}
 
@@ -789,13 +783,16 @@ func (s *CatalogService) GetTrendingAnime(ctx context.Context, page, pageSize in
 		}
 	}
 
-	// Slice to requested page size
-	result := shikimoriAnimes
-	if pageSize < len(result) {
-		result = result[:pageSize]
-	}
+	return sliceToPageSize(shikimoriAnimes, pageSize), int64(len(shikimoriAnimes)), nil
+}
 
-	return result, int64(len(shikimoriAnimes)), nil
+// sliceToPageSize returns the first pageSize elements of animes, or all of them
+// when pageSize is not smaller than the slice length.
+func sliceToPageSize(animes []*domain.Anime, pageSize int) []*domain.Anime {
+	if pageSize < len(animes) {
+		return animes[:pageSize]
+	}
+	return animes
 }
 
 // GetPopularAnime gets popular anime (all time)
@@ -830,9 +827,7 @@ func (s *CatalogService) GetPopularAnime(ctx context.Context, page, pageSize int
 		return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
 	}
 
-	for _, anime := range animes {
-		s.enrichAnime(ctx, anime)
-	}
+	s.enrichAll(ctx, animes)
 
 	return animes, total, nil
 }
@@ -851,9 +846,7 @@ func (s *CatalogService) GetRecentAnime(ctx context.Context, page, pageSize int)
 		return nil, 0, err
 	}
 
-	for _, anime := range animes {
-		s.enrichAnime(ctx, anime)
-	}
+	s.enrichAll(ctx, animes)
 
 	return animes, total, nil
 }
@@ -865,9 +858,7 @@ func (s *CatalogService) GetSchedule(ctx context.Context) ([]*domain.Anime, erro
 		return nil, err
 	}
 
-	for _, anime := range animes {
-		s.enrichAnime(ctx, anime)
-	}
+	s.enrichAll(ctx, animes)
 
 	return animes, nil
 }
@@ -886,11 +877,52 @@ func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, f
 
 	s.log.Infow("fetched calendar entries", "count", len(calendar))
 
-	// Deduplicate by anime ID (same anime can appear multiple times for different episodes)
-	type calendarInfo struct {
-		shikimoriID   string
-		nextEpisodeAt *time.Time
+	seen := dedupeCalendarEntries(calendar)
+
+	// Check which anime already exist locally.
+	missingIDs, existingByShikimoriID, partFailed, err := s.partitionCalendarAnime(ctx, seen)
+	failed += partFailed
+	if err != nil {
+		return imported, updated, failed, err
 	}
+
+	s.log.Infow("calendar sync status",
+		"total_unique", len(seen),
+		"already_in_db", len(existingByShikimoriID),
+		"missing", len(missingIDs),
+	)
+
+	// Batch-fetch + import missing anime from Shikimori.
+	imp, impFailed, err := s.importMissingCalendarAnime(ctx, missingIDs, seen)
+	imported += imp
+	failed += impFailed
+	if err != nil {
+		return imported, updated, failed, err
+	}
+
+	// Update next_episode_at for anime already in DB.
+	upd, updFailed := s.updateExistingCalendarEpisodes(ctx, existingByShikimoriID, seen)
+	updated += upd
+	failed += updFailed
+
+	s.log.Infow("calendar sync completed",
+		"imported", imported,
+		"updated", updated,
+		"failed", failed,
+	)
+
+	return imported, updated, failed, nil
+}
+
+// calendarInfo holds the deduplicated next-episode air time for a calendar anime.
+type calendarInfo struct {
+	shikimoriID   string
+	nextEpisodeAt *time.Time
+}
+
+// dedupeCalendarEntries collapses calendar entries (one per upcoming episode) to
+// one record per anime, keeping the first (earliest) entry seen.
+func dedupeCalendarEntries(calendar []shikimori.CalendarEntry) map[string]*calendarInfo {
 	seen := make(map[string]*calendarInfo)
 	for _, entry := range calendar {
 		id := strconv.Itoa(entry.Anime.ID)
@@ -905,15 +937,19 @@ func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, f
 		}
 		seen[id] = info
 	}
+	return seen
+}
 
-	// Check which anime already exist locally
-	var missingIDs []string
-	existingByShikimoriID := make(map[string]*domain.Anime)
+// partitionCalendarAnime splits the deduplicated calendar anime into those already
+// in the local DB (returned as a map) and those still missing (returned as IDs).
+// Returns the number of lookups that failed, and ctx.Err() if the context is cancelled.
+func (s *CatalogService) partitionCalendarAnime(ctx context.Context, seen map[string]*calendarInfo) (missingIDs []string, existingByShikimoriID map[string]*domain.Anime, failed int, err error) {
+	existingByShikimoriID = make(map[string]*domain.Anime)
 
 	for id := range seen {
 		select {
 		case <-ctx.Done():
-			return imported, updated, failed, ctx.Err()
+			return missingIDs, existingByShikimoriID, failed, ctx.Err()
 		default:
 		}
 
@@ -930,18 +966,19 @@ func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, f
 		}
 	}
 
-	s.log.Infow("calendar sync status",
-		"total_unique", len(seen),
-		"already_in_db", len(existingByShikimoriID),
-		"missing", len(missingIDs),
-	)
+	return missingIDs, existingByShikimoriID, failed, nil
+}
 
-	// Batch-fetch missing anime from Shikimori GraphQL (50 per batch, conservative)
+// importMissingCalendarAnime batch-fetches missing anime from Shikimori (50 per
+// batch, conservative rate limiting between batches) and upserts them, overriding
+// next_episode_at with the more accurate calendar value when available. Returns the
+// imported and failed counts, and ctx.Err() if the context is cancelled.
+func (s *CatalogService) importMissingCalendarAnime(ctx context.Context, missingIDs []string, seen map[string]*calendarInfo) (imported, failed int, err error) {
 	const batchSize = 50
 	for i := 0; i < len(missingIDs); i += batchSize {
 		select {
 		case <-ctx.Done():
-			return imported, updated, failed, ctx.Err()
+			return imported, failed, ctx.Err()
 		default:
 		}
 
@@ -983,7 +1020,13 @@ func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, f
 		}
 	}
 
-	// Update next_episode_at for anime already in DB
+	return imported, failed, nil
+}
+
+// updateExistingCalendarEpisodes refreshes next_episode_at for anime already in the
+// DB whose calendar value differs, invalidating the per-anime cache on each update.
+// Returns the updated and failed counts.
+func (s *CatalogService) updateExistingCalendarEpisodes(ctx context.Context, existingByShikimoriID map[string]*domain.Anime, seen map[string]*calendarInfo) (updated, failed int) {
 	for id, existing := range existingByShikimoriID {
 		info := seen[id]
 		if info.nextEpisodeAt == nil {
@@ -1008,13 +1051,7 @@ func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, f
 		updated++
 	}
 
-	s.log.Infow("calendar sync completed",
-		"imported", imported,
-		"updated", updated,
-		"failed", failed,
-	)
-
-	return imported, updated, failed, nil
+	return updated, failed
 }
 
 // GetOngoingAnime gets all ongoing anime
@@ -1024,9 +1061,7 @@ func (s *CatalogService) GetOngoingAnime(ctx context.Context, page, pageSize int
 		return nil, 0, err
 	}
 
-	for _, anime := range animes {
-		s.enrichAnime(ctx, anime)
-	}
+	s.enrichAll(ctx, animes)
 
 	return animes, total, nil
 }
@@ -1239,23 +1274,8 @@ func (s *CatalogService) upsertAnimeFromExternal(ctx context.Context, anime *dom
 		return err
 	}
 
-	// Upsert genres
-	for _, genre := range anime.Genres {
-		if err := s.genreRepo.Upsert(ctx, &genre); err != nil {
-			s.log.Warnw("failed to upsert genre", "error", err)
-		}
-	}
-
-	// Link genres
-	genreIDs := make([]string, len(anime.Genres))
-	for i, g := range anime.Genres {
-		genreIDs[i] = g.ID
-	}
-	if len(genreIDs) > 0 {
-		if err := s.genreRepo.SetAnimeGenres(ctx, anime.ID, genreIDs); err != nil {
-			s.log.Warnw("failed to set anime genres", "error", err)
-		}
-	}
+	// Upsert + link genres
+	s.persistAnimeGenres(ctx, anime)
 
 	return nil
 }
@@ -1362,6 +1382,32 @@ func (s *CatalogService) enrichAnimesBatch(ctx context.Context, animes []*domain
 			for _, vs := range sourceMap {
 				anime.VideoSources = append(anime.VideoSources, vs)
 			}
+		}
+	}
+}
+
+// enrichAll enriches each anime in the slice individually (genres + video sources).
+func (s *CatalogService) enrichAll(ctx context.Context, animes []*domain.Anime) {
+	for _, anime := range animes {
+		s.enrichAnime(ctx, anime)
+	}
+}
+
+// persistAnimeGenres upserts an anime's genres and links them to the anime,
+// logging (but not failing on) errors. Mirrors the inline blocks it replaces.
+func (s *CatalogService) persistAnimeGenres(ctx context.Context, anime *domain.Anime) {
+	for _, genre := range anime.Genres {
+		if err := s.genreRepo.Upsert(ctx, &genre); err != nil {
+			s.log.Warnw("failed to upsert genre", "error", err)
+		}
+	}
+	genreIDs := make([]string, len(anime.Genres))
+	for i, g := range anime.Genres {
+		genreIDs[i] = g.ID
+	}
+	if len(genreIDs) > 0 {
+		if err := s.genreRepo.SetAnimeGenres(ctx, anime.ID, genreIDs); err != nil {
+			s.log.Warnw("failed to set anime genres", "error", err)
 		}
 	}
 }
@@ -1758,9 +1804,7 @@ func (s *CatalogService) GetHiddenAnime(ctx context.Context) ([]*domain.Anime, e
 		return nil, err
 	}
 
-	for _, anime := range animes {
-		s.enrichAnime(ctx, anime)
-	}
+	s.enrichAll(ctx, animes)
 
 	return animes, nil
 }

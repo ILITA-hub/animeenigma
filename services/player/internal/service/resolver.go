@@ -49,11 +49,8 @@ func Resolve(
 		}
 
 		// Try title match: same translation_title in same language+type
-		for _, a := range available {
-			if a.Language == lockLang && a.WatchType == lockType &&
-				a.TranslationTitle == userPref.TranslationTitle {
-				return resolved(a, 1)
-			}
+		if a := findInLock(available, lockLang, lockType, userPref.TranslationTitle); a != nil {
+			return resolved(*a, 1)
 		}
 
 		// Combo gone — lock is set, continue to Tier 2
@@ -73,11 +70,8 @@ func Resolve(
 		// Match the fine-signal top translation_title within the lock.
 		// VAL-02: only inside the locked language+watch_type — never crosses.
 		if tier2Lock.TopTranslationTitle != "" {
-			for _, a := range available {
-				if a.Language == lockLang && a.WatchType == lockType &&
-					a.TranslationTitle == tier2Lock.TopTranslationTitle {
-					return resolved(a, 2)
-				}
+			if a := findInLock(available, lockLang, lockType, tier2Lock.TopTranslationTitle); a != nil {
+				return resolved(*a, 2)
 			}
 		}
 
@@ -90,65 +84,30 @@ func Resolve(
 	if len(community) > 0 {
 		if lockLang == "" {
 			// New user: pick the most popular combo to set lock
-			top := community[0]
-			for _, c := range community[1:] {
-				if c.Viewers > top.Viewers {
-					top = c
-				}
-			}
-			lockLang = top.Language
-			lockType = top.WatchType
+			lockLang, lockType = mostPopularLock(community)
 		}
 
-		// Filter community to locked language+type and find top available
-		type candidate struct {
-			combo   domain.WatchCombo
-			viewers int
-		}
-		var best *candidate
-
-		for _, c := range community {
-			if c.Language != lockLang || c.WatchType != lockType {
-				continue
-			}
-			// Check if this community combo exists in available
-			for _, a := range available {
-				if a.Language == c.Language && a.WatchType == c.WatchType &&
-					a.TranslationTitle == c.TranslationTitle {
-					if best == nil || c.Viewers > best.viewers {
-						best = &candidate{combo: a, viewers: c.Viewers}
-					}
-					break
-				}
-			}
-		}
-
-		if best != nil {
-			return resolved(best.combo, 3)
+		if best := topCommunityInLock(community, available, lockLang, lockType); best != nil {
+			return resolved(*best, 3)
 		}
 	}
 
 	// ── Tier 4: Pinned translations ───────────────────────────
-	if len(pinned) > 0 {
-		for _, p := range pinned {
-			// Map pinned translation_type to watch_type
-			pinnedWatchType := mapPinnedType(p.TranslationType)
+	for _, p := range pinned {
+		// Map pinned translation_type to watch_type
+		pinnedWatchType := mapPinnedType(p.TranslationType)
 
-			// Pinned translations are always Kodik = "ru" language
-			pinnedLang := "ru"
+		// Pinned translations are always Kodik = "ru" language
+		pinnedLang := "ru"
 
-			// Check against lock
-			if lockLang != "" && (pinnedLang != lockLang || pinnedWatchType != lockType) {
-				continue
-			}
+		// Check against lock
+		if lockLang != "" && (pinnedLang != lockLang || pinnedWatchType != lockType) {
+			continue
+		}
 
-			// Match by translation_title in available
-			for _, a := range available {
-				if a.Language == pinnedLang && a.WatchType == pinnedWatchType &&
-					a.TranslationTitle == p.TranslationTitle {
-					return resolved(a, 4)
-				}
-			}
+		// Match by translation_title in available
+		if a := findInLock(available, pinnedLang, pinnedWatchType, p.TranslationTitle); a != nil {
+			return resolved(*a, 4)
 		}
 	}
 
@@ -165,6 +124,52 @@ func Resolve(
 	}
 
 	return nil
+}
+
+// findInLock returns the first available combo matching the locked
+// language+watch_type and the given translation_title, or nil if none match.
+func findInLock(available []domain.WatchCombo, lockLang, lockType, title string) *domain.WatchCombo {
+	for i := range available {
+		a := available[i]
+		if a.Language == lockLang && a.WatchType == lockType && a.TranslationTitle == title {
+			return &a
+		}
+	}
+	return nil
+}
+
+// mostPopularLock returns the language+watch_type of the community combo with
+// the most viewers. community must be non-empty.
+func mostPopularLock(community []domain.CommunityCombo) (lang, watchType string) {
+	top := community[0]
+	for _, c := range community[1:] {
+		if c.Viewers > top.Viewers {
+			top = c
+		}
+	}
+	return top.Language, top.WatchType
+}
+
+// topCommunityInLock returns the available combo with the highest community
+// viewer count that exists within the locked language+watch_type, or nil if
+// none qualify.
+func topCommunityInLock(community []domain.CommunityCombo, available []domain.WatchCombo, lockLang, lockType string) *domain.WatchCombo {
+	var best *domain.WatchCombo
+	var bestViewers int
+
+	for _, c := range community {
+		if c.Language != lockLang || c.WatchType != lockType {
+			continue
+		}
+		// Check if this community combo exists in available
+		if a := findInLock(available, c.Language, c.WatchType, c.TranslationTitle); a != nil {
+			if best == nil || c.Viewers > bestViewers {
+				best = a
+				bestViewers = c.Viewers
+			}
+		}
+	}
+	return best
 }
 
 // resolved builds a ResolvedCombo from a WatchCombo and tier number.

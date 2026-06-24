@@ -878,22 +878,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useSkipIntroSettings } from '@/composables/useSkipIntroSettings'
-
-interface ApiError {
-  response?: {
-    status?: number
-    data?: {
-      message?: string
-      error?:
-        | string
-        | {
-            code?: string
-            message?: string
-            details?: Record<string, string>
-          }
-    }
-  }
-}
+import { timeAgo as formatTimeAgo, importErrorMessage as buildImportErrorMessage, resizeAvatarToDataUrl, type ApiError } from '@/composables/profile/profileHelpers'
 
 interface ApiKeyError {
   response?: {
@@ -1947,33 +1932,9 @@ const stopPolling = (source: 'mal' | 'shikimori') => {
   }
 }
 
-// Map a server error response into a friendly, localized message for the
-// import card. The backend tags each failure with `error.details.reason`
-// (see services/player/internal/handler/import_input.go and the
-// fetch{MAL,Shikimori}Page functions); we look up that reason in i18n and
-// fall back to the server's English message, then a generic translation.
-const importErrorMessage = (
-  err: ApiError,
-  source: 'mal' | 'shikimori',
-): string => {
-  const errBody = err.response?.data?.error
-  const structured = typeof errBody === 'object' ? errBody : undefined
-  const reason = structured?.details?.reason
-  const host = structured?.details?.host
-  const username = structured?.details?.username || structured?.details?.nickname
-
-  if (reason) {
-    const key = `profile.import.errors.${reason}`
-    if (te(key)) return t(key, { host: host ?? '', username: username ?? '', source })
-  }
-
-  // Fall back to the server-provided message, then a generic localized one.
-  const serverMsg = structured?.message
-    || (typeof errBody === 'string' ? errBody : undefined)
-    || err.response?.data?.message
-  if (serverMsg) return serverMsg
-  return t('profile.import.errors.generic', { source })
-}
+// Localized import-card error message (pure helper in composables/profile).
+const importErrorMessage = (err: ApiError, source: 'mal' | 'shikimori'): string =>
+  buildImportErrorMessage(err, source, t, te)
 
 const startImport = async (source: 'mal' | 'shikimori') => {
   const state = getSyncState(source)
@@ -2070,20 +2031,8 @@ const checkActiveSyncJobs = async () => {
   }
 }
 
-const timeAgo = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  if (isNaN(date.getTime())) return t('profile.import.justNow')
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMin < 1) return t('profile.import.justNow')
-  if (diffMin < 60) return t('profile.import.minutesAgo', { n: diffMin })
-  if (diffHours < 24) return t('profile.import.hoursAgo', { n: diffHours })
-  return t('profile.import.daysAgo', { n: diffDays })
-}
+// Relative-time string for the import "last synced" line (pure helper).
+const timeAgo = (dateStr: string): string => formatTimeAgo(dateStr, t)
 
 const savePublicId = async () => {
   if (!publicId.value) return
@@ -2154,40 +2103,18 @@ const savePrivacy = async () => {
   }
 }
 
-// Avatar upload
+// Avatar upload — pure 256x256 center-crop resize lives in composables/profile;
+// here we only wire the resulting data URL into the preview refs.
 const handleAvatarFile = (e: Event) => {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
 
-  if (file.size > 2 * 1024 * 1024) {
-    return
-  }
-
-  const reader = new FileReader()
-  reader.onload = () => {
-    const img = new Image()
-    img.onload = () => {
-      // Resize to 256x256 center-crop
-      const canvas = document.createElement('canvas')
-      canvas.width = 256
-      canvas.height = 256
-      const ctx = canvas.getContext('2d')!
-
-      // Center crop to square
-      const size = Math.min(img.width, img.height)
-      const sx = (img.width - size) / 2
-      const sy = (img.height - size) / 2
-
-      ctx.drawImage(img, sx, sy, size, size, 0, 0, 256, 256)
-
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-      avatarPreview.value = dataUrl
-      avatarDataUrl.value = dataUrl
-    }
-    img.src = reader.result as string
-  }
-  reader.readAsDataURL(file)
+  void resizeAvatarToDataUrl(file).then((dataUrl) => {
+    if (!dataUrl) return // > 2 MB — silently ignored, matching prior behaviour
+    avatarPreview.value = dataUrl
+    avatarDataUrl.value = dataUrl
+  })
   // Reset input so same file can be re-selected
   input.value = ''
 }
