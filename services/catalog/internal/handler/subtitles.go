@@ -102,6 +102,31 @@ func splitTrimLower(s string) []string {
 	return out
 }
 
+// GetAnime365File — GET /api/anime/{animeId}/subtitles/anime365/file/{transId}.
+//
+// Resolves an anime365 translation id to the subtitle text (ASS preferred, VTT
+// fallback), caching 24h. Returns text/plain so the frontend SubtitleOverlay
+// parses ASS/VTT directly.
+func (h *SubtitlesHandler) GetAnime365File(w http.ResponseWriter, r *http.Request) {
+	transID, err := strconv.Atoi(chi.URLParam(r, "transId"))
+	if err != nil || transID <= 0 {
+		httputil.BadRequest(w, "transId must be a positive integer")
+		return
+	}
+
+	body, _, err := h.aggregator.ResolveAnime365File(r.Context(), transID)
+	if err != nil {
+		h.log.Errorw("anime365 file resolve failed", "trans_id", transID, "error", err)
+		httputil.Error(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
 // GetOpenSubtitlesFile — GET /api/anime/{animeId}/subtitles/opensubtitles/file/{fileID}.
 //
 // Resolves a numeric OpenSubtitles file_id to the actual subtitle text,
