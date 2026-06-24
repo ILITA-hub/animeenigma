@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -65,8 +66,15 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
+// errUnauthorized is returned by runOnce when the WS upgrade is rejected with
+// 401, signalling that the session has expired and re-enrollment is needed.
+type errUnauthorized struct{ msg string }
+
+func (e errUnauthorized) Error() string { return e.msg }
+
 // Run enrolls the worker with the server and then maintains a persistent
 // WebSocket connection, reconnecting with exponential backoff on disconnect.
+// On 401 (session expired after SessionTTL), it re-enrolls automatically.
 // It returns when ctx is cancelled.
 func (c *Client) Run(ctx context.Context) error {
 	c.print("starting")
@@ -87,7 +95,21 @@ func (c *Client) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		c.print("reconnecting")
+		// If the WS upgrade was rejected with 401, the session has expired.
+		// Re-enroll to get a fresh session before the next reconnect attempt.
+		if _, is401 := wsErr.(errUnauthorized); is401 {
+			c.print("reconnecting")
+			fresh, err := c.enroll(ctx)
+			if err != nil {
+				// If re-enroll also fails (e.g. token revoked), surface the error.
+				c.print("error")
+				return fmt.Errorf("re-enroll after 401: %w", err)
+			}
+			enroll = fresh
+			// Do not reset delay — keep backoff pressure in case of transient auth issues.
+		} else {
+			c.print("reconnecting")
+		}
 
 		select {
 		case <-ctx.Done():
@@ -149,8 +171,13 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 	// omit it. Gorilla does not add Origin by default when using a plain Dialer
 	// (it only adds it for browser-origin requests in the default http client
 	// path). We also set no request headers here.
-	conn, _, err := dialer.DialContext(ctx, wsURL, http.Header{})
+	conn, resp, err := dialer.DialContext(ctx, wsURL, http.Header{})
 	if err != nil {
+		// Gorilla returns the HTTP response even on upgrade failure so we can
+		// detect 401 and signal the caller to re-enroll.
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			return errUnauthorized{msg: fmt.Sprintf("ws upgrade: 401 unauthorized")}
+		}
 		return err
 	}
 	defer conn.Close()
@@ -264,6 +291,8 @@ func (c *Client) print(token string) {
 
 // buildWSURL constructs the WebSocket upgrade URL from the base server URL
 // and the session triple obtained during enrollment.
+// All query values are URL-escaped so future base64 sigs (containing +/=)
+// cannot corrupt the URL.
 func buildWSURL(serverURL, workerID, exp, sig string) string {
 	// Replace http(s):// prefix with ws(s)://.
 	wsBase := serverURL
@@ -272,5 +301,9 @@ func buildWSURL(serverURL, workerID, exp, sig string) string {
 	} else if len(wsBase) >= 8 && wsBase[:8] == "https://" {
 		wsBase = "wss://" + wsBase[8:]
 	}
-	return wsBase + "/worker/ws?worker_id=" + workerID + "&exp=" + exp + "&sig=" + sig
+	q := url.Values{}
+	q.Set("worker_id", workerID)
+	q.Set("exp", exp)
+	q.Set("sig", sig)
+	return wsBase + "/worker/ws?" + q.Encode()
 }

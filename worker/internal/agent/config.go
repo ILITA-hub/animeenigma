@@ -15,6 +15,11 @@ type Config struct {
 	// Mode controls the worker's operating mode. Defaults to "batch".
 	// Read from env MODE.
 	Mode string
+
+	// APIKey is the optional edge API key sent as X-API-Key on data-plane
+	// segment GET/PUT requests. Read from env API_KEY. When CF mTLS is
+	// adopted the client cert will replace/augment this (CD-9).
+	APIKey string
 }
 
 // LoadConfig reads the worker configuration from environment variables.
@@ -27,5 +32,6 @@ func LoadConfig() Config {
 		ServerURL:   os.Getenv("SERVER_URL"),
 		EnrollToken: os.Getenv("ENROLL_TOKEN"),
 		Mode:        mode,
+		APIKey:      os.Getenv("API_KEY"),
 	}
 }

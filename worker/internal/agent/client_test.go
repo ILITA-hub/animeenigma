@@ -396,6 +396,73 @@ func TestReconnectAfterServerClose(t *testing.T) {
 	cancel()
 }
 
+// ── Test 7: re-enroll on 401 WS upgrade ─────────────────────────────────────
+
+// TestReEnrollOn401 verifies that when the WS upgrade returns 401 (session
+// expired), the client re-enrolls and then successfully reconnects.
+func TestReEnrollOn401(t *testing.T) {
+	t.Parallel()
+
+	var (
+		enrollCount atomic.Int64
+		wsCount     atomic.Int64
+	)
+
+	mux := http.NewServeMux()
+
+	// Enroll endpoint: always succeeds.
+	mux.HandleFunc("/worker/enroll", func(w http.ResponseWriter, r *http.Request) {
+		enrollCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(fakeEnrollResp) //nolint:errcheck
+	})
+
+	// WS endpoint: first upgrade returns 401; subsequent upgrades succeed.
+	mux.HandleFunc("/worker/ws", func(w http.ResponseWriter, r *http.Request) {
+		n := wsCount.Add(1)
+		if n == 1 {
+			// Reject first upgrade with 401 to trigger re-enroll.
+			http.Error(w, "session expired", http.StatusUnauthorized)
+			return
+		}
+		conn, err := testUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+		}
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := Config{ServerURL: srv.URL, EnrollToken: "tok", Mode: "batch"}
+	c := NewClient(cfg)
+	c.backoff = BackoffConfig{Initial: 10 * time.Millisecond, Max: 50 * time.Millisecond}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go c.Run(ctx) //nolint:errcheck
+
+	// Wait for the client to have re-enrolled (enrollCount >= 2) and then
+	// successfully opened a second WS connection.
+	if !waitFor(t, 4*time.Second, func() bool {
+		return enrollCount.Load() >= 2 && wsCount.Load() >= 2
+	}) {
+		t.Fatalf("client did not re-enroll on 401 (enrolls=%d ws=%d)",
+			enrollCount.Load(), wsCount.Load())
+	}
+
+	cancel()
+}
+
 // ── Test 6: stdout contains ONLY neutral tokens ──────────────────────────────
 
 func TestStdoutNeutralOnly(t *testing.T) {
