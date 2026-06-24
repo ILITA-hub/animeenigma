@@ -107,8 +107,8 @@ func (b *LogBuffer) Append(ctx context.Context, jobID string, line LogLine) erro
 }
 
 // Tail returns the last n lines for a job from Redis.
-func (b *LogBuffer) Tail(jobID string, n int) []LogLine {
-	strs, err := b.redis.rangeLogs(context.Background(), b.listKey(jobID), n)
+func (b *LogBuffer) Tail(ctx context.Context, jobID string, n int) []LogLine {
+	strs, err := b.redis.rangeLogs(ctx, b.listKey(jobID), n)
 	if err != nil || len(strs) == 0 {
 		return nil
 	}
@@ -151,7 +151,7 @@ func (b *LogBuffer) Flush(ctx context.Context, jobID string) error {
 		b.log.Infow("logbuffer: flush not wired — MinIO flusher not set", "job_id", jobID)
 		return nil
 	}
-	lines := b.Tail(jobID, b.cfg.Cap)
+	lines := b.Tail(ctx, jobID, b.cfg.Cap)
 	data, err := json.Marshal(lines)
 	if err != nil {
 		return err

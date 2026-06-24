@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/controlplane"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/service"
@@ -662,7 +663,7 @@ type fakeLogBuffer struct {
 	lines []service.LogLine
 }
 
-func (f *fakeLogBuffer) Tail(_ string, n int) []service.LogLine {
+func (f *fakeLogBuffer) Tail(_ context.Context, _ string, n int) []service.LogLine {
 	if len(f.lines) == 0 {
 		return nil
 	}
@@ -738,15 +739,33 @@ func TestAdminHandler_PostWorkerCommand_ValidCommand(t *testing.T) {
 	}
 }
 
+// fakeHub satisfies controlplane's hubSender so a REAL *controlplane.Issuer can
+// be driven end-to-end in handler tests (it records sends; never errors).
+type fakeHub struct {
+	sends []controlplane.Frame
+}
+
+func (h *fakeHub) Send(_ string, f controlplane.Frame) error {
+	h.sends = append(h.sends, f)
+	return nil
+}
+
+// TestAdminHandler_PostWorkerCommand_InvalidCommand_Returns400 drives the REAL
+// Issuer (not a fake commander), so a genuine whitelist rejection of "exec"
+// flows through Issue → handler → 400, and proves no frame is sent.
 func TestAdminHandler_PostWorkerCommand_InvalidCommand_Returns400(t *testing.T) {
 	t.Parallel()
-	cmd := &fakeCommander{err: errors.New("controlplane: command \"exec\" not allowed (whitelist: cancel|drain|shutdown|reconfigure|update)")}
-	f := newAdminFixtureWithExtras(t, cmd, nil)
+	hub := &fakeHub{}
+	issuer := controlplane.NewIssuer(hub)
+	f := newAdminFixtureWithExtras(t, issuer, nil)
 
 	body, _ := json.Marshal(map[string]interface{}{"cmd": "exec"})
 	rr := doRequest(t, f.router, http.MethodPost, "/api/upscale/workers/worker-1/commands", body)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("PostWorkerCommand(exec) status = %d; want 400 (body: %s)", rr.Code, rr.Body)
+	}
+	if len(hub.sends) != 0 {
+		t.Errorf("invalid command must not send a frame; got %d sends", len(hub.sends))
 	}
 }
 

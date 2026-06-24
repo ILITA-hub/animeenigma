@@ -62,7 +62,7 @@ func TestLogBuffer_AppendTail(t *testing.T) {
 		}
 	}
 
-	lines := buf.Tail("job-1", 5)
+	lines := buf.Tail(ctx, "job-1", 5)
 	if len(lines) != 5 {
 		t.Fatalf("Tail(5): got %d lines; want 5", len(lines))
 	}

@@ -40,7 +40,7 @@ type commander interface {
 
 // adminLogBuffer provides per-job log ring-buffer access and live subscriptions.
 type adminLogBuffer interface {
-	Tail(jobID string, n int) []service.LogLine
+	Tail(ctx context.Context, jobID string, n int) []service.LogLine
 	Subscribe(jobID string) (<-chan service.LogLine, func())
 }
 
@@ -258,7 +258,12 @@ func (h *AdminHandler) deliverCancelToWorkers(ctx context.Context, jobID string)
 		h.log.Warnw("admin: cancel job — worker lookup failed (DB cancel still applied)", "job_id", jobID, "error", err)
 		return
 	}
-	args := json.RawMessage(`{"job_id":"` + jobID + `"}`)
+	argsBytes, err := json.Marshal(map[string]string{"job_id": jobID})
+	if err != nil {
+		h.log.Warnw("admin: cancel job — marshal cancel args failed (best-effort)", "job_id", jobID, "error", err)
+		return
+	}
+	args := json.RawMessage(argsBytes)
 	for _, wk := range workers {
 		if err := h.cmd.Issue(wk.WorkerID, "cancel", args); err != nil {
 			h.log.Warnw("admin: cancel job — deliver cancel command failed (best-effort)",
@@ -392,7 +397,7 @@ func (h *AdminHandler) GetJobLogs(w http.ResponseWriter, r *http.Request) {
 			n = v
 		}
 	}
-	lines := h.logBuf.Tail(id, n)
+	lines := h.logBuf.Tail(r.Context(), id, n)
 	if lines == nil {
 		lines = []service.LogLine{}
 	}
@@ -428,8 +433,9 @@ func (h *AdminHandler) StreamJobLogs(w http.ResponseWriter, r *http.Request) {
 	ch, cancel := h.logBuf.Subscribe(id)
 	defer cancel()
 
+	ctx := r.Context()
 	// Replay recent history first so a client connecting mid-job sees context.
-	for _, line := range h.logBuf.Tail(id, 100) {
+	for _, line := range h.logBuf.Tail(ctx, id, 100) {
 		raw, err := json.Marshal(line)
 		if err != nil {
 			continue
@@ -438,7 +444,6 @@ func (h *AdminHandler) StreamJobLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher.Flush()
 
-	ctx := r.Context()
 	for {
 		select {
 		case <-ctx.Done():

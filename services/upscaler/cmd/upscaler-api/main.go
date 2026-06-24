@@ -143,6 +143,15 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to init minio writer", "error", err)
 	}
+	// Per-job log ring-buffer (Task 12b): Redis-backed RPUSH/LTRIM ring with a
+	// MinIO flusher for durable dumps at finalize. The log PRODUCER (worker log
+	// streaming over the WS) is Task 18 — until then the buffer is simply empty,
+	// but the command/SSE/Flush plumbing is fully LIVE.
+	logBuffer := service.NewLogBuffer(
+		service.NewRedisLogAdapter(redisCache.Client()),
+		service.LogBufferConfig{FlushBucket: cfg.Upscaler.MinIO.Bucket},
+	).WithFlusher(upWriter)
+
 	orchestrator := service.NewOrchestrator(service.OrchestratorDeps{
 		Jobs:           jobRepo,
 		Segments:       segmentRepo,
@@ -151,6 +160,7 @@ func main() {
 		Segmenter:      segmenter,
 		Finalizer:      finalizer,
 		Writer:         upWriter,
+		LogBuffer:      logBuffer,
 		StagingDir:     cfg.Upscaler.StagingDir,
 		SegmentSeconds: cfg.Upscaler.SegmentSeconds,
 		Log:            log,
@@ -170,7 +180,12 @@ func main() {
 		cfg.Upscaler.DefaultScale,
 		"", // defaultModel: admin must supply "model" in POST body
 		log,
-	)
+	).
+		// WS command dispatch (cancel/drain/shutdown/reconfigure/update) — backed
+		// by the hub so POST /api/upscale/workers/{id}/commands is LIVE.
+		WithCommander(controlplane.NewIssuer(hub)).
+		// Per-job log history + SSE live-tail — backed by the Redis ring-buffer.
+		WithLogBuffer(logBuffer)
 
 	// Initialize router
 	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler)

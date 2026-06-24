@@ -12,6 +12,7 @@
 package minio
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -273,6 +274,26 @@ func (c *byteCounter) value() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.n
+}
+
+// PutObject writes an in-memory byte payload to {bucket}/{key} with the given
+// Content-Type. Unlike Upload (which streams files from disk), this is for small
+// generated artifacts — e.g. the per-job log dump the LogBuffer flushes at
+// finalize. It satisfies the service.logFlusher interface.
+func (w *Writer) PutObject(ctx context.Context, bucket, key string, data []byte, contentType string) error {
+	if bucket == "" {
+		bucket = w.cfg.Bucket
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	_, err := w.uploader.PutObject(ctx, bucket, key, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
+		ContentType: contentType,
+	})
+	if err != nil {
+		return fmt.Errorf("put object %s/%s: %w", bucket, key, err)
+	}
+	return nil
 }
 
 // URLFor returns the internal MinIO HTTP URL for a bucket-relative path.

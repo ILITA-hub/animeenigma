@@ -25,12 +25,10 @@ import (
 // proper mTLS or a rotating signed header; for Phase 1 it keeps the admin
 // surface distinct from the worker surface.
 //
-// The gateway sets X-Gateway-Internal: "1" on /api/upscale/* proxied requests
-// (see services/gateway/internal/service/proxy.go — forwardWith injects it
-// when service=="upscaler" via the standard copyForwardHeaders path);
-// the gateway injects X-Gateway-Internal on all /api/upscale/* proxy requests
-// (injected by the gateway's admin-gated proxy); this gate is the server-side
-// enforcement of that contract.
+// The gateway injects X-Gateway-Internal: "1" on all /api/upscale/* proxy
+// requests (see services/gateway/internal/service/proxy.go — forwardWith sets it
+// for service=="upscaler"); this gate is the server-side enforcement of that
+// contract.
 const internalGatewayHeader = "X-Gateway-Internal"
 
 // requireGatewayInternal is middleware that ensures the request came through
