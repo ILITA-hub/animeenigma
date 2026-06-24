@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the AnimeEnigma provider-recovery operator once daily
+Documentation=file:/data/animeenigma/infra/host/README.md
+
+[Timer]
+# 04:17 UTC = 06:17 Europe/Berlin (CEST) — off-peak. Jitter avoids a thundering
+# herd with the autosync/maintenance crons. Persistent fires a missed run (box
+# was off at trigger time) on next boot.
+OnCalendar=*-*-* 04:17:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=animeenigma-provider-recovery.service
+
+[Install]
+WantedBy=timers.target

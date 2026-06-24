@@ -1,0 +1,28 @@
+[Unit]
+Description=AnimeEnigma daily provider-recovery operator (headless Claude Code)
+Documentation=file:/data/animeenigma/infra/host/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/data/animeenigma
+Environment=HOME=/root
+Environment=PATH=/root/.bun/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Lets the headless session use --dangerously-skip-permissions as root.
+Environment=IS_SANDBOX=1
+# Optional host-only overrides (e.g. RECOVERY_MODEL=opus). The dash makes it
+# optional so the unit still starts when the file is absent.
+EnvironmentFile=-/etc/animeenigma/provider-recovery.env
+ExecStart=/usr/local/bin/animeenigma-provider-recovery.sh
+# A run does diagnosis + optional worktree fix + deploy; hard-cap so a runaway
+# session can't hold the box. systemd SIGTERMs the whole cgroup at timeout.
+TimeoutStartSec=3600
+# /animeenigma-after-update fans out make/bunx/tsc/eslint like the maintenance
+# bot — match its ceilings (TasksMax=50 was exhausted; see ISS-029).
+MemoryMax=6G
+TasksMax=infinity
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=animeenigma-provider-recovery
