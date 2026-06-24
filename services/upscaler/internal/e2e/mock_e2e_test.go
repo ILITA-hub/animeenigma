@@ -43,8 +43,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -83,6 +85,15 @@ const (
 
 // tinyMKVPath is the deterministically generated fixture, populated by TestMain.
 var tinyMKVPath string
+
+// workerBinPath is the prebuilt REAL worker binary, compiled once by TestMain.
+// The worker is run as a subprocess (separate module + internal package makes an
+// in-process import impossible — see the file header). We compile it ONCE and
+// exec the binary directly rather than `go run ./cmd/worker`, so killing the
+// process kills the actual worker (no intervening `go run` parent that the kill
+// would orphan) — removing the prior spurious "worker maybe still alive" skip
+// window. Empty when the worker build was skipped/failed in TestMain.
+var workerBinPath string
 
 // ffmpegAvailable reports whether ffmpeg + ffprobe are on PATH.
 func binAvailable(name string) bool {
@@ -130,11 +141,60 @@ func TestMain(m *testing.M) {
 		}
 		cancel()
 		tinyMKVPath = out
+
+		// Build the REAL worker binary ONCE so each subprocess execs the binary
+		// directly (process-group-killable, no `go run` parent). Failure here is
+		// non-fatal: requireEnv's worker-binary guard SKIPs the test with a precise
+		// reproduction command rather than reporting a misleading failure.
+		if root, ok := findRepoRoot(); ok {
+			binDir, berr := os.MkdirTemp("", "upscaler-e2e-worker-")
+			if berr == nil {
+				bin := filepath.Join(binDir, "worker")
+				bctx, bcancel := context.WithTimeout(context.Background(), 180*time.Second)
+				build := exec.CommandContext(bctx, "go", "build", "-o", bin, "./cmd/worker")
+				build.Dir = filepath.Join(root, "worker")
+				// The worker is a SEPARATE module (GOWORK=off) pinned to go1.25.0.
+				build.Env = append(os.Environ(), "GOWORK=off", "GOTOOLCHAIN=go1.25.0")
+				var berrBuf bytes.Buffer
+				build.Stderr = &berrBuf
+				if err := build.Run(); err != nil {
+					fmt.Fprintf(os.Stderr, "e2e: build worker binary failed (test will SKIP): %v\n%s\n", err, berrBuf.String())
+				} else {
+					workerBinPath = bin
+				}
+				bcancel()
+				defer os.RemoveAll(binDir)
+			}
+		}
+
 		code := m.Run()
 		_ = os.RemoveAll(dir)
 		os.Exit(code)
 	}
 	os.Exit(m.Run())
+}
+
+// findRepoRoot ascends from the working dir to the repository root (the dir
+// containing worker/cmd/worker/main.go). Returns ("", false) if not found.
+// Used from TestMain where no *testing.T is available (repoRoot is the T-based
+// equivalent used inside tests).
+func findRepoRoot() (string, bool) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", false
+	}
+	dir := wd
+	for i := 0; i < 8; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "worker", "cmd", "worker", "main.go")); err == nil {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", false
 }
 
 // requireEnv asserts the externals this E2E needs are reachable; otherwise it
@@ -150,6 +210,10 @@ func requireEnv(t *testing.T) {
 	}
 	if tinyMKVPath == "" {
 		t.Skip("fixture not generated (ffmpeg unavailable in TestMain)")
+	}
+	if workerBinPath == "" {
+		t.Skip("worker binary not built in TestMain — run from the repo so " +
+			"`cd worker && GOWORK=off GOTOOLCHAIN=go1.25.0 go build -o /tmp/worker ./cmd/worker` succeeds")
 	}
 }
 
@@ -205,7 +269,12 @@ func openIntegrationDB(t *testing.T) *gorm.DB {
 	}
 
 	// Mirror main.go's AutoMigrate set (incl. the enroll-token table the worker
-	// enroll flow consumes).
+	// enroll flow consumes). This is the REAL production schema path: Bug 2 (the
+	// CurrentJobID `type:uuid` tag that made Postgres reject the "" sentinel and
+	// blocked EVERY worker enroll) is now fixed in domain.UpscaleWorker, so
+	// AutoMigrate creates current_job_id as text and the enroll path works with
+	// NO schema workaround. If the prior `ALTER TABLE … TYPE text` hack were still
+	// needed here, that would mean Bug 2 is not actually fixed.
 	if err := db.AutoMigrate(
 		&domain.UpscaleJob{},
 		&domain.UpscaleSegment{},
@@ -214,18 +283,6 @@ func openIntegrationDB(t *testing.T) *gorm.DB {
 		&domain.UpscaleEnrollToken{},
 	); err != nil {
 		t.Fatalf("e2e: automigrate: %v", err)
-	}
-
-	// PRODUCTION-BUG WORKAROUND (see report): domain.UpscaleWorker.CurrentJobID is
-	// declared `gorm:"type:uuid"` but is a Go string, and controlplane.EnrollTx
-	// upserts a freshly-enrolled worker with CurrentJobID == "" — which Postgres
-	// rejects ("invalid input syntax for type uuid"), so EVERY worker enroll fails
-	// in production. The project's own SQLite tests sidestep this by declaring the
-	// column as TEXT (segment_sqlite_test.go: `current_job_id TEXT`). We mirror
-	// that here so the real enroll path can run; this is a test-env schema
-	// alignment, NOT a change to production code. The bug is reported, not hidden.
-	if err := db.Exec(`ALTER TABLE upscale_workers ALTER COLUMN current_job_id TYPE text USING current_job_id::text`).Error; err != nil {
-		t.Fatalf("e2e: relax current_job_id to text (production-bug workaround): %v", err)
 	}
 
 	t.Cleanup(func() {
@@ -400,18 +457,16 @@ func newServerHarness(t *testing.T, db *gorm.DB) *serverHarness {
 
 	resolver := source.NewResolver(torrentsDir, stagingDir)
 	prober := source.NewProber("") // ffprobe on PATH
-	// ffmpeg-compat shim: ffmpeg 6.1.1 (sandbox Ubuntu AND production Alpine 3.19)
-	// does NOT auto-detect the matroska muxer from the `.mks` extension, so the
-	// segmenter's `-c:s copy {out}/subs.mks` (no explicit -f) fails muxer
-	// selection on this ffmpeg build. The Segmenter/Finalizer accept an injectable
-	// binary path precisely so tests can compensate for environment quirks without
-	// touching production code; the shim injects `-f matroska` only before
-	// `.mks` outputs and is otherwise byte-identical to a plain ffmpeg call. The
-	// REAL Segmenter/Finalizer/orchestrator logic is unchanged — this is a
-	// thin env shim, not a reimplementation. See the report for details.
-	ffmpegBin := writeFfmpegShim(t)
-	segmenter := upffmpeg.NewSegmenter(ffmpegBin)
-	finalizer := upffmpeg.NewFinalizer(ffmpegBin)
+	// REAL ffmpeg, no shim. Bug 1 (the subs demux ran `-c:s copy {out}/subs.mks`
+	// with no `-f`, so ffmpeg could not infer a muxer from the unregistered `.mks`
+	// extension and failed muxer selection → EVERY job failed at demux) is fixed
+	// in the Segmenter itself (it now passes `-f matroska` before both the `.mks`
+	// and `.mka` outputs). The earlier `writeFfmpegShim` that injected `-f matroska`
+	// has been removed: the test now exercises the genuine production ffmpeg argv.
+	// If a shim were still required for the suite to pass, that would mean Bug 1
+	// is not actually fixed in the code.
+	segmenter := upffmpeg.NewSegmenter("ffmpeg")
+	finalizer := upffmpeg.NewFinalizer("ffmpeg")
 	writer := newRecordingWriter()
 
 	orchestrator := service.NewOrchestrator(service.OrchestratorDeps{
@@ -468,43 +523,6 @@ func newServerHarness(t *testing.T, db *gorm.DB) *serverHarness {
 		torrentsDir:  torrentsDir,
 		cancelBg:     cancelBg,
 	}
-}
-
-// writeFfmpegShim writes a tiny ffmpeg wrapper to a temp file and returns its
-// path. The wrapper injects `-f matroska` before any `.mks` output argument to
-// work around ffmpeg 6.1.1's missing `.mks` muxer-extension mapping (confirmed
-// on both the sandbox Ubuntu build and the production Alpine 3.19 ffmpeg). All
-// other invocations pass through unchanged.
-func writeFfmpegShim(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "ffmpeg-mks-shim.sh")
-	// Inject `-f matroska` ONLY before an OUTPUT `.mks` argument (i.e. one NOT
-	// immediately preceded by `-i`). An INPUT `.mks` (`-i subs.mks`, used by the
-	// finalizer remux) must be left untouched — ffmpeg detects the input format
-	// from the file content, and injecting `-f` there would corrupt the `-i`
-	// argument.
-	script := `#!/usr/bin/env bash
-args=()
-prev=""
-for a in "$@"; do
-  case "$a" in
-    *.mks)
-      if [ "$prev" != "-i" ]; then
-        args+=("-f" "matroska")
-      fi
-      args+=("$a")
-      ;;
-    *) args+=("$a") ;;
-  esac
-  prev="$a"
-done
-exec ffmpeg "${args[@]}"
-`
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatalf("e2e: write ffmpeg shim: %v", err)
-	}
-	return path
 }
 
 // stageSource places the fixture under {torrentsDir}/{infohash}/tiny.mkv so the
@@ -587,6 +605,7 @@ func (h *serverHarness) seedEnrollToken(t *testing.T) string {
 type workerProc struct {
 	cmd    *exec.Cmd
 	stderr *syncBuffer
+	pgid   int // process-group id (== pid; we start it as its own group leader)
 }
 
 // repoRoot walks up from the test package dir to the repository root (where the
@@ -616,38 +635,56 @@ func repoRoot(t *testing.T) string {
 // startWorker launches the REAL worker agent as a subprocess (the in-process
 // import is impossible — separate module + internal package; see file header),
 // pointed at the httptest server with model=mock and a fresh enroll token.
+//
+// It execs the PREBUILT worker binary directly (compiled once in TestMain) — NOT
+// `go run ./cmd/worker`. `go run` would fork a child worker process under a
+// parent `go` process, so Process.Kill() would only kill the parent and orphan
+// the actual worker (the prior flake). The binary is started as its own process-
+// group leader (Setpgid) so stop() can SIGKILL the whole group atomically,
+// reaping any grandchildren (ffmpeg / nvidia-smi spawned by the pipeline).
 func (h *serverHarness) startWorker(t *testing.T, root, enrollToken string) *workerProc {
 	t.Helper()
 	stderr := &syncBuffer{}
-	cmd := exec.Command("go", "run", "./cmd/worker")
+	cmd := exec.Command(workerBinPath)
 	cmd.Dir = filepath.Join(root, "worker")
 	cmd.Env = append(os.Environ(),
-		"GOWORK=off",
-		"GOTOOLCHAIN=go1.25.0",
 		"SERVER_URL="+h.srv.URL,
 		"ENROLL_TOKEN="+enrollToken,
 		"MODEL=mock",
 		"MODE=batch",
 		"SCALE=2",
+		// Fast telemetry cadence so the metrics/heartbeat assertions observe real
+		// frames within the test's polling windows (production defaults are 5s/10s).
+		"HEARTBEAT_INTERVAL=300ms",
+		"METRICS_INTERVAL=300ms",
 		// NOTE: the worker never signs capabilities — it only carries the session
 		// triple + per-segment handles minted server-side, so JOB_CAPABILITY_SECRET
 		// is intentionally NOT in the worker env (only the server holds it).
 	)
 	cmd.Stderr = stderr
 	cmd.Stdout = io.Discard
+	// Start the worker as its own process-group leader so the whole tree is
+	// killable atomically (Minor 1 fix).
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("e2e: start worker subprocess: %v", err)
 	}
-	return &workerProc{cmd: cmd, stderr: stderr}
+	return &workerProc{cmd: cmd, stderr: stderr, pgid: cmd.Process.Pid}
 }
 
-// stop kills the worker subprocess (and its `go run` child tree) and waits for
-// it to exit. `go run` execs a child; killing the process group ensures the
-// actual worker binary dies too.
+// stop kills the worker subprocess group (the worker + any ffmpeg/nvidia-smi
+// grandchildren) and waits for it to exit. Because the worker is its own
+// process-group leader (Setpgid in startWorker), syscall.Kill(-pgid, SIGKILL)
+// signals the entire group, so no child survives the kill (Minor 1 fix). Calling
+// stop() more than once (explicit + t.Cleanup belt-and-suspenders) is safe.
 func (w *workerProc) stop() {
 	if w == nil || w.cmd == nil || w.cmd.Process == nil {
 		return
 	}
+	if w.pgid > 0 {
+		_ = syscall.Kill(-w.pgid, syscall.SIGKILL)
+	}
+	// Also signal the leader directly in case Setpgid did not take effect.
 	_ = w.cmd.Process.Kill()
 	_, _ = w.cmd.Process.Wait()
 }
@@ -775,6 +812,38 @@ func TestMockE2E_FullChainWithSpotResumeExecAndMetrics(t *testing.T) {
 	t.Cleanup(w2.stop)
 	t.Log("worker #2 started (resume)")
 
+	// ── Telemetry heartbeat observer (Bug 3a regression) ─────────────────────
+	// The worker now starts a per-segment Telemetry loop that emits heartbeat
+	// frames; the server's hub applies each to the worker row via
+	// WorkerRepository.Heartbeat, setting current_job_id = jobID. Poll FindByJob
+	// concurrently DURING the resume window so we capture that a heartbeat
+	// genuinely landed while a segment was in flight (after job-done the per-
+	// segment context is cancelled and no further heartbeats fire). Before the
+	// fix, no heartbeat was ever emitted, so FindByJob would stay empty and this
+	// flag never flips.
+	hbObserved := make(chan struct{})
+	hbStop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-hbStop:
+				return
+			default:
+			}
+			ws, err := h.workers.FindByJob(context.Background(), jobID)
+			if err == nil {
+				for _, wk := range ws {
+					if wk.CurrentJobID == jobID {
+						close(hbObserved)
+						return
+					}
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+	t.Cleanup(func() { close(hbStop) })
+
 	// ── Wait for the job to reach done. ──────────────────────────────────────
 	waitFor(t, "job to reach done after resume", 180*time.Second, func() bool {
 		st := h.jobStatus(t, jobID)
@@ -785,6 +854,23 @@ func TestMockE2E_FullChainWithSpotResumeExecAndMetrics(t *testing.T) {
 		return st == domain.JobDone
 	})
 	t.Log("job reached done")
+
+	// Assert a heartbeat updated the worker's current_job_id during processing.
+	select {
+	case <-hbObserved:
+		t.Log("telemetry heartbeat observed: worker.current_job_id == jobID during processing (Bug 3a OK)")
+	case <-time.After(15 * time.Second):
+		// Heartbeats may have only fired during the (now-finished) segment windows.
+		// As a fallback, accept a persisted current_job_id on the worker row — the
+		// last heartbeat of the final segment leaves it set. An empty result here
+		// means NO heartbeat ever landed → telemetry is still dark.
+		ws, ferr := h.workers.FindByJob(context.Background(), jobID)
+		if ferr != nil || len(ws) == 0 {
+			t.Fatalf("no telemetry heartbeat ever set worker.current_job_id to %s "+
+				"(FindByJob err=%v, rows=%d) — worker Telemetry not wired", jobID, ferr, len(ws))
+		}
+		t.Logf("telemetry heartbeat observed via persisted current_job_id on %d worker row(s) (Bug 3a OK)", len(ws))
+	}
 
 	// ── Assert NO lost / NO duplicate segments: exactly totalSegments DONE,
 	// 0 pending, 0 leased, and exactly one output file per segment idx. ──────
@@ -927,32 +1013,49 @@ func assertPlaylistLast(t *testing.T, keys []string) {
 func assertExecRoundTrip(t *testing.T, h *serverHarness) {
 	t.Helper()
 
-	// Identify the connected worker.
+	hdr := http.Header{}
+	hdr.Set("X-Gateway-Internal", "1") // admin gate
+
+	// Identify a worker that is connected to the HUB (not merely present in the
+	// DB). With per-segment telemetry now ON, the KILLED worker #1 also has a
+	// recent last_heartbeat_at, so WorkerRepository.ListConnected (a DB query)
+	// returns BOTH workers — and the dead one may sort first. ExecRelay.Open
+	// routes through the hub's in-memory WS connection map, so opening against the
+	// dead worker yields 503 (worker not connected). We therefore probe each DB-
+	// connected candidate by actually dialing the admin shell WS and keep the one
+	// whose upgrade succeeds (101) — i.e. the worker the relay can genuinely reach
+	// (Minor 2 ordering-flake fix). The successful dial IS Part A's admin
+	// connection, so no redundant open.
 	var workerID string
-	waitFor(t, "a connected worker for exec", 30*time.Second, func() bool {
+	var adminConn *gorillaws.Conn
+	waitFor(t, "a hub-connected worker reachable via the admin shell WS", 60*time.Second, func() bool {
 		ws, err := h.workers.ListConnected(context.Background(), time.Now().Add(-5*time.Minute))
 		if err != nil || len(ws) == 0 {
 			return false
 		}
-		workerID = ws[0].WorkerID
-		return true
-	})
-	t.Logf("exec target worker: %s", workerID)
-
-	// ── Part A: production relay path — audit line + real exec_open frame. We
-	// drive it through the admin shell WebSocket (the REAL handler.ExecShellHandler
-	// → ExecRelay.Open), so the full admin surface is exercised. ─────────────
-	adminWSURL := toWS(h.srv.URL) + "/api/upscale/workers/" + workerID + "/shell?pty=true"
-	hdr := http.Header{}
-	hdr.Set("X-Gateway-Internal", "1") // admin gate
-	adminConn, resp, err := gorillaws.DefaultDialer.Dial(adminWSURL, hdr)
-	if err != nil {
-		status := -1
-		if resp != nil {
-			status = resp.StatusCode
+		for _, wk := range ws {
+			adminWSURL := toWS(h.srv.URL) + "/api/upscale/workers/" + wk.WorkerID + "/shell?pty=true"
+			conn, resp, derr := gorillaws.DefaultDialer.Dial(adminWSURL, hdr)
+			if derr == nil {
+				workerID = wk.WorkerID
+				adminConn = conn
+				return true
+			}
+			// 503 = that worker isn't in the hub (e.g. the killed worker #1); try
+			// the next candidate. Any other status is also non-fatal here — we
+			// retry until a live worker accepts the upgrade or the deadline passes.
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
 		}
-		t.Fatalf("e2e: dial admin shell WS (status %d): %v", status, err)
-	}
+		return false
+	})
+	t.Logf("exec target worker (hub-reachable): %s", workerID)
+
+	// ── Part A: production relay path — audit line + real exec_open frame. The
+	// admin shell WebSocket upgrade above already drove the REAL
+	// handler.ExecShellHandler → ExecRelay.Open, so the full admin surface is
+	// exercised and the EXEC_OPEN audit line is in flight. ────────────────────
 	// Give the relay a moment to deliver exec_open + write the audit line.
 	waitFor(t, "EXEC_OPEN audit line", 10*time.Second, func() bool {
 		return strings.Contains(h.auditBuf.String(), "EXEC_OPEN")
@@ -1025,39 +1128,47 @@ func assertExecRoundTrip(t *testing.T, h *serverHarness) {
 }
 
 // assertMetrics scrapes /metrics and asserts the expected upscale_* series are
-// present.
+// present, INCLUDING the worker-telemetry + enroll series that Bug 3 turned on.
 //
 // Prometheus subtlety that drives WHICH series we assert: a *Vec metric
 // (CounterVec/GaugeVec/HistogramVec) emits NO text-format lines until a child
 // with concrete label values is created — promhttp does not even emit the
 // # HELP/# TYPE header for an unobserved vec. So the LABEL-LESS upscale_*
-// metrics (plain Counter/Gauge) are guaranteed present after package init,
-// while the LABELLED ones only appear once their labels are observed.
+// metrics (plain Counter/Gauge) are present after package init, while the
+// LABELLED ones only appear once their labels are observed.
 //
-// In the current (merged) live flow the labelled worker-telemetry vecs
-// (upscale_decode_fps, upscale_workers_connected, …) are NEVER populated:
-// agent.Client.Run does not wire agent.Telemetry, so the worker emits no
-// heartbeat/metrics frames, so the hub never calls RecordWorkerTelemetry.
-// Likewise upscale_enroll_total is only incremented by the (unit-test-only)
-// controlplane.Handle path — the PRODUCTION EnrollTx path does not touch it.
-// We therefore assert the series the real system actually exposes after a full
-// job run, and we do NOT assert the ones the merged code never emits (asserting
-// them would be testing a fiction). These gaps are flagged in the report.
+// Bug 3 wired BOTH halves of that observability into the live flow:
+//   - 3a: the worker now starts agent.Telemetry per segment → it emits `metrics`
+//     frames → hub.RecordWorkerTelemetry sets the labelled upscale_decode_fps /
+//     upscale_inference_fps / upscale_encode_fps / upscale_worker_* gauges, so
+//     those vecs now appear in the scrape (proving a real `metrics` frame was
+//     received end-to-end).
+//   - 3b: EnrollTx now increments upscale_enroll_total{result="ok"} on every
+//     successful production enroll (≥2 happened in this run: worker #1 + #2).
+//
+// We therefore now assert these series ARE present. Because the worker emits at
+// the configured cadence and the scrape races the last metrics frame, we poll
+// the endpoint briefly rather than scrape once.
 func assertMetrics(t *testing.T, h *serverHarness) {
 	t.Helper()
-	resp, err := http.Get(h.srv.URL + "/metrics")
-	if err != nil {
-		t.Fatalf("e2e: scrape /metrics: %v", err)
+
+	scrape := func() string {
+		resp, err := http.Get(h.srv.URL + "/metrics")
+		if err != nil {
+			t.Fatalf("e2e: scrape /metrics: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("e2e: /metrics status %d", resp.StatusCode)
+		}
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("e2e: read /metrics body: %v", err)
+		}
+		return string(raw)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("e2e: /metrics status %d", resp.StatusCode)
-	}
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("e2e: read /metrics body: %v", err)
-	}
-	body := string(raw)
+
+	body := scrape()
 
 	// (a) upscaler HTTP collector — populated by every request through the
 	// router middleware (we POSTed a job, scraped /metrics, etc.).
@@ -1080,12 +1191,94 @@ func assertMetrics(t *testing.T, h *serverHarness) {
 		}
 	}
 
-	// (c) sanity: at least one upscale_* family is present (guards against a
+	// (c) Bug 3b: the PRODUCTION enroll path now counts enrolls. Two workers
+	// enrolled in this run, so upscale_enroll_total{result="ok"} must be ≥1.
+	if !containsEnrollOK(body) {
+		t.Errorf(`/metrics missing upscale_enroll_total{result="ok"} ≥1 — `+
+			`EnrollTx is not incrementing the enroll counter (Bug 3b).`+"\nenroll lines:\n%s",
+			grepLines(body, "upscale_enroll_total"))
+	}
+
+	// (d) Bug 3a: the worker now emits `metrics` frames, so the labelled
+	// worker-telemetry gauges become non-empty once a metrics frame is applied
+	// server-side. These vecs would be ABSENT entirely if telemetry were still
+	// dark. Poll briefly so the assertion does not race the worker's cadence.
+	telemetrySeries := []string{
+		"upscale_decode_fps",
+		"upscale_inference_fps",
+		"upscale_encode_fps",
+		"upscale_worker_gpu_util",
+		"upscale_worker_vram_used_bytes",
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		missing := false
+		for _, s := range telemetrySeries {
+			if !strings.Contains(body, s) {
+				missing = true
+				break
+			}
+		}
+		if !missing {
+			break
+		}
+		if time.Now().After(deadline) {
+			for _, s := range telemetrySeries {
+				if !strings.Contains(body, s) {
+					t.Errorf("/metrics missing worker-telemetry series %q — no `metrics` "+
+						"frame was received from the worker (Bug 3a: Telemetry not wired)", s)
+				}
+			}
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
+		body = scrape()
+	}
+
+	// (e) sanity: at least one upscale_* family is present (guards against a
 	// total registration regression).
 	if !strings.Contains(body, "upscale_") {
 		t.Error("/metrics contains no upscale_* series at all — registration regression")
 	}
-	t.Log("/metrics scrape OK — http_* collector + label-less upscale_* series present")
+	t.Log("/metrics scrape OK — http_* collector + label-less upscale_* + " +
+		"worker-telemetry fps gauges + upscale_enroll_total{ok} present")
+}
+
+// containsEnrollOK reports whether the scrape has a non-zero
+// upscale_enroll_total sample with result="ok". It scans for a line like:
+//
+//	upscale_enroll_total{result="ok"} 2
+//
+// and checks the trailing value is > 0.
+func containsEnrollOK(body string) bool {
+	for _, ln := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(ln, "upscale_enroll_total") {
+			continue
+		}
+		if !strings.Contains(ln, `result="ok"`) {
+			continue
+		}
+		fields := strings.Fields(ln)
+		if len(fields) < 2 {
+			continue
+		}
+		if v, err := strconv.ParseFloat(fields[len(fields)-1], 64); err == nil && v > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// grepLines returns the lines of body that contain sub, for error diagnostics.
+func grepLines(body, sub string) string {
+	var b strings.Builder
+	for _, ln := range strings.Split(body, "\n") {
+		if strings.Contains(ln, sub) {
+			b.WriteString(ln)
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }
 
 // ── small helpers ────────────────────────────────────────────────────────────

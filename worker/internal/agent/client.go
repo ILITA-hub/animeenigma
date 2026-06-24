@@ -45,6 +45,14 @@ const (
 
 	// sendBuf is the capacity of the client's outbound frame channel.
 	sendBuf = 64
+
+	// defaultHeartbeatInterval / defaultMetricsInterval are the per-segment
+	// telemetry cadences. Heartbeat keeps the worker row's current_job_id /
+	// current_segment fresh (and feeds the server's cancel-in-flight FindByJob);
+	// metrics drives the Prometheus + ClickHouse observability stack. They are
+	// well under the server's 60s pongWait so the connection is also kept warm.
+	defaultHeartbeatInterval = 5 * time.Second
+	defaultMetricsInterval   = 10 * time.Second
 )
 
 // BackoffConfig controls reconnect backoff timing. Exposed as a field on Client
@@ -88,6 +96,11 @@ type Client struct {
 
 	// execHandler handles server-sent exec_open frames.
 	execHandler *ExecHandler
+
+	// heartbeatInterval / metricsInterval control the per-segment Telemetry
+	// cadence. Defaulted in NewClient; overridable by tests for fast emission.
+	heartbeatInterval time.Duration
+	metricsInterval   time.Duration
 }
 
 // NewClient constructs a Client with default backoff settings.
@@ -97,13 +110,23 @@ func NewClient(cfg Config) *Client {
 	// CommandHandler.SetCancel. It is a plain no-op func so no context leaks
 	// (an unused context.WithCancel would leak its cancel goroutine/timer).
 	noopCancel := func() {}
+	hbInterval := defaultHeartbeatInterval
+	if cfg.HeartbeatInterval > 0 {
+		hbInterval = cfg.HeartbeatInterval
+	}
+	metInterval := defaultMetricsInterval
+	if cfg.MetricsInterval > 0 {
+		metInterval = cfg.MetricsInterval
+	}
 	return &Client{
-		cfg:            cfg,
-		backoff:        defaultBackoff,
-		send:           send,
-		stdout:         os.Stdout,
-		commandHandler: NewCommandHandler(noopCancel),
-		execHandler:    NewExecHandler(send),
+		cfg:               cfg,
+		backoff:           defaultBackoff,
+		send:              send,
+		stdout:            os.Stdout,
+		commandHandler:    NewCommandHandler(noopCancel),
+		execHandler:       NewExecHandler(send),
+		heartbeatInterval: hbInterval,
+		metricsInterval:   metInterval,
 	}
 }
 

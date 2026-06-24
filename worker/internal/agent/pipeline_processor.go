@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync/atomic"
 
 	"github.com/ILITA-hub/animeenigma/worker/internal/upscale"
 )
@@ -15,6 +16,11 @@ type PipelineProcessor struct {
 	model   upscale.Model
 	scale   int
 	workDir string
+
+	// live holds the most recent *Stats produced by Process, published
+	// atomically so Telemetry's statsSource can read fps without a lock while
+	// Process runs concurrently. nil until the first segment completes.
+	live atomic.Pointer[Stats]
 }
 
 // NewPipelineProcessor constructs a PipelineProcessor that looks up the named
@@ -49,12 +55,26 @@ func (p *PipelineProcessor) Process(ctx context.Context, inSeg, outSeg string) (
 		bytesWritten = fi.Size()
 	}
 
-	return Stats{
+	st := Stats{
 		BytesRead:    bytesRead,
 		BytesWritten: bytesWritten,
 		DecodeFPS:    pStats.DecodeFPS,
 		InferenceFPS: pStats.InferenceFPS,
 		EncodeFPS:    pStats.EncodeFPS,
 		Frames:       pStats.Frames,
-	}, nil
+	}
+	// Publish the latest measured throughput so Telemetry.statsSource can
+	// surface real fps on subsequent metrics frames.
+	p.live.Store(&st)
+	return st, nil
+}
+
+// LiveStats implements StatsSource: it returns the most recent Stats measured by
+// Process (zero value until the first segment completes). Safe for concurrent
+// use with Process — reads an atomically-published pointer.
+func (p *PipelineProcessor) LiveStats() Stats {
+	if s := p.live.Load(); s != nil {
+		return *s
+	}
+	return Stats{}
 }

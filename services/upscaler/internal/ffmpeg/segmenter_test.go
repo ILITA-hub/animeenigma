@@ -322,6 +322,36 @@ func TestDemuxSidecars_ArgvContainsAudioFlags(t *testing.T) {
 	if !strings.Contains(a, "-f") || !strings.Contains(a, "ffmetadata") {
 		t.Errorf("demux argv missing chapters ffmetadata flag\nfull argv:\n%s", a)
 	}
+
+	// BUG 1 regression: both the audio (.mka) and subs (.mks) demux must
+	// pass an explicit "-f matroska". ffmpeg cannot infer a muxer from the
+	// ".mks" extension, so without it the subs demux exits non-zero and
+	// fails EVERY job. Assert each muxer flag precedes its output path on
+	// its OWN invocation (per-call argv), so a stray "matroska" from the
+	// segment-format flag elsewhere can't satisfy it.
+	assertMatroskaBeforeOutput(t, a, ".mka")
+	assertMatroskaBeforeOutput(t, a, ".mks")
+}
+
+// assertMatroskaBeforeOutput verifies that within the accumulated demux argv
+// dump, the line whose value is the output path ending in suffix is
+// immediately preceded by the two lines "-f" then "matroska". Because
+// DemuxSidecars emits one argv block per invocation and the output path is
+// always the LAST arg of its block, the "-f matroska" we look for can only be
+// the muxer flag of that same call.
+func assertMatroskaBeforeOutput(t *testing.T, argv, suffix string) {
+	t.Helper()
+	lines := strings.Split(strings.TrimRight(argv, "\n"), "\n")
+	for i, ln := range lines {
+		if strings.HasSuffix(ln, suffix) {
+			if i < 2 || lines[i-2] != "-f" || lines[i-1] != "matroska" {
+				t.Errorf("output %q (line %d) not immediately preceded by -f matroska\nfull argv:\n%s",
+					ln, i, argv)
+			}
+			return
+		}
+	}
+	t.Errorf("no output line ending in %q found\nfull argv:\n%s", suffix, argv)
 }
 
 func TestDemuxSidecars_SubsAndChaptersSet(t *testing.T) {

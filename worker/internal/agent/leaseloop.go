@@ -112,6 +112,23 @@ func (c *Client) processSegment(ctx context.Context, workerID string, grant wire
 		os.Remove(outPath) //nolint:errcheck
 	}()
 
+	// Start per-segment telemetry: heartbeat (keeps the worker row's
+	// current_job_id/current_segment fresh + feeds the server's cancel-in-flight
+	// FindByJob) + metrics (GPU + pipeline fps → server Prometheus / ClickHouse).
+	// Bound to a child context cancelled when this segment finishes, so the
+	// (jobID, segIdx) attribution Telemetry.Run stamps is always for the segment
+	// actually in flight. statsFn surfaces the processor's REAL measured fps when
+	// it implements StatsSource (PipelineProcessor); processors that don't (the
+	// CopyProcessor stub) contribute zero fps but still emit GPU/heartbeat data.
+	segCtx, cancelTel := context.WithCancel(ctx)
+	defer cancelTel()
+	var statsFn func() Stats
+	if ss, ok := proc.(StatsSource); ok {
+		statsFn = ss.LiveStats
+	}
+	tel := NewTelemetry(c.send, c.heartbeatInterval, c.metricsInterval, statsFn)
+	go tel.Run(segCtx, grant.JobID, grant.Idx)
+
 	c.print("processing")
 
 	// 1. Download input segment using the GET capability handle.

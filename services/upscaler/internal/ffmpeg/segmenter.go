@@ -158,6 +158,7 @@ func (s *Segmenter) DemuxSidecars(ctx context.Context, srcPath, outDir string) (
 		"-i", srcPath,
 		"-map", "0:a?",
 		"-c:a", "copy",
+		"-f", "matroska",
 		audioPath,
 	}
 	if err := s.run(ctx, "", audioArgs); err != nil {
@@ -174,6 +175,7 @@ func (s *Segmenter) DemuxSidecars(ctx context.Context, srcPath, outDir string) (
 		"-i", srcPath,
 		"-map", "0:s?",
 		"-c:s", "copy",
+		"-f", "matroska",
 		subsPath,
 	}
 	if err := s.run(ctx, "", subsArgs); err != nil {

@@ -218,10 +218,21 @@ func (s *GormEnrollStore) EnrollTx(ctx context.Context, req EnrollRequest, ttl t
 		return nil
 	})
 	if err != nil {
+		// Observe the production enroll outcome (the test-only Handle path already
+		// does this; EnrollTx is the route the live /worker/enroll handler calls,
+		// so without this the counter stays dark in prod). Classification mirrors
+		// Handle: ErrTokenNotFound → "bad_token", anything else → "error". Counted
+		// exactly once here (the router does not double-count).
+		if errors.Is(err, ErrTokenNotFound) {
+			metrics.UpscaleEnrollTotal.WithLabelValues("bad_token").Inc()
+		} else {
+			metrics.UpscaleEnrollTotal.WithLabelValues("error").Inc()
+		}
 		return EnrollResponse{}, err
 	}
 
 	// 4. Return the response.
+	metrics.UpscaleEnrollTotal.WithLabelValues("ok").Inc()
 	return EnrollResponse{
 		WorkerID: workerID,
 		Handle:   handle,

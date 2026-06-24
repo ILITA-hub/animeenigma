@@ -35,6 +35,17 @@ type Processor interface {
 	Process(ctx context.Context, inSeg, outSeg string) (Stats, error)
 }
 
+// StatsSource is an optional capability a Processor may implement to expose its
+// latest measured pipeline Stats (DecodeFPS/InferenceFPS/EncodeFPS) for
+// telemetry. The lease loop feeds LiveStats into Telemetry so metrics frames
+// carry real fps. A Processor that does not implement this contributes zero fps
+// (Telemetry still emits GPU/heartbeat data).
+type StatsSource interface {
+	// LiveStats returns the most recent Stats observed by this Processor.
+	// It must be safe to call concurrently with Process.
+	LiveStats() Stats
+}
+
 // CopyProcessor is the stub Processor shipped in Task 15.
 // It copies the input file to the output file verbatim, allowing the full
 // lease-loop machinery (download → process → upload → delete) to be exercised

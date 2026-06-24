@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"strconv"
+	"time"
 )
 
 // Config holds the worker agent configuration loaded from environment variables.
@@ -35,6 +36,14 @@ type Config struct {
 	// Scale is the integer upscale factor (e.g. 2 or 4).
 	// Read from env SCALE; defaults to 2.
 	Scale int
+
+	// HeartbeatInterval / MetricsInterval override the per-segment Telemetry
+	// cadence. Read from env HEARTBEAT_INTERVAL / METRICS_INTERVAL (Go duration
+	// strings, e.g. "5s", "200ms"); zero/unset leaves the Client defaults
+	// (5s / 10s) in place. Exposed primarily so the e2e integration test can
+	// drive fast emission without waiting on production cadences.
+	HeartbeatInterval time.Duration
+	MetricsInterval   time.Duration
 }
 
 // LoadConfig reads the worker configuration from environment variables.
@@ -57,13 +66,26 @@ func LoadConfig() Config {
 			scale = n
 		}
 	}
+	var hbInterval, metInterval time.Duration
+	if s := os.Getenv("HEARTBEAT_INTERVAL"); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d > 0 {
+			hbInterval = d
+		}
+	}
+	if s := os.Getenv("METRICS_INTERVAL"); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d > 0 {
+			metInterval = d
+		}
+	}
 	return Config{
-		ServerURL:   os.Getenv("SERVER_URL"),
-		EnrollToken: os.Getenv("ENROLL_TOKEN"),
-		Mode:        mode,
-		APIKey:      os.Getenv("API_KEY"),
-		Model:       model,
-		WorkDir:     workDir,
-		Scale:       scale,
+		ServerURL:         os.Getenv("SERVER_URL"),
+		EnrollToken:       os.Getenv("ENROLL_TOKEN"),
+		Mode:              mode,
+		APIKey:            os.Getenv("API_KEY"),
+		Model:             model,
+		WorkDir:           workDir,
+		Scale:             scale,
+		HeartbeatInterval: hbInterval,
+		MetricsInterval:   metInterval,
 	}
 }
