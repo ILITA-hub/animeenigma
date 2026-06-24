@@ -15,6 +15,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/anime365"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -44,6 +45,7 @@ var errProviderUnconfigured = errors.New("subtitle provider not configured")
 type SubsAggregator struct {
 	jimaku    *jimaku.Client
 	opensubs  *opensubtitles.Client
+	anime365  *anime365.Client
 	idmap     *idmapping.Client
 	animeRepo animeRepoForSubs
 	cache     *cache.RedisCache
@@ -55,6 +57,7 @@ type SubsAggregator struct {
 func NewSubsAggregator(
 	jimakuClient *jimaku.Client,
 	openSubsClient *opensubtitles.Client,
+	anime365Client *anime365.Client,
 	idMapClient *idmapping.Client,
 	animeRepo *repo.AnimeRepository,
 	redisCache *cache.RedisCache,
@@ -64,6 +67,7 @@ func NewSubsAggregator(
 	return &SubsAggregator{
 		jimaku:    jimakuClient,
 		opensubs:  openSubsClient,
+		anime365:  anime365Client,
 		idmap:     idMapClient,
 		animeRepo: animeRepo,
 		cache:     redisCache,
@@ -93,7 +97,7 @@ type SubtitleTrack struct {
 	Lang     string `json:"lang"`
 	Label    string `json:"label"`
 	Format   string `json:"format,omitempty"`
-	Provider string `json:"provider"` // "jimaku" or "opensubtitles"
+	Provider string `json:"provider"` // "jimaku", "opensubtitles", or "anime365"
 	Release  string `json:"release,omitempty"`
 }
 
@@ -188,7 +192,7 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		tracks []SubtitleTrack
 		err    error
 	}
-	resultsCh := make(chan providerResult, 2)
+	resultsCh := make(chan providerResult, 3)
 	var wg sync.WaitGroup
 
 	start := time.Now()
@@ -207,6 +211,14 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		defer wg.Done()
 		tracks, err := s.fetchOpenSubtitles(ctx, anime, episode, langs)
 		resultsCh <- providerResult{name: "opensubtitles", tracks: tracks, err: err}
+	}()
+
+	// anime365 — Russian fansubs, keyed by MAL id.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tracks, err := s.fetchAnime365(ctx, anime, episode)
+		resultsCh <- providerResult{name: "anime365", tracks: tracks, err: err}
 	}()
 
 	go func() {
@@ -361,6 +373,90 @@ func (s *SubsAggregator) fetchOpenSubtitles(ctx context.Context, anime *domain.A
 		})
 	}
 	return tracks, nil
+}
+
+func (s *SubsAggregator) fetchAnime365(ctx context.Context, anime *domain.Anime, episode int) ([]SubtitleTrack, error) {
+	if s.anime365 == nil || !s.anime365.IsConfigured() {
+		return nil, errProviderUnconfigured
+	}
+	mal := anime.MALID
+	if mal == "" {
+		mal = anime.ShikimoriID // Shikimori IDs are MAL-aligned for most TV titles
+	}
+	if mal == "" {
+		return nil, nil
+	}
+	title := anime.NameEN
+	if title == "" {
+		title = anime.Name
+	}
+
+	seriesID, err := s.resolveAnime365Series(ctx, mal, title)
+	if err != nil {
+		return nil, err
+	}
+	if seriesID == 0 {
+		return nil, nil // not on anime365
+	}
+
+	episodes, err := s.anime365.ListEpisodes(ctx, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	target := strconv.Itoa(episode)
+	if strings.EqualFold(anime.Kind, "movie") {
+		target = "1"
+	}
+	epID := 0
+	for _, e := range episodes {
+		if e.IsActive && !strings.EqualFold(e.EpisodeType, "preview") && e.EpisodeInt == target {
+			epID = e.ID
+			break
+		}
+	}
+	if epID == 0 {
+		return nil, nil
+	}
+
+	translations, err := s.anime365.ListTranslations(ctx, epID)
+	if err != nil {
+		return nil, err
+	}
+	tracks := []SubtitleTrack{}
+	for _, t := range translations {
+		if !strings.EqualFold(t.TypeKind, "sub") || !strings.EqualFold(t.TypeLang, "ru") {
+			continue
+		}
+		tracks = append(tracks, SubtitleTrack{
+			URL:      fmt.Sprintf("/api/anime/%s/subtitles/anime365/file/%d", anime.ID, t.ID),
+			Lang:     "ru",
+			Label:    t.AuthorsSummary,
+			Format:   "ass",
+			Provider: "anime365",
+			Release:  t.AuthorsSummary,
+		})
+	}
+	return tracks, nil
+}
+
+// resolveAnime365Series maps a MAL id to an anime365 series id, caching the
+// result (hits long, misses shorter so a newly-added title self-heals).
+func (s *SubsAggregator) resolveAnime365Series(ctx context.Context, malID, title string) (int, error) {
+	cacheKey := fmt.Sprintf("subs:anime365:series:%s", malID)
+	var cached int
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+	seriesID, err := s.anime365.SearchSeriesByMAL(ctx, malID, title)
+	if err != nil {
+		return 0, err
+	}
+	ttl := 7 * 24 * time.Hour
+	if seriesID == 0 {
+		ttl = 6 * time.Hour
+	}
+	_ = s.cache.Set(ctx, cacheKey, seriesID, ttl)
+	return seriesID, nil
 }
 
 // ensureExternalIDs runs the Kitsu mapping lookup and persists results.
