@@ -412,7 +412,7 @@ func (s *SubsAggregator) fetchAnime365(ctx context.Context, anime *domain.Anime,
 	}
 	epID := 0
 	for _, e := range episodes {
-		if e.IsActive && !strings.EqualFold(e.EpisodeType, "preview") && e.EpisodeInt == target {
+		if e.Active() && !strings.EqualFold(e.EpisodeType, "preview") && e.EpisodeInt == target {
 			epID = e.ID
 			break
 		}

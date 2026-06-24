@@ -2,10 +2,34 @@ package anime365
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+// TestEpisode_IsActiveDecodesNumberAndBool guards the real anime365 wire shape:
+// isActive is a JSON number (1/0), not a bool. Decoding both forms must work.
+func TestEpisode_IsActiveDecodesNumberAndBool(t *testing.T) {
+	var env struct {
+		Data []Episode `json:"data"`
+	}
+	raw := `{"data":[
+		{"id":1,"episodeInt":"1","isActive":1},
+		{"id":2,"episodeInt":"2","isActive":0},
+		{"id":3,"episodeInt":"3","isActive":true},
+		{"id":4,"episodeInt":"4","isActive":false}
+	]}`
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := []bool{true, false, true, false}
+	for i, w := range want {
+		if env.Data[i].Active() != w {
+			t.Fatalf("ep[%d].Active() = %v, want %v", i, env.Data[i].Active(), w)
+		}
+	}
+}
 
 func TestSearchSeriesByMAL_InvalidIDReturnsZeroNoError(t *testing.T) {
 	c := NewClient(Config{BaseURL: "http://127.0.0.1:0", Enabled: true})
@@ -56,9 +80,9 @@ func TestSearchSeriesByMAL_NoMatchReturnsZero(t *testing.T) {
 func TestListEpisodes_DecodesFields(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"data":[
-			{"id":349360,"episodeInt":"1","episodeType":"tv","isActive":true},
-			{"id":371073,"episodeInt":"1","episodeType":"preview","isActive":true},
-			{"id":380283,"episodeInt":"12","episodeType":"tv","isActive":true}
+			{"id":349360,"episodeInt":"1","episodeType":"tv","isActive":1},
+			{"id":371073,"episodeInt":"1","episodeType":"preview","isActive":1},
+			{"id":380283,"episodeInt":"12","episodeType":"tv","isActive":1}
 		]}`))
 	}))
 	defer srv.Close()

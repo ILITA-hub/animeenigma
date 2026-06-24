@@ -21,8 +21,8 @@ func anime365TestServer(t *testing.T) *httptest.Server {
 			_, _ = w.Write([]byte(`{"data":[{"id":28440,"myAnimeListId":51553}]}`))
 		case r.URL.Path == "/api/episodes":
 			_, _ = w.Write([]byte(`{"data":[
-				{"id":371073,"episodeInt":"1","episodeType":"preview","isActive":true},
-				{"id":380283,"episodeInt":"12","episodeType":"tv","isActive":true}
+				{"id":371073,"episodeInt":"1","episodeType":"preview","isActive":1},
+				{"id":380283,"episodeInt":"12","episodeType":"tv","isActive":1}
 			]}`))
 		case r.URL.Path == "/api/episodes/380283":
 			_, _ = w.Write([]byte(`{"data":{"id":380283,"translations":[
