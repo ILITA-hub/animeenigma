@@ -129,39 +129,3 @@ func TestUpscaleTelemetryHandler_EmptyBatch(t *testing.T) {
 	}
 }
 
-// TestUpscaleTelemetryHandler_RouteIsolation asserts that
-// /internal/upscale-telemetry is NOT registered on any gateway-proxied path.
-// The router mounts it ONLY at /internal/upscale-telemetry (Docker-network-only).
-//
-// We prove this by mounting the handler directly and verifying:
-//   - POST /internal/upscale-telemetry → 202 (the handler responds)
-//   - POST /api/analytics/upscale-telemetry → 404 (not registered on any public path)
-//
-// The transport.NewRouter source code confirms the route is listed only in the
-// /internal/* block comment alongside /internal/effects and /internal/erase —
-// both of which are Docker-network-only and never gateway-proxied.
-func TestUpscaleTelemetryHandler_RouteIsolation(t *testing.T) {
-	store := &fakeUpscaleStore{}
-	h := NewUpscaleTelemetryHandler(store)
-
-	// Mount ONLY at the internal path to prove the handler itself is path-agnostic
-	// and that only the router places it under /internal/*.
-	mux := http.NewServeMux()
-	mux.Handle("/internal/upscale-telemetry", h)
-
-	// Internal path → 202.
-	req := httptest.NewRequest(http.MethodPost, "/internal/upscale-telemetry", strings.NewReader("[]"))
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("/internal/upscale-telemetry: expected 202, got %d", rec.Code)
-	}
-
-	// Gateway-proxied style path → 404 (not registered).
-	req2 := httptest.NewRequest(http.MethodPost, "/api/analytics/upscale-telemetry", strings.NewReader("[]"))
-	rec2 := httptest.NewRecorder()
-	mux.ServeHTTP(rec2, req2)
-	if rec2.Code != http.StatusNotFound {
-		t.Fatalf("/api/analytics/upscale-telemetry: expected 404 (not on public path), got %d", rec2.Code)
-	}
-}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/repo"
 )
 
@@ -28,11 +29,12 @@ type UpscaleTelemetryStore interface {
 // mirrors /internal/effects isolation).
 type UpscaleTelemetryHandler struct {
 	store UpscaleTelemetryStore
+	log   *logger.Logger
 }
 
 // NewUpscaleTelemetryHandler builds an UpscaleTelemetryHandler backed by store.
 func NewUpscaleTelemetryHandler(store UpscaleTelemetryStore) *UpscaleTelemetryHandler {
-	return &UpscaleTelemetryHandler{store: store}
+	return &UpscaleTelemetryHandler{store: store, log: logger.Default()}
 }
 
 func (h *UpscaleTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -55,8 +57,11 @@ func (h *UpscaleTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 
 	// InsertUpscaleTelemetry is a direct CH write (no batcher needed for the
 	// low-frequency telemetry path — batching happens on the upscaler side).
-	// A CH error is logged by the store layer; we return 202 regardless so the
-	// upscaler's fire-and-forget producer doesn't retry on transient failures.
-	_ = h.store.InsertUpscaleTelemetry(r.Context(), rows)
+	// We return 202 regardless so the upscaler's fire-and-forget producer
+	// doesn't retry on transient failures; but we log the error so a persistent
+	// CH write failure is NOT silent.
+	if err := h.store.InsertUpscaleTelemetry(r.Context(), rows); err != nil {
+		h.log.Warnw("upscale_telemetry: CH insert failed (rows dropped)", "error", err, "rows", len(rows))
+	}
 	w.WriteHeader(http.StatusAccepted)
 }

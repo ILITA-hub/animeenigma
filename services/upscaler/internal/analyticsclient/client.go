@@ -11,9 +11,11 @@ package analyticsclient
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
 
 // UpscaleTelemetryRow is one per-worker GPU telemetry sample. JSON tags are
@@ -71,9 +73,11 @@ type Client struct {
 	stop    chan struct{}
 	stopped chan struct{}
 	http    *http.Client
+	log     *logger.Logger
 
-	// dropCount tracks how many rows were dropped due to a full buffer. It is
-	// accessible only via internal log-path; no external accessor needed.
+	// dropCount tracks how many rows were dropped due to a full buffer.
+	// Must be accessed exclusively via sync/atomic (Send is called concurrently
+	// by multiple goroutines — one per connected worker).
 	dropCount uint64
 }
 
@@ -97,6 +101,7 @@ func New(analyticsURL string, cfg Config) *Client {
 		stop:    make(chan struct{}),
 		stopped: make(chan struct{}),
 		http:    &http.Client{Timeout: 5 * time.Second},
+		log:     logger.Default(),
 	}
 }
 
@@ -130,7 +135,10 @@ func (c *Client) Send(row UpscaleTelemetryRow) {
 	default:
 		// Buffer full — drop the row. An analytics outage or slow consumer
 		// must never block the WS read pump.
-		c.dropCount++
+		dropped := atomic.AddUint64(&c.dropCount, 1)
+		if c.log != nil {
+			c.log.Warnw("analyticsclient: telemetry dropped (buffer full)", "dropped_total", dropped)
+		}
 	}
 }
 
@@ -179,13 +187,15 @@ func (c *Client) drain() {
 }
 
 // post marshals rows as a JSON array and POSTs them to the analytics endpoint.
-// Any error (network failure, 5xx, etc.) is logged to stderr and swallowed —
+// Any error (network failure, 5xx, etc.) is logged and swallowed —
 // it must never be propagated to the caller.
 func (c *Client) post(rows []UpscaleTelemetryRow) {
 	body, err := json.Marshal(rows)
 	if err != nil {
 		// Marshalling our own struct should never fail; log defensively.
-		fmt.Printf("[analyticsclient] WARN marshal error: %v\n", err)
+		if c.log != nil {
+			c.log.Warnw("analyticsclient: marshal error (rows dropped)", "error", err)
+		}
 		return
 	}
 
@@ -193,12 +203,16 @@ func (c *Client) post(rows []UpscaleTelemetryRow) {
 	if err != nil {
 		// Network failure — swallow. The analytics service may be temporarily
 		// unavailable; the upscaler's job pipeline must not be affected.
-		fmt.Printf("[analyticsclient] WARN POST failed (rows dropped): %v\n", err)
+		if c.log != nil {
+			c.log.Warnw("analyticsclient: POST failed (rows dropped)", "error", err, "rows", len(rows))
+		}
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
-		fmt.Printf("[analyticsclient] WARN analytics returned %d (rows dropped)\n", resp.StatusCode)
+		if c.log != nil {
+			c.log.Warnw("analyticsclient: analytics returned unexpected status (rows dropped)", "status", resp.StatusCode, "rows", len(rows))
+		}
 	}
 }

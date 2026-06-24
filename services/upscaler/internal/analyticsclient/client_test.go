@@ -182,3 +182,58 @@ func TestClient_NilSend(t *testing.T) {
 	// Must not panic.
 	c.Send(UpscaleTelemetryRow{TS: time.Now(), WorkerID: "w", GPUModel: "GPU"})
 }
+
+// TestClient_ConcurrentSend_Race is the data-race regression test for the
+// dropCount field. Before the atomic fix, concurrent Send calls on a shared
+// *Client (one per worker WS goroutine) caused unsynchronized writes to
+// dropCount — a data race / UB. This test exercises that exact path:
+//
+//   - 50 goroutines each call Send 200 times on the same *Client.
+//   - The channel buffer is tiny (4) so most calls hit the drop path.
+//   - Run under `go test -race` — FAILS before the atomic fix, PASSES after.
+//
+// The test also verifies that no panic occurs and that Stop() completes.
+func TestClient_ConcurrentSend_Race(t *testing.T) {
+	// Tiny buffer: almost all sends will drop, exercising the dropCount path.
+	// Use New() so the logger field is populated (nil logger caused a nil-deref
+	// in manual struct-literal constructions — New() is the canonical constructor).
+	c := New("http://127.0.0.1:1", Config{BufferSize: 4, BatchSize: 100, FlushInterval: time.Hour})
+	// Do NOT call Start() — the drain goroutine is intentionally absent so the
+	// buffer fills immediately and every subsequent Send hits the drop path.
+	// Drive stop/stopped manually so Stop() can unblock without a drain loop.
+	go func() {
+		<-c.stop
+		close(c.stopped)
+	}()
+
+	const goroutines = 50
+	const sendsEach = 200
+
+	row := UpscaleTelemetryRow{TS: time.Now(), WorkerID: "w-race", GPUModel: "GPU"}
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			for j := 0; j < sendsEach; j++ {
+				c.Send(row) // concurrent — races on dropCount without atomic fix
+			}
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All goroutines finished — no panic, no blocking.
+	case <-time.After(10 * time.Second):
+		t.Fatal("concurrent Send calls did not complete within 10s")
+	}
+
+	c.Stop() // must not deadlock
+}
