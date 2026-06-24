@@ -93,7 +93,10 @@ type Client struct {
 // NewClient constructs a Client with default backoff settings.
 func NewClient(cfg Config) *Client {
 	send := make(chan []byte, sendBuf)
-	_, noopCancel := context.WithCancel(context.Background())
+	// noopCancel is a placeholder until a real segment context is wired in via
+	// CommandHandler.SetCancel. It is a plain no-op func so no context leaks
+	// (an unused context.WithCancel would leak its cancel goroutine/timer).
+	noopCancel := func() {}
 	return &Client{
 		cfg:            cfg,
 		backoff:        defaultBackoff,
@@ -293,11 +296,13 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 	}()
 
 	// Run pumps; readPump returns when the connection closes and signals writePump
-	// via the done channel.
+	// via the done channel. loopCtx is the connection context: it is cancelled
+	// (via the deferred cancelLoop) when this connection drops, which tears down
+	// any in-flight exec sessions so no orphaned process survives a reconnect.
 	done := make(chan struct{})
 	go c.writePump(ctx, conn, done)
 
-	err = c.readPump(conn)
+	err = c.readPump(loopCtx, conn)
 
 	// Close grantCh so chanLeaseConn.ReadGrant returns an error and the
 	// lease loop goroutine exits cleanly.
@@ -314,7 +319,10 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 
 // readPump reads frames from the WebSocket and dispatches them.
 // It returns when the connection is closed or an error occurs.
-func (c *Client) readPump(conn *gorillaws.Conn) error {
+//
+// connCtx is the per-connection context; it is passed to dispatch so exec
+// sessions are bound to the connection's lifetime and torn down on WS drop.
+func (c *Client) readPump(connCtx context.Context, conn *gorillaws.Conn) error {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -328,7 +336,7 @@ func (c *Client) readPump(conn *gorillaws.Conn) error {
 			continue
 		}
 
-		c.dispatch(f)
+		c.dispatch(connCtx, f)
 	}
 }
 
@@ -361,7 +369,10 @@ func (c *Client) writePump(ctx context.Context, conn *gorillaws.Conn, done <-cha
 
 // dispatch routes an inbound frame to the appropriate handler.
 // Unknown frame types are silently ignored (forward-compat with new server frames).
-func (c *Client) dispatch(f wire.Frame) {
+//
+// connCtx is the per-connection context; exec sessions are bound to it so they
+// are torn down when the connection drops.
+func (c *Client) dispatch(connCtx context.Context, f wire.Frame) {
 	switch f.Type {
 	case "lease_grant":
 		var g wire.LeaseGrantPayload
@@ -394,7 +405,18 @@ func (c *Client) dispatch(f wire.Frame) {
 			fmt.Fprintf(os.Stderr, "worker: decode exec_open payload: %v\n", err)
 			return
 		}
-		c.execHandler.Handle(context.Background(), p)
+		// Bind the exec session to the connection context so a WS drop /
+		// worker shutdown kills the process/PTY (no orphaned process).
+		c.execHandler.Handle(connCtx, p)
+	case "exec_close":
+		// Admin-initiated teardown of a running exec session: kill the
+		// process + close the PTY for the named session.
+		var p wire.ExecPayload
+		if err := f.Decode(&p); err != nil {
+			fmt.Fprintf(os.Stderr, "worker: decode exec_close payload: %v\n", err)
+			return
+		}
+		c.execHandler.Close(p.SessionID)
 	default:
 		// Forward-compat: unknown frames are ignored silently.
 	}

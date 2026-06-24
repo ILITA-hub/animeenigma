@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/creack/pty"
 
@@ -33,24 +34,71 @@ var execAllowlist = map[string]bool{
 // PTY shell session (Pty=true) or executes an allowlisted command (Pty=false).
 // All operations are async — Handle returns immediately and the session runs
 // in a goroutine.
+//
+// Each running session is tracked by SessionID so an admin-sent exec_close
+// frame can tear it down (kill process + close PTY). Sessions are also torn
+// down when the connection context passed to Handle is cancelled (WS drop /
+// worker shutdown), so no orphaned process survives a reconnect.
 type ExecHandler struct {
 	// send is the outbound frame channel shared with the WS write pump.
 	send chan<- []byte
+
+	// mu guards sessions.
+	mu sync.Mutex
+	// sessions maps SessionID → cancel func for that session's context.
+	// Calling the cancel func triggers teardown (CommandContext kills the
+	// process; the PTY reader unblocks when ptmx is closed on ctx-cancel).
+	sessions map[string]context.CancelFunc
 }
 
 // NewExecHandler constructs an ExecHandler.
 func NewExecHandler(send chan<- []byte) *ExecHandler {
-	return &ExecHandler{send: send}
+	return &ExecHandler{
+		send:     send,
+		sessions: make(map[string]context.CancelFunc),
+	}
 }
 
 // Handle dispatches an exec_open payload. It runs asynchronously so as not to
-// block the WS dispatch goroutine. ctx cancellation terminates the session.
+// block the WS dispatch goroutine. The parent ctx is the connection context:
+// when it is cancelled (WS drop / worker shutdown) the running process/PTY is
+// killed and resources are released.
 func (h *ExecHandler) Handle(ctx context.Context, payload wire.ExecPayload) {
-	go h.run(ctx, payload)
+	// Derive a per-session cancellable context from the connection context so
+	// either a connection drop OR an admin exec_close tears the session down.
+	sessionCtx, cancel := context.WithCancel(ctx)
+
+	h.mu.Lock()
+	h.sessions[payload.SessionID] = cancel
+	h.mu.Unlock()
+
+	go h.run(sessionCtx, cancel, payload)
+}
+
+// Close tears down the session identified by sessionID, if it is running.
+// This is the handler for an admin-sent exec_close frame: it cancels the
+// session context, which kills the process and closes the PTY. It is a no-op
+// for unknown sessions.
+func (h *ExecHandler) Close(sessionID string) {
+	h.mu.Lock()
+	cancel := h.sessions[sessionID]
+	h.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 // run executes the session and emits exec_data + exec_close frames.
-func (h *ExecHandler) run(ctx context.Context, payload wire.ExecPayload) {
+// cancel is the session's own cancel func; it is released (and the session
+// deregistered) when the session ends so the map does not leak.
+func (h *ExecHandler) run(ctx context.Context, cancel context.CancelFunc, payload wire.ExecPayload) {
+	defer func() {
+		cancel()
+		h.mu.Lock()
+		delete(h.sessions, payload.SessionID)
+		h.mu.Unlock()
+	}()
+
 	if payload.Pty {
 		h.runPty(ctx, payload)
 	} else {
@@ -104,6 +152,10 @@ func (h *ExecHandler) sendExecClose(sessionID string, exitCode int) {
 }
 
 // runAllowlist handles a non-PTY exec request with allowlist enforcement.
+//
+// The command runs under exec.CommandContext(ctx, ...), so cancelling ctx
+// (connection drop or admin exec_close) sends SIGKILL to the process group
+// and CombinedOutput returns promptly — no orphaned process survives.
 func (h *ExecHandler) runAllowlist(ctx context.Context, payload wire.ExecPayload) {
 	cmdStr := strings.TrimSpace(string(payload.Data))
 	parts := strings.Fields(cmdStr)
@@ -138,8 +190,11 @@ func (h *ExecHandler) runAllowlist(ctx context.Context, payload wire.ExecPayload
 // output as exec_data frames, and sends exec_close when the shell exits.
 //
 // If payload.Data is non-empty it is written to the PTY as initial input
-// (e.g. "exit\n" to terminate a non-interactive session). The PTY master is
-// closed after writing so the shell sees EOF on stdin and exits.
+// (e.g. a command to run). The PTY write side is NOT closed after the initial
+// write — this keeps the session interactive so subsequent exec_data frames
+// can stream more input. Teardown is driven exclusively by ctx cancellation
+// (connection drop or admin exec_close): a watchdog goroutine closes ptmx,
+// which makes the shell receive EOF/SIGHUP and exit, unblocking cmd.Wait.
 func (h *ExecHandler) runPty(ctx context.Context, payload wire.ExecPayload) {
 	cols := uint16(payload.Cols)
 	rows := uint16(payload.Rows)
@@ -150,9 +205,10 @@ func (h *ExecHandler) runPty(ctx context.Context, payload wire.ExecPayload) {
 		rows = 24
 	}
 
+	// exec.CommandContext so ctx-cancel also SIGKILLs the shell as a backstop
+	// even if closing the PTY does not make it exit.
 	cmd := exec.CommandContext(ctx, "/bin/sh")
 
-	// Set PTY size if provided.
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{
 		Rows: rows,
 		Cols: cols,
@@ -165,14 +221,29 @@ func (h *ExecHandler) runPty(ctx context.Context, payload wire.ExecPayload) {
 	}
 
 	// Write initial data (if any) to the PTY so the shell can act on it.
-	// Then close the write side so the shell gets EOF on stdin.
+	// Do NOT close the write side: the session stays open for interactive
+	// streaming until ctx-cancel (connection drop / admin exec_close).
 	if len(payload.Data) > 0 {
 		ptmx.Write(payload.Data) //nolint:errcheck
-		// Ensure a newline so the shell executes the command.
+		// Ensure a trailing newline so the shell executes the command.
 		if payload.Data[len(payload.Data)-1] != '\n' {
 			ptmx.Write([]byte{'\n'}) //nolint:errcheck
 		}
 	}
+
+	// Watchdog: when ctx is cancelled (connection drop / admin exec_close),
+	// close the PTY master. This unblocks the reader and makes the shell exit.
+	// waitDone is closed once the shell has exited so the watchdog can return
+	// without leaking when the session ends normally.
+	waitDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			ptmx.Close() //nolint:errcheck — idempotent close; reader unblocks
+		case <-waitDone:
+			// Session ended normally; nothing to tear down.
+		}
+	}()
 
 	// Read PTY output in a goroutine and forward as exec_data frames.
 	readDone := make(chan struct{})
@@ -192,17 +263,23 @@ func (h *ExecHandler) runPty(ctx context.Context, payload wire.ExecPayload) {
 		}
 	}()
 
-	// Wait for shell to exit or ctx to cancel.
+	// Wait for shell to exit (normal exit, or SIGKILL from ctx-cancel via
+	// CommandContext, or EOF after the watchdog closes ptmx).
 	exitCode := 0
-	if err := cmd.Wait(); err != nil {
+	if werr := cmd.Wait(); werr != nil {
 		exitCode = 1
-		if ee, ok := err.(*exec.ExitError); ok {
+		if ee, ok := werr.(*exec.ExitError); ok {
 			exitCode = ee.ExitCode()
 		}
 	}
 
-	// Close the PTY master to unblock the reader goroutine.
-	ptmx.Close()
+	// Signal the watchdog the session ended so it returns without leaking.
+	close(waitDone)
+
+	// Close the PTY master to unblock the reader goroutine on the normal path.
+	// Safe to call even if the watchdog already closed it (close is idempotent
+	// enough: a double Close returns an error we ignore).
+	ptmx.Close() //nolint:errcheck
 
 	// Wait for reader goroutine to drain.
 	<-readDone
