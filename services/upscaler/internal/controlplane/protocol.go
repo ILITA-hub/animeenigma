@@ -84,6 +84,9 @@ type ExecPayload struct {
 	Cols      int    `json:"cols"`
 	Rows      int    `json:"rows"`
 	ExitCode  *int   `json:"exit_code,omitempty"`
+	// Pty is set on exec_open to request full PTY allocation on the worker.
+	// false = pipe-only (allowlist/restricted) mode.
+	Pty bool `json:"pty,omitempty"`
 }
 
 // ValidTypes is the exhaustive set of allowed frame type strings.

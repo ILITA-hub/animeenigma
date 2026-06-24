@@ -67,6 +67,10 @@ func requireGatewayInternal(next http.Handler) http.Handler {
 //     AdminRole). requireGatewayInternal ensures the admin surface is not
 //     served to a caller that bypasses the gateway and dials upscaler:8096
 //     directly. FOLLOW-UP: sign the injected header in Phase 2.
+//
+// shellHandler is optional: when non-nil it is mounted as
+// GET /api/upscale/workers/{id}/shell (Task 13 remote exec relay).
+// When nil the route is simply not registered (feature-disabled path).
 func NewRouter(
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -74,6 +78,7 @@ func NewRouter(
 	enrollStore *controlplane.GormEnrollStore,
 	segmentHandler *handler.SegmentHandler,
 	adminHandler *handler.AdminHandler,
+	shellHandler *handler.ExecShellHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -117,6 +122,11 @@ func NewRouter(
 			// Fleet status + control-plane commands
 			r.Get("/workers", adminHandler.ListWorkers)
 			r.Post("/workers/{id}/commands", adminHandler.PostWorkerCommand)
+		}
+		// Task 13: remote shell exec relay (gated by shellHandler != nil so the
+		// route is skipped when REMOTE_SHELL_ENABLED=false and no handler is wired).
+		if shellHandler != nil {
+			r.Get("/workers/{id}/shell", shellHandler.ServeHTTP)
 		}
 	})
 

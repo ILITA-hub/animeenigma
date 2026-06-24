@@ -187,8 +187,21 @@ func main() {
 		// Per-job log history + SSE live-tail — backed by the Redis ring-buffer.
 		WithLogBuffer(logBuffer)
 
+	// Task 13: remote shell exec relay — gated by REMOTE_SHELL_ENABLED (default true).
+	// ExecRelay is wired into the hub so worker exec_data/exec_close frames are
+	// routed to the active admin sessions. shellHandler is passed to NewRouter so
+	// the route is only registered when the feature is enabled.
+	var shellHandler *handler.ExecShellHandler
+	if cfg.Upscaler.RemoteShellEnabled {
+		execRelay := controlplane.NewExecRelay(hub, controlplane.ExecRelayConfig{
+			Enabled: true,
+		}, log, os.Stderr)
+		hub.SetExecRouter(execRelay)
+		shellHandler = handler.NewExecShellHandler(execRelay, log)
+	}
+
 	// Initialize router
-	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler)
+	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler, shellHandler)
 
 	// Create HTTP server
 	srv := &http.Server{

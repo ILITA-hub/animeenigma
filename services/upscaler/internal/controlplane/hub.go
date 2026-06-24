@@ -60,10 +60,19 @@ type Hub struct {
 	mu    sync.RWMutex
 	conns map[string]*Conn
 
-	leaser  Leaser
-	workers WorkerHeartbeater
-	log     *logger.Logger
-	cfg     HubConfig
+	leaser     Leaser
+	workers    WorkerHeartbeater
+	log        *logger.Logger
+	cfg        HubConfig
+	execRouter ExecRouter // optional; nil = ignore exec frames
+}
+
+// SetExecRouter wires an ExecRouter to handle exec_data and exec_close frames
+// received from workers. Must be called before any worker connects.
+func (h *Hub) SetExecRouter(r ExecRouter) {
+	h.mu.Lock()
+	h.execRouter = r
+	h.mu.Unlock()
 }
 
 // NewHub constructs a Hub with default timing constants.
@@ -97,15 +106,33 @@ func (h *Hub) Register(conn *Conn) {
 }
 
 // Unregister removes a connection from the hub and closes it.
+// It also notifies the ExecRouter (if wired) so any active exec sessions for
+// the departing worker are torn down and their admin channels receive exec_close.
 func (h *Hub) Unregister(workerID string) {
 	h.mu.Lock()
 	c, ok := h.conns[workerID]
 	if ok {
 		delete(h.conns, workerID)
 	}
+	er := h.execRouter
 	h.mu.Unlock()
+
 	if ok {
 		c.close()
+	}
+
+	// Notify ExecRelay (if wired) after releasing the lock so the relay's own
+	// mutex cannot deadlock with ours during cleanup.
+	if er != nil {
+		// WorkerGone must be a method on the ExecRouter that accepts a workerID.
+		// ExecRelay implements this via WorkerGone; the interface only exposes
+		// DeliverFromWorker, so we type-assert here to keep the interface minimal.
+		type workerGoner interface {
+			WorkerGone(workerID string)
+		}
+		if wg, ok := er.(workerGoner); ok {
+			wg.WorkerGone(workerID)
+		}
 	}
 }
 
@@ -268,6 +295,15 @@ func (c *Conn) dispatch(f Frame) {
 	case "register":
 		// Optional — worker metadata update. Currently a no-op: the enrollment
 		// flow already created the worker row; future work can update gpu_info etc.
+
+	case "exec_data", "exec_close":
+		// Route exec frames to the ExecRelay (if wired); ignore otherwise.
+		c.hub.mu.RLock()
+		er := c.hub.execRouter
+		c.hub.mu.RUnlock()
+		if er != nil {
+			er.DeliverFromWorker(f)
+		}
 
 	default:
 		// Unknown frame types are silently ignored so new server-side frame types

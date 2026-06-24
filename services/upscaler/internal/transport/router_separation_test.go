@@ -65,7 +65,7 @@ func buildUpscalerRouter(t *testing.T) http.Handler {
 	// nil adminHandler: the separation tests don't exercise the admin CRUD
 	// handlers and the router's nil-guard skips wiring them in. Tests that
 	// need real admin handlers construct their own fixture (see admin_test.go).
-	return NewRouter(log, sharedUpscalerCollector(), hub, nil, segHandler, nil)
+	return NewRouter(log, sharedUpscalerCollector(), hub, nil, segHandler, nil, nil)
 }
 
 // TestUpscalerRouter_WorkerSurfaceReachable — /worker/* routes exist on the
@@ -239,7 +239,7 @@ func TestUpscalerRouter_AdminJobsResolveWithGatewayHeader(t *testing.T) {
 	segHandler := handler.NewSegmentHandler(t.TempDir(), nil, nil, log)
 	// A nil adminHandler causes the route group to have no routes wired.
 	// We verify the gate passes (no gate-404) and chi handles routing.
-	router := NewRouter(log, sharedUpscalerCollector(), hub, nil, segHandler, nil)
+	router := NewRouter(log, sharedUpscalerCollector(), hub, nil, segHandler, nil, nil)
 
 	cases := []struct {
 		method string
@@ -413,7 +413,7 @@ func TestRouter_AdminJobsWithRealHandler(t *testing.T) {
 
 	hub := controlplane.NewHub(&stubLeaser{}, &stubWorkerHB{}, log)
 	segH := handler.NewSegmentHandler(t.TempDir(), nil, nil, log)
-	router := NewRouter(log, sharedUpscalerCollector(), hub, nil, segH, adminH)
+	router := NewRouter(log, sharedUpscalerCollector(), hub, nil, segH, adminH, nil)
 
 	// Seed one queued job so the list returns non-empty.
 	ctx := context.Background()
