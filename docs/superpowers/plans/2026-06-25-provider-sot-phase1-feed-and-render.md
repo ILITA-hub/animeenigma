@@ -1131,3 +1131,226 @@ Expected: NO `animepahe`/`animelib`/`animekai` rows (policy=disabled, omitted); 
 - **UXΔ = +3 (Better)** — the player and ops dashboard finally agree; disabled providers vanish, degraded is honestly hacker-gated, state is truthful.
 - **CDI = 0.05 × 21** — spread (catalog capability pkg + 4 FE components) × shift (FE loses its provider brain; `/capabilities` becomes load-bearing) × Effort_Fib 21. Not pre-multiplied.
 - **MVQ = Griffin 88% / 82%** — disciplined consolidation onto an existing endpoint; slop-resistance from the pure `deriveProviderView` + table tests + the explicit "disabled never reaches the FE" assertion.
+
+---
+
+## FE Re-Decomposition (R1–R4) — supersedes F5–F7
+
+> **Why:** F1–F4's leaf pieces shipped (committed WIP `01e31c94`: `useProviderFeed`, types,
+> `ProviderChip`, `SourcePanel`, `smartDefault` rewritten to sync 1-arg, `useCapabilities`,
+> `deepLinkProvider`, i18n). The holistic F5 then **timed out** — the AePlayer.vue rewire +
+> deletions are wider than F5 captured: AePlayer.vue still calls the OLD **async 3-arg**
+> `pickSmartDefault(rows, orderedIds, opts)` at 3 sites, and four FE-brain modules
+> (`providerRegistry.ts`, `useProviderHealth.ts`, `useProviderAvailability.ts`,
+> `rankedProviderIds.ts`) + their specs + 3 AePlayer integration specs all break under the new
+> flat `ProviderRow`. R1–R4 replace F5/F6/F7 with bounded, independently-reviewable tasks.
+
+**Decisions locked (the backend now owns these — delete the FE equivalents):**
+- `ae` library presence → backend `state:'no_content'` (B5). Delete the FE `aeApi` probe
+  (`isProviderAvailable`/`aeAvailable`/`aeAvailableCache`) and the `displayRows` `ae` special-case.
+- Provider ordering → backend `order`. Delete `rankedProviderIds.ts` + `orderedProviderIds` +
+  `CURATED_TIER`; `rowsFromReport` and `pickSmartDefault` both sort by `order` desc.
+- Degraded/recovering gating → backend `selectable`/`hacker_only`. Delete `isCapPlayable` + the
+  `isPlayable`/`needsCheck`/`isAvailable` smart-default options.
+- Hacker-mode per-title availability overlay (`useProviderAvailability` + `overlayAvailability` +
+  `scraperProviderIds` + `markCdnUnreachable`/`checkExists`) → **deleted for Phase 1** (it's pure
+  FE-brain; the backend reactive `no_content` cache is Phase 2). **Failover is unaffected** — it
+  gates on the `triedSources`/`triedWithCurrent` Sets, NOT on availability; `markCdnUnreachable`
+  only fed the display overlay.
+- Per-provider brand hue → `activeProviderHue` returns the single token `'var(--brand-cyan)'`
+  (cosmetics are state-driven, not per-provider).
+
+### Task R1: Rewire `AePlayer.vue` to the feed; delete the four FE-brain modules
+
+**Files:**
+- Modify: `frontend/web/src/components/player/aePlayer/AePlayer.vue` (~2805 lines; edits localized)
+- Delete: `frontend/web/src/components/player/aePlayer/providerRegistry.ts`
+- Delete: `frontend/web/src/composables/aePlayer/useProviderHealth.ts` + `useProviderHealth.spec.ts`
+- Delete: `frontend/web/src/composables/aePlayer/useProviderAvailability.ts` + `useProviderAvailability.spec.ts`
+- Delete: `frontend/web/src/composables/aePlayer/rankedProviderIds.ts` + `rankedProviderIds.spec.ts`
+
+**Interfaces:**
+- Consumes: `rowsFromReport(report, filter)` from `@/composables/aePlayer/useProviderFeed`;
+  `pickSmartDefault(rows): ProviderRow | null` from `@/composables/aePlayer/smartDefault`;
+  `useCapabilities(animeIdRef)` → `{ report, capMap }`. New flat `ProviderRow` (`r.id`/`r.label`/
+  `r.group`/`r.state`/`r.selectable`/`r.hackerOnly`/`r.order`/`r.audios`/`r.reason` — **no `r.def`**).
+- Produces: AePlayer.vue with zero references to the four deleted modules and zero `r.def` usages.
+
+**Symbol-fate table (every current AePlayer.vue reference — all line numbers approximate):**
+
+| Current (≈line) | Action |
+|---|---|
+| `import { useProviderHealth }` (353) | **remove** |
+| `import { useProviderAvailability, overlayAvailability }` (354) | **remove** |
+| `import { providerById, CURATED_TIER, PROVIDER_REGISTRY } from './providerRegistry'` (358) | **remove** |
+| `import { pickSmartDefault } from '…/smartDefault'` (359) | keep |
+| `import { useCapabilities } from '…/useCapabilities'` (361) | keep |
+| `import { rankedProviderIds } from '…/rankedProviderIds'` (362) | **remove** |
+| `import { aeApi } from '@/api/client'` (365) | **remove** (only used by the deleted `ae` probe — confirm no other use first; if used elsewhere, keep) |
+| `scraperProviderIds = new Set(PROVIDER_REGISTRY…)` (445) | **remove** |
+| `const { rows, recompute: recomputeRows, start } = useProviderHealth(filter)` (588) | **replace** (see below) |
+| `useCapabilities` destructure `{ capMap, rankedIds: capRankedIds }` (595) | change to `{ report, capMap }` |
+| `orderedProviderIds` computed (596–598) | **remove** |
+| `availability = useProviderAvailability(...)` (599) | **remove** |
+| `aeAvailable`/`aeAvailableCache`/`isProviderAvailable` (610–625) | **remove** |
+| `displayRows` computed (632–650) | **remove** — pass `rows` straight to SourcePanel |
+| animeId watcher body: `aeAvailableCache=null`/`aeAvailable.value=null`/`availability.reset()`/`void isProviderAvailable('ae')` (679–685) | **remove those 4 lines** (keep the rest of the watcher) |
+| `pickSmartDefault(...)` site A — failover (734–738) | **rewrite** (see below) |
+| `availability.markCdnUnreachable(provider)` + its `if (scraperProviderIds.has(provider))` (743–745) | **remove** |
+| `pickSmartDefault(...)` site B — auto-select watcher (916–944) | **rewrite** (see below) |
+| `AE_NEEDS_CHECK` (809) + `isCapPlayable` (816) | **remove** |
+| `activeProviderDef`/`activeProviderName`/`activeProviderHue` (948–958) | **rewrite** (see below) |
+| `pickSmartDefault(...)` site C — facet repick (1471–1495) | **rewrite** (see below) |
+| `recomputeRows()` (1471) | **remove** (rows is a computed — auto-reactive) |
+| `availability.checkExists(id)` + its guard (1504–1506) | **remove** |
+| `start()` + `void isProviderAvailable('ae')` in onMounted (≈2491) | **remove both lines** |
+| template `:rows="displayRows"` (217) | → `:rows="rows"` |
+| template `:ranked-ids="orderedProviderIds"` (226) | **remove** (SourcePanel no longer accepts it) |
+
+**New code (exact):**
+
+`rows` (replaces line 588) — derive purely from the report + existing `filter` computed:
+```ts
+const animeIdRef = computed(() => props.animeId)
+const { report, capMap } = useCapabilities(animeIdRef)
+const rows = computed<ProviderRow[]>(() => rowsFromReport(report.value, filter.value))
+```
+
+Smart-default **site A** (failover — replaces 734–738):
+```ts
+    const triedProviders = new Set([...triedWithCurrent].map((k) => k.split(':')[0]))
+    toProvider = pickSmartDefault(rows.value.filter((r) => !triedProviders.has(r.id)))?.id ?? null
+```
+
+Smart-default **site B** (auto-select watcher — replaces 915–944):
+```ts
+watch(
+  [rows, preferenceSettled],
+  () => {
+    if (roomHasCombo.value) return
+    if (state.combo.value.provider) return
+    if (!preferenceSettled.value) return // let saved prefs (audio/lang) settle first
+    const pick = pickSmartDefault(rows.value)
+    if (pick && !state.combo.value.provider) {
+      providerAutoSelected.value = true
+      state.setProvider(pick.id, '')
+      recordDecision('smart default — best available source')
+    }
+  },
+  { immediate: true },
+)
+```
+
+Smart-default **site C** (facet repick — replaces 1484–1495, and drop `recomputeRows()` at 1471,
+change `r.def.id` → `r.id` at 1473):
+```ts
+  const pick = pickSmartDefault(rows.value)
+  if (!pick) {
+    sourceError.value = 'No source for this language / audio'
+    return
+  }
+  providerAutoSelected.value = true
+  state.setProvider(pick.id, '') // provider watcher re-lists episodes + refreshes teams
+  recordDecision('re-picked best source for the new audio / language')
+```
+
+Active-provider display (replaces 948–958) — name from the feed, hue is a single token:
+```ts
+const activeProviderName = computed(() => {
+  const id = state.combo.value.provider
+  return capMap.value.get(id)?.display_name ?? rows.value.find((r) => r.id === id)?.label ?? id ?? ''
+})
+const activeProviderHue = computed(() => 'var(--brand-cyan)')
+```
+
+**Steps:**
+- [ ] **Step 1** — Read AePlayer.vue's provider regions (≈340–380, 440–450, 580–700, 720–770, 800–960, 1465–1510, 2485–2495). Confirm `aeApi` has no use outside the deleted `ae` probe (`grep -n 'aeApi' AePlayer.vue`); if it does, keep its import.
+- [ ] **Step 2** — Apply every row of the symbol-fate table + the four "New code" blocks. Work top-down through the file.
+- [ ] **Step 3** — `git rm` the seven dead files (4 modules + 3 specs):
+```bash
+cd frontend/web
+git rm src/components/player/aePlayer/providerRegistry.ts \
+       src/composables/aePlayer/useProviderHealth.ts \
+       src/composables/aePlayer/useProviderHealth.spec.ts \
+       src/composables/aePlayer/useProviderAvailability.ts \
+       src/composables/aePlayer/useProviderAvailability.spec.ts \
+       src/composables/aePlayer/rankedProviderIds.ts \
+       src/composables/aePlayer/rankedProviderIds.spec.ts
+```
+- [ ] **Step 4** — Verify the source migration. The ONLY remaining type errors must be in the three
+  AePlayer integration specs (handed to R2):
+```bash
+cd frontend/web && bunx vue-tsc --noEmit 2>&1 | grep -vE "AePlayer\.(urlsync|room|subtitles)\.spec" | grep -E "error TS" || echo "SOURCE CLEAN"
+```
+  Expected: `SOURCE CLEAN` (no error lines outside those 3 specs). Also confirm no dangling refs:
+```bash
+grep -rnE "providerRegistry|useProviderHealth|useProviderAvailability|rankedProviderIds|\.def\b|CURATED_TIER|PROVIDER_REGISTRY" src --include=*.vue --include=*.ts | grep -v "\.spec\."
+```
+  Expected: empty (every non-spec reference gone).
+- [ ] **Step 5** — Run the player logic specs that do NOT import the deleted modules, to confirm no regression:
+```bash
+cd frontend/web && bunx vitest run src/composables/aePlayer/ src/components/player/aePlayer/ProviderChip.spec.ts src/components/player/aePlayer/SourcePanel.spec.ts 2>&1 | tail -20
+```
+  Expected: green (the deleted modules' specs are gone; the 3 AePlayer integration specs are R2).
+- [ ] **Step 6** — Commit (co-author block): `refactor(aePlayer): render Source list from /capabilities feed; delete FE provider registry/health/availability/ranking`.
+
+### Task R2: Migrate the three AePlayer integration specs; full green gate
+
+**Files:**
+- Modify: `frontend/web/src/components/player/aePlayer/__tests__/AePlayer.urlsync.spec.ts`
+- Modify: `frontend/web/src/components/player/aePlayer/__tests__/AePlayer.room.spec.ts`
+- Modify: `frontend/web/src/components/player/aePlayer/__tests__/AePlayer.subtitles.spec.ts`
+
+**Interfaces:**
+- These specs currently `vi.mock('@/composables/aePlayer/useProviderHealth', …)` (and may import
+  `providerRegistry`) to inject provider rows into a mounted AePlayer. The composable no longer
+  exists. Re-point them at the feed: mock `@/composables/aePlayer/useCapabilities` (or
+  `@/api/client`'s `capabilitiesApi.get`) to return a `CapabilityReport`, so `rowsFromReport`
+  produces the rows the test needs. The flat `ProviderRow`/`ProviderCap` shapes (see R1/F1/F2) are
+  the contract.
+
+**Steps:**
+- [ ] **Step 1** — For each of the 3 specs, read its current `useProviderHealth`/`providerRegistry`
+  mock and the assertions it drives. Identify which provider rows each test depends on.
+- [ ] **Step 2** — Replace the `useProviderHealth` mock with a `useCapabilities` mock returning a
+  `CapabilityReport` whose `families[].providers[]` carry the needed `state`/`selectable`/
+  `hacker_only`/`order`/`group`/`audios` so `rowsFromReport` yields equivalent rows. Drop any
+  `providerRegistry` import. Keep every behavioral assertion (url-sync, room-combo suppression,
+  subtitle wiring) intact — only the provider-injection mechanism changes.
+- [ ] **Step 3** — Full FE green gate:
+```bash
+cd frontend/web && bunx vue-tsc --noEmit && bunx vitest run src/components/player/aePlayer/ src/composables/aePlayer/ src/types/
+```
+  Expected: zero type errors; all specs pass.
+- [ ] **Step 4** — Commit (co-author block): `test(aePlayer): drive integration specs off the capability feed`.
+
+### Task R3: DS-lint allowlist cleanup + `bun run build` + i18n parity (was F6)
+
+**Files:**
+- Modify: `frontend/web/scripts/design-system-allowlist.txt` (remove the now-dead AePlayer
+  `#00d4ff` line — line ≈90 `activeProviderHue` — since `activeProviderHue` now returns
+  `var(--brand-cyan)` with no hex literal).
+- Possibly Modify: `frontend/web/scripts/design-system-spacing-allowlist.txt` (only if R1/F3 removed
+  the `ProviderChip.vue` `gap-[5px]`/`py-[9px]` classes; otherwise leave).
+
+**Steps:**
+- [ ] **Step 1** — `grep -n '#00d4ff' src/components/player/aePlayer/AePlayer.vue` → expect empty
+  (R1 removed it). Remove the matching allowlist line(s) for AePlayer.vue `#00d4ff`. A stale
+  allowlist line is itself a lint error (`project_ds_allowlist_pathcheck_i18n_placeholder`).
+- [ ] **Step 2** — `bash scripts/design-system-lint.sh` → expect `ERRORS: 0`.
+- [ ] **Step 3** — Run `/frontend-verify` (DS-lint + i18n en/ru/ja parity + real `bun run build`).
+  The three `player.sources.noContent` keys must exist in en/ru/ja (added in the WIP). Expected: all green.
+- [ ] **Step 4** — Commit (co-author block): `chore(ds): drop dead AePlayer hue allowlist line; verify provider-SoT build`.
+
+### Task R4: Deploy catalog + end-to-end smoke (was F7)
+
+**Files:** none (verification + deploy).
+
+- [ ] **Step 1** — `make redeploy-catalog && make health` → catalog healthy.
+- [ ] **Step 2** — Curl `/capabilities` for a populated title; confirm disabled providers
+  (animepahe/animelib/animekai) are ABSENT, `gogoanime` is `state=active selectable=true`, degraded
+  providers carry `hacker_only=true`, and `ae` carries a `state` reflecting library presence.
+- [ ] **Step 3** — Open the player for an anime whose `animepahe` is policy=disabled: the Source
+  list must NOT show AnimePahe (absent, not merely greyed); gogoanime shows its real DB state. This
+  closes the original disagreement.
+- [ ] **Step 4** — `/animeenigma-after-update` (changelog + final redeploy of any remaining services + push).
