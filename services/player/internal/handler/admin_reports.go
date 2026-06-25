@@ -154,6 +154,8 @@ func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 	fCategory := q.Get("category")
 	fStatus := q.Get("status")
 	fType := q.Get("type")
+	fKind := q.Get("kind")
+	fSource := q.Get("source")
 	fUsername := strings.ToLower(strings.TrimSpace(q.Get("username")))
 	fFrom, fTo := parseReportWindow(q)
 
@@ -214,13 +216,29 @@ func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		m.Description = truncateRunes(m.Description, descSnippetMax)
 
+		m.Source = normalizeSource(m.Source, m.PlayerType)
+		m.Kind = deriveKind(m.Kind, m.Source)
+
 		if fCategory != "" && m.Category != fCategory {
 			continue
 		}
 		if fType != "" && m.PlayerType != fType {
 			continue
 		}
-		if fStatus != "" && m.Status != fStatus {
+		switch {
+		case fStatus == "active":
+			if m.Status == "not_relevant" {
+				continue
+			}
+		case fStatus != "":
+			if m.Status != fStatus {
+				continue
+			}
+		}
+		if fKind != "" && m.Kind != fKind {
+			continue
+		}
+		if fSource != "" && m.Source != fSource {
 			continue
 		}
 		if fUsername != "" && !strings.Contains(strings.ToLower(m.Username), fUsername) {

@@ -258,3 +258,49 @@ func withURLParam(r *http.Request, key, val string) *http.Request {
 	rctx.URLParams.Add(key, val)
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
+
+func TestAdminReports_List_KindSourceActiveFilters(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	// legacy user feedback (no kind/source) → feedback / feedback_form
+	idFb := writeReport(t, dir, "2026-06-01T10-00-00", "alice", "feedback", map[string]interface{}{"category": "bug", "description": "user bug"})
+	// legacy telegram → feedback / telegram
+	writeReport(t, dir, "2026-06-02T10-00-00", "bot", "telegram", map[string]interface{}{"description": "tg msg", "source": "telegram"})
+	// legacy AI ledger → todo / api
+	writeReport(t, dir, "2026-06-03T10-00-00", "claude", "feedback", map[string]interface{}{"description": "agent todo", "source": "owner-todo"})
+	// explicit manual idea
+	writeReport(t, dir, "2026-06-04T10-00-00", "neymik", "feedback", map[string]interface{}{"description": "an idea", "kind": "idea", "source": "manual"})
+
+	// mark the user-feedback item not_relevant in the sidecar
+	_ = os.WriteFile(filepath.Join(dir, statusFileName),
+		[]byte(`{"`+idFb+`":{"status":"not_relevant","updated_at":"x","updated_by":"y"}}`), 0600)
+
+	get := func(qs string) listResp {
+		r := httptest.NewRequest(http.MethodGet, "/api/admin/reports?"+qs, nil)
+		w := httptest.NewRecorder()
+		h.List(w, r)
+		var resp listResp
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		return resp
+	}
+
+	// kind=todo → only the api ledger item
+	if r := get("kind=todo"); r.Data.Total != 1 || r.Data.Items[0].Username != "claude" {
+		t.Errorf("kind=todo: total=%d items=%v", r.Data.Total, r.Data.Items)
+	}
+	// source=telegram → only the tg item, derived kind=feedback
+	if r := get("source=telegram"); r.Data.Total != 1 || r.Data.Items[0].Kind != "feedback" {
+		t.Errorf("source=telegram: total=%d items=%v", r.Data.Total, r.Data.Items)
+	}
+	// kind=idea → explicit manual idea
+	if r := get("kind=idea"); r.Data.Total != 1 || r.Data.Items[0].Source != "manual" {
+		t.Errorf("kind=idea: total=%d items=%v", r.Data.Total, r.Data.Items)
+	}
+	// status=active → excludes the not_relevant user-feedback item (3 of 4)
+	if r := get("status=active"); r.Data.Total != 3 {
+		t.Errorf("status=active: total=%d, want 3", r.Data.Total)
+	}
+	// derived source on the legacy user item is feedback_form (when shown)
+	if r := get("source=feedback_form"); r.Data.Total != 1 || r.Data.Items[0].Username != "alice" {
+		t.Errorf("source=feedback_form: total=%d items=%v", r.Data.Total, r.Data.Items)
+	}
+}
