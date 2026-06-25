@@ -678,6 +678,10 @@ func (s *CatalogService) refreshStaleAnime(ctx context.Context, fresh, existing 
 	fresh.HasVideo = existing.HasVideo
 	fresh.CreatedAt = existing.CreatedAt
 
+	// Defend an AniList-corroborated next-episode date against this Shikimori
+	// batch refresh, which would otherwise clobber the correction.
+	defendAniListNextEpisode(fresh, existing)
+
 	// Preserve or fetch MAL poster if Shikimori has none
 	if fresh.PosterURL == "" {
 		if existing.PosterURL != "" {

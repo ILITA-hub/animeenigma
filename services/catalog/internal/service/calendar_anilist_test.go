@@ -8,6 +8,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
 type fakeAiringFetcher struct {
@@ -65,6 +66,48 @@ func TestReconcileCalendarWithAniList(t *testing.T) {
 	assert("300", &shiki, sourceShikimori)
 	assert("400", &shiki, sourceShikimori)
 	assert("500", &aniLater, sourceAniList)
+}
+
+func TestDefendAniListNextEpisode(t *testing.T) {
+	ani := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	shikiEarlier := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	shikiLater := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("defends anilist date against earlier shikimori refresh", func(t *testing.T) {
+		fresh := &domain.Anime{NextEpisodeAt: &shikiEarlier}
+		existing := &domain.Anime{NextEpisodeAt: &ani, NextEpisodeSource: sourceAniList}
+		defendAniListNextEpisode(fresh, existing)
+		if fresh.NextEpisodeAt == nil || !fresh.NextEpisodeAt.Equal(ani) || fresh.NextEpisodeSource != sourceAniList {
+			t.Errorf("want defended anilist date, got %v src=%s", fresh.NextEpisodeAt, fresh.NextEpisodeSource)
+		}
+	})
+
+	t.Run("shikimori even-later date wins and source reverts", func(t *testing.T) {
+		fresh := &domain.Anime{NextEpisodeAt: &shikiLater}
+		existing := &domain.Anime{NextEpisodeAt: &ani, NextEpisodeSource: sourceAniList}
+		defendAniListNextEpisode(fresh, existing)
+		if fresh.NextEpisodeAt == nil || !fresh.NextEpisodeAt.Equal(shikiLater) || fresh.NextEpisodeSource != sourceShikimori {
+			t.Errorf("want shikimori-later win, got %v src=%s", fresh.NextEpisodeAt, fresh.NextEpisodeSource)
+		}
+	})
+
+	t.Run("non-anilist existing is not defended; default source set", func(t *testing.T) {
+		fresh := &domain.Anime{NextEpisodeAt: &shikiEarlier}
+		existing := &domain.Anime{NextEpisodeAt: &ani, NextEpisodeSource: sourceShikimori}
+		defendAniListNextEpisode(fresh, existing)
+		if fresh.NextEpisodeAt == nil || !fresh.NextEpisodeAt.Equal(shikiEarlier) || fresh.NextEpisodeSource != sourceShikimori {
+			t.Errorf("want shikimori kept, got %v src=%s", fresh.NextEpisodeAt, fresh.NextEpisodeSource)
+		}
+	})
+
+	t.Run("defends when shikimori refresh has no date", func(t *testing.T) {
+		fresh := &domain.Anime{NextEpisodeAt: nil}
+		existing := &domain.Anime{NextEpisodeAt: &ani, NextEpisodeSource: sourceAniList}
+		defendAniListNextEpisode(fresh, existing)
+		if fresh.NextEpisodeAt == nil || !fresh.NextEpisodeAt.Equal(ani) || fresh.NextEpisodeSource != sourceAniList {
+			t.Errorf("want defended anilist date when fresh nil, got %v src=%s", fresh.NextEpisodeAt, fresh.NextEpisodeSource)
+		}
+	})
 }
 
 func TestLaterWins(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
 // Next-episode date provenance values stored in domain.Anime.NextEpisodeSource.
@@ -84,5 +85,23 @@ func (s *CatalogService) reconcileCalendarWithAniList(ctx context.Context, seen 
 			info.source = sourceShikimori
 			metrics.NextEpisodeSourceTotal.WithLabelValues(sourceShikimori).Inc()
 		}
+	}
+}
+
+// defendAniListNextEpisode preserves an AniList-corroborated next-episode date on
+// `fresh` (the Shikimori-rebuilt row from the nightly batch refresh) when the
+// stored `existing` row was AniList-sourced and still holds the later date.
+// Same later-wins rule as the calendar reconciler: Shikimori only wins if it now
+// reports an even-later date (the show resumed and slipped further), in which
+// case the source reverts to shikimori. Always stamps a provenance value on
+// `fresh` so the full-row Update never writes an empty source.
+func defendAniListNextEpisode(fresh, existing *domain.Anime) {
+	if fresh.NextEpisodeSource == "" {
+		fresh.NextEpisodeSource = sourceShikimori
+	}
+	if existing.NextEpisodeSource == sourceAniList && existing.NextEpisodeAt != nil &&
+		(fresh.NextEpisodeAt == nil || existing.NextEpisodeAt.After(*fresh.NextEpisodeAt)) {
+		fresh.NextEpisodeAt = existing.NextEpisodeAt
+		fresh.NextEpisodeSource = existing.NextEpisodeSource
 	}
 }
