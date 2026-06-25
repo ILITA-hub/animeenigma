@@ -147,6 +147,7 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 			}
 			playable = hi.Playable
 		}
+		state, selectable, hackerOnly := deriveProviderView(row, true) // EN: hasContent=true in Phase 1
 		caps = append(caps, domain.ProviderCap{
 			Provider:    row.Name,
 			DisplayName: displayName(row.Name),
@@ -155,6 +156,13 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 			Health:      hstatus,
 			Playable:    playable,
 			Rank:        rankEN(row, hstatus, playable),
+			State:       state,
+			Selectable:  selectable,
+			HackerOnly:  hackerOnly,
+			Order:       row.PreferenceWeight,
+			Group:       wireGroup(row.Group),
+			Audios:      audiosFromTraits(row),
+			Reason:      row.Reason,
 			Variants:    variantsFromTraits(row),
 		})
 	}

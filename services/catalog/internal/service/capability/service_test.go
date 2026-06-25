@@ -75,3 +75,34 @@ func TestBuildENFamily_RanksAndFiltersDisabled(t *testing.T) {
 		t.Errorf("allanime should advertise a dub variant: %+v", fam.Providers[0].Variants)
 	}
 }
+
+func TestBuildENFamilyPopulatesFeedFields(t *testing.T) {
+	db := newDB(t)
+	db.Create(&domain.ScraperProvider{
+		Name: "gogoanime", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Group: "en", PreferenceWeight: 85, SupportsSub: true, SupportsDub: true, Reason: "live",
+	})
+	db.Create(&domain.ScraperProvider{
+		Name: "animefever", Status: domain.StatusDegraded, Health: domain.HealthDown,
+		Group: "en", PreferenceWeight: 60, SupportsSub: true, Reason: "ad-substitution",
+	})
+
+	svc := capability.NewService(db, nil, nil, nil, nil)
+	fam, err := svc.BuildENFamily(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]domain.ProviderCap{}
+	for _, p := range fam.Providers {
+		byName[p.Provider] = p
+	}
+	gg := byName["gogoanime"]
+	if gg.State != "active" || !gg.Selectable || gg.HackerOnly || gg.Order != 85 ||
+		gg.Group != "en" || len(gg.Audios) != 2 {
+		t.Fatalf("gogoanime feed fields wrong: %+v", gg)
+	}
+	af := byName["animefever"]
+	if af.State != "degraded" || !af.Selectable || !af.HackerOnly || af.Reason != "ad-substitution" {
+		t.Fatalf("animefever feed fields wrong: %+v", af)
+	}
+}
