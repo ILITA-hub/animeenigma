@@ -71,6 +71,10 @@ func requireGatewayInternal(next http.Handler) http.Handler {
 // shellHandler is optional: when non-nil it is mounted as
 // GET /api/upscale/workers/{id}/shell (Task 13 remote exec relay).
 // When nil the route is simply not registered (feature-disabled path).
+//
+// modelAdminHandler is optional (T26): when non-nil, model registry routes
+// (POST/GET /api/upscale/models, GET /api/upscale/models/{name}) are registered
+// in the gated group. When nil the model routes are not registered.
 func NewRouter(
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -79,6 +83,7 @@ func NewRouter(
 	segmentHandler *handler.SegmentHandler,
 	adminHandler *handler.AdminHandler,
 	shellHandler *handler.ExecShellHandler,
+	modelAdminHandler *handler.ModelAdminHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -127,6 +132,14 @@ func NewRouter(
 		// route is skipped when REMOTE_SHELL_ENABLED=false and no handler is wired).
 		if shellHandler != nil {
 			r.Get("/workers/{id}/shell", shellHandler.ServeHTTP)
+		}
+
+		// T26: dynamic model registry — admin upload + list + get.
+		// Routes are gated by requireGatewayInternal (inherited from this group).
+		if modelAdminHandler != nil {
+			r.Post("/models", modelAdminHandler.UploadModel)
+			r.Get("/models", modelAdminHandler.ListModels)
+			r.Get("/models/{name}", modelAdminHandler.GetModelByName)
 		}
 	})
 

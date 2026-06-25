@@ -118,6 +118,11 @@ func New(cfg Config, log *logger.Logger) (*Writer, error) {
 	return &Writer{cfg: cfg, uploader: &minioClientAdapter{c: c}, log: log}, nil
 }
 
+// RawUploader returns the underlying Uploader so callers that need streaming
+// PutObject access (e.g. the model admin handler's TeeReader upload) can use
+// it directly without going through the Writer's byte-slice PutObject helper.
+func (w *Writer) RawUploader() Uploader { return w.uploader }
+
 // newWriterWithUploader is the test seam — bypasses the real
 // minio.Client construction so unit tests inject a fake Uploader.
 func newWriterWithUploader(cfg Config, u Uploader, log *logger.Logger) *Writer {

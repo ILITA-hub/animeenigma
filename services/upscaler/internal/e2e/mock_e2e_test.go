@@ -493,7 +493,7 @@ func newServerHarness(t *testing.T, db *gorm.DB) *serverHarness {
 	hub.SetExecRouter(relay)
 	shellHandler := handler.NewExecShellHandler(relay, log)
 
-	router := transport.NewRouter(log, metrics.NewCollector("upscaler"), hub, enrollStore, segmentHandler, adminHandler, shellHandler)
+	router := transport.NewRouter(log, metrics.NewCollector("upscaler"), hub, enrollStore, segmentHandler, adminHandler, shellHandler, nil)
 	srv := httptest.NewServer(router)
 
 	bgCtx, cancelBg := context.WithCancel(context.Background())

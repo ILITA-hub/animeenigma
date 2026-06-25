@@ -208,7 +208,13 @@ func main() {
 	}
 
 	// Initialize router
-	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler, shellHandler)
+	// T26: model admin handler — admin upload + registry backed by MinIO + upscale_models table.
+	// RawUploader() exposes the underlying streaming PutObject so the handler can
+	// TeeReader-hash while streaming to MinIO without buffering the whole file.
+	modelRepo := repo.NewModelRepository(db.DB)
+	modelAdminHandler := handler.NewModelAdminHandler(modelRepo, upWriter.RawUploader(), cfg.Upscaler.MinIO.Bucket, log)
+
+	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler, shellHandler, modelAdminHandler)
 
 	// Create HTTP server
 	srv := &http.Server{
