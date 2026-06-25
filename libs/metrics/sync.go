@@ -42,4 +42,16 @@ var (
 		},
 		[]string{"source", "result"},
 	)
+
+	// NextEpisodeSourceTotal counts calendar anime whose next-episode date was
+	// resolved from each source during calendar sync: "shikimori" (kept) vs
+	// "anilist" (corroborated override). Lets operators see how often AniList
+	// corrects a stale Shikimori date.
+	NextEpisodeSourceTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "catalog_next_episode_source_total",
+			Help: "Calendar anime next-episode date resolutions by source",
+		},
+		[]string{"source"},
+	)
 )

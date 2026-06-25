@@ -78,7 +78,12 @@ type Anime struct {
 	// AiredOn is filtered + ordered in GetOngoingAnime / ListGuessPoolCandidates.
 	// Both previously unindexed. (audit L389)
 	NextEpisodeAt *time.Time `gorm:"index" json:"next_episode_at,omitempty"`
-	AiredOn       *time.Time `gorm:"index" json:"aired_on,omitempty"`
+	// NextEpisodeSource records which provider supplied NextEpisodeAt:
+	// "shikimori" (calendar default) or "anilist" (corroborated override when
+	// AniList's broadcaster schedule is strictly later). Used by the batch
+	// refresh guard to avoid clobbering an AniList correction. Auto-migrated.
+	NextEpisodeSource string `gorm:"size:16;default:'shikimori';column:next_episode_source" json:"next_episode_source,omitempty"`
+	AiredOn           *time.Time `gorm:"index" json:"aired_on,omitempty"`
 	Genres        []Genre    `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
 	// Phase 12 Decision §A1/A2 — Studios absorbs the producers role; no
 	// separate Producers field exists in v2.0 (Decision §A2 collapses
