@@ -214,7 +214,12 @@ func main() {
 	modelRepo := repo.NewModelRepository(db.DB)
 	modelAdminHandler := handler.NewModelAdminHandler(modelRepo, upWriter.RawUploader(), cfg.Upscaler.MinIO.Bucket, log)
 
-	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler, shellHandler, modelAdminHandler)
+	// T27: model serve handler — capability-signed worker data-plane route
+	// GET /worker/models/{name}. Uses the same RawUploader for streaming GetObject.
+	// Wired in the /worker group (no X-Gateway-Internal gate; HMAC capability gate).
+	modelServeHandler := handler.NewModelServeHandler(modelRepo, upWriter.RawUploader(), cfg.Upscaler.MinIO.Bucket, log)
+
+	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler, shellHandler, modelAdminHandler, modelServeHandler)
 
 	// Create HTTP server
 	srv := &http.Server{

@@ -49,3 +49,18 @@ func (r *ModelRepository) List(ctx context.Context) ([]domain.UpscaleModel, erro
 	}
 	return models, nil
 }
+
+// GetLatest returns the most recently created model row for the given name, or
+// gorm.ErrRecordNotFound when no rows exist for that name. When multiple
+// versions are registered the row with the latest created_at is returned; if
+// created_at is identical, the lexicographically greatest version string wins.
+func (r *ModelRepository) GetLatest(ctx context.Context, name string) (*domain.UpscaleModel, error) {
+	var m domain.UpscaleModel
+	if err := r.db.WithContext(ctx).
+		Where("name = ?", name).
+		Order("created_at DESC, version DESC").
+		First(&m).Error; err != nil {
+		return nil, err
+	}
+	return &m, nil
+}

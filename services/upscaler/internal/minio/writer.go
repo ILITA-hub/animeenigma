@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,6 +49,9 @@ type Uploader interface {
 	ListObjects(ctx context.Context, bucket string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
 	CopyObject(ctx context.Context, dst minio.CopyDestOptions, src minio.CopySrcOptions) (minio.UploadInfo, error)
 	RemoveObject(ctx context.Context, bucket, object string, opts minio.RemoveObjectOptions) error
+	// GetObject retrieves an object from MinIO and returns a streaming reader.
+	// The caller MUST close the returned io.ReadCloser when done.
+	GetObject(ctx context.Context, bucket, object string) (io.ReadCloser, error)
 }
 
 // minioClientAdapter wraps the real *minio.Client to satisfy Uploader.
@@ -79,6 +83,23 @@ func (a *minioClientAdapter) CopyObject(ctx context.Context, dst minio.CopyDestO
 
 func (a *minioClientAdapter) RemoveObject(ctx context.Context, bucket, object string, opts minio.RemoveObjectOptions) error {
 	return a.c.RemoveObject(ctx, bucket, object, opts)
+}
+
+func (a *minioClientAdapter) GetObject(ctx context.Context, bucket, object string) (io.ReadCloser, error) {
+	obj, err := a.c.GetObject(ctx, bucket, object, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
+// GetObject retrieves an object from MinIO using the Writer's configured bucket.
+// This is the high-level helper that delegates to the underlying Uploader's GetObject.
+func (w *Writer) GetObject(ctx context.Context, bucket, object string) (io.ReadCloser, error) {
+	if bucket == "" {
+		bucket = w.cfg.Bucket
+	}
+	return w.uploader.GetObject(ctx, bucket, object)
 }
 
 // readerAdapter promotes an "interface{ Read }" to io.Reader for the SDK.

@@ -210,24 +210,87 @@ func TestRouter_Worker_SegmentsRouteReachable(t *testing.T) {
 	}
 }
 
-// TestRouter_Worker_ModelsNotExposed — /worker/models/* is out of Phase 1
-// and must NOT be routed to the upscaler.
-func TestRouter_Worker_ModelsNotExposed(t *testing.T) {
+// TestRouter_Worker_ModelsRouteForwardsToUpscaler (T27) — /worker/models/* must
+// be API-key-gated and forwarded to the upscaler (capability check is upscaler-side).
+func TestRouter_Worker_ModelsRouteForwardsToUpscaler(t *testing.T) {
 	const key = "correct-secret"
 	gw := buildWorkerGatewayRouter(t, key)
 	defer gw.teardown()
 
-	req := httptest.NewRequest(http.MethodGet, "/worker/models/realesrgan-x4.onnx", nil)
+	req := httptest.NewRequest(http.MethodGet, "/worker/models/realesrgan-x4plus-anime", nil)
 	req.Header.Set("X-API-Key", key)
 	req.RemoteAddr = "10.0.0.7:1234"
 	rec := httptest.NewRecorder()
 	gw.router.ServeHTTP(rec, req)
 
-	// Must NOT forward to upscaler.
+	if rec.Code != http.StatusOK {
+		t.Errorf("/worker/models/... with valid key: status = %d; want 200 (proxied)", rec.Code)
+	}
+
 	select {
 	case got := <-gw.upscalerGotURL:
-		t.Errorf("/worker/models/* forwarded to upscaler (%q) — out of Phase 1", got)
+		if got != "/worker/models/realesrgan-x4plus-anime" {
+			t.Errorf("upscaler received path %q; want /worker/models/realesrgan-x4plus-anime", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("/worker/models/...: upscaler backend never received the request")
+	}
+}
+
+// TestRouter_Worker_ModelsNoAPIKey_Returns401 — /worker/models/* without
+// X-API-Key must be rejected at the gateway (same gate as /worker/segments/*).
+func TestRouter_Worker_ModelsNoAPIKey_Returns401(t *testing.T) {
+	gw := buildWorkerGatewayRouter(t, "test-secret")
+	defer gw.teardown()
+
+	req := httptest.NewRequest(http.MethodGet, "/worker/models/realesrgan-x4plus-anime", nil)
+	req.RemoteAddr = "10.0.0.8:1234"
+	rec := httptest.NewRecorder()
+	gw.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("/worker/models no key: status = %d; want 401", rec.Code)
+	}
+	select {
+	case got := <-gw.upscalerGotURL:
+		t.Errorf("/worker/models no key forwarded to upscaler (%q) — must not forward without valid key", got)
 	default:
+	}
+}
+
+// TestRouter_Worker_ModelsStripsGatewayInternal — X-Gateway-Internal on the
+// public /worker/models/* edge must be stripped before forwarding (mirrors the
+// /worker/segments/* and /worker/enroll strip behaviour).
+func TestRouter_Worker_ModelsStripsGatewayInternal(t *testing.T) {
+	const key = "correct-secret"
+	// Use the ExternalAPIHandler directly (same as existing external_api_test.go).
+	// The router-level test above proves the route is wired; this test proves
+	// the header strip contract via ExternalAPIHandler.ProxyWorker.
+	captured := make(chan string, 4)
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured <- r.Header.Get("X-Gateway-Internal")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer stub.Close()
+
+	h, err := handler.NewExternalAPIHandler(stub.URL, logger.Default())
+	if err != nil {
+		t.Fatalf("NewExternalAPIHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/worker/models/realesrgan-x4plus-anime", nil)
+	req.Header.Set("X-Gateway-Internal", "1") // attacker tries to forge the marker
+	req.Header.Set("X-API-Key", key)
+	rec := httptest.NewRecorder()
+	h.ProxyWorker(rec, req)
+
+	select {
+	case got := <-captured:
+		if got != "" {
+			t.Errorf("X-Gateway-Internal = %q forwarded; must be stripped on public edge", got)
+		}
+	default:
+		t.Fatal("stub never received the request")
 	}
 }
 

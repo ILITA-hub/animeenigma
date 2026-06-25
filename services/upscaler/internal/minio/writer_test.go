@@ -128,6 +128,11 @@ func (f *fakeUploader) RemoveObject(_ context.Context, _ string, object string, 
 	return nil
 }
 
+func (f *fakeUploader) GetObject(_ context.Context, _, _ string) (io.ReadCloser, error) {
+	// writer_test.go does not exercise GetObject; satisfy the interface.
+	return io.NopCloser(strings.NewReader("")), nil
+}
+
 // makeTempFile creates a file with content under dir and returns its path.
 func makeTempFile(t *testing.T, dir, name, content string) string {
 	t.Helper()

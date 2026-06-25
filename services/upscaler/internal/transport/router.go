@@ -57,7 +57,7 @@ func requireGatewayInternal(next http.Handler) http.Handler {
 // NewRouter returns the HTTP handler for the upscaler service.
 // Surface separation:
 //
-//   - /worker/{enroll,ws,segments/*} — worker-facing routes (Tasks 5/7+).
+//   - /worker/{enroll,ws,segments/*,models/*} — worker-facing routes (Tasks 5/7+/27).
 //     These are reached from the internet via the ext.animeenigma.org edge
 //     (gateway /worker/* → upscaler). No JWT required here; auth is the
 //     API-key + session/capability chain.
@@ -75,6 +75,11 @@ func requireGatewayInternal(next http.Handler) http.Handler {
 // modelAdminHandler is optional (T26): when non-nil, model registry routes
 // (POST/GET /api/upscale/models, GET /api/upscale/models/{name}) are registered
 // in the gated group. When nil the model routes are not registered.
+//
+// modelServeHandler is optional (T27): when non-nil, the capability-signed
+// GET /worker/models/{name} worker data-plane route is registered in the
+// /worker group (no admin gate — gating is the HMAC capability handle).
+// When nil the route is simply not registered.
 func NewRouter(
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -84,6 +89,7 @@ func NewRouter(
 	adminHandler *handler.AdminHandler,
 	shellHandler *handler.ExecShellHandler,
 	modelAdminHandler *handler.ModelAdminHandler,
+	modelServeHandler *handler.ModelServeHandler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -202,6 +208,19 @@ func NewRouter(
 			}
 			r.Get("/segments/{job}/{idx}", segDisabled)
 			r.Put("/segments/{job}/{idx}", segDisabled)
+		}
+
+		// Model data plane (T27) — capability-signed model artifact streaming.
+		// GET /worker/models/{name} streams the model .tar from MinIO to a worker
+		// that holds a valid name-bound HMAC handle (T25 MintJobHandle contract).
+		// Auth is the handle (?exp=&sig=), not JWT and not X-Gateway-Internal.
+		// The gateway routes /worker/models/* to this handler (API-key gated at
+		// the edge; capability gated here).
+		//
+		// Nil-guard: when modelServeHandler is nil the route is simply not
+		// registered (feature-disabled path; T27 is optional until T29 ships).
+		if modelServeHandler != nil {
+			r.Get("/models/{name}", modelServeHandler.ServeModel)
 		}
 	})
 

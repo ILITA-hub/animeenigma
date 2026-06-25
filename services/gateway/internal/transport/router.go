@@ -203,12 +203,14 @@ func NewRouterWithCleanup(
 	// Mounted at /worker (NOT under /api, NOT under any JWT/admin group).
 	// Authentication: static X-API-Key (ExternalAPIKeyMiddleware, fail-closed).
 	// Per-IP rate limit: applied to /worker/enroll + /worker/ws ONLY.
-	//   /worker/segments/* is EXCLUDED from the per-path rate limiter — large
-	//   segment uploads would false-trip the token bucket (CD-12, see
-	//   handler/external_api.go). The global per-IP limiter (rateLimitMW
-	//   at the top of this router) still covers all paths including segments.
-	// /worker/models/* is NOT registered (out of Phase 1, CD-13 bakes models
-	// into the image; add it only if CD-13 flips to server-served).
+	//   /worker/segments/* and /worker/models/* are EXCLUDED from the per-path
+	//   rate limiter — large binary transfers would false-trip the token bucket
+	//   (CD-12; see handler/external_api.go). The global per-IP limiter
+	//   (rateLimitMW at the top of this router) still covers all paths.
+	// /worker/models/* (T27): streams model .tar artifacts to workers that hold
+	//   a valid name-bound HMAC capability handle (T25 contract). No extra
+	//   gateway-side auth beyond the API-key gate; the upscaler enforces the
+	//   capability handle. Uses the same streaming proxy (FlushInterval=-1).
 	r.Route("/worker", func(r chi.Router) {
 		// API-key gate applies to the whole /worker group.
 		r.Use(ExternalAPIKeyMiddleware(cfg.ExternalAPIKey))
@@ -231,6 +233,21 @@ func NewRouterWithCleanup(
 		// limit (see comment above). Streams without full-body buffering
 		// (FlushInterval=-1 in the ExternalAPIHandler director).
 		r.HandleFunc("/segments/*", func(w http.ResponseWriter, r *http.Request) {
+			if workerProxyHandler != nil {
+				workerProxyHandler.ProxyWorker(w, r)
+			} else {
+				http.Error(w, `{"error":"bad_gateway"}`, http.StatusBadGateway)
+			}
+		})
+
+		// /worker/models/* (T27) — model artifact download for workers.
+		// NO per-path rate limit (same reasoning as /worker/segments/* — large
+		// binary bodies). The upscaler enforces the name-bound HMAC capability
+		// handle; the gateway adds only the API-key gate. Streaming proxy:
+		// FlushInterval=-1 ensures model .tar bytes flow without gateway OOM.
+		// X-Gateway-Internal is stripped by the ExternalAPIHandler director
+		// (defence-in-depth; same as /worker/segments/*).
+		r.HandleFunc("/models/*", func(w http.ResponseWriter, r *http.Request) {
 			if workerProxyHandler != nil {
 				workerProxyHandler.ProxyWorker(w, r)
 			} else {
