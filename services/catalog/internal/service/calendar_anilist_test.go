@@ -126,11 +126,11 @@ func TestLaterWins(t *testing.T) {
 	late := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
 
 	cases := []struct {
-		name         string
-		shikimori    *time.Time
-		anilist      *time.Time
-		wantChosen   *time.Time
-		wantFromAni  bool
+		name        string
+		shikimori   *time.Time
+		anilist     *time.Time
+		wantChosen  *time.Time
+		wantFromAni bool
 	}{
 		{"anilist later wins", &early, &late, &late, true},
 		{"anilist earlier loses", &late, &early, &late, false},
