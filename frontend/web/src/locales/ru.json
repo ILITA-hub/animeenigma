@@ -1136,8 +1136,8 @@
       "rawLibraryDesc": "Свой пайплайн торрент → HLS для оригинальных японских серий."
     },
     "feedback": {
-      "title": "Обратная связь",
-      "subtitle": "Идеи, баги и проблемы, присланные через кнопку обратной связи.",
+      "title": "Доска проекта",
+      "subtitle": "Отзывы, задачи и идеи — весь бэклог проекта в одном месте.",
       "viewTable": "Таблица",
       "viewKanban": "Канбан",
       "refresh": "Обновить",
@@ -1157,7 +1157,11 @@
         "username": "Пользователь",
         "usernamePlaceholder": "Фильтр по нику…",
         "dateFrom": "Дата с",
-        "dateTo": "Дата по"
+        "dateTo": "Дата по",
+        "kind": "Тип",
+        "source": "Источник",
+        "allKinds": "Все типы",
+        "allSources": "Все источники"
       },
       "columns": {
         "category": "Категория",
@@ -1179,7 +1183,8 @@
         "in_progress": "В работе",
         "ai_done": "ИИ: готово",
         "resolved": "Решено",
-        "not_relevant": "Неактуально"
+        "not_relevant": "Неактуально",
+        "active": "Активные (скрыть нерелевантные)"
       },
       "detail": {
         "title": "Детали обращения",
@@ -1202,6 +1207,21 @@
         "replyTo": "В ответ на",
         "fromAdmin": "от админа",
         "history": "История статусов"
+      },
+      "kind": { "feedback": "Отзыв", "todo": "Задача", "idea": "Идея" },
+      "source": { "feedback_form": "Форма отзывов", "telegram": "Telegram", "api": "API", "manual": "Вручную" },
+      "newNote": {
+        "button": "+ Новая заметка",
+        "title": "Новая заметка",
+        "kindLabel": "Тип",
+        "categoryLabel": "Категория",
+        "categoryNone": "—",
+        "descriptionLabel": "Описание",
+        "descriptionPlaceholder": "Что нужно сделать? Опишите задачу или идею…",
+        "submit": "Добавить",
+        "cancel": "Отмена",
+        "success": "Заметка добавлена",
+        "error": "Не удалось добавить заметку"
       },
       "copyLink": "Скопировать ссылку",
       "copied": "Скопировано"

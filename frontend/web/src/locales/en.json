@@ -1136,8 +1136,8 @@
       "rawLibraryDesc": "Self-hosted torrent → HLS pipeline for raw-JP episodes."
     },
     "feedback": {
-      "title": "User Feedback",
-      "subtitle": "Ideas, bugs and issues submitted via the site feedback button.",
+      "title": "Project Board",
+      "subtitle": "Feedback, TODOs and ideas — the whole project backlog in one place.",
       "viewTable": "Table",
       "viewKanban": "Kanban",
       "refresh": "Refresh",
@@ -1157,7 +1157,11 @@
         "username": "User",
         "usernamePlaceholder": "Filter by username…",
         "dateFrom": "Date from",
-        "dateTo": "Date to"
+        "dateTo": "Date to",
+        "kind": "Kind",
+        "source": "Source",
+        "allKinds": "All kinds",
+        "allSources": "All sources"
       },
       "columns": {
         "category": "Category",
@@ -1179,7 +1183,8 @@
         "in_progress": "In progress",
         "ai_done": "AI says done",
         "resolved": "Resolved",
-        "not_relevant": "Not relevant"
+        "not_relevant": "Not relevant",
+        "active": "Active (hide dismissed)"
       },
       "detail": {
         "title": "Feedback details",
@@ -1202,6 +1207,21 @@
         "replyTo": "In reply to",
         "fromAdmin": "from admin",
         "history": "Status history"
+      },
+      "kind": { "feedback": "Feedback", "todo": "TODO", "idea": "Idea" },
+      "source": { "feedback_form": "Feedback form", "telegram": "Telegram", "api": "API", "manual": "Manual" },
+      "newNote": {
+        "button": "+ New note",
+        "title": "New note",
+        "kindLabel": "Kind",
+        "categoryLabel": "Category",
+        "categoryNone": "—",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "What needs doing? Describe the TODO or idea…",
+        "submit": "Add",
+        "cancel": "Cancel",
+        "success": "Note added",
+        "error": "Failed to add note"
       },
       "copyLink": "Copy link",
       "copied": "Copied"

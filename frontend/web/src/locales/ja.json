@@ -1136,8 +1136,8 @@
       "rawLibraryDesc": "生の日本語エピソード用のセルフホスト型 torrent → HLS パイプライン。"
     },
     "feedback": {
-      "title": "ユーザーフィードバック",
-      "subtitle": "フィードバックボタンから寄せられたアイデア・バグ・問題。",
+      "title": "プロジェクトボード",
+      "subtitle": "フィードバック・TODO・アイデア — プロジェクトのバックログを一か所に。",
       "viewTable": "テーブル",
       "viewKanban": "カンバン",
       "refresh": "更新",
@@ -1157,7 +1157,11 @@
         "username": "ユーザー",
         "usernamePlaceholder": "ユーザー名で絞り込み…",
         "dateFrom": "開始日",
-        "dateTo": "終了日"
+        "dateTo": "終了日",
+        "kind": "種別",
+        "source": "ソース",
+        "allKinds": "すべての種別",
+        "allSources": "すべてのソース"
       },
       "columns": {
         "category": "カテゴリ",
@@ -1179,7 +1183,8 @@
         "in_progress": "対応中",
         "ai_done": "AI完了",
         "resolved": "解決済み",
-        "not_relevant": "対象外"
+        "not_relevant": "対象外",
+        "active": "アクティブ（非該当を隠す）"
       },
       "detail": {
         "title": "フィードバックの詳細",
@@ -1202,6 +1207,21 @@
         "replyTo": "返信先",
         "fromAdmin": "管理者から",
         "history": "ステータス履歴"
+      },
+      "kind": { "feedback": "フィードバック", "todo": "TODO", "idea": "アイデア" },
+      "source": { "feedback_form": "フィードバックフォーム", "telegram": "Telegram", "api": "API", "manual": "手動" },
+      "newNote": {
+        "button": "＋ 新規メモ",
+        "title": "新規メモ",
+        "kindLabel": "種別",
+        "categoryLabel": "カテゴリ",
+        "categoryNone": "—",
+        "descriptionLabel": "説明",
+        "descriptionPlaceholder": "何をする必要がありますか？TODOやアイデアを記入…",
+        "submit": "追加",
+        "cancel": "キャンセル",
+        "success": "メモを追加しました",
+        "error": "メモの追加に失敗しました"
       },
       "copyLink": "リンクをコピー",
       "copied": "コピーしました"
