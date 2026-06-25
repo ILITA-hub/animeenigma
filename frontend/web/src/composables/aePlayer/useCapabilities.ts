@@ -4,23 +4,17 @@ import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 
 /**
  * Flatten a capability report into a providerId→ProviderCap map (for chip
- * labels) plus a best-first ranked id list (rank desc, name tiebreak — mirrors
- * the backend stable sort). Pure + defensive: a null/malformed report yields
- * empties.
+ * labels). Pure + defensive: a null/malformed report yields an empty map.
+ * Ordering is backend-authoritative (the `order` field), so the FE keeps no
+ * rank list of its own.
  */
-export function flattenCapabilities(report: CapabilityReport | null): {
-  capMap: Map<string, ProviderCap>
-  rankedIds: string[]
-} {
+export function flattenCapabilities(report: CapabilityReport | null): Map<string, ProviderCap> {
   const capMap = new Map<string, ProviderCap>()
-  if (!report || !Array.isArray(report.families)) return { capMap, rankedIds: [] }
+  if (!report || !Array.isArray(report.families)) return capMap
   for (const fam of report.families) {
     for (const p of fam.providers ?? []) capMap.set(p.provider, p)
   }
-  const rankedIds = [...capMap.values()]
-    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0) || a.provider.localeCompare(b.provider))
-    .map((p) => p.provider)
-  return { capMap, rankedIds }
+  return capMap
 }
 
 /**
@@ -31,7 +25,6 @@ export function flattenCapabilities(report: CapabilityReport | null): {
 export function useCapabilities(animeId: Ref<string>) {
   const report = ref<CapabilityReport | null>(null)
   const capMap = ref<Map<string, ProviderCap>>(new Map())
-  const rankedIds = ref<string[]>([])
   const loaded = ref(false)
   const error = ref(false)
 
@@ -45,14 +38,11 @@ export function useCapabilities(animeId: Ref<string>) {
       const res = await capabilitiesApi.get(id)
       // catalog {success,data} envelope
       const rep = (res.data?.data ?? res.data ?? null) as CapabilityReport | null
-      const flat = flattenCapabilities(rep)
       report.value = rep
-      capMap.value = flat.capMap
-      rankedIds.value = flat.rankedIds
+      capMap.value = flattenCapabilities(rep)
     } catch {
       report.value = null
       capMap.value = new Map()
-      rankedIds.value = []
       error.value = true
     } finally {
       loaded.value = true
@@ -61,5 +51,5 @@ export function useCapabilities(animeId: Ref<string>) {
 
   watch(animeId, (id) => { void load(id) }, { immediate: true })
 
-  return { report, capMap, rankedIds, loaded, error }
+  return { report, capMap, loaded, error }
 }

@@ -38,7 +38,6 @@ vi.mock('@/composables/aePlayer/useCapabilities', () => ({
   useCapabilities: () => ({
     report: ref(kodikReport),
     capMap: ref(new Map<string, ProviderCap>([['kodik', kodikCap], ['gogoanime', gogoCap]])),
-    rankedIds: ref(['gogoanime', 'kodik']),
   }),
 }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({

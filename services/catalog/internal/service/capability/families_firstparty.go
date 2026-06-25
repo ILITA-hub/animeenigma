@@ -33,42 +33,23 @@ func (s *Service) aeFamily(ctx context.Context, animeID string) (domain.SourceFa
 		Provider: "ae", DisplayName: "AnimeEnigma", Enabled: true, Health: "up",
 		Variants: variantsFromTraits(row),
 	}
-	state, selectable, hackerOnly := deriveProviderView(row, has)
-	pc.State, pc.Selectable, pc.HackerOnly = state, selectable, hackerOnly
-	pc.Order = row.PreferenceWeight
-	pc.Group = wireGroup(row.Group)
-	pc.Audios = audiosFromTraits(row)
-	pc.Reason = row.Reason
+	applyFeedFields(&pc, row, has) // row verified registered above; ok is always true
 	return domain.SourceFamily{Family: "ae", Providers: []domain.ProviderCap{pc}}, true
 }
 
-// rawFamily builds the "raw" (JP original-audio) family from its DB row. Phase 1
-// hasContent=true (always shown when the row is enabled — parity with today's
-// registry, where non-scraper providers always rendered selectable). Omitted
-// when the row is absent or disabled.
-func (s *Service) rawFamily(ctx context.Context, _ string) (domain.SourceFamily, bool) {
-	row, ok := s.providerRow(ctx, "raw")
+// dbRowFamily builds a single-provider family straight from its stream_providers
+// row — for the trait-only sources (raw JP original-audio, 18anime) that need no
+// live catalog lookup. Phase 1 hasContent=true (always shown when the row is
+// enabled — parity with the old registry, where non-scraper providers always
+// rendered selectable). Omitted when the row is absent or disabled.
+func (s *Service) dbRowFamily(ctx context.Context, providerName, displayName, family string) (domain.SourceFamily, bool) {
+	row, ok := s.providerRow(ctx, providerName)
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	pc := domain.ProviderCap{Provider: "raw", DisplayName: "Raw", Enabled: true, Health: "up", Variants: variantsFromTraits(row)}
-	if !applyFeedFields(&pc, row) {
+	pc := domain.ProviderCap{Provider: providerName, DisplayName: displayName, Enabled: true, Health: "up", Variants: variantsFromTraits(row)}
+	if !applyFeedFields(&pc, row, true) {
 		return domain.SourceFamily{}, false
 	}
-	return domain.SourceFamily{Family: "raw", Providers: []domain.ProviderCap{pc}}, true
-}
-
-// adult18animeFamily builds the "adult" (18anime) family from its DB row. Phase 1
-// hasContent=true (parity with today's registry). Omitted when the row is absent
-// or disabled.
-func (s *Service) adult18animeFamily(ctx context.Context, _ string) (domain.SourceFamily, bool) {
-	row, ok := s.providerRow(ctx, "18anime")
-	if !ok {
-		return domain.SourceFamily{}, false
-	}
-	pc := domain.ProviderCap{Provider: "18anime", DisplayName: "18anime", Enabled: true, Health: "up", Variants: variantsFromTraits(row)}
-	if !applyFeedFields(&pc, row) {
-		return domain.SourceFamily{}, false
-	}
-	return domain.SourceFamily{Family: "adult", Providers: []domain.ProviderCap{pc}}, true
+	return domain.SourceFamily{Family: family, Providers: []domain.ProviderCap{pc}}, true
 }

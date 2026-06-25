@@ -67,13 +67,14 @@ func (s *Service) providerRow(ctx context.Context, name string) (domain.ScraperP
 
 // applyFeedFields fills the feed presentation on a built provider cap from its
 // DB row. Returns ok=false when the row is disabled (caller omits the family).
-// RU/adult families that reach here already have catalog content, so
-// deriveProviderView is called with hasContent=true.
-func applyFeedFields(cap *domain.ProviderCap, row domain.ScraperProvider) bool {
+// hasContent reports whether this title has content on the provider: the
+// catalog-backed families (kodik/animelib/hanime) and the trait-only raw/adult
+// rows pass true; first-party `ae` passes its live library-presence lookup.
+func applyFeedFields(cap *domain.ProviderCap, row domain.ScraperProvider, hasContent bool) bool {
 	if !row.IsRegistered() { // disabled → omit
 		return false
 	}
-	state, selectable, hackerOnly := deriveProviderView(row, true)
+	state, selectable, hackerOnly := deriveProviderView(row, hasContent)
 	cap.State, cap.Selectable, cap.HackerOnly = state, selectable, hackerOnly
 	cap.Order = row.PreferenceWeight
 	cap.Group = wireGroup(row.Group)
@@ -113,7 +114,7 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 		return domain.SourceFamily{}, false
 	}
 	cap := domain.ProviderCap{Provider: "kodik", DisplayName: "Kodik", Enabled: true, Health: "unknown", Variants: variants}
-	if !applyFeedFields(&cap, row) {
+	if !applyFeedFields(&cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: "kodik", Providers: []domain.ProviderCap{cap}}, true
@@ -150,7 +151,7 @@ func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.So
 		return domain.SourceFamily{}, false
 	}
 	cap := domain.ProviderCap{Provider: "animelib", DisplayName: "AniLib", Enabled: true, Health: "unknown", Variants: variants}
-	if !applyFeedFields(&cap, row) {
+	if !applyFeedFields(&cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: "animelib", Providers: []domain.ProviderCap{cap}}, true
@@ -205,7 +206,7 @@ func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.Sour
 		return domain.SourceFamily{}, false
 	}
 	cap := domain.ProviderCap{Provider: "hanime", DisplayName: "Hanime", Enabled: true, Health: "unknown", Variants: []domain.Variant{variant}}
-	if !applyFeedFields(&cap, row) {
+	if !applyFeedFields(&cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: "hanime", Providers: []domain.ProviderCap{cap}}, true

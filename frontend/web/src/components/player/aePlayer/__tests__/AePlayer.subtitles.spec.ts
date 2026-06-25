@@ -22,7 +22,7 @@ import { ref, nextTick } from 'vue'
 
 // ─── Heavy network/store composables — stubbed so the component mounts ─────────
 vi.mock('@/composables/aePlayer/useCapabilities', () => ({
-  useCapabilities: () => ({ report: ref(null), capMap: ref(new Map()), rankedIds: ref([]) }),
+  useCapabilities: () => ({ report: ref(null), capMap: ref(new Map()) }),
 }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({
   useProviderResolver: () => ({

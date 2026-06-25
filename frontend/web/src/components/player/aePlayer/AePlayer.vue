@@ -356,6 +356,7 @@ import { pickSmartDefault } from '@/composables/aePlayer/smartDefault'
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
+import { GROUP_LANGS } from '@/composables/aePlayer/providerGroups'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
@@ -370,7 +371,7 @@ import { recordPlayerEvent } from '@/utils/playerTelemetry'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, ProviderRow, TrackLang } from '@/types/aePlayer'
+import type { StreamResult, ProviderRow } from '@/types/aePlayer'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
@@ -585,13 +586,6 @@ const filter = computed(() => ({
 const animeIdRef = computed(() => props.animeId)
 const { report, capMap } = useCapabilities(animeIdRef)
 const rows = computed<ProviderRow[]>(() => rowsFromReport(report.value, filter.value))
-
-// Backend group → languages it serves. Mirrors useProviderFeed/deepLinkProvider
-// so buildAvailable can derive a row's served langs (the flat ProviderRow
-// carries `group`, not an explicit lang list).
-const GROUP_LANGS: Record<ProviderRow['group'], TrackLang[]> = {
-  en: ['en'], ru: ['ru'], adult: ['en', 'ru'], jp: ['ja'], firstparty: ['en', 'ru', 'ja'],
-}
 
 // ─── Provider defaults ────────────────────────────────────────────────────────
 

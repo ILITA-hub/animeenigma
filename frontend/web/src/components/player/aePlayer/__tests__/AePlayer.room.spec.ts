@@ -11,7 +11,7 @@ import { comboToToken } from '@/composables/aePlayer/comboMapping'
 
 // ─── Heavy network/store composables — stubbed so the component mounts ─────────
 vi.mock('@/composables/aePlayer/useCapabilities', () => ({
-  useCapabilities: () => ({ report: ref(null), capMap: ref(new Map()), rankedIds: ref([]) }),
+  useCapabilities: () => ({ report: ref(null), capMap: ref(new Map()) }),
 }))
 const listEpisodes = vi.fn().mockResolvedValue([])
 const listTeams = vi.fn().mockResolvedValue([])

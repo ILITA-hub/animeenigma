@@ -44,7 +44,6 @@ export interface ProviderCap {
   degraded?: boolean
   health?: 'up' | 'down' | 'unknown'
   playable?: boolean
-  rank?: number
 }
 
 export interface CapVariant {

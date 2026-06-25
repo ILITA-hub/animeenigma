@@ -93,7 +93,7 @@ func TestRawFamilyPresentAndOmitted(t *testing.T) {
 		Group: "jp", PreferenceWeight: 70, SupportsRaw: true,
 	})
 	s := &Service{db: db}
-	fam, ok := s.rawFamily(context.Background(), "uuid")
+	fam, ok := s.dbRowFamily(context.Background(), "raw", "Raw", "raw")
 	if !ok || fam.Family != "raw" {
 		t.Fatalf("raw family wrong: ok=%v fam=%+v", ok, fam)
 	}
@@ -102,12 +102,12 @@ func TestRawFamilyPresentAndOmitted(t *testing.T) {
 		t.Fatalf("raw feed fields wrong: %+v", p)
 	}
 	// absent row → omitted
-	if _, ok := (&Service{db: newDB(t)}).rawFamily(context.Background(), "u"); ok {
+	if _, ok := (&Service{db: newDB(t)}).dbRowFamily(context.Background(), "raw", "Raw", "raw"); ok {
 		t.Error("raw family must be omitted when DB row is absent")
 	}
 	// disabled row → omitted
 	dbd := newDB(t, domain.ScraperProvider{Name: "raw", Status: domain.StatusDisabled, Group: "jp"})
-	if _, ok := (&Service{db: dbd}).rawFamily(context.Background(), "u"); ok {
+	if _, ok := (&Service{db: dbd}).dbRowFamily(context.Background(), "raw", "Raw", "raw"); ok {
 		t.Error("raw family must be omitted when DB row is disabled")
 	}
 }
@@ -118,7 +118,7 @@ func TestAdult18animeFamilyPresentAndOmitted(t *testing.T) {
 		Group: "adult", PreferenceWeight: 20, SupportsRaw: true,
 	})
 	s := &Service{db: db}
-	fam, ok := s.adult18animeFamily(context.Background(), "uuid")
+	fam, ok := s.dbRowFamily(context.Background(), "18anime", "18anime", "adult")
 	if !ok || fam.Family != "adult" {
 		t.Fatalf("adult family wrong: ok=%v fam=%+v", ok, fam)
 	}
@@ -127,12 +127,12 @@ func TestAdult18animeFamilyPresentAndOmitted(t *testing.T) {
 		t.Fatalf("18anime feed fields wrong: %+v", p)
 	}
 	// absent row → omitted
-	if _, ok := (&Service{db: newDB(t)}).adult18animeFamily(context.Background(), "u"); ok {
+	if _, ok := (&Service{db: newDB(t)}).dbRowFamily(context.Background(), "18anime", "18anime", "adult"); ok {
 		t.Error("adult family must be omitted when DB row is absent")
 	}
 	// disabled row → omitted
 	dbd := newDB(t, domain.ScraperProvider{Name: "18anime", Status: domain.StatusDisabled, Group: "adult"})
-	if _, ok := (&Service{db: dbd}).adult18animeFamily(context.Background(), "u"); ok {
+	if _, ok := (&Service{db: dbd}).dbRowFamily(context.Background(), "18anime", "18anime", "adult"); ok {
 		t.Error("adult family must be omitted when DB row is disabled")
 	}
 }

@@ -95,8 +95,8 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 		en, enErr = s.BuildENFamily(ctx)
 	}()
 	go func() { defer wg.Done(); ae.fam, ae.ok = s.aeFamily(ctx, animeID) }()
-	go func() { defer wg.Done(); raw.fam, raw.ok = s.rawFamily(ctx, animeID) }()
-	go func() { defer wg.Done(); adult.fam, adult.ok = s.adult18animeFamily(ctx, animeID) }()
+	go func() { defer wg.Done(); raw.fam, raw.ok = s.dbRowFamily(ctx, "raw", "Raw", "raw") }()
+	go func() { defer wg.Done(); adult.fam, adult.ok = s.dbRowFamily(ctx, "18anime", "18anime", "adult") }()
 
 	if s.catalog != nil {
 		wg.Add(3)
@@ -160,8 +160,7 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 			}
 			playable = hi.Playable
 		}
-		state, selectable, hackerOnly := deriveProviderView(row, true) // EN: hasContent=true in Phase 1
-		caps = append(caps, domain.ProviderCap{
+		cap := domain.ProviderCap{
 			Provider:    row.Name,
 			DisplayName: displayName(row.Name),
 			Enabled:     row.IsEnabled(),
@@ -169,15 +168,12 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 			Health:      hstatus,
 			Playable:    playable,
 			Rank:        rankEN(row, hstatus, playable),
-			State:       state,
-			Selectable:  selectable,
-			HackerOnly:  hackerOnly,
-			Order:       row.PreferenceWeight,
-			Group:       wireGroup(row.Group),
-			Audios:      audiosFromTraits(row),
-			Reason:      row.Reason,
 			Variants:    variantsFromTraits(row),
-		})
+		}
+		// EN rows are loaded with status<>'disabled', so IsRegistered() is always
+		// true here ⇒ ok is always true. hasContent=true for EN in Phase 1.
+		applyFeedFields(&cap, row, true)
+		caps = append(caps, cap)
 	}
 	sort.SliceStable(caps, func(i, j int) bool {
 		if caps[i].Rank != caps[j].Rank {

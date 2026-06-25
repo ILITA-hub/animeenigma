@@ -1,21 +1,12 @@
-import type { AudioKind, ContentKind, TrackLang, ProviderGroup } from '@/types/aePlayer'
+import type { AudioKind, ContentKind, TrackLang } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
+import { GROUP_LANGS, GROUP_CONTENT } from './providerGroups'
 
 /** The audio/lang/provider a `?provider=` deep-link should pin the player to. */
 export interface DeepLinkPin {
   provider: string
   audio: AudioKind
   lang: TrackLang
-}
-
-// Backend group → which (lang, content) it serves. Mirrors useProviderFeed's
-// GROUP_LANGS/GROUP_CONTENT so the clamp stays consistent with the relevance
-// filter (a pinned row must become relevant under the clamped facet).
-const GROUP_LANGS: Record<ProviderGroup, TrackLang[]> = {
-  en: ['en'], ru: ['ru'], adult: ['en', 'ru'], jp: ['ja'], firstparty: ['en', 'ru', 'ja'],
-}
-const GROUP_CONTENT: Record<ProviderGroup, ContentKind[]> = {
-  en: ['common'], ru: ['common'], adult: ['hentai'], jp: ['common'], firstparty: ['common'],
 }
 
 /**

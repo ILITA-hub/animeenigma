@@ -1,17 +1,8 @@
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
-import type { ProviderRow, AudioKind, TrackLang, ContentKind, ProviderGroup } from '@/types/aePlayer'
+import type { ProviderRow, AudioKind, TrackLang, ContentKind } from '@/types/aePlayer'
+import { GROUP_LANGS, GROUP_CONTENT } from './providerGroups'
 
 export interface RowFilter { audio: AudioKind; lang: TrackLang; content: ContentKind }
-
-// Backend groups → which (lang, content) they serve. Group is the wire group
-// from the DB; relevance still filters by the active toggle so the menu shows
-// only providers that can serve the current combo.
-const GROUP_LANGS: Record<ProviderGroup, TrackLang[]> = {
-  en: ['en'], ru: ['ru'], adult: ['en', 'ru'], jp: ['ja'], firstparty: ['en', 'ru', 'ja'],
-}
-const GROUP_CONTENT: Record<ProviderGroup, ContentKind[]> = {
-  en: ['common'], ru: ['common'], adult: ['hentai'], jp: ['common'], firstparty: ['common'],
-}
 
 function relevant(cap: ProviderCap, f: RowFilter): boolean {
   const g = cap.group
