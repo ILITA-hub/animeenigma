@@ -39,9 +39,16 @@ type CatalogService struct {
 	animelibClient  *animelib.Client
 	hanimeClient    *hanime.Client
 	idMappingClient *idmapping.Client
-	scraperClient   *scraper.Client
-	cache           *cache.RedisCache
-	log             *logger.Logger
+	// aniListAiring resolves AniList's broadcaster airing schedule for the
+	// calendar reconciler. Defaults to the same idmapping client; an interface
+	// so tests inject a fake.
+	aniListAiring AniListAiringFetcher
+	// aniListReconcilePacing throttles per-anime AniList calls during calendar
+	// reconciliation (~2 req/s in prod; 0 in tests to skip sleeps).
+	aniListReconcilePacing time.Duration
+	scraperClient          *scraper.Client
+	cache                  *cache.RedisCache
+	log                    *logger.Logger
 
 	// kodikExtractWrap wraps the per-call Kodik extractor client's transport
 	// for egress recording (AR-EGRESS-03). nil → default (no recording). Built
@@ -138,22 +145,25 @@ func NewCatalogService(
 			idmapping.WithTransport(egressWrap(idmapping.NewIPv4Transport())))
 	}
 
+	idMapClient := idmapping.NewClient(idMapOpts...)
 	return &CatalogService{
-		animeRepo:        animeRepo,
-		genreRepo:        genreRepo,
-		videoRepo:        videoRepo,
-		shikimoriClient:  shikimoriClient,
-		aniboomClient:    aniboom.NewClient(),
-		kodikClient:      kodikClient,
-		jikanClient:      jikan.NewClient(),
-		jimakuClient:     jimakuClient,
-		animelibClient:   animelibClient,
-		hanimeClient:     hanimeClient,
-		idMappingClient:  idmapping.NewClient(idMapOpts...),
-		scraperClient:    scraper.NewClient(scraperAPIURL, scraperTimeout),
-		cache:            cache,
-		log:              log,
-		kodikExtractWrap: egressWrap,
+		animeRepo:              animeRepo,
+		genreRepo:              genreRepo,
+		videoRepo:              videoRepo,
+		shikimoriClient:        shikimoriClient,
+		aniboomClient:          aniboom.NewClient(),
+		kodikClient:            kodikClient,
+		jikanClient:            jikan.NewClient(),
+		jimakuClient:           jimakuClient,
+		animelibClient:         animelibClient,
+		hanimeClient:           hanimeClient,
+		idMappingClient:        idMapClient,
+		aniListAiring:          idMapClient,
+		aniListReconcilePacing: 500 * time.Millisecond,
+		scraperClient:          scraper.NewClient(scraperAPIURL, scraperTimeout),
+		cache:                  cache,
+		log:                    log,
+		kodikExtractWrap:       egressWrap,
 	}
 }
 
@@ -879,6 +889,10 @@ func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, f
 
 	seen := dedupeCalendarEntries(calendar)
 
+	// Corroborate Shikimori's naive next-episode dates against AniList's
+	// broadcaster schedule (later-wins). Best-effort: failures keep Shikimori.
+	s.reconcileCalendarWithAniList(ctx, seen)
+
 	// Check which anime already exist locally.
 	missingIDs, existingByShikimoriID, partFailed, err := s.partitionCalendarAnime(ctx, seen)
 	failed += partFailed
@@ -918,6 +932,7 @@ func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, f
 type calendarInfo struct {
 	shikimoriID   string
 	nextEpisodeAt *time.Time
+	source        string // sourceShikimori (default) or sourceAniList after reconciliation
 }
 
 // dedupeCalendarEntries collapses calendar entries (one per upcoming episode) to
@@ -929,7 +944,7 @@ func dedupeCalendarEntries(calendar []shikimori.CalendarEntry) map[string]*calen
 		if _, exists := seen[id]; exists {
 			continue // keep the first (earliest) entry
 		}
-		info := &calendarInfo{shikimoriID: id}
+		info := &calendarInfo{shikimoriID: id, source: sourceShikimori}
 		if entry.NextEpisodeAt != "" {
 			if t, err := time.Parse(time.RFC3339, entry.NextEpisodeAt); err == nil {
 				info.nextEpisodeAt = &t
@@ -1000,9 +1015,10 @@ func (s *CatalogService) importMissingCalendarAnime(ctx context.Context, missing
 		}
 
 		for _, anime := range freshAnime {
-			// Override next_episode_at from calendar data (more accurate)
+			// Override next_episode_at from reconciled calendar data (more accurate)
 			if info, ok := seen[anime.ShikimoriID]; ok && info.nextEpisodeAt != nil {
 				anime.NextEpisodeAt = info.nextEpisodeAt
+				anime.NextEpisodeSource = info.source
 			}
 
 			if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
@@ -1039,6 +1055,7 @@ func (s *CatalogService) updateExistingCalendarEpisodes(ctx context.Context, exi
 		}
 
 		existing.NextEpisodeAt = info.nextEpisodeAt
+		existing.NextEpisodeSource = info.source
 		if err := s.animeRepo.Update(ctx, existing); err != nil {
 			s.log.Warnw("failed to update next_episode_at",
 				"id", existing.ID, "shikimori_id", id, "error", err)
