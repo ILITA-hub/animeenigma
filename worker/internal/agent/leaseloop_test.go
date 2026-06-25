@@ -840,6 +840,44 @@ func TestConfig_ModelEnvRemoved(t *testing.T) {
 	}
 }
 
+// TestConfig_ModelsDirDefault verifies MODELS_DIR defaults to "/models" (the
+// directory the worker image provisions for baked + pulled weights) and that an
+// explicit MODELS_DIR overrides it. A non-empty ModelsDir is REQUIRED for
+// pull-on-demand Install to write pulled weights (an empty dir makes Install
+// fail with "modelsDir is not set").
+func TestConfig_ModelsDirDefault(t *testing.T) {
+	t.Setenv("MODELS_DIR", "")
+	if got := LoadConfig().ModelsDir; got != "/models" {
+		t.Errorf("default ModelsDir = %q, want %q", got, "/models")
+	}
+
+	t.Setenv("MODELS_DIR", "/srv/weights")
+	if got := LoadConfig().ModelsDir; got != "/srv/weights" {
+		t.Errorf("override ModelsDir = %q, want %q", got, "/srv/weights")
+	}
+}
+
+// TestNewClient_ManagerUsesModelsDir verifies NewClient threads cfg.ModelsDir
+// into the Manager so pull-on-demand Install has a real extraction target. With
+// a real dir set, installing a model succeeds; this guards the regression where
+// NewClient built the Manager with an empty dir (every install then failed with
+// "modelsDir is not set"), which the e2e capstone surfaced.
+func TestNewClient_ManagerUsesModelsDir(t *testing.T) {
+	dir := t.TempDir()
+	c := NewClient(Config{ModelsDir: dir})
+
+	const name = "modelsdir-probe"
+	tarData := buildModelTARBytes(t, name)
+	checksum := sha256HexOf(tarData)
+	if err := c.manager.Install(name, "v1", bytes.NewReader(tarData), checksum); err != nil {
+		t.Fatalf("Install with NewClient(ModelsDir=%q) failed: %v "+
+			"(NewClient must pass cfg.ModelsDir to the Manager)", dir, err)
+	}
+	if _, ok := c.manager.Get(name); !ok {
+		t.Errorf("model %q not registered after Install via NewClient-built manager", name)
+	}
+}
+
 // ── T28 ModelsAvailable test ──────────────────────────────────────────────────
 
 // TestModelsAvailableReflectsManager verifies that the manager's Available()

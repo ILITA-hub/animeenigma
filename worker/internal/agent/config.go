@@ -33,6 +33,15 @@ type Config struct {
 	// Unset or empty → nil (the worker boots with only the built-in mock).
 	PreinstalledModels []string
 
+	// ModelsDir is the directory that holds realesrgan model weight files
+	// ({name}.param + {name}.bin). It is BOTH the lookup dir for
+	// PreinstalledModels (baked into the image) AND the extraction target for
+	// pull-on-demand Install (T29) — preinstalled and pulled weights share one
+	// directory. Read from env MODELS_DIR; defaults to "/models" (the directory
+	// the worker image provisions). The runtime user must be able to write here
+	// for pull-on-demand to install pulled models.
+	ModelsDir string
+
 	// WorkDir is the directory where temporary frame files are written during
 	// processing. Read from env WORK_DIR; defaults to os.TempDir().
 	WorkDir string
@@ -59,6 +68,10 @@ func LoadConfig() Config {
 	workDir := os.Getenv("WORK_DIR")
 	if workDir == "" {
 		workDir = os.TempDir()
+	}
+	modelsDir := os.Getenv("MODELS_DIR")
+	if modelsDir == "" {
+		modelsDir = "/models"
 	}
 	scale := 2
 	if s := os.Getenv("SCALE"); s != "" {
@@ -95,6 +108,7 @@ func LoadConfig() Config {
 		Mode:               mode,
 		APIKey:             os.Getenv("API_KEY"),
 		PreinstalledModels: preinstalled,
+		ModelsDir:          modelsDir,
 		WorkDir:            workDir,
 		Scale:              scale,
 		HeartbeatInterval:  hbInterval,

@@ -31,11 +31,15 @@
 package e2e
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -52,6 +56,7 @@ import (
 
 	"github.com/google/uuid"
 	gorillaws "github.com/gorilla/websocket"
+	"github.com/minio/minio-go/v7"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -85,6 +90,26 @@ const (
 
 // tinyMKVPath is the deterministically generated fixture, populated by TestMain.
 var tinyMKVPath string
+
+// sharedMetricsCollector is a process-wide metrics.Collector. metrics.NewCollector
+// registers its series on the DEFAULT Prometheus registry via promauto, which
+// PANICS on a second call (duplicate registration). The mock capstone + the two
+// T30 pull-on-demand tests each build a serverHarness, so the collector must be
+// created exactly ONCE per process and reused across harnesses. (The /metrics
+// scrape in the mock test only asserts series PRESENCE, not per-test isolation,
+// so a shared collector is fine — and matches production, where the binary has
+// one collector for its lifetime.)
+var (
+	sharedMetricsOnce sync.Once
+	sharedMetrics     *metrics.Collector
+)
+
+func metricsCollector() *metrics.Collector {
+	sharedMetricsOnce.Do(func() {
+		sharedMetrics = metrics.NewCollector("upscaler")
+	})
+	return sharedMetrics
+}
 
 // workerBinPath is the prebuilt REAL worker binary, compiled once by TestMain.
 // The worker is run as a subprocess (separate module + internal package makes an
@@ -361,6 +386,145 @@ func (w *recordingWriter) snapshot() (keys []string, segsAtPlay, bucketEnsured i
 	return append([]string(nil), w.uploadedKeys...), w.segmentsAtPlay, w.bucketEnsured, w.lastPrefix
 }
 
+// ── In-memory MinIO stand-in for model artifacts (T30 pull-on-demand) ────────
+//
+// The model admin upload handler (T26) streams the artifact to a modelUploader
+// (PutObject) and the worker-facing serve handler (T27) reads it back via a
+// modelObjectGetter (GetObject). Rather than spin a real MinIO, we satisfy BOTH
+// minimal interfaces with one map[object]→bytes store. This keeps the harness
+// dependency-free while exercising the REAL admin-upload + checksum + serve
+// streaming code paths: the bytes the worker fetches are the exact bytes the
+// admin handler stored, and the X-Model-Checksum the worker verifies is the
+// SHA-256 the admin handler computed over those bytes. The method signatures
+// match the minio.Uploader surface the handlers depend on (structural
+// satisfaction of the unexported modelUploader / modelObjectGetter interfaces).
+
+type memModelStore struct {
+	mu      sync.Mutex
+	objects map[string][]byte // key: bucket+"/"+object
+}
+
+func newMemModelStore() *memModelStore {
+	return &memModelStore{objects: make(map[string][]byte)}
+}
+
+func (s *memModelStore) key(bucket, object string) string { return bucket + "/" + object }
+
+// PutObject satisfies handler.modelUploader. It reads the full stream into
+// memory (model artifacts in this test are tiny tars) and stores it by key.
+func (s *memModelStore) PutObject(_ context.Context, bucket, object string, reader interface {
+	Read(p []byte) (int, error)
+}, _ int64, _ minio.PutObjectOptions) (minio.UploadInfo, error) {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return minio.UploadInfo{}, err
+	}
+	s.mu.Lock()
+	s.objects[s.key(bucket, object)] = data
+	s.mu.Unlock()
+	return minio.UploadInfo{Bucket: bucket, Key: object, Size: int64(len(data))}, nil
+}
+
+// GetObject satisfies handler.modelObjectGetter. It returns a ReadCloser over
+// the stored bytes, or a not-found error mirroring MinIO's "key does not exist".
+func (s *memModelStore) GetObject(_ context.Context, bucket, object string) (io.ReadCloser, error) {
+	s.mu.Lock()
+	data, ok := s.objects[s.key(bucket, object)]
+	s.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("memModelStore: object %q does not exist", s.key(bucket, object))
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+// ── Model-serve hit recorder (T30) ───────────────────────────────────────────
+//
+// An OUTER http.Handler that wraps the whole upscaler router and records every
+// GET /worker/models/{name} request together with the status the REAL serve
+// handler returned. The wrapped router is fully unmodified — the capability
+// verify + MinIO stream + 200/404 logic under test is the genuine production
+// path; this shim only observes (name, status) so the e2e can assert the worker's
+// pull-on-demand GET actually reached the capability-gated endpoint and what it
+// answered. It does NOT use chi.URLParam (it sits ABOVE the router, before route
+// matching) — it parses the model name from the URL path directly.
+
+const modelServePathPrefix = "/worker/models/"
+
+type modelServeHit struct {
+	name   string
+	status int
+}
+
+type modelServeRecorder struct {
+	mu    sync.Mutex
+	inner http.Handler
+	hits  []modelServeHit
+}
+
+func newModelServeRecorder(inner http.Handler) *modelServeRecorder {
+	return &modelServeRecorder{inner: inner}
+}
+
+// statusSniffer captures the first WriteHeader status (defaulting to 200 if the
+// handler writes a body without an explicit WriteHeader).
+type statusSniffer struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (s *statusSniffer) WriteHeader(code int) {
+	if !s.wroteHeader {
+		s.status = code
+		s.wroteHeader = true
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusSniffer) Write(b []byte) (int, error) {
+	if !s.wroteHeader {
+		s.status = http.StatusOK
+		s.wroteHeader = true
+	}
+	return s.ResponseWriter.Write(b)
+}
+
+// Unwrap lets http.NewResponseController (used by ServeModel to clear the write
+// deadline before streaming) reach the underlying ResponseWriter through the shim.
+func (s *statusSniffer) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+func (rec *modelServeRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Only sniff the model-serve data-plane GETs; everything else passes straight
+	// through with no wrapping overhead.
+	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, modelServePathPrefix) {
+		name := strings.TrimPrefix(r.URL.Path, modelServePathPrefix)
+		sniff := &statusSniffer{ResponseWriter: w, status: http.StatusOK}
+		rec.inner.ServeHTTP(sniff, r)
+		rec.mu.Lock()
+		rec.hits = append(rec.hits, modelServeHit{name: name, status: sniff.status})
+		rec.mu.Unlock()
+		return
+	}
+	rec.inner.ServeHTTP(w, r)
+}
+
+func (rec *modelServeRecorder) snapshot() []modelServeHit {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	return append([]modelServeHit(nil), rec.hits...)
+}
+
+// countFor returns how many recorded hits for model `name` had the given status.
+func (rec *modelServeRecorder) countFor(name string, status int) int {
+	n := 0
+	for _, h := range rec.snapshot() {
+		if h.name == name && h.status == status {
+			n++
+		}
+	}
+	return n
+}
+
 // ── Recording exec router (captures the worker's real exec output) ───────────
 //
 // The worker only RUNS a command carried in exec_open.Data (allowlist mode); the
@@ -398,6 +562,9 @@ type serverHarness struct {
 	jobs         *repo.JobRepository
 	segs         *repo.SegmentRepository
 	workers      *repo.WorkerRepository
+	models       *repo.ModelRepository
+	modelStore   *memModelStore // in-memory MinIO stand-in for model artifacts
+	modelGets    *modelServeRecorder
 	hub          *controlplane.Hub
 	relay        *controlplane.ExecRelay
 	auditBuf     *syncBuffer
@@ -449,6 +616,7 @@ func newServerHarness(t *testing.T, db *gorm.DB) *serverHarness {
 	jobRepo := repo.NewJobRepository(db)
 	segmentRepo := repo.NewSegmentRepository(db)
 	workerRepo := repo.NewWorkerRepository(db)
+	modelRepo := repo.NewModelRepository(db)
 
 	leaser := service.NewLeaserWithLogger(jobRepo, segmentRepo, workerRepo, log)
 	hub := controlplane.NewHub(leaser, workerRepo, log)
@@ -493,8 +661,23 @@ func newServerHarness(t *testing.T, db *gorm.DB) *serverHarness {
 	hub.SetExecRouter(relay)
 	shellHandler := handler.NewExecShellHandler(relay, log)
 
-	router := transport.NewRouter(log, metrics.NewCollector("upscaler"), hub, enrollStore, segmentHandler, adminHandler, shellHandler, nil)
-	srv := httptest.NewServer(router)
+	// ── T30: dynamic-model data plane ────────────────────────────────────────
+	// Wire the REAL admin-upload (T26) + worker-serve (T27) handlers against an
+	// in-memory MinIO stand-in (model artifacts are tiny tars) and the real
+	// ModelRepository (same Postgres test DB). The serve handler resolves the
+	// latest version by name (GetLatest) and verifies the name-bound capability
+	// handle the hub minted in the lease grant. The whole router is then wrapped
+	// in a recorder so the pull-on-demand scenario can assert the worker's GET
+	// reached the capability-gated endpoint with a 200 (fetch+verify) and a 404
+	// for the unknown-model scenario.
+	const modelBucket = "raw-library"
+	modelStore := newMemModelStore()
+	modelAdminHandler := handler.NewModelAdminHandler(modelRepo, modelStore, modelBucket, log)
+	modelServeHandler := handler.NewModelServeHandler(modelRepo, modelStore, modelBucket, log)
+
+	router := transport.NewRouter(log, metricsCollector(), hub, enrollStore, segmentHandler, adminHandler, shellHandler, modelAdminHandler, modelServeHandler)
+	modelGets := newModelServeRecorder(router)
+	srv := httptest.NewServer(modelGets)
 
 	bgCtx, cancelBg := context.WithCancel(context.Background())
 	go sweeper.Run(bgCtx)
@@ -513,6 +696,9 @@ func newServerHarness(t *testing.T, db *gorm.DB) *serverHarness {
 		jobs:         jobRepo,
 		segs:         segmentRepo,
 		workers:      workerRepo,
+		models:       modelRepo,
+		modelStore:   modelStore,
+		modelGets:    modelGets,
 		hub:          hub,
 		relay:        relay,
 		auditBuf:     auditBuf,
@@ -551,13 +737,16 @@ func (h *serverHarness) stageSource(t *testing.T, infohash string) {
 
 // createJob POSTs a queued job through the REAL admin API. The admin surface is
 // gated by requireGatewayInternal, so we inject the X-Gateway-Internal header
-// exactly as the gateway proxy does.
-func (h *serverHarness) createJob(t *testing.T, shikimoriID string, episode int, infohash string) string {
+// exactly as the gateway proxy does. The model name is what threads through the
+// leaser → lease grant → worker model-selection path (T25/T29), so it is a
+// parameter: "mock" exercises the built-in no-fetch path, any other name
+// exercises pull-on-demand.
+func (h *serverHarness) createJob(t *testing.T, shikimoriID string, episode int, infohash, model string) string {
 	t.Helper()
 	body, _ := json.Marshal(map[string]any{
 		"shikimori_id":     shikimoriID,
 		"episode":          episode,
-		"model":            "mock",
+		"model":            model,
 		"scale":            2,
 		"library_infohash": infohash,
 	})
@@ -587,6 +776,104 @@ func (h *serverHarness) createJob(t *testing.T, shikimoriID string, episode int,
 		t.Fatal("e2e: created job has empty ID")
 	}
 	return env.Data.ID
+}
+
+// buildModelTAR builds a valid model artifact tar in memory: a TAR archive
+// containing exactly {name}.param and {name}.bin (the layout Manager.Install
+// extracts). The contents are arbitrary but deterministic so the SHA-256 the
+// admin handler computes is stable. Mirrors the worker package's
+// buildModelTARBytes helper (which lives in a separate module and cannot be
+// imported here).
+func buildModelTAR(t *testing.T, name string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	files := map[string]string{
+		name + ".param": "param-weights-for-" + name + "\n",
+		name + ".bin":   "bin-weights-for-" + name + "\n",
+	}
+	// Deterministic order for a stable checksum.
+	for _, fn := range []string{name + ".param", name + ".bin"} {
+		body := files[fn]
+		if err := tw.WriteHeader(&tar.Header{
+			Name: fn, Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg,
+		}); err != nil {
+			t.Fatalf("e2e: tar header %q: %v", fn, err)
+		}
+		if _, err := tw.Write([]byte(body)); err != nil {
+			t.Fatalf("e2e: tar write %q: %v", fn, err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("e2e: tar close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// uploadModel registers a model server-side via the REAL T26 admin upload
+// endpoint (POST /api/upscale/models, X-Gateway-Internal gated, multipart). The
+// handler streams the artifact to the in-memory MinIO stand-in, computes the
+// SHA-256, and upserts the upscale_models row — exactly the production path an
+// operator's `curl -F` would drive. Returns the artifact bytes + the checksum
+// the server stored (read back from the model row) so the caller can assert the
+// worker fetches and checksum-verifies the very same bytes.
+func (h *serverHarness) uploadModel(t *testing.T, name, version string) (artifact []byte, checksum string) {
+	t.Helper()
+	artifact = buildModelTAR(t, name)
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	_ = mw.WriteField("name", name)
+	_ = mw.WriteField("version", version)
+	_ = mw.WriteField("scale", "2")
+	fw, err := mw.CreateFormFile("artifact", name+".tar")
+	if err != nil {
+		t.Fatalf("e2e: create form file: %v", err)
+	}
+	if _, err := fw.Write(artifact); err != nil {
+		t.Fatalf("e2e: write artifact to form: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("e2e: close multipart writer: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, h.srv.URL+"/api/upscale/models", &body)
+	if err != nil {
+		t.Fatalf("e2e: build upload-model request: %v", err)
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("X-Gateway-Internal", "1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("e2e: upload-model request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("e2e: upload model: status %d, body %s", resp.StatusCode, raw)
+	}
+	var env struct {
+		Data domain.UpscaleModel `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("e2e: decode upload-model response: %v", err)
+	}
+	if env.Data.Checksum == "" {
+		t.Fatal("e2e: uploaded model has empty checksum")
+	}
+	// Confirm the stored checksum matches the SHA-256 of the bytes we sent — the
+	// worker will verify the served bytes against this exact value.
+	want := sha256Hex(artifact)
+	if env.Data.Checksum != want {
+		t.Fatalf("e2e: stored model checksum %q != sha256(artifact) %q", env.Data.Checksum, want)
+	}
+	return artifact, env.Data.Checksum
+}
+
+// sha256Hex returns the lowercase hex SHA-256 of b.
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // seedEnrollToken inserts a fresh single-use enroll token and returns it.
@@ -645,14 +932,22 @@ func repoRoot(t *testing.T) string {
 func (h *serverHarness) startWorker(t *testing.T, root, enrollToken string) *workerProc {
 	t.Helper()
 	stderr := &syncBuffer{}
+	// Per-worker writable models dir: the extraction target for pull-on-demand
+	// Install (the production default "/models" is not writable by the test user).
+	// Each worker gets its own dir so a pull installed by one worker doesn't leak
+	// into another's manager (each subprocess builds its own Manager from this).
+	modelsDir := t.TempDir()
 	cmd := exec.Command(workerBinPath)
 	cmd.Dir = filepath.Join(root, "worker")
 	cmd.Env = append(os.Environ(),
 		"SERVER_URL="+h.srv.URL,
 		"ENROLL_TOKEN="+enrollToken,
-		"MODEL=mock",
+		// MODEL is intentionally NOT set — it was removed in T28; the worker boots
+		// with only the built-in mock (no PREINSTALLED_MODELS) and pulls any other
+		// model on demand. Setting it would have no effect (config ignores it).
 		"MODE=batch",
 		"SCALE=2",
+		"MODELS_DIR="+modelsDir,
 		// Fast telemetry cadence so the metrics/heartbeat assertions observe real
 		// frames within the test's polling windows (production defaults are 5s/10s).
 		"HEARTBEAT_INTERVAL=300ms",
@@ -670,6 +965,28 @@ func (h *serverHarness) startWorker(t *testing.T, root, enrollToken string) *wor
 		t.Fatalf("e2e: start worker subprocess: %v", err)
 	}
 	return &workerProc{cmd: cmd, stderr: stderr, pgid: cmd.Process.Pid}
+}
+
+// exited reports whether the worker subprocess has already exited, and if so its
+// exit code (best-effort: -1 when the code can't be determined). It is
+// NON-BLOCKING and does NOT reap the process (calling Wait here would race the
+// stop()/t.Cleanup reaper). It probes liveness with signal 0 — a "process does
+// not exist" / ESRCH means the worker is gone. Used by the pull-on-demand tests
+// to assert the worker stayed alive (a fetch failure must never crash it).
+func (w *workerProc) exited() (bool, int) {
+	if w == nil || w.cmd == nil || w.cmd.Process == nil {
+		return true, -1
+	}
+	// Signal 0 performs error checking without actually sending a signal.
+	if err := w.cmd.Process.Signal(syscall.Signal(0)); err != nil {
+		// ESRCH (no such process) → exited. Any other error (e.g. EPERM, which
+		// shouldn't happen for our own child) we conservatively treat as alive.
+		if err == os.ErrProcessDone || strings.Contains(err.Error(), "process already finished") || strings.Contains(err.Error(), "no such process") {
+			return true, -1
+		}
+		return false, 0
+	}
+	return false, 0
 }
 
 // stop kills the worker subprocess group (the worker + any ffmpeg/nvidia-smi
@@ -740,7 +1057,7 @@ func TestMockE2E_FullChainWithSpotResumeExecAndMetrics(t *testing.T) {
 	)
 	h.stageSource(t, infohash)
 
-	jobID := h.createJob(t, shikimoriID, episode, infohash)
+	jobID := h.createJob(t, shikimoriID, episode, infohash, "mock")
 	t.Logf("created job %s", jobID)
 
 	// ── Assert the job starts queued (it may already have advanced by the time
@@ -1304,4 +1621,205 @@ func mustFrame(t *testing.T, typ string, payload controlplane.ExecPayload) []byt
 		t.Fatalf("e2e: marshal %s frame: %v", typ, err)
 	}
 	return raw
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// T30: pull-on-demand model provisioning.
+//
+// These tests prove the dynamic-models chain end-to-end through the REAL server
+// stack and the REAL worker subprocess. They are the companions to the mock
+// capstone above: the mock job proves full-chain COMPLETION with no fetch; these
+// prove the server can PROVISION a model the worker did not boot with.
+//
+// GPU-free design (option (b) per the T30 brief):
+// A pulled model installs as a realesrgan model (Manager.Install always registers
+// a realesrgan backend), which requires realesrgan-ncnn-vulkan + a GPU — absent
+// in this CI host, so the post-install Process() step cannot actually run a
+// segment to completion here. There is NO clean GPU-free seam in the production
+// install path (Install does not special-case any name), and faking one would
+// weaken the very code under test. So we prove the pull-on-demand chain THROUGH
+// fetch → capability-verify → install → per-job selection, and rely on the mock
+// capstone above for full-chain completion. The teeth of the proof:
+//   1. The worker's GET hit the capability-gated /worker/models/{name} endpoint
+//      and the REAL serve handler returned 200 (the name-bound HMAC handle the
+//      hub minted in the lease grant verified) — i.e. the fetch is genuinely
+//      authenticated, not stubbed.
+//   2. The worker logged a successful install of that exact model name (the
+//      served bytes checksum-matched and Manager.Install extracted+registered
+//      them) — observed via the worker subprocess's stderr.
+//   3. The worker stays alive throughout (the post-install GPU-free Process()
+//      failure is a clean per-segment fail, re-leased, NOT a crash).
+// ════════════════════════════════════════════════════════════════════════════
+
+// TestPullOnDemandE2E_FetchInstallSelection proves the server can provision a
+// model the worker did not boot with: an admin uploads it, a job names it, and a
+// mock-only worker fetches + installs it on first lease.
+func TestPullOnDemandE2E_FetchInstallSelection(t *testing.T) {
+	requireEnv(t)
+
+	db := openIntegrationDB(t)
+	h := newServerHarness(t, db)
+	root := repoRoot(t)
+
+	const (
+		shikimoriID = "57466"
+		episode     = 2
+		infohash    = "f30f30f30f30f30f30f30f30f30f30f30f30f30f"
+		modelName   = "e2emodel" // NOT mock, NOT preinstalled → must be pulled
+		modelVer    = "1"
+	)
+	h.stageSource(t, infohash)
+
+	// ── Register the model SERVER-SIDE via the real T26 admin upload endpoint. ─
+	_, checksum := h.uploadModel(t, modelName, modelVer)
+	t.Logf("uploaded model %q v%s (checksum %s…)", modelName, modelVer, checksum[:12])
+
+	// Sanity: the model is now listed by the admin registry (real GET path).
+	if got := h.modelGetLatestName(t, modelName); got != modelName {
+		t.Fatalf("model registry GetLatest(%q) returned %q", modelName, got)
+	}
+
+	// ── Submit a job NAMING that model. The leaser threads job.Model into the
+	// lease grant and the hub mints a name-bound model-fetch capability handle. ─
+	jobID := h.createJob(t, shikimoriID, episode, infohash, modelName)
+	t.Logf("created pull-on-demand job %s (model=%s)", jobID, modelName)
+
+	// Wait until the orchestrator has segmented the fixture into ≥1 segment so a
+	// lease is actually grantable (the worker can only fetch once it is granted a
+	// segment that names the model).
+	waitFor(t, "pull-on-demand job to reach upscaling with ≥1 segment", 90*time.Second, func() bool {
+		st := h.jobStatus(t, jobID)
+		if st == domain.JobFailed {
+			job, _ := h.jobs.Get(context.Background(), jobID)
+			t.Fatalf("job failed during segmenting: %q", job.ErrorText)
+		}
+		p, l, d := h.segCounts(t, jobID)
+		return st == domain.JobUpscaling && (p+l+d) >= 1
+	})
+
+	// ── Boot a worker with ONLY the built-in mock (no PREINSTALLED_MODELS). It
+	// must FETCH e2emodel from the server on first lease. ────────────────────
+	tok := h.seedEnrollToken(t)
+	w := h.startWorker(t, root, tok)
+	t.Cleanup(w.stop)
+
+	// ── Teeth #1: the worker's pull-on-demand GET reached the capability-gated
+	// serve endpoint and the REAL handler returned 200 (handle verified). ─────
+	waitFor(t, "worker GET /worker/models/"+modelName+" → 200 (capability verified)", 90*time.Second, func() bool {
+		return h.modelGets.countFor(modelName, http.StatusOK) >= 1
+	})
+	t.Logf("model serve endpoint hit: %d×200 for %q", h.modelGets.countFor(modelName, http.StatusOK), modelName)
+
+	// ── Teeth #2: the worker installed that exact model (served bytes checksum-
+	// matched + extracted + registered). Observed via the worker's stderr marker
+	// from fetchAndInstallModel's success path. ───────────────────────────────
+	installLine := fmt.Sprintf("model %q fetched and installed", modelName)
+	waitFor(t, "worker stderr to report a successful install of "+modelName, 60*time.Second, func() bool {
+		return strings.Contains(w.stderr.String(), installLine)
+	})
+	t.Logf("worker reported install: %q", installLine)
+
+	// ── Teeth #3: the worker is still alive after install (the post-install
+	// GPU-free realesrgan Process() failure is a clean per-segment fail, not a
+	// crash). A live worker keeps retrying the lease, so the serve endpoint sees
+	// repeated 200s; we assert the process has NOT exited. ────────────────────
+	if exited, code := w.exited(); exited {
+		t.Fatalf("worker exited (code=%d) after pull-on-demand install — must stay alive; stderr:\n%s",
+			code, w.stderr.String())
+	}
+	t.Log("worker still alive after pull-on-demand fetch+install (no crash)")
+
+	// Defensive: no 401/403 was ever returned for this model (the capability is
+	// genuinely verified, not bypassed). A single non-200, non-404 status here
+	// would mean the handle minted by the hub did not verify.
+	for _, hit := range h.modelGets.snapshot() {
+		if hit.name == modelName && hit.status != http.StatusOK {
+			t.Errorf("unexpected status %d for model %q serve (capability handle should verify → 200)", hit.status, modelName)
+		}
+	}
+}
+
+// TestPullOnDemandE2E_UnknownModel404 proves the negative path: a job naming a
+// model that was NEVER registered on the server → the worker's fetch gets 404 →
+// the segment cleanly fails (re-leased) and the worker stays alive (no crash).
+func TestPullOnDemandE2E_UnknownModel404(t *testing.T) {
+	requireEnv(t)
+
+	db := openIntegrationDB(t)
+	h := newServerHarness(t, db)
+	root := repoRoot(t)
+
+	const (
+		shikimoriID = "57466"
+		episode     = 3
+		infohash    = "404404404404404404404404404404404404404a"
+		modelName   = "ghostmodel" // never uploaded → server has no row → 404
+	)
+	h.stageSource(t, infohash)
+
+	// NOTE: deliberately do NOT upload the model. The hub still mints a model
+	// handle (model != "mock"), the worker still attempts the fetch, but the
+	// serve handler's GetLatest finds no row → 404.
+
+	jobID := h.createJob(t, shikimoriID, episode, infohash, modelName)
+	t.Logf("created unknown-model job %s (model=%s, NOT registered)", jobID, modelName)
+
+	waitFor(t, "unknown-model job to reach upscaling with ≥1 segment", 90*time.Second, func() bool {
+		st := h.jobStatus(t, jobID)
+		if st == domain.JobFailed {
+			job, _ := h.jobs.Get(context.Background(), jobID)
+			t.Fatalf("job failed during segmenting: %q", job.ErrorText)
+		}
+		p, l, d := h.segCounts(t, jobID)
+		return st == domain.JobUpscaling && (p+l+d) >= 1
+	})
+
+	tok := h.seedEnrollToken(t)
+	w := h.startWorker(t, root, tok)
+	t.Cleanup(w.stop)
+
+	// ── Teeth #1: the worker's fetch got a 404 from the REAL serve handler
+	// (capability verified, but GetLatest found no row). ──────────────────────
+	waitFor(t, "worker GET /worker/models/"+modelName+" → 404 (no such model)", 90*time.Second, func() bool {
+		return h.modelGets.countFor(modelName, http.StatusNotFound) >= 1
+	})
+	t.Logf("model serve endpoint hit: %d×404 for unregistered %q", h.modelGets.countFor(modelName, http.StatusNotFound), modelName)
+
+	// ── Teeth #2: the segment cleanly fails + is re-leased — NOT marked done,
+	// and NOT left permanently leased. After a 404, processSegment returns a
+	// clean error so the segment goes back to pending/leased for the next lease;
+	// it must NEVER reach done (nothing was upscaled). We observe ≥2 fetch 404s
+	// (the worker retries the re-leased segment), proving re-lease, and assert no
+	// segment for this job is done. ───────────────────────────────────────────
+	waitFor(t, "worker to re-attempt the fetch (re-lease after clean-fail)", 60*time.Second, func() bool {
+		return h.modelGets.countFor(modelName, http.StatusNotFound) >= 2
+	})
+	_, _, done := h.segCounts(t, jobID)
+	if done != 0 {
+		t.Fatalf("unknown-model job has %d done segment(s); expected 0 (nothing can be upscaled without the model)", done)
+	}
+	t.Logf("segment cleanly re-leased after 404 (≥2 fetch attempts, 0 done)")
+
+	// ── Teeth #3: the worker stays alive throughout (a fetch 404 must be a clean
+	// per-segment fail, never a worker crash). ────────────────────────────────
+	if exited, code := w.exited(); exited {
+		t.Fatalf("worker exited (code=%d) after a 404 model fetch — must stay alive; stderr:\n%s",
+			code, w.stderr.String())
+	}
+	t.Log("worker still alive after repeated 404 model fetches (no crash)")
+}
+
+// modelGetLatestName resolves the latest model row for name via the REAL repo
+// and returns its Name (or "" if absent). Used as a registry sanity check after
+// the admin upload.
+func (h *serverHarness) modelGetLatestName(t *testing.T, name string) string {
+	t.Helper()
+	m, err := h.models.GetLatest(context.Background(), name)
+	if err != nil {
+		t.Fatalf("e2e: GetLatest(%q): %v", name, err)
+	}
+	if m == nil {
+		return ""
+	}
+	return m.Name
 }

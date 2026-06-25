@@ -127,11 +127,13 @@ func NewClient(cfg Config) *Client {
 		metInterval = cfg.MetricsInterval
 	}
 
-	// Construct the model Manager. modelsDir is left empty here — the worker
-	// image bakes weights into the realesrgan default models directory, and
-	// NewManager skips existence checks when modelsDir is empty. Install uses
-	// cfg.WorkDir (or a dedicated models dir) when T29 wires pull-on-demand.
-	mgr := upscale.NewManager("", cfg.PreinstalledModels)
+	// Construct the model Manager over cfg.ModelsDir — the SAME directory that
+	// holds the image's baked PreinstalledModels weights AND is the extraction
+	// target for pull-on-demand Install (T29). It MUST be non-empty for Install
+	// to write pulled weights; an empty dir would make every pull-on-demand
+	// install fail with "modelsDir is not set". cfg defaults MODELS_DIR to
+	// "/models" (provisioned by the worker image).
+	mgr := upscale.NewManager(cfg.ModelsDir, cfg.PreinstalledModels)
 
 	return &Client{
 		cfg:               cfg,

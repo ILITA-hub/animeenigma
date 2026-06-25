@@ -319,6 +319,12 @@ func (c *Client) fetchAndInstallModel(ctx context.Context, workerID, modelName s
 		fmt.Fprintf(os.Stderr, "worker: model %q fetch: installed but not registered; server will re-lease\n", modelName)
 		return nil, false
 	}
+	// Success: a clear, single-line stderr marker so operators (and the e2e
+	// integration test) can observe a pull-on-demand install actually landed.
+	// This is the only positive observable of the fetch→install path — the
+	// register frame's ModelsAvailable is only sent once at connect, before any
+	// pull happens, so a log line is the canonical post-install signal.
+	fmt.Fprintf(os.Stderr, "worker: model %q fetched and installed (pull-on-demand)\n", modelName)
 	return model, true
 }
 
