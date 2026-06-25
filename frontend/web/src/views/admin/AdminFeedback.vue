@@ -1,5 +1,5 @@
 <template>
-  <!-- Admin feedback browser: read + triage user feedback / error reports. -->
+  <!-- Admin feedback browser: Project Board: feedback, TODOs and ideas — read, triage + quick-capture. -->
   <div class="min-h-screen bg-base pt-20">
     <div class="container mx-auto px-4 py-8 max-w-7xl">
       <!-- Header -->
@@ -21,6 +21,13 @@
           <span class="text-white/50 text-sm">{{ $t('admin.feedback.total', { n: total }) }}</span>
           <button
             type="button"
+            class="px-4 py-2 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium text-sm transition"
+            @click="showNewNote = true"
+          >
+            {{ $t('admin.feedback.newNote.button') }}
+          </button>
+          <button
+            type="button"
             class="px-4 py-2 rounded-md bg-cyan-500/80 hover:bg-cyan-500 text-white font-medium text-sm transition disabled:opacity-50"
             :disabled="isLoading"
             @click="refresh"
@@ -31,7 +38,7 @@
       </div>
 
       <!-- Filters -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Select
           v-model="filterType"
           size="sm"
@@ -47,7 +54,20 @@
           @change="applyFilters"
         />
         <Select
-          v-if="viewMode === 'table'"
+          v-model="filterKind"
+          size="sm"
+          :options="kindOptions"
+          :label="$t('admin.feedback.filters.kind')"
+          @change="applyFilters"
+        />
+        <Select
+          v-model="filterSource"
+          size="sm"
+          :options="sourceOptions"
+          :label="$t('admin.feedback.filters.source')"
+          @change="applyFilters"
+        />
+        <Select
           v-model="filterStatus"
           size="sm"
           :options="statusOptions"
@@ -123,12 +143,13 @@
               @keydown.enter="(e) => { if (!(e.target as HTMLElement).closest('select, button, a')) openReport(r.id) }"
             >
               <td class="px-3 py-2 whitespace-nowrap border-l-4" :class="statusAccentBorder(r.status)">
+                <Badge size="sm" :variant="kindVariant(r.kind || 'feedback')" class="text-[10px] font-mono uppercase mr-1">
+                  {{ kindLabel(r.kind || 'feedback') }}
+                </Badge>
                 <Badge size="sm" :variant="categoryVariant(r.category)" class="text-[10px] font-mono uppercase">
                   {{ categoryLabel(r.category) }}
                 </Badge>
-                <span v-if="r.player_type && r.player_type !== 'feedback'" class="ml-2 text-white/40 text-xs">
-                  {{ r.player_type }}
-                </span>
+                <span v-if="r.source" class="ml-2 text-white/40 text-[10px] uppercase">{{ sourceLabel(r.source) }}</span>
               </td>
               <td class="px-3 py-2 whitespace-nowrap text-white/80">{{ r.username || r.user_id }}</td>
               <td class="px-3 py-2 text-white/70 max-w-md truncate">
@@ -201,9 +222,14 @@
               @keydown.enter.prevent="openReport(r.id)"
             >
               <div class="flex items-center justify-between gap-2 mb-1.5">
-                <Badge size="sm" :variant="categoryVariant(r.category)" class="text-[10px] font-mono uppercase">
-                  {{ categoryLabel(r.category) }}
-                </Badge>
+                <div class="flex items-center gap-1.5">
+                  <Badge size="sm" :variant="kindVariant(r.kind || 'feedback')" class="text-[10px] font-mono uppercase">
+                    {{ kindLabel(r.kind || 'feedback') }}
+                  </Badge>
+                  <Badge size="sm" :variant="categoryVariant(r.category)" class="text-[10px] font-mono uppercase">
+                    {{ categoryLabel(r.category) }}
+                  </Badge>
+                </div>
                 <span class="text-white/40 text-[10px] whitespace-nowrap">{{ formatDate(r.timestamp, r.id) }}</span>
               </div>
               <p class="text-white/80 text-xs line-clamp-3 break-words">{{ r.description || '—' }}</p>
@@ -242,6 +268,8 @@
         </button>
       </div>
     </div>
+
+    <NewNoteDialog v-model:open="showNewNote" @created="refresh" />
 
     <!-- Detail overlay -->
     <div
@@ -401,6 +429,7 @@ import Select from '@/components/ui/Select.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { Spinner, DatePicker, Badge } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
+import NewNoteDialog from '@/components/admin/NewNoteDialog.vue'
 import type { FeedbackStatus } from '@/types/feedback'
 
 const { t } = useI18n()
@@ -409,7 +438,7 @@ const router = useRouter()
 
 const {
   items, total, page, pageSize, isLoading, error,
-  filterCategory, filterStatus, filterType, filterUsername, filterDateFrom, filterDateTo,
+  filterCategory, filterStatus, filterKind, filterSource, filterType, filterUsername, filterDateFrom, filterDateTo,
   detail, isDetailLoading, detailError,
   refresh, applyFilters, setPage, openDetail, closeDetail, setStatus,
 } = useAdminFeedback()
@@ -460,6 +489,8 @@ async function copyReportLink(id: string): Promise<void> {
   }
 }
 
+const showNewNote = ref(false)
+
 // --- View mode (table | kanban), persisted in localStorage ---
 const VIEW_KEY = 'admin_feedback_view'
 type ViewMode = 'table' | 'kanban'
@@ -475,22 +506,27 @@ function setViewMode(m: ViewMode): void {
   } catch {
     // localStorage can throw in privacy modes — ignore.
   }
-  // Kanban shows every status as a column, so drop the status filter and pull
-  // a bigger page (columns should be ~complete, not just the table's page).
+  // Kanban shows every status as a column, so pull a bigger page
+  // (columns should be ~complete, not just the table's page).
   page.value = 1
   pageSize.value = m === 'kanban' ? 200 : 50
-  if (m === 'kanban') filterStatus.value = 'all'
   refresh()
 }
 
 // --- Kanban: group the loaded rows into status columns ---
 const STATUS_ORDER: FeedbackStatus[] = ['new', 'in_progress', 'ai_done', 'resolved', 'not_relevant']
-const kanbanColumns = computed(() =>
-  STATUS_ORDER.map((status) => ({
+const kanbanColumns = computed(() => {
+  let order: FeedbackStatus[] = STATUS_ORDER
+  if (filterStatus.value === 'active') {
+    order = STATUS_ORDER.filter((s) => s !== 'not_relevant')
+  } else if (filterStatus.value !== 'all') {
+    order = STATUS_ORDER.filter((s) => s === filterStatus.value)
+  }
+  return order.map((status) => ({
     status,
     items: items.value.filter((i) => i.status === status),
-  })),
-)
+  }))
+})
 
 // --- Native HTML5 drag-and-drop between columns ---
 const draggingId = ref<string | null>(null)
@@ -573,6 +609,7 @@ const categoryOptions = computed(() => [
   { value: 'feature', label: categoryLabel('feature') },
 ])
 const statusOptions = computed(() => [
+  { value: 'active', label: t('admin.feedback.status.active') },
   { value: 'all', label: t('admin.feedback.filters.allStatuses') },
   { value: 'new', label: statusLabel('new') },
   { value: 'in_progress', label: statusLabel('in_progress') },
@@ -580,6 +617,23 @@ const statusOptions = computed(() => [
   { value: 'resolved', label: statusLabel('resolved') },
   { value: 'not_relevant', label: statusLabel('not_relevant') },
 ])
+
+const KINDS = ['feedback', 'todo', 'idea'] as const
+const SOURCES = ['feedback_form', 'telegram', 'api', 'manual'] as const
+const kindLabel = (k: string) => t(`admin.feedback.kind.${k}`)
+const sourceLabel = (s: string) => t(`admin.feedback.source.${s}`)
+const kindOptions = computed(() => [
+  { value: 'all', label: t('admin.feedback.filters.allKinds') },
+  ...KINDS.map((v) => ({ value: v, label: kindLabel(v) })),
+])
+const sourceOptions = computed(() => [
+  { value: 'all', label: t('admin.feedback.filters.allSources') },
+  ...SOURCES.map((v) => ({ value: v, label: sourceLabel(v) })),
+])
+
+type KindBadge = 'info' | 'primary' | 'warning'
+const KIND_VARIANT: Record<string, KindBadge> = { feedback: 'info', todo: 'primary', idea: 'warning' }
+const kindVariant = (k: string): KindBadge => KIND_VARIANT[k] ?? 'info'
 
 // Per-report status control options (no 'all' pseudo-status). Shared by the
 // table-row picker and the detail-modal picker so both expose every status
@@ -649,10 +703,12 @@ function pretty(v: unknown): string {
 }
 
 onMounted(() => {
-  // Honor a persisted kanban preference on first load: wider page + no status filter.
+  // Honor a persisted kanban preference on first load: wider page.
   if (viewMode.value === 'kanban') {
     pageSize.value = 200
-    filterStatus.value = 'all'
+    filterStatus.value = 'active'
+    filterKind.value = 'all'
+    filterSource.value = 'all'
   }
   refresh()
   // Deep link: ?id=<report-id> opens that report's detail straight away.
