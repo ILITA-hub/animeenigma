@@ -429,3 +429,223 @@ var _ Model = (*testDummyModel)(nil)
 
 // Ensure io.Reader is satisfied for test helpers.
 var _ io.Reader = (*bytes.Reader)(nil)
+
+// ── T31 hardening tests ──────────────────────────────────────────────────────
+
+// TestManager_InstallNameTraversalRejected verifies that model names containing
+// path-traversal characters ("/", "\\", "..") are rejected before any disk use.
+func TestManager_InstallNameTraversalRejected(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		badName string
+	}{
+		{"slash", "foo/bar"},
+		{"dotdot", ".."},
+		{"dotdot-prefix", "../evil"},
+		{"backslash", "foo\\bar"},
+		{"dotdot-with-backslash", "..\\evil"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			mgr := NewManager(dir, nil)
+
+			tarData := buildModelTAR(t, "safe") // name in TAR doesn't matter; guard fires before read
+			checksum := sha256HexOf(tarData)
+
+			err := mgr.Install(tc.badName, "v1", bytes.NewReader(tarData), checksum)
+			if err == nil {
+				t.Fatalf("Install(%q): expected error for path-traversal name, got nil", tc.badName)
+			}
+			if _, ok := mgr.Get(tc.badName); ok {
+				t.Errorf("Install(%q): model must not be registered after name-traversal rejection", tc.badName)
+			}
+		})
+	}
+}
+
+// TestManager_InstallOversizedArtifactRejected verifies that Install rejects
+// an artifact exceeding maxModelArtifactBytes and returns a clear error.
+//
+// The real cap (2 GiB) cannot be exercised directly in a unit test without
+// reading 2+ GiB of data. Instead, this test exercises the overflow-detection
+// path (the extra-byte read-and-detect logic) by building a stream that is
+// exactly (maxModelArtifactBytes + 2) zero bytes and computing the matching
+// SHA-256 so the checksum check would pass. The io.LimitReader guard fires
+// first (len(data) > maxModelArtifactBytes) and Install must return an error.
+//
+// Run only outside of -short mode since it reads >2 GiB.
+func TestManager_InstallOversizedArtifactRejected(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping oversized-artifact test in -short mode (needs >2GiB I/O)")
+	}
+
+	dir := t.TempDir()
+	mgr := NewManager(dir, nil)
+
+	// Build the oversized stream: zeros of length maxModelArtifactBytes+2.
+	overSize := int64(maxModelArtifactBytes) + 2
+
+	// Compute checksum over the same zero stream so checksum check would pass
+	// and the limit-check fires (not a checksum mismatch path).
+	h := sha256.New()
+	checksumStream := io.LimitReader(zeroReader{}, overSize)
+	if _, err := io.Copy(h, checksumStream); err != nil {
+		t.Fatalf("compute checksum for oversized stream: %v", err)
+	}
+	checksum := hex.EncodeToString(h.Sum(nil))
+
+	// Provide another identical oversized stream as the artifact.
+	artifact := io.LimitReader(zeroReader{}, overSize)
+
+	err := mgr.Install("oversized", "v1", artifact, checksum)
+	if err == nil {
+		t.Fatal("Install: expected error for oversized artifact, got nil")
+	}
+	if _, ok := mgr.Get("oversized"); ok {
+		t.Error("model must not be registered after oversized artifact rejection")
+	}
+}
+
+// zeroReader is an infinite stream of zero bytes, used to synthesise large
+// artifact streams without allocating the full content.
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
+}
+
+// TestManager_InstallSymlinkTarEntryRejected verifies that a TAR containing a
+// symlink entry is rejected.
+func TestManager_InstallSymlinkTarEntryRejected(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewManager(dir, nil)
+
+	// Build a TAR with a symlink entry in addition to valid model files.
+	tarData := buildTARWithSymlink(t, "linkmodel")
+	checksum := sha256HexOf(tarData)
+
+	err := mgr.Install("linkmodel", "v1", bytes.NewReader(tarData), checksum)
+	if err == nil {
+		t.Fatal("Install: expected error for TAR with symlink entry, got nil")
+	}
+	if _, ok := mgr.Get("linkmodel"); ok {
+		t.Error("model must not be registered after symlink-entry rejection")
+	}
+}
+
+// buildTARWithSymlink creates a TAR containing a symlink entry (tar.TypeSymlink).
+func buildTARWithSymlink(t *testing.T, name string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	// Add a symlink entry — must be rejected.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     name + ".param",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "/etc/passwd",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Add the bin file as regular so the archive has both names but the symlink fires first.
+	body := []byte("bin-data")
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     name + ".bin",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(body)),
+		Mode:     0o644,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestManager_InstallMissingParamFileRejected verifies that Install fails and
+// registers nothing when the artifact TAR contains only .bin (missing .param).
+func TestManager_InstallMissingParamFileRejected(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewManager(dir, nil)
+
+	tarData := buildTARFiles(t, map[string][]byte{
+		"onlyparam.bin": []byte("bin-data"),
+		// onlyparam.param is intentionally absent
+	})
+	checksum := sha256HexOf(tarData)
+
+	err := mgr.Install("onlyparam", "v1", bytes.NewReader(tarData), checksum)
+	if err == nil {
+		t.Fatal("Install: expected error when .param is missing, got nil")
+	}
+	if _, ok := mgr.Get("onlyparam"); ok {
+		t.Error("model must not be registered when .param is missing from artifact")
+	}
+}
+
+// TestManager_InstallMissingBinFileRejected verifies that Install fails and
+// registers nothing when the artifact TAR contains only .param (missing .bin).
+func TestManager_InstallMissingBinFileRejected(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewManager(dir, nil)
+
+	tarData := buildTARFiles(t, map[string][]byte{
+		"onlybin.param": []byte("param-data"),
+		// onlybin.bin is intentionally absent
+	})
+	checksum := sha256HexOf(tarData)
+
+	err := mgr.Install("onlybin", "v1", bytes.NewReader(tarData), checksum)
+	if err == nil {
+		t.Fatal("Install: expected error when .bin is missing, got nil")
+	}
+	if _, ok := mgr.Get("onlybin"); ok {
+		t.Error("model must not be registered when .bin is missing from artifact")
+	}
+}
+
+// TestManager_InstallPartialCleanupOnMissingFiles verifies that no partial
+// weight files remain on disk after a failed Install due to missing required files.
+func TestManager_InstallPartialCleanupOnMissingFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewManager(dir, nil)
+
+	// TAR with only .param so Install fails on missing .bin.
+	name := "cleanupcheck"
+	tarData := buildTARFiles(t, map[string][]byte{
+		name + ".param": []byte("param-data"),
+	})
+	checksum := sha256HexOf(tarData)
+
+	if err := mgr.Install(name, "v1", bytes.NewReader(tarData), checksum); err == nil {
+		t.Fatal("expected error for incomplete TAR, got nil")
+	}
+
+	// The .param that was written should have been cleaned up.
+	if _, err := os.Stat(filepath.Join(dir, name+".param")); err == nil {
+		t.Error("partial .param file must be cleaned up after failed Install")
+	}
+}

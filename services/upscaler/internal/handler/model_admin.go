@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,12 @@ import (
 	"github.com/minio/minio-go/v7"
 	"gorm.io/gorm"
 )
+
+// maxUploadBodyBytes caps the entire multipart body accepted by UploadModel.
+// 2 GiB covers the largest plausible realesrgan weight tars (real pairs are
+// typically 10–200 MiB); anything larger signals a misuse or attack and is
+// rejected with 413 before the body reaches memory or MinIO.
+const maxUploadBodyBytes = 2 << 30 // 2 GiB
 
 // modelRepo is the minimal interface ModelAdminHandler needs from the model repository.
 type modelRepo interface {
@@ -88,8 +95,21 @@ func isNameSafe(s string) bool {
 // computed checksum and object key are stored in the upscale_models table.
 // Returns 201 with the stored UpscaleModel metadata.
 func (h *ModelAdminHandler) UploadModel(w http.ResponseWriter, r *http.Request) {
-	// 32 MiB header memory limit; body is streamed, not buffered.
+	// Cap the entire request body before any read so an oversized upload cannot
+	// exhaust server memory or disk. MaxBytesReader wraps the body and causes
+	// ParseMultipartForm (which reads the body) to fail with a *http.MaxBytesError
+	// when the cap is exceeded.
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBodyBytes)
+
+	// 32 MiB header memory limit; the artifact file part is streamed via FormFile.
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		// Distinguish "body too large" from other parse errors. ParseMultipartForm
+		// wraps the MaxBytesError via fmt.Errorf, so use errors.As to unwrap.
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			http.Error(w, fmt.Sprintf("request body exceeds the %d-byte limit", maxUploadBodyBytes), http.StatusRequestEntityTooLarge)
+			return
+		}
 		httputil.BadRequest(w, "invalid multipart form: "+err.Error())
 		return
 	}
@@ -233,3 +253,4 @@ func isNotFound(err error) bool {
 	// Import-free check: gorm.ErrRecordNotFound.Error() == "record not found"
 	return err == gorm.ErrRecordNotFound || strings.Contains(err.Error(), "record not found")
 }
+

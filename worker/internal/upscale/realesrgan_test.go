@@ -45,10 +45,11 @@ func TestRealesrgan_Realtime_Argv(t *testing.T) {
 	binDir := t.TempDir()
 	framesDir := t.TempDir()
 	outDir := t.TempDir()
+	modelsDir := t.TempDir()
 
 	binPath := writeFakeRealesrgan(t, binDir)
 
-	m := newRealesrgan("realtime", "realesr-animevideov3", binPath)
+	m := newRealesrgan("realtime", "realesr-animevideov3", binPath, modelsDir)
 	if err := m.Upscale(context.Background(), framesDir, outDir, 4); err != nil {
 		t.Fatalf("Upscale: %v", err)
 	}
@@ -59,6 +60,35 @@ func TestRealesrgan_Realtime_Argv(t *testing.T) {
 	}
 	a := string(argv)
 
+	for _, want := range []string{"-s", "4", "-n", "realesr-animevideov3", "-m", modelsDir} {
+		if !strings.Contains(a, want) {
+			t.Errorf("argv missing %q\nfull argv:\n%s", want, a)
+		}
+	}
+}
+
+func TestRealesrgan_Realtime_Argv_NoModelsDir(t *testing.T) {
+	// When modelsDir is empty, -m must NOT appear in argv.
+	binDir := t.TempDir()
+	framesDir := t.TempDir()
+	outDir := t.TempDir()
+
+	binPath := writeFakeRealesrgan(t, binDir)
+
+	m := newRealesrgan("realtime", "realesr-animevideov3", binPath, "")
+	if err := m.Upscale(context.Background(), framesDir, outDir, 4); err != nil {
+		t.Fatalf("Upscale: %v", err)
+	}
+
+	argv, err := os.ReadFile(filepath.Join(outDir, "argv.txt"))
+	if err != nil {
+		t.Fatalf("read argv.txt: %v", err)
+	}
+	a := string(argv)
+
+	if strings.Contains(a, "-m") {
+		t.Errorf("argv contains -m but modelsDir was empty\nfull argv:\n%s", a)
+	}
 	for _, want := range []string{"-s", "4", "-n", "realesr-animevideov3"} {
 		if !strings.Contains(a, want) {
 			t.Errorf("argv missing %q\nfull argv:\n%s", want, a)
@@ -70,10 +100,11 @@ func TestRealesrgan_BestQuality_Argv(t *testing.T) {
 	binDir := t.TempDir()
 	framesDir := t.TempDir()
 	outDir := t.TempDir()
+	modelsDir := t.TempDir()
 
 	binPath := writeFakeRealesrgan(t, binDir)
 
-	m := newRealesrgan("best-quality", "realesrgan-x4plus-anime", binPath)
+	m := newRealesrgan("best-quality", "realesrgan-x4plus-anime", binPath, modelsDir)
 	if err := m.Upscale(context.Background(), framesDir, outDir, 4); err != nil {
 		t.Fatalf("Upscale: %v", err)
 	}
@@ -84,7 +115,7 @@ func TestRealesrgan_BestQuality_Argv(t *testing.T) {
 	}
 	a := string(argv)
 
-	for _, want := range []string{"-s", "4", "-n", "realesrgan-x4plus-anime"} {
+	for _, want := range []string{"-s", "4", "-n", "realesrgan-x4plus-anime", "-m", modelsDir} {
 		if !strings.Contains(a, want) {
 			t.Errorf("argv missing %q\nfull argv:\n%s", want, a)
 		}

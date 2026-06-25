@@ -14,6 +14,12 @@ import (
 	"sync"
 )
 
+// maxModelArtifactBytes caps the artifact body read in Install to prevent an
+// OOM from a hostile or corrupted artifact. 2 GiB comfortably covers the
+// largest plausible realesrgan weight sets (real model pairs are ~10-200 MiB).
+// A one-byte overflow is detected and causes an error; truncation never occurs.
+const maxModelArtifactBytes = 2 << 30 // 2 GiB
+
 // Manager is a thread-safe registry of upscale Models.
 // It always contains the built-in "mock" model and any models registered via
 // NewManager (from PREINSTALLED_MODELS) or Install (T29 pull-on-demand).
@@ -69,7 +75,7 @@ func NewManager(modelsDir string, preinstalled []string) *Manager {
 				continue
 			}
 		}
-		m.models[name] = newRealesrgan(name, name, "realesrgan-ncnn-vulkan")
+		m.models[name] = newRealesrgan(name, name, "realesrgan-ncnn-vulkan", modelsDir)
 	}
 
 	return m
@@ -106,6 +112,12 @@ func (m *Manager) Get(name string) (Model, bool) {
 //
 // Tar entries with path traversal components (absolute paths or entries
 // containing "..") are rejected and cause Install to return an error.
+// Non-regular TAR entry types (symlinks, hardlinks, devices, fifos) are also
+// rejected. If either {name}.param or {name}.bin is missing from the archive
+// after extraction, Install returns an error and cleans up any partial files.
+//
+// The artifact body read is bounded by maxModelArtifactBytes; an artifact that
+// exceeds this cap causes Install to fail rather than silently truncating.
 //
 // Install is idempotent: if a model with the given name is already registered,
 // it returns nil immediately. Concurrent Install calls for the same name are
@@ -122,6 +134,13 @@ func (m *Manager) Install(name, _ string, artifact io.Reader, expectedChecksumHe
 	}
 	if name == "mock" {
 		return fmt.Errorf("upscale: Install: cannot overwrite built-in mock model")
+	}
+
+	// Worker-side name traversal guard: reject names that could escape the models
+	// directory when used in filepath.Join or as the realesrgan -n argument.
+	// The server also validates on upload, but the worker must not trust the grant.
+	if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
+		return fmt.Errorf("upscale: Install %q: name contains path-traversal characters", name)
 	}
 
 	// Fast path: already registered.
@@ -150,12 +169,18 @@ func (m *Manager) Install(name, _ string, artifact io.Reader, expectedChecksumHe
 		return fmt.Errorf("upscale: Install: modelsDir is not set")
 	}
 
-	// Read the entire artifact through a SHA-256 hasher so we can verify
-	// the checksum before writing any files.
+	// Read the artifact through a SHA-256 hasher so we can verify the checksum
+	// before writing any files. Wrap with io.LimitReader so an oversized or
+	// hostile artifact cannot OOM the worker. We read one byte beyond the cap to
+	// detect overflow without silently truncating.
 	hasher := sha256.New()
-	data, err := io.ReadAll(io.TeeReader(artifact, hasher))
+	limited := io.LimitReader(artifact, maxModelArtifactBytes+1)
+	data, err := io.ReadAll(io.TeeReader(limited, hasher))
 	if err != nil {
 		return fmt.Errorf("upscale: Install %q: read artifact: %w", name, err)
+	}
+	if int64(len(data)) > maxModelArtifactBytes {
+		return fmt.Errorf("upscale: Install %q: artifact exceeds %d-byte cap (got >%d bytes)", name, maxModelArtifactBytes, maxModelArtifactBytes)
 	}
 
 	// Verify checksum before touching disk.
@@ -175,8 +200,32 @@ func (m *Manager) Install(name, _ string, artifact io.Reader, expectedChecksumHe
 		return fmt.Errorf("upscale: Install %q: extract: %w", name, extractErr)
 	}
 
+	// Assert both required weight files were extracted. A TAR that silently omits
+	// {name}.param or {name}.bin would produce a model that fails at runtime —
+	// reject it here and clean up whatever was written.
+	wantParam := filepath.Join(m.modelsDir, name+".param")
+	wantBin := filepath.Join(m.modelsDir, name+".bin")
+	var missingFiles []string
+	if _, err := os.Stat(wantParam); err != nil {
+		missingFiles = append(missingFiles, name+".param")
+	}
+	if _, err := os.Stat(wantBin); err != nil {
+		missingFiles = append(missingFiles, name+".bin")
+	}
+	if len(missingFiles) > 0 {
+		for _, p := range written {
+			os.Remove(p) //nolint:errcheck
+		}
+		return fmt.Errorf("upscale: Install %q: artifact is missing required weight file(s): %s", name, strings.Join(missingFiles, ", "))
+	}
+
 	// Register the model.
-	model := newRealesrgan(name, name, "realesrgan-ncnn-vulkan")
+	// IMMUTABILITY NOTE: model names are content-address keys. A running worker
+	// caches a model by name for its lifetime — Install is a no-op for a name
+	// that is already registered. Changing a model's weights requires registering
+	// them under a NEW name (e.g. "mymodel-v2") and restarting workers; there is
+	// NO in-place update path.
+	model := newRealesrgan(name, name, "realesrgan-ncnn-vulkan", m.modelsDir)
 	m.mu.Lock()
 	m.models[name] = model
 	m.mu.Unlock()
@@ -198,7 +247,11 @@ func (m *Manager) perNameMu(name string) *sync.Mutex {
 }
 
 // extractTAR extracts {name}.param and {name}.bin from r into destDir.
-// It rejects any tar entry whose path is absolute or contains "..".
+// It rejects:
+//   - any tar entry whose path is absolute or contains ".."
+//   - any entry that is not a regular file (tar.TypeReg); symlinks, hardlinks,
+//     character/block devices, FIFOs, and directories-as-files are all rejected
+//
 // Paths written are appended to *written for caller cleanup on failure.
 func extractTAR(r io.Reader, destDir, name string, written *[]string) error {
 	wantParam := name + ".param"
@@ -216,6 +269,12 @@ func extractTAR(r io.Reader, destDir, name string, written *[]string) error {
 		}
 		if hdr.Typeflag == tar.TypeDir {
 			continue
+		}
+
+		// Reject non-regular entry types (symlinks, hardlinks, char/block devices,
+		// FIFOs, etc.) — only plain files are permitted.
+		if hdr.Typeflag != tar.TypeReg {
+			return fmt.Errorf("tar entry %q has non-regular type %d (only regular files are allowed)", hdr.Name, hdr.Typeflag)
 		}
 
 		// Guard against path traversal.

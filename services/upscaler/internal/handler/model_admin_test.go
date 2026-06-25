@@ -527,6 +527,56 @@ func TestModelAdmin_GetModelByName_NotFound_404(t *testing.T) {
 	}
 }
 
+// ── T31: admin upload size cap ───────────────────────────────────────────────
+
+// TestModelAdmin_UploadModel_OversizedBody_413 verifies that a request body
+// exceeding maxUploadBodyBytes is rejected with HTTP 413 before any data is
+// written to MinIO or the database.
+//
+// We can't send 2 GiB in a unit test, so we override the per-request body limit
+// using http.MaxBytesReader with a tiny cap and confirm the 413 path. The
+// production cap (maxUploadBodyBytes = 2 GiB) is exercised by the constant
+// being used in UploadModel; this test validates the code path fires correctly.
+func TestModelAdmin_UploadModel_OversizedBody_413(t *testing.T) {
+	t.Parallel()
+
+	// Build a tiny artifact and a minimal multipart body.
+	artifact := []byte("tiny-but-over-the-limit")
+	req := buildUploadRequest(t,
+		map[string]string{"name": "oversize-model", "version": "1"},
+		"model.tar", artifact,
+	)
+
+	// Wrap the body in a MaxBytesReader with a cap of 1 byte so ANY real body
+	// triggers the limit. This exercises the exact same code path that fires in
+	// production when a 2 GiB+ artifact is uploaded.
+	req.Body = http.MaxBytesReader(httptest.NewRecorder(), req.Body, 1)
+
+	// Construct the handler directly (not via router) so we can inject the
+	// already-capped body and call UploadModel, which will call ParseMultipartForm
+	// and observe the MaxBytesError.
+	repo := &fakeModelRepo{}
+	up := &fakeModelUploader{}
+	h := NewModelAdminHandler(repo, up, "test-bucket", logger.Default())
+
+	rr := httptest.NewRecorder()
+	h.UploadModel(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("UploadModel (oversized body): status = %d; want 413\nbody: %s", rr.Code, rr.Body)
+	}
+
+	// MinIO must not have been called.
+	if _, ok := up.lastCall(); ok {
+		t.Error("PutObject must not be called when body exceeds size cap")
+	}
+	// Database must not have been written.
+	models, _ := repo.List(context.Background())
+	if len(models) != 0 {
+		t.Errorf("model must not be persisted when body exceeds cap; got %d rows", len(models))
+	}
+}
+
 // ── requireGatewayInternal gate (routes are behind the gate in the real router) ──
 
 // TestModelAdmin_RoutesRequireGatewayHeader verifies that the model routes are

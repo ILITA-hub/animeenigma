@@ -9,9 +9,13 @@ import (
 )
 
 func init() {
+	// Built-in preinstalled models use an empty modelsDir so the runtime uses its
+	// default search path (typically the same directory as the binary, or the
+	// CWD-relative "models/" folder). The manager overrides modelsDir for both
+	// preinstalled and Install-registered models via NewManager / Install.
 	const defaultBin = "realesrgan-ncnn-vulkan"
-	Register(newRealesrgan("realtime", "realesr-animevideov3", defaultBin))
-	Register(newRealesrgan("best-quality", "realesrgan-x4plus-anime", defaultBin))
+	Register(newRealesrgan("realtime", "realesr-animevideov3", defaultBin, ""))
+	Register(newRealesrgan("best-quality", "realesrgan-x4plus-anime", defaultBin, ""))
 }
 
 // realesrganModel wraps the realesrgan-ncnn-vulkan command-line tool.
@@ -20,22 +24,27 @@ type realesrganModel struct {
 	name      string // registry key: "realtime" or "best-quality"
 	modelName string // -n flag value: "realesr-animevideov3" or "realesrgan-x4plus-anime"
 	bin       string // path to realesrgan-ncnn-vulkan (default: "realesrgan-ncnn-vulkan")
+	modelsDir string // -m flag value: directory containing .param/.bin weight files; empty = runtime default
 }
 
 // newRealesrgan constructs a realesrganModel. Used both in init() and in tests.
-func newRealesrgan(name, modelName, bin string) *realesrganModel {
+// modelsDir is passed as -m to the runtime; empty means the runtime resolves
+// weights from its own default path (usually a "models/" subdir beside the binary).
+func newRealesrgan(name, modelName, bin, modelsDir string) *realesrganModel {
 	if bin == "" {
 		bin = "realesrgan-ncnn-vulkan"
 	}
-	return &realesrganModel{name: name, modelName: modelName, bin: bin}
+	return &realesrganModel{name: name, modelName: modelName, bin: bin, modelsDir: modelsDir}
 }
 
 func (r *realesrganModel) Name() string { return r.name }
 
 // Upscale shells out to realesrgan-ncnn-vulkan:
 //
-//	realesrgan-ncnn-vulkan -i {framesDir} -o {outDir} -s {scale} -n {modelName}
+//	realesrgan-ncnn-vulkan -i {framesDir} -o {outDir} -s {scale} -n {modelName} [-m {modelsDir}]
 //
+// -m is only appended when modelsDir is non-empty so that the init()-registered
+// built-in models do not force a specific search path.
 // A bounded 2048-byte ring buffer captures stderr for error messages.
 func (r *realesrganModel) Upscale(ctx context.Context, framesDir, outDir string, scale int) error {
 	args := []string{
@@ -43,6 +52,9 @@ func (r *realesrganModel) Upscale(ctx context.Context, framesDir, outDir string,
 		"-o", outDir,
 		"-s", strconv.Itoa(scale),
 		"-n", r.modelName,
+	}
+	if r.modelsDir != "" {
+		args = append(args, "-m", r.modelsDir)
 	}
 
 	cmd := exec.CommandContext(ctx, r.bin, args...)
