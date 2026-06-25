@@ -1,75 +1,47 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { pickSmartDefault } from './smartDefault'
 import type { ProviderRow } from '@/types/aePlayer'
 
-const row = (id: string, state: ProviderRow['state']): ProviderRow =>
-  ({ def: { id, name: id, hue: '#000', group: 'en', audios: ['sub'], langs: ['en'], content: ['common'], scraper: true }, state })
-
-const CURATED = ['ae', 'allanime', 'gogoanime', 'kodik']
+const row = (
+  id: string,
+  over: Partial<ProviderRow> = {},
+): ProviderRow => ({
+  id, label: id, group: 'en', state: 'active', selectable: true,
+  hackerOnly: false, order: 50, audios: ['sub'], ...over,
+})
 
 describe('pickSmartDefault', () => {
-  const alwaysAvailable = vi.fn(async () => true)
-
-  beforeEach(() => { alwaysAvailable.mockClear() })
-
-  it('picks the first active provider in curated order', async () => {
-    const rows = [row('gogoanime', 'active'), row('allanime', 'active')]
-    expect(await pickSmartDefault(rows, CURATED, { needsCheck: new Set(), isAvailable: alwaysAvailable }))
-      .toBe('allanime') // allanime precedes gogoanime in CURATED
+  it('picks the highest-order active+selectable row', () => {
+    const rows = [row('gogoanime', { order: 85 }), row('allanime', { order: 90 })]
+    expect(pickSmartDefault(rows)?.id).toBe('allanime')
   })
 
-  it('skips non-active rows', async () => {
-    const rows = [row('allanime', 'down'), row('gogoanime', 'active')]
-    expect(await pickSmartDefault(rows, CURATED, { needsCheck: new Set(), isAvailable: alwaysAvailable }))
-      .toBe('gogoanime')
+  it('skips no_content ae, picks highest-order active', () => {
+    const rows: ProviderRow[] = [
+      row('ae', { group: 'firstparty', state: 'no_content', selectable: false, order: 100 }),
+      row('gogoanime', { state: 'active', selectable: true, order: 85 }),
+    ]
+    expect(pickSmartDefault(rows)?.id).toBe('gogoanime')
   })
 
-  it('excludes an availability-gated provider when unavailable, picks next', async () => {
-    const rows = [row('ae', 'active'), row('allanime', 'active')]
-    const isAvailable = vi.fn(async () => false)
-    expect(await pickSmartDefault(rows, CURATED, { needsCheck: new Set(['ae']), isAvailable }))
-      .toBe('allanime')
-    expect(isAvailable).toHaveBeenCalledWith('ae')
+  it('skips degraded/recovering (not selectable outside hacker mode)', () => {
+    const rows = [
+      row('animefever', { state: 'degraded', selectable: false, order: 95 }),
+      row('gogoanime', { state: 'active', selectable: true, order: 60 }),
+    ]
+    expect(pickSmartDefault(rows)?.id).toBe('gogoanime')
   })
 
-  it('includes an availability-gated provider when available', async () => {
-    const rows = [row('ae', 'active'), row('allanime', 'active')]
-    expect(await pickSmartDefault(rows, CURATED, { needsCheck: new Set(['ae']), isAvailable: vi.fn(async () => true) }))
-      .toBe('ae')
+  it('returns null when nothing is active', () => {
+    const rows = [
+      row('ae', { state: 'no_content', selectable: false }),
+      row('animefever', { state: 'degraded', selectable: false }),
+    ]
+    expect(pickSmartDefault(rows)).toBeNull()
   })
 
-  it('skips a provider the capability report marks unplayable, picks next playable', async () => {
-    const rows = [row('allanime', 'active'), row('gogoanime', 'active')]
-    // allanime precedes gogoanime in CURATED, but stats mark it unplayable.
-    const id = await pickSmartDefault(rows, CURATED, {
-      needsCheck: new Set(),
-      isAvailable: alwaysAvailable,
-      isPlayable: (pid) => pid !== 'allanime',
-    })
-    expect(id).toBe('gogoanime')
-  })
-
-  it('returns null when no rows are active', async () => {
-    const rows = [row('ae', 'down'), row('allanime', 'irrelevant')]
-    expect(await pickSmartDefault(rows, CURATED, { needsCheck: new Set(), isAvailable: alwaysAvailable }))
-      .toBeNull()
-  })
-
-  it('falls back to first active not in the curated list', async () => {
-    const rows = [row('exotic', 'active')]
-    expect(await pickSmartDefault(rows, CURATED, { needsCheck: new Set(), isAvailable: alwaysAvailable }))
-      .toBe('exotic')
-  })
-
-  it('does not probe a gated id twice when curated has duplicates', async () => {
-    // Callers now pass [...rankingOrder, ...CURATED_TIER], which can repeat ids.
-    let probes = 0
-    const rows = [row('ae', 'active'), row('allanime', 'active')]
-    const id = await pickSmartDefault(rows, ['ae', 'allanime', 'ae'], {
-      needsCheck: new Set(['ae']),
-      isAvailable: async () => { probes++; return false },
-    })
-    expect(probes).toBe(1)      // ae probed once despite appearing twice
-    expect(id).toBe('allanime') // ae unavailable → next
+  it('never picks an active-but-unselectable row', () => {
+    const rows = [row('weird', { state: 'active', selectable: false })]
+    expect(pickSmartDefault(rows)).toBeNull()
   })
 })

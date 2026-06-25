@@ -29,6 +29,7 @@ export function flattenCapabilities(report: CapabilityReport | null): {
  * throws.
  */
 export function useCapabilities(animeId: Ref<string>) {
+  const report = ref<CapabilityReport | null>(null)
   const capMap = ref<Map<string, ProviderCap>>(new Map())
   const rankedIds = ref<string[]>([])
   const loaded = ref(false)
@@ -43,11 +44,13 @@ export function useCapabilities(animeId: Ref<string>) {
     try {
       const res = await capabilitiesApi.get(id)
       // catalog {success,data} envelope
-      const report = (res.data?.data ?? res.data ?? null) as CapabilityReport | null
-      const flat = flattenCapabilities(report)
+      const rep = (res.data?.data ?? res.data ?? null) as CapabilityReport | null
+      const flat = flattenCapabilities(rep)
+      report.value = rep
       capMap.value = flat.capMap
       rankedIds.value = flat.rankedIds
     } catch {
+      report.value = null
       capMap.value = new Map()
       rankedIds.value = []
       error.value = true
@@ -58,5 +61,5 @@ export function useCapabilities(animeId: Ref<string>) {
 
   watch(animeId, (id) => { void load(id) }, { immediate: true })
 
-  return { capMap, rankedIds, loaded, error }
+  return { report, capMap, rankedIds, loaded, error }
 }

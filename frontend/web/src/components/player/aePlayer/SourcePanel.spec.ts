@@ -3,9 +3,16 @@ import { mount } from '@vue/test-utils'
 import SourcePanel from './SourcePanel.vue'
 import type { ProviderRow } from '@/types/aePlayer'
 
+// Feed-shaped row builder. `order` drives ranking (desc); degraded/no_content
+// mirror the old disabled/down buckets in the new single-source-of-truth model.
+const r = (id: string, over: Partial<ProviderRow> = {}): ProviderRow => ({
+  id, label: id, group: 'en', state: 'active', selectable: true,
+  hackerOnly: false, order: 50, audios: ['sub'], ...over,
+})
+
 const rows: ProviderRow[] = [
-  { def: { id: 'allanime', name: 'AllAnime', hue: '#0df', group: 'en', audios: ['sub'], langs: ['en'], content: ['common'], scraper: true }, state: 'active' },
-  { def: { id: 'animepahe', name: 'AnimePahe', hue: '#0df', group: 'en', audios: ['sub'], langs: ['en'], content: ['common'], scraper: true }, state: 'disabled', reason: 'Cloudflare challenge' },
+  r('allanime', { order: 90 }),
+  r('animepahe', { state: 'degraded', selectable: true, hackerOnly: true, order: 30, reason: 'Cloudflare challenge' }),
 ]
 
 const baseProps = {
@@ -23,7 +30,7 @@ describe('SourcePanel', () => {
     await w.find('[data-test="audio-dub"]').trigger('click')
     expect(w.emitted('update:audio')?.[0]).toEqual(['dub'])
   })
-  it('emits select-provider only for active chips', async () => {
+  it('emits select-provider for an active chip', async () => {
     const w = mount(SourcePanel, { props: { ...baseProps, hackerMode: true } as any })
     await w.find('[data-test="provider-chip"][data-id="allanime"] button').trigger('click')
     expect(w.emitted('select-provider')?.[0]).toEqual(['allanime'])
@@ -32,14 +39,15 @@ describe('SourcePanel', () => {
 
 describe('SourcePanel collapse', () => {
   const mountOpts = { global: { mocks: { $t: (k: string) => k } } }
+  // order encodes rank: higher = better. gogoanime > allanime > miruro > animepahe > animefever
+  const ord: Record<string, number> = { gogoanime: 95, allanime: 90, miruro: 85, animepahe: 80, animefever: 75 }
   const a = (id: string, state: ProviderRow['state'] = 'active'): ProviderRow =>
-    ({ def: { id, name: id, hue: '#0df', group: 'en', audios: ['sub'], langs: ['en'], content: ['common'], scraper: true }, state } as ProviderRow)
+    r(id, { state, order: ord[id] ?? 50, selectable: state === 'active' || state === 'degraded' || state === 'recovering' })
   const collapseRows = [a('gogoanime'), a('allanime'), a('miruro')]
   const fiveRows = [a('gogoanime'), a('allanime'), a('miruro'), a('animepahe'), a('animefever')]
   const cb = {
     audio: 'sub', lang: 'en', team: null, server: '',
     servers: [] as { id: string; label: string }[], teams: [] as string[],
-    rankedIds: ['gogoanime', 'allanime', 'miruro', 'animepahe', 'animefever'],
   }
 
   it('default shows the top 3 ranked active providers', () => {
@@ -54,8 +62,8 @@ describe('SourcePanel collapse', () => {
     expect(ids).toEqual(['gogoanime', 'allanime', 'miruro', 'animefever'])
   })
 
-  it('shows only active providers, excluding down/disabled ones', () => {
-    const downTop = [a('gogoanime', 'down'), a('allanime'), a('miruro')]
+  it('shows only active providers, excluding no_content/degraded ones', () => {
+    const downTop = [a('gogoanime', 'no_content'), a('allanime'), a('miruro')]
     const w = mount(SourcePanel, { props: { ...cb, rows: downTop, provider: '', hackerMode: false, playbackError: false } as any, ...mountOpts })
     const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
     expect(ids).toEqual(['allanime', 'miruro'])
@@ -75,11 +83,11 @@ describe('SourcePanel collapse', () => {
     expect(w.findAll('[data-test="provider-chip"]').length).toBe(5)
   })
 
-  it('sorts available rows above unavailable ones, ranking as tiebreak (hacker mode)', () => {
-    // Ranking prefers gogoanime, but it is disabled → active rows must float above it.
-    const rows = [a('gogoanime', 'disabled'), a('allanime', 'active'), a('miruro', 'active')]
+  it('sorts active rows above degraded ones, order as tiebreak (hacker mode)', () => {
+    // gogoanime has the highest order, but it is degraded → active rows float above it.
+    const rows = [a('gogoanime', 'degraded'), a('allanime', 'active'), a('miruro', 'active')]
     const w = mount(SourcePanel, {
-      props: { ...cb, rows, rankedIds: ['gogoanime', 'allanime', 'miruro'], provider: '', hackerMode: true, playbackError: false } as any,
+      props: { ...cb, rows, provider: '', hackerMode: true, playbackError: false } as any,
       ...mountOpts,
     })
     const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))

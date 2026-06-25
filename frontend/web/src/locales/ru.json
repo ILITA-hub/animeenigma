@@ -256,6 +256,7 @@
       "best": "Лучший",
       "degraded": "Деградирован",
       "recovering": "Восстанавливается",
+      "noContent": "Нет серий",
       "tryAnother": "Другой источник",
       "raw": "RAW",
       "subBurnedIn": "вшитые",

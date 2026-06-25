@@ -129,13 +129,13 @@
       <div class="flex flex-col gap-1">
         <ProviderChip
           v-for="r in visibleRows"
-          :key="r.def.id"
+          :key="r.id"
           :row="r"
-          :cap="capMap.get(r.def.id)"
-          :best="!hackerMode && !expanded && r.def.id === topRow?.def.id"
-          :selected="r.def.id === provider"
+          :cap="capMap.get(r.id)"
+          :best="!hackerMode && !expanded && r.id === topRow?.id"
+          :selected="r.id === provider"
           :hacker-mode="hackerMode"
-          @select="emit('select-provider', r.def.id)"
+          @select="emit('select-provider', r.id)"
         />
       </div>
       <!-- Error escape hatch: reveal the rest without full hacker mode -->
@@ -197,13 +197,11 @@ const props = withDefaults(
     servers: { id: string; label: string }[]
     teams: string[]
     capMap?: Map<string, ProviderCap>
-    rankedIds?: string[]
     hackerMode?: boolean
     playbackError?: boolean
   }>(),
   {
     capMap: () => new Map<string, ProviderCap>(),
-    rankedIds: () => [],
     hackerMode: false,
     playbackError: false,
   },
@@ -236,31 +234,24 @@ const langIndex = computed(() =>
   langOptions.findIndex(o => o.value === props.lang),
 )
 
-// Availability bucket → available sources float to the top of the full list,
-// capability ranking is the tiebreak within each bucket. 'degraded' is
-// selectable-but-not-auto (AUTO-484) so it ranks below 'active' but above the
-// truly-unavailable states. Array.prototype.sort is stable, so equal keys keep
-// input order.
+// State bucket → available sources float to the top of the full list, backend
+// `order` (desc) is the tiebreak within each bucket. 'degraded'/'recovering'
+// are selectable-but-not-auto (AUTO-484) so they rank below 'active' but above
+// 'no_content'. Array.prototype.sort is stable, so equal keys keep input order
+// (rows already arrive `order`-sorted from rowsFromReport).
 const STATE_RANK: Record<ChipState, number> = {
   active: 0,
   recovering: 1,
   degraded: 2,
-  wip: 3,
-  down: 4,
-  disabled: 5,
-  irrelevant: 6,
+  no_content: 3,
 }
-const sortedRows = computed(() => {
-  const pos = (id: string) => {
-    const i = props.rankedIds.indexOf(id)
-    return i === -1 ? Number.MAX_SAFE_INTEGER : i
-  }
-  return [...props.rows].sort(
+const sortedRows = computed(() =>
+  [...props.rows].sort(
     (a, b) =>
       STATE_RANK[a.state] - STATE_RANK[b.state] ||
-      pos(a.def.id) - pos(b.def.id),
-  )
-})
+      b.order - a.order,
+  ),
+)
 const activeRows = computed(() => sortedRows.value.filter(r => r.state === 'active'))
 const activeCount = computed(() => activeRows.value.length)
 
@@ -268,7 +259,7 @@ const activeCount = computed(() => activeRows.value.length)
 // default already picked the top-ranked one), else the first active row. Only
 // this one carries the BEST badge.
 const topRow = computed(
-  () => activeRows.value.find(r => r.def.id === props.provider) ?? activeRows.value[0] ?? null,
+  () => activeRows.value.find(r => r.id === props.provider) ?? activeRows.value[0] ?? null,
 )
 
 // Default collapse shows the top N selectable sources (not just the single
@@ -282,8 +273,8 @@ watch(() => props.provider, () => { expanded.value = false })
 
 const collapsedRows = computed(() => {
   const top = activeRows.value.slice(0, TOP_N)
-  const selected = activeRows.value.find(r => r.def.id === props.provider)
-  if (selected && !top.some(r => r.def.id === selected.def.id)) top.push(selected)
+  const selected = activeRows.value.find(r => r.id === props.provider)
+  if (selected && !top.some(r => r.id === selected.id)) top.push(selected)
   return top
 })
 

@@ -1,55 +1,17 @@
 import type { ProviderRow } from '@/types/aePlayer'
 
-export interface SmartDefaultOpts {
-  /** Provider ids that must pass `isAvailable` before they can be picked (e.g. 'ae'). */
-  needsCheck: Set<string>
-  /** Async availability probe for gated providers. Resolves true ⇒ pickable. */
-  isAvailable: (id: string) => Promise<boolean>
-  /**
-   * Optional synchronous playability gate. Return false to exclude a provider
-   * the server's capability stats marked unplayable (e.g. allanime with
-   * `playable:false`) — it stays manually selectable, just never auto-defaulted.
-   * Providers absent from the capability report (ae/raw/kodik) return true.
-   */
-  isPlayable?: (id: string) => boolean
-}
-
-/**
- * Choose the default provider id from live rows.
+/** Pick the default provider: the highest-`order` row that is actually
+ *  selectable and `active`. Rows arrive pre-sorted by order, but sort
+ *  defensively. Returns null when nothing is active (caller shows the
+ *  empty/error state).
  *
- * Walks `curated` order, considering only providers whose row state is
- * 'active'. For an id in `opts.needsCheck`, awaits `opts.isAvailable(id)` and
- * skips it when false (this is how an empty first-party `ae` auto-drops).
- * Providers active but absent from `curated` are tried last, in row order.
- * Returns null when nothing is selectable.
- */
-export async function pickSmartDefault(
-  rows: ProviderRow[],
-  curated: string[],
-  opts: SmartDefaultOpts,
-): Promise<string | null> {
-  const activeIds = new Set(rows.filter(r => r.state === 'active').map(r => r.def.id))
-
-  // Dedup while preserving first-seen order: callers may now pass
-  // [...rankingOrder, ...CURATED_TIER], which can repeat ids. Curated/ranked
-  // ids (that are active) come first in the given order, then any remaining
-  // active rows absent from `curated`, in row order.
-  const seen = new Set<string>()
-  const ordered: string[] = []
-  for (const id of curated) {
-    if (activeIds.has(id) && !seen.has(id)) { seen.add(id); ordered.push(id) }
-  }
-  for (const r of rows) {
-    if (r.state === 'active' && !seen.has(r.def.id)) { seen.add(r.def.id); ordered.push(r.def.id) }
-  }
-
-  for (const id of ordered) {
-    if (opts.isPlayable && !opts.isPlayable(id)) continue
-    if (opts.needsCheck.has(id)) {
-      if (await opts.isAvailable(id)) return id
-      continue
-    }
-    return id
-  }
-  return null
+ *  The backend feed already carries everything needed: `ae` with no local copy
+ *  arrives as `state:'no_content'` (filtered out here), degraded/recovering
+ *  providers are `selectable:false` outside hacker mode, and disabled providers
+ *  never reach the FE at all. So a plain sync filter over the rows is the whole
+ *  smart-default policy — no registry, no async availability probe. */
+export function pickSmartDefault(rows: ProviderRow[]): ProviderRow | null {
+  return [...rows]
+    .filter(r => r.state === 'active' && r.selectable)
+    .sort((a, b) => b.order - a.order)[0] ?? null
 }

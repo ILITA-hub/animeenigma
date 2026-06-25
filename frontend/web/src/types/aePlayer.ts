@@ -5,51 +5,31 @@
 export type AudioKind = 'sub' | 'dub'
 export type TrackLang = 'en' | 'ru' | 'ja'
 export type ContentKind = 'common' | 'hentai'
-export type ProviderGroup = 'en' | 'ru' | 'adult' | 'raw' | 'first-party'
+// Wire `group` from the backend capability feed. Single source of truth: the FE
+// no longer carries a provider registry — group/state/order/audios all arrive
+// from /api/anime/{id}/capabilities.
+export type ProviderGroup = 'en' | 'ru' | 'adult' | 'jp' | 'firstparty'
 
-/** Static definition of a selectable backend provider. */
-export interface ProviderDef {
-  id: string                 // 'allanime', 'kodik', 'ae', ...
-  name: string               // display label
-  hue: string                // identity hue (brand-exempt: cyan/orange/pink/rose)
-  group: ProviderGroup
-  audios: AudioKind[]        // audio kinds this backend can serve
-  langs: TrackLang[]         // track languages this backend serves
-  content: ContentKind[]     // which content kinds it serves
-  scraper: boolean           // true => live health comes from /scraper/health
-  /** One-line plain-language summary shown under the name in hacker mode. */
-  blurb?: string
-  /** Non-scraper backends that are hard-disabled or WIP carry their reason here. */
-  staticDisabled?: { reason: string; description: string; wip?: boolean }
-}
+// State emitted by the backend feed:
+//   active     — selectable, auto-eligible, ranked by `order`.
+//   recovering — coming back online; selectable in hacker mode only.
+//   degraded   — registered but excluded from auto-failover; hacker-mode-only.
+//   no_content — provider has no episodes for this title (e.g. first-party `ae`
+//                before encoding); tinted + never selectable.
+export type ChipState = 'active' | 'recovering' | 'degraded' | 'no_content'
 
-// 'degraded' = registered + manually selectable in hacker mode, but never
-// auto-selected/auto-fallen-back-to and sorted last in the picker (AUTO-484).
-// 'recovering' = backend signals health:'recovering' — provider is coming back
-// online; selectable in hacker mode (same as degraded) but ranked above degraded.
-export type ChipState = 'active' | 'recovering' | 'degraded' | 'disabled' | 'down' | 'irrelevant' | 'wip'
-
-/** A provider as rendered in the Source panel: definition + computed state. */
+/** A provider as rendered in the Source panel — fields come straight from the
+ *  backend capability feed (single source of truth). No FE-side registry. */
 export interface ProviderRow {
-  def: ProviderDef
+  id: string
+  label: string
+  group: ProviderGroup
   state: ChipState
-  /** Hover/tooltip text for non-active states. */
+  selectable: boolean
+  hackerOnly: boolean
+  order: number
+  audios: AudioKind[]
   reason?: string
-}
-
-/** Live + registry health for one scraper provider (from the backend). */
-export interface ScraperProviderHealth {
-  name: string
-  enabled: boolean
-  /** Tri-state from the DB (enabled|degraded|disabled). 'degraded' => registered
-   *  but excluded from auto-failover; surfaced as a hacker-mode-only pick. */
-  status?: 'enabled' | 'degraded' | 'disabled'
-  /** Live recovery state from the scraper health endpoint (Task 11).
-   *  'recovering' = provider is coming back online after downtime. */
-  health?: 'up' | 'recovering' | 'down'
-  up: boolean
-  reason?: string
-  description?: string
 }
 
 /** The user's current source selection. */

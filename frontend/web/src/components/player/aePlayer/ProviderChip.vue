@@ -1,7 +1,7 @@
 <template>
   <div
     data-test="provider-chip"
-    :data-id="row.def.id"
+    :data-id="row.id"
     :class="['w-full', isSelected ? 'is-selected' : '']"
   >
     <button
@@ -19,22 +19,16 @@
       ]"
       @click="onClick"
     >
-      <!-- Identity-hue dot -->
+      <!-- State-colored status dot (no per-provider identity hue) -->
       <span
         class="flex-shrink-0 w-[9px] h-[9px] rounded-full"
-        :style="{ background: row.def.hue, boxShadow: `0 0 8px ${row.def.hue}` }"
+        :class="dotClass"
         aria-hidden="true"
       />
 
       <!-- Provider name + capability labels -->
       <span class="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span class="font-semibold truncate">{{ row.def.name }}</span>
-        <!-- Hacker-mode plain-language description for every provider -->
-        <span
-          v-if="hackerMode && row.def.blurb"
-          data-test="provider-blurb"
-          class="text-[10px] font-medium text-[var(--muted-foreground)] leading-snug"
-        >{{ row.def.blurb }}</span>
+        <span class="font-semibold truncate">{{ row.label }}</span>
         <span v-if="labels" class="flex items-center gap-[5px] flex-wrap">
           <span
             v-for="c in labels.categories"
@@ -66,15 +60,7 @@
         <Check class="size-[14px]" aria-hidden="true" />
       </span>
 
-      <!-- State badge for wip/down -->
-      <span
-        v-if="row.state === 'wip'"
-        class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)] font-mono"
-      >WIP</span>
-      <span
-        v-else-if="row.state === 'down'"
-        class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--destructive)] font-mono"
-      >DOWN</span>
+      <!-- State badges (recovering / degraded / no_content) -->
       <span
         v-else-if="row.state === 'recovering'"
         data-test="cap-recovering"
@@ -85,6 +71,11 @@
         data-test="cap-degraded"
         class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-warning font-mono"
       >{{ $t('player.sources.degraded') }}</span>
+      <span
+        v-else-if="row.state === 'no_content'"
+        data-test="cap-nocontent"
+        class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)] font-mono"
+      >{{ $t('player.sources.noContent') }}</span>
     </button>
   </div>
 </template>
@@ -92,7 +83,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Check } from 'lucide-vue-next'
-import type { ProviderRow } from '@/types/aePlayer'
+import type { ProviderRow, ChipState } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
 import { deriveCapLabels } from '@/composables/aePlayer/capLabels'
 
@@ -101,7 +92,7 @@ const props = defineProps<{
   selected?: boolean
   cap?: ProviderCap
   best?: boolean
-  /** When on, degraded providers become manually selectable (AUTO-484). */
+  /** When on, degraded/recovering (hacker-only) providers become selectable. */
   hackerMode?: boolean
 }>()
 
@@ -112,14 +103,21 @@ const emit = defineEmits<{
 const isSelected = computed(() => props.selected === true)
 const labels = computed(() => deriveCapLabels(props.cap))
 
-// Active is always selectable; degraded and recovering providers are selectable
-// ONLY in hacker mode (never auto-selected — that path filters on state 'active').
-// AUTO-484. 'recovering' ranks above 'degraded' but shares the same hacker-mode gate.
+// Selectability is the backend feed's `selectable`, gated by hacker mode for
+// hacker-only rows (degraded/recovering). The feed is the single source of
+// truth — the chip no longer recomputes state from a registry. AUTO-484.
 const selectable = computed(
-  () =>
-    props.row.state === 'active' ||
-    ((props.row.state === 'degraded' || props.row.state === 'recovering') && props.hackerMode === true),
+  () => props.row.selectable && (!props.row.hackerOnly || props.hackerMode === true),
 )
+
+// State-colored status dot — semantic DS tokens, never per-provider hue.
+const DOT: Record<ChipState, string> = {
+  active: 'bg-[var(--brand-cyan)]',
+  recovering: 'bg-lime-400',
+  degraded: 'bg-warning',
+  no_content: 'bg-[var(--muted-foreground)]',
+}
+const dotClass = computed(() => DOT[props.row.state])
 
 function onClick() {
   if (selectable.value) {

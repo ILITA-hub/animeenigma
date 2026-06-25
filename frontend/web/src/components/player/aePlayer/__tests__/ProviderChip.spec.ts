@@ -1,11 +1,11 @@
 /**
- * Task 13 — ProviderChip recovering state guard.
+ * ProviderChip recovering/degraded state guard (feed-driven).
  *
  * Verifies that:
  *   (a) A chip in 'recovering' state renders the Recovering label (lime badge)
  *   (b) The chip is selectable/clickable in hacker mode
  *   (c) The chip is NOT selectable without hacker mode
- *   (d) Active and down states are unaffected by the new branch
+ *   (d) Active and degraded states are unaffected by the recovering branch
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -14,30 +14,26 @@ import en from '@/locales/en.json'
 import ProviderChip from '../ProviderChip.vue'
 import type { ProviderRow } from '@/types/aePlayer'
 
-// ProviderChip uses deriveCapLabels which is pure; no network calls to stub.
-// lucide-vue-next icons render fine in jsdom.
-
 const i18n = createI18n({ locale: 'en', legacy: false, messages: { en } })
 
 function makeRow(state: ProviderRow['state'], reason?: string): ProviderRow {
+  // recovering/degraded arrive from the backend feed as hacker-only + selectable;
+  // the chip gates the disabled attribute on hacker mode.
+  const hackerOnly = state === 'recovering' || state === 'degraded'
   return {
-    def: {
-      id: 'gogoanime',
-      name: 'Anitaku',
-      hue: '#22c55e',
-      group: 'en',
-      audios: ['sub', 'dub'],
-      langs: ['en'],
-      content: ['common'],
-      scraper: true,
-      blurb: 'Test provider',
-    },
+    id: 'gogoanime',
+    label: 'Anitaku',
+    group: 'en',
     state,
+    selectable: state !== 'no_content',
+    hackerOnly,
+    order: 80,
+    audios: ['sub', 'dub'],
     reason,
   }
 }
 
-describe('ProviderChip — recovering state (Task 13)', () => {
+describe('ProviderChip — recovering state', () => {
   it('renders the Recovering label for state=recovering', () => {
     const wrapper = mount(ProviderChip, {
       props: { row: makeRow('recovering', 'back online'), hackerMode: true },
