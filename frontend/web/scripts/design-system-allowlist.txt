@@ -87,7 +87,6 @@ src/views/Collections.vue:#6b21a8:Collections hero fallback gradient END — no 
 # #00d4ff: brand-cyan fallback in `?? '#00d4ff'` — canonical-fine brand value fallback
 src/components/player/aePlayer/AePlayer.vue:#000:video element container background (always-dark letterbox) — player chrome, no theme token
 src/components/player/aePlayer/AePlayer.vue:#fff:icon/text color on player top-bar chrome (always-dark video backdrop) — functional non-theme surface
-src/components/player/aePlayer/AePlayer.vue:#00d4ff:brand-cyan fallback in activeProviderHue computed (var(--brand-cyan,#00d4ff) equivalent) — canonical-fine brand value
 src/components/home/spotlight/ui/SpotlightChatBubble.vue:#2aabee:Telegram brand-blue gradient start — external brand identity, not a DS hue
 src/components/home/spotlight/ui/SpotlightChatBubble.vue:#229ed9:Telegram brand-blue gradient end — external brand identity, not a DS hue
 src/components/player/aePlayer/AePlayer.vue:#08080f:resume-chip hover text-on-white fallback in var(--color-base,#08080f) — canonical-fine fallback (same as SkipIntroChip)
