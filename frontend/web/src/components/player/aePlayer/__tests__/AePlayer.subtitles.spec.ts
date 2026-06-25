@@ -21,11 +21,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { ref, nextTick } from 'vue'
 
 // ─── Heavy network/store composables — stubbed so the component mounts ─────────
-vi.mock('@/composables/aePlayer/useProviderHealth', () => ({
-  useProviderHealth: () => ({ rows: ref([]), start: vi.fn() }),
-}))
 vi.mock('@/composables/aePlayer/useCapabilities', () => ({
-  useCapabilities: () => ({ capMap: ref(new Map()), rankedIds: ref([]) }),
+  useCapabilities: () => ({ report: ref(null), capMap: ref(new Map()), rankedIds: ref([]) }),
 }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({
   useProviderResolver: () => ({

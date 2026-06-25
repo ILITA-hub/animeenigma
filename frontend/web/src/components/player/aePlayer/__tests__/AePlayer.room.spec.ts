@@ -10,11 +10,8 @@ import { comboToToken } from '@/composables/aePlayer/comboMapping'
 // hands every caller an independent instance). The real usePlayerState runs.
 
 // ─── Heavy network/store composables — stubbed so the component mounts ─────────
-vi.mock('@/composables/aePlayer/useProviderHealth', () => ({
-  useProviderHealth: () => ({ rows: ref([]), start: vi.fn() }),
-}))
 vi.mock('@/composables/aePlayer/useCapabilities', () => ({
-  useCapabilities: () => ({ capMap: ref(new Map()), rankedIds: ref([]) }),
+  useCapabilities: () => ({ report: ref(null), capMap: ref(new Map()), rankedIds: ref([]) }),
 }))
 const listEpisodes = vi.fn().mockResolvedValue([])
 const listTeams = vi.fn().mockResolvedValue([])

@@ -1,22 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref, nextTick } from 'vue'
-import { providerById } from '../providerRegistry'
 import type { Combo } from '@/types/aePlayer'
+import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 
 // A `?provider=kodik` deep-link must PIN kodik even though the default filter is
 // sub/en (kodik is RU-only) — the fix clamps audio/lang so the row becomes
-// relevant. useProviderHealth is mocked to surface kodik as an active row so
-// buildAvailable() is non-empty and the resolve/finally → applyInitialProvider
-// path runs deterministically (no async smart-default involved).
-vi.mock('@/composables/aePlayer/useProviderHealth', () => ({
-  useProviderHealth: () => ({
-    rows: ref([{ def: providerById('kodik')!, state: 'active' }]),
-    start: vi.fn(),
-  }),
-}))
+// relevant. useCapabilities is mocked to return a CapabilityReport that surfaces
+// kodik as an active RU row, so rowsFromReport() yields it and
+// buildAvailable() / applyInitialProvider() run deterministically.
+// The report must contain:
+// 1. kodik (RU) — in capMap so resolveDeepLinkProvider finds it for the deep-link pin
+// 2. gogoanime (EN sub/dub) — so rowsFromReport() under the default sub/en filter
+//    yields at least one active row, allowing buildAvailable() to return non-empty
+//    and trigger the watch(rows) → applyInitialProvider() path
+const kodikCap = {
+  provider: 'kodik', display_name: 'Kodik',
+  state: 'active' as const, selectable: true, hacker_only: false,
+  order: 80, group: 'ru' as const, audios: ['dub', 'sub'] as ('sub' | 'dub' | 'raw')[],
+  variants: [],
+}
+const gogoCap = {
+  provider: 'gogoanime', display_name: 'GogoAnime',
+  state: 'active' as const, selectable: true, hacker_only: false,
+  order: 90, group: 'en' as const, audios: ['sub', 'dub'] as ('sub' | 'dub' | 'raw')[],
+  variants: [],
+}
+const kodikReport: CapabilityReport = {
+  anime_id: 'anime-uuid',
+  families: [
+    { family: 'kodik', providers: [kodikCap] },
+    { family: 'ourenglish', providers: [gogoCap] },
+  ],
+}
+
 vi.mock('@/composables/aePlayer/useCapabilities', () => ({
-  useCapabilities: () => ({ capMap: ref(new Map()), rankedIds: ref([]) }),
+  useCapabilities: () => ({
+    report: ref(kodikReport),
+    capMap: ref(new Map<string, ProviderCap>([['kodik', kodikCap], ['gogoanime', gogoCap]])),
+    rankedIds: ref(['gogoanime', 'kodik']),
+  }),
 }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({
   useProviderResolver: () => ({

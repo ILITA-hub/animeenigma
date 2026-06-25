@@ -20,18 +20,20 @@ const baseProps = {
   servers: [{ id: 's1', label: 'Server 1' }], teams: [] as string[],
 }
 
+const t = { global: { mocks: { $t: (k: string) => k } } }
+
 describe('SourcePanel', () => {
   it('renders a chip per provider row in hacker mode', () => {
-    const w = mount(SourcePanel, { props: { ...baseProps, hackerMode: true } as any })
+    const w = mount(SourcePanel, { props: { ...baseProps, hackerMode: true } as any, ...t })
     expect(w.findAll('[data-test="provider-chip"]').length).toBe(2)
   })
   it('emits update:audio when the Dub slider option is clicked', async () => {
-    const w = mount(SourcePanel, { props: baseProps as any })
+    const w = mount(SourcePanel, { props: baseProps as any, ...t })
     await w.find('[data-test="audio-dub"]').trigger('click')
     expect(w.emitted('update:audio')?.[0]).toEqual(['dub'])
   })
   it('emits select-provider for an active chip', async () => {
-    const w = mount(SourcePanel, { props: { ...baseProps, hackerMode: true } as any })
+    const w = mount(SourcePanel, { props: { ...baseProps, hackerMode: true } as any, ...t })
     await w.find('[data-test="provider-chip"][data-id="allanime"] button').trigger('click')
     expect(w.emitted('select-provider')?.[0]).toEqual(['allanime'])
   })

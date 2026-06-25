@@ -18,7 +18,7 @@ export function flattenCapabilities(report: CapabilityReport | null): {
     for (const p of fam.providers ?? []) capMap.set(p.provider, p)
   }
   const rankedIds = [...capMap.values()]
-    .sort((a, b) => b.rank - a.rank || a.provider.localeCompare(b.provider))
+    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0) || a.provider.localeCompare(b.provider))
     .map((p) => p.provider)
   return { capMap, rankedIds }
 }
