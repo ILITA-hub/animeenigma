@@ -191,6 +191,7 @@ func NewRouter(
 				r.Use(AuthMiddleware(jwtConfig))
 				r.Use(AdminRoleMiddleware)
 				r.Get("/admin/reports", adminReportsHandler.List)
+				r.Post("/admin/reports", adminReportsHandler.CreateNote)
 				r.Get("/admin/reports/{id}", adminReportsHandler.Get)
 				r.Get("/admin/reports/{id}/attachments/{name}", adminReportsHandler.GetAttachment)
 				r.Patch("/admin/reports/{id}/status", adminReportsHandler.SetStatus)

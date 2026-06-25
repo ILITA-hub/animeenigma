@@ -288,6 +288,44 @@ func TestAdminReports_Get_InjectsKindSource(t *testing.T) {
 	}
 }
 
+func TestAdminReports_CreateNote(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	claims := &authz.Claims{UserID: "admin1", Username: "neymik"}
+
+	post := func(body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, "/api/admin/reports", strings.NewReader(body))
+		r = r.WithContext(authz.ContextWithClaims(r.Context(), claims))
+		w := httptest.NewRecorder()
+		h.CreateNote(w, r)
+		return w
+	}
+
+	// valid idea note
+	w := post(`{"kind":"idea","category":"feature","description":"dark mode toggle"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("valid note status = %d, body=%s", w.Code, w.Body.String())
+	}
+	// it must be listable, normalized to manual/idea
+	lr := httptest.NewRequest(http.MethodGet, "/api/admin/reports?kind=idea", nil)
+	lw := httptest.NewRecorder()
+	h.List(lw, lr)
+	var resp listResp
+	_ = json.Unmarshal(lw.Body.Bytes(), &resp)
+	if resp.Data.Total != 1 || resp.Data.Items[0].Source != "manual" || resp.Data.Items[0].Status != "new" {
+		t.Errorf("created note not listed correctly: %+v", resp.Data.Items)
+	}
+
+	// invalid kind rejected
+	if w := post(`{"kind":"bogus","description":"x"}`); w.Code != http.StatusBadRequest {
+		t.Errorf("invalid kind status = %d, want 400", w.Code)
+	}
+	// empty description rejected
+	if w := post(`{"kind":"todo","description":"  "}`); w.Code != http.StatusBadRequest {
+		t.Errorf("empty description status = %d, want 400", w.Code)
+	}
+	_ = dir
+}
+
 func TestAdminReports_List_KindSourceActiveFilters(t *testing.T) {
 	h, dir := newTestReportsHandler(t)
 	// legacy user feedback (no kind/source) → feedback / feedback_form

@@ -23,6 +23,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -423,4 +424,99 @@ func truncateRunes(s string, max int) string {
 		return s
 	}
 	return string(rs[:max]) + "…"
+}
+
+// noteCreateRequest is the admin "+ New note" quick-capture payload.
+type noteCreateRequest struct {
+	Kind        string `json:"kind"`
+	Category    string `json:"category,omitempty"`
+	Description string `json:"description"`
+}
+
+var validNoteKind = map[string]bool{"feedback": true, "todo": true, "idea": true}
+var validNoteCategory = map[string]bool{"": true, "bug": true, "issue": true, "feature": true}
+
+// CreateNote handles POST /api/admin/reports — the admin quick-capture
+// "+ New note". It writes a manual notebook item (source=manual) using the same
+// on-disk shape the rest of the board reads, so the listing needs no special
+// case. Admin-JWT gated by the router.
+func (h *AdminReportsHandler) CreateNote(w http.ResponseWriter, r *http.Request) {
+	if h.reportsDir == "" {
+		httputil.Error(w, errors.Internal("reports dir not configured"))
+		return
+	}
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxInternalBodySize)
+
+	var req noteCreateRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if !validNoteKind[req.Kind] {
+		httputil.BadRequest(w, "invalid kind")
+		return
+	}
+	if !validNoteCategory[req.Category] {
+		httputil.BadRequest(w, "invalid category")
+		return
+	}
+	if strings.TrimSpace(req.Description) == "" {
+		httputil.BadRequest(w, "description is required")
+		return
+	}
+
+	username := claims.Username
+	if username == "" {
+		username = claims.UserID
+	}
+	username = sanitizeForFilename(username)
+
+	entry := map[string]interface{}{
+		"user_id":      claims.UserID,
+		"username":     claims.Username,
+		"player_type":  "feedback",
+		"kind":         req.Kind,
+		"source":       "manual",
+		"category":     req.Category,
+		"description":  req.Description,
+		"timestamp":    time.Now().UTC().Format(time.RFC3339),
+		"console_logs": json.RawMessage("[]"),
+		"network_logs": json.RawMessage("[]"),
+		"page_html":    "",
+		"attachments":  []string{},
+	}
+
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		httputil.Error(w, errors.Internal("failed to marshal note"))
+		return
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ts := time.Now().UTC().Format("2006-01-02T15-04-05")
+	base := fmt.Sprintf("%s_%s_%s", ts, username, "manual")
+	id := base
+	for i := 2; ; i++ {
+		if _, statErr := os.Stat(filepath.Join(h.reportsDir, id+".json")); os.IsNotExist(statErr) {
+			break
+		}
+		if i > 50 {
+			httputil.Error(w, errors.Internal("could not allocate note id"))
+			return
+		}
+		id = fmt.Sprintf("%s-%d", base, i)
+	}
+	if err := os.WriteFile(filepath.Join(h.reportsDir, id+".json"), data, 0600); err != nil {
+		h.log.Errorw("admin note write failed", "id", id, "error", err)
+		httputil.Error(w, errors.Internal("failed to persist note"))
+		return
+	}
+	h.log.Infow("admin note created", "id", id, "kind", req.Kind, "username", claims.Username)
+	httputil.OK(w, map[string]string{"id": id, "status": "new"})
 }
