@@ -79,11 +79,13 @@ func TestBuildENFamily_RanksAndFiltersDisabled(t *testing.T) {
 func TestBuildENFamilyPopulatesFeedFields(t *testing.T) {
 	db := newDB(t)
 	db.Create(&domain.ScraperProvider{
-		Name: "gogoanime", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Name: "gogoanime", Status: domain.StatusEnabled, Policy: domain.PolicyAuto, Health: domain.HealthUp,
 		Group: "en", PreferenceWeight: 85, SupportsSub: true, SupportsDub: true, Reason: "live",
 	})
 	db.Create(&domain.ScraperProvider{
-		Name: "animefever", Status: domain.StatusDegraded, Health: domain.HealthDown,
+		// A degraded provider is pinned out of the auto chain via policy=manual; the
+		// stored status column mirrors it here but the feed derives state from policy.
+		Name: "animefever", Status: domain.StatusDegraded, Policy: domain.PolicyManual, Health: domain.HealthDown,
 		Group: "en", PreferenceWeight: 60, SupportsSub: true, Reason: "ad-substitution",
 	})
 

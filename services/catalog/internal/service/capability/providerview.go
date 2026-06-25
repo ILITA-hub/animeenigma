@@ -9,12 +9,24 @@ import "github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 // gating, except first-party `ae` whose hasContent is a live library lookup.
 // Phase 2 feeds EN providers' hasContent from the reactive no_content cache.
 //
-//	degraded            → hacker-only (selectable only when hacker mode is on)
-//	enabled + !content  → no_content (tinted, not selectable)
-//	enabled + recovering→ recovering (selectable)
-//	enabled + (up|down) → active     (selectable; status keeps it in the chain)
+//	manual policy         → degraded (hacker-only; selectable only in hacker mode)
+//	auto + !content       → no_content (tinted, not selectable)
+//	auto + recovering     → recovering (selectable)
+//	auto + (up|down)      → active     (selectable; auto+down is the <24h grace window)
+//
+// IMPORTANT — read the LIVE (policy, health) authority, NOT the stored `status`
+// column. The self-healing probe machine mutates policy/health on auto-demote
+// (down>24h → manual) and auto-promote (recovering>24h → auto) but never re-writes
+// the `status` column (it's only re-synced at migration), so `status` lags. The
+// scraper failover gate consumes the live authority via WireStatus(); deriving
+// the player feed from the SAME authority is what keeps the player, the failover
+// chain, and the Grafana dashboard in lock-step (the whole point of this feature).
+// `policy=manual` is exactly "pinned out of the auto chain" (admin soft-degrade OR
+// the machine's auto-demote); `policy=auto + health=down` is the deliberate grace
+// window where a transiently-canary-down provider STAYS selectable (live playback
+// in the user's browser is the real test, not the coarse daily canary).
 func deriveProviderView(row domain.ScraperProvider, hasContent bool) (state string, selectable, hackerOnly bool) {
-	if row.IsDegraded() {
+	if row.Policy == domain.PolicyManual {
 		return "degraded", true, true
 	}
 	if !hasContent {
