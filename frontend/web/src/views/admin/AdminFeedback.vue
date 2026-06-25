@@ -237,7 +237,7 @@
                 <span class="truncate">{{ r.username || r.user_id }}</span>
                 <span class="flex items-center gap-1.5 whitespace-nowrap">
                   <span v-if="r.attachments?.length" class="text-white/40">📎{{ r.attachments.length }}</span>
-                  <span v-if="r.player_type && r.player_type !== 'feedback'" class="text-white/30">{{ r.player_type }}</span>
+                  <span v-if="r.source" class="text-white/30 uppercase">{{ sourceLabel(r.source) }}</span>
                 </span>
               </div>
             </div>
