@@ -44,4 +44,19 @@ func TestAudiosFromTraits(t *testing.T) {
 	if a := audiosFromTraits(domain.ScraperProvider{SupportsRaw: true}); len(a) != 1 || a[0] != "raw" {
 		t.Fatalf("raw-only got %v want [raw]", a)
 	}
+	if a := audiosFromTraits(domain.ScraperProvider{}); len(a) != 0 {
+		t.Fatalf("empty traits: got %v want []", a)
+	}
+}
+
+func TestWireGroup(t *testing.T) {
+	if got := wireGroup(""); got != "en" {
+		t.Fatalf("empty: got %q want %q", got, "en")
+	}
+	if got := wireGroup("firstparty"); got != "firstparty" {
+		t.Fatalf("firstparty: got %q want %q", got, "firstparty")
+	}
+	if got := wireGroup("ru"); got != "ru" {
+		t.Fatalf("ru: got %q want %q", got, "ru")
+	}
 }
