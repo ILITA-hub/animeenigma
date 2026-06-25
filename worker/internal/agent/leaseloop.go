@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -183,8 +185,12 @@ func (c *Client) processSegment(ctx context.Context, workerID string, grant wire
 		}
 		model, ok := c.manager.Get(modelName)
 		if !ok {
-			// T29: pull-on-demand fetch here
-			return fmt.Errorf("model %q not available locally; server will re-lease", modelName)
+			// T29: pull-on-demand fetch — ask the server for the model artifact.
+			model, ok = c.fetchAndInstallModel(segCtx, workerID, modelName, grant.ModelHandle)
+			if !ok {
+				// fetchAndInstallModel already logged the reason; fail cleanly.
+				return fmt.Errorf("model %q not available and could not be fetched; server will re-lease", modelName)
+			}
 		}
 
 		scale := grant.Scale
@@ -247,6 +253,73 @@ func newModelProcessor(model upscale.Model, scale int, workDir string) Processor
 		scale:   scale,
 		workDir: workDir,
 	}
+}
+
+// fetchAndInstallModel fetches the named model from the server using the
+// capability handle, installs it via the manager, and returns the model.
+//
+// Returns (model, true) on success; (nil, false) on any failure. All failures
+// are logged to stderr but do NOT crash the worker — the caller returns a
+// clean-fail error so the server re-leases the segment to another worker.
+//
+// Concurrency: manager.Install is single-flight per name (T28), so concurrent
+// fetchAndInstallModel calls for the same model name are safe — only one will
+// actually extract and register; the rest return immediately on the re-check.
+func (c *Client) fetchAndInstallModel(ctx context.Context, workerID, modelName string, handle *wire.ModelHandle) (upscale.Model, bool) {
+	if handle == nil {
+		// Guard: a nil handle means the server didn't mint fetch capability for
+		// this model (e.g. a mock or a model the server doesn't know about).
+		fmt.Fprintf(os.Stderr, "worker: model %q not available and no fetch handle; server will re-lease\n", modelName)
+		return nil, false
+	}
+
+	// Build the fetch URL:
+	// {cfg.ServerURL}/worker/models/{url.PathEscape(name)}?exp=...&sig=...
+	rawURL := fmt.Sprintf("%s/worker/models/%s", c.cfg.ServerURL, url.PathEscape(modelName))
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "worker: model %q fetch: build URL: %v; server will re-lease\n", modelName, err)
+		return nil, false
+	}
+	q := u.Query()
+	q.Set("exp", handle.Exp)
+	q.Set("sig", handle.Sig)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "worker: model %q fetch: build request: %v; server will re-lease\n", modelName, err)
+		return nil, false
+	}
+	setWorkerHeaders(req, c.cfg, workerID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "worker: model %q fetch: request: %v; server will re-lease\n", modelName, err)
+		return nil, false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "worker: model %q fetch: server returned %d; server will re-lease\n", modelName, resp.StatusCode)
+		return nil, false
+	}
+
+	checksum := resp.Header.Get("X-Model-Checksum")
+	version := resp.Header.Get("X-Model-Version")
+
+	if err := c.manager.Install(modelName, version, resp.Body, checksum); err != nil {
+		fmt.Fprintf(os.Stderr, "worker: model %q fetch: install: %v; server will re-lease\n", modelName, err)
+		return nil, false
+	}
+
+	model, ok := c.manager.Get(modelName)
+	if !ok {
+		// Should never happen: Install succeeded but model not found.
+		fmt.Fprintf(os.Stderr, "worker: model %q fetch: installed but not registered; server will re-lease\n", modelName)
+		return nil, false
+	}
+	return model, true
 }
 
 // leaseConn is the minimal interface the lease loop needs to receive grant

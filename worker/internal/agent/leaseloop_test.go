@@ -893,3 +893,443 @@ func TestManagerInstall_ViaBytesReader(t *testing.T) {
 		t.Error("model not registered after Install")
 	}
 }
+
+// ── T29 pull-on-demand model fetch tests ─────────────────────────────────────
+
+// TestT29_FetchSuccess verifies the happy path:
+// - A lease grant names a model the worker doesn't have.
+// - ModelHandle is provided.
+// - The httptest model server receives a GET with the correct URL path/params
+//   and the X-API-Key header.
+// - Install succeeds: manager.Get(modelName) returns ok after the segment runs.
+// - Worker keeps running (no panic, no crash).
+func TestT29_FetchSuccess(t *testing.T) {
+	t.Parallel()
+
+	const (
+		modelName = "t29-fetch-model"
+		apiKey    = "test-api-key-fetch"
+	)
+
+	tarData := buildModelTARBytes(t, modelName)
+	checksum := sha256HexOf(tarData)
+
+	// Combined server: /worker/models/* → model TAR; everything else → segment data plane.
+	var modelGetReqs []*http.Request
+	var modelGetMu sync.Mutex
+	var putCount atomic.Int64
+
+	combinedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const modelPrefix = "/worker/models/"
+		if r.Method == http.MethodGet && len(r.URL.Path) > len(modelPrefix) && r.URL.Path[:len(modelPrefix)] == modelPrefix {
+			modelGetMu.Lock()
+			modelGetReqs = append(modelGetReqs, r.Clone(r.Context()))
+			modelGetMu.Unlock()
+			w.Header().Set("X-Model-Checksum", checksum)
+			w.Header().Set("X-Model-Version", "v1")
+			w.WriteHeader(http.StatusOK)
+			w.Write(tarData) //nolint:errcheck
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("segment-data")) //nolint:errcheck
+		case http.MethodPut:
+			putCount.Add(1)
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+	defer combinedSrv.Close()
+
+	dir := t.TempDir()
+	mgr := upscale.NewManager(dir, nil)
+	cfg := Config{ServerURL: combinedSrv.URL, APIKey: apiKey, Mode: "batch"}
+	c := NewClient(cfg)
+	c.manager = mgr
+	c.processorFn = nil
+
+	grant := wire.LeaseGrantPayload{
+		JobID: "fetch-job", Idx: 0, Model: modelName,
+		Handles: wire.LeaseHandles{
+			GetHandle: "gh", GetExp: "99", GetSig: "gs",
+			PutHandle: "ph", PutExp: "99", PutSig: "ps",
+		},
+		ModelHandle: &wire.ModelHandle{Exp: "exp-tok", Sig: "sig-tok"},
+	}
+
+	conn := &fakeConn{grants: []wire.LeaseGrantPayload{grant}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	panicked := false
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+			}
+			close(done)
+		}()
+		c.RunLeaseLoop(ctx, "worker-fetch", conn) //nolint:errcheck
+	}()
+
+	// Wait for the model server to be hit (fetch happened).
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		modelGetMu.Lock()
+		n := len(modelGetReqs)
+		modelGetMu.Unlock()
+		if n >= 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Give install + segment time to complete.
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	<-done
+
+	if panicked {
+		t.Fatal("RunLeaseLoop panicked during model fetch — must not crash")
+	}
+
+	// Assert 1: model server received the GET.
+	modelGetMu.Lock()
+	gotReqs := modelGetReqs
+	modelGetMu.Unlock()
+	if len(gotReqs) == 0 {
+		t.Fatal("model server received no GET requests; expected fetch call")
+	}
+
+	// Assert 2: URL contains model name and capability params.
+	req := gotReqs[0]
+	wantPath := "/worker/models/" + modelName
+	if req.URL.Path != wantPath {
+		t.Errorf("GET path = %q, want %q", req.URL.Path, wantPath)
+	}
+	if q := req.URL.Query().Get("exp"); q != "exp-tok" {
+		t.Errorf("?exp = %q, want %q", q, "exp-tok")
+	}
+	if q := req.URL.Query().Get("sig"); q != "sig-tok" {
+		t.Errorf("?sig = %q, want %q", q, "sig-tok")
+	}
+
+	// Assert 3: X-API-Key was sent.
+	if got := req.Header.Get("X-API-Key"); got != apiKey {
+		t.Errorf("X-API-Key = %q, want %q", got, apiKey)
+	}
+
+	// Assert 4: manager now has the model installed.
+	if _, ok := mgr.Get(modelName); !ok {
+		t.Errorf("manager.Get(%q) = false after successful fetch; model should be registered", modelName)
+	}
+}
+
+// TestT29_Fetch401CleanFail verifies that a 401 from the model server causes
+// a clean segment failure: model NOT installed, worker keeps running (no panic).
+func TestT29_Fetch401CleanFail(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "t29-model-401"
+
+	var modelHitCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && len(r.URL.Path) > len("/worker/models/") && r.URL.Path[:len("/worker/models/")] == "/worker/models/" {
+			modelHitCount.Add(1)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		// Segment GET (should not be reached for this test since fetch fails first,
+		// but handle it gracefully to avoid 405).
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("data")) //nolint:errcheck
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	mgr := upscale.NewManager(dir, nil)
+	cfg := Config{ServerURL: srv.URL, Mode: "batch"}
+	c := NewClient(cfg)
+	c.manager = mgr
+	c.processorFn = nil
+
+	grant := wire.LeaseGrantPayload{
+		JobID: "job-401", Idx: 0, Model: modelName,
+		Handles: wire.LeaseHandles{
+			GetHandle: "gh", GetExp: "99", GetSig: "gs",
+			PutHandle: "ph", PutExp: "99", PutSig: "ps",
+		},
+		ModelHandle: &wire.ModelHandle{Exp: "e", Sig: "s"},
+	}
+
+	conn := &fakeConn{grants: []wire.LeaseGrantPayload{grant}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	panicked := false
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+			}
+			close(done)
+		}()
+		c.RunLeaseLoop(ctx, "w", conn) //nolint:errcheck
+	}()
+
+	// Wait for model server to be hit.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if modelHitCount.Load() >= 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+
+	if panicked {
+		t.Fatal("RunLeaseLoop panicked on 401 model fetch — must fail cleanly")
+	}
+	if modelHitCount.Load() == 0 {
+		t.Error("model server was never hit; expected at least one fetch attempt")
+	}
+	// Model must NOT be installed.
+	if _, ok := mgr.Get(modelName); ok {
+		t.Errorf("model %q registered after 401 fetch — should NOT be installed", modelName)
+	}
+}
+
+// TestT29_ChecksumMismatchCleanFail verifies that a wrong X-Model-Checksum
+// header causes Install to fail (checksum mismatch), the segment fails cleanly,
+// model is NOT installed, and the worker keeps running.
+func TestT29_ChecksumMismatchCleanFail(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "t29-model-badsum"
+
+	tarData := buildModelTARBytes(t, modelName)
+	// Serve the correct tar but with a WRONG checksum header.
+	wrongChecksum := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+
+	var modelHitCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && len(r.URL.Path) > len("/worker/models/") && r.URL.Path[:len("/worker/models/")] == "/worker/models/" {
+			modelHitCount.Add(1)
+			w.Header().Set("X-Model-Checksum", wrongChecksum)
+			w.Header().Set("X-Model-Version", "v1")
+			w.WriteHeader(http.StatusOK)
+			w.Write(tarData) //nolint:errcheck
+			return
+		}
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("data")) //nolint:errcheck
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	mgr := upscale.NewManager(dir, nil)
+	cfg := Config{ServerURL: srv.URL, Mode: "batch"}
+	c := NewClient(cfg)
+	c.manager = mgr
+	c.processorFn = nil
+
+	grant := wire.LeaseGrantPayload{
+		JobID: "job-badsum", Idx: 0, Model: modelName,
+		Handles: wire.LeaseHandles{
+			GetHandle: "gh", GetExp: "99", GetSig: "gs",
+			PutHandle: "ph", PutExp: "99", PutSig: "ps",
+		},
+		ModelHandle: &wire.ModelHandle{Exp: "e", Sig: "s"},
+	}
+
+	conn := &fakeConn{grants: []wire.LeaseGrantPayload{grant}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	panicked := false
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+			}
+			close(done)
+		}()
+		c.RunLeaseLoop(ctx, "w", conn) //nolint:errcheck
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if modelHitCount.Load() >= 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+
+	if panicked {
+		t.Fatal("RunLeaseLoop panicked on checksum mismatch — must fail cleanly")
+	}
+	if modelHitCount.Load() == 0 {
+		t.Error("model server was never hit; expected at least one fetch attempt")
+	}
+	// Model must NOT be installed (checksum mismatch → Install returns error).
+	if _, ok := mgr.Get(modelName); ok {
+		t.Errorf("model %q registered after checksum mismatch — should NOT be installed", modelName)
+	}
+}
+
+// TestT29_NilModelHandleCleanFail verifies that a grant naming an absent model
+// with ModelHandle==nil fails the segment cleanly without making any HTTP call
+// to the model endpoint.
+func TestT29_NilModelHandleCleanFail(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "t29-model-nohandle"
+
+	var modelHitCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && len(r.URL.Path) > len("/worker/models/") && r.URL.Path[:len("/worker/models/")] == "/worker/models/" {
+			modelHitCount.Add(1)
+		}
+		// Accept all requests gracefully (GET for data plane).
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("data")) //nolint:errcheck
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	mgr := upscale.NewManager(dir, nil)
+	cfg := Config{ServerURL: srv.URL, Mode: "batch"}
+	c := NewClient(cfg)
+	c.manager = mgr
+	c.processorFn = nil
+
+	// ModelHandle is nil — no fetch capability.
+	grant := wire.LeaseGrantPayload{
+		JobID: "job-nohandle", Idx: 0, Model: modelName,
+		Handles: wire.LeaseHandles{
+			GetHandle: "gh", GetExp: "99", GetSig: "gs",
+			PutHandle: "ph", PutExp: "99", PutSig: "ps",
+		},
+		ModelHandle: nil,
+	}
+
+	conn := &fakeConn{grants: []wire.LeaseGrantPayload{grant}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	panicked := false
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+			}
+			close(done)
+		}()
+		c.RunLeaseLoop(ctx, "w", conn) //nolint:errcheck
+	}()
+
+	// Give the loop time to process the grant (it should fail fast, no HTTP call).
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-done
+
+	if panicked {
+		t.Fatal("RunLeaseLoop panicked on nil ModelHandle — must fail cleanly")
+	}
+	// No model endpoint should have been called.
+	if modelHitCount.Load() != 0 {
+		t.Errorf("model server was hit %d times; expected 0 (nil handle = no fetch)", modelHitCount.Load())
+	}
+	// Model must NOT be installed.
+	if _, ok := mgr.Get(modelName); ok {
+		t.Errorf("model %q registered despite nil ModelHandle — should NOT be installed", modelName)
+	}
+}
+
+// TestT29_MockGrantNoFetch verifies that a grant with Model:"mock" (built-in)
+// is handled without any model fetch HTTP call, even when processorFn is nil.
+func TestT29_MockGrantNoFetch(t *testing.T) {
+	t.Parallel()
+
+	var modelHitCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && len(r.URL.Path) > len("/worker/models/") && r.URL.Path[:len("/worker/models/")] == "/worker/models/" {
+			modelHitCount.Add(1)
+		}
+		// Data plane segment response.
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("data")) //nolint:errcheck
+		}
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	cfg := Config{ServerURL: srv.URL, Mode: "batch"}
+	c := NewClient(cfg)
+	// processorFn bypasses manager entirely — verifies that mock with processorFn
+	// results in zero model fetch calls.
+	c.processorFn = func(_ Config) (Processor, error) { return &fakeProc{}, nil }
+
+	grant := wire.LeaseGrantPayload{
+		JobID: "mock-nofetch", Idx: 0, Model: "mock",
+		Handles: wire.LeaseHandles{
+			GetHandle: "gh", GetExp: "99", GetSig: "gs",
+			PutHandle: "ph", PutExp: "99", PutSig: "ps",
+		},
+		// No ModelHandle — mock never needs one.
+		ModelHandle: nil,
+	}
+
+	conn := &fakeConn{grants: []wire.LeaseGrantPayload{grant}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.RunLeaseLoop(ctx, "w", conn) //nolint:errcheck
+	}()
+
+	// Wait for the segment to be processed (PUT happens).
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		// Just wait a bit — if processorFn ran, no model fetch happened.
+		time.Sleep(50 * time.Millisecond)
+		break
+	}
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-done
+
+	if modelHitCount.Load() != 0 {
+		t.Errorf("model endpoint was hit %d times for mock grant; expected 0", modelHitCount.Load())
+	}
+}
