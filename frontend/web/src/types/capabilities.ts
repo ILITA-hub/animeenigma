@@ -22,7 +22,8 @@ export interface ProviderCap {
   // real, backend-sanctioned source.
   /** Render/selection state derived backend-side from (policy, health, content). */
   state: 'active' | 'recovering' | 'degraded' | 'no_content'
-  /** Whether a user can pick this row (degraded/recovering are hacker-mode-only). */
+  /** Whether a user can pick this row. Degraded/recovering only surface in hacker mode
+   *  (degraded via hacker_only; recovering via the normal list's active-only render filter). */
   selectable: boolean
   /** When true, the row only appears/selects in hacker mode. */
   hacker_only: boolean

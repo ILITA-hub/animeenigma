@@ -596,8 +596,9 @@ const GROUP_LANGS: Record<ProviderRow['group'], TrackLang[]> = {
 // ─── Provider defaults ────────────────────────────────────────────────────────
 
 // props.animeId can change without a remount (no :key on the player), so the
-// per-anime ae availability probe must be invalidated when the title changes.
-// Also reset saved-combo fallback state so the new title gets a fresh attempt.
+// per-title selection state must be reset when the title changes (the ae
+// library-presence check now lives backend-side, surfaced as state:'no_content').
+// Reset the saved-combo fallback so the new title gets a fresh attempt.
 // Reactive so the shareable-URL sync (urlSyncState) can distinguish a
 // user-pinned source from an auto/smart-default one.
 const providerAutoSelected = ref(false)

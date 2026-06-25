@@ -10,10 +10,11 @@ export type ContentKind = 'common' | 'hentai'
 // from /api/anime/{id}/capabilities.
 export type ProviderGroup = 'en' | 'ru' | 'adult' | 'jp' | 'firstparty'
 
-// State emitted by the backend feed:
-//   active     — selectable, auto-eligible, ranked by `order`.
-//   recovering — coming back online; selectable in hacker mode only.
-//   degraded   — registered but excluded from auto-failover; hacker-mode-only.
+// State emitted by the backend feed (derived from the live policy/health authority):
+//   active     — in the auto-failover chain; selectable + auto-eligible, ranked by `order`.
+//   recovering — auto policy, health healing; selectable, but the normal Source list
+//                renders only `active` rows, so recovering surfaces in hacker mode only.
+//   degraded   — pinned out of the auto chain (policy=manual); hacker-mode-only (hackerOnly).
 //   no_content — provider has no episodes for this title (e.g. first-party `ae`
 //                before encoding); tinted + never selectable.
 export type ChipState = 'active' | 'recovering' | 'degraded' | 'no_content'
