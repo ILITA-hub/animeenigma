@@ -32,14 +32,16 @@ type HealthSource interface {
 type Service struct {
 	db      *gorm.DB
 	health  HealthSource
-	catalog CatalogSource // may be nil (skips RU/Hanime families)
-	cache   cache.Cache   // may be nil (skips caching)
+	catalog CatalogSource  // may be nil (skips RU/Hanime families)
+	cache   cache.Cache    // may be nil (skips caching)
 	log     *logger.Logger
+	library LibrarySource // may be nil (then `ae` is always no_content)
 }
 
-// NewService constructs a capability Service. catalog, cache and log may be nil.
-func NewService(db *gorm.DB, health HealthSource, catalog CatalogSource, c cache.Cache, log *logger.Logger) *Service {
-	return &Service{db: db, health: health, catalog: catalog, cache: c, log: log}
+// NewService constructs a capability Service. catalog, cache, log and library
+// may be nil.
+func NewService(db *gorm.DB, health HealthSource, catalog CatalogSource, c cache.Cache, log *logger.Logger, library LibrarySource) *Service {
+	return &Service{db: db, health: health, catalog: catalog, cache: c, log: log, library: library}
 }
 
 // Report assembles the full per-anime capability report, cache-first. The report
@@ -69,9 +71,11 @@ func (s *Service) Report(ctx context.Context, animeID string) (domain.Capability
 }
 
 // buildFamilies assembles every family concurrently. The EN family is required
-// (its error fails the report); the RU/Hanime families are best-effort (omitted
-// on error or when the anime isn't on that provider). Order is stable:
-// ourenglish, kodik, animelib, hanime.
+// (its error fails the report); the first-party (ae/raw/adult) and RU/Hanime
+// families are best-effort (omitted on error or when the anime isn't on that
+// provider). Order is stable: ae, ourenglish, raw, adult, kodik, animelib,
+// hanime — first-party leads. The ae/raw/adult families are DB-row-driven (no
+// CatalogSource needed) so they run regardless of whether catalog is wired.
 func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.SourceFamily, error) {
 	type slot struct {
 		fam domain.SourceFamily
@@ -80,15 +84,19 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 	var (
 		en                      domain.SourceFamily
 		enErr                   error
+		ae, raw, adult          slot
 		kodik, animelib, hanime slot
 		wg                      sync.WaitGroup
 	)
 
-	wg.Add(1)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		en, enErr = s.BuildENFamily(ctx)
 	}()
+	go func() { defer wg.Done(); ae.fam, ae.ok = s.aeFamily(ctx, animeID) }()
+	go func() { defer wg.Done(); raw.fam, raw.ok = s.rawFamily(ctx, animeID) }()
+	go func() { defer wg.Done(); adult.fam, adult.ok = s.adult18animeFamily(ctx, animeID) }()
 
 	if s.catalog != nil {
 		wg.Add(3)
@@ -101,8 +109,13 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 	if enErr != nil {
 		return nil, enErr
 	}
-	families := []domain.SourceFamily{en}
-	for _, sl := range []slot{kodik, animelib, hanime} {
+	// ae leads (first-party first), then EN, then the rest in stable order.
+	families := make([]domain.SourceFamily, 0, 7)
+	if ae.ok {
+		families = append(families, ae.fam)
+	}
+	families = append(families, en)
+	for _, sl := range []slot{raw, adult, kodik, animelib, hanime} {
 		if sl.ok {
 			families = append(families, sl.fam)
 		}

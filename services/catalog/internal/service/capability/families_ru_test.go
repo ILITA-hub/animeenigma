@@ -196,7 +196,7 @@ func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
 		anilibErr: errors.New("not on animelib"),
 		heps:      []domain.HanimeEpisode{{Slug: "ep-1"}},
 		hstream:   &domain.HanimeStream{Sources: []domain.HanimeSource{{Height: "1080"}}},
-	}, nil, nil)
+	}, nil, nil, nil)
 
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
@@ -239,11 +239,11 @@ func TestKodikFamilyCarriesFeedFields(t *testing.T) {
 }
 
 func TestBuildFamilies_NilCatalogENOnly(t *testing.T) {
-	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
-		t.Fatal(err)
-	}
-	s := NewService(db, nil, nil, nil, nil)
+	// Shared-cache DSN (via newDB): buildFamilies now also fans out the
+	// DB-row-driven ae/raw/adult families concurrently, so a plain `:memory:`
+	// DSN would hand a concurrent reader its own unmigrated connection.
+	db := newDB(t)
+	s := NewService(db, nil, nil, nil, nil, nil)
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
 		t.Fatal(err)

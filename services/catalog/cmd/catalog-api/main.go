@@ -560,7 +560,9 @@ func main() {
 	// Ranked capability report (spec 2026-06-15 P4).
 	// ScraperHealth adapts catalogService.GetScraperHealth (which forwards to
 	// the scraper microservice at cfg.Scraper.APIURL) as a HealthSource.
-	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log)
+	// aeLibraryAdapter backs the first-party `ae` family's library-presence
+	// lookup via the raw resolver's library episode index.
+	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: rawResolver})
 	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
 
 	// Initialize metrics collector
@@ -599,4 +601,18 @@ func main() {
 	}
 
 	log.Info("server stopped")
+}
+
+// aeLibraryAdapter satisfies capability.LibrarySource: the first-party `ae`
+// family is `active` (selectable) only when the title is self-hosted in the
+// library. Presence = the raw resolver's library episode index reports
+// available episodes for the anime.
+type aeLibraryAdapter struct{ r *service.RawResolver }
+
+func (a aeLibraryAdapter) HasLibraryTitle(ctx context.Context, animeID string) (bool, error) {
+	resp, err := a.r.GetLibraryEpisodes(ctx, animeID)
+	if err != nil {
+		return false, err
+	}
+	return resp.Available && len(resp.Episodes) > 0, nil
 }

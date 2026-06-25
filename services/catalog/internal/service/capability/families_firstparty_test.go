@@ -1,0 +1,138 @@
+package capability
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+)
+
+type fakeLibrary struct {
+	has bool
+	err error
+}
+
+func (f fakeLibrary) HasLibraryTitle(context.Context, string) (bool, error) { return f.has, f.err }
+
+func TestAeFamilyPresent(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Group: "firstparty", PreferenceWeight: 100, SupportsSub: true, SupportsRaw: true,
+	})
+	s := &Service{db: db, library: fakeLibrary{has: true}}
+	fam, ok := s.aeFamily(context.Background(), "uuid")
+	if !ok {
+		t.Fatal("ae family expected")
+	}
+	p := fam.Providers[0]
+	if p.State != "active" || !p.Selectable || p.Group != "firstparty" || p.Order != 100 {
+		t.Fatalf("ae present feed wrong: %+v", p)
+	}
+}
+
+func TestAeFamilyAbsentIsNoContent(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp, Group: "firstparty",
+	})
+	s := &Service{db: db, library: fakeLibrary{has: false}}
+	fam, ok := s.aeFamily(context.Background(), "uuid")
+	if !ok {
+		t.Fatal("ae family still emitted (tinted), not omitted")
+	}
+	if p := fam.Providers[0]; p.State != "no_content" || p.Selectable {
+		t.Fatalf("ae absent must be no_content/not-selectable: %+v", p)
+	}
+}
+
+// A library lookup failure must NOT drop the family — it tints to no_content.
+func TestAeFamilyLibraryErrorTints(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp, Group: "firstparty",
+	})
+	s := &Service{db: db, library: fakeLibrary{err: errors.New("library down")}}
+	fam, ok := s.aeFamily(context.Background(), "uuid")
+	if !ok {
+		t.Fatal("library error must still emit ae family (tinted)")
+	}
+	if p := fam.Providers[0]; p.State != "no_content" || p.Selectable {
+		t.Fatalf("library error must tint to no_content: %+v", p)
+	}
+}
+
+// A nil LibrarySource behaves like absent content (no_content), never panics.
+func TestAeFamilyNilLibraryIsNoContent(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp, Group: "firstparty",
+	})
+	s := &Service{db: db, library: nil}
+	fam, ok := s.aeFamily(context.Background(), "uuid")
+	if !ok {
+		t.Fatal("nil library must still emit ae family (tinted)")
+	}
+	if p := fam.Providers[0]; p.State != "no_content" {
+		t.Fatalf("nil library must be no_content: %+v", p)
+	}
+}
+
+func TestAeFamilyOmittedWhenRowAbsentOrDisabled(t *testing.T) {
+	// absent row
+	if _, ok := (&Service{db: newDB(t), library: fakeLibrary{has: true}}).aeFamily(context.Background(), "u"); ok {
+		t.Error("ae family must be omitted when DB row is absent")
+	}
+	// disabled row
+	db := newDB(t, domain.ScraperProvider{Name: "ae", Status: domain.StatusDisabled, Group: "firstparty"})
+	if _, ok := (&Service{db: db, library: fakeLibrary{has: true}}).aeFamily(context.Background(), "u"); ok {
+		t.Error("ae family must be omitted when DB row is disabled")
+	}
+}
+
+func TestRawFamilyPresentAndOmitted(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "raw", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Group: "jp", PreferenceWeight: 70, SupportsRaw: true,
+	})
+	s := &Service{db: db}
+	fam, ok := s.rawFamily(context.Background(), "uuid")
+	if !ok || fam.Family != "raw" {
+		t.Fatalf("raw family wrong: ok=%v fam=%+v", ok, fam)
+	}
+	p := fam.Providers[0]
+	if p.State != "active" || !p.Selectable || p.Group != "jp" || p.Order != 70 {
+		t.Fatalf("raw feed fields wrong: %+v", p)
+	}
+	// absent row → omitted
+	if _, ok := (&Service{db: newDB(t)}).rawFamily(context.Background(), "u"); ok {
+		t.Error("raw family must be omitted when DB row is absent")
+	}
+	// disabled row → omitted
+	dbd := newDB(t, domain.ScraperProvider{Name: "raw", Status: domain.StatusDisabled, Group: "jp"})
+	if _, ok := (&Service{db: dbd}).rawFamily(context.Background(), "u"); ok {
+		t.Error("raw family must be omitted when DB row is disabled")
+	}
+}
+
+func TestAdult18animeFamilyPresentAndOmitted(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "18anime", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Group: "adult", PreferenceWeight: 20, SupportsRaw: true,
+	})
+	s := &Service{db: db}
+	fam, ok := s.adult18animeFamily(context.Background(), "uuid")
+	if !ok || fam.Family != "adult" {
+		t.Fatalf("adult family wrong: ok=%v fam=%+v", ok, fam)
+	}
+	p := fam.Providers[0]
+	if p.Provider != "18anime" || p.State != "active" || !p.Selectable || p.Group != "adult" || p.Order != 20 {
+		t.Fatalf("18anime feed fields wrong: %+v", p)
+	}
+	// absent row → omitted
+	if _, ok := (&Service{db: newDB(t)}).adult18animeFamily(context.Background(), "u"); ok {
+		t.Error("adult family must be omitted when DB row is absent")
+	}
+	// disabled row → omitted
+	dbd := newDB(t, domain.ScraperProvider{Name: "18anime", Status: domain.StatusDisabled, Group: "adult"})
+	if _, ok := (&Service{db: dbd}).adult18animeFamily(context.Background(), "u"); ok {
+		t.Error("adult family must be omitted when DB row is disabled")
+	}
+}
