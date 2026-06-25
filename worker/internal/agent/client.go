@@ -15,6 +15,7 @@ import (
 
 	gorillaws "github.com/gorilla/websocket"
 
+	"github.com/ILITA-hub/animeenigma/worker/internal/upscale"
 	"github.com/ILITA-hub/animeenigma/worker/internal/wire"
 )
 
@@ -75,6 +76,10 @@ type Client struct {
 	backoff BackoffConfig
 	send    chan []byte
 
+	// manager is the thread-safe model registry. Always contains at least "mock".
+	// processSegment selects the model per-job from this registry.
+	manager *upscale.Manager
+
 	// stdoutMu guards concurrent writes to stdout (print can be called from
 	// multiple goroutines; tests read the buffer concurrently).
 	stdoutMu sync.Mutex
@@ -87,9 +92,9 @@ type Client struct {
 	connMu  sync.Mutex
 	grantCh chan wire.LeaseGrantPayload
 
-	// processorFn, when non-nil, overrides the default NewPipelineProcessor
-	// factory. Tests set this to inject CopyProcessor (or another stub) so
-	// the end-to-end WS wiring test does not require a real ffmpeg binary.
+	// processorFn, when non-nil, overrides the per-job model selection in
+	// processSegment. Tests set this to inject CopyProcessor (or another stub)
+	// so the end-to-end WS wiring test does not require a real ffmpeg binary.
 	processorFn func(cfg Config) (Processor, error)
 
 	// commandHandler handles server-sent command frames (cancel, drain, shutdown, etc.).
@@ -104,7 +109,9 @@ type Client struct {
 	metricsInterval   time.Duration
 }
 
-// NewClient constructs a Client with default backoff settings.
+// NewClient constructs a Client with default backoff settings and a model
+// Manager initialised from cfg.PreinstalledModels. The manager always contains
+// at least the built-in "mock" model.
 func NewClient(cfg Config) *Client {
 	send := make(chan []byte, sendBuf)
 	// noopCancel is a placeholder until a real segment context is wired in via
@@ -119,10 +126,18 @@ func NewClient(cfg Config) *Client {
 	if cfg.MetricsInterval > 0 {
 		metInterval = cfg.MetricsInterval
 	}
+
+	// Construct the model Manager. modelsDir is left empty here — the worker
+	// image bakes weights into the realesrgan default models directory, and
+	// NewManager skips existence checks when modelsDir is empty. Install uses
+	// cfg.WorkDir (or a dedicated models dir) when T29 wires pull-on-demand.
+	mgr := upscale.NewManager("", cfg.PreinstalledModels)
+
 	return &Client{
 		cfg:               cfg,
 		backoff:           defaultBackoff,
 		send:              send,
+		manager:           mgr,
 		stdout:            os.Stdout,
 		commandHandler:    NewCommandHandler(noopCancel),
 		execHandler:       NewExecHandler(send),
@@ -315,11 +330,12 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 	})
 
 	// Send the register frame immediately (seq=1).
+	// ModelsAvailable reflects the current manager state.
 	regFrame, err := wire.NewFrame("register", 1, wire.RegisterPayload{
 		WorkerID:        enroll.WorkerID,
 		GPUInfo:         "unknown",
 		ImageVersion:    os.Getenv("IMAGE_VERSION"),
-		ModelsAvailable: []string{},
+		ModelsAvailable: c.manager.Available(),
 	})
 	if err != nil {
 		return fmt.Errorf("build register frame: %w", err)
@@ -341,42 +357,12 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 	c.grantCh = grantCh
 	c.connMu.Unlock()
 
-	// Build the Processor for this connection. Tests may inject processorFn;
-	// production uses NewPipelineProcessor with the configured model.
-	var proc Processor
-	if c.processorFn != nil {
-		var err error
-		proc, err = c.processorFn(c.cfg)
-		if err != nil {
-			// Fallback to CopyProcessor so the WS machinery stays alive.
-			fmt.Fprintf(os.Stderr, "worker: processorFn error, falling back to CopyProcessor: %v\n", err)
-			proc = CopyProcessor{}
-		}
-	} else if c.cfg.Model != "" {
-		workDir := c.cfg.WorkDir
-		if workDir == "" {
-			workDir = os.TempDir()
-		}
-		pp, ppErr := NewPipelineProcessor(c.cfg.Model, c.cfg.Scale, workDir)
-		if ppErr != nil {
-			// Model not found (e.g. unregistered name).
-			// Fall back to CopyProcessor so connectivity remains functional.
-			fmt.Fprintf(os.Stderr, "worker: NewPipelineProcessor(%q): %v; falling back to CopyProcessor\n", c.cfg.Model, ppErr)
-			proc = CopyProcessor{}
-		} else {
-			proc = pp
-		}
-	} else {
-		// No model configured — use the no-op CopyProcessor (Task-15 stub).
-		proc = CopyProcessor{}
-	}
-
 	// Start the lease loop in a goroutine; it exits when loopCtx is cancelled
 	// or grantCh is closed (connection dropped).
 	loopCtx, cancelLoop := context.WithCancel(ctx)
 	defer cancelLoop()
 	go func() {
-		c.RunLeaseLoop(loopCtx, enroll.WorkerID, proc, chanLeaseConn{ch: grantCh}) //nolint:errcheck
+		c.RunLeaseLoop(loopCtx, enroll.WorkerID, chanLeaseConn{ch: grantCh}) //nolint:errcheck
 	}()
 
 	// Run pumps; readPump returns when the connection closes and signals writePump

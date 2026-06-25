@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -25,9 +26,12 @@ type Config struct {
 	// adopted the client cert will replace/augment this (CD-9).
 	APIKey string
 
-	// Model is the name of the upscale model to use from the registry.
-	// Read from env MODEL; defaults to "mock".
-	Model string
+	// PreinstalledModels is the list of realesrgan model names baked into the
+	// worker image and available without any download. Read from env
+	// PREINSTALLED_MODELS (comma-separated, e.g. "realtime,best-quality").
+	// Spaces around names are trimmed; empty tokens are dropped.
+	// Unset or empty → nil (the worker boots with only the built-in mock).
+	PreinstalledModels []string
 
 	// WorkDir is the directory where temporary frame files are written during
 	// processing. Read from env WORK_DIR; defaults to os.TempDir().
@@ -52,10 +56,6 @@ func LoadConfig() Config {
 	if mode == "" {
 		mode = "batch"
 	}
-	model := os.Getenv("MODEL")
-	if model == "" {
-		model = "mock"
-	}
 	workDir := os.Getenv("WORK_DIR")
 	if workDir == "" {
 		workDir = os.TempDir()
@@ -77,15 +77,27 @@ func LoadConfig() Config {
 			metInterval = d
 		}
 	}
+
+	// Parse PREINSTALLED_MODELS: comma-separated names, trimmed, empties dropped.
+	var preinstalled []string
+	if raw := os.Getenv("PREINSTALLED_MODELS"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			name := strings.TrimSpace(part)
+			if name != "" {
+				preinstalled = append(preinstalled, name)
+			}
+		}
+	}
+
 	return Config{
-		ServerURL:         os.Getenv("SERVER_URL"),
-		EnrollToken:       os.Getenv("ENROLL_TOKEN"),
-		Mode:              mode,
-		APIKey:            os.Getenv("API_KEY"),
-		Model:             model,
-		WorkDir:           workDir,
-		Scale:             scale,
-		HeartbeatInterval: hbInterval,
-		MetricsInterval:   metInterval,
+		ServerURL:          os.Getenv("SERVER_URL"),
+		EnrollToken:        os.Getenv("ENROLL_TOKEN"),
+		Mode:               mode,
+		APIKey:             os.Getenv("API_KEY"),
+		PreinstalledModels: preinstalled,
+		WorkDir:            workDir,
+		Scale:              scale,
+		HeartbeatInterval:  hbInterval,
+		MetricsInterval:    metInterval,
 	}
 }

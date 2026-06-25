@@ -142,7 +142,6 @@ func TestLeaseGrantDrivesLeaseLoop(t *testing.T) {
 		ServerURL:   srv.URL,
 		EnrollToken: "tok",
 		Mode:        "batch",
-		Model:       "mock",
 		WorkDir:     t.TempDir(),
 	}
 	c := NewClient(cfg)

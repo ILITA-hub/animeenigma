@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/worker/internal/upscale"
 	"github.com/ILITA-hub/animeenigma/worker/internal/wire"
 )
 
@@ -21,8 +22,8 @@ const (
 )
 
 // RunLeaseLoop sends lease_req frames over the Client's send channel,
-// processes granted segments via proc, and loops. It runs until ctx is
-// cancelled or a fatal error occurs.
+// processes granted segments via the per-job model selection, and loops.
+// It runs until ctx is cancelled or a fatal error occurs.
 //
 // Segments are processed single-flight: one segment in flight at a time.
 // The server already enforces single-flight on its side (one lease_req
@@ -33,7 +34,7 @@ const (
 //
 // workerID is the session worker_id from enrollment, used to bind data-plane
 // requests to the lease (X-Worker-Id header).
-func (c *Client) RunLeaseLoop(ctx context.Context, workerID string, proc Processor, conn leaseConn) error {
+func (c *Client) RunLeaseLoop(ctx context.Context, workerID string, conn leaseConn) error {
 	// drainCh is the server-sent "drain" signal: once closed, the worker stops
 	// requesting NEW leases, finishes any in-flight segment, and then idles until
 	// ctx is cancelled (B4 graceful-drain wiring). nil-safe: a nil commandHandler
@@ -92,7 +93,7 @@ func (c *Client) RunLeaseLoop(ctx context.Context, workerID string, proc Process
 		c.print("leased")
 
 		// Process the granted segment.
-		if err := c.processSegment(ctx, workerID, grant, proc); err != nil {
+		if err := c.processSegment(ctx, workerID, grant); err != nil {
 			// Non-fatal: log to stderr and loop (server will re-grant or timeout).
 			fmt.Fprintf(os.Stderr, "worker: segment %s/%d: %v\n", grant.JobID, grant.Idx, err)
 		}
@@ -117,9 +118,18 @@ func (c *Client) sendLeaseReq(seq int) error {
 	}
 }
 
-// processSegment downloads the input segment, processes it via proc, uploads
-// the output, and deletes both local files (process-and-delete pattern).
-func (c *Client) processSegment(ctx context.Context, workerID string, grant wire.LeaseGrantPayload, proc Processor) error {
+// processSegment downloads the input segment, processes it via the per-job
+// model (selected from the manager or the processorFn test seam), uploads the
+// output, and deletes both local files (process-and-delete pattern).
+//
+// Model selection order:
+//  1. If c.processorFn is set (test seam), call it to build a Processor.
+//  2. Otherwise, resolve the model name from grant.Model (empty → "mock") via
+//     c.manager.Get. If found, wrap it in a PipelineProcessor and process.
+//  3. If the model is not locally available, fail the segment cleanly and log
+//     a clear error so the server re-leases to another worker.
+//     // T29: pull-on-demand fetch here
+func (c *Client) processSegment(ctx context.Context, workerID string, grant wire.LeaseGrantPayload) error {
 	// Build the base segment URL on the server's data plane.
 	segBaseURL := fmt.Sprintf("%s/worker/segments/%s/%d", c.cfg.ServerURL, grant.JobID, grant.Idx)
 
@@ -152,6 +162,36 @@ func (c *Client) processSegment(ctx context.Context, workerID string, grant wire
 	if c.commandHandler != nil {
 		c.commandHandler.SetCancel(cancelSeg)
 		defer c.commandHandler.SetCancel(nil) // reset to no-op when the segment ends
+	}
+
+	// Resolve the processor for this segment.
+	var proc Processor
+
+	if c.processorFn != nil {
+		// Test seam: processorFn overrides per-job selection entirely.
+		var err error
+		proc, err = c.processorFn(c.cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "worker: processorFn error, falling back to CopyProcessor: %v\n", err)
+			proc = CopyProcessor{}
+		}
+	} else {
+		// Per-job model selection from the manager.
+		modelName := grant.Model
+		if modelName == "" {
+			modelName = "mock"
+		}
+		model, ok := c.manager.Get(modelName)
+		if !ok {
+			// T29: pull-on-demand fetch here
+			return fmt.Errorf("model %q not available locally; server will re-lease", modelName)
+		}
+
+		scale := grant.Scale
+		if scale <= 0 {
+			scale = c.cfg.Scale
+		}
+		proc = newModelProcessor(model, scale, workDir)
 	}
 
 	// statsFn surfaces the processor's REAL measured fps when it implements
@@ -197,6 +237,16 @@ func (c *Client) processSegment(ctx context.Context, workerID string, grant wire
 
 	// Local files are deleted by the deferred cleanup above.
 	return nil
+}
+
+// newModelProcessor wraps an upscale.Model in a PipelineProcessor-equivalent
+// Processor using the pipeline package's Process function.
+func newModelProcessor(model upscale.Model, scale int, workDir string) Processor {
+	return &PipelineProcessor{
+		model:   model,
+		scale:   scale,
+		workDir: workDir,
+	}
 }
 
 // leaseConn is the minimal interface the lease loop needs to receive grant
