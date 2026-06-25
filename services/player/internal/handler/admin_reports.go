@@ -96,6 +96,7 @@ type reportMeta struct {
 	URL           string `json:"url"`
 	Description   string `json:"description"`
 	Status        string `json:"status"`
+	Kind          string   `json:"kind,omitempty"`
 	Source        string   `json:"source,omitempty"`
 	Attachments   []string `json:"attachments,omitempty"`
 }

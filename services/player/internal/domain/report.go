@@ -14,7 +14,9 @@ type ErrorReport struct {
 	StreamURL     string `json:"stream_url,omitempty"`
 	ErrorMessage  string `json:"error_message,omitempty"`
 	// User input
-	Category    string `json:"category,omitempty"` // bug | issue | feature
+	Category string `json:"category,omitempty"` // bug | issue | feature
+	Kind     string `json:"kind,omitempty"`     // feedback | todo | idea
+	Source   string `json:"source,omitempty"`   // feedback_form | telegram | api | manual
 	Description string `json:"description"`
 	// Browser context
 	URL        string `json:"url"`
