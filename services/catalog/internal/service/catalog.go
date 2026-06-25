@@ -937,6 +937,7 @@ type calendarInfo struct {
 	shikimoriID   string
 	nextEpisodeAt *time.Time
 	source        string // sourceShikimori (default) or sourceAniList after reconciliation
+	status        string // Shikimori anime status ("ongoing", "anons", …); gates AniList reconciliation to ongoing only
 }
 
 // dedupeCalendarEntries collapses calendar entries (one per upcoming episode) to
@@ -948,7 +949,7 @@ func dedupeCalendarEntries(calendar []shikimori.CalendarEntry) map[string]*calen
 		if _, exists := seen[id]; exists {
 			continue // keep the first (earliest) entry
 		}
-		info := &calendarInfo{shikimoriID: id, source: sourceShikimori}
+		info := &calendarInfo{shikimoriID: id, source: sourceShikimori, status: entry.Anime.Status}
 		if entry.NextEpisodeAt != "" {
 			if t, err := time.Parse(time.RFC3339, entry.NextEpisodeAt); err == nil {
 				info.nextEpisodeAt = &t

@@ -12,11 +12,16 @@ import (
 )
 
 type fakeAiringFetcher struct {
-	byID map[string]*idmapping.AniListAiring
-	err  map[string]error
+	byID   map[string]*idmapping.AniListAiring
+	err    map[string]error
+	called map[string]bool
 }
 
 func (f *fakeAiringFetcher) AniListAiringByMALID(_ context.Context, malID string) (*idmapping.AniListAiring, error) {
+	if f.called == nil {
+		f.called = map[string]bool{}
+	}
+	f.called[malID] = true
 	if e, ok := f.err[malID]; ok {
 		return nil, e
 	}
@@ -29,11 +34,12 @@ func TestReconcileCalendarWithAniList(t *testing.T) {
 	aniEarlier := time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC)
 
 	seen := map[string]*calendarInfo{
-		"100": {shikimoriID: "100", nextEpisodeAt: &shiki, source: sourceShikimori}, // anilist later → override
-		"200": {shikimoriID: "200", nextEpisodeAt: &shiki, source: sourceShikimori}, // anilist earlier → keep
-		"300": {shikimoriID: "300", nextEpisodeAt: &shiki, source: sourceShikimori}, // anilist nil airing → keep
-		"400": {shikimoriID: "400", nextEpisodeAt: &shiki, source: sourceShikimori}, // fetch error → keep
-		"500": {shikimoriID: "500", nextEpisodeAt: nil, source: sourceShikimori},    // shiki nil, anilist set → adopt
+		"100": {shikimoriID: "100", nextEpisodeAt: &shiki, source: sourceShikimori, status: "ongoing"}, // anilist later → override
+		"200": {shikimoriID: "200", nextEpisodeAt: &shiki, source: sourceShikimori, status: "ongoing"}, // anilist earlier → keep
+		"300": {shikimoriID: "300", nextEpisodeAt: &shiki, source: sourceShikimori, status: "ongoing"}, // anilist nil airing → keep
+		"400": {shikimoriID: "400", nextEpisodeAt: &shiki, source: sourceShikimori, status: "ongoing"}, // fetch error → keep
+		"500": {shikimoriID: "500", nextEpisodeAt: nil, source: sourceShikimori, status: "ongoing"},    // shiki nil, anilist set → adopt
+		"600": {shikimoriID: "600", nextEpisodeAt: &shiki, source: sourceShikimori, status: "anons"},   // NOT ongoing → skipped, never fetched
 	}
 	fake := &fakeAiringFetcher{
 		byID: map[string]*idmapping.AniListAiring{
@@ -41,6 +47,7 @@ func TestReconcileCalendarWithAniList(t *testing.T) {
 			"200": {AniListID: 2, Status: "RELEASING", NextEpisode: 5, NextAiringAt: &aniEarlier},
 			"300": {AniListID: 3, Status: "FINISHED", NextEpisode: 0, NextAiringAt: nil},
 			"500": {AniListID: 5, Status: "RELEASING", NextEpisode: 1, NextAiringAt: &aniLater},
+			"600": {AniListID: 6, Status: "NOT_YET_RELEASED", NextEpisode: 1, NextAiringAt: &aniLater},
 		},
 		err: map[string]error{"400": errors.New("anilist down")},
 	}
@@ -66,6 +73,10 @@ func TestReconcileCalendarWithAniList(t *testing.T) {
 	assert("300", &shiki, sourceShikimori)
 	assert("400", &shiki, sourceShikimori)
 	assert("500", &aniLater, sourceAniList)
+	assert("600", &shiki, sourceShikimori) // non-ongoing kept on Shikimori
+	if fake.called["600"] {
+		t.Errorf("600: non-ongoing anime must not be fetched from AniList")
+	}
 }
 
 func TestDefendAniListNextEpisode(t *testing.T) {

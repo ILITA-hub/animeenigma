@@ -54,6 +54,14 @@ func (s *CatalogService) reconcileCalendarWithAniList(ctx context.Context, seen 
 			return
 		default:
 		}
+		// Spec scope: corroborate ONLY ongoing anime. The Shikimori calendar
+		// also lists announced ("anons") titles; later-wins is justified only
+		// for ongoing shows (Shikimori under-reports their dates across
+		// broadcast hiatuses), so skip the rest — no fetch, no metric — keeping
+		// their Shikimori value.
+		if info.status != "ongoing" {
+			continue
+		}
 		if !first && s.aniListReconcilePacing > 0 {
 			time.Sleep(s.aniListReconcilePacing)
 		}
