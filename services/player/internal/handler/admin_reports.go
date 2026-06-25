@@ -300,6 +300,12 @@ func (h *AdminReportsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		full["status_updated_by"] = e.UpdatedBy
 	}
 	full["status"] = st
+	rawSource, _ := full["source"].(string)
+	pt, _ := full["player_type"].(string)
+	src := normalizeSource(rawSource, pt)
+	full["source"] = src
+	rawKind, _ := full["kind"].(string)
+	full["kind"] = deriveKind(rawKind, src)
 	if len(history) > 0 {
 		full["status_history"] = history
 	}

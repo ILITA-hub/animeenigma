@@ -259,6 +259,35 @@ func withURLParam(r *http.Request, key, val string) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
 
+func TestAdminReports_Get_InjectsKindSource(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	id := writeReport(t, dir, "2026-06-03T10-00-00", "claude", "feedback",
+		map[string]interface{}{"description": "agent todo", "source": "owner-todo"})
+	// dismiss it — Get must still resolve it (deep-link bypasses the list filter)
+	_ = os.WriteFile(filepath.Join(dir, statusFileName),
+		[]byte(`{"`+id+`":{"status":"not_relevant","updated_at":"x","updated_by":"y"}}`), 0600)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/admin/reports/"+id, nil)
+	r = withURLParam(r, "id", id)
+	w := httptest.NewRecorder()
+	h.Get(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (deep-link to dismissed item)", w.Code)
+	}
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Data["source"] != "api" {
+		t.Errorf("source = %v, want api", resp.Data["source"])
+	}
+	if resp.Data["kind"] != "todo" {
+		t.Errorf("kind = %v, want todo", resp.Data["kind"])
+	}
+}
+
 func TestAdminReports_List_KindSourceActiveFilters(t *testing.T) {
 	h, dir := newTestReportsHandler(t)
 	// legacy user feedback (no kind/source) → feedback / feedback_form
