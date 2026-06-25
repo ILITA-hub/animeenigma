@@ -148,7 +148,8 @@ func (h *AdminReportsHandler) safeReportPath(id string) (string, bool) {
 }
 
 // List returns a paginated, optionally filtered slice of feedback rows,
-// newest first. Query params: category, status, type, username (case-insensitive
+// newest first. Query params: category, status (the sentinel "active" means all
+// statuses except not_relevant), type, kind, source, username (case-insensitive
 // substring match), page, page_size.
 func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
