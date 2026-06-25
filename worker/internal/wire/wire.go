@@ -81,12 +81,23 @@ type LeaseHandles struct {
 	PutSig    string `json:"put_sig"`
 }
 
+// ModelHandle carries a short-lived HMAC capability the worker uses to fetch
+// a model binary from the server (GET {SERVER_URL}/worker/models/{Model}).
+// Nil/omitted when Model is "mock" or empty (built-in; never fetched).
+type ModelHandle struct {
+	Exp string `json:"exp"`
+	Sig string `json:"sig"`
+}
+
 // LeaseGrantPayload is sent by the server in response to a lease_req
 // (type="lease_grant").
 type LeaseGrantPayload struct {
-	JobID   string       `json:"job_id"`
-	Idx     int          `json:"idx"`
-	Handles LeaseHandles `json:"handles"`
+	JobID       string       `json:"job_id"`
+	Idx         int          `json:"idx"`
+	Handles     LeaseHandles `json:"handles"`
+	Model       string       `json:"model"`
+	Scale       int          `json:"scale"`
+	ModelHandle *ModelHandle `json:"model_handle,omitempty"`
 }
 
 // MetricsPayload is sent by the worker to report GPU and processing metrics.

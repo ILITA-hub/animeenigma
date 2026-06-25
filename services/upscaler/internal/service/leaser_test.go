@@ -136,7 +136,7 @@ func TestLeaser_FirstSegment(t *testing.T) {
 	leaser := NewLeaser(jobs, segs, workers)
 	ctx := context.Background()
 
-	seg, handles, err := leaser.OnLeaseReq(ctx, "worker-A")
+	seg, handles, model, scale, err := leaser.OnLeaseReq(ctx, "worker-A")
 	if err != nil {
 		t.Fatalf("OnLeaseReq: %v", err)
 	}
@@ -159,6 +159,14 @@ func TestLeaser_FirstSegment(t *testing.T) {
 	// Handles for a different idx must NOT verify.
 	if capability.VerifyJobHandle(jobID, "segment-get", 1, handles.GetExp, handles.GetSig, time.Now()) {
 		t.Error("GET handle for idx=1 unexpectedly verified with idx=0 handles")
+	}
+
+	// Model and Scale are surfaced from the job (zero-value fields on UpscaleJob → "" and 0).
+	if model != job.Model {
+		t.Errorf("model = %q, want %q", model, job.Model)
+	}
+	if scale != job.Scale {
+		t.Errorf("scale = %d, want %d", scale, job.Scale)
 	}
 
 	// Worker heartbeat was recorded.
@@ -192,11 +200,11 @@ func TestLeaser_SecondSegment(t *testing.T) {
 	ctx := context.Background()
 
 	// First call → idx=0.
-	if _, _, err := leaser.OnLeaseReq(ctx, "worker-A"); err != nil {
+	if _, _, _, _, err := leaser.OnLeaseReq(ctx, "worker-A"); err != nil {
 		t.Fatalf("first OnLeaseReq: %v", err)
 	}
 	// Second call → idx=1.
-	seg, handles, err := leaser.OnLeaseReq(ctx, "worker-B")
+	seg, handles, _, _, err := leaser.OnLeaseReq(ctx, "worker-B")
 	if err != nil {
 		t.Fatalf("second OnLeaseReq: %v", err)
 	}
@@ -227,7 +235,7 @@ func TestLeaser_AllDoneFlipsJobToFinalizing(t *testing.T) {
 	leaser := NewLeaser(jobs, segs, workers)
 	ctx := context.Background()
 
-	seg, _, err := leaser.OnLeaseReq(ctx, "worker-C")
+	seg, _, _, _, err := leaser.OnLeaseReq(ctx, "worker-C")
 	if err != nil {
 		t.Fatalf("OnLeaseReq: %v", err)
 	}
@@ -258,7 +266,7 @@ func TestLeaser_NoJobReturnsNil(t *testing.T) {
 	leaser := NewLeaser(jobs, segs, workers)
 	ctx := context.Background()
 
-	seg, handles, err := leaser.OnLeaseReq(ctx, "worker-D")
+	seg, handles, model, scale, err := leaser.OnLeaseReq(ctx, "worker-D")
 	if err != nil {
 		t.Fatalf("OnLeaseReq: %v", err)
 	}
@@ -267,5 +275,11 @@ func TestLeaser_NoJobReturnsNil(t *testing.T) {
 	}
 	if handles != (LeasedHandles{}) {
 		t.Errorf("expected zero handles when no jobs, got %+v", handles)
+	}
+	if model != "" {
+		t.Errorf("expected empty model when no jobs, got %q", model)
+	}
+	if scale != 0 {
+		t.Errorf("expected zero scale when no jobs, got %d", scale)
 	}
 }

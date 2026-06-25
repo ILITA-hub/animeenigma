@@ -54,6 +54,8 @@ Target: 720p–1080p → 2K–4K. Default 2× (720→1440 "2K", 1080→2160 "4K"
 | D13 | **Remote shell over dial-home** — admin-initiated, server-relayed exec/PTY multiplexed over the worker's outbound channel | We have no SSH/provider access into the box; this is the only way to debug a live worker. Low blast-radius because the worker holds no secrets. Admin-only, audited, scoped to the container, instantly revocable, disableable. |
 | D14 | **Full dial-home telemetry** → Prometheus `upscale_*` + Grafana | Worker reports GPU/host/pipeline metrics over the channel; server adds fleet/control-plane metrics. Observability is a first-class requirement, not an afterthought. Label discipline to avoid `worker_id` cardinality blowup. |
 
+> **CD-13 (2026-06-25 superseded):** The original D6 assumption of a static baked-in model set is superseded by dynamic server-provisioned models (pull-on-demand): the lease grant now carries `model`, `scale`, and a `ModelHandle` capability so the worker fetches whichever model the job needs at runtime, without a redeploy. Implemented in `feat/upscaler-service` branch, T25.
+
 ## 4. Architecture Overview
 
 ```

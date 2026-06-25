@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -225,4 +226,140 @@ func TestNewFrame_MarshallError(t *testing.T) {
 	if err == nil {
 		t.Error("NewFrame with un-marshallable payload should return error")
 	}
+}
+
+// --------------------------------------------------------------------------
+// LeaseGrantPayload + ModelHandle parity guards
+// --------------------------------------------------------------------------
+
+// TestLeaseGrantPayload_WireParityWithWorker asserts that the server-side
+// LeaseGrantPayload and ModelHandle structs have exactly the JSON field tags
+// that the worker/internal/wire package mirrors. Tag drift between the two
+// would silently break deserialization on the worker side. The canonical
+// tags are duplicated here so a future change to either side fails fast.
+func TestLeaseGrantPayload_WireParityWithWorker(t *testing.T) {
+	t.Parallel()
+
+	// Canonical json tags — must match worker/internal/wire/wire.go exactly.
+	wantGrantTags := map[string]string{
+		"JobID":       "job_id",
+		"Idx":         "idx",
+		"Handles":     "handles",
+		"Model":       "model",
+		"Scale":       "scale",
+		"ModelHandle": "model_handle,omitempty",
+	}
+
+	grantType := reflect.TypeOf(LeaseGrantPayload{})
+	for i := 0; i < grantType.NumField(); i++ {
+		f := grantType.Field(i)
+		want, ok := wantGrantTags[f.Name]
+		if !ok {
+			t.Errorf("LeaseGrantPayload: unexpected field %q — update parity test", f.Name)
+			continue
+		}
+		got := f.Tag.Get("json")
+		if got != want {
+			t.Errorf("LeaseGrantPayload.%s json tag = %q, want %q (worker wire tag)", f.Name, got, want)
+		}
+		delete(wantGrantTags, f.Name)
+	}
+	for missing := range wantGrantTags {
+		t.Errorf("LeaseGrantPayload: missing expected field %q", missing)
+	}
+
+	wantHandleTags := map[string]string{
+		"Exp": "exp",
+		"Sig": "sig",
+	}
+	handleType := reflect.TypeOf(ModelHandle{})
+	for i := 0; i < handleType.NumField(); i++ {
+		f := handleType.Field(i)
+		want, ok := wantHandleTags[f.Name]
+		if !ok {
+			t.Errorf("ModelHandle: unexpected field %q — update parity test", f.Name)
+			continue
+		}
+		got := f.Tag.Get("json")
+		if got != want {
+			t.Errorf("ModelHandle.%s json tag = %q, want %q (worker wire tag)", f.Name, got, want)
+		}
+		delete(wantHandleTags, f.Name)
+	}
+	for missing := range wantHandleTags {
+		t.Errorf("ModelHandle: missing expected field %q", missing)
+	}
+}
+
+// TestNewFrame_LeaseGrant_WithModelHandle verifies LeaseGrantPayload round-trips
+// with Model, Scale, and ModelHandle populated, and omits model_handle when nil.
+func TestNewFrame_LeaseGrant_WithModelHandle(t *testing.T) {
+	t.Run("with model handle", func(t *testing.T) {
+		want := LeaseGrantPayload{
+			JobID: "job-model-1",
+			Idx:   2,
+			Handles: LeaseHandles{
+				GetHandle: "h-get", GetExp: "1234567890", GetSig: "abc123",
+				PutHandle: "h-put", PutExp: "9876543210", PutSig: "def456",
+			},
+			Model: "realesrgan-x4plus-anime",
+			Scale: 4,
+			ModelHandle: &ModelHandle{
+				Exp: "9999999999",
+				Sig: "cafebabe00000000000000000000beef",
+			},
+		}
+		f, err := NewFrame("lease_grant", 10, want)
+		if err != nil {
+			t.Fatalf("NewFrame: %v", err)
+		}
+		var got LeaseGrantPayload
+		if err := f.Decode(&got); err != nil {
+			t.Fatalf("Decode: %v", err)
+		}
+		if got.Model != want.Model {
+			t.Errorf("Model = %q, want %q", got.Model, want.Model)
+		}
+		if got.Scale != want.Scale {
+			t.Errorf("Scale = %d, want %d", got.Scale, want.Scale)
+		}
+		if got.ModelHandle == nil {
+			t.Fatal("ModelHandle = nil, want non-nil")
+		}
+		if got.ModelHandle.Exp != want.ModelHandle.Exp {
+			t.Errorf("ModelHandle.Exp = %q, want %q", got.ModelHandle.Exp, want.ModelHandle.Exp)
+		}
+		if got.ModelHandle.Sig != want.ModelHandle.Sig {
+			t.Errorf("ModelHandle.Sig = %q, want %q", got.ModelHandle.Sig, want.ModelHandle.Sig)
+		}
+	})
+
+	t.Run("mock model — model_handle omitted", func(t *testing.T) {
+		want := LeaseGrantPayload{
+			JobID:       "job-mock-1",
+			Idx:         0,
+			Model:       "mock",
+			Scale:       2,
+			ModelHandle: nil,
+		}
+		f, err := NewFrame("lease_grant", 11, want)
+		if err != nil {
+			t.Fatalf("NewFrame: %v", err)
+		}
+		// Confirm model_handle key absent from JSON.
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(f.Payload, &raw); err != nil {
+			t.Fatalf("unmarshal payload: %v", err)
+		}
+		if _, present := raw["model_handle"]; present {
+			t.Error("model_handle key present in JSON when ModelHandle is nil (omitempty not working)")
+		}
+		var got LeaseGrantPayload
+		if err := f.Decode(&got); err != nil {
+			t.Fatalf("Decode: %v", err)
+		}
+		if got.ModelHandle != nil {
+			t.Errorf("ModelHandle = %+v, want nil", got.ModelHandle)
+		}
+	})
 }

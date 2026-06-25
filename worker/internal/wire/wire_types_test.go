@@ -2,6 +2,7 @@ package wire
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -173,4 +174,154 @@ func TestExecPayloadRoundTrip(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLeaseGrantPayload_WireParityWithServer asserts that LeaseGrantPayload and
+// ModelHandle in this worker package have exactly the same JSON field names (tags)
+// as the server-side controlplane.LeaseGrantPayload / controlplane.ModelHandle in
+// services/upscaler/internal/controlplane/protocol.go. The worker and server are
+// separate modules; this test guards against silent tag drift.
+//
+// Canonical server-side tags (kept byte-identical across the two files):
+//
+//	LeaseGrantPayload:  job_id, idx, handles, model, scale, model_handle (omitempty)
+//	ModelHandle:        exp, sig
+func TestLeaseGrantPayload_WireParityWithServer(t *testing.T) {
+	t.Parallel()
+
+	// -- LeaseGrantPayload field → expected json tag --
+	wantGrantTags := map[string]string{
+		"JobID":       "job_id",
+		"Idx":         "idx",
+		"Handles":     "handles",
+		"Model":       "model",
+		"Scale":       "scale",
+		"ModelHandle": "model_handle,omitempty",
+	}
+
+	grantType := reflect.TypeOf(LeaseGrantPayload{})
+	for i := 0; i < grantType.NumField(); i++ {
+		f := grantType.Field(i)
+		want, ok := wantGrantTags[f.Name]
+		if !ok {
+			t.Errorf("LeaseGrantPayload: unexpected field %q — update the parity test", f.Name)
+			continue
+		}
+		got := f.Tag.Get("json")
+		if got != want {
+			t.Errorf("LeaseGrantPayload.%s json tag = %q, want %q (server tag)", f.Name, got, want)
+		}
+		delete(wantGrantTags, f.Name)
+	}
+	for missing := range wantGrantTags {
+		t.Errorf("LeaseGrantPayload: missing expected field %q", missing)
+	}
+
+	// -- ModelHandle field → expected json tag --
+	wantHandleTags := map[string]string{
+		"Exp": "exp",
+		"Sig": "sig",
+	}
+
+	handleType := reflect.TypeOf(ModelHandle{})
+	for i := 0; i < handleType.NumField(); i++ {
+		f := handleType.Field(i)
+		want, ok := wantHandleTags[f.Name]
+		if !ok {
+			t.Errorf("ModelHandle: unexpected field %q — update the parity test", f.Name)
+			continue
+		}
+		got := f.Tag.Get("json")
+		if got != want {
+			t.Errorf("ModelHandle.%s json tag = %q, want %q (server tag)", f.Name, got, want)
+		}
+		delete(wantHandleTags, f.Name)
+	}
+	for missing := range wantHandleTags {
+		t.Errorf("ModelHandle: missing expected field %q", missing)
+	}
+}
+
+// TestLeaseGrantPayload_ModelHandleRoundTrip exercises JSON marshal/unmarshal
+// of LeaseGrantPayload with ModelHandle set and omitted.
+func TestLeaseGrantPayload_ModelHandleRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with model handle", func(t *testing.T) {
+		t.Parallel()
+		in := LeaseGrantPayload{
+			JobID: "job-abc",
+			Idx:   3,
+			Handles: LeaseHandles{
+				GetHandle: "gh", GetExp: "1000", GetSig: "gs",
+				PutHandle: "ph", PutExp: "2000", PutSig: "ps",
+			},
+			Model: "realesrgan-x4plus-anime",
+			Scale: 4,
+			ModelHandle: &ModelHandle{
+				Exp: "9999999999",
+				Sig: "deadbeef00000000000000000000cafe",
+			},
+		}
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var got LeaseGrantPayload
+		if err := json.Unmarshal(b, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got.Model != in.Model {
+			t.Errorf("Model: got %q, want %q", got.Model, in.Model)
+		}
+		if got.Scale != in.Scale {
+			t.Errorf("Scale: got %d, want %d", got.Scale, in.Scale)
+		}
+		if got.ModelHandle == nil {
+			t.Fatal("ModelHandle: got nil, want non-nil")
+		}
+		if got.ModelHandle.Exp != in.ModelHandle.Exp {
+			t.Errorf("ModelHandle.Exp: got %q, want %q", got.ModelHandle.Exp, in.ModelHandle.Exp)
+		}
+		if got.ModelHandle.Sig != in.ModelHandle.Sig {
+			t.Errorf("ModelHandle.Sig: got %q, want %q", got.ModelHandle.Sig, in.ModelHandle.Sig)
+		}
+	})
+
+	t.Run("mock model — model_handle omitted", func(t *testing.T) {
+		t.Parallel()
+		in := LeaseGrantPayload{
+			JobID: "job-mock",
+			Idx:   0,
+			Handles: LeaseHandles{
+				GetHandle: "gh", GetExp: "1", GetSig: "gs",
+				PutHandle: "ph", PutExp: "1", PutSig: "ps",
+			},
+			Model:       "mock",
+			Scale:       2,
+			ModelHandle: nil,
+		}
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		// Verify model_handle key is absent from JSON when nil.
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(b, &raw); err != nil {
+			t.Fatalf("unmarshal to map: %v", err)
+		}
+		if _, present := raw["model_handle"]; present {
+			t.Errorf("model_handle should be omitted when nil (omitempty), but key present in JSON")
+		}
+		var got LeaseGrantPayload
+		if err := json.Unmarshal(b, &got); err != nil {
+			t.Fatalf("unmarshal to struct: %v", err)
+		}
+		if got.ModelHandle != nil {
+			t.Errorf("ModelHandle: got %+v, want nil", got.ModelHandle)
+		}
+		if got.Model != "mock" {
+			t.Errorf("Model: got %q, want %q", got.Model, "mock")
+		}
+	})
 }

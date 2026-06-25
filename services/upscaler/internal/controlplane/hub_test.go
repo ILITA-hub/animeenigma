@@ -30,7 +30,7 @@ func newFakeLeaser(jobID string, idx int) *fakeLeaser {
 	}
 }
 
-func (f *fakeLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSegment, LeaseHandles, error) {
+func (f *fakeLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSegment, LeaseHandles, string, int, error) {
 	handles := LeaseHandles{
 		GetHandle: f.jobID + ":segment-get:0",
 		GetExp:    "9999999999",
@@ -39,7 +39,7 @@ func (f *fakeLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSeg
 		PutExp:    "9999999999",
 		PutSig:    "fakesig0000000000000000000000002",
 	}
-	return f.seg, handles, nil
+	return f.seg, handles, "mock", 2, nil
 }
 
 // fakeWorkerRepo records Heartbeat calls.
@@ -62,21 +62,21 @@ type slowLeaser struct {
 	finished atomic.Int32  // incremented when OnLeaseReq returns
 }
 
-func (s *slowLeaser) OnLeaseReq(ctx context.Context, _ string) (*domain.UpscaleSegment, LeaseHandles, error) {
+func (s *slowLeaser) OnLeaseReq(ctx context.Context, _ string) (*domain.UpscaleSegment, LeaseHandles, string, int, error) {
 	s.started.Add(1)
 	if s.gate != nil {
 		select {
 		case <-s.gate:
 		case <-ctx.Done():
 			s.finished.Add(1)
-			return nil, LeaseHandles{}, ctx.Err()
+			return nil, LeaseHandles{}, "", 0, ctx.Err()
 		}
 	} else if s.delay > 0 {
 		select {
 		case <-time.After(s.delay):
 		case <-ctx.Done():
 			s.finished.Add(1)
-			return nil, LeaseHandles{}, ctx.Err()
+			return nil, LeaseHandles{}, "", 0, ctx.Err()
 		}
 	}
 	s.finished.Add(1)
@@ -85,7 +85,7 @@ func (s *slowLeaser) OnLeaseReq(ctx context.Context, _ string) (*domain.UpscaleS
 		GetHandle: s.jobID + ":segment-get:0", GetExp: "9999999999", GetSig: "fakesig0000000000000000000000001",
 		PutHandle: s.jobID + ":segment-put:0", PutExp: "9999999999", PutSig: "fakesig0000000000000000000000002",
 	}
-	return seg, handles, nil
+	return seg, handles, "mock", 2, nil
 }
 
 // buildTestHubWithLeaser starts a Hub backed by a caller-supplied leaser.

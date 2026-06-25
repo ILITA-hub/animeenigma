@@ -68,42 +68,44 @@ func NewLeaserWithLogger(jobs jobEligibleRepo, segs segmentLeaserRepo, workers w
 //   - Tries to claim the next available segment (via LeaseNext).
 //   - When all segments are done (LeaseNext returns nil AND pending=0,leased=0,done>0),
 //     flips the job to JobFinalizing.
-//   - Returns (nil, zero, nil) when there is nothing to lease (no jobs, or job
+//   - Returns (nil, zero, "", 0, nil) when there is nothing to lease (no jobs, or job
 //     not yet segmented).
-//   - On success, returns the claimed segment, pre-minted HMAC handles, and nil.
-func (l *Leaser) OnLeaseReq(ctx context.Context, workerID string) (*domain.UpscaleSegment, LeasedHandles, error) {
+//   - On success, returns the claimed segment, pre-minted HMAC handles, the job's
+//     Model and Scale, and nil. The caller (hub.go) uses Model+Scale to populate the
+//     lease_grant payload for T25 (dynamic server-provisioned models).
+func (l *Leaser) OnLeaseReq(ctx context.Context, workerID string) (*domain.UpscaleSegment, LeasedHandles, string, int, error) {
 	zero := LeasedHandles{}
 
 	// Find the oldest eligible job.
 	job, err := l.jobs.NextEligible(ctx)
 	if err != nil {
-		return nil, zero, err
+		return nil, zero, "", 0, err
 	}
 	if job == nil {
-		return nil, zero, nil
+		return nil, zero, "", 0, nil
 	}
 
 	// Try to claim the next segment.
 	seg, err := l.segs.LeaseNext(ctx, job.ID, workerID, leaseTTL)
 	if err != nil {
-		return nil, zero, err
+		return nil, zero, "", 0, err
 	}
 
 	if seg == nil {
 		// No segment available — check why.
 		pending, leased, done, cerr := l.segs.Counts(ctx, job.ID)
 		if cerr != nil {
-			return nil, zero, cerr
+			return nil, zero, "", 0, cerr
 		}
 		if pending == 0 && leased == 0 && done > 0 {
 			// All segments are done — flip job to finalizing.
 			if uerr := l.jobs.UpdateStatus(ctx, job.ID, domain.JobFinalizing, ""); uerr != nil {
-				return nil, zero, uerr
+				return nil, zero, "", 0, uerr
 			}
 		}
 		// If done==0 as well, the job has no segments yet (still segmenting);
 		// return nothing.
-		return nil, zero, nil
+		return nil, zero, "", 0, nil
 	}
 
 	// Mint capability handles valid for leaseTTL + graceWindow.
@@ -129,5 +131,5 @@ func (l *Leaser) OnLeaseReq(ctx context.Context, workerID string) (*domain.Upsca
 			"worker_id", workerID, "job_id", job.ID, "segment_idx", seg.Idx, "error", err)
 	}
 
-	return seg, handles, nil
+	return seg, handles, job.Model, job.Scale, nil
 }

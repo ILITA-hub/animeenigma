@@ -11,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/analyticsclient"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/capability"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	gorillaws "github.com/gorilla/websocket"
 )
@@ -49,7 +50,7 @@ func (c HubConfig) withDefaults() HubConfig {
 
 // Leaser is the interface the Hub uses to dispatch lease_req frames.
 type Leaser interface {
-	OnLeaseReq(ctx context.Context, workerID string) (*domain.UpscaleSegment, LeaseHandles, error)
+	OnLeaseReq(ctx context.Context, workerID string) (*domain.UpscaleSegment, LeaseHandles, string, int, error)
 }
 
 // WorkerHeartbeater is the minimal WorkerRepository surface the Hub needs.
@@ -387,7 +388,7 @@ func (c *Conn) handleLeaseReq(reqSeq int) {
 	go func() {
 		defer c.leaseInFlight.Store(false)
 
-		seg, handles, err := c.hub.leaser.OnLeaseReq(c.ctx, c.workerID)
+		seg, handles, model, scale, err := c.hub.leaser.OnLeaseReq(c.ctx, c.workerID)
 		if err != nil {
 			c.hub.log.Warnw("controlplane: lease_req error", "worker_id", c.workerID, "error", err)
 			return
@@ -397,11 +398,27 @@ func (c *Conn) handleLeaseReq(reqSeq int) {
 			return
 		}
 
-		grant, err := NewFrame("lease_grant", reqSeq+1, LeaseGrantPayload{
+		// Build the lease grant payload with model/scale. For non-mock, non-empty
+		// models, mint a model-fetch capability handle using the same TTL convention
+		// as the segment handles (leaseTTL + graceWindow = handleTTL).
+		//
+		// The worker uses this handle to fetch the model binary from:
+		//   GET {SERVER_URL}/worker/models/{Model}?exp=&sig=
+		// T27 builds the server-side model-fetch handler.
+		handleTTL := 12 * time.Minute // leaseTTL(10m) + graceWindow(2m)
+		payload := LeaseGrantPayload{
 			JobID:   seg.JobID,
 			Idx:     seg.Idx,
 			Handles: handles,
-		})
+			Model:   model,
+			Scale:   scale,
+		}
+		if model != "" && model != "mock" {
+			_, exp, sig := capability.MintJobHandle(seg.JobID, "model", 0, handleTTL)
+			payload.ModelHandle = &ModelHandle{Exp: exp, Sig: sig}
+		}
+
+		grant, err := NewFrame("lease_grant", reqSeq+1, payload)
 		if err != nil {
 			c.hub.log.Warnw("controlplane: marshal lease_grant", "worker_id", c.workerID, "error", err)
 			return

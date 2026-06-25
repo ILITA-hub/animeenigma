@@ -40,8 +40,8 @@ func sharedUpscalerCollector() *metrics.Collector {
 // stubLeaser satisfies controlplane.Leaser but returns nothing (no jobs).
 type stubLeaser struct{}
 
-func (s *stubLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSegment, controlplane.LeaseHandles, error) {
-	return nil, controlplane.LeaseHandles{}, nil
+func (s *stubLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSegment, controlplane.LeaseHandles, string, int, error) {
+	return nil, controlplane.LeaseHandles{}, "", 0, nil
 }
 
 // stubWorkerHB satisfies controlplane.WorkerHeartbeater (no-op).
