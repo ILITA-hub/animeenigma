@@ -22,6 +22,12 @@ const (
 	defaultPingPeriod = 30 * time.Second // must be < pongWait
 	defaultWriteWait  = 10 * time.Second
 	defaultMaxMsgSize = 64 * 1024 // 64 KiB read limit
+
+	// modelHandleTTL is the lifetime of the model-fetch capability handle minted
+	// in the lease grant. It mirrors the service package's leaseTTL (10 m) +
+	// graceWindow (2 m). hub.go is a separate package and cannot import those
+	// consts, so a local const is the correct approach.
+	modelHandleTTL = 12 * time.Minute
 )
 
 // HubConfig allows timing constants to be overridden for tests.
@@ -405,7 +411,6 @@ func (c *Conn) handleLeaseReq(reqSeq int) {
 		// The worker uses this handle to fetch the model binary from:
 		//   GET {SERVER_URL}/worker/models/{Model}?exp=&sig=
 		// T27 builds the server-side model-fetch handler.
-		handleTTL := 12 * time.Minute // leaseTTL(10m) + graceWindow(2m)
 		payload := LeaseGrantPayload{
 			JobID:   seg.JobID,
 			Idx:     seg.Idx,
@@ -414,7 +419,9 @@ func (c *Conn) handleLeaseReq(reqSeq int) {
 			Scale:   scale,
 		}
 		if model != "" && model != "mock" {
-			_, exp, sig := capability.MintJobHandle(seg.JobID, "model", 0, handleTTL)
+			// Subject is the model NAME — T27's GET /worker/models/{name} endpoint
+			// verifies with VerifyJobHandle(name, "model", 0, exp, sig, now).
+			_, exp, sig := capability.MintJobHandle(model, "model", 0, modelHandleTTL)
 			payload.ModelHandle = &ModelHandle{Exp: exp, Sig: sig}
 		}
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/capability"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
 	gorillaws "github.com/gorilla/websocket"
 )
@@ -481,6 +482,140 @@ func TestHub_DuplicateLeaseReqIgnored(t *testing.T) {
 		t.Fatal("a second lease_grant arrived — duplicate lease_req was not dropped")
 	case <-time.After(300 * time.Millisecond):
 		// good — only one grant
+	}
+}
+
+// ── Model-handle mint-verify test ─────────────────────────────────────────────
+
+// realModelLeaser returns a real (non-mock) model name so the hub mints a
+// real HMAC capability handle in the lease grant.
+type realModelLeaser struct {
+	jobID string
+	model string
+	scale int
+}
+
+func (r *realModelLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSegment, LeaseHandles, string, int, error) {
+	seg := &domain.UpscaleSegment{JobID: r.jobID, Idx: 0, Status: domain.SegLeased}
+	handles := LeaseHandles{
+		GetHandle: r.jobID + ":segment-get:0",
+		GetExp:    "9999999999",
+		GetSig:    "fakesig0000000000000000000000001",
+		PutHandle: r.jobID + ":segment-put:0",
+		PutExp:    "9999999999",
+		PutSig:    "fakesig0000000000000000000000002",
+	}
+	return seg, handles, r.model, r.scale, nil
+}
+
+// TestHub_ModelHandleMintedOverModelName is the E2E mint→verify test that
+// would have caught the original bug (subject was seg.JobID, not model name).
+//
+// Assertions:
+//  1. grant.ModelHandle is non-nil for a real (non-mock) model.
+//  2. VerifyJobHandle(model, "model", 0, exp, sig, now) returns true.
+//  3. VerifyJobHandle(jobID,  "model", 0, exp, sig, now) returns false
+//     (proving the subject is the model name, not the job ID).
+//  4. grant.ModelHandle is nil for the "mock" model.
+func TestHub_ModelHandleMintedOverModelName(t *testing.T) {
+	const (
+		jobID = "model-handle-job-001"
+		model = "realesrgan-x4plus-anime"
+		scale = 2
+	)
+
+	// Capability secret is already configured by TestMain("test-secret").
+	// Confirm it so the test is meaningful — if unset, Mint returns empty
+	// and the verify assertions would vacuously pass false==false.
+	if !capability.Enabled() {
+		t.Fatal("capability secret not configured — TestMain must call capability.Init before hub tests run")
+	}
+
+	leaser := &realModelLeaser{jobID: jobID, model: model, scale: scale}
+	_, hub, dial := buildTestHubWithLeaser(t, leaser)
+
+	wID := "hub-worker-model-handle"
+	conn := dial(wID)
+
+	waitFor(t, func() bool {
+		hub.mu.RLock()
+		defer hub.mu.RUnlock()
+		_, ok := hub.conns[wID]
+		return ok
+	}, 500*time.Millisecond, "worker to register")
+
+	// Send a lease_req.
+	req, _ := NewFrame("lease_req", 1, LeaseReqPayload{})
+	raw, _ := json.Marshal(req)
+	if err := conn.WriteMessage(gorillaws.TextMessage, raw); err != nil {
+		t.Fatalf("write lease_req: %v", err)
+	}
+
+	// Read the lease_grant.
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read lease_grant: %v", err)
+	}
+	var f Frame
+	if err := json.Unmarshal(msg, &f); err != nil {
+		t.Fatalf("unmarshal frame: %v", err)
+	}
+	if f.Type != "lease_grant" {
+		t.Fatalf("frame type = %q, want %q", f.Type, "lease_grant")
+	}
+	var grant LeaseGrantPayload
+	if err := f.Decode(&grant); err != nil {
+		t.Fatalf("decode lease_grant payload: %v", err)
+	}
+
+	// Assertion 1: ModelHandle must be non-nil for a real model.
+	if grant.ModelHandle == nil {
+		t.Fatal("grant.ModelHandle is nil for a real (non-mock) model — hub did not mint a handle")
+	}
+	exp := grant.ModelHandle.Exp
+	sig := grant.ModelHandle.Sig
+
+	now := time.Now()
+
+	// Assertion 2: sig verifies against the MODEL NAME.
+	if !capability.VerifyJobHandle(model, "model", 0, exp, sig, now) {
+		t.Errorf("VerifyJobHandle(%q, \"model\", 0, ...) = false — handle minted over wrong subject (expected model name)", model)
+	}
+
+	// Assertion 3: sig does NOT verify against the job ID — proving the subject
+	// is the model name and not the job ID (this is what the bug would have broken).
+	if capability.VerifyJobHandle(jobID, "model", 0, exp, sig, now) {
+		t.Errorf("VerifyJobHandle(%q, \"model\", 0, ...) = true — handle should NOT verify against the job ID", jobID)
+	}
+
+	// Assertion 4: mock model yields nil ModelHandle (handled by the existing
+	// fakeLeaser which returns model="mock"; confirm via a quick dial on a
+	// fresh server using the default buildTestHub).
+	_, _, dialMock := buildTestHub(t) // fakeLeaser returns "mock"
+	connMock := dialMock("hub-worker-model-mock")
+	waitFor(t, func() bool { return true }, 10*time.Millisecond, "immediate") // brief settle
+
+	reqMock, _ := NewFrame("lease_req", 1, LeaseReqPayload{})
+	rawMock, _ := json.Marshal(reqMock)
+	if err := connMock.WriteMessage(gorillaws.TextMessage, rawMock); err != nil {
+		t.Fatalf("write lease_req (mock): %v", err)
+	}
+	connMock.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, msgMock, err := connMock.ReadMessage()
+	if err != nil {
+		t.Fatalf("read lease_grant (mock): %v", err)
+	}
+	var fMock Frame
+	if err := json.Unmarshal(msgMock, &fMock); err != nil {
+		t.Fatalf("unmarshal frame (mock): %v", err)
+	}
+	var grantMock LeaseGrantPayload
+	if err := fMock.Decode(&grantMock); err != nil {
+		t.Fatalf("decode lease_grant (mock): %v", err)
+	}
+	if grantMock.ModelHandle != nil {
+		t.Errorf("grant.ModelHandle should be nil for mock model, got %+v", grantMock.ModelHandle)
 	}
 }
 
