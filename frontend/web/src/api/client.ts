@@ -3,7 +3,7 @@ import { hookAxiosDiagnostics } from '@/utils/diagnostics'
 import { getOrCreateAnonId } from '@/utils/anonId'
 import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/preference'
 import type { CreateJobPayload } from '@/types/library'
-import type { FeedbackListResponse, FeedbackDetail, FeedbackStatus } from '@/types/feedback'
+import type { FeedbackListResponse, FeedbackDetail, FeedbackStatus, FeedbackKind } from '@/types/feedback'
 import type { SourceRanking } from '@/types/sourceRanking'
 import type { ShowcaseBlock } from '@/types/showcase'
 import { consumePrefetch } from '@/utils/pagePrefetch'
@@ -612,8 +612,10 @@ export const adminApi = {
     apiClient.delete<void>(`/admin/collections/${id}/items/${animeId}`),
   // Admin feedback browser — user feedback/error reports (player service,
   // /api/admin/reports). Responses use the standard {success,data} envelope.
-  listReports: (params?: { category?: string; status?: string; type?: string; username?: string; from?: string; to?: string; page?: number; page_size?: number }) =>
+  listReports: (params?: { category?: string; status?: string; type?: string; kind?: string; source?: string; username?: string; from?: string; to?: string; page?: number; page_size?: number }) =>
     apiClient.get<FeedbackListResponse | { data: FeedbackListResponse }>('/admin/reports', { params }),
+  createNote: (body: { kind: FeedbackKind; category?: string; description: string }) =>
+    apiClient.post<{ id: string; status: string } | { data: { id: string; status: string } }>('/admin/reports', body),
   getReport: (id: string) =>
     apiClient.get<FeedbackDetail | { data: FeedbackDetail }>(`/admin/reports/${encodeURIComponent(id)}`),
   setReportStatus: (id: string, status: FeedbackStatus) =>
