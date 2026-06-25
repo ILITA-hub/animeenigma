@@ -55,12 +55,12 @@ describe('useAdminFeedback', () => {
     expect(fb.error.value).toBeNull()
   })
 
-  it('normalizes the default "all" sentinel to no filter params', async () => {
+  it('normalizes the "all" sentinel to undefined for category/type/username; status defaults to active', async () => {
     listSpy.mockResolvedValue(listEnvelope([]))
     const fb = useAdminFeedback()
     await fb.refresh()
     expect(listSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ category: undefined, status: undefined, type: undefined, username: undefined }),
+      expect.objectContaining({ category: undefined, status: 'active', type: undefined, username: undefined }),
     )
   })
 
@@ -122,5 +122,17 @@ describe('useAdminFeedback', () => {
     await fb.refresh()
     await fb.setStatus(sampleRow.id, 'resolved')
     expect(fb.items.value[0].status).toBe('new')
+  })
+
+  it('defaults status to active and sends kind/source params', async () => {
+    listSpy.mockResolvedValue(listEnvelope([sampleRow]))
+    const fb = useAdminFeedback()
+    expect(fb.filterStatus.value).toBe('active')
+    fb.filterKind.value = 'todo'
+    fb.filterSource.value = 'manual'
+    await fb.applyFilters()
+    await flushPromises()
+    const lastCall = listSpy.mock.calls.at(-1)![0]
+    expect(lastCall).toMatchObject({ status: 'active', kind: 'todo', source: 'manual' })
   })
 })

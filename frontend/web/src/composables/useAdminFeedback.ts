@@ -42,7 +42,9 @@ export function useAdminFeedback() {
   // empty-string value, so the "All …" options use 'all' and we normalize it
   // away before hitting the API.
   const filterCategory = ref('all')
-  const filterStatus = ref('all')
+  const filterStatus = ref('active')
+  const filterKind = ref('all')
+  const filterSource = ref('all')
   const filterType = ref('all')
   // Free-text username filter (case-insensitive substring match, server-side).
   const filterUsername = ref('')
@@ -63,6 +65,8 @@ export function useAdminFeedback() {
       const res = await adminApi.listReports({
         category: norm(filterCategory.value),
         status: norm(filterStatus.value),
+        kind: norm(filterKind.value),
+        source: norm(filterSource.value),
         type: norm(filterType.value),
         username: filterUsername.value.trim() || undefined,
         from: dayStartISO(filterDateFrom.value),
@@ -138,6 +142,8 @@ export function useAdminFeedback() {
     error,
     filterCategory,
     filterStatus,
+    filterKind,
+    filterSource,
     filterType,
     filterUsername,
     filterDateFrom,
