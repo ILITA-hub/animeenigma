@@ -11,7 +11,7 @@ const emit = defineEmits<{ 'update:open': [boolean]; created: [string] }>()
 const { t } = useI18n()
 
 const kind = ref<FeedbackKind>('todo')
-const category = ref('')
+const category = ref('__none__')
 const description = ref('')
 const submitting = ref(false)
 const errorMsg = ref('')
@@ -22,7 +22,7 @@ const kindOptions = [
   { value: 'feedback', label: t('admin.feedback.kind.feedback') },
 ]
 const categoryOptions = [
-  { value: '', label: t('admin.feedback.newNote.categoryNone') },
+  { value: '__none__', label: t('admin.feedback.newNote.categoryNone') },
   { value: 'bug', label: t('admin.feedback.category.bug') },
   { value: 'issue', label: t('admin.feedback.category.issue') },
   { value: 'feature', label: t('admin.feedback.category.feature') },
@@ -30,7 +30,7 @@ const categoryOptions = [
 
 function reset(): void {
   kind.value = 'todo'
-  category.value = ''
+  category.value = '__none__'
   description.value = ''
   errorMsg.value = ''
 }
@@ -55,7 +55,7 @@ async function submit(): Promise<void> {
   try {
     const res = await adminApi.createNote({
       kind: kind.value,
-      category: category.value || undefined,
+      category: category.value && category.value !== '__none__' ? category.value : undefined,
       description: description.value.trim(),
     })
     emit('created', unwrapId(res))
