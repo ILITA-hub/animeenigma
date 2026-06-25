@@ -26,6 +26,17 @@ type ProviderCap struct {
 	Health   string    `json:"health"`             // "up" | "down" | "unknown"
 	Playable *bool     `json:"playable,omitempty"` // real-bytes oracle, if known
 	Rank     float64   `json:"rank"`
+
+	// Phase-1 single-source-of-truth feed fields. Computed server-side from the
+	// DB row via deriveProviderView; the player renders these verbatim.
+	State      string   `json:"state"`        // active | recovering | degraded | no_content
+	Selectable bool     `json:"selectable"`
+	HackerOnly bool     `json:"hacker_only"`  // true only for degraded
+	Order      int      `json:"order"`        // preference_weight; FE sorts desc
+	Group      string   `json:"group"`        // en | ru | adult | jp | firstparty
+	Audios     []string `json:"audios"`       // ["sub","dub","raw"] from supports_*
+	Reason     string   `json:"reason,omitempty"`
+
 	Variants []Variant `json:"variants"`
 }
 
