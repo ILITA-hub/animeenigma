@@ -3,12 +3,19 @@ package capability
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+// dbSeq names each in-memory shared-cache database uniquely so concurrent family
+// builders within one test see a shared schema, while different tests stay
+// isolated (a global "file::memory:?cache=shared" DSN would cross-contaminate).
+var dbSeq atomic.Int64
 
 type fakeCatalog struct {
 	kodik     []domain.KodikTranslation
@@ -34,6 +41,39 @@ func (f fakeCatalog) GetHanimeStream(_ context.Context, _ string, _ string) (*do
 	return f.hstream, f.hstreamEr
 }
 
+// newDB builds an in-memory sqlite DB seeded with the given provider rows. It is
+// the internal-package twin of the package-external helper in service_test.go,
+// usable from the RU/Hanime family tests which run in `package capability`.
+//
+// buildFamilies resolves the kodik/animelib/hanime families concurrently, and
+// each now reads its DB row. A plain `:memory:` DSN gives every pooled
+// connection its OWN empty database, so a concurrent reader can land on an
+// unmigrated connection ("no such table"). A shared-cache DSN pinned to a single
+// connection makes all goroutines see the one migrated schema.
+func newDB(t *testing.T, rows ...domain.ScraperProvider) *gorm.DB {
+	t.Helper()
+	dsn := fmt.Sprintf("file:capdb%d?mode=memory&cache=shared", dbSeq.Add(1))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.SetMaxOpenConns(1) // keep the shared in-memory schema on one connection
+	t.Cleanup(func() { sqlDB.Close() })
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	for i := range rows {
+		if err := db.Create(&rows[i]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	return db
+}
+
 func findVariant(vs []domain.Variant, cat string) *domain.Variant {
 	for i := range vs {
 		if vs[i].Category == cat {
@@ -44,10 +84,11 @@ func findVariant(vs []domain.Variant, cat string) *domain.Variant {
 }
 
 func TestKodikFamily_MapsTeamsAndCategories(t *testing.T) {
-	s := &Service{catalog: fakeCatalog{kodik: []domain.KodikTranslation{
-		{ID: 610, Title: "AniLibria", Type: "voice"},
-		{ID: 735, Title: "SovetRomantica", Type: "subtitles"},
-	}}}
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "kodik-noads", Status: domain.StatusEnabled, Group: "ru", SupportsSub: true, SupportsDub: true}),
+		catalog: fakeCatalog{kodik: []domain.KodikTranslation{
+			{ID: 610, Title: "AniLibria", Type: "voice"},
+			{ID: 735, Title: "SovetRomantica", Type: "subtitles"},
+		}}}
 	fam, ok := s.kodikFamily(context.Background(), "uuid")
 	if !ok || fam.Family != "kodik" || len(fam.Providers) != 1 {
 		t.Fatalf("kodik family wrong: ok=%v fam=%+v", ok, fam)
@@ -79,11 +120,12 @@ func TestKodikFamily_OmittedWhenEmptyOrError(t *testing.T) {
 }
 
 func TestAnimelibFamily_SoftHardFromHasSubtitles(t *testing.T) {
-	s := &Service{catalog: fakeCatalog{anilib: []domain.AnimeLibTranslation{
-		{ID: 1, TeamName: "Crunchyroll", Type: "subtitles", HasSubtitles: true},
-		{ID: 2, TeamName: "AniRise", Type: "subtitles", HasSubtitles: false},
-		{ID: 3, TeamName: "AniDUB", Type: "voice", HasSubtitles: false},
-	}}}
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "animelib", Status: domain.StatusEnabled, Group: "ru", SupportsSub: true, SupportsDub: true}),
+		catalog: fakeCatalog{anilib: []domain.AnimeLibTranslation{
+			{ID: 1, TeamName: "Crunchyroll", Type: "subtitles", HasSubtitles: true},
+			{ID: 2, TeamName: "AniRise", Type: "subtitles", HasSubtitles: false},
+			{ID: 3, TeamName: "AniDUB", Type: "voice", HasSubtitles: false},
+		}}}
 	fam, ok := s.animelibFamily(context.Background(), "uuid")
 	if !ok || fam.Family != "animelib" {
 		t.Fatalf("animelib family wrong: ok=%v fam=%+v", ok, fam)
@@ -105,12 +147,13 @@ func TestAnimelibFamily_SoftHardFromHasSubtitles(t *testing.T) {
 }
 
 func TestHanimeFamily_QualitiesFromStream(t *testing.T) {
-	s := &Service{catalog: fakeCatalog{
-		heps: []domain.HanimeEpisode{{Name: "Ep 1", Slug: "ep-1"}},
-		hstream: &domain.HanimeStream{Sources: []domain.HanimeSource{
-			{Height: "720"}, {Height: "1080"}, {Height: "720"}, // dup dropped
-		}},
-	}}
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "hanime", Status: domain.StatusEnabled, Group: "adult", SupportsRaw: true}),
+		catalog: fakeCatalog{
+			heps: []domain.HanimeEpisode{{Name: "Ep 1", Slug: "ep-1"}},
+			hstream: &domain.HanimeStream{Sources: []domain.HanimeSource{
+				{Height: "720"}, {Height: "1080"}, {Height: "720"}, // dup dropped
+			}},
+		}}
 	fam, ok := s.hanimeFamily(context.Background(), "uuid")
 	if !ok || fam.Family != "hanime" {
 		t.Fatalf("hanime family wrong: ok=%v fam=%+v", ok, fam)
@@ -125,10 +168,11 @@ func TestHanimeFamily_QualitiesFromStream(t *testing.T) {
 }
 
 func TestHanimeFamily_StreamErrorKeepsFamilyWithoutQuality(t *testing.T) {
-	s := &Service{catalog: fakeCatalog{
-		heps:      []domain.HanimeEpisode{{Slug: "ep-1"}},
-		hstreamEr: errors.New("no stream"),
-	}}
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "hanime", Status: domain.StatusEnabled, Group: "adult", SupportsRaw: true}),
+		catalog: fakeCatalog{
+			heps:      []domain.HanimeEpisode{{Slug: "ep-1"}},
+			hstreamEr: errors.New("no stream"),
+		}}
 	fam, ok := s.hanimeFamily(context.Background(), "uuid")
 	if !ok {
 		t.Fatal("episodes present → family should survive a stream error")
@@ -140,11 +184,11 @@ func TestHanimeFamily_StreamErrorKeepsFamilyWithoutQuality(t *testing.T) {
 }
 
 func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
-	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
-		t.Fatal(err)
-	}
-	db.Create(&domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 90})
+	db := newDB(t,
+		domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 90},
+		domain.ScraperProvider{Name: "kodik-noads", Status: domain.StatusEnabled, Group: "ru", SupportsSub: true, SupportsDub: true},
+		domain.ScraperProvider{Name: "hanime", Status: domain.StatusEnabled, Group: "adult", SupportsRaw: true},
+	)
 
 	// kodik present, animelib errors (omitted), hanime present → order en,kodik,hanime
 	s := NewService(db, nil, fakeCatalog{
@@ -170,6 +214,27 @@ func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("families = %v, want %v", got, want)
 		}
+	}
+}
+
+func TestKodikFamilyOmittedWhenRowDisabled(t *testing.T) {
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "kodik-noads", Status: domain.StatusDisabled, Group: "ru"}),
+		catalog: fakeCatalog{kodik: []domain.KodikTranslation{{ID: 1, Title: "Team", Type: "voice"}}}}
+	if _, ok := s.kodikFamily(context.Background(), "uuid"); ok {
+		t.Fatal("kodik family must be omitted when its DB row is disabled")
+	}
+}
+
+func TestKodikFamilyCarriesFeedFields(t *testing.T) {
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "kodik-noads", Status: domain.StatusEnabled, Health: domain.HealthUp, Group: "ru", PreferenceWeight: 50, SupportsSub: true, SupportsDub: true}),
+		catalog: fakeCatalog{kodik: []domain.KodikTranslation{{ID: 1, Title: "Team", Type: "voice"}}}}
+	fam, ok := s.kodikFamily(context.Background(), "uuid")
+	if !ok {
+		t.Fatal("expected kodik family")
+	}
+	p := fam.Providers[0]
+	if p.State != "active" || !p.Selectable || p.Group != "ru" || p.Order != 50 {
+		t.Fatalf("kodik feed fields wrong: %+v", p)
 	}
 }
 

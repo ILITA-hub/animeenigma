@@ -53,9 +53,39 @@ func formatQuality(h string) string {
 	return h
 }
 
+// providerRow loads one stream_providers row by name. ok=false when absent.
+func (s *Service) providerRow(ctx context.Context, name string) (domain.ScraperProvider, bool) {
+	if s.db == nil {
+		return domain.ScraperProvider{}, false
+	}
+	var row domain.ScraperProvider
+	if err := s.db.WithContext(ctx).Where("name = ?", name).First(&row).Error; err != nil {
+		return domain.ScraperProvider{}, false
+	}
+	return row, true
+}
+
+// applyFeedFields fills the feed presentation on a built provider cap from its
+// DB row. Returns ok=false when the row is disabled (caller omits the family).
+// RU/adult families that reach here already have catalog content, so
+// deriveProviderView is called with hasContent=true.
+func applyFeedFields(cap *domain.ProviderCap, row domain.ScraperProvider) bool {
+	if !row.IsRegistered() { // disabled → omit
+		return false
+	}
+	state, selectable, hackerOnly := deriveProviderView(row, true)
+	cap.State, cap.Selectable, cap.HackerOnly = state, selectable, hackerOnly
+	cap.Order = row.PreferenceWeight
+	cap.Group = wireGroup(row.Group)
+	cap.Audios = audiosFromTraits(row)
+	cap.Reason = row.Reason
+	return true
+}
+
 // kodikFamily builds the "kodik" family: one provider whose variants are the
 // real translation teams (Kodik exposes team names; iframe hides quality). Best
-// effort — returns ok=false on error or when the anime isn't on Kodik.
+// effort — returns ok=false on error, when the anime isn't on Kodik, or when the
+// `kodik-noads` DB row is disabled (the served no-ads variant gates the family).
 func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.SourceFamily, bool) {
 	trs, err := s.catalog.GetKodikTranslations(ctx, animeID)
 	if err != nil {
@@ -78,20 +108,20 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 			Source:        "discovered",
 		})
 	}
-	return domain.SourceFamily{
-		Family: "kodik",
-		Providers: []domain.ProviderCap{{
-			Provider:    "kodik",
-			DisplayName: "Kodik",
-			Enabled:     true,
-			Health:      "unknown",
-			Variants:    variants,
-		}},
-	}, true
+	row, ok := s.providerRow(ctx, "kodik-noads")
+	if !ok {
+		return domain.SourceFamily{}, false
+	}
+	cap := domain.ProviderCap{Provider: "kodik", DisplayName: "Kodik", Enabled: true, Health: "unknown", Variants: variants}
+	if !applyFeedFields(&cap, row) {
+		return domain.SourceFamily{}, false
+	}
+	return domain.SourceFamily{Family: "kodik", Providers: []domain.ProviderCap{cap}}, true
 }
 
 // animelibFamily builds the "animelib" family from translation teams of the
-// first episode: real team names, soft/hard subs from HasSubtitles. Best effort.
+// first episode: real team names, soft/hard subs from HasSubtitles. Best effort —
+// also omitted when the `animelib` DB row is disabled.
 func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.SourceFamily, bool) {
 	const firstEpisode = 1
 	trs, err := s.catalog.GetAnimeLibTranslations(ctx, animeID, firstEpisode)
@@ -115,22 +145,21 @@ func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.So
 			Source:        "discovered",
 		})
 	}
-	return domain.SourceFamily{
-		Family: "animelib",
-		Providers: []domain.ProviderCap{{
-			Provider:    "animelib",
-			DisplayName: "AniLib",
-			Enabled:     true,
-			Health:      "unknown",
-			Variants:    variants,
-		}},
-	}, true
+	row, ok := s.providerRow(ctx, "animelib")
+	if !ok {
+		return domain.SourceFamily{}, false
+	}
+	cap := domain.ProviderCap{Provider: "animelib", DisplayName: "AniLib", Enabled: true, Health: "unknown", Variants: variants}
+	if !applyFeedFields(&cap, row) {
+		return domain.SourceFamily{}, false
+	}
+	return domain.SourceFamily{Family: "animelib", Providers: []domain.ProviderCap{cap}}, true
 }
 
 // hanimeFamily builds the "hanime" family: a single raw variant with the quality
 // ladder of the first episode's stream. Best effort — omitted when the anime
-// isn't on Hanime; quality is dropped (not the whole family) if the stream call
-// fails after episodes resolve.
+// isn't on Hanime or the `hanime` DB row is disabled; quality is dropped (not the
+// whole family) if the stream call fails after episodes resolve.
 func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.SourceFamily, bool) {
 	eps, err := s.catalog.GetHanimeEpisodes(ctx, animeID)
 	if err != nil {
@@ -171,14 +200,13 @@ func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.Sour
 	if len(qualities) > 0 {
 		variant.Qualities = qualities
 	}
-	return domain.SourceFamily{
-		Family: "hanime",
-		Providers: []domain.ProviderCap{{
-			Provider:    "hanime",
-			DisplayName: "Hanime",
-			Enabled:     true,
-			Health:      "unknown",
-			Variants:    []domain.Variant{variant},
-		}},
-	}, true
+	row, ok := s.providerRow(ctx, "hanime")
+	if !ok {
+		return domain.SourceFamily{}, false
+	}
+	cap := domain.ProviderCap{Provider: "hanime", DisplayName: "Hanime", Enabled: true, Health: "unknown", Variants: []domain.Variant{variant}}
+	if !applyFeedFields(&cap, row) {
+		return domain.SourceFamily{}, false
+	}
+	return domain.SourceFamily{Family: "hanime", Providers: []domain.ProviderCap{cap}}, true
 }
