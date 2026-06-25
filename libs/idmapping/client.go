@@ -58,6 +58,17 @@ type MappingResult struct {
 	IMDB      *string `json:"imdb"`
 }
 
+// AniListAiring is the broadcaster airing schedule AniList exposes for a Media.
+// Unlike Shikimori's naive "last + 1 week" estimate, AniList's nextAiringEpisode
+// reflects the real broadcast schedule and models hiatuses. NextAiringAt is nil
+// when AniList has no upcoming episode scheduled (e.g. FINISHED series).
+type AniListAiring struct {
+	AniListID    int        // AniList Media.id
+	Status       string     // RELEASING | FINISHED | NOT_YET_RELEASED | CANCELLED | HIATUS
+	NextEpisode  int        // nextAiringEpisode.episode; 0 when none scheduled
+	NextAiringAt *time.Time // nextAiringEpisode.airingAt (unix seconds → UTC); nil when none
+}
+
 // Client interacts with the ARM anime ID mapping API (arm.haglund.dev).
 // On ARM failure or partial-result (AniList ID missing), it falls back to
 // the AniList GraphQL API to recover at least the AniList ID — which is
@@ -281,28 +292,32 @@ type aniListGraphQLResponse struct {
 	} `json:"errors,omitempty"`
 }
 
-// resolveAniList queries AniList GraphQL for the AniList ID corresponding
-// to the given MAL ID. Returns:
-//   - (result, nil)       — AniList found a Media with the MAL ID
-//   - (nil, nil)          — AniList knows no Media with this MAL ID
-//   - (nil, error)        — transport / JSON / GraphQL error
-//
-// AniList's GraphQL Media query supports `idMal: Int` directly, which is
-// what we need. No auth required for public reads.
-func (c *Client) resolveAniList(ctx context.Context, malID string) (*MappingResult, error) {
-	intID, perr := strconv.Atoi(malID)
-	if perr != nil {
-		return nil, fmt.Errorf("AniList: invalid MAL id %q: %w", malID, perr)
-	}
+// aniListAiringResponse mirrors the JSON shape returned by AniList for the
+// airing-schedule Media query.
+type aniListAiringResponse struct {
+	Data struct {
+		Media *struct {
+			ID                int    `json:"id"`
+			Status            string `json:"status"`
+			NextAiringEpisode *struct {
+				Episode  int   `json:"episode"`
+				AiringAt int64 `json:"airingAt"`
+			} `json:"nextAiringEpisode"`
+		} `json:"Media"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors,omitempty"`
+}
 
+// postAniListGraphQL sends a GraphQL query body to AniList and returns the raw
+// response bytes. It owns the per-request timeout (aniListTimeout), JSON headers,
+// body-size limit, and non-200 handling — so resolveAniList and
+// AniListAiringByMALID speak to AniList through exactly one code path.
+func (c *Client) postAniListGraphQL(ctx context.Context, body string) ([]byte, error) {
 	// Per-request budget derived from the caller's ctx (WR-01); see resolveARM.
 	ctx, cancel := context.WithTimeout(ctx, aniListTimeout)
 	defer cancel()
-
-	body := fmt.Sprintf(
-		`{"query":"query($mal:Int){Media(idMal:$mal,type:ANIME){id idMal}}","variables":{"mal":%d}}`,
-		intID,
-	)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		c.aniListBaseURL, bytes.NewBufferString(body))
@@ -322,11 +337,34 @@ func (c *Client) resolveAniList(ctx context.Context, malID string) (*MappingResu
 	if rerr != nil {
 		return nil, fmt.Errorf("AniList read body: %w", rerr)
 	}
-
-	// 404 / 4xx → no mapping (AniList returns 200 even for "no Media"; a
-	// non-200 here usually means rate-limiting or upstream blip).
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("AniList HTTP %d: %s", resp.StatusCode, truncate(string(respBytes), 200))
+	}
+	return respBytes, nil
+}
+
+// resolveAniList queries AniList GraphQL for the AniList ID corresponding
+// to the given MAL ID. Returns:
+//   - (result, nil)       — AniList found a Media with the MAL ID
+//   - (nil, nil)          — AniList knows no Media with this MAL ID
+//   - (nil, error)        — transport / JSON / GraphQL error
+//
+// AniList's GraphQL Media query supports `idMal: Int` directly, which is
+// what we need. No auth required for public reads.
+func (c *Client) resolveAniList(ctx context.Context, malID string) (*MappingResult, error) {
+	intID, perr := strconv.Atoi(malID)
+	if perr != nil {
+		return nil, fmt.Errorf("AniList: invalid MAL id %q: %w", malID, perr)
+	}
+
+	body := fmt.Sprintf(
+		`{"query":"query($mal:Int){Media(idMal:$mal,type:ANIME){id idMal}}","variables":{"mal":%d}}`,
+		intID,
+	)
+
+	respBytes, err := c.postAniListGraphQL(ctx, body)
+	if err != nil {
+		return nil, err
 	}
 
 	var parsed aniListGraphQLResponse
@@ -346,6 +384,51 @@ func (c *Client) resolveAniList(ctx context.Context, malID string) (*MappingResu
 		AniList: &aniListID,
 		MAL:     &malIDEcho,
 	}, nil
+}
+
+// AniListAiringByMALID queries AniList for the broadcaster airing schedule by
+// MAL/Shikimori id (Shikimori IDs equal MAL IDs). Returns:
+//   - (result, nil) — AniList found a Media (NextAiringAt is nil if nothing is scheduled)
+//   - (nil, nil)    — AniList knows no Media with this MAL id
+//   - (nil, error)  — transport / JSON / GraphQL error
+//
+// AniList's Media query supports idMal:Int directly and returns
+// nextAiringEpisode in the same call. No auth required for public reads.
+func (c *Client) AniListAiringByMALID(ctx context.Context, malID string) (*AniListAiring, error) {
+	intID, perr := strconv.Atoi(malID)
+	if perr != nil {
+		return nil, fmt.Errorf("AniList airing: invalid MAL id %q: %w", malID, perr)
+	}
+
+	body := fmt.Sprintf(
+		`{"query":"query($mal:Int){Media(idMal:$mal,type:ANIME){id status nextAiringEpisode{episode airingAt}}}","variables":{"mal":%d}}`,
+		intID,
+	)
+
+	respBytes, err := c.postAniListGraphQL(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed aniListAiringResponse
+	if err := json.Unmarshal(respBytes, &parsed); err != nil {
+		return nil, fmt.Errorf("AniList airing decode: %w", err)
+	}
+	if len(parsed.Errors) > 0 {
+		return nil, fmt.Errorf("AniList airing GraphQL error: %s", parsed.Errors[0].Message)
+	}
+	m := parsed.Data.Media
+	if m == nil {
+		return nil, nil // No Media known to AniList for this id.
+	}
+
+	out := &AniListAiring{AniListID: m.ID, Status: m.Status}
+	if m.NextAiringEpisode != nil {
+		out.NextEpisode = m.NextAiringEpisode.Episode
+		t := time.Unix(m.NextAiringEpisode.AiringAt, 0).UTC()
+		out.NextAiringAt = &t
+	}
+	return out, nil
 }
 
 func truncate(s string, n int) string {

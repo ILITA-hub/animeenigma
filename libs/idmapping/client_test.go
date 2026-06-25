@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newTestClient returns a Client whose ARM and AniList endpoints both
@@ -431,5 +432,91 @@ func TestResolveByShikimoriIDContext_Succeeds(t *testing.T) {
 	}
 	if res == nil || res.AniList == nil {
 		t.Fatalf("expected a populated AniList ID, got %+v", res)
+	}
+}
+
+func TestAniListAiringByMALID_Scheduled(t *testing.T) {
+	const body = `{"data":{"Media":{"id":52991,"status":"RELEASING","nextAiringEpisode":{"episode":12,"airingAt":1786579200}}}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, body)
+	}))
+	defer srv.Close()
+
+	c := newTestClient("", srv.URL)
+	got, err := c.AniListAiringByMALID(context.Background(), "52991")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected result, got nil")
+	}
+	if got.AniListID != 52991 || got.Status != "RELEASING" || got.NextEpisode != 12 {
+		t.Errorf("unexpected fields: %+v", got)
+	}
+	if got.NextAiringAt == nil || got.NextAiringAt.Unix() != 1786579200 {
+		t.Errorf("airingAt: want unix 1786579200, got %v", got.NextAiringAt)
+	}
+	if got.NextAiringAt.Location() != time.UTC {
+		t.Errorf("airingAt should be UTC, got %v", got.NextAiringAt.Location())
+	}
+}
+
+func TestAniListAiringByMALID_NoUpcomingEpisode(t *testing.T) {
+	const body = `{"data":{"Media":{"id":1,"status":"FINISHED","nextAiringEpisode":null}}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, body)
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient("", srv.URL).AniListAiringByMALID(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil || got.Status != "FINISHED" || got.NextAiringAt != nil {
+		t.Errorf("want Media with nil NextAiringAt, got %+v", got)
+	}
+}
+
+func TestAniListAiringByMALID_NoMedia(t *testing.T) {
+	const body = `{"data":{"Media":null}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, body)
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient("", srv.URL).AniListAiringByMALID(context.Background(), "999999")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("want nil for unknown id, got %+v", got)
+	}
+}
+
+func TestAniListAiringByMALID_GraphQLError(t *testing.T) {
+	const body = `{"errors":[{"message":"Too Many Requests"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, body)
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient("", srv.URL).AniListAiringByMALID(context.Background(), "5")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got != nil {
+		t.Errorf("want nil result on error, got %+v", got)
+	}
+}
+
+func TestAniListAiringByMALID_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, "boom")
+	}))
+	defer srv.Close()
+
+	if _, err := newTestClient("", srv.URL).AniListAiringByMALID(context.Background(), "5"); err == nil {
+		t.Fatal("expected error on HTTP 500, got nil")
 	}
 }
