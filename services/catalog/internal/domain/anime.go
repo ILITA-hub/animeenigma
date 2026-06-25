@@ -82,9 +82,9 @@ type Anime struct {
 	// "shikimori" (calendar default) or "anilist" (corroborated override when
 	// AniList's broadcaster schedule is strictly later). Used by the batch
 	// refresh guard to avoid clobbering an AniList correction. Auto-migrated.
-	NextEpisodeSource string `gorm:"size:16;default:'shikimori';column:next_episode_source" json:"next_episode_source,omitempty"`
+	NextEpisodeSource string     `gorm:"size:16;default:'shikimori';column:next_episode_source" json:"next_episode_source,omitempty"`
 	AiredOn           *time.Time `gorm:"index" json:"aired_on,omitempty"`
-	Genres        []Genre    `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
+	Genres            []Genre    `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
 	// Phase 12 Decision §A1/A2 — Studios absorbs the producers role; no
 	// separate Producers field exists in v2.0 (Decision §A2 collapses
 	// the spec-§3.1 producers 0.05 into studios 0.25).
