@@ -476,6 +476,7 @@ func (h *AdminReportsHandler) CreateNote(w http.ResponseWriter, r *http.Request)
 	}
 	username = sanitizeForFilename(username)
 
+	now := time.Now().UTC()
 	entry := map[string]interface{}{
 		"user_id":      claims.UserID,
 		"username":     claims.Username,
@@ -484,7 +485,7 @@ func (h *AdminReportsHandler) CreateNote(w http.ResponseWriter, r *http.Request)
 		"source":       "manual",
 		"category":     req.Category,
 		"description":  req.Description,
-		"timestamp":    time.Now().UTC().Format(time.RFC3339),
+		"timestamp":    now.Format(time.RFC3339),
 		"console_logs": json.RawMessage("[]"),
 		"network_logs": json.RawMessage("[]"),
 		"page_html":    "",
@@ -499,7 +500,7 @@ func (h *AdminReportsHandler) CreateNote(w http.ResponseWriter, r *http.Request)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	ts := time.Now().UTC().Format("2006-01-02T15-04-05")
+	ts := now.Format("2006-01-02T15-04-05")
 	base := fmt.Sprintf("%s_%s_%s", ts, username, "manual")
 	id := base
 	for i := 2; ; i++ {
