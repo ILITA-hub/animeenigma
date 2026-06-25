@@ -52,6 +52,7 @@ type internalFeedbackCreateRequest struct {
 	UserID      string                 `json:"user_id"`
 	PlayerType  string                 `json:"player_type"`
 	Category    string                 `json:"category,omitempty"` // bug | issue | feature
+	Kind        string                 `json:"kind,omitempty"`
 	Description string                 `json:"description"`
 	URL         string                 `json:"url,omitempty"`
 	Source      string                 `json:"source,omitempty"`
@@ -88,6 +89,9 @@ func (h *AdminReportsHandler) CreateInternal(w http.ResponseWriter, r *http.Requ
 	}
 	username = sanitizeForFilename(username)
 
+	source := normalizeSource(req.Source, req.PlayerType)
+	kind := deriveKind(req.Kind, source)
+
 	entry := map[string]interface{}{
 		"user_id":     req.UserID,
 		"username":    req.Username,
@@ -95,7 +99,8 @@ func (h *AdminReportsHandler) CreateInternal(w http.ResponseWriter, r *http.Requ
 		"category":    req.Category,
 		"description": req.Description,
 		"url":         req.URL,
-		"source":      req.Source,
+		"source":      source,
+		"kind":        kind,
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 		"attachments": []string{},
 	}

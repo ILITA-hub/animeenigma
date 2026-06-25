@@ -195,6 +195,8 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 		"username":       claims.Username,
 		"player_type":    report.PlayerType,
 		"category":       report.Category,
+		"kind":           "feedback",
+		"source":         "feedback_form",
 		"anime_id":       report.AnimeID,
 		"anime_name":     report.AnimeName,
 		"episode_number": report.EpisodeNumber,

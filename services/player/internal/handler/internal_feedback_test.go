@@ -136,6 +136,32 @@ func TestInternalFeedback_SetStatus(t *testing.T) {
 	}
 }
 
+func TestCreateInternal_StampsTelegramSourceAndKind(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	body := `{"username":"u","user_id":"1","player_type":"telegram","description":"hi","source":"telegram"}`
+	r := httptest.NewRequest(http.MethodPost, "/internal/feedback", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	h.CreateInternal(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	// read the single written file and assert stamped fields
+	entries, _ := os.ReadDir(dir)
+	var got map[string]interface{}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".json") && !strings.HasPrefix(e.Name(), "_") {
+			data, _ := os.ReadFile(filepath.Join(dir, e.Name()))
+			_ = json.Unmarshal(data, &got)
+		}
+	}
+	if got["source"] != "telegram" {
+		t.Errorf("source = %v, want telegram", got["source"])
+	}
+	if got["kind"] != "feedback" {
+		t.Errorf("kind = %v, want feedback (default)", got["kind"])
+	}
+}
+
 func TestInternalFeedback_AttachmentUploadAndServe(t *testing.T) {
 	h, dir := newTestReportsHandler(t)
 	router := newInternalRouter(h)
