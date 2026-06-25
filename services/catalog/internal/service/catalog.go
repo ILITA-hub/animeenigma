@@ -1015,10 +1015,14 @@ func (s *CatalogService) importMissingCalendarAnime(ctx context.Context, missing
 		}
 
 		for _, anime := range freshAnime {
-			// Override next_episode_at from reconciled calendar data (more accurate)
-			if info, ok := seen[anime.ShikimoriID]; ok && info.nextEpisodeAt != nil {
-				anime.NextEpisodeAt = info.nextEpisodeAt
+			// Override next_episode_at + source from reconciled calendar data.
+			// Source is written whenever the calendar knows this anime, even when
+			// it has no air date, so provenance is never left blank.
+			if info, ok := seen[anime.ShikimoriID]; ok {
 				anime.NextEpisodeSource = info.source
+				if info.nextEpisodeAt != nil {
+					anime.NextEpisodeAt = info.nextEpisodeAt
+				}
 			}
 
 			if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
@@ -1049,8 +1053,10 @@ func (s *CatalogService) updateExistingCalendarEpisodes(ctx context.Context, exi
 			continue
 		}
 
-		// Only update if the calendar has a different/newer value
-		if existing.NextEpisodeAt != nil && existing.NextEpisodeAt.Equal(*info.nextEpisodeAt) {
+		// Only update if the calendar has a different/newer value OR the source
+		// provenance changed (so a source-only correction still persists).
+		if existing.NextEpisodeAt != nil && existing.NextEpisodeAt.Equal(*info.nextEpisodeAt) &&
+			existing.NextEpisodeSource == info.source {
 			continue
 		}
 
