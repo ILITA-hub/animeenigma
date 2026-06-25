@@ -214,7 +214,7 @@
     <!-- Source panel (floating, top-right) -->
     <div v-if="openMenu === 'source'" ref="sourceMenuEl" class="pl-floating pl-floating--source" @click.stop>
       <SourcePanel
-        :rows="displayRows"
+        :rows="rows"
         :audio="state.combo.value.audio"
         :lang="state.combo.value.lang"
         :team="state.combo.value.team"
@@ -223,7 +223,6 @@
         :servers="resolvedServers"
         :teams="teams"
         :cap-map="capMap"
-        :ranked-ids="orderedProviderIds"
         :hacker-mode="state.hackerMode.value"
         :playback-error="Boolean(sourceError)"
         @update:audio="state.setAudio"
@@ -350,19 +349,15 @@ import {
 import { segmentsToChapters, activeSkipSegment } from '@/composables/aePlayer/skipSegments'
 import { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
 import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/aePlayer/useProviderResolver'
-import { useProviderHealth } from '@/composables/aePlayer/useProviderHealth'
-import { useProviderAvailability, overlayAvailability } from '@/composables/aePlayer/useProviderAvailability'
 import { useI18n } from 'vue-i18n'
 import { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
-import { providerById, CURATED_TIER, PROVIDER_REGISTRY } from './providerRegistry'
 import { pickSmartDefault } from '@/composables/aePlayer/smartDefault'
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
-import { rankedProviderIds } from '@/composables/aePlayer/rankedProviderIds'
+import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
-import { aeApi } from '@/api/client'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
 import { pickDefaultSubtitle, pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
@@ -375,7 +370,7 @@ import { recordPlayerEvent } from '@/utils/playerTelemetry'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, ProviderRow } from '@/types/aePlayer'
+import type { StreamResult, ProviderRow, TrackLang } from '@/types/aePlayer'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
@@ -439,10 +434,6 @@ const engine = useVideoEngine(videoRef, state.hackerMode)
 const resolver = useProviderResolver()
 const { t } = useI18n()
 const toast = useToast()
-
-// Hacker-mode per-anime availability tracking (reuses animeIdRef declared below for capabilities).
-// scraperProviderIds is module-level (static) — same registry across all instances.
-const scraperProviderIds = new Set(PROVIDER_REGISTRY.filter((d) => d.scraper).map((d) => d.id))
 
 // ─── Watch-Together (room sync) ───────────────────────────────────────────────
 // When mounted inside a WT room, wire the generic HTML5 playback bridge (mirrors
@@ -585,69 +576,24 @@ const filter = computed(() => ({
   content: (props.isHentai ? 'hentai' : 'common') as 'hentai' | 'common',
 }))
 
-const { rows, recompute: recomputeRows, start } = useProviderHealth(filter)
-
-// Capability report → server ranking + sub/dub/quality/team labels for the
-// Source panel. orderedProviderIds merges the capability ranking with the
-// registry rows (ae/raw/18anime fall back to CURATED_TIER). Degrades to
-// CURATED_TIER order when /capabilities is absent.
+// The backend capability feed (/api/anime/{id}/capabilities) is the single
+// source of truth for which providers the player may use/show: state, order,
+// audios, group, selectable/hacker-only all arrive from it. `rows` is a pure
+// derivation of the report + the active audio/lang/content filter — no FE-side
+// registry, health poll, or availability probe. Disabled providers are omitted
+// backend-side; `ae` with no local copy arrives as state:'no_content'.
 const animeIdRef = computed(() => props.animeId)
-const { capMap, rankedIds: capRankedIds } = useCapabilities(animeIdRef)
-const orderedProviderIds = computed(() =>
-  rankedProviderIds(rows.value, capRankedIds.value, CURATED_TIER),
-)
-const availability = useProviderAvailability(animeIdRef)
+const { report, capMap } = useCapabilities(animeIdRef)
+const rows = computed<ProviderRow[]>(() => rowsFromReport(report.value, filter.value))
 
-// ─── Provider defaults ────────────────────────────────────────────────────────
-
-// First-party (ae) availability — cached single probe per mount. The library
-// only has a subset of titles encoded, so `ae` (top of CURATED_TIER) must be
-// skipped when this anime isn't on-prem. aeApi.getEpisodes returns
-// { episodes, available }; treat available=false OR an empty list as "no".
-// Reactive mirror of the probe so the SourcePanel can HIDE the first-party
-// `ae` chip (not merely skip auto-selecting it) until a local copy exists for
-// this title. null = not-yet-known, true/false = probe result.
-const aeAvailable = ref<boolean | null>(null)
-let aeAvailableCache: Promise<boolean> | null = null
-function isProviderAvailable(id: string): Promise<boolean> {
-  if (id !== 'ae') return Promise.resolve(true)
-  if (!aeAvailableCache) {
-    aeAvailableCache = aeApi
-      .getEpisodes(props.animeId)
-      .then((resp) => {
-        const data = resp.data?.data ?? resp.data
-        return Boolean(data?.available) && (data?.episodes?.length ?? 0) > 0
-      })
-      .catch(() => false)
-    aeAvailableCache.then((v) => { aeAvailable.value = v })
-  }
-  return aeAvailableCache
+// Backend group → languages it serves. Mirrors useProviderFeed/deepLinkProvider
+// so buildAvailable can derive a row's served langs (the flat ProviderRow
+// carries `group`, not an explicit lang list).
+const GROUP_LANGS: Record<ProviderRow['group'], TrackLang[]> = {
+  en: ['en'], ru: ['ru'], adult: ['en', 'ru'], jp: ['ja'], firstparty: ['en', 'ru', 'ja'],
 }
 
-// Display rows for the Source panel: the first-party `ae` chip is downgraded
-// to a non-selectable row until its library probe confirms a local copy, so it
-// never appears as a pickable source for titles that aren't encoded on-prem.
-// Selection logic keeps reading the ungated `rows` (pickSmartDefault gates `ae`
-// via isProviderAvailable), so this is purely cosmetic.
-const displayRows = computed<ProviderRow[]>(() =>
-  rows.value.map((r) => {
-    // Existing `ae` library-gating (unchanged).
-    if (r.def.id === 'ae' && aeAvailable.value !== true) {
-      return {
-        def: r.def,
-        state: 'irrelevant' as const,
-        reason: aeAvailable.value === false
-          ? 'Not in the AnimeEnigma library yet'
-          : 'Checking the AnimeEnigma library…',
-      }
-    }
-    // Hacker-mode per-anime availability overlay for scraper providers.
-    if (state.hackerMode.value && scraperProviderIds.has(r.def.id)) {
-      return overlayAvailability(r, availability.get(r.def.id), t)
-    }
-    return r
-  }),
-)
+// ─── Provider defaults ────────────────────────────────────────────────────────
 
 // props.animeId can change without a remount (no :key on the player), so the
 // per-anime ae availability probe must be invalidated when the title changes.
@@ -676,13 +622,9 @@ function resetSourceSwitching() {
   switchingSource = false
 }
 watch(() => props.animeId, () => {
-  aeAvailableCache = null
-  aeAvailable.value = null
   providerAutoSelected.value = false
   resetSourceSwitching()
   resetFallbackIntents()
-  availability.reset()
-  void isProviderAvailable('ae') // eager re-probe for the new title
 })
 
 // Switch to the next candidate source after a playback failure. Returns true if
@@ -731,18 +673,11 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
     switchServerId = nextServer.id
   } else {
     const triedProviders = new Set([...triedWithCurrent].map((k) => k.split(':')[0]))
-    toProvider = await pickSmartDefault(
-      rows.value.filter((r) => !triedProviders.has(r.def.id)),
-      orderedProviderIds.value,
-      { needsCheck: AE_NEEDS_CHECK, isAvailable: isProviderAvailable },
-    )
+    toProvider = pickSmartDefault(rows.value.filter((r) => !triedProviders.has(r.id)))?.id ?? null
   }
 
   if (state.hackerMode.value) {
     recordFallbackIntent({ from: provider, to: toProvider, reason, acted: false })
-    if (scraperProviderIds.has(provider)) {
-      availability.markCdnUnreachable(provider)
-    }
     const target = switchServerId ? `${provider} · server ${switchServerId}` : toProvider
     sourceError.value = target
       ? `Hacker mode: auto-switch suppressed — would try ${target} (${reason}). Pick a source manually.`
@@ -804,20 +739,6 @@ function armPlaybackWatchdog() {
   }, PLAYBACK_WATCHDOG_MS)
 }
 
-// Providers whose default-selection eligibility needs a runtime availability
-// probe (see isProviderAvailable). Only first-party `ae` today.
-const AE_NEEDS_CHECK = new Set(['ae'])
-
-// A provider the capability stats explicitly mark `playable: false` must never
-// be the auto-default / BEST badge (it stays manually selectable in hacker
-// mode). Providers absent from the report (ae/raw/kodik) are treated as
-// playable. This makes the BEST a deterministic function of first-party
-// availability + third-party stats, never a stale/unplayable source.
-function isCapPlayable(id: string): boolean {
-  const c = capMap.value.get(id)
-  return !c || c.playable !== false
-}
-
 // ─── Saved-combo restore (Stage 1b) ──────────────────────────────────────────
 // Resolve the user's saved watch combo first; the Stage 1a smart default is
 // gated on `preferenceSettled` so the saved pick always wins when present.
@@ -857,7 +778,7 @@ function applyInitialProvider() {
     props.initialProvider,
     state.combo.value,
     props.isHentai ? 'hentai' : 'common',
-    PROVIDER_REGISTRY,
+    capMap.value,
   )
   if (!pin) return
   providerAutoSelected.value = false // user-intent pin, not an auto-selection
@@ -876,15 +797,16 @@ const buildAvailable = (): WatchCombo[] => {
   const seen = new Set<string>()
   for (const r of rows.value) {
     if (r.state !== 'active') continue
-    const player = providerToLegacyPlayer(r.def.id)
+    const player = providerToLegacyPlayer(r.id)
     if (!player) continue
-    for (const audio of r.def.audios) {
+    const langs = GROUP_LANGS[r.group]
+    for (const audio of r.audios) {
       const key = `${player}:${audio}`
       if (seen.has(key)) continue
       seen.add(key)
       combos.push({
         player,
-        language: (r.def.langs.includes(state.combo.value.lang) ? state.combo.value.lang : r.def.langs[0]) as WatchCombo['language'],
+        language: (langs.includes(state.combo.value.lang) ? state.combo.value.lang : langs[0]) as WatchCombo['language'],
         watch_type: audio,
         translation_id: '',
         translation_title: '',
@@ -913,49 +835,33 @@ watch(rows, () => {
 }, { immediate: true })
 
 watch(
-  [rows, preferenceSettled, orderedProviderIds],
+  [rows, preferenceSettled],
   () => {
     // WT: a room that pins a usable combo suppresses the smart default. A
     // token-less / legacy room resolves BEST and broadcasts it (see roomHasCombo).
     if (roomHasCombo.value) return
     if (state.combo.value.provider) return
-    if (!preferenceSettled.value) return // let the saved prefs (audio/lang) settle first
-    void pickSmartDefault(rows.value, orderedProviderIds.value, {
-      needsCheck: AE_NEEDS_CHECK,
-      isAvailable: isProviderAvailable,
-      isPlayable: isCapPlayable,
-    }).then((id) => {
-      // Guard against a race: only apply if still unset and the chosen row is
-      // still active in the latest rows (filter may have changed mid-probe).
-      if (id && !state.combo.value.provider &&
-          rows.value.some((r) => r.def.id === id && r.state === 'active')) {
-        providerAutoSelected.value = true
-        state.setProvider(id, '')
-        const rank = orderedProviderIds.value.indexOf(id)
-        recordDecision(
-          rank >= 0
-            ? `smart default — best playable source (rank ${rank + 1} of ${orderedProviderIds.value.length})`
-            : 'smart default — best playable source',
-        )
-      }
-    })
+    if (!preferenceSettled.value) return // let saved prefs (audio/lang) settle first
+    const pick = pickSmartDefault(rows.value)
+    if (pick && !state.combo.value.provider) {
+      providerAutoSelected.value = true
+      state.setProvider(pick.id, '')
+      recordDecision('smart default — best available source')
+    }
   },
   { immediate: true },
 )
 
 // ─── Active provider display info ────────────────────────────────────────────
+// Name from the capability feed (display_name) → row label → raw id. Cosmetics
+// are state-driven, not per-provider: the active dot is always brand cyan.
 
-const activeProviderDef = computed(() =>
-  providerById(state.combo.value.provider),
-)
+const activeProviderName = computed(() => {
+  const id = state.combo.value.provider
+  return capMap.value.get(id)?.display_name ?? rows.value.find((r) => r.id === id)?.label ?? id ?? ''
+})
 
-const activeProviderName = computed(
-  () => activeProviderDef.value?.name ?? state.combo.value.provider ?? '',
-)
-
-const activeProviderHue = computed(
-  () => activeProviderDef.value?.hue ?? '#00d4ff',
-)
+const activeProviderHue = computed(() => 'var(--brand-cyan)')
 
 const audioLabel = computed(() => {
   const a = state.combo.value.audio
@@ -1467,10 +1373,11 @@ watch(
 // on a provider that has both stays put). Otherwise drop the now-wrong stream
 // and switch to the top-ranked provider that serves the new facet, which
 // triggers a full re-list + team/server refresh via the provider watcher.
-async function repickProviderForFacet() {
-  recomputeRows() // ensure rows reflect the just-changed audio/lang filter
+function repickProviderForFacet() {
+  // rows is a computed over the live audio/lang filter — already reflects the
+  // just-changed facet, no manual recompute needed.
   const cur = state.combo.value.provider
-  const curStillActive = rows.value.some((r) => r.def.id === cur && r.state === 'active')
+  const curStillActive = rows.value.some((r) => r.id === cur && r.state === 'active')
   if (curStillActive) {
     recordDecision('kept current source — it still serves your audio / language')
     void resolveStreamForCurrentEpisode()
@@ -1481,17 +1388,13 @@ async function repickProviderForFacet() {
   engine.destroy()
   sourceError.value = null
   resetSourceSwitching()
-  const id = await pickSmartDefault(rows.value, orderedProviderIds.value, {
-    needsCheck: AE_NEEDS_CHECK,
-    isAvailable: isProviderAvailable,
-    isPlayable: isCapPlayable,
-  })
-  if (!id) {
+  const pick = pickSmartDefault(rows.value)
+  if (!pick) {
     sourceError.value = 'No source for this language / audio'
     return
   }
   providerAutoSelected.value = true
-  state.setProvider(id, '') // provider watcher re-lists episodes + refreshes teams
+  state.setProvider(pick.id, '') // provider watcher re-lists episodes + refreshes teams
   recordDecision('re-picked best source for the new audio / language')
 }
 
@@ -1501,9 +1404,6 @@ function onSelectProvider(id: string) {
   providerAutoSelected.value = false
   resetSourceSwitching() // manual pick — fresh state, and don't auto-switch it
   state.setProvider(id, '')
-  if (state.hackerMode.value && scraperProviderIds.has(id)) {
-    void availability.checkExists(id)
-  }
   recordDecision('manual — you picked this source')
   // loadEpisodesAndStream fires via the provider watcher above
 }
@@ -2488,8 +2388,6 @@ function onVisibilityChange() {
 }
 
 onMounted(() => {
-  start()
-  void isProviderAvailable('ae') // eager probe so the ae chip resolves its availability
   // Apply initial volume
   const v = videoRef.value
   if (v) {
