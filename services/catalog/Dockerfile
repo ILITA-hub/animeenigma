@@ -22,6 +22,7 @@ COPY libs/videoutils/go.mod libs/videoutils/go.sum* ./libs/videoutils/
 COPY libs/metrics/go.mod libs/metrics/go.sum* ./libs/metrics/
 COPY libs/streamprobe/go.mod libs/streamprobe/go.sum* ./libs/streamprobe/
 COPY services/auth/go.mod services/auth/go.sum* ./services/auth/
+COPY services/upscaler/go.mod services/upscaler/go.sum* ./services/upscaler/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
 COPY services/streaming/go.mod services/streaming/go.sum* ./services/streaming/
 COPY services/player/go.mod services/player/go.sum* ./services/player/
