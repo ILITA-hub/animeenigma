@@ -1,10 +1,14 @@
-FROM golang:1.25 AS build
+# Build on the NATIVE build host and cross-compile to the target arch (CGO off →
+# no QEMU needed for the Go build; only the slim runtime stage is per-arch).
+FROM --platform=$BUILDPLATFORM golang:1.25 AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /worker ./cmd/worker
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o /worker ./cmd/worker
 
+# Runtime stage: buildx selects the per-arch base automatically (amd64/arm64).
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
@@ -16,18 +20,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 LABEL org.opencontainers.image.title="upscaler-worker"
 LABEL org.opencontainers.image.description="GPU worker agent (model-agnostic: built-in mock + optional baked PREINSTALLED_MODELS + server pull-on-demand)"
 
-# realesrgan-ncnn-vulkan binary (Linux x86_64) — the runtime for realesrgan
-# weight-set models, whether baked in (PREINSTALLED_MODELS) or pulled on demand
-# from the server. It needs a GPU/Vulkan at run time; the built-in `mock` model
-# is pure-Go and needs neither this binary nor a GPU.
+# realesrgan-ncnn-vulkan binary — the runtime for realesrgan weight-set models,
+# whether baked in (PREINSTALLED_MODELS) or pulled on demand. It needs a
+# GPU/Vulkan at run time; the built-in `mock` model is pure-Go and needs neither
+# this binary nor a GPU.
+#
+# ARCH NOTE: upstream ships a Linux **x86_64** build only — there is no Linux
+# arm64 release. So we fetch it on amd64 and SKIP it on other arches; an arm64
+# image therefore runs `mock` (and any future CPU path) but cannot do realesrgan
+# upscaling until an arm64 binary exists. The fetch is best-effort either way
+# (a failed download must not break the build).
+ARG TARGETARCH
 ARG REALESRGAN_VERSION=0.2.0
-RUN wget -q -O /tmp/realesrgan.zip \
-    "https://github.com/xinntao/Real-ESRGAN/releases/download/v${REALESRGAN_VERSION}/realesrgan-ncnn-vulkan-${REALESRGAN_VERSION}-ubuntu.zip" \
-    && unzip /tmp/realesrgan.zip -d /tmp/realesrgan \
-    && mv /tmp/realesrgan/realesrgan-ncnn-vulkan /usr/local/bin/realesrgan-ncnn-vulkan \
-    && chmod +x /usr/local/bin/realesrgan-ncnn-vulkan \
-    && rm -rf /tmp/realesrgan /tmp/realesrgan.zip \
-    || true  # binary fetch may fail in CI; structure is what matters
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        wget -q -O /tmp/realesrgan.zip \
+        "https://github.com/xinntao/Real-ESRGAN/releases/download/v${REALESRGAN_VERSION}/realesrgan-ncnn-vulkan-${REALESRGAN_VERSION}-ubuntu.zip" \
+        && unzip /tmp/realesrgan.zip -d /tmp/realesrgan \
+        && mv /tmp/realesrgan/realesrgan-ncnn-vulkan /usr/local/bin/realesrgan-ncnn-vulkan \
+        && chmod +x /usr/local/bin/realesrgan-ncnn-vulkan \
+        && rm -rf /tmp/realesrgan /tmp/realesrgan.zip \
+        || echo "realesrgan fetch failed (amd64) — image structure is what matters" ; \
+    else \
+        echo "realesrgan-ncnn-vulkan: no Linux ${TARGETARCH} build upstream — this arch is mock-only" ; \
+    fi
 
 # ── Model weights directory (MODELS_DIR, default /models) ────────────────────
 # This single directory holds BOTH:
