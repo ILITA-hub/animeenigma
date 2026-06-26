@@ -807,39 +807,51 @@ class CamoufoxEngine:
 
     async def _solve_cf_challenge(self, page: Any, context: Any, origin: str) -> bool:
         """Clear a Cloudflare managed/Turnstile challenge on the already-navigated
-        ``page`` by clicking the interactive checkbox and polling for the
-        cf_clearance cookie. Returns True once cleared, False if
+        ``page`` AND confirm it yields real content. Returns True only once
+        cf_clearance is present AND the page is off the interstitial; False if
         cfg.challenge_solve_timeout_ms elapses (the caller then rotates the exit).
 
+        A bare cf_clearance cookie is NOT sufficient: Cloudflare can issue an
+        interim cookie while the interstitial is still looping, and an in-page
+        fetch made against that half-solved state 403s (observed live). So once
+        clearance is present but the page still looks like a challenge, we RELOAD
+        the origin (clearance now rides in the cookie jar) and require the
+        reloaded page to be non-challenge before declaring success.
+
         Camoufox passes the fingerprint check; the only piece a curl/Go client
-        cannot do is the interactive click + token round-trip — which is exactly
-        this. Verified live against animepahe.pw (~10s to clearance, no proxy)."""
+        cannot do is the interactive checkbox click + the clearance round-trip —
+        which is exactly this. Verified live against animepahe.pw."""
         deadline = time.monotonic() + self.cfg.challenge_solve_timeout_ms / 1000.0
         clicks = 0
+        last_reload = 0.0
         while time.monotonic() < deadline:
-            await asyncio.sleep(1.2)
+            try:
+                title = await page.title()
+            except Exception:  # noqa: BLE001
+                title = ""
             try:
                 cookies = await context.cookies() if context is not None else []
             except Exception:  # noqa: BLE001
                 cookies = []
-            if any(c.get("name") == "cf_clearance" for c in cookies):
-                # Clearance issued; give the interstitial a moment to reload to
-                # real content so the first in-page fetch lands on the live site.
-                # Bounded by the SAME solve deadline so the total solve can never
-                # exceed challenge_solve_timeout_ms — keeps the whole warm-fetch
-                # flow (nav + solve + first fetch) comfortably under the Go
-                # sidecar-client 90s budget even when clearance lands late.
-                while time.monotonic() < deadline:
-                    try:
-                        title = await page.title()
-                    except Exception:  # noqa: BLE001
-                        title = ""
-                    if not looks_like_challenge(None, title):
-                        return True
-                    await asyncio.sleep(1.0)
+            has_clearance = any(c.get("name") == "cf_clearance" for c in cookies)
+            # Solved iff clearance is set AND the page reached real content.
+            if has_clearance and title and not looks_like_challenge(None, title):
                 return True
+            # Click the interactive Turnstile checkbox if its iframe is present.
             if clicks < self.cfg.challenge_click_max and await self._click_turnstile(page):
                 clicks += 1
+            # Clearance present but page still challenged ⇒ reload to apply the
+            # cookie (throttled so a slow nav doesn't thrash the loop).
+            now = time.monotonic()
+            if has_clearance and now - last_reload > 4.0:
+                try:
+                    await page.goto(
+                        origin, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                last_reload = now
+            await asyncio.sleep(1.2)
         return False
 
     async def _warm_fetch_session(
