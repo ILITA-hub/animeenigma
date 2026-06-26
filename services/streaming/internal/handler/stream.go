@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -293,6 +294,15 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 				"referer", referer,
 			)
 			http.Error(w, "domain not allowed for HLS proxy", http.StatusBadGateway)
+			return
+		}
+
+		// Client-disconnect (navigation, seek, tab close) cancels r.Context(),
+		// surfacing here as context.Canceled. That is not a proxy failure: the
+		// peer is simply gone. Logging it at ERROR and returning 502 inflates the
+		// 5xx rate and fires false High Error Rate alerts (AUTO-292). Silently
+		// drop it — there is no client left to receive a response anyway.
+		if errors.Is(err, context.Canceled) {
 			return
 		}
 
