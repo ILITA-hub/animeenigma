@@ -629,6 +629,14 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 			alert := msg.Alerts[0]
 			fireHTML := fmt.Sprintf("<b>🔴 Firing</b>\n<b>%s</b>\n%s\n%s",
 				escTelegram(alert.Name), escTelegram(alert.Summary), escTelegram(alert.Description))
+			// For scraper/parser alerts, append a one-line summary of which EN
+			// failover providers are currently unhealthy and why, so the on-call
+			// sees the likely culprit without digging into Grafana or the scraper.
+			if isScraperAlert(alert) {
+				if line := s.scraperProviderFaultLine(); line != "" {
+					fireHTML += "\n" + line
+				}
+			}
 			if sentID, err := s.tg.SendMessage(fireHTML); err == nil {
 				msg.MessageID = sentID
 			} else {
@@ -1111,6 +1119,111 @@ func (s *service) shouldSuppressForProvider(provider string) bool {
 		}
 	}
 	return false
+}
+
+// scraperProviderRow is the subset of the catalog /internal/scraper/providers
+// response used to summarise provider faults in scraper firing alerts.
+type scraperProviderRow struct {
+	Name   string `json:"name"`
+	Group  string `json:"group"`
+	Status string `json:"status"` // enabled | degraded | disabled
+	Health string `json:"health"` // up | recovering | down
+	Reason string `json:"reason"`
+}
+
+// isScraperAlert reports whether a firing alert concerns the scraper / EN
+// failover chain, so the provider fault summary is appended only where it's
+// relevant (not on web/catalog/db alerts).
+func isScraperAlert(alert domain.AlertInfo) bool {
+	if strings.EqualFold(alert.Service, "scraper") {
+		return true
+	}
+	name := strings.ToLower(alert.Name)
+	return strings.Contains(name, "scraper") || strings.Contains(name, "parser")
+}
+
+// scraperProviderFaultLine fetches the live provider roster from the catalog
+// and returns a one-line Telegram-HTML summary of the EN failover providers
+// that are currently unhealthy, each with its reason — e.g.
+//
+//	⚠️ Unhealthy: allanime (cdn_unreachable), okru (cdn_unreachable)
+//
+// Returns "" when the catalog is unreachable or no EN provider is faulted
+// (fail-open: a catalog blip must never block the firing alert).
+func (s *service) scraperProviderFaultLine() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.CatalogURL+"/internal/scraper/providers", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return "" // fail-open: catalog blip must not strip the alert
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var body struct {
+		Data struct {
+			Providers []scraperProviderRow `json:"providers"`
+		} `json:"data"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&body) != nil {
+		return ""
+	}
+	return formatProviderFaultLine(body.Data.Providers)
+}
+
+// formatProviderFaultLine builds the one-line unhealthy-provider summary from a
+// provider roster. Pure (no I/O) for testability. Considers only the "en"
+// failover group; lists providers that are degraded OR whose health is not
+// "up" (so an in-chain provider that's failing but not yet auto-demoted still
+// shows), excluding admin-disabled ones (intentionally off, not a fault).
+// Returns "" when nothing is faulted.
+func formatProviderFaultLine(providers []scraperProviderRow) string {
+	var parts []string
+	for _, p := range providers {
+		if !strings.EqualFold(p.Group, "en") {
+			continue
+		}
+		if strings.EqualFold(p.Status, "disabled") {
+			continue
+		}
+		degraded := strings.EqualFold(p.Status, "degraded")
+		if !degraded && strings.EqualFold(p.Health, "up") {
+			continue
+		}
+		label := escTelegram(p.Name)
+		if r := shortReason(p.Reason); r != "" {
+			label += " (" + escTelegram(r) + ")"
+		}
+		parts = append(parts, label)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "⚠️ Unhealthy: " + strings.Join(parts, ", ")
+}
+
+// shortReason trims a provider reason down to its leading machine code,
+// dropping a trailing " on <host>" qualifier and capping length, so the fault
+// line stays compact: "empty_response on tserver" → "empty_response",
+// "cdn_unreachable on " → "cdn_unreachable".
+func shortReason(reason string) string {
+	r := strings.TrimSpace(reason)
+	if i := strings.Index(r, " on"); i > 0 {
+		if rest := r[i+3:]; rest == "" || strings.HasPrefix(rest, " ") {
+			r = r[:i]
+		}
+	}
+	r = strings.TrimSpace(r)
+	const maxLen = 48
+	if len([]rune(r)) > maxLen {
+		r = string([]rune(r)[:maxLen-1]) + "…"
+	}
+	return r
 }
 
 func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage, result *domain.AnalysisResult) {
