@@ -1228,6 +1228,9 @@ services:
       MINIO_BUCKET: ${UPSCALER_MINIO_BUCKET:-upscaler-output}
       MINIO_USE_SSL: "false"
       JOB_CAPABILITY_SECRET: ${JOB_CAPABILITY_SECRET:-}
+      # Allow workers to enroll with the edge API key alone (no single-use token),
+      # so one self-contained worker image is reusable across GPU servers.
+      WORKER_SELF_ENROLL: ${WORKER_SELF_ENROLL:-false}
       SEGMENT_SECONDS: ${UPSCALER_SEGMENT_SECONDS:-30}
       DEFAULT_SCALE: ${UPSCALER_DEFAULT_SCALE:-2}
       REMOTE_SHELL_ENABLED: ${UPSCALER_REMOTE_SHELL_ENABLED:-false}
