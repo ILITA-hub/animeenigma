@@ -823,6 +823,7 @@ class CamoufoxEngine:
         which is exactly this. Verified live against animepahe.pw."""
         deadline = time.monotonic() + self.cfg.challenge_solve_timeout_ms / 1000.0
         clicks = 0
+        clearance_since = 0.0
         last_reload = 0.0
         while time.monotonic() < deadline:
             try:
@@ -837,13 +838,24 @@ class CamoufoxEngine:
             # Solved iff clearance is set AND the page reached real content.
             if has_clearance and title and not looks_like_challenge(None, title):
                 return True
-            # Click the interactive Turnstile checkbox if its iframe is present.
-            if clicks < self.cfg.challenge_click_max and await self._click_turnstile(page):
-                clicks += 1
-            # Clearance present but page still challenged ⇒ reload to apply the
-            # cookie (throttled so a slow nav doesn't thrash the loop).
             now = time.monotonic()
-            if has_clearance and now - last_reload > 4.0:
+            if has_clearance and clearance_since == 0.0:
+                clearance_since = now
+            # Click the interactive Turnstile checkbox only while still
+            # challenged and not yet cleared (post-clearance the iframe is gone;
+            # an extra click would do nothing but a no-op).
+            if not has_clearance and clicks < self.cfg.challenge_click_max:
+                if await self._click_turnstile(page):
+                    clicks += 1
+            # After clearance, Cloudflare AUTO-reloads the page to real content
+            # (~1-2s) — do NOT reload eagerly or we race/reset that. Only force a
+            # reload to apply the cookie if the page has been STUCK with clearance
+            # (interim cookie, no auto-reload) for several seconds; throttled.
+            elif (
+                has_clearance
+                and now - clearance_since > 6.0
+                and now - last_reload > 6.0
+            ):
                 try:
                     await page.goto(
                         origin, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
