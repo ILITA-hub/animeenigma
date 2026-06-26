@@ -821,6 +821,21 @@ class CamoufoxEngine:
         Camoufox passes the fingerprint check; the only piece a curl/Go client
         cannot do is the interactive checkbox click + the clearance round-trip —
         which is exactly this. Verified live against animepahe.pw."""
+        # A persistent/aged warm profile can carry a STALE or interim cf_clearance
+        # from a prior attempt. That cookie is poison: it makes has_clearance read
+        # True (so the solver would skip the Turnstile click) yet still 403s on the
+        # actual fetch. Wipe the cookie jar and re-navigate so every solve starts
+        # from a clean, freshly-issued challenge. (The warm profile is leased
+        # exclusively for this session, so clearing it is safe.)
+        try:
+            if context is not None:
+                await context.clear_cookies()
+                await page.goto(
+                    origin, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
         deadline = time.monotonic() + self.cfg.challenge_solve_timeout_ms / 1000.0
         clicks = 0
         clearance_since = 0.0
@@ -841,18 +856,23 @@ class CamoufoxEngine:
             now = time.monotonic()
             if has_clearance and clearance_since == 0.0:
                 clearance_since = now
-            # Click the interactive Turnstile checkbox only while still
-            # challenged and not yet cleared (post-clearance the iframe is gone;
-            # an extra click would do nothing but a no-op).
-            if not has_clearance and clicks < self.cfg.challenge_click_max:
-                if await self._click_turnstile(page):
+            # Click the interactive Turnstile whenever the page is still a
+            # challenge — do NOT gate on cf_clearance (a stale cookie must never
+            # suppress the click). _click_turnstile is a no-op when no iframe.
+            challenged = (not title) or looks_like_challenge(None, title)
+            clicked = False
+            if challenged and clicks < self.cfg.challenge_click_max:
+                clicked = await self._click_turnstile(page)
+                if clicked:
                     clicks += 1
-            # After clearance, Cloudflare AUTO-reloads the page to real content
-            # (~1-2s) — do NOT reload eagerly or we race/reset that. Only force a
-            # reload to apply the cookie if the page has been STUCK with clearance
-            # (interim cookie, no auto-reload) for several seconds; throttled.
-            elif (
-                has_clearance
+            # Clearance present but page stuck on the interstitial with NOTHING to
+            # click (interim cookie / no auto-reload): reload to apply the cookie.
+            # Only after it's been stuck >6s (let CF's own auto-reload settle
+            # first) and throttled, so we never race CF's reload.
+            if (
+                challenged
+                and not clicked
+                and has_clearance
                 and now - clearance_since > 6.0
                 and now - last_reload > 6.0
             ):

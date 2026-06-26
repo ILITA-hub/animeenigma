@@ -5,8 +5,9 @@ The animepahe recipe sets solve_challenge=True so the warm-fetch nav SOLVES the
 cf_clearance) instead of rotating the exit on the first challenge. Recipes
 without the flag (gogoanime/nineanime) are unaffected — they still rotate.
 
-All fakes here are browser-free: a fake page exposes frames/mouse/title/goto and
-a fake context exposes cookies() that flip to cf_clearance once a click lands.
+The fakes are browser-free and model reality: the page shows the challenge title
+(and the context yields only a benign cookie) UNTIL the Turnstile checkbox is
+clicked, after which the page reaches real content and cf_clearance is set.
 asyncio.sleep is patched to a no-op so the poll loop runs instantly.
 """
 import asyncio
@@ -36,6 +37,13 @@ def _no_sleep():
         asyncio.sleep = orig
 
 
+REAL_TITLE = "animepahe :: okay-ish anime website"
+CHALLENGE_TITLE = "Just a moment..."
+TURNSTILE_URL = (
+    "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/ov2"
+)
+
+
 class _Mouse:
     def __init__(self):
         self.clicks = []
@@ -60,20 +68,23 @@ class _Frame:
         return _El()
 
 
+class _Resp:
+    def __init__(self, status):
+        self.status = status
+
+
 class _Page:
-    """Fake page for _solve_cf_challenge: holds frames + a mouse; title() yields
-    a scripted sequence then settles to real content."""
+    """Fake page: a challenge until the Turnstile is clicked, then real content."""
 
     url = "https://animepahe.pw/"
 
-    def __init__(self, frames, mouse, titles):
+    def __init__(self, frames, mouse):
         self.frames = frames
         self.mouse = mouse
-        self._titles = list(titles)
         self.closed = False
 
     async def title(self):
-        return self._titles.pop(0) if self._titles else "animepahe :: okay-ish anime website"
+        return REAL_TITLE if self.mouse.clicks else CHALLENGE_TITLE
 
     async def goto(self, url, **k):
         return _Resp(403)
@@ -82,14 +93,8 @@ class _Page:
         self.closed = True
 
 
-class _Resp:
-    def __init__(self, status):
-        self.status = status
-
-
 class _Ctx:
-    """Fake context: cookies() return cf_clearance once the mouse has clicked
-    (i.e. the Turnstile was solved), else a benign analytics cookie."""
+    """Fake context: cookies yield cf_clearance once the Turnstile is clicked."""
 
     def __init__(self, mouse, page=None):
         self._mouse = mouse
@@ -98,22 +103,20 @@ class _Ctx:
     async def new_page(self):
         return self._page
 
+    async def clear_cookies(self):
+        return None
+
     async def cookies(self):
         if self._mouse.clicks:
             return [{"name": "cf_clearance", "value": "x"}, {"name": "_ga", "value": "y"}]
         return [{"name": "_ga", "value": "y"}]
 
 
-TURNSTILE_URL = (
-    "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/ov2"
-)
-
-
 class TestClickTurnstile(unittest.TestCase):
     def test_clicks_turnstile_iframe_at_checkbox(self):
         eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
         mouse = _Mouse()
-        page = _Page([_Frame("https://animepahe.pw/"), _Frame(TURNSTILE_URL)], mouse, [])
+        page = _Page([_Frame("https://animepahe.pw/"), _Frame(TURNSTILE_URL)], mouse)
         self.assertTrue(run(eng._click_turnstile(page)))
         self.assertEqual(len(mouse.clicks), 1)
         # checkbox at left of widget: x = 100 + min(33, 150) = 133; y = 100 + 32.5
@@ -123,7 +126,7 @@ class TestClickTurnstile(unittest.TestCase):
     def test_no_turnstile_frame_no_click(self):
         eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
         mouse = _Mouse()
-        page = _Page([_Frame("https://animepahe.pw/")], mouse, [])
+        page = _Page([_Frame("https://animepahe.pw/")], mouse)
         self.assertFalse(run(eng._click_turnstile(page)))
         self.assertEqual(mouse.clicks, [])
 
@@ -133,7 +136,7 @@ class TestSolveCfChallenge(unittest.TestCase):
         eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
                                     challenge_solve_timeout_ms=5000))
         mouse = _Mouse()
-        page = _Page([_Frame(TURNSTILE_URL)], mouse, ["Just a moment..."])
+        page = _Page([_Frame(TURNSTILE_URL)], mouse)
         ctx = _Ctx(mouse)
         with _no_sleep():
             ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
@@ -144,12 +147,32 @@ class TestSolveCfChallenge(unittest.TestCase):
         eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
                                     challenge_solve_timeout_ms=40))
         mouse = _Mouse()
-        # no turnstile frame ⇒ no click ⇒ cookies never flip to clearance
-        page = _Page([_Frame("https://animepahe.pw/")], mouse, ["Just a moment..."])
+        # no turnstile frame ⇒ no click ⇒ never reaches real content / clearance
+        page = _Page([_Frame("https://animepahe.pw/")], mouse)
         ctx = _Ctx(mouse)
         with _no_sleep():
             ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
         self.assertFalse(ok)
+
+    def test_stale_clearance_does_not_suppress_click(self):
+        # A profile carrying a stale cf_clearance must NOT stop the solver from
+        # clicking — the cookie jar is cleared up-front so a fresh solve runs.
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                    challenge_solve_timeout_ms=5000))
+        mouse = _Mouse()
+        page = _Page([_Frame(TURNSTILE_URL)], mouse)
+
+        class _StaleCtx(_Ctx):
+            async def cookies(self):
+                # Always reports cf_clearance present (stale), even before a click.
+                return [{"name": "cf_clearance", "value": "stale"}]
+
+        ctx = _StaleCtx(mouse)
+        with _no_sleep():
+            ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
+        # It must still click (the stale cookie didn't suppress it).
+        self.assertTrue(mouse.clicks, "stale cf_clearance must not suppress the click")
+        self.assertTrue(ok)
 
 
 class TestRecipeFlags(unittest.TestCase):
@@ -166,7 +189,7 @@ class TestWarmFetchSolveBranch(unittest.TestCase):
     """The warm-fetch nav must SOLVE the challenge for an opt-in recipe (open a
     session, no rotate) and ROTATE for a non-opt-in one / an unsolved challenge."""
 
-    def _engine_with_fake_browser(self, page, ctx, **cfg):
+    def _engine_with_fake_browser(self, ctx, **cfg):
         eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False, **cfg))
 
         async def _fake_ensure(profile, proxy_id):
@@ -177,9 +200,9 @@ class TestWarmFetchSolveBranch(unittest.TestCase):
 
     def test_opt_in_recipe_solves_and_opens_session(self):
         mouse = _Mouse()
-        page = _Page([_Frame(TURNSTILE_URL)], mouse, ["Just a moment..."])
+        page = _Page([_Frame(TURNSTILE_URL)], mouse)
         ctx = _Ctx(mouse, page)
-        eng = self._engine_with_fake_browser(page, ctx, challenge_solve_timeout_ms=5000)
+        eng = self._engine_with_fake_browser(ctx, challenge_solve_timeout_ms=5000)
         key = "fetch::animepahe::https://animepahe.pw"
         with _no_sleep():
             sess = run(eng._warm_fetch_session("animepahe", "https://animepahe.pw"))
@@ -189,9 +212,9 @@ class TestWarmFetchSolveBranch(unittest.TestCase):
 
     def test_unsolved_challenge_rotates_and_raises(self):
         mouse = _Mouse()
-        page = _Page([_Frame("https://animepahe.pw/")], mouse, ["Just a moment..."])  # no turnstile
+        page = _Page([_Frame("https://animepahe.pw/")], mouse)  # no turnstile
         ctx = _Ctx(mouse, page)
-        eng = self._engine_with_fake_browser(page, ctx, challenge_solve_timeout_ms=40)
+        eng = self._engine_with_fake_browser(ctx, challenge_solve_timeout_ms=40)
         with _no_sleep():
             with self.assertRaises(ChallengeError):
                 run(eng._warm_fetch_session("animepahe", "https://animepahe.pw"))
@@ -202,9 +225,9 @@ class TestWarmFetchSolveBranch(unittest.TestCase):
         mouse = _Mouse()
         # A turnstile frame IS present, but nineanime does not opt in → no click,
         # straight to rotate (preserves pre-existing behavior).
-        page = _Page([_Frame(TURNSTILE_URL)], mouse, ["Just a moment..."])
+        page = _Page([_Frame(TURNSTILE_URL)], mouse)
         ctx = _Ctx(mouse, page)
-        eng = self._engine_with_fake_browser(page, ctx)
+        eng = self._engine_with_fake_browser(ctx)
         with _no_sleep():
             with self.assertRaises(ChallengeError):
                 run(eng._warm_fetch_session("nineanime", "https://9anime.me.uk"))
