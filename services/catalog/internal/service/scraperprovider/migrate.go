@@ -189,6 +189,9 @@ const allanimeDegradeGuardKey = "allanime_degrade"
 // animepaheSidecarRetiredGuardKey marks AnimepaheSidecarRetired as applied.
 const animepaheSidecarRetiredGuardKey = "animepahe_sidecar_retired"
 
+// animepaheBrowserRevivalGuardKey marks AnimepaheBrowserRevival as applied.
+const animepaheBrowserRevivalGuardKey = "animepahe_browser_revival"
+
 // MiruroDubOnly flips the miruro roster row to supports_sub=false exactly once.
 // Miruro's upstream stopped serving sub streams (only English dub plays), so it
 // must not advertise/auto-select for SUB (original-Japanese-audio) playback. The
@@ -304,6 +307,66 @@ func NineanimeBrowser(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: nineanimeBrowserGuardKey}).Error; err != nil {
 		return fmt.Errorf("write nineanime-browser guard: %w", err)
+	}
+	return nil
+}
+
+// AnimepaheBrowserRevival REVIVES animepahe (2026-06-26): flips it onto the
+// Camoufox stealth-scraper sidecar (engine=browser, base_url=https://animepahe.pw)
+// and promotes it from disabled → degraded. animepahe.pw's Cloudflare managed
+// (interactive Turnstile) challenge IS solvable from this server's own datacenter
+// IP — the warm /fetch session clicks the Turnstile checkbox and waits for
+// cf_clearance (~10s, no residential proxy) — so the earlier "0% solve" verdict
+// (AnimepaheSidecarRetired) is superseded. Seeded DEGRADED (owner pref: manually
+// selectable, out of the auto-failover chain) pending live soak. The seed is
+// insert-if-absent and never updates the existing prod row; this RUN-ONCE guarded
+// migration carries the flip to live DBs. Guarded via catalog_migration_guards so
+// it's a no-op on every later boot and an operator who reverts engine/status in
+// the DB is NOT clobbered. Idempotent; safe to call every boot.
+func AnimepaheBrowserRevival(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", animepaheBrowserRevivalGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check animepahe-browser-revival guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator change
+	}
+	// The scraper roster derives the wire status via WireStatus(policy, health),
+	// NOT the stored `status` column — so the AUTHORITATIVE levers are policy +
+	// health. On the live DB animepahe is policy=disabled (set when it was
+	// disabled), so flipping `status` alone would leave WireStatus()=disabled.
+	// Set policy=manual + health=down (→ WireStatus=degraded), mirroring
+	// BackfillPolicyHealth's degraded mapping so a fresh DB (seed=degraded →
+	// backfill manual/down) and a live DB converge to the same (manual, down).
+	// `status` is updated too for column consistency (cosmetic; derived on wire).
+	now := time.Now().UTC()
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "animepahe").
+		Updates(map[string]interface{}{
+			"engine":       "browser",
+			"base_url":     "https://animepahe.pw",
+			"status":       domain.StatusDegraded,
+			"policy":       string(domain.PolicyManual),
+			"health":       string(domain.HealthDown),
+			"policy_since": now,
+			"health_since": now,
+			"reason":       "Browser-scraped via Camoufox sidecar (animepahe.pw Cloudflare managed challenge solved)",
+			"description":  "animepahe.pw sits behind a Cloudflare managed (interactive Turnstile) challenge. The Camoufox stealth-scraper warm /fetch session solves it (clicks the Turnstile checkbox + waits for cf_clearance, ~10s on our own IP, no residential proxy); discovery (search/release JSON + /play HTML) then rides the in-page fetch (engine=browser). The kwik.cx stream leg is extracted in Go. Degraded: manually selectable (hacker mode), out of the auto-failover chain pending live soak.",
+		})
+	if result.Error != nil {
+		return fmt.Errorf("animepahe browser revival: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No animepahe row to flip (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("animepahe browser revival: no row found for name=animepahe")
+	}
+	if err := db.Create(&migrationGuard{Key: animepaheBrowserRevivalGuardKey}).Error; err != nil {
+		return fmt.Errorf("write animepahe-browser-revival guard: %w", err)
 	}
 	return nil
 }

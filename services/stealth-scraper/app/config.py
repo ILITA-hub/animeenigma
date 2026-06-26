@@ -81,6 +81,22 @@ class Config:
     capture_attempts: int = 40
     capture_delay: float = 0.5
 
+    # -- Cloudflare managed/Turnstile challenge solving (opt-in per recipe) -- #
+    # A recipe with solve_challenge=True (e.g. animepahe) asks the warm-fetch
+    # path to SOLVE a Cloudflare "Just a moment…" managed challenge — click the
+    # interactive Turnstile checkbox + poll for cf_clearance — instead of
+    # rotating the exit IP on the first interstitial. Camoufox (headful in Xvfb,
+    # humanized) passes the fingerprint check; the click + token round-trip is
+    # the only piece a curl-class client cannot do. Recipes without the flag are
+    # UNAFFECTED (the challenge still rotates the exit, as before).
+    # solve budget: clearance lands ~10s in practice. The ENTIRE solve (click +
+    # clearance poll + the post-clearance reload-confirm) is bounded by this, so
+    # nav (nav_timeout_ms) + solve + first fetch (fetch_timeout_ms) stays under
+    # the 90s Go sidecar-client timeout. Keep it well below 90 − nav − fetch.
+    challenge_solve_timeout_ms: int = 30_000
+    # Max interactive Turnstile checkbox clicks per solve attempt.
+    challenge_click_max: int = 3
+
     # How long a resolved stream session (cookies + master url) is advertised as
     # fresh. cf_clearance typically lives ~30 min; keep this comfortably under it.
     session_ttl_seconds: int = 600
@@ -154,6 +170,8 @@ class Config:
             resolve_timeout_ms=_int(g("STEALTH_RESOLVE_TIMEOUT_MS"), 60_000),
             capture_attempts=_int(g("STEALTH_CAPTURE_ATTEMPTS"), 40),
             capture_delay=float(g("STEALTH_CAPTURE_DELAY") or 0.5),
+            challenge_solve_timeout_ms=_int(g("STEALTH_CHALLENGE_SOLVE_TIMEOUT_MS"), 30_000),
+            challenge_click_max=_int(g("STEALTH_CHALLENGE_CLICK_MAX"), 3),
             session_ttl_seconds=_int(g("STEALTH_SESSION_TTL_SECONDS"), 600),
             fetch_timeout_ms=_int(g("STEALTH_FETCH_TIMEOUT_MS"), 20_000),
             max_body_bytes=_int(g("STEALTH_MAX_BODY_BYTES"), 64 * 1024 * 1024),

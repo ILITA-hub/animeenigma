@@ -103,6 +103,11 @@ class Recipe:
     # Hosts a recipe is permitted to navigate to. Enforced by the engine before
     # every page.goto so a compromised upstream cannot pivot the browser (SSRF).
     allowed_hosts: set[str] = field(default_factory=set)  # type: ignore[assignment]
+    # Opt-in: when True, the engine's warm-fetch path SOLVES a Cloudflare managed
+    # /Turnstile challenge (click the checkbox + poll for cf_clearance) on the
+    # origin nav instead of rotating the exit IP on the first "Just a moment…"
+    # interstitial. Default False ⇒ unchanged rotate-on-challenge behavior.
+    solve_challenge: bool = False
 
     async def resolve(self, rc: RecipeContext) -> dict[str, Any]:
         """Drive the page chain and return a partial stream session:

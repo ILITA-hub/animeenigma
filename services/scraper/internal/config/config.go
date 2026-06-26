@@ -15,13 +15,13 @@ import (
 //
 // Phase 15 plan 03 nests megacloud-extractor settings into their own struct so
 // new providers' configs can land alongside without flattening the top level.
-// Phase 16 plan 05 adds RedisConfig (cache backend) and AnimePaheConfig
-// (provider-specific overrides).
+// Phase 16 plan 05 adds RedisConfig (cache backend). AnimePahe's per-provider
+// config was removed on the 2026-06-26 Camoufox revival — its base_url comes
+// from the DB roster (Providers.BaseURLOf) like the other browser providers.
 type Config struct {
 	Server             ServerConfig
 	MegacloudExtractor MegacloudExtractorConfig
 	Redis              RedisConfig
-	AnimePahe          AnimePaheConfig
 	Gogoanime          GogoanimeConfig
 	AnimeKai           AnimeKaiConfig
 	AllAnime           AllAnimeConfig
@@ -88,26 +88,6 @@ type RedisConfig struct {
 	Port     int
 	Password string
 	DB       int
-}
-
-// AnimePaheConfig is the per-provider override surface for animepahe.Provider.
-//
-// Phase 27 SCRAPER-HEAL-30: the Go parser no longer talks to animepahe.*
-// directly. ResolverURL points at a stealth-Chromium resolver sidecar which
-// owns the upstream challenge stack (DDoS-Guard, browser-fingerprint, etc.).
-// The pre-Phase-27 BaseURL field has been removed entirely — there is no
-// fallback to upstream animepahe.* hosts.
-//
-// RETIRED 2026-06-24: animepahe is disabled in the roster and its dedicated
-// `services/animepahe-resolver/` sidecar was deleted (no separate
-// anti-DDoS-Guard browser is run anymore — Camoufox covers the live
-// providers). This struct + the `http://animepahe-resolver:3000` default are
-// KEPT so the provider still constructs at boot (New() only validates the URL
-// string, never dials) and animepahe can be revived later: re-add a resolver
-// and point SCRAPER_ANIMEPAHE_RESOLVER_URL at it. While disabled the field is
-// never used (the orchestrator never registers/dispatches the provider).
-type AnimePaheConfig struct {
-	ResolverURL string
 }
 
 // GogoanimeConfig is the per-provider override surface for the gogoanime.Provider
@@ -185,11 +165,10 @@ type MiruroConfig struct {
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
 //
-// REVIEW.md WR-05: MEGACLOUD_EXTRACTOR_URL and (Phase 27)
-// SCRAPER_ANIMEPAHE_RESOLVER_URL are validated at boot so an invalid value
-// (e.g. missing scheme) is rejected immediately rather than surfacing deep
-// inside MegacloudClient.Extract or animepahe.Provider.FindID on the first
-// request. An empty URL is allowed (main.go warns on it).
+// REVIEW.md WR-05: MEGACLOUD_EXTRACTOR_URL is validated at boot so an invalid
+// value (e.g. missing scheme) is rejected immediately rather than surfacing
+// deep inside MegacloudClient.Extract on the first request. An empty URL is
+// allowed (main.go warns on it).
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
@@ -205,9 +184,6 @@ func Load() (*Config, error) {
 			Port:     getEnvInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvInt("REDIS_DB", 0),
-		},
-		AnimePahe: AnimePaheConfig{
-			ResolverURL: getEnv("SCRAPER_ANIMEPAHE_RESOLVER_URL", "http://animepahe-resolver:3000"),
 		},
 		Gogoanime: GogoanimeConfig{
 			BaseURL:        getEnv("SCRAPER_GOGOANIME_BASE_URL", "https://anitaku.to"),
@@ -274,15 +250,6 @@ func Load() (*Config, error) {
 		}
 		if parsed.Scheme == "" || parsed.Host == "" {
 			return nil, fmt.Errorf("invalid MEGACLOUD_EXTRACTOR_URL %q: missing scheme or host", u)
-		}
-	}
-	if u := cfg.AnimePahe.ResolverURL; u != "" {
-		parsed, err := url.Parse(u)
-		if err != nil {
-			return nil, fmt.Errorf("invalid SCRAPER_ANIMEPAHE_RESOLVER_URL %q: %w", u, err)
-		}
-		if parsed.Scheme == "" || parsed.Host == "" {
-			return nil, fmt.Errorf("invalid SCRAPER_ANIMEPAHE_RESOLVER_URL %q: missing scheme or host", u)
 		}
 	}
 	if u := cfg.Gogoanime.BaseURL; u != "" {

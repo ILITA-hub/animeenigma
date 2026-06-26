@@ -31,9 +31,9 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/capability"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/scraperprovider"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/subprobe"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/client"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/subprobe"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/transport"
 )
 
@@ -256,6 +256,17 @@ func main() {
 	// in the DB is never clobbered.
 	if err := scraperprovider.AnimepaheSidecarRetired(db.DB); err != nil {
 		log.Errorw("animepahe sidecar-retired migration failed (continuing)", "error", err)
+	}
+
+	// One-time (guarded) REVIVAL of animepahe onto the Camoufox stealth-scraper
+	// sidecar (engine=browser, base_url=https://animepahe.pw, disabled→degraded).
+	// animepahe.pw's Cloudflare managed challenge is solvable from our own IP via
+	// the warm /fetch Turnstile solver — superseding the "0% solve" retirement
+	// above. MUST run AFTER AnimepaheSidecarRetired so its degraded/browser flip
+	// wins on a fresh DB. Run-once via the ledger; a later operator revert is
+	// never clobbered.
+	if err := scraperprovider.AnimepaheBrowserRevival(db.DB); err != nil {
+		log.Errorw("animepahe browser revival migration failed (continuing)", "error", err)
 	}
 
 	// One-time (guarded) flip of nineanime to engine=browser + base_url:

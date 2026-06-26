@@ -65,6 +65,7 @@ from .fingerprint import build_launch_options, proxy_to_playwright
 from .profiles import Profile, ProfileManager
 from .ramsampler import process_tree_rss
 from .recipes import ChallengeError, NotFoundError, Recipe, RecipeContext, RecipeError
+from .recipes.animepahe import AnimePaheRecipe
 from .recipes.base import host_allowed, host_of, looks_like_challenge
 from .recipes.gogoanime import GogoanimeRecipe
 from .recipes.nineanime import NineAnimeRecipe
@@ -157,6 +158,7 @@ class CamoufoxEngine:
         self._recipes: dict[str, Recipe] = {
             "gogoanime": GogoanimeRecipe(),
             "nineanime": NineAnimeRecipe(),
+            "animepahe": AnimePaheRecipe(),
         }
         self._log: Any = None
         # Async DNS resolver (host -> list[ip str]); injectable in tests so the
@@ -744,12 +746,22 @@ class CamoufoxEngine:
         session = await self._warm_fetch_session(provider, origin, user_key)
         session.in_use += 1
         try:
-            status, ctype, _final, body = await self._in_page_fetch(session, url)
+            status, ctype, final, body = await self._in_page_fetch(session, url)
         except FetchTimeout:
             await self.aclose_session(session.id)
             raise
         finally:
             session.in_use = max(0, session.in_use - 1)
+
+        # The in-page fetch follows redirects; a compromised / open-redirecting
+        # upstream could 30x toward an internal host. Re-validate the POST-redirect
+        # host against the recipe's static allowlist (mirrors proxy_fetch's
+        # redirect guard) so the discovery path can't be used as an SSRF pivot.
+        if final and host_of(final) != h and not host_allowed(host_of(final), recipe.allowed_hosts):
+            await self.aclose_session(session.id)
+            raise RecipeError(
+                f"fetch redirect target not allowed for {provider}: {host_of(final)}"
+            )
 
         # A challenge can re-appear mid-session (cookie expiry / new edge): drop
         # the poisoned session and surface ChallengeError so Go fails over.
@@ -760,6 +772,75 @@ class CamoufoxEngine:
 
         session.expires_at = time.time() + self.cfg.session_ttl_seconds
         return {"status": status, "content_type": ctype, "body": body}
+
+    async def _click_turnstile(self, page: Any) -> bool:
+        """Click the interactive Cloudflare Turnstile checkbox if its challenge
+        iframe is present. Mouse events are coordinate-based, so a click at the
+        widget's checkbox (near its left edge) passes through the nested
+        challenge iframes. Humanized approach (move-then-click) mirrors the live-
+        verified spike. Best-effort: returns True iff a click was dispatched."""
+        try:
+            frames = list(page.frames)
+        except Exception:  # noqa: BLE001
+            return False
+        for fr in frames:
+            u = (getattr(fr, "url", "") or "")
+            if "challenges.cloudflare.com" not in u and "turnstile" not in u.lower():
+                continue
+            try:
+                el = await fr.frame_element()
+                box = await el.bounding_box()
+                if not box:
+                    continue
+                # checkbox sits near the left of the widget (~30px in), vertically centered
+                cx = box["x"] + min(33.0, box["width"] / 2.0)
+                cy = box["y"] + box["height"] / 2.0
+                await page.mouse.move(cx - 60, cy - 25)
+                await asyncio.sleep(0.25)
+                await page.mouse.move(cx, cy)
+                await asyncio.sleep(0.2)
+                await page.mouse.click(cx, cy)
+                return True
+            except Exception:  # noqa: BLE001
+                continue
+        return False
+
+    async def _solve_cf_challenge(self, page: Any, context: Any, origin: str) -> bool:
+        """Clear a Cloudflare managed/Turnstile challenge on the already-navigated
+        ``page`` by clicking the interactive checkbox and polling for the
+        cf_clearance cookie. Returns True once cleared, False if
+        cfg.challenge_solve_timeout_ms elapses (the caller then rotates the exit).
+
+        Camoufox passes the fingerprint check; the only piece a curl/Go client
+        cannot do is the interactive click + token round-trip — which is exactly
+        this. Verified live against animepahe.pw (~10s to clearance, no proxy)."""
+        deadline = time.monotonic() + self.cfg.challenge_solve_timeout_ms / 1000.0
+        clicks = 0
+        while time.monotonic() < deadline:
+            await asyncio.sleep(1.2)
+            try:
+                cookies = await context.cookies() if context is not None else []
+            except Exception:  # noqa: BLE001
+                cookies = []
+            if any(c.get("name") == "cf_clearance" for c in cookies):
+                # Clearance issued; give the interstitial a moment to reload to
+                # real content so the first in-page fetch lands on the live site.
+                # Bounded by the SAME solve deadline so the total solve can never
+                # exceed challenge_solve_timeout_ms — keeps the whole warm-fetch
+                # flow (nav + solve + first fetch) comfortably under the Go
+                # sidecar-client 90s budget even when clearance lands late.
+                while time.monotonic() < deadline:
+                    try:
+                        title = await page.title()
+                    except Exception:  # noqa: BLE001
+                        title = ""
+                    if not looks_like_challenge(None, title):
+                        return True
+                    await asyncio.sleep(1.0)
+                return True
+            if clicks < self.cfg.challenge_click_max and await self._click_turnstile(page):
+                clicks += 1
+        return False
 
     async def _warm_fetch_session(
         self, provider: str, origin: str, user_key: str | None = None
@@ -821,14 +902,31 @@ class CamoufoxEngine:
             except Exception:  # noqa: BLE001
                 title = ""
             if looks_like_challenge(status, title):
-                await _safe_close_page(page)
-                self.pool.mark_blocked(proxy.id)
-                self.profiles.release(profile, ok=False)
-                metrics.CHALLENGE_TOTAL.labels(host=host_of(origin) or "?", kind="warm").inc()
-                metrics.PROXY_BLOCK_TOTAL.labels(proxy_id=proxy.id).inc()
-                raise ChallengeError(
-                    f"challenge warming {origin}", host=host_of(origin), kind="warm"
-                )
+                # A recipe may opt into SOLVING a Cloudflare managed/Turnstile
+                # challenge (click the checkbox + poll for cf_clearance) rather
+                # than rotating the exit on the first interstitial. Recipes
+                # without the flag fall straight through to the rotate path —
+                # behavior is unchanged for them.
+                recipe = self._recipes.get(provider)
+                solved = False
+                if recipe is not None and getattr(recipe, "solve_challenge", False):
+                    try:
+                        solved = await self._solve_cf_challenge(page, context, origin)
+                    except Exception:  # noqa: BLE001 — any solve fault ⇒ rotate
+                        solved = False
+                if solved:
+                    metrics.CHALLENGE_TOTAL.labels(
+                        host=host_of(origin) or "?", kind="warm_solved"
+                    ).inc()
+                else:
+                    await _safe_close_page(page)
+                    self.pool.mark_blocked(proxy.id)
+                    self.profiles.release(profile, ok=False)
+                    metrics.CHALLENGE_TOTAL.labels(host=host_of(origin) or "?", kind="warm").inc()
+                    metrics.PROXY_BLOCK_TOTAL.labels(proxy_id=proxy.id).inc()
+                    raise ChallengeError(
+                        f"challenge warming {origin}", host=host_of(origin), kind="warm"
+                    )
             session = Session(
                 id=key, profile=profile, proxy_id=proxy.id, referer=origin,
                 user_agent=profile.user_agent, cdn_host=host_of(origin),

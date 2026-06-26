@@ -289,6 +289,81 @@ func TestNineanimeBrowser_GuardedDoesNotClobberOperatorRevert(t *testing.T) {
 	}
 }
 
+func TestAnimepaheBrowserRevival_FlipsAndPromotesToDegraded(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Simulate a pre-existing LIVE DB where animepahe is fully disabled: the
+	// retirement migration + policy/health backfill already ran, leaving it
+	// engine=http, policy=disabled, health=down. WireStatus() is therefore
+	// StatusDisabled — flipping `status` alone would NOT register it.
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "animepahe").
+		Updates(map[string]interface{}{
+			"engine": "http", "base_url": "",
+			"status": string(domain.StatusDisabled),
+			"policy": string(domain.PolicyDisabled), "health": string(domain.HealthDown),
+		}).Error; err != nil {
+		t.Fatalf("preset animepahe disabled: %v", err)
+	}
+
+	if err := scraperprovider.AnimepaheBrowserRevival(db); err != nil {
+		t.Fatalf("animepahe browser revival: %v", err)
+	}
+
+	var pahe, gogo domain.ScraperProvider
+	db.First(&pahe, "name = ?", "animepahe")
+	db.First(&gogo, "name = ?", "gogoanime")
+	if pahe.Engine != "browser" {
+		t.Errorf("animepahe engine = %q, want browser", pahe.Engine)
+	}
+	if pahe.BaseURL != "https://animepahe.pw" {
+		t.Errorf("animepahe base_url = %q, want https://animepahe.pw", pahe.BaseURL)
+	}
+	if pahe.Policy != domain.PolicyManual {
+		t.Errorf("animepahe policy = %q, want manual", pahe.Policy)
+	}
+	// The whole point: the DERIVED wire status must be degraded (registered +
+	// manually selectable), NOT disabled.
+	if got := pahe.WireStatus(); got != domain.StatusDegraded {
+		t.Errorf("animepahe WireStatus() = %q, want degraded", got)
+	}
+	// Other providers untouched.
+	if gogo.BaseURL != "https://gogoanimes.fi" {
+		t.Errorf("gogoanime base_url = %q, must stay gogoanimes.fi (only animepahe flipped)", gogo.BaseURL)
+	}
+}
+
+func TestAnimepaheBrowserRevival_GuardedDoesNotClobberOperatorRevert(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := scraperprovider.AnimepaheBrowserRevival(db); err != nil {
+		t.Fatalf("animepahe browser revival 1: %v", err)
+	}
+	// Operator later disables animepahe again in the DB.
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "animepahe").
+		Update("policy", string(domain.PolicyDisabled)).Error; err != nil {
+		t.Fatalf("operator disable: %v", err)
+	}
+	// Second boot must NOT clobber the operator's change (guard already set).
+	if err := scraperprovider.AnimepaheBrowserRevival(db); err != nil {
+		t.Fatalf("animepahe browser revival 2: %v", err)
+	}
+	var pahe domain.ScraperProvider
+	db.First(&pahe, "name = ?", "animepahe")
+	if pahe.Policy != domain.PolicyDisabled {
+		t.Errorf("animepahe policy = %q, want disabled (guard clobbered operator change)", pahe.Policy)
+	}
+}
+
 func TestNineanimeBrowser_NoRow_ErrorsAndDoesNotWriteGuard(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

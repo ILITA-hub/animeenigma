@@ -34,6 +34,26 @@ class _FetchPage:
         pass
 
 
+class _RedirectPage:
+    """Fake page whose in-page fetch resolves to a DIFFERENT final URL than the
+    requested one (simulating an HTTP redirect the in-page fetch followed)."""
+    url = "https://9anime.me.uk/"
+
+    def __init__(self, final_url: str, body: bytes = b'{"ok":1}', status: int = 200,
+                 ctype: str = "application/json"):
+        self._final, self._body, self._status, self._ctype = final_url, body, status, ctype
+        self.calls = 0
+
+    async def evaluate(self, js, *args):
+        if not args:      # liveness probe `()=>1`
+            return 1
+        self.calls += 1
+        return f"{self._status}|{self._ctype}|{self._final}|{base64.b64encode(self._body).decode()}"
+
+    async def close(self):
+        pass
+
+
 def _engine_with_fetch_session(body=b'{"ok":1}', status=200, ctype="application/json",
                                key="fetch::nineanime::https://9anime.me.uk"):
     eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
@@ -78,6 +98,26 @@ class TestBrowserFetch(unittest.TestCase):
         with self.assertRaises(ChallengeError):
             run(eng.browser_fetch("nineanime", "https://9anime.me.uk/x"))
         self.assertEqual(len(eng._sessions), 0)        # poisoned session dropped
+
+    def test_post_redirect_to_disallowed_host_rejected(self):
+        # The in-page fetch follows redirects; a 30x toward an internal host must
+        # be rejected (SSRF redirect guard) even though the ORIGINAL url is allowed.
+        eng, _, _ = _engine_with_fetch_session()
+        eng._sessions["fetch::nineanime::https://9anime.me.uk"].page = _RedirectPage(
+            "http://169.254.169.254/latest/meta-data/"
+        )
+        with self.assertRaises(RecipeError):
+            run(eng.browser_fetch("nineanime", "https://9anime.me.uk/x"))
+        self.assertEqual(len(eng._sessions), 0)        # session dropped on redirect-deny
+
+    def test_post_redirect_within_allowlist_ok(self):
+        # A redirect that stays inside the recipe's allowed_hosts is fine.
+        eng, _, _ = _engine_with_fetch_session()
+        eng._sessions["fetch::nineanime::https://9anime.me.uk"].page = _RedirectPage(
+            "https://my.1anime.site/x", body=b'{"ok":1}'
+        )
+        out = run(eng.browser_fetch("nineanime", "https://9anime.me.uk/x"))
+        self.assertEqual(out["body"], b'{"ok":1}')
 
 
 class TestFetchRoute(unittest.TestCase):

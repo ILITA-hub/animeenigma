@@ -66,9 +66,6 @@ func TestConfig_Load_Defaults(t *testing.T) {
 	if cfg.Redis.DB != 0 {
 		t.Errorf("Redis.DB = %d; want 0", cfg.Redis.DB)
 	}
-	if cfg.AnimePahe.ResolverURL != "http://animepahe-resolver:3000" {
-		t.Errorf("AnimePahe.ResolverURL = %q; want http://animepahe-resolver:3000", cfg.AnimePahe.ResolverURL)
-	}
 }
 
 // TestConfig_Load_EnvOverride — REDIS_HOST / REDIS_PORT /
@@ -78,7 +75,6 @@ func TestConfig_Load_EnvOverride(t *testing.T) {
 	setEnv(t, "REDIS_PORT", "6380")
 	setEnv(t, "REDIS_PASSWORD", "secret")
 	setEnv(t, "REDIS_DB", "3")
-	setEnv(t, "SCRAPER_ANIMEPAHE_RESOLVER_URL", "http://example.com:3000")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v; want nil", err)
@@ -94,9 +90,6 @@ func TestConfig_Load_EnvOverride(t *testing.T) {
 	}
 	if cfg.Redis.DB != 3 {
 		t.Errorf("Redis.DB = %d; want 3", cfg.Redis.DB)
-	}
-	if cfg.AnimePahe.ResolverURL != "http://example.com:3000" {
-		t.Errorf("AnimePahe.ResolverURL = %q; want http://example.com:3000", cfg.AnimePahe.ResolverURL)
 	}
 }
 
@@ -114,60 +107,8 @@ func TestConfig_Load_InvalidPort(t *testing.T) {
 	}
 }
 
-// TestConfig_Load_InvalidAnimePaheURL — missing scheme yields a Load() error,
-// mirroring the existing MEGACLOUD_EXTRACTOR_URL validation behavior.
-// Phase 27: env var renamed to SCRAPER_ANIMEPAHE_RESOLVER_URL.
-func TestConfig_Load_InvalidAnimePaheURL(t *testing.T) {
-	unsetEnv(t, "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_DB")
-	setEnv(t, "SCRAPER_ANIMEPAHE_RESOLVER_URL", "not-a-url")
-	if _, err := Load(); err == nil {
-		t.Fatal("Load() error = nil; want error for malformed SCRAPER_ANIMEPAHE_RESOLVER_URL")
-	}
-}
-
-// TestConfig_AnimepaheResolverURL — Phase 27 SCRAPER-HEAL-30. Three sub-tests
-// pin the env-var contract for the new resolver-sidecar binding.
-//
-//	(a) default — unset env returns "http://animepahe-resolver:3000" (the
-//	    docker-compose service-name URL).
-//	(b) override — t.Setenv changes the value end-to-end.
-//	(c) invalid — malformed URLs fail Load() with an error message that
-//	    names the env var verbatim so operators can grep logs.
-func TestConfig_AnimepaheResolverURL(t *testing.T) {
-	t.Run("default", func(t *testing.T) {
-		unsetEnv(t, "SCRAPER_ANIMEPAHE_RESOLVER_URL")
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if cfg.AnimePahe.ResolverURL != "http://animepahe-resolver:3000" {
-			t.Fatalf("default = %q; want http://animepahe-resolver:3000",
-				cfg.AnimePahe.ResolverURL)
-		}
-	})
-	t.Run("override", func(t *testing.T) {
-		setEnv(t, "SCRAPER_ANIMEPAHE_RESOLVER_URL", "http://custom:3000")
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if cfg.AnimePahe.ResolverURL != "http://custom:3000" {
-			t.Fatalf("override = %q; want http://custom:3000",
-				cfg.AnimePahe.ResolverURL)
-		}
-	})
-	t.Run("invalid", func(t *testing.T) {
-		setEnv(t, "SCRAPER_ANIMEPAHE_RESOLVER_URL", "notaurl")
-		_, err := Load()
-		if err == nil {
-			t.Fatal("Load: nil error; want non-nil for malformed SCRAPER_ANIMEPAHE_RESOLVER_URL")
-		}
-		if !strings.Contains(err.Error(), "SCRAPER_ANIMEPAHE_RESOLVER_URL") {
-			t.Fatalf("error %q must mention SCRAPER_ANIMEPAHE_RESOLVER_URL so operators can grep",
-				err.Error())
-		}
-	})
-}
+// (animepahe resolver-URL config tests removed on the 2026-06-26 Camoufox
+// revival — animepahe's base_url now comes from the DB roster, not an env var.)
 
 // TestLoad_GogoanimeConfig_DefaultsAndOverride pins Phase 18's new env-var
 // surface — Gogoanime.BaseURL reads SCRAPER_GOGOANIME_BASE_URL; defaults to

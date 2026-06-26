@@ -22,13 +22,14 @@
 //     already-expired URLs are NOT cached.
 //   - HealthCheck returns an in-memory snapshot of the four stage timings.
 //
-// Phase 27 SCRAPER-HEAL-30: every upstream-fetch goes through the
-// `resolverClient` (see resolver.go) which talks to the
-// `animepahe-resolver` stealth-Chromium sidecar. The Go-side DDoS-Guard
-// handshake (Pattern 3) is GONE — the sidecar owns the challenge stack.
-// MalSync invalidation on `/release` 404 is single-strike (A9) and backed
-// by a persistent reverse-mapping cache key so it survives process
-// restarts (see malsync.go::Invalidate).
+// Camoufox revival (2026-06-26): every upstream-fetch goes through the
+// browser-fetch transport (see transport.go) which hits animepahe.pw DIRECTLY
+// through the Camoufox stealth-scraper sidecar's warm /fetch session. That
+// session solves animepahe.pw's Cloudflare managed (interactive Turnstile)
+// challenge — the Go-side DDoS-Guard handshake AND the retired
+// animepahe-resolver sidecar are both GONE. MalSync invalidation on `/release`
+// 404 is single-strike (A9) and backed by a persistent reverse-mapping cache
+// key so it survives process restarts (see malsync.go::Invalidate).
 package animepahe
 
 import (
@@ -162,27 +163,35 @@ type malSyncClient interface {
 // Deps is the constructor input for New(). Every reference field must be
 // non-nil except Log (a no-op fallback is constructed if absent).
 type Deps struct {
-	// ResolverURL is the animepahe-resolver sidecar base URL (default
-	// http://animepahe-resolver:3000 per Phase 27 D2). Plan 27-02 wires
-	// this from SCRAPER_ANIMEPAHE_RESOLVER_URL. Replaces the Phase 16
-	// BaseURL field (no Go-side code talks to animepahe.* upstream
-	// directly anymore — the sidecar owns the stealth-Chromium stack).
-	ResolverURL string
-	HTTP        *domain.BaseHTTPClient
-	Embeds      *domain.Registry
-	MalSync     malSyncClient
-	Cache       cache.Cache
-	Log         *logger.Logger
+	// BaseURL is the animepahe origin (default https://animepahe.pw). Sourced
+	// from the DB roster (stream_providers.base_url) in main.go via
+	// Providers.BaseURLOf("animepahe"); empty falls back to defaultBaseURL.
+	BaseURL string
+	HTTP    *domain.BaseHTTPClient
+	Embeds  *domain.Registry
+	MalSync malSyncClient
+	Cache   cache.Cache
+	Log     *logger.Logger
+
+	// Browser routing (set together when DB engine="browser"). UseBrowser is a
+	// LIVE per-call gate reading the atomic provider roster; BrowserFetch is the
+	// sidecar /fetch closure that runs the discovery GET inside the warm,
+	// challenge-solved Camoufox session (animepahe.pw is Cloudflare-managed-
+	// challenge gated). Both nil ⇒ the plain-HTTP fallback transport is used.
+	UseBrowser   func() bool
+	BrowserFetch BrowserFetchFunc
 }
 
 // Provider implements domain.Provider for the AnimePahe upstream.
 type Provider struct {
-	resolver *resolverClient
-	http     *domain.BaseHTTPClient
-	embeds   *domain.Registry
-	malsync  malSyncClient
-	cache    cache.Cache
-	log      *logger.Logger
+	baseURL      string
+	useBrowser   func() bool
+	browserFetch BrowserFetchFunc
+	http         *domain.BaseHTTPClient
+	embeds       *domain.Registry
+	malsync      malSyncClient
+	cache        cache.Cache
+	log          *logger.Logger
 
 	// stages is the in-memory health snapshot, updated on each method call.
 	// Phase 16 only requires the snapshot exist with the four canonical
@@ -191,13 +200,13 @@ type Provider struct {
 	stages   map[string]domain.StageHealth
 }
 
-// New constructs a Provider with sane defaults — empty ResolverURL falls
-// back to http://animepahe-resolver:3000 (the docker-compose service name).
-// WR-11: required dependencies (HTTP, Embeds, MalSync, Cache) are validated
-// eagerly and a non-nil error is returned if any is missing. main.go fatals
-// on the error, so misconfiguration surfaces at boot rather than later as a
-// confusing nil-pointer dereference 502. d.Log is optional and falls back to
-// logger.Default().
+// New constructs a Provider with sane defaults — empty BaseURL falls back to
+// defaultBaseURL (https://animepahe.pw). WR-11: required dependencies (HTTP,
+// Embeds, MalSync, Cache) are validated eagerly and a non-nil error is returned
+// if any is missing. main.go fatals on the error, so misconfiguration surfaces
+// at boot rather than later as a confusing nil-pointer dereference 502. d.Log
+// is optional and falls back to logger.Default(). UseBrowser/BrowserFetch are
+// optional — absent, the provider uses the plain-HTTP fallback transport.
 func New(d Deps) (*Provider, error) {
 	if d.HTTP == nil {
 		return nil, errors.New("animepahe: Deps.HTTP is required")
@@ -214,18 +223,20 @@ func New(d Deps) (*Provider, error) {
 	if d.Log == nil {
 		d.Log = logger.Default()
 	}
-	resolverURL := d.ResolverURL
-	if resolverURL == "" {
-		resolverURL = "http://animepahe-resolver:3000"
+	baseURL := strings.TrimRight(d.BaseURL, "/")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
 	}
 	p := &Provider{
-		resolver: newResolverClient(resolverURL, d.HTTP),
-		http:     d.HTTP,
-		embeds:   d.Embeds,
-		malsync:  d.MalSync,
-		cache:    d.Cache,
-		log:      d.Log,
-		stages:   make(map[string]domain.StageHealth, len(stageNames)),
+		baseURL:      baseURL,
+		useBrowser:   d.UseBrowser,
+		browserFetch: d.BrowserFetch,
+		http:         d.HTTP,
+		embeds:       d.Embeds,
+		malsync:      d.MalSync,
+		cache:        d.Cache,
+		log:          d.Log,
+		stages:       make(map[string]domain.StageHealth, len(stageNames)),
 	}
 	// Pre-seed all four stages so HealthCheck always returns the canonical
 	// shape even before any traffic.
@@ -300,7 +311,7 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 		p.markStage(health.StageSearch, err)
 		return "", err
 	}
-	sr, err := p.resolver.Search(ctx, ref.Title)
+	sr, err := p.Search(ctx, ref.Title)
 	if err != nil {
 		p.markStage(health.StageSearch, err)
 		return "", err
@@ -358,7 +369,7 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 
 	all := make([]domain.Episode, 0, 32)
 	for page := 1; page <= maxEpisodePages; page++ {
-		rr, err := p.resolver.Release(ctx, providerID, page)
+		rr, err := p.Release(ctx, providerID, page)
 		if err != nil {
 			// A9 single-strike: on /release 404 evict the MalSync mapping
 			// so the next FindID call re-runs /search. The reverse-key
@@ -425,7 +436,7 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		p.markStage(health.StageServers, err)
 		return nil, err
 	}
-	body, err := p.resolver.Play(ctx, providerID, episodeID)
+	body, err := p.Play(ctx, providerID, episodeID)
 	if err != nil {
 		p.markStage(health.StageServers, err)
 		return nil, err

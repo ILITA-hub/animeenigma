@@ -170,17 +170,15 @@ func main() {
 
 	// Build the shared HTTP client for AnimePahe.
 	//
-	// Phase 27 SCRAPER-HEAL-30: the per-host rate limits for upstream
-	// animepahe.{ru,com,si} are GONE — the resolver sidecar owns
-	// upstream rate-pacing (its single Chromium worker naturally
-	// serializes). The internal `animepahe-resolver` host gets a higher
-	// RPS (5/sec, burst 5) since it lives on the docker network and
-	// rate-limiting twice (orchestrator + sidecar) would add latency
-	// without reducing load on upstream. kwik.cx / kwik.si /
-	// api.malsync.moe limits preserved (still hit directly from this
-	// process).
+	// Camoufox revival (2026-06-26): the retired animepahe-resolver sidecar is
+	// gone — discovery now hits animepahe.pw through the Camoufox stealth-scraper
+	// /fetch route (browser engine). This client backs the engine=http fallback
+	// (a curl-class GET of animepahe.pw — challenge-blocked, degraded only) plus
+	// the kwik.cx stream-leg + malsync calls still made directly from this
+	// process. animepahe.pw is paced low; kwik.cx/kwik.si/api.malsync.moe
+	// limits preserved.
 	animePaheBaseHTTP := domain.NewBaseHTTPClient(log,
-		domain.WithPerHostRPS("animepahe-resolver", 5.0, 5),
+		domain.WithPerHostRPS("animepahe.pw", 1.0, 2),
 		domain.WithPerHostRPS("kwik.cx", 1.0, 2),
 		domain.WithPerHostRPS("kwik.si", 1.0, 2),
 		domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
@@ -191,21 +189,9 @@ func main() {
 	// MalSync client (24h positive + 24h negative cache).
 	malSyncClient := animepahe.NewMalSyncClient(redisCache)
 
-	// AnimePahe provider — first live Provider in v3.0.
-	// WR-11: New now validates required dependencies eagerly and returns an
-	// error so a misconfigured Deps surfaces at boot, not via a runtime
-	// 502 (nil pointer dereference) minutes after deploy.
-	animePaheProvider, err := animepahe.New(animepahe.Deps{
-		ResolverURL: cfg.AnimePahe.ResolverURL,
-		HTTP:        animePaheBaseHTTP,
-		Embeds:      registry,
-		MalSync:     malSyncClient,
-		Cache:       redisCache,
-		Log:         log,
-	})
-	if err != nil {
-		log.Fatalw("failed to construct AnimePahe provider", "error", err)
-	}
+	// NOTE: the AnimePahe provider is constructed LATER (just before its
+	// registration), because its browser-fetch wiring needs `stealthClient` and
+	// `breaker`, which are built further down. See animepahe.New(...) below.
 
 	// Build the orchestrator and register the provider before HTTP starts.
 	// Phase 17 Plan 02 wires the real health cache that Plan 01 introduced;
@@ -350,6 +336,35 @@ func main() {
 	// (AnimePahe upstream observed timing out at ~65s on /api?m=release).
 	// Kept as the failover so a single-provider outage on Anitaku doesn't
 	// blank the English tab.
+	//
+	// Camoufox revival (2026-06-26): discovery routes through the stealth-scraper
+	// /fetch warm session, which solves animepahe.pw's Cloudflare managed
+	// (Turnstile) challenge when the DB engine is "browser". Mirrors the
+	// nineanime wiring; constructed here (not earlier) so stealthClient + breaker
+	// are in scope. engine=http is a degraded fallback only (curl-class GETs of
+	// animepahe.pw are challenge-blocked).
+	paheUseBrowser := func() bool {
+		return cfg.Providers.EngineOf("animepahe") == config.EngineBrowser
+	}
+	paheBrowserFetch := func(ctx context.Context, provider, url string) (int, []byte, error) {
+		status, body, err := stealthClient.Fetch(ctx, provider, url)
+		_, wedged := sidecar.IsWedged(err)
+		breaker.Record(provider, wedged)
+		return status, body, err
+	}
+	animePaheProvider, err := animepahe.New(animepahe.Deps{
+		BaseURL:      cfg.Providers.BaseURLOf("animepahe"),
+		HTTP:         animePaheBaseHTTP,
+		Embeds:       registry,
+		MalSync:      malSyncClient,
+		Cache:        redisCache,
+		Log:          log,
+		UseBrowser:   paheUseBrowser,
+		BrowserFetch: paheBrowserFetch,
+	})
+	if err != nil {
+		log.Fatalw("failed to construct AnimePahe provider", "error", err)
+	}
 	registerByStatus(animePaheProvider)
 
 	// Phase 26 (SCRAPER-HEAL-25) — AllAnime as the THIRD live EN provider.
@@ -709,7 +724,8 @@ func main() {
 			"providers", len(orchestrator.HealthSnapshot(context.Background())),
 			"embed_extractors", len(registry.Names()),
 			"megacloud_url", cfg.MegacloudExtractor.URL,
-			"animepahe_resolver_url", cfg.AnimePahe.ResolverURL,
+			"animepahe_base_url", cfg.Providers.BaseURLOf("animepahe"),
+			"animepahe_engine", cfg.Providers.EngineOf("animepahe"),
 			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
 			"animekai_enabled", cfg.AnimeKai.Enabled,
 			"animekai_base_url", cfg.AnimeKai.BaseURL,

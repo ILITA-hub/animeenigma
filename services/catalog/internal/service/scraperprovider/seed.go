@@ -96,22 +96,24 @@ var defaultProviders = []domain.ScraperProvider{
 		QualityCeiling: "720p", PreferenceWeight: 40,
 	},
 	{
-		// KEPT in the roster (and in candidateProviders + the Go provider package)
-		// on purpose: animepahe is OFF but revivable. Disabled 2026-06-03 (Cloudflare
-		// challenge, 0% solve); its dedicated animepahe-resolver stealth-Chromium
-		// sidecar was RETIRED 2026-06-24 (no separate anti-DDoS-Guard browser is run
-		// anymore — Camoufox covers the live providers). To revive: flip this row to
-		// enabled and restore a transport (the sidecar from git history, or point
-		// SCRAPER_ANIMEPAHE_RESOLVER_URL at a new resolver). See AnimepaheSidecarRetired.
-		Name: "animepahe", Status: domain.StatusDisabled,
-		Reason: "Off — animepahe-resolver sidecar retired (2026-06-24)",
-		Description: "animepahe.pw migrated DDoS-Guard -> Cloudflare managed challenge that the " +
-			"stealth-Chromium sidecar couldn't solve (0% solve rate, ISS-023); disabled 2026-06-03. " +
-			"The dedicated animepahe-resolver sidecar was retired 2026-06-24 (no separate " +
-			"anti-DDoS-Guard browser is run anymore — Camoufox covers the live providers). The Go " +
-			"provider is KEPT in the failover roster so animepahe can be revived: flip this row to " +
-			"enabled and restore a transport (the sidecar from git history, or point " +
-			"SCRAPER_ANIMEPAHE_RESOLVER_URL at a new resolver).",
+		// REVIVED 2026-06-26 via Camoufox: animepahe.pw's Cloudflare managed
+		// (interactive Turnstile) challenge IS solvable from this server's own
+		// datacenter IP — the stealth-scraper warm /fetch session clicks the
+		// Turnstile checkbox + polls for cf_clearance (~10s, no proxy), then the
+		// JSON API (search/release) + /play HTML ride the in-page fetch. The
+		// kwik.cx stream leg is plain-Go reachable (Go KwikExtractor). Seeded
+		// DEGRADED (owner pref — manually selectable, out of the auto-failover
+		// chain) pending live soak; promote to enabled later. Existing DBs are
+		// carried by AnimepaheBrowserRevival.
+		Name: "animepahe", Status: domain.StatusDegraded,
+		Engine: "browser", BaseURL: "https://animepahe.pw",
+		Reason: "Browser-scraped via Camoufox sidecar (animepahe.pw Cloudflare managed challenge solved)",
+		Description: "animepahe.pw sits behind a Cloudflare managed (interactive Turnstile) challenge. " +
+			"The Camoufox stealth-scraper warm /fetch session solves it (clicks the Turnstile checkbox + " +
+			"waits for cf_clearance, ~10s on our own IP, no residential proxy); discovery (search/release " +
+			"JSON + /play HTML) then rides the in-page fetch (engine=browser). The kwik.cx stream leg is " +
+			"extracted in Go. Degraded: manually selectable (hacker mode), out of the auto-failover chain " +
+			"pending live soak.",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 30,
 	},

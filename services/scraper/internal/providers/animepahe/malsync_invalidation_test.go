@@ -35,12 +35,12 @@ func realMalSyncProvider(t *testing.T, resolverSrv, malsyncSrv *httptest.Server)
 	)
 
 	p, err := New(Deps{
-		ResolverURL: resolverSrv.URL,
-		HTTP:        hc,
-		Embeds:      reg,
-		MalSync:     ms,
-		Cache:       fc,
-		Log:         log,
+		BaseURL: resolverSrv.URL,
+		HTTP:    hc,
+		Embeds:  reg,
+		MalSync: ms,
+		Cache:   fc,
+		Log:     log,
 	})
 	if err != nil {
 		t.Fatalf("New(Deps{...}) = %v; want nil", err)
@@ -51,15 +51,15 @@ func realMalSyncProvider(t *testing.T, resolverSrv, malsyncSrv *httptest.Server)
 // TestProvider_MalSyncInvalidationOn404 — A9 single-strike. Three sub-tests
 // cover the meaningful states:
 //
-//   (a) WithoutPriorFindID_PersistedReverseKey — load-bearing assertion that
-//       invalidation works ACROSS PROCESS RESTARTS. The test seeds both
-//       forward and reverse keys via direct cache.Set (no FindID call)
-//       then triggers a /release 404, asserting both keys are evicted.
-//   (b) AfterFindID — happy path: FindID populates both keys via MalSync
-//       lookup, then /release 404 evicts both.
-//   (c) NoMalIDKnown — defensive: when no reverse mapping exists (FindID
-//       was never called for this providerID), /release 404 still returns
-//       ErrNotFound cleanly without panicking; Invalidate is a no-op.
+//	(a) WithoutPriorFindID_PersistedReverseKey — load-bearing assertion that
+//	    invalidation works ACROSS PROCESS RESTARTS. The test seeds both
+//	    forward and reverse keys via direct cache.Set (no FindID call)
+//	    then triggers a /release 404, asserting both keys are evicted.
+//	(b) AfterFindID — happy path: FindID populates both keys via MalSync
+//	    lookup, then /release 404 evicts both.
+//	(c) NoMalIDKnown — defensive: when no reverse mapping exists (FindID
+//	    was never called for this providerID), /release 404 still returns
+//	    ErrNotFound cleanly without panicking; Invalidate is a no-op.
 func TestProvider_MalSyncInvalidationOn404(t *testing.T) {
 	t.Run("WithoutPriorFindID_PersistedReverseKey", func(t *testing.T) {
 		t.Parallel()
@@ -70,8 +70,9 @@ func TestProvider_MalSyncInvalidationOn404(t *testing.T) {
 			reverseKeyStr = "malsync_reverse:animepahe:uuid-abc-frieren"
 		)
 		resolverSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Every /release call returns 404 — drives the invalidation path.
-			if r.URL.Path == "/release" {
+			// Every release call returns 404 — drives the invalidation path.
+			// Real animepahe.pw release shape: GET /api?m=release&id=...
+			if r.URL.Path == "/api" && r.URL.Query().Get("m") == "release" {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
@@ -122,17 +123,21 @@ func TestProvider_MalSyncInvalidationOn404(t *testing.T) {
 		// Resolver returns OK for /search (so FindID succeeds) and 404
 		// for /release (drives invalidation).
 		resolverSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch r.URL.Path {
-			case "/search":
-				// /search isn't actually called in this test because the
-				// MalSync hit short-circuits FindID — but providing a 200
-				// here is harmless and documents the contract.
-				_, _ = w.Write([]byte(`{"data":[]}`))
-			case "/release":
-				w.WriteHeader(http.StatusNotFound)
-			default:
-				w.WriteHeader(http.StatusInternalServerError)
+			// Real animepahe.pw shapes: GET /api?m=search and GET /api?m=release.
+			if r.URL.Path == "/api" {
+				switch r.URL.Query().Get("m") {
+				case "search":
+					// /search isn't actually called in this test because the
+					// MalSync hit short-circuits FindID — but providing a 200
+					// here is harmless and documents the contract.
+					_, _ = w.Write([]byte(`{"data":[]}`))
+					return
+				case "release":
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
 			}
+			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer resolverSrv.Close()
 		malsyncSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +186,8 @@ func TestProvider_MalSyncInvalidationOn404(t *testing.T) {
 		// /release returns 404 but no reverse mapping exists — assert
 		// no panic, and the 404 is surfaced unchanged.
 		resolverSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/release" {
+			// Real animepahe.pw release shape: GET /api?m=release&id=...
+			if r.URL.Path == "/api" && r.URL.Query().Get("m") == "release" {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}

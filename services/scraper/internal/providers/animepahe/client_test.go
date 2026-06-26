@@ -152,14 +152,13 @@ func newTestProvider(t *testing.T, srv *httptest.Server) (*Provider, *fakeCache,
 	reg := domain.NewRegistry()
 	reg.Register(fk)
 
-	resolverURL := srv.URL
 	p, err := New(Deps{
-		ResolverURL: resolverURL,
-		HTTP:        hc,
-		Embeds:      reg,
-		MalSync:     fm,
-		Cache:       fc,
-		Log:         log,
+		BaseURL: srv.URL,
+		HTTP:    hc,
+		Embeds:  reg,
+		MalSync: fm,
+		Cache:   fc,
+		Log:     log,
 	})
 	if err != nil {
 		t.Fatalf("New(Deps{...}) = err %v; want nil", err)
@@ -251,8 +250,9 @@ func TestProvider_FindID_MalSyncLegacyNumeric(t *testing.T) {
 func TestProvider_FindID_FuzzyFallback(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/search" {
-			t.Errorf("expected /search; got %s", r.URL.Path)
+		// Real animepahe.pw search shape: GET /api?m=search&q=...
+		if r.URL.Path != "/api" || r.URL.Query().Get("m") != "search" {
+			t.Errorf("expected /api?m=search; got %s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		_, _ = w.Write(loadFixture(t, "search_naruto.json"))
 	}))
@@ -304,8 +304,9 @@ func TestProvider_FindID_FuzzyBelowThreshold(t *testing.T) {
 func TestProvider_ListEpisodes_SinglePage(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/release" {
-			t.Errorf("expected /release; got %s", r.URL.Path)
+		// Real animepahe.pw release shape: GET /api?m=release&id=...&sort=episode_asc&page=N
+		if r.URL.Path != "/api" || r.URL.Query().Get("m") != "release" {
+			t.Errorf("expected /api?m=release; got %s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		_, _ = w.Write(loadFixture(t, "release_4_p1.json"))
 	}))
@@ -464,11 +465,15 @@ func TestProvider_ListEpisodes_Upstream5xx(t *testing.T) {
 func TestProvider_ListServers_HappyPath(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/play" {
-			t.Errorf("expected /play (resolver shape); got %s", r.URL.Path)
+		// Real animepahe.pw play shape: GET /play/<animeSession>/<episodeSession>
+		// — anime + episode are PATH segments, not query params.
+		if !strings.HasPrefix(r.URL.Path, "/play/") {
+			t.Errorf("expected /play/<anime>/<ep>; got %s", r.URL.Path)
 		}
-		if r.URL.Query().Get("animeSession") == "" || r.URL.Query().Get("episodeSession") == "" {
-			t.Errorf("expected animeSession + episodeSession query params; got %s", r.URL.RawQuery)
+		rest := strings.TrimPrefix(r.URL.Path, "/play/")
+		parts := strings.SplitN(rest, "/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			t.Errorf("expected two non-empty /play path segments; got %q", r.URL.Path)
 		}
 		_, _ = w.Write(loadFixture(t, "play_session_ep1.html"))
 	}))

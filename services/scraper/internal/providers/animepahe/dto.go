@@ -50,16 +50,16 @@ type releaseResponse struct {
 // searchEntry is one row from /api?m=search&q=... — the fuzzy-fallback path
 // when malsync has no record of the (mal_id → animepahe_id) mapping.
 type searchEntry struct {
-	ID       int    `json:"id"`
-	Session  string `json:"session"`
-	Title    string `json:"title"`
-	Type     string `json:"type"`
-	Episodes int    `json:"episodes"`
-	Status   string `json:"status"`
-	Season   string `json:"season"`
-	Year     int    `json:"year"`
+	ID       int     `json:"id"`
+	Session  string  `json:"session"`
+	Title    string  `json:"title"`
+	Type     string  `json:"type"`
+	Episodes int     `json:"episodes"`
+	Status   string  `json:"status"`
+	Season   string  `json:"season"`
+	Year     int     `json:"year"`
 	Score    float64 `json:"score"`
-	Poster   string `json:"poster"`
+	Poster   string  `json:"poster"`
 }
 
 // searchResponse is the top-level shape of /api?m=search&q=...
