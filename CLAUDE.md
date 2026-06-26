@@ -266,11 +266,12 @@ Examples: `make redeploy-gateway` (after gateway code), `make restart-grafana` (
 ## After-Update Skill (MUST USE)
 
 After ANY implementation work (features, bug fixes, refactoring), **always invoke** `/animeenigma-after-update` before ending the conversation. It:
-1. Lints and builds the affected code.
-2. Redeploys changed services (`make redeploy-<service>`).
-3. Runs health checks.
-4. Updates the changelog in **Russian Trump-mode** — bombastic, self-aggrandizing, ALL-CAPS emphasis on key words, signature closers ("Поверьте мне." / "Никто другой так не делает!" / "ВЕЛИКОЛЕПНО."), emojis kept, factual claims preserved. Entries prepend to `frontend/web/changelog.full.json` (full-history source of truth); the served `frontend/web/public/changelog.json` is **generated** from it (latest 30 entries) via `frontend/web/scripts/changelog-trim.mjs` (fetched whole on every page load). `LastUpdates.vue` loads it in the Changelog tab. Full style spec + examples: `.claude/commands/animeenigma-after-update.md` step 4; gold-standard ref = 2026-05-19 group in `changelog.full.json`.
-5. Commits all changes with co-authors and pushes.
+1. Runs `/simplify` over the changed code to fold in behavior-preserving quality cleanups (skipped for docs/changelog-only changes).
+2. Lints and builds the affected code.
+3. Redeploys changed services (`make redeploy-<service>`).
+4. Runs health checks.
+5. Updates the changelog in **Russian Trump-mode** — bombastic, self-aggrandizing, ALL-CAPS emphasis on key words, signature closers ("Поверьте мне." / "Никто другой так не делает!" / "ВЕЛИКОЛЕПНО."), emojis kept, factual claims preserved. Entries prepend to `frontend/web/changelog.full.json` (full-history source of truth); the served `frontend/web/public/changelog.json` is **generated** from it (latest 30 entries) via `frontend/web/scripts/changelog-trim.mjs` (fetched whole on every page load). `LastUpdates.vue` loads it in the Changelog tab. Full style spec + examples: `.claude/commands/animeenigma-after-update.md` step 5; gold-standard ref = 2026-05-19 group in `changelog.full.json`.
+6. Commits all changes with co-authors and pushes.
 
 **Do not skip this step.** It ensures every implementation is deployed, verified, documented for users, and pushed.
 

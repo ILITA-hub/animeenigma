@@ -39,7 +39,16 @@ If no changes detected, report "Nothing to deploy" and stop.
 
 Deduplicate the service list.
 
-### 2. Lint & build checks
+### 2. Simplify (quality cleanup)
+
+Before linting and deploying, run the **`simplify`** skill over the changes this update produced to fold in reuse / simplification / efficiency / altitude cleanups. Invoke **`/simplify`** — it reviews the changed code and applies behavior-preserving quality fixes to the working tree. It does NOT hunt for bugs (that's `/code-review`); it only cleans up.
+
+- Run it **once**, on the diff this update produced, and let it apply its fixes. If the work was already committed (e.g. done in a worktree), simplify's fixes land as new uncommitted changes that step 6 (commit) then captures as a follow-up cleanup.
+- Run it **before** step 3 (lint) and step 4 (deploy) so the cleaned-up version is what gets linted, deployed, and committed — never deploy first and simplify after.
+- **Skip it only** when this update touched no code (docs / `CLAUDE.md` / changelog-only changes) — there is nothing to simplify.
+- Don't separately re-verify simplify's output here — the lint/build step (3) and health check (4) catch any regression.
+
+### 3. Lint & build checks
 
 **If Go services or libs changed:**
 ```bash
@@ -55,7 +64,7 @@ Frontend lint must pass with 0 errors. If there are errors, **fix them** before 
 
 If any lint check fails, fix the issues before proceeding.
 
-### 3. Deploy
+### 4. Deploy
 
 **Pre-deploy: land everything on `main` and deploy FROM `main` — never from a random branch.**
 
@@ -76,7 +85,7 @@ After all deployments:
 make health
 ```
 
-### 4. Update the changelog for LastUpdates.vue
+### 5. Update the changelog for LastUpdates.vue
 
 Generate user-facing changelog entries and prepend them to **`frontend/web/changelog.full.json`** (the full-history source of truth — NOT the served file).
 
@@ -136,20 +145,20 @@ If a change is too small to bear Trump-mode (one-line config tweak), prefer a sh
 - Never trim `changelog.full.json` — it keeps the complete history
 - After editing, regenerate the served file: `cd frontend/web && node scripts/changelog-trim.mjs` (writes the latest 30 entries to `public/changelog.json`). Commit BOTH files.
 
-### 5. Commit & push
+### 6. Commit & push
 
 1. Stage all changed files: `git add -A`
 2. Generate a conventional commit message summarizing the changes
 3. Include co-authors:
    ```
-   Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+   Co-Authored-By: Claude Code <noreply@anthropic.com>
    Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
    Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>
    ```
 4. Create the commit
 5. Push: `git push`
 
-### 6. Report
+### 7. Report
 
 Summarize:
 - What was implemented (human-readable)
