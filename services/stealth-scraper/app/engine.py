@@ -934,6 +934,20 @@ class CamoufoxEngine:
             self.profiles.release(profile, ok=False)
             raise RecipeError("no proxy available for fetch warm")
 
+        # solve_challenge providers (Cloudflare Turnstile, e.g. animepahe) need a
+        # CLEAN profile: an aged/pooled profile accumulates CF challenge-platform
+        # state (cookies, but also localStorage/IndexedDB on
+        # challenges.cloudflare.com that clear_cookies cannot reach cross-origin),
+        # and a failed prior attempt POISONS re-solving — the click stops yielding
+        # cf_clearance (proven: a fresh profile solves, a copy of the poisoned pool
+        # profile does not). Wipe + cold-launch the leased profile so every solve
+        # starts from genuinely clean state. The deterministic fingerprint is
+        # derived from profile.id (not the on-disk dir), so identity is preserved.
+        recipe = self._recipes.get(provider)
+        if recipe is not None and getattr(recipe, "solve_challenge", False):
+            await self._teardown(profile, reason="recycle")
+            _rm_dir(profile.user_data_dir)
+
         try:
             context = await self._ensure_browser(profile, proxy.id)
             page = await context.new_page()

@@ -11,6 +11,7 @@ clicked, after which the page reaches real content and cf_clearance is set.
 asyncio.sleep is patched to a no-op so the poll loop runs instantly.
 """
 import asyncio
+import tempfile
 import unittest
 from contextlib import contextmanager
 
@@ -190,7 +191,13 @@ class TestWarmFetchSolveBranch(unittest.TestCase):
     session, no rotate) and ROTATE for a non-opt-in one / an unsolved challenge."""
 
     def _engine_with_fake_browser(self, ctx, **cfg):
-        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False, **cfg))
+        # Temp profile_dir: the solve_challenge warm path wipes the leased
+        # profile's user_data_dir, so it must NOT point at the default
+        # /data/profiles (would delete a live profile in the container).
+        eng = CamoufoxEngine(Config(
+            pool_size=1, warming_enabled=False,
+            profile_dir=tempfile.mkdtemp(prefix="ae-test-prof-"), **cfg,
+        ))
 
         async def _fake_ensure(profile, proxy_id):
             return ctx
