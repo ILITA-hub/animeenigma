@@ -280,6 +280,12 @@ func (c *Client) enroll(ctx context.Context) (wire.EnrollResponse, error) {
 		return wire.EnrollResponse{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// The /worker/* edge (gateway ExternalAPIKeyMiddleware) gates EVERY request —
+	// including enroll — by X-API-Key. Send it when configured. With server-side
+	// self-enroll this key is also the enroll credential (empty EnrollToken).
+	if c.cfg.APIKey != "" {
+		req.Header.Set("X-API-Key", c.cfg.APIKey)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -312,8 +318,13 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 	// Server rejects connections with an Origin header (browser guard), so we
 	// omit it. Gorilla does not add Origin by default when using a plain Dialer
 	// (it only adds it for browser-origin requests in the default http client
-	// path). We also set no request headers here.
-	conn, resp, err := dialer.DialContext(ctx, wsURL, http.Header{})
+	// path). We DO send X-API-Key when configured: the /worker/* edge gates the
+	// WS upgrade by API key too, so an empty header here 401s at the gateway.
+	wsHeaders := http.Header{}
+	if c.cfg.APIKey != "" {
+		wsHeaders.Set("X-API-Key", c.cfg.APIKey)
+	}
+	conn, resp, err := dialer.DialContext(ctx, wsURL, wsHeaders)
 	if err != nil {
 		// Gorilla returns the HTTP response even on upgrade failure so we can
 		// detect 401 and signal the caller to re-enroll.

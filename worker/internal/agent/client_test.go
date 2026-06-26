@@ -210,9 +210,12 @@ type testServer struct {
 
 	enrollCalled atomic.Int64 // number of POST /worker/enroll calls
 
+	enrollAPIKey atomic.Value // string: X-API-Key seen on the last enroll POST
+	wsAPIKey     atomic.Value // string: X-API-Key seen on the last WS upgrade
+
 	mu       sync.Mutex
-	frames   []wire.Frame   // frames received over WS in order of arrival
-	wsClosed []bool         // true for each WS session that was force-closed
+	frames   []wire.Frame      // frames received over WS in order of arrival
+	wsClosed []bool            // true for each WS session that was force-closed
 	wsConns  []*gorillaws.Conn // every WS connection ever accepted
 }
 
@@ -232,12 +235,14 @@ func newTestServer(t *testing.T, serverClose bool) *testServer {
 			return
 		}
 		ts.enrollCalled.Add(1)
+		ts.enrollAPIKey.Store(r.Header.Get("X-API-Key"))
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(fakeEnrollResp) //nolint:errcheck
 	})
 
 	// GET /worker/ws — upgrade and capture frames; optionally close immediately.
 	mux.HandleFunc("/worker/ws", func(w http.ResponseWriter, r *http.Request) {
+		ts.wsAPIKey.Store(r.Header.Get("X-API-Key"))
 		conn, err := testUpgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
@@ -324,6 +329,49 @@ func waitFor(t *testing.T, d time.Duration, pred func() bool) bool {
 		time.Sleep(5 * time.Millisecond)
 	}
 	return false
+}
+
+// TestEnrollAndWSSendAPIKey proves the worker sends X-API-Key on BOTH the enroll
+// POST and the WS upgrade, so a zero-token (self-enroll) worker authenticates
+// through the /worker/* edge gate instead of 401ing at the gateway.
+func TestEnrollAndWSSendAPIKey(t *testing.T) {
+	t.Parallel()
+	ts := newTestServer(t, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cfg := Config{
+		ServerURL:   ts.ts.URL,
+		EnrollToken: "", // self-enroll: no token; the API key is the credential
+		Mode:        "batch",
+		APIKey:      "edge-key-xyz",
+	}
+	c := NewClient(cfg)
+	c.backoff = BackoffConfig{Initial: 10 * time.Millisecond, Max: 50 * time.Millisecond}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.Run(ctx) //nolint:errcheck
+	}()
+
+	if !waitFor(t, 2*time.Second, func() bool { return ts.enrollCalled.Load() >= 1 }) {
+		t.Fatal("expected POST /worker/enroll to be called")
+	}
+	if !waitFor(t, 2*time.Second, func() bool { return ts.wsConnCount() >= 1 }) {
+		t.Fatal("expected a WS upgrade")
+	}
+
+	cancel()
+	<-done
+
+	if got, _ := ts.enrollAPIKey.Load().(string); got != "edge-key-xyz" {
+		t.Errorf("enroll X-API-Key = %q, want %q", got, "edge-key-xyz")
+	}
+	if got, _ := ts.wsAPIKey.Load().(string); got != "edge-key-xyz" {
+		t.Errorf("ws X-API-Key = %q, want %q", got, "edge-key-xyz")
+	}
 }
 
 // ── Test 1: client enrolls successfully ──────────────────────────────────────
@@ -452,11 +500,11 @@ func TestPingPong(t *testing.T) {
 
 		// Send a ping.
 		conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
-		conn.WriteMessage(gorillaws.PingMessage, nil)           //nolint:errcheck
+		conn.WriteMessage(gorillaws.PingMessage, nil)          //nolint:errcheck
 
 		// Keep reading (gorilla handles pong on ReadMessage).
 		conn.SetReadDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
-		conn.ReadMessage()                                      //nolint:errcheck
+		conn.ReadMessage()                                    //nolint:errcheck
 	})
 
 	srv := httptest.NewServer(mux)
