@@ -112,6 +112,65 @@ func NewRouterWithCleanup(
 		wtWSProxy = built
 	}
 
+	// Worker edge (ext.animeenigma.org) — /worker/* proxied to upscaler:8096.
+	// No JWT; gated by ExternalAPIKeyMiddleware (static shared secret). Real
+	// per-worker auth is the enroll→session→capability chain (Tasks 5/10).
+	//
+	// When UpscalerService is unset (tests that pre-date the upscaler), we
+	// install a 502 stub instead of fataling. Production startup ALWAYS has a
+	// value because config.Load() defaults it to "http://upscaler:8096".
+	var (
+		workerProxyHandler *handler.ExternalAPIHandler
+		workerWSProxy      http.HandlerFunc
+	)
+	if cfg.Services.UpscalerService == "" {
+		stub502 := func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, `{"error":"upscaler not configured"}`, http.StatusBadGateway)
+		}
+		workerWSProxy = stub502
+		// workerProxyHandler stays nil — handled below in route registration.
+	} else {
+		builtHandler, err := handler.NewExternalAPIHandler(cfg.Services.UpscalerService, log)
+		if err != nil {
+			log.Fatalw("failed to build worker proxy handler", "error", err, "target", cfg.Services.UpscalerService)
+		}
+		workerProxyHandler = builtHandler
+
+		builtWS, err := handler.NewWorkerWSProxy(cfg.Services.UpscalerService, log)
+		if err != nil {
+			log.Fatalw("failed to build worker ws proxy", "error", err, "target", cfg.Services.UpscalerService)
+		}
+		workerWSProxy = builtWS
+	}
+
+	// workerEnrollRateLimit is a dedicated per-IP limiter for /worker/enroll
+	// and /worker/ws. /worker/segments/* is intentionally EXCLUDED from this
+	// limiter — segment uploads are large (hundreds of MB) and take long enough
+	// that the token bucket would false-trip and 429 legitimate transfers (CD-12).
+	// The global per-IP limiter (rateLimitMW, applied above) still applies to ALL
+	// paths including segments as a coarse backstop.
+	workerEnrollRL := NewIPRateLimiter(rate.Limit(cfg.RateLimit.RequestsPerSecond), cfg.RateLimit.BurstSize)
+	workerEnrollRateLimitMW := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
+			if !workerEnrollRL.getLimiter(ip).Allow() {
+				httputil.TooManyRequests(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+	// Stop the worker enroll rate limiter's background goroutine when the
+	// router is torn down (mirrors the global rateLimiter.Stop pattern).
+	origCleanup := rateLimiter.Stop
+	combinedCleanup := func() {
+		origCleanup()
+		workerEnrollRL.Stop()
+	}
+
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
@@ -139,6 +198,63 @@ func NewRouterWithCleanup(
 
 	// OpenAPI spec
 	r.Get("/openapi.json", proxyHandler.GetOpenAPISpec)
+
+	// Worker edge (ext.animeenigma.org → gateway → upscaler:8096).
+	// Mounted at /worker (NOT under /api, NOT under any JWT/admin group).
+	// Authentication: static X-API-Key (ExternalAPIKeyMiddleware, fail-closed).
+	// Per-IP rate limit: applied to /worker/enroll + /worker/ws ONLY.
+	//   /worker/segments/* and /worker/models/* are EXCLUDED from the per-path
+	//   rate limiter — large binary transfers would false-trip the token bucket
+	//   (CD-12; see handler/external_api.go). The global per-IP limiter
+	//   (rateLimitMW at the top of this router) still covers all paths.
+	// /worker/models/* (T27): streams model .tar artifacts to workers that hold
+	//   a valid name-bound HMAC capability handle (T25 contract). No extra
+	//   gateway-side auth beyond the API-key gate; the upscaler enforces the
+	//   capability handle. Uses the same streaming proxy (FlushInterval=-1).
+	r.Route("/worker", func(r chi.Router) {
+		// API-key gate applies to the whole /worker group.
+		r.Use(ExternalAPIKeyMiddleware(cfg.ExternalAPIKey))
+
+		// /worker/enroll — small JSON registration. Rate-limited per-IP.
+		r.With(workerEnrollRateLimitMW).HandleFunc("/enroll", func(w http.ResponseWriter, r *http.Request) {
+			if workerProxyHandler != nil {
+				workerProxyHandler.ProxyWorker(w, r)
+			} else {
+				http.Error(w, `{"error":"bad_gateway"}`, http.StatusBadGateway)
+			}
+		})
+
+		// /worker/ws — WebSocket upgrade. Rate-limited per-IP. Dedicated WS
+		// reverse proxy preserves Upgrade/Connection hop-by-hop headers that
+		// ProxyService.Forward would strip (same rationale as watch-together ws).
+		r.With(workerEnrollRateLimitMW).Get("/ws", workerWSProxy)
+
+		// /worker/segments/* — large binary segment bytes. NO per-path rate
+		// limit (see comment above). Streams without full-body buffering
+		// (FlushInterval=-1 in the ExternalAPIHandler director).
+		r.HandleFunc("/segments/*", func(w http.ResponseWriter, r *http.Request) {
+			if workerProxyHandler != nil {
+				workerProxyHandler.ProxyWorker(w, r)
+			} else {
+				http.Error(w, `{"error":"bad_gateway"}`, http.StatusBadGateway)
+			}
+		})
+
+		// /worker/models/* (T27) — model artifact download for workers.
+		// NO per-path rate limit (same reasoning as /worker/segments/* — large
+		// binary bodies). The upscaler enforces the name-bound HMAC capability
+		// handle; the gateway adds only the API-key gate. Streaming proxy:
+		// FlushInterval=-1 ensures model .tar bytes flow without gateway OOM.
+		// X-Gateway-Internal is stripped by the ExternalAPIHandler director
+		// (defence-in-depth; same as /worker/segments/*).
+		r.HandleFunc("/models/*", func(w http.ResponseWriter, r *http.Request) {
+			if workerProxyHandler != nil {
+				workerProxyHandler.ProxyWorker(w, r)
+			} else {
+				http.Error(w, `{"error":"bad_gateway"}`, http.StatusBadGateway)
+			}
+		})
+	})
 
 	// Admin panel routes (protected by admin role, unless DevMode is enabled)
 	r.Route("/admin", func(r chi.Router) {
@@ -602,6 +718,15 @@ func NewRouterWithCleanup(
 			})
 		})
 
+		// Upscaler service routes (admin-gated, port 8096). All /api/upscale/*
+		// paths require JWT + admin role. Internal segment-handle endpoints are
+		// Docker-network-only (D-05 security model).
+		r.Route("/upscale", func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(AdminRoleMiddleware)
+			r.HandleFunc("/*", proxyHandler.ProxyToUpscaler)
+		})
+
 		// Library service routes (workstream raw-jp / v0.2). Phase 2 adds
 		// /search behind admin auth; /health remains public so the docker
 		// healthcheck + ops probes still work without credentials. All other
@@ -646,7 +771,7 @@ func NewRouterWithCleanup(
 		})
 	})
 
-	return r, rateLimiter.Stop
+	return r, combinedCleanup
 }
 
 // apiKeyHTTPClient is a shared HTTP client for API key resolution calls.

@@ -63,7 +63,7 @@ if ! grep -q '^JWT_SECRET=' "$ENV_FILE"; then
 fi
 
 # All backend services that can be redeployed
-ALL_SERVICES="auth catalog gateway player rooms scheduler streaming"
+ALL_SERVICES="auth catalog gateway player rooms scheduler streaming upscaler"
 
 NETWORK="animeenigma-network"
 
@@ -147,6 +147,7 @@ declare -A SERVICE_PORTS=(
     [scheduler]=8085
     [gateway]=8000
     [themes]=8086
+    [upscaler]=8096
 )
 
 # Health check redeployed services

@@ -110,6 +110,13 @@ func (h *ProxyHandler) ProxyToThemes(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "themes")
 }
 
+// ProxyToUpscaler proxies requests to the upscaler service (admin-gated, port 8096).
+// Only /api/upscale/* is exposed; internal segment-handle endpoints are
+// Docker-network-only (D-05 security model).
+func (h *ProxyHandler) ProxyToUpscaler(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "upscaler")
+}
+
 // ProxyToLibrary proxies requests to the library service (workstream raw-jp / v0.2).
 // Phase 1 only exposes /health passthrough; Phases 2-5 add search + jobs + episodes
 // endpoints. Admin-protected routes (POST /jobs, DELETE /jobs/:id, etc.) are added

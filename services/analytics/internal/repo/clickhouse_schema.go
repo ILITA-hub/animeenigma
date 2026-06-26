@@ -138,6 +138,31 @@ LEFT JOIN (
     FROM identities
     GROUP BY anonymous_id
 ) AS i USING (anonymous_id)`
+
+	// createUpscaleTelemetryTableDDL records one row per worker telemetry sample
+	// (GPU utilisation, VRAM, temperature, power, FPS metrics). High-cardinality
+	// per-worker history — kept in ClickHouse rather than Prometheus (CD-15).
+	// TTL mirrors the events table: 90 days, then ClickHouse deletes the data.
+	createUpscaleTelemetryTableDDL = `CREATE TABLE IF NOT EXISTS upscale_worker_telemetry (
+    ts             DateTime64(3) CODEC(Delta, ZSTD(1)),
+    worker_id      String        CODEC(ZSTD(1)),
+    gpu_model      LowCardinality(String),
+    image_version  LowCardinality(String),
+    job_id         String        CODEC(ZSTD(1)),
+    segment_idx    Int32,
+    gpu_util       Float32,
+    vram_used_b    UInt64        CODEC(Delta, ZSTD(1)),
+    vram_total_b   UInt64        CODEC(Delta, ZSTD(1)),
+    gpu_temp_c     Float32,
+    gpu_power_w    Float32,
+    decode_fps     Float32,
+    inference_fps  Float32,
+    encode_fps     Float32
+) ENGINE = MergeTree
+  PARTITION BY toYYYYMM(ts)
+  ORDER BY (worker_id, ts)
+  TTL toDateTime(ts) + INTERVAL 90 DAY DELETE
+  SETTINGS index_granularity = 8192`
 )
 
 // EnsureSchema idempotently creates the ClickHouse analytics schema: the
@@ -152,6 +177,7 @@ func EnsureSchema(ctx context.Context, conn driver.Conn) error {
 		createProbeRunsTableDDL,
 		alterProbeRunsAddAnimeNameDDL,
 		createResolvedViewDDL,
+		createUpscaleTelemetryTableDDL,
 	} {
 		if err := conn.Exec(ctx, ddl); err != nil {
 			return err

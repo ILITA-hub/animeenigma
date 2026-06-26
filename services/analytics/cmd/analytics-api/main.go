@@ -209,8 +209,17 @@ func main() {
 	c.Start()
 	defer c.Stop()
 
+	// GPU telemetry handler (CD-15): only wired when ClickHouse is available so
+	// the insert target exists. When nil, the route is not mounted (nil-guard in
+	// NewRouter), and the upscaler's fire-and-forget producer gets 404 which it
+	// swallows as a non-fatal outage.
+	var upscaleTelemetryHandler *handler.UpscaleTelemetryHandler
+	if chConn != nil {
+		upscaleTelemetryHandler = handler.NewUpscaleTelemetryHandler(repo.NewClickHouseStore(chConn))
+	}
+
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, probeHandler, log, collector)
+	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, probeHandler, upscaleTelemetryHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {

@@ -562,6 +562,7 @@ services:
       GACHA_SERVICE_URL: http://gacha:8093
       RECS_SERVICE_URL: http://recs:8094
       ANIDLE_SERVICE_URL: http://anidle:8095
+      UPSCALER_SERVICE_URL: http://upscaler:8096
       # Dark-ship admin-gate (spec §12). While true, /api/gacha/* requires the
       # admin role — regular users get 403, the лудка is invisible to them.
       # The global-update release flips this to "false" (env change +
@@ -591,6 +592,12 @@ services:
       # /api/users/export/json with our ak_ key + UA "node". Change + `make
       # restart-gateway` (no rebuild). Empty = feature off.
       POISON_CLIENT_IPS: ${POISON_CLIENT_IPS:-159.195.37.56}
+      # Worker edge (ext.animeenigma.org) — static API key shared with GPU workers.
+      # Fail-closed: empty = all /worker/* requests rejected (403).
+      # Rotate: set a new value in docker/.env + make restart-gateway (no rebuild).
+      # This is COARSE defense-in-depth; real per-worker auth is the
+      # enroll→session→capability chain (Tasks 5/10).
+      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -603,6 +610,7 @@ services:
       - grafana
       - prometheus
       - anidle
+      - upscaler
 
   auth:
     logging: *default-logging
@@ -1195,6 +1203,55 @@ services:
           cpus: '4.0'
           memory: 4G
 
+  upscaler:
+    logging: *default-logging
+    build:
+      context: ..
+      dockerfile: services/upscaler/Dockerfile
+    container_name: animeenigma-upscaler
+    mem_limit: 1g
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8096
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${UPSCALER_DB_NAME:-upscaler}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LIBRARY_URL: http://library:8089
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${UPSCALER_MINIO_BUCKET:-upscaler-output}
+      MINIO_USE_SSL: "false"
+      JOB_CAPABILITY_SECRET: ${JOB_CAPABILITY_SECRET:-}
+      SEGMENT_SECONDS: ${UPSCALER_SEGMENT_SECONDS:-30}
+      DEFAULT_SCALE: ${UPSCALER_DEFAULT_SCALE:-2}
+      REMOTE_SHELL_ENABLED: ${UPSCALER_REMOTE_SHELL_ENABLED:-false}
+      TRACING_ENABLED: "true"
+      ANALYTICS_INTERNAL_URL: http://analytics:8092
+    ports:
+      - "127.0.0.1:8096:8096"
+    volumes:
+      - library_torrents:/data/torrents:ro
+      - upscale_staging:/data/upscale-staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # =============================================================================
   # Frontend
   # =============================================================================
@@ -1270,6 +1327,8 @@ volumes:
   # ffmpeg encode scratch dir before HLS segments land in MinIO (Phase 4).
   library_torrents:
   library_minio_staging:
+  # upscaler service — ffmpeg/realesrgan scratch dir for in-progress upscale segments.
+  upscale_staging:
   # v4.0 Activity Register Phase 1 (AR-STORE-01) — ClickHouse data + backups.
   # Backups live under /var/lib/clickhouse/backup INSIDE this volume so
   # clickhouse-backup can hardlink from shadow/ (no cross-device link error).
