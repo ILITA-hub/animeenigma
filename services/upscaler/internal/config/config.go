@@ -44,15 +44,23 @@ type MinioConfig struct {
 
 // UpscalerConfig holds upscaler-specific knobs.
 type UpscalerConfig struct {
-	LibraryURL          string
-	MinIO               MinioConfig
-	JobCapabilitySecret string
-	SegmentSeconds      int
-	DefaultScale        int
-	RemoteShellEnabled  bool
-	StagingDir          string
-	TorrentsDir         string
+	LibraryURL           string
+	MinIO                MinioConfig
+	JobCapabilitySecret  string
+	SegmentSeconds       int
+	DefaultScale         int
+	RemoteShellEnabled   bool
+	StagingDir           string
+	TorrentsDir          string
 	AnalyticsInternalURL string // default http://analytics:8092 (CD-15: GPU telemetry → CH)
+
+	// SelfEnrollEnabled allows a worker to enroll with an EMPTY token (the edge
+	// API key is then the sole enroll credential). Lets a single self-contained
+	// worker image be reused across any number of GPU servers with zero per-worker
+	// provisioning. Read from WORKER_SELF_ENROLL; defaults false (the single-use
+	// token path stays mandatory unless explicitly opted in). The /worker/* edge
+	// is still API-key + CF-IP + AOP gated, so empty-token enroll is not open.
+	SelfEnrollEnabled bool
 }
 
 // Load reads environment variables and returns a validated Config.
@@ -93,6 +101,7 @@ func Load() (*Config, error) {
 			SegmentSeconds:       getEnvInt("SEGMENT_SECONDS", 45),
 			DefaultScale:         getEnvInt("DEFAULT_SCALE", 2),
 			RemoteShellEnabled:   getEnvBool("REMOTE_SHELL_ENABLED", true),
+			SelfEnrollEnabled:    getEnvBool("WORKER_SELF_ENROLL", false),
 			StagingDir:           getEnv("UPSCALE_STAGING_DIR", "/data/upscale-staging"),
 			TorrentsDir:          getEnv("LIBRARY_TORRENTS_DIR", "/data/torrents"),
 			MinIO:                loadMinIO(),

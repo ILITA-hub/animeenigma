@@ -219,7 +219,7 @@ func main() {
 	// Wired in the /worker group (no X-Gateway-Internal gate; HMAC capability gate).
 	modelServeHandler := handler.NewModelServeHandler(modelRepo, upWriter.RawUploader(), cfg.Upscaler.MinIO.Bucket, log)
 
-	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler, shellHandler, modelAdminHandler, modelServeHandler)
+	router := transport.NewRouter(log, metricsCollector, hub, enrollStore, segmentHandler, adminHandler, shellHandler, modelAdminHandler, modelServeHandler, cfg.Upscaler.SelfEnrollEnabled)
 
 	// Create HTTP server
 	srv := &http.Server{

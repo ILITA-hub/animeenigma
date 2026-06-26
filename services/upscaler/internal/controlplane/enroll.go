@@ -240,3 +240,53 @@ func (s *GormEnrollStore) EnrollTx(ctx context.Context, req EnrollRequest, ttl t
 		Sig:      sig,
 	}, nil
 }
+
+// SelfEnroll mints a session for a worker WITHOUT consuming a single-use enroll
+// token. It is the zero-config path for the self-contained worker image: the
+// caller (router) only reaches this when WORKER_SELF_ENROLL is enabled, and the
+// /worker/* edge already gated the request by the static EXTERNAL_API_KEY (+ CF
+// IP allowlist + AOP). The edge API key is thus the enroll credential here.
+//
+// Like EnrollTx, the session is minted first (pure) so the C-1 unconfigured-
+// capability guard rejects before any DB write. A fresh UUID worker ID is
+// generated per call, so the same image self-enrolling on N servers yields N
+// distinct workers with no collision and nothing to provision.
+func (s *GormEnrollStore) SelfEnroll(ctx context.Context, ttl time.Duration) (EnrollResponse, error) {
+	// 1. Mint first (pure) + C-1 guard.
+	workerID := uuid.New().String()
+	handle, exp, sig := mintSession(workerID, ttl)
+	if handle == "" || exp == "" || sig == "" {
+		return EnrollResponse{}, errors.New("capability not configured; cannot mint session")
+	}
+
+	// 2. Derive SessionExpiresAt (I-2).
+	sessionExp := sessionExpiresAt(exp)
+
+	// 3. Upsert the worker row. No token to consume, so no transaction needed —
+	//    a single idempotent upsert (same OnConflict columns as EnrollTx).
+	w := &domain.UpscaleWorker{
+		WorkerID:         workerID,
+		Status:           "idle",
+		SessionExpiresAt: sessionExp,
+	}
+	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "worker_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"gpu_info", "image_version", "models_available",
+			"status", "current_job_id", "current_segment",
+			"session_expires_at", "last_heartbeat_at",
+		}),
+	}).Create(w).Error; err != nil {
+		metrics.UpscaleEnrollTotal.WithLabelValues("error").Inc()
+		return EnrollResponse{}, err
+	}
+
+	// 4. Return the response.
+	metrics.UpscaleEnrollTotal.WithLabelValues("self").Inc()
+	return EnrollResponse{
+		WorkerID: workerID,
+		Handle:   handle,
+		Exp:      exp,
+		Sig:      sig,
+	}, nil
+}

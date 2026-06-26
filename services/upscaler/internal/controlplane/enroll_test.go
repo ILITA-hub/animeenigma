@@ -107,7 +107,7 @@ var ctlSQLiteOnce sync.Once
 // Postgres's gen_random_uuid() builtin.
 func ctlGenRandomUUID() string {
 	b := make([]byte, 16)
-	rand.Read(b) //nolint:gosec // test-only, non-cryptographic use
+	rand.Read(b)                //nolint:gosec // test-only, non-cryptographic use
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
@@ -367,6 +367,67 @@ func TestGormEnrollStore_ValidToken(t *testing.T) {
 	row := fetchToken(t, db, "good-token")
 	if row.ConsumedAt == nil {
 		t.Error("token ConsumedAt is nil after EnrollTx, want consumed")
+	}
+}
+
+// TestGormEnrollStore_SelfEnroll proves the zero-config path: SelfEnroll mints a
+// valid session and persists an idle worker WITHOUT any enroll token, and two
+// calls yield two DISTINCT workers (one reusable image → many servers).
+func TestGormEnrollStore_SelfEnroll(t *testing.T) {
+	db := openCtlTestDB(t)
+	store := NewGormEnrollStore(db)
+
+	resp, err := store.SelfEnroll(context.Background(), SessionTTL)
+	if err != nil {
+		t.Fatalf("SelfEnroll: %v", err)
+	}
+	if resp.WorkerID == "" {
+		t.Error("WorkerID is empty")
+	}
+	if !VerifySession(resp.WorkerID, resp.Exp, resp.Sig, time.Now()) {
+		t.Error("VerifySession returned false for freshly self-enrolled session")
+	}
+
+	var w domain.UpscaleWorker
+	if err := db.Where("worker_id = ?", resp.WorkerID).First(&w).Error; err != nil {
+		t.Fatalf("worker row not found: %v", err)
+	}
+	if w.Status != "idle" {
+		t.Errorf("worker Status = %q, want %q", w.Status, "idle")
+	}
+	if w.SessionExpiresAt == nil {
+		t.Error("worker SessionExpiresAt is nil, want a derived expiry (I-2)")
+	}
+
+	// A second self-enroll yields a distinct worker (no collision).
+	resp2, err := store.SelfEnroll(context.Background(), SessionTTL)
+	if err != nil {
+		t.Fatalf("second SelfEnroll: %v", err)
+	}
+	if resp2.WorkerID == resp.WorkerID {
+		t.Error("two SelfEnroll calls returned the same WorkerID")
+	}
+	if got := countWorkers(t, db); got != 2 {
+		t.Errorf("worker count = %d, want 2", got)
+	}
+}
+
+// TestGormEnrollStore_SelfEnroll_CapabilityNotConfigured proves the C-1 guard:
+// when the session triple is empty (capability secret unset), SelfEnroll rejects
+// WITHOUT writing a worker row.
+func TestGormEnrollStore_SelfEnroll_CapabilityNotConfigured(t *testing.T) {
+	orig := mintSession
+	mintSession = func(string, time.Duration) (string, string, string) { return "", "", "" }
+	defer func() { mintSession = orig }()
+
+	db := openCtlTestDB(t)
+	store := NewGormEnrollStore(db)
+
+	if _, err := store.SelfEnroll(context.Background(), SessionTTL); err == nil {
+		t.Fatal("SelfEnroll: want error when capability not configured, got nil")
+	}
+	if got := countWorkers(t, db); got != 0 {
+		t.Errorf("worker count = %d, want 0 (no row on C-1 rejection)", got)
 	}
 }
 

@@ -2,6 +2,7 @@ package transport
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -90,6 +91,7 @@ func NewRouter(
 	shellHandler *handler.ExecShellHandler,
 	modelAdminHandler *handler.ModelAdminHandler,
 	modelServeHandler *handler.ModelServeHandler,
+	selfEnrollEnabled bool,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -154,29 +156,44 @@ func NewRouter(
 	// (ExternalAPIKeyMiddleware + WS proxy). No additional gate here; auth
 	// is the API-key (gateway) + session/capability chain.
 	r.Route("/worker", func(r chi.Router) {
-		// POST /worker/enroll — one-time-token enroll flow.
-		// Uses GormEnrollStore.EnrollTx directly (transactional, durable
-		// single-use); NOT Handle+GormEnrollStore (non-transactional footgun).
+		// POST /worker/enroll — enroll flow.
+		//   - token present     → EnrollTx (transactional, durable single-use).
+		//   - token empty + self-enroll enabled → SelfEnroll (no token consumed;
+		//     the edge API key is the enroll credential — zero-config worker image).
+		//   - token empty + self-enroll disabled → 401 (token required).
 		r.Post("/enroll", func(w http.ResponseWriter, r *http.Request) {
 			// Nil-guard: a misconfigured wiring (or a test that passes nil)
-			// must return a clean 500, not panic on the EnrollTx dereference (M-3).
+			// must return a clean 500, not panic on the store dereference (M-3).
 			if enrollStore == nil {
 				log.Errorw("enroll: enrollStore is nil — service misconfigured")
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
+			// Tolerate an empty body (io.EOF) — a self-enrolling worker may send
+			// no JSON; treat it as an empty token. Any other decode error is a 400.
 			var req controlplane.EnrollRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
 				http.Error(w, "invalid JSON", http.StatusBadRequest)
 				return
 			}
-			resp, err := enrollStore.EnrollTx(r.Context(), req, controlplane.SessionTTL)
+
+			var resp controlplane.EnrollResponse
+			var err error
+			if req.Token == "" {
+				if !selfEnrollEnabled {
+					http.Error(w, "enroll token required", http.StatusUnauthorized)
+					return
+				}
+				resp, err = enrollStore.SelfEnroll(r.Context(), controlplane.SessionTTL)
+			} else {
+				resp, err = enrollStore.EnrollTx(r.Context(), req, controlplane.SessionTTL)
+			}
 			if err != nil {
 				if err == controlplane.ErrTokenNotFound {
 					http.Error(w, "token not found or already used", http.StatusUnauthorized)
 					return
 				}
-				log.Warnw("enroll: EnrollTx error", "error", err)
+				log.Warnw("enroll: error", "self_enroll", req.Token == "", "error", err)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}

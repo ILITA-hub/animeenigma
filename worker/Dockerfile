@@ -50,9 +50,24 @@ RUN wget -q -O /tmp/realesrgan.zip \
 RUN mkdir -p /models
 
 # ── Worker configuration (environment variables) ─────────────────────────────
-# Required:
-#   SERVER_URL            base URL of the upscaler control plane (e.g. http://upscaler:8096)
-#   ENROLL_TOKEN          one-time enrollment token issued by the operator
+# This image is SELF-CONTAINED: SERVER_URL and API_KEY are baked in at build time
+# (below), and with server-side WORKER_SELF_ENROLL the worker enrolls with NO
+# token. So a GPU operator runs it with ZERO configuration:
+#
+#   docker load < ae-upscaler-worker.tar.gz
+#   docker run -d --restart unless-stopped --gpus all ae-upscaler-worker:handover
+#
+# Required (baked — override only for a different deployment):
+#   SERVER_URL            base URL of the upscaler control plane. Baked default:
+#                         https://ext.animeenigma.org (the public edge).
+# Enroll credential (baked):
+#   API_KEY               edge API key sent as X-API-Key. Baked at build via the
+#                         API_KEY build-arg (NOT stored in this Dockerfile). With
+#                         WORKER_SELF_ENROLL on the server, the API key alone
+#                         enrolls the worker — no ENROLL_TOKEN needed.
+#   ENROLL_TOKEN          OPTIONAL single-use token (legacy path). Leave unset to
+#                         self-enroll; set it only against a server without
+#                         self-enroll enabled.
 # Model provisioning (NOTE: the legacy `MODEL` env var was REMOVED — the worker
 # is model-agnostic; the server provisions models per-job):
 #   PREINSTALLED_MODELS   comma-separated realesrgan model names whose weight
@@ -64,12 +79,21 @@ RUN mkdir -p /models
 # Optional:
 #   MODE                  worker mode (default "batch")
 #   SCALE                 default integer upscale factor (default 2; per-job scale overrides)
-#   API_KEY               edge API key sent as X-API-Key on data-plane requests
 #   WORK_DIR              scratch dir for per-segment staging (default the OS temp dir)
 #   HEARTBEAT_INTERVAL    per-segment telemetry heartbeat cadence (Go duration, default 5s)
 #   METRICS_INTERVAL      per-segment telemetry metrics cadence  (Go duration, default 10s)
 ENV PREINSTALLED_MODELS=""
 ENV MODELS_DIR="/models"
+
+# Baked self-contained config. SERVER_URL is public (safe to default here).
+# API_KEY and IMAGE_VERSION come from build-args so NO secret is committed to
+# this Dockerfile; the operator's image carries the value baked at build time.
+# Build:  docker build --build-arg API_KEY=<edge key> -t ae-upscaler-worker:handover worker/
+ENV SERVER_URL="https://ext.animeenigma.org"
+ARG API_KEY=""
+ENV API_KEY="${API_KEY}"
+ARG IMAGE_VERSION="selfenroll"
+ENV IMAGE_VERSION="${IMAGE_VERSION}"
 
 RUN groupadd -r app && useradd -r -g app app
 COPY --from=build /worker /worker
