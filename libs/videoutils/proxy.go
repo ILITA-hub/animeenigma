@@ -585,6 +585,17 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	// first-party service host is correct (and the real upstream CDN stays
 	// UNlisted — it is reached only inside the sidecar, never through this proxy).
 	{Domain: "stealth-scraper", Reason: "first-party Camoufox stealth-scraper sidecar /hls restreamer (engine=browser providers)", Owner: "@0neymik0", Added: "2026-06-20"},
+
+	// 2026-06-26 — first-party self-hosted MinIO storage (minio:9000). NOT a
+	// third-party CDN: library/raw-provider HLS segments live in our own object
+	// store, fetched by the streaming HLS proxy over the docker network. minio
+	// is already a FirstPartyHosts entry for the SSRF dial guard, but the domain
+	// gate (isHLSDomainAllowed) checks this package-level allow-list and runs
+	// BEFORE presigning/dialing, so the bare host must be listed here too. The
+	// port-stripped "minio" matches "minio:9000" exactly — same pattern as the
+	// stealth-scraper entry above. Allowlisting a stable first-party internal
+	// service host is correct; the signing-only rule targets THIRD-PARTY CDNs.
+	{Domain: "minio", Reason: "first-party self-hosted MinIO storage; library/raw-provider HLS segments live here — port-stripped 'minio' matches minio:9000, same pattern as stealth-scraper entry", Owner: "@0neymik0", Added: "2026-06-26"},
 }
 
 // HLSProxyAllowedDomains is the flat []string view of
