@@ -66,8 +66,10 @@ func Process(ctx context.Context, inSegPath, outSegPath string, model Model, sca
 	decodeStart := time.Now()
 	outPattern := filepath.Join(framesInDir, "%06d.ppm")
 	decodeCmd := exec.CommandContext(ctx, FFmpegBin, "-i", inSegPath, outPattern)
-	if out, err := decodeCmd.CombinedOutput(); err != nil {
-		return Stats{}, fmt.Errorf("pipeline: ffmpeg decode: %w; output: %s", err, out)
+	decodeErrBuf := newRingBuffer(2048)
+	decodeCmd.Stderr = decodeErrBuf // bounded capture; ffmpeg diagnostics go to stderr
+	if err := decodeCmd.Run(); err != nil {
+		return Stats{}, fmt.Errorf("pipeline: ffmpeg decode: %w; output: %s", err, decodeErrBuf.String())
 	}
 	decodeElapsed := time.Since(decodeStart)
 
@@ -101,8 +103,10 @@ func Process(ctx context.Context, inSegPath, outSegPath string, model Model, sca
 		"-f", "matroska",
 		outSegPath,
 	)
-	if out, err := encodeCmd.CombinedOutput(); err != nil {
-		return Stats{}, fmt.Errorf("pipeline: ffmpeg encode: %w; output: %s", err, out)
+	encodeErrBuf := newRingBuffer(2048)
+	encodeCmd.Stderr = encodeErrBuf // bounded capture; ffmpeg diagnostics go to stderr
+	if err := encodeCmd.Run(); err != nil {
+		return Stats{}, fmt.Errorf("pipeline: ffmpeg encode: %w; output: %s", err, encodeErrBuf.String())
 	}
 	encodeElapsed := time.Since(encodeStart)
 

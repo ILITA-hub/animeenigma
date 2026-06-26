@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/domain"
@@ -143,7 +144,7 @@ func (r *JobRepository) NextEligible(ctx context.Context) (*domain.UpscaleJob, e
 		First(&job).Error
 
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

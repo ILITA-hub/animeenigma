@@ -8,16 +8,6 @@ import (
 	"sync"
 )
 
-func init() {
-	// Built-in preinstalled models use an empty modelsDir so the runtime uses its
-	// default search path (typically the same directory as the binary, or the
-	// CWD-relative "models/" folder). The manager overrides modelsDir for both
-	// preinstalled and Install-registered models via NewManager / Install.
-	const defaultBin = "realesrgan-ncnn-vulkan"
-	Register(newRealesrgan("realtime", "realesr-animevideov3", defaultBin, ""))
-	Register(newRealesrgan("best-quality", "realesrgan-x4plus-anime", defaultBin, ""))
-}
-
 // realesrganModel wraps the realesrgan-ncnn-vulkan command-line tool.
 // The injectable bin field allows tests to substitute a fake shell script.
 type realesrganModel struct {

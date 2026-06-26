@@ -8,10 +8,6 @@ import (
 	"path/filepath"
 )
 
-func init() {
-	Register(mockModel{})
-}
-
 // mockModel is the GPU-free upscale model used in tests and CI environments
 // where realesrgan-ncnn-vulkan is not available. It copies each input frame
 // to outDir verbatim, preserving the original filename.

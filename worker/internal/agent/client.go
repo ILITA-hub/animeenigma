@@ -318,7 +318,7 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 		// Gorilla returns the HTTP response even on upgrade failure so we can
 		// detect 401 and signal the caller to re-enroll.
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
-			return errUnauthorized{msg: fmt.Sprintf("ws upgrade: 401 unauthorized")}
+			return errUnauthorized{msg: "ws upgrade: 401 unauthorized"}
 		}
 		return err
 	}

@@ -32,34 +32,3 @@ func TestMockUpscale_FrameCount(t *testing.T) {
 		t.Fatalf("expected 3 output frames, got %d", len(entries))
 	}
 }
-
-func TestGet_Mock(t *testing.T) {
-	m, err := Get("mock")
-	if err != nil {
-		t.Fatalf("Get(mock): %v", err)
-	}
-	if m == nil {
-		t.Fatal("expected non-nil model")
-	}
-	if m.Name() != "mock" {
-		t.Errorf("Name() = %q, want %q", m.Name(), "mock")
-	}
-}
-
-func TestGet_Unknown(t *testing.T) {
-	_, err := Get("nope")
-	if err == nil {
-		t.Fatal("expected error for unknown model, got nil")
-	}
-}
-
-// TestRegisterDuplicatePanics verifies that registering a model name that has
-// already been registered panics rather than silently overwriting it.
-func TestRegisterDuplicatePanics(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic on duplicate Register, but no panic occurred")
-		}
-	}()
-	Register(mockModel{}) // "mock" is already registered in init()
-}

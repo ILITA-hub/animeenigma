@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"sync/atomic"
 
@@ -21,20 +20,6 @@ type PipelineProcessor struct {
 	// atomically so Telemetry's statsSource can read fps without a lock while
 	// Process runs concurrently. nil until the first segment completes.
 	live atomic.Pointer[Stats]
-}
-
-// NewPipelineProcessor constructs a PipelineProcessor that looks up the named
-// model in the upscale registry. Returns an error if the model is not found.
-//
-// scale is the integer upscale factor (e.g. 2 or 4).
-// workDir is the directory where temporary frame files are written; pass
-// os.TempDir() when no specific directory is required.
-func NewPipelineProcessor(modelName string, scale int, workDir string) (*PipelineProcessor, error) {
-	m, err := upscale.Get(modelName)
-	if err != nil {
-		return nil, fmt.Errorf("pipeline_processor: %w", err)
-	}
-	return &PipelineProcessor{model: m, scale: scale, workDir: workDir}, nil
 }
 
 // Process runs the full decode→model→encode pipeline for a single video segment.

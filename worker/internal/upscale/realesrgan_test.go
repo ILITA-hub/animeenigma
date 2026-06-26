@@ -121,23 +121,3 @@ func TestRealesrgan_BestQuality_Argv(t *testing.T) {
 		}
 	}
 }
-
-func TestGet_Realtime(t *testing.T) {
-	m, err := Get("realtime")
-	if err != nil {
-		t.Fatalf("Get(realtime): %v", err)
-	}
-	if m == nil {
-		t.Fatal("expected non-nil model for realtime")
-	}
-}
-
-func TestGet_BestQuality(t *testing.T) {
-	m, err := Get("best-quality")
-	if err != nil {
-		t.Fatalf("Get(best-quality): %v", err)
-	}
-	if m == nil {
-		t.Fatal("expected non-nil model for best-quality")
-	}
-}

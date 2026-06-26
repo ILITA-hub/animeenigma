@@ -244,13 +244,8 @@ func (h *ModelAdminHandler) GetModelByName(w http.ResponseWriter, r *http.Reques
 	httputil.OK(w, rows)
 }
 
-// isNotFound reports whether err signals a "record not found" condition
-// (gorm.ErrRecordNotFound or any error whose message matches the common text).
+// isNotFound reports whether err signals a "record not found" condition.
+// Uses errors.Is so a wrapped gorm.ErrRecordNotFound is still recognized.
 func isNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Import-free check: gorm.ErrRecordNotFound.Error() == "record not found"
-	return err == gorm.ErrRecordNotFound || strings.Contains(err.Error(), "record not found")
+	return errors.Is(err, gorm.ErrRecordNotFound)
 }
-

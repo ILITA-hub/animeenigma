@@ -2,6 +2,7 @@ package upscale
 
 import (
 	"archive/tar"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -24,8 +25,8 @@ const maxModelArtifactBytes = 2 << 30 // 2 GiB
 // It always contains the built-in "mock" model and any models registered via
 // NewManager (from PREINSTALLED_MODELS) or Install (T29 pull-on-demand).
 type Manager struct {
-	mu       sync.RWMutex
-	models   map[string]Model
+	mu        sync.RWMutex
+	models    map[string]Model
 	modelsDir string
 
 	// installMu serialises Install calls for the same model name; the outer
@@ -191,7 +192,7 @@ func (m *Manager) Install(name, _ string, artifact io.Reader, expectedChecksumHe
 
 	// Extract the TAR into modelsDir. Track files written for cleanup on failure.
 	var written []string
-	extractErr := extractTAR(strings.NewReader(string(data)), m.modelsDir, name, &written)
+	extractErr := extractTAR(bytes.NewReader(data), m.modelsDir, name, &written)
 	if extractErr != nil {
 		// Best-effort cleanup of any partially-written files.
 		for _, p := range written {

@@ -126,15 +126,9 @@ func (h *ModelServeHandler) ServeModel(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = rc.Close() }()
 
-	// Clear the write deadline before streaming the (potentially large) model
-	// artifact — same pattern as GetSegment's I3 fix. Models can be hundreds
-	// of MiB; the http.Server.WriteTimeout (120s) is an absolute deadline from
-	// response start, which a slow worker link can exceed mid-stream.
-	if rc2 := http.NewResponseController(w); rc2 != nil {
-		if err := rc2.SetWriteDeadline(time.Time{}); err != nil {
-			h.log.Warnw("models: clear write deadline failed", "name", name, "error", err)
-		}
-	}
+	// Large model artifact (hundreds of MiB) over a slow worker link can exceed
+	// the global absolute WriteTimeout — clear the deadline before streaming.
+	clearWriteDeadline(w, h.log, "models: clear write deadline failed", "name", name)
 
 	// Set response headers.
 	w.Header().Set("Content-Type", "application/x-tar")

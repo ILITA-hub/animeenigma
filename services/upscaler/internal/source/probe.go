@@ -144,9 +144,3 @@ func (p *Prober) Probe(ctx context.Context, path string) (ProbeResult, error) {
 
 	return result, nil
 }
-
-// Probe is a package-level convenience that uses the system ffprobe binary.
-// Tests should use NewProber(fakeBin).Probe(...) instead for determinism.
-func Probe(ctx context.Context, path string) (ProbeResult, error) {
-	return NewProber("").Probe(ctx, path)
-}

@@ -89,12 +89,9 @@ func TestProcess_OutputSegmentCreated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := Get("mock")
-	if err != nil {
-		t.Fatalf("Get(mock): %v", err)
-	}
+	m := mockModel{}
 
-	_, err = Process(context.Background(), inSeg, outSeg, m, 2, tmpDir)
+	_, err := Process(context.Background(), inSeg, outSeg, m, 2, tmpDir)
 	if err != nil {
 		t.Fatalf("Process: %v", err)
 	}
@@ -117,7 +114,7 @@ func TestProcess_FrameCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, _ := Get("mock")
+	m := mockModel{}
 	stats, err := Process(context.Background(), inSeg, outSeg, m, 2, tmpDir)
 	if err != nil {
 		t.Fatalf("Process: %v", err)
@@ -140,7 +137,7 @@ func TestProcess_FPSNonNegative(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, _ := Get("mock")
+	m := mockModel{}
 	stats, err := Process(context.Background(), inSeg, outSeg, m, 2, tmpDir)
 	if err != nil {
 		t.Fatalf("Process: %v", err)
@@ -171,7 +168,7 @@ func TestProcess_TempDirsCleanedUp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, _ := Get("mock")
+	m := mockModel{}
 	_, err := Process(context.Background(), inSeg, outSeg, m, 2, workDir)
 	if err != nil {
 		t.Fatalf("Process: %v", err)
@@ -205,7 +202,7 @@ func TestProcess_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately before any ffmpeg call
 
-	m, _ := Get("mock")
+	m := mockModel{}
 	_, err := Process(ctx, inSeg, outSeg, m, 2, tmpDir)
 	if err == nil {
 		t.Error("expected error when context is already cancelled")

@@ -98,7 +98,7 @@ func (h *SegmentHandler) verifyAndResolve(
 	w http.ResponseWriter,
 	r *http.Request,
 	operation string,
-) (idx int, inputPath string, rejected bool) {
+) (idx int, inputPath string, job *domain.UpscaleJob, rejected bool) {
 	jobID := chi.URLParam(r, "job")
 	idxStr := chi.URLParam(r, "idx")
 
@@ -106,7 +106,7 @@ func (h *SegmentHandler) verifyAndResolve(
 	idxVal, err := strconv.Atoi(idxStr)
 	if err != nil || idxVal < 0 {
 		writeBadRequest(w)
-		return 0, "", true
+		return 0, "", nil, true
 	}
 
 	// ── Security req #1: verify capability ────────────────────────────────
@@ -114,11 +114,11 @@ func (h *SegmentHandler) verifyAndResolve(
 	sig := r.URL.Query().Get("sig")
 	if !capability.VerifyJobHandle(jobID, operation, idxVal, exp, sig, time.Now()) {
 		writeUnauthorized(w)
-		return 0, "", true
+		return 0, "", nil, true
 	}
 
 	// ── Security req #2: bound-check against job.SegmentCount ─────────────
-	job, err := h.jobs.Get(r.Context(), jobID)
+	job, err = h.jobs.Get(r.Context(), jobID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			writeBadRequest(w)
@@ -126,11 +126,11 @@ func (h *SegmentHandler) verifyAndResolve(
 			h.log.Errorw("segments: job lookup failed", "job_id", jobID, "error", err)
 			writeInternalError(w)
 		}
-		return 0, "", true
+		return 0, "", nil, true
 	}
-	if idxVal < 0 || idxVal >= job.SegmentCount {
+	if idxVal >= job.SegmentCount { // idxVal < 0 already rejected at parse above
 		writeBadRequest(w)
-		return 0, "", true
+		return 0, "", nil, true
 	}
 
 	// ── Security req #3: path traversal defense ───────────────────────────
@@ -146,16 +146,16 @@ func (h *SegmentHandler) verifyAndResolve(
 	if jobDir != filepath.Join(rootClean, jobID) || !strings.HasPrefix(jobDir, rootClean+string(filepath.Separator)) {
 		h.log.Warnw("segments: jobID escapes staging root", "job_id", jobID, "idx", idxVal)
 		writeBadRequest(w)
-		return 0, "", true
+		return 0, "", nil, true
 	}
 	p := filepath.Clean(filepath.Join(jobDir, segName))
 	if !strings.HasPrefix(p, jobDir+string(filepath.Separator)) {
 		h.log.Warnw("segments: path traversal detected", "job_id", jobID, "idx", idxVal)
 		writeBadRequest(w)
-		return 0, "", true
+		return 0, "", nil, true
 	}
 
-	return idxVal, p, false
+	return idxVal, p, job, false
 }
 
 // GetSegment handles GET /worker/segments/{job}/{idx}.
@@ -163,7 +163,7 @@ func (h *SegmentHandler) verifyAndResolve(
 func (h *SegmentHandler) GetSegment(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "job")
 
-	idx, inputPath, rejected := h.verifyAndResolve(w, r, "segment-get")
+	idx, inputPath, _, rejected := h.verifyAndResolve(w, r, "segment-get")
 	if rejected {
 		return
 	}
@@ -205,18 +205,9 @@ func (h *SegmentHandler) GetSegment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
-	// Clear the server's absolute per-response write deadline before streaming the
-	// segment body. Input segments can be large (a 30-45s upscale segment is tens
-	// of MiB) and a slow worker link can exceed the global http.Server.WriteTimeout
-	// (120s), which is an ABSOLUTE deadline from when the response started — so
-	// without clearing it a large/slow GET is severed mid-stream. A zero time means
-	// "no deadline"; normal short requests are unaffected (they finish well inside it).
-	if rc := http.NewResponseController(w); rc != nil {
-		if err := rc.SetWriteDeadline(time.Time{}); err != nil {
-			// Not fatal — fall through and stream under the global deadline.
-			h.log.Warnw("segments: clear write deadline failed", "job_id", jobID, "idx", idx, "error", err)
-		}
-	}
+	// Large segment body (tens of MiB) over a slow worker link can exceed the
+	// global absolute WriteTimeout — clear the deadline before streaming.
+	clearWriteDeadline(w, h.log, "segments: clear write deadline failed", "job_id", jobID, "idx", idx)
 
 	w.Header().Set("Content-Type", "video/x-matroska")
 	w.WriteHeader(http.StatusOK)
@@ -233,7 +224,7 @@ func (h *SegmentHandler) GetSegment(w http.ResponseWriter, r *http.Request) {
 func (h *SegmentHandler) PutSegment(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "job")
 
-	idx, _, rejected := h.verifyAndResolve(w, r, "segment-put")
+	idx, _, job, rejected := h.verifyAndResolve(w, r, "segment-put")
 	if rejected {
 		return
 	}
@@ -262,16 +253,8 @@ func (h *SegmentHandler) PutSegment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── Security req #6: reject if job is terminal or finalizing ──────────
-	job, err := h.jobs.Get(r.Context(), jobID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			writeBadRequest(w)
-		} else {
-			h.log.Errorw("segments: job lookup failed (put)", "job_id", jobID, "error", err)
-			writeInternalError(w)
-		}
-		return
-	}
+	// job was already loaded + bound-checked by verifyAndResolve above, so we
+	// reuse it here instead of re-fetching the same row.
 	if job.Status.IsTerminal() || job.Status == domain.JobFinalizing {
 		writeConflict(w)
 		return
