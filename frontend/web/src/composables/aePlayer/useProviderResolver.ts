@@ -34,6 +34,7 @@ import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
 import { hlsProxyUrl } from '@/utils/streaming'
 import { buildSubtitleProxyUrl, detectSubFormat, langFromTrack } from '@/utils/subtitleProxy'
+import { pickKodikTranslation } from './pickKodikTranslation'
 
 // ─── Error ──────────────────────────────────────────────────────────────────
 
@@ -251,12 +252,20 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
         throw new NotAvailableError(combo.provider || prefer || 'scraper', 'has no servers for this episode')
       }
 
-      // Pick the server matching combo.server, or fall back to the first sub/raw
-      const serverId = combo.server && srvs.find((s) => s.id === combo.server)
-        ? combo.server
-        : (srvs.find((s) => s.type === 'sub') ?? srvs[0]).id
-
-      const selectedSrv = srvs.find((s) => s.id === serverId) ?? srvs[0]
+      // Pick the server for the requested audio. A server with no explicit type
+      // (or 'raw') is SUB-compatible — never DUB. Honor an explicit combo.server
+      // ONLY when it matches the requested audio: a stale pick left over from
+      // before a sub↔dub toggle must not force the wrong cut (e.g. a SUB
+      // selection silently resolving a leftover DUB server).
+      const wantDub = combo.audio === 'dub'
+      const inAudio = (s: ScraperServer) => (wantDub ? s.type === 'dub' : s.type !== 'dub')
+      const pinned = combo.server ? srvs.find((s) => s.id === combo.server) : undefined
+      const selectedSrv =
+        (pinned && inAudio(pinned) ? pinned : undefined) ??
+        srvs.find((s) => s.type === (wantDub ? 'dub' : 'sub')) ?? // exact category first
+        srvs.find(inAudio) ??                                     // then any compatible
+        srvs[0]                                                   // last resort (one-sided title)
+      const serverId = selectedSrv.id
       const category: 'sub' | 'dub' = selectedSrv.type === 'dub' ? 'dub' : 'sub'
 
       // 2. Fetch stream
@@ -480,9 +489,13 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
       if (!Array.isArray(translations) || translations.length === 0) {
         throw new NotAvailableError('kodik', 'has no translations')
       }
-      // Pick by team name, fall back to first
-      const tr = (combo.team ? translations.find((t) => t.title === combo.team) : undefined)
-        ?? translations[0]
+      // Honor an explicit team pick; otherwise fall back to the first translation
+      // matching the requested AUDIO (sub/dub) — never blindly translations[0],
+      // which is frequently a DUB voice and would override a SUB selection.
+      const tr = pickKodikTranslation(translations, { team: combo.team, audio: combo.audio })
+      if (!tr) {
+        throw new NotAvailableError('kodik', 'has no translations')
+      }
 
       const stResp = await api.getStream(animeId, ep.number, tr.id, kodikPreferredQuality())
       const stream: KodikStream = stResp.data?.data ?? stResp.data

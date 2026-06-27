@@ -22,3 +22,30 @@ export function pickDefaultSubtitle(tracks: SubTrack[], opts: { lang: string }):
 export function pickBestForLang(tracks: SubTrack[], lang: string): SubTrack | null {
   return best(tracks.filter((t) => t.lang === lang))
 }
+
+/**
+ * Decide which subtitle (if any) to AUTO-enable when a SUB cut resolves.
+ *
+ * Rules (in order):
+ *  1. A soft track the PROVIDER shipped with the stream (`bundled`) is a real
+ *     selectable subtitle the provider intends — always honor the first one.
+ *  2. No provider track, raw original-Japanese cut (`lang === 'ja'`): nothing is
+ *     burned into the video, so auto-enable the best aggregated track
+ *     (Jimaku/OpenSubtitles) for that language.
+ *  3. No provider track, EN/RU cut: the provider HARDSUBBED the subtitles into
+ *     the video. Auto-enabling an aggregated overlay on top would just double
+ *     the subtitles, so return null — the user can still pick one manually.
+ *
+ * `aggregated` is the merged track list (provider-bundled + Jimaku/OpenSubtitles);
+ * it is only consulted in rule 2, where `bundled` is empty so it carries no
+ * provider tracks.
+ */
+export function pickAutoSubtitle(opts: {
+  lang: string
+  bundled: SubTrack[]
+  aggregated: SubTrack[]
+}): SubTrack | null {
+  if (opts.bundled.length > 0) return opts.bundled[0]
+  if (opts.lang !== 'ja') return null // burned into the video by the provider
+  return pickDefaultSubtitle(opts.aggregated, { lang: opts.lang })
+}

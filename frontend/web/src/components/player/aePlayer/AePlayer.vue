@@ -361,7 +361,7 @@ import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
-import { pickDefaultSubtitle, pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
+import { pickAutoSubtitle, pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
 import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
@@ -2121,11 +2121,14 @@ let subUserDecided = false
 function autoSelectSubtitle() {
   if (subUserDecided || chosenSub.value) return
   if (state.combo.value.audio !== 'sub') return // only SUB/raw cuts
-  if (hardsubNote.value) return                 // burned-in already
-  // Prefer the provider's own bundled track; else best match for the audio language.
-  const pick =
-    providerBundledTracks.value[0] ??
-    pickDefaultSubtitle(subtitleTracks.value, { lang: state.combo.value.lang })
+  // Honor a provider-bundled soft track; for a raw original-JP cut auto-enable
+  // the best aggregated overlay; for an EN/RU cut with no provider track the
+  // subs are burned into the video — don't auto-enable a (doubling) overlay.
+  const pick = pickAutoSubtitle({
+    lang: state.combo.value.lang,
+    bundled: providerBundledTracks.value,
+    aggregated: subtitleTracks.value,
+  })
   if (pick) {
     chosenSub.value = pick
     state.subLang.value = pick.lang
@@ -2174,12 +2177,15 @@ const langSources = computed<Record<string, string>>(() => {
   return m
 })
 
-// Informational note for the subs menu: when there's no soft track but the
-// stream is a SUB cut, the subs the user sees are hardsubbed by the provider.
+// Informational note for the subs menu: when the provider shipped no soft track
+// for an EN/RU SUB cut, the subs the user sees are hardsubbed into the video.
+// A raw original-JP cut (lang 'ja') is NOT hardsubbed — its subs come from the
+// optional Jimaku/OpenSubtitles overlay — so the note never applies there.
 const hardsubNote = computed(() => {
   if (chosenSub.value) return null
   if (state.combo.value.audio !== 'sub') return null
-  if (subtitleTracks.value.length > 0) return null // soft tracks exist → not hardsubbed
+  if (state.combo.value.lang === 'ja') return null         // raw JP → overlay, not burned in
+  if (providerBundledTracks.value.length > 0) return null  // provider soft subs → not hardsubbed
   const prov = activeProviderName.value
   if (!prov) return null
   return t('player.aePlayer.subs.hardsub', { provider: prov })
