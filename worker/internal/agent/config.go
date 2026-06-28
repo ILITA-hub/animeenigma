@@ -57,6 +57,12 @@ type Config struct {
 	// drive fast emission without waiting on production cadences.
 	HeartbeatInterval time.Duration
 	MetricsInterval   time.Duration
+
+	// PongWait overrides the WebSocket read-deadline window (default 60s, which
+	// MUST match the server's pongWait). Zero leaves the default in place. There
+	// is no env knob — it must stay in lockstep with the server constant; it is
+	// exposed only so the regression test can drive a short deadline.
+	PongWait time.Duration
 }
 
 // LoadConfig reads the worker configuration from environment variables.

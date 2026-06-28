@@ -374,6 +374,88 @@ func TestEnrollAndWSSendAPIKey(t *testing.T) {
 	}
 }
 
+// TestServerPingsKeepConnectionAlive is a WS-keepalive regression: the worker
+// never sends its own pings, so its read deadline is extended ONLY by the inbound
+// server keepalive — and because the worker receives PINGs (not PONGs), that
+// extension MUST happen in the ping handler. A server pinging on a fixed cadence
+// (production: every 30s) must keep an idle worker connected indefinitely. Before
+// the ping handler existed, the read deadline (pongWait) expired ~pongWait after
+// connect and the connection dropped on a fixed 60s cycle even while perfectly
+// healthy (and would tear down a >60s in-flight segment). With a short pongWait
+// and a faster ping cadence, this asserts the connection outlives many pongWait
+// windows.
+func TestServerPingsKeepConnectionAlive(t *testing.T) {
+	t.Parallel()
+
+	const pongWait = 120 * time.Millisecond
+	const pingEvery = 40 * time.Millisecond
+
+	disconnected := make(chan struct{}, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/worker/enroll", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(fakeEnrollResp) //nolint:errcheck
+	})
+	mux.HandleFunc("/worker/ws", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := testUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// Ping on a fixed cadence; never send a data frame, never pong.
+		stop := make(chan struct{})
+		defer close(stop)
+		go func() {
+			tk := time.NewTicker(pingEvery)
+			defer tk.Stop()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-tk.C:
+					if err := conn.WriteControl(gorillaws.PingMessage, nil, time.Now().Add(time.Second)); err != nil {
+						return
+					}
+				}
+			}
+		}()
+
+		// Read loop: returns when the client disconnects (its read deadline fires
+		// → runOnce returns → connection closes). Signal the first disconnect.
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				select {
+				case disconnected <- struct{}{}:
+				default:
+				}
+				return
+			}
+		}
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := Config{ServerURL: srv.URL, EnrollToken: "tok", PongWait: pongWait}
+	c := NewClient(cfg)
+	c.backoff = BackoffConfig{Initial: 5 * time.Millisecond, Max: 20 * time.Millisecond}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx) //nolint:errcheck
+
+	// The connection must survive far past pongWait. Without the ping handler it
+	// would drop at ~pongWait (120ms); we require it to live ~10× that.
+	select {
+	case <-disconnected:
+		t.Fatal("worker WS dropped despite regular server pings — read deadline not extended on inbound ping")
+	case <-time.After(10 * pongWait):
+		// Survived ~10 pongWait windows: server pings are extending the deadline.
+	}
+}
+
 // ── Test 1: client enrolls successfully ──────────────────────────────────────
 
 func TestEnrollCalled(t *testing.T) {

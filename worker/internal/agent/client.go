@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,9 +39,16 @@ func (c chanLeaseConn) ReadGrant(ctx context.Context) (wire.LeaseGrantPayload, e
 }
 
 const (
-	// pongWait is the read deadline extension on each pong received from the server.
-	// Must match the server's pongWait (60s).
-	pongWait = 60 * time.Second
+	// defaultPongWait is the WebSocket read-deadline window. It is reset on every
+	// inbound server keepalive — both PONGs (via SetPongHandler) and PINGs (via
+	// SetPingHandler). The worker never sends its own pings, so PongHandler never
+	// fires in practice; the server sends a PING every 30s and the ping handler
+	// extends the deadline. Must match the server's pongWait (60s). Overridable
+	// per-Client via Config.PongWait (tests only).
+	defaultPongWait = 60 * time.Second
+
+	// writeWait is the deadline for a single control/data frame write.
+	writeWait = 10 * time.Second
 
 	// maxMsgSize is the read limit per frame (64 KiB, matches server).
 	maxMsgSize = 64 * 1024
@@ -107,6 +115,11 @@ type Client struct {
 	// cadence. Defaulted in NewClient; overridable by tests for fast emission.
 	heartbeatInterval time.Duration
 	metricsInterval   time.Duration
+
+	// pongWait is the WebSocket read-deadline window, reset on each inbound
+	// server ping/pong. Defaulted to defaultPongWait in NewClient; overridable
+	// by tests (Config.PongWait) to drive a short deadline.
+	pongWait time.Duration
 }
 
 // NewClient constructs a Client with default backoff settings and a model
@@ -125,6 +138,10 @@ func NewClient(cfg Config) *Client {
 	metInterval := defaultMetricsInterval
 	if cfg.MetricsInterval > 0 {
 		metInterval = cfg.MetricsInterval
+	}
+	pongWait := defaultPongWait
+	if cfg.PongWait > 0 {
+		pongWait = cfg.PongWait
 	}
 
 	// Construct the model Manager over cfg.ModelsDir — the SAME directory that
@@ -145,6 +162,7 @@ func NewClient(cfg Config) *Client {
 		execHandler:       NewExecHandler(send),
 		heartbeatInterval: hbInterval,
 		metricsInterval:   metInterval,
+		pongWait:          pongWait,
 	}
 }
 
@@ -337,9 +355,27 @@ func (c *Client) runOnce(ctx context.Context, enroll wire.EnrollResponse) error 
 
 	// Configure read-side constraints.
 	conn.SetReadLimit(maxMsgSize)
-	conn.SetReadDeadline(time.Now().Add(pongWait)) //nolint:errcheck
+	conn.SetReadDeadline(time.Now().Add(c.pongWait)) //nolint:errcheck
 	conn.SetPongHandler(func(string) error {
-		return conn.SetReadDeadline(time.Now().Add(pongWait))
+		return conn.SetReadDeadline(time.Now().Add(c.pongWait))
+	})
+	// The worker never sends its own pings, so PongHandler never fires. The server
+	// keeps the connection warm by sending a PING every 30s; gorilla's default
+	// ping handler replies with a PONG but does NOT extend the read deadline.
+	// Without extending it here, the read deadline (pongWait) would expire 60s
+	// after connect and tear down an otherwise-healthy connection — even mid-job,
+	// since while processing a segment the worker receives only pings, not data.
+	// Extend the deadline on every inbound ping and preserve the default pong reply.
+	conn.SetPingHandler(func(appData string) error {
+		_ = conn.SetReadDeadline(time.Now().Add(c.pongWait))
+		err := conn.WriteControl(gorillaws.PongMessage, []byte(appData), time.Now().Add(writeWait))
+		if err == gorillaws.ErrCloseSent {
+			return nil
+		}
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return nil
+		}
+		return err
 	})
 
 	// Send the register frame immediately (seq=1).
@@ -441,7 +477,7 @@ func (c *Client) writePump(ctx context.Context, conn *gorillaws.Conn, done <-cha
 			if !ok {
 				return
 			}
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
+			conn.SetWriteDeadline(time.Now().Add(writeWait)) //nolint:errcheck
 			if err := conn.WriteMessage(gorillaws.TextMessage, msg); err != nil {
 				fmt.Fprintf(os.Stderr, "worker: write error: %v\n", err)
 				return
