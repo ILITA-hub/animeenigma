@@ -73,7 +73,7 @@ type Hub struct {
 	workers         WorkerHeartbeater
 	log             *logger.Logger
 	cfg             HubConfig
-	execRouter      ExecRouter             // optional; nil = ignore exec frames
+	execRouter      ExecRouter              // optional; nil = ignore exec frames
 	analyticsClient *analyticsclient.Client // optional; nil = telemetry forwarding disabled
 }
 
@@ -400,7 +400,27 @@ func (c *Conn) handleLeaseReq(reqSeq int) {
 			return
 		}
 		if seg == nil {
-			// Nothing to lease right now — silently ignore (worker will retry).
+			// No work right now. Send an EMPTY lease_grant (JobID="") so the worker
+			// unblocks its ReadGrant, idles, and re-requests after its idleDelay.
+			// The worker never sends pings or unsolicited lease_reqs, so without a
+			// reply it blocks on ReadGrant forever and never picks up a job created
+			// AFTER it connected. The worker already treats an empty grant as
+			// "no work — retry" (leaseloop: grant.JobID == "").
+			empty, err := NewFrame("lease_grant", reqSeq+1, LeaseGrantPayload{})
+			if err != nil {
+				c.hub.log.Warnw("controlplane: marshal empty lease_grant", "worker_id", c.workerID, "error", err)
+				return
+			}
+			if err := c.hub.Send(c.workerID, empty); err != nil {
+				switch {
+				case errors.Is(err, errSendBufferFull):
+					c.hub.log.Warnw("controlplane: send buffer full, dropping empty lease_grant", "worker_id", c.workerID)
+				case errors.Is(err, errWorkerNotFound):
+					// Connection dropped between resolve and send — benign.
+				default:
+					c.hub.log.Warnw("controlplane: send empty lease_grant failed", "worker_id", c.workerID, "error", err)
+				}
+			}
 			return
 		}
 

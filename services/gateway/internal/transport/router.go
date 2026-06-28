@@ -74,7 +74,9 @@ func NewRouterWithCleanup(
 	// (POISON_CLIENT_IPS). MUST run AFTER RealIP so r.RemoteAddr is the true
 	// client IP. No-op when the list is empty.
 	r.Use(PoisonMiddleware(cfg.PoisonClientIPs, log))
-	r.Use(MaxBodySizeMiddleware(10 * 1024 * 1024)) // 10MB
+	// 10MB global cap; the worker segment data-plane is exempt (multi-MB video
+	// segment uploads, capability-signed + nginx-capped at 512m + streamed to MinIO).
+	r.Use(MaxBodySizeMiddleware(10*1024*1024, "/worker/segments/"))
 	rateLimitMW, rateLimiter := RateLimitMiddlewareWithStop(cfg.RateLimit)
 	r.Use(rateLimitMW)
 
@@ -1066,10 +1068,21 @@ func RateLimitMiddlewareWithStop(cfg config.RateLimitConfig) (func(http.Handler)
 	return mw, rl
 }
 
-// MaxBodySizeMiddleware limits the size of incoming request bodies.
-func MaxBodySizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+// MaxBodySizeMiddleware limits the size of incoming request bodies. Any request
+// whose path has one of exemptPrefixes is passed through UNCAPPED — used for the
+// worker segment data-plane (/worker/segments/*), where uploads are multi-MB
+// video segments. Those are capability-signed (HMAC handle per segment), capped
+// by nginx (client_max_body_size 512m), and streamed straight to MinIO, so the
+// gateway's small global cap must not truncate them (a truncated body 502s).
+func MaxBodySizeMiddleware(maxBytes int64, exemptPrefixes ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			for _, p := range exemptPrefixes {
+				if strings.HasPrefix(r.URL.Path, p) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
 			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 			next.ServeHTTP(w, r)
 		})

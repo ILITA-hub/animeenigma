@@ -43,6 +43,14 @@ func (f *fakeLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSeg
 	return f.seg, handles, "mock", 2, nil
 }
 
+// noWorkLeaser always reports "no segment available" — used to prove the server
+// replies with an EMPTY lease_grant (not silence) so an idle worker retries.
+type noWorkLeaser struct{}
+
+func (noWorkLeaser) OnLeaseReq(_ context.Context, _ string) (*domain.UpscaleSegment, LeaseHandles, string, int, error) {
+	return nil, LeaseHandles{}, "", 0, nil
+}
+
 // fakeWorkerRepo records Heartbeat calls.
 type fakeWorkerRepo struct{}
 
@@ -214,6 +222,53 @@ func TestHub_LeaseReqReturnsLeaseGrant(t *testing.T) {
 	}
 	if grant.Handles.GetHandle == "" || grant.Handles.PutHandle == "" {
 		t.Errorf("grant.Handles empty: %+v", grant.Handles)
+	}
+}
+
+// TestHub_LeaseReqNoWorkSendsEmptyGrant verifies that when the leaser has no
+// segment to hand out, the server replies with an EMPTY lease_grant (JobID="")
+// rather than staying silent. The worker blocks on ReadGrant and only re-requests
+// after receiving a grant; without this reply an idle worker that connected
+// before any job existed would never pick up a job created later (deadlock).
+func TestHub_LeaseReqNoWorkSendsEmptyGrant(t *testing.T) {
+	_, hub, dial := buildTestHubWithLeaser(t, noWorkLeaser{})
+
+	wID := "hub-worker-nowork"
+	conn := dial(wID)
+	waitFor(t, func() bool {
+		hub.mu.RLock()
+		defer hub.mu.RUnlock()
+		_, ok := hub.conns[wID]
+		return ok
+	}, 500*time.Millisecond, "worker to register")
+
+	req, _ := NewFrame("lease_req", 1, LeaseReqPayload{})
+	raw, _ := json.Marshal(req)
+	if err := conn.WriteMessage(gorillaws.TextMessage, raw); err != nil {
+		t.Fatalf("write lease_req: %v", err)
+	}
+
+	// The server MUST send an (empty) lease_grant. The read deadline doubles as
+	// the "silence = bug" assertion: a pre-fix server never writes, so ReadMessage
+	// would hit the deadline and fail.
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("expected an empty lease_grant on no-work, got read error (server stayed silent — the deadlock bug): %v", err)
+	}
+	var f Frame
+	if err := json.Unmarshal(msg, &f); err != nil {
+		t.Fatalf("unmarshal frame: %v", err)
+	}
+	if f.Type != "lease_grant" {
+		t.Errorf("frame type = %q, want %q", f.Type, "lease_grant")
+	}
+	var grant LeaseGrantPayload
+	if err := f.Decode(&grant); err != nil {
+		t.Fatalf("decode lease_grant: %v", err)
+	}
+	if grant.JobID != "" {
+		t.Errorf("no-work grant.JobID = %q, want empty (signals 'no work, retry')", grant.JobID)
 	}
 }
 
