@@ -448,6 +448,16 @@ class CamoufoxEngine:
                 self.profiles.release(profile, ok=False)
                 continue
 
+            except asyncio.CancelledError:
+                # HTTP client disconnected while we were awaiting inside the
+                # browser. CancelledError is a BaseException, not an Exception,
+                # so the generic handler below cannot catch it — without this
+                # clause the profile stays permanently leased (pool exhausted).
+                await _safe_close_page(page)
+                await self._teardown(profile, reason="crash")
+                self.profiles.release(profile, ok=False)
+                raise
+
             except Exception as exc:  # noqa: BLE001
                 # Driver/context death ("Connection closed while reading from the
                 # driver", "unable to perform operation on <WriteUnixTransport>")
@@ -1003,6 +1013,13 @@ class CamoufoxEngine:
             # pool_exhausted / provider_wedged) instead of a flattened error. The
             # browser handle never opened on these paths, so there is nothing to tear
             # down here — let them propagate unchanged.
+            raise
+        except asyncio.CancelledError:
+            # HTTP client disconnected while we were inside the browser.
+            # CancelledError is BaseException, not Exception — without this
+            # handler the profile leaks permanently leased.
+            await self._teardown(profile, reason="crash")
+            self.profiles.release(profile, ok=False)
             raise
         except Exception as exc:  # noqa: BLE001
             await self._teardown(profile, reason="crash")
