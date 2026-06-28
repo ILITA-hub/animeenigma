@@ -234,7 +234,7 @@ func NewRouterWithCleanup(
 		// /worker/segments/* — large binary segment bytes. NO per-path rate
 		// limit (see comment above). Streams without full-body buffering
 		// (FlushInterval=-1 in the ExternalAPIHandler director).
-		r.HandleFunc("/segments/*", func(w http.ResponseWriter, r *http.Request) {
+		r.With(largeTransferDeadlineMiddleware).HandleFunc("/segments/*", func(w http.ResponseWriter, r *http.Request) {
 			if workerProxyHandler != nil {
 				workerProxyHandler.ProxyWorker(w, r)
 			} else {
@@ -249,7 +249,7 @@ func NewRouterWithCleanup(
 		// FlushInterval=-1 ensures model .tar bytes flow without gateway OOM.
 		// X-Gateway-Internal is stripped by the ExternalAPIHandler director
 		// (defence-in-depth; same as /worker/segments/*).
-		r.HandleFunc("/models/*", func(w http.ResponseWriter, r *http.Request) {
+		r.With(largeTransferDeadlineMiddleware).HandleFunc("/models/*", func(w http.ResponseWriter, r *http.Request) {
 			if workerProxyHandler != nil {
 				workerProxyHandler.ProxyWorker(w, r)
 			} else {
@@ -1066,6 +1066,23 @@ func RateLimitMiddlewareWithStop(cfg config.RateLimitConfig) (func(http.Handler)
 		})
 	}
 	return mw, rl
+}
+
+// largeTransferDeadlineMiddleware lifts the gateway's global Read/Write timeouts
+// for the worker binary data-plane (segment up/download, model fetch). Those
+// stream multi-MB bodies over variable-speed worker links, so the whole-request
+// 30s cap would 502 a slow upload (observed: a multi-MB segment PUT over a home
+// connection). It replaces the cap with a generous per-request deadline (bounded,
+// so it is not a slowloris hole), scoped to these routes ONLY — every other route
+// keeps the protective global timeout. nginx also bounds the transfer (300s).
+func largeTransferDeadlineMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rc := http.NewResponseController(w)
+		deadline := time.Now().Add(10 * time.Minute)
+		_ = rc.SetReadDeadline(deadline)
+		_ = rc.SetWriteDeadline(deadline)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // MaxBodySizeMiddleware limits the size of incoming request bodies. Any request

@@ -48,3 +48,27 @@ func TestMaxBodySizeMiddleware_ExemptsWorkerSegments(t *testing.T) {
 		}
 	})
 }
+
+// TestLargeTransferDeadlineMiddleware_PassesThrough verifies the deadline-extension
+// middleware is transparent: it serves the request even when the ResponseWriter
+// does not support ResponseController deadlines (httptest.Recorder returns
+// ErrNotSupported, which the middleware must ignore rather than failing the route).
+func TestLargeTransferDeadlineMiddleware_PassesThrough(t *testing.T) {
+	called := false
+	h := largeTransferDeadlineMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/worker/segments/j/0", strings.NewReader("body")))
+	if !called {
+		t.Fatal("next handler not called")
+	}
+	if rec.Code != http.StatusTeapot {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusTeapot)
+	}
+	if rec.Body.String() != "ok" {
+		t.Fatalf("body = %q, want %q", rec.Body.String(), "ok")
+	}
+}

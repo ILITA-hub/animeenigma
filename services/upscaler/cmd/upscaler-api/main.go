@@ -223,11 +223,17 @@ func main() {
 
 	// Create HTTP server
 	srv := &http.Server{
-		Addr:         cfg.Server.Address(),
-		Handler:      tracing.HTTPMiddleware("upscaler")(router),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:    cfg.Server.Address(),
+		Handler: tracing.HTTPMiddleware("upscaler")(router),
+		// ReadHeaderTimeout (NOT ReadTimeout): a whole-request ReadTimeout caps the
+		// body read too, so a multi-MB worker segment UPLOAD over a slow link hit
+		// the 15s cap and 500'd ("read PUT body failed: i/o timeout"). Bounding only
+		// the header read keeps the slowloris guard; the upscaler is internal
+		// (gateway-only) so an unbounded body read is safe, and nginx + the gateway
+		// still bound the overall transfer.
+		ReadHeaderTimeout: 15 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	// ── Background goroutines ─────────────────────────────────────────────────
