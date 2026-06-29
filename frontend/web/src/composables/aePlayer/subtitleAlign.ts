@@ -45,6 +45,7 @@ export function overlapDuration(a: Interval[], b: Interval[], delta: number): nu
 
 // Reusable scratch for the offset sweep — the grid size is constant, so this
 // avoids allocating a fresh array on every evaluate() call.
+// bestOffset is therefore non-reentrant; safe today (single-threaded/synchronous).
 const SCORES = new Float64Array(Math.round((SEARCH.max - SEARCH.min) / SEARCH.step) + 1)
 
 /**

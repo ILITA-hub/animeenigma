@@ -59,7 +59,7 @@ describe('useSubtitleAutoSync', () => {
     expect(s.syncEvents.value[0].reason).toBe('resync')
   })
 
-  it('resets state and disposes tap on episode change', async () => {
+  it('resets accumulation and REUSES the tap on episode change', async () => {
     const tap = fakeTap()
     const ek = ref('a:1')
     const s = useSubtitleAutoSync({ videoElement: vel(), cues: ref([{ start: 8, end: 10 }, { start: 18, end: 21 }]), enabled: ref(true), episodeKey: ek, createTap: () => tap, config: cfg })
@@ -68,10 +68,10 @@ describe('useSubtitleAutoSync', () => {
     ek.value = 'a:2'; await nextTick()
     expect(s.autoOffset.value).toBe(0)
     expect(s.syncEvents.value).toEqual([])
-    expect(tap.disposed).toBe(true)
+    expect(tap.disposed).toBe(false)
   })
 
-  it('disabling drops autoOffset to 0 and disposes', async () => {
+  it('disabling stops accumulation and keeps the tap (no dispose)', async () => {
     const tap = fakeTap()
     const enabled = ref(true)
     const s = useSubtitleAutoSync({ videoElement: vel(), cues: ref([{ start: 8, end: 10 }, { start: 18, end: 21 }]), enabled, episodeKey: ref('a:1'), createTap: () => tap, config: cfg })
@@ -79,7 +79,10 @@ describe('useSubtitleAutoSync', () => {
     enabled.value = false; await nextTick()
     expect(s.autoOffset.value).toBe(0)
     expect(s.status.value).toBe('idle')
-    expect(tap.disposed).toBe(true)
+    expect(tap.disposed).toBe(false)
+    // Frames arriving while disabled must be ignored (active=false early-return in ingest)
+    speak(tap, 10, 12); speak(tap, 20, 23); await nextTick()
+    expect(s.autoOffset.value).toBe(0)
   })
 
   it('marks unsupported if the tap factory throws', async () => {

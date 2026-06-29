@@ -12,7 +12,13 @@ export function createAudioTap(el: HTMLVideoElement): SpeechTap {
   if (!Ctor) throw new Error('Web Audio unavailable')
 
   const ctx = new Ctor()
-  const src = ctx.createMediaElementSource(el)   // throws if cross-origin tainted / already tapped
+  let src: MediaElementAudioSourceNode
+  try {
+    src = ctx.createMediaElementSource(el)   // binds the element ONCE for its lifetime
+  } catch (e) {
+    void ctx.close().catch(() => {})         // don't leak the context if binding fails
+    throw e
+  }
   const gain = ctx.createGain()
   const analyser = ctx.createAnalyser()
   analyser.fftSize = 2048
@@ -25,6 +31,9 @@ export function createAudioTap(el: HTMLVideoElement): SpeechTap {
   const syncGain = () => { gain.gain.value = el.muted ? 0 : el.volume }
   syncGain()
   el.addEventListener('volumechange', syncGain)
+  // Created from a watcher (not a user gesture) → the context may start suspended,
+  // routing the element's audio into a non-running graph. Resume it (best-effort).
+  void Promise.resolve(ctx.resume?.()).catch(() => {})
 
   const freq = new Uint8Array(analyser.frequencyBinCount)
   const minGap = 1000 / TICK_HZ

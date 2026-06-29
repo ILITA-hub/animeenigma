@@ -44,6 +44,7 @@ export function useSubtitleAutoSync(opts: {
   let totalSpeech = 0
   let locked = false
   let tap: SpeechTap | null = null
+  let active = false
 
   function resetData() {
     speech = []; openStart = null; lastT = -Infinity; totalSpeech = 0; locked = false
@@ -81,6 +82,7 @@ export function useSubtitleAutoSync(opts: {
   }
 
   function ingest(t: number, speaking: boolean) {
+    if (!active) return
     if (t < lastT || t - lastT > cfg.seekGapSec) {        // seek / discontinuity: close, don't bridge
       if (openStart !== null) { speech.push({ start: openStart, end: lastT }); openStart = null }
     }
@@ -96,25 +98,33 @@ export function useSubtitleAutoSync(opts: {
     lastT = t
   }
 
-  function startTap() {
+  // createMediaElementSource binds an element only ONCE for its lifetime, and
+  // closing the AudioContext does not release that binding. So the tap is created
+  // exactly once per element and kept alive; disable / episode-change only stop
+  // accumulating (active=false) and must NOT dispose the tap or close the context
+  // (that would re-bind-throw on re-arm and can mute playback). Dispose only on unmount.
+  function ensureTap() {
     if (tap || !opts.videoElement.value) return
-    try { tap = makeTap(opts.videoElement.value); tap.onFrame(ingest); status.value = 'listening' }
+    try { tap = makeTap(opts.videoElement.value); tap.onFrame(ingest) }
     catch { status.value = 'unsupported' }
   }
-  function stopTap() { tap?.dispose(); tap = null }
 
   function arm() {
     if (opts.enabled.value && opts.videoElement.value) {
-      if (status.value !== 'unsupported') startTap()       // startTap owns the listening/unsupported transition
+      if (status.value === 'unsupported') return
+      ensureTap()
+      if (tap) { active = true; if (status.value !== 'locked') status.value = 'listening' }
     } else {
-      stopTap(); resetData(); status.value = 'idle'
+      active = false
+      resetData()
+      status.value = 'idle'
     }
   }
 
-  watch(opts.episodeKey, () => { stopTap(); resetData(); status.value = 'idle'; arm() })
+  watch(opts.episodeKey, () => { resetData(); arm() })
   watch([opts.enabled, opts.videoElement], arm, { immediate: true })
   watch(cueIntervals, () => { if (!locked) evaluate() })   // cues may arrive after speech
-  onUnmounted(stopTap)
+  onUnmounted(() => { tap?.dispose(); tap = null })
 
   return { autoOffset, status, confidence, syncEvents }
 }
