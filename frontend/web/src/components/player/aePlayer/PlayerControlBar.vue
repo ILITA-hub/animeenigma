@@ -130,15 +130,16 @@
         <ChevronDown class="size-3" aria-hidden="true" />
       </button>
 
-      <!-- Subtitles (CC) -->
+      <!-- Subtitles (CC) — `active` = menu open; `aria-pressed`/cyan icon = subs ON -->
       <PlayerIconButton
         :active="openMenu === 'subs'"
         aria-label="Subtitles"
         :aria-expanded="openMenu === 'subs'"
+        :aria-pressed="subsOn === true"
         data-test="toggle-subs"
         @click="emit('toggle-subs')"
       >
-        <Captions class="size-5" aria-hidden="true" />
+        <Captions class="size-5" :class="subsOn ? 'text-[var(--brand-cyan)]' : ''" aria-hidden="true" />
       </PlayerIconButton>
 
       <!-- Settings gear -->
@@ -207,6 +208,8 @@ withDefaults(
     stillUrl?: string
     /** which floating menu is open, for trigger-button is-open highlight */
     openMenu?: 'source' | 'settings' | 'subs' | 'episodes' | null
+    /** whether a subtitle overlay is currently rendering (CC enabled affordance) */
+    subsOn?: boolean
     /** hacker-mode fragment heatmap, forwarded to the scrub bar */
     fragments?: { startPct: number; widthPct: number; tone: 'ok' | 'warn' | 'bad'; label: string }[]
     /** current stream URL/type for real hover frame previews */

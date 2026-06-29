@@ -43,31 +43,20 @@ describe('pickBestForLang', () => {
 })
 
 describe('pickAutoSubtitle', () => {
-  it('honors a provider-bundled track regardless of language', () => {
+  // Subtitles default OFF with no exceptions — pickAutoSubtitle never enables one.
+  it('never auto-enables a provider-bundled track', () => {
     const bundled = [T('gogoanime', 'en', 'bundled-en')]
-    const r = pickAutoSubtitle({ lang: 'en', bundled, aggregated: [...bundled, T('jimaku', 'ja')] })
-    expect(r?.url).toBe('bundled-en')
+    expect(pickAutoSubtitle({ lang: 'en', bundled, aggregated: [...bundled, T('jimaku', 'ja')] })).toBeNull()
   })
 
-  it('does NOT auto-enable an aggregated overlay on a hardsubbed EN cut', () => {
-    // EN SUB cut, provider shipped no soft track → subs are burned into the
-    // video. Jimaku JA / OpenSubtitles EN exist but must NOT auto-enable.
-    const aggregated = [T('jimaku', 'ja'), T('opensubtitles', 'en')]
-    expect(pickAutoSubtitle({ lang: 'en', bundled: [], aggregated })).toBeNull()
+  it('never auto-enables on a hardsubbed EN/RU cut', () => {
+    expect(pickAutoSubtitle({ lang: 'en', bundled: [], aggregated: [T('jimaku', 'ja'), T('opensubtitles', 'en')] })).toBeNull()
+    expect(pickAutoSubtitle({ lang: 'ru', bundled: [], aggregated: [T('opensubtitles', 'ru')] })).toBeNull()
   })
 
-  it('does NOT auto-enable an aggregated overlay on a hardsubbed RU cut', () => {
-    const aggregated = [T('opensubtitles', 'ru')]
-    expect(pickAutoSubtitle({ lang: 'ru', bundled: [], aggregated })).toBeNull()
-  })
-
-  it('auto-enables the best aggregated track for a raw original-JP cut', () => {
-    // lang 'ja' → nothing burned in → auto-enable the JP overlay (jimaku first).
+  it('never auto-enables on a raw original-JP cut (no exception)', () => {
     const aggregated = [T('opensubtitles', 'ja', 'os-ja'), T('jimaku', 'ja', 'ji-ja')]
-    expect(pickAutoSubtitle({ lang: 'ja', bundled: [], aggregated })?.url).toBe('ji-ja')
-  })
-
-  it('returns null for a raw JP cut with no tracks at all', () => {
+    expect(pickAutoSubtitle({ lang: 'ja', bundled: [], aggregated })).toBeNull()
     expect(pickAutoSubtitle({ lang: 'ja', bundled: [], aggregated: [] })).toBeNull()
   })
 })

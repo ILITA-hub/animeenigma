@@ -56,6 +56,13 @@ describe('PlayerControlBar', () => {
     expect(pill.attributes('aria-label')).not.toContain('${')
   })
 
+  it('CC button reflects the subs-on state via aria-pressed', () => {
+    const on = mount(PlayerControlBar, { props: { ...baseProps, subsOn: true } })
+    expect(on.find('[data-test="toggle-subs"]').attributes('aria-pressed')).toBe('true')
+    const off = mount(PlayerControlBar, { props: { ...baseProps, subsOn: false } })
+    expect(off.find('[data-test="toggle-subs"]').attributes('aria-pressed')).toBe('false')
+  })
+
   it('exposes aria-expanded on the source pill reflecting its menu state', () => {
     const closed = mount(PlayerControlBar, { props: baseProps })
     expect(closed.find('[data-test="source-pill"]').attributes('aria-expanded')).toBe('false')

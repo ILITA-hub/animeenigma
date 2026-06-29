@@ -220,6 +220,31 @@ describe('AePlayer — subtitle wiring (Task 6 regression guard)', () => {
     expect((modal.props('tracks') as unknown[]).length).toBeGreaterThan(0)
   })
 
+  it('keeps subtitles enabled across an episode change and re-binds the track', async () => {
+    fakeTracksRef.value = [{ url: 'ep1-ja', provider: 'jimaku', lang: 'ja', label: 'JP', format: 'ass' }]
+    const wrapper = mountPlayer()
+    await flushPromises()
+    await nextTick()
+
+    // Open the subs menu and pick Japanese → overlay turns on for ep 1.
+    await wrapper.findComponent({ name: 'PlayerControlBar' }).trigger('toggle-subs')
+    await nextTick()
+    wrapper.findComponent({ name: 'SubtitlesMenu' }).vm.$emit('pick-lang', 'ja')
+    await nextTick()
+    const overlay = () => wrapper.findComponent({ name: 'SubtitleOverlay' })
+    expect(overlay().props('visible')).toBe(true)
+    expect(overlay().props('subtitleUrl')).toBe('ep1-ja')
+
+    // Change episode → the stale track URL is dropped...
+    ;(wrapper.vm as unknown as { onSelectEpisode: (e: unknown) => void }).onSelectEpisode({ key: 2, label: 2, number: 2 })
+    await nextTick()
+    // ...then the new episode's tracks arrive and the chosen language re-binds.
+    fakeTracksRef.value = [{ url: 'ep2-ja', provider: 'jimaku', lang: 'ja', label: 'JP', format: 'ass' }]
+    await nextTick()
+    expect(overlay().props('visible')).toBe(true)
+    expect(overlay().props('subtitleUrl')).toBe('ep2-ja') // persisted JA choice re-bound
+  })
+
   it('SubtitleOverlay is rendered and wired (no prop-shape error at runtime)', async () => {
     // Confirms the subtitleUrl / format prop bindings compile + render without
     // throwing. The auto-select logic itself is unit-tested in

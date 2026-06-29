@@ -189,6 +189,7 @@
       :provider-name="activeProviderName"
       :provider-hue="activeProviderHue"
       :audio-label="audioLabel"
+      :subs-on="subsOn"
       :episode-label="selectedEpisode?.number ?? anime.ep"
       :progress="state.progress.value"
       :buffered="bufferedPct"
@@ -361,7 +362,7 @@ import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
-import { pickAutoSubtitle, pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
+import { pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
 import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
@@ -2164,6 +2165,9 @@ watch(openMenu, (menu) => {
 const chosenSub = ref<SubTrack | null>(null)
 
 const chosenSubUrl = computed<string | null>(() => chosenSub.value?.url ?? null)
+// Whether a subtitle overlay is actually rendering — drives the CC button's
+// enabled affordance (distinct from the menu-open highlight).
+const subsOn = computed(() => state.subLang.value !== 'off' && !!chosenSubUrl.value)
 const chosenSubFormat = computed<'ass' | 'srt' | 'vtt' | null>(() => {
   const fmt = chosenSub.value?.format ?? null
   if (fmt === 'ass' || fmt === 'srt' || fmt === 'vtt') return fmt
@@ -2183,45 +2187,39 @@ const {
   refetch: refetchSubs,
 } = useSubtitleTracks(toRef(props, 'animeId'), subEpisode, providerSubtitles)
 
-// User explicitly turned subs off (or picked one) for THIS stream → don't re-auto-select.
-let subUserDecided = false
+// Subtitles default OFF (state.subLang starts 'off') and the player NEVER
+// auto-enables one — the user opts in via the Subtitles menu. That choice
+// (language + on/off) then PERSISTS across episodes: the track URL is
+// episode-specific so it's dropped on episode change, but the re-bind watcher
+// below re-resolves a track in the chosen language for the new episode.
 
-function autoSelectSubtitle() {
-  if (subUserDecided || chosenSub.value) return
-  if (state.combo.value.audio !== 'sub') return // only SUB/raw cuts
-  // Honor a provider-bundled soft track; for a raw original-JP cut auto-enable
-  // the best aggregated overlay; for an EN/RU cut with no provider track the
-  // subs are burned into the video — don't auto-enable a (doubling) overlay.
-  const pick = pickAutoSubtitle({
-    lang: state.combo.value.lang,
-    bundled: providerBundledTracks.value,
-    aggregated: subtitleTracks.value,
-  })
-  if (pick) {
-    chosenSub.value = pick
-    state.subLang.value = pick.lang
-  }
-}
-
-// A NEW episode is a fresh subtitle decision — clear the pick + the user latch.
-// (Keyed on episode, NOT currentStream: a same-episode re-resolve — server
-// fallback, quality swap — must NOT drop a sub the user already picked.)
+// A NEW episode drops the stale (episode-specific) track URL but KEEPS the
+// user's subtitle language choice (state.subLang). Keyed on episode, NOT
+// currentStream: a same-episode re-resolve (server fallback, quality swap) must
+// not drop a track the user is watching.
 watch(subEpisode, () => {
-  subUserDecided = false
   chosenSub.value = null
 })
 
-// Fetch aggregation eagerly once a SUB stream resolves, then auto-select.
+// Fetch the aggregation eagerly once a RAW (sub) stream resolves so the menu's
+// language list is ready — but DO NOT auto-enable (subs default off).
 watch(
   [currentStream, () => state.combo.value.audio],
   async () => {
     if (!currentStream.value || state.combo.value.audio !== 'sub') return
     await ensureSubsLoaded()
-    autoSelectSubtitle()
   },
 )
-// Provider tracks (and late aggregation) can arrive after the first tick.
-watch(subtitleTracks, () => autoSelectSubtitle())
+
+// Re-bind the chosen track to the persisted subtitle language whenever the track
+// list changes (new episode, or late provider/aggregation arrival). 'off' stays
+// off — there is no auto-enable.
+watch(subtitleTracks, () => {
+  const lang = state.subLang.value
+  if (lang === 'off') return
+  const track = pickBestForLang(subtitleTracks.value, lang)
+  if (track) chosenSub.value = track
+})
 
 // Real distinct languages that have a loaded soft track (provider-bundled +
 // aggregated Jimaku/OpenSubtitles). Drives which RU/EN/JP fast buttons are enabled.
@@ -2260,15 +2258,13 @@ const hardsubNote = computed(() => {
 })
 
 function onSelectSubTrack(track: SubTrack) {
-  subUserDecided = true
   chosenSub.value = track
-  // Selecting a track turns the overlay on for that language
+  // Selecting a track turns the overlay on for that language (persists across episodes).
   state.subLang.value = track.lang
   browseOpen.value = false
 }
 
 function onSubtitlesOff() {
-  subUserDecided = true
   chosenSub.value = null
   state.subLang.value = 'off'
   browseOpen.value = false
