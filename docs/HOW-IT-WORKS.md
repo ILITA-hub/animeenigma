@@ -23,22 +23,27 @@ For tags, the catalog cross-references each anime to AniList via the [ARM mappin
 
 ---
 
-## 2. Four Video Players, One UI
+## 2. One Unified Player (aePlayer)
 
-Different source APIs need different players. Each one is a different Vue component because the underlying tech is fundamentally different.
+There used to be a separate Vue component per source. Now there is **one** player — `aePlayer/AePlayer.vue` — and every source plays through it. Inside it, an in-player **Source** panel lets you switch between source *families*:
 
-| Player | Language | Tech | Tracking | Japanese subs | Quality menu |
-|--------|----------|------|----------|---------------|--------------|
-| **Kodik** | RU dub | Iframe embed | No | No | No (iframe) |
-| **AnimeLib** | RU dub | HTML5 `<video>` (MP4) or Kodik fallback | Yes | No | Yes (MP4) |
-| **HiAnime** | EN sub | Video.js / HLS.js | Yes | Yes | Yes (HLS) |
-| **Consumet** | EN sub | Video.js / HLS.js | Yes | Yes | Yes (HLS) |
+| Source family | Language | Tech | Japanese subs |
+|--------|----------|------|---------------|
+| **Kodik** | RU dub | Kodik HLS | No |
+| **EN scraper chain** | EN sub | HTML5 `<video>` + hls.js / MP4 | Yes |
+| **Raw** | JP (original) | HTML5 `<video>` + hls.js / MP4 | Yes (Jimaku + others) |
+| **Hanime / 18anime** | 18+ | HTML5 `<video>` + hls.js | No |
+| **ae** | EN/RU/JP | HTML5 `<video>` + hls.js (self-hosted) | Yes |
 
-When a player ships an HLS or MP4 stream, the backend proxies it for CORS — the browser talks to AnimeEnigma's gateway, not directly to the streaming CDN. The gateway also routes Japanese subtitle files from [jimaku.cc](https://jimaku.cc) for HiAnime and Consumet streams.
+You pick a **combo**: a top slider chooses **RAW** (original audio — EN-sub, RU-sub, and pure-JP sources all in one list) or **DUB** (localized audio; a second slider picks EN or RU — there is no Japanese dub). The player then shows the providers the backend says are healthy for *this* title and auto-picks the best one; you can override it. The legacy "Classic Kodik" iframe is still available as a one-click fallback.
 
-The `SubtitleOverlay.vue` component renders ASS / SRT / VTT subtitle tracks as selectable text on top of the video — useful for copy-pasting Japanese lines into a dictionary while you watch.
+When a source ships an HLS or MP4 stream, the backend proxies (and signs) it for CORS — the browser talks to AnimeEnigma's gateway, not directly to the streaming CDN. The gateway also routes Japanese subtitle files from [jimaku.cc](https://jimaku.cc).
 
-The "Watch Preference Resolver" remembers which player and language combination you used per-anime. The next time you open the same anime it auto-picks the same setup, and never crosses language boundaries (so a user watching JP-sub HiAnime will never silently get a RU-dub Kodik player).
+Subtitles are **off by default** — EN/RU sources usually have subs burned into the video, and for raw-JP you opt into a Jimaku/OpenSubtitles overlay via the CC menu. The `SubtitleOverlay.vue` component renders ASS / SRT / VTT tracks as selectable text on top of the video — useful for copy-pasting Japanese lines into a dictionary while you watch.
+
+The "Watch Preference Resolver" remembers the audio/language/source combo you used per-anime and auto-picks it next time, never crossing language boundaries.
+
+> **For the full, code-verified player model** (the combo state machine, provider groups, capability feed, subtitle behavior, URL deep-linking), see [`docs/aeplayer-reference.md`](aeplayer-reference.md).
 
 ---
 

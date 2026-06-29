@@ -8,17 +8,23 @@ AnimeEnigma: self-hosted anime streaming platform with Shikimori/MAL integration
 
 ### Video Player Architecture
 
-5 video players, each targeting different source APIs:
+> **📖 Canonical, code-verified deep-dive: [`docs/aeplayer-reference.md`](docs/aeplayer-reference.md).** Read it before touching `frontend/web/src/components/player/` or reasoning about playback. The summary below is high-level; that doc is the source of truth.
 
-| Player | Lang | Component | Video Tech | Tracking | JP Subs | Quality |
-|--------|------|-----------|-----------|----------|---------|---------|
-| **Kodik** | RU | `KodikPlayer.vue` | Kodik iframe | No | No | No (iframe) |
-| **AniLib** | RU | `AnimeLibPlayer.vue` | HTML5 `<video>` (MP4) | Yes | No | Yes (MP4) |
-| **OurEnglish** | EN | `OurEnglishPlayer.vue` | HTML5 `<video>` + hls.js (HLS) or MP4 via backend HLS proxy | Planned | Yes (via SubtitleOverlay) | Yes |
-| **Hanime** | 18+ | `HanimePlayer.vue` | HTML5 `<video>` + hls.js | Yes | No | Yes |
-| **Raw** | JP | `RawPlayer.vue` | HTML5 `<video>` + hls.js (HLS) or MP4 (AllAnime `fast4speed.rsvp`) | No | Yes (Jimaku + others) | Yes |
+**There is ONE unified player — `frontend/web/src/components/player/aePlayer/AePlayer.vue`.** The old per-source components (`OurEnglishPlayer.vue`, `RawPlayer.vue`, `AnimeLibPlayer.vue`, `HanimePlayer.vue`) were **deleted** and folded into it. The only separate surface is `KodikPlayer.vue` — the legacy Kodik **iframe**, mounted as a binary "Classic Kodik" fallback toggle on the anime page (and the surface when `VITE_AE_PLAYER_ENABLED=false`).
 
-> **OurEnglish** (shipped 2026-05, v3.1 Phases 24–28) replaces the May-2026 HiAnime + Consumet removal. Single user-facing surface; backend `services/scraper/` microservice fails over **gogoanime → animepahe → allanime → animefever → miruro → nineanime** (+ optional `animekai`). In-player **Source** dropdown pins a provider (default auto). Behind `VITE_OURENGLISH_ENABLED` (defaults on; env-override dark-ship).
+The "5 players" are now **source families inside one player**, chosen via the in-player **Source** panel. The user selects a **combo** `{audio, lang, provider, server, team}`; the backend **capability feed** (`GET /api/anime/{id}/capabilities`, `(policy,health,content)`-derived, disabled providers omitted) is the single source of truth for what's available.
+
+| Source family | Lang | Group | Video tech | JP subs |
+|--------|------|-------|-----------|---------|
+| **Kodik** | RU | `ru` | Kodik HLS adapter (the separate `KodikPlayer.vue` is the iframe fallback only) | No |
+| **EN scraper chain** | EN | `en` | HTML5 `<video>` + hls.js / MP4 via backend HLS proxy | Yes (SubtitleOverlay) |
+| **Raw (AllAnime raw)** | JP | `jp` | HTML5 `<video>` + hls.js / MP4 (`fast4speed.rsvp`) | Yes (Jimaku + others) |
+| **Hanime / 18anime** | 18+ | `adult` | HTML5 `<video>` + hls.js | No |
+| **ae (self-hosted)** | EN/RU/JP | `firstparty` | HTML5 `<video>` + hls.js (MinIO) | Yes |
+
+> **RAW vs DUB:** the top slider's **RAW** position = `combo.audio:'sub'` (original audio — EN-sub/RU-sub/pure-JP all surface, language filter dropped); **DUB** = `combo.audio:'dub'` (localized; language slider EN/RU only, no JP dub). Subtitles default **OFF** and never auto-enable. Full model in the reference doc.
+>
+> **EN scraper backend** (`services/scraper/`) fails over **gogoanime → animepahe → allanime → animefever → miruro → nineanime** (+ optional `animekai`); see [`docs/scraper-framework.md`](docs/scraper-framework.md). aePlayer is behind `VITE_AE_PLAYER_ENABLED` (defaults on).
 
 **Backend route family** (gateway → catalog → scraper microservice):
 - `GET /api/anime/{uuid}/scraper/episodes?prefer=<provider>`
@@ -33,7 +39,7 @@ AnimeEnigma: self-hosted anime streaming platform with Shikimori/MAL integration
 - `ReportButton.vue` — per-stream user-reportable error path; persists to disk + Telegram admin notification.
 - `libs/videoutils/proxy.go` — backend HLS proxy for CORS. **Auth gate = `allowlisted OR signed`** (`proxy.go:465-470`): catalog's `GetScraperStream` signs scraper-resolved stream/subtitle URLs (`videoutils.SignStreamURL`), and the proxy mints HMAC provenance tokens for rotating child/segment CDNs — so **scraper CDN hosts are auto-trusted and need NO allowlist entry**. The structured `HLSProxyAllowedDomainsWithProvenance` list (quarterly-review provenance fields) is a **legacy fallback being phased out**; it still covers non-scraper CDNs + older entries: `jimaku.cc`, `cdnlibs.org` (AniLib), `kwik.cx` (AnimePahe), `fast4speed.rsvp` (AllAnime), `am.vidstream.vip` + `static-cdn-ca1.mofl.pro` (AnimeFever), `pro.ultracloud.cc` + `pru.ultracloud.cc` (Miruro), `my.1anime.site` (9anime), Hanime CDN families `hanime.tv`/`htv-*`/`hydaelyn-*`/`zodiark-*`. Do NOT add new scraper CDNs here — rely on signing.
 
-**Known issue:** AniLib subtitles are broken — direct MP4 player can't render soft-subs embedded in the video.
+**Known issue:** HLS codec stall (D-07) — for some HLS sources hls.js loads the master/level playlist but never requests `.ts` fragments (readyState stays 0). Pre-existing; `hls.js` is pinned to `~1.5.20` (1.6.x regressed codecs). Tracked in `aePlayer/MANUAL-REVIEW.md`. (The retired AniLib MP4 player's soft-sub limitation no longer applies — AniLib is not wired into aePlayer.)
 
 ### Video Streaming Model
 
