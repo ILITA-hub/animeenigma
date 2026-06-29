@@ -122,6 +122,18 @@ describe('AePlayer — ?provider deep-link pin (cross-language clamp)', () => {
     expect(combo.team).toBe('Studio Band')
   })
 
+  it('honors ?audio=dub&?lang=ru props instead of collapsing to RAW/EN', async () => {
+    const wrapper = mountPlayer({ initialAudio: 'dub', initialLang: 'ru' })
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    const combo = readCombo(wrapper)
+    expect(combo.audio).toBe('dub')
+    expect(combo.lang).toBe('ru')
+    expect(combo.provider).toBe('kodik') // the dub/ru source the facet resolves to
+  })
+
   it('emits url-sync mirroring the user-pinned source for the shareable URL', async () => {
     const wrapper = mountPlayer({ initialProvider: 'kodik', initialTeam: 'Studio Band' })
     await flushPromises()

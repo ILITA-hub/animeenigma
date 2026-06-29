@@ -398,6 +398,10 @@ const props = defineProps<{
   initialProvider?: string
   /** Notification deep-link: team TITLE to preselect alongside initialProvider. */
   initialTeam?: string
+  /** URL facet override (?audio=raw|sub|dub). raw/sub → RAW, dub → DUB. */
+  initialAudio?: string
+  /** URL facet override (?lang=en|ru|ja). */
+  initialLang?: string
   /** Shikimori id (= MAL id) for AniSkip skip-times. Absent ⇒ no skip UI. */
   malId?: string | number
   /** Watch-Together: when set, the player mirrors playback (play/pause/seek)
@@ -786,26 +790,48 @@ function applyInitialProvider() {
   recordDecision('deep-link — pinned from the ?provider/?team URL')
 }
 
-// evaluated exactly once at first-active rows (resolveAttempted guards re-run)
+// URL facet override (?audio=raw|sub|dub, ?lang=en|ru|ja) — applied after the
+// saved combo, before the ?provider clamp. Precedence: URL > saved > smart default.
+function applyUrlFacet() {
+  if (state.combo.value.provider) return
+  const a = props.initialAudio
+  if (a === 'dub') state.setAudio('dub')
+  else if (a === 'raw' || a === 'sub') state.setAudio('sub')
+  const l = props.initialLang
+  if (l === 'en' || l === 'ru' || l === 'ja') state.setLang(l)
+}
+
+// Enumerate EVERY real source's facet (across all families, NOT just the rows
+// matching the current audio/lang filter) so a saved/URL combo in any
+// language/audio can be matched. The old version iterated the facet-filtered
+// `rows` — which at mount only carry the default RAW/EN options — so every saved
+// preference (ru/dub/ja) failed to match and the player collapsed to SUB EN.
 const buildAvailable = (): WatchCombo[] => {
   const combos: WatchCombo[] = []
   const seen = new Set<string>()
-  for (const r of rows.value) {
-    if (r.state !== 'active') continue
-    const player = providerToLegacyPlayer(r.id)
-    if (!player) continue
-    const langs = GROUP_LANGS[r.group]
-    for (const audio of r.audios) {
-      const key = `${player}:${audio}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      combos.push({
-        player,
-        language: (langs.includes(state.combo.value.lang) ? state.combo.value.lang : langs[0]) as WatchCombo['language'],
-        watch_type: audio,
-        translation_id: '',
-        translation_title: '',
-      })
+  const rep = report.value
+  if (!rep || !Array.isArray(rep.families)) return combos
+  for (const fam of rep.families) {
+    for (const cap of fam.providers ?? []) {
+      if (cap.state === 'no_content') continue
+      const player = providerToLegacyPlayer(cap.provider)
+      if (!player) continue
+      const langs = GROUP_LANGS[cap.group]
+      const audios = [...new Set((cap.audios ?? []).map((a) => (a === 'dub' ? 'dub' : 'sub')))]
+      for (const audio of audios) {
+        for (const language of langs) {
+          const key = `${player}:${audio}:${language}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          combos.push({
+            player,
+            language: language as WatchCombo['language'],
+            watch_type: audio as WatchCombo['watch_type'],
+            translation_id: '',
+            translation_title: '',
+          })
+        }
+      }
     }
   }
   return combos
@@ -824,6 +850,7 @@ watch(rows, () => {
   resolveAttempted = true
   resolvePreference(available).finally(() => {
     applyResolvedCombo()
+    applyUrlFacet()
     applyInitialProvider()
     preferenceSettled.value = true
   })

@@ -408,6 +408,8 @@
             :initial-episode="resumeStartEpisode"
             :initial-provider="queryProvider"
             :initial-team="queryTeam"
+            :initial-audio="queryAudio"
+            :initial-lang="queryLang"
             :mal-id="anime.shikimoriId"
             @toggle-theater="setTheater(!theaterMode)"
             @combo-change="aeWtSeed = $event"
@@ -1217,6 +1219,16 @@ const queryProvider = computed<string | undefined>(() => {
 })
 const queryTeam = computed<string | undefined>(() => {
   const v = route.query.team
+  const s = Array.isArray(v) ? v[0] : v
+  return typeof s === 'string' && s !== '' ? s : undefined
+})
+const queryAudio = computed<string | undefined>(() => {
+  const v = route.query.audio
+  const s = Array.isArray(v) ? v[0] : v
+  return typeof s === 'string' && s !== '' ? s : undefined
+})
+const queryLang = computed<string | undefined>(() => {
+  const v = route.query.lang
   const s = Array.isArray(v) ? v[0] : v
   return typeof s === 'string' && s !== '' ? s : undefined
 })
