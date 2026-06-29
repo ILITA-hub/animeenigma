@@ -28,8 +28,8 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 15 {
-		t.Fatalf("want 15 default rows, got %d", count)
+	if count != 17 {
+		t.Fatalf("want 17 default rows, got %d", count)
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")
@@ -62,6 +62,29 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	// sub_delivery "unknown": claimed hard but unverified by the 2026-06-29 subprobe (stream down).
 	if !okru.SupportsSub || !okru.SupportsDub || okru.SubDelivery != "unknown" || okru.PreferenceWeight != 35 {
 		t.Errorf("okru capabilities wrong (want sub+dub/unknown/35): %+v", okru)
+	}
+	// The two animejoy RU-sub legs: intrinsic group ru, NOT scraper-operated (kept
+	// out of the EN failover chain), degraded (soak), sub-only/hard.
+	for _, tc := range []struct {
+		name   string
+		weight int
+	}{
+		{"animejoy-sibnet", 25},
+		{"animejoy-allvideo", 20},
+	} {
+		var aj domain.ScraperProvider
+		if err := db.First(&aj, "name = ?", tc.name).Error; err != nil {
+			t.Fatalf("%s row missing: %v", tc.name, err)
+		}
+		if aj.Group != "ru" || aj.ScraperOperated || !aj.IsDegraded() {
+			t.Errorf("%s seeded wrong (want ru/degraded/not-scraper-operated): %+v", tc.name, aj)
+		}
+		if !aj.SupportsSub || aj.SupportsDub || aj.SupportsRaw {
+			t.Errorf("%s capabilities wrong (want sub-only): %+v", tc.name, aj)
+		}
+		if aj.SubDelivery != "hard" || aj.QualityCeiling != "1080p" || aj.PreferenceWeight != tc.weight {
+			t.Errorf("%s traits wrong (want hard/1080p/%d): %+v", tc.name, tc.weight, aj)
+		}
 	}
 }
 
@@ -109,7 +132,7 @@ func TestSeedDefaults_IdempotentDoesNotOverwrite(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 15 {
+	if count != 17 {
 		t.Fatalf("re-seed created duplicates: %d rows", count)
 	}
 	var all domain.ScraperProvider

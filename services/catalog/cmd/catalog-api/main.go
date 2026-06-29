@@ -279,6 +279,19 @@ func main() {
 		log.Errorw("nineanime browser migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) INSERT of the two catalog-side animejoy RU-sub provider
+	// rows (animejoy-sibnet + animejoy-allvideo) IF ABSENT. animejoy itself is the
+	// shared discovery base, not a row. The seed covers fresh DBs (insert-if-absent);
+	// this carries the rows to existing live DBs (server IS prod). The insert sets
+	// group='ru' + scraper_operated=false EXPLICITLY (intrinsicGroup stamping does
+	// not run for a raw migration), keeping these catalog-operated RU rows out of
+	// the EN scraper-failover chain. Seeded DEGRADED (soak). Run-once via the ledger;
+	// a later operator edit/delete is never clobbered. Rows stay dormant until the
+	// capability family + FE adapter ship in a later phase.
+	if err := scraperprovider.AddAnimejoyProviders(db.DB); err != nil {
+		log.Errorw("add-animejoy-providers migration failed (continuing)", "error", err)
+	}
+
 	// One-time (guarded) back-fill of the legacy status tri-state onto the new
 	// (policy, health) dimensions: enabled→auto/up, degraded→manual/down,
 	// disabled→disabled/down. Run-once via the catalog_migration_guards ledger;

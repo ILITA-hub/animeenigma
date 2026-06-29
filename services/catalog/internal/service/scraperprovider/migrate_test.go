@@ -563,6 +563,113 @@ func TestBackfillPolicyHealth(t *testing.T) {
 	}
 }
 
+func TestAddAnimejoyProviders_InsertsBothRowsExplicitGroupAndFlag(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Simulate an existing live DB that pre-dates animejoy (no rows present, and
+	// the policy/health backfill has NOT been re-run for these names).
+	if err := scraperprovider.AddAnimejoyProviders(db); err != nil {
+		t.Fatalf("add animejoy: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		weight int
+	}{
+		{"animejoy-sibnet", 25},
+		{"animejoy-allvideo", 20},
+	} {
+		var aj domain.ScraperProvider
+		if err := db.First(&aj, "name = ?", tc.name).Error; err != nil {
+			t.Fatalf("%s row missing: %v", tc.name, err)
+		}
+		// CRITICAL: raw migration must set group='ru' + scraper_operated=false
+		// EXPLICITLY (intrinsicGroup stamping does not run here).
+		if aj.Group != "ru" {
+			t.Errorf("%s group = %q, want ru (must be set explicitly in raw migration)", tc.name, aj.Group)
+		}
+		if aj.ScraperOperated {
+			t.Errorf("%s scraper_operated = true, want false (must stay out of EN failover chain)", tc.name)
+		}
+		if aj.Status != domain.StatusDegraded {
+			t.Errorf("%s status = %q, want degraded", tc.name, aj.Status)
+		}
+		// policy=manual + health=down → WireStatus() degraded regardless of
+		// BackfillPolicyHealth ordering.
+		if aj.Policy != domain.PolicyManual || aj.Health != domain.HealthDown {
+			t.Errorf("%s (policy,health) = (%q,%q), want (manual,down)", tc.name, aj.Policy, aj.Health)
+		}
+		if got := aj.WireStatus(); got != domain.StatusDegraded {
+			t.Errorf("%s WireStatus() = %q, want degraded", tc.name, got)
+		}
+		if !aj.SupportsSub || aj.SupportsDub || aj.SupportsRaw || aj.SubDelivery != "hard" || aj.PreferenceWeight != tc.weight {
+			t.Errorf("%s traits wrong (want sub-only/hard/%d): %+v", tc.name, tc.weight, aj)
+		}
+	}
+}
+
+func TestAddAnimejoyProviders_IdempotentAndDoesNotClobber(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.AddAnimejoyProviders(db); err != nil {
+		t.Fatalf("add animejoy 1: %v", err)
+	}
+	// Operator later promotes one leg in the DB.
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "animejoy-sibnet").
+		Update("status", domain.StatusEnabled).Error; err != nil {
+		t.Fatalf("operator promote: %v", err)
+	}
+	// Second boot: guard already set → must be a no-op (no clobber, no duplicate).
+	if err := scraperprovider.AddAnimejoyProviders(db); err != nil {
+		t.Fatalf("add animejoy 2: %v", err)
+	}
+
+	var count int64
+	db.Model(&domain.ScraperProvider{}).Where("name LIKE ?", "animejoy-%").Count(&count)
+	if count != 2 {
+		t.Fatalf("animejoy row count = %d, want 2 (no duplicates)", count)
+	}
+	var sib domain.ScraperProvider
+	db.First(&sib, "name = ?", "animejoy-sibnet")
+	if sib.Status != domain.StatusEnabled {
+		t.Errorf("animejoy-sibnet status = %q, want enabled (guard clobbered operator promote)", sib.Status)
+	}
+}
+
+func TestAddAnimejoyProviders_InsertIfAbsentSkipsExistingRow(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Fresh DB seeded first (the rows already exist via SeedDefaults), THEN the
+	// migration runs on the same DB — it must not duplicate or overwrite.
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Operator edits an existing seeded row before the migration runs.
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "animejoy-allvideo").
+		Update("preference_weight", 99).Error; err != nil {
+		t.Fatalf("operator edit: %v", err)
+	}
+	if err := scraperprovider.AddAnimejoyProviders(db); err != nil {
+		t.Fatalf("add animejoy: %v", err)
+	}
+	var count int64
+	db.Model(&domain.ScraperProvider{}).Where("name LIKE ?", "animejoy-%").Count(&count)
+	if count != 2 {
+		t.Fatalf("animejoy row count = %d, want 2 (insert-if-absent must not duplicate seeded rows)", count)
+	}
+	var av domain.ScraperProvider
+	db.First(&av, "name = ?", "animejoy-allvideo")
+	if av.PreferenceWeight != 99 {
+		t.Errorf("animejoy-allvideo preference_weight = %d, want 99 (insert-if-absent clobbered operator edit)", av.PreferenceWeight)
+	}
+}
+
 func TestAnimepaheSidecarRetired_RefreshesRecordOnceIdempotent(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

@@ -192,6 +192,9 @@ const animepaheSidecarRetiredGuardKey = "animepahe_sidecar_retired"
 // animepaheBrowserRevivalGuardKey marks AnimepaheBrowserRevival as applied.
 const animepaheBrowserRevivalGuardKey = "animepahe_browser_revival"
 
+// addAnimejoyProvidersGuardKey marks AddAnimejoyProviders as applied.
+const addAnimejoyProvidersGuardKey = "add_animejoy_providers"
+
 // MiruroDubOnly flips the miruro roster row to supports_sub=false exactly once.
 // Miruro's upstream stopped serving sub streams (only English dub plays), so it
 // must not advertise/auto-select for SUB (original-Japanese-audio) playback. The
@@ -513,6 +516,88 @@ func AnimepaheSidecarRetired(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: animepaheSidecarRetiredGuardKey}).Error; err != nil {
 		return fmt.Errorf("write animepahe-sidecar-retired guard: %w", err)
+	}
+	return nil
+}
+
+// AddAnimejoyProviders INSERTs the two catalog-side animejoy RU-sub provider rows
+// — "animejoy-sibnet" and "animejoy-allvideo" — exactly once, IF ABSENT. animejoy
+// itself is NOT a row (it is the shared discovery/reference base); these two rows
+// each resolve their own leg (Sibnet primary 6/6, AllVideo 5/6 per AUTO-084) off
+// that shared discovery. Seeded DEGRADED (soak first): registered + manually
+// selectable (hacker mode), out of the auto-failover chain. RU-SUB only —
+// original (JP) audio + burned-in Russian subs in the mirror MP4s (SubDelivery=hard,
+// no dub, no raw).
+//
+// SeedDefaults covers fresh DBs (insert-if-absent); this RUN-ONCE guarded migration
+// carries the same two rows to the EXISTING live prod DB (server IS prod). Because
+// this is a raw INSERT (NOT SeedDefaults), the intrinsicGroup/scraper_operated
+// stamping that SeedDefaults applies does NOT run here, so group='ru' and
+// scraper_operated=false are set EXPLICITLY in the insert — scraper_operated=false
+// keeps these catalog-operated RU rows out of the EN scraper-failover chain (the
+// EN-only candidateProviders invariant crash-loops boot if an EN-unlisted provider
+// is pulled in). policy=manual + health=down mirror BackfillPolicyHealth's degraded
+// mapping so the DERIVED WireStatus() is degraded regardless of whether the
+// policy/health backfill runs before or after this migration.
+//
+// Idempotent: guard ledger + per-row insert-if-absent (an operator who later deletes
+// or re-configures either row is never clobbered once the guard is written). Safe to
+// call every boot. The rows are intentionally dormant until the capability family /
+// FE adapter ship in a later phase — a stream_providers row with no family simply
+// does not surface, so this is safe to land now.
+func AddAnimejoyProviders(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", addAnimejoyProvidersGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check add-animejoy-providers guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber later operator edits
+	}
+
+	now := time.Now().UTC()
+	rows := []domain.ScraperProvider{
+		{
+			Name: "animejoy-sibnet", Status: domain.StatusDegraded,
+			Group: "ru", ScraperOperated: false,
+			Policy: domain.PolicyManual, Health: domain.HealthDown,
+			PolicySince: now, HealthSince: now,
+			SupportsSub: true, SupportsDub: false, SupportsRaw: false,
+			SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 25,
+			Reason:      "Soaking — animejoy.ru via Sibnet",
+			Description: "Sibnet (AnimeJoy, RU-sub)",
+		},
+		{
+			Name: "animejoy-allvideo", Status: domain.StatusDegraded,
+			Group: "ru", ScraperOperated: false,
+			Policy: domain.PolicyManual, Health: domain.HealthDown,
+			PolicySince: now, HealthSince: now,
+			SupportsSub: true, SupportsDub: false, SupportsRaw: false,
+			SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 20,
+			Reason:      "Soaking — animejoy.ru via AllVideo",
+			Description: "AllVideo (AnimeJoy, RU-sub)",
+		},
+	}
+	for _, r := range rows {
+		var count int64
+		if err := db.Model(&domain.ScraperProvider{}).
+			Where("name = ?", r.Name).Count(&count).Error; err != nil {
+			return fmt.Errorf("count %q: %w", r.Name, err)
+		}
+		if count > 0 {
+			continue // insert-if-absent: never overwrite an existing/operator-edited row
+		}
+		row := r
+		if err := db.Create(&row).Error; err != nil {
+			return fmt.Errorf("create %q: %w", r.Name, err)
+		}
+	}
+
+	if err := db.Create(&migrationGuard{Key: addAnimejoyProvidersGuardKey}).Error; err != nil {
+		return fmt.Errorf("write add-animejoy-providers guard: %w", err)
 	}
 	return nil
 }

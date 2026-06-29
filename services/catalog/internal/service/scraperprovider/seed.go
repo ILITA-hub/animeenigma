@@ -189,6 +189,33 @@ var defaultProviders = []domain.ScraperProvider{
 		SupportsSub: true, SupportsRaw: true, SubDelivery: "soft",
 		QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
+	{
+		// animejoy itself is NOT a row — it is the shared discovery/reference base
+		// (title→news_id→playlist, cached once); the two real provider rows below
+		// each resolve their own leg off that shared discovery (mirrors how 'okru'
+		// reuses AllAnime's GraphQL discovery). Seeded DEGRADED (soak first):
+		// registered + manually selectable, out of the auto-failover chain. RU-SUB
+		// only — animejoy serves original (JP) audio + burned-in Russian subs in the
+		// Sibnet/AllVideo mirror MP4s, so SubDelivery=hard, no dub, no raw. Group is
+		// intrinsic ("ru", via intrinsicGroups) and scraper_operated is intentionally
+		// false (NOT in scraperOperatedNames — these are catalog-operated RU rows;
+		// adding them to the EN scraper-failover chain would crash-loop boot via the
+		// EN-only candidateProviders invariant). The rows are dormant until the
+		// capability family / FE adapter ship in a later phase (a stream_providers
+		// row with no family simply doesn't surface — safe).
+		Name: "animejoy-sibnet", Status: domain.StatusDegraded,
+		SupportsSub: true, SupportsDub: false, SupportsRaw: false,
+		SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 25,
+		Reason:      "Soaking — animejoy.ru via Sibnet",
+		Description: "Sibnet (AnimeJoy, RU-sub)",
+	},
+	{
+		Name: "animejoy-allvideo", Status: domain.StatusDegraded,
+		SupportsSub: true, SupportsDub: false, SupportsRaw: false,
+		SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 20,
+		Reason:      "Soaking — animejoy.ru via AllVideo",
+		Description: "AllVideo (AnimeJoy, RU-sub)",
+	},
 }
 
 // intrinsicGroups mirrors services/scraper/internal/config/providers.go's
@@ -196,13 +223,15 @@ var defaultProviders = []domain.ScraperProvider{
 // "adult"), so the seed can never move 18anime into the EN failover chain.
 // Absent entries default to "en".
 var intrinsicGroups = map[string]string{
-	"18anime":      "adult",
-	"hanime":       "adult",
-	"ae":           "firstparty",
-	"kodik-iframe": "ru",
-	"kodik-noads":  "ru",
-	"animelib":     "ru",
-	"raw":          "jp",
+	"18anime":           "adult",
+	"hanime":            "adult",
+	"ae":                "firstparty",
+	"kodik-iframe":      "ru",
+	"kodik-noads":       "ru",
+	"animelib":          "ru",
+	"raw":               "jp",
+	"animejoy-sibnet":   "ru",
+	"animejoy-allvideo": "ru",
 }
 
 func intrinsicGroup(name string) string {
