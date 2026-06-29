@@ -67,49 +67,21 @@ export function useSubtitleAutoSync(opts: {
     }
     syncEvents.value = [ev, ...syncEvents.value].slice(0, cfg.maxEvents)
     autoOffset.value = offset; confidence.value = conf; locked = true; status.value = 'locked'
-    // Clear the speech buffer after a lock/resync so subsequent evaluations use
-    // only fresh speech — prevents old aligned segments from suppressing the
-    // confidence of future re-syncs when the offset shifts mid-episode.
-    speech = []; totalSpeech = 0
-  }
-
-  function pickBest(ivl: Interval[]) {
-    // Primary: full search range — handles large legitimate drifts.
-    const r = bestOffset(speech, ivl, SEARCH)
-    if (r.confidence >= cfg.confMin) return r
-
-    // Fallback: when the full range is ambiguous (e.g. aliased by a distant cue
-    // whose shifted position coincidentally matches speech), restrict to a ±10 s
-    // neighbourhood anchored on the expected offset (0 before first lock, the
-    // current autoOffset after).  This breaks ties toward the smallest plausible
-    // shift — a conservative bias that is still overridden by a high-confidence
-    // full-range result.
-    const anchor = locked ? autoOffset.value : 0
-    const near = { min: anchor - 10, max: anchor + 10, step: SEARCH.step }
-    const rNear = bestOffset(speech, ivl, near)
-    return rNear.confidence > r.confidence ? rNear : r
   }
 
   function evaluate() {
     if (!locked && totalSpeech < cfg.minSpeech) return    // skip the sweep until warmed up
     if (!speech.length || !cueIntervals.value.length) return
-    const chosen = pickBest(cueIntervals.value)
+    const r = bestOffset(speech, cueIntervals.value, SEARCH)
     if (!locked) {
-      if (chosen.confidence >= cfg.confMin) apply(chosen.offset, chosen.confidence, 'lock')
-    } else if (chosen.confidence >= cfg.confMin && Math.abs(chosen.offset - autoOffset.value) >= cfg.resyncDelta) {
-      apply(chosen.offset, chosen.confidence, 'resync')
+      if (r.confidence >= cfg.confMin) apply(r.offset, r.confidence, 'lock')
+    } else if (r.confidence >= cfg.confMin && Math.abs(r.offset - autoOffset.value) >= cfg.resyncDelta) {
+      apply(r.offset, r.confidence, 'resync')
     }
   }
 
   function ingest(t: number, speaking: boolean) {
-    // Detect seeks: backward jump always closes open segment; forward gap only
-    // resets when we are NOT inside an open speech segment.  During speech,
-    // frames can arrive > seekGapSec apart (sparse VAD or coarse test sampling)
-    // without the user actually seeking — closing the segment prematurely would
-    // fragment it into zero-length pieces and under-count totalSpeech.
-    const isBackwardSeek = t < lastT
-    const isForwardSeek  = openStart === null && t - lastT > cfg.seekGapSec
-    if (isBackwardSeek || isForwardSeek) {
+    if (t < lastT || t - lastT > cfg.seekGapSec) {        // seek / discontinuity: close, don't bridge
       if (openStart !== null) { speech.push({ start: openStart, end: lastT }); openStart = null }
     }
     if (speaking) {

@@ -13,9 +13,11 @@ function fakeTap() {
   } as SpeechTap & { frame(t: number, s: boolean): void; disposed: boolean }
 }
 function speak(tap: ReturnType<typeof fakeTap>, a: number, b: number) {
-  tap.frame(a, true); tap.frame((a + b) / 2, true); tap.frame(b, true); tap.frame(b + 0.05, false)
+  for (let t = a; t < b; t += 0.5) tap.frame(t, true)
+  tap.frame(b, true)
+  tap.frame(b + 0.05, false)
 }
-const cfg = { minSpeech: 3, confMin: 0.1, resyncDelta: 0.5, maxEvents: 10, seekGapSec: 1, windowSec: 120 }
+const cfg = { minSpeech: 3, confMin: 0.1, resyncDelta: 0.5, maxEvents: 10, seekGapSec: 1, windowSec: 20 }
 const vel = () => ref(document.createElement('video'))
 
 describe('useSubtitleAutoSync', () => {
@@ -44,13 +46,16 @@ describe('useSubtitleAutoSync', () => {
 
   it('re-syncs on a mid-episode step (eyecatch) and logs reason=resync', async () => {
     const tap = fakeTap()
-    const cues = ref([{ start: 8, end: 10 }, { start: 18, end: 21 }, { start: 40, end: 42 }, { start: 50, end: 53 }])
+    // Far cues placed so their alias onto the near speech falls OUTSIDE the ±30s
+    // search grid (start 41/51 ⇒ alias at δ=-31, off-grid): real cue tracks are
+    // dense and don't alias; the synthetic fixture must avoid the exact -30 tie.
+    const cues = ref([{ start: 8, end: 10 }, { start: 18, end: 21 }, { start: 41, end: 43 }, { start: 51, end: 54 }])
     const s = useSubtitleAutoSync({ videoElement: vel(), cues, enabled: ref(true), episodeKey: ref('a:1'), createTap: () => tap, config: cfg })
     speak(tap, 10, 12); speak(tap, 20, 23)
     expect(s.autoOffset.value).toBeCloseTo(2, 1)
-    speak(tap, 45, 47); speak(tap, 55, 58)            // cue 40 -> speech 45 ⇒ +5
+    speak(tap, 45, 47); speak(tap, 55, 58)            // cue 41 -> speech 45 ⇒ +4 (old speech aged out of the 20s window)
     await nextTick()
-    expect(s.autoOffset.value).toBeCloseTo(5, 1)
+    expect(s.autoOffset.value).toBeCloseTo(4, 1)
     expect(s.syncEvents.value[0].reason).toBe('resync')
   })
 
