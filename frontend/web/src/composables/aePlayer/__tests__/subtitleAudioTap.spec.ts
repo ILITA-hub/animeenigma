@@ -37,4 +37,34 @@ describe('createAudioTap', () => {
     const { createAudioTap } = await import('../subtitleAudioTap')
     expect(() => createAudioTap(document.createElement('video')).dispose()).not.toThrow()
   })
+  it('calls onFrame on throttled ticks, skips when paused', async () => {
+    let rafCb: ((t: number) => void) | null = null
+    vi.stubGlobal('requestAnimationFrame', (fn: (t: number) => void) => { rafCb = fn; return 2 })
+
+    const { createAudioTap } = await import('../subtitleAudioTap')
+    const el = document.createElement('video')
+    Object.defineProperty(el, 'paused', { get: () => false, configurable: true })
+    Object.defineProperty(el, 'seeking', { get: () => false, configurable: true })
+    Object.defineProperty(el, 'currentTime', { get: () => 2.5, configurable: true })
+
+    const tap = createAudioTap(el)
+    const calls: Array<[number, boolean]> = []
+    tap.onFrame((t, s) => calls.push([t, s]))
+
+    rafCb!(0)                       // first tick: lastTick=-Infinity → always fires
+    expect(calls).toHaveLength(1)
+    expect(calls[0][0]).toBe(2.5)   // currentTime forwarded
+
+    rafCb!(30)                      // 30ms < 50ms minGap → throttled
+    expect(calls).toHaveLength(1)
+
+    rafCb!(55)                      // > minGap → fires
+    expect(calls).toHaveLength(2)
+
+    Object.defineProperty(el, 'paused', { get: () => true, configurable: true })
+    rafCb!(110)                     // paused → skip
+    expect(calls).toHaveLength(2)
+
+    tap.dispose()
+  })
 })

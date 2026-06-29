@@ -19,6 +19,7 @@ export function createAudioTap(el: HTMLVideoElement): SpeechTap {
 
   // Preserve player volume/mute: route audio through a mirrored gain to output.
   src.connect(gain); gain.connect(ctx.destination)
+  // Analyser is an intentional passive leaf branch (ubiquitous VAD-tap pattern; browsers process it).
   src.connect(analyser)
 
   const syncGain = () => { gain.gain.value = el.muted ? 0 : el.volume }
@@ -45,6 +46,7 @@ export function createAudioTap(el: HTMLVideoElement): SpeechTap {
     onFrame(fn) { cb = fn },
     dispose() {
       if (raf !== null) cancelAnimationFrame(raf)
+      raf = null
       el.removeEventListener('volumechange', syncGain)
       try { src.disconnect(); gain.disconnect(); analyser.disconnect() } catch { /* already gone */ }
       void ctx.close().catch(() => {})
