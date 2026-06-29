@@ -150,6 +150,12 @@ vi.mock('@/composables/aePlayer/useSubtitleTracks', () => ({
 // useSubtitleCues fetches+parses the sub file — no network in jsdom.
 // useSubtitleAutoSync taps WebAudio — not available in jsdom.
 // Both are unit-tested in their own spec files; here we just need safe stubs.
+//
+// fakeAutoOffset is a mutable ref (same pattern as fakeTracksRef) so the
+// regression-guard test can inject a non-zero sentinel and prove the template
+// reads effectiveOffset = autoOffset + manualOffset, not just manualOffset.
+const fakeAutoOffset = ref(0)
+
 vi.mock('@/composables/aePlayer/useSubtitleCues', () => ({
   useSubtitleCues: () => ({ cues: ref([]) }),
 }))
@@ -158,7 +164,7 @@ vi.mock('@/composables/aePlayer/useSubtitleAutoSyncPref', () => ({
 }))
 vi.mock('@/composables/aePlayer/useSubtitleAutoSync', () => ({
   useSubtitleAutoSync: () => ({
-    autoOffset: ref(0),
+    autoOffset: fakeAutoOffset,
     status: ref('idle'),
     confidence: ref(0),
     syncEvents: ref([]),
@@ -203,6 +209,7 @@ function mountPlayer() {
 beforeEach(() => {
   vi.clearAllMocks()
   fakeTracksRef.value = []
+  fakeAutoOffset.value = 0
 })
 
 describe('AePlayer — subtitle wiring (Task 6 regression guard)', () => {
@@ -279,19 +286,21 @@ describe('AePlayer — subtitle wiring (Task 6 regression guard)', () => {
     expect(overlay.exists()).toBe(true)
   })
 
-  it('effective subtitle offset equals the manual offset before any auto lock (Task 7 regression guard)', async () => {
-    // autoSyncOffset mocked to 0 (idle — no audio frames pumped).
-    // state.subOffset defaults to 0.
-    // → effectiveOffset = autoOffset(0) + manualOffset(0) = 0
-    // This confirms SubtitleOverlay receives the effectiveOffset computed,
-    // not a stale direct reference to state.subOffset.
+  it('SubtitleOverlay offset includes the auto-sync term (Task 7 regression guard)', async () => {
+    // Inject a non-zero auto-sync offset so the assertion fails if the template
+    // reverts to `state.subOffset.value` (0) instead of `effectiveOffset`
+    // (autoOffset + manualOffset = 1.5 + 0 = 1.5).
+    // Guard: if effectiveOffset loses the autoOffset term, overlay.props('offset')
+    // would be 0 (the manual default) ≠ 1.5 → test fails as required.
+    fakeAutoOffset.value = 1.5
+
     const wrapper = mountPlayer()
     await flushPromises()
     await nextTick()
 
     const overlay = wrapper.findComponent({ name: 'SubtitleOverlay' })
     expect(overlay.exists()).toBe(true)
-    // autoOffset is 0 (mocked idle); manualOffset is 0 (initial state) → 0 + 0 = 0
-    expect(overlay.props('offset')).toBe(0)
+    // effectiveOffset = autoOffset(1.5) + manualOffset(0) = 1.5
+    expect(overlay.props('offset')).toBe(1.5)
   })
 })
