@@ -47,28 +47,28 @@
             ]"
             @click="emit('update:audio', opt.value)"
           >
-            {{ opt.label }}
+            {{ $t(opt.labelKey) }}
           </button>
         </div>
       </div>
 
-      <!-- Language slider -->
-      <div>
+      <!-- Language slider (DUB only — RAW is original voices, no language facet) -->
+      <div v-if="audio === 'dub'">
         <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-1.5">
           Language
         </span>
         <div
           class="relative rounded-full p-1"
-          style="background: var(--white-a8); display: grid; grid-template-columns: repeat(3, 1fr);"
+          style="background: var(--white-a8); display: grid; grid-template-columns: repeat(2, 1fr);"
           :data-on="langIndex"
           role="radiogroup"
           aria-label="Language"
         >
-          <!-- Sliding thumb (3 cols) -->
+          <!-- Sliding thumb (2 cols) -->
           <span
             class="absolute top-1 bottom-1 left-1 rounded-full pointer-events-none transition-transform duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
             :style="{
-              width: 'calc((100% - 8px) / 3)',
+              width: 'calc((100% - 8px) / 2)',
               background: 'linear-gradient(135deg, var(--brand-cyan), var(--brand-pink))',
               transform: `translateX(${langIndex * 100}%)`,
             }"
@@ -215,15 +215,19 @@ const emit = defineEmits<{
   (e: 'select-server', id: string): void
 }>()
 
-const audioOptions: { value: AudioKind; label: string }[] = [
-  { value: 'sub', label: 'SUB' },
-  { value: 'dub', label: 'DUB' },
+// RAW = original voices (today's sub + raw-JP); DUB = dubbed. Labels are
+// translatable: RAW → player.aePlayer.audioRaw (Original/Оригинал/オリジナル),
+// DUB reuses the existing player.dub key.
+const audioOptions: { value: AudioKind; labelKey: string }[] = [
+  { value: 'sub', labelKey: 'player.aePlayer.audioRaw' },
+  { value: 'dub', labelKey: 'player.dub' },
 ]
 
+// Language is a DUB-only facet (RU/EN). Under RAW the slider is hidden — the
+// subtitle language is chosen in the Subtitles menu.
 const langOptions: { value: TrackLang; label: string }[] = [
   { value: 'en', label: 'English' },
   { value: 'ru', label: 'Русский' },
-  { value: 'ja', label: '日本語' },
 ]
 
 const audioIndex = computed(() =>

@@ -225,7 +225,7 @@
         :cap-map="capMap"
         :hacker-mode="state.hackerMode.value"
         :playback-error="Boolean(sourceError)"
-        @update:audio="state.setAudio"
+        @update:audio="onSelectAudio"
         @update:lang="state.setLang"
         @update:team="state.setTeam"
         @select-provider="onSelectProvider"
@@ -371,7 +371,7 @@ import { recordPlayerEvent } from '@/utils/playerTelemetry'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, ProviderRow } from '@/types/aePlayer'
+import type { StreamResult, ProviderRow, AudioKind } from '@/types/aePlayer'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
@@ -858,10 +858,17 @@ const activeProviderName = computed(() => {
 
 const activeProviderHue = computed(() => 'var(--brand-cyan)')
 
-const audioLabel = computed(() => {
-  const a = state.combo.value.audio
-  return a === 'dub' ? 'DUB' : 'SUB'
-})
+const audioLabel = computed(() =>
+  state.combo.value.audio === 'dub' ? t('player.dub') : t('player.aePlayer.audioRaw'),
+)
+
+// Audio slider handler. Switching to DUB while the carried lang is 'ja' (set by a
+// RAW pick on a JP source) would leave the DUB filter on a language its RU/EN
+// slider can't represent and no dub provider serves — clamp it to EN.
+function onSelectAudio(a: AudioKind) {
+  state.setAudio(a)
+  if (a === 'dub' && state.combo.value.lang === 'ja') state.setLang('en')
+}
 
 // ─── Episode list + stream resolution ────────────────────────────────────────
 

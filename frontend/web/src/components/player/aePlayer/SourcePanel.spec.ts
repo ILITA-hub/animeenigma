@@ -32,6 +32,19 @@ describe('SourcePanel', () => {
     await w.find('[data-test="audio-dub"]').trigger('click')
     expect(w.emitted('update:audio')?.[0]).toEqual(['dub'])
   })
+  it('audio slider renders the RAW/DUB labels (translated keys), not SUB/DUB', () => {
+    const w = mount(SourcePanel, { props: { ...baseProps, audio: 'sub' } as any, ...t })
+    expect(w.find('[data-test="audio-sub"]').text()).toBe('player.aePlayer.audioRaw')
+    expect(w.find('[data-test="audio-dub"]').text()).toBe('player.dub')
+  })
+  it('hides the language slider under RAW; shows EN/RU (no JA) under DUB', () => {
+    const raw = mount(SourcePanel, { props: { ...baseProps, audio: 'sub' } as any, ...t })
+    expect(raw.find('[data-test="lang-en"]').exists()).toBe(false)
+    const dub = mount(SourcePanel, { props: { ...baseProps, audio: 'dub', lang: 'en' } as any, ...t })
+    expect(dub.find('[data-test="lang-en"]').exists()).toBe(true)
+    expect(dub.find('[data-test="lang-ru"]').exists()).toBe(true)
+    expect(dub.find('[data-test="lang-ja"]').exists()).toBe(false)
+  })
   it('emits select-provider for an active chip', async () => {
     const w = mount(SourcePanel, { props: { ...baseProps, hackerMode: true } as any, ...t })
     await w.find('[data-test="provider-chip"][data-id="allanime"] button').trigger('click')
