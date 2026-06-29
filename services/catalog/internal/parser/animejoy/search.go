@@ -222,6 +222,17 @@ func bestFuzzy(titles []string, cand string) float64 {
 // "season N" form for synonym-shaped titles.
 var seasonNumRe = regexp.MustCompile(`(?i)(\d+)\s*сезон|сезон\s*(\d+)|season\s*(\d+)|(\d+)(?:nd|rd|st|th)\s*season`)
 
+// DetectSeason is the exported entry point catalog callers use to derive a
+// best-effort season number from an anime's primary title for the discovery
+// Query. It delegates to the same detectSeason heuristic the internal scorer
+// uses, so a query's season matches how candidates are scored. Returns 1 when no
+// season marker is present (MVP caveat: a bare single-season title and an
+// explicit "(1 сезон)" both resolve to 1 — the catalog has no first-class season
+// field to override this).
+func DetectSeason(title string) int {
+	return detectSeason(title)
+}
+
 // detectSeason returns the season number embedded in a title, or 1 when none is
 // present (AnimeJoy omits "(1 сезон)" on some single-season entries, but our
 // fixtures carry it; defaulting to 1 keeps a bare title from out-ranking the

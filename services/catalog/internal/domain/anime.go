@@ -272,6 +272,18 @@ type KodikTranslation struct {
 	Pinned        bool   `json:"pinned"`
 }
 
+// AnimejoyTeam is one fansub/voiceover team discovered on AnimeJoy, reduced to
+// the per-leg presence flags the capability feed needs. HasSibnet / HasAllVideo
+// report whether ANY episode of the team carries that leg's embed URL, so the
+// leg-specific family builders can decide whether to surface the team. AnimeJoy
+// is RU-sub only (Category "sub").
+type AnimejoyTeam struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	HasSibnet   bool   `json:"has_sibnet"`
+	HasAllVideo bool   `json:"has_allvideo"`
+}
+
 // PinTranslationRequest for pinning a translation
 type PinTranslationRequest struct {
 	TranslationID    int    `json:"translation_id" validate:"required"`

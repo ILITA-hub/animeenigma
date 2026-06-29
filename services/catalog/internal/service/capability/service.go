@@ -32,8 +32,8 @@ type HealthSource interface {
 type Service struct {
 	db      *gorm.DB
 	health  HealthSource
-	catalog CatalogSource  // may be nil (skips RU/Hanime families)
-	cache   cache.Cache    // may be nil (skips caching)
+	catalog CatalogSource // may be nil (skips RU/Hanime families)
+	cache   cache.Cache   // may be nil (skips caching)
 	log     *logger.Logger
 	library LibrarySource // may be nil (then `ae` is always no_content)
 }
@@ -74,8 +74,9 @@ func (s *Service) Report(ctx context.Context, animeID string) (domain.Capability
 // (its error fails the report); the first-party (ae/raw/adult) and RU/Hanime
 // families are best-effort (omitted on error or when the anime isn't on that
 // provider). Order is stable: ae, ourenglish, raw, adult, kodik, animelib,
-// hanime — first-party leads. The ae/raw/adult families are DB-row-driven (no
-// CatalogSource needed) so they run regardless of whether catalog is wired.
+// hanime, animejoy-sibnet, animejoy-allvideo — first-party leads. The
+// ae/raw/adult families are DB-row-driven (no CatalogSource needed) so they run
+// regardless of whether catalog is wired.
 func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.SourceFamily, error) {
 	type slot struct {
 		fam domain.SourceFamily
@@ -86,6 +87,7 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 		enErr                   error
 		ae, raw, adult          slot
 		kodik, animelib, hanime slot
+		ajSibnet, ajAllVideo    slot
 		wg                      sync.WaitGroup
 	)
 
@@ -99,10 +101,19 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 	go func() { defer wg.Done(); adult.fam, adult.ok = s.dbRowFamily(ctx, "18anime", "18anime", "adult") }()
 
 	if s.catalog != nil {
-		wg.Add(3)
+		wg.Add(4)
 		go func() { defer wg.Done(); kodik.fam, kodik.ok = s.kodikFamily(ctx, animeID) }()
 		go func() { defer wg.Done(); animelib.fam, animelib.ok = s.animelibFamily(ctx, animeID) }()
 		go func() { defer wg.Done(); hanime.fam, hanime.ok = s.hanimeFamily(ctx, animeID) }()
+		// AnimeJoy: resolve discovery ONCE, then build BOTH leg families from the
+		// shared teams (no second network call). Discovery failure → empty teams →
+		// both leg families absent (no_content).
+		go func() {
+			defer wg.Done()
+			teams, _ := s.catalog.GetAnimejoyTeams(ctx, animeID)
+			ajSibnet.fam, ajSibnet.ok = s.animejoyLegFamily(ctx, teams, "animejoy-sibnet", "Sibnet", "sibnet")
+			ajAllVideo.fam, ajAllVideo.ok = s.animejoyLegFamily(ctx, teams, "animejoy-allvideo", "AllVideo", "allvideo")
+		}()
 	}
 	wg.Wait()
 
@@ -110,12 +121,12 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 		return nil, enErr
 	}
 	// ae leads (first-party first), then EN, then the rest in stable order.
-	families := make([]domain.SourceFamily, 0, 7)
+	families := make([]domain.SourceFamily, 0, 9)
 	if ae.ok {
 		families = append(families, ae.fam)
 	}
 	families = append(families, en)
-	for _, sl := range []slot{raw, adult, kodik, animelib, hanime} {
+	for _, sl := range []slot{raw, adult, kodik, animelib, hanime, ajSibnet, ajAllVideo} {
 		if sl.ok {
 			families = append(families, sl.fam)
 		}

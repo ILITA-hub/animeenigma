@@ -16,6 +16,9 @@ type CatalogSource interface {
 	GetAnimeLibTranslations(ctx context.Context, animeID string, episodeID int) ([]domain.AnimeLibTranslation, error)
 	GetHanimeEpisodes(ctx context.Context, animeID string) ([]domain.HanimeEpisode, error)
 	GetHanimeStream(ctx context.Context, animeID string, slug string) (*domain.HanimeStream, error)
+	// GetAnimejoyTeams resolves AnimeJoy discovery ONCE for the title and reports
+	// the per-leg (Sibnet/AllVideo) team presence both animejoy leg families share.
+	GetAnimejoyTeams(ctx context.Context, animeID string) ([]domain.AnimejoyTeam, error)
 }
 
 // categoryFromTranslationType maps Kodik/AniLib's normalized translation type
@@ -210,4 +213,55 @@ func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.Sour
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: "hanime", Providers: []domain.ProviderCap{cap}}, true
+}
+
+// animejoyTeamHasLeg reports whether a discovered AnimeJoy team carries the given
+// leg ("sibnet" or "allvideo"). Pure; an unknown leg matches nothing.
+func animejoyTeamHasLeg(t domain.AnimejoyTeam, leg string) bool {
+	switch leg {
+	case "sibnet":
+		return t.HasSibnet
+	case "allvideo":
+		return t.HasAllVideo
+	}
+	return false
+}
+
+// animejoyLegFamily builds one of the two AnimeJoy leg families ("animejoy-sibnet"
+// or "animejoy-allvideo") from the SHARED discovery teams resolved once per
+// report. Each qualifying team (one that carries this leg) becomes a single RU-sub
+// variant; AnimeJoy serves baked/iframe subs, so SubDelivery is always "hard" and
+// quality is unknown (resolved per-stream later). Best effort — returns ok=false
+// (no_content) when no team carries this leg, or when the provider's DB row is
+// disabled. The teams slice is the SAME for both legs: the caller resolves
+// discovery once, never two network calls.
+func (s *Service) animejoyLegFamily(ctx context.Context, teams []domain.AnimejoyTeam, provider, displayName, leg string) (domain.SourceFamily, bool) {
+	variants := make([]domain.Variant, 0, len(teams))
+	for _, t := range teams {
+		if !animejoyTeamHasLeg(t, leg) {
+			continue
+		}
+		v := domain.Variant{
+			Category:      "sub",
+			SubDelivery:   subDeliveryFor("sub", false), // baked/iframe subs → "hard"
+			QualitySource: "unknown",                    // quality ladder needs a per-stream call
+			Source:        "discovered",
+		}
+		if t.Name != "" {
+			v.Team = &domain.Team{ID: t.ID, Name: t.Name}
+		}
+		variants = append(variants, v)
+	}
+	if len(variants) == 0 {
+		return domain.SourceFamily{}, false
+	}
+	row, ok := s.providerRow(ctx, provider)
+	if !ok {
+		return domain.SourceFamily{}, false
+	}
+	cap := domain.ProviderCap{Provider: provider, DisplayName: displayName, Enabled: true, Health: "unknown", Variants: variants}
+	if !applyFeedFields(&cap, row, true) {
+		return domain.SourceFamily{}, false
+	}
+	return domain.SourceFamily{Family: provider, Providers: []domain.ProviderCap{cap}}, true
 }
