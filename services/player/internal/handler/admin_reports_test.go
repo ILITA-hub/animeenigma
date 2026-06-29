@@ -366,6 +366,14 @@ func TestAdminReports_List_KindSourceActiveFilters(t *testing.T) {
 	if r := get("status=active"); r.Data.Total != 3 {
 		t.Errorf("status=active: total=%d, want 3", r.Data.Total)
 	}
+	// status CSV (multi-select): new,not_relevant → all 4 (3 default-new + 1 not_relevant)
+	if r := get("status=new,not_relevant"); r.Data.Total != 4 {
+		t.Errorf("status=new,not_relevant: total=%d, want 4", r.Data.Total)
+	}
+	// status CSV with no matches → empty
+	if r := get("status=resolved,in_progress"); r.Data.Total != 0 {
+		t.Errorf("status=resolved,in_progress: total=%d, want 0", r.Data.Total)
+	}
 	// derived source on the legacy user item is feedback_form (when shown)
 	if r := get("source=feedback_form"); r.Data.Total != 1 || r.Data.Items[0].Username != "alice" {
 		t.Errorf("source=feedback_form: total=%d items=%v", r.Data.Total, r.Data.Items)

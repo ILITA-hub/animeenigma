@@ -55,13 +55,24 @@ describe('useAdminFeedback', () => {
     expect(fb.error.value).toBeNull()
   })
 
-  it('normalizes the "all" sentinel to undefined for category/type/username; status defaults to active', async () => {
+  it('normalizes the "all" sentinel to undefined for category/type/username; status defaults to the active set as CSV', async () => {
     listSpy.mockResolvedValue(listEnvelope([]))
     const fb = useAdminFeedback()
     await fb.refresh()
     expect(listSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ category: undefined, status: 'active', type: undefined, username: undefined }),
+      expect.objectContaining({ category: undefined, status: 'new,in_progress,ai_done,resolved', type: undefined, username: undefined }),
     )
+  })
+
+  it('serializes the multi-select status array to a comma-separated param; empty = no filter', async () => {
+    listSpy.mockResolvedValue(listEnvelope([]))
+    const fb = useAdminFeedback()
+    fb.filterStatuses.value = ['new', 'ai_done']
+    await fb.refresh()
+    expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'new,ai_done' }))
+    fb.filterStatuses.value = []
+    await fb.refresh()
+    expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ status: undefined }))
   })
 
   it('passes a trimmed username filter, omitting it when blank', async () => {
@@ -80,7 +91,7 @@ describe('useAdminFeedback', () => {
     const fb = useAdminFeedback()
     fb.page.value = 3
     fb.filterCategory.value = 'feature'
-    fb.filterStatus.value = 'resolved'
+    fb.filterStatuses.value = ['resolved']
     fb.filterType.value = 'kodik'
     await fb.applyFilters()
     expect(fb.page.value).toBe(1)
@@ -124,15 +135,15 @@ describe('useAdminFeedback', () => {
     expect(fb.items.value[0].status).toBe('new')
   })
 
-  it('defaults status to active and sends kind/source params', async () => {
+  it('defaults status to the active set and sends kind/source params', async () => {
     listSpy.mockResolvedValue(listEnvelope([sampleRow]))
     const fb = useAdminFeedback()
-    expect(fb.filterStatus.value).toBe('active')
+    expect(fb.filterStatuses.value).toEqual(['new', 'in_progress', 'ai_done', 'resolved'])
     fb.filterKind.value = 'todo'
     fb.filterSource.value = 'manual'
     await fb.applyFilters()
     await flushPromises()
     const lastCall = listSpy.mock.calls.at(-1)![0]
-    expect(lastCall).toMatchObject({ status: 'active', kind: 'todo', source: 'manual' })
+    expect(lastCall).toMatchObject({ status: 'new,in_progress,ai_done,resolved', kind: 'todo', source: 'manual' })
   })
 })

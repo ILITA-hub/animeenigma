@@ -1158,6 +1158,7 @@
         "allTypes": "すべてのプレイヤー",
         "allCategories": "すべてのカテゴリ",
         "allStatuses": "すべてのステータス",
+        "statusSelected": "{n}件選択",
         "username": "ユーザー",
         "usernamePlaceholder": "ユーザー名で絞り込み…",
         "dateFrom": "開始日",

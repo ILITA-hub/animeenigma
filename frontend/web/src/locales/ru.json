@@ -1158,6 +1158,7 @@
         "allTypes": "Все плееры",
         "allCategories": "Все категории",
         "allStatuses": "Все статусы",
+        "statusSelected": "Выбрано: {n}",
         "username": "Пользователь",
         "usernamePlaceholder": "Фильтр по нику…",
         "dateFrom": "Дата с",

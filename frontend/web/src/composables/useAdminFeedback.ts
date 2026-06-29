@@ -42,7 +42,10 @@ export function useAdminFeedback() {
   // empty-string value, so the "All …" options use 'all' and we normalize it
   // away before hitting the API.
   const filterCategory = ref('all')
-  const filterStatus = ref('active')
+  // Multi-select status filter: a set of concrete statuses. Empty = no filter
+  // (all statuses). Default mirrors the old 'active' sentinel (everything but
+  // not_relevant). Serialized to a comma-separated `status` param for the API.
+  const filterStatuses = ref<string[]>(['new', 'in_progress', 'ai_done', 'resolved'])
   const filterKind = ref('all')
   const filterSource = ref('all')
   const filterType = ref('all')
@@ -64,7 +67,7 @@ export function useAdminFeedback() {
       const norm = (v: string) => (v && v !== 'all' ? v : undefined)
       const res = await adminApi.listReports({
         category: norm(filterCategory.value),
-        status: norm(filterStatus.value),
+        status: filterStatuses.value.length ? filterStatuses.value.join(',') : undefined,
         kind: norm(filterKind.value),
         source: norm(filterSource.value),
         type: norm(filterType.value),
@@ -141,7 +144,7 @@ export function useAdminFeedback() {
     isLoading,
     error,
     filterCategory,
-    filterStatus,
+    filterStatuses,
     filterKind,
     filterSource,
     filterType,

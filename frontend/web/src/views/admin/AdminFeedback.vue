@@ -67,13 +67,45 @@
           :label="$t('admin.feedback.filters.source')"
           @change="applyFilters"
         />
-        <Select
-          v-model="filterStatus"
-          size="sm"
-          :options="statusOptions"
-          :label="$t('admin.feedback.filters.status')"
-          @change="applyFilters"
-        />
+        <!-- Status: multi-select checkbox picker (any combination of statuses) -->
+        <div class="w-full">
+          <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('admin.feedback.filters.status') }}</label>
+          <Popover v-model:open="statusMenuOpen" align="start" class="w-56 p-2">
+            <template #trigger>
+              <button
+                type="button"
+                class="w-full flex items-center justify-between gap-2 bg-white/5 border border-white/10 text-white px-3 py-2 text-sm rounded-lg transition-all duration-200 cursor-pointer hover:border-white/20 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 data-[state=open]:ring-2 data-[state=open]:ring-cyan-500/50"
+                aria-haspopup="listbox"
+              >
+                <span :class="filterStatuses.length ? 'text-white' : 'text-white/30'">{{ statusSummary }}</span>
+                <ChevronDown
+                  class="size-4 text-white/50 transition-transform duration-200"
+                  :class="statusMenuOpen ? 'rotate-180' : ''"
+                  aria-hidden="true"
+                />
+              </button>
+            </template>
+
+            <div class="space-y-0.5">
+              <div class="flex items-center justify-between gap-2 px-1 pb-2 mb-1 border-b border-white/10">
+                <button type="button" class="text-xs text-white/60 hover:text-white transition-colors" @click="setStatusFilter(ACTIVE_STATUSES)">
+                  {{ $t('admin.feedback.status.active') }}
+                </button>
+                <button type="button" class="text-xs text-white/60 hover:text-white transition-colors" @click="setStatusFilter([])">
+                  {{ $t('admin.feedback.filters.allStatuses') }}
+                </button>
+              </div>
+              <label
+                v-for="s in STATUS_ORDER"
+                :key="s"
+                class="flex items-center gap-2 px-1 py-1.5 rounded-md hover:bg-white/5 cursor-pointer transition-colors"
+              >
+                <Checkbox :model-value="filterStatuses.includes(s)" @update:model-value="(v) => toggleStatus(s, v as boolean)" />
+                <span class="text-sm text-white/80">{{ statusLabel(s) }}</span>
+              </label>
+            </div>
+          </Popover>
+        </div>
         <Input
           v-model="filterUsername"
           size="sm"
@@ -201,7 +233,7 @@
           @drop="onDrop(col.status)"
         >
           <div class="flex items-center justify-between mb-3 px-1">
-            <Badge size="sm" :variant="statusBadgeVariant(col.status)" class="font-semibold uppercase">
+            <Badge size="sm" class="font-semibold uppercase" :class="statusPillClass(col.status)">
               {{ statusLabel(col.status) }}
             </Badge>
             <span class="text-white/40 text-xs font-mono">{{ col.items.length }}</span>
@@ -295,7 +327,7 @@
             <Badge size="sm" :variant="categoryVariant(detail.category)" class="text-[10px] font-mono uppercase">
               {{ categoryLabel(detail.category) }}
             </Badge>
-            <Badge size="sm" :variant="statusBadgeVariant(detail.status)" class="text-[10px] font-mono uppercase">
+            <Badge size="sm" class="text-[10px] font-mono uppercase" :class="statusPillClass(detail.status)">
               {{ statusLabel(detail.status) }}
             </Badge>
             <span class="text-white/50 text-xs">{{ formatDate(detail.timestamp, detail.id) }}</span>
@@ -422,12 +454,12 @@
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { Check, Link as LinkIcon } from 'lucide-vue-next'
+import { Check, Link as LinkIcon, ChevronDown } from 'lucide-vue-next'
 import { adminApi } from '@/api/client'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
-import { Spinner, DatePicker, Badge } from '@/components/ui'
+import { Spinner, DatePicker, Badge, Popover, Checkbox } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
 import NewNoteDialog from '@/components/admin/NewNoteDialog.vue'
 import type { FeedbackStatus } from '@/types/feedback'
@@ -438,7 +470,7 @@ const router = useRouter()
 
 const {
   items, total, page, pageSize, isLoading, error,
-  filterCategory, filterStatus, filterKind, filterSource, filterType, filterUsername, filterDateFrom, filterDateTo,
+  filterCategory, filterStatuses, filterKind, filterSource, filterType, filterUsername, filterDateFrom, filterDateTo,
   detail, isDetailLoading, detailError,
   refresh, applyFilters, setPage, openDetail, closeDetail, setStatus,
 } = useAdminFeedback()
@@ -515,18 +547,46 @@ function setViewMode(m: ViewMode): void {
 
 // --- Kanban: group the loaded rows into status columns ---
 const STATUS_ORDER: FeedbackStatus[] = ['new', 'in_progress', 'ai_done', 'resolved', 'not_relevant']
+// Active = everything except dismissed; used as the default selection and the
+// "Active" quick-action in the status filter.
+const ACTIVE_STATUSES: FeedbackStatus[] = ['new', 'in_progress', 'ai_done', 'resolved']
 const kanbanColumns = computed(() => {
-  let order: FeedbackStatus[] = STATUS_ORDER
-  if (filterStatus.value === 'active') {
-    order = STATUS_ORDER.filter((s) => s !== 'not_relevant')
-  } else if (filterStatus.value !== 'all') {
-    order = STATUS_ORDER.filter((s) => s === filterStatus.value)
-  }
+  // Empty selection = show every column; otherwise only the chosen statuses,
+  // kept in canonical STATUS_ORDER.
+  const sel = filterStatuses.value
+  const order = sel.length ? STATUS_ORDER.filter((s) => sel.includes(s)) : STATUS_ORDER
   return order.map((status) => ({
     status,
     items: items.value.filter((i) => i.status === status),
   }))
 })
+
+// --- Status multi-select filter (Popover + checkbox list) ---
+const statusMenuOpen = ref(false)
+
+// Same-set check (order-independent) so the trigger can name common presets.
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
+
+const statusSummary = computed(() => {
+  const sel = filterStatuses.value
+  if (sel.length === 0 || sel.length === STATUS_ORDER.length) return t('admin.feedback.filters.allStatuses')
+  if (sameSet(sel, ACTIVE_STATUSES)) return t('admin.feedback.status.active')
+  if (sel.length === 1) return statusLabel(sel[0])
+  return t('admin.feedback.filters.statusSelected', { n: sel.length })
+})
+
+function toggleStatus(s: string, checked: boolean): void {
+  const next = checked
+    ? [...filterStatuses.value, s]
+    : filterStatuses.value.filter((x) => x !== s)
+  filterStatuses.value = next
+  applyFilters()
+}
+
+function setStatusFilter(list: string[]): void {
+  filterStatuses.value = [...list]
+  applyFilters()
+}
 
 // --- Native HTML5 drag-and-drop between columns ---
 const draggingId = ref<string | null>(null)
@@ -608,16 +668,6 @@ const categoryOptions = computed(() => [
   { value: 'issue', label: categoryLabel('issue') },
   { value: 'feature', label: categoryLabel('feature') },
 ])
-const statusOptions = computed(() => [
-  { value: 'active', label: t('admin.feedback.status.active') },
-  { value: 'all', label: t('admin.feedback.filters.allStatuses') },
-  { value: 'new', label: statusLabel('new') },
-  { value: 'in_progress', label: statusLabel('in_progress') },
-  { value: 'ai_done', label: statusLabel('ai_done') },
-  { value: 'resolved', label: statusLabel('resolved') },
-  { value: 'not_relevant', label: statusLabel('not_relevant') },
-])
-
 const KINDS = ['feedback', 'todo', 'idea'] as const
 const SOURCES = ['feedback_form', 'telegram', 'api', 'manual'] as const
 const kindLabel = (k: string) => t(`admin.feedback.kind.${k}`)
@@ -656,22 +706,23 @@ function statusLabel(s: string): string {
 }
 
 // Single source of truth for per-status styling (kills drift across the three
-// places status colour was previously duplicated):
-//   - `badge`  → Badge variant for the status pill. Mirrors MyFeedback's
-//                STATUS_VARIANT so both feedback pages render identical pills.
+// places status colour was previously duplicated). Every status drives its pill,
+// dropdown trigger and row accent from ONE token-bound palette so all three agree:
+//   - `pill`   → bg+text classes for the status Badge (passed as a class override).
 //   - `select` → tints the status-dropdown trigger (overrides its neutral base).
 //   - `accent` → left border colour on each table row.
-// ai_done uses cyan (= Badge `primary`) so pill, dropdown and accent all agree.
-type StatusBadge = 'default' | 'primary' | 'success' | 'warning' | 'info'
-const STATUS_META: Record<FeedbackStatus, { badge: StatusBadge; select: string; accent: string }> = {
-  new:          { badge: 'info',    select: 'bg-info/20 text-info border border-info/40',                        accent: 'border-info' },
-  in_progress:  { badge: 'warning', select: 'bg-warning/20 text-warning border border-warning/40',               accent: 'border-warning' },
-  ai_done:      { badge: 'primary', select: 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40',            accent: 'border-cyan-400' },
-  resolved:     { badge: 'success', select: 'bg-success/20 text-success border border-success/40',               accent: 'border-success' },
-  not_relevant: { badge: 'default', select: 'bg-muted text-muted-foreground border border-muted-foreground/40',  accent: 'border-muted-foreground' },
+// ai_done is brand-violet (purple) — its distinguishing colour for the
+// "AI says done, awaiting human verify" triage state. `new` is the info-blue
+// token so purple stays unique to ai_done.
+const STATUS_META: Record<FeedbackStatus, { pill: string; select: string; accent: string }> = {
+  new:          { pill: 'bg-info/20 text-info',                 select: 'bg-info/20 text-info border border-info/40',                        accent: 'border-info' },
+  in_progress:  { pill: 'bg-warning/20 text-warning',           select: 'bg-warning/20 text-warning border border-warning/40',               accent: 'border-warning' },
+  ai_done:      { pill: 'bg-brand-violet/20 text-brand-violet', select: 'bg-brand-violet/20 text-brand-violet border border-brand-violet/40', accent: 'border-brand-violet' },
+  resolved:     { pill: 'bg-success/20 text-success',           select: 'bg-success/20 text-success border border-success/40',               accent: 'border-success' },
+  not_relevant: { pill: 'bg-muted text-muted-foreground',       select: 'bg-muted text-muted-foreground border border-muted-foreground/40',  accent: 'border-muted-foreground' },
 }
 const statusMeta = (s: string) => STATUS_META[s as FeedbackStatus] ?? STATUS_META.new
-const statusBadgeVariant = (s: string): StatusBadge => statusMeta(s).badge
+const statusPillClass = (s: string): string => statusMeta(s).pill
 const statusSelectClass = (s: string): string => statusMeta(s).select
 const statusAccentBorder = (s: string): string => statusMeta(s).accent
 
@@ -706,7 +757,6 @@ onMounted(() => {
   // Honor a persisted kanban preference on first load: wider page.
   if (viewMode.value === 'kanban') {
     pageSize.value = 200
-    filterStatus.value = 'active'
     filterKind.value = 'all'
     filterSource.value = 'all'
   }

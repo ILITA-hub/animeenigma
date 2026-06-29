@@ -147,10 +147,22 @@ func (h *AdminReportsHandler) safeReportPath(id string) (string, bool) {
 	return clean, true
 }
 
+// statusInCSV reports whether status matches any entry in a comma-separated
+// list (the multi-select status filter). Blank entries are ignored.
+func statusInCSV(csv, status string) bool {
+	for _, s := range strings.Split(csv, ",") {
+		if strings.TrimSpace(s) == status {
+			return true
+		}
+	}
+	return false
+}
+
 // List returns a paginated, optionally filtered slice of feedback rows,
 // newest first. Query params: category, status (the sentinel "active" means all
-// statuses except not_relevant), type, kind, source, username (case-insensitive
-// substring match), page, page_size.
+// statuses except not_relevant; otherwise a comma-separated set, e.g.
+// "new,ai_done"), type, kind, source, username (case-insensitive substring
+// match), page, page_size.
 func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	fCategory := q.Get("category")
@@ -233,7 +245,9 @@ func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 		case fStatus != "":
-			if m.Status != fStatus {
+			// status accepts a comma-separated set (multi-select filter); a
+			// single value is just a one-element set. Row kept if it matches any.
+			if !statusInCSV(fStatus, m.Status) {
 				continue
 			}
 		}
