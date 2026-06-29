@@ -1212,26 +1212,16 @@ const queryEpisode = computed<number | undefined>(() => {
 
 // Notification deep-link — `?provider=` is an aePlayer source id, `?team=` is a
 // team TITLE. Both are HINTS preselected on aePlayer (see AePlayer initialProvider).
-const queryProvider = computed<string | undefined>(() => {
-  const v = route.query.provider
+// Single non-empty string query param (first value if repeated), else undefined.
+function queryString(key: string): string | undefined {
+  const v = route.query[key]
   const s = Array.isArray(v) ? v[0] : v
   return typeof s === 'string' && s !== '' ? s : undefined
-})
-const queryTeam = computed<string | undefined>(() => {
-  const v = route.query.team
-  const s = Array.isArray(v) ? v[0] : v
-  return typeof s === 'string' && s !== '' ? s : undefined
-})
-const queryAudio = computed<string | undefined>(() => {
-  const v = route.query.audio
-  const s = Array.isArray(v) ? v[0] : v
-  return typeof s === 'string' && s !== '' ? s : undefined
-})
-const queryLang = computed<string | undefined>(() => {
-  const v = route.query.lang
-  const s = Array.isArray(v) ? v[0] : v
-  return typeof s === 'string' && s !== '' ? s : undefined
-})
+}
+const queryProvider = computed(() => queryString('provider'))
+const queryTeam = computed(() => queryString('team'))
+const queryAudio = computed(() => queryString('audio'))
+const queryLang = computed(() => queryString('lang'))
 
 // A `?provider=` deep-link always opens aePlayer (the param speaks aePlayer's
 // source vocabulary), so make sure we're not on the Classic Kodik fallback.

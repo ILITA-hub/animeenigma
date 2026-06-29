@@ -19,20 +19,11 @@ export function pickDefaultSubtitle(tracks: SubTrack[], opts: { lang: string }):
 
 // Best track for EXACTLY this language (no cross-language fallback). Used by the
 // quick chooser's RU/EN/JP fast buttons.
+//
+// NOTE: aePlayer subtitles default OFF with no exceptions (incl. raw-JP). There
+// is deliberately NO auto-select helper — the player never enables an overlay on
+// its own; the user opts in via the Subtitles menu and that choice persists
+// across episodes (AePlayer re-binds the chosen language on each episode).
 export function pickBestForLang(tracks: SubTrack[], lang: string): SubTrack | null {
   return best(tracks.filter((t) => t.lang === lang))
-}
-
-/**
- * aePlayer subtitles default OFF, with NO exceptions (including pure raw-JP).
- * The player never auto-enables an overlay — the user opts in via the Subtitles
- * menu, and that choice then persists across episodes. Kept as a stable export
- * so call sites / specs don't churn.
- */
-export function pickAutoSubtitle(_opts: {
-  lang: string
-  bundled: SubTrack[]
-  aggregated: SubTrack[]
-}): SubTrack | null {
-  return null
 }

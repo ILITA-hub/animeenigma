@@ -20,9 +20,9 @@ function relevant(cap: ProviderCap, f: RowFilter): boolean {
 
 function toRow(cap: ProviderCap): ProviderRow {
   // 'raw' caps are original-audio → surface as a 'sub' (RAW) row so a raw-only
-  // provider is selectable and contributes a sub combo to availability.
-  const audios = [...new Set(cap.audios.map((a) => (a === 'dub' ? 'dub' : 'sub')))]
-    .filter((a): a is AudioKind => a === 'sub' || a === 'dub')
+  // provider is selectable and contributes a sub combo to availability. The map
+  // yields only 'sub'|'dub', so no post-filter is needed.
+  const audios = [...new Set(cap.audios.map((a): AudioKind => (a === 'dub' ? 'dub' : 'sub')))]
   return {
     id: cap.provider, label: cap.display_name, group: cap.group, state: cap.state,
     selectable: cap.selectable, hackerOnly: cap.hacker_only, order: cap.order,

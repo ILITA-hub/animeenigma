@@ -363,7 +363,7 @@ import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/ae
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
 import { pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
-import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken } from '@/composables/aePlayer/comboMapping'
+import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken, clampLangForAudio } from '@/composables/aePlayer/comboMapping'
 import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
 import { useToast } from '@/composables/useToast'
@@ -754,12 +754,9 @@ function applyResolvedCombo() {
   // first-party availability + third-party stats, so the smart default (below)
   // always picks it; a previously-watched source must not override it.
   const { audio, lang, team } = watchComboToPartialCombo(rc)
-  // There is no Japanese dub — the DUB language slider is EN/RU only, so a saved
-  // dub/ja combo would land an off-screen slider thumb + a no-source facet. Clamp.
-  const safeLang: TrackLang = audio === 'dub' && lang === 'ja' ? 'en' : lang
   // setAudio/setLang each reset team → null, so setTeam must come AFTER them.
   state.setAudio(audio)
-  state.setLang(safeLang)
+  state.setLang(clampLangForAudio(audio, lang)) // no Japanese dub → dub/ja becomes dub/en
   if (team) state.setTeam(team)
 }
 
@@ -802,8 +799,7 @@ function applyUrlFacet() {
   if (a === 'dub') state.setAudio('dub')
   else if (a === 'raw' || a === 'sub') state.setAudio('sub')
   const l = props.initialLang
-  // ja is valid only under RAW (no Japanese dub; DUB slider is EN/RU only).
-  if (l === 'en' || l === 'ru' || (l === 'ja' && state.combo.value.audio !== 'dub')) state.setLang(l)
+  if (l === 'en' || l === 'ru' || l === 'ja') state.setLang(clampLangForAudio(state.combo.value.audio, l))
 }
 
 // Enumerate EVERY real source's facet (across all families, NOT just the rows
@@ -925,10 +921,11 @@ const audioLabel = computed(() =>
 // RAW pick on a JP source) would leave the DUB filter on a language its RU/EN
 // slider can't represent and no dub provider serves — clamp it to EN.
 function onSelectAudio(a: AudioKind) {
-  // Clamp ja→en BEFORE switching to DUB. There is no Japanese dub and the DUB
-  // slider is EN/RU only; setting lang first (while still RAW, where lang is
-  // inert) avoids a transient doomed repick on the dub/ja facet.
-  if (a === 'dub' && state.combo.value.lang === 'ja') state.setLang('en')
+  // Clamp ja→en BEFORE switching to DUB (no Japanese dub; DUB slider is EN/RU
+  // only). Setting lang first — while still RAW, where lang is inert — avoids a
+  // transient doomed repick on the dub/ja facet.
+  const clamped = clampLangForAudio(a, state.combo.value.lang)
+  if (clamped !== state.combo.value.lang) state.setLang(clamped)
   state.setAudio(a)
 }
 

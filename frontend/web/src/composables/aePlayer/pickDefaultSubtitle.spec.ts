@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickDefaultSubtitle, pickBestForLang, pickAutoSubtitle } from './pickDefaultSubtitle'
+import { pickDefaultSubtitle, pickBestForLang } from './pickDefaultSubtitle'
 
 const T = (provider: string, lang: string, url = `${provider}-${lang}`) => ({ url, provider, lang, label: url, format: 'srt' })
 
@@ -39,24 +39,5 @@ describe('pickBestForLang', () => {
   it('does NOT fall back to another language (unlike pickDefaultSubtitle)', () => {
     expect(pickBestForLang([tracks[2]], 'en')).toBeNull()
     expect(pickDefaultSubtitle([tracks[2]], { lang: 'en' })?.url).toBe('ja-ji')
-  })
-})
-
-describe('pickAutoSubtitle', () => {
-  // Subtitles default OFF with no exceptions — pickAutoSubtitle never enables one.
-  it('never auto-enables a provider-bundled track', () => {
-    const bundled = [T('gogoanime', 'en', 'bundled-en')]
-    expect(pickAutoSubtitle({ lang: 'en', bundled, aggregated: [...bundled, T('jimaku', 'ja')] })).toBeNull()
-  })
-
-  it('never auto-enables on a hardsubbed EN/RU cut', () => {
-    expect(pickAutoSubtitle({ lang: 'en', bundled: [], aggregated: [T('jimaku', 'ja'), T('opensubtitles', 'en')] })).toBeNull()
-    expect(pickAutoSubtitle({ lang: 'ru', bundled: [], aggregated: [T('opensubtitles', 'ru')] })).toBeNull()
-  })
-
-  it('never auto-enables on a raw original-JP cut (no exception)', () => {
-    const aggregated = [T('opensubtitles', 'ja', 'os-ja'), T('jimaku', 'ja', 'ji-ja')]
-    expect(pickAutoSubtitle({ lang: 'ja', bundled: [], aggregated })).toBeNull()
-    expect(pickAutoSubtitle({ lang: 'ja', bundled: [], aggregated: [] })).toBeNull()
   })
 })

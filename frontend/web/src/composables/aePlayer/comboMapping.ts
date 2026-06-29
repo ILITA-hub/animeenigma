@@ -23,6 +23,13 @@ export function providerToLegacyPlayer(providerId: string): LegacyPlayer | null 
 const langToLanguage: Record<TrackLang, WatchCombo['language']> = { en: 'en', ru: 'ru', ja: 'ja' }
 const languageToLang: Partial<Record<WatchCombo['language'], TrackLang>> = { en: 'en', ru: 'ru', ja: 'ja', '18+': 'en' }
 
+/** There is no Japanese dub — the DUB language facet is EN/RU only. Clamp a
+ *  dub/ja combo to dub/en. Applied on every audio/lang entry point (saved-combo
+ *  restore, URL facet, the audio slider) so the rule lives in one place. */
+export function clampLangForAudio(audio: AudioKind, lang: TrackLang): TrackLang {
+  return audio === 'dub' && lang === 'ja' ? 'en' : lang
+}
+
 /** Map a unified Combo -> legacy WatchCombo for persistence/resolve. Null if provider unmappable. */
 export function comboToWatchCombo(combo: Combo): WatchCombo | null {
   const player = providerToLegacyPlayer(combo.provider)
