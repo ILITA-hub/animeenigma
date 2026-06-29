@@ -408,6 +408,7 @@
       "loadingEpisode": "Loading episode…",
       "source": "Source & translation",
       "audio": "Audio",
+      "audioRaw": "Original",
       "language": "Language",
       "team": "Team",
       "provider": "Provider",

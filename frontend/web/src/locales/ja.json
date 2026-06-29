@@ -408,6 +408,7 @@
       "loadingEpisode": "エピソードを読み込み中…",
       "source": "ソースと翻訳",
       "audio": "音声",
+      "audioRaw": "オリジナル",
       "language": "言語",
       "team": "チーム",
       "provider": "プロバイダー",
