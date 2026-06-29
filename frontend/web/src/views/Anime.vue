@@ -406,6 +406,7 @@
             :theater="theaterMode"
             :is-hentai="isHentai"
             :initial-episode="resumeStartEpisode"
+            :resume-pill="resumePillProps"
             :initial-provider="queryProvider"
             :initial-team="queryTeam"
             :initial-audio="queryAudio"

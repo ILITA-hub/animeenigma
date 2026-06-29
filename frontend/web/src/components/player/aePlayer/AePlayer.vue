@@ -121,7 +121,14 @@
     </div>
 
     <!-- Overlays -->
-    <ResumePill :kind="resumeKind" />
+    <!-- Airing / translation-delay status banner (top-center, persists through
+         chrome auto-hide). Only the "caught up, waiting for the next episode"
+         family surfaces over the video: not-yet-aired and episode-not-loaded-yet
+         ("ep N aired {ago} — translation teams need time to upload it"). The
+         watching/finished breadcrumbs are intentionally not overlaid here. -->
+    <div v-if="resumeBannerProps" class="pl-airing-status">
+      <ResumePill v-bind="resumeBannerProps" />
+    </div>
 
     <BigPlayButton
       :visible="!state.playing.value && !sourceError && !showBuffering && !isResolving"
@@ -409,6 +416,18 @@ const props = defineProps<{
    *  and source/episode state to the room. Null/undefined ⇒ zero WT behavior
    *  (the bridge is never instantiated, auto-source-select runs as normal). */
   room?: WatchTogetherRoomHandle | null
+  /** Resume/airing status for the in-player banner, computed by the parent's
+   *  resume state machine. Only the "caught up, waiting for the next episode"
+   *  family is surfaced as a top-center overlay: not-yet-aired ("ep N airs
+   *  {when}") and episode-not-loaded-yet ("ep N aired {ago} — translation teams
+   *  need time to upload it"). Absent / first-time / watching ⇒ no banner. */
+  resumePill?: {
+    kind: 'first-time' | 'watching' | 'finished' | 'not-yet-aired' | 'episode-not-loaded-yet'
+    finishedEpisode?: number
+    nextEpisodeNumber?: number
+    nextEpisodeEtaLabel?: string
+    airedAgoLabel?: string
+  }
 }>()
 
 const emit = defineEmits<{
@@ -2283,10 +2302,18 @@ function onPickSubLang(v: string) {
 
 // ─── Resume pill ─────────────────────────────────────────────────────────────
 
-// Stage 1: static "first-time" — no persistent watch progress wired yet
-const resumeKind = computed<
-  'first-time' | 'watching' | 'finished' | 'not-yet-aired' | 'episode-not-loaded-yet'
->(() => 'first-time')
+// The parent (Anime.vue) owns the resume state machine and passes the computed
+// pill props down via `resumePill`. We overlay only the airing-status family —
+// not-yet-aired and episode-not-loaded-yet — so a caught-up viewer learns the
+// next episode aired and translation teams need time to upload it. The
+// watching/finished breadcrumbs are deliberately NOT shown over the video.
+const resumeBannerProps = computed(() => {
+  const rp = props.resumePill
+  if (rp && (rp.kind === 'not-yet-aired' || rp.kind === 'episode-not-loaded-yet')) {
+    return rp
+  }
+  return null
+})
 
 // ─── Playback helpers ─────────────────────────────────────────────────────────
 
@@ -2700,6 +2727,23 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Airing / translation-delay status banner — top-center, informational.
+   Sits just below the title bar and, unlike .pl-top, never auto-hides (a
+   caught-up viewer should keep seeing "next episode aired — translators need
+   time"). z-index below .pl-top so a long title is never covered; pointer-
+   events:none so it never intercepts a tap on the video. */
+.pl-airing-status {
+  position: absolute;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  max-width: calc(100% - 36px);
+  pointer-events: none;
 }
 
 /* Player shell is tabindex=0 for hotkeys. Suppress the ring on mouse focus,
