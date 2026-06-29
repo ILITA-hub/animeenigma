@@ -14,13 +14,11 @@
 <script setup lang="ts">
 import { FastForward } from 'lucide-vue-next'
 
-withDefaults(
-  defineProps<{
-    visible: boolean
-    label?: string
-  }>(),
-  { label: 'Skip Intro' },
-)
+defineProps<{
+  visible: boolean
+  // Parent always passes a translated label (Skip Intro / Skip Outro).
+  label: string
+}>()
 
 const emit = defineEmits<{
   (e: 'skip'): void

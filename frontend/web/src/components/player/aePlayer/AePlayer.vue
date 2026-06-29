@@ -6,7 +6,7 @@
     :style="{ '--prov': activeProviderHue }"
     tabindex="0"
     role="region"
-    aria-label="Video player. Space to play or pause, arrow keys to seek and adjust volume."
+    :aria-label="$t('player.aePlayer.rootAria')"
     @click.self="closeMenus"
     @mouseenter="onPointerEnter"
     @mouseleave="onPointerLeave"
@@ -68,7 +68,7 @@
         <CircleAlert :size="48" :stroke-width="1.5" class="text-muted-foreground" aria-hidden="true" />
         <p class="text-sm font-medium text-foreground">{{ sourceError }}</p>
         <Button variant="soft" size="sm" data-test="source-error-retry" @click="retryResolution">
-          Retry
+          {{ $t('player.aePlayer.retry') }}
         </Button>
       </div>
     </div>
@@ -84,12 +84,12 @@
               type="button"
               class="pl-ep-trigger"
               :aria-expanded="openMenu === 'episodes'"
-              aria-label="Episode list"
-              title="Episodes"
+              :aria-label="$t('player.aePlayer.episodeList')"
+              :title="$t('player.aePlayer.episodes')"
               data-test="ep-trigger"
               @click="toggleMenu('episodes')"
             >
-              EP {{ selectedEpisode?.number ?? anime.ep }}
+              {{ $t('player.aePlayer.epAbbrev') }} {{ selectedEpisode?.number ?? anime.ep }}
               <span v-if="selectedEpisode?.title" class="pl-ep-title">· {{ selectedEpisode.title }}</span>
               <ChevronDown
                 class="pl-ep-chev"
@@ -155,7 +155,7 @@
 
     <SkipIntroChip
       :visible="!!skipTarget"
-      :label="skipTarget?.kind === 'outro' ? 'Skip Outro' : 'Skip Intro'"
+      :label="skipTarget?.kind === 'outro' ? $t('player.aePlayer.skipOutro') : $t('player.aePlayer.skipIntro')"
       @skip="onSkipSegment"
     />
 
@@ -163,12 +163,12 @@
     <div v-if="resumeChipVisible" class="pl-resume" data-test="resume-chip">
       <button class="pl-resume-go" type="button" @click="onResumeFromSaved">
         <Play :size="12" :stroke-width="2.5" aria-hidden="true" />
-        <span>Resume from {{ fmtResume(resumePosSec) }}</span>
+        <span>{{ $t('player.aePlayer.resumeFrom', { time: fmtResume(resumePosSec) }) }}</span>
       </button>
       <button
         class="pl-resume-x"
         type="button"
-        aria-label="Dismiss resume offer"
+        :aria-label="$t('player.aePlayer.dismissResume')"
         data-test="resume-chip-dismiss"
         @click="resumeChipDismissed = true"
       >

@@ -19,7 +19,7 @@
 
       <!-- Play / Pause -->
       <PlayerIconButton
-        :aria-label="playing ? 'Pause' : 'Play'"
+        :aria-label="playing ? $t('player.aePlayer.pause') : $t('player.aePlayer.play')"
         data-test="play-pause"
         @click="emit('toggle-play')"
       >
@@ -30,7 +30,7 @@
       <!-- −5s (hidden on mobile via CSS) — circular replay arrow -->
       <PlayerIconButton
         class="pl-skip-back"
-        aria-label="Back 5 seconds"
+        :aria-label="$t('player.aePlayer.back5s')"
         data-test="seek-back"
         @click="emit('seek-rel', -5)"
       >
@@ -45,7 +45,7 @@
       <!-- +5s (hidden on mobile via CSS) — circular forward arrow -->
       <PlayerIconButton
         class="pl-skip-fwd"
-        aria-label="Forward 5 seconds"
+        :aria-label="$t('player.aePlayer.forward5s')"
         data-test="seek-fwd"
         @click="emit('seek-rel', 5)"
       >
@@ -62,7 +62,7 @@
       <!-- Volume cluster (hover to expand) -->
       <div class="pl-vol">
         <PlayerIconButton
-          :aria-label="muted || volume === 0 ? 'Unmute' : 'Mute'"
+          :aria-label="muted || volume === 0 ? $t('player.aePlayer.unmute') : $t('player.aePlayer.mute')"
           data-test="mute"
           @click="emit('toggle-mute')"
         >
@@ -80,7 +80,7 @@
           max="100"
           step="1"
           :value="muted ? 0 : volume"
-          aria-label="Volume"
+          :aria-label="$t('player.aePlayer.volume')"
           data-test="volume-slider"
           @input="onVolumeInput"
         />
@@ -99,11 +99,11 @@
         :class="{ 'is-open': openMenu === 'episodes' }"
         data-test="episodes-pill"
         :aria-expanded="openMenu === 'episodes'"
-        aria-label="Episodes"
+        :aria-label="$t('player.aePlayer.episodes')"
         @click="emit('toggle-episodes')"
       >
         <ListVideo class="size-4" aria-hidden="true" />
-        <span class="pl-epbtn-text">EP {{ episodeLabel }}</span>
+        <span class="pl-epbtn-text">{{ $t('player.aePlayer.epAbbrev') }} {{ episodeLabel }}</span>
         <ChevronDown class="size-3" aria-hidden="true" />
       </button>
 
@@ -115,7 +115,7 @@
         class="pl-srcbtn"
         :class="{ 'is-open': openMenu === 'source' }"
         data-test="source-pill"
-        :aria-label="`Source: ${providerName} · ${audioLabel}`"
+        :aria-label="$t('player.aePlayer.sourceAria', { provider: providerName, audio: audioLabel })"
         :aria-expanded="openMenu === 'source'"
         @click="emit('toggle-source')"
       >
@@ -133,7 +133,7 @@
       <!-- Subtitles (CC) — `active` = menu open; `aria-pressed`/cyan icon = subs ON -->
       <PlayerIconButton
         :active="openMenu === 'subs'"
-        aria-label="Subtitles"
+        :aria-label="$t('player.aePlayer.subtitles')"
         :aria-expanded="openMenu === 'subs'"
         :aria-pressed="subsOn === true"
         data-test="toggle-subs"
@@ -145,7 +145,7 @@
       <!-- Settings gear -->
       <PlayerIconButton
         :active="openMenu === 'settings'"
-        aria-label="Settings"
+        :aria-label="$t('player.aePlayer.settings')"
         :aria-expanded="openMenu === 'settings'"
         data-test="toggle-settings"
         @click="emit('toggle-settings')"
@@ -156,7 +156,7 @@
       <!-- PiP (hidden on mobile via CSS) -->
       <PlayerIconButton
         class="pl-pip-btn"
-        aria-label="Picture in Picture"
+        :aria-label="$t('player.aePlayer.pip')"
         data-test="toggle-pip"
         @click="emit('toggle-pip')"
       >
@@ -166,7 +166,7 @@
       <!-- Fullscreen (hidden on mobile via CSS) -->
       <PlayerIconButton
         class="pl-fs-btn"
-        aria-label="Fullscreen"
+        :aria-label="$t('player.aePlayer.fullscreen')"
         data-test="toggle-fullscreen"
         @click="emit('toggle-fullscreen')"
       >

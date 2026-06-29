@@ -9,7 +9,7 @@
         @click="view = 'root'"
       >
         <ChevronLeft class="size-[14px]" aria-hidden="true" />
-        Quality
+        {{ $t('player.aePlayer.quality') }}
       </button>
       <div class="flex flex-col gap-[3px] pb-1">
         <button
@@ -38,7 +38,7 @@
         @click="view = 'root'"
       >
         <ChevronLeft class="size-[14px]" aria-hidden="true" />
-        Speed
+        {{ $t('player.aePlayer.speed') }}
       </button>
       <div class="flex gap-1 px-1.5 pb-1.5 flex-wrap">
         <button
@@ -55,7 +55,7 @@
             : 'background: var(--line)'"
           @click="select('speed', s)"
         >
-          {{ s === 1 ? 'Normal' : `${s}×` }}
+          {{ s === 1 ? $t('player.aePlayer.normal') : `${s}×` }}
         </button>
       </div>
     </template>
@@ -65,7 +65,7 @@
       <!-- Header -->
       <div class="px-2.5 pt-2 pb-1">
         <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
-          Playback
+          {{ $t('player.aePlayer.playback') }}
         </span>
       </div>
 
@@ -77,7 +77,7 @@
         @click="view = 'quality'"
       >
         <MonitorPlay class="size-4 flex-shrink-0" aria-hidden="true" />
-        <span class="flex-1">Quality</span>
+        <span class="flex-1">{{ $t('player.aePlayer.quality') }}</span>
         <span class="inline-flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] mr-1">
           {{ qualityDisplay ?? quality }}
           <ChevronDown class="size-3" aria-hidden="true" />
@@ -90,9 +90,9 @@
         @click="view = 'speed'"
       >
         <Gauge class="size-4 flex-shrink-0" aria-hidden="true" />
-        <span class="flex-1">Speed</span>
+        <span class="flex-1">{{ $t('player.aePlayer.speed') }}</span>
         <span class="inline-flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] mr-1">
-          {{ speed === 1 ? 'Normal' : `${speed}×` }}
+          {{ speed === 1 ? $t('player.aePlayer.normal') : `${speed}×` }}
           <ChevronDown class="size-3" aria-hidden="true" />
         </span>
       </button>
@@ -102,7 +102,7 @@
       <!-- Autoplay next toggle -->
       <div class="flex items-center gap-2.5 px-2.5 py-[9px]">
         <SkipForward class="size-4 flex-shrink-0 text-[var(--ink-2)]" aria-hidden="true" />
-        <span class="flex-1 text-[14px] text-[var(--ink-2)]">Autoplay next</span>
+        <span class="flex-1 text-[14px] text-[var(--ink-2)]">{{ $t('player.aePlayer.autoplayNext') }}</span>
         <Switch
           :model-value="autoNext"
           @update:model-value="emit('update:autoNext', $event)"
@@ -112,7 +112,7 @@
       <!-- Auto-skip intro toggle -->
       <div class="flex items-center gap-2.5 px-2.5 py-[9px]">
         <FastForward class="size-4 flex-shrink-0 text-[var(--ink-2)]" aria-hidden="true" />
-        <span class="flex-1 text-[14px] text-[var(--ink-2)]">Auto-skip intro</span>
+        <span class="flex-1 text-[14px] text-[var(--ink-2)]">{{ $t('player.aePlayer.autoSkipIntro') }}</span>
         <Switch
           :model-value="autoSkip"
           @update:model-value="emit('update:autoSkip', $event)"
@@ -122,7 +122,7 @@
       <!-- Hacker mode toggle -->
       <div class="flex items-center gap-2.5 px-2.5 py-[9px]">
         <Terminal class="size-4 flex-shrink-0 text-[var(--ink-2)]" aria-hidden="true" />
-        <span class="flex-1 text-[14px] text-[var(--ink-2)]">Hacker mode</span>
+        <span class="flex-1 text-[14px] text-[var(--ink-2)]">{{ $t('player.aePlayer.hackerMode') }}</span>
         <Switch
           :model-value="hackerMode"
           @update:model-value="emit('update:hackerMode', $event)"

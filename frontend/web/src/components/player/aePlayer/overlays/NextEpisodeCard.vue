@@ -1,6 +1,6 @@
 <template>
   <div class="pl-next" data-test="next-episode-card">
-    <p class="pl-next-label">Up Next</p>
+    <p class="pl-next-label">{{ $t('player.aePlayer.upNext') }}</p>
 
     <div class="pl-next-body">
       <!-- Thumbnail -->
@@ -11,24 +11,24 @@
       />
 
       <div class="min-w-0">
-        <p class="pl-next-ep">EP {{ nextEp }}</p>
+        <p class="pl-next-ep">{{ $t('player.aePlayer.epAbbrev') }} {{ nextEp }}</p>
         <p class="pl-next-title">{{ title }}</p>
       </div>
     </div>
 
     <!-- Countdown indicator -->
     <div v-if="countdown !== undefined && countdown > 0" class="pl-next-countdown" aria-live="polite">
-      Playing in {{ countdown }}s
+      {{ $t('player.aePlayer.playingIn', { n: countdown }) }}
     </div>
 
     <div class="pl-next-actions">
       <button class="pl-next-play-btn" data-test="next-play" @click="emit('play')">
         <!-- Play icon -->
         <Play class="size-[14px]" aria-hidden="true" />
-        Play now
+        {{ $t('player.aePlayer.playNow') }}
       </button>
       <button class="pl-next-cancel" data-test="next-cancel" @click="emit('cancel')">
-        Cancel
+        {{ $t('common.cancel') }}
       </button>
     </div>
   </div>

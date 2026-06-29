@@ -1,7 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, config } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
+import en from '@/locales/en.json'
 import EpisodesPanel from './EpisodesPanel.vue'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
+
+// Real i18n so $t() resolves to en.json text (the assertions below expect the
+// English strings, not raw keys) and {n} interpolation works.
+const i18n = createI18n({ locale: 'en', legacy: false, messages: { en } })
+// Append (don't clobber) in case a shared setup ever registers a global plugin.
+config.global.plugins = [...(config.global.plugins ?? []), i18n]
 
 const eps: EpisodeOption[] = [
   { key: 1, label: 1, number: 1 },

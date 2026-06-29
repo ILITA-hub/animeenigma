@@ -2,7 +2,7 @@
   <button
     v-if="visible"
     class="pl-bigplay"
-    aria-label="Play"
+    :aria-label="$t('player.aePlayer.play')"
     data-test="bigplay"
     @click="emit('play')"
   >

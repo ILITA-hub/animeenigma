@@ -2,15 +2,15 @@
   <div class="flex flex-col" data-test="episodes-panel">
     <!-- Sheet head: count, view toggle (100+), next-unwatched, jump (16+) -->
     <div class="px-3 pt-2.5 pb-2 flex items-center gap-2">
-      <span class="text-[13px] font-semibold text-white">Episodes</span>
+      <span class="text-[13px] font-semibold text-white">{{ $t('player.aePlayer.episodes') }}</span>
       <span class="text-[11px] text-[var(--muted-foreground)]">{{ episodes.length }}</span>
 
-      <div v-if="showGridToggle" class="ep-vt" role="group" aria-label="Episode list view">
+      <div v-if="showGridToggle" class="ep-vt" role="group" :aria-label="$t('player.aePlayer.episodeListView')">
         <button
           type="button"
           :class="{ 'ep-vt--on': view === 'strip' }"
-          aria-label="Strip view"
-          title="Strip"
+          :aria-label="$t('player.aePlayer.stripView')"
+          :title="$t('player.aePlayer.stripView')"
           data-test="view-strip"
           @click="setView('strip')"
         >
@@ -19,8 +19,8 @@
         <button
           type="button"
           :class="{ 'ep-vt--on': view === 'grid' }"
-          aria-label="Grid view"
-          title="Grid"
+          :aria-label="$t('player.aePlayer.gridView')"
+          :title="$t('player.aePlayer.gridView')"
           data-test="view-grid"
           @click="setView('grid')"
         >
@@ -37,7 +37,7 @@
         data-test="next-unwatched"
         @click="scrollToEp(nextUnwatched.number, true)"
       >
-        → next unwatched: {{ nextUnwatched.number }}
+        → {{ $t('player.aePlayer.nextUnwatched', { n: nextUnwatched.number }) }}
       </button>
       <input
         v-if="showJump"
@@ -45,8 +45,8 @@
         class="ep-jump"
         type="text"
         inputmode="numeric"
-        placeholder="Jump to ep… ⏎"
-        aria-label="Jump to episode"
+        :placeholder="$t('player.aePlayer.jumpPlaceholder')"
+        :aria-label="$t('player.aePlayer.jumpAria')"
         data-test="jump-input"
         @keydown.enter.prevent="onJump"
         @keydown.stop
@@ -54,7 +54,7 @@
     </div>
 
     <div v-if="episodes.length === 0" class="px-3 pb-3 text-[13px] text-[var(--muted-foreground)]">
-      No episodes from this source
+      {{ $t('player.aePlayer.noEpisodes') }}
     </div>
 
     <!-- Strip view: horizontal episode cards (titles + user data visible) -->
@@ -79,7 +79,7 @@
         @click="emit('select', ep)"
       >
         <span class="ep-card-n">
-          <span>EP {{ ep.label }}</span>
+          <span>{{ $t('player.aePlayer.epAbbrev') }} {{ ep.label }}</span>
           <Check
             v-if="isWatched(ep)"
             :size="10"
@@ -153,9 +153,9 @@
         @click="emit('mark-watched')"
       >
         <Check :size="12" :stroke-width="3" aria-hidden="true" />
-        <span v-if="marked">Ep. {{ selectedNumber }} watched</span>
-        <span v-else-if="marking">Marking…</span>
-        <span v-else>Mark ep. {{ selectedNumber }} as watched</span>
+        <span v-if="marked">{{ $t('player.aePlayer.epWatched', { n: selectedNumber }) }}</span>
+        <span v-else-if="marking">{{ $t('player.aePlayer.marking') }}</span>
+        <span v-else>{{ $t('player.aePlayer.markWatched', { n: selectedNumber }) }}</span>
       </button>
     </div>
   </div>

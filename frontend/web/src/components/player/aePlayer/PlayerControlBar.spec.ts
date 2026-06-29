@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, config } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
+import en from '@/locales/en.json'
 import PlayerControlBar from './PlayerControlBar.vue'
+
+// Real i18n so aria-labels/EP pill resolve to en.json text + {provider}/{audio}
+// interpolation works (the assertions below expect English, not raw keys).
+const i18n = createI18n({ locale: 'en', legacy: false, messages: { en } })
+// Append (don't clobber) in case a shared setup ever registers a global plugin.
+config.global.plugins = [...(config.global.plugins ?? []), i18n]
 
 const baseProps = {
   playing: false,
