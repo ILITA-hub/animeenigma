@@ -12,3 +12,16 @@ export const GROUP_LANGS: Record<ProviderGroup, TrackLang[]> = {
 export const GROUP_CONTENT: Record<ProviderGroup, ContentKind[]> = {
   en: ['common'], ru: ['common'], adult: ['hentai'], jp: ['common'], firstparty: ['common'],
 }
+
+// Primary served language per group — the lang a RAW (original-audio) pick
+// resolves to when the current lang isn't in the provider's group.
+export const GROUP_PRIMARY_LANG: Record<ProviderGroup, TrackLang> = {
+  en: 'en', ru: 'ru', adult: 'en', jp: 'ja', firstparty: 'ja',
+}
+
+// Under RAW the language slider is hidden — combo.lang follows the chosen
+// provider's group. Keep the current lang if the group serves it, else fall
+// back to the group's primary language.
+export function langForProviderUnderRaw(group: ProviderGroup, currentLang: TrackLang): TrackLang {
+  return GROUP_LANGS[group].includes(currentLang) ? currentLang : GROUP_PRIMARY_LANG[group]
+}

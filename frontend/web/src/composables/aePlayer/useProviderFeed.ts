@@ -8,14 +8,25 @@ function relevant(cap: ProviderCap, f: RowFilter): boolean {
   const g = cap.group
   // 18+ sources stay visible on a hentai title regardless of audio/lang toggle.
   if (GROUP_CONTENT[g].includes('hentai') && f.content === 'hentai') return true
-  return cap.audios.includes(f.audio) && GROUP_LANGS[g].includes(f.lang) && GROUP_CONTENT[g].includes(f.content)
+  if (!GROUP_CONTENT[g].includes(f.content)) return false
+  if (f.audio === 'dub') {
+    return cap.audios.includes('dub') && GROUP_LANGS[g].includes(f.lang)
+  }
+  // RAW (audio === 'sub'): original voices — any language group, sub OR raw caps.
+  // The language slider is hidden under RAW, so the lang filter is intentionally
+  // dropped: EN-sub, RU-sub and pure-JP sources all surface in one list.
+  return cap.audios.includes('sub') || cap.audios.includes('raw')
 }
 
 function toRow(cap: ProviderCap): ProviderRow {
+  // 'raw' caps are original-audio → surface as a 'sub' (RAW) row so a raw-only
+  // provider is selectable and contributes a sub combo to availability.
+  const audios = [...new Set(cap.audios.map((a) => (a === 'dub' ? 'dub' : 'sub')))]
+    .filter((a): a is AudioKind => a === 'sub' || a === 'dub')
   return {
     id: cap.provider, label: cap.display_name, group: cap.group, state: cap.state,
     selectable: cap.selectable, hackerOnly: cap.hacker_only, order: cap.order,
-    audios: cap.audios.filter((a): a is AudioKind => a === 'sub' || a === 'dub'),
+    audios,
     reason: cap.reason,
   }
 }

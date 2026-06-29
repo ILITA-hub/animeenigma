@@ -35,9 +35,56 @@ describe('rowsFromReport', () => {
     expect(rows.map(r => r.id)).toEqual(['gogoanime'])
   })
 
-  it('hides EN providers when the lang toggle is not EN', () => {
+  it('RAW ignores the language filter — EN sources show even when lang is not EN', () => {
+    // Under RAW (audio:'sub') the language slider is hidden; original-audio
+    // sources surface regardless of the lang value carried in the combo.
     const rows = rowsFromReport(report, { audio: 'sub', lang: 'ru', content: 'common' })
-    expect(rows).toHaveLength(0)
+    expect(rows.map(r => r.id)).toEqual(['gogoanime', 'animefever'])
+  })
+
+  it('RAW lists en, ru and jp original sources and maps a raw-only cap to a sub row', () => {
+    const multi = {
+      anime_id: 'm',
+      families: [
+        { family: 'ourenglish', providers: [
+          { provider: 'gogoanime', display_name: 'GogoAnime', state: 'active', selectable: true,
+            hacker_only: false, order: 90, group: 'en', audios: ['sub', 'dub'], variants: [] },
+        ] },
+        { family: 'ru', providers: [
+          { provider: 'kodik', display_name: 'Kodik', state: 'active', selectable: true,
+            hacker_only: false, order: 80, group: 'ru', audios: ['sub', 'dub'], variants: [] },
+        ] },
+        { family: 'raw', providers: [
+          { provider: 'raw', display_name: 'Raw', state: 'active', selectable: true,
+            hacker_only: false, order: 70, group: 'jp', audios: ['raw'], variants: [] },
+        ] },
+        { family: 'en', providers: [
+          { provider: 'dubonly', display_name: 'DubOnly', state: 'active', selectable: true,
+            hacker_only: false, order: 60, group: 'en', audios: ['dub'], variants: [] },
+        ] },
+      ],
+    } as unknown as CapabilityReport
+    const rows = rowsFromReport(multi, { audio: 'sub', lang: 'en', content: 'common' })
+    expect(rows.map(r => r.id)).toEqual(['gogoanime', 'kodik', 'raw'])
+    expect(rows.find(r => r.id === 'raw')!.audios).toEqual(['sub'])
+  })
+
+  it('DUB keeps the language gate (en vs ru)', () => {
+    const multi = {
+      anime_id: 'm',
+      families: [
+        { family: 'ourenglish', providers: [
+          { provider: 'gogoanime', display_name: 'GogoAnime', state: 'active', selectable: true,
+            hacker_only: false, order: 90, group: 'en', audios: ['sub', 'dub'], variants: [] },
+        ] },
+        { family: 'ru', providers: [
+          { provider: 'kodik', display_name: 'Kodik', state: 'active', selectable: true,
+            hacker_only: false, order: 80, group: 'ru', audios: ['sub', 'dub'], variants: [] },
+        ] },
+      ],
+    } as unknown as CapabilityReport
+    expect(rowsFromReport(multi, { audio: 'dub', lang: 'en', content: 'common' }).map(r => r.id)).toEqual(['gogoanime'])
+    expect(rowsFromReport(multi, { audio: 'dub', lang: 'ru', content: 'common' }).map(r => r.id)).toEqual(['kodik'])
   })
 
   it('keeps 18+ sources visible on a hentai title regardless of audio/lang', () => {
