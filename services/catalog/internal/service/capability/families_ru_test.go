@@ -18,14 +18,16 @@ import (
 var dbSeq atomic.Int64
 
 type fakeCatalog struct {
-	kodik     []domain.KodikTranslation
-	kodikErr  error
-	anilib    []domain.AnimeLibTranslation
-	anilibErr error
-	heps      []domain.HanimeEpisode
-	hepsErr   error
-	hstream   *domain.HanimeStream
-	hstreamEr error
+	kodik      []domain.KodikTranslation
+	kodikErr   error
+	anilib     []domain.AnimeLibTranslation
+	anilibErr  error
+	heps       []domain.HanimeEpisode
+	hepsErr    error
+	hstream    *domain.HanimeStream
+	hstreamEr  error
+	ajTeams    []domain.AnimejoyTeam
+	ajTeamsErr error
 }
 
 func (f fakeCatalog) GetKodikTranslations(_ context.Context, _ string) ([]domain.KodikTranslation, error) {
@@ -39,6 +41,9 @@ func (f fakeCatalog) GetHanimeEpisodes(_ context.Context, _ string) ([]domain.Ha
 }
 func (f fakeCatalog) GetHanimeStream(_ context.Context, _ string, _ string) (*domain.HanimeStream, error) {
 	return f.hstream, f.hstreamEr
+}
+func (f fakeCatalog) GetAnimejoyTeams(_ context.Context, _ string) ([]domain.AnimejoyTeam, error) {
+	return f.ajTeams, f.ajTeamsErr
 }
 
 // newDB builds an in-memory sqlite DB seeded with the given provider rows. It is
@@ -235,6 +240,143 @@ func TestKodikFamilyCarriesFeedFields(t *testing.T) {
 	p := fam.Providers[0]
 	if p.State != "active" || !p.Selectable || p.Group != "ru" || p.Order != 50 {
 		t.Fatalf("kodik feed fields wrong: %+v", p)
+	}
+}
+
+// ajRow builds a DEGRADED animejoy leg row (policy=manual → hacker-only via
+// deriveProviderView), mirroring the seeded animejoy-sibnet (w25) /
+// animejoy-allvideo (w20) DB rows.
+func ajRow(name string, weight int) domain.ScraperProvider {
+	return domain.ScraperProvider{
+		Name: name, Status: domain.StatusDegraded, Policy: domain.PolicyManual,
+		Group: "ru", PreferenceWeight: weight, SupportsSub: true,
+	}
+}
+
+func TestAnimejoyLegFamily_BothLegsPresentDegraded(t *testing.T) {
+	s := &Service{db: newDB(t, ajRow("animejoy-sibnet", 25), ajRow("animejoy-allvideo", 20))}
+	teams := []domain.AnimejoyTeam{{ID: "0", Name: "AnimeJoy", HasSibnet: true, HasAllVideo: true}}
+
+	sib, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-sibnet", "Sibnet", "sibnet")
+	if !ok || sib.Family != "animejoy-sibnet" || len(sib.Providers) != 1 {
+		t.Fatalf("sibnet family wrong: ok=%v fam=%+v", ok, sib)
+	}
+	av, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-allvideo", "AllVideo", "allvideo")
+	if !ok || av.Family != "animejoy-allvideo" || len(av.Providers) != 1 {
+		t.Fatalf("allvideo family wrong: ok=%v fam=%+v", ok, av)
+	}
+
+	for _, tc := range []struct {
+		fam   domain.SourceFamily
+		label string
+	}{{sib, "Sibnet"}, {av, "AllVideo"}} {
+		p := tc.fam.Providers[0]
+		if p.DisplayName != tc.label {
+			t.Errorf("%s display name = %q", tc.label, p.DisplayName)
+		}
+		if len(p.Variants) != 1 {
+			t.Fatalf("%s want 1 variant, got %d", tc.label, len(p.Variants))
+		}
+		v := p.Variants[0]
+		if v.Category != "sub" || v.SubDelivery != "hard" {
+			t.Errorf("%s variant wrong: %+v", tc.label, v)
+		}
+		if v.Source != "discovered" || v.QualitySource != "unknown" {
+			t.Errorf("%s variant provenance wrong: %+v", tc.label, v)
+		}
+		if v.Team == nil || v.Team.Name != "AnimeJoy" || v.Team.ID != "0" {
+			t.Errorf("%s team wrong: %+v", tc.label, v.Team)
+		}
+		// DEGRADED (policy=manual) → hacker-only, still selectable in hacker mode.
+		if p.State != "degraded" || !p.HackerOnly || !p.Selectable {
+			t.Errorf("%s feed view wrong: state=%q hackerOnly=%v selectable=%v", tc.label, p.State, p.HackerOnly, p.Selectable)
+		}
+	}
+}
+
+func TestAnimejoyLegFamily_SibnetOnlyDropsAllVideo(t *testing.T) {
+	s := &Service{db: newDB(t, ajRow("animejoy-sibnet", 25), ajRow("animejoy-allvideo", 20))}
+	teams := []domain.AnimejoyTeam{{ID: "0", HasSibnet: true, HasAllVideo: false}}
+
+	if _, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-sibnet", "Sibnet", "sibnet"); !ok {
+		t.Error("sibnet family should be present when a team has the sibnet leg")
+	}
+	if _, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-allvideo", "AllVideo", "allvideo"); ok {
+		t.Error("allvideo family must be ABSENT when no team has the allvideo leg")
+	}
+}
+
+func TestAnimejoyLegFamily_NoNameOmitsTeam(t *testing.T) {
+	s := &Service{db: newDB(t, ajRow("animejoy-sibnet", 25))}
+	teams := []domain.AnimejoyTeam{{ID: "0", Name: "", HasSibnet: true}}
+	fam, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-sibnet", "Sibnet", "sibnet")
+	if !ok {
+		t.Fatal("sibnet family should be present")
+	}
+	if v := fam.Providers[0].Variants[0]; v.Team != nil {
+		t.Errorf("empty team name must yield nil Team, got %+v", v.Team)
+	}
+}
+
+func TestAnimejoyLegFamily_EmptyTeamsAbsent(t *testing.T) {
+	s := &Service{db: newDB(t, ajRow("animejoy-sibnet", 25))}
+	if _, ok := s.animejoyLegFamily(context.Background(), nil, "animejoy-sibnet", "Sibnet", "sibnet"); ok {
+		t.Error("no teams → family must be absent (no_content), not present")
+	}
+}
+
+func TestAnimejoyLegFamily_OmittedWhenRowDisabled(t *testing.T) {
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "animejoy-sibnet", Status: domain.StatusDisabled, Group: "ru"})}
+	teams := []domain.AnimejoyTeam{{ID: "0", HasSibnet: true}}
+	if _, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-sibnet", "Sibnet", "sibnet"); ok {
+		t.Fatal("animejoy leg family must be omitted when its DB row is disabled")
+	}
+}
+
+func TestBuildFamilies_AnimejoyBothLegsInOrder(t *testing.T) {
+	db := newDB(t,
+		domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 90},
+		ajRow("animejoy-sibnet", 25),
+		ajRow("animejoy-allvideo", 20),
+	)
+	s := NewService(db, nil, fakeCatalog{
+		ajTeams: []domain.AnimejoyTeam{{ID: "0", Name: "AnimeJoy", HasSibnet: true, HasAllVideo: true}},
+	}, nil, nil, nil)
+
+	fams, err := s.buildFamilies(context.Background(), "uuid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, len(fams))
+	for i, f := range fams {
+		got[i] = f.Family
+	}
+	want := []string{"ourenglish", "animejoy-sibnet", "animejoy-allvideo"}
+	if len(got) != len(want) {
+		t.Fatalf("families = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("families = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestBuildFamilies_AnimejoyDiscoveryErrorBothAbsent(t *testing.T) {
+	db := newDB(t,
+		domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 90},
+		ajRow("animejoy-sibnet", 25),
+		ajRow("animejoy-allvideo", 20),
+	)
+	// Discovery error → GetAnimejoyTeams returns nil teams → both leg families
+	// absent; the feed still builds (EN-only).
+	s := NewService(db, nil, fakeCatalog{ajTeamsErr: errors.New("not on animejoy")}, nil, nil, nil)
+	fams, err := s.buildFamilies(context.Background(), "uuid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fams) != 1 || fams[0].Family != "ourenglish" {
+		t.Fatalf("discovery error should yield EN-only, got %+v", fams)
 	}
 }
 

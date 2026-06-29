@@ -17,6 +17,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animejoy"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animelib"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jikan"
@@ -38,6 +39,7 @@ type CatalogService struct {
 	jimakuClient    *jimaku.Client
 	animelibClient  *animelib.Client
 	hanimeClient    *hanime.Client
+	animejoyClient  *animejoy.Client
 	idMappingClient *idmapping.Client
 	// aniListAiring resolves AniList's broadcaster airing schedule for the
 	// calendar reconciler. Defaults to the same idmapping client; an interface
@@ -157,6 +159,7 @@ func NewCatalogService(
 		jimakuClient:           jimakuClient,
 		animelibClient:         animelibClient,
 		hanimeClient:           hanimeClient,
+		animejoyClient:         animejoy.NewClient(),
 		idMappingClient:        idMapClient,
 		aniListAiring:          idMapClient,
 		aniListReconcilePacing: 500 * time.Millisecond,
@@ -1612,6 +1615,102 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 	// Cache for 1 hour
 	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
 
+	return result, nil
+}
+
+// mapAnimejoyTeams reduces the discovery playlist's per-episode legs to the
+// per-team presence flags the capability feed needs. PURE: HasSibnet /
+// HasAllVideo report whether ANY episode of a team carries that leg's embed URL.
+// Order is preserved.
+func mapAnimejoyTeams(teams []animejoy.Team) []domain.AnimejoyTeam {
+	out := make([]domain.AnimejoyTeam, 0, len(teams))
+	for _, t := range teams {
+		dt := domain.AnimejoyTeam{ID: t.ID, Name: t.Name}
+		for _, ep := range t.Episodes {
+			if ep.Sibnet != "" {
+				dt.HasSibnet = true
+			}
+			if ep.AllVideo != "" {
+				dt.HasAllVideo = true
+			}
+		}
+		out = append(out, dt)
+	}
+	return out
+}
+
+// animejoyTitlesFor gathers the lookup titles for AnimeJoy discovery, primary
+// first: romaji (Name), then English / Russian / Japanese variants, deduped and
+// blank-stripped. AnimeJoy's DLE search keys on the first title; the rest feed
+// the fuzzy scorer.
+func animejoyTitlesFor(anime *domain.Anime) []string {
+	titles := make([]string, 0, 4)
+	seen := map[string]bool{}
+	for _, t := range []string{anime.Name, anime.NameEN, anime.NameRU, anime.NameJP} {
+		t = strings.TrimSpace(t)
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		titles = append(titles, t)
+	}
+	return titles
+}
+
+// GetAnimejoyTeams resolves AnimeJoy discovery ONCE for an anime and returns the
+// per-leg (Sibnet/AllVideo) team presence shared by both animejoy leg families.
+// Best-effort and CACHED (3h, keyed by anime_id) — a discovery miss or error
+// yields an empty list, never blocks the capability feed. RU-sub only.
+func (s *CatalogService) GetAnimejoyTeams(ctx context.Context, animeID string) (_ []domain.AnimejoyTeam, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("animejoy", "get_teams", start, &retErr)
+
+	if s.animejoyClient == nil {
+		return []domain.AnimejoyTeam{}, nil
+	}
+
+	anime, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheKey := fmt.Sprintf("animejoy:teams:%s", animeID)
+	var cached []domain.AnimejoyTeam
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	titles := animejoyTitlesFor(anime)
+	if len(titles) == 0 {
+		_ = s.cache.Set(ctx, cacheKey, []domain.AnimejoyTeam{}, 3*time.Hour)
+		return []domain.AnimejoyTeam{}, nil
+	}
+
+	q := animejoy.Query{
+		Titles: titles,
+		Year:   anime.Year,
+		Season: animejoy.DetectSeason(anime.Name), // best-effort; MVP caveat (defaults to 1)
+		Kind:   anime.Kind,
+	}
+
+	newsID, err := s.animejoyClient.ResolveNewsID(ctx, q)
+	if err != nil {
+		s.log.Warnw("animejoy news_id unresolved; returning no teams",
+			"anime_id", animeID, "name", anime.Name, "error", err)
+		_ = s.cache.Set(ctx, cacheKey, []domain.AnimejoyTeam{}, 3*time.Hour)
+		return []domain.AnimejoyTeam{}, nil
+	}
+
+	teams, err := s.animejoyClient.FetchPlaylist(ctx, newsID)
+	if err != nil {
+		s.log.Warnw("animejoy playlist fetch failed; returning no teams",
+			"anime_id", animeID, "news_id", newsID, "error", err)
+		_ = s.cache.Set(ctx, cacheKey, []domain.AnimejoyTeam{}, 3*time.Hour)
+		return []domain.AnimejoyTeam{}, nil
+	}
+
+	result := mapAnimejoyTeams(teams)
+	_ = s.cache.Set(ctx, cacheKey, result, 3*time.Hour)
 	return result, nil
 }
 

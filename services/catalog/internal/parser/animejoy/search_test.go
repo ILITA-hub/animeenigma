@@ -6,6 +6,21 @@ import (
 	"testing"
 )
 
+func TestDetectSeasonExported(t *testing.T) {
+	cases := map[string]int{
+		"Re:Zero (2 сезон)":           2,
+		"Frieren":                     1, // no marker → MVP default of 1
+		"Attack on Titan Season 3":    3,
+		"Some Show 2nd Season":        2,
+		"Восставший… 1 сезон [25/25]": 1,
+	}
+	for title, want := range cases {
+		if got := DetectSeason(title); got != want {
+			t.Errorf("DetectSeason(%q) = %d, want %d", title, got, want)
+		}
+	}
+}
+
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", name))
