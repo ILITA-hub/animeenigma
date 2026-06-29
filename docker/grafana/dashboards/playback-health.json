@@ -626,20 +626,21 @@
           "options": {
             "excludeByName": {
               "Time": true,
-              "Health": true
+              "Health": true,
+              "Last probed": true
             },
             "indexByName": {
               "provider": 0,
-              "Group": 1,
-              "State": 2,
-              "Policy": 3,
-              "playability": 4,
-              "Resolved via": 5,
-              "Last probed": 6,
+              "State": 1,
+              "Policy": 2,
+              "playability": 3,
+              "AI Probe Notes": 4,
+              "Description": 5,
+              "reasons": 6,
               "probed_at": 7,
-              "reasons": 8,
-              "Description": 9,
-              "AI Probe Notes": 10
+              "Group": 8,
+              "Resolved via": 9,
+              "Last probed": 10
             },
             "renameByName": {
               "provider": "Provider",
