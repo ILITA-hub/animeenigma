@@ -498,7 +498,10 @@
         "providerLabel": "Провайдер",
         "langLabel": "Язык",
         "clearSearch": "Очистить поиск",
-        "hardsub": "Субтитры вшиты в видео ({provider})"
+        "hardsub": "Субтитры вшиты в видео ({provider})",
+        "autoSync": "Автосинхрон",
+        "autoSyncHint": "Автоматически подгонять субтитры под звук",
+        "autoSyncDebug": { "state": "{status} · {offset}с · {conf}%", "event": "{delta}с (VAD) {'@'} {from}–{to} ({conf}%)" }
       }
     }
   },

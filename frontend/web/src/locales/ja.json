@@ -498,7 +498,10 @@
         "providerLabel": "プロバイダー",
         "langLabel": "言語",
         "clearSearch": "検索をクリア",
-        "hardsub": "字幕は{provider}によって映像に焼き込まれています"
+        "hardsub": "字幕は{provider}によって映像に焼き込まれています",
+        "autoSync": "自動同期",
+        "autoSyncHint": "字幕を音声に自動的に合わせる",
+        "autoSyncDebug": { "state": "{status} · {offset}秒 · {conf}%", "event": "{delta}秒 (VAD) {'@'} {from}–{to} ({conf}%)" }
       }
     }
   },

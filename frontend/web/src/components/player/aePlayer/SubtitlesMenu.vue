@@ -136,6 +136,38 @@
         <span class="w-9 flex-shrink-0 text-right text-[12px] text-[var(--muted-foreground)]">{{ subBg }}%</span>
       </div>
 
+      <!-- Auto-sync -->
+      <div class="flex items-center gap-3 px-3 py-2">
+        <div class="flex-1">
+          <div class="text-[13px] text-[var(--ink-2)]">{{ $t('player.aePlayer.subs.autoSync') }}</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">{{ $t('player.aePlayer.subs.autoSyncHint') }}</div>
+        </div>
+        <span data-test="autosync-switch">
+          <Switch :model-value="autoSync" @update:model-value="emit('update:autoSync', $event)" />
+        </span>
+      </div>
+
+      <!-- Auto-sync debug (hacker mode) -->
+      <div
+        v-if="autoSyncInfo"
+        data-test="autosync-debug"
+        class="px-3 pb-2 font-mono text-[11px] leading-[1.7] text-[var(--success)]"
+      >
+        <div>{{ $t('player.aePlayer.subs.autoSyncDebug.state', {
+          status: autoSyncInfo.status,
+          offset: autoSyncInfo.offset.toFixed(1),
+          conf: Math.round(autoSyncInfo.confidence * 100),
+        }) }}</div>
+        <div v-for="(ev, i) in autoSyncInfo.events" :key="i">
+          {{ $t('player.aePlayer.subs.autoSyncDebug.event', {
+            delta: (ev.delta >= 0 ? '+' : '') + ev.delta.toFixed(1),
+            from: fmtResume(ev.windowStart),
+            to: fmtResume(ev.windowEnd),
+            conf: Math.round(ev.confidence * 100),
+          }) }}
+        </div>
+      </div>
+
       <!-- Timing offset -->
       <div class="flex items-center gap-3 px-3 py-2">
         <label class="w-[72px] flex-shrink-0 text-[13px] text-[var(--ink-2)]">{{ $t('player.aePlayer.subs.timing') }}</label>
@@ -166,6 +198,9 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { List, ChevronRight, ChevronLeft, Settings2 } from 'lucide-vue-next'
 import Stepper from '@/components/ui/Stepper.vue'
+import Switch from '@/components/ui/Switch.vue'
+import { fmtResume } from '@/composables/aePlayer/episodeProgress'
+import type { SyncEvent } from '@/composables/aePlayer/subtitleAlign'
 
 const { t: $t } = useI18n()
 
@@ -182,6 +217,8 @@ const props = defineProps<{
   subSize: number
   subBg: number
   subOffset: number
+  autoSync: boolean
+  autoSyncInfo?: { status: string; offset: number; confidence: number; events: SyncEvent[] } | null
 }>()
 
 const emit = defineEmits<{
@@ -190,6 +227,7 @@ const emit = defineEmits<{
   (e: 'update:subBg', value: number): void
   (e: 'update:subOffset', value: number): void
   (e: 'open-browse'): void
+  (e: 'update:autoSync', value: boolean): void
 }>()
 
 const face = ref<'caps' | 'style'>('caps')

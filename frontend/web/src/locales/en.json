@@ -498,7 +498,10 @@
         "providerLabel": "Provider",
         "langLabel": "Lang",
         "clearSearch": "Clear search",
-        "hardsub": "Subtitles are burned into the video by {provider}"
+        "hardsub": "Subtitles are burned into the video by {provider}",
+        "autoSync": "Auto-sync",
+        "autoSyncHint": "Automatically align subtitles to the audio",
+        "autoSyncDebug": { "state": "{status} · {offset}s · {conf}%", "event": "{delta}s (VAD) {'@'} {from}–{to} ({conf}%)" }
       }
     }
   },
