@@ -59,8 +59,9 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	if !okru.IsEnabled() || okru.Group != "en" || !okru.ScraperOperated {
 		t.Errorf("okru seeded wrong (want en/enabled/scraper-operated): %+v", okru)
 	}
-	if !okru.SupportsSub || !okru.SupportsDub || okru.SubDelivery != "hard" || okru.PreferenceWeight != 35 {
-		t.Errorf("okru capabilities wrong (want sub+dub/hard/35): %+v", okru)
+	// sub_delivery "unknown": claimed hard but unverified by the 2026-06-29 subprobe (stream down).
+	if !okru.SupportsSub || !okru.SupportsDub || okru.SubDelivery != "unknown" || okru.PreferenceWeight != 35 {
+		t.Errorf("okru capabilities wrong (want sub+dub/unknown/35): %+v", okru)
 	}
 }
 

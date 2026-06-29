@@ -25,7 +25,9 @@ var defaultProviders = []domain.ScraperProvider{
 			"or a down bare host — unsolvable from our egress. Degraded: out of auto-failover, " +
 			"manually selectable (hacker mode). Its ok.ru ('Ok') sources are served clock-free by " +
 			"the 'okru' provider. Existing DBs flipped via AllAnimeDegrade.",
-		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
+		// sub_delivery "unknown": claimed hard, but unverifiable by the 2026-06-29
+		// subprobe (stream stage down — Cloudflare clock). Do not assert burned-in.
+		SupportsSub: true, SupportsDub: true, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 90,
 	},
 	{
@@ -35,7 +37,10 @@ var defaultProviders = []domain.ScraperProvider{
 			"ok.ru ('Ok') sources via ok.ru data-options metadata → okcdn.ru HLS, bypassing the " +
 			"Cloudflare-Turnstile-walled /apivtwo/clock endpoint that broke allanime. EN sub/dub, " +
 			"hardsubbed (ok.ru has no soft-sub track).",
-		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
+		// sub_delivery "unknown": unverifiable by the 2026-06-29 subprobe (stream
+		// stage down). ok.ru has no soft-sub track so subs are *likely* burned-in,
+		// but we never confirmed it — don't assert hard.
+		SupportsSub: true, SupportsDub: true, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 35,
 	},
 	{
@@ -54,7 +59,9 @@ var defaultProviders = []domain.ScraperProvider{
 			"megaplay.buzz player. The stream id + CDN host (mewstream.buzz → cinewave2.site " +
 			"→ …) are built at runtime by the player JS and the CDN is Referer-gated, so the " +
 			"stealth-scraper drives a real browser and intercepts the .m3u8 (engine=browser).",
-		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
+		// sub_delivery verified soft 2026-06-29 (subprobe): megaplay serves CLEAN
+		// video + multi-language soft .vtt tracks (EN/RU/+7), NOT burned-in.
+		SupportsSub: true, SupportsDub: true, SubDelivery: "soft",
 		QualityCeiling: "1080p", PreferenceWeight: 85,
 	},
 	{
@@ -75,7 +82,9 @@ var defaultProviders = []domain.ScraperProvider{
 			"fails. The exact trigger for the ad swap is not confirmed. " +
 			"Degraded: kept manually selectable (hacker mode) but out of the auto-failover chain. " +
 			"Existing DBs updated via AnimefeverDeclaim.",
-		SupportsSub: true, SupportsDub: false, SubDelivery: "hard",
+		// sub_delivery "unknown": claimed hard, unverifiable by the 2026-06-29
+		// subprobe (degraded — ad-substituted segments 403, playback fails).
+		SupportsSub: true, SupportsDub: false, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 60,
 	},
 	{
@@ -122,7 +131,9 @@ var defaultProviders = []domain.ScraperProvider{
 		Reason: "Stub — ListServers unimplemented (SCRAPER-KAI-03)",
 		Description: "animekai provider is a stub; ListServers returns ErrProviderDown. " +
 			"Disabled until implemented so it never wastes a failover slot.",
-		SupportsSub: true, SupportsDub: false, SubDelivery: "hard",
+		// sub_delivery "unknown": claimed hard, but animekai is a disabled stub
+		// (ListServers unimplemented) — never probed, so don't assert burned-in.
+		SupportsSub: true, SupportsDub: false, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
 	{
