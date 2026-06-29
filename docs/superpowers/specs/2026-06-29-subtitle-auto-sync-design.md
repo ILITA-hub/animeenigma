@@ -78,8 +78,23 @@ useSubtitleAutoSync({
   autoOffset: Ref<number>,         // seconds, same sign convention as manual
   status: Ref<'idle' | 'listening' | 'locked' | 'unsupported'>,
   confidence: Ref<number>,         // 0..1, peak prominence of the chosen offset
+  syncEvents: Ref<SyncEvent[]>,    // bounded change-log (last N, e.g. 10), newest-first
+}
+
+type SyncEvent = {
+  atMediaTime: number,             // video.currentTime (s) when the change was applied
+  fromOffset: number,              // previous autoOffset (s)
+  toOffset: number,                // new autoOffset (s)
+  delta: number,                   // toOffset - fromOffset (s)
+  confidence: number,              // 0..1 of the chosen offset
+  windowStart: number,             // analyzed window interval (s) that produced it
+  windowEnd: number,
+  reason: 'lock' | 'resync',       // initial lock vs. step/eyecatch re-sync
 }
 ```
+A `SyncEvent` is pushed on every `autoOffset` change — the initial lock (`reason='lock'`)
+and each step/eyecatch re-sync (`reason='resync'`). The list is bounded (newest-first,
+~10) and reset on `episodeKey` change. This is the data behind the hacker-mode log (3.5).
 
 **Audio tap.** On first enable with a usable `videoElement`:
 - `const ctx = new AudioContext()`
@@ -170,9 +185,17 @@ useSubtitleAutoSyncPref(episodeKey: Ref<string>)
 
 ### 3.5 Hacker-mode debug readout
 
-When `state.hackerMode` is on, the Subtitles menu shows: `status`, `autoOffset` (s), and
-`confidence` (%). Lets the owner verify the engine is locking. Pure display; gated; no
-effect when hacker mode is off.
+When `state.hackerMode` is on, the Subtitles menu shows a debug panel:
+
+- **Current state line:** `status` · current **auto-offset** (s, signed) · `confidence` (%).
+- **VAD change-log:** the `syncEvents` list (newest-first), one row per change, e.g.
+  `Changed by +1.2s (VAD) @ 10:00–12:30` — i.e. `delta` (signed), the `reason` (VAD
+  lock/resync), and the analyzed `windowStart–windowEnd` interval as `mm:ss`. Showing the
+  interval makes step/eyecatch re-syncs legible (you see *when* and *over what window* the
+  correction was decided). Confidence per row shown as a trailing `(NN%)`.
+
+Pure display; gated on `hackerMode`; no effect when hacker mode is off. Empty log while
+`listening`/`idle`. i18n keys under `player.aePlayer.subs.autoSyncDebug.*` (en/ru/ja parity).
 
 ## 4. Manual-offset interaction (explicit)
 
@@ -212,6 +235,9 @@ Turning auto-sync OFF instantly drops `autoOffset` to 0 (manual value preserved)
   sign convention (subs-early ⇒ positive offset); confidence gate ⇒ no-op below threshold;
   warm-up gate ⇒ no-op below `MIN_SPEECH`.
 - **Step re-sync:** a synthetic mid-timeline jump is detected and the segment offset adopted.
+- **Change-log:** `syncEvents` records an entry on initial lock (`reason='lock'`) and on
+  step re-sync (`reason='resync'`) with correct `delta`/`windowStart..End`; list is bounded
+  (newest-first) and reset on `episodeKey` change.
 - **Volume/mute mirror:** gain tracks `videoElement.volume`/`muted`.
 - **Apply path:** `effectiveOffset = autoOffset + subOffset`; auto OFF ⇒ equals `subOffset`.
 - **Menu:** Switch reflects + emits pref; hacker readout shows status/offset/confidence.
