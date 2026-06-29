@@ -28,13 +28,18 @@ function cellClass(b: ShowcaseBlock): string {
   return spanClasses(b.w || s.defW, b.h || s.defH)
 }
 
+// The showcase API returns either a bare payload or a {data: payload}
+// envelope — unwrap both shapes in one place.
+type ShowcasePayload = { blocks: ShowcaseBlock[]; enabled: boolean }
+function unwrap(res: { data: ShowcasePayload | { data: ShowcasePayload } }): ShowcasePayload {
+  return 'data' in res.data ? res.data.data : res.data
+}
+
 async function load() {
   loading.value = true
   try {
     const res = await showcaseApi.getShowcase(props.userId)
-    const data = 'data' in res.data
-      ? (res.data as { data: { blocks: ShowcaseBlock[]; enabled: boolean } }).data
-      : (res.data as { blocks: ShowcaseBlock[]; enabled: boolean })
+    const data = unwrap(res)
     blocks.value = data.blocks ?? []
     enabled.value = !!data.enabled
   } catch {
@@ -49,11 +54,8 @@ async function load() {
 async function onSave(next: ShowcaseBlock[], nextEnabled: boolean) {
   try {
     const res = await showcaseApi.saveShowcase(next, nextEnabled)
-    const data = 'data' in res.data
-      ? (res.data as { data: { blocks: ShowcaseBlock[]; enabled: boolean } }).data
-      : (res.data as { blocks: ShowcaseBlock[]; enabled: boolean })
     // Backend coerces enabled=false for an empty showcase — trust its echo.
-    const coerced = !!data.enabled
+    const coerced = !!unwrap(res).enabled
     blocks.value = next
     enabled.value = coerced
     editing.value = false

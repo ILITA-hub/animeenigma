@@ -1,5 +1,16 @@
 export type ShowcaseState = 'none' | 'hidden' | 'visible'
 
+/**
+ * Derive the showcase visibility state from a (enabled, block count) pair.
+ * Mirrors the backend mapping (auth GetShowcaseState): empty ⇒ 'none',
+ * otherwise 'visible' when published / 'hidden' when not. Single FE source of
+ * truth so the post-save state update can't drift from the backend rule.
+ */
+export function deriveShowcaseState(enabled: boolean, count: number): ShowcaseState {
+  if (count === 0) return 'none'
+  return enabled ? 'visible' : 'hidden'
+}
+
 export type ShowcaseBlockType =
   | 'about'
   | 'favorite_anime'

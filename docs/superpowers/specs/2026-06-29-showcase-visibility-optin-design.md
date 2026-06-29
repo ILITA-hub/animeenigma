@@ -245,6 +245,17 @@ the same field.
   the route; **required before the public flag-flip** (add optional-auth on the
   GET route → return `{blocks: [], enabled: false}` for non-owner + disabled).
 - Gacha coupling untouched (`card_collection` still renders the viewer's cards).
+- **Owner self-profile fetch (pre-release cleanup):** an owner viewing their own
+  profile makes one extra best-effort `getUserProfile` call to learn
+  `showcase_state` (authStore's user object doesn't carry it). Gated to
+  wall-visible (admins) for now. Before the public flag-flip, carry
+  `showcase_state` on the authenticated self-profile (authStore / `/users/profile`)
+  to drop the extra request.
+- **Auth→player schema coupling (future hardening):** `GetShowcaseState` reads
+  `profile_showcases` column names via raw SQL. Self-healing on error, but a
+  player column rename would silently degrade to `none`. If this seam ever
+  hardens, expose it as a player-owned DB view (`showcase_visibility_state`) auth
+  SELECTs, decoupling auth from the underlying columns.
 
 ## Metrics
 

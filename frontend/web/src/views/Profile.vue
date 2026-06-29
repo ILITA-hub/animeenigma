@@ -876,7 +876,7 @@ import TimezoneCard from '@/components/profile/TimezoneCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
 import ProfileShowcase from '@/components/profile/showcase/ProfileShowcase.vue'
-import type { ShowcaseState } from '@/types/showcase'
+import { deriveShowcaseState, type ShowcaseState } from '@/types/showcase'
 import { useProfileWallVisible } from '@/utils/profileWallGate'
 import { AnimeContextMenu, PosterCard } from '@/components/anime'
 import WatchlistRow from '@/components/profile/WatchlistRow.vue'
@@ -1021,9 +1021,10 @@ const memberSinceYear = computed(() => {
 // ── Showcase visibility (per-user opt-in, under the dark-ship gate) ───────
 // One rule: the tab shows ⟺ the showcase is `visible`. The only owner-specific
 // surface is the header Add/Edit button, shown when it's NOT visible.
-const localShowcaseState = ref<ShowcaseState | null>(null) // post-save override
+// Single source of truth: profileUser.showcase_state (seeded by the profile
+// fetch, updated in place after an owner save — see onShowcaseChange).
 const effectiveShowcaseState = computed<ShowcaseState>(
-  () => localShowcaseState.value ?? (profileUser.value?.showcase_state as ShowcaseState) ?? 'none',
+  () => (profileUser.value?.showcase_state as ShowcaseState) ?? 'none',
 )
 const forceShowcaseEditing = ref(false) // owner reveal via the header button
 const tabTouched = ref(false) // user has manually picked a tab
@@ -1097,7 +1098,7 @@ function onShowcaseLoaded(count: number) {
 }
 
 function onShowcaseChange(p: { enabled: boolean; count: number }) {
-  localShowcaseState.value = p.count === 0 ? 'none' : (p.enabled ? 'visible' : 'hidden')
+  if (profileUser.value) profileUser.value.showcase_state = deriveShowcaseState(p.enabled, p.count)
 }
 
 function onShowcaseEditorClosed() {
