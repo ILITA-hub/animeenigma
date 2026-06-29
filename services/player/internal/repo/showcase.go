@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	stderrors "errors"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
@@ -33,12 +34,20 @@ func (r *ShowcaseRepository) Get(ctx context.Context, userID string) (*domain.Pr
 	return &s, nil
 }
 
-// Upsert writes the full blocks JSON for a user (insert or replace).
-func (r *ShowcaseRepository) Upsert(ctx context.Context, userID, blocksJSON string) error {
-	row := domain.ProfileShowcase{UserID: userID, Blocks: blocksJSON}
+// Upsert writes the full blocks JSON + enabled flag for a user (insert or
+// replace). On conflict we use explicit clause.Assignments (not
+// AssignmentColumns): a false `enabled` is GORM's zero value, which the
+// column-name form would omit from the UPDATE — explicit values are robust and
+// portable across Postgres/SQLite.
+func (r *ShowcaseRepository) Upsert(ctx context.Context, userID, blocksJSON string, enabled bool) error {
+	row := domain.ProfileShowcase{UserID: userID, Blocks: blocksJSON, Enabled: enabled}
 	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"blocks", "updated_at"}),
+		Columns: []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"blocks":     blocksJSON,
+			"enabled":    enabled,
+			"updated_at": time.Now(),
+		}),
 	}).Create(&row).Error
 	if err != nil {
 		return errors.Wrap(err, errors.CodeInternal, "failed to upsert showcase")

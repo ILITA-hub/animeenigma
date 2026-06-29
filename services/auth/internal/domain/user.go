@@ -23,6 +23,16 @@ func ValidActivityVisibility(v string) bool {
 	return v == ActivityVisibilityAll || v == ActivityVisibilityNonHentai || v == ActivityVisibilityNone
 }
 
+// ShowcaseState values — the cheap visibility signal carried on PublicUser so
+// the FE knows whether to show the profile showcase tab WITHOUT fetching the
+// (player-owned) showcase blocks. Derived by a co-located in-DB read of the
+// player-owned profile_showcases table (see UserRepository.GetShowcaseState).
+const (
+	ShowcaseStateNone    = "none"    // no showcase row, or blocks empty
+	ShowcaseStateHidden  = "hidden"  // has content but enabled = false
+	ShowcaseStateVisible = "visible" // enabled = true (player coerces enabled ⟹ non-empty)
+)
+
 // User represents a user in the system
 type User struct {
 	ID             string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
@@ -34,14 +44,14 @@ type User struct {
 	// ActivityVisibility is enforced server-side by the player service
 	// (activity feed + public watchlist reads) — see
 	// docs/superpowers/specs/2026-06-12-activity-visibility-design.md.
-	ActivityVisibility string `gorm:"size:20;default:'all'" json:"activity_visibility"`
-	Avatar         string         `gorm:"type:text" json:"avatar,omitempty"`
-	Timezone       string         `gorm:"size:64" json:"timezone,omitempty"`
-	ApiKeyHash     *string        `gorm:"size:64;uniqueIndex" json:"-"`
-	Role           authz.Role     `gorm:"size:20;default:'user'" json:"role"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	ActivityVisibility string         `gorm:"size:20;default:'all'" json:"activity_visibility"`
+	Avatar             string         `gorm:"type:text" json:"avatar,omitempty"`
+	Timezone           string         `gorm:"size:64" json:"timezone,omitempty"`
+	ApiKeyHash         *string        `gorm:"size:64;uniqueIndex" json:"-"`
+	Role               authz.Role     `gorm:"size:20;default:'user'" json:"role"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // RegisterRequest represents a registration request
@@ -171,6 +181,11 @@ type PublicUser struct {
 	PublicStatuses []string  `json:"public_statuses"`
 	Avatar         string    `json:"avatar,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
+	// ShowcaseState is a co-located denormalization of the player-owned
+	// profile_showcases table, set by the service layer (ToPublic has no DB
+	// access, so it leaves this as the zero value "" — the service overwrites
+	// it). One of ShowcaseStateNone/Hidden/Visible.
+	ShowcaseState string `json:"showcase_state"`
 }
 
 // ToPublic converts a User to PublicUser. When the user hid all activity,

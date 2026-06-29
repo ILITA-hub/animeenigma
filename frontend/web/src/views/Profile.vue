@@ -55,6 +55,15 @@
 
             <!-- Action Buttons -->
             <div class="flex gap-2">
+              <!-- Showcase entry (owner, showcase not visible). Add / Edit by state. -->
+              <button
+                v-if="showcaseEntryButton"
+                @click="openShowcaseEditor"
+                class="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 backdrop-blur-xl border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+              >
+                <LayoutGrid class="size-5" />
+                <span>{{ effectiveShowcaseState === 'hidden' ? $t('profile.editShowcase') : $t('profile.addShowcase') }}</span>
+              </button>
               <!-- Share Button -->
               <button
                 v-if="profileUser.public_id"
@@ -71,14 +80,18 @@
 
       <!-- Tabs -->
       <div class="max-w-4xl mx-auto px-4">
-        <Tabs v-model="activeTab" :tabs="tabs" variant="underline" full-width class="mb-6">
+        <Tabs :model-value="activeTab" @update:model-value="onTabChange" :tabs="tabs" variant="underline" full-width class="mb-6">
           <!-- Showcase Tab (dark-ship gate: VITE_PROFILE_WALL_ADMIN_ONLY) -->
-          <template v-if="profileWallVisible" #showcase>
+          <!-- One rule: shown ⟺ showcase is visible (or owner-revealed via the header button). -->
+          <template v-if="showcaseTabVisible" #showcase>
             <ProfileShowcase
               v-if="profileUser?.id"
               :user-id="profileUser.id"
               :is-owner="!!isOwnProfile"
+              :auto-edit="forceShowcaseEditing"
               @loaded="onShowcaseLoaded"
+              @change="onShowcaseChange"
+              @editor-closed="onShowcaseEditorClosed"
             />
           </template>
 
@@ -863,6 +876,7 @@ import TimezoneCard from '@/components/profile/TimezoneCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
 import ProfileShowcase from '@/components/profile/showcase/ProfileShowcase.vue'
+import type { ShowcaseState } from '@/types/showcase'
 import { useProfileWallVisible } from '@/utils/profileWallGate'
 import { AnimeContextMenu, PosterCard } from '@/components/anime'
 import WatchlistRow from '@/components/profile/WatchlistRow.vue'
@@ -917,6 +931,7 @@ interface ProfileUser {
   role?: string
   avatar?: string
   created_at?: string
+  showcase_state?: ShowcaseState
 }
 
 const router = useRouter()
@@ -1003,11 +1018,43 @@ const memberSinceYear = computed(() => {
   return new Date().getFullYear()
 })
 
+// ── Showcase visibility (per-user opt-in, under the dark-ship gate) ───────
+// One rule: the tab shows ⟺ the showcase is `visible`. The only owner-specific
+// surface is the header Add/Edit button, shown when it's NOT visible.
+const localShowcaseState = ref<ShowcaseState | null>(null) // post-save override
+const effectiveShowcaseState = computed<ShowcaseState>(
+  () => localShowcaseState.value ?? (profileUser.value?.showcase_state as ShowcaseState) ?? 'none',
+)
+const forceShowcaseEditing = ref(false) // owner reveal via the header button
+const tabTouched = ref(false) // user has manually picked a tab
+
+const showcaseTabVisible = computed(
+  () =>
+    profileWallVisible.value &&
+    (effectiveShowcaseState.value === 'visible' ||
+      (isOwnProfile.value && forceShowcaseEditing.value)),
+)
+
+// Header button: owner, showcase not visible, not already revealing the editor.
+const showcaseEntryButton = computed(
+  () =>
+    profileWallVisible.value &&
+    !!isOwnProfile.value &&
+    effectiveShowcaseState.value !== 'visible' &&
+    !forceShowcaseEditing.value,
+)
+
+function openShowcaseEditor() {
+  forceShowcaseEditing.value = true
+  tabTouched.value = true
+  activeTab.value = 'showcase'
+}
+
 // Tabs
-const activeTab = ref(profileWallVisible.value ? 'showcase' : 'watchlist')
+const activeTab = ref('watchlist')
 const tabs = computed(() => {
   const baseTabs: Array<{ value: string; label: string }> = []
-  if (profileWallVisible.value) baseTabs.push({ value: 'showcase', label: t('profile.tabs.showcase') })
+  if (showcaseTabVisible.value) baseTabs.push({ value: 'showcase', label: t('profile.tabs.showcase') })
   baseTabs.push({ value: 'watchlist', label: t('profile.tabs.watchlist') })
   if (isOwnProfile.value && gachaVisible.value) {
     baseTabs.push({ value: 'collection', label: t('gacha.collection_tab') })
@@ -1020,10 +1067,41 @@ const tabs = computed(() => {
   return baseTabs
 })
 
+// Promote showcase to the default tab once we learn (async) it's visible —
+// but only if the user hasn't already picked a tab. And if the tab disappears
+// (owner cancelled the editor / saved as hidden) while it was active, fall
+// back to the watchlist so the panel isn't left blank.
+watch(showcaseTabVisible, (visible) => {
+  if (
+    visible &&
+    effectiveShowcaseState.value === 'visible' &&
+    !tabTouched.value &&
+    activeTab.value === 'watchlist'
+  ) {
+    activeTab.value = 'showcase'
+  } else if (!visible && activeTab.value === 'showcase') {
+    activeTab.value = 'watchlist'
+  }
+})
+
+// Wrap the Tabs v-model so any manual tab pick freezes the auto-promotion.
+function onTabChange(next: string) {
+  tabTouched.value = true
+  activeTab.value = next
+}
+
 function onShowcaseLoaded(count: number) {
   if (count === 0 && !isOwnProfile.value && activeTab.value === 'showcase') {
     activeTab.value = 'watchlist'
   }
+}
+
+function onShowcaseChange(p: { enabled: boolean; count: number }) {
+  localShowcaseState.value = p.count === 0 ? 'none' : (p.enabled ? 'visible' : 'hidden')
+}
+
+function onShowcaseEditorClosed() {
+  forceShowcaseEditing.value = false
 }
 
 // Phase 7 — Advanced Settings tab state. Lazy-loaded the first time the user
@@ -1410,6 +1488,18 @@ const fetchProfile = async () => {
       publicId.value = authStore.user.public_id || ''
       publicStatuses.value = authStore.user.public_statuses || ['watching', 'completed', 'plan_to_watch']
       activityVisibility.value = authStore.user.activity_visibility || 'all'
+      // Owner needs showcase_state (carried only by the public endpoint, not
+      // authStore). Fetch it only when the wall gate is on — keeps the common
+      // (dark-shipped) path request-minimal. Best-effort: failure → stays 'none'.
+      if (profileWallVisible.value && authStore.user.public_id) {
+        try {
+          const pub = await publicApi.getUserProfile(authStore.user.public_id)
+          const pubData = pub.data?.data || pub.data
+          if (pubData?.showcase_state && profileUser.value) {
+            profileUser.value.showcase_state = pubData.showcase_state
+          }
+        } catch { /* non-fatal — owner just sees the Add button */ }
+      }
     } else {
       // Fetch public profile data
       const response = await publicApi.getUserProfile(publicIdParam)

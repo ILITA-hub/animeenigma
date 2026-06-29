@@ -23,38 +23,48 @@ func NewShowcaseService(r *repo.ShowcaseRepository, log *logger.Logger) *Showcas
 	return &ShowcaseService{repo: r, log: log}
 }
 
-// GetShowcase returns the user's blocks sorted by Order ascending.
-func (s *ShowcaseService) GetShowcase(ctx context.Context, userID string) ([]domain.Block, error) {
+// GetShowcase returns the user's blocks sorted by Order ascending plus the
+// stored `enabled` (published) flag.
+func (s *ShowcaseService) GetShowcase(ctx context.Context, userID string) ([]domain.Block, bool, error) {
 	row, err := s.repo.Get(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var blocks []domain.Block
 	if row.Blocks != "" && row.Blocks != "[]" {
 		if err := json.Unmarshal([]byte(row.Blocks), &blocks); err != nil {
 			// Corrupt config should not 500 the public profile — log + return empty.
 			s.log.Errorw("failed to parse showcase blocks", "user_id", userID, "error", err)
-			return []domain.Block{}, nil
+			return []domain.Block{}, row.Enabled, nil
 		}
 	}
 	sort.SliceStable(blocks, func(i, j int) bool { return blocks[i].Order < blocks[j].Order })
-	return blocks, nil
+	return blocks, row.Enabled, nil
 }
 
 // SaveShowcase validates, re-numbers Order to the array index, and persists.
 // Blocks are sorted by their incoming Order before re-numbering, so the
 // caller's intended sequence is preserved canonically.
-func (s *ShowcaseService) SaveShowcase(ctx context.Context, userID string, blocks []domain.Block) error {
+//
+// Coerce rule: an empty showcase can never be enabled, so the stored/returned
+// `enabled` is `enabled && len(blocks) > 0` — keeping the visible ⟹ non-empty
+// invariant. The coerced value is returned so the handler can echo the
+// authoritative state.
+func (s *ShowcaseService) SaveShowcase(ctx context.Context, userID string, blocks []domain.Block, enabled bool) (bool, error) {
 	if err := domain.ValidateBlocks(blocks); err != nil {
-		return err
+		return false, err
 	}
 	sort.SliceStable(blocks, func(i, j int) bool { return blocks[i].Order < blocks[j].Order })
 	for i := range blocks {
 		blocks[i].Order = i
 	}
+	enabled = enabled && len(blocks) > 0
 	encoded, err := json.Marshal(blocks)
 	if err != nil {
-		return errors.Wrap(err, errors.CodeInternal, "failed to encode showcase blocks")
+		return false, errors.Wrap(err, errors.CodeInternal, "failed to encode showcase blocks")
 	}
-	return s.repo.Upsert(ctx, userID, string(encoded))
+	if err := s.repo.Upsert(ctx, userID, string(encoded), enabled); err != nil {
+		return false, err
+	}
+	return enabled, nil
 }

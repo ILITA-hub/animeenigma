@@ -34,7 +34,9 @@ func (s *UserService) GetPublicProfile(ctx context.Context, id string) (*domain.
 	if err != nil {
 		return nil, err
 	}
-	return user.ToPublic(), nil
+	pub := user.ToPublic()
+	pub.ShowcaseState = s.userRepo.GetShowcaseState(ctx, user.ID)
+	return pub, nil
 }
 
 func (s *UserService) Update(ctx context.Context, userID string, req *domain.UpdateUserRequest) (*domain.User, error) {
@@ -97,7 +99,9 @@ func (s *UserService) GetPublicProfileByPublicID(ctx context.Context, publicID s
 	if err != nil {
 		return nil, err
 	}
-	return user.ToPublic(), nil
+	pub := user.ToPublic()
+	pub.ShowcaseState = s.userRepo.GetShowcaseState(ctx, user.ID)
+	return pub, nil
 }
 
 func (s *UserService) UpdatePublicID(ctx context.Context, userID, publicID string) error {

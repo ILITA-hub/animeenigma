@@ -8,13 +8,18 @@ import { useToast } from '@/composables/useToast'
 import ShowcaseBlockView from './ShowcaseBlockView.vue'
 import ShowcaseEditor from './ShowcaseEditor.vue'
 
-const props = defineProps<{ userId: string; isOwner: boolean }>()
-const emit = defineEmits<{ loaded: [number] }>()
+const props = defineProps<{ userId: string; isOwner: boolean; autoEdit?: boolean }>()
+const emit = defineEmits<{
+  loaded: [number]
+  change: [{ enabled: boolean; count: number }]
+  editorClosed: []
+}>()
 
 const { t } = useI18n()
 const toast = useToast()
 
 const blocks = ref<ShowcaseBlock[]>([])
+const enabled = ref(false)
 const editing = ref(false)
 const loading = ref(true)
 
@@ -28,29 +33,47 @@ async function load() {
   try {
     const res = await showcaseApi.getShowcase(props.userId)
     const data = 'data' in res.data
-      ? (res.data as { data: { blocks: ShowcaseBlock[] } }).data
-      : res.data
+      ? (res.data as { data: { blocks: ShowcaseBlock[]; enabled: boolean } }).data
+      : (res.data as { blocks: ShowcaseBlock[]; enabled: boolean })
     blocks.value = data.blocks ?? []
+    enabled.value = !!data.enabled
   } catch {
     blocks.value = []
+    enabled.value = false
   } finally {
     loading.value = false
     emit('loaded', blocks.value.length)
   }
 }
 
-async function onSave(next: ShowcaseBlock[]) {
+async function onSave(next: ShowcaseBlock[], nextEnabled: boolean) {
   try {
-    await showcaseApi.saveShowcase(next)
+    const res = await showcaseApi.saveShowcase(next, nextEnabled)
+    const data = 'data' in res.data
+      ? (res.data as { data: { blocks: ShowcaseBlock[]; enabled: boolean } }).data
+      : (res.data as { blocks: ShowcaseBlock[]; enabled: boolean })
+    // Backend coerces enabled=false for an empty showcase — trust its echo.
+    const coerced = !!data.enabled
     blocks.value = next
+    enabled.value = coerced
     editing.value = false
     toast.push(t('showcase.saved'), 'success')
+    emit('change', { enabled: coerced, count: next.length })
+    emit('editorClosed')
   } catch {
     toast.push(t('showcase.save_error'), 'error')
   }
 }
 
-onMounted(load)
+function onCancel() {
+  editing.value = false
+  emit('editorClosed')
+}
+
+onMounted(async () => {
+  if (props.autoEdit) editing.value = true
+  await load()
+})
 </script>
 
 <template>
@@ -71,8 +94,9 @@ onMounted(load)
       v-if="editing"
       :user-id="userId"
       :model-value="blocks"
+      :enabled="enabled"
       @save="onSave"
-      @cancel="editing = false"
+      @cancel="onCancel"
     />
 
     <template v-else>

@@ -26,11 +26,13 @@ func NewShowcaseHandler(s *service.ShowcaseService, log *logger.Logger) *Showcas
 }
 
 type showcaseResponse struct {
-	Blocks []domain.Block `json:"blocks"`
+	Blocks  []domain.Block `json:"blocks"`
+	Enabled bool           `json:"enabled"`
 }
 
 type saveShowcaseRequest struct {
-	Blocks []domain.Block `json:"blocks"`
+	Blocks  []domain.Block `json:"blocks"`
+	Enabled bool           `json:"enabled"`
 }
 
 // GetShowcase handles GET /api/users/{userId}/showcase.
@@ -43,7 +45,7 @@ func (h *ShowcaseHandler) GetShowcase(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "userId is required")
 		return
 	}
-	blocks, err := h.svc.GetShowcase(r.Context(), userID)
+	blocks, enabled, err := h.svc.GetShowcase(r.Context(), userID)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -51,7 +53,7 @@ func (h *ShowcaseHandler) GetShowcase(w http.ResponseWriter, r *http.Request) {
 	if blocks == nil {
 		blocks = []domain.Block{}
 	}
-	httputil.OK(w, showcaseResponse{Blocks: blocks})
+	httputil.OK(w, showcaseResponse{Blocks: blocks, Enabled: enabled})
 }
 
 // SaveShowcase handles PUT /api/users/me/showcase.
@@ -70,9 +72,10 @@ func (h *ShowcaseHandler) SaveShowcase(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
-	if err := h.svc.SaveShowcase(r.Context(), claims.UserID, req.Blocks); err != nil {
+	enabled, err := h.svc.SaveShowcase(r.Context(), claims.UserID, req.Blocks, req.Enabled)
+	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, showcaseResponse{Blocks: req.Blocks})
+	httputil.OK(w, showcaseResponse{Blocks: req.Blocks, Enabled: enabled})
 }

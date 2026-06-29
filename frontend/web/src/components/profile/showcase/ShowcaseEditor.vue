@@ -4,11 +4,19 @@ import type { ShowcaseBlock, ShowcaseBlockType } from '@/types/showcase'
 import { MAX_SHOWCASE_BLOCKS, defaultVariant, sizeFor, clampSize, spanClasses } from '@/types/showcase'
 import ShowcaseBlockView from './ShowcaseBlockView.vue'
 import ShowcaseConfigDialog from './ShowcaseConfigDialog.vue'
+import Switch from '@/components/ui/Switch.vue'
 
-const props = defineProps<{ userId: string; modelValue: ShowcaseBlock[] }>()
-const emit = defineEmits<{ save: [ShowcaseBlock[]]; cancel: [] }>()
+const props = withDefaults(
+  defineProps<{ userId: string; modelValue: ShowcaseBlock[]; enabled?: boolean }>(),
+  { enabled: false },
+)
+const emit = defineEmits<{ save: [ShowcaseBlock[], boolean]; cancel: [] }>()
 
 const local = ref<ShowcaseBlock[]>(props.modelValue.map((b) => ({ ...b })))
+const enabled = ref(props.enabled)
+
+// Non-blocking nudge: shown after a Save with content but visibility OFF.
+const showHiddenNudge = ref(false)
 
 const ADDABLE: ShowcaseBlockType[] = [
   'about',
@@ -56,8 +64,22 @@ function swapBlocks(i: number, j: number) {
 }
 
 function save() {
+  // Empty showcase can never be visible — keep the toggle honest locally too
+  // (the backend coerces enabled=false when blocks is empty).
+  if (local.value.length === 0) enabled.value = false
   const renumbered = local.value.map((b, i) => ({ ...b, order: i, variant: b.variant ?? defaultVariant(b.type) }))
-  emit('save', renumbered)
+  // Nudge: saving real content while hidden — offer one-click enable, but still
+  // let the plain save through (saves as hidden).
+  showHiddenNudge.value = renumbered.length >= 1 && enabled.value === false
+  emit('save', renumbered, enabled.value)
+}
+
+// Inline "Enable" action from the nudge: flip visibility on, then re-save.
+function enableAndSave() {
+  enabled.value = true
+  showHiddenNudge.value = false
+  const renumbered = local.value.map((b, i) => ({ ...b, order: i, variant: b.variant ?? defaultVariant(b.type) }))
+  emit('save', renumbered, enabled.value)
 }
 
 // ── Resize helpers ────────────────────────────────────────────────
@@ -242,6 +264,37 @@ defineExpose({ swapBlocks, applyResize, isFixed, local, pickerOpen, usedTypes, o
           @pointerdown="startResize($event, index)"
         >◢</button>
       </div>
+    </div>
+
+    <!-- Visibility toggle — publish/unpublish the showcase -->
+    <div class="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-foreground">{{ $t('showcase.visibleToggle') }}</p>
+        <p v-if="local.length === 0" class="text-xs text-muted-foreground">{{ $t('showcase.disabledEmptyHint') }}</p>
+      </div>
+      <Switch
+        v-model="enabled"
+        :disabled="local.length === 0"
+        data-test="showcase-visible-toggle"
+        :aria-label="$t('showcase.visibleToggle')"
+      />
+    </div>
+
+    <!-- Hidden-with-content nudge — non-blocking; offers one-click enable -->
+    <div
+      v-if="showHiddenNudge"
+      data-test="showcase-hidden-nudge"
+      class="flex items-center justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning"
+    >
+      <span class="min-w-0">{{ $t('showcase.hiddenNotice') }}</span>
+      <button
+        type="button"
+        data-test="showcase-enable-now"
+        class="shrink-0 rounded-lg border border-warning/50 px-3 py-1 text-sm font-medium text-warning hover:bg-warning/20"
+        @click="enableAndSave"
+      >
+        {{ $t('showcase.enableNow') }}
+      </button>
     </div>
 
     <div class="flex gap-2">

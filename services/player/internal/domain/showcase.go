@@ -15,6 +15,7 @@ import (
 type ProfileShowcase struct {
 	UserID    string    `gorm:"type:uuid;primaryKey" json:"user_id"`
 	Blocks    string    `gorm:"type:jsonb;not null;default:'[]'" json:"-"`
+	Enabled   bool      `gorm:"not null;default:false" json:"enabled"`
 	UpdatedAt time.Time `gorm:"not null;default:now()" json:"updated_at"`
 }
 

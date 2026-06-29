@@ -288,3 +288,47 @@ func TestEnsureWatchIndexes_CreatesFilteredSortIndexes(t *testing.T) {
 	assert.True(t, indexExists("idx_wp_user_lastwatched"))
 	assert.True(t, indexExists("idx_wh_user_watched"))
 }
+
+// TestBackfillShowcaseEnabled verifies the one-shot backfill derives `enabled`
+// from existing content: non-empty blocks → enabled, empty `[]`/'' → disabled.
+// Re-running it is a harmless no-op for already-correct data.
+func TestBackfillShowcaseEnabled(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err, "open in-memory sqlite")
+
+	// Pre-existing table shape (enabled already added by AutoMigrate, default 0).
+	require.NoError(t, db.Exec(`CREATE TABLE profile_showcases (
+		user_id TEXT PRIMARY KEY,
+		blocks TEXT NOT NULL DEFAULT '[]',
+		enabled INTEGER NOT NULL DEFAULT 0,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`).Error)
+
+	// Seed: one non-empty, one empty `[]`, one empty-string — all enabled=0.
+	require.NoError(t, db.Exec(
+		`INSERT INTO profile_showcases (user_id, blocks, enabled) VALUES
+		 ('has-content', '[{"type":"about","order":0,"config":{}}]', 0),
+		 ('empty-arr', '[]', 0),
+		 ('empty-str', '', 0)`).Error)
+
+	log, err := logger.New(logger.Config{Level: "error", Development: false})
+	require.NoError(t, err)
+
+	enabledOf := func(userID string) bool {
+		var n int64
+		require.NoError(t, db.Raw(
+			`SELECT enabled FROM profile_showcases WHERE user_id = ?`, userID).Scan(&n).Error)
+		return n != 0
+	}
+
+	require.NoError(t, backfillShowcaseEnabled(db, log), "first backfill")
+	assert.True(t, enabledOf("has-content"), "non-empty content must become enabled")
+	assert.False(t, enabledOf("empty-arr"), "empty [] must stay disabled")
+	assert.False(t, enabledOf("empty-str"), "empty string must stay disabled")
+
+	// Re-running over already-correct data is a no-op (deterministic RHS).
+	require.NoError(t, backfillShowcaseEnabled(db, log), "second backfill must be a no-op")
+	assert.True(t, enabledOf("has-content"))
+	assert.False(t, enabledOf("empty-arr"))
+	assert.False(t, enabledOf("empty-str"))
+}

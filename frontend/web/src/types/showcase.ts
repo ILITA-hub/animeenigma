@@ -1,3 +1,5 @@
+export type ShowcaseState = 'none' | 'hidden' | 'visible'
+
 export type ShowcaseBlockType =
   | 'about'
   | 'favorite_anime'

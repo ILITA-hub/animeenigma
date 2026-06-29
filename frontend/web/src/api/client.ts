@@ -568,17 +568,19 @@ export const publicApi = {
 }
 
 export const showcaseApi = {
-  // Public read of a user's profile showcase blocks.
+  // Public read of a user's profile showcase blocks (+ visibility flag).
   getShowcase: (userId: string) =>
-    apiClient.get<{ blocks: ShowcaseBlock[] } | { data: { blocks: ShowcaseBlock[] } }>(
-      `/users/${userId}/showcase`,
-    ),
+    apiClient.get<
+      | { blocks: ShowcaseBlock[]; enabled: boolean }
+      | { data: { blocks: ShowcaseBlock[]; enabled: boolean } }
+    >(`/users/${userId}/showcase`),
   // Owner save (replaces the whole block array). "me" resolves to the JWT user.
-  saveShowcase: (blocks: ShowcaseBlock[]) =>
-    apiClient.put<{ blocks: ShowcaseBlock[] } | { data: { blocks: ShowcaseBlock[] } }>(
-      `/users/me/showcase`,
-      { blocks },
-    ),
+  // `enabled` is coerced to false server-side when blocks is empty.
+  saveShowcase: (blocks: ShowcaseBlock[], enabled: boolean) =>
+    apiClient.put<
+      | { blocks: ShowcaseBlock[]; enabled: boolean }
+      | { data: { blocks: ShowcaseBlock[]; enabled: boolean } }
+    >(`/users/me/showcase`, { blocks, enabled }),
   // Compatibility score between the viewer and the profile owner.
   // Player returns bare or {success,data} envelope — mirrored union type.
   getCompatibility: (userId: string) =>

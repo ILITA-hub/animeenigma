@@ -196,6 +196,39 @@ func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) 
 	return count > 0, nil
 }
 
+// GetShowcaseState returns the profile-showcase visibility signal for a user.
+//
+// This is a read-only denormalization of the player-owned profile_showcases
+// table, co-located in the shared "animeenigma" Postgres DB (auth, player,
+// catalog, … all share it). Auth does NOT own or AutoMigrate this table, so we
+// read it via a raw query — never a GORM model. It is an in-DB read, not a
+// cross-service HTTP call.
+//
+// Mapping: missing table/row or empty blocks → "none"; non-empty + enabled →
+// "visible"; non-empty + not enabled → "hidden". Any error (e.g. before the
+// player has migrated the table) defensively yields "none" — the profile still
+// loads, just without a showcase tab, and self-heals once the table exists.
+func (r *UserRepository) GetShowcaseState(ctx context.Context, userID string) string {
+	var row struct {
+		Enabled bool
+		Blocks  string
+	}
+	err := r.db.WithContext(ctx).
+		Raw(`SELECT enabled, blocks FROM profile_showcases WHERE user_id = ?`, userID).
+		Scan(&row).Error
+	if err != nil {
+		return domain.ShowcaseStateNone // table/row absent or error → treat as none
+	}
+	hasContent := row.Blocks != "" && row.Blocks != "[]"
+	if !hasContent {
+		return domain.ShowcaseStateNone
+	}
+	if row.Enabled {
+		return domain.ShowcaseStateVisible
+	}
+	return domain.ShowcaseStateHidden
+}
+
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false

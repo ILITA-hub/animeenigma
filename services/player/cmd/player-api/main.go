@@ -66,6 +66,14 @@ func main() {
 		metrics.StartActivityMetricsCollector(sqlDB, 60*time.Second)
 	}
 
+	// Showcase `enabled` backfill probe — must run BEFORE AutoMigrate adds the
+	// column. We capture whether the table already existed and already had the
+	// `enabled` column; only "table existed but column did not" triggers the
+	// one-shot backfill below (fresh DBs skip it — new rows default false,
+	// which is correct).
+	showcaseTableExisted := db.Migrator().HasTable(&domain.ProfileShowcase{})
+	showcaseHadEnabled := showcaseTableExisted && db.Migrator().HasColumn(&domain.ProfileShowcase{}, "Enabled")
+
 	// Auto-migrate schema
 	if err := db.AutoMigrate(
 		&domain.WatchProgress{},
@@ -92,6 +100,16 @@ func main() {
 		&domain.ActivityEvent{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
+	}
+
+	// One-shot showcase `enabled` backfill — runs only on the single boot that
+	// introduces the `enabled` column to a pre-existing profile_showcases table,
+	// deriving each row's visibility from its current content. Fresh DBs (table
+	// did not exist before this boot) skip it; their new rows default false.
+	if showcaseTableExisted && !showcaseHadEnabled {
+		if err := backfillShowcaseEnabled(db.DB, log); err != nil {
+			log.Fatalw("showcase enabled backfill failed", "error", err)
+		}
 	}
 
 	// Compound unique index for ON CONFLICT in progress UPSERTs.
@@ -609,4 +627,23 @@ func runSocialMigration(db *gorm.DB, log *logger.Logger) error {
 
 	log.Infow("social migration complete")
 	return nil
+}
+
+// backfillShowcaseEnabled derives each showcase's `enabled` (visible) flag from
+// its current content: rows with non-empty blocks become enabled, empty
+// (`[]`/'') stay disabled. It runs exactly once — only on the first boot after
+// the `enabled` column is added to a pre-existing profile_showcases table (the
+// caller guards on showcaseTableExisted && !showcaseHadEnabled). Fresh DBs skip
+// it because the table did not exist before that boot, so new rows correctly
+// default false. The RHS is a portable boolean expression (Postgres bool /
+// SQLite 0|1). Because it runs on a single boot it cannot re-enable a showcase
+// the owner later disables.
+//
+// Takes `*gorm.DB` directly (not the `*database.DB` wrapper) so the test in
+// main_test.go can pass an in-memory SQLite DB.
+func backfillShowcaseEnabled(db *gorm.DB, log *logger.Logger) error {
+	log.Infow("showcase: backfilling enabled from existing content")
+	return db.Exec(
+		`UPDATE profile_showcases SET enabled = (blocks IS NOT NULL AND blocks <> '[]' AND blocks <> '')`,
+	).Error
 }

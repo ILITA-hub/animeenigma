@@ -37,10 +37,10 @@ const mountEditor = (modelValue: ShowcaseBlock[] = blocks) =>
   })
 
 describe('ShowcaseEditor', () => {
-  it('renders one row per block', () => {
+  it('renders one grid cell per block', () => {
     const w = mountEditor()
-    expect(w.text()).toContain('showcase.block.about')
-    expect(w.text()).toContain('showcase.block.stats')
+    // Each block renders a draggable grid cell with a remove control.
+    expect(w.findAll('[data-test^="showcase-remove-"]')).toHaveLength(blocks.length)
   })
 
   it('emits save with re-numbered order on save', async () => {
@@ -167,6 +167,61 @@ describe('ShowcaseEditor', () => {
       { type: 'stats', variant: 'tiles', order: 0, w: 2, h: 1, config: {} },
     ] }, global: { stubs: { draggable: true, Select: true, ShowcaseBlockView: true, ShowcaseConfigDialog: true }, mocks: { $t: (k: string) => k } } })
     expect((wrapper.vm as any).isFixed((wrapper.vm as any).local[0])).toBe(true)
+  })
+
+  // ── Visibility toggle + nudge (opt-in showcase) ─────────────────────────
+  it('renders the visibility toggle', () => {
+    const w = mountEditor()
+    expect(w.find('[data-test="showcase-visible-toggle"]').exists()).toBe(true)
+  })
+
+  it('disables the visibility toggle when there are 0 blocks', () => {
+    const w = mountEditor([])
+    const toggle = w.find('[data-test="showcase-visible-toggle"]')
+    expect(toggle.exists()).toBe(true)
+    expect(toggle.attributes('disabled')).toBeDefined()
+  })
+
+  it('save emits [blocks, enabled] — enabled defaults false', async () => {
+    const w = mountEditor()
+    await w.find('[data-test="showcase-save"]').trigger('click')
+    const emitted = w.emitted('save')
+    expect(emitted).toBeTruthy()
+    expect(emitted![0][1]).toBe(false)
+  })
+
+  it('save emits enabled=true when the editor is mounted enabled', async () => {
+    const w = mount(ShowcaseEditor, {
+      props: { userId: 'u1', modelValue: blocks, enabled: true },
+      global: { mocks: { $t: (k: string) => k }, stubs: { teleport: true, Select: true, ShowcaseBlockView: true, ShowcaseConfigDialog: true } },
+    })
+    await w.find('[data-test="showcase-save"]').trigger('click')
+    expect(w.emitted('save')![0][1]).toBe(true)
+  })
+
+  it('shows the hidden nudge after saving content while disabled', async () => {
+    const w = mountEditor()
+    expect(w.find('[data-test="showcase-hidden-nudge"]').exists()).toBe(false)
+    await w.find('[data-test="showcase-save"]').trigger('click')
+    expect(w.find('[data-test="showcase-hidden-nudge"]').exists()).toBe(true)
+  })
+
+  it('Enable-now in the nudge re-saves with enabled=true', async () => {
+    const w = mountEditor()
+    await w.find('[data-test="showcase-save"]').trigger('click')
+    await w.find('[data-test="showcase-enable-now"]').trigger('click')
+    const emitted = w.emitted('save')!
+    // first save = hidden, second save (from Enable) = enabled
+    expect(emitted[0][1]).toBe(false)
+    expect(emitted[1][1]).toBe(true)
+    // nudge dismissed after enabling
+    expect(w.find('[data-test="showcase-hidden-nudge"]').exists()).toBe(false)
+  })
+
+  it('no nudge when saving an empty showcase', async () => {
+    const w = mountEditor([])
+    await w.find('[data-test="showcase-save"]').trigger('click')
+    expect(w.find('[data-test="showcase-hidden-nudge"]').exists()).toBe(false)
   })
 
   it('disables already-present types in the picker', async () => {

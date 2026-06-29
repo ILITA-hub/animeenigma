@@ -124,4 +124,91 @@ describe('ProfileShowcase', () => {
     // The finally block should emit loaded with the length (0)
     expect(w.emitted('loaded')?.[0]).toEqual([0])
   })
+
+  // ── Opt-in visibility model ─────────────────────────────────────────────
+  it('reads enabled from the fetch and passes it to the editor', async () => {
+    vi.mocked(showcaseApi.getShowcase).mockResolvedValueOnce({
+      data: { blocks: [{ type: 'about', order: 0, config: { text: 'hi' } }], enabled: true },
+    } as never)
+    const w = mount(ProfileShowcase, {
+      props: { userId: 'u1', isOwner: true, autoEdit: true },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          ShowcaseEditor: {
+            name: 'ShowcaseEditor',
+            template: '<div data-testid="editor" />',
+            props: ['userId', 'modelValue', 'enabled'],
+          },
+        },
+      },
+    })
+    await flushPromises()
+    const editor = w.findComponent({ name: 'ShowcaseEditor' })
+    expect(editor.props('enabled')).toBe(true)
+  })
+
+  it('autoEdit opens the editor immediately', async () => {
+    const w = mount(ProfileShowcase, {
+      props: { userId: 'u1', isOwner: true, autoEdit: true },
+      global: {
+        plugins: [i18n],
+        stubs: { ShowcaseEditor: { name: 'ShowcaseEditor', template: '<div data-testid="editor" />', props: ['userId', 'modelValue', 'enabled'] } },
+      },
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="editor"]').exists()).toBe(true)
+  })
+
+  it('emits change and editorClosed on successful save', async () => {
+    vi.mocked(showcaseApi.saveShowcase).mockResolvedValueOnce({
+      data: { blocks: [{ type: 'stats', order: 0, config: {} }], enabled: true },
+    } as never)
+    const w = mount(ProfileShowcase, {
+      props: { userId: 'u1', isOwner: true, autoEdit: true },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          ShowcaseEditor: {
+            name: 'ShowcaseEditor',
+            template: '<div data-testid="editor" />',
+            emits: ['save', 'cancel'],
+            props: ['userId', 'modelValue', 'enabled'],
+          },
+        },
+      },
+    })
+    await flushPromises()
+    const editor = w.findComponent({ name: 'ShowcaseEditor' })
+    const newBlocks = [{ type: 'stats', order: 0, config: {} }]
+    await editor.vm.$emit('save', newBlocks, true)
+    await flushPromises()
+    expect(w.emitted('change')?.[0]).toEqual([{ enabled: true, count: 1 }])
+    expect(w.emitted('editorClosed')).toBeTruthy()
+    // editor closed on save
+    expect(w.find('[data-testid="editor"]').exists()).toBe(false)
+  })
+
+  it('emits editorClosed on cancel', async () => {
+    const w = mount(ProfileShowcase, {
+      props: { userId: 'u1', isOwner: true, autoEdit: true },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          ShowcaseEditor: {
+            name: 'ShowcaseEditor',
+            template: '<div data-testid="editor" />',
+            emits: ['save', 'cancel'],
+            props: ['userId', 'modelValue', 'enabled'],
+          },
+        },
+      },
+    })
+    await flushPromises()
+    const editor = w.findComponent({ name: 'ShowcaseEditor' })
+    await editor.vm.$emit('cancel')
+    await flushPromises()
+    expect(w.emitted('editorClosed')).toBeTruthy()
+    expect(w.find('[data-testid="editor"]').exists()).toBe(false)
+  })
 })
