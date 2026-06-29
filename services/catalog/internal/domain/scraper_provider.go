@@ -75,6 +75,11 @@ type ScraperProvider struct {
 	// WHY this provider is enabled/degraded/disabled).
 	Reason      string `json:"reason"`
 	Description string `json:"description"`
+	// AIProbeNotes is a free-form analysis field curated by the AI probe operator
+	// and surfaced as the "AI Probe Notes" column on the playback-health dashboard.
+	// No service logic reads it; routine catalog writes (health/policy/reason) never
+	// touch it, so it persists across auto-demote/promote cycles.
+	AIProbeNotes string `gorm:"column:ai_probe_notes" json:"ai_probe_notes"`
 	// Capability traits (curated; refined per-title by live discovery in P2).
 	SupportsSub      bool   `json:"supports_sub"`
 	SupportsDub      bool   `json:"supports_dub"`

@@ -440,20 +440,30 @@
                 "id": "mappings",
                 "value": [
                   {
-                    "type": "value",
+                    "type": "regex",
                     "options": {
-                      "up": {
-                        "text": "up",
+                      "pattern": "^up",
+                      "result": {
                         "color": "green",
                         "index": 0
-                      },
-                      "degraded": {
-                        "text": "degraded",
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "^degraded",
+                      "result": {
                         "color": "orange",
                         "index": 1
-                      },
-                      "down": {
-                        "text": "down",
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "^down",
+                      "result": {
                         "color": "red",
                         "index": 2
                       }
@@ -480,7 +490,7 @@
               },
               {
                 "id": "custom.width",
-                "value": 120
+                "value": 130
               }
             ]
           },
@@ -511,12 +521,24 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Note"
+              "options": "Description"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 360
+                "value": 380
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "AI Probe Notes"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 460
               }
             ]
           },
@@ -575,7 +597,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", policy AS \"Policy\", health AS \"Health\", CASE WHEN policy = 'disabled' THEN 'Off' WHEN policy = 'auto' AND health = 'up' THEN 'UP' WHEN health = 'recovering' THEN 'Recovering' WHEN policy = 'auto' AND health = 'down' THEN 'Failing' ELSE 'Manual-only' END AS \"State\", last_probed_at AS \"Last probed\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", reason AS \"Note\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
+          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", policy AS \"Policy\", health AS \"Health\", CASE WHEN policy = 'disabled' THEN 'Off' WHEN policy = 'auto' AND health = 'up' THEN 'UP' WHEN health = 'recovering' THEN 'Recovering' WHEN policy = 'auto' AND health = 'down' THEN 'Failing' ELSE 'Manual-only' END AS \"State\", last_probed_at AS \"Last probed\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", description AS \"Description\", ai_probe_notes AS \"AI Probe Notes\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
           "refId": "A"
         },
         {
@@ -586,7 +608,7 @@
           "rawQuery": true,
           "queryType": "sql",
           "format": "table",
-          "rawSql": "SELECT provider, multiIf(countIf(playable = 1) > 0, 'up', countIf(stage = 'playback') > 0, 'degraded', 'down') AS playability, max(run_ts) AS probed_at, arrayStringConcat(topKIf(3)(label, playable = 0), ' · ') AS reasons FROM (  SELECT provider, stage, playable, run_ts,          concat(reason, ' — ', if(empty(anime_name), 'anime', anime_name)) AS label   FROM probe_runs WHERE (provider, run_ts) IN (SELECT provider, max(run_ts) FROM probe_runs WHERE run_ts > now() - INTERVAL 48 HOUR GROUP BY provider)) GROUP BY provider ORDER BY provider",
+          "rawSql": "SELECT provider, concat(multiIf(countIf(playable = 1) > 0, 'up', countIf(stage = 'playback') > 0, 'degraded', 'down'), ' (', toString(countIf(playable = 1)), '/', toString(count()), ')') AS playability, max(run_ts) AS probed_at, arrayStringConcat(topKIf(3)(label, playable = 0), ' · ') AS reasons FROM (  SELECT provider, stage, playable, run_ts,          concat(reason, ' — ', if(empty(anime_name), 'anime', anime_name)) AS label   FROM probe_runs WHERE (provider, run_ts) IN (SELECT provider, max(run_ts) FROM probe_runs WHERE run_ts > now() - INTERVAL 48 HOUR GROUP BY provider)) GROUP BY provider ORDER BY provider",
           "refId": "B"
         }
       ],
@@ -603,20 +625,21 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true
+              "Time": true,
+              "Health": true
             },
             "indexByName": {
               "provider": 0,
               "Group": 1,
               "State": 2,
               "Policy": 3,
-              "Health": 4,
+              "playability": 4,
               "Resolved via": 5,
               "Last probed": 6,
-              "playability": 7,
-              "probed_at": 8,
-              "reasons": 9,
-              "Note": 10
+              "probed_at": 7,
+              "reasons": 8,
+              "Description": 9,
+              "AI Probe Notes": 10
             },
             "renameByName": {
               "provider": "Provider",
