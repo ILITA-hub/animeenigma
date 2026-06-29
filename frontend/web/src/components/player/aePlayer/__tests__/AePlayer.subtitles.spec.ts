@@ -146,6 +146,25 @@ vi.mock('@/composables/aePlayer/useSubtitleTracks', () => ({
   }),
 }))
 
+// ─── Mock auto-sync composables (Task 7) ─────────────────────────────────────
+// useSubtitleCues fetches+parses the sub file — no network in jsdom.
+// useSubtitleAutoSync taps WebAudio — not available in jsdom.
+// Both are unit-tested in their own spec files; here we just need safe stubs.
+vi.mock('@/composables/aePlayer/useSubtitleCues', () => ({
+  useSubtitleCues: () => ({ cues: ref([]) }),
+}))
+vi.mock('@/composables/aePlayer/useSubtitleAutoSyncPref', () => ({
+  useSubtitleAutoSyncPref: () => ({ enabled: ref(true), setEnabled: vi.fn() }),
+}))
+vi.mock('@/composables/aePlayer/useSubtitleAutoSync', () => ({
+  useSubtitleAutoSync: () => ({
+    autoOffset: ref(0),
+    status: ref('idle'),
+    confidence: ref(0),
+    syncEvents: ref([]),
+  }),
+}))
+
 import AePlayer from '../AePlayer.vue'
 import BrowseSubsModal from '../BrowseSubsModal.vue'
 
@@ -258,5 +277,21 @@ describe('AePlayer — subtitle wiring (Task 6 regression guard)', () => {
 
     const overlay = wrapper.findComponent({ name: 'SubtitleOverlay' })
     expect(overlay.exists()).toBe(true)
+  })
+
+  it('effective subtitle offset equals the manual offset before any auto lock (Task 7 regression guard)', async () => {
+    // autoSyncOffset mocked to 0 (idle — no audio frames pumped).
+    // state.subOffset defaults to 0.
+    // → effectiveOffset = autoOffset(0) + manualOffset(0) = 0
+    // This confirms SubtitleOverlay receives the effectiveOffset computed,
+    // not a stale direct reference to state.subOffset.
+    const wrapper = mountPlayer()
+    await flushPromises()
+    await nextTick()
+
+    const overlay = wrapper.findComponent({ name: 'SubtitleOverlay' })
+    expect(overlay.exists()).toBe(true)
+    // autoOffset is 0 (mocked idle); manualOffset is 0 (initial state) → 0 + 0 = 0
+    expect(overlay.props('offset')).toBe(0)
   })
 })

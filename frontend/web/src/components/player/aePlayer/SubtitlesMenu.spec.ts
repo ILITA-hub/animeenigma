@@ -18,9 +18,10 @@ const base = {
   subSize: 100,
   subBg: 50,
   subOffset: 0,
+  autoSync: false,
 }
 
-const stubs = { Stepper: true }
+const stubs = { Stepper: true, Switch: true }
 
 describe('SubtitlesMenu', () => {
   it('renders Off plus three native language rows (RU/EN/JP)', () => {

@@ -53,7 +53,7 @@
       :visible="state.subLang.value !== 'off' && !!chosenSubUrl"
       :fullscreen-container="rootRef"
       :windowed-container="rootRef"
-      :offset="state.subOffset.value"
+      :offset="effectiveOffset"
     />
 
     <!-- Source error overlay -->
@@ -290,7 +290,10 @@
         @pick-lang="onPickSubLang"
         @update:sub-size="v => { state.subSize.value = v }"
         @update:sub-bg="v => { state.subBg.value = v }"
+        :auto-sync="autoSyncPref.enabled.value"
+        :auto-sync-info="autoSyncInfo"
         @update:sub-offset="v => { state.subOffset.value = v }"
+        @update:auto-sync="v => autoSyncPref.setEnabled(v)"
         @open-browse="() => { openMenu = null; browseOpen = true; void ensureSubsLoaded() }"
       />
     </div>
@@ -370,6 +373,9 @@ import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/ae
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
 import { pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
+import { useSubtitleCues } from '@/composables/aePlayer/useSubtitleCues'
+import { useSubtitleAutoSyncPref } from '@/composables/aePlayer/useSubtitleAutoSyncPref'
+import { useSubtitleAutoSync } from '@/composables/aePlayer/useSubtitleAutoSync'
 import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, tokenToCombo, comboToToken, clampLangForAudio } from '@/composables/aePlayer/comboMapping'
 import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
@@ -2209,6 +2215,24 @@ const {
   ensureLoaded: ensureSubsLoaded,
   refetch: refetchSubs,
 } = useSubtitleTracks(toRef(props, 'animeId'), subEpisode, providerSubtitles)
+
+// ─── Subtitle auto-sync (frontend VAD; spec 2026-06-29) ──────────────────────
+const { cues: subtitleCues } = useSubtitleCues(chosenSubUrl, chosenSubFormat)
+const autoSyncEpisodeKey = computed(() => `${props.animeId}:${subEpisode.value}`)
+const autoSyncPref = useSubtitleAutoSyncPref(autoSyncEpisodeKey)
+const autoSync = useSubtitleAutoSync({
+  videoElement: videoRef,
+  cues: subtitleCues,
+  enabled: computed(() => autoSyncPref.enabled.value && subsOn.value),
+  episodeKey: autoSyncEpisodeKey,
+})
+// Manual offset layers on top of the auto result.
+const effectiveOffset = computed(() => autoSync.autoOffset.value + state.subOffset.value)
+const autoSyncInfo = computed(() =>
+  state.hackerMode.value
+    ? { status: autoSync.status.value, offset: autoSync.autoOffset.value, confidence: autoSync.confidence.value, events: autoSync.syncEvents.value }
+    : null,
+)
 
 // Subtitles default OFF (state.subLang starts 'off') and the player NEVER
 // auto-enables one — the user opts in via the Subtitles menu. That choice
