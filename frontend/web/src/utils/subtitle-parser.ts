@@ -3,6 +3,7 @@
  * ASS parsing uses ass-compiler (dynamically imported).
  * SRT/VTT are parsed inline with no external dependencies.
  */
+import { hlsProxyUrl } from '@/utils/streaming'
 
 export interface SubtitleCue {
   start: number    // seconds
@@ -172,4 +173,29 @@ export function parseVTT(content: string): SubtitleCue[] {
   // Remove WEBVTT header
   const body = content.replace(/^WEBVTT[^\n]*\n/, '').trim()
   return parseSRT(body)
+}
+
+/**
+ * Fetch a subtitle file and parse it to cues. Same-origin backend URLs (leading `/`)
+ * are fetched directly; external provider URLs go through the CORS proxy. Throws on a
+ * non-ok response. Single source of truth for SubtitleOverlay + useSubtitleCues.
+ */
+export async function fetchAndParseCues(
+  url: string,
+  format: 'ass' | 'srt' | 'vtt' | 'auto' | string,
+  signal?: AbortSignal,
+): Promise<SubtitleCue[]> {
+  const fetchUrl = url.startsWith('/') ? url : hlsProxyUrl(`url=${encodeURIComponent(url)}`)
+  const resp = await fetch(fetchUrl, signal ? { signal } : undefined)
+  if (!resp.ok) throw new Error(`Failed to fetch subtitle file: ${resp.status}`)
+  const content = await resp.text()
+  switch (format) {
+    case 'ass': return parseASS(content)
+    case 'srt': return parseSRT(content)
+    case 'vtt': return parseVTT(content)
+    default:
+      if (content.includes('[Script Info]') || content.includes('[V4+ Styles]')) return parseASS(content)
+      if (content.startsWith('WEBVTT')) return parseVTT(content)
+      return parseSRT(content)
+  }
 }

@@ -24,8 +24,7 @@
 <script setup lang="ts">
 import { ref, shallowRef, watch, onMounted, onUnmounted, computed } from 'vue'
 import type { SubtitleCue } from '@/utils/subtitle-parser'
-import { parseASS, parseSRT, parseVTT } from '@/utils/subtitle-parser'
-import { hlsProxyUrl } from '@/utils/streaming'
+import { fetchAndParseCues } from '@/utils/subtitle-parser'
 
 const props = withDefaults(defineProps<{
   videoElement: HTMLVideoElement | null
@@ -266,44 +265,12 @@ function stopTimeSync() {
 let subtitleAbortController: AbortController | null = null
 
 async function loadSubtitles(url: string, format: string) {
-  // Cancel any in-flight subtitle fetch
   subtitleAbortController?.abort()
   subtitleAbortController = new AbortController()
-
   emit('loading', true)
   cues.value = []
-
   try {
-    // Same-origin backend URLs (e.g. our OpenSubtitles resolve endpoint) are
-    // fetched directly; external provider URLs go through the CORS proxy.
-    const fetchUrl = url.startsWith('/')
-      ? url
-      : hlsProxyUrl(`url=${encodeURIComponent(url)}`)
-    const resp = await fetch(fetchUrl, { signal: subtitleAbortController.signal })
-    if (!resp.ok) throw new Error(`Failed to fetch subtitle file: ${resp.status}`)
-
-    const content = await resp.text()
-
-    switch (format) {
-      case 'ass':
-        cues.value = await parseASS(content)
-        break
-      case 'srt':
-        cues.value = parseSRT(content)
-        break
-      case 'vtt':
-        cues.value = parseVTT(content)
-        break
-      default:
-        // Try to detect from content
-        if (content.includes('[Script Info]') || content.includes('[V4+ Styles]')) {
-          cues.value = await parseASS(content)
-        } else if (content.startsWith('WEBVTT')) {
-          cues.value = parseVTT(content)
-        } else {
-          cues.value = parseSRT(content)
-        }
-    }
+    cues.value = await fetchAndParseCues(url, format, subtitleAbortController.signal)
   } catch (err: unknown) {
     if (err instanceof DOMException && err.name === 'AbortError') return
     const e = err as { message?: string }
