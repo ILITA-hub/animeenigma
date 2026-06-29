@@ -170,6 +170,17 @@ func main() {
 				"kodik-noads": func() probe.ProbeTarget {
 					return probe.ProbeTarget{Provider: "kodik-noads", AnimeSet: spotlight, Resolver: probe.NewKodikNoadsResolver(cfg.CatalogURL, nil)}
 				},
+				// animepahe is browser-engine (Camoufox): a cold Cloudflare-Turnstile
+				// solve on an expired cf_clearance can take 30–60s, far over the
+				// shared 15s scraper resolver timeout (a 15s cap would read a working
+				// animepahe as a false "down" whenever the clearance lapsed between
+				// 6h runs). Give it the shared spotlight set but a dedicated
+				// long-timeout scraper resolver. Warm-cookie resolves are ~2s, and
+				// the catalog plan probes it fail_fast with sample_size=1, so the
+				// worst case is a single cold solve per tick.
+				"animepahe": func() probe.ProbeTarget {
+					return probe.ProbeTarget{Provider: "animepahe", AnimeSet: spotlight, Resolver: probe.NewHTTPResolver(cfg.CatalogURL, &http.Client{Timeout: 90 * time.Second})}
+				},
 			}
 
 			var targets []probe.ProbeTarget
