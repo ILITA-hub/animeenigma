@@ -82,16 +82,18 @@ useSubtitleAutoSync({
 }
 
 type SyncEvent = {
-  atMediaTime: number,             // video.currentTime (s) when the change was applied
-  fromOffset: number,              // previous autoOffset (s)
-  toOffset: number,                // new autoOffset (s)
-  delta: number,                   // toOffset - fromOffset (s)
+  delta: number,                   // offset change applied (s), signed
   confidence: number,              // 0..1 of the chosen offset
-  windowStart: number,             // analyzed window interval (s) that produced it
+  windowStart: number,             // analyzed speech-window interval (s) that produced it
   windowEnd: number,
   reason: 'lock' | 'resync',       // initial lock vs. step/eyecatch re-sync
 }
 ```
+> Trimmed to what the hacker-mode log actually surfaces (delta + interval + confidence).
+> Earlier drafts also carried `atMediaTime`/`fromOffset`/`toOffset`; `atMediaTime` always
+> equalled `windowEnd` and the absolute offsets were never read (the current absolute value
+> shows in the live state line), so they were dropped.
+
 A `SyncEvent` is pushed on every `autoOffset` change — the initial lock (`reason='lock'`)
 and each step/eyecatch re-sync (`reason='resync'`). The list is bounded (newest-first,
 ~10) and reset on `episodeKey` change. This is the data behind the hacker-mode log (3.5).
@@ -108,12 +110,23 @@ and each step/eyecatch re-sync (`reason='resync'`). The list is bounded (newest-
 - If `createMediaElementSource` throws / `AudioContext` unavailable / media tainted ⇒
   `status='unsupported'`, **no-op** (subs unchanged).
 
-**VAD.** `AnalyserNode` (`fftSize` ~2048) polled ~50 Hz (rAF-gated, only while playing):
-- `getByteFrequencyData` → **speech-band energy** (≈300–3400 Hz) over total energy.
-  Speech-band weighting rejects BGM/SFX/silence false positives better than raw RMS.
-- Adaptive noise floor (running percentile) → boolean `speaking` per frame, timestamped by
-  `videoElement.currentTime` (the *media* clock — robust to pauses/seeks/playback-rate).
-- Append to a speech-activity timeline (sparse run-length intervals; bounded memory).
+**VAD.** `AnalyserNode` (`fftSize` ~2048), rAF-driven but **throttled to ~20 Hz** (VAD
+segments are ≫50 ms, so 20 Hz is ample and ~3× cheaper than display-rate; only while
+playing & not seeking):
+- The frame decision is a **pure, unit-tested** function `classifyFrame(freq, sampleRate,
+  fftSize)` in `subtitleAlign.ts` (next to the math), so the thresholds that determine what
+  counts as speech are testable — not buried in the impure tap. It does a **single pass** over
+  the bins computing both mean energy and the **speech-band ratio** (≈300–3400 Hz), and
+  returns `speaking` when mean ≥ floor AND ratio ≥ `VAD_RATIO`. Speech-band weighting rejects
+  BGM/SFX/silence better than raw RMS. The tap (`subtitleAudioTap.ts`) is then thin Web-Audio
+  I/O glue that calls it.
+- **v1 uses a fixed energy floor** (a deliberate simplification of the spec's earlier
+  "adaptive running-percentile floor"); a later adaptive floor can drop into the pure layer
+  without touching the tap. Each `speaking` frame is timestamped by `videoElement.currentTime`
+  (the *media* clock — robust to pauses/seeks/playback-rate).
+- Append to a speech-activity timeline (run-length intervals), kept to a **sliding recent
+  window** (e.g. ~120 s) so per-evaluation cost and memory stay bounded over a long episode
+  (alignment is local; old history adds nothing).
 
 **Correlation.**
 - Build a "subtitle active" boolean timeline from `cues` (`[start,end]` intervals).
@@ -138,7 +151,9 @@ This serves the bumper case without a global model.
 **Lifecycle / safety.**
 - `episodeKey` change ⇒ reset timeline + `autoOffset=0` + `status='idle'`; re-arm.
 - `enabled=false` ⇒ stop polling, `autoOffset=0` (manual-only behavior returns).
-- Once a stable lock holds, drop to the low-rate monitor (CPU saver).
+- CPU is bounded by the ~20 Hz tick throttle + the sliding speech window (a per-lock dynamic
+  downshift was considered and dropped — it needed an engine→tap rate channel for marginal
+  gain once the window already caps sweep cost).
 - `onUnmounted` / `enabled=false` ⇒ disconnect nodes, `ctx.close()`.
 - **Never makes subs worse:** any failure/uncertainty ⇒ `autoOffset` stays `0`.
 
@@ -156,28 +171,38 @@ useSubtitleAutoSyncPref(episodeKey: Ref<string>)
 - SSR-guard (`typeof window`), try/catch quota/disabled storage ⇒ falls back to in-memory
   default `true`.
 - Reactive to `episodeKey` (re-read on episode switch).
+- The TTL is **read-time only** (expired keys aren't evicted — they're tiny and harmless).
+  This is the **third** subtitle-pref persistence model alongside the dead global-sticky
+  `useSubtitleTimingOffset` and the live ephemeral `usePlayerState.subOffset`; the per-episode
+  + decaying-opt-out shape is deliberate, so add a one-line comment saying so.
 
 ### 3.3 `components/player/aePlayer/SubtitlesMenu.vue` (touched) — the UI
 
 - Add an **"Auto-sync subtitles"** toggle using the DS `Switch` primitive, placed **above**
   the existing Timing-offset row. Props in: `autoSync: boolean`; emits
-  `update:autoSync(boolean)`.
-- When auto-sync is ON, relabel the manual offset row to read as a **fine-tune** (copy only)
-  and show the live detected offset under hacker mode (3.5).
+  `update:autoSync(boolean)`. The manual offset stays as-is (a fine-tune delta on top of the
+  auto result) — no relabel; it already works unchanged.
 - New i18n keys in **en / ru / ja** (parity-gated): `player.aePlayer.subs.autoSync` (label),
   `…subs.autoSyncHint`, plus hacker-mode readout strings (3.5). No off-palette colors / DS
   rule compliance (Switch is a DS primitive ⇒ no Rule-5 native-control violation).
 
-### 3.4 `components/player/aePlayer/AePlayer.vue` (touched) — wiring
+### 3.4 Cue fetch/parse (shared) + `AePlayer.vue` wiring (touched)
 
-- **Parse cues once for alignment.** Add a small reactive `subtitleCues` derived from
-  `chosenSubUrl` + `chosenSubFormat` via `subtitle-parser.ts` (fetch is browser-cached, the
-  overlay already fetched it). Additive — `SubtitleOverlay.vue` stays untouched (it keeps
-  parsing internally for render). If duplicate fetch/parse proves wasteful later, lift parse
-  into a shared `useSubtitleCues` composable consumed by both; not required for v1.
-- Build `episodeKey` as `"{anime.uuid}:{selectedEpisode.number}"`.
+- **One cue fetch/parse path, not two.** Extract `fetchAndParseCues(url, format, signal?)`
+  into `@/utils/subtitle-parser.ts` (it already owns `parseASS/parseSRT/parseVTT` + the
+  format auto-detect; it gains the `hlsProxyUrl` URL rule from `@/utils/streaming`).
+  `SubtitleOverlay.loadSubtitles` is refactored to **delegate** to it (keeping its own
+  `emit('loading'|'error')` + `AbortController` wrapper — behavior-preserving), and the new
+  `useSubtitleCues(url, format)` composable calls the same helper. This kills the
+  fetch/format-sniff fork (the real risk is the two copies drifting so the engine aligns a
+  *different* cue set than the overlay renders). aePlayer is the overlay's **only** consumer,
+  so this has no cross-player blast radius.
+- In `AePlayer.vue`: `const { cues: subtitleCues } = useSubtitleCues(chosenSubUrl, chosenSubFormat)`.
+- Reuse the **existing** `subEpisode` computed for episode identity:
+  `episodeKey = computed(() => `${props.animeId}:${subEpisode.value}`)` (don't re-derive
+  `selectedEpisode.number ?? anime.ep`).
 - `const pref = useSubtitleAutoSyncPref(episodeKey)`.
-- `const sync = useSubtitleAutoSync({ videoElement, cues: subtitleCues, enabled: pref.enabled, episodeKey })`.
+- `const sync = useSubtitleAutoSync({ videoElement, cues: subtitleCues, enabled: computed(() => pref.enabled.value && subsOn.value), episodeKey })`.
 - **Apply:** pass `:offset="effectiveOffset"` where
   `effectiveOffset = computed(() => sync.autoOffset.value + state.subOffset.value)`.
   Manual slider remains a delta on top of the auto result.
@@ -212,8 +237,13 @@ Turning auto-sync OFF instantly drops `autoOffset` to 0 (manual value preserved)
 - **Frontend only.** No backend, service, DB, or env var. Deploy = `make redeploy-web`.
 - **aePlayer only** (the sole live `SubtitleOverlay` consumer).
 - Linear-fps exact solve: **deferred** (approximated by re-anchoring).
+- `SubtitleOverlay.vue`: **only** its fetch/parse is refactored to call the shared
+  `fetchAndParseCues` helper (behavior-preserving) — no render/teleport/offset changes.
 - Dead `useSubtitleTimingOffset` / `SubtitleSettingsMenu`: **left alone**.
 - Manual-offset persistence (currently ephemeral): **out of scope** (separate concern).
+- Post-lock dynamic tick downshift / `bestOffset` window-bounding: **deferred** — the fixed
+  ~20 Hz throttle + sliding speech window already bound cost; both add cross-layer/dynamic
+  complexity for marginal gain.
 
 ## 6. Risks & mitigations
 
@@ -225,7 +255,8 @@ Turning auto-sync OFF instantly drops `autoOffset` to 0 (manual value preserved)
    offline-decode head-start (range-fetch + `OfflineAudioContext`) can shorten it.
 4. **Mis-sync risk** on low-dialogue/musical openings. Mitigation: confidence gate + speech
    minimum ⇒ no-op rather than a wrong jump.
-5. **CPU.** ~50 Hz FFT + bounded correlation is light; drop to low-rate monitor after lock.
+5. **CPU.** ~20 Hz FFT (throttled) + correlation over a sliding speech window (not the whole
+   episode) keeps both per-frame and per-evaluation cost bounded and flat over time.
 
 ## 7. Testing (Vitest; audio graph stubbed)
 
@@ -234,6 +265,8 @@ Turning auto-sync OFF instantly drops `autoOffset` to 0 (manual value preserved)
 - **Correlation:** recovers a known constant offset from synthetic speech+cue timelines;
   sign convention (subs-early ⇒ positive offset); confidence gate ⇒ no-op below threshold;
   warm-up gate ⇒ no-op below `MIN_SPEECH`.
+- **Classifier (`classifyFrame`):** high speech-band energy ⇒ `speaking=true`; out-of-band
+  or sub-floor energy ⇒ `false` (the thresholds that drive every produced offset are tested).
 - **Step re-sync:** a synthetic mid-timeline jump is detected and the segment offset adopted.
 - **Change-log:** `syncEvents` records an entry on initial lock (`reason='lock'`) and on
   step re-sync (`reason='resync'`) with correct `delta`/`windowStart..End`; list is bounded
@@ -249,9 +282,10 @@ real `bun run build`, i18n en/ru/ja parity — all via `/frontend-verify`.
 
 - **UXΔ = +3 (Better)** — meaningful QoL for subtitle watchers; tempered by warm-up +
   mis-sync risk.
-- **CDI = 0.03 * 13** — localized, mostly-additive spread (2 new composables + small edits
-  to `AePlayer.vue` / `SubtitlesMenu.vue` + i18n + tests); the VAD/correlation engine is the
-  real effort (Fibonacci 13). Not pre-multiplied.
+- **CDI = 0.03 * 13** — localized, mostly-additive spread (pure-math module + Web-Audio tap +
+  3 composables + a shared `fetchAndParseCues` helper + small edits to `AePlayer.vue` /
+  `SubtitlesMenu.vue` / `SubtitleOverlay.vue` delegation + i18n + tests); the VAD/correlation
+  engine is the real effort (Fibonacci 13). Not pre-multiplied.
 - **MVQ = Griffin 85%/80%** — precise, self-contained signal-processing unit grafted cleanly
   onto the existing offset path.
 
