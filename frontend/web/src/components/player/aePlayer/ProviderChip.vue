@@ -94,6 +94,9 @@ const props = defineProps<{
   best?: boolean
   /** When on, degraded/recovering (hacker-only) providers become selectable. */
   hackerMode?: boolean
+  /** Top-3 fallback: force selectability for a hacker-only row when too few
+   *  sources are active, so a fully-degraded fleet is never a dead end. */
+  forced?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -107,7 +110,7 @@ const labels = computed(() => deriveCapLabels(props.cap))
 // hacker-only rows (degraded/recovering). The feed is the single source of
 // truth — the chip no longer recomputes state from a registry. AUTO-484.
 const selectable = computed(
-  () => props.row.selectable && (!props.row.hackerOnly || props.hackerMode === true),
+  () => props.row.selectable && (!props.row.hackerOnly || props.hackerMode === true || props.forced === true),
 )
 
 // State-colored status dot — semantic DS tokens, never per-provider hue.

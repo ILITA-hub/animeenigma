@@ -57,6 +57,14 @@ describe('ProviderChip', () => {
     expect(on.emitted('select')).toBeTruthy()
   })
 
+  it('a forced degraded row is selectable without hacker mode', async () => {
+    const dr = row({ state: 'degraded', hackerOnly: true, selectable: true })
+    const w = mount(ProviderChip, { props: { row: dr, hackerMode: false, forced: true }, ...stub })
+    expect(w.find('button').attributes('disabled')).toBeUndefined()
+    await w.find('button').trigger('click')
+    expect(w.emitted('select')).toBeTruthy()
+  })
+
   it('renders the DEGRADED / RECOVERING badges', () => {
     const deg = mount(ProviderChip, { props: { row: row({ state: 'degraded', hackerOnly: true }) }, ...stub })
     expect(deg.find('[data-test="cap-degraded"]').exists()).toBe(true)

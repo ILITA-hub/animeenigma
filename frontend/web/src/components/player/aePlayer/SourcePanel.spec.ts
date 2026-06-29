@@ -98,6 +98,20 @@ describe('SourcePanel collapse', () => {
     expect(w.findAll('[data-test="provider-chip"]').length).toBe(5)
   })
 
+  it('pads the collapsed list to 3 with degraded rows when fewer than 3 are active', () => {
+    const rows = [a('gogoanime', 'active'), a('allanime', 'degraded'), a('miruro', 'degraded'), a('animepahe', 'degraded')]
+    const w = mount(SourcePanel, { props: { ...cb, rows, provider: '', hackerMode: false, playbackError: false } as any, ...mountOpts })
+    const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
+    expect(ids).toEqual(['gogoanime', 'allanime', 'miruro'])
+  })
+
+  it('a padded degraded chip is selectable without hacker mode', async () => {
+    const rows = [a('gogoanime', 'degraded'), a('allanime', 'degraded')]
+    const w = mount(SourcePanel, { props: { ...cb, rows, provider: '', hackerMode: false, playbackError: false } as any, ...mountOpts })
+    await w.find('[data-test="provider-chip"][data-id="gogoanime"] button').trigger('click')
+    expect(w.emitted('select-provider')?.[0]).toEqual(['gogoanime'])
+  })
+
   it('sorts active rows above degraded ones, order as tiebreak (hacker mode)', () => {
     // gogoanime has the highest order, but it is degraded → active rows float above it.
     const rows = [a('gogoanime', 'degraded'), a('allanime', 'active'), a('miruro', 'active')]

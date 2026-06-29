@@ -135,6 +135,7 @@
           :best="!hackerMode && !expanded && r.id === topRow?.id"
           :selected="r.id === provider"
           :hacker-mode="hackerMode"
+          :forced="forcedSelectableIds.has(r.id)"
           @select="emit('select-provider', r.id)"
         />
       </div>
@@ -277,9 +278,29 @@ watch(() => props.provider, () => { expanded.value = false })
 
 const collapsedRows = computed(() => {
   const top = activeRows.value.slice(0, TOP_N)
-  const selected = activeRows.value.find(r => r.id === props.provider)
+  // Pad with the next best non-active sources so the user always has up to
+  // TOP_N selectable providers, even when nothing is active (fully-degraded
+  // fleet) — otherwise the panel is a dead end without hacker mode.
+  if (top.length < TOP_N) {
+    for (const r of sortedRows.value) {
+      if (top.length >= TOP_N) break
+      if (r.state === 'active' || r.state === 'no_content') continue
+      if (!top.some(x => x.id === r.id)) top.push(r)
+    }
+  }
+  const selected = sortedRows.value.find(r => r.id === props.provider)
   if (selected && !top.some(r => r.id === selected.id)) top.push(selected)
   return top
+})
+
+// The padded (non-active, non-no_content) rows are made selectable WITHOUT
+// hacker mode so the user can always pick a source.
+const forcedSelectableIds = computed(() => {
+  const ids = new Set<string>()
+  for (const r of collapsedRows.value) {
+    if (r.state !== 'active' && r.state !== 'no_content') ids.add(r.id)
+  }
+  return ids
 })
 
 const visibleRows = computed(() => {
