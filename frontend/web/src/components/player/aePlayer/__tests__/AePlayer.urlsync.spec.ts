@@ -134,6 +134,17 @@ describe('AePlayer — ?provider deep-link pin (cross-language clamp)', () => {
     expect(combo.provider).toBe('kodik') // the dub/ru source the facet resolves to
   })
 
+  it('clamps a dub/ja URL combo to dub/en (no Japanese dub; slider is EN/RU)', async () => {
+    const wrapper = mountPlayer({ initialAudio: 'dub', initialLang: 'ja' })
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    const combo = readCombo(wrapper)
+    expect(combo.audio).toBe('dub')
+    expect(combo.lang).toBe('en') // ja rejected under dub
+  })
+
   it('emits url-sync mirroring the user-pinned source for the shareable URL', async () => {
     const wrapper = mountPlayer({ initialProvider: 'kodik', initialTeam: 'Studio Band' })
     await flushPromises()
