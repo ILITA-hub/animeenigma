@@ -487,6 +487,18 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "Probe run"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "Reasons"
             },
             "properties": [
@@ -574,7 +586,7 @@
           "rawQuery": true,
           "queryType": "sql",
           "format": "table",
-          "rawSql": "SELECT provider, multiIf(countIf(playable = 1) > 0, 'up', countIf(stage = 'playback') > 0, 'degraded', 'down') AS playability, arrayStringConcat(topKIf(3)(label, playable = 0), ' · ') AS reasons FROM (  SELECT provider, stage, playable,          concat(reason, ' — ', if(empty(anime_name), 'anime', anime_name)) AS label   FROM probe_runs WHERE run_ts = (SELECT max(run_ts) FROM probe_runs)) GROUP BY provider ORDER BY provider",
+          "rawSql": "SELECT provider, multiIf(countIf(playable = 1) > 0, 'up', countIf(stage = 'playback') > 0, 'degraded', 'down') AS playability, max(run_ts) AS probed_at, arrayStringConcat(topKIf(3)(label, playable = 0), ' · ') AS reasons FROM (  SELECT provider, stage, playable, run_ts,          concat(reason, ' — ', if(empty(anime_name), 'anime', anime_name)) AS label   FROM probe_runs WHERE (provider, run_ts) IN (SELECT provider, max(run_ts) FROM probe_runs WHERE run_ts > now() - INTERVAL 48 HOUR GROUP BY provider)) GROUP BY provider ORDER BY provider",
           "refId": "B"
         }
       ],
@@ -602,12 +614,14 @@
               "Resolved via": 5,
               "Last probed": 6,
               "playability": 7,
-              "reasons": 8,
-              "Note": 9
+              "probed_at": 8,
+              "reasons": 9,
+              "Note": 10
             },
             "renameByName": {
               "provider": "Provider",
               "playability": "Playability",
+              "probed_at": "Probe run",
               "reasons": "Reasons"
             }
           }
