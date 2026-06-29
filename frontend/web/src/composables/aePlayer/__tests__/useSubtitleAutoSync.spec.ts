@@ -66,6 +66,7 @@ describe('useSubtitleAutoSync', () => {
     speak(tap, 10, 12); speak(tap, 20, 23)
     expect(s.autoOffset.value).toBeCloseTo(2, 1)
     ek.value = 'a:2'; await nextTick()
+    expect(s.status.value).toBe('listening')   // not the stale 'locked' from the prior episode
     expect(s.autoOffset.value).toBe(0)
     expect(s.syncEvents.value).toEqual([])
     expect(tap.disposed).toBe(false)

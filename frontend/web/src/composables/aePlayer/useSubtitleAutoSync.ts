@@ -121,7 +121,11 @@ export function useSubtitleAutoSync(opts: {
     }
   }
 
-  watch(opts.episodeKey, () => { resetData(); arm() })
+  watch(opts.episodeKey, () => {
+    resetData()
+    if (status.value !== 'unsupported') status.value = 'idle'
+    arm()
+  })
   watch([opts.enabled, opts.videoElement], arm, { immediate: true })
   watch(cueIntervals, () => { if (!locked) evaluate() })   // cues may arrive after speech
   onUnmounted(() => { tap?.dispose(); tap = null })
