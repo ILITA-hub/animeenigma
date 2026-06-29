@@ -32,6 +32,18 @@ type Team struct {
 	Episodes []Episode // episodes that carry at least one of Sibnet/AllVideo, ascending by Num
 }
 
+// ResolvedLeg is the Phase 2 output: a concrete progressive MP4 plus the Referer
+// the player must replay when fetching it. The host CDNs (video.sibnet.ru,
+// incvideo1.online) gate the stream on the Referer of the embed/shell page, so
+// the downstream proxy MUST set Referer to this value, not animejoy.ru. Quality
+// is the picked rendition tag ("1080p", or "" for Sibnet which serves a single
+// progressive file).
+type ResolvedLeg struct {
+	URL     string // absolute progressive .mp4 URL
+	Referer string // Referer header the proxy must send when fetching URL
+	Quality string // rendition tag for AllVideo ("1080p"/…); "" for Sibnet
+}
+
 // searchHit is one deduped DLE search result row.
 type searchHit struct {
 	NewsID  string // the numeric news_id ("3647")
