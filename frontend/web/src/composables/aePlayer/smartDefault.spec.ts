@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickSmartDefault } from './smartDefault'
+import { pickSmartDefault, pickRawBiased, pickSelectableFallback } from './smartDefault'
 import type { ProviderRow } from '@/types/aePlayer'
 
 const row = (
@@ -43,5 +43,39 @@ describe('pickSmartDefault', () => {
   it('never picks an active-but-unselectable row', () => {
     const rows = [row('weird', { state: 'active', selectable: false })]
     expect(pickSmartDefault(rows)).toBeNull()
+  })
+})
+
+describe('pickRawBiased', () => {
+  it('prefers the best active row in the requested language group', () => {
+    const rows = [
+      row('gogoanime', { group: 'en', order: 90 }),
+      row('kodik', { group: 'ru', order: 80 }),
+    ]
+    expect(pickRawBiased(rows, 'ru')?.id).toBe('kodik')
+    expect(pickRawBiased(rows, 'en')?.id).toBe('gogoanime')
+  })
+
+  it('falls back to the global best when no active row serves the language', () => {
+    const rows = [
+      row('gogoanime', { group: 'en', order: 90 }),
+      row('kodik', { group: 'ru', order: 80 }),
+    ]
+    expect(pickRawBiased(rows, 'ja')?.id).toBe('gogoanime')
+  })
+})
+
+describe('pickSelectableFallback', () => {
+  it('returns the top-ranked selectable row even if degraded', () => {
+    const rows = [
+      row('kodik', { group: 'ru', state: 'degraded', selectable: true, order: 80 }),
+      row('raw', { group: 'jp', state: 'degraded', selectable: true, order: 70 }),
+    ]
+    expect(pickSelectableFallback(rows)?.id).toBe('kodik')
+  })
+
+  it('returns null for an empty or non-selectable set', () => {
+    expect(pickSelectableFallback([])).toBeNull()
+    expect(pickSelectableFallback([row('x', { selectable: false })])).toBeNull()
   })
 })

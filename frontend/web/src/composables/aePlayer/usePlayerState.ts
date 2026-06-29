@@ -15,6 +15,10 @@ export function usePlayerState() {
 
   const setAudio = (a: AudioKind) => { combo.value = { ...combo.value, audio: a, team: null } }
   const setLang = (l: TrackLang) => { combo.value = { ...combo.value, lang: l, team: null } }
+  // Set lang WITHOUT resetting team — used under RAW where combo.lang is derived
+  // from the chosen provider's group (not a user facet), so it must not clobber
+  // a deep-linked / saved team.
+  const setServedLang = (l: TrackLang) => { combo.value = { ...combo.value, lang: l } }
   const setProvider = (id: string, server: string) => { combo.value = { ...combo.value, provider: id, server } }
   const setServer = (server: string) => { combo.value = { ...combo.value, server } }
   const setTeam = (team: string | null) => { combo.value = { ...combo.value, team } }
@@ -53,7 +57,7 @@ export function usePlayerState() {
   return {
     playing, progress, volume, muted, quality, speed, autoNext, autoSkip, combo,
     subLang, subSize, subBg, subOffset, hackerMode, hudPinned,
-    setAudio, setLang, setProvider, setServer, setTeam,
+    setAudio, setLang, setServedLang, setProvider, setServer, setTeam,
   }
 }
 export type PlayerState = ReturnType<typeof usePlayerState>

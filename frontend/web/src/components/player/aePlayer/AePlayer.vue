@@ -352,11 +352,11 @@ import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/aePla
 import { useI18n } from 'vue-i18n'
 import { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
-import { pickSmartDefault } from '@/composables/aePlayer/smartDefault'
+import { pickSmartDefault, pickRawBiased, pickSelectableFallback } from '@/composables/aePlayer/smartDefault'
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
-import { GROUP_LANGS } from '@/composables/aePlayer/providerGroups'
+import { GROUP_LANGS, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
 import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
@@ -371,7 +371,7 @@ import { recordPlayerEvent } from '@/utils/playerTelemetry'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, ProviderRow, AudioKind } from '@/types/aePlayer'
+import type { StreamResult, ProviderRow, AudioKind, TrackLang } from '@/types/aePlayer'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
@@ -837,7 +837,7 @@ watch(
     if (roomHasCombo.value) return
     if (state.combo.value.provider) return
     if (!preferenceSettled.value) return // let saved prefs (audio/lang) settle first
-    const pick = pickSmartDefault(rows.value)
+    const pick = pickFacetDefault()
     if (pick && !state.combo.value.provider) {
       providerAutoSelected.value = true
       state.setProvider(pick.id, '')
@@ -845,6 +845,33 @@ watch(
     }
   },
   { immediate: true },
+)
+
+// Best provider for the current facet: language-biased under RAW (don't cross
+// language when a same-language source exists), plain best under DUB, with a
+// dead-player fallback to the top-ranked SELECTABLE (degraded) row so a
+// fully-degraded fleet still attempts playback instead of dead-ending.
+function pickFacetDefault(): ProviderRow | null {
+  const primary =
+    state.combo.value.audio === 'sub'
+      ? pickRawBiased(rows.value, state.combo.value.lang)
+      : pickSmartDefault(rows.value)
+  return primary ?? pickSelectableFallback(rows.value)
+}
+
+// Under RAW (audio:'sub') the language slider is hidden — derive combo.lang from
+// the chosen provider's group so persistence + the subtitle menu stay correct.
+// setServedLang preserves team; the facet watcher ignores RAW lang changes, so
+// this never churns the source.
+watch(
+  () => state.combo.value.provider,
+  (id) => {
+    if (!id || state.combo.value.audio !== 'sub') return
+    const row = rows.value.find((r) => r.id === id)
+    if (!row) return
+    const want: TrackLang = langForProviderUnderRaw(row.group, state.combo.value.lang)
+    if (want !== state.combo.value.lang) state.setServedLang(want)
+  },
 )
 
 // ─── Active provider display info ────────────────────────────────────────────
@@ -1361,7 +1388,14 @@ watch(
     // RU-only). When it can't, drop the current stream and re-pick the best
     // provider for the new facet — refreshing episodes/servers/teams — instead
     // of silently re-resolving a provider that has no such stream.
-    const facetChanged = newVal[0] !== oldVal[0] || newVal[1] !== oldVal[1]
+    const audioChanged = newVal[0] !== oldVal[0]
+    const langChanged = newVal[1] !== oldVal[1]
+    // Under RAW the language slider is hidden — combo.lang is a DERIVED value that
+    // follows the chosen provider (see the lang-follows-provider watcher below).
+    // A RAW-only lang change must NOT repick or re-resolve (it would churn the
+    // source); language is a real facet only under DUB.
+    if (!audioChanged && langChanged && newVal[0] === 'sub') return
+    const facetChanged = audioChanged || (newVal[0] === 'dub' && langChanged)
     if (facetChanged && !roomPinned.value) {
       void repickProviderForFacet()
       return
@@ -1390,7 +1424,7 @@ function repickProviderForFacet() {
   engine.destroy()
   sourceError.value = null
   resetSourceSwitching()
-  const pick = pickSmartDefault(rows.value)
+  const pick = pickFacetDefault()
   if (!pick) {
     sourceError.value = 'No source for this language / audio'
     return
