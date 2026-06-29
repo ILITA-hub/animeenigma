@@ -42,12 +42,11 @@ export function useSubtitleAutoSync(opts: {
   let openStart: number | null = null
   let lastT = -Infinity
   let totalSpeech = 0
-  let locked = false
   let tap: SpeechTap | null = null
   let active = false
 
   function resetData() {
-    speech = []; openStart = null; lastT = -Infinity; totalSpeech = 0; locked = false
+    speech = []; openStart = null; lastT = -Infinity; totalSpeech = 0
     autoOffset.value = 0; confidence.value = 0; syncEvents.value = []
   }
 
@@ -67,10 +66,11 @@ export function useSubtitleAutoSync(opts: {
       windowStart: speech[0]?.start ?? 0, windowEnd: lastT, reason,
     }
     syncEvents.value = [ev, ...syncEvents.value].slice(0, cfg.maxEvents)
-    autoOffset.value = offset; confidence.value = conf; locked = true; status.value = 'locked'
+    autoOffset.value = offset; confidence.value = conf; status.value = 'locked'
   }
 
   function evaluate() {
+    const locked = status.value === 'locked'   // single source of truth for the lock-vs-resync gate
     if (!locked && totalSpeech < cfg.minSpeech) return    // skip the sweep until warmed up
     if (!speech.length || !cueIntervals.value.length) return
     const r = bestOffset(speech, cueIntervals.value, SEARCH)
@@ -127,7 +127,7 @@ export function useSubtitleAutoSync(opts: {
     arm()
   })
   watch([opts.enabled, opts.videoElement], arm, { immediate: true })
-  watch(cueIntervals, () => { if (!locked) evaluate() })   // cues may arrive after speech
+  watch(cueIntervals, () => { if (status.value !== 'locked') evaluate() })   // cues may arrive after speech
   onUnmounted(() => { tap?.dispose(); tap = null })
 
   return { autoOffset, status, confidence, syncEvents }
