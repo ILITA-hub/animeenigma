@@ -5,6 +5,30 @@ Newest entry first. Used by the recovery operator to avoid repeating yesterday's
 
 ---
 
+## 2026-06-29 — nineanime
+
+**State before:** `policy=manual, health=down, status=degraded` — reason: `empty_response on 1anime` (health_since 2026-06-26T18:00:04Z, last_probed_at 2026-06-28T00:00:19Z)
+
+**Root cause:** Transient 1anime CDN blips. The probe rolled an anime indexed by 9anime.me.uk, got past episodes and servers, but the `my.1anime.site` CDN returned an empty/zero-body response at probe time (2026-06-26T18:00 and 2026-06-28T00:00). This CDN is intermittently unreliable around those UTC hours.
+
+**Manual verification today (2026-06-29T02:27Z):**
+- `GET /scraper/episodes?prefer=nineanime` (Witch Hat Atelier, fc6c54ac) → 13 episodes ✅
+- `GET /scraper/servers` → `1anime` server ✅
+- `GET /scraper/stream?server=1anime&category=sub` → signed `https://my.1anime.site/stream/6717eb510c2aa23f77b32fabcea730d0` ✅
+- Direct URL (with `Referer: https://my.1anime.site/`): HTTP 302 → `https://my.1anime.site/videos/witch-hat-atelier-episode-1.mp4` → HTTP 200, 195MB, `video/mp4` ✅
+- Via streaming proxy with `?referer=https%3A%2F%2Fmy.1anime.site%2F`: HTTP 200, 195MB, `video/mp4` ✅
+
+Note: probe_validator correctly sets the referer query param (`rs.Referer` from `stream.headers["Referer"]`). The proxy WITHOUT referer returns 403 from my.1anime.site — but that only affects misconfigured callers; the probe itself passes correctly.
+
+**Action taken:**
+Submitted `probe-result pass` with reason `manual-recovery-verify` → state machine transitioned `down → recovering` at 2026-06-29T02:32Z. `policy=manual` preserved. No code changes needed.
+
+**Outcome:** ✅ Recovered (transient 1anime CDN blip). nineanime now `health=recovering, policy=manual`.
+
+**Next step:** Monitor next scheduled probe. If probe keeps hitting `empty_response on 1anime`, investigate whether 1anime CDN has a nightly maintenance window (failures at 18:00 UTC and 00:00 UTC suggest a pattern). Consider adding a daytime probe window. `policy=manual` remains — promotion to auto is a human decision.
+
+---
+
 ## 2026-06-28 — gogoanime
 
 **State before:** `policy=auto, health=down, status=degraded` — reason: `cdn_unreachable on ` (health_since 2026-06-27T18:00:12Z, last_probed_at 2026-06-27T18:00:12Z)
