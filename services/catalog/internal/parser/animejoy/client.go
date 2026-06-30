@@ -1,6 +1,9 @@
 package animejoy
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -59,4 +62,35 @@ func (c *Client) base() string {
 		return DefaultBaseURL
 	}
 	return strings.TrimRight(c.baseURL, "/")
+}
+
+// getBody issues a GET to url with the default User-Agent plus any extra headers,
+// requires a 200, and returns the response body read through the shared
+// maxBodyBytes LimitReader. It is the single HTTP-fetch primitive shared by the
+// search / playlist / leg-resolver wrappers; each caller layers its own
+// parse-step error context on top. Transport, status, and read errors carry a
+// generic "animejoy:" prefix.
+func (c *Client) getBody(ctx context.Context, url string, headers map[string]string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("animejoy: build request: %w", err)
+	}
+	req.Header.Set("User-Agent", defaultUserAgent)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("animejoy: request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("animejoy: http %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("animejoy: read body: %w", err)
+	}
+	return body, nil
 }
