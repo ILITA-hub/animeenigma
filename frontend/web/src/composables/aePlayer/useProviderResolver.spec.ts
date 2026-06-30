@@ -427,3 +427,98 @@ describe('ProviderResolver.listTeams', () => {
     expect(await resolver.listTeams('allanime', 'anime-1', 'sub')).toEqual([])
   })
 })
+
+describe('useProviderResolver animejoy (RU-sub MP4 legs)', () => {
+  // Run the same expectations against BOTH legs — sibnet & allvideo share the
+  // adapter and differ only in the leg path segment.
+  for (const leg of ['sibnet', 'allvideo'] as const) {
+    const provider = `animejoy-${leg}` as const
+
+    const makeAnimejoyApi = () => {
+      return {
+        getEpisodes: vi.fn().mockResolvedValue({
+          data: { data: {
+            episodes: [1, 2, 3],
+            teams: [{ id: 't1', name: 'AnimeJoy' }, { id: 't2', name: 'Studio Band' }],
+          } },
+        }),
+        getStream: vi.fn().mockResolvedValue({
+          data: { data: {
+            url: 'https://video.sibnet.ru/v/abc.mp4',
+            type: 'mp4',
+            quality: '720p',
+            referer: 'https://animejoy.ru/',
+            exp: '1799999999',
+            sig: 'cafebabe',
+          } },
+        }),
+      }
+    }
+
+    it(`${provider}: listEpisodes maps data.episodes to EpisodeOption[]`, async () => {
+      const animejoyApi = makeAnimejoyApi()
+      const resolver = makeResolver({ animejoyApi } as any)
+      const eps = await resolver.listEpisodes(provider, 'anime-uuid')
+      expect(animejoyApi.getEpisodes).toHaveBeenCalledWith('anime-uuid', leg)
+      expect(eps.length).toBe(3)
+      expect(eps[0]).toEqual({ key: 1, label: 1, number: 1 })
+      expect(eps[2].number).toBe(3)
+    })
+
+    it(`${provider}: resolveStream proxies the MP4 with referer+exp+sig+type=mp4`, async () => {
+      const animejoyApi = makeAnimejoyApi()
+      const resolver = makeResolver({ animejoyApi } as any)
+      const eps = await resolver.listEpisodes(provider, 'anime-uuid')
+      const stream = await resolver.resolveStream(provider, 'anime-uuid', eps[0], {
+        audio: 'sub', lang: 'ru', provider, server: '', team: 't1',
+      })
+      // getStream called with (animeId, leg, ep.number, team)
+      expect(animejoyApi.getStream).toHaveBeenCalledWith('anime-uuid', leg, 1, 't1')
+      expect(stream.type).toBe('mp4')
+      expect(stream.qualityLabel).toBe('720p')
+      const params = proxyParams(stream.url)
+      expect(params.get('url')).toBe('https://video.sibnet.ru/v/abc.mp4')
+      expect(params.get('referer')).toBe('https://animejoy.ru/')
+      // progressive MP4 → range-passthrough marker MUST be present
+      expect(params.get('type')).toBe('mp4')
+      // Referer-gated CDN tokens forwarded so the proxy trusts the source.
+      expect(params.get('exp')).toBe('1799999999')
+      expect(params.get('sig')).toBe('cafebabe')
+    })
+
+    it(`${provider}: resolveStream omits the team param when none is selected`, async () => {
+      const animejoyApi = makeAnimejoyApi()
+      const resolver = makeResolver({ animejoyApi } as any)
+      const eps = await resolver.listEpisodes(provider, 'anime-uuid')
+      await resolver.resolveStream(provider, 'anime-uuid', eps[0], {
+        audio: 'sub', lang: 'ru', provider, server: '', team: null,
+      })
+      // team is null → adapter passes undefined, api drops it from params
+      expect(animejoyApi.getStream).toHaveBeenCalledWith('anime-uuid', leg, 1, undefined)
+    })
+
+    it(`${provider}: resolveStream throws NotAvailableError when no URL`, async () => {
+      const animejoyApi = makeAnimejoyApi()
+      animejoyApi.getStream.mockResolvedValue({ data: { data: { url: '' } } })
+      const resolver = makeResolver({ animejoyApi } as any)
+      await expect(
+        resolver.resolveStream(provider, 'anime-uuid', { key: 1, label: 1, number: 1 }, {
+          audio: 'sub', lang: 'ru', provider, server: '', team: null,
+        }),
+      ).rejects.toThrow(/no stream URL/)
+    })
+
+    it(`${provider}: listTeams returns team names for 'sub' and [] for 'dub'`, async () => {
+      const animejoyApi = makeAnimejoyApi()
+      const resolver = makeResolver({ animejoyApi } as any)
+      expect(await resolver.listTeams(provider, 'anime-uuid', 'sub')).toEqual(['AnimeJoy', 'Studio Band'])
+      // RU-sub only — never surfaces DUB teams.
+      expect(await resolver.listTeams(provider, 'anime-uuid', 'dub')).toEqual([])
+    })
+
+    it(`${provider}: throws NotAvailableError when the animejoyApi dep is missing`, async () => {
+      const resolver = makeResolver({} as any)
+      await expect(resolver.listEpisodes(provider, 'anime-uuid')).rejects.toThrow(NotAvailableError)
+    })
+  }
+})
