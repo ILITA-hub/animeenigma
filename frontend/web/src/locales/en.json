@@ -462,6 +462,8 @@
       "jumpPlaceholder": "Jump to ep… ⏎",
       "jumpAria": "Jump to episode",
       "noEpisodes": "No episodes from this source",
+      "episodeUpcoming": "airs {when}",
+      "episodeUpcomingNoEta": "not aired yet",
       "marking": "Marking…",
       "markWatched": "Mark ep. {n} as watched",
       "epWatched": "Ep. {n} watched",

@@ -462,6 +462,8 @@
       "jumpPlaceholder": "エピソードへ… ⏎",
       "jumpAria": "エピソードへ移動",
       "noEpisodes": "このソースにエピソードがありません",
+      "episodeUpcoming": "{when}に公開",
+      "episodeUpcomingNoEta": "未放送",
       "marking": "記録中…",
       "markWatched": "第{n}話を視聴済みにする",
       "epWatched": "第{n}話 視聴済み",

@@ -192,4 +192,36 @@ describe('EpisodesPanel', () => {
     expect(w.emitted('select')).toBeUndefined()
     expect(w.find('[data-test="episode-40"]').classes()).toContain('ep-flash')
   })
+
+  // ── Upcoming episode placeholder ──────────────────────────────────────────
+
+  it('renders a disabled upcoming placeholder with the eta label', () => {
+    const w = mount(EpisodesPanel, {
+      props: { episodes: eps, selectedNumber: 1, upcoming: { number: 4, etaLabel: 'in 2 days' } },
+    })
+    const ph = w.find('[data-test="episode-upcoming"]')
+    expect(ph.exists()).toBe(true)
+    expect(ph.text()).toContain('airs in 2 days')
+    // non-interactive: it is a div, not a button, and emits no select
+    expect(ph.element.tagName).not.toBe('BUTTON')
+  })
+
+  it('upcoming placeholder without an eta shows the generic not-aired label', () => {
+    const w = mount(EpisodesPanel, {
+      props: { episodes: eps, selectedNumber: 1, upcoming: { number: 4 } },
+    })
+    expect(w.find('[data-test="episode-upcoming"]').text()).toContain('not aired yet')
+  })
+
+  it('hides the upcoming placeholder when that episode is already loaded', () => {
+    const w = mount(EpisodesPanel, {
+      props: { episodes: eps, selectedNumber: 1, upcoming: { number: 3, etaLabel: 'soon' } },
+    })
+    expect(w.find('[data-test="episode-upcoming"]').exists()).toBe(false)
+  })
+
+  it('renders no upcoming placeholder when upcoming is null', () => {
+    const w = mount(EpisodesPanel, { props: { episodes: eps, selectedNumber: 1 } })
+    expect(w.find('[data-test="episode-upcoming"]').exists()).toBe(false)
+  })
 })

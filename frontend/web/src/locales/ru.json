@@ -462,6 +462,8 @@
       "jumpPlaceholder": "К серии… ⏎",
       "jumpAria": "Перейти к серии",
       "noEpisodes": "Нет серий из этого источника",
+      "episodeUpcoming": "выйдет {when}",
+      "episodeUpcomingNoEta": "ещё не вышла",
       "marking": "Отмечаем…",
       "markWatched": "Отметить серию {n} просмотренной",
       "epWatched": "Серия {n} просмотрена",

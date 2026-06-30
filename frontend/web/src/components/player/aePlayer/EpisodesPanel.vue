@@ -98,6 +98,18 @@
           data-test="ep-progress"
         />
       </button>
+      <div
+        v-if="upcomingVisible"
+        class="ep-card ep-card--upcoming"
+        data-test="episode-upcoming"
+        :title="upcomingText"
+      >
+        <span class="ep-card-n">
+          <span>{{ $t('player.aePlayer.epAbbrev') }} {{ upcoming?.number }}</span>
+          <Clock :size="11" class="ep-card-clock" aria-hidden="true" />
+        </span>
+        <span class="ep-card-t">{{ upcomingText }}</span>
+      </div>
     </div>
 
     <!-- Grid view (100+): dense archive navigation, vertical scroll -->
@@ -138,6 +150,15 @@
           aria-hidden="true"
         />
       </button>
+      <div
+        v-if="upcomingVisible"
+        class="ep-cell ep-cell--upcoming relative rounded-[var(--r-sm)] text-[12px] font-semibold"
+        data-test="episode-grid-upcoming"
+        :title="upcomingText"
+      >
+        {{ upcoming?.number }}
+        <Clock class="ep-check" :size="10" aria-hidden="true" />
+      </div>
     </div>
 
     <!-- Manual mark-as-watched for the CURRENT episode (Kodik parity) -->
@@ -163,7 +184,8 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
-import { Check, LayoutGrid, GalleryHorizontal } from 'lucide-vue-next'
+import { Check, LayoutGrid, GalleryHorizontal, Clock } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 
 export interface EpisodeUserProgress {
@@ -173,6 +195,8 @@ export interface EpisodeUserProgress {
   sec?: number
   completed: boolean
 }
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -188,8 +212,10 @@ const props = withDefaults(
     marking?: boolean
     /** current episode already watched — disables the action */
     marked?: boolean
+    /** Disabled placeholder for the not-yet-aired next episode (from the resume banner). */
+    upcoming?: { number: number; etaLabel?: string } | null
   }>(),
-  { watchedUpTo: 0, progress: () => ({}), canMark: false, marking: false, marked: false },
+  { watchedUpTo: 0, progress: () => ({}), canMark: false, marking: false, marked: false, upcoming: null },
 )
 
 const emit = defineEmits<{
@@ -224,6 +250,19 @@ const nextUnwatched = computed(() => {
   const ep = props.episodes.find((e) => !isWatched(e))
   if (!ep || ep.number === props.selectedNumber) return null
   return ep
+})
+
+// Show the disabled "next episode airs …" placeholder, unless that episode is
+// already in the loaded list (then it's a real, selectable card).
+const upcomingVisible = computed(
+  () => !!props.upcoming && !props.episodes.some((e) => e.number === props.upcoming!.number),
+)
+const upcomingText = computed(() => {
+  const u = props.upcoming
+  if (!u) return ''
+  return u.etaLabel
+    ? t('player.aePlayer.episodeUpcoming', { when: u.etaLabel })
+    : t('player.aePlayer.episodeUpcomingNoEta')
 })
 
 function setView(v: 'strip' | 'grid') {
@@ -449,6 +488,29 @@ onMounted(() => {
   100% {
     box-shadow: none;
   }
+}
+
+/* upcoming (not-yet-aired) placeholder — disabled, non-interactive */
+.ep-card--upcoming {
+  opacity: 0.5;
+  cursor: default;
+  border-style: dashed;
+}
+
+.ep-card--upcoming:hover {
+  background: var(--white-a4);
+}
+
+.ep-card-clock {
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.ep-cell--upcoming {
+  opacity: 0.5;
+  cursor: default;
+  background: var(--white-a8);
+  color: var(--muted-foreground);
 }
 
 /* mark-as-watched footer */

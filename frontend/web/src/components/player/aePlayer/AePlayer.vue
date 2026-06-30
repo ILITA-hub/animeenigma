@@ -121,13 +121,6 @@
     </div>
 
     <!-- Overlays -->
-    <!-- Airing-status banner (top-center, persists through chrome auto-hide).
-         Only the "caught up, waiting for the next episode" family surfaces over
-         the video: next-unavailable ("ep N airs {when}" / "ep N not available
-         yet"). The just-finished breadcrumb is intentionally not overlaid here. -->
-    <div v-if="resumeBannerProps.kind !== 'none'" class="pl-airing-status">
-      <ResumePill :banner="resumeBannerProps" />
-    </div>
 
     <BigPlayButton
       :visible="!state.playing.value && !sourceError && !showBuffering && !isResolving"
@@ -245,6 +238,7 @@
       <EpisodesPanel
         :episodes="episodes"
         :selected-number="selectedEpisode?.number ?? null"
+        :upcoming="upcomingEpisode"
         :watched-up-to="watchedUpTo"
         :progress="epProgress"
         :can-mark="auth.isAuthenticated"
@@ -332,7 +326,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useViewerContextStore } from '@/stores/viewerContext'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
-import ResumePill from '@/components/player/ResumePill.vue'
 import type { ResumeBanner } from '@/composables/watchState'
 import { Button } from '@/components/ui'
 import PlayerControlBar from './PlayerControlBar.vue'
@@ -2333,16 +2326,15 @@ function onPickSubLang(v: string) {
   if (track) onSelectSubTrack(track)
 }
 
-// ─── Resume pill ─────────────────────────────────────────────────────────────
+// ─── Upcoming episode placeholder ────────────────────────────────────────────
 
-// The parent (Anime.vue) owns the unified watch state and passes the computed
-// banner down via `resumeBanner`. We overlay only the airing-status family —
-// next-unavailable — so a caught-up viewer learns the next episode is not
-// available yet. The just-finished breadcrumb is deliberately NOT shown over
-// the video.
-const resumeBannerProps = computed<ResumeBanner>(() => {
+// The "next episode airs {when}" info is NOT overlaid on the video — the anime
+// page already shows that banner above the player. Instead we surface the
+// awaited episode as a disabled placeholder inside the episodes sheet. Derived
+// from the resume banner's next-unavailable family.
+const upcomingEpisode = computed<{ number: number; etaLabel?: string } | null>(() => {
   const b = props.resumeBanner
-  return b && b.kind === 'next-unavailable' ? b : { kind: 'none' }
+  return b && b.kind === 'next-unavailable' ? { number: b.episode, etaLabel: b.etaLabel } : null
 })
 
 // ─── Playback helpers ─────────────────────────────────────────────────────────
@@ -2757,23 +2749,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* Airing / translation-delay status banner — top-center, informational.
-   Sits just below the title bar and, unlike .pl-top, never auto-hides (a
-   caught-up viewer should keep seeing "next episode aired — translators need
-   time"). z-index below .pl-top so a long title is never covered; pointer-
-   events:none so it never intercepts a tap on the video. */
-.pl-airing-status {
-  position: absolute;
-  top: 68px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
-  display: flex;
-  justify-content: center;
-  max-width: calc(100% - 36px);
-  pointer-events: none;
 }
 
 /* Player shell is tabindex=0 for hotkeys. Suppress the ring on mouse focus,

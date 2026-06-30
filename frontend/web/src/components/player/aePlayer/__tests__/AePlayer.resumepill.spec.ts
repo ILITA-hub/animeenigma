@@ -4,12 +4,11 @@ import { ref, nextTick } from 'vue'
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 import type { ResumeBanner } from '@/composables/watchState'
 
-// Regression: the in-player resume/airing banner. Before this wiring AePlayer
-// hardcoded resumeKind='first-time', so the "next episode not available yet"
-// message NEVER surfaced in the primary player; it only worked in the legacy
-// Kodik header slot. The parent now passes the unified resume banner down via
-// `resumeBanner` (a ResumeBanner), and AePlayer overlays ONLY the airing-status
-// family (next-unavailable) — never the just-finished breadcrumb.
+// Regression: task 8 — the in-player airing overlay has been REMOVED. The
+// `.pl-airing-status` div no longer exists in AePlayer; the "ep N airs {when}"
+// copy moved into EpisodesPanel as a disabled placeholder card. These tests
+// confirm the old overlay is absent and AePlayer compiles + mounts cleanly
+// when a next-unavailable resume banner is passed.
 const gogoCap = {
   provider: 'gogoanime', display_name: 'GogoAnime',
   state: 'active' as const, selectable: true, hacker_only: false,
@@ -73,9 +72,6 @@ vi.mock('@/utils/playerTelemetry', () => ({ recordPlayerEvent: vi.fn() }))
 
 import AePlayer from '../AePlayer.vue'
 
-// Render the REAL ResumePill (it's a tiny presentational SFC) so we assert the
-// message path end-to-end; i18n's t() is mocked to echo the key, so a rendered
-// "anime.resume.notYetAvailable*" proves the airing-status copy is wired.
 const stubs = {
   PlayerControlBar: true, SourcePanel: true, EpisodesPanel: true, PlaybackSettingsMenu: true,
   SubtitlesMenu: true, BrowseSubsModal: true, BigPlayButton: true, BufferingOverlay: true,
@@ -98,39 +94,31 @@ async function settle() {
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('AePlayer — resume/airing banner', () => {
-  it('surfaces the not-yet-available message for next-unavailable (no eta)', async () => {
+describe('AePlayer — airing overlay removed (task 8)', () => {
+  it('does NOT render .pl-airing-status for next-unavailable (no eta) — overlay removed', async () => {
     const resumeBanner: ResumeBanner = { kind: 'next-unavailable', episode: 12 }
     const wrapper = mountPlayer({ resumeBanner })
     await settle()
-
-    const banner = wrapper.find('.pl-airing-status')
-    expect(banner.exists()).toBe(true)
-    expect(banner.text()).toContain('anime.resume.notYetAvailable')
-  })
-
-  it('surfaces the eta message for next-unavailable with an etaLabel', async () => {
-    const resumeBanner: ResumeBanner = { kind: 'next-unavailable', episode: 12, etaLabel: 'Jul 1' }
-    const wrapper = mountPlayer({ resumeBanner })
-    await settle()
-
-    const banner = wrapper.find('.pl-airing-status')
-    expect(banner.exists()).toBe(true)
-    expect(banner.text()).toContain('anime.resume.notYetAvailableEta')
-  })
-
-  it('does NOT overlay the just-finished breadcrumb over the video', async () => {
-    const resumeBanner: ResumeBanner = { kind: 'just-finished', episode: 5 }
-    const wrapper = mountPlayer({ resumeBanner })
-    await settle()
-
     expect(wrapper.find('.pl-airing-status').exists()).toBe(false)
   })
 
-  it('shows no banner when no resume state is passed (none / first-time / anonymous)', async () => {
+  it('does NOT render .pl-airing-status for next-unavailable with eta — overlay removed', async () => {
+    const resumeBanner: ResumeBanner = { kind: 'next-unavailable', episode: 12, etaLabel: 'Jul 1' }
+    const wrapper = mountPlayer({ resumeBanner })
+    await settle()
+    expect(wrapper.find('.pl-airing-status').exists()).toBe(false)
+  })
+
+  it('does NOT render .pl-airing-status for just-finished either', async () => {
+    const resumeBanner: ResumeBanner = { kind: 'just-finished', episode: 5 }
+    const wrapper = mountPlayer({ resumeBanner })
+    await settle()
+    expect(wrapper.find('.pl-airing-status').exists()).toBe(false)
+  })
+
+  it('shows no airing overlay when no resume state is passed', async () => {
     const wrapper = mountPlayer()
     await settle()
-
     expect(wrapper.find('.pl-airing-status').exists()).toBe(false)
   })
 })
