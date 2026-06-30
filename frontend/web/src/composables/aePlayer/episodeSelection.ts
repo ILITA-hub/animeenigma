@@ -39,3 +39,20 @@ export function pickEpisodeForProvider(
   // 4. fall back to the previous selection so we never null out unexpectedly.
   return eps[0] ?? previous ?? null
 }
+
+/**
+ * Decide whether the player should re-pick its episode when `initialEpisode`
+ * changes AFTER mount. Resume/watch-progress resolves asynchronously, so the
+ * prop flips from its mount value (default 1) to e.g. `lastWatched + 1` a tick
+ * later. We re-select then — UNLESS the user has already manually chosen an
+ * episode (never yank them off a deliberate pick), the prop is still absent,
+ * or we are already on the target (no churn). Pure: testable in isolation.
+ */
+export function shouldReselectEpisode(
+  currentNumber: number | null,
+  initialEpisode: number | undefined,
+  userPicked: boolean,
+): boolean {
+  if (initialEpisode == null || userPicked) return false
+  return currentNumber !== initialEpisode
+}
