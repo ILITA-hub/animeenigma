@@ -1012,6 +1012,38 @@ func (h *CatalogHandler) getAnimejoyStream(w http.ResponseWriter, r *http.Reques
 	httputil.OK(w, stream)
 }
 
+// GetAnimejoySibnetEpisodes returns the AnimeJoy *Sibnet* leg's episode + team
+// inventory for a title — the per-provider episode list the FE adapter's
+// listEpisodes / listTeams read. Thin: read animeId (chi param); delegate to
+// GetAnimejoyLegInfo with the fixed "sibnet" leg.
+func (h *CatalogHandler) GetAnimejoySibnetEpisodes(w http.ResponseWriter, r *http.Request) {
+	h.getAnimejoyEpisodes(w, r, "sibnet")
+}
+
+// GetAnimejoyAllVideoEpisodes is the AllVideo mirror of GetAnimejoySibnetEpisodes.
+func (h *CatalogHandler) GetAnimejoyAllVideoEpisodes(w http.ResponseWriter, r *http.Request) {
+	h.getAnimejoyEpisodes(w, r, "allvideo")
+}
+
+// getAnimejoyEpisodes is the shared body for both leg episode handlers. Mirrors
+// getAnimejoyStream: animeId (chi) only — no episode/team query params, since the
+// FE needs the whole per-leg list to build its picker.
+func (h *CatalogHandler) getAnimejoyEpisodes(w http.ResponseWriter, r *http.Request, leg string) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	info, err := h.catalogService.GetAnimejoyLegInfo(r.Context(), animeID, leg)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, info)
+}
+
 // GetJimakuSubtitles fetches Japanese subtitles from Jimaku for an anime episode
 func (h *CatalogHandler) GetJimakuSubtitles(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")

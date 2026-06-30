@@ -307,6 +307,25 @@ type AnimejoyStream struct {
 	Sig       string    `json:"sig,omitempty"`
 }
 
+// AnimejoyLegInfo is the per-leg (Sibnet OR AllVideo) episode + team inventory
+// for a title — the data source the frontend AnimeJoy adapter's listEpisodes /
+// listTeams need (the player drives a per-provider episode list, one list per
+// leg). Episodes holds the DISTINCT episode numbers (ascending) that carry the
+// leg across all teams; Teams lists the teams that have at least one episode on
+// the leg. RU-sub only.
+type AnimejoyLegInfo struct {
+	Episodes []int              `json:"episodes"`
+	Teams    []AnimejoyTeamMeta `json:"teams"`
+}
+
+// AnimejoyTeamMeta is the minimal {id,name} a team contributes to AnimejoyLegInfo
+// — the dropdown label + value the FE listTeams needs, with the per-leg presence
+// already filtered (a team only appears for legs it actually carries).
+type AnimejoyTeamMeta struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // PinTranslationRequest for pinning a translation
 type PinTranslationRequest struct {
 	TranslationID    int    `json:"translation_id" validate:"required"`

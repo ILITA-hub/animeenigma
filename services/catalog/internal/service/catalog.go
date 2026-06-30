@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1740,6 +1741,70 @@ func (s *CatalogService) GetAnimejoyTeams(ctx context.Context, animeID string) (
 	return mapAnimejoyTeams(teams), nil
 }
 
+// buildAnimejoyLegInfo reduces the discovery playlist to the per-leg episode +
+// team inventory the FE adapter's listEpisodes / listTeams consume. PURE (no
+// network): a team "has" the leg when ANY of its episodes carries a non-empty
+// leg embed (via animejoy.LegEmbedURL) — only such teams appear in Teams; an
+// episode contributes its Num to Episodes only when it carries the leg.
+// Episodes is the DISTINCT set across all teams, sorted ascending. Both slices
+// are always non-nil (empty, never nil) so the JSON renders [] not null.
+func buildAnimejoyLegInfo(teams []animejoy.Team, leg string) domain.AnimejoyLegInfo {
+	info := domain.AnimejoyLegInfo{
+		Episodes: []int{},
+		Teams:    []domain.AnimejoyTeamMeta{},
+	}
+	seenEp := map[int]bool{}
+	for _, t := range teams {
+		hasLeg := false
+		for _, ep := range t.Episodes {
+			if animejoy.LegEmbedURL(ep, leg) == "" {
+				continue
+			}
+			hasLeg = true
+			if !seenEp[ep.Num] {
+				seenEp[ep.Num] = true
+				info.Episodes = append(info.Episodes, ep.Num)
+			}
+		}
+		if hasLeg {
+			info.Teams = append(info.Teams, domain.AnimejoyTeamMeta{ID: t.ID, Name: t.Name})
+		}
+	}
+	sort.Ints(info.Episodes)
+	return info
+}
+
+// GetAnimejoyLegInfo returns the per-leg (sibnet|allvideo) episode + team
+// inventory for a title — the source the FE AnimeJoy adapter's listEpisodes /
+// listTeams read (the player uses a per-provider episode list, one per leg).
+// Best-effort: a nil client or a discovery miss/error yields an EMPTY info
+// (non-nil slices), nil error — the FE then shows "no episodes" rather than an
+// error. An unknown leg is the one hard error (errors.InvalidInput). Shares the
+// cached discovery base with GetAnimejoyTeams / GetAnimejoyStream. RU-sub only.
+func (s *CatalogService) GetAnimejoyLegInfo(ctx context.Context, animeID, leg string) (_ *domain.AnimejoyLegInfo, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("animejoy", "get_leg_info", start, &retErr)
+
+	empty := &domain.AnimejoyLegInfo{Episodes: []int{}, Teams: []domain.AnimejoyTeamMeta{}}
+	if s.animejoyClient == nil {
+		return empty, nil
+	}
+	if leg != "sibnet" && leg != "allvideo" {
+		return nil, errors.InvalidInput(fmt.Sprintf("invalid animejoy leg %q", leg))
+	}
+
+	teams, err := s.resolveAnimejoyPlaylist(ctx, animeID)
+	if err != nil {
+		// Best-effort: surface no episodes rather than an error so the FE leg
+		// chip degrades cleanly (mirrors resolveAnimejoyPlaylist's own
+		// negative-cache-and-return-empty posture for discovery misses).
+		return empty, nil
+	}
+
+	info := buildAnimejoyLegInfo(teams, leg)
+	return &info, nil
+}
+
 // pickLegEmbed selects the concrete embed URL for a (leg, episode, teamID)
 // request from the discovery playlist. PURE (no network):
 //   - leg must be "sibnet" or "allvideo".
@@ -1762,10 +1827,7 @@ func pickLegEmbed(teams []animejoy.Team, leg string, episode int, teamID string)
 	}
 
 	legURL := func(ep animejoy.Episode) string {
-		if leg == "sibnet" {
-			return ep.Sibnet
-		}
-		return ep.AllVideo
+		return animejoy.LegEmbedURL(ep, leg)
 	}
 
 	if teamID != "" {
