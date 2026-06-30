@@ -7,6 +7,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/providerpolicy"
@@ -56,6 +57,9 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 
 	// disabled is the hard lock; non-scraper rows are not under policy management.
 	if p.Policy == domain.PolicyDisabled || !p.ScraperOperated {
+		// Refresh the state gauge from the current (unchanged) row so the
+		// history timeline stays current even for non-managed providers.
+		metrics.ProviderState.WithLabelValues(p.Name).Set(p.StateCode())
 		httputil.OK(w, map[string]any{
 			"provider": p.Name,
 			"policy":   p.Policy,
@@ -85,6 +89,11 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 		http.Error(w, `{"success":false,"error":"persist failed"}`, http.StatusInternalServerError)
 		return
 	}
+
+	// Reflect the post-transition derived state into the provider_state gauge so
+	// the "Provider State History" timeline records this transition live (the
+	// gauge holds between probes; Prometheus scraping fills the continuous band).
+	metrics.ProviderState.WithLabelValues(p.Name).Set(p.StateCode())
 
 	httputil.OK(w, map[string]any{
 		"provider": p.Name,

@@ -52,6 +52,7 @@ type wireProducerEffect struct {
 	EffectKind string `json:"effect_kind,omitempty"`
 	TargetKind string `json:"target_kind,omitempty"`
 	Target     string `json:"target,omitempty"`
+	Provider   string `json:"provider,omitempty"`
 	AnimeID    string `json:"anime_id,omitempty"`
 	TraceID    string `json:"trace_id,omitempty"`
 	Status     int    `json:"status,omitempty"`
@@ -175,6 +176,7 @@ func (p *Producer) post(effects []Effect) {
 			EffectKind: e.EffectKind,
 			TargetKind: targetKind,
 			Target:     target,
+			Provider:   e.Provider,
 			AnimeID:    e.AnimeID,
 			TraceID:    e.TraceID,
 			Status:     e.Status,

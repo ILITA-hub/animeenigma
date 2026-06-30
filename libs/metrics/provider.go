@@ -117,6 +117,22 @@ var (
 		[]string{"provider", "status", "reason", "description"},
 	)
 
+	// ProviderState is the derived-lifecycle gauge feeding the playback-health
+	// "Provider State History" timeline. Value is the numeric StateCode of the
+	// (policy, health) pair — 4=UP, 3=Recovering, 2=Degraded, 1=Down, 0=Disabled
+	// (see domain.ScraperProvider.StateCode). Unlike provider_info (boot-only
+	// snapshot), catalog re-sets this on every probe-result transition, so the
+	// gauge holds the current state between probes and Prometheus scraping
+	// records the continuous weekly history. Catalog is the SOLE emitter (covers
+	// the full roster), so there is no duplicate-series-across-targets concern.
+	ProviderState = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "provider_state",
+			Help: "Derived provider lifecycle state code (4=UP, 3=Recovering, 2=Degraded, 1=Down, 0=Disabled) per provider, for the Grafana state-history timeline",
+		},
+		[]string{"provider"},
+	)
+
 	// ProviderBreakerTripsTotal counts circuit-breaker trips per provider: each
 	// time the scraper's in-memory breaker observes >=3 sidecar wedged-kind
 	// errors within 60s and forces the provider's health-cache entry DOWN

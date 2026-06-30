@@ -309,6 +309,15 @@ func main() {
 		log.Errorw("emit catalog-side provider roster metrics failed (continuing)", "error", err)
 	}
 
+	// Seed the provider_state gauge for the FULL roster (every provider's derived
+	// (policy, health) lifecycle state) so the dashboard's "Provider State History"
+	// timeline has a baseline band for never-probed rows. The probe-result handler
+	// re-sets each provider's gauge live on every transition. Catalog is the sole
+	// emitter of provider_state.
+	if err := scraperprovider.EmitProviderStates(db.DB); err != nil {
+		log.Errorw("emit provider state metrics failed (continuing)", "error", err)
+	}
+
 	// Initialize cache
 	redisCache, err := cache.New(cfg.Redis)
 	if err != nil {

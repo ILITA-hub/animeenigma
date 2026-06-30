@@ -101,12 +101,12 @@ func (s *ClickHouseStore) InsertBatch(ctx context.Context, events []domain.Event
 		// Column order MUST match createEventsTableDDL exactly.
 		if err := batch.Append(
 			// correlation / time
-			e.Timestamp,            // timestamp
-			e.ReceivedAt,           // received_at
-			e.EventID,              // event_id
-			e.TraceID,              // trace_id
-			e.SessionID,            // session_id
-			e.AnonymousID,          // anonymous_id
+			e.Timestamp,              // timestamp
+			e.ReceivedAt,             // received_at
+			e.EventID,                // event_id
+			e.TraceID,                // trace_id
+			e.SessionID,              // session_id
+			e.AnonymousID,            // anonymous_id
 			nullableString(e.UserID), // user_id (Nullable)
 
 			// register dimensions — effect rows populate these; clickstream
@@ -117,26 +117,27 @@ func (s *ClickHouseStore) InsertBatch(ctx context.Context, events []domain.Event
 			e.EffectKind,                    // effect_kind
 			e.TargetKind,                    // target_kind
 			e.Target,                        // target
+			e.Provider,                      // provider
 			defaultStr(e.Source, "be"),      // source
 			defaultStr(e.Accuracy, "exact"), // accuracy
 			nullableString(e.AnimeID),       // anime_id (Nullable)
 
 			// reconciled clickstream dimensions
-			string(e.EventType),     // event_type
-			e.EventName,             // event_name
-			e.URL,                   // url
-			e.Path,                  // path
-			e.Referrer,              // referrer
-			e.Title,                 // title
-			e.ElSelector,            // el_selector
-			e.ElText,                // el_text
-			e.ElTag,                 // el_tag
-			defaultJSON(e.ElAttrs),  // el_attrs
-			e.UserAgent,             // user_agent
-			e.DeviceType,            // device_type
-			uint16(e.ScreenW),       // screen_w
-			uint16(e.ScreenH),       // screen_h
-			e.IPHash,                // ip_hash
+			string(e.EventType),       // event_type
+			e.EventName,               // event_name
+			e.URL,                     // url
+			e.Path,                    // path
+			e.Referrer,                // referrer
+			e.Title,                   // title
+			e.ElSelector,              // el_selector
+			e.ElText,                  // el_text
+			e.ElTag,                   // el_tag
+			defaultJSON(e.ElAttrs),    // el_attrs
+			e.UserAgent,               // user_agent
+			e.DeviceType,              // device_type
+			uint16(e.ScreenW),         // screen_w
+			uint16(e.ScreenH),         // screen_h
+			e.IPHash,                  // ip_hash
 			defaultJSON(e.Properties), // properties
 
 			// register measures — effect rows populate these; clickstream rows

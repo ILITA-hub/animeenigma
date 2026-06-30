@@ -352,7 +352,7 @@
         "type": "datasource",
         "uid": "-- Mixed --"
       },
-      "description": "Merged provider roster (Postgres stream_providers — source of truth) + live playback verdict (daily honest probe). One row per provider: the operator Policy (Auto = in auto-failover chain · Manual-only = pinnable but excluded from failover · Off = not registered — what we set), the probed Playability (up/degraded/down — what we measured), how each stream is Resolved via (scraper microservice + engine — 'Camoufox' = stealth browser sidecar, 'HTTP' = direct fetch — vs catalog parser, FE iframe, or self-hosted), the probed Playability (up/degraded/down), and the top-3 failure Reasons with the anime title each failed on. Non-probed providers (Kodik/AniLib/Hanime/Raw/18anime/ae) show '— not probed'. Filtered by $provider for the probe columns.",
+      "description": "Merged provider roster (Postgres stream_providers — source of truth) + live playback verdict (daily honest probe). One row per provider: the derived State (UP · Recovering · Down · Degraded · Disabled — from policy+health, same scheme as the Provider State History timeline), the probed Playability (up/degraded/down — what we measured), Last tick (age since this provider was last probed; 'never' = never probed), how each stream is Resolved via (scraper microservice + engine — 'Camoufox' = stealth browser sidecar, 'HTTP' = direct fetch — vs catalog parser, FE iframe, or self-hosted), the top-3 failure Reasons with the anime title each failed on, and (far right) whether the provider is In auto-failover chain — yes (auto) · no (manual) · disabled. Non-probed providers (Kodik/AniLib/Hanime/Raw/18anime/ae) show '— not probed'. Filtered by $provider for the probe columns.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -387,20 +387,20 @@
                         "index": 1,
                         "text": "Recovering"
                       },
-                      "Failing": {
+                      "Degraded": {
                         "color": "orange",
                         "index": 2,
-                        "text": "Failing"
+                        "text": "Degraded"
                       },
-                      "Manual-only": {
+                      "Down": {
                         "color": "red",
                         "index": 3,
-                        "text": "Manual-only"
+                        "text": "Down"
                       },
-                      "Off": {
+                      "Disabled": {
                         "color": "dark-red",
                         "index": 4,
-                        "text": "Off"
+                        "text": "Disabled"
                       }
                     }
                   }
@@ -565,6 +565,88 @@
                 "value": 110
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last tick"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": 31536000,
+                      "to": 99999999999,
+                      "result": {
+                        "text": "never",
+                        "color": "text",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "never",
+                        "color": "text",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 600
+                    },
+                    {
+                      "color": "red",
+                      "value": 1800
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "In auto-failover chain"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 175
+              }
+            ]
           }
         ]
       },
@@ -597,7 +679,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", policy AS \"Policy\", health AS \"Health\", CASE WHEN policy = 'disabled' THEN 'Off' WHEN policy = 'auto' AND health = 'up' THEN 'UP' WHEN health = 'recovering' THEN 'Recovering' WHEN policy = 'auto' AND health = 'down' THEN 'Failing' ELSE 'Manual-only' END AS \"State\", last_probed_at AS \"Last probed\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", description AS \"Description\", ai_probe_notes AS \"AI Probe Notes\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
+          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", CASE policy WHEN 'auto' THEN 'yes (auto)' WHEN 'manual' THEN 'no (manual)' ELSE 'disabled' END AS \"In auto-failover chain\", health AS \"Health\", CASE WHEN policy = 'disabled' THEN 'Disabled' WHEN policy = 'auto' AND health = 'up' THEN 'UP' WHEN health = 'recovering' THEN 'Recovering' WHEN policy = 'auto' AND health = 'down' THEN 'Down' ELSE 'Degraded' END AS \"State\", last_probed_at AS \"Last probed\", EXTRACT(EPOCH FROM (now() - last_probed_at))::bigint AS \"Last tick\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", description AS \"Description\", ai_probe_notes AS \"AI Probe Notes\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
           "refId": "A"
         },
         {
@@ -632,15 +714,15 @@
             "indexByName": {
               "provider": 0,
               "State": 1,
-              "Policy": 2,
-              "playability": 3,
-              "AI Probe Notes": 4,
-              "Description": 5,
-              "reasons": 6,
-              "probed_at": 7,
-              "Group": 8,
-              "Resolved via": 9,
-              "Last probed": 10
+              "playability": 2,
+              "probed_at": 3,
+              "Last tick": 4,
+              "reasons": 5,
+              "AI Probe Notes": 6,
+              "Description": 7,
+              "Resolved via": 8,
+              "Group": 9,
+              "In auto-failover chain": 10
             },
             "renameByName": {
               "provider": "Provider",
@@ -671,137 +753,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Seconds since each provider's probe last ticked (heartbeat). Catches a silently-dead probe (stale gauge). Includes Kodik. Scrollable table sorted by staleness (oldest first). Providers never probed (e.g. 18anime, which runs in its own orchestrator and emits a zero-timestamp heartbeat) render as a neutral 'never' instead of a bogus ~56-year age (any age ≥ 1 year is treated as never-ticked).",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "left",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "filterable": false
-          },
-          "mappings": [
-            {
-              "type": "range",
-              "options": {
-                "from": 31536000,
-                "to": 99999999999,
-                "result": {
-                  "text": "never",
-                  "color": "text",
-                  "index": 0
-                }
-              }
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 600
-              },
-              {
-                "color": "red",
-                "value": 1800
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Last Tick (age)"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
-              {
-                "id": "custom.width",
-                "value": 160
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 0,
-        "y": 19
-      },
-      "id": 25,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "Last Tick (age)",
-            "desc": true
-          }
-        ]
-      },
-      "pluginVersion": "10.3.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "time() - provider_probe_last_tick_timestamp{provider=~\"$provider\"}",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "{{ provider }}",
-          "refId": "A"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true
-            },
-            "renameByName": {
-              "provider": "Provider",
-              "Value": "Last Tick (age)"
-            },
-            "indexByName": {
-              "provider": 0,
-              "Value": 1
-            }
-          }
-        }
-      ],
-      "title": "Probe Last Tick (by provider)",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "Auto-failover enabled/disabled history per provider (provider_enabled). A provider drops to 0 here when set to status='degraded' or 'disabled' in the catalog scraper_providers table.",
+      "description": "Per-provider derived lifecycle state over time (provider_state), defaulting to the last 7 days regardless of the dashboard time picker. Reads the same 5-state scheme as the roster's State column — UP (auto + healthy) · Recovering · Down (auto + failing) · Degraded (manual-only, out of auto-failover) · Disabled (not registered). Catalog re-sets the gauge live on every probe-result transition, so each colored segment is a real state change; never-probed rows (ae/kodik/legacy/disabled) show a flat baseline band. Filtered by $provider.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -814,13 +766,30 @@
           "mappings": [
             {
               "options": {
-                "0": {
-                  "color": "red",
-                  "text": "Disabled"
+                "4": {
+                  "color": "green",
+                  "text": "UP",
+                  "index": 0
+                },
+                "3": {
+                  "color": "yellow",
+                  "text": "Recovering",
+                  "index": 1
+                },
+                "2": {
+                  "color": "orange",
+                  "text": "Degraded",
+                  "index": 2
                 },
                 "1": {
-                  "color": "green",
-                  "text": "Enabled"
+                  "color": "red",
+                  "text": "Down",
+                  "index": 3
+                },
+                "0": {
+                  "color": "dark-red",
+                  "text": "Disabled",
+                  "index": 4
                 }
               },
               "type": "value"
@@ -830,12 +799,24 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "dark-red",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "red",
                 "value": 1
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "green",
+                "value": 4
               }
             ]
           }
@@ -843,9 +824,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
+        "h": 8,
+        "w": 24,
+        "x": 0,
         "y": 19
       },
       "id": 26,
@@ -866,12 +847,13 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "provider_enabled{provider=~\"$provider\"}",
+          "expr": "provider_state{provider=~\"$provider\"}",
           "legendFormat": "{{ provider }}",
           "refId": "A"
         }
       ],
-      "title": "Connect / Disconnect History",
+      "timeFrom": "now-7d",
+      "title": "Provider State History",
       "type": "state-timeline"
     },
     {
@@ -880,7 +862,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 27
       },
       "id": 104,
       "panels": [],
@@ -918,7 +900,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 28
       },
       "id": 12,
       "options": {
@@ -979,7 +961,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 28
       },
       "id": 13,
       "options": {
@@ -1032,7 +1014,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 33
+        "y": 35
       },
       "id": 23,
       "options": {
@@ -1086,7 +1068,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 33
+        "y": 35
       },
       "id": 24,
       "options": {
@@ -1175,7 +1157,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 33
+        "y": 35
       },
       "id": 31,
       "options": {
@@ -1240,7 +1222,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 42
       },
       "id": 105,
       "panels": [],
@@ -1260,7 +1242,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 41
+        "y": 43
       },
       "id": 46,
       "options": {
@@ -1298,7 +1280,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 41
+        "y": 43
       },
       "id": 47,
       "options": {
@@ -1336,7 +1318,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 49
+        "y": 51
       },
       "id": 48,
       "options": {
@@ -1374,7 +1356,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 49
+        "y": 51
       },
       "id": 49,
       "options": {
@@ -1412,7 +1394,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 49
+        "y": 51
       },
       "id": 50,
       "options": {
@@ -1443,7 +1425,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 59
       },
       "id": 106,
       "panels": [],
@@ -1480,7 +1462,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 58
+        "y": 60
       },
       "id": 42,
       "options": {
@@ -1551,7 +1533,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 58
+        "y": 60
       },
       "id": 43,
       "options": {
@@ -1622,7 +1604,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 58
+        "y": 60
       },
       "id": 44,
       "options": {
@@ -1662,6 +1644,124 @@
       ],
       "title": "HLS Proxy Latency (p50 / p95)",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 67
+      },
+      "id": 107,
+      "panels": [],
+      "title": "Provider Usage (ClickHouse)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
+      "description": "Per-provider real-user usage over the selected range. 'Times requested' = player_resolve events (each time the player asked this provider to resolve a stream). 'Restreamed (s)' = total wall-clock seconds streamed through the HLS proxy for this provider (sum of egress session durations; provider-attributed at manifest-mint). Providers with no attributable egress (Kodik iframe, direct embeds) show 0 restream seconds. Empty-provider egress rows are excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Times requested"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Restreamed (s)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
+      "id": 60,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Times requested"
+          }
+        ]
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
+          "rawQuery": true,
+          "queryType": "sql",
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT prov AS \"Provider\", countIf(kind = 'player_resolve') AS \"Times requested\", round(sumIf(duration_ms, kind = 'egress') / 1000) AS \"Restreamed (s)\" FROM ( SELECT effect_kind AS kind, duration_ms, multiIf(effect_kind = 'egress', provider, target) AS prov FROM events WHERE $__timeFilter(timestamp) AND effect_kind IN ('player_resolve', 'egress') ) WHERE prov != '' GROUP BY prov ORDER BY \"Times requested\" DESC, \"Restreamed (s)\" DESC"
+        }
+      ],
+      "title": "Provider Usage — times requested & restream seconds",
+      "type": "table"
     }
   ],
   "schemaVersion": 39,

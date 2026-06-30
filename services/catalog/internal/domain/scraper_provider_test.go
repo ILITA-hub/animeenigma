@@ -94,3 +94,33 @@ func TestScraperProviderSchema_AutoMigrate(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
 }
+
+func TestDerivedStateAndCode(t *testing.T) {
+	cases := []struct {
+		name   string
+		policy domain.ProviderPolicy
+		health domain.ProviderHealth
+		want   string
+		code   float64
+	}{
+		{"auto+up", domain.PolicyAuto, domain.HealthUp, domain.StateUP, 4},
+		{"auto+recovering", domain.PolicyAuto, domain.HealthRecovering, domain.StateRecovering, 3},
+		{"auto+down", domain.PolicyAuto, domain.HealthDown, domain.StateDown, 1},
+		{"manual+up", domain.PolicyManual, domain.HealthUp, domain.StateDegraded, 2},
+		{"manual+down", domain.PolicyManual, domain.HealthDown, domain.StateDegraded, 2},
+		{"manual+recovering", domain.PolicyManual, domain.HealthRecovering, domain.StateRecovering, 3},
+		{"disabled+down", domain.PolicyDisabled, domain.HealthDown, domain.StateDisabled, 0},
+		{"disabled+up", domain.PolicyDisabled, domain.HealthUp, domain.StateDisabled, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := domain.ScraperProvider{Policy: c.policy, Health: c.health}
+			if got := p.DerivedState(); got != c.want {
+				t.Fatalf("DerivedState()=%q want %q", got, c.want)
+			}
+			if got := p.StateCode(); got != c.code {
+				t.Fatalf("StateCode()=%v want %v", got, c.code)
+			}
+		})
+	}
+}

@@ -128,6 +128,55 @@ func (p ScraperProvider) IsRegistered() bool { return p.Status != StatusDisabled
 // Eligible reports auto-failover eligibility: policy auto AND health up.
 func (p ScraperProvider) Eligible() bool { return p.Policy == PolicyAuto && p.Health == HealthUp }
 
+// Derived-state labels for the playback-health dashboard. These are the single
+// source of truth shared by the roster table's State column (the Postgres CASE
+// in playback-health.json mirrors this exactly) and the provider_state gauge
+// (StateCode) that feeds the "Provider State History" timeline.
+const (
+	StateUP         = "UP"         // auto + up: in auto-failover and healthy
+	StateRecovering = "Recovering" // health recovering (any policy)
+	StateDegraded   = "Degraded"   // manual-only: registered, out of auto-failover
+	StateDown       = "Down"       // auto + down: in auto-failover but failing
+	StateDisabled   = "Disabled"   // policy disabled: not registered
+)
+
+// DerivedState collapses (policy, health) into the dashboard's 5-state
+// lifecycle label. The branch ORDER is significant and mirrors the roster
+// table's SQL CASE one-for-one (docker/grafana/dashboards/playback-health.json):
+// disabled → UP(auto+up) → Recovering(any) → Down(auto+down) → Degraded(else).
+func (p ScraperProvider) DerivedState() string {
+	switch {
+	case p.Policy == PolicyDisabled:
+		return StateDisabled
+	case p.Policy == PolicyAuto && p.Health == HealthUp:
+		return StateUP
+	case p.Health == HealthRecovering:
+		return StateRecovering
+	case p.Policy == PolicyAuto && p.Health == HealthDown:
+		return StateDown
+	default: // manual (up or down)
+		return StateDegraded
+	}
+}
+
+// StateCode is the numeric encoding of DerivedState for the provider_state
+// Prometheus gauge / Grafana state-timeline. Higher = healthier; the panel maps
+// each code back to its colored label. Kept in lock-step with DerivedState.
+func (p ScraperProvider) StateCode() float64 {
+	switch p.DerivedState() {
+	case StateUP:
+		return 4
+	case StateRecovering:
+		return 3
+	case StateDegraded:
+		return 2
+	case StateDown:
+		return 1
+	default: // Disabled
+		return 0
+	}
+}
+
 // WireStatus derives the legacy tri-state the scraper failover gate consumes.
 func (p ScraperProvider) WireStatus() ProviderStatus {
 	switch p.Policy {

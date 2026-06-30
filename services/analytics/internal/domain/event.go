@@ -77,9 +77,13 @@ type Event struct {
 	EffectKind string // "egress" | "db" | "cache" | "" (clickstream)
 	TargetKind string // "host" | "table" | "key" | ...
 	Target     string // the concrete target: host, table name, cache key family
-	Source     string // attribution accuracy origin: "be" | "fe" | ...
-	Accuracy   string // "exact" | "approximate"
-	AnimeID    string // optional correlation; empty → NULL
+	Provider   string // optional provider attribution for egress rows (target is
+	// the CDN host; Provider names the upstream source — gogoanime, allanime, ae…).
+	// Empty for non-egress / unattributed rows. ClickHouse-only (the Postgres
+	// effect path drops effect dimensions entirely).
+	Source   string // attribution accuracy origin: "be" | "fe" | ...
+	Accuracy string // "exact" | "approximate"
+	AnimeID  string // optional correlation; empty → NULL
 
 	// --- Activity-register effect measures (v4.0 Phase 2) ---
 	Requests   int // count of underlying requests this row aggregates (default 1)

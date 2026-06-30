@@ -51,6 +51,7 @@ const (
     effect_kind   LowCardinality(String)  DEFAULT '',
     target_kind   LowCardinality(String)  DEFAULT '',
     target        String                  DEFAULT '' CODEC(ZSTD(1)),
+    provider      LowCardinality(String)  DEFAULT '',
     source        LowCardinality(String)  DEFAULT 'be',
     accuracy      LowCardinality(String)  DEFAULT 'exact',
     anime_id      Nullable(String),
@@ -123,6 +124,13 @@ ORDER BY (anonymous_id, timestamp)`
 	// INSERT in ClickHouseStore.InsertProbeRows.
 	alterProbeRunsAddAnimeNameDDL = `ALTER TABLE probe_runs ADD COLUMN IF NOT EXISTS anime_name String AFTER anime_uuid`
 
+	// alterEventsAddProviderDDL adds the provider dimension to an events table
+	// that predates the column (the create-table DDL only fires on a fresh
+	// install). Idempotent via IF NOT EXISTS. AFTER target keeps the physical
+	// column order aligned with the positional INSERT in ClickHouseStore.InsertBatch
+	// (provider is appended right after target there).
+	alterEventsAddProviderDDL = `ALTER TABLE events ADD COLUMN IF NOT EXISTS provider LowCardinality(String) DEFAULT '' AFTER target`
+
 	// createResolvedViewDDL stitches identity at query time. argMax(user_id,
 	// timestamp) picks the latest identity per anonymous_id; person_id is the
 	// identified user if ever known, else the anonymous id. This preserves the
@@ -173,6 +181,7 @@ func EnsureSchema(ctx context.Context, conn driver.Conn) error {
 	for _, ddl := range []string{
 		createDatabaseDDL,
 		createEventsTableDDL,
+		alterEventsAddProviderDDL,
 		createIdentitiesTableDDL,
 		createProbeRunsTableDDL,
 		alterProbeRunsAddAnimeNameDDL,

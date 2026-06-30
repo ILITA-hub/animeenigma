@@ -33,3 +33,21 @@ func EmitCatalogSideRoster(db *gorm.DB) error {
 	metrics.EmitProviderRoster(entries)
 	return nil
 }
+
+// EmitProviderStates seeds the provider_state gauge for the FULL roster at boot
+// (every row, both scraper- and catalog-operated) from each row's derived
+// (policy, health) state. Catalog is the sole emitter of provider_state, so this
+// one call covers all providers with no cross-target duplication. Live
+// transitions are layered on top by the probe-result handler; this boot seed
+// ensures never-probed rows (ae, kodik, legacy players, disabled providers) still
+// render a continuous band on the state-history timeline. Idempotent (pure Set).
+func EmitProviderStates(db *gorm.DB) error {
+	var rows []domain.ScraperProvider
+	if err := db.Order("name asc").Find(&rows).Error; err != nil {
+		return fmt.Errorf("load roster for state metrics: %w", err)
+	}
+	for _, r := range rows {
+		metrics.ProviderState.WithLabelValues(r.Name).Set(r.StateCode())
+	}
+	return nil
+}
