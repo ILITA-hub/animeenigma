@@ -193,34 +193,29 @@ var defaultProviders = []domain.ScraperProvider{
 		// animejoy itself is NOT a row — it is the shared discovery/reference base
 		// (title→news_id→playlist, cached once); the two real provider rows below
 		// each resolve their own leg off that shared discovery (mirrors how 'okru'
-		// reuses AllAnime's GraphQL discovery). Seeded DEGRADED (soak first):
-		// registered + manually selectable, out of the auto-failover chain. RU-SUB
-		// only — animejoy serves original (JP) audio + burned-in Russian subs in the
-		// Sibnet/AllVideo mirror MP4s, so SubDelivery=hard, no dub, no raw. Group is
-		// intrinsic ("ru", via intrinsicGroups) and scraper_operated is intentionally
-		// false (NOT in scraperOperatedNames — these are catalog-operated RU rows;
-		// adding them to the EN scraper-failover chain would crash-loop boot via the
-		// EN-only candidateProviders invariant). The rows are dormant until the
-		// capability family / FE adapter ship in a later phase (a stream_providers
-		// row with no family simply doesn't surface — safe).
-		// Policy/Health are set EXPLICITLY (manual/down = the degraded soak state):
-		// BackfillPolicyHealth (status→policy/health) is run-once guarded and already
-		// applied on prod, so a NEW degraded seed row would otherwise keep the column
-		// defaults (auto/up) and surface as "active" (deriveProviderView keys hacker-
-		// only on Policy==manual, NOT status). Explicit values keep fresh DBs honest.
-		Name: "animejoy-sibnet", Status: domain.StatusDegraded,
-		Policy: domain.PolicyManual, Health: domain.HealthDown,
+		// reuses AllAnime's GraphQL discovery). Promoted out of soak 2026-06-30
+		// (probe-verified playable end-to-end): Status=enabled with the default
+		// policy=auto/health=up, so they surface as normal selectable sources for ALL
+		// users (deriveProviderView keys hacker-only on Policy==manual; enabled needs
+		// no explicit policy/health). RU-SUB only — animejoy serves original (JP)
+		// audio + burned-in Russian subs in the Sibnet/AllVideo mirror MP4s, so
+		// SubDelivery=hard, no dub, no raw. Group is intrinsic ("ru", via
+		// intrinsicGroups) and scraper_operated is intentionally false (NOT in
+		// scraperOperatedNames — these are catalog-operated RU rows; adding them to
+		// the EN scraper-failover chain would crash-loop boot via the EN-only
+		// candidateProviders invariant). A stream_providers row with no family simply
+		// doesn't surface, so they only appear on titles AnimeJoy actually carries.
+		Name: "animejoy-sibnet", Status: domain.StatusEnabled,
 		SupportsSub: true, SupportsDub: false, SupportsRaw: false,
 		SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 25,
-		Reason:      "Soaking — animejoy.ru via Sibnet",
+		Reason:      "AnimeJoy RU-sub via Sibnet",
 		Description: "Sibnet (AnimeJoy, RU-sub)",
 	},
 	{
-		Name: "animejoy-allvideo", Status: domain.StatusDegraded,
-		Policy: domain.PolicyManual, Health: domain.HealthDown,
+		Name: "animejoy-allvideo", Status: domain.StatusEnabled,
 		SupportsSub: true, SupportsDub: false, SupportsRaw: false,
 		SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 20,
-		Reason:      "Soaking — animejoy.ru via AllVideo",
+		Reason:      "AnimeJoy RU-sub via AllVideo",
 		Description: "AllVideo (AnimeJoy, RU-sub)",
 	},
 }

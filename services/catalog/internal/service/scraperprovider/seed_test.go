@@ -64,7 +64,8 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 		t.Errorf("okru capabilities wrong (want sub+dub/unknown/35): %+v", okru)
 	}
 	// The two animejoy RU-sub legs: intrinsic group ru, NOT scraper-operated (kept
-	// out of the EN failover chain), degraded (soak), sub-only/hard.
+	// out of the EN failover chain), enabled (promoted out of soak 2026-06-30 —
+	// probe-verified — so they surface for all users), sub-only/hard.
 	for _, tc := range []struct {
 		name   string
 		weight int
@@ -76,8 +77,8 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 		if err := db.First(&aj, "name = ?", tc.name).Error; err != nil {
 			t.Fatalf("%s row missing: %v", tc.name, err)
 		}
-		if aj.Group != "ru" || aj.ScraperOperated || !aj.IsDegraded() {
-			t.Errorf("%s seeded wrong (want ru/degraded/not-scraper-operated): %+v", tc.name, aj)
+		if aj.Group != "ru" || aj.ScraperOperated || !aj.IsEnabled() {
+			t.Errorf("%s seeded wrong (want ru/enabled/not-scraper-operated): %+v", tc.name, aj)
 		}
 		if !aj.SupportsSub || aj.SupportsDub || aj.SupportsRaw {
 			t.Errorf("%s capabilities wrong (want sub-only): %+v", tc.name, aj)
