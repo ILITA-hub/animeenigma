@@ -402,11 +402,11 @@
           <AePlayer
             v-else
             :anime-id="anime.id"
-            :anime="{ title: anime.title, ep: (anime.episodesAired || 1), eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage }"
+            :anime="{ title: anime.title, eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage }"
             :theater="theaterMode"
             :is-hentai="isHentai"
             :initial-episode="resumeStartEpisode"
-            :resume-pill="resumePillProps"
+            :resume-banner="resumeBanner"
             :initial-provider="queryProvider"
             :initial-team="queryTeam"
             :initial-audio="queryAudio"
@@ -442,7 +442,7 @@
             @available-translations="handleAvailableTranslations"
           >
             <template #header-middle>
-              <ResumePill v-bind="resumePillProps" />
+              <ResumePill :banner="resumeBanner" />
             </template>
           </KodikPlayer>
           <!-- When AePlayer is disabled there's no toggle above; offer a way
@@ -860,8 +860,8 @@ import ReviewReactions from '@/components/anime/ReviewReactions.vue'
 import CharacterCard from '@/components/anime/CharacterCard.vue'
 import Carousel from '@/components/carousel/Carousel.vue'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
-import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
-import { computeWatchCta, type WatchCta } from '@/composables/watchCta'
+import { useWatchState } from '@/composables/useWatchState'
+import type { WatchCta } from '@/composables/watchState'
 import RewatchCounter from '@/components/anime/RewatchCounter.vue'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useSiteRatings } from '@/composables/useSiteRatings'
@@ -914,8 +914,6 @@ import {
   isReviewFlagged as isReviewFlaggedPure,
   formatEpisodeCount as formatEpisodeCountPure,
   formatCount as formatCountPure,
-  formatAiredAgo as formatAiredAgoPure,
-  parseLastWatchedEpisode,
 } from '@/composables/anime/animeFormatters'
 
 interface AnimeWithExtras {
@@ -1018,14 +1016,7 @@ async function activatePlayer() {
 const currentRewatchCount = ref(0)
 const rewatchPending = ref(false)
 
-const watchCta = computed<WatchCta>(() => computeWatchCta({
-  isAuthenticated: authStore.isAuthenticated,
-  lastWatched: resumeAuth.value && resume.loaded.value
-    ? resume.lastWatched.value
-    : (lastEpisode.value ?? 0),
-  totalEpisodes: anime.value?.totalEpisodes ?? 0,
-  listStatus: currentListStatus.value,
-}))
+const watchCta = computed(() => watchState.cta.value)
 
 const watchCtaLabel = computed(() => t(watchCta.value.labelKey, watchCta.value.labelParams ?? {}))
 
@@ -1044,7 +1035,7 @@ async function startRewatchFlow() {
     await userApi.startRewatch(animeId)
     currentListStatus.value = 'watching'
     resumeOverrideEpisode.value = 1
-    await resume.init()
+    await watchState.init()
     void viewerCtxStore.load(animeId, true).then((ctx) => { if (ctx) applyViewerContext(ctx) })
     void activatePlayer()
   } catch (err) {
@@ -1143,15 +1134,10 @@ watch(classicKodik, (on) => {
   localStorage.setItem(CLASSIC_KODIK_KEY, on ? 'true' : 'false')
 })
 
-// Last-watched episode. For authenticated users this comes from server-side
-// watch_progress (Phase 4 — A-03 / D-02 single source of truth). For
-// anonymous users we still read localStorage; D-01 in Phase 7 will close the
-// gap with a localStorage-driven anonymous state machine.
-const lastEpisode = ref<number | undefined>(undefined)
-
-// Phase 4 resume state machine. Inputs are reactive refs that the composable
-// re-evaluates as anime data + watch_progress arrives. The composable owns
-// the kind / startEpisode / banner-relevant state; Anime.vue only renders.
+// Unified watch state — single source of truth for last-watched, start
+// episode, resume banner, and CTA verb (authed server watch_progress + anon
+// localStorage, resolved inside the composable). Inputs are reactive refs that
+// it re-evaluates as anime data + watch_progress arrives; Anime.vue only renders.
 const resumeAnimeId = computed(() => anime.value?.id ?? '')
 const resumeTotal = computed(() => anime.value?.totalEpisodes ?? 0)
 const resumeAired = computed(() => anime.value?.episodesAired ?? 0)
@@ -1161,28 +1147,19 @@ const resumeAuth = computed(() => authStore.isAuthenticated)
 // Highest episode actually loaded into our sources, surfaced by the active
 // player via `available-translations` (max episodes_count across teams). This
 // is the ground truth for availability and overrides Shikimori's lagging
-// `episodesAired` in the resume state machine — so a freshly-uploaded episode
-// is never mislabeled "not loaded yet". 0 until the player emits.
+// `episodesAired` in the resume state — so a freshly-uploaded episode is never
+// mislabeled "not available yet". 0 until the player emits.
 const resumeLoadedEpisodes = ref(0)
-const resume = useResumeStateMachine({
+const watchState = useWatchState({
   animeId: resumeAnimeId,
   totalEpisodes: resumeTotal,
   episodesAired: resumeAired,
-  nextEpisodeAt: resumeNextAt,
   status: resumeStatus,
-  isAuthenticated: resumeAuth,
+  nextEpisodeAt: resumeNextAt,
   loadedEpisodes: resumeLoadedEpisodes,
-})
-
-function loadLastEpisode(animeId: string) {
-  const ep = parseLastWatchedEpisode(localStorage.getItem(`watch_progress:${animeId}`))
-  if (ep !== undefined) lastEpisode.value = ep
-}
-
-// Once the resume state machine loads from server, it overrides the
-// localStorage last-episode for authenticated users.
-watch(() => resume.lastWatched.value, (n) => {
-  if (resumeAuth.value && n > 0) lastEpisode.value = n
+  listStatus: currentListStatus,
+  isAuthenticated: resumeAuth,
+  formatEta: (iso: string) => formatNextEpisode(iso),
 })
 
 // User-driven override of the state machine's start episode. Set when the
@@ -1228,24 +1205,17 @@ const queryLang = computed(() => queryString('lang'))
 // source vocabulary), so make sure we're not on the Classic Kodik fallback.
 if (queryProvider.value) classicKodik.value = false
 
-// What episode the player should mount on. Authenticated + state machine
-// loaded → use the state machine's startEpisode. Otherwise fall back to the
-// existing lastEpisode (localStorage path) so anonymous users keep the
-// pre-Phase-4 behavior. Manual override (rewatch click) wins over both.
-// Deep-link query param wins over the state-machine resume (explicit user
-// selection), but still loses to the in-page "Rewatch" override.
-const resumeStartEpisode = computed<number | undefined>(() => {
+// Single start-episode authority: explicit overrides win, else the unified
+// watchState. Manual override (rewatch click) > deep-link query param >
+// watchState.startEpisode. Always a number >= 1 — never episodesAired.
+const resumeStartEpisode = computed<number>(() => {
   if (resumeOverrideEpisode.value && resumeOverrideEpisode.value > 0) {
     return resumeOverrideEpisode.value
   }
   if (queryEpisode.value !== undefined) {
     return queryEpisode.value
   }
-  if (resumeAuth.value && resume.loaded.value) {
-    const s = resume.startEpisode.value
-    return s > 0 ? s : (lastEpisode.value ?? 1)
-  }
-  return lastEpisode.value
+  return watchState.startEpisode.value
 })
 
 // Phase 8 (CR-01) — auto-activate the player when arriving with ?episode=N.
@@ -1266,50 +1236,10 @@ watch(
   { immediate: true },
 )
 
-// Episode number the "not yet available" / "currently airing" banners refer
-// to. Always lastWatched + 1 in those states (the state machine has already
-// guaranteed last < total).
-const resumeNextEpisodeNumber = computed<number | undefined>(() => {
-  if (resume.kind.value === 'not-yet-aired' || resume.kind.value === 'episode-not-loaded-yet') {
-    // Use episodesAired + 1 — the episode the announced air time refers to, and
-    // the same formula the top-of-page airing banner uses — so both surfaces
-    // name the same episode instead of diverging on `lastWatched + 1`.
-    return Math.max(1, resumeAired.value + 1)
-  }
-  return undefined
-})
-
-// Resume pill props bundled into one object so each player slot can
-// `v-bind` them in one line. Visibility is auth-gated here — the pill
-// component itself decides per-kind visibility.
-const resumePillProps = computed(() => {
-  if (!authStore.isAuthenticated || !resume.loaded.value || resume.kind.value === 'first-time') {
-    return { kind: 'first-time' as const }
-  }
-  // Only surface an ETA when the air time is genuinely in the future. A past
-  // nextEpisodeAt would otherwise format into a date in the PAST (a past air
-  // time means the episode aired and the state is episode-not-loaded-yet, not
-  // not-yet-aired); suppress it so we never render a nonsensical past ETA.
-  const hasFutureEta =
-    !!resumeNextAt.value && new Date(resumeNextAt.value).getTime() > Date.now()
-  const etaLabel =
-    resume.kind.value === 'not-yet-aired' && hasFutureEta
-      ? formatNextEpisode(resumeNextAt.value as string)
-      : undefined
-  // For episode-not-loaded-yet: localized "aired N ago" (reads episodeAiredAgoMs
-  // so it stays reactive to the 60s clock tick).
-  const airedAgoLabel =
-    resume.kind.value === 'episode-not-loaded-yet'
-      ? formatAiredAgo(resume.episodeAiredAgoMs.value)
-      : undefined
-  return {
-    kind: resume.kind.value,
-    finishedEpisode: resume.finishedEpisode.value,
-    nextEpisodeNumber: resumeNextEpisodeNumber.value,
-    nextEpisodeEtaLabel: etaLabel,
-    airedAgoLabel,
-  }
-})
+// Resume banner passthrough — the unified watchState owns banner kind /
+// episode / ETA. Player slots bind it directly; ResumePill decides per-kind
+// visibility, AePlayer overlays only the next-unavailable family.
+const resumeBanner = computed(() => watchState.banner.value)
 
 // Watch preference resolution
 const preferenceState = ref<{
@@ -1360,7 +1290,7 @@ const wtInvitePayload = computed<{ player: PlayerKind; translationId: string; ep
   return {
     player: 'aeplayer' as PlayerKind,
     translationId: '',
-    episodeId: String(resumeStartEpisode.value ?? lastEpisode.value ?? 1),
+    episodeId: String(resumeStartEpisode.value),
   }
 })
 
@@ -1514,9 +1444,6 @@ const formatNextEpisode = (dateStr: string) => {
   }
   return t('anime.timeAt', { time: date.toLocaleDateString(locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: tz }), tz: formatUtcOffset(tz) })
 }
-
-// Localized "N ago" for an episode that already aired (episode-not-loaded-yet).
-const formatAiredAgo = (agoMs: number) => formatAiredAgoPure(agoMs, locale.value)
 
 const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: number; status?: string }) =>
   formatEpisodeCountPure(anime, t)
@@ -2093,8 +2020,7 @@ const loadAnimeData = async (animeId: string) => {
 
   // Reset state so stale data doesn't flash
   anime.value = null
-  lastEpisode.value = undefined
-  resume.reset()
+  watchState.reset()
   resumeLoadedEpisodes.value = 0
   resumeOverrideEpisode.value = null
   currentListStatus.value = null
@@ -2165,19 +2091,18 @@ const loadAnimeData = async (animeId: string) => {
   // Plan B — the 18+ language tab is retired; AePlayer gates its own 18+
   // sources by `is-hentai`, so there is no page-level tab to reset here.
 
-  // Load last-watched episode from localStorage (anon path), then pull the
-  // viewer-context aggregate — ONE request carrying rating, watchers-count,
-  // watch progress, watchlist entry, my review and the saved combo (page-fetch
-  // optimization 2026-06-11). The legacy per-endpoint fetches remain as the
-  // fallback when the aggregate is unavailable.
+  // Pull the viewer-context aggregate — ONE request carrying rating,
+  // watchers-count, watch progress, watchlist entry, my review and the saved
+  // combo (page-fetch optimization 2026-06-11). The legacy per-endpoint fetches
+  // remain as the fallback when the aggregate is unavailable. (watchState reads
+  // the anon localStorage last-watched lazily — no explicit load needed.)
   let viewerCtx: ViewerContextData | null = null
   if (fetched) {
-    loadLastEpisode(fetched.id)
     viewerCtx = await viewerCtxStore.load(fetched.id, false, fetched.malId || undefined)
     if (gen !== loadGeneration) return
     if (viewerCtx) {
       applyViewerContext(viewerCtx)
-      void resume.init(viewerCtx.progress ?? [])
+      void watchState.init(viewerCtx.progress ?? [])
       // Legacy MAL-import entry surfaced under anime_id="mal_{malId}" —
       // auto-migrate it to the real UUID (same behavior the statuses-scan
       // path had), fire-and-forget.
@@ -2188,7 +2113,7 @@ const loadAnimeData = async (animeId: string) => {
         })
       }
     } else {
-      void resume.init()
+      void watchState.init()
     }
   }
 

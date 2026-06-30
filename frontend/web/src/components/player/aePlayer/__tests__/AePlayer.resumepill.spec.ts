@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref, nextTick } from 'vue'
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
+import type { ResumeBanner } from '@/composables/watchState'
 
 // Regression: the in-player resume/airing banner. Before this wiring AePlayer
-// hardcoded resumeKind='first-time', so the "episode aired — translation teams
-// need time" message (anime.resume.episodeNotLoaded) NEVER surfaced in the
-// primary player; it only worked in the legacy Kodik header slot. The parent
-// now passes resumePillProps down via `resumePill` and AePlayer overlays the
-// airing-status family (not-yet-aired / episode-not-loaded-yet) only.
+// hardcoded resumeKind='first-time', so the "next episode not available yet"
+// message NEVER surfaced in the primary player; it only worked in the legacy
+// Kodik header slot. The parent now passes the unified resume banner down via
+// `resumeBanner` (a ResumeBanner), and AePlayer overlays ONLY the airing-status
+// family (next-unavailable) — never the just-finished breadcrumb.
 const gogoCap = {
   provider: 'gogoanime', display_name: 'GogoAnime',
   state: 'active' as const, selectable: true, hacker_only: false,
@@ -74,7 +75,7 @@ import AePlayer from '../AePlayer.vue'
 
 // Render the REAL ResumePill (it's a tiny presentational SFC) so we assert the
 // message path end-to-end; i18n's t() is mocked to echo the key, so a rendered
-// "anime.resume.episodeNotLoaded" proves the translation-delay copy is wired.
+// "anime.resume.notYetAvailable*" proves the airing-status copy is wired.
 const stubs = {
   PlayerControlBar: true, SourcePanel: true, EpisodesPanel: true, PlaybackSettingsMenu: true,
   SubtitlesMenu: true, BrowseSubsModal: true, BigPlayButton: true, BufferingOverlay: true,
@@ -84,7 +85,7 @@ const stubs = {
 
 function mountPlayer(extraProps: Record<string, unknown> = {}) {
   return mount(AePlayer, {
-    props: { animeId: 'anime-uuid', anime: { title: 'T', ep: 1, eps: 12 }, theater: false, ...extraProps },
+    props: { animeId: 'anime-uuid', anime: { title: 'T', eps: 12 }, theater: false, ...extraProps },
     global: { mocks: { $t: (k: string) => k }, stubs },
   })
 }
@@ -98,21 +99,19 @@ async function settle() {
 beforeEach(() => vi.clearAllMocks())
 
 describe('AePlayer — resume/airing banner', () => {
-  it('surfaces the translation-delay message for episode-not-loaded-yet', async () => {
-    const wrapper = mountPlayer({
-      resumePill: { kind: 'episode-not-loaded-yet', nextEpisodeNumber: 12, airedAgoLabel: '2 hours ago' },
-    })
+  it('surfaces the not-yet-available message for next-unavailable (no eta)', async () => {
+    const resumeBanner: ResumeBanner = { kind: 'next-unavailable', episode: 12 }
+    const wrapper = mountPlayer({ resumeBanner })
     await settle()
 
     const banner = wrapper.find('.pl-airing-status')
     expect(banner.exists()).toBe(true)
-    expect(banner.text()).toContain('anime.resume.episodeNotLoaded')
+    expect(banner.text()).toContain('anime.resume.notYetAvailable')
   })
 
-  it('surfaces the not-yet-aired message for not-yet-aired', async () => {
-    const wrapper = mountPlayer({
-      resumePill: { kind: 'not-yet-aired', nextEpisodeNumber: 12, nextEpisodeEtaLabel: 'Jul 1' },
-    })
+  it('surfaces the eta message for next-unavailable with an etaLabel', async () => {
+    const resumeBanner: ResumeBanner = { kind: 'next-unavailable', episode: 12, etaLabel: 'Jul 1' }
+    const wrapper = mountPlayer({ resumeBanner })
     await settle()
 
     const banner = wrapper.find('.pl-airing-status')
@@ -120,16 +119,15 @@ describe('AePlayer — resume/airing banner', () => {
     expect(banner.text()).toContain('anime.resume.notYetAvailableEta')
   })
 
-  it('does NOT overlay the watching breadcrumb over the video', async () => {
-    const wrapper = mountPlayer({
-      resumePill: { kind: 'watching', finishedEpisode: 5 },
-    })
+  it('does NOT overlay the just-finished breadcrumb over the video', async () => {
+    const resumeBanner: ResumeBanner = { kind: 'just-finished', episode: 5 }
+    const wrapper = mountPlayer({ resumeBanner })
     await settle()
 
     expect(wrapper.find('.pl-airing-status').exists()).toBe(false)
   })
 
-  it('shows no banner when no resume state is passed (first-time / anonymous)', async () => {
+  it('shows no banner when no resume state is passed (none / first-time / anonymous)', async () => {
     const wrapper = mountPlayer()
     await settle()
 

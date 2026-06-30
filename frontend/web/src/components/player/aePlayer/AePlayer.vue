@@ -121,13 +121,12 @@
     </div>
 
     <!-- Overlays -->
-    <!-- Airing / translation-delay status banner (top-center, persists through
-         chrome auto-hide). Only the "caught up, waiting for the next episode"
-         family surfaces over the video: not-yet-aired and episode-not-loaded-yet
-         ("ep N aired {ago} — translation teams need time to upload it"). The
-         watching/finished breadcrumbs are intentionally not overlaid here. -->
-    <div v-if="resumeBannerProps" class="pl-airing-status">
-      <ResumePill v-bind="resumeBannerProps" />
+    <!-- Airing-status banner (top-center, persists through chrome auto-hide).
+         Only the "caught up, waiting for the next episode" family surfaces over
+         the video: next-unavailable ("ep N airs {when}" / "ep N not available
+         yet"). The just-finished breadcrumb is intentionally not overlaid here. -->
+    <div v-if="resumeBannerProps.kind !== 'none'" class="pl-airing-status">
+      <ResumePill :banner="resumeBannerProps" />
     </div>
 
     <BigPlayButton
@@ -334,6 +333,7 @@ import { useViewerContextStore } from '@/stores/viewerContext'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
+import type { ResumeBanner } from '@/composables/watchState'
 import { Button } from '@/components/ui'
 import PlayerControlBar from './PlayerControlBar.vue'
 import SourcePanel from './SourcePanel.vue'
@@ -403,7 +403,7 @@ interface SubTrack {
 
 const props = defineProps<{
   animeId: string
-  anime: { title: string; ep: number; eps: number; still?: string }
+  anime: { title: string; eps: number; still?: string }
   theater: boolean
   isHentai?: boolean
   initialEpisode?: number
@@ -423,17 +423,10 @@ const props = defineProps<{
    *  (the bridge is never instantiated, auto-source-select runs as normal). */
   room?: WatchTogetherRoomHandle | null
   /** Resume/airing status for the in-player banner, computed by the parent's
-   *  resume state machine. Only the "caught up, waiting for the next episode"
-   *  family is surfaced as a top-center overlay: not-yet-aired ("ep N airs
-   *  {when}") and episode-not-loaded-yet ("ep N aired {ago} — translation teams
-   *  need time to upload it"). Absent / first-time / watching ⇒ no banner. */
-  resumePill?: {
-    kind: 'first-time' | 'watching' | 'finished' | 'not-yet-aired' | 'episode-not-loaded-yet'
-    finishedEpisode?: number
-    nextEpisodeNumber?: number
-    nextEpisodeEtaLabel?: string
-    airedAgoLabel?: string
-  }
+   *  unified watch state. Only the "caught up, waiting for the next episode"
+   *  family is surfaced as a top-center overlay (next-unavailable: "ep N airs
+   *  {when}" / "ep N not available yet"). none / just-finished ⇒ no banner. */
+  resumeBanner?: ResumeBanner
 }>()
 
 const emit = defineEmits<{
@@ -2342,17 +2335,14 @@ function onPickSubLang(v: string) {
 
 // ─── Resume pill ─────────────────────────────────────────────────────────────
 
-// The parent (Anime.vue) owns the resume state machine and passes the computed
-// pill props down via `resumePill`. We overlay only the airing-status family —
-// not-yet-aired and episode-not-loaded-yet — so a caught-up viewer learns the
-// next episode aired and translation teams need time to upload it. The
-// watching/finished breadcrumbs are deliberately NOT shown over the video.
-const resumeBannerProps = computed(() => {
-  const rp = props.resumePill
-  if (rp && (rp.kind === 'not-yet-aired' || rp.kind === 'episode-not-loaded-yet')) {
-    return rp
-  }
-  return null
+// The parent (Anime.vue) owns the unified watch state and passes the computed
+// banner down via `resumeBanner`. We overlay only the airing-status family —
+// next-unavailable — so a caught-up viewer learns the next episode is not
+// available yet. The just-finished breadcrumb is deliberately NOT shown over
+// the video.
+const resumeBannerProps = computed<ResumeBanner>(() => {
+  const b = props.resumeBanner
+  return b && b.kind === 'next-unavailable' ? b : { kind: 'none' }
 })
 
 // ─── Playback helpers ─────────────────────────────────────────────────────────
