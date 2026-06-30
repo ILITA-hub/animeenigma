@@ -222,6 +222,13 @@ func NewRouter(
 			// Hanime video sources
 			r.Get("/{animeId}/hanime/episodes", catalogHandler.GetHanimeEpisodes)
 			r.Get("/{animeId}/hanime/stream", catalogHandler.GetHanimeStream)
+			// AnimeJoy RU-sub video sources — two independent leg providers
+			// (animejoy-sibnet / animejoy-allvideo) over a shared discovery
+			// base. Public, no auth, like the sibling stream routes. The
+			// resolved tokened MP4 is proxy-signed; the FE forwards
+			// url/referer/exp/sig to /api/streaming/hls-proxy.
+			r.Get("/{animeId}/animejoy-sibnet/stream", catalogHandler.GetAnimejoySibnetStream)
+			r.Get("/{animeId}/animejoy-allvideo/stream", catalogHandler.GetAnimejoyAllVideoStream)
 			// 18anime (18+) video sources
 			r.Get("/{animeId}/anime18/episodes", catalogHandler.GetAnime18Episodes)
 			r.Get("/{animeId}/anime18/stream", catalogHandler.GetAnime18Stream)

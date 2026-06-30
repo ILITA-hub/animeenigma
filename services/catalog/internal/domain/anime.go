@@ -284,6 +284,29 @@ type AnimejoyTeam struct {
 	HasAllVideo bool   `json:"has_allvideo"`
 }
 
+// AnimejoyStream is a resolved playable AnimeJoy leg (Sibnet or AllVideo),
+// reduced to a single progressive MP4 plus the provenance signature and the
+// Referer the HLS proxy MUST replay.
+//
+// Mirrors RawStream's wire shape (FE reads url/quality/exp/sig) but adds
+// Referer: unlike the self-hosted MinIO library, the Sibnet/AllVideo CDNs gate
+// the stream on the embed/shell page's Referer (video.sibnet.ru / fsst.online),
+// so the proxy must send it. Type is always "mp4" (progressive, not HLS). The
+// resolved URL is an absolute https URL whose provenance token (Exp/Sig)
+// authorizes the un-allowlisted CDN host — the proxy follows the 302 to the
+// real CDN (dvNN.sibnet.ru / filevideo1.com) within the same fetch, so NO
+// HLSProxyAllowedDomainsWithProvenance entry is required. RU-sub only.
+type AnimejoyStream struct {
+	URL       string    `json:"url"`
+	Type      string    `json:"type"`
+	Quality   string    `json:"quality,omitempty"`
+	Referer   string    `json:"referer"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Source    string    `json:"source"`
+	Exp       string    `json:"exp,omitempty"`
+	Sig       string    `json:"sig,omitempty"`
+}
+
 // PinTranslationRequest for pinning a translation
 type PinTranslationRequest struct {
 	TranslationID    int    `json:"translation_id" validate:"required"`
