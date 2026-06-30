@@ -126,28 +126,6 @@ describe('useProviderResolver', () => {
     expect(params.get('type')).toBe('mp4')
   })
 
-  it('proxies the raw (AllAnime JP) stream with the allmanga.to Referer', async () => {
-    const rawApi = {
-      getEpisodes: vi.fn().mockResolvedValue({
-        data: { data: { episodes: [{ id: 'r1', number: 1, title: 'Ep 1' }], available: true, source: 'allanime' } },
-      }),
-      getStream: vi.fn().mockResolvedValue({
-        data: { data: { url: 'https://tools.fast4speed.rsvp/raw/1', type: 'mp4' } },
-      }),
-    }
-    const resolver = makeResolver({ rawApi } as any)
-    const eps = await resolver.listEpisodes('raw', 'uuid')
-    const stream = await resolver.resolveStream('raw', 'uuid', eps[0], {
-      audio: 'sub', lang: 'ja', provider: 'raw', server: '', team: null,
-    })
-    expect(stream.type).toBe('mp4')
-    const params = proxyParams(stream.url)
-    expect(params.get('url')).toBe('https://tools.fast4speed.rsvp/raw/1')
-    expect(params.get('referer')).toBe('https://allmanga.to/')
-    expect(params.get('type')).toBe('mp4')
-    expect(rawApi.getStream).toHaveBeenCalledWith('uuid', 1)
-  })
-
   it('throws a typed error for a disabled/unwired provider', async () => {
     const resolver = makeResolver({} as any)
     await expect(resolver.listEpisodes('animelib', 'x')).rejects.toThrow(/not available/i)

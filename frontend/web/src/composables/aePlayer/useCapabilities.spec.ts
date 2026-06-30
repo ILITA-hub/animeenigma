@@ -3,7 +3,7 @@ import { flattenCapabilities } from './useCapabilities'
 import type { CapabilityReport } from '@/types/capabilities'
 
 // Feed defaults so each literal only spells out the fields under test.
-const feed = { state: 'active' as const, selectable: true, hacker_only: false, order: 0, group: 'en' as const, audios: ['sub'] as ('sub' | 'dub' | 'raw')[] }
+const feed = { state: 'active' as const, selectable: true, hacker_only: false, order: 0, group: 'en' as const, audios: ['sub'] as ('sub' | 'dub')[] }
 
 const report: CapabilityReport = {
   anime_id: 'uuid-1',

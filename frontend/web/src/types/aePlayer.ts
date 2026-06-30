@@ -8,7 +8,7 @@ export type ContentKind = 'common' | 'hentai'
 // Wire `group` from the backend capability feed. Single source of truth: the FE
 // no longer carries a provider registry — group/state/order/audios all arrive
 // from /api/anime/{id}/capabilities.
-export type ProviderGroup = 'en' | 'ru' | 'adult' | 'jp' | 'firstparty'
+export type ProviderGroup = 'en' | 'ru' | 'adult' | 'firstparty'
 
 // State emitted by the backend feed (derived from the live policy/health authority):
 //   active     — in the auto-failover chain; selectable + auto-eligible, ranked by `order`.

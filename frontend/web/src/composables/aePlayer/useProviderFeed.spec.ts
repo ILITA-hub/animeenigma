@@ -42,7 +42,7 @@ describe('rowsFromReport', () => {
     expect(rows.map(r => r.id)).toEqual(['gogoanime', 'animefever'])
   })
 
-  it('RAW lists en, ru and jp original sources and maps a raw-only cap to a sub row', () => {
+  it('RAW lists en and ru original sources (sub caps) and drops dub-only', () => {
     const multi = {
       anime_id: 'm',
       families: [
@@ -54,10 +54,6 @@ describe('rowsFromReport', () => {
           { provider: 'kodik', display_name: 'Kodik', state: 'active', selectable: true,
             hacker_only: false, order: 80, group: 'ru', audios: ['sub', 'dub'], variants: [] },
         ] },
-        { family: 'raw', providers: [
-          { provider: 'raw', display_name: 'Raw', state: 'active', selectable: true,
-            hacker_only: false, order: 70, group: 'jp', audios: ['raw'], variants: [] },
-        ] },
         { family: 'en', providers: [
           { provider: 'dubonly', display_name: 'DubOnly', state: 'active', selectable: true,
             hacker_only: false, order: 60, group: 'en', audios: ['dub'], variants: [] },
@@ -65,8 +61,7 @@ describe('rowsFromReport', () => {
       ],
     } as unknown as CapabilityReport
     const rows = rowsFromReport(multi, { audio: 'sub', lang: 'en', content: 'common' })
-    expect(rows.map(r => r.id)).toEqual(['gogoanime', 'kodik', 'raw'])
-    expect(rows.find(r => r.id === 'raw')!.audios).toEqual(['sub'])
+    expect(rows.map(r => r.id)).toEqual(['gogoanime', 'kodik'])
   })
 
   it('DUB keeps the language gate (en vs ru)', () => {

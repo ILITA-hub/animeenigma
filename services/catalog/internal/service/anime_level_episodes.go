@@ -13,7 +13,7 @@ import (
 // translation/team id. See spec 2026-06-18-aeplayer-notification-coverage.
 func isAnimeLevelPlayer(player string) bool {
 	switch player {
-	case "english", "ae", "raw":
+	case "english", "ae":
 		return true
 	default:
 		return false
@@ -30,7 +30,6 @@ type scraperEpisodeLister interface {
 	GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error)
 }
 type rawEpisodeLister interface {
-	GetEpisodes(ctx context.Context, animeID string) (*EpisodesResponse, error)
 	GetLibraryEpisodes(ctx context.Context, animeID string) (*EpisodesResponse, error)
 }
 
@@ -59,8 +58,6 @@ func (r *animeLevelResolver) Latest(ctx context.Context, shikimoriID, player, wa
 		return r.latestEnglish(ctx, anime.ID, watchType)
 	case "ae":
 		return maxRawEpisode(r.raw.GetLibraryEpisodes(ctx, anime.ID))
-	case "raw":
-		return maxRawEpisode(r.raw.GetEpisodes(ctx, anime.ID))
 	default:
 		return 0, "", apperrors.InvalidInput("player is not anime-level")
 	}

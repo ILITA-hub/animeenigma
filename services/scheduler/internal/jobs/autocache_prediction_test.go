@@ -88,7 +88,7 @@ func TestAutocachePrediction_OngoingCount(t *testing.T) {
 	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
 	seedAnimeRow(t, db, "a2", "222", "ongoing", 3)
 	seedListRow(t, db, "u2", "a2", "watching", now.Add(-2*time.Hour))
-	seedWatchRow(t, db, "u2", "a2", "raw", "")
+	seedWatchRow(t, db, "u2", "a2", "ae", "ja")
 
 	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
 	require.NoError(t, j.Run(context.Background()))
@@ -120,12 +120,12 @@ func TestAutocachePrediction_NextepDropsOngoingClause(t *testing.T) {
 }
 
 // TestAutocachePrediction_FiltersExcludeNonJPAndStale verifies a DUB watcher
-// (watch_type='dub' on a non-ae/raw player) and a stale watcher (al.updated_at
+// (watch_type='dub' on a non-ae player) and a stale watcher (al.updated_at
 // older than the cutoff) are excluded from BOTH counts.
 //
 // NOTE (L662): the previously-used kodik/ru exclusion case defaulted to
 // watch_type='sub' (seedWatchRow), which the corrected predicate
-// (watch_type='sub' OR player IN (ae,raw)) actually COUNTS — any sub combo
+// (watch_type='sub' OR player IN (ae)) actually COUNTS — any sub combo
 // carries original Japanese audio regardless of subtitle language. So the
 // genuine exclusion is now a dub combo, matching Logic A.
 func TestAutocachePrediction_FiltersExcludeNonJPAndStale(t *testing.T) {
@@ -138,7 +138,7 @@ func TestAutocachePrediction_FiltersExcludeNonJPAndStale(t *testing.T) {
 	seedListRow(t, db, "u1", "a1", "watching", now.Add(-1*time.Hour))
 	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
 
-	// Dub combo on a non-ae/raw player (kodik/ru/dub) → excluded (no JP audio).
+	// Dub combo on a non-ae player (kodik/ru/dub) → excluded (no JP audio).
 	seedAnimeRow(t, db, "a2", "222", "ongoing", 5)
 	seedListRow(t, db, "u2", "a2", "watching", now.Add(-1*time.Hour))
 	seedWatchRowWT(t, db, "u2", "a2", "kodik", "ru", "dub")
@@ -156,10 +156,10 @@ func TestAutocachePrediction_FiltersExcludeNonJPAndStale(t *testing.T) {
 }
 
 // TestAutocachePrediction_CountsEnSubMatchingLogicA is the L662 regression: a sub
-// combo that is NOT an ae/raw player and NOT language='ja' (kodik/ru/sub and
+// combo that is NOT an ae player and NOT language='ja' (kodik/ru/sub and
 // english/en/sub) carries original Japanese audio and MUST be counted, matching
 // the corrected Logic A predicate (autocache_logic_a.go:129). Before the fix the
-// prediction job used the stale `player IN (ae,raw) OR language='ja'` predicate
+// prediction job used the stale `player IN (ae) OR language='ja'` predicate
 // which wrongly excluded both, so this test FAILS on the old code (counts==0) and
 // passes after the predicate swap.
 func TestAutocachePrediction_CountsEnSubMatchingLogicA(t *testing.T) {
@@ -167,7 +167,7 @@ func TestAutocachePrediction_CountsEnSubMatchingLogicA(t *testing.T) {
 	db := newPredictionTestDB(t)
 	now := time.Now()
 
-	// kodik/ru/sub: not ae/raw, not lang=ja, but watch_type='sub' → JP audio → counted.
+	// kodik/ru/sub: not ae, not lang=ja, but watch_type='sub' → JP audio → counted.
 	seedAnimeRow(t, db, "a1", "111", "ongoing", 7)
 	seedListRow(t, db, "u1", "a1", "watching", now.Add(-1*time.Hour))
 	seedWatchRow(t, db, "u1", "a1", "kodik", "ru")
@@ -206,7 +206,7 @@ func TestAutocachePrediction_ExcludesEmptyShikimoriID(t *testing.T) {
 	seedWatchRow(t, db, "u2", "a2", "ae", "ja")
 	seedAnimeRow(t, db, "a3", "", "ongoing", 5)
 	seedListRow(t, db, "u3", "a3", "watching", now.Add(-1*time.Hour))
-	seedWatchRow(t, db, "u3", "a3", "raw", "")
+	seedWatchRow(t, db, "u3", "a3", "ae", "ja")
 
 	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
 	require.NoError(t, j.Run(context.Background()))
@@ -230,7 +230,7 @@ func TestAutocachePrediction_CountsDistinctByID(t *testing.T) {
 	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
 	seedAnimeRow(t, db, "a2", "999", "ongoing", 3)
 	seedListRow(t, db, "u2", "a2", "watching", now.Add(-1*time.Hour))
-	seedWatchRow(t, db, "u2", "a2", "raw", "")
+	seedWatchRow(t, db, "u2", "a2", "ae", "ja")
 
 	j := NewAutocachePredictionJob(db, 30, avgEpBytesTest, logger.Default())
 	require.NoError(t, j.Run(context.Background()))

@@ -13,9 +13,9 @@ import { ANIME_KINDS } from '@/constants/animeKinds'
 // the composable trivially test-mockable and the existing useAnime
 // composable untouched.
 
-export type Provider = 'kodik' | 'dub' | 'raw' | 'ae'
+export type Provider = 'kodik' | 'dub' | 'ae'
 export type Sort = 'popularity' | 'rating' | 'year' | 'updated' | 'title'
-const PROVIDER_VALUES: Provider[] = ['kodik', 'dub', 'raw', 'ae']
+const PROVIDER_VALUES: Provider[] = ['kodik', 'dub', 'ae']
 const SORT_VALUES: Sort[] = ['popularity', 'rating', 'year', 'updated', 'title']
 const STATUS_VALUES = ['', 'ongoing', 'released', 'announced'] as const
 type Status = (typeof STATUS_VALUES)[number]

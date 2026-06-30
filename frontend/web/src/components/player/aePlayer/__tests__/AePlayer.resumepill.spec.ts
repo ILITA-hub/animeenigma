@@ -12,7 +12,7 @@ import type { ResumeBanner } from '@/composables/watchState'
 const gogoCap = {
   provider: 'gogoanime', display_name: 'GogoAnime',
   state: 'active' as const, selectable: true, hacker_only: false,
-  order: 90, group: 'en' as const, audios: ['sub', 'dub'] as ('sub' | 'dub' | 'raw')[],
+  order: 90, group: 'en' as const, audios: ['sub', 'dub'] as ('sub' | 'dub')[],
   variants: [],
 }
 const report: CapabilityReport = {

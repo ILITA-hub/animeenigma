@@ -12,7 +12,7 @@ function cap(variants: ProviderCap['variants']): ProviderCap {
 }
 
 describe('deriveCapLabels', () => {
-  it('collects categories in sub,dub,raw order and the max quality', () => {
+  it('collects categories in sub,dub order and the max quality', () => {
     const l = deriveCapLabels(cap([
       { category: 'dub', sub_delivery: 'none', qualities: ['720p'], quality_source: 'trait', source: 'trait' },
       { category: 'sub', sub_delivery: 'hard', qualities: ['1080p'], quality_source: 'trait', source: 'trait' },

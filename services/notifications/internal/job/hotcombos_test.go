@@ -19,12 +19,11 @@ func mustExec(t *testing.T, db *gorm.DB, sql string) {
 func TestHotCombos_AdmitsAnimeLevelPlayers(t *testing.T) {
 	db := testDB(t)
 	// anime rows (ongoing) + list rows (watching)
-	mustExec(t, db, `INSERT INTO animes (id, shikimori_id, status) VALUES ('a-en','111','ongoing'),('a-ae','222','ongoing'),('a-raw','333','ongoing'),('a-h','444','ongoing'),('a-k','555','ongoing')`)
-	mustExec(t, db, `INSERT INTO anime_list (user_id, anime_id, status) VALUES ('u1','a-en','watching'),('u1','a-ae','watching'),('u1','a-raw','watching'),('u1','a-h','watching'),('u1','a-k','watching')`)
+	mustExec(t, db, `INSERT INTO animes (id, shikimori_id, status) VALUES ('a-en','111','ongoing'),('a-ae','222','ongoing'),('a-h','444','ongoing'),('a-k','555','ongoing')`)
+	mustExec(t, db, `INSERT INTO anime_list (user_id, anime_id, status) VALUES ('u1','a-en','watching'),('u1','a-ae','watching'),('u1','a-h','watching'),('u1','a-k','watching')`)
 
 	seedWatch(t, db, "u1", "a-en", "english", "en", "sub", "", 5)  // empty id, anime-level
 	seedWatch(t, db, "u1", "a-ae", "ae", "ja", "sub", "", 3)       // empty id, anime-level
-	seedWatch(t, db, "u1", "a-raw", "raw", "ja", "sub", "", 2)     // empty id, anime-level
 	seedWatch(t, db, "u1", "a-h", "hanime", "ru", "dub", "", 1)    // empty id, NOT admitted
 	seedWatch(t, db, "u1", "a-k", "kodik", "ru", "sub", "1291", 7) // legacy kodik with id, admitted
 
@@ -42,7 +41,7 @@ func TestHotCombos_AdmitsAnimeLevelPlayers(t *testing.T) {
 	for _, c := range combos {
 		got[c.Player] = true
 	}
-	for _, p := range []string{"english", "ae", "raw", "kodik"} {
+	for _, p := range []string{"english", "ae", "kodik"} {
 		if !got[p] {
 			t.Errorf("expected player %q in hot combos, missing", p)
 		}

@@ -17,7 +17,7 @@ type Room struct {
 
 	AnimeID       string `json:"anime_id"`
 	EpisodeID     string `json:"episode_id"`
-	Player        string `json:"player"` // PlayerKodik | PlayerAnimeLib | PlayerOurEnglish | PlayerHanime | PlayerRaw
+	Player        string `json:"player"` // PlayerKodik | PlayerAnimeLib | PlayerOurEnglish | PlayerHanime | PlayerAePlayer
 	TranslationID string `json:"translation_id"`
 
 	PlaybackState           string  `json:"playback_state"`            // StatePlaying | StatePaused

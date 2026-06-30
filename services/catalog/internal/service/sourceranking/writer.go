@@ -15,7 +15,7 @@ const srcfixTTL = 24 * time.Hour
 // SYNC: keep in step with frontend providerRegistry.ts CURATED_TIER (+ EN scraper ids).
 var knownProviders = map[string]struct{}{
 	"ae": {}, "allanime": {}, "okru": {}, "gogoanime": {}, "miruro": {}, "animepahe": {},
-	"animefever": {}, "nineanime": {}, "animekai": {}, "kodik": {}, "raw": {},
+	"animefever": {}, "nineanime": {}, "animekai": {}, "kodik": {},
 	"18anime": {}, "animelib": {}, "hanime": {},
 }
 

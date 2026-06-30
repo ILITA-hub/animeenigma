@@ -9,7 +9,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
-	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
@@ -33,13 +32,12 @@ const (
 	CacheKeyEpisodes = "raw:episodes"
 )
 
-// RawResolver resolves the JP-original-audio "raw" provider STRICTLY from the
-// self-hosted library (MinIO HLS). RAW = Japanese audio with NO burned-in subs;
-// subtitles overlay softly at playback (Jimaku). The legacy AllAnime backend was
-// dropped 2026-06-22 — its sources were behind a Cloudflare-Turnstile clock and
-// duplicated the scraper's allanime provider — so raw now serves only titles
-// present in the library. libraryClient is optional; when nil, raw reports no
-// episodes / NotFound (defensive for environments without LIBRARY_API_URL).
+// RawResolver backs the first-party ("ae") self-hosted provider, resolving
+// STRICTLY from the self-hosted library (MinIO HLS). The standalone JP-original
+// "raw" provider that this resolver also fronted was removed 2026-06-30 (AllAnime
+// + ok.ru cover JP-original now); the library/ae path below is unchanged.
+// libraryClient is optional; when nil, it reports no episodes / NotFound
+// (defensive for environments without LIBRARY_API_URL).
 type RawResolver struct {
 	library   *library.Client
 	animeRepo *repo.AnimeRepository
@@ -138,44 +136,6 @@ type EpisodesResponse struct {
 	Episodes  []RawEpisode `json:"episodes"`
 	Available bool         `json:"available"`
 	Source    string       `json:"source"`
-}
-
-// GetEpisodes returns the raw episode list, served from the library, with a
-// cache (6h on a hit, 10m on an empty result). Returns an empty
-// available=false envelope when the library is unconfigured, the anime has no
-// shikimori_id, or nothing is encoded yet. An errors.ServiceUnavailable
-// AppError surfaces when the library API is unreachable.
-func (r *RawResolver) GetEpisodes(ctx context.Context, animeID string) (_ *EpisodesResponse, retErr error) {
-	start := time.Now()
-	defer metrics.ObserveParser("library", "get_episodes", start, &retErr)
-
-	cacheKey := fmt.Sprintf("%s:%s", CacheKeyEpisodes, animeID)
-	var cached EpisodesResponse
-	if err := r.cache.Get(ctx, cacheKey, &cached); err == nil {
-		return &cached, nil
-	}
-
-	resp, err := r.GetLibraryEpisodes(ctx, animeID)
-	if err != nil {
-		return nil, err
-	}
-	ttl := 10 * time.Minute
-	if resp.Available {
-		ttl = 6 * time.Hour
-	}
-	_ = r.cache.Set(ctx, cacheKey, resp, ttl)
-	return resp, nil
-}
-
-// GetStream resolves a playable raw HLS stream from the library only. A miss
-// returns errors.NotFound (after firing a best-effort autocache backfill
-// demand). Delegates to the shared library-stream path — raw and the
-// first-party "ae" provider both serve the self-hosted JP pool.
-func (r *RawResolver) GetStream(ctx context.Context, animeID string, episodeNumber int, quality string) (_ *RawStream, retErr error) {
-	start := time.Now()
-	defer metrics.ObserveParser("library", "get_stream", start, &retErr)
-	metrics.EpisodeStreamRequestsTotal.WithLabelValues("raw").Inc()
-	return r.GetLibraryStream(ctx, animeID, episodeNumber, quality)
 }
 
 // newLibraryStream builds a RawStream for a self-hosted MinIO HLS URL, signing

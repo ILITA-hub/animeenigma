@@ -827,19 +827,6 @@ export const charactersApi = {
 }
 
 /**
- * workstream raw-jp / Phase 01 — AllAnime raw-JP provider.
- * Returns Japanese-audio HLS streams.
- */
-export const rawApi = {
-  getEpisodes: (animeId: string) =>
-    apiClient.get(`/anime/${animeId}/raw/episodes`),
-  getStream: (animeId: string, episode: number, quality?: string) =>
-    apiClient.get(`/anime/${animeId}/raw/stream`, {
-      params: { episode, ...(quality && { quality }) },
-    }),
-}
-
-/**
  * First-party "AnimeEnigma" provider — self-hosted library (MinIO HLS).
  * Episodes/stream resolve STRICTLY from what's encoded on-prem; the stream
  * URL arrives proxy-signed (exp/sig) so the un-allowlisted minio host is

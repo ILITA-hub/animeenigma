@@ -29,15 +29,11 @@ func (f fakeScraper) GetScraperEpisodes(_ context.Context, _, _ string, _ bool) 
 
 type fakeRaw struct {
 	lib *EpisodesResponse
-	raw *EpisodesResponse
 	err error
 }
 
 func (f fakeRaw) GetLibraryEpisodes(_ context.Context, _ string) (*EpisodesResponse, error) {
 	return f.lib, f.err
-}
-func (f fakeRaw) GetEpisodes(_ context.Context, _ string) (*EpisodesResponse, error) {
-	return f.raw, f.err
 }
 
 func newResolver(fnd animeFinder, scr scraperEpisodeLister, raw rawEpisodeLister) *animeLevelResolver {
@@ -45,7 +41,7 @@ func newResolver(fnd animeFinder, scr scraperEpisodeLister, raw rawEpisodeLister
 }
 
 func TestIsAnimeLevelPlayer(t *testing.T) {
-	for _, p := range []string{"english", "ae", "raw"} {
+	for _, p := range []string{"english", "ae"} {
 		if !isAnimeLevelPlayer(p) {
 			t.Errorf("isAnimeLevelPlayer(%q) = false, want true", p)
 		}
@@ -113,26 +109,6 @@ func TestAnimeLevel_AE_MaxFromLibrary(t *testing.T) {
 	latest, _, err := r.Latest(context.Background(), "57466", "ae", "sub")
 	if err != nil || latest != 9 {
 		t.Fatalf("ae latest = %d, err = %v, want 9, nil", latest, err)
-	}
-}
-
-func TestAnimeLevel_Raw_MaxFromAllAnime(t *testing.T) {
-	r := newResolver(
-		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
-		fakeScraper{},
-		fakeRaw{raw: &EpisodesResponse{Available: true, Episodes: []RawEpisode{{Number: 24}}}},
-	)
-	latest, _, err := r.Latest(context.Background(), "57466", "raw", "sub")
-	if err != nil || latest != 24 {
-		t.Fatalf("raw latest = %d, err = %v, want 24, nil", latest, err)
-	}
-}
-
-func TestAnimeLevel_Raw_UnavailableIsNotFound(t *testing.T) {
-	r := newResolver(fakeFinder{anime: &domain.Anime{ID: "uuid-1"}}, fakeScraper{}, fakeRaw{raw: &EpisodesResponse{Available: false}})
-	_, _, err := r.Latest(context.Background(), "57466", "raw", "sub")
-	if err == nil || !isNotFoundLike(err) {
-		t.Fatalf("unavailable raw err = %v, want NotFound-like", err)
 	}
 }
 

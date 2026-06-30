@@ -28,8 +28,8 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 17 {
-		t.Fatalf("want 17 default rows, got %d", count)
+	if count != 16 {
+		t.Fatalf("want 16 default rows, got %d", count)
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")
@@ -133,7 +133,7 @@ func TestSeedDefaults_IdempotentDoesNotOverwrite(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 17 {
+	if count != 16 {
 		t.Fatalf("re-seed created duplicates: %d rows", count)
 	}
 	var all domain.ScraperProvider

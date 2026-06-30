@@ -416,18 +416,18 @@ func main() {
 	// Stateless handler with embedded http.Client + shared redis cache.
 	skipTimesHandler := handler.NewSkipTimesHandler(redisCache, log)
 
-	// Raw JP provider — LIBRARY-ONLY (AllAnime backend dropped 2026-06-22; its
-	// sources were behind a Cloudflare-Turnstile clock and duplicated the
-	// scraper's allanime provider). The resolver serves JP-original-audio
-	// strictly from the self-hosted library (MinIO HLS ladder); nil-safe — an
-	// unreachable / unconfigured library client makes raw report no episodes.
-	// The handler mounts /api/anime/{id}/raw/{episodes,stream}.
+	// First-party ("ae") provider — serves JP/EN/RU strictly from the self-hosted
+	// library (MinIO HLS ladder); nil-safe — an unreachable / unconfigured library
+	// client makes it report no episodes. The handler mounts
+	// /api/anime/{id}/ae/{episodes,stream}. (The standalone JP "raw" provider this
+	// resolver also fronted was removed 2026-06-30 — AllAnime + ok.ru cover
+	// JP-original now.)
 	libraryClient := library.NewClient(library.Config{
 		APIURL:  cfg.Library.APIURL,
 		Timeout: cfg.Library.Timeout,
 	})
-	rawResolver := service.NewRawResolver(libraryClient, animeRepo, redisCache, log)
-	rawHandler := handler.NewRawHandler(rawResolver, log)
+	libraryResolver := service.NewRawResolver(libraryClient, animeRepo, redisCache, log)
+	aeHandler := handler.NewAeHandler(libraryResolver, log)
 
 	// Start Kodik + ae library liveness probes (reports via shared provider-health
 	// metrics). Constructed AFTER libraryClient so the ae probe can be wired in.
@@ -460,7 +460,7 @@ func main() {
 		catalogService.AnimeLibClient(),
 		animeRepo,
 		catalogService,
-		rawResolver,
+		libraryResolver,
 		log,
 	)
 	internalEpisodesHandler := handler.NewInternalEpisodesHandler(episodesLookupService, log)
@@ -595,14 +595,14 @@ func main() {
 	// the scraper microservice at cfg.Scraper.APIURL) as a HealthSource.
 	// aeLibraryAdapter backs the first-party `ae` family's library-presence
 	// lookup via the raw resolver's library episode index.
-	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: rawResolver})
+	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: libraryResolver})
 	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

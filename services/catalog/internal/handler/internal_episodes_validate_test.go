@@ -171,7 +171,7 @@ func TestValidateHandler_EmptyEpisode_Permissive_Still200(t *testing.T) {
 	router := newValidateRouter(NewInternalEpisodesValidateHandler(fv, nil))
 
 	req := httptest.NewRequest(http.MethodGet,
-		"/internal/anime/57466/episodes/validate?player=raw&episode_id=", nil)
+		"/internal/anime/57466/episodes/validate?player=hanime&episode_id=", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 

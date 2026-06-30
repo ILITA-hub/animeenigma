@@ -73,8 +73,8 @@ const (
 )
 
 // ----------------------------------------------------------------------------
-// Player constants — string union for Room.Player. Mirror the 5 frontend
-// player components (Kodik / AnimeLib / OurEnglish / Hanime / Raw — see
+// Player constants — string union for Room.Player. Mirror the frontend
+// player components (Kodik / AnimeLib / OurEnglish / Hanime — see
 // CLAUDE.md §Video Player Architecture).
 // ----------------------------------------------------------------------------
 const (
@@ -82,7 +82,6 @@ const (
 	PlayerAnimeLib   = "animelib"
 	PlayerOurEnglish = "ourenglish"
 	PlayerHanime     = "hanime"
-	PlayerRaw        = "raw"
 	// PlayerAePlayer is the first-party AnimeEnigma unified player (multi-source).
 	PlayerAePlayer = "aeplayer"
 )

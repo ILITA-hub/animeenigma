@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import OtherSubsPanel from './OtherSubsPanel.vue'
-import type { GroupedSubs } from '@/types/raw'
+import type { GroupedSubs } from '@/types/subtitles'
 
 // The component reads `useI18n().t`/`locale` in <script> (providerLabel,
 // languageHeader, orderLangs) AND `$t` in <template> (filter labels), so BOTH

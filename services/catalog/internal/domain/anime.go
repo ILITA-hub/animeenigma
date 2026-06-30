@@ -61,9 +61,10 @@ type Anime struct {
 	// Default false; existing rows backfill over time.
 	HasKodik    bool `gorm:"default:false;index;column:has_kodik" json:"has_kodik"`
 	HasAnimeLib bool `gorm:"default:false;index;column:has_animelib" json:"has_animelib"`
-	// HasRaw — raw Japanese audio available via the AllAnime parser
-	// (workstream raw-jp, Phase 01). Lazily backfilled when the catalog
-	// service first resolves a raw stream for the anime.
+	// HasRaw — self-hosted library (MinIO HLS) content is available for this
+	// anime. Lazily backfilled when the first-party ("ae") path first resolves a
+	// library stream for it. (Formerly fronted the standalone JP "raw" provider,
+	// removed 2026-06-30; the flag now tracks on-prem library availability.)
 	HasRaw bool `gorm:"default:false;index;column:has_raw" json:"has_raw"`
 	// HasEnglish — at least one English source resolvable via the scraper
 	// microservice (gogoanime, animepahe, allanime, animekai). Lazily
@@ -404,8 +405,8 @@ type SearchFilters struct {
 	// Kinds is the OR-set of Shikimori kinds: "tv" / "movie" / "ova" /
 	// "ona" / "special" / "tv_special" / "music" / "cm" / "pv". A row
 	// passes when its kind matches ANY selected value. Empty = no filter.
-	// Providers is the OR-set of {"kodik","dub","raw","ae"} → columns
-	// has_kodik/has_dub/has_raw/has_video — a row passes when ANY of the
+	// Providers is the OR-set of {"kodik","dub","ae"} → columns
+	// has_kodik/has_dub/has_video — a row passes when ANY of the
 	// selected columns is true. Empty = no filter. Unknown values dropped at
 	// the handler. StudioIDs is an OR-set over the anime_studios join.
 	Kinds     []string

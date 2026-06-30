@@ -257,7 +257,6 @@
       "recovering": "Восстанавливается",
       "noContent": "Нет серий",
       "tryAnother": "Другой источник",
-      "raw": "RAW",
       "subBurnedIn": "вшитые",
       "subSelectable": "отдельные",
       "providerLacksAnime": "У этого источника нет этого аниме",
@@ -1067,7 +1066,6 @@
       "provider": {
         "kodik": "Kodik (RU)",
         "dub": "Английский (озвучка)",
-        "raw": "RAW (JP)",
         "ae": "AnimeEnigma"
       },
       "score": {

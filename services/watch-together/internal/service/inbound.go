@@ -482,14 +482,13 @@ func (r *InboundRouter) handleTimeTick(ctx context.Context, conn ConnectionCtx, 
 
 // validPlayers is the closed set of player identifiers accepted by
 // handleChangePlayer. Kept in sync with frontend/web/src/components/player/
-// (the 5 player components). Out-of-set values are rejected as BAD_PAYLOAD
+// (the player components). Out-of-set values are rejected as BAD_PAYLOAD
 // before any catalog call — saves a round-trip on a clearly bogus value.
 var validPlayers = map[string]struct{}{
 	domain.PlayerKodik:      {},
 	domain.PlayerAnimeLib:   {},
 	domain.PlayerOurEnglish: {},
 	domain.PlayerHanime:     {},
-	domain.PlayerRaw:        {},
 	domain.PlayerAePlayer:   {},
 }
 
@@ -630,7 +629,7 @@ func (r *InboundRouter) handleChangePlayer(
 		// Bogus player value — never round-trip to catalog for an obviously
 		// invalid identifier.
 		r.sendBadPayload(ctx, conn, domain.MsgStateChangePlayer,
-			fmt.Errorf("player %q not in {kodik, animelib, ourenglish, hanime, raw, aeplayer}", payload.Player))
+			fmt.Errorf("player %q not in {kodik, animelib, ourenglish, hanime, aeplayer}", payload.Player))
 		return
 	}
 

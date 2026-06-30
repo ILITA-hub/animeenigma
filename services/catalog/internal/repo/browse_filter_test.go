@@ -74,17 +74,15 @@ func TestAnimeRepository_Search_ProviderColumns(t *testing.T) {
 
 	seedBrowseAnime(t, db, "k", "Kodik only")
 	seedBrowseAnime(t, db, "d", "Dub only")
-	seedBrowseAnime(t, db, "rw", "Raw only")
 	seedBrowseAnime(t, db, "ae", "First-party only")
 	require.NoError(t, db.Exec(`UPDATE animes SET has_kodik=1 WHERE id='k'`).Error)
 	require.NoError(t, db.Exec(`UPDATE animes SET has_dub=1 WHERE id='d'`).Error)
-	require.NoError(t, db.Exec(`UPDATE animes SET has_raw=1 WHERE id='rw'`).Error)
 	require.NoError(t, db.Exec(`UPDATE animes SET has_video=1 WHERE id='ae'`).Error)
 
 	cases := []struct {
 		key, wantID string
 	}{
-		{"kodik", "k"}, {"dub", "d"}, {"raw", "rw"}, {"ae", "ae"},
+		{"kodik", "k"}, {"dub", "d"}, {"ae", "ae"},
 	}
 	for _, c := range cases {
 		got, total, err := r.Search(ctx, domain.SearchFilters{

@@ -9,7 +9,6 @@ describe('providerToLegacyPlayer', () => {
   })
   it('maps 1:1 providers', () => {
     expect(providerToLegacyPlayer('kodik')).toBe('kodik')
-    expect(providerToLegacyPlayer('raw')).toBe('raw')
     expect(providerToLegacyPlayer('ae')).toBe('ae')
     expect(providerToLegacyPlayer('18anime')).toBe('hanime')
     expect(providerToLegacyPlayer('animelib')).toBe('animelib')
@@ -24,9 +23,9 @@ describe('comboToWatchCombo', () => {
     expect(comboToWatchCombo({ audio: 'dub', lang: 'ru', provider: 'kodik', server: '', team: 'AniLibria' }))
       .toEqual({ player: 'kodik', language: 'ru', watch_type: 'dub', translation_id: '', translation_title: 'AniLibria' })
   })
-  it('maps ja-lang raw correctly', () => {
-    expect(comboToWatchCombo({ audio: 'sub', lang: 'ja', provider: 'raw', server: '', team: null }))
-      .toEqual({ player: 'raw', language: 'ja', watch_type: 'sub', translation_id: '', translation_title: '' })
+  it('maps ja-lang ae correctly', () => {
+    expect(comboToWatchCombo({ audio: 'sub', lang: 'ja', provider: 'ae', server: '', team: null }))
+      .toEqual({ player: 'ae', language: 'ja', watch_type: 'sub', translation_id: '', translation_title: '' })
   })
   it('returns null when provider has no legacy mapping', () => {
     expect(comboToWatchCombo({ audio: 'sub', lang: 'en', provider: 'nope', server: '', team: null })).toBeNull()

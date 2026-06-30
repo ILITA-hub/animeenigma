@@ -257,7 +257,6 @@
       "recovering": "Recovering",
       "noContent": "No episodes",
       "tryAnother": "Try another source",
-      "raw": "RAW",
       "subBurnedIn": "burned-in",
       "subSelectable": "selectable",
       "providerLacksAnime": "This provider doesn't have this anime",
@@ -1067,7 +1066,6 @@
       "provider": {
         "kodik": "Kodik (RU)",
         "dub": "English (Dub)",
-        "raw": "RAW (JP)",
         "ae": "AnimeEnigma"
       },
       "score": {

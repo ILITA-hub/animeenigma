@@ -1,33 +1,8 @@
 /**
- * Type definitions for the workstream raw-jp video provider.
- * Workstream raw-jp, Phase 03.
+ * Type definitions for the aggregated subtitle sources surfaced by
+ * OtherSubsPanel (Jimaku, OpenSubtitles, etc.). Backed by the catalog's
+ * /api/anime/{id}/subtitles[/all] endpoints.
  */
-
-export interface RawEpisode {
-  id: string
-  number: number
-  title: string
-}
-
-export interface RawSubtitle {
-  url: string
-  lang: string
-  label: string
-}
-
-export interface RawStream {
-  url: string
-  type: 'hls' | 'mp4'
-  quality?: string
-  subtitles?: RawSubtitle[]
-  expires_at: string
-}
-
-export interface RawEpisodesResponse {
-  episodes: RawEpisode[]
-  available: boolean
-  source: string
-}
 
 /**
  * One aggregated subtitle track returned by the catalog's

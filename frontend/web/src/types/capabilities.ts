@@ -30,9 +30,9 @@ export interface ProviderCap {
   /** Backend ordering weight — higher wins (smart default + panel sort). */
   order: number
   /** Lang/content family the provider belongs to (drives the relevance filter). */
-  group: 'en' | 'ru' | 'adult' | 'jp' | 'firstparty'
+  group: 'en' | 'ru' | 'adult' | 'firstparty'
   /** Audio kinds this provider can serve for the current title. */
-  audios: ('sub' | 'dub' | 'raw')[]
+  audios: ('sub' | 'dub')[]
   /** Human-readable explanation for a non-active state (tooltip text). */
   reason?: string
 
@@ -47,7 +47,7 @@ export interface ProviderCap {
 }
 
 export interface CapVariant {
-  category: 'sub' | 'dub' | 'raw'
+  category: 'sub' | 'dub'
   team?: { id?: string; name: string }
   sub_delivery: 'soft' | 'hard' | 'none'
   qualities?: string[]

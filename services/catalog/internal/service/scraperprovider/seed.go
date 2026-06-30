@@ -183,13 +183,6 @@ var defaultProviders = []domain.ScraperProvider{
 		SubDelivery: "none", QualityCeiling: "1080p", PreferenceWeight: 0,
 	},
 	{
-		Name: "raw", Status: domain.StatusEnabled,
-		Reason:      "JP original-audio player (library-only, self-hosted HLS)",
-		Description: "Raw JP player (MinIO library HLS, no AllAnime backend as of 2026-06-22). JP audio with no burned-in subs; subs overlay softly (Jimaku).",
-		SupportsSub: true, SupportsRaw: true, SubDelivery: "soft",
-		QualityCeiling: "1080p", PreferenceWeight: 0,
-	},
-	{
 		// animejoy itself is NOT a row — it is the shared discovery/reference base
 		// (title→news_id→playlist, cached once); the two real provider rows below
 		// each resolve their own leg off that shared discovery (mirrors how 'okru'
@@ -231,7 +224,6 @@ var intrinsicGroups = map[string]string{
 	"kodik-iframe":      "ru",
 	"kodik-noads":       "ru",
 	"animelib":          "ru",
-	"raw":               "jp",
 	"animejoy-sibnet":   "ru",
 	"animejoy-allvideo": "ru",
 }

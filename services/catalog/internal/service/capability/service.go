@@ -71,11 +71,11 @@ func (s *Service) Report(ctx context.Context, animeID string) (domain.Capability
 }
 
 // buildFamilies assembles every family concurrently. The EN family is required
-// (its error fails the report); the first-party (ae/raw/adult) and RU/Hanime
+// (its error fails the report); the first-party (ae/adult) and RU/Hanime
 // families are best-effort (omitted on error or when the anime isn't on that
-// provider). Order is stable: ae, ourenglish, raw, adult, kodik, animelib,
+// provider). Order is stable: ae, ourenglish, adult, kodik, animelib,
 // hanime, animejoy-sibnet, animejoy-allvideo — first-party leads. The
-// ae/raw/adult families are DB-row-driven (no CatalogSource needed) so they run
+// ae/adult families are DB-row-driven (no CatalogSource needed) so they run
 // regardless of whether catalog is wired.
 func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.SourceFamily, error) {
 	type slot struct {
@@ -85,19 +85,18 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 	var (
 		en                      domain.SourceFamily
 		enErr                   error
-		ae, raw, adult          slot
+		ae, adult               slot
 		kodik, animelib, hanime slot
 		ajSibnet, ajAllVideo    slot
 		wg                      sync.WaitGroup
 	)
 
-	wg.Add(4)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		en, enErr = s.BuildENFamily(ctx)
 	}()
 	go func() { defer wg.Done(); ae.fam, ae.ok = s.aeFamily(ctx, animeID) }()
-	go func() { defer wg.Done(); raw.fam, raw.ok = s.dbRowFamily(ctx, "raw", "Raw", "raw") }()
 	go func() { defer wg.Done(); adult.fam, adult.ok = s.dbRowFamily(ctx, "18anime", "18anime", "adult") }()
 
 	if s.catalog != nil {
@@ -126,7 +125,7 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 		families = append(families, ae.fam)
 	}
 	families = append(families, en)
-	for _, sl := range []slot{raw, adult, kodik, animelib, hanime, ajSibnet, ajAllVideo} {
+	for _, sl := range []slot{adult, kodik, animelib, hanime, ajSibnet, ajAllVideo} {
 		if sl.ok {
 			families = append(families, sl.fam)
 		}

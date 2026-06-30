@@ -162,7 +162,6 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 		colsByKey := map[string]string{
 			"kodik": "has_kodik",
 			"dub":   "has_dub",
-			"raw":   "has_raw",
 			"ae":    "has_video",
 		}
 		var orParts []string

@@ -69,7 +69,7 @@ describe('pickSelectableFallback', () => {
   it('returns the top-ranked selectable row even if degraded', () => {
     const rows = [
       row('kodik', { group: 'ru', state: 'degraded', selectable: true, order: 80 }),
-      row('raw', { group: 'jp', state: 'degraded', selectable: true, order: 70 }),
+      row('ae', { group: 'firstparty', state: 'degraded', selectable: true, order: 70 }),
     ]
     expect(pickSelectableFallback(rows)?.id).toBe('kodik')
   })

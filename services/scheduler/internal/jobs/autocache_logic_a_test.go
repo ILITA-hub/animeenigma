@@ -148,22 +148,6 @@ func TestLogicA_FiresOngoingDemandForJPAudioWatcher(t *testing.T) {
 	require.Equal(t, "ongoing", got[0].Reason)
 }
 
-// TestLogicA_RawPlayerAlsoQualifies verifies player='raw' qualifies as JP-audio
-// even when language is not ja.
-func TestLogicA_RawPlayerAlsoQualifies(t *testing.T) {
-	db := newLogicATestDB(t)
-	seedAnimeRow(t, db, "a1", "111", "ongoing", 3)
-	seedListRow(t, db, "u1", "a1", "watching", time.Now())
-	seedWatchRow(t, db, "u1", "a1", "raw", "")
-
-	srv, captured := capturingLibrary(t, http.StatusOK)
-	defer srv.Close()
-
-	j := NewAutocacheLogicAJob(db, srv.URL, 30, logger.Default())
-	require.NoError(t, j.Run(context.Background()))
-	require.Len(t, captured(), 1)
-}
-
 // TestLogicA_SubCombosQualify verifies that ANY sub combo (kodik/ru/sub,
 // english/en/sub) carries original Japanese audio and therefore fires an ongoing
 // demand — two distinct ongoings → two demands.
@@ -279,7 +263,7 @@ func TestLogicA_ZeroAiredOrEmptyMalSkipped(t *testing.T) {
 	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
 	seedAnimeRow(t, db, "a2", "", "ongoing", 4) // empty shikimori_id → skip
 	seedListRow(t, db, "u1", "a2", "watching", time.Now())
-	seedWatchRow(t, db, "u1", "a2", "raw", "ja")
+	seedWatchRow(t, db, "u1", "a2", "ae", "ja")
 
 	srv, captured := capturingLibrary(t, http.StatusOK)
 	defer srv.Close()
@@ -297,7 +281,7 @@ func TestLogicA_DistinctPerAnime(t *testing.T) {
 	seedListRow(t, db, "u1", "a1", "watching", time.Now())
 	seedListRow(t, db, "u2", "a1", "watching", time.Now())
 	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
-	seedWatchRow(t, db, "u2", "a1", "raw", "ja")
+	seedWatchRow(t, db, "u2", "a1", "kodik", "ru")
 	seedAnimeRow(t, db, "a2", "222", "ongoing", 8)
 	seedListRow(t, db, "u1", "a2", "watching", time.Now())
 	seedWatchRow(t, db, "u1", "a2", "ae", "ja")
@@ -320,7 +304,7 @@ func TestLogicA_SingleDemandFailureDoesNotAbortSweep(t *testing.T) {
 	seedWatchRow(t, db, "u1", "a1", "ae", "ja")
 	seedAnimeRow(t, db, "a2", "222", "ongoing", 8)
 	seedListRow(t, db, "u1", "a2", "watching", time.Now())
-	seedWatchRow(t, db, "u1", "a2", "raw", "ja")
+	seedWatchRow(t, db, "u1", "a2", "ae", "ja")
 
 	// Library returns 500 for every POST — both demands fail but the sweep
 	// completes and Run returns nil (JOIN itself succeeded).

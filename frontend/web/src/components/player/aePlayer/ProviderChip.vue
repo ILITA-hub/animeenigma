@@ -36,7 +36,7 @@
             data-test="cap-cat"
             class="text-[9px] font-semibold font-mono uppercase tracking-wide px-1 py-px rounded bg-white/[0.08] text-[var(--muted-foreground)]"
           >
-            {{ c === 'sub' ? $t('player.sub') : c === 'dub' ? $t('player.dub') : $t('player.sources.raw') }}<template v-if="c === 'sub' && labels.subDelivery"> · {{ labels.subDelivery === 'hard' ? $t('player.sources.subBurnedIn') : $t('player.sources.subSelectable') }}</template>
+            {{ c === 'sub' ? $t('player.sub') : $t('player.dub') }}<template v-if="c === 'sub' && labels.subDelivery"> · {{ labels.subDelivery === 'hard' ? $t('player.sources.subBurnedIn') : $t('player.sources.subSelectable') }}</template>
           </span>
           <span
             v-if="labels.quality"

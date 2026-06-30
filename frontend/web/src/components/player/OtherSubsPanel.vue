@@ -130,7 +130,7 @@ import Modal from '@/components/ui/Modal.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { Spinner } from '@/components/ui'
 import { subtitlesApi } from '@/api/client'
-import type { GroupedSubs, SubtitleTrack, ProviderHealth } from '@/types/raw'
+import type { GroupedSubs, SubtitleTrack, ProviderHealth } from '@/types/subtitles'
 
 const props = defineProps<{
   modelValue: boolean

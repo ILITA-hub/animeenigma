@@ -17,13 +17,13 @@ import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 const kodikCap = {
   provider: 'kodik', display_name: 'Kodik',
   state: 'active' as const, selectable: true, hacker_only: false,
-  order: 80, group: 'ru' as const, audios: ['dub', 'sub'] as ('sub' | 'dub' | 'raw')[],
+  order: 80, group: 'ru' as const, audios: ['dub', 'sub'] as ('sub' | 'dub')[],
   variants: [],
 }
 const gogoCap = {
   provider: 'gogoanime', display_name: 'GogoAnime',
   state: 'active' as const, selectable: true, hacker_only: false,
-  order: 90, group: 'en' as const, audios: ['sub', 'dub'] as ('sub' | 'dub' | 'raw')[],
+  order: 90, group: 'en' as const, audios: ['sub', 'dub'] as ('sub' | 'dub')[],
   variants: [],
 }
 const kodikReport: CapabilityReport = {

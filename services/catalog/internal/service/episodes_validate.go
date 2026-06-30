@@ -62,7 +62,6 @@ var validPlayers = map[string]struct{}{
 	"animelib":   {},
 	"ourenglish": {},
 	"hanime":     {},
-	"raw":        {},
 	"aeplayer":   {},
 }
 

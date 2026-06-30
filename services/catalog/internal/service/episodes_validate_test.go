@@ -144,17 +144,6 @@ func TestValidateEpisode_Hanime_Permissive_Happy(t *testing.T) {
 	}
 }
 
-func TestValidateEpisode_Raw_Permissive_Happy(t *testing.T) {
-	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
-	got, err := svc.ValidateEpisode(context.Background(), "111", "raw", "7", "", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !got.Valid {
-		t.Fatalf("raw permissive: want Valid=true, got %+v", got)
-	}
-}
-
 func TestValidateEpisode_AePlayer_Permissive_Happy(t *testing.T) {
 	// aeplayer is the first-party multi-source unified player. Per-provider
 	// episode validation is wrong (it spans many providers), so v1 trusts
@@ -250,7 +239,7 @@ func TestValidateEpisode_PlayerChange_Permissive_Valid(t *testing.T) {
 	// Previously this wrongly returned EPISODE_UNAVAILABLE, so switching to
 	// OurEnglish/Hanime/Raw in a Watch Together room always failed.
 	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
-	for _, p := range []string{"ourenglish", "hanime", "raw"} {
+	for _, p := range []string{"ourenglish", "hanime"} {
 		got, err := svc.ValidateEpisode(context.Background(), "111", p, "", "", "")
 		if err != nil {
 			t.Fatalf("player=%s unexpected error: %v", p, err)
@@ -266,7 +255,7 @@ func TestValidateEpisode_Permissive_FullMode_EmptyEpisode_Invalid(t *testing.T) 
 	// real callers never send this shape (change_episode guards a non-empty
 	// episode; change_translation passes the room's current episode).
 	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
-	got, err := svc.ValidateEpisode(context.Background(), "111", "raw", "", "x", "")
+	got, err := svc.ValidateEpisode(context.Background(), "111", "hanime", "", "x", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -454,7 +443,7 @@ func TestValidateEpisode_EmptyShikimoriID(t *testing.T) {
 // -----------------------------------------------------------------
 
 func TestIsValidPlayer(t *testing.T) {
-	for _, p := range []string{"kodik", "animelib", "ourenglish", "hanime", "raw", "aeplayer"} {
+	for _, p := range []string{"kodik", "animelib", "ourenglish", "hanime", "aeplayer"} {
 		if !IsValidPlayer(p) {
 			t.Errorf("IsValidPlayer(%q) = false, want true", p)
 		}

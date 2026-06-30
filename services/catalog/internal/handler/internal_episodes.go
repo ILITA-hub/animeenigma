@@ -82,10 +82,10 @@ func (h *InternalEpisodesHandler) GetLatestEpisode(w http.ResponseWriter, r *htt
 	watchType := q.Get("watch_type")
 	language := q.Get("language")
 
-	// Anime-level players (aePlayer, empty translation_id): english/ae/raw.
+	// Anime-level players (aePlayer, empty translation_id): english/ae.
 	// Legacy translation-specific players: kodik/animelib (accept with OR
 	// without translation_id; empty → any-team max, present → legacy path).
-	animeLevel := player == "english" || player == "ae" || player == "raw"
+	animeLevel := player == "english" || player == "ae"
 	legacy := player == "kodik" || player == "animelib"
 	if !animeLevel && !legacy {
 		httputil.BadRequest(w, "player not supported by detector")

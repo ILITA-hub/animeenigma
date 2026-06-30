@@ -39,17 +39,16 @@ func deriveProviderView(row domain.ScraperProvider, hasContent bool) (state stri
 }
 
 // audiosFromTraits lists the audio kinds a provider serves, sub before dub
-// before raw (stable for the FE filter).
+// (stable for the FE filter). The player's combo audio model is binary
+// (sub/dub) — original audio surfaces under sub — so SupportsRaw is a recorded
+// trait that does NOT add a third selectable audio kind to the feed.
 func audiosFromTraits(row domain.ScraperProvider) []string {
-	out := make([]string, 0, 3)
+	out := make([]string, 0, 2)
 	if row.SupportsSub {
 		out = append(out, "sub")
 	}
 	if row.SupportsDub {
 		out = append(out, "dub")
-	}
-	if row.SupportsRaw {
-		out = append(out, "raw")
 	}
 	return out
 }

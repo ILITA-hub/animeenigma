@@ -11,7 +11,6 @@ export function providerToLegacyPlayer(providerId: string): LegacyPlayer | null 
   if (EN_SCRAPER_IDS.has(providerId)) return 'english'
   switch (providerId) {
     case 'kodik': return 'kodik'
-    case 'raw': return 'raw'
     case 'ae': return 'ae'
     case '18anime': return 'hanime'
     case 'animelib': return 'animelib'

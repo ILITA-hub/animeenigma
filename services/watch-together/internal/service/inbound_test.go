@@ -898,7 +898,7 @@ func TestStateChange_Player_BogusValue_BadPayload(t *testing.T) {
 // Test StateChange.6b — aeplayer follows the permissive path: an aeplayer
 // room with an unknown catalog episode id is NOT short-circuited — it
 // round-trips to the catalog (whose permissive contract decides), exactly
-// like ourenglish/hanime/raw. Mechanism: aeplayer ∈ validPlayers so a
+// like ourenglish/hanime. Mechanism: aeplayer ∈ validPlayers so a
 // change_player to it reaches catalog rather than BAD_PAYLOAD; and an
 // aeplayer-room change_episode reaches catalog with the unknown id (no
 // per-player short-circuit in this service).

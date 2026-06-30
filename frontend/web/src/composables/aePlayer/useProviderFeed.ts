@@ -12,16 +12,14 @@ function relevant(cap: ProviderCap, f: RowFilter): boolean {
   if (f.audio === 'dub') {
     return cap.audios.includes('dub') && GROUP_LANGS[g].includes(f.lang)
   }
-  // RAW (audio === 'sub'): original voices — any language group, sub OR raw caps.
+  // RAW (audio === 'sub'): original voices — any language group, sub caps.
   // The language slider is hidden under RAW, so the lang filter is intentionally
   // dropped: EN-sub, RU-sub and pure-JP sources all surface in one list.
-  return cap.audios.includes('sub') || cap.audios.includes('raw')
+  return cap.audios.includes('sub')
 }
 
 function toRow(cap: ProviderCap): ProviderRow {
-  // 'raw' caps are original-audio → surface as a 'sub' (RAW) row so a raw-only
-  // provider is selectable and contributes a sub combo to availability. The map
-  // yields only 'sub'|'dub', so no post-filter is needed.
+  // The audios map yields only 'sub'|'dub', so no post-filter is needed.
   const audios = [...new Set(cap.audios.map((a): AudioKind => (a === 'dub' ? 'dub' : 'sub')))]
   return {
     id: cap.provider, label: cap.display_name, group: cap.group, state: cap.state,

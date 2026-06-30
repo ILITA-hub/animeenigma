@@ -49,8 +49,10 @@ func TestAudiosFromTraits(t *testing.T) {
 	if len(got) != 2 || got[0] != "sub" || got[1] != "dub" {
 		t.Fatalf("got %v want [sub dub]", got)
 	}
-	if a := audiosFromTraits(domain.ScraperProvider{SupportsRaw: true}); len(a) != 1 || a[0] != "raw" {
-		t.Fatalf("raw-only got %v want [raw]", a)
+	// SupportsRaw is a recorded trait only — the binary (sub/dub) combo audio
+	// model means it adds NO third audio kind to the feed.
+	if a := audiosFromTraits(domain.ScraperProvider{SupportsRaw: true}); len(a) != 0 {
+		t.Fatalf("raw-only got %v want []", a)
 	}
 	if a := audiosFromTraits(domain.ScraperProvider{}); len(a) != 0 {
 		t.Fatalf("empty traits: got %v want []", a)

@@ -33,8 +33,8 @@ type ProviderCap struct {
 	Selectable bool     `json:"selectable"`
 	HackerOnly bool     `json:"hacker_only"`  // true only for degraded
 	Order      int      `json:"order"`        // preference_weight; FE sorts desc
-	Group      string   `json:"group"`        // en | ru | adult | jp | firstparty
-	Audios     []string `json:"audios"`       // ["sub","dub","raw"] from supports_*
+	Group      string   `json:"group"`        // en | ru | adult | firstparty
+	Audios     []string `json:"audios"`       // ["sub","dub"] from supports_* (binary audio model)
 	Reason     string   `json:"reason,omitempty"`
 
 	Variants []Variant `json:"variants"`

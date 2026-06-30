@@ -16,14 +16,13 @@ function makeCap(over: Partial<ProviderCap> & Pick<ProviderCap, 'provider' | 'gr
 
 // Registry as a Map<string, ProviderCap> — the new single-source-of-truth shape.
 // Mirrors the real provider shapes that matter for the clamp logic: cross-language
-// (kodik=ru, raw=jp), audio-restricted (miruro=dub-only, raw=sub-only),
-// absent-from-map (animelib disabled — omitted), and 18+ (hanime).
+// (kodik=ru), audio-restricted (miruro=dub-only), absent-from-map (animelib
+// disabled — omitted), and 18+ (hanime).
 const capMap = new Map<string, ProviderCap>([
   ['gogoanime', makeCap({ provider: 'gogoanime', group: 'en', audios: ['sub', 'dub'] })],
   ['miruro',    makeCap({ provider: 'miruro',    group: 'en', audios: ['dub'] })],
   ['kodik',     makeCap({ provider: 'kodik',     group: 'ru', audios: ['dub', 'sub'] })],
   ['ae',        makeCap({ provider: 'ae',        group: 'firstparty', audios: ['sub', 'dub'] })],
-  ['raw',       makeCap({ provider: 'raw',       group: 'jp', audios: ['sub'] })],
   ['hanime',    makeCap({ provider: 'hanime',    group: 'adult', audios: ['dub'] })],
   // animelib is OMITTED — disabled providers are not present in the feed
 ])
@@ -41,11 +40,6 @@ describe('resolveDeepLinkProvider', () => {
     // must switch lang to ru so the row becomes relevant/active and can be pinned.
     expect(resolveDeepLinkProvider('kodik', sub_en, 'common', capMap))
       .toEqual({ provider: 'kodik', audio: 'sub', lang: 'ru' })
-  })
-
-  it('clamps both audio and lang for raw (ja, sub-only)', () => {
-    expect(resolveDeepLinkProvider('raw', { audio: 'dub', lang: 'en' }, 'common', capMap))
-      .toEqual({ provider: 'raw', audio: 'sub', lang: 'ja' })
   })
 
   it('clamps audio for a dub-only provider (miruro)', () => {

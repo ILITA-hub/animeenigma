@@ -70,9 +70,6 @@ func variantsFromTraits(row domain.ScraperProvider) []domain.Variant {
 	if row.SupportsDub {
 		out = append(out, mk("dub", "none"))
 	}
-	if row.SupportsRaw {
-		out = append(out, mk("raw", row.SubDelivery))
-	}
 	return out
 }
 

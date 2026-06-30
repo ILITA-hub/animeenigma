@@ -21,7 +21,7 @@ func NewRouter(
 	newsHandler *handler.NewsHandler,
 	collectionHandler *handler.CollectionHandler,
 	skipTimesHandler *handler.SkipTimesHandler,
-	rawHandler *handler.RawHandler,
+	aeHandler *handler.AeHandler,
 	subtitlesHandler *handler.SubtitlesHandler,
 	internalCacheHandler *handler.InternalCacheHandler,
 	internalEpisodesHandler *handler.InternalEpisodesHandler,
@@ -199,16 +199,11 @@ func NewRouter(
 			if capabilitiesHandler != nil {
 				r.Get("/{animeId}/capabilities", capabilitiesHandler.Get)
 			}
-			// Raw JP video source (workstream raw-jp, Phase 01). AllAnime
-			// GraphQL persisted-query API resolves original Japanese audio
-			// HLS streams. Public, no auth.
-			r.Get("/{animeId}/raw/episodes", rawHandler.GetEpisodes)
-			r.Get("/{animeId}/raw/stream", rawHandler.GetStream)
 			// First-party ("AnimeEnigma") provider: self-hosted library
 			// (MinIO HLS) only — episodes/stream resolve straight from what's
 			// encoded on-prem, with proxy-signed URLs. Public, no auth.
-			r.Get("/{animeId}/ae/episodes", rawHandler.GetAeEpisodes)
-			r.Get("/{animeId}/ae/stream", rawHandler.GetAeStream)
+			r.Get("/{animeId}/ae/episodes", aeHandler.GetAeEpisodes)
+			r.Get("/{animeId}/ae/stream", aeHandler.GetAeStream)
 			// Multi-provider subtitles (workstream raw-jp, Phase 02). Jimaku
 			// + OpenSubtitles merged via /service/subs_aggregator.go.
 			r.Get("/{animeId}/subtitles", subtitlesHandler.Get)

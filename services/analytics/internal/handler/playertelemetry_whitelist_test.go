@@ -8,7 +8,7 @@ import "testing"
 func TestWhitelistProvider(t *testing.T) {
 	known := []string{
 		"gogoanime", "animepahe", "allanime", "animefever", "miruro",
-		"nineanime", "animekai", "kodik", "animelib", "hanime", "raw",
+		"nineanime", "animekai", "kodik", "animelib", "hanime",
 		"ae", "18anime",
 	}
 	for _, p := range known {
@@ -17,7 +17,7 @@ func TestWhitelistProvider(t *testing.T) {
 		}
 	}
 	// case/whitespace normalization
-	if whitelistProvider("  RAW ") != "raw" {
+	if whitelistProvider("  KODIK ") != "kodik" {
 		t.Fatalf("provider not normalized to canonical lowercase")
 	}
 	for _, p := range []string{"", "evil", "'; DROP TABLE", "be", "http://x", "gogoanime\x00"} {

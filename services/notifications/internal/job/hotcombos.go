@@ -23,13 +23,13 @@ import (
 //	JOIN animes a ON a.id = wh.anime_id
 //	WHERE al.status = 'watching'
 //	  AND a.status = 'ongoing'
-//	  AND (wh.translation_id != '' OR wh.player IN ('english', 'ae', 'raw', 'kodik', 'animelib'));
+//	  AND (wh.translation_id != '' OR wh.player IN ('english', 'ae', 'kodik', 'animelib'));
 //
 // Filtering on status='watching' (user-side) AND 'ongoing' (catalog-side)
 // keeps the result set bounded to "combos that could legitimately produce a
 // new_episode notification". Legacy translation-specific players (kodik,
 // animelib) carry a non-empty translation_id. Anime-level aePlayer players
-// (english/ae/raw) are admitted with an empty translation_id and resolved at
+// (english/ae) are admitted with an empty translation_id and resolved at
 // the anime level. kodik/animelib are also admitted with an empty translation_id
 // (any-team aePlayer mode — resolved at the anime level, D-DET-03 extended).
 // Only hanime/18anime rows with an empty translation_id stay excluded — no
@@ -59,7 +59,7 @@ func (c *HotCombosCollector) Collect(ctx context.Context) ([]domain.Combo, error
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
 		  AND a.status = 'ongoing'
-		  AND (wh.translation_id != '' OR wh.player IN ('english', 'ae', 'raw', 'kodik', 'animelib'))
+		  AND (wh.translation_id != '' OR wh.player IN ('english', 'ae', 'kodik', 'animelib'))
 	`
 
 	var rows []domain.Combo

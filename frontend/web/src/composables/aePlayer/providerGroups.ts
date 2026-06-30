@@ -7,16 +7,16 @@ import type { TrackLang, ContentKind, ProviderGroup } from '@/types/aePlayer'
 // owns `group`; mapping a group to its served facets is the only provider
 // knowledge the feed does not yet surface directly (provider-SoT spec, Phase 2).
 export const GROUP_LANGS: Record<ProviderGroup, TrackLang[]> = {
-  en: ['en'], ru: ['ru'], adult: ['en', 'ru'], jp: ['ja'], firstparty: ['en', 'ru', 'ja'],
+  en: ['en'], ru: ['ru'], adult: ['en', 'ru'], firstparty: ['en', 'ru', 'ja'],
 }
 export const GROUP_CONTENT: Record<ProviderGroup, ContentKind[]> = {
-  en: ['common'], ru: ['common'], adult: ['hentai'], jp: ['common'], firstparty: ['common'],
+  en: ['common'], ru: ['common'], adult: ['hentai'], firstparty: ['common'],
 }
 
 // Primary served language per group — the lang a RAW (original-audio) pick
 // resolves to when the current lang isn't in the provider's group.
 export const GROUP_PRIMARY_LANG: Record<ProviderGroup, TrackLang> = {
-  en: 'en', ru: 'ru', adult: 'en', jp: 'ja', firstparty: 'ja',
+  en: 'en', ru: 'ru', adult: 'en', firstparty: 'ja',
 }
 
 // Under RAW the language slider is hidden — combo.lang follows the chosen

@@ -45,14 +45,13 @@ var (
 )
 
 // allowedPlayers is the set of player identifiers the room may declare.
-// Mirrors the 5 frontend player components (CLAUDE.md §Video Player
+// Mirrors the frontend player components (CLAUDE.md §Video Player
 // Architecture) and the constants in domain/ws_message.go.
 var allowedPlayers = map[string]struct{}{
 	domain.PlayerKodik:      {},
 	domain.PlayerAnimeLib:   {},
 	domain.PlayerOurEnglish: {},
 	domain.PlayerHanime:     {},
-	domain.PlayerRaw:        {},
 	domain.PlayerAePlayer:   {},
 }
 
@@ -79,7 +78,7 @@ func (in CreateRoomInput) validate() error {
 		return fmt.Errorf("%w: player is required", ErrInvalidInput)
 	}
 	if _, ok := allowedPlayers[in.Player]; !ok {
-		return fmt.Errorf("%w: unknown player %q (allowed: kodik|animelib|ourenglish|hanime|raw|aeplayer)", ErrInvalidInput, in.Player)
+		return fmt.Errorf("%w: unknown player %q (allowed: kodik|animelib|ourenglish|hanime|aeplayer)", ErrInvalidInput, in.Player)
 	}
 	// translation_id is required for the legacy single-source players (it
 	// names the exact upstream stream). The first-party aePlayer carries its

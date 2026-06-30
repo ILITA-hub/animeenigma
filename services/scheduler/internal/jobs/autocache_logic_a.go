@@ -41,15 +41,15 @@ const logicADemandTimeout = 5 * time.Second
 // rawAudioWatcherPredicate is the SQL fragment that selects watch_history rows
 // carrying original Japanese audio: ANY sub combo (watch_type='sub' — kodik/ru/sub,
 // english/en/sub, hianime/en/sub etc. all carry JP audio regardless of subtitle
-// language/provider), plus the ae/raw players. It is SHARED verbatim by Logic A
-// (this file's enumeration join) and the Phase-11 prediction job
+// language/provider), plus the ae first-party player. It is SHARED verbatim by
+// Logic A (this file's enumeration join) and the Phase-11 prediction job
 // (autocache_prediction.go) so the two cannot drift — the prediction header
 // promises the join is identical to Logic A's. The predicate uses the
 // `wh.` table alias both queries bind to.
 //
-// Corrected 2026-06-17: was `wh.player IN ('ae','raw') OR wh.language = 'ja'`,
+// Corrected 2026-06-17: was `wh.player IN ('ae') OR wh.language = 'ja'`,
 // which wrongly dropped sub combos (kodik/ru/sub, english/en/sub).
-const rawAudioWatcherPredicate = `(wh.watch_type = 'sub' OR wh.player IN ('ae', 'raw'))`
+const rawAudioWatcherPredicate = `(wh.watch_type = 'sub' OR wh.player IN ('ae'))`
 
 // AutocacheLogicAJob enumerates ongoing anime with an active JP-audio watcher and
 // re-asserts an `ongoing` demand for each one's latest-aired episode.
@@ -120,7 +120,7 @@ func (j *AutocacheLogicAJob) Run(ctx context.Context) error {
 
 	// Adapted from notifications/internal/job/hotcombos.go:46 — the DISTINCT join
 	// over (watch_history × anime_list × animes) WHERE watching + ongoing, plus the
-	// Logic-A additions: raw-audio filter (any SUB combo, plus the ae/raw players —
+	// Logic-A additions: raw-audio filter (any SUB combo, plus the ae player —
 	// skip DUB), the D8 recency predicate (al.updated_at > cutoff), and the
 	// episodes_aired projection (the latest-aired episode target, A3). ANY sub combo
 	// carries original Japanese audio regardless of subtitle language/provider, so

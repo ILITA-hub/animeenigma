@@ -230,12 +230,6 @@ const providerOptions = computed<{ value: Provider; label: string; accent: strin
     accent: 'text-success focus:ring-success',
   },
   {
-    value: 'raw',
-    // Raw (JP) provider-identity hue (rose) — brand-exempt decorative accent.
-    label: t('browse.filters.provider.raw'),
-    accent: 'text-rose-500 focus:ring-rose-500',
-  },
-  {
     value: 'ae',
     // First-party AnimeEnigma (has_video) — indigo brand-exempt accent.
     label: t('browse.filters.provider.ae'),

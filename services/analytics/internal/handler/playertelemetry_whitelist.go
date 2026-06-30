@@ -8,7 +8,7 @@ import "strings"
 var knownProviders = map[string]struct{}{
 	"gogoanime": {}, "animepahe": {}, "allanime": {}, "animefever": {},
 	"miruro": {}, "nineanime": {}, "animekai": {}, "kodik": {}, "animelib": {},
-	"hanime": {}, "raw": {}, "ae": {}, "18anime": {},
+	"hanime": {}, "ae": {}, "18anime": {},
 }
 
 // whitelistProvider returns the canonical (lowercased) provider key if it is in

@@ -10,8 +10,6 @@
  * ──────────────
  * • scraperAdapter  — covers all SCRAPER_IDS (EN scraper chain, NOT 18anime)
  *   using scraperApi.getEpisodes / getServers / getStream (resp.data.data envelope).
- * • rawAdapter      — covers 'raw' (AllAnime JP) using rawApi.getEpisodes /
- *   getStream (resp.data?.data ?? resp.data envelope).
  * • anime18Adapter  — covers '18anime' via the SEPARATE anime18Api backend
  *   (/anime18/* routes), NOT the scraper chain. Uses anime18Api.getEpisodes /
  *   getStream (resp.data?.data || resp.data envelope).
@@ -33,7 +31,7 @@
  * • 'animelib'  — upstream went Kodik-only (see MEMORY.md); hidden by default.
  */
 
-import { scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi } from '@/api/client'
+import { scraperApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
 import { hlsProxyUrl } from '@/utils/streaming'
@@ -94,15 +92,15 @@ interface ScraperEnvelope {
   meta?: { tried?: string[]; provider?: string }
 }
 
-// ─── Raw-JP types (from types/raw.ts) ───────────────────────────────────────
+// ─── First-party (ae) library types ─────────────────────────────────────────
 
-interface RawEpisodesResponse {
+interface LibraryEpisodesResponse {
   episodes: { id: string; number: number; title: string }[]
   available: boolean
   source: string
 }
 
-interface RawStream {
+interface LibraryStream {
   url: string
   type: 'hls' | 'mp4'
   quality?: string
@@ -217,7 +215,6 @@ export interface ProviderAdapter {
 
 export interface ResolverDeps {
   scraperApi?: typeof scraperApi
-  rawApi?: typeof rawApi
   anime18Api?: typeof anime18Api
   kodikApi?: typeof kodikApi
   aeApi?: typeof aeApi
@@ -322,46 +319,11 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
   }
 }
 
-function makeRawAdapter(api: typeof rawApi): ProviderAdapter {
-  return {
-    async listEpisodes(animeId: string): Promise<EpisodeOption[]> {
-      const resp = await api.getEpisodes(animeId)
-      const data: RawEpisodesResponse = resp.data?.data ?? resp.data
-      return (data?.episodes ?? []).map((ep) => ({
-        key: ep.id,
-        label: ep.number,
-        number: ep.number,
-      }))
-    },
-
-    async resolveStream(animeId: string, ep: EpisodeOption): Promise<StreamResult> {
-      // rawApi.getStream takes the episode NUMBER, not the id string
-      const resp = await api.getStream(animeId, ep.number)
-      const stream: RawStream = resp.data?.data ?? resp.data
-      if (!stream?.url) {
-        throw new NotAvailableError('raw', 'returned no stream URL')
-      }
-      const type: 'hls' | 'mp4' = stream.type ?? 'hls'
-      // AllAnime's fast4speed.rsvp CDN requires Referer: https://allmanga.to/
-      // (mirrors the legacy RawPlayer). The proxy injects it. When the raw
-      // resolver served this from the self-hosted library instead, the URL is
-      // a signed minio one — forward exp/sig so the proxy trusts it.
-      return {
-        url: buildProxyUrl(stream.url, 'https://allmanga.to/', type, {
-          exp: stream.exp,
-          sig: stream.sig,
-        }),
-        type,
-      }
-    },
-  }
-}
-
 function makeAeAdapter(api: typeof aeApi): ProviderAdapter {
   return {
     async listEpisodes(animeId: string): Promise<EpisodeOption[]> {
       const resp = await api.getEpisodes(animeId)
-      const data: RawEpisodesResponse = resp.data?.data ?? resp.data
+      const data: LibraryEpisodesResponse = resp.data?.data ?? resp.data
       // available=false (nothing encoded on-prem yet) → empty list; the
       // player then shows the provider as having no episodes.
       return (data?.episodes ?? []).map((ep) => ({
@@ -373,7 +335,7 @@ function makeAeAdapter(api: typeof aeApi): ProviderAdapter {
 
     async resolveStream(animeId: string, ep: EpisodeOption): Promise<StreamResult> {
       const resp = await api.getStream(animeId, ep.number)
-      const stream: RawStream = resp.data?.data ?? resp.data
+      const stream: LibraryStream = resp.data?.data ?? resp.data
       if (!stream?.url) {
         throw new NotAvailableError('ae', 'has no local copy of this episode')
       }
@@ -610,7 +572,6 @@ export interface ProviderResolver {
  * Dispatching rules:
  * - provider === 'kodik'     → kodikAdapter (requires deps.kodikApi)
  * - provider in SCRAPER_IDS → scraperAdapter (requires deps.scraperApi)
- * - provider === 'raw'       → rawAdapter (requires deps.rawApi)
  * - provider === '18anime'   → anime18Adapter via anime18Api (/anime18/* backend,
  *                              NOT the EN scraper chain; requires deps.anime18Api)
  * - provider === 'hanime'    → hanimeAdapter via hanimeApi (/hanime/* catalog
@@ -642,13 +603,6 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
         throw new NotAvailableError(provider, 'not available (scraperApi dep missing)')
       }
       return makeScraperAdapter(deps.scraperApi, provider)
-    }
-
-    if (provider === 'raw') {
-      if (!deps.rawApi) {
-        throw new NotAvailableError(provider, 'not available (rawApi dep missing)')
-      }
-      return makeRawAdapter(deps.rawApi)
     }
 
     if (provider === 'ae') {
@@ -713,5 +667,5 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
  * Call this inside a Vue setup context.
  */
 export function useProviderResolver(): ProviderResolver {
-  return makeResolver({ scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi })
+  return makeResolver({ scraperApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi })
 }
