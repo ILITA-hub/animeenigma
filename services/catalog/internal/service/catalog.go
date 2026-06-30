@@ -619,6 +619,11 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 		shikimoriIDs = append(shikimoriIDs, a.ShikimoriID)
 	}
 
+	// Genres are a small global lookup (~80 rows) shared across every anime.
+	// Track which we've already upserted so the whole run upserts each distinct
+	// genre once instead of once per anime (~15k redundant writes → ~80).
+	seenGenres := make(map[string]struct{})
+
 	// Process in chunks of 50
 	const batchSize = 50
 	for i := 0; i < len(shikimoriIDs); i += batchSize {
@@ -646,16 +651,56 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 			continue
 		}
 
+		// anime ID -> genre IDs for the rows refreshed in this chunk; written to
+		// the join table in one bulk DELETE+INSERT below instead of four
+		// statements per anime.
+		chunkLinks := make(map[string][]string, len(freshAnime))
+
 		for _, fresh := range freshAnime {
 			existing, ok := existingMap[fresh.ShikimoriID]
 			if !ok {
 				continue
 			}
+
+			// Upsert genres we haven't seen yet this run (best-effort; a failed
+			// upsert is left unmarked so a later anime retries it).
+			for _, g := range fresh.Genres {
+				if _, done := seenGenres[g.ID]; done {
+					continue
+				}
+				if err := s.genreRepo.Upsert(ctx, &g); err != nil {
+					s.log.Warnw("failed to upsert genre", "genre_id", g.ID, "error", err)
+					continue
+				}
+				seenGenres[g.ID] = struct{}{}
+			}
+
 			if err := s.refreshStaleAnime(ctx, fresh, existing); err != nil {
 				failed++
 				continue
 			}
+
+			// Record links only when Shikimori returned genres — an empty fetch
+			// must NOT wipe the existing join rows (matches the prior per-anime
+			// SetAnimeGenres guard). fresh.ID was set to existing.ID by
+			// refreshStaleAnime.
+			if len(fresh.Genres) > 0 {
+				genreIDs := make([]string, len(fresh.Genres))
+				for j, g := range fresh.Genres {
+					genreIDs[j] = g.ID
+				}
+				chunkLinks[fresh.ID] = genreIDs
+			}
+
 			refreshed++
+		}
+
+		// Bulk-rewrite this chunk's genre join rows (best-effort: the anime
+		// metadata rows are already updated).
+		if len(chunkLinks) > 0 {
+			if err := s.genreRepo.ReplaceAnimeGenresBatch(ctx, chunkLinks); err != nil {
+				s.log.Warnw("failed to bulk relink anime genres", "error", err, "batch_start", i)
+			}
 		}
 
 		// Rate limit safety between batches
@@ -674,9 +719,10 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 
 // refreshStaleAnime updates a single stale anime in place with fresh Shikimori
 // data, preserving local-only fields (ID, HasVideo, CreatedAt) and the existing
-// MAL poster, then relinks genres and invalidates the per-anime cache. Genre
-// upsert/link errors are intentionally ignored here (best-effort). Returns an
-// error only when the primary anime row update fails.
+// MAL poster, and invalidates the per-anime cache. Genre upserts and join-table
+// relinking are done in bulk by the BatchRefreshAnime caller (deduped across the
+// run, one bulk join rewrite per chunk), not per anime here. Returns an error
+// only when the primary anime row update fails.
 func (s *CatalogService) refreshStaleAnime(ctx context.Context, fresh, existing *domain.Anime) error {
 	// Preserve local fields
 	fresh.ID = existing.ID
@@ -701,17 +747,9 @@ func (s *CatalogService) refreshStaleAnime(ctx context.Context, fresh, existing 
 		return err
 	}
 
-	// Upsert genres
-	for _, genre := range fresh.Genres {
-		_ = s.genreRepo.Upsert(ctx, &genre)
-	}
-	genreIDs := make([]string, len(fresh.Genres))
-	for j, g := range fresh.Genres {
-		genreIDs[j] = g.ID
-	}
-	if len(genreIDs) > 0 {
-		_ = s.genreRepo.SetAnimeGenres(ctx, fresh.ID, genreIDs)
-	}
+	// Genre upserts and join relinking are handled in bulk by the
+	// BatchRefreshAnime caller (one upsert per distinct genre across the whole
+	// run, one bulk join rewrite per chunk) — not per anime here.
 
 	// Invalidate cache
 	_ = s.cache.Delete(ctx, cache.KeyAnime(existing.ID))
