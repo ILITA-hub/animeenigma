@@ -98,3 +98,31 @@ func TestParseAllVideoFilesErrorsOnGarbage(t *testing.T) {
 		t.Fatalf("expected error on nil allvideo page")
 	}
 }
+
+func TestDeriveAllVideoReferer(t *testing.T) {
+	// The Referer MUST be the get_file URL's own origin (the host that 302s to
+	// filevideo1), NOT the fsst embed origin — filevideo1 403s a fsst.online
+	// Referer (smoke-tested 2026-06-30). Derived per-resolve so it survives
+	// CDN mirror rotation.
+	cases := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{"incvideo1 get_file", "https://www.incvideo1.online/get_file/5/abc/726000/726858/726858.mp4/", "https://www.incvideo1.online/"},
+		{"rotated mirror host", "https://incvideo2.online/get_file/9/def/1.mp4/", "https://incvideo2.online/"},
+		{"unparseable falls back", "://no-scheme", allVideoFallbackReferer},
+		{"empty falls back", "", allVideoFallbackReferer},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := deriveAllVideoReferer(c.url); got != c.want {
+				t.Fatalf("deriveAllVideoReferer(%q): want %q, got %q", c.url, c.want, got)
+			}
+		})
+	}
+	// The fsst embed origin must never be the Referer (the bug we fixed).
+	if got := deriveAllVideoReferer("https://www.incvideo1.online/get_file/x/726858.mp4/"); strings.Contains(got, "fsst") {
+		t.Fatalf("deriveAllVideoReferer leaked fsst origin: %q", got)
+	}
+}

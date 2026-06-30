@@ -3,14 +3,30 @@ package animejoy
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 )
 
-// allVideoReferer is the Referer the incvideo1.online CDN expects when its
-// get_file mp4 is fetched: the fsst.online embed origin (the page the playlist
-// points at), NOT animejoy.ru and NOT the post-301 incvideo1 host.
-const allVideoReferer = "https://fsst.online/"
+// allVideoFallbackReferer is used only when the resolved get_file URL can't be
+// parsed for its origin. The real Referer is derived per-resolve from the
+// get_file URL itself (see deriveAllVideoReferer): the get_file host 302-redirects
+// to a*.filevideo1.com/remote_control.php, which 403s a fsst.online Referer but
+// serves the mp4 when the Referer is the get_file origin (or absent). The proxy
+// keeps this Referer across the get_file→filevideo1 302, so it MUST be the value
+// the FINAL hop accepts — NOT the fsst embed origin (smoke-tested 2026-06-30).
+const allVideoFallbackReferer = "https://www.incvideo1.online/"
+
+// deriveAllVideoReferer returns the Referer the AllVideo CDN chain expects,
+// taken from the resolved get_file URL's own origin. The get_file host is
+// incvideo1.online today, but the network rotates mirrors, so deriving the
+// origin (rather than hardcoding it) keeps the Referer correct across rotation.
+func deriveAllVideoReferer(getFileURL string) string {
+	if u, err := url.Parse(getFileURL); err == nil && u.Scheme != "" && u.Host != "" {
+		return u.Scheme + "://" + u.Host + "/"
+	}
+	return allVideoFallbackReferer
+}
 
 // allVideoFile is one rendition from the playerjs file:"…" list.
 type allVideoFile struct {
@@ -87,8 +103,9 @@ func pickBestAllVideo(list []allVideoFile) (allVideoFile, bool) {
 // list, and pick the highest rendition. embedURL is the fsst.online embed URL
 // found in the playlist's data-file.
 //
-// The proxy MUST replay Referer = https://fsst.online/ when fetching the returned
-// URL.
+// The proxy MUST replay the returned Referer (the get_file origin, e.g.
+// https://www.incvideo1.online/) when fetching the returned URL: the get_file
+// host 302-redirects to a*.filevideo1.com, which 403s a fsst.online Referer.
 func (c *Client) ResolveAllVideo(ctx context.Context, embedURL string) (ResolvedLeg, error) {
 	target := strings.TrimSpace(embedURL)
 	if target == "" {
@@ -111,7 +128,7 @@ func (c *Client) ResolveAllVideo(ctx context.Context, embedURL string) (Resolved
 	}
 	return ResolvedLeg{
 		URL:     best.URL,
-		Referer: allVideoReferer,
+		Referer: deriveAllVideoReferer(best.URL),
 		Quality: best.Quality,
 	}, nil
 }

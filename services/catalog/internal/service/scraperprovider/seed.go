@@ -203,7 +203,13 @@ var defaultProviders = []domain.ScraperProvider{
 		// EN-only candidateProviders invariant). The rows are dormant until the
 		// capability family / FE adapter ship in a later phase (a stream_providers
 		// row with no family simply doesn't surface — safe).
+		// Policy/Health are set EXPLICITLY (manual/down = the degraded soak state):
+		// BackfillPolicyHealth (status→policy/health) is run-once guarded and already
+		// applied on prod, so a NEW degraded seed row would otherwise keep the column
+		// defaults (auto/up) and surface as "active" (deriveProviderView keys hacker-
+		// only on Policy==manual, NOT status). Explicit values keep fresh DBs honest.
 		Name: "animejoy-sibnet", Status: domain.StatusDegraded,
+		Policy: domain.PolicyManual, Health: domain.HealthDown,
 		SupportsSub: true, SupportsDub: false, SupportsRaw: false,
 		SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 25,
 		Reason:      "Soaking — animejoy.ru via Sibnet",
@@ -211,6 +217,7 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "animejoy-allvideo", Status: domain.StatusDegraded,
+		Policy: domain.PolicyManual, Health: domain.HealthDown,
 		SupportsSub: true, SupportsDub: false, SupportsRaw: false,
 		SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 20,
 		Reason:      "Soaking — animejoy.ru via AllVideo",
