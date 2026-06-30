@@ -195,6 +195,38 @@ const animepaheBrowserRevivalGuardKey = "animepahe_browser_revival"
 // addAnimejoyProvidersGuardKey marks AddAnimejoyProviders as applied.
 const addAnimejoyProvidersGuardKey = "add_animejoy_providers"
 
+// removeRawProviderGuardKey marks RemoveRawProvider as applied.
+const removeRawProviderGuardKey = "remove_raw_provider"
+
+// RemoveRawProvider hard-deletes the legacy standalone "raw" JP provider row
+// (removed 2026-06-30 — AllAnime + ok.ru cover JP-original audio). The seed no
+// longer creates it, but insert-if-absent seeding never deletes an existing
+// prod row, and the Grafana provider roster reads stream_providers DIRECTLY, so
+// the stale row would otherwise keep showing in the roster. Run-once via the
+// catalog_migration_guards ledger; a no-op once applied (and a clean no-op on
+// fresh DBs that never had the row — delete is idempotent). ScraperProvider has
+// no soft-delete column, so Delete is a hard delete.
+func RemoveRawProvider(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", removeRawProviderGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check remove-raw-provider guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied
+	}
+	if err := db.Where("name = ?", "raw").Delete(&domain.ScraperProvider{}).Error; err != nil {
+		return fmt.Errorf("delete raw provider row: %w", err)
+	}
+	if err := db.Create(&migrationGuard{Key: removeRawProviderGuardKey}).Error; err != nil {
+		return fmt.Errorf("write remove-raw-provider guard: %w", err)
+	}
+	return nil
+}
+
 // MiruroDubOnly flips the miruro roster row to supports_sub=false exactly once.
 // Miruro's upstream stopped serving sub streams (only English dub plays), so it
 // must not advertise/auto-select for SUB (original-Japanese-audio) playback. The

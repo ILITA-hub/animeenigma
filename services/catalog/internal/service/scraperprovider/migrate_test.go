@@ -200,6 +200,39 @@ func TestMiruroDubOnly_FlipsMiruroSubOnly(t *testing.T) {
 	}
 }
 
+func TestRemoveRawProvider_DeletesRowIdempotently(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Simulate a pre-existing live DB that still has the legacy raw row (the seed
+	// no longer creates it).
+	if err := db.Create(&domain.ScraperProvider{Name: "raw", Status: domain.StatusEnabled, Group: "jp"}).Error; err != nil {
+		t.Fatalf("preset raw row: %v", err)
+	}
+	// A sibling row that must survive.
+	if err := db.Create(&domain.ScraperProvider{Name: "ae", Status: domain.StatusEnabled, Group: "firstparty"}).Error; err != nil {
+		t.Fatalf("preset ae row: %v", err)
+	}
+
+	if err := scraperprovider.RemoveRawProvider(db); err != nil {
+		t.Fatalf("remove raw provider: %v", err)
+	}
+	var rawCount, aeCount int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "raw").Count(&rawCount)
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "ae").Count(&aeCount)
+	if rawCount != 0 {
+		t.Errorf("raw row count = %d, want 0 after RemoveRawProvider", rawCount)
+	}
+	if aeCount != 1 {
+		t.Errorf("ae row must survive: count = %d, want 1", aeCount)
+	}
+	// Idempotent: a second call (and a fresh-DB no-row case) is a clean no-op.
+	if err := scraperprovider.RemoveRawProvider(db); err != nil {
+		t.Fatalf("second RemoveRawProvider call must be a no-op: %v", err)
+	}
+}
+
 func TestMiruroDubOnly_GuardedDoesNotClobberOperatorReEnable(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

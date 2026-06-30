@@ -292,6 +292,14 @@ func main() {
 		log.Errorw("add-animejoy-providers migration failed (continuing)", "error", err)
 	}
 
+	// Hard-delete the retired standalone "raw" JP provider row (removed 2026-06-30).
+	// The seed no longer creates it, but insert-if-absent never deletes the existing
+	// prod row, and the Grafana roster reads stream_providers directly — so the stale
+	// row must be removed explicitly. Run-once via the ledger; idempotent.
+	if err := scraperprovider.RemoveRawProvider(db.DB); err != nil {
+		log.Errorw("remove-raw-provider migration failed (continuing)", "error", err)
+	}
+
 	// One-time (guarded) back-fill of the legacy status tri-state onto the new
 	// (policy, health) dimensions: enabled→auto/up, degraded→manual/down,
 	// disabled→disabled/down. Run-once via the catalog_migration_guards ledger;
