@@ -963,6 +963,55 @@ func (h *CatalogHandler) GetHanimeStream(w http.ResponseWriter, r *http.Request)
 	httputil.OK(w, stream)
 }
 
+// ============================================================================
+// AnimeJoy Handlers (RU-sub: Sibnet + AllVideo legs, two independent providers)
+// ============================================================================
+
+// GetAnimejoySibnetStream resolves the AnimeJoy *Sibnet* leg for an episode.
+// Thin: read animeId (chi param) + the same `episode` query param the AnimeLib
+// stream route uses + optional `team`; delegate to GetAnimejoyStream with the
+// fixed "sibnet" leg.
+func (h *CatalogHandler) GetAnimejoySibnetStream(w http.ResponseWriter, r *http.Request) {
+	h.getAnimejoyStream(w, r, "sibnet")
+}
+
+// GetAnimejoyAllVideoStream resolves the AnimeJoy *AllVideo* leg for an episode.
+// Mirror of GetAnimejoySibnetStream with the fixed "allvideo" leg. No
+// intra-provider failover — the other chip is the user's fallback.
+func (h *CatalogHandler) GetAnimejoyAllVideoStream(w http.ResponseWriter, r *http.Request) {
+	h.getAnimejoyStream(w, r, "allvideo")
+}
+
+// getAnimejoyStream is the shared body for both leg handlers.
+func (h *CatalogHandler) getAnimejoyStream(w http.ResponseWriter, r *http.Request, leg string) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeStr := r.URL.Query().Get("episode")
+	if episodeStr == "" {
+		httputil.BadRequest(w, "episode is required")
+		return
+	}
+	episode, err := strconv.Atoi(episodeStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid episode")
+		return
+	}
+
+	teamID := r.URL.Query().Get("team")
+
+	stream, err := h.catalogService.GetAnimejoyStream(r.Context(), animeID, leg, episode, teamID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, stream)
+}
+
 // GetJimakuSubtitles fetches Japanese subtitles from Jimaku for an anime episode
 func (h *CatalogHandler) GetJimakuSubtitles(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")
