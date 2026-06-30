@@ -550,6 +550,16 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	// source family.
 	{Domain: "pro.ultracloud.cc", Reason: "Miruro upstream proxy host (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
 	{Domain: "pru.ultracloud.cc", Reason: "Miruro alternate proxy host (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
+	// 2026-06-30 (AUTO-517) — Miruro vidtube inner-embed CDN. When a Miruro
+	// stream routes through the vidtube.site embed, the ultracloud.cc proxy
+	// 302-redirects the master/variant playlists to mt.nekostream.site, which
+	// the HLS proxy was 502-ing (proxy_upstream_errors_total{domain=
+	// mt.nekostream.site}) because the host was unlisted. Stop-gap allowlist
+	// entry to unblock the burst while the signing/provenance gap (the proxy
+	// should mint child-segment tokens across this redirect chain instead of
+	// relying on a static entry) is fixed properly. Exact host match + any
+	// *.mt.nekostream.site subdomain via the HasSuffix(host, "."+allowed) gate.
+	{Domain: "mt.nekostream.site", Reason: "Miruro vidtube inner-embed CDN — ultracloud.cc 302 redirect target for master/variant playlists (AUTO-517 stop-gap; underlying fix = provenance token minting across the redirect chain)", Owner: "@0neymik0", Added: "2026-06-30"},
 
 	// Phase 28 (SCRAPER-HEAL-39) — 9anime.me.uk MP4 embed + CDN host.
 	// my.1anime.site serves the <iframe src="...index.php?action=play&file=
