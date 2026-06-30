@@ -197,24 +197,29 @@ Single-provider groups (e.g. `ru`=Kodik, `firstparty`=ae) behave correctly:
 `ProviderFleetNoAutoPlayable` fires when that single provider drops below
 auto-playable — **provided the group's steady-state is `UP`** (see R5).
 
-### 4.3 Phase 1c — Bot relay for fleet alerts
+### 4.3 Phase 1c — Bot handling for fleet alerts
 
-Route the two fleet alert names to a dedicated handler (before the generic
-per-alert Claude dispatch):
+The two fleet alerts are **real, actionable** outages, so they flow through the
+**normal Claude analysis + Telegram + escalate path** — like any other
+`escalate`-tier alert. No special "skip Claude" handling. (Idle-run savings come
+from deferring the garbage streaming/gateway alerts (§4.1) and from Phase 2
+demoting the per-provider pagers (§4.4) — not from short-circuiting a genuine
+fleet outage.)
 
-- Send **one** Telegram message:
-  `🚨 <group> provider fleet — manual action required`, including which trigger
-  fired and the per-provider reasons (reuse `scraperProviderFaultLine`,
-  generalized to take a `group` argument instead of hardcoding `en`).
-- Create or reuse **one** `escalate`-tier issue (AUTO-NNN) so it surfaces in
-  `/admin/feedback`.
-- **Skip the Claude analysis run** — these alerts are already actionable; no
-  diagnosis adds value.
-- Re-alert cadence: at most once / 24h while unresolved, via the existing
-  cooldown mechanism (a `fleet-outage:<group>` cooldown key, 24h).
-- Auto-clear: handled by the existing `checkResolvedAlerts` path — when Grafana
-  stops firing the rule, the issue is resolved and the cooldown is cleared so a
-  future genuine outage can escalate again.
+The only roster-specific behaviour:
+
+- **Aggregation is already done upstream:** the Grafana rule is `by (group)`, so
+  the bot receives **one** alert per affected group instead of N per-provider
+  alerts. The per-provider fault detail comes from Claude's analysis (it reads
+  the live roster), so `scraperProviderFaultLine` can simply be generalized to a
+  `group` argument for the firing-message annotation if useful.
+- **Standard active-alert dedup applies** (`GetActiveAlert`) so Grafana's 4h
+  `repeat_interval` re-sends are processed once, not re-analyzed on every repeat.
+- **No periodic re-alert.** The escalation fires once per occurrence (after the
+  30m hold); it is **not** re-sent on a 24h timer. Auto-clear is handled by the
+  existing `checkResolvedAlerts` path — when Grafana stops firing, the
+  active-alert entry clears, so a *new* later collapse escalates again as a fresh
+  occurrence.
 
 ### 4.4 Phase 2 — Simplification cleanup (after soak)
 
@@ -262,16 +267,18 @@ is found, note it — do not build new storage in this work.
 | `provider_state` gauge (catalog) | Publish derived lifecycle state per `(provider, group)` | DB roster rows | yes — emit test asserts code+labels |
 | Grafana fleet rules | Evaluate fleet collapse / correlated-down per group | `provider_state` series | yes — PromQL unit reasoning + manual/synthetic check |
 | Bot webhook suppress gate | Drop deferred alert keys silently | `SUPPRESSED_ALERTS` cfg | yes — table test |
-| Bot fleet-alert handler | One Telegram + one escalate issue, no Claude | alert name/labels, cooldown state | yes — handler test with fakes |
+| Bot fleet-alert handling | Route the aggregated per-group alert through the normal Claude analysis + escalate path | alert name/labels, active-alert dedup | yes — handler test with fakes |
 
 ## 7. Testing
 
 - **Bot**:
   - Webhook-path suppression: suppressed `High Error Rate:streaming` dropped
     silently (no Telegram, no issue, no Claude); non-suppressed proceeds.
-  - Fleet-alert handler: produces one Telegram + one `escalate` issue, **no**
-    Claude dispatch; second firing within 24h is throttled; resolve clears
-    cooldown. Handwritten fakes (project convention — no testify/mock).
+  - Fleet alert: routed through the normal Claude analysis + escalate path (a
+    Claude run **is** expected); active-alert dedup means a repeated Grafana
+    delivery is processed once, not re-analyzed; resolve clears the active-alert
+    entry; no periodic re-alert is scheduled. Handwritten fakes (project
+    convention — no testify/mock).
 - **Catalog**:
   - `provider_state` emits with `(provider, group)` labels at boot seed and on a
     simulated policy transition.
@@ -298,7 +305,8 @@ is found, note it — do not build new storage in this work.
 3. Confirm: streaming/gateway `High Error Rate` no longer reaches Telegram;
    Grafana still shows the rule; `events` still records egress.
 4. Synthetically drive a group to all-`Down` (or wait for a real transition) →
-   confirm exactly one fleet Telegram + one escalate issue, no Claude run.
+   confirm exactly one fleet Telegram + one escalate issue (Claude analysis
+   runs); a repeated Grafana delivery is deduped, not re-analyzed.
 5. Soak a few days; confirm gradual single-provider degrade stays silent.
 6. Phase 2: demote per-provider pagers, delete `shouldSuppressForProvider`,
    redeploy + restart-grafana; confirm dashboards still populate and no provider
@@ -339,7 +347,7 @@ is found, note it — do not build new storage in this work.
 | Auto-playable threshold | `>= 3` (UP/Recovering) | fleet rule PromQL |
 | Correlated-down count | `>= 2` | fleet rule PromQL |
 | Persistence hold | `30m` | rule `for:` |
-| Re-alert cooldown | `24h` | bot `fleet-outage:<group>` cooldown |
+| Re-alert | none — fire once per occurrence, auto-clear on resolve | bot active-alert dedup |
 
 ## 11. Metrics (project conventions — `.planning/CONVENTIONS.md`)
 
