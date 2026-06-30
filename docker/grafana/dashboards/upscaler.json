@@ -1145,7 +1145,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "Upscaler",
-  "uid": "upscaler",
+  "uid": "upscaler-fleet",
   "version": 1,
   "weekStart": ""
 }
