@@ -116,7 +116,7 @@ groups:
           reason: egress_anomaly
         annotations:
           summary: 'Egress volume anomaly: {{ $values.B }} operation(s) over hourly baseline (>3σ, >500 MiB/h)'
-          description: 'One or more egress operations sent abnormally high volume in the last complete hour (> baseline_avg + 3·σ over the trailing 168h, and > 500 MiB/h). Almost always the video HLS proxy. Open the "Activity Register — Overview" dashboard to see which operation and the volume vs baseline.'
+          description: 'One or more egress operations sent abnormally high volume in the last complete hour (> baseline_avg + 3·σ over the trailing 168h, and > 500 MiB/h). Almost always the video HLS proxy. Open the "Activity Register" dashboard (Awareness Overview section) to see which operation and the volume vs baseline.'
           reason: egress_anomaly
 
       # --------------------------------------------------------------------
