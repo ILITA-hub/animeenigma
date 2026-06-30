@@ -234,8 +234,27 @@ const stripRef = ref<HTMLElement | null>(null)
 const gridRef = ref<HTMLElement | null>(null)
 const jumpVal = ref('')
 
+// The high-water mark (watchedUpTo = anime_list.episodes) means "watched up to
+// N" — correct for MAL-imported lists that carry only a count and no per-episode
+// rows. But when that mark is itself anchored by an OUT-OF-ORDER on-platform
+// completion (a completed row sits at the mark while episodes below it have no
+// row — e.g. an episode auto-opened by a stale deep-link, then marked watched),
+// the contiguous fill would falsely paint never-opened episodes as watched. In
+// that case we trust the per-episode rows alone. Watched-count bug, 2026-06-30.
+const onPlatformGappy = computed(() => {
+  if (!props.progress[props.watchedUpTo]?.completed) return false // mark is import-derived
+  let rowsAtOrBelowMark = 0
+  for (const key of Object.keys(props.progress)) {
+    if (Number(key) <= props.watchedUpTo) rowsAtOrBelowMark++
+  }
+  return rowsAtOrBelowMark < props.watchedUpTo // a gap exists under an on-platform mark
+})
+
 function isWatched(ep: EpisodeOption): boolean {
-  return ep.number <= props.watchedUpTo || !!props.progress[ep.number]?.completed
+  const row = props.progress[ep.number]
+  if (row) return !!row.completed // real per-episode playback data wins
+  if (ep.number > props.watchedUpTo) return false
+  return !onPlatformGappy.value // contiguous fill, unless the mark jumped over gaps
 }
 
 /** Partial progress fraction (0..100); 0 for watched/untouched episodes. */

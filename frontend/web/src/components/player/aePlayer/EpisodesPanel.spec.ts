@@ -66,6 +66,55 @@ describe('EpisodesPanel', () => {
     expect(w.find('[data-test="episode-3"] [data-test="ep-watched"]').exists()).toBe(true)
   })
 
+  // Regression: an out-of-order on-platform completion (e.g. an episode
+  // auto-opened by a stale deep-link) must NOT contiguous-fill the never-opened
+  // episodes below it as "watched". Watched-count bug, 2026-06-30.
+  it('does not contiguous-fill gaps below an out-of-order on-platform mark', () => {
+    const many: EpisodeOption[] = Array.from({ length: 12 }, (_, i) => ({
+      key: i + 1,
+      label: i + 1,
+      number: i + 1,
+    }))
+    const w = mount(EpisodesPanel, {
+      props: {
+        episodes: many,
+        selectedNumber: 1,
+        // anime_list.episodes jumped to 12 because ep12 was auto-opened+completed,
+        // but eps 2–11 were never opened and ep1 is only in progress.
+        watchedUpTo: 12,
+        progress: { 1: { pct: 0.3, completed: false }, 12: { pct: 1, completed: true } },
+      },
+    })
+    // The genuinely-completed episode stays watched…
+    expect(w.find('[data-test="episode-12"] [data-test="ep-watched"]').exists()).toBe(true)
+    // …the in-progress first episode is NOT watched…
+    expect(w.find('[data-test="episode-1"] [data-test="ep-watched"]').exists()).toBe(false)
+    // …and the never-opened middle episodes are NOT watched (the bug painted these).
+    expect(w.find('[data-test="episode-5"] [data-test="ep-watched"]').exists()).toBe(false)
+    expect(w.find('[data-test="episode-11"] [data-test="ep-watched"]').exists()).toBe(false)
+  })
+
+  // MAL-imported lists carry a high-water count with NO per-episode rows; the
+  // contiguous "watched up to N" fill must be preserved for them even when a
+  // single later on-platform row exists (a re-watch of an early episode).
+  it('keeps the contiguous fill for import-style high-water marks', () => {
+    const many: EpisodeOption[] = Array.from({ length: 24 }, (_, i) => ({
+      key: i + 1,
+      label: i + 1,
+      number: i + 1,
+    }))
+    const w = mount(EpisodesPanel, {
+      props: {
+        episodes: many,
+        selectedNumber: 1,
+        watchedUpTo: 24,
+        progress: { 1: { pct: 1, completed: true } },
+      },
+    })
+    expect(w.find('[data-test="episode-10"] [data-test="ep-watched"]').exists()).toBe(true)
+    expect(w.find('[data-test="episode-24"] [data-test="ep-watched"]').exists()).toBe(true)
+  })
+
   it('renders a partial-progress underline sized by pct', () => {
     const w = mount(EpisodesPanel, {
       props: {
