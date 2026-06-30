@@ -3,8 +3,6 @@ package animejoy
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"regexp"
 	"strings"
 )
@@ -97,25 +95,10 @@ func (c *Client) ResolveAllVideo(ctx context.Context, embedURL string) (Resolved
 		return ResolvedLeg{}, fmt.Errorf("animejoy: ResolveAllVideo called with empty embed URL")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return ResolvedLeg{}, fmt.Errorf("animejoy: build allvideo embed request: %w", err)
-	}
-	req.Header.Set("User-Agent", defaultUserAgent)
 	// AnimeJoy is the page that embeds the fsst player; the embed keys on it.
-	req.Header.Set("Referer", DefaultBaseURL+"/")
-
-	resp, err := c.httpClient.Do(req)
+	body, err := c.getBody(ctx, target, map[string]string{"Referer": DefaultBaseURL + "/"})
 	if err != nil {
 		return ResolvedLeg{}, fmt.Errorf("animejoy: allvideo embed request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return ResolvedLeg{}, fmt.Errorf("animejoy: allvideo embed HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-	if err != nil {
-		return ResolvedLeg{}, fmt.Errorf("animejoy: read allvideo embed body: %w", err)
 	}
 
 	list, err := parseAllVideoFiles(body)

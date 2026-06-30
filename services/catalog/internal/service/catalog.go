@@ -1664,8 +1664,9 @@ func animejoyTitlesFor(anime *domain.Anime) []string {
 // (GetAnimejoyTeams reduces it to per-leg presence) and the stream resolver
 // (GetAnimejoyStream picks a concrete embed). Best-effort and CACHED 3h, keyed
 // by anime_id (animejoy:playlist:<animeID>) — a discovery miss or error
-// NEGATIVE-caches an empty slice and returns it, never blocking the feed. The
-// teams cache (animejoy:teams:*) is layered ON TOP for the reduced shape.
+// NEGATIVE-caches an empty slice and returns it, never blocking the feed.
+// GetAnimejoyTeams reduces this cached shape with a cheap pure map, so it adds
+// no cache layer of its own.
 func (s *CatalogService) resolveAnimejoyPlaylist(ctx context.Context, animeID string) ([]animejoy.Team, error) {
 	if s.animejoyClient == nil {
 		return []animejoy.Team{}, nil
@@ -1721,7 +1722,9 @@ func (s *CatalogService) resolveAnimejoyPlaylist(ctx context.Context, animeID st
 // GetAnimejoyTeams resolves AnimeJoy discovery ONCE for an anime and returns the
 // per-leg (Sibnet/AllVideo) team presence shared by both animejoy leg families.
 // Best-effort and CACHED (3h, keyed by anime_id) — a discovery miss or error
-// yields an empty list, never blocks the capability feed. RU-sub only.
+// yields an empty list, never blocks the capability feed. RU-sub only. The cache
+// lives in resolveAnimejoyPlaylist (the expensive network step); mapAnimejoyTeams
+// is a cheap pure reduction, so no second cache layer is kept here.
 func (s *CatalogService) GetAnimejoyTeams(ctx context.Context, animeID string) (_ []domain.AnimejoyTeam, retErr error) {
 	start := time.Now()
 	defer metrics.ObserveParser("animejoy", "get_teams", start, &retErr)
@@ -1730,20 +1733,11 @@ func (s *CatalogService) GetAnimejoyTeams(ctx context.Context, animeID string) (
 		return []domain.AnimejoyTeam{}, nil
 	}
 
-	cacheKey := fmt.Sprintf("animejoy:teams:%s", animeID)
-	var cached []domain.AnimejoyTeam
-	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
-		return cached, nil
-	}
-
 	teams, err := s.resolveAnimejoyPlaylist(ctx, animeID)
 	if err != nil {
 		return nil, err
 	}
-
-	result := mapAnimejoyTeams(teams)
-	_ = s.cache.Set(ctx, cacheKey, result, 3*time.Hour)
-	return result, nil
+	return mapAnimejoyTeams(teams), nil
 }
 
 // pickLegEmbed selects the concrete embed URL for a (leg, episode, teamID)
@@ -1833,13 +1827,7 @@ func (s *CatalogService) GetAnimejoyStream(ctx context.Context, animeID, leg str
 		return nil, err
 	}
 
-	var resolved animejoy.ResolvedLeg
-	switch leg {
-	case "sibnet":
-		resolved, err = s.animejoyClient.ResolveSibnet(ctx, embedURL)
-	case "allvideo":
-		resolved, err = s.animejoyClient.ResolveAllVideo(ctx, embedURL)
-	}
+	resolved, err := s.animejoyClient.ResolveLeg(ctx, leg, embedURL)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.CodeUnavailable, fmt.Sprintf("animejoy %s leg resolution failed", leg))
 	}

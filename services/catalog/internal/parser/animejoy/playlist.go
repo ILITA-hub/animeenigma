@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"io"
-	"net/http"
 	"regexp"
 	"sort"
 	"strings"
@@ -172,24 +170,9 @@ func (c *Client) FetchPlaylist(ctx context.Context, newsID string) ([]Team, erro
 		return nil, fmt.Errorf("animejoy: FetchPlaylist called with empty news_id")
 	}
 	u := fmt.Sprintf("%s/engine/ajax/playlists.php?news_id=%s&xfield=playlist", c.base(), newsID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, fmt.Errorf("animejoy: build playlist request: %w", err)
-	}
-	req.Header.Set("User-Agent", defaultUserAgent)
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-
-	resp, err := c.httpClient.Do(req)
+	body, err := c.getBody(ctx, u, map[string]string{"X-Requested-With": "XMLHttpRequest"})
 	if err != nil {
 		return nil, fmt.Errorf("animejoy: playlist request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("animejoy: playlist HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("animejoy: read playlist body: %w", err)
 	}
 	return parsePlaylist(body)
 }

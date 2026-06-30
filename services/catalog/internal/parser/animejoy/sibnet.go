@@ -3,8 +3,6 @@ package animejoy
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"regexp"
 	"strings"
 )
@@ -71,25 +69,10 @@ func (c *Client) ResolveSibnet(ctx context.Context, videoIDOrURL string) (Resolv
 		target = sibnetShellURL(target)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return ResolvedLeg{}, fmt.Errorf("animejoy: build sibnet shell request: %w", err)
-	}
-	req.Header.Set("User-Agent", defaultUserAgent)
 	// AnimeJoy is the page that embeds the shell; Sibnet keys the 301 + shell on it.
-	req.Header.Set("Referer", DefaultBaseURL+"/")
-
-	resp, err := c.httpClient.Do(req)
+	body, err := c.getBody(ctx, target, map[string]string{"Referer": DefaultBaseURL + "/"})
 	if err != nil {
 		return ResolvedLeg{}, fmt.Errorf("animejoy: sibnet shell request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return ResolvedLeg{}, fmt.Errorf("animejoy: sibnet shell HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-	if err != nil {
-		return ResolvedLeg{}, fmt.Errorf("animejoy: read sibnet shell body: %w", err)
 	}
 
 	path, err := parseSibnetShell(body)

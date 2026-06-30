@@ -82,7 +82,6 @@ func displayName(provider string) string {
 		"allanime": "AllAnime", "okru": "OK.ru", "gogoanime": "GogoAnime", "animepahe": "AnimePahe",
 		"animefever": "AnimeFever", "miruro": "Miruro", "nineanime": "9anime",
 		"animekai": "AnimeKai", "18anime": "18anime",
-		"animejoy-sibnet": "Sibnet", "animejoy-allvideo": "AllVideo",
 	}
 	if d, ok := known[provider]; ok {
 		return d

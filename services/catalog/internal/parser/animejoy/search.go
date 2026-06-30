@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"html"
-	"io"
-	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
@@ -130,6 +128,11 @@ func scoreAndPick(hits []searchHit, q Query) (string, bool) {
 	}
 
 	wantTV := kindIsTV(q.Kind)
+	// Fold the query titles once; bestFuzzy then only folds each candidate.
+	foldedTitles := make([]string, len(q.Titles))
+	for i, t := range q.Titles {
+		foldedTitles[i] = foldSeason(t)
+	}
 	var cands []scored
 	for _, h := range hits {
 		// Section filter.
@@ -143,7 +146,7 @@ func scoreAndPick(hits []searchHit, q Query) (string, bool) {
 			}
 		}
 
-		score := bestFuzzy(q.Titles, h.Title)
+		score := bestFuzzy(foldedTitles, h.Title)
 		if score < fuzzyThreshold {
 			continue
 		}
@@ -205,12 +208,13 @@ func sectionMatchesKind(section, kind string) bool {
 }
 
 // bestFuzzy returns the highest JaroWinkler score between any query title and
-// the candidate, both folded via foldSeason.
-func bestFuzzy(titles []string, cand string) float64 {
+// the candidate. The query titles are passed ALREADY folded via foldSeason (the
+// caller folds them once); only the candidate is folded here.
+func bestFuzzy(foldedTitles []string, cand string) float64 {
 	fc := foldSeason(cand)
 	best := 0.0
-	for _, t := range titles {
-		if s := jaroWinkler(foldSeason(t), fc); s > best {
+	for _, t := range foldedTitles {
+		if s := jaroWinkler(t, fc); s > best {
 			best = s
 		}
 	}
@@ -274,23 +278,9 @@ func (c *Client) ResolveNewsID(ctx context.Context, q Query) (string, error) {
 
 	u := fmt.Sprintf("%s/index.php?do=search&subaction=search&story=%s",
 		c.base(), url.QueryEscape(story))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return "", fmt.Errorf("animejoy: build search request: %w", err)
-	}
-	req.Header.Set("User-Agent", defaultUserAgent)
-
-	resp, err := c.httpClient.Do(req)
+	body, err := c.getBody(ctx, u, nil)
 	if err != nil {
 		return "", fmt.Errorf("animejoy: search request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("animejoy: search HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-	if err != nil {
-		return "", fmt.Errorf("animejoy: read search body: %w", err)
 	}
 
 	hits := parseSearchResults(body)
