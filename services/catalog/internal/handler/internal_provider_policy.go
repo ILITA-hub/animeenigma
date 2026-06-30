@@ -56,10 +56,10 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 	}
 
 	// disabled is the hard lock; non-scraper rows are not under policy management.
+	// Their provider_state gauge is seeded once at boot (EmitProviderStates) and,
+	// like provider_info/provider_enabled, only changes across a restart — so there
+	// is nothing to re-emit here.
 	if p.Policy == domain.PolicyDisabled || !p.ScraperOperated {
-		// Refresh the state gauge from the current (unchanged) row so the
-		// history timeline stays current even for non-managed providers.
-		metrics.ProviderState.WithLabelValues(p.Name).Set(p.StateCode())
 		httputil.OK(w, map[string]any{
 			"provider": p.Name,
 			"policy":   p.Policy,

@@ -77,10 +77,11 @@ type Event struct {
 	EffectKind string // "egress" | "db" | "cache" | "" (clickstream)
 	TargetKind string // "host" | "table" | "key" | ...
 	Target     string // the concrete target: host, table name, cache key family
-	Provider   string // optional provider attribution for egress rows (target is
-	// the CDN host; Provider names the upstream source — gogoanime, allanime, ae…).
-	// Empty for non-egress / unattributed rows. ClickHouse-only (the Postgres
-	// effect path drops effect dimensions entirely).
+	// Provider is optional provider attribution for egress rows (Target is the CDN
+	// host; Provider names the upstream source — gogoanime, allanime, ae…). Empty
+	// for non-egress / unattributed rows. ClickHouse-only (the Postgres effect path
+	// drops effect dimensions entirely).
+	Provider string
 	Source   string // attribution accuracy origin: "be" | "fe" | ...
 	Accuracy string // "exact" | "approximate"
 	AnimeID  string // optional correlation; empty → NULL
