@@ -738,6 +738,20 @@ export const kodikApi = {
 }
 
 /**
+ * animejoy — RU-sub-only provider with two legs (sibnet | allvideo). The
+ * resolved stream is a Referer-gated, tokened progressive MP4 served through
+ * the HLS proxy with referer+exp+sig.
+ */
+export const animejoyApi = {
+  getEpisodes: (animeId: string, leg: 'sibnet' | 'allvideo') =>
+    apiClient.get(`/anime/${animeId}/animejoy-${leg}/episodes`),
+  getStream: (animeId: string, leg: 'sibnet' | 'allvideo', episode: number, team?: string) =>
+    apiClient.get(`/anime/${animeId}/animejoy-${leg}/stream`, {
+      params: { episode, ...(team ? { team } : {}) },
+    }),
+}
+
+/**
  * Phase 16 — scraperApi targets the /api/anime/{id}/scraper/* routes served
  * by the catalog→scraper pipeline. The single English-source entry point now
  * that the legacy direct clients are gone.

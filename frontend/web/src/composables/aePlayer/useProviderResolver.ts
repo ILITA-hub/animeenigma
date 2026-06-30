@@ -23,13 +23,17 @@
  * • hanimeAdapter   — covers 'hanime' (18+) via hanimeApi (/hanime/* catalog
  *   routes). Slug-keyed like anime18 (episode key = slug); the ordinal is
  *   derived from list order since hanime episodes carry no number.
+ * • animejoyAdapter — covers 'animejoy-sibnet' / 'animejoy-allvideo' (RU-SUB
+ *   ONLY) via animejoyApi (one adapter per leg). The resolved URL is a
+ *   Referer-gated, tokened progressive MP4 wrapped through the proxy with
+ *   type=mp4 (range-passthrough) + referer + exp/sig.
  *
  * NOT wired (throw NotAvailableError)
  * ─────────────────────────────────────
  * • 'animelib'  — upstream went Kodik-only (see MEMORY.md); hidden by default.
  */
 
-import { scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi } from '@/api/client'
+import { scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
 import { hlsProxyUrl } from '@/utils/streaming'
@@ -156,6 +160,22 @@ interface KodikStream {
   qualities?: number[]
 }
 
+// ─── Animejoy types ──────────────────────────────────────────────────────────
+
+interface AnimejoyEpisodesResponse {
+  episodes: number[]
+  teams: { id: string; name: string }[]
+}
+
+interface AnimejoyStreamResp {
+  url: string
+  type?: 'mp4'
+  quality?: string
+  referer?: string
+  exp?: string
+  sig?: string
+}
+
 // Shared with KodikAdFreePlayer — both surfaces play the same Kodik source, so
 // a quality picked in either player carries over to the other.
 export const KODIK_QUALITY_PREF_KEY = 'kodik_adfree_quality'
@@ -202,6 +222,7 @@ export interface ResolverDeps {
   kodikApi?: typeof kodikApi
   aeApi?: typeof aeApi
   hanimeApi?: typeof hanimeApi
+  animejoyApi?: typeof animejoyApi
 }
 
 // ─── Set of provider IDs that route through the scraper microservice ─────────
@@ -535,6 +556,46 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
   }
 }
 
+function makeAnimejoyAdapter(api: typeof animejoyApi, leg: 'sibnet' | 'allvideo'): ProviderAdapter {
+  return {
+    async listEpisodes(animeId: string): Promise<EpisodeOption[]> {
+      const resp = await api.getEpisodes(animeId, leg)
+      const data: AnimejoyEpisodesResponse = resp.data?.data ?? resp.data
+      const episodes: number[] = data?.episodes ?? []
+      // Empty → [] (no throw; mirrors kodik). animejoy episodes are number-keyed.
+      return episodes.map((n) => ({ key: n, label: n, number: n }))
+    },
+
+    async resolveStream(animeId: string, ep: EpisodeOption, combo: Combo): Promise<StreamResult> {
+      const resp = await api.getStream(animeId, leg, ep.number, combo.team ?? undefined)
+      const s: AnimejoyStreamResp = resp.data?.data ?? resp.data
+      if (!s?.url) {
+        throw new NotAvailableError(`animejoy-${leg}`, 'returned no stream URL')
+      }
+      // animejoy is a progressive MP4 + Referer-gated CDN. type MUST be 'mp4' so
+      // the proxy uses its range-passthrough path instead of m3u8 rewriting.
+      return {
+        url: buildProxyUrl(s.url, s.referer ?? '', 'mp4', { exp: s.exp, sig: s.sig }),
+        type: 'mp4',
+        qualityLabel: s.quality || undefined,
+      }
+    },
+
+    async listTeams(animeId: string, audio: AudioKind): Promise<string[]> {
+      // animejoy is RU-SUB ONLY — never surfaces DUB teams.
+      if (audio === 'dub') return []
+      const resp = await api.getEpisodes(animeId, leg)
+      const data: AnimejoyEpisodesResponse = resp.data?.data ?? resp.data
+      const seen = new Set<string>()
+      const out: string[] = []
+      for (const t of data?.teams ?? []) {
+        if (t.name && !seen.has(t.name)) { seen.add(t.name); out.push(t.name) }
+      }
+      return out
+    },
+  }
+}
+
 // ─── Resolver (factory + composable) ─────────────────────────────────────────
 
 export interface ProviderResolver {
@@ -554,6 +615,9 @@ export interface ProviderResolver {
  *                              NOT the EN scraper chain; requires deps.anime18Api)
  * - provider === 'hanime'    → hanimeAdapter via hanimeApi (/hanime/* catalog
  *                              routes; requires deps.hanimeApi)
+ * - provider === 'animejoy-sibnet' | 'animejoy-allvideo'
+ *                            → animejoyAdapter via animejoyApi (one adapter per
+ *                              leg; RU-sub only; requires deps.animejoyApi)
  * - anything else            → NotAvailableError
  */
 export function makeResolver(deps: ResolverDeps): ProviderResolver {
@@ -608,6 +672,13 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
       return makeHanimeAdapter(deps.hanimeApi)
     }
 
+    if (provider === 'animejoy-sibnet' || provider === 'animejoy-allvideo') {
+      if (!deps.animejoyApi) {
+        throw new NotAvailableError(provider, 'not available (animejoyApi dep missing)')
+      }
+      return makeAnimejoyAdapter(deps.animejoyApi, provider === 'animejoy-sibnet' ? 'sibnet' : 'allvideo')
+    }
+
     throw new NotAvailableError(provider)
   }
 
@@ -642,5 +713,5 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
  * Call this inside a Vue setup context.
  */
 export function useProviderResolver(): ProviderResolver {
-  return makeResolver({ scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi })
+  return makeResolver({ scraperApi, rawApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi })
 }
