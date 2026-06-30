@@ -231,7 +231,7 @@ func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchF
 	// If we have local results, enrich and return them
 	if len(animes) > 0 {
 		metrics.SearchRequestsTotal.WithLabelValues("local_db").Inc()
-		s.enrichAnimesBatch(ctx, animes)
+		s.enrichAll(ctx, animes)
 		// Cache the result
 		if searchCacheKey != "" {
 			_ = s.cache.Set(ctx, searchCacheKey, struct {
@@ -283,7 +283,7 @@ func (s *CatalogService) searchShikimori(ctx context.Context, filters domain.Sea
 	}
 
 	// Enrich with genres and video sources (batch)
-	s.enrichAnimesBatch(ctx, shikimoriAnimes)
+	s.enrichAll(ctx, shikimoriAnimes)
 
 	return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
 }
@@ -830,8 +830,8 @@ func (s *CatalogService) GetTrendingAnime(ctx context.Context, page, pageSize in
 		if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
 			s.log.Warnw("failed to store trending anime", "error", err)
 		}
-		s.enrichAnime(ctx, anime)
 	}
+	s.enrichAll(ctx, shikimoriAnimes)
 
 	// Cache page 1 results for 24 hours
 	if page == 1 && len(shikimoriAnimes) > 0 {
@@ -878,8 +878,8 @@ func (s *CatalogService) GetPopularAnime(ctx context.Context, page, pageSize int
 			if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
 				s.log.Warnw("failed to store anime", "error", err)
 			}
-			s.enrichAnime(ctx, anime)
 		}
+		s.enrichAll(ctx, shikimoriAnimes)
 
 		return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
 	}
@@ -1370,6 +1370,34 @@ func (s *CatalogService) fetchMALPosterIfMissing(ctx context.Context, anime *dom
 	}
 }
 
+// videoSourcesFromVideos collapses videos into a deduplicated (type, quality,
+// language) source summary, preserving first-seen order. Shared by enrichAnime
+// (single) and enrichAll (batch) so the dedup logic lives in one place.
+func videoSourcesFromVideos(videos []*domain.Video) []domain.VideoSource {
+	// domain.VideoSource carries a []string Subtitles field (not comparable), so
+	// dedup on a small comparable key rather than the value itself.
+	type key struct {
+		typ      domain.SourceType
+		quality  string
+		language string
+	}
+	seen := make(map[key]struct{}, len(videos))
+	sources := make([]domain.VideoSource, 0, len(videos))
+	for _, v := range videos {
+		k := key{v.SourceType, v.Quality, v.Language}
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		sources = append(sources, domain.VideoSource{
+			Type:     v.SourceType,
+			Quality:  v.Quality,
+			Language: v.Language,
+		})
+	}
+	return sources
+}
+
 // enrichAnime adds genres and video sources to anime
 func (s *CatalogService) enrichAnime(ctx context.Context, anime *domain.Anime) {
 	if anime == nil {
@@ -1387,25 +1415,16 @@ func (s *CatalogService) enrichAnime(ctx context.Context, anime *domain.Anime) {
 	// Load video sources summary
 	videos, err := s.videoRepo.GetForAnime(ctx, anime.ID, "")
 	if err == nil && len(videos) > 0 {
-		sourceMap := make(map[string]domain.VideoSource)
-		for _, v := range videos {
-			key := fmt.Sprintf("%s-%s-%s", v.SourceType, v.Quality, v.Language)
-			if _, exists := sourceMap[key]; !exists {
-				sourceMap[key] = domain.VideoSource{
-					Type:     v.SourceType,
-					Quality:  v.Quality,
-					Language: v.Language,
-				}
-			}
-		}
-		for _, vs := range sourceMap {
-			anime.VideoSources = append(anime.VideoSources, vs)
-		}
+		anime.VideoSources = append(anime.VideoSources, videoSourcesFromVideos(videos)...)
 	}
 }
 
-// enrichAnimesBatch loads genres and video sources for multiple anime in bulk (2 queries instead of N*2).
-func (s *CatalogService) enrichAnimesBatch(ctx context.Context, animes []*domain.Anime) {
+// enrichAll loads genres and video sources for a whole slice of anime in bulk:
+// two queries (one genre join, one video IN-list) regardless of slice size,
+// instead of the per-anime 4-query path (which N+1'd list endpoints — a popular
+// page once issued ~400 queries). Falls back to per-anime enrichAnime only if a
+// batch query errors.
+func (s *CatalogService) enrichAll(ctx context.Context, animes []*domain.Anime) {
 	if len(animes) == 0 {
 		return
 	}
@@ -1439,28 +1458,8 @@ func (s *CatalogService) enrichAnimesBatch(ctx context.Context, animes []*domain
 		}
 		videos := videosMap[anime.ID]
 		if len(videos) > 0 {
-			sourceMap := make(map[string]domain.VideoSource)
-			for _, v := range videos {
-				key := fmt.Sprintf("%s-%s-%s", v.SourceType, v.Quality, v.Language)
-				if _, exists := sourceMap[key]; !exists {
-					sourceMap[key] = domain.VideoSource{
-						Type:     v.SourceType,
-						Quality:  v.Quality,
-						Language: v.Language,
-					}
-				}
-			}
-			for _, vs := range sourceMap {
-				anime.VideoSources = append(anime.VideoSources, vs)
-			}
+			anime.VideoSources = append(anime.VideoSources, videoSourcesFromVideos(videos)...)
 		}
-	}
-}
-
-// enrichAll enriches each anime in the slice individually (genres + video sources).
-func (s *CatalogService) enrichAll(ctx context.Context, animes []*domain.Anime) {
-	for _, anime := range animes {
-		s.enrichAnime(ctx, anime)
 	}
 }
 
