@@ -89,7 +89,7 @@
               data-test="ep-trigger"
               @click="toggleMenu('episodes')"
             >
-              {{ $t('player.aePlayer.epAbbrev') }} {{ selectedEpisode?.number ?? anime.ep }}
+              {{ $t('player.aePlayer.epAbbrev') }} {{ selectedEpisode?.number ?? initialEpisode ?? 1 }}
               <span v-if="selectedEpisode?.title" class="pl-ep-title">· {{ selectedEpisode.title }}</span>
               <ChevronDown
                 class="pl-ep-chev"
@@ -197,7 +197,7 @@
       :provider-hue="activeProviderHue"
       :audio-label="audioLabel"
       :subs-on="subsOn"
-      :episode-label="selectedEpisode?.number ?? anime.ep"
+      :episode-label="selectedEpisode?.number ?? initialEpisode ?? 1"
       :progress="state.progress.value"
       :buffered="bufferedPct"
       :chapters="chapters"
@@ -368,7 +368,7 @@ import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider
 import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
 import { GROUP_LANGS, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
-import { pickEpisodeForProvider } from '@/composables/aePlayer/episodeSelection'
+import { pickEpisodeForProvider, shouldReselectEpisode } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
@@ -958,6 +958,9 @@ function onSelectAudio(a: AudioKind) {
 
 const episodes = ref<EpisodeOption[]>([])
 const selectedEpisode = ref<EpisodeOption | null>(null)
+// True once the user manually switches episodes — freezes the reactive
+// initialEpisode re-pick so resume resolving late never yanks a deliberate pick.
+const userPickedEpisode = ref(false)
 
 // ─── User watch data (read-only): watched marks + per-episode progress ───────
 
@@ -1274,20 +1277,32 @@ async function reResolveAtPosition() {
   else v2.addEventListener('loadedmetadata', restore, { once: true })
 }
 
-// Initialize selectedEpisode from initialEpisode or anime.ep
+// Initialize selectedEpisode from initialEpisode (NEVER episodesAired).
 function initSelectedEpisode() {
-  const targetEp = props.initialEpisode ?? props.anime.ep ?? 1
-  // Look up in existing list or create a synthetic placeholder
+  const targetEp = props.initialEpisode ?? 1
   const found = episodes.value.find((e) => e.number === targetEp)
   if (found) {
     selectedEpisode.value = found
   } else if (episodes.value.length > 0) {
     selectedEpisode.value = episodes.value[0]
   } else {
-    // Synthetic placeholder for when episode list isn't loaded yet
+    // Synthetic placeholder for when the episode list isn't loaded yet.
     selectedEpisode.value = { key: targetEp, label: targetEp, number: targetEp }
   }
 }
+
+// Resume / watch-progress resolves asynchronously AFTER mount, so initialEpisode
+// flips from its default (1) to e.g. lastWatched+1 a tick later. Re-pick then —
+// unless the user already chose an episode. Closes the mount race that used to
+// fall back to episodesAired and open the latest aired episode instead of ep 1.
+watch(
+  () => props.initialEpisode,
+  () => {
+    if (shouldReselectEpisode(selectedEpisode.value?.number ?? null, props.initialEpisode, userPickedEpisode.value)) {
+      initSelectedEpisode()
+    }
+  },
+)
 
 // Load the provider-native team chips (e.g. Kodik translation titles) for the
 // CURRENT audio facet. Kodik exposes different teams for sub vs dub, so the list
@@ -1341,7 +1356,7 @@ async function loadEpisodesAndStream() {
     // episode NUMBER when the new source has it, and never snap back to EP 1
     // when it doesn't (pickEpisodeForProvider handles the nearest-fallback).
     const targetNum =
-      selectedEpisode.value?.number ?? props.initialEpisode ?? props.anime.ep ?? 1
+      selectedEpisode.value?.number ?? props.initialEpisode ?? 1
     const ep = pickEpisodeForProvider(eps, targetNum, selectedEpisode.value)
 
     if (!ep) {
@@ -1520,6 +1535,7 @@ function onSelectEpisode(ep: EpisodeOption) {
   resetSourceSwitching() // new episode — fresh switch budget
   tracking.saveNow() // persist the outgoing episode's position
   selectedEpisode.value = ep
+  userPickedEpisode.value = true
   tracking.resetEpisode(isEpisodeWatched(ep.number))
   resumeChipDismissed.value = false
   resumeChipUsed.value = false
@@ -1958,10 +1974,10 @@ function onEnded() {
   }
 }
 
-// The episode the user is actually on — NOT props.anime.ep, which is the
-// mount-time prop and never updates as they switch episodes inside the player.
+// The episode the user is actually on — initialEpisode is the resume-resolved
+// starting point; selectedEpisode.value tracks in-session switches.
 const currentEpNumber = computed(
-  () => selectedEpisode.value?.number ?? props.initialEpisode ?? props.anime.ep ?? 1,
+  () => selectedEpisode.value?.number ?? props.initialEpisode ?? 1,
 )
 
 // "Has a next episode" derived from the loaded episode list (authoritative for
@@ -2204,7 +2220,7 @@ const chosenSubFormat = computed<'ass' | 'srt' | 'vtt' | null>(() => {
 })
 
 // Episode number the subtitle aggregation keys on.
-const subEpisode = computed(() => selectedEpisode.value?.number ?? props.anime.ep)
+const subEpisode = computed(() => selectedEpisode.value?.number ?? props.initialEpisode ?? 1)
 // Provider's own signed soft-subs from the resolved stream.
 const providerSubtitles = computed(() => currentStream.value?.subtitles)
 const {
