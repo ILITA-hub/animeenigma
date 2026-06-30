@@ -54,13 +54,6 @@
           @change="applyFilters"
         />
         <Select
-          v-model="filterKind"
-          size="sm"
-          :options="kindOptions"
-          :label="$t('admin.feedback.filters.kind')"
-          @change="applyFilters"
-        />
-        <Select
           v-model="filterSource"
           size="sm"
           :options="sourceOptions"
@@ -74,7 +67,7 @@
             <template #trigger>
               <button
                 type="button"
-                class="w-full flex items-center justify-between gap-2 bg-white/5 border border-white/10 text-white px-3 py-2 text-sm rounded-lg transition-all duration-200 cursor-pointer hover:border-white/20 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 data-[state=open]:ring-2 data-[state=open]:ring-cyan-500/50"
+                class="w-full flex items-center justify-between gap-2 bg-white/5 border border-white/10 text-white px-3 py-2 text-sm rounded-lg touch-target transition-all duration-200 cursor-pointer hover:border-white/20 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 data-[state=open]:ring-2 data-[state=open]:ring-cyan-500/50"
                 aria-haspopup="listbox"
               >
                 <span :class="filterStatuses.length ? 'text-white' : 'text-white/30'">{{ statusSummary }}</span>
@@ -470,7 +463,7 @@ const router = useRouter()
 
 const {
   items, total, page, pageSize, isLoading, error,
-  filterCategory, filterStatuses, filterKind, filterSource, filterType, filterUsername, filterDateFrom, filterDateTo,
+  filterCategory, filterStatuses, filterSource, filterType, filterUsername, filterDateFrom, filterDateTo,
   detail, isDetailLoading, detailError,
   refresh, applyFilters, setPage, openDetail, closeDetail, setStatus,
 } = useAdminFeedback()
@@ -668,14 +661,9 @@ const categoryOptions = computed(() => [
   { value: 'issue', label: categoryLabel('issue') },
   { value: 'feature', label: categoryLabel('feature') },
 ])
-const KINDS = ['feedback', 'todo', 'idea'] as const
 const SOURCES = ['feedback_form', 'telegram', 'api', 'manual'] as const
 const kindLabel = (k: string) => t(`admin.feedback.kind.${k}`)
 const sourceLabel = (s: string) => t(`admin.feedback.source.${s}`)
-const kindOptions = computed(() => [
-  { value: 'all', label: t('admin.feedback.filters.allKinds') },
-  ...KINDS.map((v) => ({ value: v, label: kindLabel(v) })),
-])
 const sourceOptions = computed(() => [
   { value: 'all', label: t('admin.feedback.filters.allSources') },
   ...SOURCES.map((v) => ({ value: v, label: sourceLabel(v) })),
@@ -757,7 +745,6 @@ onMounted(() => {
   // Honor a persisted kanban preference on first load: wider page.
   if (viewMode.value === 'kanban') {
     pageSize.value = 200
-    filterKind.value = 'all'
     filterSource.value = 'all'
   }
   refresh()

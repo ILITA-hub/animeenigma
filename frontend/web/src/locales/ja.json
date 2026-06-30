@@ -1110,8 +1110,8 @@
       "title": "フィードバックを送る",
       "categoryLabel": "どのような内容ですか？",
       "categoryBug": "バグ",
-      "categoryIssue": "気になる点",
-      "categoryFeature": "ご要望",
+      "categoryIssue": "フィードバック",
+      "categoryFeature": "アイデア",
       "descriptionPlaceholderBug": "何が起きましたか？再現手順、期待と実際の動作…",
       "descriptionPlaceholderIssue": "気になる点を教えてください — 表現、挙動、わかりにくい箇所など…",
       "descriptionPlaceholderFeature": "AnimeEnigmaに加えたい機能はありますか？",
@@ -1212,9 +1212,9 @@
       },
       "category": {
         "bug": "バグ",
-        "issue": "問題",
+        "issue": "フィードバック",
         "feature": "アイデア",
-        "other": "フィードバック"
+        "other": "その他"
       },
       "status": {
         "new": "新規",
@@ -1832,7 +1832,7 @@
     },
     "category": {
       "bug": "バグ",
-      "issue": "問題",
+      "issue": "フィードバック",
       "feature": "アイデア",
       "other": "レポート"
     },

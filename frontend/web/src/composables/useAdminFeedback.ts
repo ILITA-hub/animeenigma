@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { adminApi } from '@/api/client'
 import { dayStartISO, dayEndISO } from '@/utils/time'
 import type {
@@ -30,6 +30,39 @@ function mapErr(e: unknown): string {
   return obj?.response?.data?.error?.message || obj?.message || 'admin.feedback.errorGeneric'
 }
 
+// --- Status filter persistence (localStorage) ---
+// The multi-select status filter survives reloads/navigation. An empty array is
+// a valid persisted state ("all statuses"), so we only fall back to the default
+// active set when nothing has been stored yet (key absent).
+const STATUS_FILTER_KEY = 'admin_feedback_statuses'
+const VALID_STATUSES = ['new', 'in_progress', 'ai_done', 'resolved', 'not_relevant']
+const DEFAULT_STATUSES = ['new', 'in_progress', 'ai_done', 'resolved']
+
+function loadStatuses(): string[] {
+  try {
+    if (typeof localStorage === 'undefined') return [...DEFAULT_STATUSES]
+    const raw = localStorage.getItem(STATUS_FILTER_KEY)
+    if (raw === null) return [...DEFAULT_STATUSES]
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      // Drop anything unknown (e.g. a status removed in a later release).
+      return parsed.filter((s): s is string => typeof s === 'string' && VALID_STATUSES.includes(s))
+    }
+  } catch {
+    // Malformed JSON / privacy-mode localStorage — fall back to the default.
+  }
+  return [...DEFAULT_STATUSES]
+}
+
+function saveStatuses(list: string[]): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(STATUS_FILTER_KEY, JSON.stringify(list))
+  } catch {
+    // localStorage can throw in privacy modes — ignore.
+  }
+}
+
 export function useAdminFeedback() {
   const items = ref<FeedbackListItem[]>([])
   const total = ref(0)
@@ -45,8 +78,10 @@ export function useAdminFeedback() {
   // Multi-select status filter: a set of concrete statuses. Empty = no filter
   // (all statuses). Default mirrors the old 'active' sentinel (everything but
   // not_relevant). Serialized to a comma-separated `status` param for the API.
-  const filterStatuses = ref<string[]>(['new', 'in_progress', 'ai_done', 'resolved'])
-  const filterKind = ref('all')
+  // Restored from / persisted to localStorage so the triage selection survives
+  // reloads and navigation.
+  const filterStatuses = ref<string[]>(loadStatuses())
+  watch(filterStatuses, (v) => saveStatuses(v))
   const filterSource = ref('all')
   const filterType = ref('all')
   // Free-text username filter (case-insensitive substring match, server-side).
@@ -68,7 +103,6 @@ export function useAdminFeedback() {
       const res = await adminApi.listReports({
         category: norm(filterCategory.value),
         status: filterStatuses.value.length ? filterStatuses.value.join(',') : undefined,
-        kind: norm(filterKind.value),
         source: norm(filterSource.value),
         type: norm(filterType.value),
         username: filterUsername.value.trim() || undefined,
@@ -145,7 +179,6 @@ export function useAdminFeedback() {
     error,
     filterCategory,
     filterStatuses,
-    filterKind,
     filterSource,
     filterType,
     filterUsername,

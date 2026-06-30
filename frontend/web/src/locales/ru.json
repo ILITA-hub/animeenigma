@@ -1110,7 +1110,7 @@
       "title": "Обратная связь",
       "categoryLabel": "О чём сообщение?",
       "categoryBug": "Баг",
-      "categoryIssue": "Замечание",
+      "categoryIssue": "Отзыв",
       "categoryFeature": "Идея",
       "descriptionPlaceholderBug": "Что сломалось? Шаги воспроизведения, чего ожидали и что произошло…",
       "descriptionPlaceholderIssue": "Расскажите, что не так — формулировка, поведение, что-то непонятное…",
@@ -1212,9 +1212,9 @@
       },
       "category": {
         "bug": "Баг",
-        "issue": "Проблема",
+        "issue": "Отзыв",
         "feature": "Идея",
-        "other": "Отзыв"
+        "other": "Другое"
       },
       "status": {
         "new": "Новое",
@@ -1832,7 +1832,7 @@
     },
     "category": {
       "bug": "Баг",
-      "issue": "Проблема",
+      "issue": "Отзыв",
       "feature": "Идея",
       "other": "Репорт"
     },

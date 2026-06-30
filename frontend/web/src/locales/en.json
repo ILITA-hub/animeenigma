@@ -1110,8 +1110,8 @@
       "title": "Send feedback",
       "categoryLabel": "What are you reporting?",
       "categoryBug": "Bug",
-      "categoryIssue": "Issue",
-      "categoryFeature": "Feature",
+      "categoryIssue": "Feedback",
+      "categoryFeature": "Idea",
       "descriptionPlaceholderBug": "What broke? Steps to reproduce, expected vs. actual…",
       "descriptionPlaceholderIssue": "Tell us what's off — wording, behavior, anything confusing…",
       "descriptionPlaceholderFeature": "What would you like AnimeEnigma to do?",
@@ -1212,9 +1212,9 @@
       },
       "category": {
         "bug": "Bug",
-        "issue": "Issue",
+        "issue": "Feedback",
         "feature": "Idea",
-        "other": "Feedback"
+        "other": "Other"
       },
       "status": {
         "new": "New",
@@ -1832,7 +1832,7 @@
     },
     "category": {
       "bug": "Bug",
-      "issue": "Issue",
+      "issue": "Feedback",
       "feature": "Idea",
       "other": "Report"
     },

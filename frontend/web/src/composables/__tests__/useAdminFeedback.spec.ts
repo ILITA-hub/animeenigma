@@ -41,6 +41,9 @@ const sampleRow = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // The status filter now persists to localStorage; clear it so each test starts
+  // from the default active set instead of a value leaked by a prior test.
+  localStorage.clear()
 })
 
 describe('useAdminFeedback', () => {
@@ -135,15 +138,38 @@ describe('useAdminFeedback', () => {
     expect(fb.items.value[0].status).toBe('new')
   })
 
-  it('defaults status to the active set and sends kind/source params', async () => {
+  it('persists the status filter to localStorage and restores it on a fresh instance', async () => {
+    listSpy.mockResolvedValue(listEnvelope([]))
+    const fb = useAdminFeedback()
+    fb.filterStatuses.value = ['resolved', 'not_relevant']
+    await flushPromises() // let the persistence watcher flush
+    expect(JSON.parse(localStorage.getItem('admin_feedback_statuses')!)).toEqual(['resolved', 'not_relevant'])
+
+    // A new instance (e.g. page revisit) restores the persisted selection.
+    const fb2 = useAdminFeedback()
+    expect(fb2.filterStatuses.value).toEqual(['resolved', 'not_relevant'])
+  })
+
+  it('treats a persisted empty selection as "all statuses" (not the active default)', async () => {
+    localStorage.setItem('admin_feedback_statuses', '[]')
+    const fb = useAdminFeedback()
+    expect(fb.filterStatuses.value).toEqual([])
+  })
+
+  it('falls back to the active default when localStorage holds malformed data', () => {
+    localStorage.setItem('admin_feedback_statuses', 'not json')
+    const fb = useAdminFeedback()
+    expect(fb.filterStatuses.value).toEqual(['new', 'in_progress', 'ai_done', 'resolved'])
+  })
+
+  it('defaults status to the active set and sends the source param', async () => {
     listSpy.mockResolvedValue(listEnvelope([sampleRow]))
     const fb = useAdminFeedback()
     expect(fb.filterStatuses.value).toEqual(['new', 'in_progress', 'ai_done', 'resolved'])
-    fb.filterKind.value = 'todo'
     fb.filterSource.value = 'manual'
     await fb.applyFilters()
     await flushPromises()
     const lastCall = listSpy.mock.calls.at(-1)![0]
-    expect(lastCall).toMatchObject({ status: 'new,in_progress,ai_done,resolved', kind: 'todo', source: 'manual' })
+    expect(lastCall).toMatchObject({ status: 'new,in_progress,ai_done,resolved', source: 'manual' })
   })
 })
