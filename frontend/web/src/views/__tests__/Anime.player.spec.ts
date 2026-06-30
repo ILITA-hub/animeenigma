@@ -58,19 +58,6 @@ vi.mock('@/composables/useWatchPreferences', () => ({
   }),
 }))
 
-vi.mock('@/composables/useResumeStateMachine', () => ({
-  useResumeStateMachine: () => ({
-    kind: ref('first-time'),
-    startEpisode: ref(0),
-    loaded: ref(true),
-    finishedEpisode: ref(0),
-    episodeAiredAgoMs: ref(0),
-    lastWatched: ref(0),
-    init: vi.fn().mockResolvedValue(undefined),
-    reset: vi.fn(),
-  }),
-}))
-
 vi.mock('@/composables/useContextMenu', () => ({
   useContextMenu: () => ({
     contextMenu: ref({ visible: false, x: 0, y: 0, items: [], target: null }),

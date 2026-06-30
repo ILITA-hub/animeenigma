@@ -116,8 +116,7 @@
       "justFinished": "You finished episode {n}.",
       "rewatch": "Rewatch from ep. 1",
       "notYetAvailable": "Episode {n} — not yet available.",
-      "notYetAvailableEta": "Episode {n} airs {when}.",
-      "episodeNotLoaded": "Episode {n} aired {ago} — translation teams need time to upload it."
+      "notYetAvailableEta": "Episode {n} airs {when}."
     },
     "rateStar": "Rate {n} out of 10",
     "episodesShort": "eps",

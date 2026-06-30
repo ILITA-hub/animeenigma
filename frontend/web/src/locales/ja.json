@@ -116,8 +116,7 @@
       "justFinished": "第{n}話を視聴しました。",
       "rewatch": "第1話から見直す",
       "notYetAvailable": "第{n}話はまだ配信されていません。",
-      "notYetAvailableEta": "第{n}話は{when}に配信予定です。",
-      "episodeNotLoaded": "第{n}話は{ago}に放送されました — 翻訳チームの読み込みをお待ちください。"
+      "notYetAvailableEta": "第{n}話は{when}に配信予定です。"
     },
     "rateStar": "{n}/10で評価",
     "episodesShort": "話",
