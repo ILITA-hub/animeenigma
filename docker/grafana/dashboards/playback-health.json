@@ -709,20 +709,20 @@
             "excludeByName": {
               "Time": true,
               "Health": true,
-              "Last probed": true
+              "Last probed": true,
+              "probed_at": true
             },
             "indexByName": {
               "provider": 0,
               "State": 1,
               "playability": 2,
-              "probed_at": 3,
+              "reasons": 3,
               "Last tick": 4,
-              "reasons": 5,
-              "AI Probe Notes": 6,
-              "Description": 7,
-              "Resolved via": 8,
-              "Group": 9,
-              "In auto-failover chain": 10
+              "AI Probe Notes": 5,
+              "Description": 6,
+              "Resolved via": 7,
+              "Group": 8,
+              "In auto-failover chain": 9
             },
             "renameByName": {
               "provider": "Provider",
