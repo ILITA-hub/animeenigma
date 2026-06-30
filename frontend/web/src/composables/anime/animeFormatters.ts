@@ -116,20 +116,6 @@ export function formatCount(n: number, locale: string): string {
 }
 
 /**
- * Localized "N ago" for an episode that already aired (episode-not-loaded-yet).
- * Uses Intl.RelativeTimeFormat so pluralization + the "ago"/"назад"/"前" suffix
- * are correct per-locale. Picks the coarsest sensible unit.
- */
-export function formatAiredAgo(agoMs: number, locale: string): string {
-  const loc = locale === 'ru' ? 'ru-RU' : locale === 'ja' ? 'ja-JP' : 'en-US'
-  const rtf = new Intl.RelativeTimeFormat(loc, { numeric: 'always' })
-  const sec = Math.max(0, Math.floor(agoMs / 1000))
-  if (sec < 3600) return rtf.format(-Math.max(1, Math.round(sec / 60)), 'minute')
-  if (sec < 86400) return rtf.format(-Math.round(sec / 3600), 'hour')
-  return rtf.format(-Math.round(sec / 86400), 'day')
-}
-
-/**
  * Parse the raw `watch_progress:{animeId}` localStorage JSON and return the
  * episode number with the most-recent `updatedAt`, or undefined when there's
  * no usable entry / the data is corrupt. Pure: takes the raw string, performs

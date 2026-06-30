@@ -157,7 +157,7 @@
         :title="upcomingText"
       >
         {{ upcoming?.number }}
-        <Clock class="ep-check" :size="10" aria-hidden="true" />
+        <Clock class="ep-cell-clock" :size="10" aria-hidden="true" />
       </div>
     </div>
 
@@ -504,6 +504,13 @@ onMounted(() => {
 .ep-card-clock {
   color: var(--muted-foreground);
   flex-shrink: 0;
+}
+
+.ep-cell-clock {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  color: var(--muted-foreground);
 }
 
 .ep-cell--upcoming {
