@@ -229,6 +229,12 @@ func NewRouter(
 			// url/referer/exp/sig to /api/streaming/hls-proxy.
 			r.Get("/{animeId}/animejoy-sibnet/stream", catalogHandler.GetAnimejoySibnetStream)
 			r.Get("/{animeId}/animejoy-allvideo/stream", catalogHandler.GetAnimejoyAllVideoStream)
+			// Per-leg episode + team inventory (the FE adapter's listEpisodes /
+			// listTeams source — the player drives a per-provider episode list,
+			// one per leg). Same public/no-auth wrapping as the sibling stream
+			// routes above.
+			r.Get("/{animeId}/animejoy-sibnet/episodes", catalogHandler.GetAnimejoySibnetEpisodes)
+			r.Get("/{animeId}/animejoy-allvideo/episodes", catalogHandler.GetAnimejoyAllVideoEpisodes)
 			// 18anime (18+) video sources
 			r.Get("/{animeId}/anime18/episodes", catalogHandler.GetAnime18Episodes)
 			r.Get("/{animeId}/anime18/stream", catalogHandler.GetAnime18Stream)
