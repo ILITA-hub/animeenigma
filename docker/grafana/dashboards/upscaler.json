@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Upscaler fleet / job / pipeline / edge observability — Prometheus datasource. Worker-level per-run GPU history lives in the companion upscaler-gpu dashboard (ClickHouse).",
+  "description": "Upscaler observability — fleet / jobs / pipeline / edge (Prometheus, fleet-aggregate) plus per-worker GPU telemetry history from analytics.upscale_worker_telemetry (ClickHouse). Merges the former Upscaler / Fleet and Upscaler / GPU History dashboards (2026-06-30). Prometheus rows are expanded at the top; the ClickHouse per-worker rows (GPU util/VRAM, thermals & power, pipeline FPS, worker inventory) are collapsible sections driven by the $worker_id variable.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -191,577 +191,952 @@
       "type": "timeseries"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
       "id": 101,
-      "panels": [],
       "title": "Jobs",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Active job progress as a fraction of segments completed (0–1). Populated when orchestrator gauge wiring lands (Phase 2).",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.3 },
-              { "color": "green", "value": 0.8 }
-            ]
-          },
-          "min": 0,
-          "max": 1,
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 18 },
-      "id": 5,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
+      "type": "row",
+      "panels": [
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "upscale_job_progress_ratio",
-          "legendFormat": "Progress",
-          "refId": "A"
-        }
-      ],
-      "title": "Active Job Progress",
-      "type": "stat"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Estimated seconds remaining for the active upscale job. Populated when orchestrator gauge wiring lands (Phase 2).",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
+          "description": "Active job progress as a fraction of segments completed (0–1). Populated when orchestrator gauge wiring lands (Phase 2).",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.3 },
+                  { "color": "green", "value": 0.8 }
+                ]
+              },
+              "min": 0,
+              "max": 1,
+              "unit": "percentunit"
+            },
+            "overrides": []
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 300 },
-              { "color": "red", "value": 3600 }
-            ]
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 18 },
+          "id": 5,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
           },
-          "unit": "s"
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "upscale_job_progress_ratio",
+              "legendFormat": "Progress",
+              "refId": "A"
+            }
+          ],
+          "title": "Active Job Progress",
+          "type": "stat"
         },
-        "overrides": []
-      },
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 18 },
-      "id": 6,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "upscale_job_eta_seconds",
-          "legendFormat": "ETA",
-          "refId": "A"
-        }
-      ],
-      "title": "Active Job ETA",
-      "type": "stat"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Number of upscale jobs per status bucket (queued, upscaling, finalizing, done, failed). Populated when orchestrator gauge wiring lands (Phase 2).",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+          "description": "Estimated seconds remaining for the active upscale job. Populated when orchestrator gauge wiring lands (Phase 2).",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 300 },
+                  { "color": "red", "value": 3600 }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
           },
-          "min": 0,
-          "unit": "short"
+          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 18 },
+          "id": 6,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "upscale_job_eta_seconds",
+              "legendFormat": "ETA",
+              "refId": "A"
+            }
+          ],
+          "title": "Active Job ETA",
+          "type": "stat"
         },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": ["last"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "upscale_queue_depth",
-          "legendFormat": "{{status}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Queue Depth (by status)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Rate of segment lease expirations / spot preemptions re-queued by the sweeper.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+          "description": "Number of upscale jobs per status bucket (queued, upscaling, finalizing, done, failed). Populated when orchestrator gauge wiring lands (Phase 2).",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "short"
+            },
+            "overrides": []
           },
-          "min": 0,
-          "unit": "reqps"
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+          "id": 7,
+          "options": {
+            "legend": { "calcs": ["last"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "upscale_queue_depth",
+              "legendFormat": "{{status}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Queue Depth (by status)",
+          "type": "timeseries"
         },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "rate(upscale_lease_expired_total[5m])",
-          "legendFormat": "Lease expirations/s",
-          "refId": "A"
-        }
-      ],
-      "title": "Lease Expirations / Spot Preemptions (rate 5m)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Rate of control-plane commands issued to workers, broken down by command type.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+          "description": "Rate of segment lease expirations / spot preemptions re-queued by the sweeper.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "reqps"
+            },
+            "overrides": []
           },
-          "min": 0,
-          "unit": "reqps"
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+          "id": 8,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "rate(upscale_lease_expired_total[5m])",
+              "legendFormat": "Lease expirations/s",
+              "refId": "A"
+            }
+          ],
+          "title": "Lease Expirations / Spot Preemptions (rate 5m)",
+          "type": "timeseries"
         },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
-      "id": 9,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "rate(upscale_command_total[5m])",
-          "legendFormat": "{{type}}",
-          "refId": "A"
+          "description": "Rate of control-plane commands issued to workers, broken down by command type.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+          "id": 9,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "rate(upscale_command_total[5m])",
+              "legendFormat": "{{type}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Control-Plane Commands (rate 5m, by type)",
+          "type": "timeseries"
         }
-      ],
-      "title": "Control-Plane Commands (rate 5m, by type)",
-      "type": "timeseries"
+      ]
     },
     {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
       "id": 102,
-      "panels": [],
       "title": "Pipeline",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Video decode throughput (frames/s) reported by workers, by GPU model and image version.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+      "type": "row",
+      "panels": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "description": "Video decode throughput (frames/s) reported by workers, by GPU model and image version.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "short"
+            },
+            "overrides": []
           },
-          "min": 0,
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 35 },
-      "id": 10,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "upscale_decode_fps",
-          "legendFormat": "decode {{gpu_model}} / {{image_version}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Decode FPS",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "AI inference throughput (frames/s) reported by workers, by GPU model and image version.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 35 },
+          "id": 10,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
           },
-          "min": 0,
-          "unit": "short"
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "upscale_decode_fps",
+              "legendFormat": "decode {{gpu_model}} / {{image_version}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Decode FPS",
+          "type": "timeseries"
         },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 35 },
-      "id": 11,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "upscale_inference_fps",
-          "legendFormat": "inference {{gpu_model}} / {{image_version}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Inference FPS",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Video encode throughput (frames/s) reported by workers, by GPU model and image version.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+          "description": "AI inference throughput (frames/s) reported by workers, by GPU model and image version.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "short"
+            },
+            "overrides": []
           },
-          "min": 0,
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 35 },
-      "id": 12,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "upscale_encode_fps",
-          "legendFormat": "encode {{gpu_model}} / {{image_version}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Encode FPS",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "p50/p95/p99 per-segment duration by pipeline stage (download, decode, inference, encode, upload), in seconds.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 35 },
+          "id": 11,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
           },
-          "min": 0,
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
-      "id": 13,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "histogram_quantile(0.50, sum by (le, stage) (rate(upscale_segment_duration_seconds_bucket[5m])))",
-          "legendFormat": "p50 {{stage}}",
-          "refId": "A"
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "upscale_inference_fps",
+              "legendFormat": "inference {{gpu_model}} / {{image_version}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Inference FPS",
+          "type": "timeseries"
         },
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(upscale_segment_duration_seconds_bucket[5m])))",
-          "legendFormat": "p95 {{stage}}",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "histogram_quantile(0.99, sum by (le, stage) (rate(upscale_segment_duration_seconds_bucket[5m])))",
-          "legendFormat": "p99 {{stage}}",
-          "refId": "C"
-        }
-      ],
-      "title": "Segment Duration p50/p95/p99 (by stage)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Throughput of each pipeline stage (segments/s) measured from the segment duration histogram.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+          "description": "Video encode throughput (frames/s) reported by workers, by GPU model and image version.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "short"
+            },
+            "overrides": []
           },
-          "min": 0,
-          "unit": "reqps"
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 35 },
+          "id": 12,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "upscale_encode_fps",
+              "legendFormat": "encode {{gpu_model}} / {{image_version}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Encode FPS",
+          "type": "timeseries"
         },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
-      "id": 14,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "sum by (stage) (rate(upscale_segment_duration_seconds_count[5m]))",
-          "legendFormat": "{{stage}}",
-          "refId": "A"
+          "description": "p50/p95/p99 per-segment duration by pipeline stage (download, decode, inference, encode, upload), in seconds.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
+          "id": 13,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "histogram_quantile(0.50, sum by (le, stage) (rate(upscale_segment_duration_seconds_bucket[5m])))",
+              "legendFormat": "p50 {{stage}}",
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(upscale_segment_duration_seconds_bucket[5m])))",
+              "legendFormat": "p95 {{stage}}",
+              "refId": "B"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "histogram_quantile(0.99, sum by (le, stage) (rate(upscale_segment_duration_seconds_bucket[5m])))",
+              "legendFormat": "p99 {{stage}}",
+              "refId": "C"
+            }
+          ],
+          "title": "Segment Duration p50/p95/p99 (by stage)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "description": "Throughput of each pipeline stage (segments/s) measured from the segment duration histogram.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
+          "id": 14,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "sum by (stage) (rate(upscale_segment_duration_seconds_count[5m]))",
+              "legendFormat": "{{stage}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Segment Throughput (segments/s, by stage)",
+          "type": "timeseries"
         }
-      ],
-      "title": "Segment Throughput (segments/s, by stage)",
-      "type": "timeseries"
+      ]
     },
     {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 51 },
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 },
       "id": 103,
-      "panels": [],
       "title": "Edge",
-      "type": "row"
+      "type": "row",
+      "panels": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "description": "Request rate arriving at the upscaler edge, broken down by HTTP path and status code.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 52 },
+          "id": 15,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "sum by (path, status) (rate(upscale_edge_requests_total[5m]))",
+              "legendFormat": "{{path}} {{status}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Edge Request Rate (by path / status)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "description": "Rate of authentication failures (status=401) and rate-limit rejections (status=429) at the edge.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 },
+          "id": 16,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "sum by (path) (rate(upscale_edge_requests_total{status=\"401\"}[5m]))",
+              "legendFormat": "auth-fail {{path}}",
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+              "expr": "sum by (path) (rate(upscale_edge_requests_total{status=\"429\"}[5m]))",
+              "legendFormat": "rate-limit {{path}}",
+              "refId": "B"
+            }
+          ],
+          "title": "Auth Failures (401) and Rate-Limit Rejections (429)",
+          "type": "timeseries"
+        }
+      ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Request rate arriving at the upscaler edge, broken down by HTTP path and status code.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
-          },
-          "min": 0,
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 52 },
-      "id": 15,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "id": 104,
+      "title": "GPU Utilisation & VRAM (per worker)",
+      "type": "row",
+      "panels": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "sum by (path, status) (rate(upscale_edge_requests_total[5m]))",
-          "legendFormat": "{{path}} {{status}}",
-          "refId": "A"
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "GPU utilisation (%) per worker over the selected time range. Filter by worker_id using the variable above.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "max": 100,
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+          "id": 20,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, worker_id, gpu_util FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) ORDER BY ts"
+            }
+          ],
+          "title": "GPU Utilisation % (per worker)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "VRAM used (bytes) per worker over the selected time range.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+          "id": 21,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, worker_id, vram_used_b FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) ORDER BY ts"
+            }
+          ],
+          "title": "VRAM Used (bytes, per worker)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "VRAM used vs. VRAM total (bytes) for selected workers — shows headroom available.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 5,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+          "id": 22,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, concat(worker_id, ' used') AS series, vram_used_b AS value FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) UNION ALL SELECT ts AS time, concat(worker_id, ' total') AS series, vram_total_b AS value FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) ORDER BY time"
+            }
+          ],
+          "title": "VRAM Used vs Total (bytes, per worker)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "VRAM utilisation ratio (used/total) per worker — shows how close each worker is to VRAM exhaustion.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "max": 1,
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
+          "id": 23,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, worker_id, toFloat64(vram_used_b) / toFloat64(vram_total_b) AS vram_ratio FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) AND vram_total_b > 0 ORDER BY ts"
+            }
+          ],
+          "title": "VRAM Utilisation Ratio (used/total, per worker)",
+          "type": "timeseries"
         }
-      ],
-      "title": "Edge Request Rate (by path / status)",
-      "type": "timeseries"
+      ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "description": "Rate of authentication failures (status=401) and rate-limit rejections (status=429) at the edge.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "auto",
-            "spanNulls": true
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 },
+      "id": 105,
+      "title": "Thermals & Power (per worker)",
+      "type": "row",
+      "panels": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "GPU die temperature (°C) per worker over the selected time range.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "celsius"
+            },
+            "overrides": []
           },
-          "min": 0,
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 },
-      "id": 16,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "sum by (path) (rate(upscale_edge_requests_total{status=\"401\"}[5m]))",
-          "legendFormat": "auth-fail {{path}}",
-          "refId": "A"
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+          "id": 24,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, worker_id, gpu_temp_c FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) ORDER BY ts"
+            }
+          ],
+          "title": "GPU Temperature °C (per worker)",
+          "type": "timeseries"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "sum by (path) (rate(upscale_edge_requests_total{status=\"429\"}[5m]))",
-          "legendFormat": "rate-limit {{path}}",
-          "refId": "B"
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "GPU power draw (watts) per worker over the selected time range.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "watt"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+          "id": 25,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, worker_id, gpu_power_w FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) ORDER BY ts"
+            }
+          ],
+          "title": "GPU Power Draw W (per worker)",
+          "type": "timeseries"
         }
-      ],
-      "title": "Auth Failures (401) and Rate-Limit Rejections (429)",
-      "type": "timeseries"
+      ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "id": 106,
+      "title": "Pipeline FPS (per worker)",
+      "type": "row",
+      "panels": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "Video decode throughput (frames/s) per worker.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 23 },
+          "id": 26,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, worker_id, decode_fps FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) ORDER BY ts"
+            }
+          ],
+          "title": "Decode FPS (per worker)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "AI inference throughput (frames/s) per worker.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 23 },
+          "id": 27,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, worker_id, inference_fps FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) ORDER BY ts"
+            }
+          ],
+          "title": "Inference FPS (per worker)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "Video encode throughput (frames/s) per worker.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "min": 0,
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 23 },
+          "id": 28,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "timeseries",
+              "refId": "A",
+              "rawSql": "SELECT ts AS time, worker_id, encode_fps FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) ORDER BY ts"
+            }
+          ],
+          "title": "Encode FPS (per worker)",
+          "type": "timeseries"
+        }
+      ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 107,
+      "title": "Worker Inventory",
+      "type": "row",
+      "panels": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "description": "Latest telemetry snapshot per selected worker — GPU model, image version, and current sensor readings.",
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+          "id": 29,
+          "options": { "footer": { "show": false }, "showHeader": true },
+          "targets": [
+            {
+              "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+              "rawQuery": true,
+              "queryType": "sql",
+              "format": "table",
+              "refId": "A",
+              "rawSql": "SELECT worker_id, gpu_model, image_version, argMax(gpu_util, ts) AS gpu_util, formatReadableSize(argMax(vram_used_b, ts)) AS vram_used, formatReadableSize(argMax(vram_total_b, ts)) AS vram_total, argMax(gpu_temp_c, ts) AS temp_c, argMax(gpu_power_w, ts) AS power_w, argMax(decode_fps, ts) AS decode_fps, argMax(inference_fps, ts) AS inference_fps, argMax(encode_fps, ts) AS encode_fps, max(ts) AS last_seen FROM analytics.upscale_worker_telemetry WHERE $__timeFilter(ts) AND worker_id IN (${worker_id:sql}) GROUP BY worker_id, gpu_model, image_version ORDER BY last_seen DESC"
+            }
+          ],
+          "title": "Worker Snapshot (latest readings per worker)",
+          "type": "table"
+        }
+      ]
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["upscaler", "platform"],
+  "tags": ["upscaler", "platform", "gpu"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+        "definition": "SELECT DISTINCT worker_id FROM analytics.upscale_worker_telemetry ORDER BY worker_id",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "worker_id",
+        "options": [],
+        "query": "SELECT DISTINCT worker_id FROM analytics.upscale_worker_telemetry ORDER BY worker_id",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-6h",
@@ -769,8 +1144,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Upscaler / Fleet",
-  "uid": "upscaler-fleet",
+  "title": "Upscaler",
+  "uid": "upscaler",
   "version": 1,
   "weekStart": ""
 }
