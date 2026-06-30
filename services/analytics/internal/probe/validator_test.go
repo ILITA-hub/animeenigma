@@ -54,6 +54,39 @@ func TestValidator_403(t *testing.T) {
 	}
 }
 
+// newMP4Stub serves the upstream as a progressive mp4 (NOT an HLS manifest):
+// the first bytes are an ISO-BMFF ftyp box, so the validator must ffprobe the
+// fetched head directly instead of trying to walk a manifest chain.
+func newMP4Stub(t *testing.T) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Write([]byte("\x00\x00\x00\x20ftypisomisom...mp4bytes"))
+	}))
+}
+
+func TestValidator_ProgressiveMP4Playable(t *testing.T) {
+	s := newMP4Stub(t)
+	defer s.Close()
+	v := NewHTTPValidator(s.URL, s.Client(), fakeProber{})
+	got := v.Validate(context.Background(), ResolvedStream{
+		MasterURL: "https://video.sibnet.ru/v/abc/5.mp4", Provider: "animejoy-sibnet",
+		Exp: "1", Sig: "a", Referer: "https://video.sibnet.ru/",
+	})
+	if got.Reason != streamprobe.ReasonPlayable {
+		t.Fatalf("want playable for decodable mp4, got %s", got.Reason)
+	}
+}
+
+func TestValidator_ProgressiveMP4DecodeFailed(t *testing.T) {
+	s := newMP4Stub(t)
+	defer s.Close()
+	v := NewHTTPValidator(s.URL, s.Client(), fakeProber{err: errors.New("no video stream")})
+	got := v.Validate(context.Background(), ResolvedStream{MasterURL: "https://x/y.mp4", Provider: "animejoy-allvideo"})
+	if got.Reason != streamprobe.ReasonDecodeFailed {
+		t.Fatalf("want decode_failed for undecodable mp4, got %s", got.Reason)
+	}
+}
+
 func TestValidator_DecodeFailed(t *testing.T) {
 	s := newStreamingStub(t, 200)
 	defer s.Close()

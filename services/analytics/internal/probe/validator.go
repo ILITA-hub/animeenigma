@@ -97,6 +97,14 @@ func hasAES128(manifest []byte) bool {
 	return strings.Contains(string(manifest), "#EXT-X-KEY:METHOD=AES-128")
 }
 
+// looksLikeManifest reports whether the fetched bytes are an HLS playlist (the
+// #EXTM3U tag is, per spec, the first line). Used to distinguish an HLS master
+// from a progressive media file (e.g. an AnimeJoy mp4) and, mid-walk, a sub-
+// manifest from a media segment.
+func looksLikeManifest(b []byte) bool {
+	return strings.Contains(string(b[:min(len(b), 64)]), "#EXTM3U")
+}
+
 func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict {
 	ctx, cancel := context.WithTimeout(ctx, validatorBudget)
 	defer cancel()
@@ -113,6 +121,19 @@ func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict
 	}
 	if status != http.StatusOK || len(master) == 0 {
 		verdict.Reason = streamprobe.ReasonEmptyResponse
+		return verdict
+	}
+
+	// Progressive media (e.g. an AnimeJoy mp4): the upstream URL is the playable
+	// file itself, not an HLS manifest — there is no variant/segment chain to
+	// walk. ffprobe the fetched head directly: reachability (200 + bytes) plus a
+	// decodable video stream = playable.
+	if !looksLikeManifest(master) {
+		if v.prober.Probe(ctx, master) != nil {
+			verdict.Reason = streamprobe.ReasonDecodeFailed
+			return verdict
+		}
+		verdict.Reason = streamprobe.ReasonPlayable
 		return verdict
 	}
 
@@ -142,7 +163,7 @@ func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict
 			verdict.Reason = streamprobe.ReasonEmptyResponse
 			return verdict
 		}
-		if !strings.Contains(string(body[:min(len(body), 64)]), "#EXTM3U") {
+		if !looksLikeManifest(body) {
 			// reached a media segment
 			if encrypted {
 				// Segment is AES-128 ciphertext — ffprobe would see random bytes

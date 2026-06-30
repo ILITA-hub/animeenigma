@@ -159,6 +159,9 @@ func main() {
 			// and one scraper resolver (catalog /scraper/...).
 			spotlight := probe.NewHTTPAnimeSet(cfg.CatalogURL, cfg.ProbeAnchorUUID, nil, rand.New(rand.NewSource(time.Now().UnixNano()))) //nolint:gosec
 			scraperRes := probe.NewHTTPResolver(cfg.CatalogURL, nil)
+			// One AnimeJoy resolver serves both legs (it keys on the provider name);
+			// generous timeout for cold live discovery (search → news_id → playlist).
+			animejoyRes := probe.NewAnimejoyResolver(cfg.CatalogURL, &http.Client{Timeout: 45 * time.Second})
 
 			// Providers with custom rules. ae uses the "3 latest distinct-anime
 			// library uploads" set + the ae stream resolver; kodik-noads reuses the
@@ -180,6 +183,15 @@ func main() {
 				// worst case is a single cold solve per tick.
 				"animepahe": func() probe.ProbeTarget {
 					return probe.ProbeTarget{Provider: "animepahe", AnimeSet: spotlight, Resolver: probe.NewHTTPResolver(cfg.CatalogURL, &http.Client{Timeout: 90 * time.Second})}
+				},
+				// AnimeJoy RU-sub legs: shared spotlight set + the catalog-side animejoy
+				// resolver. Progressive mp4 (no HLS), so the validator ffprobes the file
+				// head directly. Both legs share one resolver instance (keyed on name).
+				"animejoy-sibnet": func() probe.ProbeTarget {
+					return probe.ProbeTarget{Provider: "animejoy-sibnet", AnimeSet: spotlight, Resolver: animejoyRes}
+				},
+				"animejoy-allvideo": func() probe.ProbeTarget {
+					return probe.ProbeTarget{Provider: "animejoy-allvideo", AnimeSet: spotlight, Resolver: animejoyRes}
 				},
 			}
 
