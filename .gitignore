@@ -138,5 +138,11 @@ tmp/
 # stalls the ff-only auto-sync; it's host-local runtime state, never commit.
 .claude/maintenance-state.json
 
+# Maintenance bot: live issue ledger (continuously rewritten by the maintenance service).
+# Same hazard as maintenance-state.json above — tracking it left uncommitted edits in the
+# shared base tree that overlapped incoming commits and stalled the ff-only auto-sync.
+# Host-local runtime state, never commit.
+docs/issues/issues.json
+
 # Python .venv/ for internal repo management
 .venv/
