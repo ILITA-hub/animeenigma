@@ -17,7 +17,7 @@ from contextlib import contextmanager
 
 from app.config import Config
 from app.engine import CamoufoxEngine
-from app.recipes.base import ChallengeError
+from app.recipes.base import ChallengeError, RecipeError
 
 
 def run(coro):
@@ -240,6 +240,41 @@ class TestWarmFetchSolveBranch(unittest.TestCase):
                 run(eng._warm_fetch_session("nineanime", "https://9anime.me.uk"))
         self.assertEqual(mouse.clicks, [], "non-opt-in recipe must NOT click/solve")
         self.assertTrue(page.closed)
+
+
+class TestWarmFetchRecycleTeardownLeak(unittest.TestCase):
+    """Regression: the solve_challenge recycle teardown (animepahe wipes its
+    leased profile before every warm fetch, see engine.py _warm_fetch_session)
+    used to run BEFORE the try/except that releases the lease on failure. A
+    CancelledError/exception from that teardown itself leaked the just-acquired
+    profile forever — it never showed up as leased-but-crashed (the reaper
+    can't reclaim it) or leased-but-in-a-session (the TTL reaper can't reclaim
+    it either). Live symptom: pool_free stuck at 0 with active_sessions far
+    below pool_size, no self-heal, for a shared pool other providers also lease
+    from."""
+
+    def test_recycle_teardown_failure_releases_profile(self):
+        eng = CamoufoxEngine(Config(
+            pool_size=1, warming_enabled=False,
+            profile_dir=tempfile.mkdtemp(prefix="ae-test-prof-"),
+        ))
+
+        async def _flaky_teardown(profile, *, reason):
+            if reason == "recycle":
+                raise RuntimeError("boom during recycle teardown")
+            profile.context = None  # the except-clause's own teardown(reason="crash")
+
+        eng._teardown = _flaky_teardown
+
+        with self.assertRaises(RecipeError):
+            run(eng._warm_fetch_session("animepahe", "https://animepahe.pw"))
+
+        profile = eng.profiles.all()[0]
+        self.assertFalse(
+            profile.leased,
+            "a failure in the recycle teardown must still release the lease, "
+            "not strand the profile leased-forever",
+        )
 
 
 if __name__ == "__main__":
