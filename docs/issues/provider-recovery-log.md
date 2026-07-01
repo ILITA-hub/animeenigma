@@ -5,6 +5,36 @@ Newest entry first. Used by the recovery operator to avoid repeating yesterday's
 
 ---
 
+## 2026-07-01 — animepahe
+
+**State before:** `policy=manual, health=down, status=degraded` — reason: `cdn_unreachable on ` (health_since 2026-06-29T18:02:01Z, policy_since 2026-06-26T08:17:08Z, last_probed_at 2026-07-01T00:02:19Z). Selected over the "Known-hard cases" list at the bottom of this log — that list predates the 2026-06-26 Camoufox Turnstile-solve revival (`e77802d4`) and animepahe had been genuinely running `engine=browser` for days before regressing on 06-29; not re-litigating a known-unsolvable case.
+
+**Root cause — TWO independent bugs, found by walking the full episodes→servers→stream chain with `prefer=animepahe`:**
+
+1. **Profile-lease leak in the `solve_challenge` recycle path (the actual animepahe-specific regression).** `services/stealth-scraper/app/engine.py::_warm_fetch_session` wipes the leased profile's `user_data_dir` before every animepahe warm fetch (Turnstile re-solves need a clean profile — a poisoned prior attempt stops yielding `cf_clearance`). That recycle step (`await self._teardown(profile, reason="recycle")` + `_rm_dir(...)`) ran BEFORE the function's `try/except` block, so any exception there (chiefly `asyncio.CancelledError` from an HTTP client disconnect — the exact `BaseException`-not-`Exception` gotcha already fixed for the sibling `resolve()` path in `0c994cfa`) leaked the just-acquired profile forever: no crash flag, no session, so the reaper's TTL/crashed-slot sweeps could never reclaim it. animepahe is the *only* `solve_challenge=True` provider, so it hit this on every single fetch. Live symptom confirmed via `/metrics`: `stealth_browser_pool_size=3, stealth_active_sessions=1, stealth_pool_free=0, stealth_pool_crashed=0` — 2 of 3 profiles permanently leased with nothing accounting for them, for the SHARED pool gogoanime/nineanime/9anime discovery also lease from.
+2. **Unrelated, self-inflicted during recovery: unpinned `playwright` transitive dependency.** Redeploying stealth-scraper to ship fix #1 triggered a Docker build-cache miss on the `pip install && camoufox fetch` layer (likely evicted by the daily docker-prune cron). `camoufox==0.4.11` (PyPI, unmaintained since Jan 2025) does not pin `playwright`, and `python -m camoufox fetch` always grabs the latest upstream Camoufox/Firefox release with no version-pin flag — the two halves drift independently. The fresh install landed on `playwright==1.61.0`, which sends a `viewport.isMobile` field the Juggler protocol on the fetched browser build rejects outright (`BrowserType.launch_persistent_context: Protocol error (Browser.setDefaultViewport)`), breaking **browser launch for every `engine=browser` provider container-wide** — not just animepahe. Confirmed via `pip show playwright` (1.61.0) and the open, unresolved upstream report at github.com/daijro/camoufox/issues/612. This is a landmine that will resurface on any future cache-miss rebuild until upstream ships a compatible pin.
+
+**Fixes shipped (worktree → main, both deployed + verified):**
+1. `23255553` — move the recycle-teardown block inside the existing `try`, matching the CancelledError handling already present for every other lease-acquisition branch in this function. Added a regression test (`TestWarmFetchRecycleTeardownLeak`) that fails against the pre-fix code (proved by temporarily reverting via `git stash`) and passes post-fix. Full suite: 133/133 passing.
+2. `f985aa08` — pin `playwright==1.59.0` in `requirements.txt` (last confirmed-compatible line per the upstream issue), with an explanatory comment so the next person doesn't re-drift onto 1.60+.
+
+**Manual verification (2026-07-01, post both fixes, post-redeploy):**
+- Pool metrics post-restart: `pool_free=4/4, pool_crashed=0, active_sessions=0` (leak fully cleared by the fresh container; the fix additionally proved itself live — a transient unrelated Camoufox launch crash right after restart came back `pool_free=4, pool_crashed=1`, i.e. properly released and marked for reaper resurrection, not leaked)
+- `GET /scraper/episodes?prefer=animepahe` (Witch Hat Atelier, fc6c54ac) → `meta.provider=animepahe`, 13 episodes ✅ (177ms, warm session reuse)
+- `GET /scraper/servers` → 6 real `kwik.cx` servers (3 sub / 3 dub) ✅
+- `GET /scraper/stream?category=sub` → signed `https://vault-16.owocdn.top/.../uwu.m3u8` (AES-128 HLS) ✅
+- HLS master via streaming proxy (`/api/v1/hls-proxy` + `exp`/`sig`/`referer`): HTTP 200, valid `#EXTM3U` VOD playlist, `#EXT-X-KEY:METHOD=AES-128` ✅
+- First rewritten segment via gateway (`/api/streaming/hls-proxy`): HTTP 200, `video/mp2t`, 677,184 bytes ✅
+- Incidental: gogoanime (also `engine=browser`, also broken by bug #2, also fixed by the same pin) confirmed recovered too — `meta.provider=gogoanime` on a fresh episodes call. nineanime still fails over, but to an unrelated pre-existing `not_found` (title fuzzy-match miss on the CotE-4 probe anchor, documented in the 2026-06-26 entry below) — not a browser-launch symptom, so left alone.
+
+**Action taken:** Submitted `probe-result pass` with reason citing both commit hashes and the concrete verification → state machine transitioned `down → recovering` at 2026-07-01T02:5x. `policy=manual` preserved (promotion to auto is a human call). Did NOT touch gogoanime's own `health=down` flag manually — its next scheduled probe (browser launch now works) should self-correct; not forcing a second provider's state in the same run per the one-provider guardrail, this was incidental fallout from fixing animepahe.
+
+**Outcome:** ✅ Recovered with two shipped code fixes (not just a flag flip) — genuinely verified end-to-end with real decrypted-chain bytes.
+
+**Next step:** Confirm animepahe (and gogoanime) transition `recovering → up` at the next scheduled probe cycle. Consider a longer-term follow-up: either vendor/pin the Camoufox *browser* build too (not just playwright) so a future `camoufox fetch` can't silently drift again, or move off the unmaintained `camoufox` PyPI package. Also: the base tree (`/data/animeenigma`) has an uncommitted 2026-06-30 gogoanime entry for this same log sitting in dirty WIP (part of the pre-existing `git status` at session start, alongside `.planning/STATE.md` etc.) that was never pushed — did not touch it (golden rule: never edit the base tree directly), but a future run should reconcile/rescue that entry rather than losing it.
+
+---
+
 ## 2026-06-29 — nineanime
 
 **State before:** `policy=manual, health=down, status=degraded` — reason: `empty_response on 1anime` (health_since 2026-06-26T18:00:04Z, last_probed_at 2026-06-28T00:00:19Z)
