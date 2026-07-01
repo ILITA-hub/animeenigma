@@ -1,8 +1,19 @@
 # stealth-scraper sidecar — Camoufox (anti-detect Firefox) + FastAPI.
 # Camoufox pulls Playwright; the Firefox binary is fetched at image build via
-# `python -m camoufox fetch` (see Dockerfile). geoip extra aligns the browser
-# locale/timezone/WebRTC to the proxy exit IP.
+# `python -m camoufox fetch` (see Dockerfile) and always tracks the latest
+# upstream GitHub release — `camoufox fetch` has no version-pin flag. camoufox
+# 0.4.11 (PyPI, unmaintained since Jan 2025) leaves its `playwright` dependency
+# UNPINNED, so a cache-miss rebuild silently picks up whatever playwright is
+# newest at build time. playwright 1.60+ sends a `viewport.isMobile` field the
+# Juggler protocol on current Camoufox browser builds rejects outright
+# (`BrowserType.launch_persistent_context: Protocol error`), which breaks
+# EVERY browser-engine provider's launch, not just one — see
+# github.com/daijro/camoufox/issues/612 (open, unresolved upstream as of this
+# pin). Pin BELOW that break so `pip install` can't silently drift onto it
+# again on the next rebuild. geoip extra aligns the browser locale/timezone/
+# WebRTC to the proxy exit IP.
 camoufox[geoip]==0.4.11
+playwright==1.59.0
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 prometheus-client==0.21.1
