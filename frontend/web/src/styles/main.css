@@ -255,10 +255,20 @@ body {
 
 }
 
-.glass-mobile-nav {
-  background-color: rgba(17, 17, 28, 0.8);
-  backdrop-filter: blur(24px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+/* Floating mobile glass capsule — browser-URL-bar treatment. Pair with
+   .glass-nav on the same element: below md this rule wins the cascade
+   (same specificity, declared later) and retints the surface; at md+ it
+   is inert and .glass-nav shows through. The element supplies its own
+   inset/radius/border (see Navbar.vue). */
+@media (max-width: 767px) {
+  .glass-mobile-nav {
+    background-color: var(--scrim-bg-soft);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    backdrop-filter: blur(24px) saturate(1.5);
+    box-shadow:
+      0 8px 32px var(--black-a40),
+      inset 0 1px 0 var(--white-a8);
+  }
 }
 
 /* Text glow for headings */

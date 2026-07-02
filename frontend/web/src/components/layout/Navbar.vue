@@ -10,16 +10,23 @@
        pads <body> right by the vanished scrollbar's width, and this fixed
        header must shrink by the same amount or its centered content visibly
        shifts. transition-transform (not -all) keeps the compensation
-       instant — only the show/hide translate-y should animate. -->
+       instant — only the show/hide translate-y should animate.
+
+       On mobile (< md) the header is a floating glass capsule — inset from
+       the viewport edges like a browser URL bar — so content scrolls behind
+       it through the blur. Desktop keeps the full-width glass-nav bar. The
+       capsule's bottom edge (8px inset + 56px row) matches the desktop
+       header height, so page top offsets stay valid. -->
   <header
     :class="[
-      'fixed top-0 left-0 right-0 z-50 pr-[var(--scrollbar-width,0px)] transition-transform duration-300 navbar-root',
-      isVisible ? 'translate-y-0' : '-translate-y-full',
-      'glass-nav'
+      'fixed top-2 inset-x-2 md:top-0 md:inset-x-0 z-50 pr-[var(--scrollbar-width,0px)] transition-transform duration-300 navbar-root',
+      'rounded-2xl border border-white/10 md:rounded-none md:border-0',
+      isVisible ? 'translate-y-0' : '-translate-y-full navbar-root--hidden',
+      'glass-nav glass-mobile-nav'
     ]"
   >
     <nav class="max-w-7xl mx-auto px-4 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex items-center justify-between h-14 md:h-16">
         <!-- Logo — BrandMark icon + wordmark -->
         <router-link to="/" class="brand-link">
           <BrandMark />
@@ -224,7 +231,7 @@
           role="dialog"
           aria-modal="true"
           aria-labelledby="mobile-drawer-title"
-          class="md:hidden py-4 border-t border-white/10 glass-nav rounded-b-2xl"
+          class="md:hidden py-4 border-t border-white/10"
         >
           <h2 id="mobile-drawer-title" class="sr-only">{{ $t('nav.drawerTitle') }}</h2>
           <div class="flex flex-col gap-1">
@@ -584,6 +591,20 @@ onUnmounted(() => {
 .mobile-menu-leave-to {
   opacity: 0;
   max-height: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mobile capsule hide offset. The glass treatment itself lives in     */
+/* main.css (.glass-mobile-nav); only the geometry quirk is local:     */
+/* -translate-y-full alone leaves the inset capsule's bottom sliver    */
+/* and its drop shadow peeking into the viewport (element top is 8px,  */
+/* shadow reaches ~40px past the bottom edge) — the hide offset needs  */
+/* that extra clearance. Desktop keeps plain -translate-y-full.        */
+/* ------------------------------------------------------------------ */
+@media (max-width: 767px) {
+  .navbar-root--hidden {
+    translate: 0 calc(-100% - 48px);
+  }
 }
 
 /* ------------------------------------------------------------------ */
