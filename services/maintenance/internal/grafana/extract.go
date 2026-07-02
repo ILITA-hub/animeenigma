@@ -4,7 +4,7 @@ import "strings"
 
 // ExtractService determines the service name from alert labels and annotations.
 func ExtractService(labels, annotations map[string]string) string {
-	for _, key := range []string{"service", "job", "provider", "player"} {
+	for _, key := range []string{"service", "job", "provider", "player", "group"} {
 		if v, ok := labels[key]; ok && v != "" {
 			return strings.ToLower(v)
 		}
