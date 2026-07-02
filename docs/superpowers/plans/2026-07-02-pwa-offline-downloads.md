@@ -431,12 +431,11 @@ async function killSwitchActive(): Promise<boolean> {
 async function unregisterAll(): Promise<void> {
   const regs = await navigator.serviceWorker.getRegistrations()
   await Promise.all(regs.map((r) => r.unregister()))
+  // ONLY the workbox app-shell caches. ae-offline-* holds user-downloaded
+  // episodes — the kill-switch disables a broken SW, it must never destroy
+  // user data (downloads become unplayable until re-registration, not gone).
   const keys = await caches.keys()
-  await Promise.all(
-    keys
-      .filter((k) => k.startsWith('workbox-') || k.startsWith('ae-offline-'))
-      .map((k) => caches.delete(k)),
-  )
+  await Promise.all(keys.filter((k) => k.startsWith('workbox-')).map((k) => caches.delete(k)))
 }
 
 export async function initPwa(): Promise<void> {
@@ -909,7 +908,13 @@ export function selectVariant(masterBody: string, targetHeight: number): { uri: 
 }
 
 function absolute(uri: string, baseUrl: string): string {
-  return new URL(uri, baseUrl).href
+  // baseUrl is usually a ROOT-RELATIVE proxy path (/api/streaming/hls-proxy?…)
+  // — hlsProxyUrl() emits relative URLs unless VITE_HLS_PROXY_BASE is set, and
+  // new URL() throws "Invalid base URL" on a relative base. Anchor on the
+  // document origin. (The proxy itself rewrites child URIs — segments AND
+  // EXT-X-KEY/EXT-X-MAP — to root-relative /api/streaming/hls-proxy?… URLs,
+  // libs/videoutils/proxy.go, so this path is the COMMON case, not the edge.)
+  return new URL(uri, new URL(baseUrl, window.location.href)).href
 }
 
 /** Rewrite a MEDIA playlist: every segment URI → /__offline/{id}/r/{n}, every
@@ -1057,7 +1062,7 @@ describe('downloadEngine — HLS happy path', () => {
     vi.stubGlobal('fetch', fetcher)
     const id = await enqueueDownload(req(async () => ({ url: 'https://p.example/hls/master.m3u8', type: 'hls' })))
     // engine runs the queue inline in tests (no BG); wait for completion state
-    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
     const cache = caches.get(`ae-offline-${id}`)!
     expect(await cache.match(`/__offline/${encodeURIComponent(id)}/master.m3u8`)).toBeTruthy()
     expect(await cache.match(`/__offline/${encodeURIComponent(id)}/r/0`)).toBeTruthy()
@@ -1072,7 +1077,7 @@ describe('downloadEngine — HLS happy path', () => {
     _installCachesForTests(impl)
     vi.stubGlobal('fetch', mockFetch({ 'ep.mp4': () => new Response(new Uint8Array(16)) }))
     const id = await enqueueDownload(req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' })))
-    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
     expect(await caches.get(`ae-offline-${id}`)!.match(`/__offline/${encodeURIComponent(id)}/media.mp4`)).toBeTruthy()
   })
 
@@ -1087,14 +1092,14 @@ describe('downloadEngine — HLS happy path', () => {
     })
     vi.stubGlobal('fetch', fetcher)
     const id1 = await enqueueDownload(req(async () => ({ url: 'https://p.example/hls/master.m3u8', type: 'hls' })))
-    await vi.waitFor(async () => expect((await getDownload(id1))?.state).toBe('done'))
+    await vi.waitFor(async () => expect((await getDownload(id1))?.state).toBe('done'), { timeout: 10_000 })
     const callsFirst = fetcher.mock.calls.length
     // simulate an interrupted download surviving an app restart: record not
     // done, but segments already sit in Cache Storage
     await putDownload({ ...(await getDownload(id1))!, state: 'paused' })
     _resetEngineForTests() // fresh engine, same caches
     const id2 = await enqueueDownload(req(async () => ({ url: 'https://p.example/hls/master.m3u8', type: 'hls' })))
-    await vi.waitFor(async () => expect((await getDownload(id2))?.state).toBe('done'))
+    await vi.waitFor(async () => expect((await getDownload(id2))?.state).toBe('done'), { timeout: 10_000 })
     // second run refetches playlists (cheap, needed for the resource map) but no segments
     const segRefetches = fetcher.mock.calls.slice(callsFirst).filter((c) => String(c[0]).includes('.ts'))
     expect(segRefetches.length).toBe(0)
@@ -1117,7 +1122,7 @@ describe('downloadEngine — HLS happy path', () => {
     vi.stubGlobal('fetch', fetcher)
     const resolve = vi.fn(async () => ({ url: 'https://p.example/hls/master.m3u8', type: 'hls' as const }))
     const id = await enqueueDownload(req(resolve))
-    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
     expect(resolve.mock.calls.length).toBe(2) // initial + one re-resolve
   })
 
@@ -1126,7 +1131,7 @@ describe('downloadEngine — HLS happy path', () => {
     _installCachesForTests(impl)
     vi.stubGlobal('fetch', mockFetch({ 'ep.mp4': () => new Response(new Uint8Array(4)) }))
     const id = await enqueueDownload(req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' })))
-    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
     await removeDownload(id)
     expect(await getDownload(id)).toBeUndefined()
     expect(await impl.has(`ae-offline-${id}`)).toBe(false)
@@ -1162,9 +1167,10 @@ export interface DownloadRequest {
   resolve: () => Promise<StreamResult>
 }
 
-// Pacing: gateway per-user GCRA is 240/min (4 rps sustained) and provider CDNs
-// deserve mercy — 3 rps sustained, 3 in flight, keeps a full-episode download
-// at ~2-3 min without tripping limits.
+// Pacing: segment fetches are anonymous (no Authorization header), so the
+// per-user GCRA never sees them — the binding limits are the per-IP limiter
+// and provider-CDN etiquette. 3 rps sustained, 3 in flight, keeps a full
+// episode at ~2-3 min while staying gentle on upstream CDNs.
 const MIN_FETCH_SPACING_MS = 334
 const CONCURRENCY = 3
 const MAX_RETRIES = 3
@@ -1207,11 +1213,15 @@ async function releaseWakeLock(): Promise<void> {
   wakeLock = null
 }
 
-let lastFetchStart = 0
+// Slot reservation happens SYNCHRONOUSLY before the await — with 3 concurrent
+// workers, read-sleep-then-stamp would let all 3 burst in the same window
+// (~9 rps); reserving first serializes the schedule regardless of concurrency.
+let nextFetchSlot = 0
 async function pacedFetch(url: string): Promise<Response> {
-  const wait = lastFetchStart + MIN_FETCH_SPACING_MS - Date.now()
+  const at = Math.max(Date.now(), nextFetchSlot)
+  nextFetchSlot = at + MIN_FETCH_SPACING_MS
+  const wait = at - Date.now()
   if (wait > 0) await new Promise((r) => setTimeout(r, wait))
-  lastFetchStart = Date.now()
   return fetch(url, { headers: { 'X-AE-Download': '1' } })
 }
 
@@ -1241,7 +1251,11 @@ async function planHls(id: string, stream: StreamResult, targetHeight: number): 
 }> {
   const masterBody = await (await fetchResource(stream.url)).text()
   const variant = selectVariant(masterBody, targetHeight)
-  const mediaUrl = variant ? new URL(variant.uri, stream.url).href : stream.url
+  // stream.url is typically a root-relative proxy path — anchor on the document
+  // origin before resolving (new URL throws on a relative base).
+  const mediaUrl = variant
+    ? new URL(variant.uri, new URL(stream.url, window.location.href)).href
+    : stream.url
   const mediaBody = variant ? await (await fetchResource(mediaUrl)).text() : masterBody
   if (!isVod(mediaBody)) throw new Error('not-vod')
   const { body, resources } = rewriteMediaPlaylist(mediaBody, mediaUrl, id)
@@ -1293,10 +1307,12 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
     await cache.put(p.path, new Response(p.body, { headers: { 'Content-Type': 'application/vnd.apple.mpegurl' } }))
   }
   const localSubs = await cacheSubtitles(id, cache, stream.subtitles ?? [])
+  let posterOk = false
   if (req.poster) {
     try {
       await cache.put(offlinePath(id, 'poster'), await fetchResource(req.poster))
-    } catch { /* poster is cosmetic */ }
+      posterOk = true
+    } catch { /* poster is cosmetic — CORS on external hosts is expected */ }
   }
 
   const total = plan.resources.length
@@ -1310,7 +1326,7 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
       ...cur,
       state, error, bytes, resourcesDone: done, resourcesTotal: total,
       streamType: stream.type, playlistLocalPath: plan.playlistLocalPath,
-      subtitles: localSubs, posterPath: req.poster ? offlinePath(id, 'poster') : undefined,
+      subtitles: localSubs, posterPath: posterOk ? offlinePath(id, 'poster') : undefined,
     })
   }
   await update('downloading')
@@ -1334,20 +1350,28 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
     return reResolving
   }
 
+  async function storeItem(item: PlaylistResource, resp: Response): Promise<void> {
+    if (item.path.endsWith('/media.mp4')) {
+      // MP4 is one huge body — stream it straight to Cache Storage; buffering
+      // hundreds of MB through arrayBuffer() OOMs mobile tabs.
+      const len = parseInt(resp.headers.get('Content-Length') ?? '0', 10)
+      bytes += Number.isFinite(len) ? len : 0
+      await cache.put(item.path, resp)
+      return
+    }
+    const buf = await resp.arrayBuffer()
+    bytes += buf.byteLength
+    await cache.put(item.path, new Response(buf, { headers: { 'Content-Type': resp.headers.get('Content-Type') ?? 'application/octet-stream' } }))
+  }
+
   async function fetchItem(item: PlaylistResource): Promise<void> {
     try {
-      const resp = await fetchResource(item.url)
-      const buf = await resp.arrayBuffer()
-      bytes += buf.byteLength
-      await cache.put(item.path, new Response(buf, { headers: { 'Content-Type': resp.headers.get('Content-Type') ?? 'application/octet-stream' } }))
+      await storeItem(item, await fetchResource(item.url))
     } catch (e) {
       if (!(e instanceof SignatureExpiredError)) throw e
       await ensureFreshUrls()
       // one retry with the fresh URL; a second 401/403 is a real failure
-      const resp = await fetchResource(item.url)
-      const buf = await resp.arrayBuffer()
-      bytes += buf.byteLength
-      await cache.put(item.path, new Response(buf, { headers: { 'Content-Type': resp.headers.get('Content-Type') ?? 'application/octet-stream' } }))
+      await storeItem(item, await fetchResource(item.url))
     }
   }
 
@@ -1389,6 +1413,25 @@ async function pump(): Promise<void> {
   }
 }
 
+// Conservative per-quality size projections for the pre-download quota check
+// (also shown as the dialog's size hint). Real size lands in `bytes` as it
+// downloads; QuotaExceededError mid-flight is still handled as error:'quota'.
+export const PROJECTED_BYTES: Record<string, number> = {
+  '480': 250 * 2 ** 20,
+  '720': 450 * 2 ** 20,
+  '1080': 900 * 2 ** 20,
+}
+
+async function quotaHeadroom(): Promise<number | null> {
+  try {
+    const est = await navigator.storage?.estimate?.()
+    if (!est?.quota) return null
+    return est.quota - (est.usage ?? 0)
+  } catch {
+    return null // estimate unsupported — proceed, mid-flight quota check remains
+  }
+}
+
 export async function enqueueDownload(req: DownloadRequest): Promise<string> {
   const id = downloadId(req.animeId, req.episode.number, req.combo, req.quality)
   try {
@@ -1397,13 +1440,19 @@ export async function enqueueDownload(req: DownloadRequest): Promise<string> {
   const existing = await getDownload(id)
   if (existing?.state === 'done') return id
   paused.delete(id)
-  await putDownload({
+  const baseRecord = {
     id, animeId: req.animeId, animeTitle: req.animeTitle, episode: req.episode,
-    combo: req.combo, quality: req.quality, streamType: 'hls', state: 'queued',
+    combo: req.combo, quality: req.quality, streamType: 'hls' as const,
     bytes: existing?.bytes ?? 0, resourcesDone: 0, resourcesTotal: 0,
     createdAt: existing?.createdAt ?? Date.now(),
     playlistLocalPath: offlinePath(id, 'master.m3u8'), subtitles: [],
-  })
+  }
+  const headroom = await quotaHeadroom()
+  if (headroom !== null && headroom < (PROJECTED_BYTES[req.quality] ?? PROJECTED_BYTES['720'])) {
+    await putDownload({ ...baseRecord, state: 'error', error: 'quota' })
+    return id
+  }
+  await putDownload({ ...baseRecord, state: 'queued' })
   queue.push({ id, req })
   void pump()
   return id
@@ -1441,19 +1490,17 @@ export async function markEvicted(list: OfflineDownload[]): Promise<OfflineDownl
 }
 ```
 
-Then DELETE the dead `buildResourcePlan` function (it was a drafting artifact — `planHls` + the inline mp4 branch are the real plan builders; leaving it in fails `bunx eslint` on unused vars).
-
 - [ ] **Step 4: Run tests**
 
 ```bash
 bunx vitest run src/offline/downloadEngine.spec.ts
 ```
-Expected: PASS (5 tests). The pacing constant makes tests slow-ish (~334ms × segments); if the suite exceeds ~15s, add `vi.stubGlobal('setTimeout', (fn: () => void) => { fn(); return 0 })`-style fake timers — but prefer real timers first (only ~8 fetches total per test).
+Expected: PASS (5 tests). Real timers + 334ms pacing make each test take 1–3s — the `{ timeout: 10_000 }` on every `vi.waitFor` covers that. Do NOT stub `setTimeout` globally (it would also collapse the retry backoff and starve waitFor's polling).
 
 - [ ] **Step 5: Lint + typecheck**
 
 ```bash
-bunx eslint src/offline/ && bunx tsc --noEmit
+bunx eslint src/offline/ --ext .ts && bunx tsc --noEmit
 ```
 Expected: clean.
 
@@ -1789,6 +1836,7 @@ git commit src/offline/progressQueue.ts src/offline/progressQueue.spec.ts src/co
 **Files:**
 - Create: `frontend/web/src/offline/flag.ts`
 - Create: `frontend/web/src/components/player/aePlayer/DownloadDialog.vue`
+- Modify: `frontend/web/src/vite-env.d.ts` (declare the new VITE_* key)
 - Modify: `frontend/web/src/components/player/aePlayer/EpisodesPanel.vue`
 - Modify: `frontend/web/src/components/player/aePlayer/EpisodesPanel.spec.ts`
 - Modify: `frontend/web/src/components/player/aePlayer/AePlayer.vue` (anchored)
@@ -1798,7 +1846,7 @@ git commit src/offline/progressQueue.ts src/offline/progressQueue.spec.ts src/co
 - Consumes: `enqueueDownload`, `engineState` (Task 7); `resolver.resolveStream(provider, animeId, ep, combo)` (existing); `DownloadState` (Task 5).
 - Produces: EpisodesPanel new optional props `downloadable?: boolean`, `downloadStates?: Record<number, DownloadState>` + emit `(e: 'download', ep: EpisodeOption)`. DownloadDialog emits `(e: 'confirm', quality: string)` / `(e: 'close')`. New i18n namespace `player.aePlayer.offline.*` + `downloads.*` + `nav.downloads`.
 
-- [ ] **Step 1: Create `src/offline/flag.ts`**
+- [ ] **Step 1: Create `src/offline/flag.ts`** + declare the env key
 
 ```ts
 /** Offline downloads UI gate. Default ON; set VITE_OFFLINE_DOWNLOADS_ENABLED=false
@@ -1812,6 +1860,12 @@ export function offlineRuntimeReady(): boolean {
 }
 ```
 
+Also add to the `ImportMetaEnv` interface in `src/vite-env.d.ts` (project convention — mimic the existing `VITE_HLS_PROXY_BASE` line):
+
+```ts
+  readonly VITE_OFFLINE_DOWNLOADS_ENABLED?: string
+```
+
 - [ ] **Step 2: Add i18n keys to ALL THREE locales** (`en.json` / `ru.json` / `ja.json`)
 
 `en.json` — inside `player.aePlayer` add:
@@ -1822,6 +1876,7 @@ export function offlineRuntimeReady(): boolean {
   "downloaded": "Downloaded",
   "failed": "Download failed",
   "quality": "Download quality",
+  "estimate": "~{size} per episode",
   "start": "Download",
   "cancel": "Cancel"
 }
@@ -1857,9 +1912,9 @@ Top-level `downloads` namespace + one nav key:
 ```
 `nav`: `"downloads": "Downloads"`.
 
-`ru.json` — same shapes: `offline`: `"download": "Скачать"`, `"downloading": "Скачивается…"`, `"downloaded": "Скачано"`, `"failed": "Ошибка скачивания"`, `"quality": "Качество загрузки"`, `"start": "Скачать"`, `"cancel": "Отмена"`. `downloads`: `"title": "Загрузки"`, `"empty": "Пока ничего не скачано. Откройте серию и нажмите «Скачать» в плеере."`, `"storage": "Хранилище: {used} из {total}"`, `"episode": "Серия {n}"`, `"watch": "Смотреть"`, `"delete": "Удалить"`, `"confirmDelete": "Удалить загрузку?"`, `"pause": "Пауза"`, `"resume": "Продолжить"`, `state`: `"queued": "В очереди"`, `"downloading": "Скачивается {done}/{total}"`, `"paused": "Пауза"`, `"done": "Готово"`, `"error": "Ошибка"`, `error`: `"network": "Ошибка сети — нажмите «Продолжить»"`, `"quota": "Недостаточно места"`, `"evicted": "Браузер удалил загрузку — скачайте заново"`, `"resolve": "Источник недоступен"`, `"mismatch": "Источник изменился — скачайте заново"`, `"offlineReady": "Доступно оффлайн"`. `nav.downloads`: `"Загрузки"`.
+`ru.json` — same shapes: `offline`: `"download": "Скачать"`, `"downloading": "Скачивается…"`, `"downloaded": "Скачано"`, `"failed": "Ошибка скачивания"`, `"quality": "Качество загрузки"`, `"estimate": "~{size} на серию"`, `"start": "Скачать"`, `"cancel": "Отмена"`. `downloads`: `"title": "Загрузки"`, `"empty": "Пока ничего не скачано. Откройте серию и нажмите «Скачать» в плеере."`, `"storage": "Хранилище: {used} из {total}"`, `"episode": "Серия {n}"`, `"watch": "Смотреть"`, `"delete": "Удалить"`, `"confirmDelete": "Удалить загрузку?"`, `"pause": "Пауза"`, `"resume": "Продолжить"`, `state`: `"queued": "В очереди"`, `"downloading": "Скачивается {done}/{total}"`, `"paused": "Пауза"`, `"done": "Готово"`, `"error": "Ошибка"`, `error`: `"network": "Ошибка сети — нажмите «Продолжить»"`, `"quota": "Недостаточно места"`, `"evicted": "Браузер удалил загрузку — скачайте заново"`, `"resolve": "Источник недоступен"`, `"mismatch": "Источник изменился — скачайте заново"`, `"offlineReady": "Доступно оффлайн"`. `nav.downloads`: `"Загрузки"`.
 
-`ja.json` — same shapes: `offline`: `"download": "ダウンロード"`, `"downloading": "ダウンロード中…"`, `"downloaded": "ダウンロード済み"`, `"failed": "ダウンロード失敗"`, `"quality": "ダウンロード画質"`, `"start": "ダウンロード"`, `"cancel": "キャンセル"`. `downloads`: `"title": "ダウンロード"`, `"empty": "まだ何もダウンロードされていません。プレイヤーで「ダウンロード」を押してください。"`, `"storage": "ストレージ: {total} 中 {used}"`, `"episode": "第{n}話"`, `"watch": "視聴"`, `"delete": "削除"`, `"confirmDelete": "このダウンロードを削除しますか？"`, `"pause": "一時停止"`, `"resume": "再開"`, `state`: `"queued": "待機中"`, `"downloading": "ダウンロード中 {done}/{total}"`, `"paused": "一時停止"`, `"done": "完了"`, `"error": "失敗"`, `error`: `"network": "ネットワークエラー — 再開で再試行"`, `"quota": "ストレージ容量が不足しています"`, `"evicted": "ブラウザがデータを削除しました — 再ダウンロードしてください"`, `"resolve": "ソースが利用できません"`, `"mismatch": "ソースが変更されました — 再ダウンロードしてください"`, `"offlineReady": "オフラインで視聴可能"`. `nav.downloads`: `"ダウンロード"`.
+`ja.json` — same shapes: `offline`: `"download": "ダウンロード"`, `"downloading": "ダウンロード中…"`, `"downloaded": "ダウンロード済み"`, `"failed": "ダウンロード失敗"`, `"quality": "ダウンロード画質"`, `"estimate": "1話あたり約{size}"`, `"start": "ダウンロード"`, `"cancel": "キャンセル"`. `downloads`: `"title": "ダウンロード"`, `"empty": "まだ何もダウンロードされていません。プレイヤーで「ダウンロード」を押してください。"`, `"storage": "ストレージ: {total} 中 {used}"`, `"episode": "第{n}話"`, `"watch": "視聴"`, `"delete": "削除"`, `"confirmDelete": "このダウンロードを削除しますか？"`, `"pause": "一時停止"`, `"resume": "再開"`, `state`: `"queued": "待機中"`, `"downloading": "ダウンロード中 {done}/{total}"`, `"paused": "一時停止"`, `"done": "完了"`, `"error": "失敗"`, `error`: `"network": "ネットワークエラー — 再開で再試行"`, `"quota": "ストレージ容量が不足しています"`, `"evicted": "ブラウザがデータを削除しました — 再ダウンロードしてください"`, `"resolve": "ソースが利用できません"`, `"mismatch": "ソースが変更されました — 再ダウンロードしてください"`, `"offlineReady": "オフラインで視聴可能"`. `nav.downloads`: `"ダウンロード"`.
 
 Verify parity:
 ```bash
@@ -1870,17 +1925,19 @@ Expected: PASS.
 - [ ] **Step 3: Write failing EpisodesPanel test** — append to `EpisodesPanel.spec.ts` (follow the file's existing mount helper style):
 
 ```ts
-// mountPanel: reuse the spec file's existing mount helper, spreading the extra
-// props. If the file has no helper, use this one:
+// NOTE: the spec file has NO shared mount helper — it mounts inline with a
+// real createI18n(en.json) via config.global.plugins (top of file), so $t
+// resolves the real keys added in Step 2. Define this local helper:
 //   const mountPanel = (extra: Record<string, unknown>) =>
 //     mount(EpisodesPanel, { props: {
 //       episodes: [{ key: 1, label: 1, number: 1 }, { key: 2, label: 2, number: 2 }],
 //       selectedNumber: 1, ...extra,
-//     }, global: { mocks: { $t: (k: string) => k } } })
+//     } })
+// Selectors use data-test (the file's existing convention), not data-testid.
 describe('download affordance', () => {
   it('emits download for an episode when downloadable', async () => {
     const w = mountPanel({ downloadable: true, downloadStates: {} })
-    const btn = w.find('[data-testid="ep-download-1"]')
+    const btn = w.find('[data-test="ep-download-1"]')
     expect(btn.exists()).toBe(true)
     await btn.trigger('click')
     expect(w.emitted('download')![0][0]).toMatchObject({ number: 1 })
@@ -1888,11 +1945,11 @@ describe('download affordance', () => {
   })
   it('renders no download affordance when not downloadable', () => {
     const w = mountPanel({})
-    expect(w.find('[data-testid="ep-download-1"]').exists()).toBe(false)
+    expect(w.find('[data-test="ep-download-1"]').exists()).toBe(false)
   })
   it('shows done state instead of a button for downloaded episodes', () => {
     const w = mountPanel({ downloadable: true, downloadStates: { 1: 'done' } })
-    expect(w.find('[data-testid="ep-downloaded-1"]').exists()).toBe(true)
+    expect(w.find('[data-test="ep-downloaded-1"]').exists()).toBe(true)
   })
 })
 ```
@@ -1915,7 +1972,7 @@ Template — inside the **strip view** `.ep-card` block (the `v-for` around line
 ```html
 <span
   v-if="downloadable && (downloadStates[ep.number] === 'done')"
-  :data-testid="`ep-downloaded-${ep.number}`"
+  :data-test="`ep-downloaded-${ep.number}`"
   class="ep-dl text-success"
   :title="$t('player.aePlayer.offline.downloaded')"
 ><Check :size="14" /></span>
@@ -1926,7 +1983,7 @@ Template — inside the **strip view** `.ep-card` block (the `v-for` around line
 ><Loader2 :size="14" /></span>
 <span
   v-else-if="downloadable"
-  :data-testid="`ep-download-${ep.number}`"
+  :data-test="`ep-download-${ep.number}`"
   role="button"
   tabindex="0"
   class="ep-dl text-muted-foreground hover:text-foreground"
@@ -1952,6 +2009,7 @@ Run: `bunx vitest run src/components/player/aePlayer/EpisodesPanel.spec.ts` — 
 <template>
   <div class="dl-dialog" role="dialog" :aria-label="$t('player.aePlayer.offline.quality')">
     <div class="dl-title text-sm font-semibold">{{ $t('player.aePlayer.offline.quality') }}</div>
+    <div class="dl-est text-muted-foreground">{{ $t('player.aePlayer.offline.estimate', { size: SIZE_HINT[quality] }) }}</div>
     <div class="dl-opts">
       <button
         v-for="q in QUALITIES"
@@ -1977,6 +2035,7 @@ Run: `bunx vitest run src/components/player/aePlayer/EpisodesPanel.spec.ts` — 
 import { ref } from 'vue'
 
 const QUALITIES = ['480', '720', '1080'] as const
+const SIZE_HINT: Record<string, string> = { '480': '250 MB', '720': '450 MB', '1080': '900 MB' }
 const LS_KEY = 'ae.downloadQuality'
 
 const emit = defineEmits<{
@@ -2006,7 +2065,8 @@ function confirm() {
   border: 1px solid var(--white-a8);
   z-index: 30;
 }
-.dl-title { margin-bottom: 0.5rem; }
+.dl-title { margin-bottom: 0.25rem; }
+.dl-est { font-size: 0.75rem; margin-bottom: 0.5rem; }
 .dl-opts { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 .dl-opt {
   flex: 1;
@@ -2032,6 +2092,10 @@ function confirm() {
 ```ts
 const downloadDialogEp = ref<EpisodeOption | null>(null)
 const downloadStates = ref<Record<number, DownloadState>>({})
+// offlineRuntimeReady() is non-reactive (navigator.serviceWorker.controller) —
+// a plain :downloadable="offlineRuntimeReady()" would never appear after the
+// SW's first claim. Track it in a ref, refreshed when the SW becomes ready.
+const canDownload = ref(false)
 
 async function refreshDownloadStates() {
   if (!offlineRuntimeReady()) return
@@ -2040,8 +2104,19 @@ async function refreshDownloadStates() {
   for (const d of all) if (d.animeId === props.animeId) mine[d.episode.number] = d.state
   downloadStates.value = mine
 }
-onMounted(() => void refreshDownloadStates())
-watch(engineState.progress, () => void refreshDownloadStates())
+onMounted(() => {
+  canDownload.value = offlineRuntimeReady()
+  navigator.serviceWorker?.ready.then(() => { canDownload.value = offlineRuntimeReady() }).catch(() => {})
+  void refreshDownloadStates()
+})
+// Throttle: engineState.progress ticks per segment (~300×/episode); a raw
+// watcher would hammer IndexedDB with listDownloads() on every tick.
+let dlRefreshQueued = false
+watch(engineState.progress, () => {
+  if (dlRefreshQueued) return
+  dlRefreshQueued = true
+  setTimeout(() => { dlRefreshQueued = false; void refreshDownloadStates() }, 1000)
+})
 
 function onDownloadEpisode(ep: EpisodeOption) {
   downloadDialogEp.value = ep
@@ -2070,11 +2145,11 @@ Anchor notes: `combo` and `resolver` already exist in AePlayer's setup (the refe
 3. Template — extend the existing `<EpisodesPanel …>` mount:
 
 ```html
-  :downloadable="offlineRuntimeReady()"
+  :downloadable="canDownload"
   :download-states="downloadStates"
   @download="onDownloadEpisode"
 ```
-(Task 11 tightens this to `:downloadable="!offline && offlineRuntimeReady()"` once the `offline` prop exists — no downloading while already offline-playing.) Add near it:
+(Task 11 tightens this to `:downloadable="!offline && canDownload"` once the `offline` prop exists — no downloading while already offline-playing.) Add near it:
 
 ```html
 <DownloadDialog
@@ -2094,8 +2169,8 @@ Expected: PASS + clean build (DS-lint hook fires on the edited .vue files — fi
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/offline/flag.ts src/components/player/aePlayer/DownloadDialog.vue src/components/player/aePlayer/EpisodesPanel.vue src/components/player/aePlayer/EpisodesPanel.spec.ts src/components/player/aePlayer/AePlayer.vue src/locales/en.json src/locales/ru.json src/locales/ja.json
-git commit src/offline/flag.ts src/components/player/aePlayer/DownloadDialog.vue src/components/player/aePlayer/EpisodesPanel.vue src/components/player/aePlayer/EpisodesPanel.spec.ts src/components/player/aePlayer/AePlayer.vue src/locales/en.json src/locales/ru.json src/locales/ja.json -m "feat(offline): per-episode download button + quality dialog in aePlayer (strip view only)"
+git add src/offline/flag.ts src/vite-env.d.ts src/components/player/aePlayer/DownloadDialog.vue src/components/player/aePlayer/EpisodesPanel.vue src/components/player/aePlayer/EpisodesPanel.spec.ts src/components/player/aePlayer/AePlayer.vue src/locales/en.json src/locales/ru.json src/locales/ja.json
+git commit src/offline/flag.ts src/vite-env.d.ts src/components/player/aePlayer/DownloadDialog.vue src/components/player/aePlayer/EpisodesPanel.vue src/components/player/aePlayer/EpisodesPanel.spec.ts src/components/player/aePlayer/AePlayer.vue src/locales/en.json src/locales/ru.json src/locales/ja.json -m "feat(offline): per-episode download button + quality dialog in aePlayer (strip view only)"
 ```
 
 ---
@@ -2161,8 +2236,10 @@ describe('makeOfflineResolver', () => {
 describe('offlineCapabilityReport', () => {
   it('exposes exactly one active selectable provider named offline', () => {
     const rep = offlineCapabilityReport(p)
-    expect(rep.providers).toHaveLength(1)
-    expect(rep.providers[0]).toMatchObject({ provider: 'offline', state: 'active', selectable: true })
+    expect(rep.anime_id).toBe('a1')
+    expect(rep.families).toHaveLength(1)
+    expect(rep.families[0].providers).toHaveLength(1)
+    expect(rep.families[0].providers[0]).toMatchObject({ provider: 'offline', state: 'active', selectable: true })
   })
 })
 ```
@@ -2217,31 +2294,41 @@ export function makeOfflineResolver(p: OfflinePlayback): ProviderResolver {
   }
 }
 
-/** Synthetic one-provider feed. Group 'firstparty' serves every lang, so the
- *  saved-combo restore can never filter the offline row out. */
+/** Synthetic one-provider feed. The REAL CapabilityReport shape is
+ *  `{ anime_id, families: SourceFamily[] }` (types/capabilities.ts) — NOT a
+ *  flat providers array; rowsFromReport() hard-requires Array.isArray(families)
+ *  and returns [] otherwise, which would leave the offline player sourceless.
+ *  Group 'firstparty' serves every lang, so the saved-combo restore can never
+ *  filter the offline row out. */
 export function offlineCapabilityReport(p: OfflinePlayback): CapabilityReport {
   const first = ready(p)[0]
   const audio = first?.combo.audio ?? 'sub'
   return {
-    providers: [
+    anime_id: p.animeId,
+    families: [
       {
-        provider: OFFLINE_PROVIDER_ID,
-        display_name: 'Offline',
-        state: 'active',
-        selectable: true,
-        hacker_only: false,
-        order: 1,
-        group: 'firstparty',
-        audios: audio === 'dub' ? ['dub', 'sub'] : ['sub', 'dub'],
-        reason: '',
-        variants: [],
-      } as CapabilityReport['providers'][number],
+        family: 'offline',
+        providers: [
+          {
+            provider: OFFLINE_PROVIDER_ID,
+            display_name: 'Offline',
+            state: 'active',
+            selectable: true,
+            hacker_only: false,
+            order: 1,
+            group: 'firstparty',
+            audios: audio === 'dub' ? ['dub', 'sub'] : ['sub', 'dub'],
+            reason: '',
+            variants: [],
+          },
+        ],
+      },
     ],
-  } as CapabilityReport
+  } as unknown as CapabilityReport
 }
 ```
 
-(If `CapabilityReport`/`ProviderCap` have additional required fields, fill them with the neutral values used in `useProviderFeed.spec.ts` fixtures — copy that spec's fixture shape rather than casting more broadly.)
+(Copy the exact `SourceFamily`/`ProviderCap` required-field set from the fixtures in `useProviderFeed.spec.ts` — fill any missing required fields with those neutral values and drop the `as unknown as` bridge once the literal satisfies the type.)
 
 - [ ] **Step 4: Run tests**
 
@@ -2275,7 +2362,7 @@ const report = computed(() =>
 ```
 …and every downstream consumer of `cap.report` switches to `report`; the initial `cap.load()`/poll call gets `if (!props.offline)`. If `useCapabilities` auto-fetches on construction, construct it lazily: `const cap = props.offline ? null : useCapabilities(...)` and `report` falls back accordingly (`cap?.report.value ?? offlineCapabilityReport(props.offline!)`).
 
-4. Task 10 interlock: the `:downloadable` binding on EpisodesPanel becomes `!props.offline && offlineRuntimeReady()` (no downloading while already offline-playing).
+4. Task 10 interlock: the `:downloadable` binding on EpisodesPanel becomes `!offline && canDownload` (no downloading while already offline-playing).
 
 5. Watch tracking stays ON (animeId is real; offline writes buffer through Task 9). WT/url-sync need no change — DownloadsPage passes no `room` and ignores `url-sync`.
 
@@ -2419,7 +2506,9 @@ describe('DownloadsPage', () => {
     const w = mount(DownloadsPage)
     await vi.waitFor(() => expect(w.text()).toContain('Frieren'))
     await w.find('[data-testid="watch-a1"]').trigger('click')
-    expect(w.find('[data-testid="offline-player"]').exists()).toBe(true)
+    // AePlayer is a defineAsyncComponent — even the mocked module resolves a
+    // microtask later; assert with retry, not synchronously
+    await vi.waitFor(() => expect(w.find('[data-testid="offline-player"]').exists()).toBe(true))
   })
   it('deletes after confirm', async () => {
     await putDownload(doneDl)
@@ -2448,6 +2537,7 @@ Run to verify failure: `bunx vitest run src/views/__tests__/DownloadsPage.spec.t
 
     <section v-if="playing" class="mb-8">
       <AePlayer
+        :key="playing.animeId"
         :anime-id="playing.animeId"
         :anime="{ title: playing.title, eps: playing.downloads.length }"
         :theater="false"
@@ -2535,9 +2625,9 @@ Run to verify failure: `bunx vitest run src/views/__tests__/DownloadsPage.spec.t
 <script setup lang="ts">
 import { defineAsyncComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+// The ui dir is FLAT with one barrel (src/components/ui/index.ts) — there are
+// no per-component subdirs, so '@/components/ui/button' does not resolve.
+import { Button, Card, Badge } from '@/components/ui'
 import { useDownloadsStore } from '@/stores/downloads'
 import type { OfflineDownload } from '@/offline/types'
 import type { OfflinePlayback } from '@/offline/offlineAdapter'
@@ -2579,7 +2669,7 @@ function onDelete(id: string) {
 </script>
 ```
 
-Check the exact `@/components/ui/{button,card,badge}` barrel export names against an existing view import (e.g. `StatusPage.vue`) and match them. `common.close` already exists in all locales (verify with `grep '"close"' src/locales/en.json`; if absent, use `downloads.watch`-style own key added to all three).
+Badge note: `variant="secondary"` renders brand-pink per `badge-variants.ts` — wrong tone for "Ready". Check `badge-variants.ts` for a `success` variant and use it for the done/offlineReady badge; if none exists, use the neutral/outline variant from that file (NOT secondary). `common.close` already exists in all locales (verify with `grep '"close"' src/locales/en.json`; if absent, use a `downloads.close` key added to all three).
 
 - [ ] **Step 4: Route + navbar**
 
@@ -2632,6 +2722,10 @@ import { test, expect } from '@playwright/test'
 // PROD-gated). Skips itself on dev servers where /sw.js 404s.
 test.describe('PWA shell', () => {
   test('manifest is served and linked', async ({ page }) => {
+    // The default e2e webServer is the DEV server, where the PWA plugin emits
+    // neither sw.js nor the manifest link — probe and self-skip, same as below.
+    const swProbe = await page.request.get('/sw.js')
+    test.skip(!swProbe.ok(), 'no sw.js — dev server / SW not built')
     await page.goto('/')
     const href = await page.locator('link[rel="manifest"]').getAttribute('href')
     expect(href).toBeTruthy()
@@ -2695,6 +2789,7 @@ Then run the `animeenigma-after-update` skill (simplify → lint/build → `make
 
 - **Auto-delete-watched toggle** (spec "Storage & quota", listed as optional): needs a watched-state join against `anime_list`/watch-progress — follow-up after v1 lands. Manual delete + pause/resume ship in Task 12.
 - Eviction scan runs on DownloadsPage mount rather than app start (spec said "app start") — same user-visible outcome (marked before the list renders), zero cost on non-download sessions.
+- **E2E download→offline-play→progress-flush and deploy-update reload-guard specs** (spec "Testing"): playwright cannot reliably intercept SW-initiated fetches and a real-media fixture pipeline is out of proportion for v1 — that behavior is covered by the unit suites (engine, offlineServe, progressQueue, registerPwa) plus the owner manual-smoke checklist in Task 13 Step 4.
 
 ## Metrics
 
