@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="group relative flex items-start gap-3 p-3 hover:bg-white/5 transition-colors"
-    :class="{ 'opacity-70': isRead }"
-  >
+  <div class="group relative flex items-start gap-3 p-3 hover:bg-white/5 transition-colors">
     <!-- Whole-row click target (excluding the dismiss button) -->
     <button
       type="button"
@@ -89,8 +86,6 @@ const payload = computed<NewEpisodePayload>(() => {
     watch_url: '',
   }
 })
-
-const isRead = computed(() => Boolean(props.notification.read_at))
 
 const rangeText = computed(() => {
   const first = payload.value.first_unwatched_episode

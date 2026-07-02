@@ -79,12 +79,8 @@ describe('FeedbackStatusCard', () => {
     expect(without.text()).not.toContain('«')
   })
 
-  it('dims the card when read', () => {
-    const n = notif('feedback_created')
-    n.read_at = new Date().toISOString()
-    const wrapper = mountCard(n)
-    expect(wrapper.classes()).toContain('opacity-70')
-  })
+  // NB: the read-row dim lives on the dropdown's <li> wrapper now, not on
+  // the card — covered by NotificationDropdown.spec.ts.
 
   it('emits close (and never navigates) on row click', async () => {
     const wrapper = mountCard(notif('feedback_ai_done'))

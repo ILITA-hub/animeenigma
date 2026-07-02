@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="group relative flex items-start gap-3 p-3 hover:bg-white/5 transition-colors"
-    :class="{ 'opacity-70': isRead }"
-  >
+  <div class="group relative flex items-start gap-3 p-3 hover:bg-white/5 transition-colors">
     <!-- Whole-row click target (excluding the dismiss button) -->
     <button
       type="button"
@@ -74,8 +71,6 @@ const payload = computed<FeedbackStatusPayload>(() => {
     status: 'created',
   }
 })
-
-const isRead = computed(() => Boolean(props.notification.read_at))
 
 interface StageMeta {
   icon: LucideIcon

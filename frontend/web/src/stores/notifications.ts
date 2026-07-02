@@ -2,7 +2,8 @@
  * Pinia store for the notifications engine — v1.0 Phase 3.
  *
  * Responsibilities:
- *   - Hold the cached unread + dismissed-state list of notifications
+ *   - Hold the cached active notification list (unread + read — read rows
+ *     stay visible in the dropdown, tinted by the card renderers)
  *   - Drive the 60s polling lifecycle (visibilitychange-paused, single-flight)
  *   - Optimistic mark-read / dismiss / mark-all-read
  *   - Track which notifications have shown a toast this session
@@ -196,11 +197,14 @@ export const useNotificationsStore = defineStore('notifications', () => {
   // ---------------------------------------------------------------------------
 
   /**
-   * Fetch the unread list + counts. Single-flight: concurrent callers
-   * (e.g. visibility-change racing the interval tick) wait on the
-   * already-running promise rather than firing duplicate requests.
+   * Fetch the active notification list (read + unread) + counts. Read
+   * rows are kept so the dropdown can render them tinted instead of
+   * making them vanish the moment they're read. Single-flight:
+   * concurrent callers (e.g. visibility-change racing the interval
+   * tick) wait on the already-running promise rather than firing
+   * duplicate requests.
    */
-  async function fetchUnread(opts?: { ifStale?: boolean }): Promise<void> {
+  async function fetchNotifications(opts?: { ifStale?: boolean }): Promise<void> {
     if (!isFeatureEnabled()) return
     if (inFlight) return inFlight
     // Freshness guard for the "immediate" callers (start, tab-visible):
@@ -209,7 +213,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
     inFlight = (async () => {
       try {
-        const data = await listNotifications('unread', 20, 0)
+        const data = await listNotifications('all', 20, 0)
         notifications.value = Array.isArray(data.notifications)
           ? data.notifications
           : []
@@ -366,12 +370,12 @@ export const useNotificationsStore = defineStore('notifications', () => {
       }
     } else if (polling.value && intervalId === null) {
       // Tab visible — refresh if stale, then resume cadence. The
-      // single-flight guard inside fetchUnread() prevents the immediate
-      // refresh from racing the just-restarted interval; the ifStale guard
-      // keeps rapid tab flaps from bursting requests.
-      void fetchUnread({ ifStale: true })
+      // single-flight guard inside fetchNotifications() prevents the
+      // immediate refresh from racing the just-restarted interval; the
+      // ifStale guard keeps rapid tab flaps from bursting requests.
+      void fetchNotifications({ ifStale: true })
       intervalId = setInterval(() => {
-        void fetchUnread()
+        void fetchNotifications()
       }, POLL_INTERVAL_MS)
     }
   }
@@ -408,10 +412,10 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
     // Immediate fetch — don't wait the first 60s. ifStale: a stop()/start()
     // flap (auth watcher re-firing on boot) must not duplicate the fetch.
-    void fetchUnread({ ifStale: true })
+    void fetchNotifications({ ifStale: true })
     if (typeof document === 'undefined' || !document.hidden) {
       intervalId = setInterval(() => {
-        void fetchUnread()
+        void fetchNotifications()
       }, POLL_INTERVAL_MS)
     }
   }
@@ -463,7 +467,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     // getters
     latestUndismissedToast,
     // actions
-    fetchUnread,
+    fetchNotifications,
     markRead,
     dismiss: dismissNotification,
     markAllRead,

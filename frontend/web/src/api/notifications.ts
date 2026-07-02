@@ -3,7 +3,6 @@
  *
  * Routes (gateway-proxied, JWT-required):
  *   GET    /api/notifications?status=unread|all&limit=&offset=
- *   GET    /api/notifications/unread-count
  *   POST   /api/notifications/{id}/read
  *   POST   /api/notifications/mark-all-read
  *   POST   /api/notifications/{id}/dismiss
@@ -20,7 +19,6 @@
 import { apiClient } from '@/api/client'
 import type {
   NotificationListResponse,
-  UnreadCountResponse,
   MarkAllReadResponse,
 } from '@/types/notification'
 
@@ -44,9 +42,10 @@ function unwrap<T>(raw: unknown): T {
 /**
  * GET /api/notifications?status=...&limit=...&offset=...
  *
- * `status` defaults to `'unread'` — matches the backend default and what
- * the bell badge needs in the common path. Pass `'all'` for the
- * "view all notifications" history page (not shipped in v1.0).
+ * `status` defaults to `'unread'` — matches the backend default. The
+ * bell/dropdown store passes `'all'` so already-read notifications stay
+ * visible (rendered tinted); the unread badge comes from the response's
+ * `unread_count`, not the row list.
  */
 export async function listNotifications(
   status: ListStatus = 'unread',
@@ -57,13 +56,6 @@ export async function listNotifications(
     params: { status, limit, offset },
   })
   return unwrap<NotificationListResponse>(response.data)
-}
-
-/** GET /api/notifications/unread-count → just the integer count. */
-export async function getUnreadCount(): Promise<number> {
-  const response = await apiClient.get('/notifications/unread-count')
-  const data = unwrap<UnreadCountResponse>(response.data)
-  return data?.unread_count ?? 0
 }
 
 /** POST /api/notifications/{id}/read */

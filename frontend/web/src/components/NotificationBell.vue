@@ -74,7 +74,7 @@ function toggle(): void {
   if (open.value) {
     // Fire-and-forget refresh so the dropdown reflects the up-to-the-
     // second list — the 60s ticker can leave a stale state otherwise.
-    void store.fetchUnread()
+    void store.fetchNotifications()
   }
 }
 

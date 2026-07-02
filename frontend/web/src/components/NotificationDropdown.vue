@@ -13,9 +13,15 @@
         {{ $t('notifications.dropdown.empty') }}
       </EmptyState>
 
-      <!-- Notification list -->
+      <!-- Notification list. Read rows stay visible but tinted — the
+           single point of control for the read/unread visual split, so
+           the card renderers stay presentation-agnostic. -->
       <ul v-else class="divide-y divide-white/5">
-        <li v-for="n in store.notifications" :key="n.id">
+        <li
+          v-for="n in store.notifications"
+          :key="n.id"
+          :class="{ 'opacity-70': n.read_at }"
+        >
           <component
             :is="resolveRenderer(n.type)"
             :notification="n"

@@ -5,7 +5,7 @@ import { test, expect, Page, APIRequestContext } from '@playwright/test'
  *
  * Test cases (TC-01..08 per 03-PLAN.md §D-UI-09):
  *   TC-01 logged-out: bell NOT rendered; 0 /api/notifications requests in 5s
- *   TC-02 logged-in zero notifications: bell renders, no badge, 1 unread fetch on mount
+ *   TC-02 logged-in zero notifications: bell renders, no badge, 1 list fetch on mount
  *   TC-03 logged-in with seed: badge shows, toast slides in once
  *   TC-04 toast suppressed on matching anime route
  *   TC-05 mark-all-read clears badge
@@ -99,36 +99,36 @@ test.describe('Notifications — TC-01 logged-out', () => {
 })
 
 test.describe('Notifications — logged-in', () => {
-  test('TC-02: bell renders, one /api/notifications?status=unread fires on mount', async ({
+  test('TC-02: bell renders, one /api/notifications?status=all fires on mount', async ({
     page,
     request,
   }) => {
     await loginAs(page, request)
 
-    const unreadFetches: string[] = []
+    const listFetches: string[] = []
     page.on('request', (req) => {
       const u = req.url()
       if (
         /\/api\/notifications(\b|\?|\/)/.test(u) &&
         !/\.(ts|js|map)(\?|$)/.test(u) &&
-        u.includes('status=unread')
+        u.includes('status=all')
       ) {
-        unreadFetches.push(u)
+        listFetches.push(u)
       }
     })
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // Wait briefly for the start() → fetchUnread() in App.vue to fire.
+    // Wait briefly for the start() → fetchNotifications() in App.vue to fire.
     await page.waitForTimeout(2500)
 
     const bell = page.getByRole('button', { name: /Notifications|Уведомления|通知/i })
     await expect(bell.first()).toBeVisible()
 
     expect(
-      unreadFetches.length,
-      `expected ≥1 unread fetch on mount, saw: ${unreadFetches.length}`,
+      listFetches.length,
+      `expected ≥1 list fetch on mount, saw: ${listFetches.length}`,
     ).toBeGreaterThanOrEqual(1)
   })
 
@@ -192,15 +192,15 @@ test.describe('Notifications — TC-07 visibility-change polling', () => {
   }) => {
     await loginAs(page, request)
 
-    const unreadFetches: number[] = []
+    const listFetches: number[] = []
     page.on('request', (req) => {
       const u = req.url()
       if (
         /\/api\/notifications(\b|\?|\/)/.test(u) &&
         !/\.(ts|js|map)(\?|$)/.test(u) &&
-        u.includes('status=unread')
+        u.includes('status=all')
       ) {
-        unreadFetches.push(Date.now())
+        listFetches.push(Date.now())
       }
     })
 
@@ -208,7 +208,7 @@ test.describe('Notifications — TC-07 visibility-change polling', () => {
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
 
-    const baseCount = unreadFetches.length
+    const baseCount = listFetches.length
     expect(baseCount, 'initial fetch happened').toBeGreaterThanOrEqual(1)
 
     // Hide the tab
@@ -223,7 +223,7 @@ test.describe('Notifications — TC-07 visibility-change polling', () => {
 
     // Wait long enough for at least one interval tick that should NOT fire.
     await page.waitForTimeout(3000)
-    const hiddenCount = unreadFetches.length
+    const hiddenCount = listFetches.length
     // Pollings should be paused (NB: backend may still get the in-flight
     // request from before we hid; we only assert "no NEW fires" in the
     // 3s window above).
@@ -244,8 +244,8 @@ test.describe('Notifications — TC-07 visibility-change polling', () => {
 
     await page.waitForTimeout(1500)
     expect(
-      unreadFetches.length,
-      `expected ≥1 new fetch after reveal, delta=${unreadFetches.length - hiddenCount}`,
+      listFetches.length,
+      `expected ≥1 new fetch after reveal, delta=${listFetches.length - hiddenCount}`,
     ).toBeGreaterThan(hiddenCount)
   })
 })

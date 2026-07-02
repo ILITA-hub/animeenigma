@@ -96,11 +96,6 @@ export interface NotificationListResponse {
   total: number
 }
 
-/** Response shape for `GET /api/notifications/unread-count`. */
-export interface UnreadCountResponse {
-  unread_count: number
-}
-
 /** Response shape for `POST /api/notifications/mark-all-read`. */
 export interface MarkAllReadResponse {
   updated: number
