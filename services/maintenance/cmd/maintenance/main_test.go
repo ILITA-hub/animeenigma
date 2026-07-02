@@ -172,3 +172,24 @@ func TestScraperProviderFaultLine_FailOpen(t *testing.T) {
 		t.Fatalf("unreachable catalog must fail open, got %q", got)
 	}
 }
+
+func TestIsSuppressed_StreamingGatewayKeys(t *testing.T) {
+	s := newTestServiceWithHTTP(t, "http://127.0.0.1:0", &http.Client{})
+	s.cfg.SuppressedAlerts = []string{"High Error Rate:streaming", "High Error Rate:gateway"}
+
+	cases := []struct {
+		key  string
+		want bool
+	}{
+		{"High Error Rate:streaming", true},
+		{"High Error Rate:gateway", true},
+		{"high error rate:STREAMING", true}, // EqualFold is case-insensitive
+		{"High Error Rate:catalog", false},  // catalog still pages
+		{"Parser Failure Rate:gogoanime", false},
+	}
+	for _, c := range cases {
+		if got := s.isSuppressed(c.key); got != c.want {
+			t.Errorf("isSuppressed(%q) = %v, want %v", c.key, got, c.want)
+		}
+	}
+}

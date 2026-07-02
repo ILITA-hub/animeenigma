@@ -594,6 +594,18 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 			s.mirrorToFeedback(&msg)
 		}
 
+		// Defer suppressed alerts (e.g. transient streaming/gateway HLS-proxy
+		// 5xx bursts): drop silently here so the webhook path honors
+		// SUPPRESSED_ALERTS the same way the reconcile poller does. Data is
+		// preserved in Prometheus + ClickHouse events; this only stops the
+		// Telegram page + Claude run. Keyed alertName:service.
+		if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
+			if s.isSuppressed(msg.Alerts[0].Name + ":" + msg.Alerts[0].Service) {
+				log.Infow("deferred alert (suppressed)", "alert", msg.Alerts[0].Name, "service", msg.Alerts[0].Service)
+				continue
+			}
+		}
+
 		// Dedup: check if this alert is already being tracked
 		if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
 			alert := msg.Alerts[0]
