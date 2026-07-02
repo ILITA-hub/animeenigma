@@ -35,6 +35,33 @@ Newest entry first. Used by the recovery operator to avoid repeating yesterday's
 
 ---
 
+## 2026-06-30 — gogoanime
+
+**State before:** `policy=manual, health=down, status=degraded` — reason: `cdn_unreachable on ` (health_since 2026-06-30T00:00:21Z, policy_since 2026-06-30T00:00:21Z)
+
+**Root cause:** Transient — midnight UTC pool pressure. `cdn_unreachable on ` (empty server field) in `engine.go` means the resolver returned a non-`ErrProbeNotFound` error before any stream URL was fetched; the server field is never set. This pattern is consistent with `PoolExhausted` (503) from the stealth-scraper: the probe's `/resolve` call lands when all Camoufox profiles are occupied by concurrent viewer sessions and other browser-engine provider probes (gogoanime, allanime, animepahe, nineanime all share the same pool and hit their 6h cadence around midnight UTC simultaneously). With no free profile, stealth-scraper returns 503 → resolver returns error → `cdn_unreachable on `.
+
+The CancelledError profile-lease fix deployed 2026-06-28 (`0c994cfa`) eliminated the leak path, but pool pressure from *legitimate* concurrent usage at midnight persists. This is the third consecutive midnight failure pattern (2026-06-27T00:00:05Z, 2026-06-30T00:00:21Z).
+
+**Manual verification (2026-06-30T02:26–02:38Z):**
+- `GET /scraper/episodes?prefer=gogoanime` (Witch Hat Atelier, fc6c54ac) → 13 episodes ✅
+- `GET /scraper/servers` → HD-1, HD-2 (`gogoanimes.fi`) ✅
+- `GET /scraper/stream?category=sub` → stealth-scraper resolved session `c456ee9d...`, `http://stealth-scraper:3000/hls?sid=c456ee9d...&url=https://9hjkrt.nekostream.site/.../master.m3u8` ✅ (2357ms)
+- HLS master via streaming proxy: HTTP 200, 1412 bytes, 3 quality variants (1080p/720p/360p) ✅
+- HLS variant manifest (`index-f1-v1-a1.m3u8`): HTTP 200, valid VOD playlist, segment URIs rewritten through stealth-scraper ✅
+- First segment (`nekostream.site/segment/...`): HTTP 200, `video/mp2t`, 2,957,492 bytes ✅
+
+**Action taken:**
+Submitted `probe-result pass` with reason `manual-recovery-verify: 3-hop HLS chain confirmed (master+variant+segment), nekostream.site CDN nominal` → state machine transitioned `down → recovering` at 2026-06-30T02:38:45Z. `policy=manual` preserved. No code changes needed.
+
+**Outcome:** ✅ Recovered (transient pool pressure at midnight, no structural failure). gogoanime now `health=recovering, policy=manual`.
+
+**Systemic note:** Three out of four midnight UTC probes in the last week have failed with `cdn_unreachable on ` for gogoanime. The probe runs `manual+down` cadence (6h, 1 sample, fail-fast), so it fires at approximately 00:00, 06:00, 12:00, 18:00 UTC. The 00:00 UTC slot appears to be peak viewer + multi-provider probe overlap. Recommendation: stagger browser-engine provider probe cadences slightly (e.g. gogoanime at 0h offset, allanime at +30min, animepahe at +1h) OR increase the Camoufox pool size by 1–2 profiles. Not blocking today.
+
+**Next step:** Monitor 06:00Z and 12:00Z probe results. If the next few probes pass, the state machine auto-promotes `recovering → up` (requires PROVIDER_PROMOTE_AFTER consecutive passes). Stagger cadence fix is a follow-up improvement, not an emergency.
+
+---
+
 ## 2026-06-29 — nineanime
 
 **State before:** `policy=manual, health=down, status=degraded` — reason: `empty_response on 1anime` (health_since 2026-06-26T18:00:04Z, last_probed_at 2026-06-28T00:00:19Z)
