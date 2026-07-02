@@ -93,7 +93,7 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 	// Reflect the post-transition derived state into the provider_state gauge so
 	// the "Provider State History" timeline records this transition live (the
 	// gauge holds between probes; Prometheus scraping fills the continuous band).
-	metrics.ProviderState.WithLabelValues(p.Name).Set(p.StateCode())
+	metrics.ProviderState.WithLabelValues(p.Name, p.Group).Set(p.StateCode())
 
 	httputil.OK(w, map[string]any{
 		"provider": p.Name,

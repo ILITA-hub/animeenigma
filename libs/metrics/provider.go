@@ -125,12 +125,14 @@ var (
 	// gauge holds the current state between probes and Prometheus scraping
 	// records the continuous weekly history. Catalog is the SOLE emitter (covers
 	// the full roster), so there is no duplicate-series-across-targets concern.
+	// Carries a `group` label (domain.ScraperProvider.Group) alongside `provider`
+	// so Grafana fleet-level alert rules can aggregate `by (group)`.
 	ProviderState = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "provider_state",
-			Help: "Derived provider lifecycle state code (4=UP, 3=Recovering, 2=Degraded, 1=Down, 0=Disabled) per provider, for the Grafana state-history timeline",
+			Help: "Derived provider lifecycle state code (4=UP, 3=Recovering, 2=Degraded, 1=Down, 0=Disabled) per (provider, group), for the Grafana state-history timeline",
 		},
-		[]string{"provider"},
+		[]string{"provider", "group"},
 	)
 
 	// ProviderBreakerTripsTotal counts circuit-breaker trips per provider: each
