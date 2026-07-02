@@ -3,7 +3,8 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Modal, Select, Button } from '@/components/ui'
 import { adminApi } from '@/api/client'
-import type { FeedbackKind } from '@/types/feedback'
+import { FEEDBACK_CATEGORIES } from '@/types/feedback'
+import type { FeedbackKind, FeedbackCategory } from '@/types/feedback'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ 'update:open': [boolean]; created: [string] }>()
@@ -11,7 +12,7 @@ const emit = defineEmits<{ 'update:open': [boolean]; created: [string] }>()
 const { t } = useI18n()
 
 const kind = ref<FeedbackKind>('todo')
-const category = ref('__none__')
+const category = ref<FeedbackCategory | '__none__'>('__none__')
 const description = ref('')
 const submitting = ref(false)
 const errorMsg = ref('')
@@ -23,9 +24,7 @@ const kindOptions = [
 ]
 const categoryOptions = [
   { value: '__none__', label: t('admin.feedback.newNote.categoryNone') },
-  { value: 'bug', label: t('admin.feedback.category.bug') },
-  { value: 'issue', label: t('admin.feedback.category.issue') },
-  { value: 'feature', label: t('admin.feedback.category.feature') },
+  ...FEEDBACK_CATEGORIES.map((c) => ({ value: c, label: t(`admin.feedback.category.${c}`) })),
 ]
 
 function reset(): void {

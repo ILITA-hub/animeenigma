@@ -12,6 +12,21 @@ export type FeedbackKind = 'feedback' | 'todo' | 'idea'
 // Normalized channel the item entered the system through.
 export type FeedbackSource = 'feedback_form' | 'telegram' | 'api' | 'manual'
 
+// User-submitted report category (the in-site feedback form's "What are you
+// reporting?"). Single source of truth for the triad — iterate
+// FEEDBACK_CATEGORIES to build option lists so the frontend never drifts from
+// the player service's validNoteCategory allow-list (admin_reports.go).
+// NOTE: the wire `category` fields below stay `string`: legacy/Telegram rows and
+// un-categorized notes can carry '' or values outside this set, which the
+// renderers map to an "other" label.
+export const FEEDBACK_CATEGORIES = ['bug', 'issue', 'feature'] as const
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number]
+
+/** Narrow an arbitrary (possibly legacy/empty) category string to the known triad. */
+export function isFeedbackCategory(c: string): c is FeedbackCategory {
+  return (FEEDBACK_CATEGORIES as readonly string[]).includes(c)
+}
+
 // FeedbackListItem is one light list row (no heavy diagnostics).
 export interface FeedbackListItem {
   id: string

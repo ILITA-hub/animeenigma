@@ -125,8 +125,7 @@ import { collectDiagnostics } from '@/utils/diagnostics'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
 import { Spinner } from '@/components/ui'
-
-type FeedbackCategory = 'bug' | 'issue' | 'feature'
+import type { FeedbackCategory } from '@/types/feedback'
 
 // "My feedback" entry points re-enabled per owner approval of AUTO-436
 // (2026-06-11, in-chat). App.vue's footer link has the same flag.

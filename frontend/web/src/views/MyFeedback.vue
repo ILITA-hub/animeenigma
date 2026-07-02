@@ -91,6 +91,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { userApi } from '@/api/client'
 import { dayStartISO, dayEndISO } from '@/utils/time'
+import { isFeedbackCategory } from '@/types/feedback'
 import type { MyFeedbackItem, MyFeedbackResponse, FeedbackStatus } from '@/types/feedback'
 import { Badge, Button, DatePicker, Spinner } from '@/components/ui'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -124,7 +125,7 @@ const statusLabel = (s: string) =>
     ? t('myFeedback.status.' + s)
     : s
 const categoryLabel = (c: string) =>
-  ['bug', 'issue', 'feature'].includes(c) ? t('myFeedback.category.' + c) : t('myFeedback.category.other')
+  isFeedbackCategory(c) ? t('myFeedback.category.' + c) : t('myFeedback.category.other')
 
 function formatDate(iso: string): string {
   const d = new Date(iso)

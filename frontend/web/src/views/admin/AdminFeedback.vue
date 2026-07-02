@@ -455,7 +455,8 @@ import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { Spinner, DatePicker, Badge, Popover, Checkbox } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
 import NewNoteDialog from '@/components/admin/NewNoteDialog.vue'
-import type { FeedbackStatus } from '@/types/feedback'
+import { FEEDBACK_CATEGORIES, isFeedbackCategory } from '@/types/feedback'
+import type { FeedbackStatus, FeedbackCategory } from '@/types/feedback'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -657,9 +658,7 @@ const typeOptions = computed(() => [
 ])
 const categoryOptions = computed(() => [
   { value: 'all', label: t('admin.feedback.filters.allCategories') },
-  { value: 'bug', label: categoryLabel('bug') },
-  { value: 'issue', label: categoryLabel('issue') },
-  { value: 'feature', label: categoryLabel('feature') },
+  ...FEEDBACK_CATEGORIES.map((c) => ({ value: c, label: categoryLabel(c) })),
 ])
 const SOURCES = ['feedback_form', 'telegram', 'api', 'manual'] as const
 const kindLabel = (k: string) => t(`admin.feedback.kind.${k}`)
@@ -685,7 +684,7 @@ const rowStatusOptions = computed(() => [
 ])
 
 function categoryLabel(c: string): string {
-  if (c === 'bug' || c === 'issue' || c === 'feature') return t(`admin.feedback.category.${c}`)
+  if (isFeedbackCategory(c)) return t(`admin.feedback.category.${c}`)
   return t('admin.feedback.category.other')
 }
 function statusLabel(s: string): string {
@@ -717,12 +716,14 @@ const statusAccentBorder = (s: string): string => statusMeta(s).accent
 // Category → Badge variant. Admin keeps colour-coded categories (richer than the
 // user-facing MyFeedback view, which renders all categories as a neutral badge).
 type CategoryBadge = 'destructive' | 'warning' | 'success' | 'info'
-const CATEGORY_VARIANT: Record<string, CategoryBadge> = {
+const CATEGORY_VARIANT: Record<FeedbackCategory, CategoryBadge> = {
   bug: 'destructive',
   issue: 'warning',
   feature: 'success',
 }
-const categoryVariant = (c: string): CategoryBadge => CATEGORY_VARIANT[c] ?? 'info'
+// CATEGORY_VARIANT stays exhaustive over FeedbackCategory; the guard maps any
+// legacy/empty value off-list to the neutral 'info' badge.
+const categoryVariant = (c: string): CategoryBadge => (isFeedbackCategory(c) ? CATEGORY_VARIANT[c] : 'info')
 
 // Render the report timestamp; fall back to the id's leading timestamp segment.
 function formatDate(iso: string, id: string): string {

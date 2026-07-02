@@ -4,6 +4,7 @@
  * comprehensive diagnostic data when users report issues.
  */
 import type { AxiosInstance, AxiosResponse } from 'axios'
+import type { FeedbackCategory } from '@/types/feedback'
 import { reportFeError } from './feErrorLog'
 
 interface ConsoleEntry {
@@ -52,7 +53,7 @@ export interface DiagnosticReport {
   error_message: string | null
   scraper_provider: string | null  // Phase 16 SCRAPER-NF-05 (snake_case for Go report.go)
   tried_chain: string[]            // Phase 16 SCRAPER-NF-05 (snake_case for Go report.go)
-  category: string                 // "bug" | "issue" | "feature" | "" — set by footer FeedbackButton
+  category: FeedbackCategory | ''  // set by footer FeedbackButton ('' when captured outside the form)
   console_logs: string
   network_logs: string
   page_html: string
@@ -222,7 +223,7 @@ export function collectDiagnostics(
   userDescription: string,
   userId: string | null,
   username: string | null,
-  category: string = '',
+  category: FeedbackCategory | '' = '',
 ): DiagnosticReport {
   let pageHtml = ''
   try {
