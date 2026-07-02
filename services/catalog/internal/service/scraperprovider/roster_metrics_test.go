@@ -41,3 +41,25 @@ func TestEmitCatalogSideRoster_OnlyEmitsOwnedRows(t *testing.T) {
 		t.Errorf("provider_enabled{t2_gogo} = %v, want 0 — catalog must not emit scraper-owned rows", got)
 	}
 }
+
+func TestEmitProviderStates_CarriesGroupLabel(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "t2_gogoanime", Group: "en", Policy: domain.PolicyAuto, Health: domain.HealthUp,
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := scraperprovider.EmitProviderStates(db); err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	// UP (auto+up) => StateCode 4, carried on the (provider, group) series.
+	if got := testutil.ToFloat64(metrics.ProviderState.WithLabelValues("t2_gogoanime", "en")); got != 4 {
+		t.Errorf("provider_state{t2_gogoanime,en} = %v, want 4", got)
+	}
+}

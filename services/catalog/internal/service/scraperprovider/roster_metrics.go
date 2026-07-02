@@ -47,7 +47,7 @@ func EmitProviderStates(db *gorm.DB) error {
 		return fmt.Errorf("load roster for state metrics: %w", err)
 	}
 	for _, r := range rows {
-		metrics.ProviderState.WithLabelValues(r.Name).Set(r.StateCode())
+		metrics.ProviderState.WithLabelValues(r.Name, r.Group).Set(r.StateCode())
 	}
 	return nil
 }
