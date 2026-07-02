@@ -741,3 +741,46 @@ func TestAnimepaheSidecarRetired_RefreshesRecordOnceIdempotent(t *testing.T) {
 		t.Fatalf("status = %q after operator re-enable + rerun, want enabled (not clobbered)", row.Status)
 	}
 }
+
+func TestMiruroCloudflareBlock_RefreshesDescriptionOnceIdempotent(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Pre-existing live-DB state: miruro auto+down with the probe-managed generic
+	// reason and the old (pre-CF-block) description.
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "miruro", Status: domain.StatusDegraded, Policy: domain.PolicyAuto, Health: domain.HealthDown,
+		Reason:      "cdn_unreachable on ",
+		Description: "Miruro aggregator: AnimePahe/kwik.cx HLS via the kiwi server (vault-*.uwucdn HLS), 1080p, AES-128 encrypted segments served through the streaming proxy. EN sub. Playback-probed.",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraperprovider.MiruroCloudflareBlock(db); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	var row domain.ScraperProvider
+	db.Where("name = ?", "miruro").First(&row)
+	if !strings.Contains(row.Description, "Cloudflare WAF managed-rule block") {
+		t.Fatalf("description not refreshed with the CF-block finding: %q", row.Description)
+	}
+	// reason/status/policy/health are NOT this migration's concern — untouched.
+	if row.Reason != "cdn_unreachable on " {
+		t.Fatalf("reason should be untouched (probe-managed): %q", row.Reason)
+	}
+	if row.Policy != domain.PolicyAuto || row.Health != domain.HealthDown {
+		t.Fatalf("policy/health should be untouched (state-machine-owned): policy=%q health=%q", row.Policy, row.Health)
+	}
+
+	// A later operator's own description edit must NOT be clobbered by a rerun
+	// (guard already written).
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "miruro").Update("description", "operator note")
+	if err := scraperprovider.MiruroCloudflareBlock(db); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	db.Where("name = ?", "miruro").First(&row)
+	if row.Description != "operator note" {
+		t.Fatalf("description = %q after operator edit + rerun, want untouched (not clobbered)", row.Description)
+	}
+}

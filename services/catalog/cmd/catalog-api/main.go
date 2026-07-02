@@ -232,6 +232,14 @@ func main() {
 		log.Errorw("miruro dub-only migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) refresh of the miruro roster description: 2026-07-02
+	// daily-recovery finding that www.miruro.tv now sits behind a Cloudflare WAF
+	// block on every path (T-28-04-01 reappeared). Description-only — reason is
+	// probe-managed and status/policy/health stay with the self-healing machine.
+	if err := scraperprovider.MiruroCloudflareBlock(db.DB); err != nil {
+		log.Errorw("miruro cloudflare-block migration failed (continuing)", "error", err)
+	}
+
 	// Remove unverified "Region-walled" / egress-IP-class claims from animefever
 	// description (AUTO-484 follow-up). Run-once via the ledger.
 	if err := scraperprovider.AnimefeverDeclaim(db.DB); err != nil {

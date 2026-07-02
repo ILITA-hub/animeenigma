@@ -198,6 +198,9 @@ const addAnimejoyProvidersGuardKey = "add_animejoy_providers"
 // removeRawProviderGuardKey marks RemoveRawProvider as applied.
 const removeRawProviderGuardKey = "remove_raw_provider"
 
+// miruroCloudflareBlockGuardKey marks MiruroCloudflareBlock as applied.
+const miruroCloudflareBlockGuardKey = "miruro_cloudflare_block_2026_07_02"
+
 // RemoveRawProvider hard-deletes the legacy standalone "raw" JP provider row
 // (removed 2026-06-30 — AllAnime + ok.ru cover JP-original audio). The seed no
 // longer creates it, but insert-if-absent seeding never deletes an existing
@@ -630,6 +633,56 @@ func AddAnimejoyProviders(db *gorm.DB) error {
 
 	if err := db.Create(&migrationGuard{Key: addAnimejoyProvidersGuardKey}).Error; err != nil {
 		return fmt.Errorf("write add-animejoy-providers guard: %w", err)
+	}
+	return nil
+}
+
+// MiruroCloudflareBlock records, exactly once, the 2026-07-02 daily-recovery-run
+// finding that www.miruro.tv now sits behind a Cloudflare WAF managed-rule block
+// (a plain unauthenticated GET on "/" returns Cloudflare's "Sorry, you have been
+// blocked" firewall page, not the interactive Turnstile challenge — confirmed on
+// every path including static assets, and identically reproduced by the live Go
+// scraper's own properly-encoded secure-pipe requests, not just ad-hoc curl).
+// Miruro was healthy as recently as 2026-07-01T12:00Z (real stream resolutions
+// logged); the block started at the 2026-07-02T00:00 UTC probe and has held
+// steady across manual retries since. This reappears the exact T-28-04-01
+// "Cloudflare challenge" threat doc.go already flagged: the provider's stdlib-only,
+// no-headless-browser client (D3 gate 2) cannot solve it, so a real fix requires
+// routing miruro through the Camoufox stealth-scraper roster (a "v3.2"-class
+// architecture change, correctly out of scope for a single automated recovery run).
+//
+// Deliberately updates ONLY `description` — never `reason` (the probe/state-machine
+// overwrites `reason` on every cycle; only `description` is durable operator
+// context) and never `status`/`policy`/`health` (owned by the self-healing state
+// machine; PROVIDER_DEMOTE_AFTER will auto-demote policy=auto→manual on its own
+// after 24h of continued health=down, same as it would for any other failing
+// auto-policy provider — no need to fight it here). Guarded via the ledger so a
+// later operator's own description edit is never clobbered.
+func MiruroCloudflareBlock(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", miruroCloudflareBlockGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check miruro-cloudflare-block guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator edit
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "miruro").
+		Update("description", "Miruro aggregator: AnimePahe/kwik.cx HLS via the kiwi server (vault-*.uwucdn HLS), 1080p, AES-128 encrypted segments served through the streaming proxy. EN sub. Playback-probed. As of 2026-07-02, www.miruro.tv sits behind a Cloudflare WAF managed-rule block on every path (including the bare homepage and static assets) — a hard 'Sorry, you have been blocked' firewall page, not a solvable Turnstile challenge, and identically reproduced by the live scraper's own properly-encoded requests. Was healthy through 2026-07-01T12:00Z. This is the T-28-04-01 threat doc.go already anticipated: the stdlib-only Go client (no headless browser, D3 gate 2) cannot pass it. A real fix needs routing miruro through the Camoufox stealth-scraper roster (v3.2-class change) — flagged for human review, not attempted in an automated recovery run. Self-healing state machine will auto-demote policy=auto→manual after 24h of continued health=down (PROVIDER_DEMOTE_AFTER) if the block persists.")
+	if result.Error != nil {
+		return fmt.Errorf("miruro cloudflare-block: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No miruro row to update (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("miruro cloudflare-block: no row found for name=miruro")
+	}
+	if err := db.Create(&migrationGuard{Key: miruroCloudflareBlockGuardKey}).Error; err != nil {
+		return fmt.Errorf("write miruro-cloudflare-block guard: %w", err)
 	}
 	return nil
 }
