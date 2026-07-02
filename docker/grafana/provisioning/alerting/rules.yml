@@ -947,3 +947,106 @@ groups:
           summary: 'Scraper stream cascade: {{ $values.B }} resolutions over 12s in the last hour'
           description: 'At least 3 `scraper GET /scraper/stream` resolutions exceeded 12 s in the last hour — a multi-provider failover cascade (normal is sub-second warm / 8 s single-gate). Check provider health (/api/anime/_/scraper/health), the Scraper dashboards, and recent parser_fallback_total.'
           reason: stream_cascade_latency
+
+      - uid: provider-fleet-no-auto-playable
+        title: ProviderFleetNoAutoPlayable
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              # Per group, fires when the HEALTHIEST provider is registered
+              # (>=1, so all-Disabled steady-state groups are excluded) but below
+              # auto-playable (<3 => no UP/Recovering). `max by (group)` never
+              # yields an empty result, so a fully-Down group still produces a
+              # value to threshold (the naive count(...>=3)==0 would vanish).
+              expr: (max by (group) (provider_state) < 3) and (max by (group) (provider_state) >= 1)
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        labels:
+          severity: critical
+        annotations:
+          summary: "Provider group {{ $labels.group }}: no auto-playable source"
+          description: "Every provider in the {{ $labels.group }} group is Down or only manually-selectable (Degraded) for 30m — auto-failover cannot serve this group. Check /api/admin/scraper/health and the playback-health roster."
+
+      - uid: provider-fleet-correlated-down
+        title: ProviderFleetCorrelatedDown
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              # Count of providers per group actively failing IN the auto chain
+              # (state==1 Down). Gradual attrition is auto-demoted to manual
+              # (Degraded=2) and never counts here, so >=2 means a correlated
+              # simultaneous failure (shared cause), not slow one-at-a-time aging.
+              expr: count by (group) (provider_state == 1)
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1.5]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        labels:
+          severity: critical
+        annotations:
+          summary: "Provider group {{ $labels.group }}: multiple sources failed together"
+          description: "2+ providers in the {{ $labels.group }} group are actively Down in the auto chain for 30m — a correlated outage (shared cause), not gradual degrade. Check the Camoufox pool / shared dependency and /api/admin/scraper/health."
