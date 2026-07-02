@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -24,16 +25,7 @@ func TestProviderCapFeedFieldsRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip lost feed fields: %+v", out)
 	}
 	// JSON keys are snake_case for the FE.
-	if got := string(b); !contains(got, `"state":"active"`) || !contains(got, `"hacker_only":false`) {
+	if got := string(b); !strings.Contains(got, `"state":"active"`) || !strings.Contains(got, `"hacker_only":false`) {
 		t.Fatalf("unexpected json: %s", got)
 	}
 }
-
-func contains(s, sub string) bool { return len(s) >= len(sub) && (func() bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}()) }

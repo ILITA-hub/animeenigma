@@ -116,7 +116,7 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: "kodik", DisplayName: "Kodik", Enabled: true, Health: "unknown", Variants: variants}
+	cap := domain.ProviderCap{Provider: "kodik", DisplayName: "Kodik", Variants: variants}
 	if !applyFeedFields(&cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
@@ -153,7 +153,7 @@ func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.So
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: "animelib", DisplayName: "AniLib", Enabled: true, Health: "unknown", Variants: variants}
+	cap := domain.ProviderCap{Provider: "animelib", DisplayName: "AniLib", Variants: variants}
 	if !applyFeedFields(&cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
@@ -208,7 +208,7 @@ func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.Sour
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: "hanime", DisplayName: "Hanime", Enabled: true, Health: "unknown", Variants: []domain.Variant{variant}}
+	cap := domain.ProviderCap{Provider: "hanime", DisplayName: "Hanime", Variants: []domain.Variant{variant}}
 	if !applyFeedFields(&cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
@@ -259,7 +259,7 @@ func (s *Service) animejoyLegFamily(ctx context.Context, teams []domain.Animejoy
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: provider, DisplayName: displayName, Enabled: true, Health: "unknown", Variants: variants}
+	cap := domain.ProviderCap{Provider: provider, DisplayName: displayName, Variants: variants}
 	if !applyFeedFields(&cap, row, true) {
 		return domain.SourceFamily{}, false
 	}

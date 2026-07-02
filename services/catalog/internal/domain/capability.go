@@ -14,18 +14,13 @@ type SourceFamily struct {
 	Providers []ProviderCap `json:"providers"`
 }
 
-// ProviderCap is one provider's capability + liveness + rank within a family.
+// ProviderCap is one provider's capability + rank within a family. Liveness is
+// no longer a wire field — the Phase-1 feed fields below encode render/select
+// state; internal ranking still factors live health via Rank.
 type ProviderCap struct {
-	Provider    string `json:"provider"`
-	DisplayName string `json:"display_name"`
-	Enabled     bool   `json:"enabled"`
-	// Degraded marks a soft-degraded provider: the player ranks it LAST, never
-	// auto-selects/auto-falls-back to it, and only offers it (behind a "degraded"
-	// pill) when hacker mode is on. EN family only; RU/Hanime families never set it.
-	Degraded bool      `json:"degraded"`
-	Health   string    `json:"health"`             // "up" | "down" | "unknown"
-	Playable *bool     `json:"playable,omitempty"` // real-bytes oracle, if known
-	Rank     float64   `json:"rank"`
+	Provider    string  `json:"provider"`
+	DisplayName string  `json:"display_name"`
+	Rank        float64 `json:"rank"`
 
 	// Phase-1 single-source-of-truth feed fields. Computed server-side from the
 	// DB row via deriveProviderView; the player renders these verbatim.

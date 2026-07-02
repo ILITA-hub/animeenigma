@@ -173,10 +173,6 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 		cap := domain.ProviderCap{
 			Provider:    row.Name,
 			DisplayName: displayName(row.Name),
-			Enabled:     row.IsEnabled(),
-			Degraded:    row.IsDegraded(),
-			Health:      hstatus,
-			Playable:    playable,
 			Rank:        rankEN(row, hstatus, playable),
 			Variants:    variantsFromTraits(row),
 		}

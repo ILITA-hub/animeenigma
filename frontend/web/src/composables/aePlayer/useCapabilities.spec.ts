@@ -11,14 +11,14 @@ const report: CapabilityReport = {
     {
       family: 'ourenglish',
       providers: [
-        { ...feed, provider: 'gogoanime', display_name: 'Gogoanime', enabled: true, health: 'up', playable: true, variants: [] },
-        { ...feed, provider: 'allanime', display_name: 'AllAnime', enabled: true, health: 'up', variants: [] },
+        { ...feed, provider: 'gogoanime', display_name: 'Gogoanime', variants: [] },
+        { ...feed, provider: 'allanime', display_name: 'AllAnime', variants: [] },
       ],
     },
     {
       family: 'kodik',
       providers: [
-        { ...feed, provider: 'kodik', display_name: 'Kodik', enabled: true, health: 'unknown', group: 'ru', variants: [] },
+        { ...feed, provider: 'kodik', display_name: 'Kodik', group: 'ru', variants: [] },
       ],
     },
   ],

@@ -6,8 +6,7 @@ function cap(variants: ProviderCap['variants']): ProviderCap {
   return {
     provider: 'x', display_name: 'X',
     state: 'active', selectable: true, hacker_only: false, order: 50,
-    group: 'en', audios: ['sub'],
-    enabled: true, health: 'up', variants,
+    group: 'en', audios: ['sub'], variants,
   }
 }
 

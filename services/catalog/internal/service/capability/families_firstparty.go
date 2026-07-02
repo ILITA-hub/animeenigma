@@ -30,7 +30,7 @@ func (s *Service) aeFamily(ctx context.Context, animeID string) (domain.SourceFa
 		}
 	}
 	pc := domain.ProviderCap{
-		Provider: "ae", DisplayName: "AnimeEnigma", Enabled: true, Health: "up",
+		Provider: "ae", DisplayName: "AnimeEnigma",
 		Variants: variantsFromTraits(row),
 	}
 	applyFeedFields(&pc, row, has) // row verified registered above; ok is always true
@@ -47,7 +47,7 @@ func (s *Service) dbRowFamily(ctx context.Context, providerName, displayName, fa
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	pc := domain.ProviderCap{Provider: providerName, DisplayName: displayName, Enabled: true, Health: "up", Variants: variantsFromTraits(row)}
+	pc := domain.ProviderCap{Provider: providerName, DisplayName: displayName, Variants: variantsFromTraits(row)}
 	if !applyFeedFields(&pc, row, true) {
 		return domain.SourceFamily{}, false
 	}

@@ -62,9 +62,6 @@ func TestBuildENFamily_RanksAndFiltersDisabled(t *testing.T) {
 	if fam.Providers[0].Provider != "allanime" {
 		t.Errorf("rank order wrong: %+v", fam.Providers)
 	}
-	if fam.Providers[0].Health != "up" || fam.Providers[0].Playable == nil || !*fam.Providers[0].Playable {
-		t.Errorf("allanime health/playable wrong: %+v", fam.Providers[0])
-	}
 	var sawDub bool
 	for _, v := range fam.Providers[0].Variants {
 		if v.Category == "dub" {

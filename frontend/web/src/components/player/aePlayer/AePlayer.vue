@@ -673,10 +673,10 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
   const nextServer = resolvedServers.value.find(
     (s) => !triedWithCurrent.has(`${provider}:${s.id}`),
   )
-  // 2) else the next-ranked provider not yet tried. Deliberately NOT filtered on
-  //    the capability `playable` flag — that flag is a stale server-side guess;
-  //    live playback in the user's browser is the real test, so give every
-  //    remaining provider a shot.
+  // 2) else the next-ranked provider not yet tried. We give every remaining
+  //    provider a shot rather than pre-filtering on a server-side liveness
+  //    guess: live playback in the user's browser is the real test. (The old
+  //    per-provider `playable` capability flag was retired for this reason.)
   let toProvider: string | null = null
   let switchServerId: string | null = null
   if (nextServer) {

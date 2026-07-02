@@ -38,12 +38,6 @@ export interface ProviderCap {
 
   // ─── Decoration / variant labels (still consumed by deriveCapLabels) ────────
   variants: CapVariant[]
-
-  // ─── Legacy fields (pre-Phase-1; kept optional for back-compat) ─────────────
-  enabled?: boolean
-  degraded?: boolean
-  health?: 'up' | 'down' | 'unknown'
-  playable?: boolean
 }
 
 export interface CapVariant {
