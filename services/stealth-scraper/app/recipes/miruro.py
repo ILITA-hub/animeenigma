@@ -38,3 +38,6 @@ class MiruroRecipe(Recipe):
     # nav rather than rotating the exit (see module docstring + engine
     # _solve_cf_challenge).
     solve_challenge = True
+    # The secure-pipe response marks its transport codec (gzip vs xor+gzip) in the
+    # x-obfuscated RESPONSE header; the Go decoder needs it, so surface it back.
+    response_header_allowlist = ("x-obfuscated",)

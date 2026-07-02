@@ -22,6 +22,11 @@ class TestMiruroRecipe(unittest.TestCase):
         # (else browser_fetch rotates the exit instead of clicking the Turnstile).
         self.assertTrue(MiruroRecipe().solve_challenge)
 
+    def test_surfaces_x_obfuscated_header(self):
+        # The Go decoder picks the transport codec from the x-obfuscated RESPONSE
+        # header, so the recipe must opt into surfacing it (per-recipe, not global).
+        self.assertEqual(MiruroRecipe().response_header_allowlist, ("x-obfuscated",))
+
     def test_host_allowlist_locked(self):
         r = MiruroRecipe()
         self.assertTrue(host_allowed("www.miruro.tv", r.allowed_hosts))

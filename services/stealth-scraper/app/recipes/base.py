@@ -108,6 +108,12 @@ class Recipe:
     # origin nav instead of rotating the exit IP on the first "Just a moment…"
     # interstitial. Default False ⇒ unchanged rotate-on-challenge behavior.
     solve_challenge: bool = False
+    # Response headers this recipe needs surfaced back to the Go caller from a
+    # browser /fetch (lowercase names). Default () ⇒ none. Kept per-recipe (not a
+    # global) so the exfiltration surface is least-privilege — only a provider that
+    # carries response *semantics* in a header opts in. E.g. miruro's secure-pipe
+    # marks its transport codec in `x-obfuscated`, which its Go decoder needs.
+    response_header_allowlist: tuple[str, ...] = ()
 
     async def resolve(self, rc: RecipeContext) -> dict[str, Any]:
         """Drive the page chain and return a partial stream session:

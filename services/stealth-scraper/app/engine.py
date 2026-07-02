@@ -26,22 +26,15 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import unquote
 
-# Response headers surfaced back to the Go caller (bounded allowlist — NOT a full
-# dump, so no Set-Cookie / auth leakage and a fixed payload size). Some providers
-# carry response *semantics* in a header rather than the body: miruro's secure-pipe
-# marks its transport encoding with `x-obfuscated: 1|2`, which the Go decoder needs.
-# Lowercase keys (the Fetch API Headers object already lowercases names).
-_FETCH_HEADER_ALLOWLIST = ("x-obfuscated",)
-
-
-def _in_page_fetch_js(
-    max_bytes: int, header_allowlist: tuple[str, ...] = _FETCH_HEADER_ALLOWLIST
-) -> str:
+def _in_page_fetch_js(max_bytes: int, header_allowlist: tuple[str, ...] = ()) -> str:
     """Build the in-page fetch JS, returning "status|content-type|final-url|
     headers|base64body" (or "…|__TOO_LARGE__" in the body slot when the body
     exceeds ``max_bytes``). ``headers`` is encodeURIComponent(JSON) of the
-    allowlisted response headers that are present — URL-encoding is pipe-safe
-    (``|`` → ``%7C``) so it can never collide with the field delimiter.
+    ``header_allowlist`` response headers that are present — URL-encoding is
+    pipe-safe (``|`` → ``%7C``) so it can never collide with the field delimiter.
+    The allowlist is per-recipe (Recipe.response_header_allowlist), empty for
+    paths that don't need headers (e.g. the /hls proxy), so nothing leaks by
+    default.
 
     Encodes the body via FileReader/blob for base64 (manual Uint8Array + btoa trips
     Camoufox's xray wrapper → "Permission denied to access property
@@ -779,7 +772,9 @@ class CamoufoxEngine:
         session = await self._warm_fetch_session(provider, origin, user_key)
         session.in_use += 1
         try:
-            status, ctype, final, headers, body = await self._in_page_fetch(session, url)
+            status, ctype, final, headers, body = await self._in_page_fetch(
+                session, url, getattr(recipe, "response_header_allowlist", ())
+            )
         except FetchTimeout:
             await self.aclose_session(session.id)
             raise
@@ -1059,13 +1054,14 @@ class CamoufoxEngine:
             raise RecipeError(f"fetch warm failed for {origin}: {exc}") from exc
 
     async def _in_page_fetch(
-        self, session: Session, url: str
+        self, session: Session, url: str, header_allowlist: tuple[str, ...] = ()
     ) -> tuple[int, str, str, dict[str, str], bytes]:
         """Run ``fetch(url)`` inside the session's live page and marshal the
         response back as (status, content_type, final_url, headers, bytes).
-        ``headers`` carries the allowlisted response headers (see
-        _in_page_fetch_js). Body is encoded via FileReader/base64 (NOT
-        typed-array + btoa, which trips Camoufox's xray wrapper).
+        ``headers`` carries the ``header_allowlist`` response headers (per-recipe;
+        empty default ⇒ none, e.g. the /hls proxy path). Body is encoded via
+        FileReader/base64 (NOT typed-array + btoa, which trips Camoufox's xray
+        wrapper).
 
         Poison-fence (Phase 1): a "Target closed" / "context was destroyed" /
         "navigation" error means the page is dead. We DO NOT re-navigate and
@@ -1078,7 +1074,7 @@ class CamoufoxEngine:
         if page is None:
             raise SessionGone(session.id)
         try:
-            raw = await self._evaluate_fetch(page, url)
+            raw = await self._evaluate_fetch(page, url, header_allowlist)
         except asyncio.TimeoutError as exc:
             raise FetchTimeout(session.id) from exc
         except Exception as exc:  # noqa: BLE001
@@ -1123,12 +1119,14 @@ class CamoufoxEngine:
         body = base64.b64decode(b64) if b64 else b""
         return int(status_s), ctype, final_url, headers, body
 
-    async def _evaluate_fetch(self, page: Any, url: str) -> str:
+    async def _evaluate_fetch(
+        self, page: Any, url: str, header_allowlist: tuple[str, ...] = ()
+    ) -> str:
         """Run the in-page fetch JS with a hard timeout. page.evaluate has no
         built-in timeout, so an unbounded ``await fetch(url)`` against a stalled
         CDN would otherwise pin this browser slot forever (pool exhaustion)."""
         return await asyncio.wait_for(
-            page.evaluate(_in_page_fetch_js(self.cfg.max_body_bytes), url),
+            page.evaluate(_in_page_fetch_js(self.cfg.max_body_bytes, header_allowlist), url),
             timeout=self.cfg.fetch_timeout_ms / 1000.0,
         )
 
