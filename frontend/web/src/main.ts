@@ -109,3 +109,9 @@ deferInit(() => {
     })
   }
 })
+
+// Defer PWA/offline service-worker registration too — same idle window as
+// diagnostics/analytics above.
+deferInit(() => {
+  void import('./pwa/registerPwa').then((m) => m.initPwa())
+})
