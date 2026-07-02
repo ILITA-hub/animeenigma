@@ -1,0 +1,148 @@
+import 'fake-indexeddb/auto'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { enqueueDownload, removeDownload, _resetEngineForTests, _installCachesForTests } from './downloadEngine'
+import { _resetDbForTests, getDownload, putDownload } from './registry'
+import type { StreamResult } from '@/types/aePlayer'
+
+// ── in-memory CacheStorage fake ──────────────────────────────────────────────
+class FakeCache {
+  store = new Map<string, Response>()
+  async match(req: string | Request) {
+    const key = typeof req === 'string' ? req : new URL(req.url).pathname
+    return this.store.get(key)?.clone()
+  }
+  async put(req: string | Request, resp: Response) {
+    const key = typeof req === 'string' ? req : new URL(req.url).pathname
+    this.store.set(key, resp)
+  }
+}
+function fakeCaches() {
+  const caches = new Map<string, FakeCache>()
+  return {
+    caches,
+    impl: {
+      async open(name: string) {
+        if (!caches.has(name)) caches.set(name, new FakeCache())
+        return caches.get(name)! as unknown as Cache
+      },
+      async delete(name: string) { return caches.delete(name) },
+      async has(name: string) { return caches.has(name) },
+      async keys() { return [...caches.keys()] },
+      async match() { return undefined },
+    } as unknown as CacheStorage,
+  }
+}
+
+const MASTER = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=1280x720\nv/index.m3u8\n'
+const MEDIA = '#EXTM3U\n#EXTINF:4,\ns0.ts\n#EXTINF:4,\ns1.ts\n#EXT-X-ENDLIST\n'
+
+function mockFetch(routes: Record<string, () => Response>) {
+  return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input)
+    for (const [suffix, make] of Object.entries(routes)) {
+      if (url.endsWith(suffix)) return make()
+    }
+    return new Response('nf', { status: 404 })
+  })
+}
+
+const req = (resolve: () => Promise<StreamResult>) => ({
+  animeId: 'a1', animeTitle: 'T', quality: '720',
+  episode: { key: 1, label: 1, number: 1 },
+  combo: { audio: 'sub' as const, lang: 'en' as const, provider: 'gogoanime', server: 's', team: null },
+  resolve,
+})
+
+beforeEach(async () => {
+  await _resetDbForTests()
+  _resetEngineForTests()
+})
+
+describe('downloadEngine — HLS happy path', () => {
+  it('resolves, picks variant, caches playlist+segments, marks done', async () => {
+    const { caches, impl } = fakeCaches()
+    _installCachesForTests(impl)
+    const fetcher = mockFetch({
+      'master.m3u8': () => new Response(MASTER),
+      'v/index.m3u8': () => new Response(MEDIA),
+      's0.ts': () => new Response(new Uint8Array(8)),
+      's1.ts': () => new Response(new Uint8Array(8)),
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const id = await enqueueDownload(req(async () => ({ url: 'https://p.example/hls/master.m3u8', type: 'hls' })))
+    // engine runs the queue inline in tests (no BG); wait for completion state
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    const cache = caches.get(`ae-offline-${id}`)!
+    expect(await cache.match(`/__offline/${encodeURIComponent(id)}/master.m3u8`)).toBeTruthy()
+    expect(await cache.match(`/__offline/${encodeURIComponent(id)}/r/0`)).toBeTruthy()
+    expect(await cache.match(`/__offline/${encodeURIComponent(id)}/r/1`)).toBeTruthy()
+    // download marker header rides every media fetch
+    const segCall = fetcher.mock.calls.find((c) => String(c[0]).endsWith('s0.ts'))!
+    expect((segCall[1] as RequestInit).headers).toMatchObject({ 'X-AE-Download': '1' })
+  })
+
+  it('MP4: caches single media.mp4 entry', async () => {
+    const { caches, impl } = fakeCaches()
+    _installCachesForTests(impl)
+    vi.stubGlobal('fetch', mockFetch({ 'ep.mp4': () => new Response(new Uint8Array(16)) }))
+    const id = await enqueueDownload(req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' })))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    expect(await caches.get(`ae-offline-${id}`)!.match(`/__offline/${encodeURIComponent(id)}/media.mp4`)).toBeTruthy()
+  })
+
+  it('resume skips already-cached resources', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    const fetcher = mockFetch({
+      'master.m3u8': () => new Response(MASTER),
+      'v/index.m3u8': () => new Response(MEDIA),
+      's0.ts': () => new Response(new Uint8Array(8)),
+      's1.ts': () => new Response(new Uint8Array(8)),
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const id1 = await enqueueDownload(req(async () => ({ url: 'https://p.example/hls/master.m3u8', type: 'hls' })))
+    await vi.waitFor(async () => expect((await getDownload(id1))?.state).toBe('done'), { timeout: 10_000 })
+    const callsFirst = fetcher.mock.calls.length
+    // simulate an interrupted download surviving an app restart: record not
+    // done, but segments already sit in Cache Storage
+    await putDownload({ ...(await getDownload(id1))!, state: 'paused' })
+    _resetEngineForTests() // fresh engine, same caches
+    const id2 = await enqueueDownload(req(async () => ({ url: 'https://p.example/hls/master.m3u8', type: 'hls' })))
+    await vi.waitFor(async () => expect((await getDownload(id2))?.state).toBe('done'), { timeout: 10_000 })
+    // second run refetches playlists (cheap, needed for the resource map) but no segments
+    const segRefetches = fetcher.mock.calls.slice(callsFirst).filter((c) => String(c[0]).includes('.ts'))
+    expect(segRefetches.length).toBe(0)
+  })
+
+  it('re-resolves once on 403 and continues', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    let expired = true
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('master.m3u8')) return new Response(MASTER)
+      if (url.endsWith('v/index.m3u8')) return new Response(MEDIA)
+      if (url.includes('.ts')) {
+        if (expired) { expired = false; return new Response('sig', { status: 403 }) }
+        return new Response(new Uint8Array(8))
+      }
+      return new Response('nf', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const resolve = vi.fn(async () => ({ url: 'https://p.example/hls/master.m3u8', type: 'hls' as const }))
+    const id = await enqueueDownload(req(resolve))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    expect(resolve.mock.calls.length).toBe(2) // initial + one re-resolve
+  })
+
+  it('remove deletes cache and record', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    vi.stubGlobal('fetch', mockFetch({ 'ep.mp4': () => new Response(new Uint8Array(4)) }))
+    const id = await enqueueDownload(req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' })))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    await removeDownload(id)
+    expect(await getDownload(id)).toBeUndefined()
+    expect(await impl.has(`ae-offline-${id}`)).toBe(false)
+  })
+})
