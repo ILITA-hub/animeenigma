@@ -168,9 +168,6 @@
               @keydown.enter="(e) => { if (!(e.target as HTMLElement).closest('select, button, a')) openReport(r.id) }"
             >
               <td class="px-3 py-2 whitespace-nowrap border-l-4" :class="statusAccentBorder(r.status)">
-                <Badge size="sm" :variant="kindVariant(r.kind || 'feedback')" class="text-[10px] font-mono uppercase mr-1">
-                  {{ kindLabel(r.kind || 'feedback') }}
-                </Badge>
                 <Badge size="sm" :variant="categoryVariant(r.category)" class="text-[10px] font-mono uppercase">
                   {{ categoryLabel(r.category) }}
                 </Badge>
@@ -247,14 +244,9 @@
               @keydown.enter.prevent="openReport(r.id)"
             >
               <div class="flex items-center justify-between gap-2 mb-1.5">
-                <div class="flex items-center gap-1.5">
-                  <Badge size="sm" :variant="kindVariant(r.kind || 'feedback')" class="text-[10px] font-mono uppercase">
-                    {{ kindLabel(r.kind || 'feedback') }}
-                  </Badge>
-                  <Badge size="sm" :variant="categoryVariant(r.category)" class="text-[10px] font-mono uppercase">
-                    {{ categoryLabel(r.category) }}
-                  </Badge>
-                </div>
+                <Badge size="sm" :variant="categoryVariant(r.category)" class="text-[10px] font-mono uppercase">
+                  {{ categoryLabel(r.category) }}
+                </Badge>
                 <span class="text-white/40 text-[10px] whitespace-nowrap">{{ formatDate(r.timestamp, r.id) }}</span>
               </div>
               <p class="text-white/80 text-xs line-clamp-3 break-words">{{ r.description || '—' }}</p>
@@ -661,16 +653,11 @@ const categoryOptions = computed(() => [
   ...FEEDBACK_CATEGORIES.map((c) => ({ value: c, label: categoryLabel(c) })),
 ])
 const SOURCES = ['feedback_form', 'telegram', 'api', 'manual'] as const
-const kindLabel = (k: string) => t(`admin.feedback.kind.${k}`)
 const sourceLabel = (s: string) => t(`admin.feedback.source.${s}`)
 const sourceOptions = computed(() => [
   { value: 'all', label: t('admin.feedback.filters.allSources') },
   ...SOURCES.map((v) => ({ value: v, label: sourceLabel(v) })),
 ])
-
-type KindBadge = 'info' | 'primary' | 'warning'
-const KIND_VARIANT: Record<string, KindBadge> = { feedback: 'info', todo: 'primary', idea: 'warning' }
-const kindVariant = (k: string): KindBadge => KIND_VARIANT[k] ?? 'info'
 
 // Per-report status control options (no 'all' pseudo-status). Shared by the
 // table-row picker and the detail-modal picker so both expose every status
