@@ -15,11 +15,13 @@
        On mobile (< md) the header is a floating glass capsule — inset from
        the viewport edges like a browser URL bar — so content scrolls behind
        it through the blur. Desktop keeps the full-width glass-nav bar. The
-       capsule's bottom edge (8px inset + 56px row) matches the desktop
-       header height, so page top offsets stay valid. -->
+       side inset (16px) matches the page gutter (px-4) so the capsule
+       aligns with the content column; the bottom edge (8px top inset +
+       56px row) matches the desktop header height, so page top offsets
+       stay valid. -->
   <header
     :class="[
-      'fixed top-2 inset-x-2 md:top-0 md:inset-x-0 z-50 pr-[var(--scrollbar-width,0px)] transition-transform duration-300 navbar-root',
+      'fixed top-2 inset-x-4 md:top-0 md:inset-x-0 z-50 pr-[var(--scrollbar-width,0px)] transition-transform duration-300 navbar-root',
       'rounded-2xl border border-white/10 md:rounded-none md:border-0',
       isVisible ? 'translate-y-0' : '-translate-y-full navbar-root--hidden',
       'glass-nav glass-mobile-nav'

@@ -184,6 +184,11 @@ html {
      unloaded content or during the pre-paint frame on hard reload. */
   color-scheme: dark;
   background-color: var(--color-base);
+  /* The site never scrolls horizontally by design, but any stray element
+     poking 1-2px past the viewport makes the whole page pannable on
+     Android. clip (not hidden) discards that overflow without turning
+     the root into a scroll container, so position:sticky keeps working. */
+  overflow-x: clip;
 }
 
 body {

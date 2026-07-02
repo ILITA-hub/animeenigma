@@ -341,6 +341,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Title and tabs both refuse to shrink; without wrapping they overflow
+     the viewport by a few px at ≤320px CSS widths (Android display zoom). */
+  flex-wrap: wrap;
   margin-bottom: 14px;
   gap: 12px;
 }
