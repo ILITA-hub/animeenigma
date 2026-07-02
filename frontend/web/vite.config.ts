@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import compression from 'vite-plugin-compression'
+import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
 // RU static-edge (Maskanya) asset routing — dark-shipped. When
@@ -40,6 +41,40 @@ export default defineConfig({
       algorithm: 'brotliCompress',
       ext: '.br',
       threshold: 1024,
+    }),
+    VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      // We self-manage registration (kill-switch + playback-aware reload in
+      // src/pwa/registerPwa.ts) — the plugin only builds sw.js + manifest.
+      injectRegister: false,
+      manifest: {
+        name: 'AnimeEnigma',
+        short_name: 'AnimeEnigma',
+        description: 'Anime streaming platform',
+        lang: 'ru',
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        theme_color: '#08080f',
+        background_color: '#08080f',
+        icons: [
+          { src: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
+          // Same art declared maskable — acceptable v1 (logo sits centered);
+          // dedicated safe-zone art can replace it later without code changes.
+          { src: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,woff2,svg,png,ico,webmanifest}'],
+        // .gz/.br twins are nginx-only; changelog.json is fetched fresh every
+        // page load by design; branding/ is heavy static art.
+        globIgnores: ['**/*.{gz,br}', 'changelog.json', 'branding/**'],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+      },
+      devOptions: { enabled: false },
     }),
   ],
   resolve: {
