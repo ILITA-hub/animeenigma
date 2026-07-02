@@ -3,13 +3,23 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/state"
 )
+
+// TestMain initializes the package-level `log` var (normally set in main()
+// before any handler runs) so tests exercising log-calling code paths (e.g.
+// dropSuppressedAlerts) don't panic on a nil *logger.Logger.
+func TestMain(m *testing.M) {
+	log = logger.Default()
+	os.Exit(m.Run())
+}
 
 func newTestServiceWithHTTP(t *testing.T, catalogURL string, httpClient *http.Client) *service {
 	t.Helper()
@@ -190,6 +200,51 @@ func TestIsSuppressed_StreamingGatewayKeys(t *testing.T) {
 	for _, c := range cases {
 		if got := s.isSuppressed(c.key); got != c.want {
 			t.Errorf("isSuppressed(%q) = %v, want %v", c.key, got, c.want)
+		}
+	}
+}
+
+// TestDropSuppressedAlerts verifies the early filter — called immediately
+// after batch.Relevant is assembled in processWork, before the
+// multi-service-outage triage — removes suppressed firing alerts so they can
+// never inflate the escalation count or reach escalateBatch/dedup/analysis,
+// while non-suppressed alerts and non-alert messages pass through unchanged
+// and in order.
+func TestDropSuppressedAlerts(t *testing.T) {
+	s := newTestServiceWithHTTP(t, "http://127.0.0.1:0", &http.Client{})
+	s.cfg.SuppressedAlerts = []string{"High Error Rate:streaming", "High Error Rate:gateway"}
+
+	suppressedStreaming := domain.ClassifiedMessage{
+		MessageID: 1,
+		Type:      domain.MessageAlertFiring,
+		Alerts:    []domain.AlertInfo{{Name: "High Error Rate", Service: "streaming"}},
+	}
+	suppressedGateway := domain.ClassifiedMessage{
+		MessageID: 2,
+		Type:      domain.MessageAlertFiring,
+		Alerts:    []domain.AlertInfo{{Name: "High Error Rate", Service: "gateway"}},
+	}
+	nonSuppressedAlert := domain.ClassifiedMessage{
+		MessageID: 3,
+		Type:      domain.MessageAlertFiring,
+		Alerts:    []domain.AlertInfo{{Name: "High Error Rate", Service: "catalog"}},
+	}
+	adminMessage := domain.ClassifiedMessage{
+		MessageID: 4,
+		Type:      domain.MessageAdminMessage,
+		Text:      "restart streaming please",
+	}
+
+	in := []domain.ClassifiedMessage{suppressedStreaming, suppressedGateway, nonSuppressedAlert, adminMessage}
+	got := s.dropSuppressedAlerts(in)
+
+	want := []domain.ClassifiedMessage{nonSuppressedAlert, adminMessage}
+	if len(got) != len(want) {
+		t.Fatalf("dropSuppressedAlerts() returned %d messages, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i].MessageID != want[i].MessageID {
+			t.Errorf("index %d: got MessageID %d, want %d (order/content mismatch)", i, got[i].MessageID, want[i].MessageID)
 		}
 	}
 }

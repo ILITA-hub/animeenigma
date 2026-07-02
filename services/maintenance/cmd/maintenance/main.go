@@ -557,6 +557,14 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 	// Add Grafana alerts to the relevant queue
 	batch.Relevant = append(batch.Relevant, work.grafanaAlerts...)
 
+	// Defer suppressed alerts (e.g. transient streaming/gateway HLS-proxy
+	// 5xx bursts): drop silently here, before the multi-service triage below,
+	// so a suppressed alert can never inflate the outage escalation count nor
+	// be named in escalateBatch's Telegram page. Data is preserved in
+	// Prometheus + ClickHouse events; this only stops the Telegram page +
+	// Claude run. Keyed alertName:service.
+	batch.Relevant = s.dropSuppressedAlerts(batch.Relevant)
+
 	// Triage: check for multi-service outage
 	activeAlertCount := s.state.CountActiveAlerts()
 	batchAlertCount := classifier.CountAffectedServices(batch)
@@ -592,18 +600,6 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 		// Claude later fails or times out.
 		if msg.Type == domain.MessageAdminMessage || msg.Type == domain.MessageUserIssue {
 			s.mirrorToFeedback(&msg)
-		}
-
-		// Defer suppressed alerts (e.g. transient streaming/gateway HLS-proxy
-		// 5xx bursts): drop silently here so the webhook path honors
-		// SUPPRESSED_ALERTS the same way the reconcile poller does. Data is
-		// preserved in Prometheus + ClickHouse events; this only stops the
-		// Telegram page + Claude run. Keyed alertName:service.
-		if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
-			if s.isSuppressed(msg.Alerts[0].Name + ":" + msg.Alerts[0].Service) {
-				log.Infow("deferred alert (suppressed)", "alert", msg.Alerts[0].Name, "service", msg.Alerts[0].Service)
-				continue
-			}
 		}
 
 		// Dedup: check if this alert is already being tracked
@@ -1731,6 +1727,22 @@ func (s *service) isSuppressed(alertKey string) bool {
 		}
 	}
 	return false
+}
+
+// dropSuppressedAlerts removes firing alerts whose alertName:service key is in
+// SUPPRESSED_ALERTS, so deferred alerts never reach the multi-service triage,
+// escalateBatch, dedup, or analysis. Non-alert messages pass through unchanged.
+func (s *service) dropSuppressedAlerts(msgs []domain.ClassifiedMessage) []domain.ClassifiedMessage {
+	out := msgs[:0:0] // new backing array; do not alias
+	for _, m := range msgs {
+		if m.Type == domain.MessageAlertFiring && len(m.Alerts) > 0 &&
+			s.isSuppressed(m.Alerts[0].Name+":"+m.Alerts[0].Service) {
+			log.Infow("deferred alert (suppressed)", "alert", m.Alerts[0].Name, "service", m.Alerts[0].Service)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 func escTelegram(s string) string {
