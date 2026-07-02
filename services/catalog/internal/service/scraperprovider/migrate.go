@@ -201,6 +201,9 @@ const removeRawProviderGuardKey = "remove_raw_provider"
 // miruroCloudflareBlockGuardKey marks MiruroCloudflareBlock as applied.
 const miruroCloudflareBlockGuardKey = "miruro_cloudflare_block_2026_07_02"
 
+// miruroBrowserRevivalGuardKey marks MiruroBrowserRevival as applied.
+const miruroBrowserRevivalGuardKey = "miruro_browser_revival"
+
 // RemoveRawProvider hard-deletes the legacy standalone "raw" JP provider row
 // (removed 2026-06-30 — AllAnime + ok.ru cover JP-original audio). The seed no
 // longer creates it, but insert-if-absent seeding never deletes an existing
@@ -683,6 +686,63 @@ func MiruroCloudflareBlock(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: miruroCloudflareBlockGuardKey}).Error; err != nil {
 		return fmt.Errorf("write miruro-cloudflare-block guard: %w", err)
+	}
+	return nil
+}
+
+// MiruroBrowserRevival flips the miruro roster row to engine="browser" exactly
+// once, reviving it through the Camoufox stealth-scraper roster after the
+// 2026-07-02 Cloudflare block (MiruroCloudflareBlock). A Phase-0 spike proved the
+// migration viable (WORLD A): solving www.miruro.tv's homepage Turnstile lets an
+// in-page fetch to the hard-WAF-blocked /api/secure/pipe return 200 + a decodable
+// x-obfuscated body — so the block only applies to un-cleared clients, exactly
+// like the animepahe revival (AnimepaheBrowserRevival). Go still builds the `e=`
+// descriptor + decodes the x-obfuscated envelope (Approach 2); the sidecar only
+// fetches through the solved session.
+//
+// Seeded DEGRADED (owner pref: manually selectable via ?prefer=miruro&exclusive,
+// out of the auto-failover chain pending live soak — and miruro is dub-only). The
+// scraper roster derives the wire status via WireStatus(policy, health), NOT the
+// stored `status` column, so the authoritative levers are policy=manual +
+// health=down (→ WireStatus=degraded); `status` is updated too for column
+// consistency (cosmetic). Guarded via catalog_migration_guards so it's a no-op on
+// every later boot and never clobbers a later operator change. Idempotent.
+func MiruroBrowserRevival(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", miruroBrowserRevivalGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check miruro-browser-revival guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator change
+	}
+	now := time.Now().UTC()
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "miruro").
+		Updates(map[string]interface{}{
+			"engine":       "browser",
+			"base_url":     "https://www.miruro.tv",
+			"status":       domain.StatusDegraded,
+			"policy":       string(domain.PolicyManual),
+			"health":       string(domain.HealthDown),
+			"policy_since": now,
+			"health_since": now,
+			"reason":       "Browser-scraped via Camoufox sidecar (www.miruro.tv Cloudflare Turnstile solved)",
+			"description":  "Miruro aggregator (AnimePahe/kwik.cx HLS via the kiwi server, 1080p AES-128, EN dub). As of 2026-07-02 www.miruro.tv sits behind Cloudflare — an interactive Turnstile on the SPA and a hard WAF block on /api/secure/pipe for un-cleared clients. Revived engine=browser: the Camoufox stealth-scraper warm /fetch session solves the homepage Turnstile (~9s on our own IP, no residential proxy); the in-page fetch to /api/secure/pipe then rides cf_clearance and is served as the SPA (verified live). Go builds the secure-pipe descriptor + decodes the x-obfuscated response (Approach 2); the x-obfuscated response header is surfaced through the sidecar /fetch header allowlist. Degraded: manually selectable (hacker mode), out of the auto-failover chain pending live soak.",
+		})
+	if result.Error != nil {
+		return fmt.Errorf("miruro browser revival: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No miruro row to flip (seed did not run / row hard-deleted). Do NOT write
+		// the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("miruro browser revival: no row found for name=miruro")
+	}
+	if err := db.Create(&migrationGuard{Key: miruroBrowserRevivalGuardKey}).Error; err != nil {
+		return fmt.Errorf("write miruro-browser-revival guard: %w", err)
 	}
 	return nil
 }

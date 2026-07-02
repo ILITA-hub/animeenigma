@@ -154,11 +154,12 @@ type fetchRequest struct {
 }
 
 type fetchResponse struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error"`
-	Kind    string `json:"kind"`
-	Status  int    `json:"status"`
-	Body    string `json:"body"` // base64
+	Success bool              `json:"success"`
+	Error   string            `json:"error"`
+	Kind    string            `json:"kind"`
+	Status  int               `json:"status"`
+	Headers map[string]string `json:"headers"` // allowlisted response headers (lowercase keys)
+	Body    string            `json:"body"`    // base64
 }
 
 // ResolveEmbed resolves a known embed/wrapper URL (a provider server ID) to a
@@ -180,55 +181,73 @@ func (c *Client) ResolveEmbed(
 // body + the UPSTREAM status. Only sidecar-level failures (challenge / pool
 // exhausted / host denied / transport) return an error; an upstream 4xx/5xx is
 // returned as (status, body, nil) so the provider keeps its own status handling.
+//
+// This is a thin wrapper over FetchWithHeaders for callers (gogoanime/nineanime/
+// animepahe) that only need status+body.
 func (c *Client) Fetch(ctx context.Context, provider, rawURL string) (int, []byte, error) {
+	status, _, body, err := c.FetchWithHeaders(ctx, provider, rawURL)
+	return status, body, err
+}
+
+// FetchWithHeaders is Fetch plus the sidecar-returned allowlisted response
+// headers (lowercase keys; see stealth-scraper _FETCH_HEADER_ALLOWLIST). Some
+// providers carry response semantics in a header rather than the body — miruro's
+// secure-pipe marks its transport encoding in `x-obfuscated`, which its Go
+// decoder needs. The map is never nil on success (empty when no allowlisted
+// header was present).
+func (c *Client) FetchWithHeaders(ctx context.Context, provider, rawURL string) (int, map[string]string, []byte, error) {
 	reqBody, err := json.Marshal(fetchRequest{
 		Provider: provider, URL: rawURL, Method: "GET", UserKey: userkey.FromContext(ctx),
 	})
 	if err != nil {
-		return 0, nil, domain.WrapProviderDown(err, "sidecar: marshal fetch")
+		return 0, nil, nil, domain.WrapProviderDown(err, "sidecar: marshal fetch")
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/fetch", bytes.NewReader(reqBody))
 	if err != nil {
-		return 0, nil, domain.WrapProviderDown(err, "sidecar: build fetch request")
+		return 0, nil, nil, domain.WrapProviderDown(err, "sidecar: build fetch request")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
-		return 0, nil, domain.WrapProviderDown(err, "sidecar: fetch request")
+		return 0, nil, nil, domain.WrapProviderDown(err, "sidecar: fetch request")
 	}
 	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxFetchBody))
 	if err != nil {
-		return 0, nil, domain.WrapProviderDown(err, "sidecar: read fetch body")
+		return 0, nil, nil, domain.WrapProviderDown(err, "sidecar: read fetch body")
 	}
 
 	var out fetchResponse
 	decodeErr := json.Unmarshal(raw, &out)
 
 	if resp.StatusCode == http.StatusNotFound {
-		return 0, nil, domain.WrapNotFound(
+		return 0, nil, nil, domain.WrapNotFound(
 			fmt.Errorf("sidecar fetch 404 (kind=%s): %s", out.Kind, snippet(raw)), "sidecar: fetch not found")
 	}
 	if resp.StatusCode != http.StatusOK {
 		base := domain.WrapProviderDown(
 			fmt.Errorf("sidecar fetch %d (kind=%s): %s", resp.StatusCode, out.Kind, snippet(raw)),
 			"sidecar: fetch")
-		return 0, nil, classifyDown(out.Kind, base)
+		return 0, nil, nil, classifyDown(out.Kind, base)
 	}
 	if decodeErr != nil {
-		return 0, nil, domain.WrapProviderDown(decodeErr, "sidecar: decode fetch response")
+		return 0, nil, nil, domain.WrapProviderDown(decodeErr, "sidecar: decode fetch response")
 	}
 	if !out.Success {
-		return 0, nil, domain.WrapProviderDown(
+		return 0, nil, nil, domain.WrapProviderDown(
 			fmt.Errorf("sidecar fetch unsuccessful (kind=%s): %s", out.Kind, out.Error), "sidecar: fetch")
 	}
 	body, err := base64.StdEncoding.DecodeString(out.Body)
 	if err != nil {
-		return 0, nil, domain.WrapProviderDown(err, "sidecar: decode fetch body b64")
+		return 0, nil, nil, domain.WrapProviderDown(err, "sidecar: decode fetch body b64")
 	}
-	return out.Status, body, nil
+	headers := out.Headers
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	return out.Status, headers, body, nil
 }
 
 func (c *Client) resolve(ctx context.Context, req resolveRequest) (*domain.Stream, error) {

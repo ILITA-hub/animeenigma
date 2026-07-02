@@ -2,8 +2,10 @@
 challenge-solved session keyed per (provider, origin). Returns the raw body.
 Used for providers whose whole site is challenge-gated (9anime DDoS-Guard)."""
 import base64
+import json
 import time
 import unittest
+from urllib.parse import quote
 
 from app.config import Config
 from app.engine import CamoufoxEngine, Session
@@ -15,20 +17,31 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def _enc_headers(headers) -> str:
+    """Mimic the in-page JS `encodeURIComponent(JSON.stringify(hs))`. Empty when
+    headers is None (the no-allowlisted-header path)."""
+    if headers is None:
+        return ""
+    return quote(json.dumps(headers), safe="")
+
+
 class _FetchPage:
     """Fake page: evaluate() mimics the in-page fetch JS contract
-    'status|content-type|final-url|base64(body)'. Counts calls for reuse asserts."""
+    'status|content-type|final-url|headers|base64(body)'. Counts calls for reuse asserts."""
     url = "https://9anime.me.uk/"
 
-    def __init__(self, body: bytes, status: int = 200, ctype: str = "application/json"):
+    def __init__(self, body: bytes, status: int = 200, ctype: str = "application/json",
+                 headers=None):
         self._body, self._status, self._ctype = body, status, ctype
+        self._headers = headers
         self.calls = 0
 
     async def evaluate(self, js, *args):
         if not args:      # liveness probe `()=>1`
             return 1
         self.calls += 1
-        return f"{self._status}|{self._ctype}|{args[0]}|{base64.b64encode(self._body).decode()}"
+        return (f"{self._status}|{self._ctype}|{args[0]}|{_enc_headers(self._headers)}"
+                f"|{base64.b64encode(self._body).decode()}")
 
     async def close(self):
         pass
@@ -48,17 +61,18 @@ class _RedirectPage:
         if not args:      # liveness probe `()=>1`
             return 1
         self.calls += 1
-        return f"{self._status}|{self._ctype}|{self._final}|{base64.b64encode(self._body).decode()}"
+        return (f"{self._status}|{self._ctype}|{self._final}|"
+                f"|{base64.b64encode(self._body).decode()}")
 
     async def close(self):
         pass
 
 
 def _engine_with_fetch_session(body=b'{"ok":1}', status=200, ctype="application/json",
-                               key="fetch::nineanime::https://9anime.me.uk"):
+                               key="fetch::nineanime::https://9anime.me.uk", headers=None):
     eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False))
     prof = eng.profiles.lease()
-    page = _FetchPage(body, status, ctype)
+    page = _FetchPage(body, status, ctype, headers=headers)
     sess = Session(
         id=key, profile=prof, proxy_id="direct", referer="https://9anime.me.uk",
         user_agent="UA", cdn_host="9anime.me.uk", master_url="https://9anime.me.uk",
@@ -85,6 +99,15 @@ class TestBrowserFetch(unittest.TestCase):
         self.assertEqual(out["status"], 200)
         self.assertEqual(out["body"], b'{"hello":"world"}')
         self.assertEqual(page.calls, 1)
+        # No allowlisted headers present ⇒ empty dict (never None / missing key).
+        self.assertEqual(out.get("headers"), {})
+
+    def test_returns_allowlisted_response_headers(self):
+        # miruro's secure-pipe marks its transport encoding in x-obfuscated; the Go
+        # decoder needs it, so browser_fetch must surface allowlisted headers.
+        eng, _, _ = _engine_with_fetch_session(headers={"x-obfuscated": "1"})
+        out = run(eng.browser_fetch("nineanime", "https://9anime.me.uk/x"))
+        self.assertEqual(out["headers"], {"x-obfuscated": "1"})
 
     def test_session_reused_per_origin(self):
         eng, _, page = _engine_with_fetch_session()
@@ -141,6 +164,7 @@ class TestFetchRoute(unittest.TestCase):
         self.assertTrue(data["success"])
         self.assertEqual(data["status"], 200)
         self.assertEqual(base64.b64decode(data["body"]), b'{"hello":"world"}')
+        self.assertIn("headers", data)  # wire contract: headers always present
 
     def test_fetch_route_host_denied_is_502(self):
         import json

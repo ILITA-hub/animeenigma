@@ -18,27 +18,48 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import os
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import unquote
 
-def _in_page_fetch_js(max_bytes: int) -> str:
+# Response headers surfaced back to the Go caller (bounded allowlist — NOT a full
+# dump, so no Set-Cookie / auth leakage and a fixed payload size). Some providers
+# carry response *semantics* in a header rather than the body: miruro's secure-pipe
+# marks its transport encoding with `x-obfuscated: 1|2`, which the Go decoder needs.
+# Lowercase keys (the Fetch API Headers object already lowercases names).
+_FETCH_HEADER_ALLOWLIST = ("x-obfuscated",)
+
+
+def _in_page_fetch_js(
+    max_bytes: int, header_allowlist: tuple[str, ...] = _FETCH_HEADER_ALLOWLIST
+) -> str:
     """Build the in-page fetch JS, returning "status|content-type|final-url|
-    base64body" (or "…|__TOO_LARGE__" when the body exceeds ``max_bytes``).
+    headers|base64body" (or "…|__TOO_LARGE__" in the body slot when the body
+    exceeds ``max_bytes``). ``headers`` is encodeURIComponent(JSON) of the
+    allowlisted response headers that are present — URL-encoding is pipe-safe
+    (``|`` → ``%7C``) so it can never collide with the field delimiter.
 
-    Encodes via FileReader/blob for base64 (manual Uint8Array + btoa trips
+    Encodes the body via FileReader/blob for base64 (manual Uint8Array + btoa trips
     Camoufox's xray wrapper → "Permission denied to access property
-    constructor"). Takes a single STRING arg (object args also trip the wrapper).
-    The size cap is baked in (max_bytes is a trusted int) — checked via
-    Content-Length first, then the realized blob size — so an oversized upstream
-    body can't be base64'd into memory (a DoS amplified ~3x: blob + b64 + decode)."""
+    constructor"). Takes a single STRING arg (max_bytes + the allowlist are baked
+    in as trusted values; object args also trip the wrapper). The size cap is
+    baked in — checked via Content-Length first, then the realized blob size — so
+    an oversized upstream body can't be base64'd into memory (a DoS amplified ~3x:
+    blob + b64 + decode)."""
+    allow_js = "[" + ",".join(f'"{h}"' for h in header_allowlist) + "]"
     return (
         "async (url) => {\n"
         "  const r = await fetch(url);\n"
         "  const ct = r.headers.get('content-type') || '';\n"
-        "  const head = r.status + '|' + ct + '|' + (r.url || '') + '|';\n"
+        f"  const allow = {allow_js};\n"
+        "  const hs = {};\n"
+        "  for (const k of allow) { const v = r.headers.get(k); if (v !== null) hs[k] = v; }\n"
+        "  const he = encodeURIComponent(JSON.stringify(hs));\n"
+        "  const head = r.status + '|' + ct + '|' + (r.url || '') + '|' + he + '|';\n"
         f"  const cap = {int(max_bytes)};\n"
         "  const clen = parseInt(r.headers.get('content-length') || '0', 10);\n"
         "  if (clen > cap) return head + '__TOO_LARGE__';\n"
@@ -68,6 +89,7 @@ from .recipes import ChallengeError, NotFoundError, Recipe, RecipeContext, Recip
 from .recipes.animepahe import AnimePaheRecipe
 from .recipes.base import host_allowed, host_of, looks_like_challenge
 from .recipes.gogoanime import GogoanimeRecipe
+from .recipes.miruro import MiruroRecipe
 from .recipes.nineanime import NineAnimeRecipe
 from .streamproxy import looks_like_m3u8, make_wrap, rewrite_playlist
 from .tunnels import ProxyPool, build_pool_from_config
@@ -159,6 +181,7 @@ class CamoufoxEngine:
             "gogoanime": GogoanimeRecipe(),
             "nineanime": NineAnimeRecipe(),
             "animepahe": AnimePaheRecipe(),
+            "miruro": MiruroRecipe(),
         }
         self._log: Any = None
         # Async DNS resolver (host -> list[ip str]); injectable in tests so the
@@ -682,7 +705,7 @@ class CamoufoxEngine:
         session.in_use += 1
         started = time.monotonic()
         try:
-            status, ctype, final_url, body = await self._in_page_fetch(session, url)
+            status, ctype, final_url, _hdrs, body = await self._in_page_fetch(session, url)
         except FetchTimeout:
             # A hung fetch would pin this browser slot forever — reclaim it.
             self._observe_proxy_fetch("timeout", started)
@@ -756,7 +779,7 @@ class CamoufoxEngine:
         session = await self._warm_fetch_session(provider, origin, user_key)
         session.in_use += 1
         try:
-            status, ctype, final, body = await self._in_page_fetch(session, url)
+            status, ctype, final, headers, body = await self._in_page_fetch(session, url)
         except FetchTimeout:
             await self.aclose_session(session.id)
             raise
@@ -781,7 +804,7 @@ class CamoufoxEngine:
             raise ChallengeError(f"challenge on fetch {h}", host=h, kind="fetch")
 
         session.expires_at = time.time() + self.cfg.session_ttl_seconds
-        return {"status": status, "content_type": ctype, "body": body}
+        return {"status": status, "content_type": ctype, "headers": headers, "body": body}
 
     async def _click_turnstile(self, page: Any) -> bool:
         """Click the interactive Cloudflare Turnstile checkbox if its challenge
@@ -1035,10 +1058,14 @@ class CamoufoxEngine:
             self.profiles.release(profile, ok=False)
             raise RecipeError(f"fetch warm failed for {origin}: {exc}") from exc
 
-    async def _in_page_fetch(self, session: Session, url: str) -> tuple[int, str, str, bytes]:
+    async def _in_page_fetch(
+        self, session: Session, url: str
+    ) -> tuple[int, str, str, dict[str, str], bytes]:
         """Run ``fetch(url)`` inside the session's live page and marshal the
-        response back as bytes. Encodes via FileReader/base64 (NOT typed-array +
-        btoa, which trips Camoufox's xray wrapper).
+        response back as (status, content_type, final_url, headers, bytes).
+        ``headers`` carries the allowlisted response headers (see
+        _in_page_fetch_js). Body is encoded via FileReader/base64 (NOT
+        typed-array + btoa, which trips Camoufox's xray wrapper).
 
         Poison-fence (Phase 1): a "Target closed" / "context was destroyed" /
         "navigation" error means the page is dead. We DO NOT re-navigate and
@@ -1080,13 +1107,21 @@ class CamoufoxEngine:
                 # ONCE; the session stays for one more strike (no nav-retry).
                 raise
             raise
-        status_s, ctype, final_url, b64 = raw.split("|", 3)
+        status_s, ctype, final_url, hdrs_enc, b64 = raw.split("|", 4)
         if b64 == _TOO_LARGE:
             raise FetchTooLarge(
                 f"upstream body exceeds cap ({self.cfg.max_body_bytes} bytes): {host_of(url)}"
             )
+        headers: dict[str, str] = {}
+        if hdrs_enc:
+            try:
+                parsed = json.loads(unquote(hdrs_enc))
+                if isinstance(parsed, dict):
+                    headers = {str(k): str(v) for k, v in parsed.items()}
+            except (ValueError, TypeError):
+                headers = {}  # malformed header blob is non-fatal — body still returns
         body = base64.b64decode(b64) if b64 else b""
-        return int(status_s), ctype, final_url, body
+        return int(status_s), ctype, final_url, headers, body
 
     async def _evaluate_fetch(self, page: Any, url: str) -> str:
         """Run the in-page fetch JS with a hard timeout. page.evaluate has no

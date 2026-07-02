@@ -455,14 +455,31 @@ func main() {
 	armClient := idmapping.NewClient(
 		idmapping.WithTransport(tracing.WrapTransport(idmapping.NewIPv4Transport())),
 	)
+	// Camoufox migration (2026-07-02): when the DB roster sets miruro engine=
+	// "browser", the secure-pipe GET routes through the stealth-scraper /fetch
+	// warm session (solves www.miruro.tv's Cloudflare Turnstile; the in-page fetch
+	// to /api/secure/pipe then rides cf_clearance). FetchWithHeaders surfaces the
+	// x-obfuscated RESPONSE header the Go decoder needs. Mirrors the animepahe
+	// wiring; engine=http is a degraded fallback (curl-class GETs are CF-blocked).
+	miruroUseBrowser := func() bool {
+		return cfg.Providers.EngineOf("miruro") == config.EngineBrowser
+	}
+	miruroBrowserFetch := func(ctx context.Context, provider, url string) (int, map[string]string, []byte, error) {
+		status, headers, body, err := stealthClient.FetchWithHeaders(ctx, provider, url)
+		_, wedged := sidecar.IsWedged(err)
+		breaker.Record(provider, wedged)
+		return status, headers, body, err
+	}
 	miruroProvider, err := miruro.New(miruro.Deps{
-		BaseURL:     cfg.Miruro.BaseURL,
-		ProxyURL:    cfg.Miruro.ProxyURL,
-		ProxyURLAlt: cfg.Miruro.ProxyURLAlt,
-		HTTP:        miruroBaseHTTP,
-		Cache:       redisCache,
-		IDMapping:   armClient,
-		Log:         log,
+		BaseURL:      cfg.Miruro.BaseURL,
+		ProxyURL:     cfg.Miruro.ProxyURL,
+		ProxyURLAlt:  cfg.Miruro.ProxyURLAlt,
+		HTTP:         miruroBaseHTTP,
+		Cache:        redisCache,
+		IDMapping:    armClient,
+		Log:          log,
+		UseBrowser:   miruroUseBrowser,
+		BrowserFetch: miruroBrowserFetch,
 	})
 	if err != nil {
 		log.Fatalw("failed to construct Miruro provider", "error", err)

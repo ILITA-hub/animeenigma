@@ -397,6 +397,79 @@ func TestAnimepaheBrowserRevival_GuardedDoesNotClobberOperatorRevert(t *testing.
 	}
 }
 
+func TestMiruroBrowserRevival_FlipsToBrowserAndDegraded(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Simulate the pre-block LIVE DB: miruro was engine=http, auto/up (a healthy
+	// auto-failover provider before the 2026-07-02 Cloudflare block).
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "miruro").
+		Updates(map[string]interface{}{
+			"engine": "http", "base_url": "",
+			"status": string(domain.StatusEnabled),
+			"policy": string(domain.PolicyAuto), "health": string(domain.HealthUp),
+		}).Error; err != nil {
+		t.Fatalf("preset miruro pre-block: %v", err)
+	}
+
+	if err := scraperprovider.MiruroBrowserRevival(db); err != nil {
+		t.Fatalf("miruro browser revival: %v", err)
+	}
+
+	var mir, gogo domain.ScraperProvider
+	db.First(&mir, "name = ?", "miruro")
+	db.First(&gogo, "name = ?", "gogoanime")
+	if mir.Engine != "browser" {
+		t.Errorf("miruro engine = %q, want browser", mir.Engine)
+	}
+	if mir.BaseURL != "https://www.miruro.tv" {
+		t.Errorf("miruro base_url = %q, want https://www.miruro.tv", mir.BaseURL)
+	}
+	if mir.Policy != domain.PolicyManual {
+		t.Errorf("miruro policy = %q, want manual", mir.Policy)
+	}
+	// The whole point: DERIVED wire status must be degraded (registered + manually
+	// selectable), NOT enabled (auto-failover) and NOT disabled.
+	if got := mir.WireStatus(); got != domain.StatusDegraded {
+		t.Errorf("miruro WireStatus() = %q, want degraded", got)
+	}
+	// Other providers untouched.
+	if gogo.BaseURL != "https://gogoanimes.fi" {
+		t.Errorf("gogoanime base_url = %q, must stay gogoanimes.fi (only miruro flipped)", gogo.BaseURL)
+	}
+}
+
+func TestMiruroBrowserRevival_GuardedDoesNotClobberOperatorRevert(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := scraperprovider.MiruroBrowserRevival(db); err != nil {
+		t.Fatalf("miruro browser revival 1: %v", err)
+	}
+	// Operator later flips miruro back to engine=http in the DB.
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "miruro").
+		Update("engine", "http").Error; err != nil {
+		t.Fatalf("operator revert: %v", err)
+	}
+	// Second boot must NOT clobber the operator's change (guard already set).
+	if err := scraperprovider.MiruroBrowserRevival(db); err != nil {
+		t.Fatalf("miruro browser revival 2: %v", err)
+	}
+	var mir domain.ScraperProvider
+	db.First(&mir, "name = ?", "miruro")
+	if mir.Engine != "http" {
+		t.Errorf("miruro engine = %q, want http (guard clobbered operator revert)", mir.Engine)
+	}
+}
+
 func TestNineanimeBrowser_NoRow_ErrorsAndDoesNotWriteGuard(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

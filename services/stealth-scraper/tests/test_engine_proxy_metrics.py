@@ -43,9 +43,9 @@ SEG_BYTES = bytes([0x47, 0x40, 0x00, 0x10]) + b"\x00" * 512
 
 class _ProxyPage:
     """evaluate() mimics the in-page fetch JS contract:
-    "status|content-type|final-url|base64(body)". A body of the literal
-    "__TOO_LARGE__" sentinel (4th field, un-base64ed) triggers the over-cap
-    RecipeError path in _in_page_fetch."""
+    "status|content-type|final-url|headers|base64(body)". A body of the literal
+    "__TOO_LARGE__" sentinel (5th field, un-base64ed) triggers the over-cap
+    RecipeError path in _in_page_fetch. The headers slot is empty."""
 
     url = "https://megaplay.buzz/stream/s-2/122211/sub"
 
@@ -56,8 +56,8 @@ class _ProxyPage:
         st, ct, raw = self._responses[url]
         if raw == metrics_too_large_sentinel():
             # un-base64ed sentinel: _in_page_fetch sees b64 == "__TOO_LARGE__"
-            return f"{st}|{ct}|{url}|{raw}"
-        return f"{st}|{ct}|{url}|{base64.b64encode(raw).decode()}"
+            return f"{st}|{ct}|{url}||{raw}"
+        return f"{st}|{ct}|{url}||{base64.b64encode(raw).decode()}"
 
     async def close(self):
         pass

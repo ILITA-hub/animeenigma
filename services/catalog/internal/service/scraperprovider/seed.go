@@ -65,11 +65,26 @@ var defaultProviders = []domain.ScraperProvider{
 		QualityCeiling: "1080p", PreferenceWeight: 85,
 	},
 	{
-		Name: "miruro", Status: domain.StatusEnabled,
-		Reason: "DUB-only — upstream stopped serving sub streams (2026-06-19)",
-		Description: "Miruro's upstream no longer returns sub servers; only English dub " +
-			"plays. SupportsSub=false so it is never offered/auto-selected for SUB " +
-			"(original-Japanese-audio) playback. Existing DBs flipped via MiruroDubOnly.",
+		// REVIVED 2026-07-02 via Camoufox after a Cloudflare block: www.miruro.tv
+		// serves an interactive Turnstile on the SPA + a hard WAF block on
+		// /api/secure/pipe for un-cleared clients. The stealth-scraper warm /fetch
+		// session solves the Turnstile (~9s, our own IP, no proxy); the in-page
+		// fetch to /api/secure/pipe then rides cf_clearance (engine=browser). Go
+		// builds the secure-pipe descriptor + decodes the x-obfuscated response
+		// (Approach 2). DUB-only (upstream stopped serving sub, 2026-06-19). Seeded
+		// DEGRADED (owner pref — manually selectable, out of the auto-failover chain)
+		// pending live soak. Existing DBs carried by MiruroBrowserRevival.
+		Name: "miruro", Status: domain.StatusDegraded,
+		Engine: "browser", BaseURL: "https://www.miruro.tv",
+		Reason: "Browser-scraped via Camoufox sidecar (www.miruro.tv Cloudflare Turnstile solved)",
+		Description: "Miruro aggregator (AnimePahe/kwik.cx HLS via the kiwi server, 1080p AES-128, " +
+			"EN dub). As of 2026-07-02 www.miruro.tv sits behind Cloudflare — a Turnstile on the SPA and " +
+			"a hard WAF block on /api/secure/pipe for un-cleared clients. Revived engine=browser: the " +
+			"Camoufox stealth-scraper warm /fetch session solves the homepage Turnstile (~9s on our own IP, " +
+			"no residential proxy); the in-page fetch to /api/secure/pipe then rides cf_clearance. Go builds " +
+			"the secure-pipe descriptor + decodes the x-obfuscated response (Approach 2). SupportsSub=false " +
+			"(dub-only, 2026-06-19). Degraded: manually selectable (hacker mode), out of the auto-failover " +
+			"chain pending live soak.",
 		SupportsSub: false, SupportsDub: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 70,
 	},

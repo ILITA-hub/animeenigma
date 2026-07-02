@@ -87,6 +87,15 @@ type Deps struct {
 	Cache     cache.Cache
 	IDMapping IDMapper
 	Log       *logger.Logger
+
+	// Browser routing (set together when DB engine="browser"). UseBrowser is a
+	// LIVE per-call gate reading the atomic provider roster; BrowserFetch is the
+	// sidecar /fetch closure that runs the secure-pipe GET inside the warm,
+	// challenge-solved Camoufox session (www.miruro.tv is Cloudflare-gated —
+	// Turnstile on the SPA, hard WAF block on /api/*). Both nil ⇒ the plain-HTTP
+	// fallback transport is used. See transport.go.
+	UseBrowser   func() bool
+	BrowserFetch BrowserFetchFunc
 }
 
 // DefaultPipeObfKey is the upstream-observed VITE_PIPE_OBF_KEY (16 bytes
@@ -97,14 +106,16 @@ const DefaultPipeObfKeyHex = "71951034f8fbcf53d89db52ceb3dc22c"
 
 // Provider implements domain.Provider for Miruro.
 type Provider struct {
-	baseURL     string
-	proxyURL    string
-	proxyURLAlt string
-	obfKey      []byte
-	http        *domain.BaseHTTPClient
-	cache       *cacheLayer
-	idMap       IDMapper
-	log         *logger.Logger
+	baseURL      string
+	proxyURL     string
+	proxyURLAlt  string
+	obfKey       []byte
+	http         *domain.BaseHTTPClient
+	cache        *cacheLayer
+	idMap        IDMapper
+	log          *logger.Logger
+	useBrowser   func() bool
+	browserFetch BrowserFetchFunc
 
 	stagesMu sync.Mutex
 	stages   map[string]domain.StageHealth
@@ -147,15 +158,17 @@ func New(d Deps) (*Provider, error) {
 	}
 
 	p := &Provider{
-		baseURL:     strings.TrimRight(base, "/"),
-		proxyURL:    strings.TrimRight(proxy, "/"),
-		proxyURLAlt: strings.TrimRight(proxyAlt, "/"),
-		obfKey:      obfKey,
-		http:        d.HTTP,
-		cache:       newCacheLayer(d.Cache),
-		idMap:       d.IDMapping,
-		log:         d.Log,
-		stages:      make(map[string]domain.StageHealth, len(stageNames)),
+		baseURL:      strings.TrimRight(base, "/"),
+		proxyURL:     strings.TrimRight(proxy, "/"),
+		proxyURLAlt:  strings.TrimRight(proxyAlt, "/"),
+		obfKey:       obfKey,
+		http:         d.HTTP,
+		cache:        newCacheLayer(d.Cache),
+		idMap:        d.IDMapping,
+		log:          d.Log,
+		useBrowser:   d.UseBrowser,
+		browserFetch: d.BrowserFetch,
+		stages:       make(map[string]domain.StageHealth, len(stageNames)),
 	}
 	// Optimistic seed (Up=true) matching the allanime/animekai convention.
 	for _, s := range stageNames {
@@ -661,7 +674,11 @@ func (p *Provider) fetchPipe(ctx context.Context, endpoint string, query map[str
 	if !errors.Is(attemptErr, domain.ErrProviderDown) {
 		return nil, attemptErr
 	}
-	if p.proxyURL == "" {
+	// In browser mode the proxy fallback hosts (pro/pru.ultracloud.cc) are not in
+	// the recipe's allowed_hosts and are equally Cloudflare-fronted, so a browser
+	// retry there just fails host-not-allowed. Skip it and let the orchestrator
+	// fail over to the next provider.
+	if p.proxyURL == "" || p.browserEnabled() {
 		return nil, attemptErr
 	}
 	p.log.Debugw("miruro: primary host failed, retrying via proxy",
@@ -675,47 +692,68 @@ func (p *Provider) fetchPipe(ctx context.Context, endpoint string, query map[str
 	return nil, retryErr
 }
 
-// doSecurePipe performs a single attempt against the named host.
+// doSecurePipe performs a single attempt against the named host. It routes
+// through the Camoufox sidecar's warm /fetch session when the DB engine is
+// "browser" (www.miruro.tv is Cloudflare-gated), else a plain-Go GET (degraded
+// fallback + test path). Both transports converge on the same status handling +
+// x-obfuscated decode below — the x-obfuscated RESPONSE HEADER selects the codec.
 func (p *Provider) doSecurePipe(ctx context.Context, host, endpoint string, query map[string]any) ([]byte, error) {
 	pipeURL, err := BuildSecurePipeURL(host, endpoint, query)
 	if err != nil {
 		return nil, domain.WrapExtractFailed(err, "miruro: build pipe URL")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pipeURL, nil)
-	if err != nil {
-		return nil, domain.WrapProviderDown(err, "miruro: build request")
-	}
-	// Referer is upstream-required (the SPA always sets it; bare clients
-	// occasionally get 403 without it).
-	req.Header.Set("Referer", requestReferer)
-	req.Header.Set("Accept", "*/*")
+	var (
+		status int
+		xobf   string
+		body   []byte
+	)
+	if p.browserEnabled() {
+		// The sidecar client already maps its own failures to typed domain errors
+		// (ErrNotFound / ErrProviderDown / provider-wedged) and raises
+		// ChallengeError→ProviderDown when a challenge re-appears — pass through.
+		st, hdrs, b, ferr := p.browserFetch(ctx, providerName, pipeURL)
+		if ferr != nil {
+			return nil, ferr
+		}
+		status, xobf, body = st, hdrs["x-obfuscated"], b
+	} else {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, pipeURL, nil)
+		if err != nil {
+			return nil, domain.WrapProviderDown(err, "miruro: build request")
+		}
+		// Referer is upstream-required (the SPA always sets it; bare clients
+		// occasionally get 403 without it).
+		req.Header.Set("Referer", requestReferer)
+		req.Header.Set("Accept", "*/*")
 
-	resp, err := p.http.Do(ctx, req)
-	if err != nil {
-		return nil, domain.WrapProviderDown(err, "miruro: http")
-	}
-	defer resp.Body.Close()
+		resp, err := p.http.Do(ctx, req)
+		if err != nil {
+			return nil, domain.WrapProviderDown(err, "miruro: http")
+		}
+		defer resp.Body.Close()
 
-	// Defensive read cap — obfuscation.gunzipCapped enforces a stricter
-	// post-gunzip cap, but we also bound the raw response.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, domain.WrapProviderDown(err, "miruro: read body")
+		// Defensive read cap — obfuscation.gunzipCapped enforces a stricter
+		// post-gunzip cap, but we also bound the raw response.
+		body, err = io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		if err != nil {
+			return nil, domain.WrapProviderDown(err, "miruro: read body")
+		}
+		status = resp.StatusCode
+		xobf = resp.Header.Get("x-obfuscated")
 	}
 
-	if resp.StatusCode >= 500 {
+	if status >= 500 {
 		return nil, domain.WrapProviderDown(
-			fmt.Errorf("upstream %d: %s", resp.StatusCode, truncate(string(body), 200)),
+			fmt.Errorf("upstream %d: %s", status, truncate(string(body), 200)),
 			"miruro: upstream 5xx")
 	}
-	if resp.StatusCode >= 400 {
+	if status >= 400 {
 		return nil, domain.WrapExtractFailed(
-			fmt.Errorf("http %d: %s", resp.StatusCode, truncate(string(body), 200)),
+			fmt.Errorf("http %d: %s", status, truncate(string(body), 200)),
 			"miruro: 4xx")
 	}
 
-	xobf := resp.Header.Get("x-obfuscated")
 	decoded, derr := DecodeObfuscatedResponse(body, xobf, p.obfKey)
 	if derr != nil {
 		return nil, domain.WrapExtractFailed(derr, "miruro: decode response")

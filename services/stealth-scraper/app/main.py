@@ -174,6 +174,7 @@ async def fetch(req: FetchRequest) -> JSONResponse:
             "success": True,
             "status": out["status"],
             "content_type": out["content_type"],
+            "headers": out.get("headers", {}),
             "body": base64.b64encode(out["body"]).decode(),
         })
     except NotFoundError as exc:

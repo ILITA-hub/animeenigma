@@ -43,8 +43,9 @@ async def _fake_resolve(host):
 
 class _ProxyPage:
     """Fake page whose evaluate() mimics the in-page fetch JS contract:
-    returns "status|content-type|final-url|base64(body)". A response may carry a
-    4th element to simulate a redirect (final_url != requested url)."""
+    returns "status|content-type|final-url|headers|base64(body)". A response may
+    carry a 4th element to simulate a redirect (final_url != requested url). The
+    headers slot is empty (the /hls proxy path ignores response headers)."""
 
     url = "https://megaplay.buzz/stream/s-2/122211/sub"
 
@@ -55,7 +56,7 @@ class _ProxyPage:
         entry = self._responses[url]
         st, ct, body = entry[0], entry[1], entry[2]
         final_url = entry[3] if len(entry) > 3 else url
-        return f"{st}|{ct}|{final_url}|{base64.b64encode(body).decode()}"
+        return f"{st}|{ct}|{final_url}||{base64.b64encode(body).decode()}"
 
     async def close(self):
         pass

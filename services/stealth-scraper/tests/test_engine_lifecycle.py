@@ -36,7 +36,7 @@ class _Page:
         if self._result is not None:
             return self._result
         body = bytes([0x47, 0x40, 0x00, 0x10]) + b"seg"
-        return f"200|video/mp2t|{url}|{base64.b64encode(body).decode()}"
+        return f"200|video/mp2t|{url}||{base64.b64encode(body).decode()}"
 
     async def close(self):
         self.closed = True
@@ -109,7 +109,7 @@ class TestProxyFetchLifecycle(unittest.TestCase):
         self.assertFalse(sess.profile.leased, "wedged browser slot must be reclaimed")
 
     def test_body_cap_rejected(self):
-        page = _Page(result="200|video/mp2t|https://cdn.mewstream.buzz/x|__TOO_LARGE__")
+        page = _Page(result="200|video/mp2t|https://cdn.mewstream.buzz/x||__TOO_LARGE__")
         eng, _ = _engine_session(page)
         with self.assertRaises(RecipeError):
             run(eng.proxy_fetch("sid1", "https://cdn.mewstream.buzz/m.m3u8"))

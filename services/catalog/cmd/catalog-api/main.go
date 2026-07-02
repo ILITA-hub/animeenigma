@@ -240,6 +240,15 @@ func main() {
 		log.Errorw("miruro cloudflare-block migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) revival of miruro through the Camoufox stealth-scraper
+	// roster after the 2026-07-02 Cloudflare block: engine=browser, seeded DEGRADED
+	// (policy=manual/health=down → WireStatus=degraded). A Phase-0 spike proved the
+	// homepage-Turnstile solve unblocks the /api/secure/pipe WORLD-A path. Mirrors
+	// AnimepaheBrowserRevival; never clobbers a later operator change.
+	if err := scraperprovider.MiruroBrowserRevival(db.DB); err != nil {
+		log.Errorw("miruro browser-revival migration failed (continuing)", "error", err)
+	}
+
 	// Remove unverified "Region-walled" / egress-IP-class claims from animefever
 	// description (AUTO-484 follow-up). Run-once via the ledger.
 	if err := scraperprovider.AnimefeverDeclaim(db.DB); err != nil {

@@ -64,15 +64,24 @@
 //
 // Threat surface (28-04-PLAN.md threat_model):
 //
-//   - T-28-04-01 Cloudflare challenge: NOT observed during spike. If it
-//     reappears, mark the spike killed-post-impl and roll
-//     SCRAPER-HEAL-37 to v3.2 (no utls workaround per D3 gate 2).
+//   - T-28-04-01 Cloudflare challenge: REAPPEARED 2026-07-02 (Turnstile on the
+//     SPA + a hard WAF block on /api/secure/pipe for un-cleared clients).
+//     RESOLVED by routing the secure-pipe GET through the Camoufox
+//     stealth-scraper sidecar when the DB roster sets engine="browser" (see
+//     transport.go): the warm /fetch session solves the homepage Turnstile and
+//     the in-page fetch to /api/secure/pipe rides cf_clearance. Go still builds
+//     the `e=` descriptor + decodes the x-obfuscated envelope (Approach 2). The
+//     stdlib-only engine="http" path (below) remains as a degraded fallback but
+//     cannot pass the block on its own (per D3 gate 2, no utls workaround).
 //   - T-28-04-04 SSRF: TransformProxyURL takes endpoint strings only
 //     constructed internally from validated AniList IDs / opaque IDs.
 //     The base host comes from Deps.BaseURL (validated at config.Load).
 //   - T-28-04-05 DoS: 4 MiB read cap from MaxDecodedResponseBytes in
 //     obfuscation.go + 4 MiB on the raw response read.
 //
-// Stdlib-only — no third-party HTTP fingerprint libraries, no headless
-// browsers (RESEARCH.md "Don't Hand-Roll" boundary).
+// Transport: the stdlib-only path (engine="http") has no third-party HTTP
+// fingerprint libraries and no in-process headless browser (RESEARCH.md
+// "Don't Hand-Roll" boundary). When the DB roster sets engine="browser", the
+// secure-pipe GET is delegated to the out-of-process Camoufox stealth-scraper
+// sidecar (transport.go) — the provider itself stays stdlib-only.
 package miruro
