@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { shouldDeferReload, scheduleReload } from './registerPwa'
+import { shouldDeferReload, scheduleReload, setActiveDownloadProbe } from './registerPwa'
 
 function docWithVideo({ paused = false, ended = false, readyState = 4 } = {}): Document {
   const doc = document.implementation.createHTMLDocument('')
@@ -11,11 +11,18 @@ function docWithVideo({ paused = false, ended = false, readyState = 4 } = {}): D
   return doc
 }
 
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.useRealTimers()
+  setActiveDownloadProbe(() => false)
+})
 
 describe('shouldDeferReload', () => {
   it('defers while a video is actively playing', () => {
     expect(shouldDeferReload(docWithVideo())).toBe(true)
+  })
+  it('defers while an offline download is in flight (probe injected by the offline engine)', () => {
+    setActiveDownloadProbe(() => true)
+    expect(shouldDeferReload(document.implementation.createHTMLDocument(''))).toBe(true)
   })
   it('does not defer for paused/ended/not-started videos', () => {
     expect(shouldDeferReload(docWithVideo({ paused: true }))).toBe(false)

@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { OfflineDownload } from '@/offline/types'
-import { listDownloads } from '@/offline/registry'
-import { engineState, markEvicted, removeDownload, pauseDownload, enqueueDownload, storageEstimate } from '@/offline/downloadEngine'
+import { listDownloads, putDownload } from '@/offline/registry'
+import { engineState, markEvicted, removeDownload, pauseDownload, enqueueDownload, storageEstimate, isEngineWorking } from '@/offline/downloadEngine'
 import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
 
 export const useDownloadsStore = defineStore('downloads', () => {
@@ -13,7 +13,14 @@ export const useDownloadsStore = defineStore('downloads', () => {
   async function refresh(): Promise<void> {
     loading.value = true
     try {
-      entries.value = await markEvicted(await listDownloads())
+      const listed = await markEvicted(await listDownloads())
+      for (const d of listed) {
+        if ((d.state === 'downloading' || d.state === 'queued') && !isEngineWorking(d.id)) {
+          d.state = 'paused' // interrupted by reload/crash — resumable via the existing button
+          await putDownload(d)
+        }
+      }
+      entries.value = listed
       storage.value = await storageEstimate() // via the OfflineMediaStore port (Task 7b)
     } finally {
       loading.value = false

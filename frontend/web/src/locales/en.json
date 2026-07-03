@@ -1954,6 +1954,7 @@
       "resolve": "Source unavailable",
       "mismatch": "Source changed — re-download"
     },
-    "offlineReady": "Available offline"
+    "offlineReady": "Available offline",
+    "noSw": "Offline playback needs the app's service worker — reload the page once online"
   }
 }

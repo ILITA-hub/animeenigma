@@ -83,6 +83,8 @@
               :data-testid="`watch-${animeId}`"
               class="mt-3"
               size="sm"
+              :disabled="!swReady"
+              :title="!swReady ? t('downloads.noSw') : undefined"
               @click="play(animeId, group)"
             >
               {{ t('downloads.watch') }}
@@ -103,6 +105,7 @@ import { Button, Card, Badge } from '@/components/ui'
 import { useDownloadsStore } from '@/stores/downloads'
 import type { OfflineDownload } from '@/offline/types'
 import type { OfflinePlayback } from '@/offline/offlineAdapter'
+import { offlineRuntimeReady } from '@/offline/flag'
 
 const AePlayer = defineAsyncComponent(() => import('@/components/player/aePlayer/AePlayer.vue'))
 
@@ -111,8 +114,12 @@ const store = useDownloadsStore()
 const playing = ref<OfflinePlayback | null>(null)
 const playingEpisode = ref<number | undefined>(undefined)
 const armed = ref<string | null>(null)
+const swReady = ref(true)
 
-onMounted(() => void store.refresh())
+onMounted(() => {
+  swReady.value = offlineRuntimeReady()
+  void store.refresh()
+})
 
 function progressOf(d: OfflineDownload): { done: number; total: number } {
   return store.progress[d.id] ?? { done: d.resourcesDone, total: d.resourcesTotal }

@@ -33,6 +33,13 @@ export const engineState: {
   progress: ref({}),
 }
 
+// Injected lazily to avoid a static offline→pwa dependency: registerPwa
+// defers a deploy reload while a download is in flight (interrupting it
+// would leave an unresumable phantom — see isEngineWorking below).
+void import('@/pwa/registerPwa').then((m) =>
+  m.setActiveDownloadProbe(() => engineState.activeId.value !== null || queue.length > 0),
+)
+
 // `caches` is not declared as a global outside browser/SW contexts (jsdom
 // test env included) — a bare reference throws ReferenceError, and passing an
 // explicit `undefined` re-triggers the adapter's own `= caches` default (same
@@ -138,9 +145,12 @@ async function cacheSubtitles(id: string, subs: SubtitleTrack[]): Promise<Subtit
 }
 
 async function runDownload(id: string, req: DownloadRequest): Promise<void> {
-  const record = (await getDownload(id))!
+  const record = await getDownload(id)
+  if (!record) return // removed while queued — do not resurrect or refetch
   const setError = async (error: DownloadError) => {
-    await putDownload({ ...(await getDownload(id))!, state: 'error', error })
+    const cur = await getDownload(id)
+    if (!cur) return // removed mid-run — do not resurrect the record
+    await putDownload({ ...cur, state: 'error', error })
   }
 
   let stream: StreamResult
@@ -261,7 +271,12 @@ async function pump(): Promise<void> {
     while (queue.length > 0) {
       const { id, req } = queue.shift()!
       engineState.activeId.value = id
-      await runDownload(id, req)
+      try {
+        await runDownload(id, req)
+      } catch {
+        // a throw here is a bug in runDownload's own error handling — never
+        // let it abandon the rest of the queue
+      }
       engineState.activeId.value = null
     }
   } finally {
@@ -316,12 +331,18 @@ export function pauseDownload(id: string): void {
   paused.add(id)
 }
 
+/** True when the engine is actively working or holding this id in its queue. */
+export function isEngineWorking(id: string): boolean {
+  return engineState.activeId.value === id || queue.some((q) => q.id === id)
+}
+
 export async function resumeDownload(req: DownloadRequest): Promise<string> {
   return enqueueDownload(req) // resume = re-enqueue; cached resources are skipped
 }
 
 export async function removeDownload(id: string): Promise<void> {
   paused.add(id) // stop an in-flight run at the next item boundary
+  for (let i = queue.length - 1; i >= 0; i--) if (queue[i].id === id) queue.splice(i, 1)
   await store.remove(id)
   await deleteDownloadRecord(id)
   const { [id]: _, ...rest } = engineState.progress.value

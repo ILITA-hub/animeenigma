@@ -2,12 +2,21 @@
 // client reloads unconditionally on controllerchange, which would kill playback
 // mid-episode. We reload only when nothing is playing (deploy mid-anime waits).
 
-/** True while media is actively playing: any HTML5 <video> mid-playback, or a
+/** Injected lazily to avoid a static pwa→offline dependency; set by the
+ *  offline engine's module when it loads. Absent ⇒ no downloads happening. */
+let activeDownloadProbe: () => boolean = () => false
+export function setActiveDownloadProbe(probe: () => boolean): void {
+  activeDownloadProbe = probe
+}
+
+/** True while media is actively playing: any HTML5 <video> mid-playback, a
  *  Kodik iframe mounted (classic fallback — its playback state is opaque, so
- *  its mere presence defers). */
+ *  its mere presence defers), or an offline download is in flight (a deploy
+ *  reload mid-download kills the foreground engine and orphans the record). */
 export function shouldDeferReload(doc: Document): boolean {
   const videos = Array.from(doc.querySelectorAll('video'))
   if (videos.some((v) => !v.paused && !v.ended && v.readyState > 2)) return true
+  if (activeDownloadProbe()) return true
   if (doc.querySelector('iframe[src*="kodik"]')) return true
   return false
 }

@@ -146,3 +146,37 @@ describe('downloadEngine — HLS happy path', () => {
     expect(await impl.has(`ae-offline-${id}`)).toBe(false)
   })
 })
+
+describe('downloadEngine — remove while queued', () => {
+  it('removing a still-queued download does not crash the pump or leave an orphan cache, and the queue keeps working', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    vi.stubGlobal('fetch', mockFetch({ 'ep.mp4': () => new Response(new Uint8Array(16)) }))
+
+    const reqFor = (epNumber: number) => ({
+      ...req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' as const })),
+      episode: { key: epNumber, label: epNumber, number: epNumber },
+    })
+
+    // Enqueue two: pump picks up id1 first and starts working it; id2 sits in
+    // the queue array behind it (pacedFetch's real spacing means id1 is still
+    // mid-flight by the time the synchronous code below runs).
+    const id1 = await enqueueDownload(reqFor(1))
+    const id2 = await enqueueDownload(reqFor(2))
+
+    // Remove the second while it's still just a queue entry (not yet started).
+    await removeDownload(id2)
+
+    // The first, unrelated download must still complete normally.
+    await vi.waitFor(async () => expect((await getDownload(id1))?.state).toBe('done'), { timeout: 10_000 })
+
+    // The removed one must leave no record and no orphan cache namespace.
+    expect(await getDownload(id2)).toBeUndefined()
+    expect(await impl.has(`ae-offline-${id2}`)).toBe(false)
+
+    // The pump must not be stalled/wedged by the removal — a later enqueue
+    // still runs to completion.
+    const id3 = await enqueueDownload(reqFor(3))
+    await vi.waitFor(async () => expect((await getDownload(id3))?.state).toBe('done'), { timeout: 10_000 })
+  })
+})

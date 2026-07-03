@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DownloadsPage from '@/views/DownloadsPage.vue'
-import { putDownload, _resetDbForTests } from '@/offline/registry'
+import { putDownload, getDownload, _resetDbForTests } from '@/offline/registry'
 import { _installCachesForTests } from '@/offline/downloadEngine'
 import type { OfflineDownload } from '@/offline/types'
 
@@ -52,6 +52,14 @@ const doneDl: OfflineDownload = {
   playlistLocalPath: '/__offline/x/master.m3u8', subtitles: [],
 }
 
+const downloadingDl: OfflineDownload = {
+  id: 'a2:1:gogoanime:sub:en::720', animeId: 'a2', animeTitle: 'Interrupted Anime', quality: '720',
+  episode: { key: 1, label: 1, number: 1 }, streamType: 'hls', state: 'downloading',
+  combo: { audio: 'sub', lang: 'en', provider: 'gogoanime', server: 's', team: null },
+  bytes: 0, resourcesDone: 0, resourcesTotal: 4, createdAt: 5,
+  playlistLocalPath: '/__offline/y/master.m3u8', subtitles: [],
+}
+
 beforeEach(async () => {
   setActivePinia(createPinia())
   await _resetDbForTests()
@@ -59,6 +67,9 @@ beforeEach(async () => {
     async has() { return true }, async open() { return {} as Cache },
     async delete() { return true }, async keys() { return [] }, async match() { return undefined },
   } as unknown as CacheStorage)
+  // Simulate a normal browser with an active controlling SW (offlineRuntimeReady()
+  // gates the Watch button on this) — jsdom has no serviceWorker at all by default.
+  Object.defineProperty(navigator, 'serviceWorker', { value: { controller: {} }, configurable: true })
 })
 
 describe('DownloadsPage', () => {
@@ -82,5 +93,24 @@ describe('DownloadsPage', () => {
     await w.find(`[data-testid="del-${CSS.escape(doneDl.id)}"]`).trigger('click')   // arm
     await w.find(`[data-testid="del-${CSS.escape(doneDl.id)}"]`).trigger('click')   // confirm
     await vi.waitFor(() => expect(w.text()).not.toContain('Frieren'))
+  })
+  it('disables Watch (with explanatory title) when there is no controlling service worker', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', { value: { controller: null }, configurable: true })
+    await putDownload(doneDl)
+    const w = mount(DownloadsPage)
+    await vi.waitFor(() => expect(w.text()).toContain('Frieren'))
+    const btn = w.find('[data-testid="watch-a1"]')
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.attributes('title')).toBe('downloads.noSw')
+  })
+  it('demotes an orphaned downloading/queued record to paused on refresh (engine not actively working it)', async () => {
+    await putDownload(downloadingDl)
+    const w = mount(DownloadsPage)
+    await vi.waitFor(() => expect(w.text()).toContain('Interrupted Anime'))
+    await vi.waitFor(async () => expect((await getDownload(downloadingDl.id))?.state).toBe('paused'))
+    expect(w.text()).toContain('downloads.state.paused')
+    // The resume button (only rendered for 'paused'/network-error) confirms it's
+    // no longer stuck in the un-resumable 'downloading' phantom state.
+    expect(w.text()).toContain('downloads.resume')
   })
 })
