@@ -146,6 +146,15 @@ Hanime downloads inherit the existing adult-gating at *download time* (button on
 2. Task B ships behind `VITE_OFFLINE_DOWNLOADS_ENABLED` (default **on**; flag exists to yank the UI without a rebuild-revert if a storage/provider surprise appears).
 3. nginx changes (`sw.js` no-cache) ride the same deploy as Task A.
 
+## Portability — future standalone apps (owner requirement, added 2026-07-03)
+
+The owner intends to ship **separate full-fledged apps** (Capacitor/Tauri-class wrappers over this codebase) later. The offline module therefore must not hard-bind to browser storage APIs:
+
+- The download engine performs ALL media-byte I/O through an **`OfflineMediaStore` port** (`src/offline/mediaStore.ts`): `put/has/remove/exists/persist/estimate/entryUrl`. The engine, registry, playlist rewrite, offline adapter, progress queue, and all UI are platform-neutral.
+- The **web adapter** (`cacheStorageMediaStore`) implements the port over Cache Storage (`ae-offline-{id}` caches) with the SW serving `/__offline/*` — exactly the behavior specced above.
+- A future **native adapter** (Capacitor Filesystem / Tauri fs) implements the same port and supplies its own `entryUrl` scheme (file/asset URLs); the SW-serving half is simply unused there. Path construction is centralized (`offlinePath`) so the URL scheme is a one-function swap.
+- Fully-native (Kotlin/Swift) apps reuse the **backend contracts** instead (capabilities feed, scraper/stream routes, signed proxy URLs) — those are already the platform-independent surface.
+
 ## Out of scope, recorded for later
 
-Background Fetch upgrade (Chrome) · season-batch downloads · storage encryption · push notifications · TWA packaging.
+Background Fetch upgrade (Chrome) · season-batch downloads · storage encryption · push notifications · TWA/Capacitor/Tauri packaging (the port above is the enabler, not the packaging itself).

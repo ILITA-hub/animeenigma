@@ -23,6 +23,7 @@
 - Type-only imports from `.vue` files cause TS2614 — put shared types in `.ts` files. `vue-tsc --noEmit` can false-pass on cache; the real gate is `bun run build`.
 - The plan's verbatim code is the contract; where a step says "anchor: …" the executor must locate the anchor in the named file and apply the shown pattern there (used only for `AePlayer.vue`, ~2800 lines, whose internals shift).
 - Feature flag: PWA shell ships unflagged; all download UI gates on `VITE_OFFLINE_DOWNLOADS_ENABLED !== 'false'` (default ON) **and** SW availability.
+- **Portability (owner, 2026-07-03):** future standalone apps will reuse this code — media-byte I/O goes ONLY through the `OfflineMediaStore` port (Task 7b); no direct Cache Storage / `navigator.storage` calls outside `mediaStore.ts` and the SW's serving half (`offlineServe.ts`, web-adapter-specific by design).
 
 ---
 
@@ -1513,6 +1514,174 @@ git commit src/offline/downloadEngine.ts src/offline/downloadEngine.spec.ts -m "
 
 ---
 
+### Task 7b: OfflineMediaStore port (future standalone apps)
+
+> Added 2026-07-03 per owner requirement: separate full-fledged apps (Capacitor/Tauri-class) will reuse this codebase later — the engine must not hard-bind to Cache Storage. This task refactors the just-written engine onto a storage port. **Behavior must stay byte-identical**; the existing 5 engine tests keep passing UNCHANGED (they install a fake CacheStorage, which now flows through the real web adapter — even better coverage).
+
+**Files:**
+- Create: `frontend/web/src/offline/mediaStore.ts`
+- Create: `frontend/web/src/offline/mediaStore.spec.ts`
+- Modify: `frontend/web/src/offline/downloadEngine.ts`
+
+**Interfaces:**
+- Consumes: `offlineCacheName`, `offlinePath` (Task 5).
+- Produces: `OfflineMediaStore` interface + `cacheStorageMediaStore(cachesImpl?)` web adapter; engine keeps its public API (`enqueueDownload`, `pauseDownload`, `resumeDownload`, `removeDownload`, `markEvicted`, `engineState`, `_installCachesForTests`, `_resetEngineForTests`) and ADDS `storageEstimate(): Promise<{usage,quota}|null>` (Task 12 uses it instead of touching `navigator.storage` directly).
+
+- [ ] **Step 1: Create `src/offline/mediaStore.ts`**
+
+```ts
+// Storage port for downloaded media bytes. The download engine performs ALL
+// byte I/O through this interface so future standalone apps (Capacitor/Tauri)
+// can swap in a filesystem adapter without touching the engine, registry, or
+// UI. The web adapter below is Cache Storage + SW-served /__offline/* URLs.
+import { offlineCacheName, offlinePath } from './types'
+
+export interface OfflineMediaStore {
+  put(id: string, path: string, resp: Response): Promise<void>
+  has(id: string, path: string): Promise<boolean>
+  /** Drop the whole container for a download id. */
+  remove(id: string): Promise<boolean>
+  /** Container still present? (eviction scan) */
+  exists(id: string): Promise<boolean>
+  persist(): Promise<void>
+  estimate(): Promise<{ usage: number; quota: number } | null>
+  /** Playable local URL for an entry. Web: /__offline/{id}/{rest} (SW-served).
+   *  A native adapter returns its own scheme (file/asset URL) here. */
+  entryUrl(id: string, rest: string): string
+}
+
+export function cacheStorageMediaStore(cachesImpl: CacheStorage = caches): OfflineMediaStore {
+  return {
+    async put(id, path, resp) {
+      const cache = await cachesImpl.open(offlineCacheName(id))
+      await cache.put(path, resp)
+    },
+    async has(id, path) {
+      const cache = await cachesImpl.open(offlineCacheName(id))
+      return !!(await cache.match(path))
+    },
+    async remove(id) {
+      return cachesImpl.delete(offlineCacheName(id))
+    },
+    async exists(id) {
+      return cachesImpl.has(offlineCacheName(id))
+    },
+    async persist() {
+      try {
+        await (navigator as Navigator & { storage?: { persist?: () => Promise<boolean> } }).storage?.persist?.()
+      } catch { /* best-effort */ }
+    },
+    async estimate() {
+      try {
+        const est = await navigator.storage?.estimate?.()
+        if (!est?.quota) return null
+        return { usage: est.usage ?? 0, quota: est.quota }
+      } catch {
+        return null
+      }
+    },
+    entryUrl(id, rest) {
+      return offlinePath(id, rest)
+    },
+  }
+}
+```
+
+- [ ] **Step 2: Write `src/offline/mediaStore.spec.ts`** (direct adapter coverage — the engine specs cover it indirectly)
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { cacheStorageMediaStore } from './mediaStore'
+
+function fakeCaches() {
+  const stores = new Map<string, Map<string, Response>>()
+  return {
+    stores,
+    impl: {
+      async open(name: string) {
+        if (!stores.has(name)) stores.set(name, new Map())
+        const m = stores.get(name)!
+        return {
+          async put(k: string, r: Response) { m.set(k, r) },
+          async match(k: string) { return m.get(k)?.clone() },
+        } as unknown as Cache
+      },
+      async delete(name: string) { return stores.delete(name) },
+      async has(name: string) { return stores.has(name) },
+      async keys() { return [...stores.keys()] },
+      async match() { return undefined },
+    } as unknown as CacheStorage,
+  }
+}
+
+describe('cacheStorageMediaStore', () => {
+  it('put/has round-trips inside the per-id container', async () => {
+    const { stores, impl } = fakeCaches()
+    const s = cacheStorageMediaStore(impl)
+    await s.put('d1', '/__offline/d1/r/0', new Response('x'))
+    expect(await s.has('d1', '/__offline/d1/r/0')).toBe(true)
+    expect(await s.has('d1', '/__offline/d1/r/1')).toBe(false)
+    expect(stores.has('ae-offline-d1')).toBe(true)
+  })
+  it('remove/exists manage the container lifecycle', async () => {
+    const { impl } = fakeCaches()
+    const s = cacheStorageMediaStore(impl)
+    await s.put('d1', '/p', new Response('x'))
+    expect(await s.exists('d1')).toBe(true)
+    expect(await s.remove('d1')).toBe(true)
+    expect(await s.exists('d1')).toBe(false)
+  })
+  it('entryUrl emits the SW-served offline scheme', () => {
+    const s = cacheStorageMediaStore(fakeCaches().impl)
+    expect(s.entryUrl('a:1', 'master.m3u8')).toBe(`/__offline/${encodeURIComponent('a:1')}/master.m3u8`)
+  })
+})
+```
+
+Run: `bunx vitest run src/offline/mediaStore.spec.ts` — RED (module not found) before Step 1 if following strict TDD order (write spec first), GREEN after.
+
+- [ ] **Step 3: Refactor `downloadEngine.ts` onto the port** (behavior-identical)
+
+Mechanical substitutions — no logic changes:
+1. Replace the `cachesImpl` module state and its uses:
+```ts
+import { cacheStorageMediaStore, type OfflineMediaStore } from './mediaStore'
+
+let store: OfflineMediaStore = cacheStorageMediaStore()
+/** Kept name/signature so the existing engine spec is untouched: installing a
+ *  fake CacheStorage routes it through the real web adapter. */
+export function _installCachesForTests(impl: CacheStorage): void {
+  store = cacheStorageMediaStore(impl)
+}
+```
+2. `enqueueDownload`: `navigator.storage.persist` try/catch → `await store.persist()`; `quotaHeadroom()` body → `return store.estimate().then((est) => est ? est.quota - est.usage : null)` (keep the function; simplify).
+3. Add the Task 12 helper:
+```ts
+export function storageEstimate(): Promise<{ usage: number; quota: number } | null> {
+  return store.estimate()
+}
+```
+4. `runDownload`: delete `const cache = await cachesImpl.open(offlineCacheName(id))`; every `cache.put(path, resp)` → `store.put(id, path, resp)`; the worker resume check `if (!(await cache.match(item.path)))` → `if (!(await store.has(id, item.path)))`; `cacheSubtitles(id, cache, subs)` → `cacheSubtitles(id, subs)` (signature drops the Cache param, uses `store.put` inside).
+5. `removeDownload`: `await cachesImpl.delete(offlineCacheName(id))` → `await store.remove(id)`.
+6. `markEvicted`: `!(await cachesImpl.has(offlineCacheName(d.id)))` → `!(await store.exists(d.id))`.
+7. Remove the now-unused `offlineCacheName` import if nothing else uses it.
+
+- [ ] **Step 4: Full offline suite + gates**
+
+```bash
+bunx vitest run src/offline/ && bunx eslint src/offline/ --ext .ts && bunx tsc --noEmit
+```
+Expected: all previous engine tests pass UNCHANGED (any engine-spec edit means the refactor broke behavior — fix the engine, not the spec) + 3 new adapter tests; lint/typecheck clean.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/offline/mediaStore.ts src/offline/mediaStore.spec.ts src/offline/downloadEngine.ts
+git commit src/offline/mediaStore.ts src/offline/mediaStore.spec.ts src/offline/downloadEngine.ts -m "refactor(offline): media-byte I/O behind OfflineMediaStore port (future native apps)"
+```
+
+---
+
 ### Task 8: SW offline serving — cache-first + MP4 Range
 
 **Files:**
@@ -2402,7 +2571,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { OfflineDownload } from '@/offline/types'
 import { listDownloads } from '@/offline/registry'
-import { engineState, markEvicted, removeDownload, pauseDownload, enqueueDownload } from '@/offline/downloadEngine'
+import { engineState, markEvicted, removeDownload, pauseDownload, enqueueDownload, storageEstimate } from '@/offline/downloadEngine'
 import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
 
 export const useDownloadsStore = defineStore('downloads', () => {
@@ -2414,8 +2583,7 @@ export const useDownloadsStore = defineStore('downloads', () => {
     loading.value = true
     try {
       entries.value = await markEvicted(await listDownloads())
-      const est = await navigator.storage?.estimate?.().catch(() => null)
-      storage.value = est?.quota ? { usage: est.usage ?? 0, quota: est.quota } : null
+      storage.value = await storageEstimate() // via the OfflineMediaStore port (Task 7b)
     } finally {
       loading.value = false
     }
@@ -2783,7 +2951,7 @@ Then run the `animeenigma-after-update` skill (simplify → lint/build → `make
 
 ## Task dependency order
 
-1 → 2 → 3 → 4 (shell, sequential) ; 5 → 6 → 7 (engine core) ; 8 needs 5's naming only; 9 needs 5; 10 needs 5+7; 11 needs 5+10 (interlock note); 12 needs 7+11; 13 last. Tasks 8/9 can run parallel to 6/7 **in separate sessions but the same worktree is single-agent** — execute serially unless using separate worktrees per phase.
+1 → 2 → 3 → 4 (shell, sequential) ; 5 → 6 → 7 → 7b (engine core + port) ; 8 needs 5's naming only; 9 needs 5; 10 needs 5+7; 11 needs 5+10 (interlock note); 12 needs 7b+11 (storageEstimate); 13 last. Tasks 8/9 can run parallel to 6/7 **in separate sessions but the same worktree is single-agent** — execute serially unless using separate worktrees per phase.
 
 ## Deferred from spec (explicit)
 
