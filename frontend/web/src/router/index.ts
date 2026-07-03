@@ -266,6 +266,15 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'gacha.admin.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // Task 12 — offline downloads library (/downloads). Gated in the Navbar
+    // link only (offlineDownloadsEnabled); the route itself stays reachable
+    // by direct URL even with the flag off, mirroring other flag-gated views.
+    path: '/downloads',
+    name: 'downloads',
+    component: () => import('@/views/DownloadsPage.vue'),
+    meta: { titleKey: 'downloads.title' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFound.vue'),

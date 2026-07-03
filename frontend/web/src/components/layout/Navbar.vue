@@ -374,6 +374,7 @@ import NotificationBell from '@/components/NotificationBell.vue'
 import BrandMark from '@/components/layout/BrandMark.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
 import { useGachaStore } from '@/stores/gacha'
+import { offlineDownloadsEnabled } from '@/offline/flag'
 
 const router = useRouter()
 const { locale } = useI18n()
@@ -406,12 +407,16 @@ watch(
 // time constant, no reactive dependency.
 const notifEnabled = (import.meta.env.VITE_NOTIFICATIONS_ENABLED as string | undefined) !== 'false'
 
+// Task 12 — /downloads is a build-time flag (offlineDownloadsEnabled), not a
+// reactive one, so filtering the plain array once at setup covers both the
+// desktop and mobile-drawer v-for loops that share navLinks.
 const navLinks = [
   { to: '/', label: 'nav.home' },
   { to: '/browse', label: 'nav.catalog' },
   { to: '/schedule', label: 'nav.schedule' },
   { to: '/anidle', label: 'nav.anidle' },
-]
+  { to: '/downloads', label: 'nav.downloads' },
+].filter((l) => l.to !== '/downloads' || offlineDownloadsEnabled)
 
 const languages = [
   { code: 'ru', name: 'Русский' },
