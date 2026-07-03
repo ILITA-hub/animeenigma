@@ -18,16 +18,26 @@
        side inset (16px) matches the page gutter (px-4) so the capsule
        aligns with the content column; the bottom edge (8px top inset +
        56px row) matches the desktop header height, so page top offsets
-       stay valid. -->
+       stay valid.
+
+       The glass surface lives on an absolute CHILD, not on this fixed
+       element: iOS 26 Safari samples background-color/backdrop-filter
+       from fixed elements near the viewport edge to tint its status-bar
+       chrome — glass directly on the fixed header gets sampled and
+       painted as an opaque near-black band over the cutout zone,
+       defeating viewport-fit=cover. A transparent fixed shell keeps
+       Safari compositing real page pixels behind the status bar. -->
   <header
     :class="[
       'fixed top-2 inset-x-4 md:top-0 md:inset-x-0 z-50 pr-[var(--scrollbar-width,0px)] transition-transform duration-300 navbar-root',
-      'rounded-2xl border border-white/10 md:rounded-none md:border-0',
       isVisible ? 'translate-y-0' : '-translate-y-full navbar-root--hidden',
-      'glass-nav glass-mobile-nav'
     ]"
   >
-    <nav class="max-w-7xl mx-auto px-4 lg:px-8">
+    <div
+      class="absolute inset-0 glass-nav glass-mobile-nav rounded-2xl border border-white/10 md:rounded-none md:border-0"
+      aria-hidden="true"
+    />
+    <nav class="relative max-w-7xl mx-auto px-4 lg:px-8">
       <div class="flex items-center justify-between h-14 md:h-16">
         <!-- Logo — BrandMark icon + wordmark -->
         <router-link to="/" class="brand-link">
