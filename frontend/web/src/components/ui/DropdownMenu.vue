@@ -12,7 +12,15 @@
     <DropdownMenuTrigger v-if="$slots.trigger" as-child>
       <slot name="trigger" />
     </DropdownMenuTrigger>
-    <DropdownMenuTrigger v-else-if="anchorPoint" as-child>
+    <!-- `&& open` is REQUIRED: while closed, the anchor span would sit as a
+         permanently-mounted position:fixed element at the last anchor point —
+         (0,0) before any open — touching the viewport top edge. iOS 26 Safari
+         samples such fixed elements to pick its status-bar treatment and
+         paints an opaque band over the Dynamic Island zone (same constraint
+         as Modal.vue's wrapper). Mounting in the same flush as open is fine:
+         the trigger registers on the root context before the portaled
+         Content's popper resolves its anchor. -->
+    <DropdownMenuTrigger v-else-if="anchorPoint && open" as-child>
       <span aria-hidden="true" :style="anchorStyle" />
     </DropdownMenuTrigger>
 

@@ -1,13 +1,20 @@
 <template>
   <DialogRoot :open="modelValue" :modal="modal" @update:open="onOpenUpdate">
     <DialogPortal>
+      <!-- The v-if is REQUIRED and load-bearing: DialogPortal is a bare
+           Teleport (no presence gating), and iOS 26 Safari samples every
+           mounted position:fixed element touching the viewport top edge to
+           pick its status-bar treatment — an always-mounted closed-modal
+           wrapper (even pointer-events-none and empty) makes it paint an
+           opaque band over the Dynamic Island zone instead of compositing
+           page content. A closed modal must contribute NOTHING to the DOM. -->
+      <template v-if="modelValue">
       <!-- Plain div, NOT DialogOverlay: Reka renders DialogOverlay only in
            modal mode, and non-modal is our default (scroll-lock conflict, see
            the `modal` prop note) — the dim backdrop must not depend on it.
            Outside-click close still works: Reka's DismissableLayer watches
            document-level pointerdown, not the overlay element. -->
       <div
-        v-if="modelValue"
         class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
         aria-hidden="true"
       />
@@ -52,6 +59,7 @@
           </div>
         </DialogContent>
       </div>
+      </template>
     </DialogPortal>
   </DialogRoot>
 </template>
@@ -106,9 +114,10 @@ const titleId = `modal-title-${Math.random().toString(36).slice(2, 9)}`
 const modalClasses = computed(() => {
   // pointer-events-auto re-enables interaction on the content (the wrapper is
   // pointer-events-none so outside-clicks still register on the overlay).
-  // data-[state] utilities replicate the legacy .modal-* scale+fade transition
-  // (visually-equivalent; pixel-parity verified in the in-browser gate).
-  const base = 'relative glass-elevated rounded-2xl p-4 sm:p-6 w-full max-h-[90vh] overflow-y-auto pointer-events-auto transition-all duration-200 data-[state=open]:opacity-100 data-[state=open]:scale-100 data-[state=closed]:opacity-0 data-[state=closed]:scale-95'
+  // No open/close transition: the template v-if unmounts the whole subtree in
+  // the same flush, so data-[state] transition utilities could never paint —
+  // see the iOS 26 comment in the template for why the v-if must stay.
+  const base = 'relative glass-elevated rounded-2xl p-4 sm:p-6 w-full max-h-[90vh] overflow-y-auto pointer-events-auto'
 
   const sizes = {
     sm: 'max-w-sm',
