@@ -244,7 +244,7 @@
         :can-mark="auth.isAuthenticated"
         :marking="tracking.marking.value"
         :marked="selectedEpisode ? isEpisodeWatched(selectedEpisode.number) : false"
-        :downloadable="canDownload"
+        :downloadable="!offline && canDownload"
         :download-states="downloadStates"
         @select="onSelectEpisode"
         @mark-watched="onMarkWatched"
@@ -368,7 +368,7 @@ import { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
 import { pickSmartDefault, pickRawBiased, pickSelectableFallback } from '@/composables/aePlayer/smartDefault'
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
-import { useCapabilities } from '@/composables/aePlayer/useCapabilities'
+import { useCapabilities, flattenCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
 import { GROUP_LANGS, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
 import { pickEpisodeForProvider, shouldReselectEpisode } from '@/composables/aePlayer/episodeSelection'
@@ -389,9 +389,11 @@ import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import { offlineRuntimeReady } from '@/offline/flag'
 import { enqueueDownload, engineState } from '@/offline/downloadEngine'
 import { listDownloads } from '@/offline/registry'
+import { makeOfflineResolver, offlineCapabilityReport } from '@/offline/offlineAdapter'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, ProviderRow, AudioKind, TrackLang } from '@/types/aePlayer'
+import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 import type { DownloadState } from '@/offline/types'
@@ -434,6 +436,10 @@ const props = defineProps<{
    *  family is surfaced as a top-center overlay (next-unavailable: "ep N airs
    *  {when}" / "ep N not available yet"). none / just-finished ⇒ no banner. */
   resumeBanner?: ResumeBanner
+  /** Offline playback bundle (from /downloads). When set: episodes + streams
+   *  come from the local download store, the capability feed is synthetic
+   *  (one 'offline' provider), and no network resolution is attempted. */
+  offline?: import('@/offline/offlineAdapter').OfflinePlayback | null
 }>()
 
 const emit = defineEmits<{
@@ -462,7 +468,10 @@ const state = usePlayerState()
 // for the ~99% of sessions with hacker mode off (the watchdog uses the cheap
 // always-on fragLoadedCount instead).
 const engine = useVideoEngine(videoRef, state.hackerMode)
-const resolver = useProviderResolver()
+// Guard point 1 — resolver. Offline: a ProviderResolver that reads local
+// downloads instead of hitting any network API (episodes + stream URLs resolve
+// to /__offline/… paths). Live: the real multi-provider resolver, unchanged.
+const resolver = props.offline ? makeOfflineResolver(props.offline) : useProviderResolver()
 const { t } = useI18n()
 const toast = useToast()
 
@@ -614,7 +623,19 @@ const filter = computed(() => ({
 // registry, health poll, or availability probe. Disabled providers are omitted
 // backend-side; `ae` with no local copy arrives as state:'no_content'.
 const animeIdRef = computed(() => props.animeId)
-const { report, capMap } = useCapabilities(animeIdRef)
+// Guard point 2 — capability feed. Offline: a synthetic one-provider report
+// ('offline'), and NO network fetch/poll fires — useCapabilities (whose
+// immediate watch triggers the /capabilities GET) is never constructed. Live
+// (every existing usage): identical to before — useCapabilities runs with the
+// same immediate fetch, and `report`/`capMap` transparently forward its refs
+// (same object identity, same reactivity timing).
+const cap = props.offline ? null : useCapabilities(animeIdRef)
+const report = computed<CapabilityReport | null>(() =>
+  props.offline ? offlineCapabilityReport(props.offline) : (cap?.report.value ?? null),
+)
+const capMap = computed<Map<string, ProviderCap>>(() =>
+  props.offline ? flattenCapabilities(report.value) : (cap?.capMap.value ?? new Map()),
+)
 const rows = computed<ProviderRow[]>(() => rowsFromReport(report.value, filter.value))
 
 // ─── Provider defaults ────────────────────────────────────────────────────────
@@ -2154,10 +2175,11 @@ onMounted(() => {
 // Throttle: engineState.progress ticks per segment (~300×/episode); a raw
 // watcher would hammer IndexedDB with listDownloads() on every tick.
 let dlRefreshQueued = false
+let dlRefreshTimer: ReturnType<typeof setTimeout> | null = null
 watch(engineState.progress, () => {
   if (dlRefreshQueued) return
   dlRefreshQueued = true
-  setTimeout(() => { dlRefreshQueued = false; void refreshDownloadStates() }, 1000)
+  dlRefreshTimer = setTimeout(() => { dlRefreshQueued = false; void refreshDownloadStates() }, 1000)
 })
 
 function onDownloadEpisode(ep: EpisodeOption) {
@@ -2595,6 +2617,7 @@ onUnmounted(() => {
   clearHudTimers()
   clearPlaybackWatchdog()
   if (bufferingTimer) clearTimeout(bufferingTimer)
+  if (dlRefreshTimer) clearTimeout(dlRefreshTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pagehide', onPageHide)
   document.removeEventListener('visibilitychange', onVisibilityChange)
