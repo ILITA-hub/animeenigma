@@ -15,6 +15,7 @@ interface ImportMetaEnv {
   readonly VITE_HLS_PROXY_BASE?: string
   /** Short git commit hash of the deployed build (baked at build time, shown in footer). */
   readonly VITE_GIT_COMMIT?: string
+  readonly VITE_OFFLINE_DOWNLOADS_ENABLED?: string
 }
 
 interface ImportMeta {

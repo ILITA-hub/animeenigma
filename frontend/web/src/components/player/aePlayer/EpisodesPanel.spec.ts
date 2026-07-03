@@ -273,4 +273,34 @@ describe('EpisodesPanel', () => {
     const w = mount(EpisodesPanel, { props: { episodes: eps, selectedNumber: 1 } })
     expect(w.find('[data-test="episode-upcoming"]').exists()).toBe(false)
   })
+
+  // ── Download affordance (strip view only) ─────────────────────────────────
+
+  const mountPanel = (extra: Record<string, unknown>) =>
+    mount(EpisodesPanel, {
+      props: {
+        episodes: [{ key: 1, label: 1, number: 1 }, { key: 2, label: 2, number: 2 }],
+        selectedNumber: 1,
+        ...extra,
+      },
+    })
+
+  describe('download affordance', () => {
+    it('emits download for an episode when downloadable', async () => {
+      const w = mountPanel({ downloadable: true, downloadStates: {} })
+      const btn = w.find('[data-test="ep-download-1"]')
+      expect(btn.exists()).toBe(true)
+      await btn.trigger('click')
+      expect(w.emitted('download')![0][0]).toMatchObject({ number: 1 })
+      expect(w.emitted('select')).toBeUndefined() // .stop — no episode switch
+    })
+    it('renders no download affordance when not downloadable', () => {
+      const w = mountPanel({})
+      expect(w.find('[data-test="ep-download-1"]').exists()).toBe(false)
+    })
+    it('shows done state instead of a button for downloaded episodes', () => {
+      const w = mountPanel({ downloadable: true, downloadStates: { 1: 'done' } })
+      expect(w.find('[data-test="ep-downloaded-1"]').exists()).toBe(true)
+    })
+  })
 })

@@ -15,7 +15,8 @@
     "langToggleLabel": "Язык интерфейса",
     "drawerTitle": "Меню навигации",
     "about": "О сервисе",
-    "anidle": "Аниме-dle"
+    "anidle": "Аниме-dle",
+    "downloads": "Загрузки"
   },
   "a11y": {
     "skipToContent": "Перейти к контенту"
@@ -502,6 +503,16 @@
         "autoSync": "Автосинхрон",
         "autoSyncHint": "Автоматически подгонять субтитры под звук",
         "autoSyncDebug": { "state": "{status} · {offset}с · {conf}%", "event": "{delta}с (VAD) {'@'} {from}–{to} ({conf}%)" }
+      },
+      "offline": {
+        "download": "Скачать",
+        "downloading": "Скачивается…",
+        "downloaded": "Скачано",
+        "failed": "Ошибка скачивания",
+        "quality": "Качество загрузки",
+        "estimate": "~{size} на серию",
+        "start": "Скачать",
+        "cancel": "Отмена"
       }
     }
   },
@@ -1918,5 +1929,31 @@
       "heading": "У вас много общего",
       "in_common": "общих тайтлов"
     }
+  },
+  "downloads": {
+    "title": "Загрузки",
+    "empty": "Пока ничего не скачано. Откройте серию и нажмите «Скачать» в плеере.",
+    "storage": "Хранилище: {used} из {total}",
+    "episode": "Серия {n}",
+    "watch": "Смотреть",
+    "delete": "Удалить",
+    "confirmDelete": "Удалить загрузку?",
+    "pause": "Пауза",
+    "resume": "Продолжить",
+    "state": {
+      "queued": "В очереди",
+      "downloading": "Скачивается {done}/{total}",
+      "paused": "Пауза",
+      "done": "Готово",
+      "error": "Ошибка"
+    },
+    "error": {
+      "network": "Ошибка сети — нажмите «Продолжить»",
+      "quota": "Недостаточно места",
+      "evicted": "Браузер удалил загрузку — скачайте заново",
+      "resolve": "Источник недоступен",
+      "mismatch": "Источник изменился — скачайте заново"
+    },
+    "offlineReady": "Доступно оффлайн"
   }
 }

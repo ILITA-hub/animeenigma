@@ -15,7 +15,8 @@
     "langToggleLabel": "Interface language",
     "drawerTitle": "Navigation menu",
     "about": "About",
-    "anidle": "Anidle"
+    "anidle": "Anidle",
+    "downloads": "Downloads"
   },
   "a11y": {
     "skipToContent": "Skip to content"
@@ -502,6 +503,16 @@
         "autoSync": "Auto-sync",
         "autoSyncHint": "Automatically align subtitles to the audio",
         "autoSyncDebug": { "state": "{status} · {offset}s · {conf}%", "event": "{delta}s (VAD) {'@'} {from}–{to} ({conf}%)" }
+      },
+      "offline": {
+        "download": "Download",
+        "downloading": "Downloading…",
+        "downloaded": "Downloaded",
+        "failed": "Download failed",
+        "quality": "Download quality",
+        "estimate": "~{size} per episode",
+        "start": "Download",
+        "cancel": "Cancel"
       }
     }
   },
@@ -1918,5 +1929,31 @@
       "heading": "You have a lot in common",
       "in_common": "titles in common"
     }
+  },
+  "downloads": {
+    "title": "Downloads",
+    "empty": "Nothing downloaded yet. Find an episode and hit Download in the player.",
+    "storage": "Storage: {used} of {total}",
+    "episode": "Episode {n}",
+    "watch": "Watch",
+    "delete": "Delete",
+    "confirmDelete": "Delete this download?",
+    "pause": "Pause",
+    "resume": "Resume",
+    "state": {
+      "queued": "Queued",
+      "downloading": "Downloading {done}/{total}",
+      "paused": "Paused",
+      "done": "Ready",
+      "error": "Failed"
+    },
+    "error": {
+      "network": "Network error — resume to retry",
+      "quota": "Not enough storage space",
+      "evicted": "The browser evicted this download — re-download",
+      "resolve": "Source unavailable",
+      "mismatch": "Source changed — re-download"
+    },
+    "offlineReady": "Available offline"
   }
 }

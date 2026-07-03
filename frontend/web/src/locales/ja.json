@@ -15,7 +15,8 @@
     "langToggleLabel": "インターフェース言語",
     "drawerTitle": "ナビゲーションメニュー",
     "about": "サイトについて",
-    "anidle": "アニメdle"
+    "anidle": "アニメdle",
+    "downloads": "ダウンロード"
   },
   "a11y": {
     "skipToContent": "コンテンツへスキップ"
@@ -502,6 +503,16 @@
         "autoSync": "自動同期",
         "autoSyncHint": "字幕を音声に自動的に合わせる",
         "autoSyncDebug": { "state": "{status} · {offset}秒 · {conf}%", "event": "{delta}秒 (VAD) {'@'} {from}–{to} ({conf}%)" }
+      },
+      "offline": {
+        "download": "ダウンロード",
+        "downloading": "ダウンロード中…",
+        "downloaded": "ダウンロード済み",
+        "failed": "ダウンロード失敗",
+        "quality": "ダウンロード画質",
+        "estimate": "1話あたり約{size}",
+        "start": "ダウンロード",
+        "cancel": "キャンセル"
       }
     }
   },
@@ -1918,5 +1929,31 @@
       "heading": "共通点が多いです",
       "in_common": "共通タイトル"
     }
+  },
+  "downloads": {
+    "title": "ダウンロード",
+    "empty": "まだ何もダウンロードされていません。プレイヤーで「ダウンロード」を押してください。",
+    "storage": "ストレージ: {total} 中 {used}",
+    "episode": "第{n}話",
+    "watch": "視聴",
+    "delete": "削除",
+    "confirmDelete": "このダウンロードを削除しますか？",
+    "pause": "一時停止",
+    "resume": "再開",
+    "state": {
+      "queued": "待機中",
+      "downloading": "ダウンロード中 {done}/{total}",
+      "paused": "一時停止",
+      "done": "完了",
+      "error": "失敗"
+    },
+    "error": {
+      "network": "ネットワークエラー — 再開で再試行",
+      "quota": "ストレージ容量が不足しています",
+      "evicted": "ブラウザがデータを削除しました — 再ダウンロードしてください",
+      "resolve": "ソースが利用できません",
+      "mismatch": "ソースが変更されました — 再ダウンロードしてください"
+    },
+    "offlineReady": "オフラインで視聴可能"
   }
 }

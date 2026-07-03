@@ -244,8 +244,11 @@
         :can-mark="auth.isAuthenticated"
         :marking="tracking.marking.value"
         :marked="selectedEpisode ? isEpisodeWatched(selectedEpisode.number) : false"
+        :downloadable="canDownload"
+        :download-states="downloadStates"
         @select="onSelectEpisode"
         @mark-watched="onMarkWatched"
+        @download="onDownloadEpisode"
       />
     </div>
 
@@ -305,6 +308,12 @@
       @off="onSubtitlesOff"
       @close="browseOpen = false"
     />
+
+    <DownloadDialog
+      v-if="downloadDialogEp"
+      @confirm="onConfirmDownload"
+      @close="downloadDialogEp = null"
+    />
   </div>
 </template>
 
@@ -340,6 +349,7 @@ import DebugHud, { type SeekTrace, type SourceDecision } from './overlays/DebugH
 import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
+import DownloadDialog from './DownloadDialog.vue'
 
 import { useSkipTimes } from '@/composables/useSkipTimes'
 import { usePlayerState } from '@/composables/aePlayer/usePlayerState'
@@ -376,11 +386,15 @@ import { useToast } from '@/composables/useToast'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
+import { offlineRuntimeReady } from '@/offline/flag'
+import { enqueueDownload, engineState } from '@/offline/downloadEngine'
+import { listDownloads } from '@/offline/registry'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, ProviderRow, AudioKind, TrackLang } from '@/types/aePlayer'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
+import type { DownloadState } from '@/offline/types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2115,6 +2129,57 @@ const activeMenuEl = computed<HTMLElement | null>(() => {
     default: return null
   }
 })
+
+// ─── Offline downloads (episode panel affordance) ──────────────────────────────
+
+const downloadDialogEp = ref<EpisodeOption | null>(null)
+const downloadStates = ref<Record<number, DownloadState>>({})
+// offlineRuntimeReady() is non-reactive (navigator.serviceWorker.controller) —
+// a plain :downloadable="offlineRuntimeReady()" would never appear after the
+// SW's first claim. Track it in a ref, refreshed when the SW becomes ready.
+const canDownload = ref(false)
+
+async function refreshDownloadStates() {
+  if (!offlineRuntimeReady()) return
+  const all = await listDownloads()
+  const mine: Record<number, DownloadState> = {}
+  for (const d of all) if (d.animeId === props.animeId) mine[d.episode.number] = d.state
+  downloadStates.value = mine
+}
+onMounted(() => {
+  canDownload.value = offlineRuntimeReady()
+  navigator.serviceWorker?.ready.then(() => { canDownload.value = offlineRuntimeReady() }).catch(() => {})
+  void refreshDownloadStates()
+})
+// Throttle: engineState.progress ticks per segment (~300×/episode); a raw
+// watcher would hammer IndexedDB with listDownloads() on every tick.
+let dlRefreshQueued = false
+watch(engineState.progress, () => {
+  if (dlRefreshQueued) return
+  dlRefreshQueued = true
+  setTimeout(() => { dlRefreshQueued = false; void refreshDownloadStates() }, 1000)
+})
+
+function onDownloadEpisode(ep: EpisodeOption) {
+  downloadDialogEp.value = ep
+}
+
+async function onConfirmDownload(quality: string) {
+  const ep = downloadDialogEp.value
+  downloadDialogEp.value = null
+  if (!ep) return
+  const comboSnapshot = { ...state.combo.value } // freeze — user may switch sources mid-download
+  await enqueueDownload({
+    animeId: props.animeId,
+    animeTitle: props.anime.title,
+    poster: props.anime.still,
+    episode: ep,
+    combo: comboSnapshot,
+    quality,
+    resolve: () => resolver.resolveStream(comboSnapshot.provider, props.animeId, ep, comboSnapshot),
+  })
+  void refreshDownloadStates()
+}
 
 // Click-outside dismiss: a click anywhere outside the open dropdown closes it.
 // Ignore the trigger regions — the control bar (source/subs/settings pills) and

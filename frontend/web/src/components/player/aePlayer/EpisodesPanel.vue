@@ -91,6 +91,27 @@
         </span>
         <span class="ep-card-t">{{ ep.title || '\u00a0' }}</span>
         <span
+          v-if="downloadable && (downloadStates[ep.number] === 'done')"
+          :data-test="`ep-downloaded-${ep.number}`"
+          class="ep-dl text-success"
+          :title="$t('player.aePlayer.offline.downloaded')"
+        ><Check :size="14" /></span>
+        <span
+          v-else-if="downloadable && (downloadStates[ep.number] === 'downloading' || downloadStates[ep.number] === 'queued')"
+          class="ep-dl text-muted-foreground animate-spin"
+          :title="$t('player.aePlayer.offline.downloading')"
+        ><Loader2 :size="14" /></span>
+        <span
+          v-else-if="downloadable"
+          :data-test="`ep-download-${ep.number}`"
+          role="button"
+          tabindex="0"
+          class="ep-dl text-muted-foreground hover:text-foreground"
+          :title="$t('player.aePlayer.offline.download')"
+          @click.stop="emit('download', ep)"
+          @keydown.enter.stop="emit('download', ep)"
+        ><Download :size="14" /></span>
+        <span
           v-if="partialPct(ep) > 0"
           class="ep-progress"
           :style="{ width: partialPct(ep) + '%' }"
@@ -184,9 +205,10 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
-import { Check, LayoutGrid, GalleryHorizontal, Clock } from 'lucide-vue-next'
+import { Check, LayoutGrid, GalleryHorizontal, Clock, Download, Loader2 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
+import type { DownloadState } from '@/offline/types'
 
 export interface EpisodeUserProgress {
   /** 0..1 fraction of the episode watched */
@@ -214,13 +236,27 @@ const props = withDefaults(
     marked?: boolean
     /** Disabled placeholder for the not-yet-aired next episode (from the resume banner). */
     upcoming?: { number: number; etaLabel?: string } | null
+    /** Gate for the per-episode download affordance (strip view only). */
+    downloadable?: boolean
+    /** Download state per episode number, for the affordance's icon. */
+    downloadStates?: Record<number, DownloadState>
   }>(),
-  { watchedUpTo: 0, progress: () => ({}), canMark: false, marking: false, marked: false, upcoming: null },
+  {
+    watchedUpTo: 0,
+    progress: () => ({}),
+    canMark: false,
+    marking: false,
+    marked: false,
+    upcoming: null,
+    downloadable: false,
+    downloadStates: () => ({}),
+  },
 )
 
 const emit = defineEmits<{
   (e: 'select', ep: EpisodeOption): void
   (e: 'mark-watched'): void
+  (e: 'download', ep: EpisodeOption): void
 }>()
 
 // ── V2b adaptive rules ───────────────────────────────────────────────────────
@@ -455,6 +491,13 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 1px;
+}
+
+.ep-dl {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 2px;
 }
 
 /* ── grid view (archive) ── */
