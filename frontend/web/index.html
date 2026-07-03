@@ -12,7 +12,11 @@
          the page canvas shows behind and beside the cutout instead of a black
          letterbox. Layout compensates via env(safe-area-inset-*) (main.css). -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#08080f">
+    <!-- NO theme-color meta on purpose: iOS Safari paints the theme-color as
+         an opaque band over the status-bar zone, defeating viewport-fit=cover
+         (content briefly showed behind the Dynamic Island, then Safari tinted
+         it solid). Without it Safari keeps the zone transparent; the PWA
+         manifest still carries theme_color for installed mode. -->
     <!-- Installed-PWA mode (Add to Home Screen): black-translucent makes the
          iOS status bar transparent so the page truly renders behind the
          notch/Dynamic Island; safe-area offsets in main.css keep content

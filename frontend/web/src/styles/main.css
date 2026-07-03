@@ -184,10 +184,18 @@ html {
      unloaded content or during the pre-paint frame on hard reload. */
   color-scheme: dark;
   background-color: var(--color-base);
-  /* The site never scrolls horizontally by design, but any stray element
-     poking 1-2px past the viewport makes the whole page pannable on
-     Android. clip (not hidden) discards that overflow without turning
-     the root into a scroll container, so position:sticky keeps working. */
+}
+
+/* Horizontal-pan guard: any stray element poking 1-2px past the viewport
+   makes the whole page pannable on Android; the site never scrolls
+   horizontally by design. Lives on #app, NOT on <html> — root-level
+   overflow clipping makes iOS Safari stop extending the page canvas into
+   the status-bar zone, breaking viewport-fit=cover. clip (not hidden)
+   avoids creating a scroll container, so position:sticky keeps working.
+   Fixed elements and body-teleported overlays are outside #app / not
+   clipped by it, but they are viewport-positioned and cannot widen the
+   page. */
+#app {
   overflow-x: clip;
 }
 
