@@ -200,6 +200,14 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* viewport-fit=cover compensation: keep in-flow content out of the
+     device cutout while the body background still paints edge-to-edge
+     (backgrounds cover the padding box). Scrolled content passes behind
+     the status bar / Dynamic Island, which is the point. Fixed/sticky
+     elements are NOT moved by this — they offset via --safe-* directly. */
+  padding-top: var(--safe-top);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -396,6 +404,14 @@ body {
    the carousel for longer than the actual fade. */
 :root {
   --spotlight-fade-ms: 400ms;
+
+  /* Device cutout safe areas (viewport-fit=cover in index.html). 0px
+     everywhere except notch/Dynamic-Island phones. Fixed/sticky top UI
+     must offset by --safe-top itself — body padding below does not move
+     viewport-anchored elements. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 
   /* Semantic tokens — Neon Tokyo foundation */
   --surface-2: #161623;

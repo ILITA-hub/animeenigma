@@ -26,7 +26,7 @@
 
   <!-- Mobile: sticky horizontal pill row -->
   <nav
-    class="md:hidden sticky top-16 z-30 -mx-4 px-4 py-2 bg-background/80 backdrop-blur-md border-b border-white/5 overflow-x-auto scrollbar-hide"
+    class="md:hidden sticky top-16 z-30 -mx-4 px-4 py-2 bg-background/80 backdrop-blur-md border-b border-white/5 overflow-x-auto scrollbar-hide quicknav-safe"
     :aria-label="$t('anime.nav.heading')"
   >
     <div class="flex gap-2 whitespace-nowrap">
@@ -97,3 +97,12 @@ onBeforeUnmount(() => {
   observer = null
 })
 </script>
+
+<style scoped>
+/* Sticks below the navbar capsule; on notch/Dynamic-Island phones
+   (viewport-fit=cover) the capsule sits --safe-top lower, so the sticky
+   offset must too. 0px everywhere else — identical to plain top-16. */
+.quicknav-safe {
+  top: calc(var(--safe-top) + 4rem);
+}
+</style>

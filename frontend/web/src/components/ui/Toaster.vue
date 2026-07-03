@@ -2,7 +2,7 @@
   <div
     aria-live="polite"
     aria-atomic="true"
-    class="fixed top-20 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-[calc(100%-2rem)] sm:w-auto"
+    class="fixed top-20 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-[calc(100%-2rem)] sm:w-auto toaster-safe"
   >
     <TransitionGroup name="toast">
       <div
@@ -46,6 +46,13 @@ function toastClasses(type: ToastType): string {
 </script>
 
 <style scoped>
+/* Clears the header on notch/Dynamic-Island phones (viewport-fit=cover):
+   the header sits --safe-top lower there, so the toast stack must too.
+   0px on cutout-less devices — identical to plain top-20. */
+.toaster-safe {
+  top: calc(var(--safe-top) + 5rem);
+}
+
 .toast-enter-active,
 .toast-leave-active {
   transition: opacity 200ms ease, transform 200ms ease;

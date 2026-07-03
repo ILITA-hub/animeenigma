@@ -596,16 +596,28 @@ onUnmounted(() => {
 }
 
 /* ------------------------------------------------------------------ */
-/* Mobile capsule hide offset. The glass treatment itself lives in     */
-/* main.css (.glass-mobile-nav); only the geometry quirk is local:     */
-/* -translate-y-full alone leaves the inset capsule's bottom sliver    */
-/* and its drop shadow peeking into the viewport (element top is 8px,  */
-/* shadow reaches ~40px past the bottom edge) — the hide offset needs  */
-/* that extra clearance. Desktop keeps plain -translate-y-full.        */
+/* Mobile capsule geometry. The glass treatment itself lives in        */
+/* main.css (.glass-mobile-nav); only geometry quirks are local:       */
+/*                                                                     */
+/* 1. Safe-area offsets: with viewport-fit=cover the capsule must      */
+/*    clear the status bar / Dynamic Island (top) and the landscape    */
+/*    notch (sides). The scoped selector outranks the top-2/inset-x-4  */
+/*    utilities; on cutout-less devices --safe-* are 0px and this      */
+/*    matches the utilities exactly.                                   */
+/* 2. Hide offset: -translate-y-full alone leaves the inset capsule's  */
+/*    bottom sliver and its drop shadow peeking into the viewport      */
+/*    (element top is --safe-top + 8px, shadow reaches ~40px past the  */
+/*    bottom edge) — the hide offset needs that extra clearance.       */
+/*    Desktop keeps plain -translate-y-full.                           */
 /* ------------------------------------------------------------------ */
 @media (max-width: 767px) {
+  .navbar-root {
+    top: calc(var(--safe-top) + 0.5rem);
+    inset-inline: calc(var(--safe-left) + 1rem) calc(var(--safe-right) + 1rem);
+  }
+
   .navbar-root--hidden {
-    translate: 0 calc(-100% - 48px);
+    translate: 0 calc(-100% - var(--safe-top) - 48px);
   }
 }
 

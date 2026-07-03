@@ -8,7 +8,7 @@
         'fixed z-50 pointer-events-auto',
         isDesktop
           ? 'bottom-6 right-6 w-[360px]'
-          : 'top-16 left-3 right-3',
+          : 'top-16 left-3 right-3 notif-toast-safe',
       ]"
       @mouseenter="onHoverStart"
       @mouseleave="onHoverEnd"
@@ -144,6 +144,13 @@ watch(
 </script>
 
 <style scoped>
+/* Mobile toast pins below the navbar capsule; on notch/Dynamic-Island
+   phones (viewport-fit=cover) the capsule sits --safe-top lower, so the
+   toast must too. 0px everywhere else — identical to plain top-16. */
+.notif-toast-safe {
+  top: calc(var(--safe-top) + 4rem);
+}
+
 .notif-toast-enter-active,
 .notif-toast-leave-active {
   transition: opacity 200ms ease-out, transform 200ms ease-out;
