@@ -115,3 +115,9 @@ deferInit(() => {
 deferInit(() => {
   void import('./pwa/registerPwa').then((m) => m.initPwa())
 })
+
+// Install the offline watch-progress flush (drains anything buffered from a
+// prior offline session, then again on every 'online' transition).
+deferInit(() => {
+  void import('./offline/progressQueue').then((m) => m.installProgressFlush())
+})

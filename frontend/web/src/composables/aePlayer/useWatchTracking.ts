@@ -89,18 +89,19 @@ export function useWatchTracking(
   function saveServer(time: number) {
     const ep = episodeNumber()
     if (!ep || time <= 0 || !auth.isAuthenticated) return
-    void userApi
-      .updateProgress({
-        anime_id: animeId(),
-        episode_number: ep,
-        progress: Math.floor(time),
-        duration: Math.floor(maxTime.value) || null,
-        session_id: sessionId.value,
-        ...comboFields(),
-      })
-      .catch(() => {
-        /* heartbeat save is best-effort */
-      })
+    const payload = {
+      anime_id: animeId(),
+      episode_number: ep,
+      progress: Math.floor(time),
+      duration: Math.floor(maxTime.value) || null,
+      session_id: sessionId.value,
+      ...comboFields(),
+    }
+    void userApi.updateProgress(payload).catch(() => {
+      // offline / transient failure — buffer for the online flush so
+      // continue-watching doesn't diverge after offline viewing
+      void import('@/offline/progressQueue').then((m) => m.queueProgress(payload))
+    })
   }
 
   /** Immediate save (pause, episode switch, unmount). */
