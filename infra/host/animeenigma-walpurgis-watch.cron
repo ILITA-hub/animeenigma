@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# AnimeEnigma: weekly Walpurgisnacht Rising release watcher (owner reminder; source /usr/local/bin)
+23 9 * * 3 root /usr/local/bin/animeenigma-walpurgis-watch.sh >> /var/log/animeenigma-walpurgis-watch.log 2>&1

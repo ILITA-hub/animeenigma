@@ -123,3 +123,45 @@ tail -f /var/log/animeenigma-provider-recovery.log           # run log (START/EN
 > endpoints (`localhost:8081/internal/*`), the git-ignored Telegram secrets in
 > `docker/.env`, `make logs-scraper`, and the live containers. Like the
 > maintenance bot, it must run on the box.
+
+---
+
+## 3. Walpurgis no Kaiten release watcher
+
+A weekly cron that reminds the owner (one Telegram admin-chat message per
+signal, via the **maintenance** bot creds in `docker/maintenance.env`) to
+download «Madoka Magica: Walpurgisnacht Rising» (shiki/MAL 48820) once it is
+actually obtainable. Two one-shot signals, deduplicated through
+`/var/lib/animeenigma/walpurgis-watch.state`:
+
+1. **premiere** — catalog status flips off `announced` OR the JP theatrical
+   date (2026-08-28) passes. FYI only (torrents at that point are camrips).
+2. **torrent** — library search (`/api/library/search`, Jackett→Nyaa/AnimeTosho)
+   surfaces a non-camrip ≥1080p (or ≥2 GiB) release. Actionable: enqueue the
+   download (movie ⇒ set `episode=1` on the `library_jobs` row — the filename
+   carries no episode number for the detector).
+
+After both signals have fired the script exits immediately; the cron entry can
+stay installed forever. Requested by the owner 2026-07-03.
+
+### Files
+
+| Repo (source of truth)                        | Installed to                                              |
+|-----------------------------------------------|------------------------------------------------------------|
+| `infra/host/animeenigma-walpurgis-watch.sh`   | `/usr/local/bin/animeenigma-walpurgis-watch.sh` (mode 755) |
+| `infra/host/animeenigma-walpurgis-watch.cron` | `/etc/cron.d/animeenigma-walpurgis-watch` (mode 644)       |
+
+### Install / update
+
+```bash
+install -m 755 infra/host/animeenigma-walpurgis-watch.sh   /usr/local/bin/animeenigma-walpurgis-watch.sh
+install -m 644 infra/host/animeenigma-walpurgis-watch.cron /etc/cron.d/animeenigma-walpurgis-watch
+```
+
+### Inspect
+
+```bash
+tail /var/log/animeenigma-walpurgis-watch.log      # one line per fired signal
+cat /var/lib/animeenigma/walpurgis-watch.state     # which signals already notified
+/usr/local/bin/animeenigma-walpurgis-watch.sh      # run once, by hand (idempotent)
+```
