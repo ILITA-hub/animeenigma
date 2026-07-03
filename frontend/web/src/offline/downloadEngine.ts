@@ -1,9 +1,10 @@
 import { ref, type Ref } from 'vue'
 import type { Combo, StreamResult, SubtitleTrack } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import { downloadId, offlineCacheName, offlinePath, type DownloadError, type OfflineDownload } from './types'
+import { downloadId, offlinePath, type DownloadError, type OfflineDownload } from './types'
 import { putDownload, getDownload, deleteDownloadRecord } from './registry'
 import { isVod, rewriteMediaPlaylist, selectVariant, type PlaylistResource } from './playlistRewrite'
+import { cacheStorageMediaStore, type OfflineMediaStore } from './mediaStore'
 
 export interface DownloadRequest {
   animeId: string
@@ -32,9 +33,17 @@ export const engineState: {
   progress: ref({}),
 }
 
-let cachesImpl: CacheStorage = typeof caches !== 'undefined' ? caches : (undefined as unknown as CacheStorage)
+// `caches` is not declared as a global outside browser/SW contexts (jsdom
+// test env included) — a bare reference throws ReferenceError, and passing an
+// explicit `undefined` re-triggers the adapter's own `= caches` default (same
+// crash), so branch around the call entirely, mirroring the pre-port guard.
+let store: OfflineMediaStore = typeof caches !== 'undefined'
+  ? cacheStorageMediaStore(caches)
+  : cacheStorageMediaStore({} as CacheStorage)
+/** Kept name/signature so the existing engine spec is untouched: installing a
+ *  fake CacheStorage routes it through the real web adapter. */
 export function _installCachesForTests(impl: CacheStorage): void {
-  cachesImpl = impl
+  store = cacheStorageMediaStore(impl)
 }
 
 const queue: { id: string; req: DownloadRequest }[] = []
@@ -115,13 +124,13 @@ async function planHls(id: string, stream: StreamResult, targetHeight: number): 
   }
 }
 
-async function cacheSubtitles(id: string, cache: Cache, subs: SubtitleTrack[]): Promise<SubtitleTrack[]> {
+async function cacheSubtitles(id: string, subs: SubtitleTrack[]): Promise<SubtitleTrack[]> {
   const out: SubtitleTrack[] = []
   for (let k = 0; k < subs.length; k++) {
     try {
       const resp = await fetchResource(subs[k].url)
       const path = offlinePath(id, `sub/${k}`)
-      await cache.put(path, resp)
+      await store.put(id, path, resp)
       out.push({ ...subs[k], url: path })
     } catch { /* a missing sub track is not fatal to the download */ }
   }
@@ -130,7 +139,6 @@ async function cacheSubtitles(id: string, cache: Cache, subs: SubtitleTrack[]): 
 
 async function runDownload(id: string, req: DownloadRequest): Promise<void> {
   const record = (await getDownload(id))!
-  const cache = await cachesImpl.open(offlineCacheName(id))
   const setError = async (error: DownloadError) => {
     await putDownload({ ...(await getDownload(id))!, state: 'error', error })
   }
@@ -153,13 +161,13 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
   }
 
   for (const p of plan.playlists) {
-    await cache.put(p.path, new Response(p.body, { headers: { 'Content-Type': 'application/vnd.apple.mpegurl' } }))
+    await store.put(id, p.path, new Response(p.body, { headers: { 'Content-Type': 'application/vnd.apple.mpegurl' } }))
   }
-  const localSubs = await cacheSubtitles(id, cache, stream.subtitles ?? [])
+  const localSubs = await cacheSubtitles(id, stream.subtitles ?? [])
   let posterOk = false
   if (req.poster) {
     try {
-      await cache.put(offlinePath(id, 'poster'), await fetchResource(req.poster))
+      await store.put(id, offlinePath(id, 'poster'), await fetchResource(req.poster))
       posterOk = true
     } catch { /* poster is cosmetic — CORS on external hosts is expected */ }
   }
@@ -205,12 +213,12 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
       // hundreds of MB through arrayBuffer() OOMs mobile tabs.
       const len = parseInt(resp.headers.get('Content-Length') ?? '0', 10)
       bytes += Number.isFinite(len) ? len : 0
-      await cache.put(item.path, resp)
+      await store.put(id, item.path, resp)
       return
     }
     const buf = await resp.arrayBuffer()
     bytes += buf.byteLength
-    await cache.put(item.path, new Response(buf, { headers: { 'Content-Type': resp.headers.get('Content-Type') ?? 'application/octet-stream' } }))
+    await store.put(id, item.path, new Response(buf, { headers: { 'Content-Type': resp.headers.get('Content-Type') ?? 'application/octet-stream' } }))
   }
 
   async function fetchItem(item: PlaylistResource): Promise<void> {
@@ -229,7 +237,7 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
     while (cursor < plan.resources.length) {
       if (paused.has(id)) return
       const item = plan.resources[cursor++]
-      if (!(await cache.match(item.path))) await fetchItem(item)
+      if (!(await store.has(id, item.path))) await fetchItem(item)
       done++
       engineState.progress.value = { ...engineState.progress.value, [id]: { done, total } }
     }
@@ -271,21 +279,18 @@ export const PROJECTED_BYTES: Record<string, number> = {
   '1080': 900 * 2 ** 20,
 }
 
-async function quotaHeadroom(): Promise<number | null> {
-  try {
-    const est = await navigator.storage?.estimate?.()
-    if (!est?.quota) return null
-    return est.quota - (est.usage ?? 0)
-  } catch {
-    return null // estimate unsupported — proceed, mid-flight quota check remains
-  }
+function quotaHeadroom(): Promise<number | null> {
+  return store.estimate().then((est) => (est ? est.quota - est.usage : null))
+}
+
+/** Storage headroom for callers outside the engine (Task 12 quota UI). */
+export function storageEstimate(): Promise<{ usage: number; quota: number } | null> {
+  return store.estimate()
 }
 
 export async function enqueueDownload(req: DownloadRequest): Promise<string> {
   const id = downloadId(req.animeId, req.episode.number, req.combo, req.quality)
-  try {
-    await (navigator as Navigator & { storage?: { persist?: () => Promise<boolean> } }).storage?.persist?.()
-  } catch { /* best-effort */ }
+  await store.persist()
   const existing = await getDownload(id)
   if (existing?.state === 'done') return id
   paused.delete(id)
@@ -317,7 +322,7 @@ export async function resumeDownload(req: DownloadRequest): Promise<string> {
 
 export async function removeDownload(id: string): Promise<void> {
   paused.add(id) // stop an in-flight run at the next item boundary
-  await cachesImpl.delete(offlineCacheName(id))
+  await store.remove(id)
   await deleteDownloadRecord(id)
   const { [id]: _, ...rest } = engineState.progress.value
   engineState.progress.value = rest
@@ -327,7 +332,7 @@ export async function removeDownload(id: string): Promise<void> {
 export async function markEvicted(list: OfflineDownload[]): Promise<OfflineDownload[]> {
   const out: OfflineDownload[] = []
   for (const d of list) {
-    if (d.state === 'done' && !(await cachesImpl.has(offlineCacheName(d.id)))) {
+    if (d.state === 'done' && !(await store.exists(d.id))) {
       const marked: OfflineDownload = { ...d, state: 'error', error: 'evicted' }
       await putDownload(marked)
       out.push(marked)
