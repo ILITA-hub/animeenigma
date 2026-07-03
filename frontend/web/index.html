@@ -8,15 +8,24 @@
     <link id="favicon-32" rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <link id="favicon-16" rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-    <!-- viewport-fit=cover: draw edge-to-edge on notch/Dynamic-Island phones —
-         the page canvas shows behind and beside the cutout instead of a black
-         letterbox. Layout compensates via env(safe-area-inset-*) (main.css). -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <!-- NO theme-color meta on purpose: iOS Safari paints the theme-color as
-         an opaque band over the status-bar zone, defeating viewport-fit=cover
-         (content briefly showed behind the Dynamic Island, then Safari tinted
-         it solid). Without it Safari keeps the zone transparent; the PWA
-         manifest still carries theme_color for installed mode. -->
+    <!-- NO viewport-fit=cover in browser mode ON PURPOSE. iOS 26 Safari
+         (Liquid Glass) fights the page for the status-bar zone when cover
+         is active: it composites the page there for the first frame, then
+         paints an opaque mis-sampled band over it (theme-color is ignored,
+         so the band can't be styled). Without cover Safari tints that zone
+         itself with the page's background color — seamless, same approach
+         as reference sites that look right (e.g. wanikani.com). The inline
+         script below opts back INTO cover only for the installed PWA
+         (Add to Home Screen), where no Safari chrome exists and true
+         edge-to-edge works; env(safe-area-inset-*) offsets in main.css are
+         0 in browser mode and kick in there. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+      if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+        document.querySelector('meta[name="viewport"]')
+          .setAttribute('content', 'width=device-width, initial-scale=1.0, viewport-fit=cover')
+      }
+    </script>
     <!-- Installed-PWA mode (Add to Home Screen): black-translucent makes the
          iOS status bar transparent so the page truly renders behind the
          notch/Dynamic Island; safe-area offsets in main.css keep content
