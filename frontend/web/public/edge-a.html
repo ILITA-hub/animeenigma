@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AE edge test A</title>
+<style>
+  html { background: #00e676; }
+  body { margin: 0; font-family: -apple-system, sans-serif; }
+  .rainbow { height: 300vh; background: linear-gradient(180deg, #ff2d7c 0%, #ff8a00 15%, #ffe600 30%, #00d4ff 50%, #7c4dff 70%, #ff2d7c 100%); }
+  .top-mark { padding: 2px 8px; color: #fff; font-weight: 700; font-size: 13px; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  .label { padding: 64px 16px 8px; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  .label b { font-size: 40px; }
+  .label small { display: block; font-size: 14px; margin-top: 6px; line-height: 1.4; }
+  .links { display: flex; gap: 8px; padding: 12px 16px; }
+  .links a { display: block; padding: 10px 16px; background: rgba(0,0,0,.45); color: #fff; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 18px; }
+</style>
+</head>
+<body>
+<div class="rainbow">
+  <div class="top-mark">&#9650; самый верх страницы &#9650;</div>
+  <div class="label">
+    <b>ТЕСТ A</b> — голый базовый (без cover, без fixed)
+    <small>Что за островком/статус-баром?<br>РАДУГА = контент рисуется за ним (как на wanikani)<br>ЗЕЛЁНОЕ = Safari рисует свою полосу цветом фона<br>ЧЁРНОЕ = что-то ещё</small>
+  </div>
+  <div class="links"><a href="/edge-a.html">A</a><a href="/edge-b.html">B</a><a href="/edge-c.html">C</a><a href="/edge-d.html">D</a><a href="/edge-e.html">E</a><a href="/edge-f.html">F</a></div>
+</div>
+</body>
+</html>
