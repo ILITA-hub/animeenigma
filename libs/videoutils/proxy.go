@@ -736,10 +736,13 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 		return 0, 0, &UpstreamError{StatusCode: resp.StatusCode, Domain: parsed.Host}
 	}
 
-	// Check if this is an M3U8 file that needs URL rewriting
-	contentType := resp.Header.Get("Content-Type")
+	// Check if this is an M3U8 file that needs URL rewriting. Some CDNs (e.g.
+	// okcdn.ru) serve path-style variant playlists with no .m3u8 suffix — the
+	// mixed-case "application/x-mpegURL" Content-Type is the only signal, so
+	// this match must be case-insensitive or those playlists' relative
+	// segment URIs never get rewritten to go through the proxy.
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
 	isM3U8 := strings.Contains(contentType, "mpegurl") ||
-		strings.Contains(contentType, "x-mpegurl") ||
 		strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
 
 	// Set CORS headers for frontend access

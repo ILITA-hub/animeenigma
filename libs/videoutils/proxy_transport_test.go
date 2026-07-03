@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -104,5 +105,44 @@ func TestProxyStream_FastUpstreamSucceeds(t *testing.T) {
 	}
 	if rec.Result().StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Result().StatusCode)
+	}
+}
+
+// TestProxyStream_MixedCaseMpegURLContentTypeIsRewritten is the regression
+// proof for the okru media-playlist bug: okcdn.ru serves path-style variant
+// playlists (no .m3u8 suffix — the quality is baked into the path itself,
+// e.g. ".../type/2/video/") with a mixed-case "application/x-mpegURL"
+// Content-Type. isM3U8's detection used strings.Contains with an
+// all-lowercase needle, which is case-sensitive in Go, so it silently missed
+// the capitalized "mpegURL" and streamed the response as opaque bytes — the
+// relative segment URIs inside never got rewritten to go through the proxy,
+// breaking playback for any client resolving them against the CDN host
+// instead of the proxy origin.
+func TestProxyStream_MixedCaseMpegURLContentTypeIsRewritten(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// No .m3u8 suffix on the path — Content-Type is the only signal.
+		w.Header().Set("Content-Type", "application/x-mpegURL")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\nseg-0.ts\n"))
+	}))
+	defer upstream.Close()
+
+	proxy := NewVideoProxy(ProxyConfig{UserAgent: "test-agent"})
+	sourceURL := upstream.URL + "/expires/1/type/2/video/"
+	exp, sig := signProvenance(sourceURL, time.Now())
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/hls-proxy?url="+url.QueryEscape(sourceURL)+"&exp="+exp+"&sig="+sig, nil)
+
+	if _, _, err := proxy.ProxyWithRefererCounted(context.Background(), sourceURL, "", rec, req); err != nil {
+		t.Fatalf("proxy should not error, got: %v", err)
+	}
+	body := rec.Body.String()
+	if strings.HasSuffix(strings.TrimSpace(body), "\nseg-0.ts") || strings.TrimSpace(body) == "#EXTM3U\n#EXTINF:6.0,\nseg-0.ts" {
+		t.Fatalf("segment URI was not rewritten through the proxy (case-sensitive Content-Type check regression): %q", body)
+	}
+	if !strings.Contains(body, "/api/streaming/hls-proxy?url=") {
+		t.Fatalf("expected rewritten segment to route through the proxy, got: %q", body)
 	}
 }
