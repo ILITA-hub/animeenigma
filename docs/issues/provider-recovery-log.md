@@ -5,6 +5,40 @@ Newest entry first. Used by the recovery operator to avoid repeating yesterday's
 
 ---
 
+## 2026-07-03 — okru
+
+**State before:** `policy=manual, health=down, status=degraded` — reason: `cdn_unreachable on ` (health_since 2026-06-26T18:00:01Z, policy_since 2026-06-25T00:00:17Z, last_probed_at 2026-07-02T18:00:24Z). Selected as the most-neglected "manual-only" candidate — last worked 2026-06-26 (7 days), no "Failing" (auto+down) or stuck-"recovering" providers existed in the roster. Not repeating yesterday's miruro (documented known-hard, do-not-re-attempt-code-fix). allanime/animefever/animekai skipped as documented known-hard/disabled cases.
+
+**Root cause — genuine structural bug, NOT a transient CDN blip (though the roster's stale reason predates this finding):**
+
+Walked the full `episodes→servers→stream` chain with `prefer=okru` on Witch Hat Atelier (`fc6c54ac`), episodes 1 and 5 — discovery worked perfectly every time (AllAnime GraphQL backing okru's `FindID`/`ListEpisodes` is unaffected by the Cloudflare-walled `/apivtwo/clock` leg that only blocks `allanime` proper). The actual break is downstream, in the **shared HLS proxy**, not okru's extractor:
+
+- `libs/videoutils/proxy.go`'s `isM3U8` detection (used to decide whether a fetched response's body needs its relative segment URIs rewritten to route through the proxy) checked `strings.Contains(contentType, "mpegurl")` / `"x-mpegurl"` — both **case-sensitive** Go string checks — plus a `.m3u8` path-suffix fallback.
+- okcdn.ru serves its **path-style variant/quality playlists** (bitrate baked into the path, e.g. `.../type/2/video/`, no `.m3u8` suffix) with `Content-Type: application/x-mpegURL` — capital `URL`. Neither the content-type check (case mismatch) nor the path-suffix check (no `.m3u8`) matched, so `isM3U8` evaluated `false` and the proxy streamed the variant playlist as opaque bytes **without rewriting its segment URIs**. A real player resolving those now-relative `MEDIUM00000.ts` refs against the proxy's own URL (not okcdn.ru) gets an unresolvable path — playback breaks silently past the master manifest.
+- Reproduced directly: master `.m3u8`-suffixed URLs rewrote fine (path-suffix fallback caught them); the **variant** hop, fetched exactly as the analytics probe validator and a real hls.js client would fetch it, came back with the original unrewritten `MEDIUM00000.ts` line and `Content-Type: application/octet-stream` (the proxy's own fallback for "not recognized as M3U8") instead of `application/x-mpegURL`.
+- Confirmed this is a **shared-proxy** bug, not okru-specific: `libs/videoutils/proxy.go` is the single HLS proxy used by every CDN-backed provider; any upstream returning a mixed-case `mpegURL`/`mpegUrl` content-type on a non-`.m3u8` path would hit the same silent break. okru is simply the provider whose CDN (okcdn.ru) does this consistently.
+
+**Fix shipped (worktree → main, TDD, deployed + verified):**
+1. Wrote `TestProxyStream_MixedCaseMpegURLContentTypeIsRewritten` in `libs/videoutils/proxy_transport_test.go` — an httptest upstream serving a no-`.m3u8`-suffix path with `Content-Type: application/x-mpegURL`; asserted the returned body's segment URI is rewritten through the proxy. Ran first and **confirmed it fails** against pre-fix code (segment URI left unrewritten).
+2. Fix in `libs/videoutils/proxy.go`: lowercase `Content-Type` once before the `mpegurl` substring check (the redundant `"x-mpegurl"` branch folded away — `"x-mpegurl"` is trivially a substring of `"mpegurl"` once case is normalized). Three-line diff.
+3. `go test ./...` (full `libs/videoutils` package) green, including the new regression test. `go vet ./...` clean. `go build ./...` clean for both `services/streaming` (the only service that actually invokes `ProxyWithRefererCounted`/`ProxyStreamCounted` at request time) and `services/catalog` (also imports the lib, for signing).
+4. Committed `ab3c7317`, pushed to `main`, redeployed `streaming` (`make redeploy-streaming`) — healthy post-deploy.
+
+**Manual verification (2026-07-03, post-fix, post-redeploy, via the real public gateway path a browser hits):**
+- `GET /api/anime/{uuid}/scraper/episodes?prefer=okru` → 13 episodes ✅
+- `GET /api/anime/{uuid}/scraper/servers?...` → `Ok` (sub) / `Ok-dub` (dub) ✅
+- `GET /api/anime/{uuid}/scraper/stream?...&category=sub` → signed okcdn.ru HLS sources with catalog-minted `exp`/`sig` ✅
+- Episode 1 (`vd636.okcdn.ru` host): master via `http://localhost:8000/api/streaming/hls-proxy?...` → HTTP 200 ✅ → sd-quality variant → HTTP 200, **`Content-Type: application/x-mpegURL` now correctly detected**, segment URIs rewritten to `/api/streaming/hls-proxy?url=...MEDIUM00000.ts...` ✅ → first segment → HTTP 200, `video/mp2t`, 1,763,628 bytes, real MPEG-TS sync bytes (`0x47 0x40 0x11...`) ✅
+- Episode 5 (`ok6-1.vkuser.net` host — a different okcdn mirror, confirming the fix isn't host-specific): master → variant (`application/x-mpegURL`, rewritten) → segment → HTTP 200, `video/mp2t`, 314,900 bytes, real TS sync byte ✅
+
+**Action taken:** Submitted `probe-result pass` with reason citing commit `ab3c7317` and the concrete verification → state machine transitioned `down → recovering` at 2026-07-03. `policy=manual` preserved (promotion to `auto` is a human call / the state machine's own timer).
+
+**Outcome:** ✅ Recovered with a shipped code fix — genuinely verified end-to-end with real decrypted-chain bytes on two episodes across two different okcdn.ru CDN hosts, through the actual public proxy path a browser uses.
+
+**Next step:** Confirm okru transitions `recovering → up` at the next scheduled probe cycle. Given the fix lives in the **shared** `libs/videoutils/proxy.go`, consider whether any other currently-"down"/"degraded" provider's failure reason might be this same case-sensitivity bug in disguise (a CDN returning `mpegURL`/`MPEGURL` on a non-`.m3u8` path) — worth a quick grep of scraper logs for `octet-stream`-typed manifest responses on the next run before assuming a provider's failure is CDN-side.
+
+---
+
 ## 2026-07-02 — miruro
 
 **State before:** `policy=auto, health=down, status=degraded` — reason: `cdn_unreachable on ` (health_since 2026-07-02T00:00:12Z, policy_since 2026-06-23T11:43:15Z, last_probed_at 2026-07-02T00:00:12Z). Selected as the ONLY "Failing" (policy=auto + health=down) provider in the roster — top priority per the selection rules, still live in the auto-failover chain and actively serving (or attempting to serve) real users during its 24h grace window. Not attempted since 2026-06-24 (an unrelated ffprobe/AES-128 validator false-negative fix), so not a repeat.
