@@ -401,7 +401,7 @@
         <!-- Default surface: AePlayer. Premiere notice replaces it for
              not-yet-released titles so users see "premieres on {date}" rather
              than an empty-source error. -->
-        <div class="glass-card p-4 md:p-6" v-if="!classicKodik && aePlayerEnabled">
+        <div class="glass-card player-card p-4 md:p-6" v-if="!classicKodik && aePlayerEnabled">
           <div
             v-if="notReleasedYet"
             class="w-full aspect-video rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center text-center gap-3 px-6"
@@ -433,7 +433,7 @@
 
         <!-- Classic Kodik fallback: the iframe KodikPlayer. Also the surface
              when AePlayer is disabled via VITE_AE_PLAYER_ENABLED=false. -->
-        <div class="glass-card p-4 md:p-6" v-else>
+        <div class="glass-card player-card p-4 md:p-6" v-else>
           <div
             v-if="notReleasedYet"
             class="w-full aspect-video rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center text-center gap-3 px-6"
@@ -2301,6 +2301,25 @@ onUnmounted(() => {
 :deep(.shiki-footnote) {
   font-size: 0.75rem;
   color: var(--ink-4);
+}
+
+/* Full-bleed player on phones: kill the card gutter and the page padding
+   (px-4 on the page container) so the video spans the full viewport width.
+   Scoped selector (.player-card[data-v]) outranks the unlayered .glass-card. */
+@media (max-width: 680px) {
+  .player-card {
+    margin-inline: -1rem;
+    padding: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .player-card > .aspect-video {
+    border-radius: 0;
+  }
 }
 </style>
 
