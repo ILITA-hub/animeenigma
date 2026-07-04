@@ -253,4 +253,28 @@ describe('confirmSeasonDownload', () => {
     expect(seasonFlow.phase).toBe('idle')
     expect(seasonFlow.notice).toBeNull()
   })
+
+  it('cancel during confirm re-list REJECT does not stomp state with a failed notice', async () => {
+    await toChoose()
+
+    // Deferred reject for the re-list triggered by the provider change
+    let rejectDeferred!: (e: Error) => void
+    h.listEpisodes.mockReturnValueOnce(
+      new Promise<EpisodeOption[]>((_, r) => (rejectDeferred = r)),
+    )
+
+    const kodikCombo: Combo = { ...(seasonFlow.combo as Combo), provider: 'kodik' }
+    const p = confirmSeasonDownload('720', 'season', kodikCombo, null)
+
+    // Cancel bumps seq before the reject lands
+    cancelSeasonDownload()
+
+    // Now reject the deferred — without the guard this would call reset({kind:'failed'})
+    rejectDeferred(new Error('network error'))
+    await p
+
+    // The failed reset must be suppressed; state stays as cancel left it
+    expect(seasonFlow.phase).toBe('idle')
+    expect(consumeSeasonNotice()).toBeNull()
+  })
 })

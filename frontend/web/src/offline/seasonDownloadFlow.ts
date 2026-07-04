@@ -203,7 +203,7 @@ export async function confirmSeasonDownload(
     reset({ kind: 'queued', n })
   } catch (e) {
     console.error('[seasonDownload] confirm failed', e)
-    reset({ kind: 'failed', message: e instanceof Error ? e.message : String(e) })
+    if (mySeq === seq) reset({ kind: 'failed', message: e instanceof Error ? e.message : String(e) })
   }
 }
 
