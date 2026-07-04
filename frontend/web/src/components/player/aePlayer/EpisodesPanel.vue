@@ -35,11 +35,11 @@
         type="button"
         class="ep-chip ep-chip-season"
         data-test="season-download"
-        :title="downloadMode === 'install' ? $t('downloads.inAppOnly') : $t('player.aePlayer.offline.scopeSeasonTitle')"
+        :title="seasonChipTitle"
         @click="emit('download-season')"
       >
         <Download :size="11" aria-hidden="true" />
-        {{ downloadMode === 'install' ? $t('downloads.inAppOnly') : $t('player.aePlayer.offline.season') }}
+        {{ seasonChipLabel }}
       </button>
       <button
         v-if="showJump && nextUnwatched"
@@ -260,6 +260,14 @@ const emit = defineEmits<{
   (e: 'mark-watched'): void
   (e: 'download-season'): void
 }>()
+
+// In install mode (browser tab) the season chip points at the app instead.
+const seasonChipLabel = computed(() =>
+  props.downloadMode === 'install' ? t('downloads.inAppOnly') : t('player.aePlayer.offline.season'),
+)
+const seasonChipTitle = computed(() =>
+  props.downloadMode === 'install' ? t('downloads.inAppOnly') : t('player.aePlayer.offline.scopeSeasonTitle'),
+)
 
 // ── V2b adaptive rules ───────────────────────────────────────────────────────
 // ≤15 eps: strip only. 16+: jump input appears. 100+: grid toggle appears.
@@ -607,14 +615,8 @@ onMounted(() => {
   gap: 4px;
 }
 
-/* Touch: grow the per-card download affordance to a real hit target
-   without shifting layout (negative margins reclaim the padding). */
+/* Touch: keep the header chips comfortably tappable. */
 @media (pointer: coarse) {
-  .ep-dl {
-    padding: 12px;
-    margin: -10px -10px -10px auto;
-  }
-
   .ep-chip {
     min-height: 36px;
   }

@@ -487,7 +487,7 @@ import { recordPlayerEvent } from '@/utils/playerTelemetry'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import { offlineDownloadsEnabled, offlineRuntimeReady } from '@/offline/flag'
 import { engineState } from '@/offline/downloadEngine'
-import { useStandaloneDisplay, installHintKey } from '@/pwa/standalone'
+import { useDownloadGate } from '@/offline/downloadGate'
 import { seasonTargets, enqueueSeason } from '@/offline/seasonDownload'
 import { listDownloads } from '@/offline/registry'
 import { makeOfflineResolver, offlineCapabilityReport } from '@/offline/offlineAdapter'
@@ -2275,12 +2275,13 @@ const seasonCount = computed(() => seasonTargets(episodes.value, downloadStates.
 // a plain check in the template would never appear after the SW's first claim.
 // Track it in a ref, refreshed when the SW becomes ready.
 const canDownload = ref(false)
-const isStandalone = useStandaloneDisplay()
-// Downloads are app-only (owner call 2026-07-04): in a plain browser tab every
-// download surface becomes a "download in the app" hint instead.
+// Downloads are app-only: in a plain browser tab every download surface
+// becomes a "download in the app" hint instead (useDownloadGate owns that
+// policy for all surfaces).
+const { appOnly, showInstallHint } = useDownloadGate()
 const downloadMode = computed<'off' | 'install' | 'ready'>(() => {
   if (props.offline || !offlineDownloadsEnabled) return 'off'
-  if (!isStandalone.value) return 'install'
+  if (appOnly.value) return 'install'
   return canDownload.value ? 'ready' : 'off'
 })
 
@@ -2307,10 +2308,7 @@ watch(engineState.progress, () => {
 })
 
 function onDownloadSeason() {
-  if (downloadMode.value === 'install') {
-    toast.push(t(installHintKey()), 'info', 6000)
-    return
-  }
+  if (downloadMode.value === 'install') return showInstallHint()
   downloadDialogOpen.value = true
 }
 

@@ -89,7 +89,6 @@ const lowSpace = computed(() => free.value !== null && projected.value > free.va
 const freeLabel = computed(() => (free.value === null ? '' : fmtGb(free.value)))
 
 function confirm() {
-  if (props.seasonCount === 0) return
   localStorage.setItem(LS_KEY, quality.value)
   emit('confirm', quality.value)
 }

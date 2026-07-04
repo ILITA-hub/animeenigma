@@ -269,9 +269,8 @@ describe('projectedBytesFor — duration scaling', () => {
 })
 
 describe('downloadEngine — queue wedge protection (eternal "queued" regression)', () => {
-  afterEach(() => {
-    _setWatchdogTimeoutsForTests({ headersMs: 45_000, bodyStallMs: 60_000, resolveMs: 120_000 })
-  })
+  // No manual watchdog restore needed: _resetEngineForTests (beforeEach)
+  // reinstates WATCHDOG_DEFAULTS.
 
   it('claims the active record as downloading before resolve settles', async () => {
     const { impl } = fakeCaches()

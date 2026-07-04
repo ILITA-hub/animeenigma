@@ -32,7 +32,7 @@ const MAX_RETRIES = 3
 // own, and the pump is strictly serial: one request that never answers wedges
 // the whole queue forever (records sit "queued" with a live engine, so the
 // stale-record downgrade in the downloads store never fires either).
-const watchdogs = {
+const WATCHDOG_DEFAULTS = {
   /** No response headers within this window → abort → retry/'network'. */
   headersMs: 45_000,
   /** Body produced no chunk for this long mid-stream → abort the fetch. */
@@ -40,6 +40,7 @@ const watchdogs = {
   /** req.resolve() (scraper failover can be slow, but not THIS slow). */
   resolveMs: 120_000,
 }
+const watchdogs = { ...WATCHDOG_DEFAULTS }
 export function _setWatchdogTimeoutsForTests(o: Partial<typeof watchdogs>): void {
   Object.assign(watchdogs, o)
 }
@@ -83,6 +84,7 @@ export function _resetEngineForTests(): void {
   running = false
   engineState.activeId.value = null
   engineState.progress.value = {}
+  Object.assign(watchdogs, WATCHDOG_DEFAULTS)
 }
 
 async function acquireWakeLock(): Promise<void> {
@@ -101,7 +103,7 @@ async function releaseWakeLock(): Promise<void> {
 // workers, read-sleep-then-stamp would let all 3 burst in the same window
 // (~9 rps); reserving first serializes the schedule regardless of concurrency.
 let nextFetchSlot = 0
-async function pacedFetch(url: string): Promise<Response> {
+async function pacedFetch(url: string): Promise<{ resp: Response; ctrl: AbortController }> {
   const at = Math.max(Date.now(), nextFetchSlot)
   nextFetchSlot = at + MIN_FETCH_SPACING_MS
   const wait = at - Date.now()
@@ -109,8 +111,7 @@ async function pacedFetch(url: string): Promise<Response> {
   const ctrl = new AbortController()
   const headerTimer = setTimeout(() => ctrl.abort(), watchdogs.headersMs)
   try {
-    const resp = await fetch(url, { headers: { 'X-AE-Download': '1' }, signal: ctrl.signal })
-    return guardBodyStall(resp, ctrl)
+    return { resp: await fetch(url, { headers: { 'X-AE-Download': '1' }, signal: ctrl.signal }), ctrl }
   } finally {
     clearTimeout(headerTimer)
   }
@@ -119,21 +120,32 @@ async function pacedFetch(url: string): Promise<Response> {
 /** Re-wrap the body so a stream that stops producing chunks aborts the fetch
  *  (the consumer's pending read rejects) instead of hanging forever — an MP4
  *  body legitimately takes many minutes, so only *stalls* are capped, not
- *  total transfer time. */
+ *  total transfer time. One coarse interval per response (stamping a
+ *  timestamp per chunk) instead of a timer per chunk; the interval clears
+ *  itself on completion, cancellation, or once it has aborted. */
 function guardBodyStall(resp: Response, ctrl: AbortController): Response {
   if (!resp.body || typeof resp.body.pipeThrough !== 'function') return resp
-  let timer = setTimeout(() => ctrl.abort(), watchdogs.bodyStallMs)
+  let lastChunk = Date.now()
+  const watchdog = setInterval(() => {
+    if (ctrl.signal.aborted || Date.now() - lastChunk > watchdogs.bodyStallMs) {
+      clearInterval(watchdog)
+      ctrl.abort()
+    }
+  }, Math.max(50, watchdogs.bodyStallMs / 4))
   const guarded = resp.body.pipeThrough(
     new TransformStream({
       transform(chunk, controller) {
-        clearTimeout(timer)
-        timer = setTimeout(() => ctrl.abort(), watchdogs.bodyStallMs)
+        lastChunk = Date.now()
         controller.enqueue(chunk)
       },
       flush() {
-        clearTimeout(timer)
+        clearInterval(watchdog)
       },
-    }),
+      // `cancel` is in the Streams spec but not yet in lib.dom's Transformer.
+      cancel() {
+        clearInterval(watchdog)
+      },
+    } as Transformer<Uint8Array, Uint8Array>),
   )
   return new Response(guarded, { status: resp.status, statusText: resp.statusText, headers: resp.headers })
 }
@@ -141,13 +153,11 @@ function guardBodyStall(resp: Response, ctrl: AbortController): Response {
 /** req.resolve() with a deadline — a hung scraper resolution is the observed
  *  way the serial pump wedges (record stuck 'queued', both watchdog-less). */
 function resolveWithDeadline(req: DownloadRequest): Promise<StreamResult> {
-  return new Promise((res, rej) => {
-    const t = setTimeout(() => rej(new Error('resolve-timeout')), watchdogs.resolveMs)
-    req.resolve().then(
-      (v) => { clearTimeout(t); res(v) },
-      (e) => { clearTimeout(t); rej(e) },
-    )
+  let t!: ReturnType<typeof setTimeout>
+  const deadline = new Promise<never>((_, rej) => {
+    t = setTimeout(() => rej(new Error('resolve-timeout')), watchdogs.resolveMs)
   })
+  return Promise.race([req.resolve(), deadline]).finally(() => clearTimeout(t))
 }
 
 class SignatureExpiredError extends Error {}
@@ -171,10 +181,13 @@ async function fetchResource(url: string): Promise<Response> {
   let lastErr: unknown
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const resp = await pacedFetch(url)
+      const { resp, ctrl } = await pacedFetch(url)
       if (resp.status === 401 || resp.status === 403) throw new SignatureExpiredError()
       if (!resp.ok) throw new Error(`http ${resp.status}`)
-      return normalizeForCache(resp)
+      // Stall-guard only bodies that will actually be consumed — wrapping
+      // before the status checks would leak an armed watchdog per discarded
+      // (401/403/!ok) response.
+      return normalizeForCache(guardBodyStall(resp, ctrl))
     } catch (e) {
       if (e instanceof SignatureExpiredError) throw e
       lastErr = e
@@ -220,36 +233,31 @@ async function cacheSubtitles(id: string, subs: SubtitleTrack[]): Promise<Subtit
 }
 
 async function runDownload(id: string, req: DownloadRequest): Promise<void> {
-  const record = await getDownload(id)
-  if (!record) return // removed while queued — do not resurrect or refetch
-  if (paused.has(id)) {
-    // Paused while still waiting in line — park it without paying for a resolve.
-    await putDownload({ ...record, state: 'paused' })
-    return
-  }
   const setError = async (error: DownloadError) => {
     const cur = await getDownload(id)
     if (!cur) return // removed mid-run — do not resurrect the record
     await putDownload({ ...cur, state: 'error', error })
   }
 
-  // Re-check headroom right before doing any real work: the enqueue-time
-  // check in enqueueDownload passes a whole season instantly (no bytes
-  // downloaded yet); once disk fills mid-batch, every remaining queued item
-  // must fail HERE, before paying for a scraper req.resolve().
+  // Estimate first (needs no record), then ONE record read serves the
+  // park/quota/claim sequence. Paused wins over the quota gate — a record
+  // paused while waiting in line parks without paying for a resolve and can
+  // never be downgraded to error:'quota'. The re-check at enqueue time passes
+  // a whole season instantly (no bytes downloaded yet); once disk fills
+  // mid-batch, every remaining queued item must fail HERE, before paying for
+  // a scraper req.resolve().
   const headroom = await quotaHeadroom()
+  const record = await getDownload(id)
+  if (!record) return // removed while queued — do not resurrect or refetch
+  if (paused.has(id)) return void (await putDownload({ ...record, state: 'paused' }))
   if (headroom !== null && headroom < projectedBytesFor(req.quality, req.durationMin)) {
     return setError('quota')
   }
 
   // Claim the record BEFORE the resolve/playlist phase: while this run owns it
   // the UI must show activity ("preparing"), never "queued" — a wedged resolve
-  // used to be indistinguishable from waiting in line. Re-fetch + re-check
-  // first: removeDownload/pauseDownload may have raced the estimate above.
-  const cur = await getDownload(id)
-  if (!cur) return
-  if (paused.has(id)) return void (await putDownload({ ...cur, state: 'paused' }))
-  await putDownload({ ...cur, state: 'downloading' })
+  // used to be indistinguishable from waiting in line.
+  await putDownload({ ...record, state: 'downloading' })
 
   let stream: StreamResult
   try {

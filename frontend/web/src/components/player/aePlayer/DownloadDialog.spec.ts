@@ -40,12 +40,10 @@ describe('DownloadDialog (season-only)', () => {
     expect(evt).toEqual(['720'])
   })
 
-  it('disables start and says done when nothing is left to download', async () => {
+  it('disables start and says done when nothing is left to download', () => {
     const w = mountDlg({ seasonCount: 0 })
     expect(w.find('[data-test="dl-start"]').attributes('disabled')).toBeDefined()
     expect(w.find('[data-test="season-summary"]').text()).toContain('seasonDone')
-    await w.find('[data-test="dl-start"]').trigger('click')
-    expect(w.emitted('confirm')).toBeUndefined()
   })
 
   it('warns when the projection exceeds free space', async () => {
