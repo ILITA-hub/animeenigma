@@ -43,31 +43,19 @@
  *
  * Phase 3 — workstream: notifications.
  */
-import { computed, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { ref } from 'vue'
 import { onClickOutside, useEventListener } from '@vueuse/core'
 import { Bell } from 'lucide-vue-next'
 
 import { useNotificationsStore } from '@/stores/notifications'
+import { useNotificationBadge } from '@/composables/useNotificationBadge'
 import NotificationDropdown from '@/components/NotificationDropdown.vue'
 
-const { t } = useI18n()
 const store = useNotificationsStore()
+const { badgeText, ariaLabel } = useNotificationBadge()
 
 const open = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
-
-const badgeText = computed<string>(() => {
-  const n = store.unreadCount
-  return n > 99 ? '99+' : String(n)
-})
-
-const ariaLabel = computed(() => {
-  if (store.unreadCount > 0) {
-    return t('notifications.bell.ariaLabelWithCount', { count: store.unreadCount })
-  }
-  return t('notifications.bell.ariaLabel')
-})
 
 function toggle(): void {
   open.value = !open.value

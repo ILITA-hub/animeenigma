@@ -1,12 +1,21 @@
 <template>
   <div
-    role="dialog"
-    aria-modal="false"
-    :aria-label="$t('notifications.dropdown.title')"
-    class="bg-background/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl w-[380px] max-w-[calc(100vw-1.5rem)] overflow-hidden flex flex-col"
+    :role="flat ? undefined : 'dialog'"
+    :aria-modal="flat ? undefined : 'false'"
+    :aria-label="flat ? undefined : $t('notifications.dropdown.title')"
+    class="overflow-hidden flex flex-col"
+    :class="flat
+      ? 'w-full'
+      : 'bg-background/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl w-[380px] max-w-[calc(100vw-1.5rem)]'"
   >
-    <!-- Body: list region (scrolls) -->
-    <div class="max-h-[420px] overflow-y-auto" role="region">
+    <!-- Body: list region (scrolls). Flat mode caps against the viewport
+         so the list never nests a second scroller inside the Modal's own
+         max-h-[90vh] scroll on short (landscape-phone) viewports. -->
+    <div
+      class="overflow-y-auto"
+      :class="flat ? 'max-h-[min(420px,60svh)]' : 'max-h-[420px]'"
+      role="region"
+    >
       <!-- Empty state -->
       <EmptyState v-if="store.notifications.length === 0" size="sm" class="text-sm">
         <template #icon><Bell class="size-10" /></template>
@@ -58,6 +67,11 @@
  * wrapper (so closing also flips the wrapper's `open` ref to drive the
  * Transition cleanly).
  *
+ * `flat` embeds the list in a host that already provides the panel
+ * chrome and dialog semantics (the mobile-drawer Modal) — it drops the
+ * standalone width/background/border and contributes no landmark of its
+ * own (no role/aria-label; the host's labeled dialog covers it).
+ *
  * Phase 3 — workstream: notifications.
  */
 import { Bell } from 'lucide-vue-next'
@@ -65,6 +79,8 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { resolveRenderer } from '@/lib/notification-renderers'
 import Button from '@/components/ui/Button.vue'
+
+defineProps<{ flat?: boolean }>()
 
 const store = useNotificationsStore()
 

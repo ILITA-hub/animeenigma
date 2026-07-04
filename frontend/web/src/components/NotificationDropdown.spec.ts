@@ -44,8 +44,9 @@ function notif(id: string, readAt: string | null): UserNotification {
   } as UserNotification
 }
 
-function mountDropdown() {
+function mountDropdown(props: { flat?: boolean } = {}) {
   return mount(NotificationDropdown, {
+    props,
     global: {
       mocks: { $t: (key: string) => key },
     },
@@ -75,5 +76,23 @@ describe('NotificationDropdown', () => {
     const wrapper = mountDropdown()
     expect(wrapper.find('li').exists()).toBe(false)
     expect(wrapper.text()).toContain('notifications.dropdown.empty')
+  })
+
+  it('renders standalone panel chrome by default', () => {
+    const wrapper = mountDropdown()
+    expect(wrapper.classes()).toContain('rounded-xl')
+    expect(wrapper.classes()).toContain('w-[380px]')
+    expect(wrapper.attributes('role')).toBe('dialog')
+  })
+
+  it('drops panel chrome and landmark when flat (embedded in Modal)', () => {
+    const wrapper = mountDropdown({ flat: true })
+    expect(wrapper.classes()).not.toContain('rounded-xl')
+    expect(wrapper.classes()).not.toContain('w-[380px]')
+    expect(wrapper.classes()).toContain('w-full')
+    // The hosting Modal provides the labeled dialog — flat contributes
+    // no landmark of its own.
+    expect(wrapper.attributes('role')).toBeUndefined()
+    expect(wrapper.attributes('aria-label')).toBeUndefined()
   })
 })

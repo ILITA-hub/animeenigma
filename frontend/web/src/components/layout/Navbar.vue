@@ -278,15 +278,28 @@
             <!-- Divider -->
             <div class="my-1 border-t border-white/10" />
 
-            <!-- Workstream notifications / Phase 3 — mobile bell. Same
-                 NotificationBell component as desktop; dropdown is
-                 max-w-[calc(100vw-1.5rem)] so it fits the narrow viewport. -->
-            <div
+            <!-- Workstream notifications — full-width drawer row (matches
+                 the Gacha row). The desktop bell's anchored dropdown cannot
+                 fit a phone viewport from inside the drawer (it opened
+                 off-screen left + below the fold), so tapping the row closes
+                 the drawer and opens the list in the Modal below instead. -->
+            <button
               v-if="notifEnabled && authStore.isAuthenticated"
-              class="px-3 py-2"
+              type="button"
+              class="flex items-center gap-2 px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-left"
+              :aria-label="notifAriaLabel"
+              @click="openMobileNotifications"
             >
-              <NotificationBell />
-            </div>
+              <Bell class="size-4" aria-hidden="true" />
+              {{ $t('notifications.bell.tooltip') }}
+              <span
+                v-if="notificationsStore.unreadCount > 0"
+                aria-hidden="true"
+                class="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-pink-500 text-white text-xs font-semibold leading-none flex items-center justify-center tabular-nums"
+              >
+                {{ notifBadgeText }}
+              </span>
+            </button>
 
             <!-- Profile / Login -->
             <template v-if="authStore.isAuthenticated">
@@ -352,6 +365,19 @@
           </div>
         </div>
       </Transition>
+
+      <!-- Mobile notifications host. Lives OUTSIDE the drawer so the panel
+           survives the drawer closing; the Modal primitive already handles
+           the scrim, Esc, refcounted scroll-lock, and the iOS 26
+           fixed-element status-bar gotcha. -->
+      <Modal
+        v-if="notifEnabled && authStore.isAuthenticated"
+        v-model="mobileNotifOpen"
+        :title="$t('notifications.dropdown.title')"
+        size="md"
+      >
+        <NotificationDropdown flat @close="mobileNotifOpen = false" />
+      </Modal>
     </nav>
   </header>
 </template>
@@ -368,15 +394,18 @@ import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
-import { Search, X, ChevronDown, Menu, Gem, Star } from 'lucide-vue-next'
+import { Search, X, ChevronDown, Menu, Gem, Star, Bell } from 'lucide-vue-next'
 import Avatar from '@/components/ui/Avatar.vue'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
-import { Input } from '@/components/ui'
+import { Input, Modal } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell.vue'
+import NotificationDropdown from '@/components/NotificationDropdown.vue'
 import BrandMark from '@/components/layout/BrandMark.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
 import { useGachaStore } from '@/stores/gacha'
+import { useNotificationsStore } from '@/stores/notifications'
+import { useNotificationBadge } from '@/composables/useNotificationBadge'
 import { offlineDownloadsEnabled } from '@/offline/flag'
 
 const router = useRouter()
@@ -409,6 +438,23 @@ watch(
 // Workstream notifications / Phase 3 — feature flag mirrors App.vue. Build-
 // time constant, no reactive dependency.
 const notifEnabled = (import.meta.env.VITE_NOTIFICATIONS_ENABLED as string | undefined) !== 'false'
+
+// Mobile notifications: the drawer row opens the list in a Modal (an
+// anchored dropdown can't fit a phone viewport from inside the drawer).
+// Store instantiation is side-effect-free — polling is App.vue's job.
+const notificationsStore = useNotificationsStore()
+const { badgeText: notifBadgeText, ariaLabel: notifAriaLabel } = useNotificationBadge()
+const mobileNotifOpen = ref(false)
+
+function openMobileNotifications(): void {
+  // Close the drawer first so its focus trap + scroll lock unwind before
+  // the Modal takes over; the Modal lives outside the drawer subtree so
+  // it survives the unmount.
+  mobileMenuOpen.value = false
+  mobileNotifOpen.value = true
+  // Same up-to-the-second refresh the desktop bell does on open.
+  void notificationsStore.fetchNotifications()
+}
 
 // Task 12 — /downloads is a build-time flag (offlineDownloadsEnabled), not a
 // reactive one, so filtering the plain array once at setup covers both the
@@ -453,9 +499,11 @@ useBodyScrollLock(mobileMenuOpen)
 // focus trap, and body state all unwind cleanly via the existing watchers.
 const isDesktop = useMediaQuery('(min-width: 768px)')
 watch(isDesktop, (desktop) => {
-  if (desktop && mobileMenuOpen.value) {
-    mobileMenuOpen.value = false
-  }
+  if (!desktop) return
+  mobileMenuOpen.value = false
+  // The notifications Modal is portaled (not md:hidden) — close it too, the
+  // desktop bell has its own anchored dropdown.
+  mobileNotifOpen.value = false
 })
 
 // WR-04: ESC must work globally while the drawer is open — not just when focus
