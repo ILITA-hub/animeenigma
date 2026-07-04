@@ -303,4 +303,17 @@ function onMouseLeave() {
   border-radius: 4px;
   font-weight: 500;
 }
+
+/* Touch: taller grab zone + always-visible thumb (there is no hover). */
+@media (pointer: coarse) {
+  .pl-track {
+    height: 28px;
+  }
+
+  .pl-thumb {
+    opacity: 1;
+    width: 15px;
+    height: 15px;
+  }
+}
 </style>

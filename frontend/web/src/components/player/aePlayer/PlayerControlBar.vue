@@ -163,14 +163,16 @@
         <PictureInPicture2 class="size-5" aria-hidden="true" />
       </PlayerIconButton>
 
-      <!-- Fullscreen (hidden on mobile via CSS) -->
+      <!-- Fullscreen — the ONLY comfortable watch surface on phones, so it is
+           NOT part of the mobile trim (it used to be — that was the bug). -->
       <PlayerIconButton
         class="pl-fs-btn"
         :aria-label="$t('player.aePlayer.fullscreen')"
         data-test="toggle-fullscreen"
         @click="emit('toggle-fullscreen')"
       >
-        <Maximize class="size-5" aria-hidden="true" />
+        <Minimize v-if="fullscreenActive" class="size-5" aria-hidden="true" />
+        <Maximize v-else class="size-5" aria-hidden="true" />
       </PlayerIconButton>
 
     </div>
@@ -180,7 +182,7 @@
 <script setup lang="ts">
 import PlayerScrubBar from './PlayerScrubBar.vue'
 import PlayerIconButton from './PlayerIconButton.vue'
-import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize, ListVideo } from 'lucide-vue-next'
+import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize, Minimize, ListVideo } from 'lucide-vue-next'
 
 interface Chapter {
   kind: 'intro' | 'outro'
@@ -215,8 +217,10 @@ withDefaults(
     /** current stream URL/type for real hover frame previews */
     previewUrl?: string | null
     previewType?: 'hls' | 'mp4' | null
+    /** fullscreen (native or pseudo) currently active — swaps the FS icon */
+    fullscreenActive?: boolean
   }>(),
-  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null, episodeLabel: '' },
+  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null, episodeLabel: '', fullscreenActive: false },
 )
 
 const emit = defineEmits<{
@@ -301,16 +305,6 @@ function onVolumeInput(event: Event) {
   width: 72px;
   opacity: 1;
   margin-right: 6px;
-}
-
-/* Coarse pointers (touch) have no hover — keep the slider revealed so it's
-   reachable without a hover affordance. */
-@media (pointer: coarse) {
-  .pl-vol-range {
-    width: 72px;
-    opacity: 1;
-    margin-right: 6px;
-  }
 }
 
 /* Time pill — same geometry as the source pill (.pl-srcbtn) */
@@ -418,22 +412,39 @@ function onVolumeInput(event: Event) {
   flex-shrink: 0;
 }
 
-/* Mobile trim: hide skip ±10s, PiP, fullscreen at ≤680px */
+/* Mobile trim (≤680px): ±5s, PiP and the episodes pill go (seek moves to
+   double-tap gestures; episodes has the top trigger + under-player action
+   row). FULLSCREEN STAYS. The volume slider is hidden — phones use hardware
+   volume (iOS ignores JS volume entirely); mute stays. */
 @media (max-width: 680px) {
   .pl-skip-back,
   .pl-skip-fwd,
   .pl-pip-btn,
-  .pl-fs-btn {
+  .pl-epbtn,
+  .pl-vol-range {
     display: none;
   }
 
-  .pl-vol:hover .pl-vol-range {
-    width: 52px;
+  .pl-timepill {
+    background: transparent;
+    border: 0;
+    padding: 0 2px;
   }
 
-  /* Episodes pill stays (it's the second chooser) but trims to icon + chevron */
-  .pl-epbtn-text {
+  .pl-srcbtn {
+    max-width: 64px;
+  }
+
+  .pl-srcbtn-text {
     display: none;
+  }
+}
+
+/* Touch ergonomics: ≥44px hit targets for every bar control. */
+@media (pointer: coarse) {
+  .pl-btns :deep(button) {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 </style>

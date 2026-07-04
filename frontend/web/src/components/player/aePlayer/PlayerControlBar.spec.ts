@@ -154,4 +154,14 @@ describe('PlayerControlBar', () => {
     const settings = mount(PlayerControlBar, { props: { ...baseProps, openMenu: 'settings' } })
     expect(settings.find('[data-test="toggle-settings"]').attributes('data-active')).toBe('true')
   })
+
+  it('shows the fullscreen button and swaps its icon with fullscreenActive', async () => {
+    const w = mount(PlayerControlBar, { props: baseProps })
+    const fsBtn = w.find('[data-test="toggle-fullscreen"]')
+    expect(fsBtn.exists()).toBe(true)
+    // default: enter-fullscreen icon (Maximize)
+    expect(fsBtn.html()).toContain('lucide-maximize')
+    await w.setProps({ fullscreenActive: true })
+    expect(fsBtn.html()).toContain('lucide-minimize')
+  })
 })
