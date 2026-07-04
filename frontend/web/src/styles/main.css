@@ -382,6 +382,18 @@ body {
   overflow: hidden;
 }
 
+/* Below-fold section culling — put on a whole section's root so it skips
+   style/layout/paint entirely while off-screen (2026-07-04 render trace:
+   SPA route-swap layouts walked 500-1600 dirty objects across the whole
+   mounted page). The intrinsic height is a pre-first-reveal estimate only —
+   `auto` remembers the real size afterwards, so no scroll jumps on repeat
+   passes. Complements (nests fine with) the per-item content-visibility
+   rules inside PosterRow/LastUpdates/rail tiles. */
+.cv-below-fold {
+  content-visibility: auto;
+  contain-intrinsic-height: auto 800px;
+}
+
 /* Skeleton loading animation.
    KNOWN DEBT (deliberate scope cut, 2026-07-04): this still animates
    background-position (main-thread repaint per frame) — same defect class

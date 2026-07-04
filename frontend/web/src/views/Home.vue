@@ -298,16 +298,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Below-fold home sections skip style/layout/paint entirely while
-   off-screen (2026-07-04 render trace: SPA route-swap layouts walked
-   500-1600 dirty objects across the whole mounted page). The intrinsic
-   height is a pre-first-reveal estimate only — `auto` remembers the real
-   size afterwards, so no scroll jumps on repeat passes. Applied via class
-   fallthrough onto each child component's single root element. */
-.cv-below-fold {
-  content-visibility: auto;
-  contain-intrinsic-height: auto 800px;
-}
+/* Below-fold sections use the global .cv-below-fold utility (main.css),
+   applied via class fallthrough onto each child component's single root. */
 
 /* Neon Tokyo search row — grid 1fr auto, gap 12px */
 .search-row {

@@ -1684,6 +1684,12 @@ const bufferedPct = ref(0)
 const hasStarted = ref(false)
 let rafId: number | null = null
 
+/** rAF-path snap rates (see writeProgress) — mirrors SubtitleOverlay's
+ *  TIME_SYNC_HZ pattern. 4 Hz time / half-percent buffered ≈ sub-pixel on
+ *  the scrub bar while cutting reactive re-renders ~15×. */
+const PROGRESS_SYNC_HZ = 4
+const BUFFERED_SYNC_STEPS_PER_PCT = 2
+
 function writeProgress(quantize = false) {
   const v = videoRef.value
   if (!v) return
@@ -1695,7 +1701,7 @@ function writeProgress(quantize = false) {
   // indistinguishable on the scrub bar. Event-driven callers (seek, pause)
   // stay exact so a paused UI is frame-accurate. SubtitleOverlay syncs off
   // the <video> element directly (own rAF + snap grid) and is unaffected.
-  const t = quantize ? Math.floor(v.currentTime * 4) / 4 : v.currentTime
+  const t = quantize ? Math.floor(v.currentTime * PROGRESS_SYNC_HZ) / PROGRESS_SYNC_HZ : v.currentTime
   if (t !== currentTime.value) currentTime.value = t
   const dur = v.duration || 0
   if (dur !== duration.value) duration.value = dur
@@ -1706,7 +1712,7 @@ function writeProgress(quantize = false) {
   // Buffered
   if (v.buffered.length > 0 && dur > 0) {
     const bpct = (v.buffered.end(v.buffered.length - 1) / dur) * 100
-    const qb = quantize ? Math.floor(bpct * 2) / 2 : bpct
+    const qb = quantize ? Math.floor(bpct * BUFFERED_SYNC_STEPS_PER_PCT) / BUFFERED_SYNC_STEPS_PER_PCT : bpct
     if (qb !== bufferedPct.value) bufferedPct.value = qb
   }
   // Watch tracking: heartbeat saves + duration-aware auto-complete — always
