@@ -1987,6 +1987,8 @@
     "seasonPreparing": "ダウンロードを準備中…",
     "seasonQueued": "{n}話をキューに追加 — 「ダウンロード」を確認",
     "seasonNothing": "すべてダウンロード済みです",
-    "seasonFailed": "ダウンロードを準備できませんでした"
+    "seasonFailed": "ダウンロードを準備できませんでした",
+    "cellularPaused": "ダウンロード一時停止中 — Wi-Fi待ち",
+    "cellularResume": "モバイルデータでダウンロード"
   }
 }

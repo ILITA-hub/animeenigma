@@ -1987,6 +1987,8 @@
     "seasonPreparing": "Preparing download…",
     "seasonQueued": "Queued {n} ep. — see Downloads",
     "seasonNothing": "Everything is already downloaded",
-    "seasonFailed": "Couldn't prepare the download"
+    "seasonFailed": "Couldn't prepare the download",
+    "cellularPaused": "Downloads paused — waiting for Wi-Fi",
+    "cellularResume": "Download over mobile data"
   }
 }

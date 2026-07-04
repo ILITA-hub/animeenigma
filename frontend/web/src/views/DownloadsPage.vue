@@ -25,6 +25,11 @@
       {{ t('downloads.empty') }}
     </p>
 
+    <Card v-if="cellularBlocked" class="p-4 flex items-center justify-between gap-3" data-test="cellular-banner">
+      <span class="text-sm text-warning">{{ t('downloads.cellularPaused') }}</span>
+      <Button size="sm" variant="outline" @click="onCellularResume">{{ t('downloads.cellularResume') }}</Button>
+    </Card>
+
     <div class="grid gap-4">
       <Card v-for="[animeId, group] in store.byAnime" :key="animeId" class="p-4 md:p-6">
         <div class="flex items-start gap-4">
@@ -56,6 +61,7 @@
                 </Badge>
                 <Badge v-else variant="secondary">{{ t(`downloads.state.${d.state}`) }}</Badge>
                 <span class="text-muted-foreground">{{ sizeLabel(d) }}</span>
+                <span class="text-muted-foreground text-xs truncate">{{ metaLabel(d) }}</span>
                 <span class="ml-auto flex items-center gap-2">
                   <Button
                     v-if="d.state === 'downloading' || d.state === 'queued'"
@@ -104,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 // The ui dir is FLAT with one barrel (src/components/ui/index.ts) — there are
 // no per-component subdirs, so '@/components/ui/button' does not resolve.
@@ -113,7 +119,10 @@ import { useDownloadsStore } from '@/stores/downloads'
 import type { OfflineDownload } from '@/offline/types'
 import type { OfflinePlayback } from '@/offline/offlineAdapter'
 import { offlineRuntimeReady } from '@/offline/flag'
-import { projectedBytesFor } from '@/offline/downloadEngine'
+import { engineState, projectedBytesFor } from '@/offline/downloadEngine'
+import { isCellular, onConnectionChange, allowCellularThisSession } from '@/offline/network'
+import { allowCellularAndResume } from '@/offline/cellularGuard'
+import { useToast } from '@/composables/useToast'
 
 const AePlayer = defineAsyncComponent(() => import('@/components/player/aePlayer/AePlayer.vue'))
 
@@ -124,8 +133,32 @@ const playingEpisode = ref<number | undefined>(undefined)
 const armed = ref<string | null>(null)
 const swReady = ref(true)
 
+const toast = useToast()
+const onCellular = ref(isCellular())
+const cellularAllowed = ref(allowCellularThisSession())
+let offConnChange: (() => void) | undefined
 onMounted(() => {
   swReady.value = offlineRuntimeReady()
+  void store.refresh()
+  offConnChange = onConnectionChange(() => {
+    onCellular.value = isCellular()
+    cellularAllowed.value = allowCellularThisSession() // override may have been granted in the player dialog
+  })
+})
+onUnmounted(() => offConnChange?.())
+
+const cellularBlocked = computed(() =>
+  onCellular.value && !cellularAllowed.value &&
+  store.entries.some((d) => d.state === 'paused' && d.pausedBy === 'network'))
+
+async function onCellularResume() {
+  await allowCellularAndResume()
+  cellularAllowed.value = true
+  await store.refresh()
+}
+
+watch(() => engineState.cellularPauses.value, () => {
+  toast.push(t('downloads.cellularPaused'), 'info', 5000)
   void store.refresh()
 })
 
@@ -137,6 +170,14 @@ function fmtBytes(n: number): string {
   if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} GB`
   if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(0)} MB`
   return `${Math.max(1, Math.round(n / 1024))} KB`
+}
+
+/** «what exactly did I download»: provider · quality · chosen subs (label + lang).
+ *  Provider id (not display name) is what the record stores — accepted. */
+function metaLabel(d: OfflineDownload): string {
+  const base = `${d.combo.provider} · ${d.quality}p`
+  const sub = d.autoSubUrl ? d.subtitles.find((s) => s.url === d.autoSubUrl) : undefined
+  return sub ? `${base} · CC ${sub.label} (${sub.lang.toUpperCase()})` : base
 }
 
 /** "X из ~Y" while in flight (Y = duration-scaled projection stamped at
