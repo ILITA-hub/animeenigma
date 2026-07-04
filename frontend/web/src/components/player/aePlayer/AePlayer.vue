@@ -11,7 +11,7 @@
     @mouseenter="onPointerEnter"
     @mouseleave="onPointerLeave"
     @mousemove="wakeUi"
-    @touchstart.passive="wakeUi"
+    @touchstart.passive="onRootTouch"
     data-test="ae-player"
   >
     <!-- Poster / still background — only until playback first starts; a
@@ -126,6 +126,27 @@
       :visible="!state.playing.value && !sourceError && !showBuffering && !isResolving"
       @play="togglePlay"
     />
+
+    <!-- Mobile play/pause affordance while playing (tap = chrome toggle on touch) -->
+    <button
+      v-if="isCoarse && state.playing.value && uiVisible && hasStarted && !sourceError"
+      class="pl-center-pause"
+      :aria-label="$t('player.aePlayer.pause')"
+      data-test="center-pause"
+      @click.stop="togglePlay"
+    >
+      <Pause :size="30" aria-hidden="true" />
+    </button>
+
+    <!-- Double-tap seek indicator -->
+    <div
+      v-if="seekFlash"
+      class="pl-seekflash"
+      :class="seekFlash === 'back' ? 'pl-seekflash--back' : 'pl-seekflash--fwd'"
+      aria-hidden="true"
+    >
+      {{ seekFlash === 'back' ? '−10s' : '+10s' }}
+    </div>
 
     <BufferingOverlay :visible="(showBuffering || isResolving) && !sourceError" />
 
@@ -329,7 +350,7 @@ import {
   toRef,
 } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { CircleAlert, ChevronDown, Play, X } from 'lucide-vue-next'
+import { CircleAlert, ChevronDown, Pause, Play, X } from 'lucide-vue-next'
 
 import { userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -2259,6 +2280,14 @@ function wakeUi() {
   armUiIdleTimer()
 }
 
+// On touch the video tap handler owns chrome toggling — pre-waking from the
+// root touchstart would make every tap see "chrome already visible" and
+// immediately hide it again (toggle would never show the chrome).
+function onRootTouch(e: TouchEvent) {
+  if (isCoarse.value && e.target === videoRef.value) return
+  wakeUi()
+}
+
 function onPointerEnter() {
   isPointerInside.value = true
   wakeUi()
@@ -2430,15 +2459,71 @@ const upcomingEpisode = computed<{ number: number; etaLabel?: string } | null>((
 
 // ─── Playback helpers ─────────────────────────────────────────────────────────
 
-// A tap on the video acts as a backdrop dismiss while any settings menu /
-// modal is open — close it WITHOUT also toggling play/pause (the dismiss must
-// not have a side effect). With nothing open it's the normal play/pause tap.
-function onVideoClick() {
+// A tap on the video: backdrop-dismiss if a menu is open (no side effect).
+// Desktop click = play/pause. Touch (coarse): single tap toggles the chrome,
+// double-tap on the side thirds seeks ±10s (center double-tap = play/pause) —
+// so the play/pause affordance on phones is the center overlay button, never
+// a stray tap.
+const DOUBLE_TAP_MS = 280
+let lastTapAt = 0
+let lastTapX = 0
+let singleTapTimer: ReturnType<typeof setTimeout> | null = null
+
+const seekFlash = ref<'back' | 'fwd' | null>(null)
+let seekFlashTimer: ReturnType<typeof setTimeout> | null = null
+
+function flashSeek(dir: 'back' | 'fwd') {
+  seekFlash.value = dir
+  if (seekFlashTimer) clearTimeout(seekFlashTimer)
+  seekFlashTimer = setTimeout(() => {
+    seekFlash.value = null
+  }, 500)
+}
+
+function onVideoClick(e: MouseEvent) {
   if (openMenu.value !== null || browseOpen.value) {
     closeMenus()
     return
   }
-  togglePlay()
+  if (!isCoarse.value) {
+    togglePlay()
+    return
+  }
+
+  const now = performance.now()
+  const isDouble = now - lastTapAt < DOUBLE_TAP_MS && Math.abs(e.clientX - lastTapX) < 64
+  lastTapAt = now
+  lastTapX = e.clientX
+
+  if (isDouble) {
+    if (singleTapTimer) {
+      clearTimeout(singleTapTimer)
+      singleTapTimer = null
+    }
+    lastTapAt = 0
+    const rect = rootRef.value?.getBoundingClientRect()
+    const x = rect && rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0.5
+    if (x < 0.4) {
+      onSeekRel(-10)
+      flashSeek('back')
+    } else if (x > 0.6) {
+      onSeekRel(10)
+      flashSeek('fwd')
+    } else {
+      togglePlay()
+    }
+    return
+  }
+
+  singleTapTimer = setTimeout(() => {
+    singleTapTimer = null
+    if (uiVisible.value && state.playing.value) {
+      clearUiIdleTimer()
+      uiVisible.value = false
+    } else {
+      wakeUi()
+    }
+  }, DOUBLE_TAP_MS)
 }
 
 function togglePlay() {
@@ -2995,5 +3080,47 @@ onUnmounted(() => {
   .pl-floating--source {
     width: calc(100% - 28px);
   }
+}
+
+/* Mobile center pause — the touch play/pause affordance while playing. */
+.pl-center-pause {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid var(--white-a30);
+  background: var(--scrim-bg-strong);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+/* Double-tap ±10s flash */
+.pl-seekflash {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--scrim-bg-strong);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+  animation: pl-pop 0.18s ease;
+}
+
+.pl-seekflash--back {
+  left: 12%;
+}
+
+.pl-seekflash--fwd {
+  right: 12%;
 }
 </style>
