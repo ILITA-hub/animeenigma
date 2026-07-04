@@ -1,5 +1,6 @@
 import { ref, onMounted, watch } from 'vue'
 import { userApi } from '@/api/client'
+import { createFetchCache } from '@/composables/createFetchCache'
 import { useAuthStore } from '@/stores/auth'
 
 // Phase 8 (UX-15 / UA-061): Continue-Watching row for the logged-in Home
@@ -35,11 +36,9 @@ export interface ContinueWatchingItem {
 // the identical request 12s later). 30s TTL is lossless: the player's
 // heartbeat saves every 30s (useWatchTracking SAVE_INTERVAL), so the backend
 // can't have meaningfully fresher data inside that window anyway.
-const CACHE_TTL = 30 * 1000
 const items = ref<ContinueWatchingItem[]>([])
-let cachedAt = 0
+const cache = createFetchCache(30 * 1000)
 let cachedLimit = 0
-let inFlight: Promise<void> | null = null
 
 export function useContinueWatching(limit = 10) {
   const isLoading = ref(false)
@@ -51,30 +50,27 @@ export function useContinueWatching(limit = 10) {
     // protected and would return 401.
     if (!auth.token) {
       items.value = []
-      cachedAt = 0
+      cache.invalidate()
       return
     }
-    if (!force && cachedLimit === limit && Date.now() - cachedAt < CACHE_TTL) return
-    if (inFlight) return inFlight
-    isLoading.value = true
-    error.value = null
-    inFlight = (async () => {
+    if (!force && cachedLimit === limit && cache.isFresh()) return
+    return cache.share(async () => {
+      isLoading.value = true
+      error.value = null
       try {
         const res = await userApi.getContinueWatching(limit)
         const data = (res.data?.data ?? res.data) as ContinueWatchingItem[]
         items.value = Array.isArray(data) ? data : []
-        cachedAt = Date.now()
+        cache.markFresh()
         cachedLimit = limit
       } catch (e) {
         error.value = e instanceof Error ? e.message : 'failed to load continue-watching'
         items.value = []
-        cachedAt = 0
+        cache.invalidate()
       } finally {
         isLoading.value = false
-        inFlight = null
       }
-    })()
-    return inFlight
+    })
   }
 
   onMounted(fetchItems)
