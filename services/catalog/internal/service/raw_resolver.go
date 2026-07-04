@@ -114,14 +114,25 @@ type RawEpisode struct {
 // the proxy allowlist, so a library master-playlist request must arrive
 // pre-signed; the proxy then mints child segment tokens during m3u8 rewrite.
 type RawStream struct {
-	URL       string        `json:"url"`
-	Type      string        `json:"type"`
-	Quality   string        `json:"quality,omitempty"`
-	Subtitles []RawSubtitle `json:"subtitles,omitempty"`
-	ExpiresAt time.Time     `json:"expires_at"`
-	Source    string        `json:"source"`
-	Exp       string        `json:"exp,omitempty"`
-	Sig       string        `json:"sig,omitempty"`
+	URL        string         `json:"url"`
+	Type       string         `json:"type"`
+	Quality    string         `json:"quality,omitempty"`
+	Subtitles  []RawSubtitle  `json:"subtitles,omitempty"`
+	ExpiresAt  time.Time      `json:"expires_at"`
+	Source     string         `json:"source"`
+	Exp        string         `json:"exp,omitempty"`
+	Sig        string         `json:"sig,omitempty"`
+	Storyboard *RawStoryboard `json:"storyboard,omitempty"`
+}
+
+// RawStoryboard points at the episode's WebVTT thumbnail track (signed for
+// the HLS proxy, same trust path as the playlist URL). Present only when the
+// library's episode row has a storyboard (best-effort ffmpeg pass; absent for
+// episodes encoded before the pass shipped, or when it failed).
+type RawStoryboard struct {
+	URL string `json:"url"`
+	Exp string `json:"exp,omitempty"`
+	Sig string `json:"sig,omitempty"`
 }
 
 // RawSubtitle is an embedded subtitle track.
@@ -141,10 +152,12 @@ type EpisodesResponse struct {
 // newLibraryStream builds a RawStream for a self-hosted MinIO HLS URL, signing
 // it with the HLS-proxy provenance HMAC so the (un-allowlisted) minio host is
 // trusted on the master-playlist request. Shared by raw + the first-party
-// ("ae") path.
-func newLibraryStream(minioURL, quality string) *RawStream {
+// ("ae") path. storyboardURL is optional (empty when the episode has no
+// storyboard yet); when present it is signed the same way and attached as
+// RawStream.Storyboard.
+func newLibraryStream(minioURL, quality, storyboardURL string) *RawStream {
 	exp, sig := streamsign.Sign(minioURL)
-	return &RawStream{
+	s := &RawStream{
 		URL:       minioURL,
 		Type:      "hls",
 		Quality:   quality,
@@ -154,6 +167,11 @@ func newLibraryStream(minioURL, quality string) *RawStream {
 		Exp:       exp,
 		Sig:       sig,
 	}
+	if storyboardURL != "" {
+		sbExp, sbSig := streamsign.Sign(storyboardURL)
+		s.Storyboard = &RawStoryboard{URL: storyboardURL, Exp: sbExp, Sig: sbSig}
+	}
+	return s
 }
 
 // GetLibraryEpisodes lists the episodes for an anime that are present in the
@@ -256,5 +274,5 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 	r.fireSignal(func() {
 		_ = r.library.RecordFetch(sigCtx, mal, ep)
 	})
-	return newLibraryStream(resp.MinIOURL, quality), nil
+	return newLibraryStream(resp.MinIOURL, quality, resp.StoryboardURL), nil
 }

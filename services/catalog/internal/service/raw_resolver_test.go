@@ -244,6 +244,66 @@ func TestRawResolver_GetLibraryStream_SignedAndLibraryOnly(t *testing.T) {
 	}
 }
 
+// TestRawResolver_GetLibraryStream_StoryboardSigned proves that when the
+// library's episode response carries a storyboard_url, GetLibraryStream
+// mints a signed RawStoryboard alongside the playlist — same trust path
+// (streamsign.Sign) as the master-playlist URL.
+func TestRawResolver_GetLibraryStream_StoryboardSigned(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	const storyboardURL = "http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard.vtt"
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success":true,"data":{"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8","duration_sec":10,"size_bytes":100,"storyboard_url":%q}}`, storyboardURL)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	if err != nil {
+		t.Fatalf("GetLibraryStream: %v", err)
+	}
+	if got.Storyboard == nil {
+		t.Fatal("expected non-nil Storyboard when library returns storyboard_url")
+	}
+	if got.Storyboard.URL != storyboardURL {
+		t.Errorf("Storyboard.URL = %q, want %q", got.Storyboard.URL, storyboardURL)
+	}
+	if got.Storyboard.Exp == "" || got.Storyboard.Sig == "" {
+		t.Errorf("expected signed storyboard URL (exp/sig), got exp=%q sig=%q", got.Storyboard.Exp, got.Storyboard.Sig)
+	}
+}
+
+// TestRawResolver_GetLibraryStream_NoStoryboardWhenAbsent proves that when
+// the library's episode response has no storyboard_url (episode encoded
+// before the storyboard pass shipped, or the ffmpeg storyboard pass failed
+// best-effort), RawStream.Storyboard stays nil rather than a zero-value
+// struct — so the frontend's `if (stream.storyboard)` check works.
+func TestRawResolver_GetLibraryStream_NoStoryboardWhenAbsent(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8","duration_sec":10,"size_bytes":100}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	if err != nil {
+		t.Fatalf("GetLibraryStream: %v", err)
+	}
+	if got.Storyboard != nil {
+		t.Errorf("expected nil Storyboard when library omits storyboard_url, got %+v", got.Storyboard)
+	}
+}
+
 func TestRawResolver_GetLibraryStream_404WhenAbsent(t *testing.T) {
 	cacheC := newTestRedis(t)
 	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))

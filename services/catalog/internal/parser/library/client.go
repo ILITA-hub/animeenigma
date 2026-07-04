@@ -50,9 +50,10 @@ type Client struct {
 // httputil's standard envelope; we decode into the envelope and
 // return the inner payload.
 type EpisodeResponse struct {
-	MinIOURL    string `json:"minio_url"`
-	DurationSec int    `json:"duration_sec"`
-	SizeBytes   int64  `json:"size_bytes"`
+	MinIOURL      string `json:"minio_url"`
+	DurationSec   int    `json:"duration_sec"`
+	SizeBytes     int64  `json:"size_bytes"`
+	StoryboardURL string `json:"storyboard_url,omitempty"`
 }
 
 // envelope mirrors libs/httputil.Response — Success + Data only; we
