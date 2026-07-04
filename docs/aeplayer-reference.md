@@ -6,7 +6,7 @@
 > first**. The CLAUDE.md "5 video players" table is a historical sketch; this
 > document describes the player as it is actually built today.
 >
-> Last verified against code: 2026-06-29 (`git` HEAD `e69e3e77`).
+> Last verified against code: 2026-07-04 (mobile redesign + season downloads).
 
 ---
 
@@ -331,6 +331,50 @@ every member resolves the identical stream. Full WT architecture:
   flag, not a provider override. `pl_hud_pin='1'` keeps the HUD on screen.
 - **Autoplay-next / auto-skip-intro:** both default OFF. Skip-intro chip only
   shows if real intro/outro timings exist (no backend yet → effectively hidden).
+
+---
+
+## 12.5 Mobile (≤680px / coarse pointer) — redesign 2026-07-04
+
+`useMobilePlayer.ts` provides reactive `isMobile` (`max-width: 680px`, the
+player CSS breakpoint) and `isCoarse` (`pointer: coarse`, gates gestures).
+
+- **Template root is `.pl-wrap`** (carries `data-test="ae-player"`); the video
+  box `.pl` is its first child and keeps `rootRef`, hotkeys, theater/pseudo-FS
+  classes. Below it a mobile-only **action row** (`.pl-actions`): `[Эп N ▾]
+  [Источник ▾] [⬇ Скачать]` — hidden per-button under `offline` /
+  `!canDownload`.
+- **Fullscreen is capability-based** (`onToggleFullscreen`): native element FS
+  (+ best-effort `screen.orientation.lock('landscape')` on coarse) where
+  available; on iPhone (no element-FS API) a **pseudo-FS** takeover
+  (`pl--pseudo-fs`, fixed inset-0 z-100, `html.pl-noscroll`). Pseudo-FS pushes
+  a MERGED history state (`{...history.state, plPseudoFs:true}`) so the back
+  gesture exits it; exit correctness rides an instance-local
+  `pseudoFsEntryPushed` flag because url-sync's `router.replace` clobbers
+  `history.state`. Never use `video.webkitEnterFullscreen()` — it drops
+  SubtitleOverlay/SourcePanel/WT.
+- **Menus are bottom sheets on mobile**: the four floating menus +
+  BrowseSubsModal + DownloadDialog wrap in `<Teleport to="body"
+  :disabled="!sheetTeleport">` where `sheetTeleport = isMobile &&
+  !nativeFsActive` (body children are invisible under a native-FS element).
+  Sheet class `.pl-floating--mobile-sheet` z-110 over a z-105 scrim (both above
+  pseudo-FS z-100); `--prov` is re-bound on each wrapper (CSS vars don't
+  cascade to body).
+- **Gestures (coarse only)**: single tap on video toggles chrome (never
+  play/pause — the center 64px pause overlay is the play/pause affordance
+  while playing); double-tap side thirds = ±10s with a flash pill; desktop
+  click path is byte-identical.
+- **Control bar mobile trim**: ±5s/PiP/episodes-pill/volume-slider hidden;
+  fullscreen ALWAYS visible (hiding it was the original bug); source pill =
+  dot+chevron; 44px hit targets on coarse.
+- **Full-bleed**: `views/Anime.vue` adds scoped `.player-card` (class+attr
+  specificity — the only reliable way to beat unlayered `.glass-card` under
+  Tailwind v4) killing card gutters at ≤680px; `.pl` drops radius/side borders.
+- **Season downloads**: DownloadDialog v2 has an episode/season scope selector
+  (+ storage headroom warning); season path recomputes `seasonTargets()` at
+  confirm time and `enqueueSeason()` serially feeds the engine (which re-checks
+  quota headroom at the start of every `runDownload`). Season chip also lives
+  in the EpisodesPanel header.
 
 ---
 
