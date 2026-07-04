@@ -349,6 +349,8 @@ git commit -m "feat(offline): SubPref descriptor types + shared external-subtitl
 
 - [ ] **Step 1: Write the failing tests** (append to `downloadEngine.spec.ts`, reusing its `fakeCaches`/`mockFetch`/`req` helpers and MASTER/MEDIA fixtures)
 
+⚠️ The module-level `store` in the engine persists across tests and `_resetEngineForTests` does NOT reset it — every existing test installs its own fake explicitly. Each new test that must reach `done` MUST start with `_installCachesForTests(fakeCaches().impl)`; do not rely on a fake leaked from an earlier test.
+
 ```ts
 describe('external subtitles + autoSubUrl', () => {
   const STREAM: StreamResult = {
@@ -366,6 +368,7 @@ describe('external subtitles + autoSubUrl', () => {
   }
 
   it('caches the external track and stamps autoSubUrl from the pref', async () => {
+    _installCachesForTests(fakeCaches().impl)
     vi.stubGlobal('fetch', mockFetch(routes()))
     const id = await enqueueDownload({
       ...req(async () => STREAM),
@@ -381,6 +384,7 @@ describe('external subtitles + autoSubUrl', () => {
   })
 
   it('resolveSubs failure is non-fatal: download done, autoSubUrl unset', async () => {
+    _installCachesForTests(fakeCaches().impl)
     vi.stubGlobal('fetch', mockFetch(routes()))
     const id = await enqueueDownload({
       ...req(async () => STREAM),
@@ -392,6 +396,7 @@ describe('external subtitles + autoSubUrl', () => {
   })
 
   it('bundled pref matches the stream-provider track', async () => {
+    _installCachesForTests(fakeCaches().impl)
     vi.stubGlobal('fetch', mockFetch(routes()))
     const id = await enqueueDownload({ ...req(async () => STREAM), subPref: { kind: 'bundled', lang: 'auto' } })
     await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'))
@@ -497,6 +502,7 @@ describe('cellular gate', () => {
   })
 
   it('with the session override the gate is open', async () => {
+    _installCachesForTests(fakeCaches().impl)
     vi.spyOn(network, 'isCellular').mockReturnValue(true)
     vi.spyOn(network, 'allowCellularThisSession').mockReturnValue(true)
     vi.stubGlobal('fetch', mockFetch({
@@ -526,9 +532,12 @@ In `downloadEngine.ts`:
 
 ```ts
 // Installed lazily for the same reason as the registerPwa probe: the guard
-// imports the resolver chain, which must not become a static engine dep.
-void import('./cellularGuard').then((m) => m.ensureCellularGuard())
+// must not become a static engine dep. The catch matters — an unhandled
+// rejection here would fail unrelated test suites that import the engine.
+void import('./cellularGuard').then((m) => m.ensureCellularGuard()).catch(() => {})
 ```
+
+Also add `vi.mock('./cellularGuard', () => ({ ensureCellularGuard: () => {} }))` at the top of `downloadEngine.spec.ts` so the engine's module-scope dynamic import stays inert in tests.
 
 4. Gate at the very top of `runDownload`, right after the `if (!record) return`:
 
@@ -575,9 +584,13 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const enqueueDownload = vi.fn(async () => 'id')
+// vi.mock intercepts DYNAMIC imports too — these cover the guard's lazy loads.
+// externalSubs must be mocked as well: its static @/api/client chain pulls
+// router+i18n into the suite otherwise.
 vi.mock('./downloadEngine', () => ({
   enqueueDownload, isEngineWorking: () => false, pauseAllForCellular: vi.fn(),
 }))
+vi.mock('./externalSubs', () => ({ makeExternalSubResolver: () => undefined }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({
   useProviderResolver: () => ({ resolveStream: vi.fn(async () => ({ url: 'u', type: 'hls' })) }),
 }))
@@ -612,14 +625,13 @@ describe('resumeNetworkPaused', () => {
 
 ```ts
 // src/offline/cellularGuard.ts
-// Wi-Fi-only default, part 2: reacts to connectivity-type changes. Loaded
-// lazily by the engine (mirrors the registerPwa probe) so the resolver chain
-// never becomes a static engine dependency in reverse.
+// Wi-Fi-only default, part 2: reacts to connectivity-type changes. The engine
+// dynamic-imports this at module scope, so this module MUST stay
+// dependency-light: a static resolver/api-client chain would drag
+// router+i18n into every test suite that imports the engine. Everything
+// heavy is lazy-imported inside the functions.
 import { onConnectionChange, isCellular, allowCellularThisSession, setAllowCellularThisSession } from './network'
-import { enqueueDownload, isEngineWorking, pauseAllForCellular } from './downloadEngine'
 import { listDownloads } from './registry'
-import { makeExternalSubResolver } from './externalSubs'
-import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
 
 let installed = false
 /** Idempotent — the engine installs it on first load. */
@@ -628,17 +640,26 @@ export function ensureCellularGuard(): void {
   installed = true
   onConnectionChange(() => {
     if (isCellular()) {
-      if (!allowCellularThisSession()) void pauseAllForCellular()
+      if (!allowCellularThisSession()) void import('./downloadEngine').then((m) => m.pauseAllForCellular()).catch(() => {})
     } else {
-      void resumeNetworkPaused()
+      void resumeNetworkPaused().catch(() => {})
     }
   })
 }
 
 /** Re-enqueue every record the guard parked (pausedBy:'network'), rebuilding
  *  the resolve closures from the persisted combo/subPref — the exact recipe
- *  of the store's manual resume. Returns how many were released. */
+ *  of the store's manual resume. Returns how many were released.
+ *  Known self-healing edges (manual resume recovers both): a cellular blip
+ *  shorter than the in-flight segment can leave the active id parked with no
+ *  later trigger; a worker's final paused-write can theoretically drop a
+ *  concurrent pausedBy stamp. */
 export async function resumeNetworkPaused(): Promise<number> {
+  const [{ enqueueDownload, isEngineWorking }, { makeExternalSubResolver }, { useProviderResolver }] = await Promise.all([
+    import('./downloadEngine'),
+    import('./externalSubs'),
+    import('@/composables/aePlayer/useProviderResolver'),
+  ])
   const resolver = useProviderResolver()
   let n = 0
   for (const d of await listDownloads()) {
@@ -862,7 +883,7 @@ Template — insert BEFORE the quality title (`dl-title` for quality):
     </template>
 ```
 
-Scoped style addition (token-only):
+Scoped style addition (token-only). ⚠️ The dialog roughly doubles in height and the NON-sheet variant renders inside the player (`sheetTeleport = isMobile && !nativeFsActive` — mobile NATIVE fullscreen uses the absolute variant, where landscape height is ~360-400px): give `.dl-dialog` a scroll guard.
 
 ```css
 .dl-select {
@@ -875,6 +896,13 @@ Scoped style addition (token-only):
   color: var(--foreground);
   font-size: 0.8125rem;
 }
+```
+
+And on the existing `.dl-dialog` rule add:
+
+```css
+  max-height: calc(100% - 5rem);
+  overflow-y: auto;
 ```
 
 i18n — add to `player.aePlayer.offline` in ALL THREE locales:
@@ -1223,6 +1251,8 @@ git commit -m "feat(player): download dialog edits source combo + subtitles; dow
 
 - [ ] **Step 1: Write the failing tests** (append to `seasonDownloadFlow.spec.ts`, following its existing mock scaffolding for `capabilitiesApi`/`useProviderResolver`/`enqueueSeason` — read the file's existing mocks first and extend them, don't rebuild)
 
+⚠️ **The existing `vi.mock('@/api/client', …)` factory has NO `subtitlesApi`** — after Step 3 every PRE-EXISTING test in this file fails (undefined `subtitlesApi.all` → synchronous TypeError → flow resets to `failed` instead of reaching `choose`). Extend the factory FIRST: add `subtitlesApi: { all: vi.fn(async () => ({ data: { data: { languages: {}, episode: 1 } } })) }` (hoisting-safe, same style as the factory's other entries), overridable per test.
+
 Cases to add (adapt to the file's helpers):
 
 ```ts
@@ -1260,7 +1290,7 @@ Run: `bunx vitest run src/offline/seasonDownloadFlow.spec.ts` — Expected: new 
 
 (init `report: null, subTracks: []`; reset() clears both). Imports: `subtitlesApi` (extend the existing `@/api/client` import), `flattenAggregateSubs, type AggregateSubsResponse` from `@/composables/aePlayer/useSubtitleTracks`, `makeExternalSubResolver` from `./externalSubs`, `type SubPref` from `./types`, `type SubtitleTrack` from `@/types/aePlayer`, `listDownloads` already imported.
 
-In `openSeasonDownload`, after `targets` is computed and before `state.phase = 'choose'`:
+In `openSeasonDownload`, AFTER the `targets.length === 0 → reset({ kind: 'nothing-left' })` guard, right next to the `state.targets = targets` assignments (⚠️ NOT between `seasonTargets(...)` and that guard — `targets[0]` on an empty list would throw and turn `nothing-left` into `failed`, breaking the existing test):
 
 ```ts
     // External subtitle menu rides along; its failure must never block the flow.
@@ -1402,21 +1432,22 @@ git commit -m "feat(offline): card season flow gets source + subtitle selection"
 
 - [ ] **Step 1: Write the failing test** (append to `offlineAdapter.spec.ts`, reusing its record fixtures)
 
+The file ALREADY has a record fixture `function dl(n: number, over: Partial<OfflineDownload> = {})` — REUSE it (do not shadow it, there is no `baseRecord`):
+
 ```ts
 import { pickOfflineAutoSub } from './offlineAdapter'
 
 describe('pickOfflineAutoSub', () => {
   const sub = { url: '/__offline/a%3A1/sub/0', provider: 'jimaku', lang: 'ja', label: 'J', format: 'ass' }
-  const dl = (over: Partial<OfflineDownload>) => ({ /* reuse the file's record factory */ ...baseRecord, ...over })
+  const play = (over: Partial<OfflineDownload>) => ({ animeId: 'a', title: 'T', downloads: [dl(1, over)] })
 
   it('returns the stream track matching the record autoSubUrl', () => {
-    const p = { animeId: 'a', title: 'T', downloads: [dl({ state: 'done', autoSubUrl: sub.url })] }
-    expect(pickOfflineAutoSub(p, 1, [sub])).toEqual(sub)
+    expect(pickOfflineAutoSub(play({ state: 'done', autoSubUrl: sub.url }), 1, [sub])).toEqual(sub)
   })
   it('null when no autoSubUrl / episode not done / track missing from stream', () => {
-    expect(pickOfflineAutoSub({ animeId: 'a', title: 'T', downloads: [dl({ state: 'done' })] }, 1, [sub])).toBeNull()
-    expect(pickOfflineAutoSub({ animeId: 'a', title: 'T', downloads: [dl({ state: 'paused', autoSubUrl: sub.url })] }, 1, [sub])).toBeNull()
-    expect(pickOfflineAutoSub({ animeId: 'a', title: 'T', downloads: [dl({ state: 'done', autoSubUrl: sub.url })] }, 1, [])).toBeNull()
+    expect(pickOfflineAutoSub(play({ state: 'done' }), 1, [sub])).toBeNull()
+    expect(pickOfflineAutoSub(play({ state: 'paused', autoSubUrl: sub.url }), 1, [sub])).toBeNull()
+    expect(pickOfflineAutoSub(play({ state: 'done', autoSubUrl: sub.url }), 1, [])).toBeNull()
   })
 })
 ```
@@ -1438,7 +1469,9 @@ export function pickOfflineAutoSub(
 }
 ```
 
-- [ ] **Step 3: Wire into AePlayer**
+- [ ] **Step 3: Wire into AePlayer — BOTH stream-assignment sites**
+
+⚠️ AePlayer assigns `currentStream` in TWO places: `loadEpisodesAndStream()` (~line 1455, assignment ~1507 — this is the path the FIRST offline episode takes: the synthetic offline provider wins the default pick → provider watcher → full re-list) and `resolveStreamForEpisode()` (~2182, assignment ~2203 — manual episode switch / autoplay-next). Wiring only the second silently skips the headline case (play from /downloads). Wire a shared helper into BOTH.
 
 Near the subtitle handlers add the session opt-out flag, and set it in `onSubtitlesOff`:
 
@@ -1446,21 +1479,26 @@ Near the subtitle handlers add the session opt-out flag, and set it in `onSubtit
 // Session opt-out: once the viewer explicitly turns subs off, offline
 // auto-enable must not re-arm on the next episode.
 let userDisabledSubs = false
+
+// The ONLY sanctioned subtitle auto-enable: explicit download-time choice,
+// offline playback only. Called after EVERY currentStream assignment.
+// Note: the "re-bind chosen track to subLang" watcher may later swap to
+// pickBestForLang's pick for the same lang — same track in practice.
+function applyOfflineAutoSub(epNumber: number, stream: StreamResult): void {
+  if (!props.offline || userDisabledSubs) return
+  const auto = pickOfflineAutoSub(props.offline, epNumber, stream.subtitles)
+  if (auto) {
+    chosenSub.value = auto as SubTrack
+    state.subLang.value = auto.lang // session ref — the global "subs off by default" pref is untouched
+  }
+}
 ```
 
 (in `onSubtitlesOff()` body, first line: `userDisabledSubs = true`).
 
-In `resolveStreamForEpisode`, right after `currentStream.value = stream`:
-
-```ts
-    if (props.offline && !userDisabledSubs) {
-      const auto = pickOfflineAutoSub(props.offline, ep.number, stream.subtitles)
-      if (auto) {
-        chosenSub.value = auto as SubTrack
-        state.subLang.value = auto.lang // session ref — the global "subs off by default" pref is untouched
-      }
-    }
-```
+Call sites — immediately after `currentStream.value = stream` in BOTH functions, using each scope's episode:
+- in `loadEpisodesAndStream()`: `applyOfflineAutoSub(<the selected episode variable in that scope>.number, stream)`
+- in `resolveStreamForEpisode(ep)`: `applyOfflineAutoSub(ep.number, stream)`
 
 Import `pickOfflineAutoSub` alongside the existing `offlineAdapter` imports.
 
@@ -1491,11 +1529,12 @@ git commit -m "feat(offline): auto-enable the downloaded subtitle track at offli
 ```
 
 ```ts
-/** «what exactly did I download»: provider · quality · chosen subs. */
+/** «what exactly did I download»: provider · quality · chosen subs (label + lang).
+ *  Provider id (not display name) is what the record stores — accepted. */
 function metaLabel(d: OfflineDownload): string {
   const base = `${d.combo.provider} · ${d.quality}p`
   const sub = d.autoSubUrl ? d.subtitles.find((s) => s.url === d.autoSubUrl) : undefined
-  return sub ? `${base} · CC ${sub.lang.toUpperCase()}` : base
+  return sub ? `${base} · CC ${sub.label} (${sub.lang.toUpperCase()})` : base
 }
 ```
 
@@ -1523,7 +1562,12 @@ const toast = useToast()
 const onCellular = ref(isCellular())
 const cellularAllowed = ref(allowCellularThisSession())
 let offConnChange: (() => void) | undefined
-onMounted(() => { offConnChange = onConnectionChange(() => { onCellular.value = isCellular() }) })
+onMounted(() => {
+  offConnChange = onConnectionChange(() => {
+    onCellular.value = isCellular()
+    cellularAllowed.value = allowCellularThisSession() // override may have been granted in the player dialog
+  })
+})
 onUnmounted(() => offConnChange?.())
 
 const cellularBlocked = computed(() =>
