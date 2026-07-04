@@ -130,6 +130,9 @@
     "reviews": "レビュー",
     "reviewsCount": "{count}件のレビュー",
     "watchersCount": "{count}人が視聴中",
+    "posterZoom": {
+      "open": "ポスターを全画面で表示"
+    },
     "writeReview": "レビューを書く",
     "reviewStats": {
       "watched": "📺 {watched}/{total}話 · {status}",

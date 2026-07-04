@@ -130,6 +130,9 @@
     "reviews": "Reviews",
     "reviewsCount": "{count} review | {count} reviews",
     "watchersCount": "{count} watching",
+    "posterZoom": {
+      "open": "View full-size poster"
+    },
     "writeReview": "Write a review",
     "reviewStats": {
       "watched": "📺 {watched}/{total} · {status}",

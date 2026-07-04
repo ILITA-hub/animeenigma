@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed, watch, toValue, type MaybeRefOrGetter } from 'vue'
 
 const STORAGE_KEY_BLOCKED = 'shikimori_blocked'
 const STORAGE_KEY_FAILED_URLS = 'shikimori_failed_urls'
@@ -102,15 +102,24 @@ export function getImageFallbackUrl(originalUrl: string): string {
   return proxyUrl(originalUrl)
 }
 
-export function useImageProxy(originalUrl: string | undefined | null) {
-  const src = ref(getImageUrl(originalUrl))
+export function useImageProxy(originalUrl: MaybeRefOrGetter<string | undefined | null>) {
   const hasFallback = ref(false)
 
+  // New source ⇒ fresh fallback state (route components are reused across
+  // navigations, so the url can change while the consumer stays mounted).
+  watch(() => toValue(originalUrl), () => {
+    hasFallback.value = false
+  })
+
+  const imageSrc = computed(() => {
+    const url = toValue(originalUrl)
+    return hasFallback.value && url ? getImageFallbackUrl(url) : getImageUrl(url)
+  })
+
   function onError() {
-    if (hasFallback.value || !originalUrl) return
+    if (hasFallback.value || !toValue(originalUrl)) return
     hasFallback.value = true
-    src.value = getImageFallbackUrl(originalUrl)
   }
 
-  return { imageSrc: src, onError }
+  return { imageSrc, onError }
 }

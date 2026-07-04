@@ -17,13 +17,26 @@
       <div class="flex flex-col md:flex-row gap-6 md:gap-8">
         <!-- Poster -->
         <div class="flex-shrink-0">
-          <PosterImage
+          <button
+            type="button"
+            class="block w-40 md:w-56 cursor-zoom-in rounded-xl"
+            :aria-label="$t('anime.posterZoom.open')"
+            @click="openPosterZoom"
+          >
+            <PosterImage
+              :src="anime.coverImage"
+              :alt="anime.title"
+              ratio="2/3"
+              rounded="xl"
+              :proxy-width="448"
+              class="shadow-2xl ring-1 ring-white/10"
+            />
+          </button>
+          <PosterLightbox
+            v-if="posterZoomEverOpened"
+            v-model="posterZoomOpen"
             :src="anime.coverImage"
             :alt="anime.title"
-            ratio="2/3"
-            rounded="xl"
-            :proxy-width="448"
-            class="w-40 md:w-56 shadow-2xl ring-1 ring-white/10"
           />
         </div>
 
@@ -878,6 +891,10 @@ import type { WatchCombo } from '@/types/preference'
 // Hanime / Anime18 / Raw / OurEnglish) are retired — their imports + template
 // mounts are removed here; the component files are deleted in a later task.
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
+// Poster tap-to-zoom lightbox — lazy + mounted only after the first tap (the
+// posterZoomEverOpened latch), so ~250 lines of gesture code stay out of the
+// eager route chunk and the chunk isn't even fetched until someone zooms.
+const PosterLightbox = defineAsyncComponent(() => import('@/components/anime/PosterLightbox.vue'))
 // Unified player (Task 15) — single-surface player; default ON, set
 // VITE_AE_PLAYER_ENABLED=false to disable for dark-ship.
 // loadingComponent: selecting the tab unmounts the existing-player card
@@ -998,6 +1015,14 @@ const { contextMenu, openAtElement: openContextMenuAt } = useContextMenu()
 
 let loadGeneration = 0
 const synopsisExpanded = ref(false)
+const posterZoomOpen = ref(false)
+// Latch (never unset): keeps the lightbox mounted after first use so the
+// close fade-out plays; gating v-if on posterZoomOpen would unmount mid-fade.
+const posterZoomEverOpened = ref(false)
+function openPosterZoom() {
+  posterZoomEverOpened.value = true
+  posterZoomOpen.value = true
+}
 const currentListStatus = ref<string | null>(null)
 const showStatusDropdown = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)

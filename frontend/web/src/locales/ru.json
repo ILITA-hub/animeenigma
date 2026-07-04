@@ -130,6 +130,9 @@
     "reviews": "Отзывы",
     "reviewsCount": "{count} отзыв | {count} отзыва | {count} отзывов",
     "watchersCount": "{count} смотрят",
+    "posterZoom": {
+      "open": "Открыть постер на весь экран"
+    },
     "writeReview": "Написать отзыв",
     "reviewStats": {
       "watched": "📺 {watched}/{total} · {status}",
