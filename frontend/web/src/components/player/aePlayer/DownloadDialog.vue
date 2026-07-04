@@ -56,7 +56,7 @@
       {{ $t('player.aePlayer.offline.cellularWarn') }}
     </div>
     <div class="dl-actions">
-<template v-if="cellularStep">
+      <template v-if="cellularStep">
         <button type="button" class="dl-btn dl-btn-warn text-warning font-medium" data-test="dl-cellular-confirm" @click="confirmCellular">
           {{ $t('player.aePlayer.offline.cellularConfirm') }}
         </button>
