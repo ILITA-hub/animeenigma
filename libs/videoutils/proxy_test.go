@@ -437,3 +437,19 @@ func TestRewriteVTTURLs_NonImagePayloadUntouched(t *testing.T) {
 		t.Fatalf("subtitle-style payload must pass through unchanged:\n%s", out)
 	}
 }
+
+// TestGetCorrectHLSContentType_StoryboardSheetStaysImage pins the first-party
+// sprite-sheet exemption: genuine storyboard JPEGs must NOT be relabeled
+// video/mp2t by the image→video obfuscation heuristic (image bytes served as
+// video break under any future nosniff header), while the heuristic keeps
+// firing for obfuscated CDN segments that merely claim to be images.
+func TestGetCorrectHLSContentType_StoryboardSheetStaysImage(t *testing.T) {
+	got := getCorrectHLSContentType("/raw-library/aeProvider/1/RAW/1/storyboard_001.jpg", "image/jpeg")
+	if got != "image/jpeg" {
+		t.Fatalf("storyboard sheet content-type = %q, want image/jpeg", got)
+	}
+	// Obfuscated CDN segment pretending to be an image keeps the video override.
+	if got := getCorrectHLSContentType("/cdn/seg-42.bin", "image/jpeg"); got != "video/mp2t" {
+		t.Fatalf("obfuscated segment content-type = %q, want video/mp2t", got)
+	}
+}

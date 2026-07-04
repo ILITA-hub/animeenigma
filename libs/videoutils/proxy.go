@@ -1098,6 +1098,13 @@ func rewriteURIAttribute(line, basePath, referer, sess string) string {
 func getCorrectHLSContentType(path, upstreamContentType string) string {
 	pathLower := strings.ToLower(path)
 
+	// First-party scrub-preview sprite sheets are GENUINE images — exempt
+	// them from the image→video obfuscation heuristic below, or the browser
+	// gets image bytes labeled video/mp2t (breaks under any future nosniff).
+	if strings.Contains(pathLower, "storyboard_") && strings.HasSuffix(pathLower, ".jpg") {
+		return "image/jpeg"
+	}
+
 	// Direct video files (MP4, WebM)
 	if strings.HasSuffix(pathLower, ".mp4") || strings.HasSuffix(pathLower, ".m4v") {
 		return "video/mp4"
