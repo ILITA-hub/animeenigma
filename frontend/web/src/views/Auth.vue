@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4 py-12">
+  <div class="min-h-[calc(100vh-var(--header-offset))] flex items-center justify-center px-4 py-12">
     <!-- Background -->
     <div class="fixed inset-0 -z-10">
       <div class="absolute inset-0 bg-gradient-to-br from-base via-surface to-base" />

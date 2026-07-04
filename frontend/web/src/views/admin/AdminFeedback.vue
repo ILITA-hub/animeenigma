@@ -1,6 +1,6 @@
 <template>
   <!-- Admin feedback browser: Project Board: feedback, TODOs and ideas — read, triage + quick-capture. -->
-  <div class="min-h-screen bg-base pt-20">
+  <div class="min-h-screen bg-base">
     <div class="container mx-auto px-4 py-8 max-w-7xl">
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">

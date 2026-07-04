@@ -51,8 +51,20 @@
       </button>
     </div>
 
-    <!-- Main Content -->
-    <main v-else id="main-content" tabindex="-1">
+    <!-- Main Content.
+         The ONE place that offsets pages below the fixed Navbar (value =
+         --header-offset in main.css; body already pads by safe-top). Pages
+         must NOT re-add their own header offset. Routes whose design runs
+         behind the transparent header (full-bleed hero) opt out via route
+         meta.fullBleed and own their clearance.
+         v-if (not v-else): a v-else would pair with the conditional banner
+         above and unmount the page while the banner shows. -->
+    <main
+      v-if="!appError"
+      id="main-content"
+      tabindex="-1"
+      :class="{ 'pt-[var(--header-offset)]': !route.meta.fullBleed }"
+    >
       <router-view v-slot="{ Component }">
         <Transition name="page">
           <component :is="Component" />
@@ -145,7 +157,7 @@
 import { onMounted, onErrorCaptured, ref, watch } from 'vue'
 import { TriangleAlert, Inbox, Send, Github, Mail } from 'lucide-vue-next'
 import { TooltipProvider } from 'reka-ui'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 import Navbar from '@/components/layout/Navbar.vue'
@@ -158,6 +170,7 @@ import { reportFeError } from '@/utils/feErrorLog'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const notifStore = useNotificationsStore()
 
 // Workstream notifications / Phase 3 — feature flag baked at build time.

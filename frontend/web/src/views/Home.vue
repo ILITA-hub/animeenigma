@@ -9,7 +9,7 @@
 
     <!-- Search Bar -->
     <h1 class="sr-only">AnimeEnigma</h1>
-    <div class="pt-24 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+    <div class="pt-4 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
       <div class="search-row relative z-40">
         <!-- Search wrapper — Neon Tokyo .search shell wrapping the SearchAutocomplete -->
         <div class="search-shell">

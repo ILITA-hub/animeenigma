@@ -1,6 +1,6 @@
 <template>
   <!-- /admin/gacha — Gacha manager with Cards / Groups / Banners tabs -->
-  <div class="min-h-screen bg-base pt-20">
+  <div class="min-h-screen bg-base">
     <div class="container mx-auto px-4 py-8 max-w-7xl">
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">

@@ -1,6 +1,6 @@
 <!-- frontend/web/src/views/Schedule.vue -->
 <template>
-  <div class="min-h-screen bg-background pt-20">
+  <div class="min-h-screen bg-background">
     <div class="container mx-auto px-4 py-8">
       <div class="flex items-center justify-between gap-3 flex-wrap mb-5">
         <div class="flex items-center gap-3 flex-wrap">

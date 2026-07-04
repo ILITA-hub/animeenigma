@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4">
+  <div class="min-h-[calc(100vh-var(--header-offset))] flex items-center justify-center px-4">
     <div class="max-w-md w-full">
       <div class="glass-card p-8 text-center">
         <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-cyan-500/20 flex items-center justify-center">

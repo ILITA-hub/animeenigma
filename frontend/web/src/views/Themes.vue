@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen pt-24 pb-16 px-4">
+  <div class="min-h-screen pt-4 pb-16 px-4">
     <div class="max-w-4xl mx-auto">
       <!-- Header -->
       <div class="flex items-center justify-between mb-6">

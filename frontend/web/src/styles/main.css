@@ -421,6 +421,12 @@ body {
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
 
+  /* Fixed-Navbar clearance, SINGLE source of truth (capsule bottom 64px +
+     16px breathing room). Consumed by App.vue <main> (default page offset)
+     and by viewport-fit pages (min-h-[calc(100vh-var(--header-offset))]).
+     Change it here, nowhere else. */
+  --header-offset: 5rem;
+
   /* Semantic tokens — Neon Tokyo foundation */
   --surface-2: #161623;
   --elevated: #1c1c2c;

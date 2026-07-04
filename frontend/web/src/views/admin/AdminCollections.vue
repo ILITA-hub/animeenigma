@@ -1,6 +1,6 @@
 <template>
   <!-- Phase 17 (UX-33) admin list view for editorial collections. -->
-  <div class="min-h-screen bg-base pt-20">
+  <div class="min-h-screen bg-base">
     <div class="container mx-auto px-4 py-8 max-w-7xl">
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">

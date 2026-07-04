@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-base pt-20">
+  <div class="min-h-screen bg-base">
     <div class="container mx-auto px-4 py-8 max-w-4xl">
       <!-- Page header -->
       <h1 class="text-3xl font-semibold text-white mb-1">{{ $t('anidle.page_title') }}</h1>

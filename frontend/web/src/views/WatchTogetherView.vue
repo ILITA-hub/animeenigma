@@ -481,7 +481,7 @@ watch(livePlayer, (p) => {
        absolute over the player. -->
   <div
     v-else
-    class="flex flex-col lg:flex-row min-h-screen w-full pt-16"
+    class="flex flex-col lg:flex-row min-h-screen w-full"
   >
     <!-- Player column — relative so the burst overlay can `absolute inset-0` -->
     <div class="relative flex-1 min-w-0 bg-black">

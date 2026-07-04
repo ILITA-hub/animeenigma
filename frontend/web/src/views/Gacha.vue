@@ -1,7 +1,7 @@
 <template>
   <!-- /gacha — all-in-one Variant C: daily-claim header + banner slider + spin
        dock + drops modal + gem ceremony → 3D viewer → summary pull flow. -->
-  <div class="min-h-screen bg-base pt-20">
+  <div class="min-h-screen bg-base">
     <div class="container mx-auto px-4 py-8 max-w-5xl">
       <!-- Loading state -->
       <div v-if="loadingWallet && loadingBanners" class="flex justify-center py-20">

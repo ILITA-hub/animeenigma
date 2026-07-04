@@ -3,7 +3,7 @@
        HTML page. Lists every admin tool as a styled Neon-Tokyo card. Auth is
        enforced upstream (gateway /admin JWT+AdminRole) AND by the router guard
        (meta.requiresAdmin), so this only ever renders for admins. -->
-  <div class="min-h-screen bg-base pt-20">
+  <div class="min-h-screen bg-base">
     <div class="container mx-auto px-4 py-8 max-w-7xl">
       <!-- Header -->
       <div class="mb-8">

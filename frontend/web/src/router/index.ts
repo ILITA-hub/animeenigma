@@ -46,7 +46,9 @@ const routes: RouteRecordRaw[] = [
     path: '/anime/:id',
     name: 'anime',
     component: () => import('@/views/Anime.vue'),
-    meta: { titleKey: 'anime.detailsTitle' },
+    // fullBleed: page owns its top clearance (hero runs behind the
+    // transparent header) — see the <main> offset comment in App.vue.
+    meta: { titleKey: 'anime.detailsTitle', fullBleed: true },
     // Page-load waterfall optimization (2026-06-11): fire the page's data
     // requests and warm the player chunk at NAVIGATION START, in parallel
     // with the Anime.vue route-chunk download — instead of discovering them
@@ -151,7 +153,7 @@ const routes: RouteRecordRaw[] = [
     path: '/user/:publicId',
     name: 'public-profile',
     component: () => import('@/views/Profile.vue'),
-    meta: { titleKey: 'nav.profile' }
+    meta: { titleKey: 'nav.profile', fullBleed: true }
   },
   {
     path: '/status',
@@ -237,7 +239,7 @@ const routes: RouteRecordRaw[] = [
     path: '/collections/:slug',
     name: 'collection-detail',
     component: () => import('@/views/Collections.vue'),
-    meta: { titleKey: 'collections.title' }
+    meta: { titleKey: 'collections.title', fullBleed: true }
   },
   // ── Anidle anime-guessing game ──────────────────────────────────────────────
   {

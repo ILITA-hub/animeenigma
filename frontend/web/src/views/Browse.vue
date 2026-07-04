@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen pt-20 pb-20 md:pb-8">
+  <div class="min-h-screen pb-20 md:pb-8">
     <div class="max-w-7xl mx-auto px-4">
       <!-- Search Header -->
       <div class="mb-6">

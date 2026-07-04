@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen pt-24 pb-16 px-4">
+  <div class="min-h-screen pt-4 pb-16 px-4">
     <div class="max-w-md mx-auto">
       <div class="glass-card rounded-2xl p-8">
         <h1 class="text-2xl font-semibold text-white mb-2">{{ $t('admin.recs.title') }}</h1>

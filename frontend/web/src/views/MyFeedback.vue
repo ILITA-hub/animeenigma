@@ -4,7 +4,7 @@
      to friendly labels. Read-only mirror of the admin feedback archive,
      scoped server-side to the authenticated user (GET /api/users/reports). -->
 <template>
-  <div class="min-h-screen bg-background pt-20">
+  <div class="min-h-screen bg-background">
     <div class="container mx-auto px-4 py-8 max-w-3xl">
       <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
         <h1 class="text-2xl font-semibold text-foreground font-display">{{ $t('myFeedback.title') }}</h1>
