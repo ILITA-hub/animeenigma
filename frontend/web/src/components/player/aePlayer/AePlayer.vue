@@ -379,7 +379,7 @@
         :season-count="seasonCount"
         :duration-min="anime.durationMin"
         :report="report"
-        :initial-combo="dlInitialCombo"
+        :initial-combo="state.combo.value"
         :sub-options="dlSubOptions"
         :load-teams="dlLoadTeams"
         :sheet="sheetTeleport"
@@ -497,7 +497,7 @@ import { enqueueDownload, engineState } from '@/offline/downloadEngine'
 import { seasonTargets, enqueueSeason } from '@/offline/seasonDownload'
 import { listDownloads } from '@/offline/registry'
 import { makeOfflineResolver, offlineCapabilityReport, pickOfflineAutoSub } from '@/offline/offlineAdapter'
-import { makeExternalSubResolver } from '@/offline/externalSubs'
+import { makeExternalSubResolver, externalSubOptions } from '@/offline/externalSubs'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, ProviderRow, AudioKind, TrackLang, Combo } from '@/types/aePlayer'
@@ -2314,27 +2314,19 @@ watch(() => engineState.cellularPauses.value, () => {
   toast.push(t('player.aePlayer.offline.cellularAutoPaused'), 'info', 5000)
 })
 
-const dlInitialCombo = computed<Combo>(() => ({ ...state.combo.value }))
-
 // Bundled entries come from the CURRENT stream (per-episode availability is
 // re-matched by the engine); external entries from the aggregated list.
 const dlSubOptions = computed<SubOption[]>(() => {
   const opts: SubOption[] = []
-  const seen = new Set<string>()
+  const seenLangs = new Set<string>()
+  const bundledUrls = new Set<string>()
   for (const tr of providerBundledTracks.value) {
-    const key = `b:${tr.lang}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    opts.push({ key, label: `${t('player.aePlayer.offline.subsBundled')} · ${tr.lang.toUpperCase()}`, pref: { kind: 'bundled', lang: tr.lang } })
+    bundledUrls.add(tr.url)
+    if (seenLangs.has(tr.lang)) continue
+    seenLangs.add(tr.lang)
+    opts.push({ key: `b:${tr.lang}`, label: `${t('player.aePlayer.offline.subsBundled')} · ${tr.lang.toUpperCase()}`, pref: { kind: 'bundled', lang: tr.lang } })
   }
-  const bundledUrls = new Set(providerBundledTracks.value.map((b) => b.url))
-  for (const tr of subtitleTracks.value) {
-    if (bundledUrls.has(tr.url)) continue
-    const key = `e:${tr.provider}:${tr.lang}:${tr.label}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    opts.push({ key, label: `${tr.label} · ${tr.lang.toUpperCase()}`, pref: { kind: 'external', provider: tr.provider, lang: tr.lang, label: tr.label } })
-  }
+  opts.push(...externalSubOptions(subtitleTracks.value.filter((tr) => !bundledUrls.has(tr.url))))
   return opts
 })
 

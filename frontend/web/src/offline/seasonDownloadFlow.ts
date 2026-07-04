@@ -62,6 +62,13 @@ const state = reactive<SeasonFlowState>({
 // its result instead of reviving a dismissed dialog.
 let seq = 0
 
+/** Per-anime download states keyed by episode number — the seasonTargets input. */
+async function animeDownloadStates(animeId: string): Promise<Record<number, DownloadState>> {
+  const states: Record<number, DownloadState> = {}
+  for (const d of await listDownloads()) if (d.animeId === animeId) states[d.episode.number] = d.state
+  return states
+}
+
 function reset(notice: SeasonFlowNotice | null): void {
   state.phase = 'idle'
   state.request = null
@@ -131,10 +138,8 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
     const resolver = useProviderResolver()
     const episodes = await resolver.listEpisodes(combo.provider, request.animeId)
     if (mySeq !== seq) return
-    const all = await listDownloads()
+    const states = await animeDownloadStates(request.animeId)
     if (mySeq !== seq) return
-    const states: Record<number, DownloadState> = {}
-    for (const d of all) if (d.animeId === request.animeId) states[d.episode.number] = d.state
     const targets = seasonTargets(episodes, states)
     if (targets.length === 0) {
       reset({ kind: 'nothing-left' })
@@ -177,10 +182,8 @@ export async function confirmSeasonDownload(
     if (chosen.provider !== state.combo?.provider) {
       const episodes = await resolver.listEpisodes(chosen.provider, req.animeId)
       if (mySeq !== seq) return
-      const all = await listDownloads()
+      const states = await animeDownloadStates(req.animeId)
       if (mySeq !== seq) return
-      const states: Record<number, DownloadState> = {}
-      for (const d of all) if (d.animeId === req.animeId) states[d.episode.number] = d.state
       targets = seasonTargets(episodes, states)
       if (targets.length === 0) {
         reset({ kind: 'nothing-left' })

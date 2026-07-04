@@ -46,6 +46,7 @@ import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
 import type { Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
 import type { CapabilityReport } from '@/types/capabilities'
 import type { SubPref, SubOption } from '@/offline/types'
+import { externalSubOptions } from '@/offline/externalSubs'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -58,19 +59,10 @@ function loadTeams(provider: string, audio: AudioKind): Promise<string[]> {
 }
 
 // Labels are i18n'd here — the flow module stays translation-free.
-const subOptions = computed<SubOption[]>(() => {
-  const opts: SubOption[] = [
-    { key: 'b:auto', label: t('player.aePlayer.offline.subsBundled'), pref: { kind: 'bundled', lang: 'auto' } },
-  ]
-  const seen = new Set<string>()
-  for (const tr of seasonFlow.subTracks as readonly SubtitleTrack[]) {
-    const key = `e:${tr.provider}:${tr.lang}:${tr.label}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    opts.push({ key, label: `${tr.label} · ${tr.lang.toUpperCase()}`, pref: { kind: 'external', provider: tr.provider, lang: tr.lang, label: tr.label } })
-  }
-  return opts
-})
+const subOptions = computed<SubOption[]>(() => [
+  { key: 'b:auto', label: t('player.aePlayer.offline.subsBundled'), pref: { kind: 'bundled', lang: 'auto' } },
+  ...externalSubOptions(seasonFlow.subTracks as readonly SubtitleTrack[]),
+])
 
 function onConfirm(quality: string, scope: 'episode' | 'season', combo: Combo | null, subPref: SubPref | null) {
   void confirmSeasonDownload(quality, scope, combo, subPref)

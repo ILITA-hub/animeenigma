@@ -2,7 +2,7 @@ import type { SubtitleTrack } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import { subtitlesApi } from '@/api/client'
 import { flattenAggregateSubs, type AggregateSubsResponse } from '@/composables/aePlayer/useSubtitleTracks'
-import type { SubPref } from './types'
+import type { SubPref, SubOption } from './types'
 
 function matchExternal(tracks: SubtitleTrack[], pref: Extract<SubPref, { kind: 'external' }>): SubtitleTrack | undefined {
   const same = tracks.filter((t) => t.provider === pref.provider && t.lang === pref.lang)
@@ -34,4 +34,19 @@ export function makeExternalSubResolver(
     const hit = matchExternal(flattenAggregateSubs(data), pref)
     return hit ? [hit] : []
   }
+}
+
+/** Download-dialog options for external (aggregated) tracks — shared by the
+ *  in-player and card-flow hosts so the option key format, dedup rule, and
+ *  pref shape live in exactly one place. */
+export function externalSubOptions(tracks: readonly SubtitleTrack[]): SubOption[] {
+  const opts: SubOption[] = []
+  const seen = new Set<string>()
+  for (const tr of tracks) {
+    const key = `e:${tr.provider}:${tr.lang}:${tr.label}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    opts.push({ key, label: `${tr.label} · ${tr.lang.toUpperCase()}`, pref: { kind: 'external', provider: tr.provider, lang: tr.lang, label: tr.label } })
+  }
+  return opts
 }
