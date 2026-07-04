@@ -6,6 +6,7 @@ import {
   setLiveSessionProbe,
   cancelPendingReload,
   shouldFullReloadOnNav,
+  shouldPurgeCacheKey,
 } from './registerPwa'
 
 function makeDoc(): Document {
@@ -179,6 +180,21 @@ describe('scheduleReload', () => {
     doc.dispatchEvent(new Event('visibilitychange'))
     expect(first).not.toHaveBeenCalled()
     expect(second).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('shouldPurgeCacheKey (kill-switch cache purge filter)', () => {
+  it('purges the workbox app-shell precache', () => {
+    expect(shouldPurgeCacheKey('workbox-precache-v2')).toBe(true)
+  })
+  it('purges the disposable scrub-preview segment tee (segmentCache.ts)', () => {
+    expect(shouldPurgeCacheKey('ae-seg-v1')).toBe(true)
+  })
+  it('preserves user-downloaded offline episode caches', () => {
+    expect(shouldPurgeCacheKey('ae-offline-v1')).toBe(false)
+  })
+  it('preserves unrelated cache keys', () => {
+    expect(shouldPurgeCacheKey('some-other-cache')).toBe(false)
   })
 })
 

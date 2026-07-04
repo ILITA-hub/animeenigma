@@ -108,14 +108,21 @@ async function killSwitchActive(): Promise<boolean> {
   }
 }
 
+/** Cache Storage keys the kill-switch purges: the workbox app-shell precache,
+ *  and ae-seg-* (segmentCache.ts) — the scrub-preview segment tee, disposable
+ *  and rebuilt from network on demand. ae-offline-* (user-downloaded episodes)
+ *  deliberately does NOT match — the kill-switch disables a broken SW, it
+ *  must never destroy user data (downloads become unplayable until
+ *  re-registration, not gone). */
+export function shouldPurgeCacheKey(key: string): boolean {
+  return key.startsWith('workbox-') || key.startsWith('ae-seg-')
+}
+
 async function unregisterAll(): Promise<void> {
   const regs = await navigator.serviceWorker.getRegistrations()
   await Promise.all(regs.map((r) => r.unregister()))
-  // ONLY the workbox app-shell caches. ae-offline-* holds user-downloaded
-  // episodes — the kill-switch disables a broken SW, it must never destroy
-  // user data (downloads become unplayable until re-registration, not gone).
   const keys = await caches.keys()
-  await Promise.all(keys.filter((k) => k.startsWith('workbox-')).map((k) => caches.delete(k)))
+  await Promise.all(keys.filter(shouldPurgeCacheKey).map((k) => caches.delete(k)))
 }
 
 export async function initPwa(): Promise<void> {

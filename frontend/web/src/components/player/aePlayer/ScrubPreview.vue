@@ -37,6 +37,7 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
 import { scrubDebug, slog, srecordCapture, sreset } from '@/composables/aePlayer/scrubPreviewDebug'
+import { markScrubUrl } from '@/pwa/segmentCache'
 
 /**
  * Real frame previews for the scrub-bar hover bubble — thumbnail-cache design.
@@ -391,6 +392,12 @@ async function ensureEngine() {
     maxMaxBufferLength: 6,
     backBufferLength: 0,
     startLevel: 0,
+    // Tag shadow-engine traffic so the SW serves it cache-first (segmentCache.ts).
+    // hls.js skips its own open() when xhrSetup already opened the request.
+    xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+      const marked = markScrubUrl(url)
+      if (marked !== url) xhr.open('GET', marked, true)
+    },
   })
   hls.loadSource(streamUrl)
   hls.attachMedia(v)

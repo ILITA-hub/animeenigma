@@ -4,13 +4,23 @@ import ScrubPreview from './ScrubPreview.vue'
 import { scrubDebug, sreset } from '@/composables/aePlayer/scrubPreviewDebug'
 
 // hls.js is dynamically imported only on the hls path — mock it so the mp4
-// tests never pull the real module.
+// tests never pull the real module. `hlsMockState` is read/written by the
+// mock factory (hoisted above this module's imports by vi.mock), so it must
+// be created via vi.hoisted rather than a plain module-scope `let`.
+const hlsMockState = vi.hoisted(() => ({
+  isSupported: false,
+  lastConfig: null as Record<string, unknown> | null,
+}))
+
 vi.mock('hls.js', () => ({
   default: class MockHls {
     static isSupported() {
-      return false // jsdom — fall back to the native-src path
+      return hlsMockState.isSupported // jsdom — false falls back to native-src path
     }
     static Events = { MANIFEST_PARSED: 'hlsManifestParsed' }
+    constructor(config: Record<string, unknown>) {
+      hlsMockState.lastConfig = config
+    }
     loadSource() {}
     attachMedia() {}
     on() {}
@@ -22,6 +32,8 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     sreset()
+    hlsMockState.isSupported = false
+    hlsMockState.lastConfig = null
   })
   afterEach(() => vi.useRealTimers())
 
@@ -128,6 +140,35 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
     await vi.advanceTimersByTimeAsync(0)
     const video = w.find('[data-test="preview-video"]').element as HTMLVideoElement
     expect(video.getAttribute('src')).toBe('https://x/ep.mp4')
+  })
+
+  it('tags shadow-engine HLS requests via xhrSetup with the aescrub=1 marker', async () => {
+    hlsMockState.isSupported = true
+    const w = make({ streamUrl: 'https://x/master.m3u8', streamType: 'hls' })
+    await w.setProps({ visible: true, timeSec: 5 })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(hlsMockState.lastConfig).toBeTruthy()
+    const xhrSetup = hlsMockState.lastConfig?.xhrSetup as
+      | ((xhr: XMLHttpRequest, url: string) => void)
+      | undefined
+    expect(typeof xhrSetup).toBe('function')
+
+    const proxyUrl =
+      '/api/streaming/hls-proxy?url=' + encodeURIComponent('https://cdn.example/v/segment_001.ts')
+    const fakeXhr = { open: vi.fn() } as unknown as XMLHttpRequest
+    xhrSetup!(fakeXhr, proxyUrl)
+    expect(fakeXhr.open).toHaveBeenCalledTimes(1)
+    const [method, calledUrl, isAsync] = (fakeXhr.open as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(method).toBe('GET')
+    expect(calledUrl).toContain('aescrub=1')
+    expect(isAsync).toBe(true)
+
+    // A non-proxy URL must be left completely untouched — no open() call.
+    const otherUrl = 'https://cdn.example/other/master.m3u8'
+    const fakeXhrUntouched = { open: vi.fn() } as unknown as XMLHttpRequest
+    xhrSetup!(fakeXhrUntouched, otherUrl)
+    expect(fakeXhrUntouched.open).not.toHaveBeenCalled()
   })
 
   it('a fast hover sweep issues NO seeks until the pointer settles, then ONE', async () => {
