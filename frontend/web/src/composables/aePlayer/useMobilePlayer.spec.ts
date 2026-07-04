@@ -8,7 +8,7 @@ function stubMatchMedia(initial: Record<string, boolean>) {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: initial[query] ?? false,
     addEventListener: (_: string, fn: Listener) => {
-      ;(listeners[query] ??= []).push(fn)
+      (listeners[query] ??= []).push(fn)
     },
     removeEventListener: () => {},
   }))
