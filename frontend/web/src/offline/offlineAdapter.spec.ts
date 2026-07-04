@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { makeOfflineResolver, offlineCapabilityReport, type OfflinePlayback } from './offlineAdapter'
+import { makeOfflineResolver, offlineCapabilityReport, pickOfflineAutoSub, type OfflinePlayback } from './offlineAdapter'
 import type { OfflineDownload } from './types'
 
 function dl(n: number, over: Partial<OfflineDownload> = {}): OfflineDownload {
@@ -45,5 +45,19 @@ describe('offlineCapabilityReport', () => {
     expect(rep.families).toHaveLength(1)
     expect(rep.families[0].providers).toHaveLength(1)
     expect(rep.families[0].providers[0]).toMatchObject({ provider: 'offline', state: 'active', selectable: true })
+  })
+})
+
+describe('pickOfflineAutoSub', () => {
+  const sub = { url: '/__offline/a%3A1/sub/0', provider: 'jimaku', lang: 'ja', label: 'J', format: 'ass' }
+  const play = (over: Partial<OfflineDownload>) => ({ animeId: 'a', title: 'T', downloads: [dl(1, over)] })
+
+  it('returns the stream track matching the record autoSubUrl', () => {
+    expect(pickOfflineAutoSub(play({ state: 'done', autoSubUrl: sub.url }), 1, [sub])).toEqual(sub)
+  })
+  it('null when no autoSubUrl / episode not done / track missing from stream', () => {
+    expect(pickOfflineAutoSub(play({ state: 'done' }), 1, [sub])).toBeNull()
+    expect(pickOfflineAutoSub(play({ state: 'paused', autoSubUrl: sub.url }), 1, [sub])).toBeNull()
+    expect(pickOfflineAutoSub(play({ state: 'done', autoSubUrl: sub.url }), 1, [])).toBeNull()
   })
 })

@@ -496,7 +496,7 @@ import { offlineRuntimeReady } from '@/offline/flag'
 import { enqueueDownload, engineState } from '@/offline/downloadEngine'
 import { seasonTargets, enqueueSeason } from '@/offline/seasonDownload'
 import { listDownloads } from '@/offline/registry'
-import { makeOfflineResolver, offlineCapabilityReport } from '@/offline/offlineAdapter'
+import { makeOfflineResolver, offlineCapabilityReport, pickOfflineAutoSub } from '@/offline/offlineAdapter'
 import { makeExternalSubResolver } from '@/offline/externalSubs'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
@@ -1510,6 +1510,7 @@ async function loadEpisodesAndStream() {
     // Set BEFORE the await: a superseded resolve must never clobber the
     // winner's stream descriptor after resuming from engine.load.
     currentStream.value = stream
+    applyOfflineAutoSub(ep.number, stream)
     await engine.load(stream)
     armPlaybackWatchdog() // catch a silent CODECS-less stall (manifest OK, no frags)
   } catch (err: unknown) {
@@ -2206,6 +2207,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
     resolvedServers.value = stream.servers ?? []
     // Set BEFORE the await — see loadEpisodesAndStream.
     currentStream.value = stream
+    applyOfflineAutoSub(ep.number, stream)
     await engine.load(stream)
     armPlaybackWatchdog() // catch a silent CODECS-less stall (manifest OK, no frags)
   } catch (err: unknown) {
@@ -2623,6 +2625,23 @@ const hardsubNote = computed(() => {
   return t('player.aePlayer.subs.hardsub', { provider: prov })
 })
 
+// Session opt-out: once the viewer explicitly turns subs off, offline
+// auto-enable must not re-arm on the next episode.
+let userDisabledSubs = false
+
+// The ONLY sanctioned subtitle auto-enable: explicit download-time choice,
+// offline playback only. Called after EVERY currentStream assignment.
+// Note: the "re-bind chosen track to subLang" watcher may later swap to
+// pickBestForLang's pick for the same lang — same track in practice.
+function applyOfflineAutoSub(epNumber: number, stream: StreamResult): void {
+  if (!props.offline || userDisabledSubs) return
+  const auto = pickOfflineAutoSub(props.offline, epNumber, stream.subtitles)
+  if (auto) {
+    chosenSub.value = auto as SubTrack
+    state.subLang.value = auto.lang // session ref — the global "subs off by default" pref is untouched
+  }
+}
+
 function onSelectSubTrack(track: SubTrack) {
   chosenSub.value = track
   // Selecting a track turns the overlay on for that language (persists across episodes).
@@ -2631,6 +2650,7 @@ function onSelectSubTrack(track: SubTrack) {
 }
 
 function onSubtitlesOff() {
+  userDisabledSubs = true
   chosenSub.value = null
   state.subLang.value = 'off'
   browseOpen.value = false

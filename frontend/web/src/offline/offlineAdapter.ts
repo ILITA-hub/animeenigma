@@ -4,7 +4,7 @@
 // feed has exactly one active provider, so it wins every pick.
 import type { ProviderResolver } from '@/composables/aePlayer/useProviderResolver'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult } from '@/types/aePlayer'
+import type { StreamResult, SubtitleTrack } from '@/types/aePlayer'
 import type { CapabilityReport } from '@/types/capabilities'
 import type { OfflineDownload } from './types'
 
@@ -12,6 +12,19 @@ export interface OfflinePlayback {
   animeId: string
   title: string
   downloads: OfflineDownload[]
+}
+
+/** The local track a download asked to auto-enable, resolved against the
+ *  offline stream's track list. The ONLY sanctioned subtitle auto-enable:
+ *  an explicit download-time choice, offline playback only. */
+export function pickOfflineAutoSub(
+  p: OfflinePlayback,
+  epNumber: number,
+  streamSubs: SubtitleTrack[] | undefined,
+): SubtitleTrack | null {
+  const url = p.downloads.find((d) => d.state === 'done' && d.episode.number === epNumber)?.autoSubUrl
+  if (!url) return null
+  return (streamSubs ?? []).find((s) => s.url === url) ?? null
 }
 
 export const OFFLINE_PROVIDER_ID = 'offline'
