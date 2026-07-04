@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import i18n from '@/i18n'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
+import { shouldFullReloadOnNav, setLiveSessionProbe } from '@/pwa/registerPwa'
 import { GACHA_ADMIN_ONLY } from '@/utils/gachaGate'
 import { stashPrefetch } from '@/utils/pagePrefetch'
 import { setFaviconVariant, faviconVariantForPath } from '@/utils/favicon'
@@ -124,7 +125,9 @@ const routes: RouteRecordRaw[] = [
     path: '/game/:roomId',
     name: 'game-room',
     component: () => import('@/views/Game.vue'),
-    meta: { titleKey: 'rooms.title' }
+    // liveSession: a live WS room a reload would kick the user out of —
+    // defers the deferred-SW-update reload (see setLiveSessionProbe below).
+    meta: { titleKey: 'rooms.title', liveSession: true }
   },
   {
     // Workstream watch-together / Phase 2 (WT-SHELL-01) — synchronized
@@ -147,7 +150,7 @@ const routes: RouteRecordRaw[] = [
     path: '/watch/room/:roomId',
     name: 'watch-together-room',
     component: () => import('@/views/WatchTogetherView.vue'),
-    meta: { titleKey: 'watch_together.title' }
+    meta: { titleKey: 'watch_together.title', liveSession: true }
   },
   {
     path: '/user/:publicId',
@@ -359,6 +362,21 @@ router.beforeEach((to, _from, next) => {
 
   next()
 })
+
+// Deferred SW update pickup: with a new version pending, a cross-page
+// navigation becomes a full page load — the user already expects a screen
+// change, the new shell is precached (barely slower than the SPA transition),
+// and it retires the window where old lazy chunks are gone from the server.
+router.beforeEach((to, from) => {
+  if (shouldFullReloadOnNav(to, from)) {
+    window.location.assign(to.fullPath)
+    return false
+  }
+})
+
+// Route meta is the single home of "which pages host live WS sessions";
+// the PWA reload deferral consults it through this probe.
+setLiveSessionProbe(() => Boolean(router.currentRoute.value.meta.liveSession))
 
 // Auto-recover when lazy-loaded route chunks fail after a deploy (old JS/CSS
 // files are replaced with new hashed versions). vue-router aborts the failed

@@ -110,8 +110,10 @@ deferInit(() => {
   }
 })
 
-// Defer PWA/offline service-worker registration too — same idle window as
-// diagnostics/analytics above.
+// Defer SW registration WORK to the same idle window as diagnostics/analytics
+// above. (The registerPwa module itself already rides in the entry chunk via
+// the router's update-nav guard import — only the initPwa() execution is
+// deferred here, so don't "restore" a code-split that was never load-bearing.)
 deferInit(() => {
   void import('./pwa/registerPwa').then((m) => m.initPwa())
 })
