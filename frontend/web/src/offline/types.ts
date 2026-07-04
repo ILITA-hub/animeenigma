@@ -4,6 +4,17 @@ import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 export type DownloadState = 'queued' | 'downloading' | 'paused' | 'done' | 'error'
 export type DownloadError = 'network' | 'quota' | 'evicted' | 'resolve' | 'mismatch'
 
+/** Download-time subtitle choice. A DESCRIPTOR, never a URL — aggregated
+ *  track URLs are per-episode and signed URLs expire in queue; the engine
+ *  re-resolves the concrete track for each episode. */
+export type SubPref =
+  | { kind: 'bundled'; lang: string } // lang 'auto' = first provider-bundled track
+  | { kind: 'external'; provider: string; lang: string; label?: string }
+
+/** One entry of the download dialog's subtitle picker (built by the hosts —
+ *  labels are i18n'd there; this stays a plain data shape). */
+export interface SubOption { key: string; label: string; pref: SubPref }
+
 export interface OfflineDownload {
   /** Canonical key — NEVER a raw URL (signed proxy URLs expire hourly). */
   id: string
@@ -28,6 +39,14 @@ export interface OfflineDownload {
   playlistLocalPath: string
   /** Subtitle tracks rewritten to /__offline/{id}/sub/{k} local URLs. */
   subtitles: SubtitleTrack[]
+  /** Download-time subtitle choice (descriptor; see SubPref). */
+  subPref?: SubPref
+  /** Local /__offline/{id}/sub/{k} URL of the track matching subPref —
+   *  offline playback auto-enables exactly this track. */
+  autoSubUrl?: string
+  /** 'network' when the cellular guard parked it (auto-resumed on Wi-Fi).
+   *  Manual pauses leave it unset and are never auto-resumed. */
+  pausedBy?: 'network'
   /** /__offline/{id}/poster when the poster fetch succeeded. */
   posterPath?: string
 }

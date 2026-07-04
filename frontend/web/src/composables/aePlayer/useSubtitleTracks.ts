@@ -7,13 +7,31 @@ import type { SubtitleTrack } from '@/types/aePlayer'
 // vue-tsc versions (TS2614), which breaks the production build.
 type SubTrack = SubtitleTrack
 
-interface BackendSubTrack {
+export interface BackendSubTrack {
   url: string; lang: string; label: string; format?: string; provider: string; release?: string
 }
-interface AggregateResponse {
+export interface AggregateSubsResponse {
   languages: Record<string, BackendSubTrack[]>
   episode: number
   providers_down?: string[]
+}
+
+/** Flatten the /subtitles/all languages map into SubtitleTrack[] — shared
+ *  with the offline download engine (external subtitle capture). */
+export function flattenAggregateSubs(data: AggregateSubsResponse | null | undefined): SubtitleTrack[] {
+  const flat: SubtitleTrack[] = []
+  for (const [lang, list] of Object.entries(data?.languages ?? {})) {
+    for (const t of list) {
+      flat.push({
+        url: t.url,
+        provider: t.provider,
+        lang: t.lang || lang,
+        label: t.label || t.release || t.provider,
+        format: (t.format || t.url.split('?')[0].split('.').pop() || 'srt').toLowerCase(),
+      })
+    }
+  }
+  return flat
 }
 
 export function useSubtitleTracks(
@@ -33,20 +51,8 @@ export function useSubtitleTracks(
     error.value = null
     try {
       const resp = await subtitlesApi.all(unref(animeId), ep)
-      const data: AggregateResponse = resp.data?.data ?? resp.data
-      const flat: SubTrack[] = []
-      for (const [lang, list] of Object.entries(data?.languages ?? {})) {
-        for (const t of list) {
-          flat.push({
-            url: t.url,
-            provider: t.provider,
-            lang: t.lang || lang,
-            label: t.label || t.release || t.provider,
-            format: (t.format || t.url.split('?')[0].split('.').pop() || 'srt').toLowerCase(),
-          })
-        }
-      }
-      aggTracks.value = flat
+      const data: AggregateSubsResponse = resp.data?.data ?? resp.data
+      aggTracks.value = flattenAggregateSubs(data)
       providersDown.value = data?.providers_down ?? []
       loadedEpisode = ep
     } catch (e) {
