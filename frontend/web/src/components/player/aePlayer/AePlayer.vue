@@ -233,109 +233,160 @@
       @toggle-fullscreen="onToggleFullscreen"
     />
 
-    <!-- Source panel (floating, top-right) -->
-    <div v-if="openMenu === 'source'" ref="sourceMenuEl" class="pl-floating pl-floating--source" @click.stop>
-      <SourcePanel
-        :rows="rows"
-        :audio="state.combo.value.audio"
-        :lang="state.combo.value.lang"
-        :team="state.combo.value.team"
-        :provider="state.combo.value.provider"
-        :server="state.combo.value.server"
-        :servers="resolvedServers"
-        :teams="teams"
-        :cap-map="capMap"
-        :hacker-mode="state.hackerMode.value"
-        :playback-error="Boolean(sourceError)"
-        @update:audio="onSelectAudio"
-        @update:lang="state.setLang"
-        @update:team="state.setTeam"
-        @select-provider="onSelectProvider"
-        @select-server="state.setServer"
-      />
-    </div>
+    <!-- Source panel (floating card on desktop, bottom sheet on mobile) -->
+    <Teleport to="body" :disabled="!sheetTeleport">
+      <div
+        v-if="openMenu === 'source'"
+        ref="sourceMenuEl"
+        class="pl-floating pl-floating--source"
+        :class="{ 'pl-floating--mobile-sheet': sheetTeleport }"
+        :style="{ '--prov': activeProviderHue }"
+        @click.stop
+      >
+        <SourcePanel
+          :rows="rows"
+          :audio="state.combo.value.audio"
+          :lang="state.combo.value.lang"
+          :team="state.combo.value.team"
+          :provider="state.combo.value.provider"
+          :server="state.combo.value.server"
+          :servers="resolvedServers"
+          :teams="teams"
+          :cap-map="capMap"
+          :hacker-mode="state.hackerMode.value"
+          :playback-error="Boolean(sourceError)"
+          @update:audio="onSelectAudio"
+          @update:lang="state.setLang"
+          @update:team="state.setTeam"
+          @select-provider="onSelectProvider"
+          @select-server="state.setServer"
+        />
+      </div>
+    </Teleport>
 
     <!-- Episodes sheet (V2b — bottom sheet above the control bar) -->
-    <div v-if="openMenu === 'episodes'" ref="episodesMenuEl" class="pl-floating pl-floating--sheet" @click.stop>
-      <EpisodesPanel
-        :episodes="episodes"
-        :selected-number="selectedEpisode?.number ?? null"
-        :upcoming="upcomingEpisode"
-        :watched-up-to="watchedUpTo"
-        :progress="epProgress"
-        :can-mark="auth.isAuthenticated"
-        :marking="tracking.marking.value"
-        :marked="selectedEpisode ? isEpisodeWatched(selectedEpisode.number) : false"
-        :downloadable="!offline && canDownload"
-        :download-states="downloadStates"
-        @select="onSelectEpisode"
-        @mark-watched="onMarkWatched"
-        @download="onDownloadEpisode"
-      />
-    </div>
+    <Teleport to="body" :disabled="!sheetTeleport">
+      <div
+        v-if="openMenu === 'episodes'"
+        ref="episodesMenuEl"
+        class="pl-floating pl-floating--sheet"
+        :class="{ 'pl-floating--mobile-sheet': sheetTeleport }"
+        :style="{ '--prov': activeProviderHue }"
+        @click.stop
+      >
+        <EpisodesPanel
+          :episodes="episodes"
+          :selected-number="selectedEpisode?.number ?? null"
+          :upcoming="upcomingEpisode"
+          :watched-up-to="watchedUpTo"
+          :progress="epProgress"
+          :can-mark="auth.isAuthenticated"
+          :marking="tracking.marking.value"
+          :marked="selectedEpisode ? isEpisodeWatched(selectedEpisode.number) : false"
+          :downloadable="!offline && canDownload"
+          :download-states="downloadStates"
+          @select="onSelectEpisode"
+          @mark-watched="onMarkWatched"
+          @download="onDownloadEpisode"
+        />
+      </div>
+    </Teleport>
 
     <!-- Playback settings menu (floating, above control bar) -->
-    <div v-if="openMenu === 'settings'" ref="settingsMenuEl" class="pl-floating pl-floating--btnmenu" @click.stop>
-      <PlaybackSettingsMenu
-        :quality="state.quality.value"
-        :qualities="qualities"
-        :quality-display="qualityDisplay"
-        :speed="state.speed.value"
-        :speeds="[0.75, 1, 1.25, 1.5, 2]"
-        :auto-next="state.autoNext.value"
-        :auto-skip="state.autoSkip.value"
-        :hacker-mode="state.hackerMode.value"
-        :debug-stats="debugStats"
-        @update:quality="onSetQuality"
-        @update:speed="onSetSpeed"
-        @update:auto-next="v => { state.autoNext.value = v }"
-        @update:auto-skip="v => { state.autoSkip.value = v }"
-        @update:hacker-mode="v => { state.hackerMode.value = v }"
-      />
-    </div>
+    <Teleport to="body" :disabled="!sheetTeleport">
+      <div
+        v-if="openMenu === 'settings'"
+        ref="settingsMenuEl"
+        class="pl-floating pl-floating--btnmenu"
+        :class="{ 'pl-floating--mobile-sheet': sheetTeleport }"
+        :style="{ '--prov': activeProviderHue }"
+        @click.stop
+      >
+        <PlaybackSettingsMenu
+          :quality="state.quality.value"
+          :qualities="qualities"
+          :quality-display="qualityDisplay"
+          :speed="state.speed.value"
+          :speeds="[0.75, 1, 1.25, 1.5, 2]"
+          :auto-next="state.autoNext.value"
+          :auto-skip="state.autoSkip.value"
+          :hacker-mode="state.hackerMode.value"
+          :debug-stats="debugStats"
+          @update:quality="onSetQuality"
+          @update:speed="onSetSpeed"
+          @update:auto-next="v => { state.autoNext.value = v }"
+          @update:auto-skip="v => { state.autoSkip.value = v }"
+          @update:hacker-mode="v => { state.hackerMode.value = v }"
+        />
+      </div>
+    </Teleport>
 
     <!-- Subtitles menu (floating, above control bar) -->
-    <div v-if="openMenu === 'subs'" ref="subsMenuEl" class="pl-floating pl-floating--btnmenu" @click.stop>
-      <SubtitlesMenu
-        :sub-lang="state.subLang.value"
-        :available-sub-langs="availableSubLangs"
-        :lang-sources="langSources"
-        :browse-count="subtitleTracks.length"
-        :hardsub-note="hardsubNote"
-        :sub-size="state.subSize.value"
-        :sub-bg="state.subBg.value"
-        :sub-offset="state.subOffset.value"
-        @pick-lang="onPickSubLang"
-        @update:sub-size="v => { state.subSize.value = v }"
-        @update:sub-bg="v => { state.subBg.value = v }"
-        :auto-sync="autoSyncPref.enabled.value"
-        :auto-sync-info="autoSyncInfo"
-        @update:sub-offset="v => { state.subOffset.value = v }"
-        @update:auto-sync="v => autoSyncPref.setEnabled(v)"
-        @open-browse="() => { openMenu = null; browseOpen = true; void ensureSubsLoaded() }"
-      />
-    </div>
+    <Teleport to="body" :disabled="!sheetTeleport">
+      <div
+        v-if="openMenu === 'subs'"
+        ref="subsMenuEl"
+        class="pl-floating pl-floating--btnmenu"
+        :class="{ 'pl-floating--mobile-sheet': sheetTeleport }"
+        :style="{ '--prov': activeProviderHue }"
+        @click.stop
+      >
+        <SubtitlesMenu
+          :sub-lang="state.subLang.value"
+          :available-sub-langs="availableSubLangs"
+          :lang-sources="langSources"
+          :browse-count="subtitleTracks.length"
+          :hardsub-note="hardsubNote"
+          :sub-size="state.subSize.value"
+          :sub-bg="state.subBg.value"
+          :sub-offset="state.subOffset.value"
+          @pick-lang="onPickSubLang"
+          @update:sub-size="v => { state.subSize.value = v }"
+          @update:sub-bg="v => { state.subBg.value = v }"
+          :auto-sync="autoSyncPref.enabled.value"
+          :auto-sync-info="autoSyncInfo"
+          @update:sub-offset="v => { state.subOffset.value = v }"
+          @update:auto-sync="v => autoSyncPref.setEnabled(v)"
+          @open-browse="() => { openMenu = null; browseOpen = true; void ensureSubsLoaded() }"
+        />
+      </div>
+    </Teleport>
 
     <!-- Browse subtitles modal -->
-    <BrowseSubsModal
-      v-if="browseOpen"
-      :tracks="subtitleTracks"
-      :selected-url="chosenSubUrl"
-      :loading="subsLoading"
-      :error="subsError"
-      :providers-down="subsProvidersDown"
-      @click.stop
-      @select="onSelectSubTrack"
-      @retry="refetchSubs"
-      @off="onSubtitlesOff"
-      @close="browseOpen = false"
-    />
+    <Teleport to="body" :disabled="!sheetTeleport">
+      <div v-if="browseOpen" :class="sheetTeleport ? 'pl-bsm-host' : 'contents'">
+        <BrowseSubsModal
+          :tracks="subtitleTracks"
+          :selected-url="chosenSubUrl"
+          :loading="subsLoading"
+          :error="subsError"
+          :providers-down="subsProvidersDown"
+          @click.stop
+          @select="onSelectSubTrack"
+          @retry="refetchSubs"
+          @off="onSubtitlesOff"
+          @close="browseOpen = false"
+        />
+      </div>
+    </Teleport>
 
-    <DownloadDialog
-      v-if="downloadDialogEp"
-      @confirm="onConfirmDownload"
-      @close="downloadDialogEp = null"
-    />
+    <Teleport to="body" :disabled="!sheetTeleport">
+      <DownloadDialog
+        v-if="downloadDialogEp"
+        @confirm="onConfirmDownload"
+        @close="downloadDialogEp = null"
+      />
+    </Teleport>
+
+    <!-- Mobile sheet scrim — tap closes whatever sheet is open -->
+    <Teleport to="body" :disabled="!sheetTeleport">
+      <div
+        v-if="sheetTeleport && anySheetOpen"
+        class="pl-sheet-scrim"
+        data-test="sheet-scrim"
+        @click="closeAllSheets"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -497,8 +548,7 @@ const engine = useVideoEngine(videoRef, state.hackerMode)
 const resolver = props.offline ? makeOfflineResolver(props.offline) : useProviderResolver()
 const { t } = useI18n()
 const toast = useToast()
-// isMobile is unused here (Tasks 6/7 add its consumers) — destructure just isCoarse to keep lint clean.
-const { isCoarse } = useMobilePlayer()
+const { isMobile, isCoarse } = useMobilePlayer()
 
 // ─── Watch-Together (room sync) ───────────────────────────────────────────────
 // When mounted inside a WT room, wire the generic HTML5 playback bridge (mirrors
@@ -2251,6 +2301,18 @@ function closeMenus() {
   browseOpen.value = false
 }
 
+// Mobile sheets: teleport the floating menus to <body> and present them as
+// bottom sheets. Disabled inside NATIVE fullscreen — body children render
+// under the fullscreen element — where fixed positioning already fills the
+// fullscreen viewport correctly in place.
+const sheetTeleport = computed(() => isMobile.value && !nativeFsActive.value)
+const anySheetOpen = computed(() => openMenu.value !== null || browseOpen.value || downloadDialogEp.value !== null)
+
+function closeAllSheets() {
+  closeMenus()
+  downloadDialogEp.value = null
+}
+
 // ─── Controls auto-hide (idle while playing) ─────────────────────────────────
 // Top bar + control bar fade out after UI_IDLE_MS of pointer inactivity while
 // playing (matters most in fullscreen). Any pointer/keyboard activity, a pause,
@@ -3076,10 +3138,48 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 680px) {
-  .pl-floating--source {
-    width: calc(100% - 28px);
+/* ── Mobile bottom sheets ── */
+.pl-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 105; /* above pseudo-FS (100), below the sheet (110) */
+  background: var(--black-a60);
+}
+
+/* Double class beats every .pl-floating--* placement rule regardless of
+   source order (scoped attribute + two classes). */
+.pl-floating.pl-floating--mobile-sheet {
+  position: fixed;
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  max-width: none;
+  max-height: 72dvh;
+  border-radius: 16px 16px 0 0;
+  z-index: 110;
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: pl-sheet-up 0.22s ease;
+}
+
+@keyframes pl-sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
   }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Fixed host for the browse-subs modal when teleported (its root is
+   absolute inset-0 and needs a viewport-sized positioned ancestor). */
+.pl-bsm-host {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
 }
 
 /* Mobile center pause — the touch play/pause affordance while playing. */
