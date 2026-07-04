@@ -413,7 +413,7 @@ func TestIsHLSDomainAllowed_RotatingSubdomains(t *testing.T) {
 // the same treatment rewriteM3U8URLs already gives playlist children.
 func TestRewriteVTTURLs_StoryboardCues(t *testing.T) {
 	in := "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nstoryboard_001.jpg#xywh=0,0,160,90\n\n00:00:05.000 --> 00:00:10.000\nstoryboard_001.jpg#xywh=160,0,160,90\n"
-	out := rewriteVTTURLs(in, "http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard.vtt", "", "")
+	out := rewriteVTTURLs(in, "http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard.vtt", "")
 	if !strings.Contains(out, "/api/streaming/hls-proxy?url="+url.QueryEscape("http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard_001.jpg")) {
 		t.Fatalf("cue URL not proxied:\n%s", out)
 	}
@@ -433,7 +433,7 @@ func TestRewriteVTTURLs_StoryboardCues(t *testing.T) {
 // byte-for-byte unchanged.
 func TestRewriteVTTURLs_NonImagePayloadUntouched(t *testing.T) {
 	in := "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nSome subtitle text line\n"
-	if out := rewriteVTTURLs(in, "http://x/s.vtt", "", ""); out != in {
+	if out := rewriteVTTURLs(in, "http://x/s.vtt", ""); out != in {
 		t.Fatalf("subtitle-style payload must pass through unchanged:\n%s", out)
 	}
 }

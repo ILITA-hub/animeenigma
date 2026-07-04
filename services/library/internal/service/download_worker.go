@@ -135,16 +135,10 @@ func (p *WorkerPool) runWorker(ctx context.Context, idx int) {
 }
 
 // sleep is a ctx-aware time.Sleep. Returns false when the context
-// fires.
+// fires. Delegates to the package-level sleepCtx primitive shared with
+// EncoderPool and the storyboard backfill loop.
 func (p *WorkerPool) sleep(ctx context.Context, d time.Duration) bool {
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-t.C:
-		return true
-	}
+	return sleepCtx(ctx, d)
 }
 
 // processJob drives a single claimed job through downloading →

@@ -319,7 +319,11 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
     // Sheet images "load" the instant their src is set: complete/naturalWidth
     // flip synchronously (so the first renderStoryboard draws immediately) and
     // onload ALSO fires on a microtask, so a handler assigned right after
-    // `.src =` (as the component does) still runs.
+    // `.src =` (as the component does) still runs. Every assigned src is also
+    // pushed to the shared `imageSrcs` array so tests that care which sprite
+    // sheet actually rendered can assert on it; tests that don't care simply
+    // never read it.
+    let imageSrcs: string[] = []
     class MockImage {
       onload: (() => void) | null = null
       onerror: (() => void) | null = null
@@ -329,6 +333,7 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
       private _src = ''
       set src(v: string) {
         this._src = v
+        imageSrcs.push(v)
         this.complete = true
         this.naturalWidth = 320
         this.naturalHeight = 180
@@ -339,6 +344,9 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
       }
     }
 
+    beforeEach(() => {
+      imageSrcs = []
+    })
     afterEach(() => {
       vi.unstubAllGlobals()
     })
@@ -498,29 +506,10 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
 00:00:00.000 --> 00:00:99.000
 /api/streaming/hls-proxy?url=STREAM_B&exp=1&sig=x#xywh=160,0,160,90
 `
-      // Track every sprite-sheet Image src the component constructs, so we can
-      // tell which stream's cue actually got rendered.
-      const imageSrcs: string[] = []
-      class TrackingImage {
-        onload: (() => void) | null = null
-        onerror: (() => void) | null = null
-        complete = false
-        naturalWidth = 0
-        naturalHeight = 0
-        private _src = ''
-        set src(v: string) {
-          this._src = v
-          imageSrcs.push(v)
-          this.complete = true
-          this.naturalWidth = 320
-          this.naturalHeight = 180
-          queueMicrotask(() => this.onload?.())
-        }
-        get src() {
-          return this._src
-        }
-      }
-      vi.stubGlobal('Image', TrackingImage)
+      // MockImage (shared, describe-scoped) already tracks every sprite-sheet
+      // src assigned into `imageSrcs`, so we can tell which stream's cue
+      // actually got rendered.
+      vi.stubGlobal('Image', MockImage)
 
       // Deferred, per-call-controllable fetch so resolution order can be
       // driven independently of call (start) order.

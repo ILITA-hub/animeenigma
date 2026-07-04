@@ -126,6 +126,54 @@ type ffprobeOutput struct {
 	} `json:"format"`
 }
 
+// ScopedTempDir creates a fresh per-call scratch directory for an ffmpeg
+// pass: it first ensures base exists (MkdirAll, best-effort — so a
+// configured-but-not-yet-created tmpdir doesn't fail every call), then
+// MkdirTemp's a prefix-named subdirectory inside it. Shared by Transcode
+// ("encode-"), Storyboard ("storyboard-"), and the storyboard backfill
+// worker ("sb-backfill-", which passes its own configured base rather than
+// a Transcoder's Config.Tmpdir).
+func ScopedTempDir(base, prefix string) (string, error) {
+	if base != "" {
+		if err := os.MkdirAll(base, 0o755); err != nil {
+			return "", fmt.Errorf("mkdir tmpdir: %w", err)
+		}
+	}
+	dir, err := os.MkdirTemp(base, prefix)
+	if err != nil {
+		return "", fmt.Errorf("mkdir %s tmpdir: %w", strings.TrimSuffix(prefix, "-"), err)
+	}
+	return dir, nil
+}
+
+// runFfmpeg runs an ffmpeg subprocess with the plumbing shared by Transcode
+// and Storyboard: exec.CommandContext, a bounded 2KB stderr ring-buffer,
+// cmd.Start, a best-effort nice-priority reduction (NEVER fails the call
+// over priority), and cmd.Wait. label identifies the caller in the returned
+// error text — Transcode passes "ffmpeg" (keeping its error strings
+// byte-identical to before this extraction); Storyboard passes "ffmpeg
+// storyboard".
+func (t *Transcoder) runFfmpeg(ctx context.Context, args []string, label string) error {
+	cmd := exec.CommandContext(ctx, t.cfg.BinaryPath, args...)
+	ring := newRingBuffer(2048)
+	cmd.Stderr = ring
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("%s start failed: %s", label, err)
+	}
+	// Best-effort: run at low scheduling priority so it yields to interactive
+	// work. NEVER fail the call over priority.
+	if t.cfg.Nice > 0 {
+		if err := syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, t.cfg.Nice); err != nil && t.log != nil {
+			t.log.Debugw("setpriority(ffmpeg) failed; continuing at default priority",
+				"label", label, "pid", cmd.Process.Pid, "nice", t.cfg.Nice, "error", err)
+		}
+	}
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("%s failed: %s\nstderr tail:\n%s", label, err, ring.String())
+	}
+	return nil
+}
+
 // probe runs ffprobe and returns (durationSec, bitrateKbps). On parse
 // failure both come back as zero; the caller substitutes the default
 // bitrate cap. Errors from exec.Run are NOT fatal — probe is
@@ -170,14 +218,9 @@ func (t *Transcoder) probe(ctx context.Context, sourcePath string) (int, int) {
 // os.RemoveAll(filepath.Dir(result.PlaylistPath)) AFTER the MinIO
 // upload completes.
 func (t *Transcoder) Transcode(ctx context.Context, sourcePath string) (*Result, error) {
-	if t.cfg.Tmpdir != "" {
-		if err := os.MkdirAll(t.cfg.Tmpdir, 0o755); err != nil {
-			return nil, fmt.Errorf("mkdir tmpdir: %w", err)
-		}
-	}
-	tmp, err := os.MkdirTemp(t.cfg.Tmpdir, "encode-")
+	tmp, err := ScopedTempDir(t.cfg.Tmpdir, "encode-")
 	if err != nil {
-		return nil, fmt.Errorf("mkdir per-call tmpdir: %w", err)
+		return nil, err
 	}
 
 	durationSec, sourceKbps := t.probe(ctx, sourcePath)
@@ -211,22 +254,8 @@ func (t *Transcoder) Transcode(ctx context.Context, sourcePath string) (*Result,
 		"-hls_segment_filename", segmentTemplate,
 		playlistPath,
 	)
-	cmd := exec.CommandContext(ctx, t.cfg.BinaryPath, args...)
-	ring := newRingBuffer(2048)
-	cmd.Stderr = ring
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("ffmpeg start failed: %s", err)
-	}
-	// Best-effort: run the transcode at low scheduling priority so it yields
-	// to interactive work. NEVER fail the transcode over priority.
-	if t.cfg.Nice > 0 {
-		if err := syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, t.cfg.Nice); err != nil && t.log != nil {
-			t.log.Debugw("setpriority(ffmpeg) failed; continuing at default priority",
-				"pid", cmd.Process.Pid, "nice", t.cfg.Nice, "error", err)
-		}
-	}
-	if err := cmd.Wait(); err != nil {
-		return nil, fmt.Errorf("ffmpeg failed: %s\nstderr tail:\n%s", err, ring.String())
+	if err := t.runFfmpeg(ctx, args, "ffmpeg"); err != nil {
+		return nil, err
 	}
 
 	// Enumerate produced segments.

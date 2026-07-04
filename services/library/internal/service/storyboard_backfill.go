@@ -204,18 +204,12 @@ func (b *StoryboardBackfill) nextEligible(eps []domain.Episode) (domain.Episode,
 // per-episode temp dir is always cleaned (defer os.RemoveAll), as is the
 // transcoder's own storyboard output dir.
 func (b *StoryboardBackfill) processOne(ctx context.Context, ep domain.Episode) bool {
-	// The transcoder's own MkdirTemp needs an existing parent; mirror
-	// Storyboard()'s guard so a configured-but-absent tmpdir doesn't fail
-	// every episode.
-	if b.tmpdir != "" {
-		if err := os.MkdirAll(b.tmpdir, 0o755); err != nil {
-			b.warn(ctx, "storyboard backfill: mkdir tmpdir failed", "episode_id", ep.ID, "tmpdir", b.tmpdir, "error", err)
-			return false
-		}
-	}
-	dir, err := os.MkdirTemp(b.tmpdir, "sb-backfill-")
+	// Mirrors Storyboard()'s own tmpdir preamble (MkdirAll guard so a
+	// configured-but-absent tmpdir doesn't fail every episode, then
+	// MkdirTemp) via the shared helper.
+	dir, err := ffmpeg.ScopedTempDir(b.tmpdir, "sb-backfill-")
 	if err != nil {
-		b.warn(ctx, "storyboard backfill: mkdir temp failed", "episode_id", ep.ID, "error", err)
+		b.warn(ctx, "storyboard backfill: mkdir temp failed", "episode_id", ep.ID, "tmpdir", b.tmpdir, "error", err)
 		return false
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
@@ -276,14 +270,19 @@ func (b *StoryboardBackfill) warn(ctx context.Context, msg string, kv ...any) {
 	b.log.Warnw(msg, kv...)
 }
 
-// sleepCtx sleeps d, returning early if ctx is cancelled — the yielding
-// primitive that keeps the backfill loop responsive to SIGTERM between its
-// deliberately long pauses.
-func sleepCtx(ctx context.Context, d time.Duration) {
+// sleepCtx sleeps d, returning early (false) if ctx is cancelled before the
+// timer fires (true if the full duration elapsed) — the single ctx-aware
+// sleep primitive shared across the package: the backfill loop above uses it
+// directly for its long inter-cycle pauses (ignoring the bool, since it
+// checks ctx.Err() itself on the next iteration), and (*WorkerPool).sleep /
+// (*EncoderPool).sleep both delegate to it.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
 	t := time.NewTimer(d)
 	defer t.Stop()
 	select {
 	case <-ctx.Done():
+		return false
 	case <-t.C:
+		return true
 	}
 }

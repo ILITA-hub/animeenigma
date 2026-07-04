@@ -773,23 +773,7 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 		// Rewrite URLs in the M3U8
 		rewritten := rewriteM3U8URLs(string(body), sourceURL, referer)
 
-		// Set headers (skip Content-Length as it changed; skip the CORS headers we
-		// set ourselves above — an upstream that also sends Access-Control-Allow-*
-		// would otherwise duplicate them, and a response with two ACAO values is
-		// rejected by browsers as a CORS error).
-		for key, values := range resp.Header {
-			if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" || isProxySetCORSHeader(key) {
-				continue
-			}
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
-		}
-
-		w.Header().Set("Content-Length", strconv.Itoa(len(rewritten)))
-		w.WriteHeader(resp.StatusCode)
-		n, _ := w.Write([]byte(rewritten))
-		bytesOut = uint64(n)
+		bytesOut = writeRewrittenText(w, resp, rewritten)
 		return bytesIn, bytesOut, nil
 	}
 
@@ -803,30 +787,14 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 		}
 		bytesIn = uint64(len(body))
 
-		// Rewrite storyboard image cue URLs in the VTT. Mint one per-manifest
-		// correlation token (AR-EGRESS-04), same as rewriteM3U8URLs does for
-		// playlist children — every sheet image fetched from this storyboard
-		// track groups into one aggregated egress row.
-		sess := newSessToken()
-		rewritten := rewriteVTTURLs(string(body), sourceURL, referer, sess)
+		// Rewrite storyboard image cue URLs in the VTT. rewriteVTTURLs mints
+		// its own per-manifest correlation token (AR-EGRESS-04) internally,
+		// same as rewriteM3U8URLs does for playlist children — every sheet
+		// image fetched from this storyboard track groups into one
+		// aggregated egress row.
+		rewritten := rewriteVTTURLs(string(body), sourceURL, referer)
 
-		// Set headers (skip Content-Length as it changed; skip the CORS headers we
-		// set ourselves above — an upstream that also sends Access-Control-Allow-*
-		// would otherwise duplicate them, and a response with two ACAO values is
-		// rejected by browsers as a CORS error).
-		for key, values := range resp.Header {
-			if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" || isProxySetCORSHeader(key) {
-				continue
-			}
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
-		}
-
-		w.Header().Set("Content-Length", strconv.Itoa(len(rewritten)))
-		w.WriteHeader(resp.StatusCode)
-		n, _ := w.Write([]byte(rewritten))
-		bytesOut = uint64(n)
+		bytesOut = writeRewrittenText(w, resp, rewritten)
 		return bytesIn, bytesOut, nil
 	}
 
@@ -901,6 +869,30 @@ func isProxySetCORSHeader(key string) bool {
 		return true
 	}
 	return false
+}
+
+// writeRewrittenText writes a rewritten manifest/cue-sheet payload (M3U8 or
+// VTT) to w: it copies resp's headers (skipping Connection/Keep-Alive/
+// Transfer-Encoding/Content-Length — the length changed — and the CORS
+// headers the proxy already set itself, since an upstream that also sends
+// Access-Control-Allow-* would otherwise duplicate them and a response with
+// two ACAO values is rejected by browsers as a CORS error), sets the new
+// Content-Length, writes the upstream status code, then writes the
+// rewritten body. Returns the number of bytes written (bytesOut).
+func writeRewrittenText(w http.ResponseWriter, resp *http.Response, rewritten string) uint64 {
+	for key, values := range resp.Header {
+		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" || isProxySetCORSHeader(key) {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	w.Header().Set("Content-Length", strconv.Itoa(len(rewritten)))
+	w.WriteHeader(resp.StatusCode)
+	n, _ := w.Write([]byte(rewritten))
+	return uint64(n)
 }
 
 // manifestDirBase derives the directory base (scheme://host/dir/) a manifest's
@@ -1048,11 +1040,17 @@ var vttImageCue = regexp.MustCompile(`^[^\s#]+\.(?:jpe?g|png|webp)(?:#.*)?$`)
 // proxied+signed URLs, preserving #xywh fragments — the same treatment
 // rewriteM3U8URLs gives playlist children via rewriteHLSURL. Timing lines,
 // headers, and non-image payloads (real subtitle text) are left untouched.
-func rewriteVTTURLs(content, manifestURL, referer, sess string) string {
+// Mints its own per-manifest correlation token (AR-EGRESS-04), mirroring how
+// rewriteM3U8URLs mints one internally for playlist children — every sheet
+// image fetched from this storyboard track groups into one aggregated
+// egress row.
+func rewriteVTTURLs(content, manifestURL, referer string) string {
 	basePath := manifestDirBase(manifestURL)
 	if basePath == "" {
 		return content
 	}
+
+	sess := newSessToken()
 
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {

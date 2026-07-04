@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 )
 
 // Storyboard geometry — LOCKED, mirrored by the frontend sprite renderer
@@ -40,14 +38,9 @@ func (t *Transcoder) Storyboard(ctx context.Context, sourcePath string, duration
 	if durationSec <= 0 {
 		return nil, fmt.Errorf("storyboard: unknown duration for %s", sourcePath)
 	}
-	if t.cfg.Tmpdir != "" {
-		if err := os.MkdirAll(t.cfg.Tmpdir, 0o755); err != nil {
-			return nil, fmt.Errorf("mkdir tmpdir: %w", err)
-		}
-	}
-	tmp, err := os.MkdirTemp(t.cfg.Tmpdir, "storyboard-")
+	tmp, err := ScopedTempDir(t.cfg.Tmpdir, "storyboard-")
 	if err != nil {
-		return nil, fmt.Errorf("mkdir storyboard tmpdir: %w", err)
+		return nil, err
 	}
 	// Storyboard is best-effort + high-frequency: unlike Transcode (which RETAINS
 	// its dir on failure for admin debugging of encode jobs), a retained
@@ -74,20 +67,8 @@ func (t *Transcoder) Storyboard(ctx context.Context, sourcePath string, duration
 		"-q:v", "8", // low quality preferred for previews (owner decision 2026-07-04)
 		sheetTemplate,
 	}
-	cmd := exec.CommandContext(ctx, t.cfg.BinaryPath, args...)
-	ring := newRingBuffer(2048)
-	cmd.Stderr = ring
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("ffmpeg storyboard start failed: %s", err)
-	}
-	if t.cfg.Nice > 0 {
-		if err := syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, t.cfg.Nice); err != nil && t.log != nil {
-			t.log.Debugw("setpriority(storyboard ffmpeg) failed; continuing",
-				"pid", cmd.Process.Pid, "nice", t.cfg.Nice, "error", err)
-		}
-	}
-	if err := cmd.Wait(); err != nil {
-		return nil, fmt.Errorf("ffmpeg storyboard failed: %s\nstderr tail:\n%s", err, ring.String())
+	if err := t.runFfmpeg(ctx, args, "ffmpeg storyboard"); err != nil {
+		return nil, err
 	}
 	sheets, err := filepath.Glob(filepath.Join(tmp, "storyboard_*.jpg"))
 	if err != nil || len(sheets) == 0 {

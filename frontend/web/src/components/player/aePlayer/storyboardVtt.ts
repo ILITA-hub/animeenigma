@@ -1,3 +1,5 @@
+import { absolute } from '@/offline/playlistRewrite'
+
 export interface StoryboardCue {
   start: number
   end: number
@@ -36,9 +38,10 @@ export function parseStoryboardVtt(text: string, baseUrl: string): StoryboardCue
     try {
       // baseUrl is usually a ROOT-RELATIVE proxy path (/api/streaming/hls-proxy?…)
       // — hlsProxyUrl() emits relative URLs unless VITE_HLS_PROXY_BASE is set, and
-      // new URL() throws "Invalid URL" on a relative base. Anchor on the document
-      // origin (mirrors offline/playlistRewrite.ts's absolute()).
-      url = new URL(raw, new URL(baseUrl, window.location.href)).href
+      // new URL() throws "Invalid URL" on a relative base. absolute() anchors on
+      // the document origin — shared with offline/playlistRewrite.ts, which
+      // resolves playlist resource URIs the same way.
+      url = absolute(raw, baseUrl)
     } catch {
       continue
     }

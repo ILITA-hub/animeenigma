@@ -36,7 +36,10 @@ export function selectVariant(masterBody: string, targetHeight: number): { uri: 
   return { uri: pick.uri }
 }
 
-function absolute(uri: string, baseUrl: string): string {
+/** Resolve a (possibly root-relative) URI against baseUrl, anchored on the
+ *  document origin. Shared with components/player/aePlayer/storyboardVtt.ts,
+ *  which resolves storyboard sprite-sheet cue URLs the same way. */
+export function absolute(uri: string, baseUrl: string): string {
   // baseUrl is usually a ROOT-RELATIVE proxy path (/api/streaming/hls-proxy?…)
   // — hlsProxyUrl() emits relative URLs unless VITE_HLS_PROXY_BASE is set, and
   // new URL() throws "Invalid base URL" on a relative base. Anchor on the
