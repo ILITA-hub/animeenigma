@@ -31,6 +31,14 @@ describe('parseStoryboardVtt', () => {
     expect(parseStoryboardVtt('WEBVTT\n\ngarbage\nnot-a-timing\n', BASE)).toEqual([])
     expect(parseStoryboardVtt('', BASE)).toEqual([])
   })
+  it('anchors a ROOT-RELATIVE base on the document origin instead of throwing — this is the DEFAULT shape when VITE_HLS_PROXY_BASE is unset, so every cue must still resolve, not silently empty out', () => {
+    const rootRelativeBase = '/api/streaming/hls-proxy?url=x%2Fstoryboard.vtt'
+    const cues = parseStoryboardVtt(SAMPLE, rootRelativeBase)
+    expect(cues).toHaveLength(2)
+    const origin = new URL(window.location.href).origin
+    expect(cues[0].url).toBe(`${origin}/api/streaming/hls-proxy?url=a&exp=1&sig=b`)
+    expect(cues[1].url).toBe(`${origin}/api/streaming/hls-proxy?url=a&exp=1&sig=b`)
+  })
 })
 
 describe('cueAt', () => {

@@ -56,7 +56,7 @@ import { parseStoryboardVtt, cueAt, type StoryboardCue } from './storyboardVtt'
  *  - hovering renders the nearest cached thumbnail instantly — zero network;
  *  - the shadow video seeks only when the pointer SETTLES (180ms), so moving
  *    across the bar no longer abort-storms the loader;
- *  - after init, ~9 evenly-spaced timeline points are prefetched in the
+ *  - after init, 16 evenly-spaced timeline points are prefetched in the
  *    background (lowest HLS level, ~100-300KB each), so the whole bar has
  *    distinct frames within seconds of the first hover.
  */
@@ -91,7 +91,7 @@ const PREFETCH_POINTS = 16
 /** a stuck seek (failed fragment) must not wedge the prefetch pump */
 const SEEK_WATCHDOG_MS = 8000
 /** eager-init delay after a stream loads — the MAIN player wins startup
- *  bandwidth, then the preview warms its 50 thumbnails in the background */
+ *  bandwidth, then the preview warms its 16 thumbnails in the background */
 const EAGER_INIT_DELAY_MS = 3500
 /** pump retry cadence while the user's hover blocks background prefetch */
 const PUMP_RETRY_MS = 500

@@ -34,7 +34,11 @@ export function parseStoryboardVtt(text: string, baseUrl: string): StoryboardCue
     if (!/^(?:https?:)?\/\//.test(raw) && !raw.startsWith('/')) continue
     let url: string
     try {
-      url = new URL(raw, baseUrl).href
+      // baseUrl is usually a ROOT-RELATIVE proxy path (/api/streaming/hls-proxy?…)
+      // — hlsProxyUrl() emits relative URLs unless VITE_HLS_PROXY_BASE is set, and
+      // new URL() throws "Invalid URL" on a relative base. Anchor on the document
+      // origin (mirrors offline/playlistRewrite.ts's absolute()).
+      url = new URL(raw, new URL(baseUrl, window.location.href)).href
     } catch {
       continue
     }
