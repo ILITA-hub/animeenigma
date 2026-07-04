@@ -153,6 +153,15 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
     await putDownload({ ...cur, state: 'error', error })
   }
 
+  // Re-check headroom right before doing any real work: the enqueue-time
+  // check in enqueueDownload passes a whole season instantly (no bytes
+  // downloaded yet); once disk fills mid-batch, every remaining queued item
+  // must fail HERE, before paying for a scraper req.resolve().
+  const headroom = await quotaHeadroom()
+  if (headroom !== null && headroom < (PROJECTED_BYTES[req.quality] ?? PROJECTED_BYTES['720'])) {
+    return setError('quota')
+  }
+
   let stream: StreamResult
   try {
     stream = await req.resolve()
@@ -170,8 +179,16 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
     return setError(e instanceof Error && e.message === 'not-vod' ? 'mismatch' : 'network')
   }
 
-  for (const p of plan.playlists) {
-    await store.put(id, p.path, new Response(p.body, { headers: { 'Content-Type': 'application/vnd.apple.mpegurl' } }))
+  try {
+    for (const p of plan.playlists) {
+      await store.put(id, p.path, new Response(p.body, { headers: { 'Content-Type': 'application/vnd.apple.mpegurl' } }))
+    }
+  } catch (e) {
+    // Runs while the record is still 'queued' (before update() exists) — a
+    // throw here must not escape to pump()'s catch, or the record is
+    // stranded at 'queued' forever (spinner, no error, no work).
+    const quota = e instanceof DOMException && e.name === 'QuotaExceededError'
+    return setError(quota ? 'quota' : 'network')
   }
   const localSubs = await cacheSubtitles(id, stream.subtitles ?? [])
   let posterOk = false

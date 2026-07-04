@@ -2718,6 +2718,11 @@ function onTogglePip() {
 const pseudoFs = ref(false)
 const nativeFsActive = ref(false)
 const fullscreenActive = computed(() => nativeFsActive.value || pseudoFs.value)
+// Tracks whether WE pushed the pseudo-FS history entry and it hasn't been
+// consumed yet — `history.state` itself is unreliable because url-sync
+// (router.replace on episode/provider change) can overwrite the top entry's
+// state while pseudo-FS is active, dropping our marker.
+let pseudoFsEntryPushed = false
 
 function onFullscreenChange() {
   nativeFsActive.value = !!document.fullscreenElement
@@ -2759,13 +2764,17 @@ function onToggleFullscreen() {
 // Pseudo-FS pushes a history entry so the phone's back gesture exits the
 // takeover instead of leaving the page.
 function onPseudoFsPop() {
+  pseudoFsEntryPushed = false // the entry was just consumed by this pop
   exitPseudoFs(true)
 }
 
 function enterPseudoFs() {
   pseudoFs.value = true
   document.documentElement.classList.add('pl-noscroll')
-  history.pushState({ plPseudoFs: true }, '')
+  // Merge with the existing state so vue-router's own bookkeeping
+  // ({position, back, current…}) survives alongside our marker.
+  history.pushState({ ...history.state, plPseudoFs: true }, '')
+  pseudoFsEntryPushed = true
   window.addEventListener('popstate', onPseudoFsPop)
 }
 
@@ -2774,7 +2783,10 @@ function exitPseudoFs(viaPop = false) {
   pseudoFs.value = false
   document.documentElement.classList.remove('pl-noscroll')
   window.removeEventListener('popstate', onPseudoFsPop)
-  if (!viaPop && (history.state as { plPseudoFs?: boolean } | null)?.plPseudoFs) history.back()
+  if (!viaPop && pseudoFsEntryPushed) {
+    pseudoFsEntryPushed = false
+    history.back()
+  }
 }
 
 /** Unmount-safe teardown: never touches history (a route change already moved it). */
@@ -2783,6 +2795,7 @@ function teardownPseudoFs() {
   pseudoFs.value = false
   document.documentElement.classList.remove('pl-noscroll')
   window.removeEventListener('popstate', onPseudoFsPop)
+  pseudoFsEntryPushed = false
 }
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
@@ -2891,6 +2904,8 @@ onUnmounted(() => {
   clearPlaybackWatchdog()
   if (bufferingTimer) clearTimeout(bufferingTimer)
   if (dlRefreshTimer) clearTimeout(dlRefreshTimer)
+  if (singleTapTimer) clearTimeout(singleTapTimer)
+  if (seekFlashTimer) clearTimeout(seekFlashTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pagehide', onPageHide)
   document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -3267,7 +3282,7 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 600;
   pointer-events: none;
-  animation: pl-pop 0.18s ease;
+  animation: pl-seekflash-in 0.18s ease;
 }
 
 .pl-seekflash--back {
@@ -3276,6 +3291,17 @@ onUnmounted(() => {
 
 .pl-seekflash--fwd {
   right: 12%;
+}
+
+@keyframes pl-seekflash-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-50% + 6px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
 }
 
 /* ── Under-player mobile action row ── */

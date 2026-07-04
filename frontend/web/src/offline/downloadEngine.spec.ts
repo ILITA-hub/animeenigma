@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { enqueueDownload, removeDownload, _resetEngineForTests, _installCachesForTests } from './downloadEngine'
 import { _resetDbForTests, getDownload, putDownload } from './registry'
 import type { StreamResult } from '@/types/aePlayer'
@@ -144,6 +144,43 @@ describe('downloadEngine — HLS happy path', () => {
     await removeDownload(id)
     expect(await getDownload(id)).toBeUndefined()
     expect(await impl.has(`ae-offline-${id}`)).toBe(false)
+  })
+})
+
+describe('downloadEngine — mid-batch quota re-check', () => {
+  // jsdom has no navigator.storage at all; stub it per-test the same way
+  // DownloadsPage.spec.ts stubs the missing navigator.serviceWorker, and
+  // remove it afterwards so later tests see the engine's normal
+  // headroom === null (no-op) behavior again.
+  afterEach(() => {
+    delete (navigator as unknown as { storage?: unknown }).storage
+  })
+
+  it('fails fast in runDownload when headroom drops between enqueue and run, without ever calling resolve()', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    // A 24-episode season passes enqueueDownload's own pre-check instantly
+    // (call #1: plenty of headroom, no bytes landed yet); by the time this
+    // item's turn comes up in runDownload (call #2), the disk has filled —
+    // the engine-side re-check (this fix) must catch it there.
+    let call = 0
+    Object.defineProperty(navigator, 'storage', {
+      value: {
+        persist: async () => true,
+        estimate: async () => {
+          call++
+          return call === 1
+            ? { usage: 0, quota: 10 * 2 ** 30 }
+            : { usage: 9.9 * 2 ** 30, quota: 10 * 2 ** 30 }
+        },
+      },
+      configurable: true,
+    })
+    const resolve = vi.fn(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' as const }))
+    const id = await enqueueDownload(req(resolve))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('error'), { timeout: 10_000 })
+    expect((await getDownload(id))?.error).toBe('quota')
+    expect(resolve).not.toHaveBeenCalled()
   })
 })
 
