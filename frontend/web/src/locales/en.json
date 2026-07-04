@@ -525,7 +525,11 @@
         "scopeSeasonTitle": "Download the whole season",
         "seasonDone": "Season already downloaded",
         "season": "Season",
-        "lowSpace": "May run out of space — the browser granted this site ~{free} of storage"
+        "lowSpace": "May run out of space — the browser granted this site ~{free} of storage",
+        "source": "Source",
+        "audioRaw": "RAW",
+        "audioDub": "Dub",
+        "teamAuto": "Auto"
       }
     }
   },

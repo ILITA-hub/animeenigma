@@ -525,7 +525,11 @@
         "scopeSeasonTitle": "シーズン全体をダウンロード",
         "seasonDone": "全話ダウンロード済み",
         "season": "シーズン",
-        "lowSpace": "容量が不足する可能性 — ブラウザがこのサイトに割り当てた容量は約{free}です"
+        "lowSpace": "容量が不足する可能性 — ブラウザがこのサイトに割り当てた容量は約{free}です",
+        "source": "ソース",
+        "audioRaw": "RAW",
+        "audioDub": "吹き替え",
+        "teamAuto": "自動"
       }
     }
   },
