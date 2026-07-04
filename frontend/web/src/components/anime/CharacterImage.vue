@@ -14,8 +14,8 @@
       @error="onError"
     />
 
-    <!-- Drift skeleton — translucent glass OVERLAY above the img (own element,
-         never shares a `background` with the container — the cascade bug),
+    <!-- Drift skeleton — translucent OVERLAY above the img (own positioned
+         element so the sk-drift ::after sweep anchors to it — see main.css),
          fades out on @load. Mirrors PosterImage; portraits use the same
          loading feedback as posters. -->
     <Transition name="sk-fade">

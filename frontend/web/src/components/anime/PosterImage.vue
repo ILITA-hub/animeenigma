@@ -14,11 +14,11 @@
       @error="onError"
     />
 
-    <!-- Drift skeleton — translucent glass OVERLAY above the img, so the
+    <!-- Drift skeleton — translucent OVERLAY above the img, so the
          browser's native progressive (top-down) poster render stays visible
-         underneath as loading feedback; fades out on @load. Its OWN element,
-         so it never shares a `background` declaration with the container
-         (the cascade bug). -->
+         underneath as loading feedback; fades out on @load. Its OWN
+         positioned element so the sk-drift ::after sweep anchors to it
+         (see main.css). -->
     <Transition name="sk-fade">
       <div
         v-if="!loaded"

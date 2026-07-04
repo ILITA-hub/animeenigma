@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      variant === 'drift' ? 'sk-drift relative' : 'animate-pulse bg-white/10',
+      variant === 'drift' ? 'sk-drift relative overflow-hidden' : 'animate-pulse bg-white/10',
       'rounded',
       roundedClass,
       className,

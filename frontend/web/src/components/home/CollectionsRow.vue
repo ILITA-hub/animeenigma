@@ -31,7 +31,7 @@
             v-else
             class="collection-card-fallback"
           />
-          <!-- Glass skeleton — translucent overlay above the img so the native
+          <!-- Drift skeleton — translucent overlay above the img so the native
                progressive cover render shows through; fades out on @load.
                AFTER the v-if/v-else chain (a node in between breaks it). -->
           <Transition name="sk-fade">

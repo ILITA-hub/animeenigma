@@ -146,7 +146,12 @@
    overlays), while transform runs on the compositor. No backdrop-filter
    here either: a per-card blur forced a render surface + GPU re-filter per
    skeleton per frame. Hosts must be positioned (all current hosts are
-   `absolute inset-0` overlays) so the ::after anchors to the skeleton.
+   `absolute inset-0` overlays) so the ::after anchors to the skeleton, and
+   must clip overflow — every current host fills a poster container that
+   already clips at identical bounds, so .sk-drift itself deliberately does
+   NOT re-clip (a rounded clip directly on the composited-animation host
+   would cost a mask per instance; and unlayered position/overflow here
+   would stomp host utilities — Tailwind v4 layering gotcha).
    Iterations are capped (~21s) so a poster that never loads (lazy offscreen,
    404 fallback chain) settles into a static placeholder instead of animating
    for the whole session. See
@@ -156,7 +161,6 @@
   100% { transform: translateX(-66.667%); }
 }
 .sk-drift {
-  overflow: hidden;
   background-color: rgba(255, 255, 255, 0.06);
   /* Inset highlight edge via shadow (not border) so it adds no size. */
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
@@ -378,7 +382,14 @@ body {
   overflow: hidden;
 }
 
-/* Skeleton loading animation */
+/* Skeleton loading animation.
+   KNOWN DEBT (deliberate scope cut, 2026-07-04): this still animates
+   background-position (main-thread repaint per frame) — same defect class
+   fixed for .sk-drift above. Left as-is because it rides transient
+   load-phase surfaces (spotlight/hero skeletons, ~44 paints in the trace vs
+   25k for sk-drift) and several hosts are unpositioned, so the ::after
+   technique needs a per-host audit first. Port it the sk-drift way when
+   touching these skeletons. */
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
