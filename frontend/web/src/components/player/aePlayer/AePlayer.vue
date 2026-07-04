@@ -2,7 +2,7 @@
   <div
     ref="rootRef"
     class="pl"
-    :class="{ 'pl--theater': theater, 'pl--ui-hidden': !uiVisible }"
+    :class="{ 'pl--theater': theater, 'pl--ui-hidden': !uiVisible, 'pl--pseudo-fs': pseudoFs }"
     :style="{ '--prov': activeProviderHue }"
     tabindex="0"
     role="region"
@@ -198,6 +198,7 @@
       :fragments="fragOverlay"
       :preview-url="currentStream?.url ?? null"
       :preview-type="currentStream?.type ?? null"
+      :fullscreen-active="fullscreenActive"
       @toggle-play="togglePlay"
       @seek-rel="onSeekRel"
       @seek="onSeek"
@@ -383,6 +384,7 @@ import { comboToWatchCombo, watchComboToPartialCombo, providerToLegacyPlayer, to
 import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
 import { useToast } from '@/composables/useToast'
+import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
@@ -474,6 +476,8 @@ const engine = useVideoEngine(videoRef, state.hackerMode)
 const resolver = props.offline ? makeOfflineResolver(props.offline) : useProviderResolver()
 const { t } = useI18n()
 const toast = useToast()
+// isMobile is unused here (Tasks 6/7 add its consumers) — destructure just isCoarse to keep lint clean.
+const { isCoarse } = useMobilePlayer()
 
 // ─── Watch-Together (room sync) ───────────────────────────────────────────────
 // When mounted inside a WT room, wire the generic HTML5 playback bridge (mirrors
@@ -2503,14 +2507,81 @@ function onTogglePip() {
   }
 }
 
+// ─── Fullscreen (capability-based) ───────────────────────────────────────────
+// Android/desktop: native element fullscreen (+ landscape lock on touch).
+// iPhone Safari has NO element fullscreen API — fall back to a fixed-position
+// pseudo-fullscreen takeover. video.webkitEnterFullscreen() (the native iOS
+// player) is deliberately NOT used: it drops SubtitleOverlay, the Source
+// panel and the WT button.
+
+const pseudoFs = ref(false)
+const nativeFsActive = ref(false)
+const fullscreenActive = computed(() => nativeFsActive.value || pseudoFs.value)
+
+function onFullscreenChange() {
+  nativeFsActive.value = !!document.fullscreenElement
+  if (!nativeFsActive.value) unlockOrientation()
+}
+
+function lockLandscape() {
+  const o = screen.orientation as ScreenOrientation & { lock?: (v: string) => Promise<void> }
+  void o?.lock?.('landscape').catch(() => {})
+}
+
+function unlockOrientation() {
+  try {
+    screen.orientation?.unlock?.()
+  } catch {
+    /* not locked / unsupported */
+  }
+}
+
 function onToggleFullscreen() {
   const el = rootRef.value ?? videoRef.value?.parentElement
   if (!el) return
   if (document.fullscreenElement) {
     void document.exitFullscreen()
-  } else {
-    void el.requestFullscreen()
+    return
   }
+  if (pseudoFs.value) {
+    exitPseudoFs()
+    return
+  }
+  if (el.requestFullscreen) {
+    void el.requestFullscreen()
+    if (isCoarse.value) lockLandscape()
+    return
+  }
+  enterPseudoFs()
+}
+
+// Pseudo-FS pushes a history entry so the phone's back gesture exits the
+// takeover instead of leaving the page.
+function onPseudoFsPop() {
+  exitPseudoFs(true)
+}
+
+function enterPseudoFs() {
+  pseudoFs.value = true
+  document.documentElement.classList.add('pl-noscroll')
+  history.pushState({ plPseudoFs: true }, '')
+  window.addEventListener('popstate', onPseudoFsPop)
+}
+
+function exitPseudoFs(viaPop = false) {
+  if (!pseudoFs.value) return
+  pseudoFs.value = false
+  document.documentElement.classList.remove('pl-noscroll')
+  window.removeEventListener('popstate', onPseudoFsPop)
+  if (!viaPop && (history.state as { plPseudoFs?: boolean } | null)?.plPseudoFs) history.back()
+}
+
+/** Unmount-safe teardown: never touches history (a route change already moved it). */
+function teardownPseudoFs() {
+  if (!pseudoFs.value) return
+  pseudoFs.value = false
+  document.documentElement.classList.remove('pl-noscroll')
+  window.removeEventListener('popstate', onPseudoFsPop)
 }
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
@@ -2607,6 +2678,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('pagehide', onPageHide)
   document.addEventListener('visibilitychange', onVisibilityChange)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
 })
 
 onUnmounted(() => {
@@ -2621,6 +2693,8 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pagehide', onPageHide)
   document.removeEventListener('visibilitychange', onVisibilityChange)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  teardownPseudoFs()
 })
 </script>
 
@@ -2692,6 +2766,22 @@ onUnmounted(() => {
   border: 0;
   aspect-ratio: auto;
   height: 100vh;
+}
+
+/* iPhone pseudo-fullscreen — fixed takeover (no element FS API on iOS).
+   Black behind the notch/status bar is intended (video surface). */
+.pl--pseudo-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  border: 0;
+}
+
+:global(html.pl-noscroll) {
+  overflow: hidden;
 }
 
 .pl-scene {
