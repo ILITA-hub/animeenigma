@@ -16,7 +16,8 @@
     "drawerTitle": "Navigation menu",
     "about": "About",
     "anidle": "Anidle",
-    "downloads": "Downloads"
+    "downloads": "Downloads",
+    "back": "Back"
   },
   "a11y": {
     "skipToContent": "Skip to content"
@@ -505,7 +506,10 @@
         "hardsub": "Subtitles are burned into the video by {provider}",
         "autoSync": "Auto-sync",
         "autoSyncHint": "Automatically align subtitles to the audio",
-        "autoSyncDebug": { "state": "{status} · {offset}s · {conf}%", "event": "{delta}s (VAD) {'@'} {from}–{to} ({conf}%)" }
+        "autoSyncDebug": {
+          "state": "{status} · {offset}s · {conf}%",
+          "event": "{delta}s (VAD) {'@'} {from}–{to} ({conf}%)"
+        }
       },
       "offline": {
         "download": "Download",
@@ -1178,7 +1182,8 @@
     "goToPage": "Go to anime page",
     "openInNewTab": "Open in new tab",
     "openMenu": "Open menu",
-    "markNextWatched": "Mark episode {n} watched"
+    "markNextWatched": "Mark episode {n} watched",
+    "downloadSeason": "Download season (offline)"
   },
   "admin": {
     "dashboard": {
@@ -1265,8 +1270,17 @@
         "fromAdmin": "from admin",
         "history": "Status history"
       },
-      "kind": { "feedback": "Feedback", "todo": "TODO", "idea": "Idea" },
-      "source": { "feedback_form": "Feedback form", "telegram": "Telegram", "api": "API", "manual": "Manual" },
+      "kind": {
+        "feedback": "Feedback",
+        "todo": "TODO",
+        "idea": "Idea"
+      },
+      "source": {
+        "feedback_form": "Feedback form",
+        "telegram": "Telegram",
+        "api": "API",
+        "manual": "Manual"
+      },
       "newNote": {
         "button": "+ New note",
         "title": "New note",
@@ -1964,6 +1978,10 @@
       "mismatch": "Source changed — re-download"
     },
     "offlineReady": "Available offline",
-    "noSw": "Offline playback needs the app's service worker — reload the page once online"
+    "noSw": "Offline playback needs the app's service worker — reload the page once online",
+    "seasonPreparing": "Preparing download…",
+    "seasonQueued": "Queued {n} ep. — see Downloads",
+    "seasonNothing": "Everything is already downloaded",
+    "seasonFailed": "Couldn't prepare the download"
   }
 }

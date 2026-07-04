@@ -14,6 +14,7 @@ const sharedState = vi.hoisted(() => ({
   fetchWatchlist: vi.fn(async () => {}),
   updateWatchlistEntry: vi.fn(async (_arg?: unknown) => {}),
   pushToast: vi.fn(),
+  openSeasonDownload: vi.fn(async (_req?: unknown, _lang?: unknown) => {}),
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -63,6 +64,12 @@ vi.mock('@/utils/title', () => ({
   getLocalizedTitle: (name?: string) => name ?? '',
 }))
 
+// Mocked wholesale so the real flow's transitive imports (api client,
+// provider resolver, download engine) never load in this component test.
+vi.mock('@/offline/seasonDownloadFlow', () => ({
+  openSeasonDownload: (req: unknown, lang: unknown) => sharedState.openSeasonDownload(req, lang),
+}))
+
 vi.mock('@/composables/useImageProxy', () => ({
   getImageFallbackUrl: (url: string) => url,
   cardPosterUrl: (url: string) => url,
@@ -75,7 +82,7 @@ import AnimeContextMenu from './AnimeContextMenu.vue'
 // the tests query the action items in the wrapper rather than portaled DOM.
 const DropdownMenuStub = {
   name: 'DropdownMenu',
-  props: ['open', 'reference', 'align', 'side', 'sideOffset'],
+  props: ['open', 'reference', 'anchorPoint', 'align', 'side', 'sideOffset'],
   emits: ['update:open'],
   template: '<div data-testid="dd-stub"><slot /></div>',
 }
@@ -127,6 +134,7 @@ beforeEach(() => {
   sharedState.fetchWatchlist.mockClear()
   sharedState.updateWatchlistEntry.mockClear()
   sharedState.pushToast.mockClear()
+  sharedState.openSeasonDownload.mockClear()
 })
 
 afterEach(() => {
@@ -222,15 +230,35 @@ describe('AnimeContextMenu.vue (Reka DropdownMenu rebuild)', () => {
     expect(w.emitted('update:visible')!.at(-1)).toEqual([false])
   })
 
-  it('forwards anchorEl to the DropdownMenu reference prop', () => {
-    const fakeEl = { getBoundingClientRect: () => ({}) } as unknown as HTMLElement
-    const w = mountMenu({ listStatus: null, anchorEl: fakeEl })
-    expect(w.findComponent(DropdownMenuStub).props('reference')).toStrictEqual(fakeEl)
+  // The component positions via DropdownMenu's anchorPoint mode — its own docs
+  // deprecate the bare `reference` prop ("menu rendered unanchored at 0,0.
+  // Use anchorPoint"). This replaces the stale reference-forwarding assertion
+  // (pre-existing failure) with the real positioning contract.
+  it('forwards the x/y anchor point to the DropdownMenu', () => {
+    const w = mountMenu({ listStatus: null, x: 11, y: 22 })
+    expect(w.findComponent(DropdownMenuStub).props('anchorPoint')).toEqual({ x: 11, y: 22 })
   })
 
   it('pins Open in new tab as the first action (C-top)', () => {
     const w = mountMenu({ listStatus: 'watching', episodesWatched: 2, episodesTotal: 12 })
     const items = w.findAllComponents({ name: 'DropdownMenuItem' })
     expect(items[0].text()).toContain('contextMenu.openInNewTab')
+  })
+
+  it('offers download-season even for anonymous users (downloads are local, not auth-gated)', () => {
+    sharedState.isAuthenticated = false
+    const w = mountMenu({ listStatus: null })
+    expect(actions(w).some((x) => x.kind === 'download-season')).toBe(true)
+  })
+
+  it('download-season closes the menu and launches the flow with the anime request', () => {
+    const w = mountMenu({ listStatus: null })
+    const dl = actions(w).find((x) => x.kind === 'download-season')!
+    ;(dl as unknown as { onActivate: () => void }).onActivate()
+    expect(w.emitted('update:visible')!.at(-1)).toEqual([false])
+    expect(sharedState.openSeasonDownload).toHaveBeenCalledTimes(1)
+    const [req, lang] = sharedState.openSeasonDownload.mock.calls[0]
+    expect(req).toMatchObject({ animeId: 'anime-1', poster: 'https://example.com/p.jpg' })
+    expect(typeof lang).toBe('string')
   })
 })

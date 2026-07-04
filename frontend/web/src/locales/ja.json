@@ -16,7 +16,8 @@
     "drawerTitle": "ナビゲーションメニュー",
     "about": "サイトについて",
     "anidle": "アニメdle",
-    "downloads": "ダウンロード"
+    "downloads": "ダウンロード",
+    "back": "戻る"
   },
   "a11y": {
     "skipToContent": "コンテンツへスキップ"
@@ -505,7 +506,10 @@
         "hardsub": "字幕は{provider}によって映像に焼き込まれています",
         "autoSync": "自動同期",
         "autoSyncHint": "字幕を音声に自動的に合わせる",
-        "autoSyncDebug": { "state": "{status} · {offset}秒 · {conf}%", "event": "{delta}秒 (VAD) {'@'} {from}–{to} ({conf}%)" }
+        "autoSyncDebug": {
+          "state": "{status} · {offset}秒 · {conf}%",
+          "event": "{delta}秒 (VAD) {'@'} {from}–{to} ({conf}%)"
+        }
       },
       "offline": {
         "download": "ダウンロード",
@@ -1178,7 +1182,8 @@
     "goToPage": "アニメページへ",
     "openInNewTab": "新しいタブで開く",
     "openMenu": "メニューを開く",
-    "markNextWatched": "第{n}話を視聴済みにする"
+    "markNextWatched": "第{n}話を視聴済みにする",
+    "downloadSeason": "シーズンをダウンロード（オフライン）"
   },
   "admin": {
     "dashboard": {
@@ -1265,8 +1270,17 @@
         "fromAdmin": "管理者から",
         "history": "ステータス履歴"
       },
-      "kind": { "feedback": "フィードバック", "todo": "TODO", "idea": "アイデア" },
-      "source": { "feedback_form": "フィードバックフォーム", "telegram": "Telegram", "api": "API", "manual": "手動" },
+      "kind": {
+        "feedback": "フィードバック",
+        "todo": "TODO",
+        "idea": "アイデア"
+      },
+      "source": {
+        "feedback_form": "フィードバックフォーム",
+        "telegram": "Telegram",
+        "api": "API",
+        "manual": "手動"
+      },
       "newNote": {
         "button": "＋ 新規メモ",
         "title": "新規メモ",
@@ -1964,6 +1978,10 @@
       "mismatch": "ソースが変更されました — 再ダウンロードしてください"
     },
     "offlineReady": "オフラインで視聴可能",
-    "noSw": "オフライン再生にはアプリのService Workerが必要です — オンラインで一度ページを再読み込みしてください"
+    "noSw": "オフライン再生にはアプリのService Workerが必要です — オンラインで一度ページを再読み込みしてください",
+    "seasonPreparing": "ダウンロードを準備中…",
+    "seasonQueued": "{n}話をキューに追加 — 「ダウンロード」を確認",
+    "seasonNothing": "すべてダウンロード済みです",
+    "seasonFailed": "ダウンロードを準備できませんでした"
   }
 }

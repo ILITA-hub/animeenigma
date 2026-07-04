@@ -63,7 +63,7 @@
       v-if="!appError"
       id="main-content"
       tabindex="-1"
-      :class="{ 'pt-[var(--header-offset)]': !route.meta.fullBleed }"
+      :class="{ 'pt-[var(--header-offset)]': !route.meta.fullBleed, 'pb-24': tabBarVisible }"
     >
       <router-view v-slot="{ Component }">
         <Transition name="page">
@@ -79,6 +79,12 @@
          for native window.confirm(). Mounted once, like <Toaster />. -->
     <ConfirmDialogHost />
 
+    <!-- Card-launched season download flow (context menu → quality dialog → engine). -->
+    <SeasonDownloadHost />
+
+    <!-- Installed-PWA bottom navigation (standalone mode has no browser chrome). -->
+    <MobileTabBar v-if="!appError" />
+
     <!-- Workstream notifications / Phase 3 — slide-in toast for the latest
          undismissed notification. Mounted at App-root so it survives route
          transitions. Gated by the feature flag so VITE_NOTIFICATIONS_ENABLED=
@@ -86,7 +92,7 @@
     <NotificationToast v-if="notifEnabled" />
 
     <!-- Footer -->
-    <footer v-if="!appError" class="py-8 px-4 text-center border-t border-white/10">
+    <footer v-if="!appError" class="py-8 px-4 text-center border-t border-white/10" :class="{ 'pb-24': tabBarVisible }">
       <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
         <p class="text-white/60 text-sm">
           &copy; {{ new Date().getFullYear() }} AnimeEnigma. {{ $t('footer.rights') }}
@@ -154,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onErrorCaptured, ref, watch } from 'vue'
+import { computed, onMounted, onErrorCaptured, ref, watch } from 'vue'
 import { TriangleAlert, Inbox, Send, Github, Mail } from 'lucide-vue-next'
 import { TooltipProvider } from 'reka-ui'
 import { useRoute, useRouter } from 'vue-router'
@@ -165,6 +171,10 @@ import FeedbackButton from '@/components/layout/FeedbackButton.vue'
 import Toaster from '@/components/ui/Toaster.vue'
 import ConfirmDialogHost from '@/components/ui/ConfirmDialogHost.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
+import MobileTabBar from '@/components/layout/MobileTabBar.vue'
+import SeasonDownloadHost from '@/components/SeasonDownloadHost.vue'
+import { useStandaloneDisplay } from '@/pwa/standalone'
+import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { reportFeError } from '@/utils/feErrorLog'
 
@@ -177,6 +187,12 @@ const notifStore = useNotificationsStore()
 // When false (rollback), skip mounting the toast AND skip starting the
 // store's polling lifecycle. Defaults to true.
 const notifEnabled = (import.meta.env.VITE_NOTIFICATIONS_ENABLED as string | undefined) !== 'false'
+
+// Installed-PWA bottom tab bar (standalone has no browser chrome). When it is
+// visible, main/footer get bottom clearance so content never hides behind it.
+const isStandalone = useStandaloneDisplay()
+const { isMobile: isMobileViewport } = useMobilePlayer()
+const tabBarVisible = computed(() => isStandalone.value && isMobileViewport.value)
 
 // "My feedback" footer link re-enabled per owner approval of AUTO-436
 // (2026-06-11, in-chat). FeedbackButton.vue has the same flag.

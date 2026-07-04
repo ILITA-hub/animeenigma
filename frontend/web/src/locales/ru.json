@@ -16,7 +16,8 @@
     "drawerTitle": "Меню навигации",
     "about": "О сервисе",
     "anidle": "Аниме-dle",
-    "downloads": "Загрузки"
+    "downloads": "Загрузки",
+    "back": "Назад"
   },
   "a11y": {
     "skipToContent": "Перейти к контенту"
@@ -505,7 +506,10 @@
         "hardsub": "Субтитры вшиты в видео ({provider})",
         "autoSync": "Автосинхрон",
         "autoSyncHint": "Автоматически подгонять субтитры под звук",
-        "autoSyncDebug": { "state": "{status} · {offset}с · {conf}%", "event": "{delta}с (VAD) {'@'} {from}–{to} ({conf}%)" }
+        "autoSyncDebug": {
+          "state": "{status} · {offset}с · {conf}%",
+          "event": "{delta}с (VAD) {'@'} {from}–{to} ({conf}%)"
+        }
       },
       "offline": {
         "download": "Скачать",
@@ -1178,7 +1182,8 @@
     "goToPage": "Перейти на страницу",
     "openInNewTab": "Открыть в новой вкладке",
     "openMenu": "Открыть меню",
-    "markNextWatched": "Отметить серию {n} просмотренной"
+    "markNextWatched": "Отметить серию {n} просмотренной",
+    "downloadSeason": "Скачать сезон (оффлайн)"
   },
   "admin": {
     "dashboard": {
@@ -1265,8 +1270,17 @@
         "fromAdmin": "от админа",
         "history": "История статусов"
       },
-      "kind": { "feedback": "Отзыв", "todo": "Задача", "idea": "Идея" },
-      "source": { "feedback_form": "Форма отзывов", "telegram": "Telegram", "api": "API", "manual": "Вручную" },
+      "kind": {
+        "feedback": "Отзыв",
+        "todo": "Задача",
+        "idea": "Идея"
+      },
+      "source": {
+        "feedback_form": "Форма отзывов",
+        "telegram": "Telegram",
+        "api": "API",
+        "manual": "Вручную"
+      },
       "newNote": {
         "button": "+ Новая заметка",
         "title": "Новая заметка",
@@ -1964,6 +1978,10 @@
       "mismatch": "Источник изменился — скачайте заново"
     },
     "offlineReady": "Доступно оффлайн",
-    "noSw": "Для оффлайн-просмотра нужен service worker приложения — перезагрузите страницу онлайн"
+    "noSw": "Для оффлайн-просмотра нужен service worker приложения — перезагрузите страницу онлайн",
+    "seasonPreparing": "Готовим скачивание…",
+    "seasonQueued": "В очереди {n} сер. — смотри «Загрузки»",
+    "seasonNothing": "Все серии уже скачаны",
+    "seasonFailed": "Не удалось подготовить скачивание"
   }
 }

@@ -81,6 +81,11 @@
               class="size-4 flex-shrink-0"
             />
 
+            <Download
+              v-else-if="action.kind === 'download-season'"
+              class="size-4 flex-shrink-0"
+            />
+
             {{ action.label }}
           </DropdownMenuItem>
         </template>
@@ -94,7 +99,7 @@ import { computed } from 'vue'
 import type { ReferenceElement } from 'reka-ui'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Check, Trash2, ExternalLink, Star } from 'lucide-vue-next'
+import { Check, Trash2, ExternalLink, Star, Download } from 'lucide-vue-next'
 import { DropdownMenu, DropdownMenuItem, ScoreDiamond } from '@/components/ui'
 import PosterImage from '@/components/anime/PosterImage.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -102,6 +107,8 @@ import { useWatchlistStore } from '@/stores/watchlist'
 import { userApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { getLocalizedTitle } from '@/utils/title'
+import { offlineDownloadsEnabled } from '@/offline/flag'
+import { openSeasonDownload } from '@/offline/seasonDownloadFlow'
 
 interface Anime {
   id: string | number
@@ -117,7 +124,7 @@ interface Anime {
   genres?: string[]
 }
 
-type ActionKind = 'status' | 'remove' | 'mark-next' | 'goto' | 'newtab'
+type ActionKind = 'status' | 'remove' | 'mark-next' | 'goto' | 'newtab' | 'download-season'
 
 interface MenuAction {
   key: string
@@ -184,6 +191,14 @@ const actions = computed<MenuAction[]>(() => {
   // C-top: open-in-new-tab pinned first, its own navigation group.
   out.push({ key: 'newtab', kind: 'newtab', label: t('contextMenu.openInNewTab'), onActivate: openInNewTab })
   out.push({ key: 'goto', kind: 'goto', label: t('contextMenu.goToPage'), onActivate: goToPage })
+  if (offlineDownloadsEnabled) {
+    out.push({
+      key: 'download-season',
+      kind: 'download-season',
+      label: t('contextMenu.downloadSeason'),
+      onActivate: downloadSeason,
+    })
+  }
   if (authStore.isAuthenticated) {
     for (const [i, s] of statusOptions.entries()) {
       out.push({
@@ -294,5 +309,18 @@ function openInNewTab() {
   if (!props.anime) return
   window.open(`/anime/${props.anime.id}`, '_blank', 'noopener,noreferrer')
   closeMenu()
+}
+
+function downloadSeason() {
+  if (!props.anime) return
+  const req = {
+    animeId: String(props.anime.id),
+    title: localizedTitle.value,
+    poster: props.anime.coverImage,
+  }
+  closeMenu()
+  // Fire-and-forget: the global <SeasonDownloadHost /> renders the flow's
+  // dialog/toasts; this menu is already closed by then.
+  void openSeasonDownload(req, locale.value)
 }
 </script>
