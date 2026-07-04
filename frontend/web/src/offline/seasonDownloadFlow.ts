@@ -140,15 +140,14 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
   }
 }
 
-export async function confirmSeasonDownload(quality: string, scope: 'episode' | 'season'): Promise<void> {
+export async function confirmSeasonDownload(quality: string): Promise<void> {
   const req = state.request
   const combo = state.combo ? { ...state.combo } : null
   if (!req || !combo || state.phase !== 'choose') return
   // Plain copies: `state` is reactive, so its elements are Proxies — IndexedDB
   // structured clone rejects those (DataCloneError). The engine de-proxies too;
   // this keeps the flow safe even against future engine callers.
-  const picked = scope === 'season' ? state.targets : state.targets.slice(0, 1)
-  const eps = picked.map((ep) => ({ ...ep }))
+  const eps = state.targets.map((ep) => ({ ...ep }))
   state.phase = 'queueing'
   const resolver = useProviderResolver()
   try {

@@ -7,17 +7,15 @@
     </div>
   </Teleport>
 
-  <!-- Quality/scope chooser — reuses the player's DownloadDialog, season-first -->
+  <!-- Quality chooser — reuses the player's season DownloadDialog -->
   <Teleport to="body">
     <div v-if="seasonFlow.phase === 'choose'">
       <div class="sdh-scrim" data-test="sdh-scrim" @click="cancelSeasonDownload()" />
       <div class="sdh-anchor">
         <DownloadDialog
-          :episode-number="seasonFlow.targets[0]?.number ?? 1"
           :season-count="seasonFlow.targets.length"
           :duration-min="seasonFlow.durationMin ?? undefined"
           :sheet="isMobile"
-          initial-scope="season"
           @confirm="onConfirm"
           @close="cancelSeasonDownload()"
         />
@@ -43,8 +41,8 @@ const { t } = useI18n()
 const toast = useToast()
 const { isMobile } = useMobilePlayer()
 
-function onConfirm(quality: string, scope: 'episode' | 'season') {
-  void confirmSeasonDownload(quality, scope)
+function onConfirm(quality: string) {
+  void confirmSeasonDownload(quality)
 }
 
 const NOTICE_KEY: Record<string, string> = {

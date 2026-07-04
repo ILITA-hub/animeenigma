@@ -159,21 +159,14 @@ describe('confirmSeasonDownload', () => {
     expect(seasonFlow.phase).toBe('choose')
   }
 
-  it('season scope enqueues every target with the frozen combo', async () => {
+  it('enqueues every target with the frozen combo', async () => {
     await toChoose()
-    await confirmSeasonDownload('720', 'season')
+    await confirmSeasonDownload('720')
     expect(h.enqueueSeason).toHaveBeenCalledTimes(1)
     const [targets, ctx] = h.enqueueSeason.mock.calls[0] as unknown as [EpisodeOption[], Record<string, unknown>]
     expect(targets.map((e) => e.number)).toEqual([1, 2, 3])
     expect(ctx).toMatchObject({ animeId: 'a1', animeTitle: 'T', poster: 'p.jpg', quality: '720', durationMin: 12 })
     expect(consumeSeasonNotice()).toEqual({ kind: 'queued', n: 3 })
     expect(seasonFlow.phase).toBe('idle')
-  })
-
-  it('episode scope enqueues only the first missing episode', async () => {
-    await toChoose()
-    await confirmSeasonDownload('480', 'episode')
-    const [targets] = h.enqueueSeason.mock.calls[0] as [EpisodeOption[]]
-    expect(targets.map((e) => e.number)).toEqual([1])
   })
 })

@@ -519,8 +519,6 @@
         "quality": "ダウンロード画質",
         "start": "ダウンロード",
         "cancel": "キャンセル",
-        "scope": "ダウンロード対象",
-        "scopeEpisode": "この話（{n}）",
         "scopeSeason": "全シーズン — {n}話",
         "scopeSeasonTitle": "シーズン全体をダウンロード",
         "seasonDone": "全話ダウンロード済み",
@@ -1975,6 +1973,9 @@
     "seasonPreparing": "ダウンロードを準備中…",
     "seasonQueued": "{n}話をキューに追加 — 「ダウンロード」を確認",
     "seasonNothing": "すべてダウンロード済みです",
-    "seasonFailed": "ダウンロードを準備できませんでした"
+    "seasonFailed": "ダウンロードを準備できませんでした",
+    "inAppOnly": "アプリでダウンロード",
+    "installHint": "ダウンロードはAnimeEnigmaアプリで利用できます。ブラウザのアドレスバーのインストールアイコンからアプリを追加してください。",
+    "installHintIos": "ダウンロードはAnimeEnigmaアプリで利用できます。Safariで「共有」→「ホーム画面に追加」からアプリを追加してください。"
   }
 }

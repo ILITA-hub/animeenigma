@@ -20,42 +20,38 @@ const globalStubs = {
   global: { mocks: { $t: (k: string, p?: Record<string, unknown>) => (p ? `${k}:${JSON.stringify(p)}` : k) } },
 }
 
-function mountDlg(props: Partial<{ episodeNumber: number; seasonCount: number; sheet: boolean; initialScope: 'episode' | 'season'; durationMin: number }> = {}) {
-  return mount(DownloadDialog, { props: { episodeNumber: 4, seasonCount: 10, ...props }, ...globalStubs })
+function mountDlg(props: Partial<{ seasonCount: number; sheet: boolean; durationMin: number }> = {}) {
+  return mount(DownloadDialog, { props: { seasonCount: 10, ...props }, ...globalStubs })
 }
 
-describe('DownloadDialog v2', () => {
+describe('DownloadDialog (season-only)', () => {
   beforeEach(() => localStorage.clear())
 
-  it('renders both scopes and defaults to episode', () => {
+  it('shows the season summary with count and estimate', () => {
     const w = mountDlg()
-    expect(w.find('[data-test="scope-episode"]').attributes('aria-checked')).toBe('true')
-    expect(w.find('[data-test="scope-season"]').attributes('aria-checked')).toBe('false')
+    expect(w.find('[data-test="season-summary"]').text()).toContain('scopeSeason:{"n":10}')
+    expect(w.find('[data-test="season-estimate"]').exists()).toBe(true)
   })
 
-  it('emits confirm with quality AND scope', async () => {
+  it('emits confirm with the picked quality only', async () => {
     const w = mountDlg()
-    await w.find('[data-test="scope-season"]').trigger('click')
     await w.find('[data-test="dl-start"]').trigger('click')
     const evt = w.emitted('confirm')![0]
-    expect(evt[0]).toBe('720')
-    expect(evt[1]).toBe('season')
+    expect(evt).toEqual(['720'])
   })
 
-  it('disables season scope when nothing left to download', () => {
+  it('disables start and says done when nothing is left to download', async () => {
     const w = mountDlg({ seasonCount: 0 })
-    expect(w.find('[data-test="scope-season"]').attributes('disabled')).toBeDefined()
-  })
-
-  it('preselects season via initialScope', () => {
-    const w = mountDlg({ initialScope: 'season' })
-    expect(w.find('[data-test="scope-season"]').attributes('aria-checked')).toBe('true')
+    expect(w.find('[data-test="dl-start"]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-test="season-summary"]').text()).toContain('seasonDone')
+    await w.find('[data-test="dl-start"]').trigger('click')
+    expect(w.emitted('confirm')).toBeUndefined()
   })
 
   it('warns when the projection exceeds free space', async () => {
     const { storageEstimate } = await import('@/offline/downloadEngine')
     ;(storageEstimate as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ usage: 0, quota: 1 * 2 ** 30 })
-    const w = mountDlg({ seasonCount: 20, initialScope: 'season' })
+    const w = mountDlg({ seasonCount: 20 })
     await new Promise((r) => setTimeout(r))
     await w.vm.$nextTick()
     expect(w.find('[data-test="low-space"]').exists()).toBe(true)
@@ -68,18 +64,13 @@ describe('DownloadDialog v2', () => {
 })
 
 describe('DownloadDialog — duration-scaled estimates', () => {
-  it('halves the estimate for a 12-min episode (720p: 225 MB, not 450)', () => {
-    const w = mountDlg({ durationMin: 12 })
-    expect(w.find('[data-test="episode-estimate"]').text()).toContain('225 MB')
-  })
-
-  it('keeps the 24-min baseline without a duration', () => {
-    const w = mountDlg()
-    expect(w.find('[data-test="episode-estimate"]').text()).toContain('450 MB')
-  })
-
-  it('scales the season total too (10 × 12-min at 720p ≈ 2.2 GB)', () => {
+  it('scales the season total by episode duration (10 × 12-min at 720p ≈ 2.2 GB)', () => {
     const w = mountDlg({ durationMin: 12, seasonCount: 10 })
-    expect(w.find('[data-test="scope-season"]').text()).toContain('2.2 GB')
+    expect(w.find('[data-test="season-estimate"]').text()).toContain('2.2 GB')
+  })
+
+  it('keeps the 24-min baseline without a duration (10 × 450 MB ≈ 4.4 GB)', () => {
+    const w = mountDlg({ seasonCount: 10 })
+    expect(w.find('[data-test="season-estimate"]').text()).toContain('4.4 GB')
   })
 })
