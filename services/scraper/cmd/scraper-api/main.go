@@ -212,6 +212,14 @@ func main() {
 	// budget and starve the chain before failover reaches a healthy provider.
 	orchestrator.SetProviderTimeout(cfg.ProviderTimeout)
 	log.Infow("per-provider failover budget configured", "timeout", cfg.ProviderTimeout.String())
+	// animepahe's stealth-scraper warm session cold-solves a Cloudflare
+	// Turnstile challenge (up to 30s) and idle-expires every 600s — far shorter
+	// than the 6h health-probe cadence — so it is ALWAYS cold at probe time.
+	// The shared 8s ProviderTimeout kills that cold solve before it finishes,
+	// marking animepahe perpetually down regardless of real health (see
+	// docs/issues/provider-recovery-log.md 2026-07-04). Give it its own budget.
+	orchestrator.SetProviderTimeoutOverride("animepahe", cfg.AnimepaheProviderTimeout)
+	log.Infow("animepahe per-provider timeout override configured", "timeout", cfg.AnimepaheProviderTimeout.String())
 
 	// Prefer DB-backed provider config from catalog (the runtime source of truth);
 	// fall back to the all-enabled offline default already in cfg if catalog is

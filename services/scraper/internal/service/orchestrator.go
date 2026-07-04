@@ -49,6 +49,15 @@ type Orchestrator struct {
 	// behaviour for tests constructed via NewOrchestrator without a setter).
 	// Set via SetProviderTimeout from config (SCRAPER_PROVIDER_TIMEOUT). ISS-022.
 	providerTimeout time.Duration
+
+	// providerTimeoutOverrides holds per-provider budgets that replace
+	// providerTimeout for one named provider (e.g. animepahe's Cloudflare
+	// Turnstile cold-solve, which can take up to STEALTH_CHALLENGE_SOLVE_TIMEOUT_MS
+	// (30s default) and would otherwise always exceed the global 8s default,
+	// marking the provider perpetually down on every probe cycle — see
+	// docs/issues/provider-recovery-log.md 2026-07-04). Set via
+	// SetProviderTimeoutOverride; absent entries fall back to providerTimeout.
+	providerTimeoutOverrides map[string]time.Duration
 }
 
 // NewOrchestrator builds an orchestrator with zero providers. Use Register
@@ -148,10 +157,31 @@ func (o *Orchestrator) SetProviderTimeout(d time.Duration) {
 	o.providerTimeout = d
 }
 
-// providerBudget returns the current per-provider timeout under the read lock.
-func (o *Orchestrator) providerBudget() time.Duration {
+// SetProviderTimeoutOverride gives ONE named provider a budget that replaces
+// providerTimeout for every call to that provider, without affecting any
+// other provider in the chain. d <= 0 removes the override (falls back to the
+// global budget). Safe to call once at startup before serving traffic.
+func (o *Orchestrator) SetProviderTimeoutOverride(name string, d time.Duration) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if d <= 0 {
+		delete(o.providerTimeoutOverrides, name)
+		return
+	}
+	if o.providerTimeoutOverrides == nil {
+		o.providerTimeoutOverrides = make(map[string]time.Duration)
+	}
+	o.providerTimeoutOverrides[name] = d
+}
+
+// providerBudgetFor returns the effective per-provider timeout for `name`: its
+// override if one is set, otherwise the global providerTimeout.
+func (o *Orchestrator) providerBudgetFor(name string) time.Duration {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
+	if d, ok := o.providerTimeoutOverrides[name]; ok {
+		return d
+	}
 	return o.providerTimeout
 }
 
@@ -283,11 +313,11 @@ func runFailover[T any](
 	log *logger.Logger,
 	providers []domain.Provider,
 	cache *health.InMemoryHealthCache,
-	providerTimeout time.Duration,
+	budgetFor func(name string) time.Duration,
 	operation string,
 	call func(ctx context.Context, p domain.Provider) (T, error),
 ) (T, error) {
-	v, _, err := runFailoverNamed(ctx, log, providers, cache, providerTimeout, operation, call)
+	v, _, err := runFailoverNamed(ctx, log, providers, cache, budgetFor, operation, call)
 	return v, err
 }
 
@@ -337,7 +367,7 @@ func runFailoverNamed[T any](
 	log *logger.Logger,
 	providers []domain.Provider,
 	cache *health.InMemoryHealthCache,
-	providerTimeout time.Duration,
+	budgetFor func(name string) time.Duration,
 	operation string,
 	call func(ctx context.Context, p domain.Provider) (T, error),
 ) (T, string, error) {
@@ -377,7 +407,7 @@ func runFailoverNamed[T any](
 
 		result, err := func() (res T, e error) {
 			defer metrics.ObserveParser(p.Name(), operation, time.Now(), &e)
-			return providerCall(ctx, providerTimeout, func(c context.Context) (T, error) {
+			return providerCall(ctx, budgetFor(p.Name()), func(c context.Context) (T, error) {
 				return call(c, p)
 			})
 		}()
@@ -468,7 +498,7 @@ func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer s
 // exclusive=true so a failure on that provider is not masked by a successful
 // response from another provider in the chain.
 func (o *Orchestrator) FindIDNamed(ctx context.Context, ref domain.AnimeRef, prefer string, exclusive bool) (string, string, error) {
-	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudget(), "find_id",
+	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudgetFor, "find_id",
 		func(c context.Context, p domain.Provider) (string, error) {
 			return p.FindID(c, ref)
 		})
@@ -490,7 +520,7 @@ func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer stri
 // When exclusive is true the call is pinned to the `prefer` provider only —
 // no failover. See FindIDNamed for the rationale.
 func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer string, exclusive bool) ([]domain.Episode, string, error) {
-	eps, name, err := runFailoverNamed(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudget(), "list_episodes",
+	eps, name, err := runFailoverNamed(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudgetFor, "list_episodes",
 		func(c context.Context, p domain.Provider) ([]domain.Episode, error) {
 			return p.ListEpisodes(c, providerID)
 		})
@@ -510,7 +540,7 @@ func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer
 // When exclusive is true the call is pinned to the `prefer` provider only —
 // no failover. See FindIDNamed for the rationale.
 func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, prefer string, exclusive bool) ([]domain.Server, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudget(), "list_servers",
+	return runFailover(ctx, o.log, o.orderedProviders(prefer, exclusive), o.cache, o.providerBudgetFor, "list_servers",
 		func(c context.Context, p domain.Provider) ([]domain.Server, error) {
 			return p.ListServers(c, providerID, episodeID)
 		})
@@ -518,7 +548,7 @@ func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, p
 
 // GetStream runs the provider chain to pull a playable Stream.
 func (o *Orchestrator) GetStream(ctx context.Context, providerID, episodeID, serverID string, cat domain.Category, prefer string) (*domain.Stream, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer, false), o.cache, o.providerBudget(), "get_stream",
+	return runFailover(ctx, o.log, o.orderedProviders(prefer, false), o.cache, o.providerBudgetFor, "get_stream",
 		func(c context.Context, p domain.Provider) (*domain.Stream, error) {
 			return p.GetStream(c, providerID, episodeID, serverID, cat)
 		})
@@ -567,7 +597,6 @@ func (o *Orchestrator) GetStreamGated(
 		return nil, false, domain.ErrNotFound
 	}
 
-	budget := o.providerBudget()
 	errs := make([]error, 0, len(providers))
 	for i, p := range providers {
 		if err := ctx.Err(); err != nil {
@@ -589,8 +618,10 @@ func (o *Orchestrator) GetStreamGated(
 		// Per-provider budget (ISS-022): cap each provider so one hung provider
 		// cannot starve the chain past the caller's timeout. A budget timeout
 		// while the parent ctx is alive is reclassified as a failover, not a
-		// terminal error, by classifyProviderErr below.
-		stream, gated, err := o.attemptGatedStream(ctx, budget, p, providerID, episodeID, serverID, cat)
+		// terminal error, by classifyProviderErr below. Looked up per-provider
+		// (not hoisted before the loop) so a SetProviderTimeoutOverride entry
+		// applies to its named provider only.
+		stream, gated, err := o.attemptGatedStream(ctx, o.providerBudgetFor(p.Name()), p, providerID, episodeID, serverID, cat)
 		if err == nil {
 			o.logResolvedStream(p.Name(), providerID, episodeID, serverID, cat, stream)
 			return stream, gated, nil

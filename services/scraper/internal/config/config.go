@@ -41,6 +41,19 @@ type Config struct {
 	// caller budget). Set 0 to disable the per-provider cap.
 	ProviderTimeout time.Duration
 
+	// AnimepaheProviderTimeout overrides ProviderTimeout for the animepahe
+	// provider only. animepahe is the sole solve_challenge=true provider (its
+	// stealth-scraper warm session must cold-solve a Cloudflare Turnstile
+	// challenge, up to STEALTH_CHALLENGE_SOLVE_TIMEOUT_MS = 30s default) AND its
+	// warm session idle-expires after STEALTH_SESSION_TTL_SECONDS (600s) — far
+	// shorter than the 6h health-probe cadence. Every scheduled probe therefore
+	// hits a cold solve, which the shared 8s ProviderTimeout always kills before
+	// it finishes, marking animepahe perpetually "down" regardless of whether it
+	// actually works (see docs/issues/provider-recovery-log.md 2026-07-04). Read
+	// from SCRAPER_ANIMEPAHE_PROVIDER_TIMEOUT; default 35s (30s solve budget +
+	// margin). Set 0 to fall back to the global ProviderTimeout.
+	AnimepaheProviderTimeout time.Duration
+
 	// Providers is the resolved provider-management config (scraper-providers.yaml,
 	// or env fallback). Source of truth for enable/disable + reason/description.
 	Providers ProvidersConfig
@@ -207,7 +220,8 @@ func Load() (*Config, error) {
 		NineAnime: NineAnimeConfig{
 			BaseURL: getEnv("SCRAPER_NINEANIME_BASE_URL", "https://9anime.me.uk"),
 		},
-		ProviderTimeout: getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
+		ProviderTimeout:          getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
+		AnimepaheProviderTimeout: getEnvDuration("SCRAPER_ANIMEPAHE_PROVIDER_TIMEOUT", 35*time.Second),
 	}
 	cfg.CatalogURL = getEnv("CATALOG_URL", "")
 	cfg.StealthScraperURL = getEnv("STEALTH_SCRAPER_URL", "http://stealth-scraper:3000")

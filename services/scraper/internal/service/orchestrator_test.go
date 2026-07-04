@@ -59,6 +59,12 @@ func (f *fakeProvider) HealthCheck(ctx context.Context) domain.Health {
 	return domain.Health{Provider: f.nameVal}
 }
 
+// noBudget is a budgetFor func with no per-provider cap — the uncapped
+// behaviour tests calling runFailover/runFailoverNamed directly (rather than
+// through an *Orchestrator) exercised via a bare `0` before budgetFor
+// replaced the flat time.Duration parameter.
+func noBudget(string) time.Duration { return 0 }
+
 func newTestOrchestrator(t *testing.T, providers ...domain.Provider) *Orchestrator {
 	t.Helper()
 	log := logger.Default()
@@ -369,6 +375,114 @@ func TestOrchestrator_PerProviderTimeout_FailsOverPastHung(t *testing.T) {
 	// Must bail near the 50ms budget, NOT the 5s parent deadline.
 	if elapsed > 1*time.Second {
 		t.Errorf("ListEpisodes took %v; per-provider budget should fail over in ~50ms, not wait on parent", elapsed)
+	}
+}
+
+// TestOrchestrator_PerProviderTimeoutOverride_GrantsNamedProviderLongerBudget
+// verifies SetProviderTimeoutOverride lets ONE named provider run past the
+// global providerTimeout (e.g. animepahe's Cloudflare Turnstile cold-solve,
+// which regularly exceeds the global 8s SCRAPER_PROVIDER_TIMEOUT — see
+// docs/issues/provider-recovery-log.md 2026-07-04), while a provider with no
+// override registered stays capped at the global budget.
+func TestOrchestrator_PerProviderTimeoutOverride_GrantsNamedProviderLongerBudget(t *testing.T) {
+	t.Parallel()
+
+	slow := &fakeProvider{
+		nameVal: "slow_override_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			select {
+			case <-time.After(150 * time.Millisecond):
+				return []domain.Episode{{ID: "ep_slow"}}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		},
+	}
+	o := newTestOrchestrator(t, slow)
+	o.SetProviderTimeout(50 * time.Millisecond)
+	o.SetProviderTimeoutOverride(slow.nameVal, 1*time.Second)
+
+	got, err := o.ListEpisodes(context.Background(), "x", "")
+	if err != nil {
+		t.Fatalf("ListEpisodes err = %v; want nil — override budget should have covered the 150ms call", err)
+	}
+	if len(got) != 1 || got[0].ID != "ep_slow" {
+		t.Errorf("ListEpisodes = %+v; want slow provider's result", got)
+	}
+}
+
+// TestOrchestrator_PerProviderTimeoutOverride_OtherProvidersUnaffected proves
+// the override is scoped to its named provider only — a sibling provider with
+// no override entry stays bounded by the global budget, so raising one
+// provider's cap (e.g. animepahe) cannot silently slow down failover for
+// every other provider in the chain.
+func TestOrchestrator_PerProviderTimeoutOverride_OtherProvidersUnaffected(t *testing.T) {
+	t.Parallel()
+
+	var otherCtxErr atomic.Bool
+	other := &fakeProvider{
+		nameVal: "other_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			<-ctx.Done()
+			otherCtxErr.Store(true)
+			return nil, ctx.Err()
+		},
+	}
+	fast := &fakeProvider{
+		nameVal: "fast_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{ID: "ep_fast"}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, other, fast)
+	o.SetProviderTimeout(50 * time.Millisecond)
+	o.SetProviderTimeoutOverride("some_unrelated_provider", 10*time.Second)
+
+	start := time.Now()
+	got, err := o.ListEpisodes(context.Background(), "x", "")
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("ListEpisodes err = %v; want nil (should fail over to fast)", err)
+	}
+	if len(got) != 1 || got[0].ID != "ep_fast" {
+		t.Errorf("ListEpisodes = %+v; want fast provider's result", got)
+	}
+	if !otherCtxErr.Load() {
+		t.Errorf("other provider's context was never cancelled; still bound by global 50ms budget")
+	}
+	if elapsed > 1*time.Second {
+		t.Errorf("ListEpisodes took %v; unrelated override must not leak a longer budget to other", elapsed)
+	}
+}
+
+// TestOrchestrator_PerProviderTimeoutOverride_GetStreamGated verifies the
+// override also applies on the GetStreamGated path (used by /scraper/stream),
+// which tracks its own budget lookup separately from runFailoverNamed.
+func TestOrchestrator_PerProviderTimeoutOverride_GetStreamGated(t *testing.T) {
+	t.Parallel()
+
+	slow := &fakeProvider{
+		nameVal: "slow_gated_" + t.Name(),
+		getStreamFn: func(ctx context.Context, providerID, episodeID, serverID string, cat domain.Category) (*domain.Stream, error) {
+			select {
+			case <-time.After(150 * time.Millisecond):
+				return &domain.Stream{Sources: []domain.Source{{URL: "http://x/slow.m3u8"}}}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		},
+	}
+	o := newTestOrchestrator(t, slow)
+	o.SetProviderTimeout(50 * time.Millisecond)
+	o.SetProviderTimeoutOverride(slow.nameVal, 1*time.Second)
+
+	stream, _, err := o.GetStreamGated(context.Background(), "pid", "eid", "sid", domain.CategorySub, "", false)
+	if err != nil {
+		t.Fatalf("GetStreamGated err = %v; want nil — override budget should have covered the 150ms call", err)
+	}
+	if stream == nil || len(stream.Sources) != 1 {
+		t.Errorf("GetStreamGated stream = %+v; want slow provider's stream", stream)
 	}
 }
 

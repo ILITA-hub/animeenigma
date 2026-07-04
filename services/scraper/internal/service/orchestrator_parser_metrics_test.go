@@ -15,7 +15,7 @@ func TestRunFailoverNamed_EmitsParserMetrics(t *testing.T) {
 	before := testutil.ToFloat64(metrics.ParserRequestsTotal.WithLabelValues("p3_ok", "find_id", "success"))
 	_, name, err := runFailoverNamed(
 		context.Background(), nil,
-		[]domain.Provider{&fakeProvider{nameVal: "p3_ok"}}, nil, 0, "find_id",
+		[]domain.Provider{&fakeProvider{nameVal: "p3_ok"}}, nil, noBudget, "find_id",
 		func(c context.Context, p domain.Provider) (string, error) { return "X", nil },
 	)
 	if err != nil || name != "p3_ok" {
@@ -30,7 +30,7 @@ func TestRunFailoverNamed_EmitsParserMetrics(t *testing.T) {
 	eBefore := testutil.ToFloat64(metrics.ParserRequestsTotal.WithLabelValues("p3_err", "get_stream", "error"))
 	_, _, _ = runFailoverNamed(
 		context.Background(), nil,
-		[]domain.Provider{&fakeProvider{nameVal: "p3_err"}}, nil, 0, "get_stream",
+		[]domain.Provider{&fakeProvider{nameVal: "p3_err"}}, nil, noBudget, "get_stream",
 		func(c context.Context, p domain.Provider) (string, error) { return "", errors.New("boom") },
 	)
 	eAfter := testutil.ToFloat64(metrics.ParserRequestsTotal.WithLabelValues("p3_err", "get_stream", "error"))
