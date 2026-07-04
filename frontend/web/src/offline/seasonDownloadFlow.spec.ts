@@ -229,4 +229,28 @@ describe('confirmSeasonDownload', () => {
     expect((ctx as { subPref: SubPref }).subPref).toEqual(pref)
     expect(typeof (ctx as { resolveSubsFor?: unknown }).resolveSubsFor).toBe('function')
   })
+
+  it('cancel during confirm re-list does not enqueue after cancel', async () => {
+    await toChoose()
+
+    // Deferred promise for the re-list triggered by the provider change
+    let release!: (v: EpisodeOption[]) => void
+    h.listEpisodes.mockReturnValueOnce(new Promise<EpisodeOption[]>((r) => (release = r)))
+
+    const kodikCombo: Combo = { ...(seasonFlow.combo as Combo), provider: 'kodik' }
+    const p = confirmSeasonDownload('720', 'season', kodikCombo, null)
+
+    // Cancel while listEpisodes is still in flight
+    cancelSeasonDownload()
+
+    // Resolve the deferred after cancellation
+    release([ep(1), ep(2)])
+    await p
+
+    // enqueueSeason must NOT have been called
+    expect(h.enqueueSeason).not.toHaveBeenCalled()
+    // State must remain as cancel left it: idle + no 'queued' notice stomp
+    expect(seasonFlow.phase).toBe('idle')
+    expect(seasonFlow.notice).toBeNull()
+  })
 })

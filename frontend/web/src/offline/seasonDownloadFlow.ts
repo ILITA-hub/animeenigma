@@ -168,6 +168,7 @@ export async function confirmSeasonDownload(
   const chosen = combo ? { ...combo } : state.combo ? { ...state.combo } : null
   if (!req || !chosen || state.phase !== 'choose') return
   state.phase = 'queueing'
+  const mySeq = seq
   const resolver = useProviderResolver()
   try {
     // The episode list came from the DEFAULT provider — a dialog-picked
@@ -175,7 +176,9 @@ export async function confirmSeasonDownload(
     let targets = state.targets
     if (chosen.provider !== state.combo?.provider) {
       const episodes = await resolver.listEpisodes(chosen.provider, req.animeId)
+      if (mySeq !== seq) return
       const all = await listDownloads()
+      if (mySeq !== seq) return
       const states: Record<number, DownloadState> = {}
       for (const d of all) if (d.animeId === req.animeId) states[d.episode.number] = d.state
       targets = seasonTargets(episodes, states)
