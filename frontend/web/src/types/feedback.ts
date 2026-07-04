@@ -5,10 +5,6 @@
 // done, pending human verification before promotion to 'resolved'.
 export type FeedbackStatus = 'new' | 'in_progress' | 'ai_done' | 'resolved' | 'not_relevant'
 
-// Item nature (Project Board). 'feedback' = inbound from users; 'todo'/'idea'
-// are internal notebook items.
-export type FeedbackKind = 'feedback' | 'todo' | 'idea'
-
 // Normalized channel the item entered the system through.
 export type FeedbackSource = 'feedback_form' | 'telegram' | 'api' | 'manual'
 
@@ -40,7 +36,6 @@ export interface FeedbackListItem {
   url: string
   description: string
   status: FeedbackStatus
-  kind?: FeedbackKind
   // 'telegram' for entries mirrored by the maintenance bot
   source?: FeedbackSource
   // Stored attachment filenames (served via /admin/reports/{id}/attachments/{name})

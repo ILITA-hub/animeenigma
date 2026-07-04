@@ -1220,9 +1220,7 @@
         "usernamePlaceholder": "ユーザー名で絞り込み…",
         "dateFrom": "開始日",
         "dateTo": "終了日",
-        "kind": "種別",
         "source": "ソース",
-        "allKinds": "すべての種別",
         "allSources": "すべてのソース"
       },
       "columns": {
@@ -1270,11 +1268,6 @@
         "fromAdmin": "管理者から",
         "history": "ステータス履歴"
       },
-      "kind": {
-        "feedback": "フィードバック",
-        "todo": "TODO",
-        "idea": "アイデア"
-      },
       "source": {
         "feedback_form": "フィードバックフォーム",
         "telegram": "Telegram",
@@ -1284,7 +1277,6 @@
       "newNote": {
         "button": "＋ 新規メモ",
         "title": "新規メモ",
-        "kindLabel": "種別",
         "categoryLabel": "カテゴリ",
         "categoryNone": "—",
         "descriptionLabel": "説明",

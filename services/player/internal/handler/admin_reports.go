@@ -96,8 +96,7 @@ type reportMeta struct {
 	EpisodeNumber *int   `json:"episode_number,omitempty"`
 	URL           string `json:"url"`
 	Description   string `json:"description"`
-	Status        string `json:"status"`
-	Kind          string   `json:"kind,omitempty"`
+	Status        string   `json:"status"`
 	Source        string   `json:"source,omitempty"`
 	Attachments   []string `json:"attachments,omitempty"`
 }
@@ -161,14 +160,13 @@ func statusInCSV(csv, status string) bool {
 // List returns a paginated, optionally filtered slice of feedback rows,
 // newest first. Query params: category, status (the sentinel "active" means all
 // statuses except not_relevant; otherwise a comma-separated set, e.g.
-// "new,ai_done"), type, kind, source, username (case-insensitive substring
+// "new,ai_done"), type, source, username (case-insensitive substring
 // match), page, page_size.
 func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	fCategory := q.Get("category")
 	fStatus := q.Get("status")
 	fType := q.Get("type")
-	fKind := q.Get("kind")
 	fSource := q.Get("source")
 	fUsername := strings.ToLower(strings.TrimSpace(q.Get("username")))
 	fFrom, fTo := parseReportWindow(q)
@@ -231,7 +229,6 @@ func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 		m.Description = truncateRunes(m.Description, descSnippetMax)
 
 		m.Source = normalizeSource(m.Source, m.PlayerType)
-		m.Kind = deriveKind(m.Kind, m.Source)
 
 		if fCategory != "" && m.Category != fCategory {
 			continue
@@ -250,9 +247,6 @@ func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 			if !statusInCSV(fStatus, m.Status) {
 				continue
 			}
-		}
-		if fKind != "" && m.Kind != fKind {
-			continue
 		}
 		if fSource != "" && m.Source != fSource {
 			continue
@@ -318,10 +312,7 @@ func (h *AdminReportsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	full["status"] = st
 	rawSource, _ := full["source"].(string)
 	pt, _ := full["player_type"].(string)
-	src := normalizeSource(rawSource, pt)
-	full["source"] = src
-	rawKind, _ := full["kind"].(string)
-	full["kind"] = deriveKind(rawKind, src)
+	full["source"] = normalizeSource(rawSource, pt)
 	if len(history) > 0 {
 		full["status_history"] = history
 	}
@@ -441,14 +432,14 @@ func truncateRunes(s string, max int) string {
 	return string(rs[:max]) + "…"
 }
 
-// noteCreateRequest is the admin "+ New note" quick-capture payload.
+// noteCreateRequest is the admin "+ New note" quick-capture payload. The kind
+// dimension was retired from the UI (2026-07-04) — manual notes are always
+// stamped kind=todo; a legacy "kind" body field is ignored.
 type noteCreateRequest struct {
-	Kind        string `json:"kind"`
 	Category    string `json:"category,omitempty"`
 	Description string `json:"description"`
 }
 
-var validNoteKind = map[string]bool{"feedback": true, "todo": true, "idea": true}
 var validNoteCategory = map[string]bool{"": true, "bug": true, "issue": true, "feature": true}
 
 // CreateNote handles POST /api/admin/reports — the admin quick-capture
@@ -472,10 +463,6 @@ func (h *AdminReportsHandler) CreateNote(w http.ResponseWriter, r *http.Request)
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
-	if !validNoteKind[req.Kind] {
-		httputil.BadRequest(w, "invalid kind")
-		return
-	}
 	if !validNoteCategory[req.Category] {
 		httputil.BadRequest(w, "invalid category")
 		return
@@ -496,7 +483,7 @@ func (h *AdminReportsHandler) CreateNote(w http.ResponseWriter, r *http.Request)
 		"user_id":      claims.UserID,
 		"username":     claims.Username,
 		"player_type":  "feedback",
-		"kind":         req.Kind,
+		"kind":         "todo",
 		"source":       "manual",
 		"category":     req.Category,
 		"description":  req.Description,
@@ -533,6 +520,6 @@ func (h *AdminReportsHandler) CreateNote(w http.ResponseWriter, r *http.Request)
 		httputil.Error(w, errors.Internal("failed to persist note"))
 		return
 	}
-	h.log.Infow("admin note created", "id", id, "kind", req.Kind, "username", claims.Username)
+	h.log.Infow("admin note created", "id", id, "username", claims.Username)
 	httputil.OK(w, map[string]string{"id": id, "status": "new"})
 }

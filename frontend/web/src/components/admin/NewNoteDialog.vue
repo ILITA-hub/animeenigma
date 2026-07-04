@@ -4,31 +4,24 @@ import { useI18n } from 'vue-i18n'
 import { Modal, Select, Button } from '@/components/ui'
 import { adminApi } from '@/api/client'
 import { FEEDBACK_CATEGORIES } from '@/types/feedback'
-import type { FeedbackKind, FeedbackCategory } from '@/types/feedback'
+import type { FeedbackCategory } from '@/types/feedback'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ 'update:open': [boolean]; created: [string] }>()
 
 const { t } = useI18n()
 
-const kind = ref<FeedbackKind>('todo')
 const category = ref<FeedbackCategory | '__none__'>('__none__')
 const description = ref('')
 const submitting = ref(false)
 const errorMsg = ref('')
 
-const kindOptions = [
-  { value: 'todo', label: t('admin.feedback.kind.todo') },
-  { value: 'idea', label: t('admin.feedback.kind.idea') },
-  { value: 'feedback', label: t('admin.feedback.kind.feedback') },
-]
 const categoryOptions = [
   { value: '__none__', label: t('admin.feedback.newNote.categoryNone') },
   ...FEEDBACK_CATEGORIES.map((c) => ({ value: c, label: t(`admin.feedback.category.${c}`) })),
 ]
 
 function reset(): void {
-  kind.value = 'todo'
   category.value = '__none__'
   description.value = ''
   errorMsg.value = ''
@@ -53,7 +46,6 @@ async function submit(): Promise<void> {
   errorMsg.value = ''
   try {
     const res = await adminApi.createNote({
-      kind: kind.value,
       category: category.value && category.value !== '__none__' ? category.value : undefined,
       description: description.value.trim(),
     })
@@ -67,7 +59,7 @@ async function submit(): Promise<void> {
   }
 }
 
-defineExpose({ kind, category, description, submit })
+defineExpose({ category, description, submit })
 </script>
 
 <template>
@@ -78,10 +70,6 @@ defineExpose({ kind, category, description, submit })
     @update:model-value="(v: boolean) => !v && close()"
   >
     <div class="space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-white/70 mb-2">{{ t('admin.feedback.newNote.kindLabel') }}</label>
-        <Select v-model="kind" size="sm" :options="kindOptions" />
-      </div>
       <div>
         <label class="block text-sm font-medium text-white/70 mb-2">{{ t('admin.feedback.newNote.categoryLabel') }}</label>
         <Select v-model="category" size="sm" :options="categoryOptions" />

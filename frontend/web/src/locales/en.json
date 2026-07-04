@@ -1220,9 +1220,7 @@
         "usernamePlaceholder": "Filter by username…",
         "dateFrom": "Date from",
         "dateTo": "Date to",
-        "kind": "Kind",
         "source": "Source",
-        "allKinds": "All kinds",
         "allSources": "All sources"
       },
       "columns": {
@@ -1270,11 +1268,6 @@
         "fromAdmin": "from admin",
         "history": "Status history"
       },
-      "kind": {
-        "feedback": "Feedback",
-        "todo": "TODO",
-        "idea": "Idea"
-      },
       "source": {
         "feedback_form": "Feedback form",
         "telegram": "Telegram",
@@ -1284,7 +1277,6 @@
       "newNote": {
         "button": "+ New note",
         "title": "New note",
-        "kindLabel": "Kind",
         "categoryLabel": "Category",
         "categoryNone": "—",
         "descriptionLabel": "Description",

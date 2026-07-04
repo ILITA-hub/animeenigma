@@ -259,7 +259,7 @@ func withURLParam(r *http.Request, key, val string) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
 
-func TestAdminReports_Get_InjectsKindSource(t *testing.T) {
+func TestAdminReports_Get_InjectsSource(t *testing.T) {
 	h, dir := newTestReportsHandler(t)
 	id := writeReport(t, dir, "2026-06-03T10-00-00", "claude", "feedback",
 		map[string]interface{}{"description": "agent todo", "source": "owner-todo"})
@@ -283,9 +283,6 @@ func TestAdminReports_Get_InjectsKindSource(t *testing.T) {
 	if resp.Data["source"] != "api" {
 		t.Errorf("source = %v, want api", resp.Data["source"])
 	}
-	if resp.Data["kind"] != "todo" {
-		t.Errorf("kind = %v, want todo", resp.Data["kind"])
-	}
 }
 
 func TestAdminReports_CreateNote(t *testing.T) {
@@ -300,13 +297,14 @@ func TestAdminReports_CreateNote(t *testing.T) {
 		return w
 	}
 
-	// valid idea note
+	// valid note (kind retired — a legacy "kind" body field from cached
+	// bundles is ignored)
 	w := post(`{"kind":"idea","category":"feature","description":"dark mode toggle"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("valid note status = %d, body=%s", w.Code, w.Body.String())
 	}
-	// it must be listable, normalized to manual/idea
-	lr := httptest.NewRequest(http.MethodGet, "/api/admin/reports?kind=idea", nil)
+	// it must be listable as a manual note
+	lr := httptest.NewRequest(http.MethodGet, "/api/admin/reports?source=manual", nil)
 	lw := httptest.NewRecorder()
 	h.List(lw, lr)
 	var resp listResp
@@ -315,26 +313,22 @@ func TestAdminReports_CreateNote(t *testing.T) {
 		t.Errorf("created note not listed correctly: %+v", resp.Data.Items)
 	}
 
-	// invalid kind rejected
-	if w := post(`{"kind":"bogus","description":"x"}`); w.Code != http.StatusBadRequest {
-		t.Errorf("invalid kind status = %d, want 400", w.Code)
-	}
 	// empty description rejected
-	if w := post(`{"kind":"todo","description":"  "}`); w.Code != http.StatusBadRequest {
+	if w := post(`{"description":"  "}`); w.Code != http.StatusBadRequest {
 		t.Errorf("empty description status = %d, want 400", w.Code)
 	}
 	_ = dir
 }
 
-func TestAdminReports_List_KindSourceActiveFilters(t *testing.T) {
+func TestAdminReports_List_SourceActiveFilters(t *testing.T) {
 	h, dir := newTestReportsHandler(t)
-	// legacy user feedback (no kind/source) → feedback / feedback_form
+	// legacy user feedback (no source) → feedback_form
 	idFb := writeReport(t, dir, "2026-06-01T10-00-00", "alice", "feedback", map[string]interface{}{"category": "bug", "description": "user bug"})
-	// legacy telegram → feedback / telegram
+	// legacy telegram → telegram
 	writeReport(t, dir, "2026-06-02T10-00-00", "bot", "telegram", map[string]interface{}{"description": "tg msg", "source": "telegram"})
-	// legacy AI ledger → todo / api
+	// legacy AI ledger → api
 	writeReport(t, dir, "2026-06-03T10-00-00", "claude", "feedback", map[string]interface{}{"description": "agent todo", "source": "owner-todo"})
-	// explicit manual idea
+	// explicit manual note (legacy on-disk kind value is simply ignored)
 	writeReport(t, dir, "2026-06-04T10-00-00", "neymik", "feedback", map[string]interface{}{"description": "an idea", "kind": "idea", "source": "manual"})
 
 	// mark the user-feedback item not_relevant in the sidecar
@@ -350,17 +344,13 @@ func TestAdminReports_List_KindSourceActiveFilters(t *testing.T) {
 		return resp
 	}
 
-	// kind=todo → only the api ledger item
-	if r := get("kind=todo"); r.Data.Total != 1 || r.Data.Items[0].Username != "claude" {
-		t.Errorf("kind=todo: total=%d items=%v", r.Data.Total, r.Data.Items)
-	}
-	// source=telegram → only the tg item, derived kind=feedback
-	if r := get("source=telegram"); r.Data.Total != 1 || r.Data.Items[0].Kind != "feedback" {
+	// source=telegram → only the tg item
+	if r := get("source=telegram"); r.Data.Total != 1 || r.Data.Items[0].Username != "bot" {
 		t.Errorf("source=telegram: total=%d items=%v", r.Data.Total, r.Data.Items)
 	}
-	// kind=idea → explicit manual idea
-	if r := get("kind=idea"); r.Data.Total != 1 || r.Data.Items[0].Source != "manual" {
-		t.Errorf("kind=idea: total=%d items=%v", r.Data.Total, r.Data.Items)
+	// source=manual → the explicit manual note
+	if r := get("source=manual"); r.Data.Total != 1 || r.Data.Items[0].Username != "neymik" {
+		t.Errorf("source=manual: total=%d items=%v", r.Data.Total, r.Data.Items)
 	}
 	// status=active → excludes the not_relevant user-feedback item (3 of 4)
 	if r := get("status=active"); r.Data.Total != 3 {

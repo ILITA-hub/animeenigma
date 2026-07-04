@@ -23,12 +23,11 @@ describe('NewNoteDialog', () => {
   it('posts the note and emits created on success', async () => {
     createSpy.mockResolvedValue({ data: { data: { id: 'note-1', status: 'new' } } })
     const w = mount(NewNoteDialog, { props: { open: true } })
-    const vm = w.vm as unknown as { kind: string; description: string; submit: () => Promise<void> }
-    vm.kind = 'idea'
+    const vm = w.vm as unknown as { description: string; submit: () => Promise<void> }
     vm.description = 'dark mode'
     await vm.submit()
     await flushPromises()
-    expect(createSpy).toHaveBeenCalledWith({ kind: 'idea', category: undefined, description: 'dark mode' })
+    expect(createSpy).toHaveBeenCalledWith({ category: undefined, description: 'dark mode' })
     expect(w.emitted('created')?.[0]).toEqual(['note-1'])
   })
 })
