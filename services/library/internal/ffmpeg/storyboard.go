@@ -40,6 +40,11 @@ func (t *Transcoder) Storyboard(ctx context.Context, sourcePath string, duration
 	if durationSec <= 0 {
 		return nil, fmt.Errorf("storyboard: unknown duration for %s", sourcePath)
 	}
+	if t.cfg.Tmpdir != "" {
+		if err := os.MkdirAll(t.cfg.Tmpdir, 0o755); err != nil {
+			return nil, fmt.Errorf("mkdir tmpdir: %w", err)
+		}
+	}
 	tmp, err := os.MkdirTemp(t.cfg.Tmpdir, "storyboard-")
 	if err != nil {
 		return nil, fmt.Errorf("mkdir storyboard tmpdir: %w", err)

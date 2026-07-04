@@ -94,3 +94,86 @@ func TestStoryboard_FfmpegFailureReturnsError(t *testing.T) {
 		t.Fatal("expected error on ffmpeg failure")
 	}
 }
+
+// fakeFfprobeWithDuration emits a JSON blob with the specified duration (in seconds).
+func fakeFfprobeScriptWithDuration(durationSec string) string {
+	return `#!/bin/sh
+cat <<'JSON'
+{"format":{"duration":"` + durationSec + `","bit_rate":"1000000"}}
+JSON
+`
+}
+
+// fakeFfprobeEmptyScript returns an empty JSON object (no duration).
+const fakeFfprobeEmptyScript = `#!/bin/sh
+cat <<'JSON'
+{}
+JSON
+`
+
+func TestStoryboard_SelfProbesWhenDurationUnknown(t *testing.T) {
+	dir := t.TempDir()
+	ffprobeBin := filepath.Join(dir, "fake_ffprobe.sh")
+	ffmpegBin := filepath.Join(dir, "fake_ffmpeg.sh")
+	writeScript(t, ffprobeBin, fakeFfprobeScriptWithDuration("12.0"))
+	writeScript(t, ffmpegBin, fakeStoryboardFfmpeg)
+
+	tr := NewTranscoder(Config{
+		BinaryPath:  ffmpegBin,
+		FfprobePath: ffprobeBin,
+		Tmpdir:      dir,
+	}, nil)
+
+	src := filepath.Join(dir, "src.mp4")
+	if err := os.WriteFile(src, []byte("s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Call with durationSec=0 to force self-probe
+	res, err := tr.Storyboard(context.Background(), src, 0)
+	if err != nil {
+		t.Fatalf("Storyboard: %v", err)
+	}
+
+	// Verify the VTT was generated for a 12-second video (ceil(12/5) = 3 cues)
+	vtt, err := os.ReadFile(res.VTTPath)
+	if err != nil {
+		t.Fatalf("read VTT: %v", err)
+	}
+	vttStr := string(vtt)
+	if !strings.Contains(vttStr, "00:00:10.000 --> 00:00:12.000") {
+		t.Errorf("missing final cue for 12s duration in:\n%s", vttStr)
+	}
+	// Ensure we don't have a 4th cue (which would start at 00:00:15)
+	if strings.Contains(vttStr, "00:00:15.000") {
+		t.Errorf("should not have cue at 15s for 12s duration:\n%s", vttStr)
+	}
+}
+
+func TestStoryboard_ErrorWhenDurationStillUnknown(t *testing.T) {
+	dir := t.TempDir()
+	ffprobeBin := filepath.Join(dir, "fake_ffprobe.sh")
+	ffmpegBin := filepath.Join(dir, "fake_ffmpeg.sh")
+	writeScript(t, ffprobeBin, fakeFfprobeEmptyScript)
+	writeScript(t, ffmpegBin, fakeStoryboardFfmpeg)
+
+	tr := NewTranscoder(Config{
+		BinaryPath:  ffmpegBin,
+		FfprobePath: ffprobeBin,
+		Tmpdir:      dir,
+	}, nil)
+
+	src := filepath.Join(dir, "src.mp4")
+	if err := os.WriteFile(src, []byte("s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Call with durationSec=0; ffprobe returns empty, should fail
+	_, err := tr.Storyboard(context.Background(), src, 0)
+	if err == nil {
+		t.Fatal("expected error when duration is unknown")
+	}
+	if !strings.Contains(err.Error(), "unknown duration") {
+		t.Errorf("error should mention 'unknown duration', got: %v", err)
+	}
+}
