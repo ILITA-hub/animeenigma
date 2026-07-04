@@ -3,7 +3,7 @@ import type { Combo, StreamResult, SubtitleTrack } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import { downloadId, offlinePath, type DownloadError, type OfflineDownload, type SubPref } from './types'
 import { matchAutoSub } from './externalSubs'
-import { putDownload, getDownload, deleteDownloadRecord } from './registry'
+import { putDownload, getDownload, deleteDownloadRecord, listDownloads } from './registry'
 import { isVod, rewriteMediaPlaylist, selectVariant, type PlaylistResource } from './playlistRewrite'
 import { cacheStorageMediaStore, type OfflineMediaStore } from './mediaStore'
 import * as network from './network'
@@ -114,6 +114,17 @@ async function releaseWakeLock(): Promise<void> {
   wakeLock = null
 }
 
+/** Download marker for the backend/logs — a QUERY PARAM, never a request
+ *  header: the proxy can live on a separate origin (VITE_HLS_PROXY_BASE →
+ *  stream.animeenigma.org), where any non-safelisted header turns each media
+ *  fetch into a CORS preflight the edge rejects (Allow-Headers: Range only) —
+ *  every download then dies client-side with zero server contact. The proxy's
+ *  provenance MAC covers only the upstream `url`+`exp`, so the extra param is
+ *  signature-neutral. */
+function markDownloadUrl(url: string): string {
+  return url + (url.includes('?') ? '&' : '?') + 'aedl=1'
+}
+
 // Slot reservation happens SYNCHRONOUSLY before the await — with 3 concurrent
 // workers, read-sleep-then-stamp would let all 3 burst in the same window
 // (~9 rps); reserving first serializes the schedule regardless of concurrency.
@@ -126,7 +137,7 @@ async function pacedFetch(url: string): Promise<{ resp: Response; ctrl: AbortCon
   const ctrl = new AbortController()
   const headerTimer = setTimeout(() => ctrl.abort(), watchdogs.headersMs)
   try {
-    return { resp: await fetch(url, { headers: { 'X-AE-Download': '1' }, signal: ctrl.signal }), ctrl }
+    return { resp: await fetch(markDownloadUrl(url), { signal: ctrl.signal }), ctrl }
   } finally {
     clearTimeout(headerTimer)
   }
@@ -457,6 +468,15 @@ export async function enqueueDownload(req: DownloadRequest): Promise<string> {
   await store.persist()
   const existing = await getDownload(id)
   if (existing?.state === 'done') return id
+  // One offline copy per episode: a season relaunch can pick a different
+  // provider/combo (→ different id) for an episode whose failed attempt still
+  // sits under the old combo — without this the Downloads list shows the same
+  // episode twice (stale error row + fresh queued row).
+  for (const d of await listDownloads()) {
+    if (d.animeId === req.animeId && d.episode.number === req.episode.number && d.id !== id && d.state !== 'done') {
+      await removeDownload(d.id)
+    }
+  }
   paused.delete(id)
   const baseRecord = {
     // Plain copies: callers pass Vue-reactive episode/combo objects (player

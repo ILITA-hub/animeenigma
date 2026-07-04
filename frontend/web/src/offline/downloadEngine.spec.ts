@@ -46,7 +46,8 @@ const MEDIA = '#EXTM3U\n#EXTINF:4,\ns0.ts\n#EXTINF:4,\ns1.ts\n#EXT-X-ENDLIST\n'
 
 function mockFetch(routes: Record<string, () => Response>) {
   return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-    const url = String(input instanceof Request ? input.url : input)
+    // Match on the path only — the engine appends the ?aedl=1 download marker.
+    const url = String(input instanceof Request ? input.url : input).split('?')[0]
     for (const [suffix, make] of Object.entries(routes)) {
       if (url.endsWith(suffix)) return make()
     }
@@ -84,9 +85,12 @@ describe('downloadEngine — HLS happy path', () => {
     expect(await cache.match(`/__offline/${encodeURIComponent(id)}/master.m3u8`)).toBeTruthy()
     expect(await cache.match(`/__offline/${encodeURIComponent(id)}/r/0`)).toBeTruthy()
     expect(await cache.match(`/__offline/${encodeURIComponent(id)}/r/1`)).toBeTruthy()
-    // download marker header rides every media fetch
-    const segCall = fetcher.mock.calls.find((c) => String(c[0]).endsWith('s0.ts'))!
-    expect((segCall[1] as RequestInit).headers).toMatchObject({ 'X-AE-Download': '1' })
+    // download marker rides every media fetch as a QUERY PARAM — a custom
+    // header would force a CORS preflight on the cross-origin stream host,
+    // which the edge rejects (downloads then fail with zero server contact)
+    const segCall = fetcher.mock.calls.find((c) => String(c[0]).split('?')[0].endsWith('s0.ts'))!
+    expect(String(segCall[0])).toContain('aedl=1')
+    expect((segCall[1] as RequestInit).headers).toBeUndefined()
   })
 
   it('MP4: caches single media.mp4 entry', async () => {
@@ -127,7 +131,7 @@ describe('downloadEngine — HLS happy path', () => {
     _installCachesForTests(impl)
     let expired = true
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input)
+      const url = String(input).split('?')[0]
       if (url.endsWith('master.m3u8')) return new Response(MASTER)
       if (url.endsWith('v/index.m3u8')) return new Response(MEDIA)
       if (url.includes('.ts')) {
@@ -314,6 +318,44 @@ describe('downloadEngine — queue wedge protection (eternal "queued" regression
     pauseDownload(id)
     await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('paused'))
     expect(resolve).not.toHaveBeenCalled()
+  })
+})
+
+describe('downloadEngine — one offline copy per episode (duplicate-row regression)', () => {
+  // A season relaunch can pick a different provider/combo for an episode whose
+  // failed attempt still sits under the old combo (downloadId includes the
+  // provider) — the Downloads list then showed the same episode twice.
+  it('enqueueing an episode under a new combo removes the stale non-done twin', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    vi.stubGlobal('fetch', mockFetch({ 'ep.mp4': () => new Response(new Uint8Array(16)) }))
+    // Stale failed attempt under the old provider:
+    const stale = req(async () => { throw new Error('unused') })
+    const staleId = await enqueueDownload(stale)
+    await vi.waitFor(async () => expect((await getDownload(staleId))?.state).toBe('error'))
+    // Season relaunch resolves the same episode via another provider:
+    const id = await enqueueDownload({
+      ...req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' as const })),
+      combo: { ...stale.combo, provider: 'animejoy-allvideo' },
+    })
+    expect(id).not.toBe(staleId)
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    expect(await getDownload(staleId)).toBeUndefined()
+  })
+
+  it('a done copy under another combo is kept', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    vi.stubGlobal('fetch', mockFetch({ 'ep.mp4': () => new Response(new Uint8Array(16)) }))
+    const done = req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' as const }))
+    const doneId = await enqueueDownload(done)
+    await vi.waitFor(async () => expect((await getDownload(doneId))?.state).toBe('done'), { timeout: 10_000 })
+    const id = await enqueueDownload({
+      ...req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' as const })),
+      combo: { ...done.combo, provider: 'animejoy-allvideo' },
+    })
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    expect((await getDownload(doneId))?.state).toBe('done')
   })
 })
 
