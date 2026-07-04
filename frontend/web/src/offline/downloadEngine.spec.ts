@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // Keep the engine's module-scope dynamic import of cellularGuard inert in tests.
 vi.mock('./cellularGuard', () => ({ ensureCellularGuard: () => {} }))
 
-import { enqueueDownload, removeDownload, _resetEngineForTests, _installCachesForTests, pauseAllForCellular, engineState } from './downloadEngine'
+import { enqueueDownload, removeDownload, pauseDownload, _resetEngineForTests, _installCachesForTests, _setWatchdogTimeoutsForTests, pauseAllForCellular, engineState } from './downloadEngine'
 import { _resetDbForTests, getDownload, putDownload } from './registry'
 import type { StreamResult } from '@/types/aePlayer'
 import * as network from './network'
@@ -270,6 +270,50 @@ describe('projectedBytesFor — duration scaling', () => {
     })
     const rec = await getDownload(id)
     expect(rec?.projectedBytes).toBe(Math.round((450 * 2 ** 20) / 2))
+  })
+})
+
+describe('downloadEngine — queue wedge protection (eternal "queued" regression)', () => {
+  // No manual watchdog restore needed: _resetEngineForTests (beforeEach)
+  // reinstates WATCHDOG_DEFAULTS.
+
+  it('claims the active record as downloading before resolve settles', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    let halt!: () => void
+    const gate = new Promise<StreamResult>((_, rej) => { halt = () => rej(new Error('halt')) })
+    const id = await enqueueDownload(req(() => gate))
+    // While the resolver is still in flight, the UI must see activity — a
+    // record stuck at 'queued' here was indistinguishable from waiting in line.
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('downloading'))
+    halt()
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('error'))
+  })
+
+  it('a resolver that never answers times out as error:resolve and frees the queue', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    _setWatchdogTimeoutsForTests({ resolveMs: 50 })
+    vi.stubGlobal('fetch', mockFetch({ 'ep.mp4': () => new Response(new Uint8Array(16)) }))
+    const id1 = await enqueueDownload(req(() => new Promise<StreamResult>(() => {})))
+    const id2 = await enqueueDownload({
+      ...req(async () => ({ url: 'https://p.example/ep.mp4', type: 'mp4' as const })),
+      episode: { key: 2, label: 2, number: 2 },
+    })
+    // The hung head of the queue must fail on its own…
+    await vi.waitFor(async () => expect((await getDownload(id1))?.error).toBe('resolve'), { timeout: 10_000 })
+    // …and the strictly-serial pump must move on to the next item.
+    await vi.waitFor(async () => expect((await getDownload(id2))?.state).toBe('done'), { timeout: 10_000 })
+  })
+
+  it('parks a paused still-queued record as paused without resolving', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    const resolve = vi.fn(async () => { throw new Error('should not resolve') })
+    const id = await enqueueDownload(req(resolve as unknown as () => Promise<StreamResult>))
+    pauseDownload(id)
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('paused'))
+    expect(resolve).not.toHaveBeenCalled()
   })
 })
 

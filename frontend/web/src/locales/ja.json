@@ -515,12 +515,9 @@
         "download": "ダウンロード",
         "downloading": "ダウンロード中…",
         "downloaded": "ダウンロード済み",
-        "failed": "ダウンロード失敗",
         "quality": "ダウンロード画質",
         "start": "ダウンロード",
         "cancel": "キャンセル",
-        "scope": "ダウンロード対象",
-        "scopeEpisode": "この話（{n}）",
         "scopeSeason": "全シーズン — {n}話",
         "scopeSeasonTitle": "シーズン全体をダウンロード",
         "seasonDone": "全話ダウンロード済み",
@@ -536,7 +533,6 @@
         "cellularWarn": "モバイルデータ通信中です。ダウンロードは既定でWi-Fiのみです。",
         "cellularConfirm": "モバイルデータでダウンロード",
         "sourceListFailed": "このソースのエピソード一覧を取得できませんでした",
-        "epUnavailable": "選択したソースにはこのエピソードがありません",
         "cellularAutoPaused": "モバイルデータ:ダウンロードを一時停止しました"
       }
     }
@@ -1989,6 +1985,9 @@
     "seasonNothing": "すべてダウンロード済みです",
     "seasonFailed": "ダウンロードを準備できませんでした",
     "cellularPaused": "ダウンロード一時停止中 — Wi-Fi待ち",
-    "cellularResume": "モバイルデータでダウンロード"
+    "cellularResume": "モバイルデータでダウンロード",
+    "inAppOnly": "アプリでダウンロード",
+    "installHint": "ダウンロードはAnimeEnigmaアプリで利用できます。ブラウザのアドレスバーのインストールアイコンからアプリを追加してください。",
+    "installHintIos": "ダウンロードはAnimeEnigmaアプリで利用できます。Safariで「共有」→「ホーム画面に追加」からアプリを追加してください。"
   }
 }

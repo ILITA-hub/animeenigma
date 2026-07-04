@@ -1,5 +1,6 @@
 import { ref, onMounted } from 'vue'
 import { apiClient } from '@/api/client'
+import { createFetchCache } from '@/composables/createFetchCache'
 import type { SpotlightCard, SpotlightResponse } from '@/types/spotlight'
 
 /**
@@ -17,8 +18,9 @@ import type { SpotlightCard, SpotlightResponse } from '@/types/spotlight'
  *                                    null-cards path (no throw → no error).
  *   - refresh () => Promise<void>   Manual re-fetch trigger.
  *
- * Phase 2 — additive only; this composable performs a single fetch on
- * mount. Phase 3 will add an auth-state watcher (re-fetch on
+ * Fetches on mount with a module-level 3-minute cache (SPA route revisits
+ * within the TTL reuse the shared cards; `refresh()` always refetches).
+ * Phase 3 will add an auth-state watcher (re-fetch on
  * login/logout transitions, mirroring useContinueWatching.ts:72) and a
  * 30-second `useIntervalFn` poll for live cards (now_watching,
  * latest_news refresh). Both extensions are additive — destructured
@@ -28,9 +30,14 @@ import type { SpotlightCard, SpotlightResponse } from '@/types/spotlight'
  * any catch path so observability/auditing can grep for it without
  * surfacing a user-visible toast. The block self-hides silently.
  */
+// Module-level state — shared across mounts so SPA route revisits within the
+// TTL don't refetch (2026-07-04 trace: home→anime→home re-issued the identical
+// /home/spotlight request 11s after the first). TTL mirrors stores/home.ts.
+const cards = ref<SpotlightCard[]>([])
+const cache = createFetchCache(3 * 60 * 1000)
+
 export function useSpotlight() {
-  const cards = ref<SpotlightCard[]>([])
-  const loading = ref(true)
+  const loading = ref(cards.value.length === 0)
   const error = ref<Error | null>(null)
 
   async function refresh(): Promise<void> {
@@ -50,6 +57,7 @@ export function useSpotlight() {
       // failure or test fixtures; the block must self-hide rather than
       // crash the render.
       cards.value = Array.isArray(body?.cards) ? body.cards : []
+      cache.markFresh()
     } catch (e) {
       // Single warn for observability per UI-SPEC §State Contract. No
       // toast / banner — silent self-hide.
@@ -62,7 +70,17 @@ export function useSpotlight() {
     }
   }
 
-  onMounted(refresh)
+  // Fresh-cache mounts render the shared cards instantly; concurrent mounts
+  // share one in-flight request instead of racing duplicates.
+  function refreshIfStale(): Promise<void> {
+    if (cards.value.length > 0 && cache.isFresh()) {
+      loading.value = false
+      return Promise.resolve()
+    }
+    return cache.share(refresh)
+  }
+
+  onMounted(refreshIfStale)
 
   return { cards, loading, error, refresh }
 }

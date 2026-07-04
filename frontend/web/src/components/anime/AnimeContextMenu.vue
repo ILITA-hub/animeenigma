@@ -109,6 +109,7 @@ import { useToast } from '@/composables/useToast'
 import { getLocalizedTitle } from '@/utils/title'
 import { offlineDownloadsEnabled } from '@/offline/flag'
 import { openSeasonDownload } from '@/offline/seasonDownloadFlow'
+import { useDownloadGate } from '@/offline/downloadGate'
 
 interface Anime {
   id: string | number
@@ -162,6 +163,7 @@ const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const toast = useToast()
+const { appOnly, showInstallHint } = useDownloadGate()
 
 // Close the anchored DropdownMenu after an action (replaces the old
 // ContextMenu `closeWithReason('item')` provide/inject contract).
@@ -195,7 +197,8 @@ const actions = computed<MenuAction[]>(() => {
     out.push({
       key: 'download-season',
       kind: 'download-season',
-      label: t('contextMenu.downloadSeason'),
+      // Downloads are app-only: from a browser tab the item points at the app.
+      label: appOnly.value ? t('downloads.inAppOnly') : t('contextMenu.downloadSeason'),
       onActivate: downloadSeason,
     })
   }
@@ -313,12 +316,13 @@ function openInNewTab() {
 
 function downloadSeason() {
   if (!props.anime) return
+  closeMenu()
+  if (appOnly.value) return showInstallHint()
   const req = {
     animeId: String(props.anime.id),
     title: localizedTitle.value,
     poster: props.anime.coverImage,
   }
-  closeMenu()
   // Fire-and-forget: the global <SeasonDownloadHost /> renders the flow's
   // dialog/toasts; this menu is already closed by then.
   void openSeasonDownload(req, locale.value)

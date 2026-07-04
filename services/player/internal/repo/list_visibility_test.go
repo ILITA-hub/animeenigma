@@ -111,10 +111,13 @@ func TestGetUserWatchlistStats_ExcludeHentai(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, stats.TotalEntries)
 	assert.EqualValues(t, 12, stats.TotalEpisodes)
+	assert.Equal(t, map[string]int{"completed": 1}, stats.StatusCounts,
+		"status counts honor the hentai-visibility filter")
 
 	stats, err = r.GetUserWatchlistStats(ctx, "u1", nil, false)
 	require.NoError(t, err)
 	assert.EqualValues(t, 3, stats.TotalEntries)
+	assert.Equal(t, map[string]int{"completed": 2, "watching": 1}, stats.StatusCounts)
 }
 
 func TestGetUserActivityVisibility(t *testing.T) {

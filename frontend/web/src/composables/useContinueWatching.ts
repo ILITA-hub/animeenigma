@@ -1,5 +1,6 @@
 import { ref, onMounted, watch } from 'vue'
 import { userApi } from '@/api/client'
+import { createFetchCache } from '@/composables/createFetchCache'
 import { useAuthStore } from '@/stores/auth'
 
 // Phase 8 (UX-15 / UA-061): Continue-Watching row for the logged-in Home
@@ -30,31 +31,46 @@ export interface ContinueWatchingItem {
   dropped_off_at?: number | null
 }
 
+// Module-level cache — SPA route revisits within the TTL reuse the shared
+// items instead of refetching (2026-07-04 trace: home→anime→home re-issued
+// the identical request 12s later). 30s TTL is lossless: the player's
+// heartbeat saves every 30s (useWatchTracking SAVE_INTERVAL), so the backend
+// can't have meaningfully fresher data inside that window anyway.
+const items = ref<ContinueWatchingItem[]>([])
+const cache = createFetchCache(30 * 1000)
+let cachedLimit = 0
+
 export function useContinueWatching(limit = 10) {
-  const items = ref<ContinueWatchingItem[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const auth = useAuthStore()
 
-  async function fetchItems() {
+  async function fetchItems(force = false) {
     // Anonymous users skip the fetch entirely — the endpoint is JWT-
     // protected and would return 401.
     if (!auth.token) {
       items.value = []
+      cache.invalidate()
       return
     }
-    isLoading.value = true
-    error.value = null
-    try {
-      const res = await userApi.getContinueWatching(limit)
-      const data = (res.data?.data ?? res.data) as ContinueWatchingItem[]
-      items.value = Array.isArray(data) ? data : []
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'failed to load continue-watching'
-      items.value = []
-    } finally {
-      isLoading.value = false
-    }
+    if (!force && cachedLimit === limit && cache.isFresh()) return
+    return cache.share(async () => {
+      isLoading.value = true
+      error.value = null
+      try {
+        const res = await userApi.getContinueWatching(limit)
+        const data = (res.data?.data ?? res.data) as ContinueWatchingItem[]
+        items.value = Array.isArray(data) ? data : []
+        cache.markFresh()
+        cachedLimit = limit
+      } catch (e) {
+        error.value = e instanceof Error ? e.message : 'failed to load continue-watching'
+        items.value = []
+        cache.invalidate()
+      } finally {
+        isLoading.value = false
+      }
+    })
   }
 
   onMounted(fetchItems)
@@ -72,9 +88,11 @@ export function useContinueWatching(limit = 10) {
   watch(
     () => auth.token,
     () => {
-      fetchItems()
+      // Force past the cache — a token change means the cached items belong
+      // to a different identity (or to anonymous).
+      fetchItems(true)
     },
   )
 
-  return { items, isLoading, error, refresh: fetchItems }
+  return { items, isLoading, error, refresh: () => fetchItems(true) }
 }

@@ -331,6 +331,10 @@ type WatchlistStats struct {
 	TotalEpisodes int     `json:"total_episodes"`
 	TotalEntries  int     `json:"total_entries"`
 	Completed     int     `json:"completed"`
+	// Per-status entry counts under the same visibility/status filter as the
+	// aggregates. Lets the public-profile tab bar render counts from this one
+	// call instead of probing every status with a per_page=1 list request.
+	StatusCounts map[string]int `json:"status_counts" gorm:"-"`
 }
 
 // ContinueWatchingItem is the per-row payload of GET /users/continue-watching.

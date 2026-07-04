@@ -285,33 +285,48 @@ describe('EpisodesPanel', () => {
       },
     })
 
-  describe('download affordance', () => {
-    it('emits download for an episode when downloadable', async () => {
-      const w = mountPanel({ downloadable: true, downloadStates: {} })
-      const btn = w.find('[data-test="ep-download-1"]')
-      expect(btn.exists()).toBe(true)
-      await btn.trigger('click')
-      expect(w.emitted('download')![0][0]).toMatchObject({ number: 1 })
-      expect(w.emitted('select')).toBeUndefined() // .stop — no episode switch
-    })
-    it('renders no download affordance when not downloadable', () => {
-      const w = mountPanel({})
+  describe('download affordance (season-only)', () => {
+    it('offers no per-episode download button — downloads are season-only', () => {
+      const w = mountPanel({ downloadMode: 'ready', downloadStates: {} })
       expect(w.find('[data-test="ep-download-1"]').exists()).toBe(false)
     })
-    it('shows done state instead of a button for downloaded episodes', () => {
-      const w = mountPanel({ downloadable: true, downloadStates: { 1: 'done' } })
+    it('shows the done indicator for downloaded episodes', () => {
+      const w = mountPanel({ downloadMode: 'ready', downloadStates: { 1: 'done' } })
       expect(w.find('[data-test="ep-downloaded-1"]').exists()).toBe(true)
     })
+    it('hides the done indicator outside ready mode', () => {
+      const w = mountPanel({ downloadMode: 'install', downloadStates: { 1: 'done' } })
+      expect(w.find('[data-test="ep-downloaded-1"]').exists()).toBe(false)
+    })
 
-    it('emits download-season from the header chip when downloadable', async () => {
-      const w = mountPanel({ downloadable: true })
+    it('emits download-season from the header chip when ready', async () => {
+      const w = mountPanel({ downloadMode: 'ready' })
       await w.find('[data-test="season-download"]').trigger('click')
       expect(w.emitted('download-season')).toHaveLength(1)
     })
 
-    it('hides the season chip when not downloadable', () => {
-      const w = mountPanel({ downloadable: false })
+    it('shows the "in the app" chip label in install mode and still emits', async () => {
+      const w = mountPanel({ downloadMode: 'install' })
+      const chip = w.find('[data-test="season-download"]')
+      expect(chip.text()).toContain('Download in the app')
+      await chip.trigger('click')
+      expect(w.emitted('download-season')).toHaveLength(1)
+    })
+
+    it('hides the season chip when downloads are off', () => {
+      const w = mountPanel({})
       expect(w.find('[data-test="season-download"]').exists()).toBe(false)
+    })
+
+    it('keeps the season chip for single-episode anime (movies)', () => {
+      const w = mount(EpisodesPanel, {
+        props: {
+          episodes: [{ key: 1, label: 1, number: 1 }],
+          selectedNumber: 1,
+          downloadMode: 'ready',
+        },
+      })
+      expect(w.find('[data-test="season-download"]').exists()).toBe(true)
     })
   })
 })

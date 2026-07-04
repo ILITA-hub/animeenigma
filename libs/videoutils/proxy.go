@@ -817,7 +817,8 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 	// The caller can also force a specific container via ?type=mp4 when the upstream URL
 	// has no extension in the path (e.g. AllAnime's fast4speed.rsvp CDN), which would
 	// otherwise default to application/octet-stream and trip the HLS-segment rate limiter.
-	correctContentType := getCorrectHLSContentType(parsed.Path, resp.Header.Get("Content-Type"))
+	correctContentType := getCorrectHLSContentType(parsed.Path, resp.Header.Get("Content-Type"),
+		firstPartyAddr(parsed.Host, p.config.FirstPartyHosts))
 	switch strings.ToLower(r.URL.Query().Get("type")) {
 	case "mp4":
 		correctContentType = "video/mp4"
@@ -1095,15 +1096,10 @@ func rewriteURIAttribute(line, basePath, referer, sess string) string {
 
 // getCorrectContentType returns the correct Content-Type for proxied content.
 // Some CDNs return incorrect types (like image/jpeg) to obfuscate video content.
-func getCorrectHLSContentType(path, upstreamContentType string) string {
+// trustedUpstream marks first-party hosts (MinIO, stealth-scraper) whose
+// image responses are genuine and must not be second-guessed.
+func getCorrectHLSContentType(path, upstreamContentType string, trustedUpstream bool) string {
 	pathLower := strings.ToLower(path)
-
-	// First-party scrub-preview sprite sheets are GENUINE images — exempt
-	// them from the image→video obfuscation heuristic below, or the browser
-	// gets image bytes labeled video/mp2t (breaks under any future nosniff).
-	if strings.Contains(pathLower, "storyboard_") && strings.HasSuffix(pathLower, ".jpg") {
-		return "image/jpeg"
-	}
 
 	// Direct video files (MP4, WebM)
 	if strings.HasSuffix(pathLower, ".mp4") || strings.HasSuffix(pathLower, ".m4v") {
@@ -1131,6 +1127,14 @@ func getCorrectHLSContentType(path, upstreamContentType string) string {
 		return "video/mp2t"
 	}
 
+	// Genuine first-party images (e.g. scrub-preview sprite sheets on MinIO)
+	// keep their declared type: the image→video assumption below exists for
+	// lying scraper CDNs, and first-party hosts don't lie — while image bytes
+	// labeled video/mp2t break under any future nosniff header.
+	if trustedUpstream && strings.HasPrefix(upstreamContentType, "image/") && hasImageExt(pathLower) {
+		return upstreamContentType
+	}
+
 	// If the upstream says it's an image but the content length suggests video
 	// (video segments are typically > 100KB), treat it as video
 	if strings.HasPrefix(upstreamContentType, "image/") {
@@ -1154,6 +1158,13 @@ func getCorrectHLSContentType(path, upstreamContentType string) string {
 
 	// Default to octet-stream for unknown types
 	return "application/octet-stream"
+}
+
+// hasImageExt reports whether the (lowercased) path ends in a genuine image
+// extension — the shapes first-party assets actually use.
+func hasImageExt(pathLower string) bool {
+	return strings.HasSuffix(pathLower, ".jpg") || strings.HasSuffix(pathLower, ".jpeg") ||
+		strings.HasSuffix(pathLower, ".png") || strings.HasSuffix(pathLower, ".webp")
 }
 
 // isHLSDomainAllowed checks if a domain is allowed for HLS proxying

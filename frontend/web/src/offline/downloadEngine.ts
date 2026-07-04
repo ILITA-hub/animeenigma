@@ -34,6 +34,23 @@ const MIN_FETCH_SPACING_MS = 334
 const CONCURRENCY = 3
 const MAX_RETRIES = 3
 
+// Watchdogs — browser fetch and the stream resolver have NO timeout of their
+// own, and the pump is strictly serial: one request that never answers wedges
+// the whole queue forever (records sit "queued" with a live engine, so the
+// stale-record downgrade in the downloads store never fires either).
+const WATCHDOG_DEFAULTS = {
+  /** No response headers within this window → abort → retry/'network'. */
+  headersMs: 45_000,
+  /** Body produced no chunk for this long mid-stream → abort the fetch. */
+  bodyStallMs: 60_000,
+  /** req.resolve() (scraper failover can be slow, but not THIS slow). */
+  resolveMs: 120_000,
+}
+const watchdogs = { ...WATCHDOG_DEFAULTS }
+export function _setWatchdogTimeoutsForTests(o: Partial<typeof watchdogs>): void {
+  Object.assign(watchdogs, o)
+}
+
 export const engineState: {
   activeId: Ref<string | null>
   progress: Ref<Record<string, { done: number; total: number }>>
@@ -82,6 +99,7 @@ export function _resetEngineForTests(): void {
   engineState.progress.value = {}
   engineState.cellularPauses.value = 0
   nextFetchSlot = 0 // prevent cross-test pacing pollution
+  Object.assign(watchdogs, WATCHDOG_DEFAULTS)
 }
 
 async function acquireWakeLock(): Promise<void> {
@@ -100,12 +118,61 @@ async function releaseWakeLock(): Promise<void> {
 // workers, read-sleep-then-stamp would let all 3 burst in the same window
 // (~9 rps); reserving first serializes the schedule regardless of concurrency.
 let nextFetchSlot = 0
-async function pacedFetch(url: string): Promise<Response> {
+async function pacedFetch(url: string): Promise<{ resp: Response; ctrl: AbortController }> {
   const at = Math.max(Date.now(), nextFetchSlot)
   nextFetchSlot = at + MIN_FETCH_SPACING_MS
   const wait = at - Date.now()
   if (wait > 0) await new Promise((r) => setTimeout(r, wait))
-  return fetch(url, { headers: { 'X-AE-Download': '1' } })
+  const ctrl = new AbortController()
+  const headerTimer = setTimeout(() => ctrl.abort(), watchdogs.headersMs)
+  try {
+    return { resp: await fetch(url, { headers: { 'X-AE-Download': '1' }, signal: ctrl.signal }), ctrl }
+  } finally {
+    clearTimeout(headerTimer)
+  }
+}
+
+/** Re-wrap the body so a stream that stops producing chunks aborts the fetch
+ *  (the consumer's pending read rejects) instead of hanging forever — an MP4
+ *  body legitimately takes many minutes, so only *stalls* are capped, not
+ *  total transfer time. One coarse interval per response (stamping a
+ *  timestamp per chunk) instead of a timer per chunk; the interval clears
+ *  itself on completion, cancellation, or once it has aborted. */
+function guardBodyStall(resp: Response, ctrl: AbortController): Response {
+  if (!resp.body || typeof resp.body.pipeThrough !== 'function') return resp
+  let lastChunk = Date.now()
+  const watchdog = setInterval(() => {
+    if (ctrl.signal.aborted || Date.now() - lastChunk > watchdogs.bodyStallMs) {
+      clearInterval(watchdog)
+      ctrl.abort()
+    }
+  }, Math.max(50, watchdogs.bodyStallMs / 4))
+  const guarded = resp.body.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        lastChunk = Date.now()
+        controller.enqueue(chunk)
+      },
+      flush() {
+        clearInterval(watchdog)
+      },
+      // `cancel` is in the Streams spec but not yet in lib.dom's Transformer.
+      cancel() {
+        clearInterval(watchdog)
+      },
+    } as Transformer<Uint8Array, Uint8Array>),
+  )
+  return new Response(guarded, { status: resp.status, statusText: resp.statusText, headers: resp.headers })
+}
+
+/** req.resolve() with a deadline — a hung scraper resolution is the observed
+ *  way the serial pump wedges (record stuck 'queued', both watchdog-less). */
+function resolveWithDeadline(req: DownloadRequest): Promise<StreamResult> {
+  let t!: ReturnType<typeof setTimeout>
+  const deadline = new Promise<never>((_, rej) => {
+    t = setTimeout(() => rej(new Error('resolve-timeout')), watchdogs.resolveMs)
+  })
+  return Promise.race([req.resolve(), deadline]).finally(() => clearTimeout(t))
 }
 
 class SignatureExpiredError extends Error {}
@@ -129,10 +196,13 @@ async function fetchResource(url: string): Promise<Response> {
   let lastErr: unknown
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const resp = await pacedFetch(url)
+      const { resp, ctrl } = await pacedFetch(url)
       if (resp.status === 401 || resp.status === 403) throw new SignatureExpiredError()
       if (!resp.ok) throw new Error(`http ${resp.status}`)
-      return normalizeForCache(resp)
+      // Stall-guard only bodies that will actually be consumed — wrapping
+      // before the status checks would leak an armed watchdog per discarded
+      // (401/403/!ok) response.
+      return normalizeForCache(guardBodyStall(resp, ctrl))
     } catch (e) {
       if (e instanceof SignatureExpiredError) throw e
       lastErr = e
@@ -178,15 +248,6 @@ async function cacheSubtitles(id: string, subs: SubtitleTrack[]): Promise<Subtit
 }
 
 async function runDownload(id: string, req: DownloadRequest): Promise<void> {
-  const record = await getDownload(id)
-  if (!record) return // removed while queued — do not resurrect or refetch
-
-  // Wi-Fi-only default: park instead of downloading on mobile data. Sits
-  // before resolve() so a starved item never burns a scraper resolution.
-  if (network.isCellular() && !network.allowCellularThisSession()) {
-    await putDownload({ ...record, state: 'paused', pausedBy: 'network' })
-    return
-  }
 
   const setError = async (error: DownloadError) => {
     const cur = await getDownload(id)
@@ -194,18 +255,35 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
     await putDownload({ ...cur, state: 'error', error })
   }
 
-  // Re-check headroom right before doing any real work: the enqueue-time
-  // check in enqueueDownload passes a whole season instantly (no bytes
-  // downloaded yet); once disk fills mid-batch, every remaining queued item
-  // must fail HERE, before paying for a scraper req.resolve().
+  // Estimate first (needs no record), then ONE record read serves the
+  // park/quota/claim sequence. Paused wins over the quota gate — a record
+  // paused while waiting in line parks without paying for a resolve and can
+  // never be downgraded to error:'quota'. The re-check at enqueue time passes
+  // a whole season instantly (no bytes downloaded yet); once disk fills
+  // mid-batch, every remaining queued item must fail HERE, before paying for
+  // a scraper req.resolve().
   const headroom = await quotaHeadroom()
+  const record = await getDownload(id)
+  if (!record) return // removed while queued — do not resurrect or refetch
+  if (paused.has(id)) return void (await putDownload({ ...record, state: 'paused' }))
+  // Wi-Fi-only default: park instead of downloading on mobile data. Sits
+  // before the quota gate and resolve() so a starved item neither burns a
+  // scraper resolution nor downgrades to error:'quota'.
+  if (network.isCellular() && !network.allowCellularThisSession()) {
+    return void (await putDownload({ ...record, state: 'paused', pausedBy: 'network' }))
+  }
   if (headroom !== null && headroom < projectedBytesFor(req.quality, req.durationMin)) {
     return setError('quota')
   }
 
+  // Claim the record BEFORE the resolve/playlist phase: while this run owns it
+  // the UI must show activity ("preparing"), never "queued" — a wedged resolve
+  // used to be indistinguishable from waiting in line.
+  await putDownload({ ...record, state: 'downloading' })
+
   let stream: StreamResult
   try {
-    stream = await req.resolve()
+    stream = await resolveWithDeadline(req)
   } catch {
     return setError('resolve')
   }
@@ -268,7 +346,7 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
   function ensureFreshUrls(): Promise<void> {
     if (!reResolving) {
       reResolving = (async () => {
-        const fresh = await req.resolve()
+        const fresh = await resolveWithDeadline(req)
         const freshPlan = fresh.type === 'mp4'
           ? { resources: [{ path: offlinePath(id, 'media.mp4'), url: fresh.url }] }
           : await planHls(id, fresh, parseInt(req.quality, 10) || 720)
@@ -415,10 +493,6 @@ export function isEngineWorking(id: string): boolean {
   return engineState.activeId.value === id || queue.some((q) => q.id === id)
 }
 
-export async function resumeDownload(req: DownloadRequest): Promise<string> {
-  return enqueueDownload(req) // resume = re-enqueue; cached resources are skipped
-}
-
 /** Cellular guard entry: park the active download and everything queued as
  *  pausedBy:'network' (the guard auto-resumes them on Wi-Fi). Bumps
  *  cellularPauses once per event — UI toasts key off it. */
@@ -438,6 +512,7 @@ export async function pauseAllForCellular(): Promise<void> {
   while (queue.length > 0) await park(queue.shift()!.id, true)
   if (parked > 0) engineState.cellularPauses.value++
 }
+
 
 export async function removeDownload(id: string): Promise<void> {
   paused.add(id) // stop an in-flight run at the next item boundary

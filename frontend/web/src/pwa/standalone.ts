@@ -27,3 +27,11 @@ export function useStandaloneDisplay(): Ref<boolean> {
 export function _resetStandaloneForTests(): void {
   cached = null
 }
+
+/** i18n key for the "downloads live in the app" hint shown when a download
+ *  surface is tapped from a plain browser tab — install steps differ on iOS
+ *  (Share → Add to Home Screen) vs everything else (address-bar install). */
+export function installHintKey(): string {
+  const ios = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
+  return ios ? 'downloads.installHintIos' : 'downloads.installHint'
+}

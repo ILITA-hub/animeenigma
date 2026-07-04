@@ -394,32 +394,34 @@ body {
   contain-intrinsic-height: auto 800px;
 }
 
-/* Skeleton loading animation.
-   KNOWN DEBT (deliberate scope cut, 2026-07-04): this still animates
-   background-position (main-thread repaint per frame) — same defect class
-   fixed for .sk-drift above. Left as-is because it rides transient
-   load-phase surfaces (spotlight/hero skeletons, ~44 paints in the trace vs
-   25k for sk-drift) and several hosts are unpositioned, so the ::after
-   technique needs a per-host audit first. Port it the sk-drift way when
-   touching these skeletons. */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+/* Skeleton loading animation — compositor-driven like .sk-drift above
+   (debt paid 2026-07-04): the sweep is a transform-animated ::after strip,
+   NOT an animated background-position (which repainted per frame). Hosts
+   must be positioned — audited: every user is an `absolute` overlay or
+   carries an explicit `relative`. Unlike .sk-drift, this class self-clips:
+   several hosts are standalone `rounded-full` spans with no clipping
+   parent, so the square strip would leak past the radius otherwise. */
+@keyframes shimmer-sweep {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-66.667%); }
 }
 
 .skeleton-shimmer {
-  background: linear-gradient(
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 300%;
+  background-image: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0) 40%,
     rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.05) 75%
+    rgba(255, 255, 255, 0) 60%
   );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  animation: shimmer-sweep 1.5s ease-in-out infinite;
 }
 
 /* Reduced motion support */

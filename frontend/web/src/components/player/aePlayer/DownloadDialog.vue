@@ -35,32 +35,9 @@
       >{{ q }}p</button>
     </div>
 
-    <div class="dl-scopes" role="radiogroup" :aria-label="$t('player.aePlayer.offline.scope')">
-      <button
-        type="button"
-        class="dl-scope"
-        :class="{ 'dl-scope-active': scope === 'episode' }"
-        role="radio"
-        :aria-checked="scope === 'episode' ? 'true' : 'false'"
-        data-test="scope-episode"
-        @click="scope = 'episode'"
-      >
-        <span>{{ $t('player.aePlayer.offline.scopeEpisode', { n: episodeNumber }) }}</span>
-        <span class="dl-scope-est" data-test="episode-estimate">~{{ episodeEstimate }}</span>
-      </button>
-      <button
-        type="button"
-        class="dl-scope"
-        :class="{ 'dl-scope-active': scope === 'season' }"
-        :disabled="seasonCount === 0"
-        role="radio"
-        :aria-checked="scope === 'season' ? 'true' : 'false'"
-        data-test="scope-season"
-        @click="seasonCount > 0 && (scope = 'season')"
-      >
-        <span>{{ seasonCount > 0 ? $t('player.aePlayer.offline.scopeSeason', { n: seasonCount }) : $t('player.aePlayer.offline.seasonDone') }}</span>
-        <span v-if="seasonCount > 0" class="dl-scope-est">~{{ seasonEstimate }}</span>
-      </button>
+    <div class="dl-summary" data-test="season-summary">
+      <span>{{ seasonCount > 0 ? $t('player.aePlayer.offline.scopeSeason', { n: seasonCount }) : $t('player.aePlayer.offline.seasonDone') }}</span>
+      <span v-if="seasonCount > 0" class="dl-est" data-test="season-estimate">~{{ seasonEstimate }}</span>
     </div>
 
     <template v-if="subOptions.length > 0">
@@ -79,7 +56,7 @@
       {{ $t('player.aePlayer.offline.cellularWarn') }}
     </div>
     <div class="dl-actions">
-      <template v-if="cellularStep">
+<template v-if="cellularStep">
         <button type="button" class="dl-btn dl-btn-warn text-warning font-medium" data-test="dl-cellular-confirm" @click="confirmCellular">
           {{ $t('player.aePlayer.offline.cellularConfirm') }}
         </button>
@@ -88,7 +65,7 @@
         </button>
       </template>
       <template v-else>
-        <button type="button" class="dl-btn dl-btn-primary font-medium" data-test="dl-start" @click="confirm">
+        <button type="button" class="dl-btn dl-btn-primary font-medium" data-test="dl-start" :disabled="seasonCount === 0" @click="confirm">
           {{ $t('player.aePlayer.offline.start') }}
         </button>
         <button type="button" class="dl-btn font-medium" @click="emit('close')">
@@ -100,6 +77,8 @@
 </template>
 
 <script setup lang="ts">
+// Season-only by design (owner call 2026-07-04): per-episode downloads were
+// removed — the dialog picks a quality for the whole remaining season.
 import { ref, computed, onMounted } from 'vue'
 import { projectedBytesFor, storageEstimate } from '@/offline/downloadEngine'
 import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
@@ -115,7 +94,6 @@ const LS_KEY = 'ae.downloadQuality'
 
 const props = withDefaults(
   defineProps<{
-    episodeNumber: number
     /** Episodes a season download would enqueue (pre-filtered). 0 = complete. */
     seasonCount: number
     /** Episode runtime in minutes — scales the size estimates (12-min shorts
@@ -123,7 +101,6 @@ const props = withDefaults(
     durationMin?: number
     /** Bottom-sheet presentation (mobile). */
     sheet?: boolean
-    initialScope?: 'episode' | 'season'
     /** Capability report for the source combo picker. When absent the source
      *  section is hidden and `combo` emits as null (backward compatible). */
     report?: CapabilityReport | null
@@ -134,17 +111,16 @@ const props = withDefaults(
     /** Subtitle options to display in the picker. Empty = picker hidden. */
     subOptions?: SubOption[]
   }>(),
-  { sheet: false, initialScope: 'episode', durationMin: undefined, report: null, initialCombo: null, loadTeams: undefined, subOptions: () => [] },
+  { sheet: false, durationMin: undefined, report: null, initialCombo: null, loadTeams: undefined, subOptions: () => [] },
 )
 
 const emit = defineEmits<{
-  (e: 'confirm', quality: string, scope: 'episode' | 'season', combo: Combo | null, subPref: SubPref | null): void
+  (e: 'confirm', quality: string, combo: Combo | null, subPref: SubPref | null): void
   (e: 'close'): void
 }>()
 
 const saved = localStorage.getItem(LS_KEY)
 const quality = ref<string>(saved && (QUALITIES as readonly string[]).includes(saved) ? saved : '720')
-const scope = ref<'episode' | 'season'>(props.initialScope === 'season' && props.seasonCount > 0 ? 'season' : 'episode')
 
 const free = ref<number | null>(null)
 onMounted(() => {
@@ -161,10 +137,8 @@ function fmtSize(bytes: number): string {
   return bytes >= 2 ** 30 ? fmtGb(bytes) : `${Math.round(bytes / 2 ** 20)} MB`
 }
 
-const perEpisode = computed(() => projectedBytesFor(quality.value, props.durationMin))
-const projected = computed(() => perEpisode.value * (scope.value === 'season' ? props.seasonCount : 1))
-const episodeEstimate = computed(() => fmtSize(perEpisode.value))
-const seasonEstimate = computed(() => fmtSize(perEpisode.value * props.seasonCount))
+const projected = computed(() => projectedBytesFor(quality.value, props.durationMin) * props.seasonCount)
+const seasonEstimate = computed(() => fmtSize(projected.value))
 const lowSpace = computed(() => free.value !== null && projected.value > free.value)
 const freeLabel = computed(() => (free.value === null ? '' : fmtGb(free.value)))
 
@@ -247,7 +221,7 @@ function confirmCellular() {
 
 function doConfirm() {
   localStorage.setItem(LS_KEY, quality.value)
-  emit('confirm', quality.value, scope.value, combo.value ? { ...combo.value } : null, pickedSubPref.value)
+  emit('confirm', quality.value, combo.value ? { ...combo.value } : null, pickedSubPref.value)
 }
 </script>
 
@@ -297,8 +271,7 @@ function doConfirm() {
   color: var(--foreground);
   font-size: 0.8125rem;
 }
-.dl-scopes { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 0.75rem; }
-.dl-scope {
+.dl-summary {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -306,18 +279,15 @@ function doConfirm() {
   padding: 0.5rem 0.625rem;
   border-radius: 0.375rem;
   border: 1px solid var(--white-a8);
-  color: var(--muted-foreground);
-  background: transparent;
-  cursor: pointer;
+  color: var(--foreground);
   font-size: 0.8125rem;
-  text-align: left;
+  margin-bottom: 0.75rem;
 }
-.dl-scope:disabled { opacity: 0.5; cursor: default; }
-.dl-scope-active { border-color: var(--brand-cyan); color: var(--foreground); }
-.dl-scope-est { color: var(--muted-foreground); font-size: 0.75rem; flex-shrink: 0; }
+.dl-est { color: var(--muted-foreground); font-size: 0.75rem; flex-shrink: 0; }
 .dl-warn { font-size: 0.75rem; margin-bottom: 0.5rem; }
 .dl-actions { display: flex; gap: 0.5rem; }
 .dl-btn { flex: 1; padding: 0.375rem 0; border-radius: 0.375rem; border: 1px solid var(--white-a8); }
+.dl-btn:disabled { opacity: 0.5; cursor: default; }
 .dl-btn-primary { border-color: var(--brand-cyan); color: var(--brand-cyan); }
 .dl-btn-warn { border-color: currentColor; }
 </style>

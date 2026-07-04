@@ -31,15 +31,15 @@
       <span class="flex-1" />
 
       <button
-        v-if="downloadable && episodes.length > 1"
+        v-if="downloadMode !== 'off'"
         type="button"
         class="ep-chip ep-chip-season"
         data-test="season-download"
-        :title="$t('player.aePlayer.offline.scopeSeasonTitle')"
+        :title="seasonChipTitle"
         @click="emit('download-season')"
       >
         <Download :size="11" aria-hidden="true" />
-        {{ $t('player.aePlayer.offline.season') }}
+        {{ seasonChipLabel }}
       </button>
       <button
         v-if="showJump && nextUnwatched"
@@ -102,26 +102,16 @@
         </span>
         <span class="ep-card-t">{{ ep.title || '\u00a0' }}</span>
         <span
-          v-if="downloadable && (downloadStates[ep.number] === 'done')"
+          v-if="downloadMode === 'ready' && (downloadStates[ep.number] === 'done')"
           :data-test="`ep-downloaded-${ep.number}`"
           class="ep-dl text-success"
           :title="$t('player.aePlayer.offline.downloaded')"
         ><Check :size="14" /></span>
         <span
-          v-else-if="downloadable && (downloadStates[ep.number] === 'downloading' || downloadStates[ep.number] === 'queued')"
+          v-else-if="downloadMode === 'ready' && (downloadStates[ep.number] === 'downloading' || downloadStates[ep.number] === 'queued')"
           class="ep-dl text-muted-foreground animate-spin"
           :title="$t('player.aePlayer.offline.downloading')"
         ><Loader2 :size="14" /></span>
-        <span
-          v-else-if="downloadable"
-          :data-test="`ep-download-${ep.number}`"
-          role="button"
-          tabindex="0"
-          class="ep-dl text-muted-foreground hover:text-foreground"
-          :title="$t('player.aePlayer.offline.download')"
-          @click.stop="emit('download', ep)"
-          @keydown.enter.stop="emit('download', ep)"
-        ><Download :size="14" /></span>
         <span
           v-if="partialPct(ep) > 0"
           class="ep-progress"
@@ -247,9 +237,10 @@ const props = withDefaults(
     marked?: boolean
     /** Disabled placeholder for the not-yet-aired next episode (from the resume banner). */
     upcoming?: { number: number; etaLabel?: string } | null
-    /** Gate for the per-episode download affordance (strip view only). */
-    downloadable?: boolean
-    /** Download state per episode number, for the affordance's icon. */
+    /** Season-download chip mode: 'ready' = real download, 'install' = the
+     *  "get the app" hint (browser tab — downloads are app-only), 'off' = hidden. */
+    downloadMode?: 'off' | 'install' | 'ready'
+    /** Download state per episode number, for the per-episode status icons. */
     downloadStates?: Record<number, DownloadState>
   }>(),
   {
@@ -259,7 +250,7 @@ const props = withDefaults(
     marking: false,
     marked: false,
     upcoming: null,
-    downloadable: false,
+    downloadMode: 'off',
     downloadStates: () => ({}),
   },
 )
@@ -267,9 +258,16 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'select', ep: EpisodeOption): void
   (e: 'mark-watched'): void
-  (e: 'download', ep: EpisodeOption): void
   (e: 'download-season'): void
 }>()
+
+// In install mode (browser tab) the season chip points at the app instead.
+const seasonChipLabel = computed(() =>
+  props.downloadMode === 'install' ? t('downloads.inAppOnly') : t('player.aePlayer.offline.season'),
+)
+const seasonChipTitle = computed(() =>
+  props.downloadMode === 'install' ? t('downloads.inAppOnly') : t('player.aePlayer.offline.scopeSeasonTitle'),
+)
 
 // ── V2b adaptive rules ───────────────────────────────────────────────────────
 // ≤15 eps: strip only. 16+: jump input appears. 100+: grid toggle appears.
@@ -617,14 +615,8 @@ onMounted(() => {
   gap: 4px;
 }
 
-/* Touch: grow the per-card download affordance to a real hit target
-   without shifting layout (negative margins reclaim the padding). */
+/* Touch: keep the header chips comfortably tappable. */
 @media (pointer: coarse) {
-  .ep-dl {
-    padding: 12px;
-    margin: -10px -10px -10px auto;
-  }
-
   .ep-chip {
     min-height: 36px;
   }

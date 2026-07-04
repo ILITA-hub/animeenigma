@@ -466,7 +466,7 @@
 
       <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
       <!-- Phase 11 / UX-22 — section-comments anchor for AnimeQuickNav. -->
-      <section id="section-comments" ref="ugcSectionEl" class="mt-8 non-player-content">
+      <section id="section-comments" ref="ugcSectionEl" class="mt-8 non-player-content cv-below-fold">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold text-white">
             <span class="flex items-center gap-2">
@@ -789,7 +789,7 @@
       <section
         v-if="relatedAnime.length > 0"
         id="section-similar"
-        class="mt-8 non-player-content"
+        class="mt-8 non-player-content cv-below-fold"
       >
         <Carousel
           :items="relatedAnime"
@@ -815,7 +815,7 @@
       <section
         v-if="characters.length > 0"
         id="section-characters"
-        class="mt-8 non-player-content"
+        class="mt-8 non-player-content cv-below-fold"
       >
         <Carousel
           :items="characters"

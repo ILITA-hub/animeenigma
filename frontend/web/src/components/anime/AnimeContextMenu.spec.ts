@@ -15,6 +15,7 @@ const sharedState = vi.hoisted(() => ({
   updateWatchlistEntry: vi.fn(async (_arg?: unknown) => {}),
   pushToast: vi.fn(),
   openSeasonDownload: vi.fn(async (_req?: unknown, _lang?: unknown) => {}),
+  standalone: true,
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -74,6 +75,16 @@ vi.mock('@/composables/useImageProxy', () => ({
   getImageFallbackUrl: (url: string) => url,
   cardPosterUrl: (url: string) => url,
 }))
+
+// Standalone detection is a matchMedia singleton — replace it with a knob so
+// tests cover both the installed-app and plain-browser-tab paths.
+vi.mock('@/pwa/standalone', async () => {
+  const { computed } = await import('vue')
+  return {
+    useStandaloneDisplay: () => computed(() => sharedState.standalone),
+    installHintKey: () => 'downloads.installHint',
+  }
+})
 
 // SUT — imported AFTER all vi.mock calls.
 import AnimeContextMenu from './AnimeContextMenu.vue'
@@ -135,6 +146,7 @@ beforeEach(() => {
   sharedState.updateWatchlistEntry.mockClear()
   sharedState.pushToast.mockClear()
   sharedState.openSeasonDownload.mockClear()
+  sharedState.standalone = true
 })
 
 afterEach(() => {
@@ -260,5 +272,16 @@ describe('AnimeContextMenu.vue (Reka DropdownMenu rebuild)', () => {
     const [req, lang] = sharedState.openSeasonDownload.mock.calls[0]
     expect(req).toMatchObject({ animeId: 'anime-1', poster: 'https://example.com/p.jpg' })
     expect(typeof lang).toBe('string')
+  })
+
+  it('in a browser tab the item points at the app: install hint toast, no flow', () => {
+    sharedState.standalone = false
+    const w = mountMenu({ listStatus: null })
+    const dl = actions(w).find((x) => x.kind === 'download-season')!
+    expect((dl as unknown as { label: string }).label).toBe('downloads.inAppOnly')
+    ;(dl as unknown as { onActivate: () => void }).onActivate()
+    expect(w.emitted('update:visible')!.at(-1)).toEqual([false])
+    expect(sharedState.openSeasonDownload).not.toHaveBeenCalled()
+    expect(sharedState.pushToast).toHaveBeenCalledWith('downloads.installHint', 'info', 6000)
   })
 })

@@ -165,7 +165,6 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
 
 export async function confirmSeasonDownload(
   quality: string,
-  scope: 'episode' | 'season',
   combo?: Combo | null,
   subPref?: SubPref | null,
 ): Promise<void> {
@@ -190,8 +189,7 @@ export async function confirmSeasonDownload(
         return
       }
     }
-    const picked = scope === 'season' ? targets : targets.slice(0, 1)
-    const eps = picked.map((ep) => ({ ...ep })) // de-proxy before IndexedDB
+    const eps = targets.map((ep) => ({ ...ep })) // de-proxy before IndexedDB
     const n = await enqueueSeason(eps, {
       animeId: req.animeId,
       animeTitle: req.title,

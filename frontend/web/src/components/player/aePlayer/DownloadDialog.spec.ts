@@ -25,51 +25,43 @@ const globalStubs = {
 }
 
 function mountDlg(props: Partial<{
-  episodeNumber: number
   seasonCount: number
   sheet: boolean
-  initialScope: 'episode' | 'season'
   durationMin: number
   report: CapabilityReport | null
   initialCombo: Combo | null
   loadTeams: (provider: string, audio: AudioKind) => Promise<string[]>
   subOptions: SubOption[]
 }> = {}) {
-  return mount(DownloadDialog, { props: { episodeNumber: 4, seasonCount: 10, ...props }, ...globalStubs })
+  return mount(DownloadDialog, { props: { seasonCount: 10, ...props }, ...globalStubs })
 }
 
-describe('DownloadDialog v2', () => {
+describe('DownloadDialog (season-only)', () => {
   beforeEach(() => localStorage.clear())
 
-  it('renders both scopes and defaults to episode', () => {
+  it('shows the season summary with count and estimate', () => {
     const w = mountDlg()
-    expect(w.find('[data-test="scope-episode"]').attributes('aria-checked')).toBe('true')
-    expect(w.find('[data-test="scope-season"]').attributes('aria-checked')).toBe('false')
+    expect(w.find('[data-test="season-summary"]').text()).toContain('scopeSeason:{"n":10}')
+    expect(w.find('[data-test="season-estimate"]').exists()).toBe(true)
   })
 
-  it('emits confirm with quality AND scope', async () => {
+  it('emits confirm with the picked quality (default combo/subPref null)', async () => {
     const w = mountDlg()
-    await w.find('[data-test="scope-season"]').trigger('click')
     await w.find('[data-test="dl-start"]').trigger('click')
     const evt = w.emitted('confirm')![0]
-    expect(evt[0]).toBe('720')
-    expect(evt[1]).toBe('season')
+    expect(evt).toEqual(['720', null, null])
   })
 
-  it('disables season scope when nothing left to download', () => {
+  it('disables start and says done when nothing is left to download', () => {
     const w = mountDlg({ seasonCount: 0 })
-    expect(w.find('[data-test="scope-season"]').attributes('disabled')).toBeDefined()
-  })
-
-  it('preselects season via initialScope', () => {
-    const w = mountDlg({ initialScope: 'season' })
-    expect(w.find('[data-test="scope-season"]').attributes('aria-checked')).toBe('true')
+    expect(w.find('[data-test="dl-start"]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-test="season-summary"]').text()).toContain('seasonDone')
   })
 
   it('warns when the projection exceeds free space', async () => {
     const { storageEstimate } = await import('@/offline/downloadEngine')
     ;(storageEstimate as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ usage: 0, quota: 1 * 2 ** 30 })
-    const w = mountDlg({ seasonCount: 20, initialScope: 'season' })
+    const w = mountDlg({ seasonCount: 20 })
     await new Promise((r) => setTimeout(r))
     await w.vm.$nextTick()
     expect(w.find('[data-test="low-space"]').exists()).toBe(true)
@@ -82,19 +74,14 @@ describe('DownloadDialog v2', () => {
 })
 
 describe('DownloadDialog — duration-scaled estimates', () => {
-  it('halves the estimate for a 12-min episode (720p: 225 MB, not 450)', () => {
-    const w = mountDlg({ durationMin: 12 })
-    expect(w.find('[data-test="episode-estimate"]').text()).toContain('225 MB')
-  })
-
-  it('keeps the 24-min baseline without a duration', () => {
-    const w = mountDlg()
-    expect(w.find('[data-test="episode-estimate"]').text()).toContain('450 MB')
-  })
-
-  it('scales the season total too (10 × 12-min at 720p ≈ 2.2 GB)', () => {
+  it('scales the season total by episode duration (10 × 12-min at 720p ≈ 2.2 GB)', () => {
     const w = mountDlg({ durationMin: 12, seasonCount: 10 })
-    expect(w.find('[data-test="scope-season"]').text()).toContain('2.2 GB')
+    expect(w.find('[data-test="season-estimate"]').text()).toContain('2.2 GB')
+  })
+
+  it('keeps the 24-min baseline without a duration (10 × 450 MB ≈ 4.4 GB)', () => {
+    const w = mountDlg({ seasonCount: 10 })
+    expect(w.find('[data-test="season-estimate"]').text()).toContain('4.4 GB')
   })
 })
 
@@ -116,7 +103,7 @@ describe('source picker', () => {
     const w = mountDlg()
     expect(w.find('[data-test="dl-provider"]').exists()).toBe(false)
     await w.find('[data-test="dl-start"]').trigger('click')
-    expect(w.emitted('confirm')![0][2]).toBeNull()
+    expect(w.emitted('confirm')![0][1]).toBeNull()
   })
 
   it('renders providers for the initial audio/lang and emits the edited combo', async () => {
@@ -125,7 +112,7 @@ describe('source picker', () => {
     expect(sel.findAll('option').map((o) => o.attributes('value'))).toEqual(['gogoanime', 'animepahe'])
     await sel.setValue('animepahe')
     await w.find('[data-test="dl-start"]').trigger('click')
-    const combo = w.emitted('confirm')![0][2] as Combo
+    const combo = w.emitted('confirm')![0][1] as Combo
     expect(combo.provider).toBe('animepahe')
     expect(combo.team).toBeNull()
   })
@@ -134,7 +121,7 @@ describe('source picker', () => {
     const w = mountDlg({ report: REPORT, initialCombo: COMBO })
     await w.find('[data-test="dl-lang-ru"]').trigger('click')
     await w.find('[data-test="dl-start"]').trigger('click')
-    const combo = w.emitted('confirm')![0][2] as Combo
+    const combo = w.emitted('confirm')![0][1] as Combo
     expect(combo.provider).toBe('kodik') // gogoanime has no RU dub rows
     expect(combo.lang).toBe('ru')
   })
@@ -143,7 +130,7 @@ describe('source picker', () => {
     const w = mountDlg({ report: REPORT, initialCombo: COMBO })
     await w.find('[data-test="dl-audio-sub"]').trigger('click')
     await w.find('[data-test="dl-start"]').trigger('click')
-    const combo = w.emitted('confirm')![0][2] as Combo
+    const combo = w.emitted('confirm')![0][1] as Combo
     expect(combo.audio).toBe('sub')
     expect(['en', 'ru']).toContain(combo.lang) // GROUP_PRIMARY_LANG of the picked row's group
   })
@@ -153,7 +140,7 @@ describe('source picker', () => {
     await vi.waitFor(() => expect(w.find('[data-test="dl-team"]').exists()).toBe(true))
     await w.find('[data-test="dl-team"]').setValue('AniLibria')
     await w.find('[data-test="dl-start"]').trigger('click')
-    expect((w.emitted('confirm')![0][2] as Combo).team).toBe('AniLibria')
+    expect((w.emitted('confirm')![0][1] as Combo).team).toBe('AniLibria')
   })
 })
 
@@ -167,13 +154,13 @@ describe('subtitle picker', () => {
     const w = mountDlg()
     expect(w.find('[data-test="dl-subs"]').exists()).toBe(false)
     await w.find('[data-test="dl-start"]').trigger('click')
-    expect(w.emitted('confirm')![0][3]).toBeNull()
+    expect(w.emitted('confirm')![0][2]).toBeNull()
   })
   it('emits the picked pref', async () => {
     const w = mountDlg({ subOptions: SUBS })
     await w.find('[data-test="dl-subs"]').setValue('e:jimaku:ja')
     await w.find('[data-test="dl-start"]').trigger('click')
-    expect(w.emitted('confirm')![0][3]).toEqual({ kind: 'external', provider: 'jimaku', lang: 'ja', label: 'Jimaku A' })
+    expect(w.emitted('confirm')![0][2]).toEqual({ kind: 'external', provider: 'jimaku', lang: 'ja', label: 'Jimaku A' })
   })
 })
 

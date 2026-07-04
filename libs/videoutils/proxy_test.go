@@ -438,18 +438,31 @@ func TestRewriteVTTURLs_NonImagePayloadUntouched(t *testing.T) {
 	}
 }
 
-// TestGetCorrectHLSContentType_StoryboardSheetStaysImage pins the first-party
-// sprite-sheet exemption: genuine storyboard JPEGs must NOT be relabeled
-// video/mp2t by the image→video obfuscation heuristic (image bytes served as
-// video break under any future nosniff header), while the heuristic keeps
-// firing for obfuscated CDN segments that merely claim to be images.
-func TestGetCorrectHLSContentType_StoryboardSheetStaysImage(t *testing.T) {
-	got := getCorrectHLSContentType("/raw-library/aeProvider/1/RAW/1/storyboard_001.jpg", "image/jpeg")
-	if got != "image/jpeg" {
-		t.Fatalf("storyboard sheet content-type = %q, want image/jpeg", got)
+// TestGetCorrectHLSContentType_FirstPartyImagesStayImages pins the first-party
+// image exemption: genuine images from trusted hosts (MinIO sprite sheets,
+// admin uploads) must NOT be relabeled video/mp2t by the image→video
+// obfuscation heuristic (image bytes served as video break under any future
+// nosniff header), while the heuristic keeps firing for third-party CDN
+// segments that merely claim to be images.
+func TestGetCorrectHLSContentType_FirstPartyImagesStayImages(t *testing.T) {
+	// First-party sprite sheet keeps its declared image type.
+	if got := getCorrectHLSContentType("/raw-library/aeProvider/1/RAW/1/storyboard_001.jpg", "image/jpeg", true); got != "image/jpeg" {
+		t.Fatalf("first-party sheet content-type = %q, want image/jpeg", got)
 	}
-	// Obfuscated CDN segment pretending to be an image keeps the video override.
-	if got := getCorrectHLSContentType("/cdn/seg-42.bin", "image/jpeg"); got != "video/mp2t" {
+	// Generalizes beyond the storyboard naming — any first-party image asset.
+	if got := getCorrectHLSContentType("/raw-library/posters/cover.png", "image/png", true); got != "image/png" {
+		t.Fatalf("first-party png content-type = %q, want image/png", got)
+	}
+	// Third-party CDN pretending to be an image keeps the video override.
+	if got := getCorrectHLSContentType("/cdn/seg-42.bin", "image/jpeg", false); got != "video/mp2t" {
 		t.Fatalf("obfuscated segment content-type = %q, want video/mp2t", got)
+	}
+	// Even an image-extension path with an image type is NOT trusted third-party.
+	if got := getCorrectHLSContentType("/cdn/fake_frame.jpg", "image/jpeg", false); got != "video/mp2t" {
+		t.Fatalf("untrusted jpg content-type = %q, want video/mp2t", got)
+	}
+	// First-party VIDEO content is still normalized — the exemption is image-scoped.
+	if got := getCorrectHLSContentType("/raw-library/aeProvider/1/RAW/1/segment_000.ts", "application/octet-stream", true); got != "video/mp2t" {
+		t.Fatalf("first-party segment content-type = %q, want video/mp2t", got)
 	}
 }

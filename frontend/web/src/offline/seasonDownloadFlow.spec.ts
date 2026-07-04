@@ -191,9 +191,9 @@ describe('confirmSeasonDownload', () => {
     expect(seasonFlow.phase).toBe('choose')
   }
 
-  it('season scope enqueues every target with the frozen combo', async () => {
+  it('enqueues every target with the frozen combo', async () => {
     await toChoose()
-    await confirmSeasonDownload('720', 'season')
+    await confirmSeasonDownload('720')
     expect(h.enqueueSeason).toHaveBeenCalledTimes(1)
     const [targets, ctx] = h.enqueueSeason.mock.calls[0] as unknown as [EpisodeOption[], Record<string, unknown>]
     expect(targets.map((e) => e.number)).toEqual([1, 2, 3])
@@ -202,19 +202,12 @@ describe('confirmSeasonDownload', () => {
     expect(seasonFlow.phase).toBe('idle')
   })
 
-  it('episode scope enqueues only the first missing episode', async () => {
-    await toChoose()
-    await confirmSeasonDownload('480', 'episode')
-    const [targets] = h.enqueueSeason.mock.calls[0] as [EpisodeOption[]]
-    expect(targets.map((e) => e.number)).toEqual([1])
-  })
-
   it('confirm with a DIFFERENT provider re-lists episodes and recomputes targets', async () => {
     await toChoose()
     // Override listEpisodes for the kodik provider re-list
     h.listEpisodes.mockResolvedValue([ep(1), ep(2)])
     const kodikCombo: Combo = { ...(seasonFlow.combo as Combo), provider: 'kodik' }
-    await confirmSeasonDownload('720', 'season', kodikCombo, null)
+    await confirmSeasonDownload('720', kodikCombo, null)
     expect(h.listEpisodes).toHaveBeenCalledWith('kodik', 'a1')
     const [targets, ctx] = h.enqueueSeason.mock.calls[0] as [EpisodeOption[], Record<string, unknown>]
     expect(targets.map((e) => e.number)).toEqual([1, 2])
@@ -224,7 +217,7 @@ describe('confirmSeasonDownload', () => {
   it('confirm threads subPref + resolveSubsFor into enqueueSeason ctx', async () => {
     await toChoose()
     const pref: SubPref = { kind: 'external', provider: 'jimaku', lang: 'ja' }
-    await confirmSeasonDownload('720', 'season', null, pref)
+    await confirmSeasonDownload('720', null, pref)
     const [, ctx] = h.enqueueSeason.mock.calls[0] as [EpisodeOption[], Record<string, unknown>]
     expect((ctx as { subPref: SubPref }).subPref).toEqual(pref)
     expect(typeof (ctx as { resolveSubsFor?: unknown }).resolveSubsFor).toBe('function')
@@ -238,7 +231,7 @@ describe('confirmSeasonDownload', () => {
     h.listEpisodes.mockReturnValueOnce(new Promise<EpisodeOption[]>((r) => (release = r)))
 
     const kodikCombo: Combo = { ...(seasonFlow.combo as Combo), provider: 'kodik' }
-    const p = confirmSeasonDownload('720', 'season', kodikCombo, null)
+    const p = confirmSeasonDownload('720', kodikCombo, null)
 
     // Cancel while listEpisodes is still in flight
     cancelSeasonDownload()
@@ -264,7 +257,7 @@ describe('confirmSeasonDownload', () => {
     )
 
     const kodikCombo: Combo = { ...(seasonFlow.combo as Combo), provider: 'kodik' }
-    const p = confirmSeasonDownload('720', 'season', kodikCombo, null)
+    const p = confirmSeasonDownload('720', kodikCombo, null)
 
     // Cancel bumps seq before the reject lands
     cancelSeasonDownload()

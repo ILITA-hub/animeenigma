@@ -1529,29 +1529,10 @@ const fetchProfile = async () => {
 // Track current profile ownership for fetchWatchlistPage
 const _isOwnProfile = ref(false)
 
-// Public profile status counts
+// Public profile status counts — populated from the /watchlist/public/stats
+// response (status_counts field), which replaced the old per-status
+// per_page=1 count-probe fan-out (5 extra requests per profile visit).
 const publicStatusCounts = ref<Record<string, number>>({})
-
-const fetchPublicStatusCounts = async (userId: string, statuses: string[]) => {
-  const promises = statuses.map(async (status) => {
-    try {
-      const response = await publicApi.getPublicWatchlist(userId, {
-        status,
-        page: 1,
-        per_page: 1,
-      })
-      return { status, count: response.data?.meta?.total_count || 0 }
-    } catch {
-      return { status, count: 0 }
-    }
-  })
-  const results = await Promise.all(promises)
-  const counts: Record<string, number> = {}
-  for (const { status, count } of results) {
-    counts[status] = count
-  }
-  publicStatusCounts.value = counts
-}
 
 const fetchWatchlistPage = async (backgroundRefresh = false) => {
   if (!profileUser.value) return
@@ -1688,16 +1669,17 @@ const fetchWatchlist = async (isOwn: boolean) => {
     // Also fetch lightweight statuses for badge map and per-status counts
     await watchlistStore.fetchStatuses(true)
   }
-  // Fetch public stats and status counts in background (fire and forget)
+  // Fetch public stats + per-status tab counts in ONE background call
+  // (fire and forget) — status_counts rides the stats response.
   if (!isOwn && profileUser.value) {
     const visibleStatuses = profileUser.value.public_statuses || []
-    // Fetch aggregate stats (avg score, total episodes)
     publicApi.getPublicWatchlistStats(profileUser.value.id, visibleStatuses.length > 0 ? visibleStatuses : undefined)
-      .then(r => { publicWatchlistStats.value = r.data?.data || r.data || null })
+      .then(r => {
+        const stats = r.data?.data || r.data || null
+        publicWatchlistStats.value = stats
+        publicStatusCounts.value = stats?.status_counts || {}
+      })
       .catch(() => {})
-    if (visibleStatuses.length > 0) {
-      fetchPublicStatusCounts(profileUser.value.id, visibleStatuses)
-    }
   }
   // Reset filters so switching profiles starts clean, and load this profile's
   // facet options (fire-and-forget — loadFacets handles its own errors).

@@ -7,13 +7,12 @@
     </div>
   </Teleport>
 
-  <!-- Quality/scope chooser — reuses the player's DownloadDialog, season-first -->
+  <!-- Quality chooser — reuses the player's season DownloadDialog -->
   <Teleport to="body">
     <div v-if="seasonFlow.phase === 'choose'">
       <div class="sdh-scrim" data-test="sdh-scrim" @click="cancelSeasonDownload()" />
       <div class="sdh-anchor">
         <DownloadDialog
-          :episode-number="seasonFlow.targets[0]?.number ?? 1"
           :season-count="seasonFlow.targets.length"
           :duration-min="seasonFlow.durationMin ?? undefined"
           :report="(seasonFlow.report as CapabilityReport | null)"
@@ -21,7 +20,6 @@
           :sub-options="subOptions"
           :load-teams="loadTeams"
           :sheet="isMobile"
-          initial-scope="season"
           @confirm="onConfirm"
           @close="cancelSeasonDownload()"
         />
@@ -64,8 +62,8 @@ const subOptions = computed<SubOption[]>(() => [
   ...externalSubOptions(seasonFlow.subTracks as readonly SubtitleTrack[]),
 ])
 
-function onConfirm(quality: string, scope: 'episode' | 'season', combo: Combo | null, subPref: SubPref | null) {
-  void confirmSeasonDownload(quality, scope, combo, subPref)
+function onConfirm(quality: string, combo: Combo | null, subPref: SubPref | null) {
+  void confirmSeasonDownload(quality, combo, subPref)
 }
 
 const NOTICE_KEY: Record<string, string> = {

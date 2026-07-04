@@ -96,13 +96,8 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import Avatar from '@/components/ui/Avatar.vue'
-import PosterImage from '@/components/anime/PosterImage.vue'
-import { activityApi } from '@/api/client'
-import { getLocalizedTitle } from '@/utils/title'
+<script lang="ts">
+import { createFetchCache } from '@/composables/createFetchCache'
 
 interface ActivityEvent {
   id: string
@@ -131,28 +126,62 @@ interface ActivityEvent {
   created_at: string
 }
 
+// Module-level cache of the feed's FIRST page — SPA route revisits within
+// the TTL render it without refetching (2026-07-04 trace: home→anime→home
+// re-issued the identical /activity/feed request 11s later). load-more
+// pagination always goes to the network. TTL mirrors stores/home.ts.
+const feedGuard = createFetchCache(3 * 60 * 1000)
+const feedCache: { events: ActivityEvent[]; hasMore: boolean } = {
+  events: [],
+  hasMore: false,
+}
+</script>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Avatar from '@/components/ui/Avatar.vue'
+import PosterImage from '@/components/anime/PosterImage.vue'
+import { activityApi } from '@/api/client'
+import { getLocalizedTitle } from '@/utils/title'
+
 const { t, locale } = useI18n()
 const events = ref<ActivityEvent[]>([])
 const hasMore = ref(false)
 const loading = ref(true)
 
 const loadFeed = async (before?: string) => {
-  loading.value = true
-  try {
-    const response = await activityApi.getFeed(10, before)
-    const data = response.data?.data || response.data
-    const newEvents: ActivityEvent[] = data?.events || []
-    if (before) {
-      events.value.push(...newEvents)
-    } else {
-      events.value = newEvents
-    }
-    hasMore.value = data?.has_more || false
-  } catch (err) {
-    console.error('Failed to load activity feed:', err)
-  } finally {
+  // First-page cache hit: render instantly, skip the request. Stale/empty
+  // first pages coalesce through feedGuard.share so concurrent mounts
+  // don't race duplicate requests.
+  if (!before && feedCache.events.length > 0 && feedGuard.isFresh()) {
+    events.value = feedCache.events
+    hasMore.value = feedCache.hasMore
     loading.value = false
+    return
   }
+  const fetchPage = async () => {
+    loading.value = true
+    try {
+      const response = await activityApi.getFeed(10, before)
+      const data = response.data?.data || response.data
+      const newEvents: ActivityEvent[] = data?.events || []
+      if (before) {
+        events.value.push(...newEvents)
+      } else {
+        events.value = newEvents
+        feedCache.events = newEvents
+        feedCache.hasMore = data?.has_more || false
+        feedGuard.markFresh()
+      }
+      hasMore.value = data?.has_more || false
+    } catch (err) {
+      console.error('Failed to load activity feed:', err)
+    } finally {
+      loading.value = false
+    }
+  }
+  return before ? fetchPage() : feedGuard.share(fetchPage)
 }
 
 const loadMore = () => {

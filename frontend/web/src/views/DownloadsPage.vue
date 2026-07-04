@@ -72,7 +72,7 @@
                     {{ t('downloads.pause') }}
                   </Button>
                   <Button
-                    v-else-if="d.state === 'paused' || (d.state === 'error' && d.error === 'network')"
+                    v-else-if="d.state === 'paused' || (d.state === 'error' && (d.error === 'network' || d.error === 'resolve'))"
                     variant="ghost"
                     size="sm"
                     @click="store.resume(d)"

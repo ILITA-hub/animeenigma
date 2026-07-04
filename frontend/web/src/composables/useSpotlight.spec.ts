@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, h, nextTick, type Ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import type { SpotlightCard } from '@/types/spotlight'
+import type { useSpotlight as UseSpotlightFn } from './useSpotlight'
 
 // vi.mock factory runs BEFORE imports so the composable's `apiClient` resolves
 // to the spy. Returning a Proxy-with-vi-fn-getters is overkill; a flat object
@@ -24,12 +25,12 @@ vi.mock('@/api/client', () => ({
   apiClient: { get: vi.fn() },
 }))
 
-// Imported AFTER vi.mock so the alias resolves to the stub.
-import { apiClient } from '@/api/client'
-import { useSpotlight } from './useSpotlight'
-
-// Type-safe spy reference
-const apiGetSpy = apiClient.get as ReturnType<typeof vi.fn>
+// The composable keeps a MODULE-LEVEL cards cache (2026-07-04 route-revisit
+// dedupe), so every test must get a fresh module instance — resetModules +
+// dynamic import in beforeEach; static imports would share one cache across
+// tests and make case order matter.
+let useSpotlight: typeof UseSpotlightFn
+let apiGetSpy: ReturnType<typeof vi.fn>
 
 // Public shape the harness exposes — the composable's refs are the same
 // references we read inside the tests, so we treat them as the underlying
@@ -72,8 +73,12 @@ function mountHarness() {
 describe('useSpotlight', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules()
+    const client = await import('@/api/client')
+    apiGetSpy = client.apiClient.get as ReturnType<typeof vi.fn>
     apiGetSpy.mockReset()
+    ;({ useSpotlight } = await import('./useSpotlight'))
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
@@ -197,5 +202,28 @@ describe('useSpotlight', () => {
     expect(apiGetSpy).toHaveBeenCalledTimes(2)
     expect(vm.cards.length).toBe(2)
     expect((vm.cards[0] as { data: { anime: { id: string } } }).data.anime.id).toBe('second-a')
+  })
+
+  it('serves a second mount from the module cache without refetching', async () => {
+    apiGetSpy.mockResolvedValueOnce({
+      data: {
+        cards: [{ type: 'featured', data: { anime: { id: 'cached' } } }],
+        generated_at: '2026-07-04T10:00:00Z',
+      },
+    })
+
+    mountHarness()
+    await flushPromises()
+    expect(apiGetSpy).toHaveBeenCalledTimes(1)
+
+    // SPA route revisit: a fresh mount inside the TTL reuses the shared
+    // cards and issues NO second request (2026-07-04 dedupe contract).
+    const second = mountHarness()
+    await flushPromises()
+
+    const vm = second.vm as unknown as HarnessVm
+    expect(apiGetSpy).toHaveBeenCalledTimes(1)
+    expect(vm.cards.length).toBe(1)
+    expect(vm.loading).toBe(false)
   })
 })

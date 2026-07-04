@@ -515,12 +515,9 @@
         "download": "Download",
         "downloading": "Downloading…",
         "downloaded": "Downloaded",
-        "failed": "Download failed",
         "quality": "Download quality",
         "start": "Download",
         "cancel": "Cancel",
-        "scope": "What to download",
-        "scopeEpisode": "This episode ({n})",
         "scopeSeason": "Whole season — {n} ep.",
         "scopeSeasonTitle": "Download the whole season",
         "seasonDone": "Season already downloaded",
@@ -536,7 +533,6 @@
         "cellularWarn": "You're on mobile data. Downloads default to Wi-Fi only.",
         "cellularConfirm": "Download over mobile data",
         "sourceListFailed": "Couldn't list episodes for that source",
-        "epUnavailable": "This episode isn't available from that source",
         "cellularAutoPaused": "Mobile data: downloads paused"
       }
     }
@@ -1989,6 +1985,9 @@
     "seasonNothing": "Everything is already downloaded",
     "seasonFailed": "Couldn't prepare the download",
     "cellularPaused": "Downloads paused — waiting for Wi-Fi",
-    "cellularResume": "Download over mobile data"
+    "cellularResume": "Download over mobile data",
+    "inAppOnly": "Download in the app",
+    "installHint": "Downloads work in the AnimeEnigma app — install it via the install icon in your browser's address bar, then download there.",
+    "installHintIos": "Downloads work in the AnimeEnigma app — in Safari tap Share → \"Add to Home Screen\", then download from the app."
   }
 }
