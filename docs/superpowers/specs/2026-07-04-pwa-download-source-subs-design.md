@@ -1,13 +1,14 @@
 # PWA downloads: source & subtitle selection, offline subtitle auto-enable, offline boot redirect
 
 **Date:** 2026-07-04 · **Status:** approved by owner (chat, all three recommended options)
-**Metrics:** UXΔ = +3 (Better) · CDI = 0.03 * 13 · MVQ = Griffin 85%/80%
+**Metrics:** UXΔ = +3 (Better) · CDI = 0.04 * 21 · MVQ = Griffin 85%/80%
 
 ## Owner asks
 
 1. When downloading (single episode AND whole season), let the user pick **which provider/source** to download from and **which subtitles** to include.
 2. The chosen subtitles must **actually display during offline playback** (owner confirmed: auto-enable them — an explicit download-time choice overrides the global "subs default OFF, never auto-enable" rule for that download only).
 3. Opening the app **without internet lands directly on /downloads**.
+4. Downloads are **Wi-Fi-only by default**: on mobile data, pause + an extra explicit confirmation «качать с мобильных данных» (added at spec review, 2026-07-04).
 
 ## Current state (verified in code)
 
@@ -112,6 +113,22 @@ if (from === START_LOCATION && !navigator.onLine && offlineDownloadsEnabled && t
 - `navigator.onLine === false` is the trigger; captive-portal/"online but dead" detection is out of scope.
 - No downloads / no SW → /downloads renders its own empty/explanatory state, still the most useful offline landing.
 
+### 8. Wi-Fi-only downloads by default
+
+**Detection** — new `src/offline/network.ts`:
+- `isCellular(): boolean` — `navigator.connection?.type === 'cellular'`. Unknown/absent type (desktop browsers, Safari) → `false`: never nag users the API can't classify.
+- `onConnectionChange(cb)` — subscribes to `connection` `change`; returns a no-op unsubscribe when the API is absent.
+- `allowCellularThisSession` flag with getter/setter — session-scoped, NOT persisted: the Wi-Fi-only default returns on every app launch.
+
+**Confirm-time gate** (`DownloadDialog.vue`): when `isCellular()` and the session override is off, pressing «Начать» does not confirm — the dialog swaps its footer into an explicit second step: warning «Вы на мобильных данных. По умолчанию скачивание только по Wi-Fi.» with buttons «Качать по мобильным данным» (sets the session override, then emits confirm) and «Отмена» (back to the normal footer).
+
+**Engine gate + mid-run pause** (`downloadEngine.ts`):
+- `OfflineDownload.pausedBy?: 'user' | 'network'` — distinguishes a manual pause (never auto-resumed) from a network pause.
+- At the top of `runDownload` (next to the quota re-check, before `resolve()` so no scraper resolution is burned): `isCellular() && !allowCellular` → record goes `paused` with `pausedBy: 'network'`.
+- The engine subscribes to connection changes: switching **to** cellular without the override pauses the active download and every queued item (`pausedBy: 'network'`) and surfaces a notice; switching **back to Wi-Fi** auto-resumes exactly the `pausedBy === 'network'` records (user-paused ones stay paused), clearing `pausedBy`.
+
+**Surface** (`DownloadsPage.vue`): when network-paused records exist and the device is on cellular, show a banner «Скачивание приостановлено — ждём Wi-Fi» with «Качать по мобильным данным» (sets the override + resumes network-paused records). A toast fires when the mid-run auto-pause triggers.
+
 ## Error handling summary
 
 - Capability fetch failure in card flow → existing `failed` notice (unchanged).
@@ -126,6 +143,8 @@ if (from === START_LOCATION && !navigator.onLine && offlineDownloadsEnabled && t
 - `externalSubs.spec.ts`: flatten + provider/lang/label matching.
 - `seasonDownloadFlow.spec.ts`: provider changed at confirm → episodes re-listed, targets recomputed; subPref threaded to `enqueueSeason`.
 - Router guard: unit test for the extracted guard predicate (offline + initial nav + non-/downloads target → redirect).
+- `network.spec.ts`: unknown connection type → not cellular; change subscription no-ops without the API.
+- Engine cellular gate: on cellular without override → record `paused`/`pausedBy:'network'` and `resolve()` NOT called; Wi-Fi return auto-resumes only network-paused records; dialog two-step confirm sets the session override.
 - Auto-enable: unit-test a `pickAutoSub(record, streamSubs)` helper; AePlayer wiring covered by existing offline-mode component tests where practical.
 - i18n en/ru/ja parity for all new keys (`player.aePlayer.offline.*`); DS-lint hook; `/frontend-verify` before finishing.
 
@@ -135,3 +154,4 @@ if (from === START_LOCATION && !navigator.onLine && offlineDownloadsEnabled && t
 - Multiple simultaneous external tracks per download (single-select matches the player's one-active-track model).
 - Auto-enabling subs in ONLINE playback (global "subs default OFF" rule stands everywhere else).
 - Captive-portal detection; Background Fetch (still deferred from the base feature).
+- A persistent "always allow mobile data" setting — the override is deliberately per-session so the safe default always returns.
