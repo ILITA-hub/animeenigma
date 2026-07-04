@@ -201,9 +201,8 @@ func Load() (*Config, error) {
 			APIKey:  getEnv("JACKETT_API_KEY", ""),
 			// CSV → slice; empty env yields nil (all categories).
 			Categories: splitCSV(getEnv("JACKETT_CATEGORIES", "")),
-			// Aggregate-endpoint filter segment. "!status:failing" skips
-			// indexers Jackett marks failing (broken ones stall the whole
-			// aggregate ~100s, past JACKETT_TIMEOUT). "all" = unfiltered.
+			// Filtered-aggregate path segment; "all" = unfiltered.
+			// Rationale: jackett.Config.IndexerFilter.
 			IndexerFilter: getEnv("JACKETT_INDEXER_FILTER", "!status:failing"),
 			// Jackett's aggregated `all` query fans out across ~20 indexers
 			// and routinely takes ~20s — far longer than a single indexer,

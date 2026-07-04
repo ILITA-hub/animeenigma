@@ -11,17 +11,20 @@
 // surfaced (a peerless donghua pack is exactly what stalled the first
 // MinIO preload).
 //
-// Endpoint: GET {BaseURL}/api/v2.0/indexers/all/results?apikey={key}&Query={q}
-//   - `all` fans out across every configured indexer; Jackett degrades
-//     soft itself (a single dead indexer never fails the whole query, it
-//     just contributes an entry to the response's Indexers[].Error list,
-//     which we ignore — partial results are still returned).
+// Endpoint: GET {BaseURL}/api/v2.0/indexers/{filter}/results?apikey={key}&Query={q}
+//   - {filter} defaults to `!status:failing` (Config.IndexerFilter): fan out
+//     only across configured indexers Jackett does NOT currently mark
+//     failing. Jackett's per-indexer fail-soft covers indexers that error
+//     QUICKLY — ones that hang (Cloudflare challenges, dead domains) stall
+//     the whole aggregate until Jackett's internal ~100s cap, far past
+//     HTTPTimeout, which killed the tier on every query when 14 of 41
+//     configured indexers rotted (2026-07-04).
 //   - optional repeated &Category[]={cat} narrows to e.g. 5070 (TV/Anime).
 //
-// The aggregated query is slow (~20s across ~20 indexers) so the operator
-// wires a generous HTTPTimeout (default 30s). Results are normalized into
-// the shared domain.Release shape and ranked Seeders DESC before the limit
-// cap, so the healthiest swarms surface first.
+// The filtered aggregate is still the slow path (seconds across dozens of
+// indexers) so the operator wires a generous HTTPTimeout (default 30s).
+// Results are normalized into the shared domain.Release shape and ranked
+// Seeders DESC before the limit cap, so the healthiest swarms surface first.
 package jackett
 
 import (
@@ -67,8 +70,8 @@ type Config struct {
 	// (e.g. ["5070"] for TV/Anime). Empty ⇒ all categories (max recall).
 	Categories []string
 
-	// HTTPTimeout per request. Default 30s — the aggregated `all` query is
-	// far slower than a single indexer.
+	// HTTPTimeout per request. Default 30s — the filtered aggregate query
+	// is far slower than a single indexer.
 	HTTPTimeout time.Duration
 
 	// UserAgent header. Default "AnimeEnigma/1.0 (library service)".
@@ -84,11 +87,11 @@ type Client struct {
 const (
 	defaultBaseURL       = "http://jackett:9117"
 	defaultIndexerFilter = "!status:failing"
-	defaultTimeout = 30 * time.Second
-	defaultUA      = "AnimeEnigma/1.0 (library service)"
-	defaultLimit   = 50
-	maxLimit       = 200
-	providerName   = "jackett"
+	defaultTimeout       = 30 * time.Second
+	defaultUA            = "AnimeEnigma/1.0 (library service)"
+	defaultLimit         = 50
+	maxLimit             = 200
+	providerName         = "jackett"
 )
 
 // qualityRegex matches the most common torrent resolution tokens.
@@ -139,7 +142,7 @@ type rawResult struct {
 	PublishDate string `json:"PublishDate"` // RFC3339, e.g. 2023-09-29T00:00:00
 }
 
-// Search queries Jackett's aggregated `all` indexers for `query` and
+// Search queries Jackett's filtered indexer aggregate for `query` and
 // returns up to `limit` normalized Release entries, ranked Seeders DESC.
 // Limit is clamped to [1, 200] (default 50 when <= 0). Non-2xx responses
 // are wrapped via errors.ExternalAPI("jackett", …) so the tier can degrade
@@ -201,7 +204,7 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]domain.
 // the query, and any configured categories.
 func (c *Client) buildURL(query string) (string, error) {
 	base := strings.TrimRight(c.cfg.BaseURL, "/")
-	u, err := url.Parse(base + "/api/v2.0/indexers/" + c.cfg.IndexerFilter + "/results")
+	u, err := url.Parse(base + "/api/v2.0/indexers/" + url.PathEscape(c.cfg.IndexerFilter) + "/results")
 	if err != nil {
 		return "", err
 	}

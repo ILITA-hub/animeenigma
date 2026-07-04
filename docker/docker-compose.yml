@@ -1183,6 +1183,8 @@ services:
       JACKETT_BASE_URL: ${JACKETT_BASE_URL:-http://jackett:9117}
       JACKETT_API_KEY: ${JACKETT_API_KEY:-}
       JACKETT_CATEGORIES: ${JACKETT_CATEGORIES:-}
+      # Aggregate filter segment; "all" = unfiltered fan-out (see jackett.Config.IndexerFilter)
+      JACKETT_INDEXER_FILTER: "${JACKETT_INDEXER_FILTER:-!status:failing}"
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8089:8089"

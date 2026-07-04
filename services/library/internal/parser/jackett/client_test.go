@@ -74,9 +74,7 @@ func TestSearch_RanksSeedersAndDropsLinkOnly(t *testing.T) {
 		t.Fatalf("Search returned error: %v", err)
 	}
 
-	// URL shape: aggregated results path (default filter skips indexers
-	// Jackett has marked failing — dead ones otherwise stall the whole
-	// aggregate past the client timeout) + apikey + Query + Category[].
+	// URL shape: aggregated results path (default filter) + apikey + Query + Category[].
 	if seenPath != "/api/v2.0/indexers/!status:failing/results" {
 		t.Errorf("path: want /api/v2.0/indexers/!status:failing/results, got %q", seenPath)
 	}
