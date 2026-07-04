@@ -76,6 +76,16 @@ describe('handleSegmentRequest', () => {
     expect(resp.status).toBe(200)
     expect(fetch).not.toHaveBeenCalled()
   })
+  it('non-scrub requests are NEVER served from cache, even when the entry exists', async () => {
+    fakeCache.put.mockClear() // clear accumulated calls from previous tests
+    await handleSegmentRequest(new Request(SEG), event) // warm the cache
+    await Promise.all(waits)
+    expect(fakeCache.put).toHaveBeenCalledTimes(1)
+    ;(fetch as ReturnType<typeof vi.fn>).mockClear()
+    const resp = await handleSegmentRequest(new Request(SEG_RESIGNED), event) // same key, no aescrub
+    expect(fetch).toHaveBeenCalledTimes(1) // network, not cache
+    expect(resp.status).toBe(200)
+  })
   it('scrub miss: falls through to network', async () => {
     const resp = await handleSegmentRequest(new Request(markScrubUrl(SEG)), event)
     expect(resp.status).toBe(200)
