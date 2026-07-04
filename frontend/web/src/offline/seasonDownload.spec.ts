@@ -9,7 +9,7 @@ vi.mock('./registry', () => ({ getDownload: (id: string) => getDownload(id) }))
 
 import { seasonTargets, enqueueSeason, type SeasonContext } from './seasonDownload'
 
-const ep = (n: number): EpisodeOption => ({ id: `e${n}`, number: n, label: String(n) }) as EpisodeOption
+const ep = (n: number): EpisodeOption => ({ key: `e${n}`, number: n, label: String(n) })
 const combo: Combo = { audio: 'sub', lang: 'en', provider: 'p', server: 's', team: null }
 
 function ctx(): SeasonContext {
