@@ -219,6 +219,7 @@
       :fragments="fragOverlay"
       :preview-url="currentStream?.url ?? null"
       :preview-type="currentStream?.type ?? null"
+      :preview-storyboard-url="currentStream?.storyboardUrl ?? null"
       :fullscreen-active="fullscreenActive"
       @toggle-play="togglePlay"
       @seek-rel="onSeekRel"

@@ -107,6 +107,9 @@ interface LibraryStream {
   // First-party (ae) / library URLs carry the HLS-proxy provenance signature.
   exp?: string
   sig?: string
+  // Optional WebVTT thumbnail track (best-effort ffmpeg pass; absent for older
+  // encodes). Signed for the HLS proxy on the same trust path as the playlist.
+  storyboard?: { url: string; exp?: string; sig?: string }
 }
 
 // ─── Anime18 types (mirrored from Anime18Player) ────────────────────────────
@@ -344,6 +347,15 @@ function makeAeAdapter(api: typeof aeApi): ProviderAdapter {
       return {
         url: buildProxyUrl(stream.url, '', type, { exp: stream.exp, sig: stream.sig }),
         type,
+        // Proxy the WebVTT thumbnail track the same way as the playlist, but
+        // with NO streamType marker: it's plain text, not m3u8/mp4, so the
+        // proxy must not apply playlist-rewrite or range-passthrough paths.
+        storyboardUrl: stream.storyboard
+          ? buildProxyUrl(stream.storyboard.url, '', undefined, {
+              exp: stream.storyboard.exp,
+              sig: stream.storyboard.sig,
+            })
+          : undefined,
       }
     },
   }

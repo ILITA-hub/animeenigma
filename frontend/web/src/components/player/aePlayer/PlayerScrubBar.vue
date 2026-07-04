@@ -74,6 +74,7 @@
           :visible="hoverVisible"
           :stream-url="previewUrl ?? null"
           :stream-type="previewType ?? null"
+          :storyboard-url="previewStoryboardUrl ?? null"
           :still-url="stillUrl"
         />
       </div>
@@ -110,6 +111,9 @@ const props = defineProps<{
   /** current stream URL for real hover frame previews (null = still only) */
   previewUrl?: string | null
   previewType?: 'hls' | 'mp4' | null
+  /** proxied WebVTT thumbnail track — when set, the preview renders sprite
+   *  crops instead of live-seeking a shadow engine (library content only) */
+  previewStoryboardUrl?: string | null
 }>()
 
 const emit = defineEmits<{

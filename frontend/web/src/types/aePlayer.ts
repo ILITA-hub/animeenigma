@@ -63,4 +63,7 @@ export interface StreamResult {
   qualityLabel?: string
   /** Subtitle tracks the provider shipped alongside the stream (signed). */
   subtitles?: SubtitleTrack[]
+  /** Proxied WebVTT thumbnail-track URL (library content only). When set, the
+   *  scrub preview uses sprite sheets and never starts a shadow engine. */
+  storyboardUrl?: string
 }

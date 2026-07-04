@@ -38,6 +38,7 @@
 import { ref, watch, onUnmounted } from 'vue'
 import { scrubDebug, slog, srecordCapture, sreset } from '@/composables/aePlayer/scrubPreviewDebug'
 import { markScrubUrl } from '@/pwa/segmentCache'
+import { parseStoryboardVtt, cueAt, type StoryboardCue } from './storyboardVtt'
 
 /**
  * Real frame previews for the scrub-bar hover bubble — thumbnail-cache design.
@@ -69,6 +70,9 @@ const props = defineProps<{
   streamType: 'hls' | 'mp4' | null
   /** static fallback image until the first frame decodes */
   stillUrl?: string
+  /** WebVTT thumbnail track — when set and loadable, sprite mode replaces the
+   *  shadow engine (library content only). Falls back to the engine if broken. */
+  storyboardUrl?: string | null
 }>()
 
 const THUMB_W = 192
@@ -125,6 +129,71 @@ const isCoarsePointer =
 /** performance.now() when the in-flight seek was issued — capture latency */
 let seekIssuedAt: number | null = null
 let prefetchCompleteLogged = false
+
+// ── Storyboard sprite mode ───────────────────────────────────────────────────
+// Library content ships a pre-baked WebVTT thumbnail track. When present and
+// loadable, the preview draws sprite crops from a handful of sheet images and
+// NEVER boots the shadow hls.js engine (zero per-hover proxy egress). A broken
+// storyboard silently degrades to the shadow-engine path — never an error.
+
+let storyCues: StoryboardCue[] | null = null
+/** true from mount-with-storyboardUrl until the VTT fetch settles — hovers
+ *  during the load must NOT boot the shadow engine (it would race sprite mode). */
+let storyPending = false
+const sheetImgs = new Map<string, HTMLImageElement>()
+
+function storyboardActive(): boolean {
+  return storyCues !== null && storyCues.length > 0
+}
+
+function resetStoryboard() {
+  storyCues = null
+  storyPending = false
+  sheetImgs.clear()
+}
+
+async function loadStoryboard(u: string) {
+  storyPending = true
+  try {
+    const r = await fetch(u)
+    if (!r.ok) throw new Error(`storyboard vtt http=${r.status}`)
+    const cues = parseStoryboardVtt(await r.text(), u)
+    storyCues = cues.length > 0 ? cues : null
+  } catch (e) {
+    storyCues = null // broken storyboard → shadow-engine fallback, never an error
+    slog(`storyboard load failed, falling back to shadow engine: ${String(e)}`)
+  } finally {
+    storyPending = false
+    if (storyboardActive() && props.visible) renderStoryboard(props.timeSec)
+  }
+}
+
+function renderStoryboard(t: number) {
+  const cue = cueAt(storyCues!, t)
+  if (!cue) {
+    hasFrame.value = false
+    return
+  }
+  let img = sheetImgs.get(cue.url)
+  if (!img) {
+    img = new Image()
+    img.src = cue.url
+    img.onload = () => {
+      if (props.visible && storyboardActive()) renderStoryboard(props.timeSec)
+    }
+    img.onerror = () => {
+      // Evict so the sheet is retried on a later hover instead of pinning a
+      // permanently-broken entry (e.g. evicted MinIO object) as "loading".
+      sheetImgs.delete(cue.url)
+      hasFrame.value = false
+    }
+    sheetImgs.set(cue.url, img)
+  }
+  if (!img.complete || img.naturalWidth === 0) return // draw on onload re-entry
+  const ctx = canvasRef.value?.getContext('2d')
+  if (ctx) ctx.drawImage(img, cue.x, cue.y, cue.w, cue.h, 0, 0, THUMB_W, THUMB_H)
+  hasFrame.value = true
+}
 
 function bucketOf(t: number): number {
   return Math.max(0, Math.round(t / BUCKET_SEC))
@@ -443,6 +512,12 @@ watch(
   () => [props.visible, props.timeSec] as const,
   ([visible, t]) => {
     if (!visible) return
+    // Storyboard sprite mode short-circuits the shadow engine entirely.
+    if (storyPending) return // VTT still loading — don't race with a boot
+    if (storyboardActive()) {
+      renderStoryboard(t)
+      return
+    }
     void ensureEngine()
     onHover(t)
   },
@@ -457,6 +532,16 @@ watch(
   () => props.streamUrl,
   () => {
     destroyEngine()
+    resetStoryboard()
+    // A storyboard means sprite mode: load the VTT and skip the shadow engine.
+    // While the load is pending the [visible,timeSec] watcher's storyPending
+    // gate keeps hovers from booting the engine; a load FAILURE leaves
+    // storyCues=null && !storyPending, so the next hover falls through to
+    // ensureEngine() naturally (today's behavior).
+    if (props.storyboardUrl) {
+      void loadStoryboard(props.storyboardUrl)
+      return
+    }
     if (!props.streamUrl) return
     if (props.visible) {
       void ensureEngine()
@@ -469,6 +554,17 @@ watch(
     }, EAGER_INIT_DELAY_MS)
   },
   { immediate: true },
+)
+
+// The storyboard URL can arrive after streamUrl (or change independently);
+// reset + (re)load on its own. Non-immediate — the streamUrl watcher above
+// covers the initial mount, so we don't double-fetch on first render.
+watch(
+  () => props.storyboardUrl,
+  () => {
+    resetStoryboard()
+    if (props.storyboardUrl) void loadStoryboard(props.storyboardUrl)
+  },
 )
 
 onUnmounted(() => {

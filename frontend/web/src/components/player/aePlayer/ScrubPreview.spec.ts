@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import ScrubPreview from './ScrubPreview.vue'
 import { scrubDebug, sreset } from '@/composables/aePlayer/scrubPreviewDebug'
 
@@ -300,5 +300,157 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
     expect(v2.getAttribute('src')).toBe('https://x/ep2.mp4')
     // ep1 frames must not leak into ep2's bubble — back to the still.
     expect(w.find('[data-test="preview-still"]').exists()).toBe(true)
+  })
+
+  // ── storyboard sprite mode ─────────────────────────────────────────────────
+  // When a WebVTT thumbnail track is present, the scrub preview draws sprite
+  // crops from pre-baked sheets and NEVER starts its shadow hls.js engine.
+  describe('storyboard mode', () => {
+    // Two cues over [0,5) and [5,10); t=2 lands in the first.
+    const SAMPLE_VTT = `WEBVTT
+
+00:00:00.000 --> 00:00:05.000
+/api/streaming/hls-proxy?url=a&exp=1&sig=b#xywh=0,0,160,90
+
+00:00:05.000 --> 00:00:10.000
+/api/streaming/hls-proxy?url=a&exp=1&sig=b#xywh=160,0,160,90
+`
+
+    // Sheet images "load" the instant their src is set: complete/naturalWidth
+    // flip synchronously (so the first renderStoryboard draws immediately) and
+    // onload ALSO fires on a microtask, so a handler assigned right after
+    // `.src =` (as the component does) still runs.
+    class MockImage {
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      complete = false
+      naturalWidth = 0
+      naturalHeight = 0
+      private _src = ''
+      set src(v: string) {
+        this._src = v
+        this.complete = true
+        this.naturalWidth = 320
+        this.naturalHeight = 180
+        queueMicrotask(() => this.onload?.())
+      }
+      get src() {
+        return this._src
+      }
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('fetches the storyboard VTT exactly once on mount', async () => {
+      const fetchMock = vi.fn(() =>
+        Promise.resolve({ ok: true, text: () => Promise.resolve(SAMPLE_VTT) }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      vi.stubGlobal('Image', MockImage)
+
+      make({
+        streamUrl: 'https://x/master.m3u8',
+        streamType: 'hls',
+        storyboardUrl: 'https://x/sb.vtt',
+      })
+      await flushPromises()
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledWith('https://x/sb.vtt')
+    })
+
+    it('renders a sprite crop on hover WITHOUT constructing the shadow hls.js engine', async () => {
+      hlsMockState.isSupported = true // the hls path WOULD construct if it ran
+      const fetchMock = vi.fn(() =>
+        Promise.resolve({ ok: true, text: () => Promise.resolve(SAMPLE_VTT) }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      vi.stubGlobal('Image', MockImage)
+
+      const w = make({
+        streamUrl: 'https://x/master.m3u8',
+        streamType: 'hls',
+        storyboardUrl: 'https://x/sb.vtt',
+      })
+      await flushPromises() // VTT settles → sprite mode active, storyPending false
+
+      await w.setProps({ visible: true, timeSec: 2 }) // inside cue [0,5)
+      await flushPromises()
+
+      // Canvas is revealed (sprite drawn) …
+      expect(
+        (w.find('[data-test="preview-canvas"]').element as HTMLElement).style.display,
+      ).not.toBe('none')
+      // … and the whole point: the shadow engine is never booted.
+      expect(hlsMockState.lastConfig).toBeNull()
+      const video = w.find('[data-test="preview-video"]').element as HTMLVideoElement
+      expect(video.getAttribute('src')).toBeNull()
+    })
+
+    it('a hover DURING the VTT load does not boot the shadow engine (storyPending gate)', async () => {
+      hlsMockState.isSupported = true
+      let resolveVtt: (v: { ok: boolean; text: () => Promise<string> }) => void = () => {}
+      const fetchMock = vi.fn(
+        () =>
+          new Promise<{ ok: boolean; text: () => Promise<string> }>((res) => {
+            resolveVtt = res
+          }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      vi.stubGlobal('Image', MockImage)
+
+      const w = make({
+        streamUrl: 'https://x/master.m3u8',
+        streamType: 'hls',
+        storyboardUrl: 'https://x/sb.vtt',
+      })
+      // Hover while the fetch is still in flight.
+      await w.setProps({ visible: true, timeSec: 2 })
+      await w.vm.$nextTick()
+      expect(hlsMockState.lastConfig).toBeNull() // gated — no engine yet
+
+      // Let the VTT resolve → sprite mode; still no engine.
+      resolveVtt({ ok: true, text: () => Promise.resolve(SAMPLE_VTT) })
+      await flushPromises()
+      expect(hlsMockState.lastConfig).toBeNull()
+    })
+
+    it('falls back to the shadow engine when the VTT fetch rejects', async () => {
+      hlsMockState.isSupported = true
+      const fetchMock = vi.fn(() => Promise.reject(new Error('network down')))
+      vi.stubGlobal('fetch', fetchMock)
+      vi.stubGlobal('Image', MockImage)
+
+      const w = make({
+        streamUrl: 'https://x/master.m3u8',
+        streamType: 'hls',
+        storyboardUrl: 'https://x/sb.vtt',
+      })
+      await flushPromises() // load rejects → storyCues=null, storyPending=false
+
+      await w.setProps({ visible: true, timeSec: 5 })
+      await flushPromises()
+
+      // No sprite mode → the hover falls through to ensureEngine's hls path.
+      expect(hlsMockState.lastConfig).toBeTruthy()
+    })
+
+    it('with storyboardUrl=null it behaves exactly as before (no fetch, eager shadow init)', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+
+      const w = make({
+        streamUrl: 'https://x/ep.mp4',
+        streamType: 'mp4',
+        storyboardUrl: null,
+      })
+      await vi.advanceTimersByTimeAsync(4000) // eager-init grace window
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      const video = w.find('[data-test="preview-video"]').element as HTMLVideoElement
+      expect(video.getAttribute('src')).toBe('https://x/ep.mp4')
+    })
   })
 })

@@ -11,6 +11,7 @@
         :fragments="fragments"
         :preview-url="previewUrl"
         :preview-type="previewType"
+        :preview-storyboard-url="previewStoryboardUrl"
         @seek="emit('seek', $event)"
       />
     </div>
@@ -217,10 +218,13 @@ withDefaults(
     /** current stream URL/type for real hover frame previews */
     previewUrl?: string | null
     previewType?: 'hls' | 'mp4' | null
+    /** proxied WebVTT thumbnail track — forwarded to the scrub bar for sprite
+     *  previews (library content only; null = live shadow-engine previews) */
+    previewStoryboardUrl?: string | null
     /** fullscreen (native or pseudo) currently active — swaps the FS icon */
     fullscreenActive?: boolean
   }>(),
-  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null, episodeLabel: '', fullscreenActive: false },
+  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null, previewStoryboardUrl: null, episodeLabel: '', fullscreenActive: false },
 )
 
 const emit = defineEmits<{
