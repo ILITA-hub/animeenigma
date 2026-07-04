@@ -63,17 +63,38 @@
       </button>
     </div>
 
+    <template v-if="subOptions.length > 0">
+      <div class="dl-title text-sm font-semibold">{{ $t('player.aePlayer.offline.subs') }}</div>
+      <select v-model="subKey" class="dl-select" data-test="dl-subs">
+        <option value="off">{{ $t('player.aePlayer.offline.subsOff') }}</option>
+        <option v-for="o in subOptions" :key="o.key" :value="o.key">{{ o.label }}</option>
+      </select>
+    </template>
+
     <div v-if="lowSpace" class="dl-warn text-warning" data-test="low-space">
       {{ $t('player.aePlayer.offline.lowSpace', { free: freeLabel }) }}
     </div>
 
+    <div v-if="cellularStep" class="dl-warn text-warning" data-test="cellular-warn">
+      {{ $t('player.aePlayer.offline.cellularWarn') }}
+    </div>
     <div class="dl-actions">
-      <button type="button" class="dl-btn dl-btn-primary font-medium" data-test="dl-start" @click="confirm">
-        {{ $t('player.aePlayer.offline.start') }}
-      </button>
-      <button type="button" class="dl-btn font-medium" @click="emit('close')">
-        {{ $t('player.aePlayer.offline.cancel') }}
-      </button>
+      <template v-if="cellularStep">
+        <button type="button" class="dl-btn dl-btn-warn text-warning font-medium" data-test="dl-cellular-confirm" @click="confirmCellular">
+          {{ $t('player.aePlayer.offline.cellularConfirm') }}
+        </button>
+        <button type="button" class="dl-btn font-medium" @click="cellularStep = false">
+          {{ $t('player.aePlayer.offline.cancel') }}
+        </button>
+      </template>
+      <template v-else>
+        <button type="button" class="dl-btn dl-btn-primary font-medium" data-test="dl-start" @click="confirm">
+          {{ $t('player.aePlayer.offline.start') }}
+        </button>
+        <button type="button" class="dl-btn font-medium" @click="emit('close')">
+          {{ $t('player.aePlayer.offline.cancel') }}
+        </button>
+      </template>
     </div>
   </div>
 </template>
@@ -86,7 +107,8 @@ import { pickSmartDefault, pickSelectableFallback } from '@/composables/aePlayer
 import { GROUP_PRIMARY_LANG } from '@/composables/aePlayer/providerGroups'
 import type { Combo, AudioKind, TrackLang, ContentKind, ProviderRow } from '@/types/aePlayer'
 import type { CapabilityReport } from '@/types/capabilities'
-import type { SubPref } from '@/offline/types'
+import type { SubPref, SubOption } from '@/offline/types'
+import * as network from '@/offline/network'
 
 const QUALITIES = ['480', '720', '1080'] as const
 const LS_KEY = 'ae.downloadQuality'
@@ -109,8 +131,10 @@ const props = withDefaults(
     initialCombo?: Combo | null
     /** Optional async loader for translation teams for a given provider+audio. */
     loadTeams?: (provider: string, audio: AudioKind) => Promise<string[]>
+    /** Subtitle options to display in the picker. Empty = picker hidden. */
+    subOptions?: SubOption[]
   }>(),
-  { sheet: false, initialScope: 'episode', durationMin: undefined, report: null, initialCombo: null, loadTeams: undefined },
+  { sheet: false, initialScope: 'episode', durationMin: undefined, report: null, initialCombo: null, loadTeams: undefined, subOptions: () => [] },
 )
 
 const emit = defineEmits<{
@@ -198,9 +222,32 @@ function setTeam(v: string): void {
   if (combo.value) combo.value = { ...combo.value, team: v === '' ? null : v }
 }
 
+// ─── Subtitle picker ─────────────────────────────────────────────────────────
+
+const subKey = ref('off')
+const pickedSubPref = computed<SubPref | null>(() =>
+  props.subOptions.find((o) => o.key === subKey.value)?.pref ?? null)
+
+// ─── Cellular guard ───────────────────────────────────────────────────────────
+
+const cellularStep = ref(false)
+
 function confirm() {
+  if (network.isCellular() && !network.allowCellularThisSession()) {
+    cellularStep.value = true
+    return
+  }
+  doConfirm()
+}
+
+function confirmCellular() {
+  network.setAllowCellularThisSession(true)
+  doConfirm()
+}
+
+function doConfirm() {
   localStorage.setItem(LS_KEY, quality.value)
-  emit('confirm', quality.value, scope.value, combo.value ? { ...combo.value } : null, null)
+  emit('confirm', quality.value, scope.value, combo.value ? { ...combo.value } : null, pickedSubPref.value)
 }
 </script>
 
@@ -272,4 +319,5 @@ function confirm() {
 .dl-actions { display: flex; gap: 0.5rem; }
 .dl-btn { flex: 1; padding: 0.375rem 0; border-radius: 0.375rem; border: 1px solid var(--white-a8); }
 .dl-btn-primary { border-color: var(--brand-cyan); color: var(--brand-cyan); }
+.dl-btn-warn { border-color: currentColor; }
 </style>

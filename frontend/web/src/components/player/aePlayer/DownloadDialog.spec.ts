@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { CapabilityReport } from '@/types/capabilities'
 import type { Combo, AudioKind } from '@/types/aePlayer'
+import * as network from '@/offline/network'
+import type { SubOption } from '@/offline/types'
 
 vi.mock('@/offline/downloadEngine', () => {
   const PROJECTED_BYTES: Record<string, number> = { '480': 250 * 2 ** 20, '720': 450 * 2 ** 20, '1080': 900 * 2 ** 20 }
@@ -31,6 +33,7 @@ function mountDlg(props: Partial<{
   report: CapabilityReport | null
   initialCombo: Combo | null
   loadTeams: (provider: string, audio: AudioKind) => Promise<string[]>
+  subOptions: SubOption[]
 }> = {}) {
   return mount(DownloadDialog, { props: { episodeNumber: 4, seasonCount: 10, ...props }, ...globalStubs })
 }
@@ -151,5 +154,45 @@ describe('source picker', () => {
     await w.find('[data-test="dl-team"]').setValue('AniLibria')
     await w.find('[data-test="dl-start"]').trigger('click')
     expect((w.emitted('confirm')![0][2] as Combo).team).toBe('AniLibria')
+  })
+})
+
+const SUBS: SubOption[] = [
+  { key: 'b:auto', label: 'Bundled', pref: { kind: 'bundled', lang: 'auto' } },
+  { key: 'e:jimaku:ja', label: 'Jimaku · JA', pref: { kind: 'external', provider: 'jimaku', lang: 'ja', label: 'Jimaku A' } },
+]
+
+describe('subtitle picker', () => {
+  it('hidden with no options; defaults to off (null pref)', async () => {
+    const w = mountDlg()
+    expect(w.find('[data-test="dl-subs"]').exists()).toBe(false)
+    await w.find('[data-test="dl-start"]').trigger('click')
+    expect(w.emitted('confirm')![0][3]).toBeNull()
+  })
+  it('emits the picked pref', async () => {
+    const w = mountDlg({ subOptions: SUBS })
+    await w.find('[data-test="dl-subs"]').setValue('e:jimaku:ja')
+    await w.find('[data-test="dl-start"]').trigger('click')
+    expect(w.emitted('confirm')![0][3]).toEqual({ kind: 'external', provider: 'jimaku', lang: 'ja', label: 'Jimaku A' })
+  })
+})
+
+describe('mobile-data confirm step', () => {
+  beforeEach(() => network._resetNetworkForTests())
+  it('on cellular the first confirm arms the warning; the explicit button confirms + sets the override', async () => {
+    vi.spyOn(network, 'isCellular').mockReturnValue(true)
+    const w = mountDlg()
+    await w.find('[data-test="dl-start"]').trigger('click')
+    expect(w.emitted('confirm')).toBeUndefined()
+    expect(w.find('[data-test="cellular-warn"]').exists()).toBe(true)
+    await w.find('[data-test="dl-cellular-confirm"]').trigger('click')
+    expect(w.emitted('confirm')).toHaveLength(1)
+    expect(network.allowCellularThisSession()).toBe(true)
+    vi.restoreAllMocks()
+  })
+  it('not on cellular: single-step confirm as before', async () => {
+    const w = mountDlg()
+    await w.find('[data-test="dl-start"]').trigger('click')
+    expect(w.emitted('confirm')).toHaveLength(1)
   })
 })

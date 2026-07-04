@@ -529,7 +529,12 @@
         "source": "Source",
         "audioRaw": "RAW",
         "audioDub": "Dub",
-        "teamAuto": "Auto"
+        "teamAuto": "Auto",
+        "subs": "Subtitles",
+        "subsOff": "Don't enable",
+        "subsBundled": "Bundled with stream",
+        "cellularWarn": "You're on mobile data. Downloads default to Wi-Fi only.",
+        "cellularConfirm": "Download over mobile data"
       }
     }
   },

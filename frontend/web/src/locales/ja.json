@@ -529,7 +529,12 @@
         "source": "ソース",
         "audioRaw": "RAW",
         "audioDub": "吹き替え",
-        "teamAuto": "自動"
+        "teamAuto": "自動",
+        "subs": "字幕",
+        "subsOff": "オフ",
+        "subsBundled": "ストリーム内蔵",
+        "cellularWarn": "モバイルデータ通信中です。ダウンロードは既定でWi-Fiのみです。",
+        "cellularConfirm": "モバイルデータでダウンロード"
       }
     }
   },

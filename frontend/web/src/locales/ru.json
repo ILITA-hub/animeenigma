@@ -529,7 +529,12 @@
         "source": "Источник",
         "audioRaw": "RAW",
         "audioDub": "Озвучка",
-        "teamAuto": "Авто"
+        "teamAuto": "Авто",
+        "subs": "Субтитры",
+        "subsOff": "Не включать",
+        "subsBundled": "Встроенные в поток",
+        "cellularWarn": "Вы на мобильных данных. По умолчанию скачивание только по Wi-Fi.",
+        "cellularConfirm": "Качать по мобильным данным"
       }
     }
   },
