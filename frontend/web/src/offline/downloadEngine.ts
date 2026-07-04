@@ -6,6 +6,7 @@ import { matchAutoSub } from './externalSubs'
 import { putDownload, getDownload, deleteDownloadRecord } from './registry'
 import { isVod, rewriteMediaPlaylist, selectVariant, type PlaylistResource } from './playlistRewrite'
 import { cacheStorageMediaStore, type OfflineMediaStore } from './mediaStore'
+import * as network from './network'
 
 export interface DownloadRequest {
   animeId: string
@@ -36,9 +37,11 @@ const MAX_RETRIES = 3
 export const engineState: {
   activeId: Ref<string | null>
   progress: Ref<Record<string, { done: number; total: number }>>
+  cellularPauses: Ref<number>
 } = {
   activeId: ref(null),
   progress: ref({}),
+  cellularPauses: ref(0),
 }
 
 // Injected lazily to avoid a static offline→pwa dependency: registerPwa
@@ -47,6 +50,11 @@ export const engineState: {
 void import('@/pwa/registerPwa').then((m) =>
   m.setActiveDownloadProbe(() => engineState.activeId.value !== null || queue.length > 0),
 )
+
+// Installed lazily for the same reason as the registerPwa probe: the guard
+// must not become a static engine dep. The catch matters — an unhandled
+// rejection here would fail unrelated test suites that import the engine.
+void import('./cellularGuard').then((m) => m.ensureCellularGuard()).catch(() => {})
 
 // `caches` is not declared as a global outside browser/SW contexts (jsdom
 // test env included) — a bare reference throws ReferenceError, and passing an
@@ -72,6 +80,8 @@ export function _resetEngineForTests(): void {
   running = false
   engineState.activeId.value = null
   engineState.progress.value = {}
+  engineState.cellularPauses.value = 0
+  nextFetchSlot = 0 // prevent cross-test pacing pollution
 }
 
 async function acquireWakeLock(): Promise<void> {
@@ -170,6 +180,14 @@ async function cacheSubtitles(id: string, subs: SubtitleTrack[]): Promise<Subtit
 async function runDownload(id: string, req: DownloadRequest): Promise<void> {
   const record = await getDownload(id)
   if (!record) return // removed while queued — do not resurrect or refetch
+
+  // Wi-Fi-only default: park instead of downloading on mobile data. Sits
+  // before resolve() so a starved item never burns a scraper resolution.
+  if (network.isCellular() && !network.allowCellularThisSession()) {
+    await putDownload({ ...record, state: 'paused', pausedBy: 'network' })
+    return
+  }
+
   const setError = async (error: DownloadError) => {
     const cur = await getDownload(id)
     if (!cur) return // removed mid-run — do not resurrect the record
@@ -374,6 +392,8 @@ export async function enqueueDownload(req: DownloadRequest): Promise<string> {
     playlistLocalPath: offlinePath(id, 'master.m3u8'), subtitles: [],
     projectedBytes: projectedBytesFor(req.quality, req.durationMin),
     subPref: req.subPref ? { ...req.subPref } : undefined,
+    // pausedBy is intentionally absent: re-enqueue (manual resume, guard
+    // resume) always clears the cellular-park flag by not carrying it forward.
   }
   const headroom = await quotaHeadroom()
   if (headroom !== null && headroom < baseRecord.projectedBytes) {
@@ -397,6 +417,26 @@ export function isEngineWorking(id: string): boolean {
 
 export async function resumeDownload(req: DownloadRequest): Promise<string> {
   return enqueueDownload(req) // resume = re-enqueue; cached resources are skipped
+}
+
+/** Cellular guard entry: park the active download and everything queued as
+ *  pausedBy:'network' (the guard auto-resumes them on Wi-Fi). Bumps
+ *  cellularPauses once per event — UI toasts key off it. */
+export async function pauseAllForCellular(): Promise<void> {
+  let parked = 0
+  const park = async (id: string, toPaused: boolean) => {
+    const cur = await getDownload(id)
+    if (!cur) return
+    await putDownload({ ...cur, state: toPaused ? 'paused' : cur.state, pausedBy: 'network' })
+    parked++
+  }
+  const active = engineState.activeId.value
+  if (active) {
+    paused.add(active) // worker exits at the next item boundary → its update('paused') spread preserves pausedBy
+    await park(active, false)
+  }
+  while (queue.length > 0) await park(queue.shift()!.id, true)
+  if (parked > 0) engineState.cellularPauses.value++
 }
 
 export async function removeDownload(id: string): Promise<void> {

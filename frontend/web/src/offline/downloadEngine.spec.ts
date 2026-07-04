@@ -1,8 +1,13 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+// Keep the engine's module-scope dynamic import of cellularGuard inert in tests.
+vi.mock('./cellularGuard', () => ({ ensureCellularGuard: () => {} }))
+
 import { enqueueDownload, removeDownload, _resetEngineForTests, _installCachesForTests } from './downloadEngine'
 import { _resetDbForTests, getDownload, putDownload } from './registry'
 import type { StreamResult } from '@/types/aePlayer'
+import * as network from './network'
 
 // ── in-memory CacheStorage fake ──────────────────────────────────────────────
 class FakeCache {
@@ -284,6 +289,32 @@ describe('downloadEngine — full-body 206 normalization (range-gated MP4 hosts)
     }))
     const id = await enqueueDownload(req(async () => ({ url: 'https://p.example/media.mp4', type: 'mp4' })))
     await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+  })
+})
+
+describe('cellular gate', () => {
+  it('on cellular without override: record parks as paused/pausedBy:network, resolve() never called', async () => {
+    vi.spyOn(network, 'isCellular').mockReturnValue(true)
+    vi.spyOn(network, 'allowCellularThisSession').mockReturnValue(false)
+    const resolve = vi.fn(async () => ({ url: 'x', type: 'hls' }) as StreamResult)
+    const id = await enqueueDownload(req(resolve))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('paused'), { timeout: 10_000 })
+    expect((await getDownload(id))?.pausedBy).toBe('network')
+    expect(resolve).not.toHaveBeenCalled()
+    vi.restoreAllMocks()
+  })
+
+  it('with the session override the gate is open', async () => {
+    _installCachesForTests(fakeCaches().impl)
+    vi.spyOn(network, 'isCellular').mockReturnValue(true)
+    vi.spyOn(network, 'allowCellularThisSession').mockReturnValue(true)
+    vi.stubGlobal('fetch', mockFetch({
+      'master.m3u8': () => new Response(MASTER), 'index.m3u8': () => new Response(MEDIA),
+      's0.ts': () => new Response('aa'), 's1.ts': () => new Response('bb'),
+    }))
+    const id = await enqueueDownload(req(async () => ({ url: 'https://cdn.example/master.m3u8', type: 'hls' }) as StreamResult))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    vi.restoreAllMocks()
   })
 })
 
