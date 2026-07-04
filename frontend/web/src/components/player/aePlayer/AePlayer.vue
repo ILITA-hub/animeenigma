@@ -1684,35 +1684,42 @@ const bufferedPct = ref(0)
 const hasStarted = ref(false)
 let rafId: number | null = null
 
-function writeProgress() {
+function writeProgress(quantize = false) {
   const v = videoRef.value
   if (!v) return
-  // Change-gate every reactive write: tick() runs ~60×/sec, but duration is
-  // effectively constant and buffered/progress change far slower than per-frame.
-  // Assigning only on a real change stops the per-frame reactivity storm (and
-  // the computed/re-render cascade it drove) for refs that didn't actually move.
-  if (v.currentTime !== currentTime.value) currentTime.value = v.currentTime
+  // Change-gate every reactive write, and QUANTIZE the fast movers on the rAF
+  // path: currentTime moves every frame, so the change-gate never held during
+  // playback and the control bar re-rendered 60×/sec (style recalc + layout
+  // per frame — the 2026-07-04 render trace). Snapping time to 250ms and
+  // buffered to 0.5% drops reactive updates to ~4 Hz, visually
+  // indistinguishable on the scrub bar. Event-driven callers (seek, pause)
+  // stay exact so a paused UI is frame-accurate. SubtitleOverlay syncs off
+  // the <video> element directly (own rAF + snap grid) and is unaffected.
+  const t = quantize ? Math.floor(v.currentTime * 4) / 4 : v.currentTime
+  if (t !== currentTime.value) currentTime.value = t
   const dur = v.duration || 0
   if (dur !== duration.value) duration.value = dur
   if (dur > 0) {
-    const pct = (v.currentTime / dur) * 100
+    const pct = (t / dur) * 100
     if (pct !== state.progress.value) state.progress.value = pct
   }
   // Buffered
   if (v.buffered.length > 0 && dur > 0) {
     const bpct = (v.buffered.end(v.buffered.length - 1) / dur) * 100
-    if (bpct !== bufferedPct.value) bufferedPct.value = bpct
+    const qb = quantize ? Math.floor(bpct * 2) / 2 : bpct
+    if (qb !== bufferedPct.value) bufferedPct.value = qb
   }
-  // Watch tracking: heartbeat saves + duration-aware auto-complete. Only feed
-  // real playback positions — a paused pre-start frame (currentTime 0) or a
-  // dead source must not write progress.
+  // Watch tracking: heartbeat saves + duration-aware auto-complete — always
+  // fed the RAW position (it does its own gating). Only feed real playback
+  // positions — a paused pre-start frame (currentTime 0) or a dead source
+  // must not write progress.
   if (v.currentTime > 0) {
     tracking.onTick(v.currentTime, dur)
   }
 }
 
 function tick() {
-  writeProgress()
+  writeProgress(true)
   rafId = requestAnimationFrame(tick)
 }
 

@@ -58,6 +58,7 @@
 
         <!-- Ongoing Column -->
         <HomeColumn
+          class="cv-below-fold"
           :title="$t('home.ongoing')"
           :sub="ongoingUpdatedAt && !loadingOngoing ? $t('home.updated', { time: formatUpdatedAt(ongoingUpdatedAt) }) : undefined"
           icon-tone="green"
@@ -82,6 +83,7 @@
 
         <!-- Top Anime Column -->
         <HomeColumn
+          class="cv-below-fold"
           :title="$t('home.topAnime')"
           :sub="$t('home.topAnimeSub')"
           icon-tone="gold"
@@ -107,6 +109,7 @@
 
         <!-- Announcements Column -->
         <HomeColumn
+          class="cv-below-fold"
           :title="$t('home.announcements')"
           :sub="$t('home.announcementsSub')"
           icon-tone="blue"
@@ -136,13 +139,13 @@
     <!-- Phase 17 (UX-33) — admin-curated editorial collections. Self-gated
          on items.length === 0 so the row hides entirely when no
          collections have been published yet. -->
-    <CollectionsRow />
+    <CollectionsRow class="cv-below-fold" />
 
     <!-- Activity Feed + Last Updates -->
     <div id="changelog" class="px-4 lg:px-8 max-w-7xl mx-auto pb-12 scroll-mt-24">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ActivityFeed />
-        <LastUpdates />
+        <ActivityFeed class="cv-below-fold" />
+        <LastUpdates class="cv-below-fold" />
       </div>
     </div>
   </div>
@@ -295,6 +298,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Below-fold home sections skip style/layout/paint entirely while
+   off-screen (2026-07-04 render trace: SPA route-swap layouts walked
+   500-1600 dirty objects across the whole mounted page). The intrinsic
+   height is a pre-first-reveal estimate only — `auto` remembers the real
+   size afterwards, so no scroll jumps on repeat passes. Applied via class
+   fallthrough onto each child component's single root element. */
+.cv-below-fold {
+  content-visibility: auto;
+  contain-intrinsic-height: auto 800px;
+}
+
 /* Neon Tokyo search row — grid 1fr auto, gap 12px */
 .search-row {
   display: grid;
