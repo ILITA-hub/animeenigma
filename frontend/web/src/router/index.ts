@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHistory, RouteRecordRaw, START_LOCATION } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import i18n from '@/i18n'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
@@ -6,6 +6,8 @@ import { shouldFullReloadOnNav, setLiveSessionProbe } from '@/pwa/registerPwa'
 import { GACHA_ADMIN_ONLY } from '@/utils/gachaGate'
 import { stashPrefetch } from '@/utils/pagePrefetch'
 import { setFaviconVariant, faviconVariantForPath } from '@/utils/favicon'
+import { offlineDownloadsEnabled } from '@/offline/flag'
+import { shouldRedirectToDownloads } from '@/pwa/offlineBoot'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -307,6 +309,19 @@ const router = createRouter({
 })
 
 // Navigation guards
+
+// PWA offline boot: land on /downloads when the app opens with no network.
+router.beforeEach((to, from) => {
+  if (shouldRedirectToDownloads({
+    isInitialNav: from === START_LOCATION,
+    online: navigator.onLine,
+    enabled: offlineDownloadsEnabled,
+    toPath: to.path,
+  })) {
+    return { path: '/downloads' }
+  }
+})
+
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
 
