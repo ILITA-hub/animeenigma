@@ -452,5 +452,107 @@ describe('ScrubPreview (thumbnail-cache v2)', () => {
       const video = w.find('[data-test="preview-video"]').element as HTMLVideoElement
       expect(video.getAttribute('src')).toBe('https://x/ep.mp4')
     })
+
+    // Regression: storyboardUrl can arrive in a LATER reactive tick than
+    // streamUrl. The streamUrl watcher already armed its eager-init timer
+    // (no storyboardUrl yet on that tick); if that timer isn't cancelled once
+    // sprite mode takes over, it fires ensureEngine() unguarded and boots the
+    // shadow hls.js engine even though storyboard mode is active — a
+    // zero-egress-guarantee violation.
+    it('eager timer never boots the shadow engine once a storyboard arrives', async () => {
+      hlsMockState.isSupported = true // the hls path WOULD construct if the guard failed
+      const fetchMock = vi.fn(() =>
+        Promise.resolve({ ok: true, text: () => Promise.resolve(SAMPLE_VTT) }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      vi.stubGlobal('Image', MockImage)
+
+      // streamUrl arrives first, storyboardUrl is still null — arms the
+      // eager-init timer per the streamUrl watcher's non-visible/non-storyboard branch.
+      const w = make({ streamUrl: 'https://x/master.m3u8', streamType: 'hls' })
+
+      // storyboardUrl arrives in a SEPARATE, later reactive tick.
+      await w.setProps({ storyboardUrl: 'https://x/sb.vtt' })
+      await flushPromises()
+
+      // Advance well past EAGER_INIT_DELAY_MS (3500ms) — the stale timer must
+      // never construct the shadow engine.
+      await vi.advanceTimersByTimeAsync(4000)
+
+      expect(hlsMockState.lastConfig).toBeNull()
+      const video = w.find('[data-test="preview-video"]').element as HTMLVideoElement
+      expect(video.getAttribute('src')).toBeNull()
+    })
+
+    // Regression: loadStoryboard had no generation token, so a stale in-flight
+    // VTT fetch for an older storyboardUrl could resolve AFTER a newer one's
+    // fetch and overwrite storyCues with the wrong (older) cues.
+    it('stale VTT fetch cannot overwrite a newer storyboard\'s cues', async () => {
+      const CUES_A = `WEBVTT
+
+00:00:00.000 --> 00:00:99.000
+/api/streaming/hls-proxy?url=STREAM_A&exp=1&sig=x#xywh=0,0,160,90
+`
+      const CUES_B = `WEBVTT
+
+00:00:00.000 --> 00:00:99.000
+/api/streaming/hls-proxy?url=STREAM_B&exp=1&sig=x#xywh=160,0,160,90
+`
+      // Track every sprite-sheet Image src the component constructs, so we can
+      // tell which stream's cue actually got rendered.
+      const imageSrcs: string[] = []
+      class TrackingImage {
+        onload: (() => void) | null = null
+        onerror: (() => void) | null = null
+        complete = false
+        naturalWidth = 0
+        naturalHeight = 0
+        private _src = ''
+        set src(v: string) {
+          this._src = v
+          imageSrcs.push(v)
+          this.complete = true
+          this.naturalWidth = 320
+          this.naturalHeight = 180
+          queueMicrotask(() => this.onload?.())
+        }
+        get src() {
+          return this._src
+        }
+      }
+      vi.stubGlobal('Image', TrackingImage)
+
+      // Deferred, per-call-controllable fetch so resolution order can be
+      // driven independently of call (start) order.
+      const deferred: Array<(v: { ok: boolean; text: () => Promise<string> }) => void> = []
+      const fetchMock = vi.fn(
+        () =>
+          new Promise<{ ok: boolean; text: () => Promise<string> }>((res) => {
+            deferred.push(res)
+          }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const w = make({
+        streamUrl: 'https://x/ep.mp4',
+        streamType: 'mp4',
+        storyboardUrl: 'https://x/sb-a.vtt', // load A (in flight, index 0)
+      })
+      await w.setProps({ storyboardUrl: 'https://x/sb-b.vtt' }) // load B (in flight, index 1)
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+
+      // B — the NEWER load — resolves first…
+      deferred[1]({ ok: true, text: () => Promise.resolve(CUES_B) })
+      await flushPromises()
+      // …then the STALE A response resolves after. It must be ignored.
+      deferred[0]({ ok: true, text: () => Promise.resolve(CUES_A) })
+      await flushPromises()
+
+      await w.setProps({ visible: true, timeSec: 2 })
+      await flushPromises()
+
+      expect(imageSrcs.some((s) => s.includes('STREAM_B'))).toBe(true)
+      expect(imageSrcs.some((s) => s.includes('STREAM_A'))).toBe(false)
+    })
   })
 })

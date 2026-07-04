@@ -140,6 +140,13 @@ let storyCues: StoryboardCue[] | null = null
 /** true from mount-with-storyboardUrl until the VTT fetch settles — hovers
  *  during the load must NOT boot the shadow engine (it would race sprite mode). */
 let storyPending = false
+/** Generation token (mirrors initToken/destroyEngine). resetStoryboard() bumps
+ *  it on every reset (URL change or clear); loadStoryboard() captures the
+ *  CURRENT value right after its caller's reset. If storyGen has moved on by
+ *  the time its fetch settles — a newer load started, or a reset with none
+ *  following superseded it — it bails without touching storyCues/storyPending,
+ *  so a stale in-flight fetch can never clobber a newer stream's cues. */
+let storyGen = 0
 const sheetImgs = new Map<string, HTMLImageElement>()
 
 function storyboardActive(): boolean {
@@ -147,24 +154,30 @@ function storyboardActive(): boolean {
 }
 
 function resetStoryboard() {
+  storyGen++
   storyCues = null
   storyPending = false
   sheetImgs.clear()
 }
 
 async function loadStoryboard(u: string) {
+  const gen = storyGen
   storyPending = true
   try {
     const r = await fetch(u)
     if (!r.ok) throw new Error(`storyboard vtt http=${r.status}`)
     const cues = parseStoryboardVtt(await r.text(), u)
+    if (gen !== storyGen) return // superseded — don't overwrite a newer load's cues
     storyCues = cues.length > 0 ? cues : null
   } catch (e) {
+    if (gen !== storyGen) return
     storyCues = null // broken storyboard → shadow-engine fallback, never an error
     slog(`storyboard load failed, falling back to shadow engine: ${String(e)}`)
   } finally {
-    storyPending = false
-    if (storyboardActive() && props.visible) renderStoryboard(props.timeSec)
+    if (gen === storyGen) {
+      storyPending = false
+      if (storyboardActive() && props.visible) renderStoryboard(props.timeSec)
+    }
   }
 }
 
@@ -423,6 +436,10 @@ function destroyEngine() {
 }
 
 async function ensureEngine() {
+  // Storyboard sprite mode owns playback — never let a stale eager-init timer
+  // (or any other stray caller) boot the shadow hls.js engine while sprite
+  // mode is loading or active. Second belt alongside the watchers' own gates.
+  if (storyPending || storyboardActive()) return
   const { streamUrl, streamType } = props
   const v = shadowRef.value
   if (!v || !streamUrl || !streamType) return
@@ -563,7 +580,18 @@ watch(
   () => props.storyboardUrl,
   () => {
     resetStoryboard()
-    if (props.storyboardUrl) void loadStoryboard(props.storyboardUrl)
+    if (props.storyboardUrl) {
+      // storyboardUrl can arrive in a LATER reactive tick than streamUrl — the
+      // streamUrl watcher's eager-init timer may already be armed from a
+      // prior tick where no storyboardUrl existed yet. Cancel it before
+      // switching to sprite mode so it can never boot the shadow engine.
+      // Mirrors destroyEngine's own eagerTimer clearing.
+      if (eagerTimer) {
+        clearTimeout(eagerTimer)
+        eagerTimer = null
+      }
+      void loadStoryboard(props.storyboardUrl)
+    }
   },
 )
 
