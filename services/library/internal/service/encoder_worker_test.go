@@ -114,6 +114,9 @@ type stubTranscoder struct {
 	result *ffmpeg.Result
 	err    error
 	calls  int
+
+	storyboardErr   error
+	storyboardCalls []string // sourcePath per call
 }
 
 func (s *stubTranscoder) Transcode(_ context.Context, source string) (*ffmpeg.Result, error) {
@@ -124,12 +127,35 @@ func (s *stubTranscoder) Transcode(_ context.Context, source string) (*ffmpeg.Re
 	return s.result, nil
 }
 
+func (s *stubTranscoder) Storyboard(_ context.Context, sourcePath string, _ int) (*ffmpeg.StoryboardResult, error) {
+	s.storyboardCalls = append(s.storyboardCalls, sourcePath)
+	if s.storyboardErr != nil {
+		return nil, s.storyboardErr
+	}
+	// A dedicated per-call subdirectory, NOT the bare os.TempDir() — the
+	// worker's cleanup does os.RemoveAll(filepath.Dir(VTTPath)), mirroring
+	// the real Storyboard()'s contract (its own MkdirTemp subdir). Returning
+	// os.TempDir() itself here would make that RemoveAll wipe the entire
+	// system temp directory out from under the test process.
+	dir, err := os.MkdirTemp("", "storyboard-test-")
+	if err != nil {
+		return nil, err
+	}
+	return &ffmpeg.StoryboardResult{
+		SheetPaths: []string{filepath.Join(dir, "storyboard_001.jpg")},
+		VTTPath:    filepath.Join(dir, "storyboard.vtt"),
+	}, nil
+}
+
 // stubUploader records every Upload call.
 type stubUploader struct {
 	mu       sync.Mutex
 	uploads  []uploadCall
 	err      error
 	bytes    int64
+
+	uploadStoryboardErr    error
+	uploadStoryboardPrefix string
 }
 
 type uploadCall struct {
@@ -151,6 +177,13 @@ func (s *stubUploader) Upload(_ context.Context, prefix string, filePaths []stri
 }
 
 func (s *stubUploader) URLFor(path string) string { return "http://stub/" + path }
+
+func (s *stubUploader) UploadStoryboard(_ context.Context, prefix string, _ []string, _ string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.uploadStoryboardPrefix = prefix
+	return s.uploadStoryboardErr
+}
 
 // stubDetector returns canned (n, ok).
 type stubDetector struct {
@@ -376,6 +409,97 @@ func TestEncoder_HappyPath_WithShikimoriID(t *testing.T) {
 	}
 	if mt.uploadBytes != 9999 {
 		t.Fatalf("uploadBytes = %d, want 9999", mt.uploadBytes)
+	}
+}
+
+// TestEncoder_StoryboardFailureDoesNotFailJob — the storyboard pass is
+// strictly best-effort: a Storyboard() error must not fail the job, and the
+// created episode ships with HasStoryboard=false.
+func TestEncoder_StoryboardFailureDoesNotFailJob(t *testing.T) {
+	job := &domain.Job{
+		ID:          "job-1",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "123",
+		Status:      domain.JobStatusEncoding,
+	}
+	pool, js, es, _, _ := newHappyPool(t, job)
+	// Replace the happy-path transcoder with one whose Storyboard() fails; the
+	// Transcode() result still needs real on-disk files for the worker's
+	// RemoveAll cleanup + upload steps.
+	dir := t.TempDir()
+	plPath := filepath.Join(dir, "playlist.m3u8")
+	if err := os.WriteFile(plPath, []byte("#EXTM3U"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	segPath := filepath.Join(dir, "segment_001.ts")
+	if err := os.WriteFile(segPath, []byte("AAAA"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pool.transcoder = &stubTranscoder{
+		result: &ffmpeg.Result{
+			PlaylistPath: plPath,
+			SegmentPaths: []string{segPath},
+			DurationSec:  1450,
+			SizeBytes:    1024,
+		},
+		storyboardErr: errors.New("boom"),
+	}
+
+	pool.processJob(context.Background(), &domain.Job{
+		ID:          "job-1",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "123",
+	})
+
+	// Status history must end with done — storyboard failure never fails the job.
+	if len(js.statusHistory) == 0 || js.statusHistory[len(js.statusHistory)-1].status != domain.JobStatusDone {
+		t.Fatalf("status history did not end at done: %+v", js.statusHistory)
+	}
+	if len(es.created) != 1 {
+		t.Fatalf("episodes created = %d, want 1", len(es.created))
+	}
+	if es.created[0].HasStoryboard {
+		t.Fatalf("HasStoryboard = true, want false on storyboard failure")
+	}
+}
+
+// TestEncoder_StoryboardSuccessSetsFlagAndUploads — a successful Storyboard +
+// UploadStoryboard sets HasStoryboard=true and uploads to the same prefix as
+// the HLS upload.
+func TestEncoder_StoryboardSuccessSetsFlagAndUploads(t *testing.T) {
+	job := &domain.Job{
+		ID:          "job-1",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "123",
+		Status:      domain.JobStatusEncoding,
+	}
+	pool, js, es, up, _ := newHappyPool(t, job)
+
+	pool.processJob(context.Background(), &domain.Job{
+		ID:          "job-1",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "123",
+	})
+
+	if len(js.statusHistory) == 0 || js.statusHistory[len(js.statusHistory)-1].status != domain.JobStatusDone {
+		t.Fatalf("status history did not end at done: %+v", js.statusHistory)
+	}
+	if len(es.created) != 1 {
+		t.Fatalf("episodes created = %d, want 1", len(es.created))
+	}
+	if !es.created[0].HasStoryboard {
+		t.Fatalf("HasStoryboard = false, want true on storyboard success")
+	}
+	if len(up.uploads) != 1 {
+		t.Fatalf("upload calls = %+v, want 1 HLS upload recorded", up.uploads)
+	}
+	if up.uploadStoryboardPrefix != up.uploads[0].prefix {
+		t.Fatalf("uploadStoryboardPrefix = %q, want it to match the HLS upload prefix %q",
+			up.uploadStoryboardPrefix, up.uploads[0].prefix)
 	}
 }
 

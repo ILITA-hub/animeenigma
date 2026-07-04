@@ -155,3 +155,13 @@ var LibraryJobsEpisodeIndexSQL string
 //
 //go:embed 014_library_jobs_transcoding.sql
 var LibraryJobsTranscodingSQL string
+
+// StoryboardSQL is migrations/015_storyboard.sql embedded as a string. Adds
+// the `has_storyboard BOOLEAN` column to library_episodes — set true by the
+// encoder worker when its best-effort ffmpeg storyboard pass (Task 1,
+// internal/ffmpeg/storyboard.go) succeeds and the sprite sheets + VTT are
+// uploaded alongside the HLS output. Idempotent ADD COLUMN IF NOT EXISTS;
+// must follow 002 (which created library_episodes). Applied by main.go.
+//
+//go:embed 015_storyboard.sql
+var StoryboardSQL string

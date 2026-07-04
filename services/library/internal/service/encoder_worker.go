@@ -41,6 +41,10 @@ type EpisodeStore interface {
 // internal/ffmpeg.Transcoder.
 type Transcoder interface {
 	Transcode(ctx context.Context, sourcePath string) (*ffmpeg.Result, error)
+	// Storyboard generates the scrub-preview sprite sheets + VTT for the
+	// already-transcoded source. Consumed best-effort by the worker — a
+	// failure here never fails the job.
+	Storyboard(ctx context.Context, sourcePath string, durationSec int) (*ffmpeg.StoryboardResult, error)
 }
 
 // Uploader is the surface the worker consumes from
@@ -48,6 +52,9 @@ type Transcoder interface {
 type Uploader interface {
 	Upload(ctx context.Context, prefix string, filePaths []string) (int64, error)
 	URLFor(path string) string
+	// UploadStoryboard puts the storyboard sprite sheets + VTT under the
+	// episode prefix. Consumed best-effort by the worker.
+	UploadStoryboard(ctx context.Context, prefix string, sheetPaths []string, vttPath string) error
 }
 
 // EpisodeDetector is the surface the worker consumes from
@@ -326,6 +333,32 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 		p.metrics.AddUploadBytes(bytes)
 	}
 
+	// 8b. Storyboard pass (scrub-preview sprites) — strictly best-effort: any
+	// failure is logged and the job proceeds without a storyboard. Skipped for
+	// pending/ jobs (no ShikimoriID → no episode row exists to flag; sprites
+	// would be orphans nothing ever references). Runs AFTER the HLS upload
+	// succeeds so a storyboard failure never blocks playable output, and
+	// BEFORE episodeRepo.Create so hasStoryboard is known at insert time
+	// (avoiding a second UPDATE).
+	hasStoryboard := false
+	if job.ShikimoriID == "" {
+		// nothing — pending/ uploads have no episode row.
+	} else if sb, sbErr := p.transcoder.Storyboard(ctx, source, result.DurationSec); sbErr != nil {
+		if p.log != nil {
+			p.log.Warnw("storyboard generation failed; episode ships without preview sprites",
+				"job_id", job.ID, "error", sbErr)
+		}
+	} else {
+		if upErr := p.uploader.UploadStoryboard(ctx, prefix, sb.SheetPaths, sb.VTTPath); upErr != nil {
+			if p.log != nil {
+				p.log.Warnw("storyboard upload failed", "job_id", job.ID, "error", upErr)
+			}
+		} else {
+			hasStoryboard = true
+		}
+		_ = os.RemoveAll(filepath.Dir(sb.VTTPath))
+	}
+
 	// 9. Persist library_episodes row (only when shikimori_id known).
 	if job.ShikimoriID != "" {
 		jobIDCopy := job.ID
@@ -348,6 +381,10 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 			// downloaded_at is the Fresh-rule-1 basis; set it to now (the
 			// download finished moments ago) so eviction freshness works.
 			DownloadedAt: &downloadedAt,
+			// HasStoryboard reflects the best-effort pass above — false when
+			// ShikimoriID is empty (branch never runs), the ffmpeg pass fails,
+			// or the MinIO upload fails.
+			HasStoryboard: hasStoryboard,
 		}
 		if err := p.episodeRepo.Create(ctx, ep); err != nil {
 			// Duplicate (re-encode of an existing episode) → log + continue.

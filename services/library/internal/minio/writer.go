@@ -190,6 +190,10 @@ func contentTypeFor(name string) string {
 		return "application/vnd.apple.mpegurl"
 	case ".ts":
 		return "video/mp2t"
+	case ".jpg":
+		return "image/jpeg"
+	case ".vtt":
+		return "text/vtt"
 	default:
 		return "application/octet-stream"
 	}
@@ -271,6 +275,28 @@ func (w *Writer) putFile(ctx context.Context, prefix, path string) (int64, error
 		return 0, fmt.Errorf("put %s: %w", object, err)
 	}
 	return st.Size(), nil
+}
+
+// UploadStoryboard PUTs the sprite sheets + WebVTT thumbnail track under the
+// episode prefix: {prefix}storyboard_NNN.jpg (one per sheet) and
+// {prefix}storyboard.vtt. Best-effort by convention of its only caller (the
+// encoder worker) — this method itself just reports success/failure; order
+// between sheets and the VTT is irrelevant (nothing references the VTT until
+// has_storyboard flips true in Postgres, which the caller only does after
+// this returns nil).
+func (w *Writer) UploadStoryboard(ctx context.Context, prefix string, sheetPaths []string, vttPath string) error {
+	if !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
+	for _, p := range sheetPaths {
+		if _, err := w.putFile(ctx, prefix, p); err != nil {
+			return fmt.Errorf("upload storyboard sheet %s: %w", filepath.Base(p), err)
+		}
+	}
+	if _, err := w.putFile(ctx, prefix, vttPath); err != nil {
+		return fmt.Errorf("upload storyboard vtt: %w", err)
+	}
+	return nil
 }
 
 // byteCounter is a simple mutex-protected int64 accumulator used to

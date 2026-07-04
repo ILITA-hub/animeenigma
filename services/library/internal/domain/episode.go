@@ -59,6 +59,9 @@ type Episode struct {
 	LastFetchAt   *time.Time    `gorm:"column:last_fetch_at" json:"last_fetch_at,omitempty"`
 	FetchCount    int64         `gorm:"type:bigint;not null;default:0;column:fetch_count" json:"fetch_count"`
 	CreatedAt     time.Time     `gorm:"column:created_at" json:"created_at"`
+	// HasStoryboard marks that storyboard_NNN.jpg + storyboard.vtt exist
+	// under MinioPath (scrub-preview sprite track).
+	HasStoryboard bool `gorm:"not null;default:false;column:has_storyboard" json:"has_storyboard"`
 }
 
 // TableName pins the table name (GORM would otherwise pluralize to

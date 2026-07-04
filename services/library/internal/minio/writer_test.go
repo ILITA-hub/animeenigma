@@ -564,6 +564,9 @@ func TestContentTypeFor_Cases(t *testing.T) {
 		{"playlist.m3u8", "application/vnd.apple.mpegurl"},
 		{"PLAYLIST.M3U8", "application/vnd.apple.mpegurl"},
 		{"segment_001.ts", "video/mp2t"},
+		{"storyboard_001.jpg", "image/jpeg"},
+		{"STORYBOARD_001.JPG", "image/jpeg"},
+		{"storyboard.vtt", "text/vtt"},
 		{"unknown.bin", "application/octet-stream"},
 		{"no_extension", "application/octet-stream"},
 	}
@@ -572,5 +575,58 @@ func TestContentTypeFor_Cases(t *testing.T) {
 		if got != c.want {
 			t.Errorf("contentTypeFor(%q) = %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+// TestUploadStoryboard_PutsAllSheetsAndVTT asserts every sheet + the VTT is
+// PUT under the given prefix with the correct content type, and a failure on
+// any single object is propagated (no swallowing).
+func TestUploadStoryboard_PutsAllSheetsAndVTT(t *testing.T) {
+	dir := t.TempDir()
+	sheets := []string{
+		makeTempFile(t, dir, "storyboard_001.jpg", "sheet1"),
+		makeTempFile(t, dir, "storyboard_002.jpg", "sheet2"),
+	}
+	vtt := makeTempFile(t, dir, "storyboard.vtt", "WEBVTT\n")
+
+	fake := &fakeUploader{bucketExists: true}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	if err := w.UploadStoryboard(context.Background(), "aeProvider/123/RAW/1/", sheets, vtt); err != nil {
+		t.Fatalf("UploadStoryboard: %v", err)
+	}
+	if len(fake.putCalls) != 3 {
+		t.Fatalf("putCalls = %d, want 3 (2 sheets + 1 vtt)", len(fake.putCalls))
+	}
+	byObject := map[string]putCall{}
+	for _, c := range fake.putCalls {
+		byObject[c.object] = c
+	}
+	if c, ok := byObject["aeProvider/123/RAW/1/storyboard_001.jpg"]; !ok || c.contentType != "image/jpeg" {
+		t.Fatalf("storyboard_001.jpg put = %+v, ok=%v", c, ok)
+	}
+	if c, ok := byObject["aeProvider/123/RAW/1/storyboard.vtt"]; !ok || c.contentType != "text/vtt" {
+		t.Fatalf("storyboard.vtt put = %+v, ok=%v", c, ok)
+	}
+}
+
+// TestUploadStoryboard_SheetFailure_PropagatesAndSkipsVTT asserts a failed
+// sheet upload is returned as an error and the VTT is never attempted.
+func TestUploadStoryboard_SheetFailure_PropagatesAndSkipsVTT(t *testing.T) {
+	dir := t.TempDir()
+	sheets := []string{makeTempFile(t, dir, "storyboard_001.jpg", "sheet1")}
+	vtt := makeTempFile(t, dir, "storyboard.vtt", "WEBVTT\n")
+
+	fake := &fakeUploader{
+		bucketExists: true,
+		putErr:       map[string]error{"aeProvider/123/RAW/1/storyboard_001.jpg": errors.New("minio is angry")},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	if err := w.UploadStoryboard(context.Background(), "aeProvider/123/RAW/1/", sheets, vtt); err == nil {
+		t.Fatal("UploadStoryboard must propagate a sheet upload failure")
+	}
+	if len(fake.putCalls) != 0 {
+		t.Fatalf("putCalls = %d, want 0 (sheet failed before vtt attempted)", len(fake.putCalls))
 	}
 }

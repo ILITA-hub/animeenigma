@@ -217,6 +217,13 @@ func main() {
 	if err := db.DB.Exec(migrations.LibraryJobsTranscodingSQL).Error; err != nil {
 		log.Fatalw("failed to apply library_jobs_transcoding migration", "error", err)
 	}
+	// 015: adds library_episodes.has_storyboard — set true by the encoder
+	// worker's best-effort ffmpeg storyboard pass (Task 1) when the sprite
+	// sheets + VTT upload succeeds. Idempotent ADD COLUMN IF NOT EXISTS; must
+	// follow 002 (which created library_episodes, already applied above).
+	if err := db.DB.Exec(migrations.StoryboardSQL).Error; err != nil {
+		log.Fatalw("failed to apply storyboard migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {
