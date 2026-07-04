@@ -115,7 +115,14 @@ function pinTitle(item: RecItem): string {
 .rr-row::-webkit-scrollbar-thumb { background: var(--white-a8); border-radius: 999px; }
 .rr-row::-webkit-scrollbar-thumb:hover { background: var(--white-a20); }
 
-.rr-card-tile { position: relative; scroll-snap-align: start; }
+/* content-visibility culls off-viewport tiles from style/paint entirely
+   (see ContinueWatchingRow.vue — same rail pattern, same trace finding). */
+.rr-card-tile {
+  position: relative;
+  scroll-snap-align: start;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px auto 180px;
+}
 
 /* PINNED badge — top-left, brand cyan. */
 .rr-pin {

@@ -140,41 +140,49 @@
 }
 
 /* Drift skeleton — animated gradient sweep for loading placeholders.
-   CRITICAL: the loading element paints a background-IMAGE gradient and animates
-   background-POSITION. The element it sits on must NOT use the `background`
-   shorthand (which resets background-position and kills the animation), and we
-   never use !important (author !important overrides CSS animations). See
+   CRITICAL (perf, 2026-07-04 trace): the sweep is a transform-animated
+   ::after strip, NOT an animated background-position — background-position
+   repaints the overlay every frame (92% of ALL page paints came from these
+   overlays), while transform runs on the compositor. No backdrop-filter
+   here either: a per-card blur forced a render surface + GPU re-filter per
+   skeleton per frame. Hosts must be positioned (all current hosts are
+   `absolute inset-0` overlays) so the ::after anchors to the skeleton.
+   Iterations are capped (~21s) so a poster that never loads (lazy offscreen,
+   404 fallback chain) settles into a static placeholder instead of animating
+   for the whole session. See
    docs/superpowers/specs/2026-06-05-unified-anime-card-design.md. */
-@keyframes drift {
-  0%   { background-position: 0% 0; }
-  100% { background-position: 100% 0; }
+@keyframes drift-sweep {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-66.667%); }
 }
 .sk-drift {
+  overflow: hidden;
   background-color: rgba(255, 255, 255, 0.06);
+  /* Inset highlight edge via shadow (not border) so it adds no size. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.sk-drift::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 300%;
   background-image: linear-gradient(
     115deg,
     rgba(255, 255, 255, 0.06),
     rgba(120, 225, 255, 0.22),
     rgba(255, 255, 255, 0.06)
   );
-  background-size: 300% 100%;
-  background-repeat: no-repeat;
-  animation: drift 2.6s ease-in-out infinite alternate;
-  /* Glassmorphic finish — the skeleton is a translucent OVERLAY above the
-     img, so the browser's progressive poster render shows through frosted
-     glass while loading. Mild blur: enough for the glass look, weak enough
-     that the incoming poster reads as progress feedback. Inset highlight
-     edge via shadow (not border) so it adds no size. */
-  backdrop-filter: blur(6px) saturate(1.15);
-  -webkit-backdrop-filter: blur(6px) saturate(1.15);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
-              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  animation: drift-sweep 2.6s ease-in-out 8 alternate;
 }
-/* Fade-out for the skeleton overlay once the poster's @load fires */
+/* Fade-out for the skeleton overlay once the poster's @load fires.
+   With the sweep animation living on ::after, Vue's <Transition> duration
+   auto-detect reads only this 0.35s transition from the element (it used to
+   pick the 2.6s drift animation and hold every leave for 2601ms). */
 .sk-fade-leave-active { transition: opacity 0.35s ease; }
 .sk-fade-leave-to { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .sk-drift { animation: none; }
+  .sk-drift::after { animation: none; }
 }
 
 /* Base styles */

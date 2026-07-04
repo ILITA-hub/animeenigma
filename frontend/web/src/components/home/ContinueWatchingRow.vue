@@ -135,7 +135,14 @@ function progressPct(item: ContinueWatchingItem): number {
 /* -----------------------------------------------------------------------
    MediaTile grid cell — snap alignment for the horizontal scroller
    ----------------------------------------------------------------------- */
-.cw-card-tile { scroll-snap-align: start; }
+/* content-visibility culls off-viewport tiles from style/paint entirely —
+   the 2026-07-04 trace showed rail cards 3 viewport-widths away repainting
+   every frame (skeleton overlays). Intrinsic size ≈ the 16:9 grid column. */
+.cw-card-tile {
+  scroll-snap-align: start;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px auto 180px;
+}
 
 /* -----------------------------------------------------------------------
    Loading skeleton card

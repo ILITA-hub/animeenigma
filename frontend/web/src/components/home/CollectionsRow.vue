@@ -143,9 +143,13 @@ onMounted(load)
   .collection-card-link { width: 224px; }
 }
 
-/* Card shell — Neon Tokyo token: --color-surface, --line, --r-lg */
+/* Card shell — Neon Tokyo token: --color-surface, --line, --r-lg.
+   content-visibility culls off-viewport cards from style/paint (2026-07-04
+   trace: offscreen rail cards repainted every frame). No intrinsic-size
+   needed: the card self-sizes via its own aspect-ratio × the link width. */
 .collection-card {
   position: relative;
+  content-visibility: auto;
   aspect-ratio: 2 / 3;
   background: var(--color-surface, #11111c);
   border: 1px solid var(--line);
