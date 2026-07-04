@@ -286,3 +286,56 @@ describe('downloadEngine — full-body 206 normalization (range-gated MP4 hosts)
     await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
   })
 })
+
+describe('external subtitles + autoSubUrl', () => {
+  const STREAM: StreamResult = {
+    url: 'https://cdn.example/master.m3u8', type: 'hls',
+    subtitles: [{ url: 'https://cdn.example/en.vtt', provider: 'gogoanime', lang: 'en', label: 'EN', format: 'vtt' }],
+  } as StreamResult
+
+  function routes() {
+    return {
+      'master.m3u8': () => new Response(MASTER),
+      'index.m3u8': () => new Response(MEDIA),
+      's0.ts': () => new Response('aa'), 's1.ts': () => new Response('bb'),
+      'en.vtt': () => new Response('WEBVTT'), 'jp.ass': () => new Response('[Script Info]'),
+    }
+  }
+
+  it('caches the external track and stamps autoSubUrl from the pref', async () => {
+    _installCachesForTests(fakeCaches().impl)
+    vi.stubGlobal('fetch', mockFetch(routes()))
+    const id = await enqueueDownload({
+      ...req(async () => STREAM),
+      subPref: { kind: 'external', provider: 'jimaku', lang: 'ja', label: 'J' },
+      resolveSubs: async () => [{ url: 'https://jimaku.cc/jp.ass', provider: 'jimaku', lang: 'ja', label: 'J', format: 'ass' }],
+    })
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    const rec = (await getDownload(id))!
+    expect(rec.subtitles).toHaveLength(2) // bundled EN + external JA, both local paths
+    expect(rec.subtitles.every((s) => s.url.startsWith('/__offline/'))).toBe(true)
+    expect(rec.autoSubUrl).toBe(rec.subtitles.find((s) => s.provider === 'jimaku')!.url)
+    expect(rec.subPref).toEqual({ kind: 'external', provider: 'jimaku', lang: 'ja', label: 'J' })
+  })
+
+  it('resolveSubs failure is non-fatal: download done, autoSubUrl unset', async () => {
+    _installCachesForTests(fakeCaches().impl)
+    vi.stubGlobal('fetch', mockFetch(routes()))
+    const id = await enqueueDownload({
+      ...req(async () => STREAM),
+      subPref: { kind: 'external', provider: 'jimaku', lang: 'ja' },
+      resolveSubs: async () => { throw new Error('api down') },
+    })
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    expect((await getDownload(id))!.autoSubUrl).toBeUndefined()
+  })
+
+  it('bundled pref matches the stream-provider track', async () => {
+    _installCachesForTests(fakeCaches().impl)
+    vi.stubGlobal('fetch', mockFetch(routes()))
+    const id = await enqueueDownload({ ...req(async () => STREAM), subPref: { kind: 'bundled', lang: 'auto' } })
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
+    const rec = (await getDownload(id))!
+    expect(rec.autoSubUrl).toBe(rec.subtitles[0].url)
+  })
+})

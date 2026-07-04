@@ -1,6 +1,6 @@
-import type { Combo, StreamResult } from '@/types/aePlayer'
+import type { Combo, StreamResult, SubtitleTrack } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { DownloadState } from './types'
+import type { DownloadState, SubPref } from './types'
 import { enqueueDownload } from './downloadEngine'
 import { getDownload } from './registry'
 
@@ -26,6 +26,10 @@ export interface SeasonContext {
   durationMin?: number
   /** Factory for the engine's fresh-resolve closure (re-called on signed-URL expiry). */
   resolveFor: (ep: EpisodeOption) => () => Promise<StreamResult>
+  /** Frozen once for the batch, like combo. */
+  subPref?: SubPref
+  /** Per-episode external-subtitle closure factory (see DownloadRequest.resolveSubs). */
+  resolveSubsFor?: (ep: EpisodeOption) => () => Promise<SubtitleTrack[]>
 }
 
 /** Serially enqueue every target. The engine's per-download quota pre-check
@@ -44,6 +48,8 @@ export async function enqueueSeason(targets: EpisodeOption[], ctx: SeasonContext
       quality: ctx.quality,
       durationMin: ctx.durationMin,
       resolve: ctx.resolveFor(ep),
+      subPref: ctx.subPref,
+      resolveSubs: ctx.resolveSubsFor?.(ep),
     })
     const rec = await getDownload(id)
     if (rec?.state === 'error' && rec.error === 'quota') break

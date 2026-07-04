@@ -4,6 +4,7 @@ import type { OfflineDownload } from '@/offline/types'
 import { listDownloads, putDownload } from '@/offline/registry'
 import { engineState, markEvicted, removeDownload, pauseDownload, enqueueDownload, storageEstimate, isEngineWorking } from '@/offline/downloadEngine'
 import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
+import { makeExternalSubResolver } from '@/offline/externalSubs'
 
 export const useDownloadsStore = defineStore('downloads', () => {
   const entries = ref<OfflineDownload[]>([])
@@ -49,6 +50,8 @@ export const useDownloadsStore = defineStore('downloads', () => {
       combo: d.combo,
       quality: d.quality,
       resolve: () => resolver.resolveStream(d.combo.provider, d.animeId, d.episode, d.combo),
+      subPref: d.subPref,
+      resolveSubs: makeExternalSubResolver(d.animeId, d.subPref)?.(d.episode),
     })
     await refresh()
   }

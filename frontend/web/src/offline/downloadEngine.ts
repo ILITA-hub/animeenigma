@@ -1,7 +1,8 @@
 import { ref, type Ref } from 'vue'
 import type { Combo, StreamResult, SubtitleTrack } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import { downloadId, offlinePath, type DownloadError, type OfflineDownload } from './types'
+import { downloadId, offlinePath, type DownloadError, type OfflineDownload, type SubPref } from './types'
+import { matchAutoSub } from './externalSubs'
 import { putDownload, getDownload, deleteDownloadRecord } from './registry'
 import { isVod, rewriteMediaPlaylist, selectVariant, type PlaylistResource } from './playlistRewrite'
 import { cacheStorageMediaStore, type OfflineMediaStore } from './mediaStore'
@@ -18,6 +19,10 @@ export interface DownloadRequest {
   durationMin?: number
   /** Fresh stream resolution — called again when signed URLs expire mid-run. */
   resolve: () => Promise<StreamResult>
+  /** Download-time subtitle choice; persisted on the record and matched to a cached track (autoSubUrl). */
+  subPref?: SubPref
+  /** Fetches the external track(s) matching subPref for THIS episode — aggregated URLs are per-episode. */
+  resolveSubs?: () => Promise<SubtitleTrack[]>
 }
 
 // Pacing: segment fetches are anonymous (no Authorization header), so the
@@ -208,7 +213,11 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
     const quota = e instanceof DOMException && e.name === 'QuotaExceededError'
     return setError(quota ? 'quota' : 'network')
   }
-  const localSubs = await cacheSubtitles(id, stream.subtitles ?? [])
+  // External track (Jimaku/OpenSubtitles) rides along when the user picked one;
+  // its failure is as non-fatal as a missing bundled track.
+  const external = req.resolveSubs ? await req.resolveSubs().catch(() => [] as SubtitleTrack[]) : []
+  const localSubs = await cacheSubtitles(id, [...(stream.subtitles ?? []), ...external])
+  const autoSubUrl = matchAutoSub(req.subPref, localSubs, req.combo.provider)
   let posterOk = false
   if (req.poster) {
     try {
@@ -228,7 +237,7 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
       ...cur,
       state, error, bytes, resourcesDone: done, resourcesTotal: total,
       streamType: stream.type, playlistLocalPath: plan.playlistLocalPath,
-      subtitles: localSubs, posterPath: posterOk ? offlinePath(id, 'poster') : undefined,
+      subtitles: localSubs, autoSubUrl, posterPath: posterOk ? offlinePath(id, 'poster') : undefined,
     })
   }
   await update('downloading')
@@ -364,6 +373,7 @@ export async function enqueueDownload(req: DownloadRequest): Promise<string> {
     createdAt: existing?.createdAt ?? Date.now(),
     playlistLocalPath: offlinePath(id, 'master.m3u8'), subtitles: [],
     projectedBytes: projectedBytesFor(req.quality, req.durationMin),
+    subPref: req.subPref ? { ...req.subPref } : undefined,
   }
   const headroom = await quotaHeadroom()
   if (headroom !== null && headroom < baseRecord.projectedBytes) {
