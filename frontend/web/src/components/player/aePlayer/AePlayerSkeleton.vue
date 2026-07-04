@@ -24,23 +24,30 @@ import Spinner from '@/components/ui/Spinner.vue'
 </script>
 
 <style scoped>
-.pl-skeleton-shimmer {
+/* Compositor-driven sweep (transform on ::after, not background-position —
+   see .sk-drift / .skeleton-shimmer in main.css). The host is
+   `absolute inset-0` inside the overflow-hidden rounded frame above,
+   which clips the oversized strip. */
+.pl-skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 300%;
   background: linear-gradient(
     100deg,
-    transparent 30%,
+    transparent 45%,
     var(--white-a4) 50%,
-    transparent 70%
+    transparent 55%
   );
-  background-size: 200% 100%;
   animation: pl-skeleton-sweep 1.4s ease-in-out infinite;
 }
 
 @keyframes pl-skeleton-sweep {
   from {
-    background-position: 200% 0;
+    transform: translateX(-66.667%);
   }
   to {
-    background-position: -200% 0;
+    transform: translateX(0);
   }
 }
 </style>

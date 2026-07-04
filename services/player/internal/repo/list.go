@@ -381,25 +381,47 @@ LIMIT 200
 func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID string, statuses []string, excludeHentai bool) (*domain.WatchlistStats, error) {
 	var stats domain.WatchlistStats
 
-	base := r.db.WithContext(ctx).Model(&domain.AnimeListEntry{}).Where("anime_list.user_id = ?", userID)
-	if len(statuses) > 0 {
-		base = base.Where("anime_list.status IN ?", statuses)
-	}
-	if excludeHentai {
-		base = base.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
+	// Fresh chain per query — GORM chains are single-use once a finisher runs.
+	filtered := func() *gorm.DB {
+		q := r.db.WithContext(ctx).Model(&domain.AnimeListEntry{}).Where("anime_list.user_id = ?", userID)
+		if len(statuses) > 0 {
+			q = q.Where("anime_list.status IN ?", statuses)
+		}
+		if excludeHentai {
+			q = q.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
+		}
+		return q
 	}
 
 	// Lifetime episodes counts rewatches: a completed entry's `episodes` equals
 	// its total, so episodes * (1 + rewatch_count) credits each completed
 	// rewatch once more. Design 2026-06-05.
-	err := base.Select(
+	err := filtered().Select(
 		"COALESCE(AVG(NULLIF(anime_list.score, 0)), 0) as avg_score, "+
 			"COALESCE(SUM(anime_list.episodes * (1 + anime_list.rewatch_count)), 0) as total_episodes, "+
 			"COUNT(*) as total_entries, "+
 			"COUNT(CASE WHEN anime_list.status = 'completed' THEN 1 END) as completed",
 	).Scan(&stats).Error
+	if err != nil {
+		return &stats, err
+	}
 
-	return &stats, err
+	// Per-status counts for the profile tab bar — replaces the frontend's
+	// N per-status per_page=1 count probes with one GROUP BY.
+	var rows []struct {
+		Status string
+		N      int
+	}
+	if err := filtered().Select("anime_list.status as status, COUNT(*) as n").
+		Group("anime_list.status").Scan(&rows).Error; err != nil {
+		return &stats, err
+	}
+	stats.StatusCounts = make(map[string]int, len(rows))
+	for _, row := range rows {
+		stats.StatusCounts[row.Status] = row.N
+	}
+
+	return &stats, nil
 }
 
 // --- Phase 1 (workstream: social) plan 02 — review-shaped queries -------

@@ -30,31 +30,51 @@ export interface ContinueWatchingItem {
   dropped_off_at?: number | null
 }
 
+// Module-level cache — SPA route revisits within the TTL reuse the shared
+// items instead of refetching (2026-07-04 trace: home→anime→home re-issued
+// the identical request 12s later). 30s TTL is lossless: the player's
+// heartbeat saves every 30s (useWatchTracking SAVE_INTERVAL), so the backend
+// can't have meaningfully fresher data inside that window anyway.
+const CACHE_TTL = 30 * 1000
+const items = ref<ContinueWatchingItem[]>([])
+let cachedAt = 0
+let cachedLimit = 0
+let inFlight: Promise<void> | null = null
+
 export function useContinueWatching(limit = 10) {
-  const items = ref<ContinueWatchingItem[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const auth = useAuthStore()
 
-  async function fetchItems() {
+  async function fetchItems(force = false) {
     // Anonymous users skip the fetch entirely — the endpoint is JWT-
     // protected and would return 401.
     if (!auth.token) {
       items.value = []
+      cachedAt = 0
       return
     }
+    if (!force && cachedLimit === limit && Date.now() - cachedAt < CACHE_TTL) return
+    if (inFlight) return inFlight
     isLoading.value = true
     error.value = null
-    try {
-      const res = await userApi.getContinueWatching(limit)
-      const data = (res.data?.data ?? res.data) as ContinueWatchingItem[]
-      items.value = Array.isArray(data) ? data : []
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'failed to load continue-watching'
-      items.value = []
-    } finally {
-      isLoading.value = false
-    }
+    inFlight = (async () => {
+      try {
+        const res = await userApi.getContinueWatching(limit)
+        const data = (res.data?.data ?? res.data) as ContinueWatchingItem[]
+        items.value = Array.isArray(data) ? data : []
+        cachedAt = Date.now()
+        cachedLimit = limit
+      } catch (e) {
+        error.value = e instanceof Error ? e.message : 'failed to load continue-watching'
+        items.value = []
+        cachedAt = 0
+      } finally {
+        isLoading.value = false
+        inFlight = null
+      }
+    })()
+    return inFlight
   }
 
   onMounted(fetchItems)
@@ -72,9 +92,11 @@ export function useContinueWatching(limit = 10) {
   watch(
     () => auth.token,
     () => {
-      fetchItems()
+      // Force past the cache — a token change means the cached items belong
+      // to a different identity (or to anonymous).
+      fetchItems(true)
     },
   )
 
-  return { items, isLoading, error, refresh: fetchItems }
+  return { items, isLoading, error, refresh: () => fetchItems(true) }
 }

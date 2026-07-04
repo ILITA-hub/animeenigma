@@ -96,14 +96,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import Avatar from '@/components/ui/Avatar.vue'
-import PosterImage from '@/components/anime/PosterImage.vue'
-import { activityApi } from '@/api/client'
-import { getLocalizedTitle } from '@/utils/title'
-
+<script lang="ts">
 interface ActivityEvent {
   id: string
   user_id: string
@@ -131,12 +124,39 @@ interface ActivityEvent {
   created_at: string
 }
 
+// Module-level cache of the feed's FIRST page — SPA route revisits within
+// the TTL render it without refetching (2026-07-04 trace: home→anime→home
+// re-issued the identical /activity/feed request 11s later). load-more
+// pagination always goes to the network. TTL mirrors stores/home.ts.
+const FEED_CACHE_TTL = 3 * 60 * 1000
+const feedCache: { events: ActivityEvent[]; hasMore: boolean; at: number } = {
+  events: [],
+  hasMore: false,
+  at: 0,
+}
+</script>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Avatar from '@/components/ui/Avatar.vue'
+import PosterImage from '@/components/anime/PosterImage.vue'
+import { activityApi } from '@/api/client'
+import { getLocalizedTitle } from '@/utils/title'
+
 const { t, locale } = useI18n()
 const events = ref<ActivityEvent[]>([])
 const hasMore = ref(false)
 const loading = ref(true)
 
 const loadFeed = async (before?: string) => {
+  // First-page cache hit: render instantly, skip the request.
+  if (!before && feedCache.events.length > 0 && Date.now() - feedCache.at < FEED_CACHE_TTL) {
+    events.value = feedCache.events
+    hasMore.value = feedCache.hasMore
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
     const response = await activityApi.getFeed(10, before)
@@ -146,6 +166,9 @@ const loadFeed = async (before?: string) => {
       events.value.push(...newEvents)
     } else {
       events.value = newEvents
+      feedCache.events = newEvents
+      feedCache.hasMore = data?.has_more || false
+      feedCache.at = Date.now()
     }
     hasMore.value = data?.has_more || false
   } catch (err) {

@@ -26,7 +26,7 @@
     <div
       class="glass-card rounded-2xl spotlight-frame overflow-hidden"
     >
-      <div class="w-full h-full skeleton-shimmer" />
+      <div class="relative w-full h-full skeleton-shimmer" />
     </div>
     <!-- Reserved menu row (v4 A-1): mirrors CarouselDots' mt-3 + h-8
          geometry so the icon menu appearing after load causes ZERO
@@ -38,7 +38,7 @@
       <span
         v-for="n in 5"
         :key="n"
-        class="skeleton-shimmer rounded-full"
+        class="relative skeleton-shimmer rounded-full"
         :class="n === 3 ? 'w-28 h-8' : 'w-8 h-8'"
       />
       <span class="skeleton-shimmer rounded-full w-8 h-8 absolute right-0 top-0" />
