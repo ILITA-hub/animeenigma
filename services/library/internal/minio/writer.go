@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,12 @@ type Uploader interface {
 	ListObjects(ctx context.Context, bucket string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
 	CopyObject(ctx context.Context, dst minio.CopyDestOptions, src minio.CopySrcOptions) (minio.UploadInfo, error)
 	RemoveObject(ctx context.Context, bucket, object string, opts minio.RemoveObjectOptions) error
+	// GetObject streams a single object for download — the read side of the
+	// storyboard backfill's DownloadPrefix. Returns an io.ReadCloser so a test
+	// fake can hand back an in-memory reader (the real *minio.Object satisfies
+	// it). minio-go's GetObject is lazy: the actual GET (and any not-found
+	// error) surfaces during Read/Close, which DownloadPrefix's io.Copy catches.
+	GetObject(ctx context.Context, bucket, object string, opts minio.GetObjectOptions) (io.ReadCloser, error)
 }
 
 // minioClientAdapter wraps the real *minio.Client to satisfy
@@ -88,6 +95,11 @@ func (a *minioClientAdapter) CopyObject(ctx context.Context, dst minio.CopyDestO
 
 func (a *minioClientAdapter) RemoveObject(ctx context.Context, bucket, object string, opts minio.RemoveObjectOptions) error {
 	return a.c.RemoveObject(ctx, bucket, object, opts)
+}
+
+func (a *minioClientAdapter) GetObject(ctx context.Context, bucket, object string, opts minio.GetObjectOptions) (io.ReadCloser, error) {
+	// *minio.Object is an io.ReadCloser (Read/Close); return it directly.
+	return a.c.GetObject(ctx, bucket, object, opts)
 }
 
 // readerAdapter promotes an "interface{ Read }" to io.Reader for the SDK.
@@ -422,6 +434,66 @@ func (w *Writer) DeletePrefix(ctx context.Context, prefix string) error {
 		if rmErr := w.uploader.RemoveObject(ctx, w.cfg.Bucket, k, minio.RemoveObjectOptions{}); rmErr != nil {
 			return fmt.Errorf("delete %s: %w", k, rmErr)
 		}
+	}
+	return nil
+}
+
+// DownloadPrefix streams the HLS payload under `prefix` into destDir, flat:
+// each object lands at destDir/<basename>. It is the read side of the
+// storyboard backfill (Task 8) — ffmpeg reads the local playlist.m3u8 as its
+// -i source, and because the playlist references its segments RELATIVELY
+// (segment_NNN.ts), co-locating them in one dir makes the download a valid
+// ffmpeg input. Only playlist.m3u8 + `*.ts` objects are fetched; any pre-
+// existing storyboard sheets / VTT under the prefix are irrelevant to
+// regeneration and skipped.
+//
+// It reuses ListObjectsByPrefix (the same channel-drain the Move/DeletePrefix
+// paths use) + the new GetObject seam. Errors: a list error, a get/copy error,
+// or the absence of a playlist.m3u8 under the prefix all return an error so the
+// backfill worker warns and skips the episode rather than driving a doomed
+// ffmpeg pass over an empty dir.
+func (w *Writer) DownloadPrefix(ctx context.Context, prefix, destDir string) error {
+	if !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
+	keys, err := w.ListObjectsByPrefix(ctx, prefix)
+	if err != nil {
+		return fmt.Errorf("download list %s: %w", prefix, err)
+	}
+	gotPlaylist := false
+	for _, key := range keys {
+		base := filepath.Base(key)
+		isPlaylist := base == "playlist.m3u8"
+		if !isPlaylist && strings.ToLower(filepath.Ext(base)) != ".ts" {
+			continue
+		}
+		if err := w.getToFile(ctx, key, filepath.Join(destDir, base)); err != nil {
+			return err
+		}
+		if isPlaylist {
+			gotPlaylist = true
+		}
+	}
+	if !gotPlaylist {
+		return fmt.Errorf("download %s: no playlist.m3u8 under prefix", prefix)
+	}
+	return nil
+}
+
+// getToFile streams one object to a local destPath, creating/truncating it.
+func (w *Writer) getToFile(ctx context.Context, object, destPath string) error {
+	obj, err := w.uploader.GetObject(ctx, w.cfg.Bucket, object, minio.GetObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("get %s: %w", object, err)
+	}
+	defer func() { _ = obj.Close() }()
+	f, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", destPath, err)
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := io.Copy(f, obj); err != nil {
+		return fmt.Errorf("download copy %s: %w", object, err)
 	}
 	return nil
 }

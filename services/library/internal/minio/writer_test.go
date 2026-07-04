@@ -41,6 +41,11 @@ type fakeUploader struct {
 	copyCalls   []copyCall
 	removeErr   map[string]error // by object key
 	removeCalls []string
+
+	// Task-8 hooks for DownloadPrefix (GetObject seam).
+	getContent map[string]string // object key → body
+	getErr     map[string]error  // object key → get error
+	getCalls   []string          // object keys fetched, in order
 }
 
 type copyCall struct {
@@ -127,6 +132,16 @@ func (f *fakeUploader) RemoveObject(_ context.Context, _ string, object string, 
 	}
 	f.removeCalls = append(f.removeCalls, object)
 	return nil
+}
+
+func (f *fakeUploader) GetObject(_ context.Context, _ string, object string, _ minio.GetObjectOptions) (io.ReadCloser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err, ok := f.getErr[object]; ok && err != nil {
+		return nil, err
+	}
+	f.getCalls = append(f.getCalls, object)
+	return io.NopCloser(strings.NewReader(f.getContent[object])), nil
 }
 
 // makeTempFile creates a file with content under dir; returns path.
@@ -628,5 +643,86 @@ func TestUploadStoryboard_SheetFailure_PropagatesAndSkipsVTT(t *testing.T) {
 	}
 	if len(fake.putCalls) != 0 {
 		t.Fatalf("putCalls = %d, want 0 (sheet failed before vtt attempted)", len(fake.putCalls))
+	}
+}
+
+// TestDownloadPrefix_FetchesPlaylistAndSegments verifies DownloadPrefix pulls
+// the playlist + every .ts segment into destDir (flat, by basename) and skips
+// unrelated objects, so the local dir is a valid ffmpeg -i source.
+func TestDownloadPrefix_FetchesPlaylistAndSegments(t *testing.T) {
+	prefix := "aeProvider/123/RAW/3/"
+	fake := &fakeUploader{
+		bucketExists: true,
+		listResults: map[string][]minio.ObjectInfo{
+			prefix: {
+				{Key: prefix + "playlist.m3u8"},
+				{Key: prefix + "segment_000.ts"},
+				{Key: prefix + "segment_001.ts"},
+				{Key: prefix + "storyboard_001.jpg"}, // unrelated — must be skipped
+			},
+		},
+		getContent: map[string]string{
+			prefix + "playlist.m3u8":  "#EXTM3U\nsegment_000.ts\nsegment_001.ts\n",
+			prefix + "segment_000.ts": "AAAA",
+			prefix + "segment_001.ts": "BBBB",
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	dir := t.TempDir()
+	if err := w.DownloadPrefix(context.Background(), prefix, dir); err != nil {
+		t.Fatalf("DownloadPrefix: %v", err)
+	}
+	// The playlist + both segments land in destDir; the .jpg does not.
+	for _, name := range []string{"playlist.m3u8", "segment_000.ts", "segment_001.ts"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("expected %s downloaded: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "storyboard_001.jpg")); !os.IsNotExist(err) {
+		t.Fatalf("storyboard_001.jpg should NOT be downloaded (stat err=%v)", err)
+	}
+	if body, _ := os.ReadFile(filepath.Join(dir, "segment_000.ts")); string(body) != "AAAA" {
+		t.Fatalf("segment_000.ts body = %q, want AAAA", string(body))
+	}
+	if len(fake.getCalls) != 3 {
+		t.Fatalf("GetObject calls = %d, want 3 (playlist + 2 segments)", len(fake.getCalls))
+	}
+}
+
+// TestDownloadPrefix_MissingPlaylistErrors — a prefix with no playlist.m3u8 is
+// an error so the backfill worker skips the episode instead of feeding ffmpeg
+// an empty dir.
+func TestDownloadPrefix_MissingPlaylistErrors(t *testing.T) {
+	prefix := "aeProvider/9/RAW/1/"
+	fake := &fakeUploader{
+		bucketExists: true,
+		listResults: map[string][]minio.ObjectInfo{
+			prefix: {{Key: prefix + "segment_000.ts"}},
+		},
+		getContent: map[string]string{prefix + "segment_000.ts": "AAAA"},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	if err := w.DownloadPrefix(context.Background(), prefix, t.TempDir()); err == nil {
+		t.Fatal("DownloadPrefix must error when no playlist.m3u8 is present under the prefix")
+	}
+}
+
+// TestDownloadPrefix_GetErrorPropagates — a GetObject failure aborts the whole
+// download with an error.
+func TestDownloadPrefix_GetErrorPropagates(t *testing.T) {
+	prefix := "aeProvider/9/RAW/1/"
+	fake := &fakeUploader{
+		bucketExists: true,
+		listResults: map[string][]minio.ObjectInfo{
+			prefix: {{Key: prefix + "playlist.m3u8"}},
+		},
+		getErr: map[string]error{prefix + "playlist.m3u8": errors.New("minio get boom")},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	if err := w.DownloadPrefix(context.Background(), prefix, t.TempDir()); err == nil {
+		t.Fatal("DownloadPrefix must propagate a GetObject failure")
 	}
 }

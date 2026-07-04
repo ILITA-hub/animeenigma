@@ -39,6 +39,18 @@ type Config struct {
 	// {CATALOG_INTERNAL_API_URL}/internal/cache/invalidate/raw/{id}
 	// to bust the catalog's source-decision cache.
 	CatalogInternal CatalogInternalConfig
+	// Storyboard drives the scrub-preview storyboard backfill worker.
+	Storyboard StoryboardConfig
+}
+
+// StoryboardConfig drives the scrub-preview storyboard backfill worker
+// (internal/service/storyboard_backfill.go) — a deliberately slow, lowest-
+// priority background loop that generates sprite storyboards for episodes
+// ingested before the storyboard pass existed. BackfillEnabled gates the
+// goroutine entirely; BackfillPauseSec is the per-episode sleep (10× when idle).
+type StoryboardConfig struct {
+	BackfillEnabled  bool
+	BackfillPauseSec int
 }
 
 // CatalogInternalConfig drives the best-effort cache-bust webhook the
@@ -250,6 +262,10 @@ func Load() (*Config, error) {
 		CatalogInternal: CatalogInternalConfig{
 			APIURL:  getEnv("CATALOG_INTERNAL_API_URL", "http://catalog:8081"),
 			Timeout: getEnvDuration("CATALOG_INTERNAL_API_TIMEOUT", 3*time.Second),
+		},
+		Storyboard: StoryboardConfig{
+			BackfillEnabled:  getEnvBool("STORYBOARD_BACKFILL_ENABLED", true),
+			BackfillPauseSec: getEnvInt("STORYBOARD_BACKFILL_PAUSE_SEC", 60),
 		},
 	}, nil
 }

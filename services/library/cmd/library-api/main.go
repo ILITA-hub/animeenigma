@@ -414,6 +414,36 @@ func main() {
 		"max_bitrate_kbps", cfg.Encode.MaxBitrateKbps,
 	)
 
+	// Scrub-preview storyboard backfill worker. Fills sprite storyboards for
+	// episodes ingested before the ingest-time storyboard pass existed. It
+	// reuses the already-built episodeRepo (ListWithoutStoryboard /
+	// SetHasStoryboard), writer (DownloadPrefix / UploadStoryboard), transcoder
+	// (Storyboard), and diskGuard (Allow with the SAME cfg.Disk.MinFreePct the
+	// download/encode admit path enforces). Deliberately the lowest-priority
+	// workload on the host (owner directive 2026-07-04): one episode per cycle,
+	// long sleeps between, and drops the whole cycle on any disk risk. Gated by
+	// STORYBOARD_BACKFILL_ENABLED (default true); observes rootCtx for SIGTERM.
+	if cfg.Storyboard.BackfillEnabled {
+		storyboardBackfill := service.NewStoryboardBackfill(
+			episodeRepo,
+			writer,
+			transcoder,
+			diskGuard,
+			cfg.Disk.MinFreePct,
+			time.Duration(cfg.Storyboard.BackfillPauseSec)*time.Second,
+			cfg.Encode.Tmpdir,
+			log,
+		)
+		go storyboardBackfill.Run(rootCtx)
+		log.Infow("storyboard backfill worker started",
+			"pause_sec", cfg.Storyboard.BackfillPauseSec,
+			"min_free_pct", cfg.Disk.MinFreePct,
+			"tmpdir", cfg.Encode.Tmpdir,
+		)
+	} else {
+		log.Infow("storyboard backfill worker disabled (STORYBOARD_BACKFILL_ENABLED=false)")
+	}
+
 	// Initialize parser clients.
 	nyaaClient := nyaa.NewClient(nyaa.Config{
 		BaseURL:     cfg.Nyaa.BaseURL,

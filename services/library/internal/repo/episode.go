@@ -270,6 +270,48 @@ func (r *EpisodeRepository) DeleteByID(ctx context.Context, id string) error {
 	return nil
 }
 
+// ListWithoutStoryboard returns up to `limit` episodes that still lack a
+// storyboard (has_storyboard = false), oldest first (created_at ASC). It skips
+// rows younger than 10 minutes for two reasons: (1) the encoder's ingest-time
+// storyboard pass already covers freshly-encoded episodes, so re-processing
+// them here would race that pass; (2) an episode that keeps failing must not be
+// re-hammered every cycle — it re-surfaces only once it has aged out and the
+// backfill loop re-queries. The 10-minute cutoff is computed in Go and passed
+// as a BOUND `?` param (portable across the Postgres prod DB and the sqlite
+// test harness — no Postgres-only `now() - interval`), mirroring
+// ListStaleEvictionCandidates.
+func (r *EpisodeRepository) ListWithoutStoryboard(ctx context.Context, limit int) ([]domain.Episode, error) {
+	if limit <= 0 {
+		limit = 1
+	}
+	cutoff := time.Now().Add(-10 * time.Minute)
+	var eps []domain.Episode
+	if err := r.db.WithContext(ctx).
+		Where("has_storyboard = ? AND created_at < ?", false, cutoff).
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&eps).Error; err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "list episodes without storyboard")
+	}
+	return eps, nil
+}
+
+// SetHasStoryboard flips has_storyboard = true for the single episode row
+// identified by id — the storyboard backfill worker's success step, run only
+// AFTER the sprite sheets + VTT upload succeeds. A scoped single-column
+// Update; a non-matching id is a nil no-op (the row may have been evicted
+// between the list and the set, which is a legitimate "already gone" state,
+// not a NotFound — same tolerance as DeleteByID).
+func (r *EpisodeRepository) SetHasStoryboard(ctx context.Context, id string) error {
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Episode{}).
+		Where("id = ?", id).
+		Update("has_storyboard", true).Error; err != nil {
+		return liberrors.Wrap(err, liberrors.CodeInternal, "set episode has_storyboard")
+	}
+	return nil
+}
+
 // ListPool returns every row in the unified first-party aeProvider/ pool (admin +
 // autocache). The Evictor's periodic Accountant sweep (Plan 02) lists the pool once
 // and Classify-buckets each row in Go to publish the per-(source,freshness)
