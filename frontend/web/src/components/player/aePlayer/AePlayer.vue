@@ -2356,6 +2356,7 @@ function onDownloadSeason() {
   if (!ep) return
   downloadScope.value = 'season'
   downloadDialogEp.value = ep
+  void ensureSubsLoaded()
 }
 
 async function onConfirmDownload(quality: string, scope: 'episode' | 'season', combo: Combo | null, subPref: SubPref | null) {
