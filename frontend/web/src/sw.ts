@@ -8,6 +8,7 @@ import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { clientsClaim } from 'workbox-core'
 import { NAV_DENYLIST, edgeAssetToOriginPath, isOfflinePath } from './pwa/swRoutes'
 import { handleOfflineRequest } from './pwa/offlineServe'
+import { segmentCacheKey, handleSegmentRequest } from './pwa/segmentCache'
 
 self.skipWaiting()
 clientsClaim()
@@ -35,4 +36,14 @@ registerRoute(
       return cached ?? Response.error()
     }
   },
+)
+
+// HLS segment tee/cache: scrub-preview traffic is served cache-first; the main
+// player is passed through untouched (see segmentCache.ts reliability contract).
+registerRoute(
+  ({ url }) => segmentCacheKey(url.href) !== null,
+  // workbox-routing types `event` as the generic `ExtendableEvent` (see
+  // workbox-core/types.d.ts), but a route registered this way is only ever
+  // invoked from an actual `fetch` event — the narrowing is safe.
+  ({ request, event }) => handleSegmentRequest(request, event as FetchEvent),
 )
