@@ -1,16 +1,18 @@
 import { reactive, readonly } from 'vue'
-import type { Combo, AudioKind, TrackLang, ContentKind } from '@/types/aePlayer'
+import type { Combo, AudioKind, TrackLang, ContentKind, SubtitleTrack } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { CapabilityReport } from '@/types/capabilities'
-import { capabilitiesApi, animeApi } from '@/api/client'
+import { capabilitiesApi, animeApi, subtitlesApi } from '@/api/client'
 import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
 import { pickSmartDefault, pickSelectableFallback } from '@/composables/aePlayer/smartDefault'
 import { GROUP_PRIMARY_LANG } from '@/composables/aePlayer/providerGroups'
 import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
+import { flattenAggregateSubs, type AggregateSubsResponse } from '@/composables/aePlayer/useSubtitleTracks'
+import { makeExternalSubResolver } from './externalSubs'
 import { seasonTargets, enqueueSeason } from './seasonDownload'
 import { listDownloads } from './registry'
 import { offlineRuntimeReady } from './flag'
-import type { DownloadState } from './types'
+import type { DownloadState, SubPref } from './types'
 
 // Season download launched OUTSIDE the player (anime-card context menu).
 // Unlike the in-player path there is no user-picked combo, so this flow
@@ -37,6 +39,10 @@ interface SeasonFlowState {
   combo: Combo | null
   /** Episode runtime (minutes) from the catalog detail — scales size estimates. */
   durationMin: number | null
+  /** Capability report for the source combo picker (passed to DownloadDialog). */
+  report: CapabilityReport | null
+  /** External (aggregated) tracks for the first target — the dialog's subtitle menu. */
+  subTracks: SubtitleTrack[]
   /** One-shot result; the host turns it into a toast via consumeSeasonNotice(). */
   notice: SeasonFlowNotice | null
 }
@@ -47,6 +53,8 @@ const state = reactive<SeasonFlowState>({
   targets: [],
   combo: null,
   durationMin: null,
+  report: null,
+  subTracks: [],
   notice: null,
 })
 
@@ -60,6 +68,8 @@ function reset(notice: SeasonFlowNotice | null): void {
   state.targets = []
   state.combo = null
   state.durationMin = null
+  state.report = null
+  state.subTracks = []
   state.notice = notice
 }
 
@@ -130,6 +140,14 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
       reset({ kind: 'nothing-left' })
       return
     }
+    // External subtitle menu rides along; its failure must never block the flow.
+    const subTracks = await subtitlesApi
+      .all(request.animeId, targets[0].number)
+      .then((r) => flattenAggregateSubs((r.data?.data ?? r.data) as AggregateSubsResponse))
+      .catch(() => [] as SubtitleTrack[])
+    if (mySeq !== seq) return
+    state.report = report
+    state.subTracks = subTracks
     state.targets = targets
     state.combo = combo
     state.durationMin = durationMin
@@ -140,30 +158,48 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
   }
 }
 
-export async function confirmSeasonDownload(quality: string, scope: 'episode' | 'season'): Promise<void> {
+export async function confirmSeasonDownload(
+  quality: string,
+  scope: 'episode' | 'season',
+  combo?: Combo | null,
+  subPref?: SubPref | null,
+): Promise<void> {
   const req = state.request
-  const combo = state.combo ? { ...state.combo } : null
-  if (!req || !combo || state.phase !== 'choose') return
-  // Plain copies: `state` is reactive, so its elements are Proxies — IndexedDB
-  // structured clone rejects those (DataCloneError). The engine de-proxies too;
-  // this keeps the flow safe even against future engine callers.
-  const picked = scope === 'season' ? state.targets : state.targets.slice(0, 1)
-  const eps = picked.map((ep) => ({ ...ep }))
+  const chosen = combo ? { ...combo } : state.combo ? { ...state.combo } : null
+  if (!req || !chosen || state.phase !== 'choose') return
   state.phase = 'queueing'
   const resolver = useProviderResolver()
   try {
+    // The episode list came from the DEFAULT provider — a dialog-picked
+    // provider numbers episodes with its own keys, so re-list and re-filter.
+    let targets = state.targets
+    if (chosen.provider !== state.combo?.provider) {
+      const episodes = await resolver.listEpisodes(chosen.provider, req.animeId)
+      const all = await listDownloads()
+      const states: Record<number, DownloadState> = {}
+      for (const d of all) if (d.animeId === req.animeId) states[d.episode.number] = d.state
+      targets = seasonTargets(episodes, states)
+      if (targets.length === 0) {
+        reset({ kind: 'nothing-left' })
+        return
+      }
+    }
+    const picked = scope === 'season' ? targets : targets.slice(0, 1)
+    const eps = picked.map((ep) => ({ ...ep })) // de-proxy before IndexedDB
     const n = await enqueueSeason(eps, {
       animeId: req.animeId,
       animeTitle: req.title,
       poster: req.poster,
-      combo,
+      combo: chosen,
       quality,
       durationMin: state.durationMin ?? undefined,
-      resolveFor: (ep) => () => resolver.resolveStream(combo.provider, req.animeId, ep, combo),
+      subPref: subPref ?? undefined,
+      resolveSubsFor: makeExternalSubResolver(req.animeId, subPref),
+      resolveFor: (ep) => () => resolver.resolveStream(chosen.provider, req.animeId, ep, chosen),
     })
     reset({ kind: 'queued', n })
   } catch (e) {
-    console.error('[seasonDownload] enqueue failed', e)
+    console.error('[seasonDownload] confirm failed', e)
     reset({ kind: 'failed', message: e instanceof Error ? e.message : String(e) })
   }
 }

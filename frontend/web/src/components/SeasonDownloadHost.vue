@@ -16,6 +16,10 @@
           :episode-number="seasonFlow.targets[0]?.number ?? 1"
           :season-count="seasonFlow.targets.length"
           :duration-min="seasonFlow.durationMin ?? undefined"
+          :report="(seasonFlow.report as CapabilityReport | null)"
+          :initial-combo="(seasonFlow.combo as Combo | null)"
+          :sub-options="subOptions"
+          :load-teams="loadTeams"
           :sheet="isMobile"
           initial-scope="season"
           @confirm="onConfirm"
@@ -31,20 +35,45 @@
 // App.vue, like <Toaster /> / <ConfirmDialogHost />). Renders the flow's
 // dialog and converts its one-shot notices into toasts — all i18n lives here
 // so the flow module stays translation-free.
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Loader2 } from 'lucide-vue-next'
 import DownloadDialog from '@/components/player/aePlayer/DownloadDialog.vue'
 import { seasonFlow, confirmSeasonDownload, cancelSeasonDownload, consumeSeasonNotice } from '@/offline/seasonDownloadFlow'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { useToast } from '@/composables/useToast'
+import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
+import type { Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
+import type { CapabilityReport } from '@/types/capabilities'
+import type { SubPref, SubOption } from '@/offline/types'
 
 const { t } = useI18n()
 const toast = useToast()
 const { isMobile } = useMobilePlayer()
 
-function onConfirm(quality: string, scope: 'episode' | 'season') {
-  void confirmSeasonDownload(quality, scope)
+const resolver = useProviderResolver()
+function loadTeams(provider: string, audio: AudioKind): Promise<string[]> {
+  const req = seasonFlow.request
+  return req ? resolver.listTeams(provider, req.animeId, audio) : Promise.resolve([])
+}
+
+// Labels are i18n'd here — the flow module stays translation-free.
+const subOptions = computed<SubOption[]>(() => {
+  const opts: SubOption[] = [
+    { key: 'b:auto', label: t('player.aePlayer.offline.subsBundled'), pref: { kind: 'bundled', lang: 'auto' } },
+  ]
+  const seen = new Set<string>()
+  for (const tr of seasonFlow.subTracks as readonly SubtitleTrack[]) {
+    const key = `e:${tr.provider}:${tr.lang}:${tr.label}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    opts.push({ key, label: `${tr.label} · ${tr.lang.toUpperCase()}`, pref: { kind: 'external', provider: tr.provider, lang: tr.lang, label: tr.label } })
+  }
+  return opts
+})
+
+function onConfirm(quality: string, scope: 'episode' | 'season', combo: Combo | null, subPref: SubPref | null) {
+  void confirmSeasonDownload(quality, scope, combo, subPref)
 }
 
 const NOTICE_KEY: Record<string, string> = {

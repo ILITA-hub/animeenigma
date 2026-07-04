@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
+import type { Combo } from '@/types/aePlayer'
+import type { SubPref } from './types'
 
 const h = vi.hoisted(() => ({
   ready: true,
@@ -10,6 +12,7 @@ const h = vi.hoisted(() => ({
   resolveStream: vi.fn(),
   listDownloads: vi.fn(async () => [] as unknown[]),
   enqueueSeason: vi.fn(async (targets: unknown[], _ctx?: unknown) => targets.length),
+  subsAll: vi.fn(async (_id: string, _ep: number) => ({ data: { data: { languages: {}, episode: 1 } } })),
 }))
 
 vi.mock('./flag', () => ({
@@ -19,6 +22,7 @@ vi.mock('./flag', () => ({
 vi.mock('@/api/client', () => ({
   capabilitiesApi: { get: (id: string) => h.capGet(id) },
   animeApi: { getById: (id: string) => h.animeGet(id) },
+  subtitlesApi: { all: (id: string, ep: number) => h.subsAll(id, ep) },
 }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({
   useProviderResolver: () => ({
@@ -86,6 +90,7 @@ beforeEach(() => {
   h.resolveStream.mockReset()
   h.listDownloads.mockReset().mockResolvedValue([])
   h.enqueueSeason.mockReset().mockImplementation(async (targets: unknown[]) => targets.length)
+  h.subsAll.mockReset().mockResolvedValue({ data: { data: { languages: {}, episode: 1 } } })
 })
 
 describe('pickDefaultCombo', () => {
@@ -149,6 +154,33 @@ describe('openSeasonDownload', () => {
     expect(seasonFlow.phase).toBe('idle')
     expect(seasonFlow.notice).toBeNull()
   })
+
+  it('open() stores the report; subTracks populated from first-target subtitle fetch', async () => {
+    h.capGet.mockResolvedValue(envelope(report(cap('gogoanime', 'en', ['sub', 'dub']))))
+    h.listEpisodes.mockResolvedValue([ep(1), ep(2), ep(3)])
+    h.subsAll.mockResolvedValue({
+      data: {
+        data: {
+          languages: { ja: [{ url: 'u.ass', lang: 'ja', label: 'Sub', format: 'ass', provider: 'jimaku' }] },
+          episode: 1,
+        },
+      },
+    })
+    await openSeasonDownload(REQ, 'en')
+    expect(seasonFlow.phase).toBe('choose')
+    expect(seasonFlow.report).not.toBeNull()
+    expect(seasonFlow.subTracks).toHaveLength(1)
+    expect(seasonFlow.subTracks[0]).toMatchObject({ lang: 'ja', provider: 'jimaku' })
+  })
+
+  it('open() tolerates subtitle fetch failure — subTracks empty, phase still choose', async () => {
+    h.capGet.mockResolvedValue(envelope(report(cap('gogoanime', 'en', ['sub', 'dub']))))
+    h.listEpisodes.mockResolvedValue([ep(1), ep(2), ep(3)])
+    h.subsAll.mockRejectedValue(new Error('network'))
+    await openSeasonDownload(REQ, 'en')
+    expect(seasonFlow.phase).toBe('choose')
+    expect(seasonFlow.subTracks).toEqual([])
+  })
 })
 
 describe('confirmSeasonDownload', () => {
@@ -175,5 +207,26 @@ describe('confirmSeasonDownload', () => {
     await confirmSeasonDownload('480', 'episode')
     const [targets] = h.enqueueSeason.mock.calls[0] as [EpisodeOption[]]
     expect(targets.map((e) => e.number)).toEqual([1])
+  })
+
+  it('confirm with a DIFFERENT provider re-lists episodes and recomputes targets', async () => {
+    await toChoose()
+    // Override listEpisodes for the kodik provider re-list
+    h.listEpisodes.mockResolvedValue([ep(1), ep(2)])
+    const kodikCombo: Combo = { ...(seasonFlow.combo as Combo), provider: 'kodik' }
+    await confirmSeasonDownload('720', 'season', kodikCombo, null)
+    expect(h.listEpisodes).toHaveBeenCalledWith('kodik', 'a1')
+    const [targets, ctx] = h.enqueueSeason.mock.calls[0] as [EpisodeOption[], Record<string, unknown>]
+    expect(targets.map((e) => e.number)).toEqual([1, 2])
+    expect((ctx as { combo: Combo }).combo.provider).toBe('kodik')
+  })
+
+  it('confirm threads subPref + resolveSubsFor into enqueueSeason ctx', async () => {
+    await toChoose()
+    const pref: SubPref = { kind: 'external', provider: 'jimaku', lang: 'ja' }
+    await confirmSeasonDownload('720', 'season', null, pref)
+    const [, ctx] = h.enqueueSeason.mock.calls[0] as [EpisodeOption[], Record<string, unknown>]
+    expect((ctx as { subPref: SubPref }).subPref).toEqual(pref)
+    expect(typeof (ctx as { resolveSubsFor?: unknown }).resolveSubsFor).toBe('function')
   })
 })
