@@ -327,8 +327,12 @@ export async function enqueueDownload(req: DownloadRequest): Promise<string> {
   if (existing?.state === 'done') return id
   paused.delete(id)
   const baseRecord = {
-    id, animeId: req.animeId, animeTitle: req.animeTitle, episode: req.episode,
-    combo: req.combo, quality: req.quality, streamType: 'hls' as const,
+    // Plain copies: callers pass Vue-reactive episode/combo objects (player
+    // episode list, card season flow) and IndexedDB's structured clone throws
+    // DataCloneError on any Proxy. Both types are flat primitive-field shapes,
+    // so a spread fully de-proxies them.
+    id, animeId: req.animeId, animeTitle: req.animeTitle, episode: { ...req.episode },
+    combo: { ...req.combo }, quality: req.quality, streamType: 'hls' as const,
     bytes: existing?.bytes ?? 0, resourcesDone: 0, resourcesTotal: 0,
     createdAt: existing?.createdAt ?? Date.now(),
     playlistLocalPath: offlinePath(id, 'master.m3u8'), subtitles: [],

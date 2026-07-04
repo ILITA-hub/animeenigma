@@ -26,7 +26,8 @@ export interface SeasonDownloadRequest {
 }
 
 export type SeasonFlowNotice =
-  | { kind: 'no-sw' | 'no-source' | 'nothing-left' | 'failed' }
+  | { kind: 'no-sw' | 'no-source' | 'nothing-left' }
+  | { kind: 'failed'; message?: string }
   | { kind: 'queued'; n: number }
 
 interface SeasonFlowState {
@@ -116,16 +117,21 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
     state.targets = targets
     state.combo = combo
     state.phase = 'choose'
-  } catch {
-    if (mySeq === seq) reset({ kind: 'failed' })
+  } catch (e) {
+    console.error('[seasonDownload] resolve failed', e)
+    if (mySeq === seq) reset({ kind: 'failed', message: e instanceof Error ? e.message : String(e) })
   }
 }
 
 export async function confirmSeasonDownload(quality: string, scope: 'episode' | 'season'): Promise<void> {
   const req = state.request
-  const combo = state.combo
+  const combo = state.combo ? { ...state.combo } : null
   if (!req || !combo || state.phase !== 'choose') return
-  const eps = scope === 'season' ? [...state.targets] : state.targets.slice(0, 1)
+  // Plain copies: `state` is reactive, so its elements are Proxies — IndexedDB
+  // structured clone rejects those (DataCloneError). The engine de-proxies too;
+  // this keeps the flow safe even against future engine callers.
+  const picked = scope === 'season' ? state.targets : state.targets.slice(0, 1)
+  const eps = picked.map((ep) => ({ ...ep }))
   state.phase = 'queueing'
   const resolver = useProviderResolver()
   try {
@@ -138,8 +144,9 @@ export async function confirmSeasonDownload(quality: string, scope: 'episode' | 
       resolveFor: (ep) => () => resolver.resolveStream(combo.provider, req.animeId, ep, combo),
     })
     reset({ kind: 'queued', n })
-  } catch {
-    reset({ kind: 'failed' })
+  } catch (e) {
+    console.error('[seasonDownload] enqueue failed', e)
+    reset({ kind: 'failed', message: e instanceof Error ? e.message : String(e) })
   }
 }
 

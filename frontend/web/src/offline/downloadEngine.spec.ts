@@ -217,3 +217,29 @@ describe('downloadEngine — remove while queued', () => {
     await vi.waitFor(async () => expect((await getDownload(id3))?.state).toBe('done'), { timeout: 10_000 })
   })
 })
+
+describe('downloadEngine — Vue-reactive inputs (DataCloneError regression)', () => {
+  // The player's episode list and the card season flow hand the engine
+  // Vue-reactive (Proxy) episode/combo objects; IndexedDB's structured clone
+  // throws DataCloneError on any Proxy. The engine must store plain copies.
+  it('de-proxies episode/combo before the IDB put', async () => {
+    const { reactive } = await import('vue')
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    const src = reactive({
+      episode: { key: 7, label: 7, number: 7 },
+      combo: { audio: 'sub' as const, lang: 'en' as const, provider: 'gogoanime', server: '', team: null },
+    })
+    const id = await enqueueDownload({
+      animeId: 'a1', animeTitle: 'T', quality: '720',
+      episode: src.episode,
+      combo: src.combo,
+      resolve: async () => { throw new Error('halt before network') },
+    })
+    const rec = await getDownload(id)
+    expect(rec).toBeTruthy()
+    expect(() => structuredClone(rec!.episode)).not.toThrow()
+    expect(() => structuredClone(rec!.combo)).not.toThrow()
+    expect(rec!.episode).toMatchObject({ key: 7, number: 7 })
+  })
+})

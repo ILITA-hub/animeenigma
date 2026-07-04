@@ -59,6 +59,10 @@ watch(
     if (!n) return
     if (n.kind === 'queued') {
       toast.push(t('downloads.seasonQueued', { n: n.n }), 'success')
+    } else if (n.kind === 'failed' && n.message) {
+      // Carry the raw error — a bare "couldn't prepare" is undebuggable from
+      // a user screenshot (learned the hard way: DataCloneError on proxies).
+      toast.push(`${t('downloads.seasonFailed')} (${n.message})`, 'error', 6000)
     } else {
       toast.push(t(NOTICE_KEY[n.kind] ?? 'downloads.seasonFailed'), n.kind === 'nothing-left' ? 'info' : 'error')
     }

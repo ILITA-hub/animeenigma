@@ -525,7 +525,7 @@
         "scopeSeasonTitle": "Download the whole season",
         "seasonDone": "Season already downloaded",
         "season": "Season",
-        "lowSpace": "May run out of space (~{free} free)"
+        "lowSpace": "May run out of space — the browser granted this site ~{free} of storage"
       }
     }
   },
