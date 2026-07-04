@@ -41,14 +41,21 @@
               <li v-for="d in group" :key="d.id" class="flex items-center gap-3 text-sm">
                 <span class="text-muted-foreground">{{ t('downloads.episode', { n: d.episode.number }) }}</span>
                 <Badge v-if="d.state === 'done'" variant="success">{{ t('downloads.offlineReady') }}</Badge>
-                <Badge v-else-if="d.state === 'downloading' || d.state === 'queued'" variant="secondary">
-                  {{ t('downloads.state.downloading', progressOf(d)) }}
+                <!-- queued ≠ downloading: the engine is strictly serial, so most
+                     of a season batch waits in line — say so. An active download
+                     whose playlist is still being planned has no resource count
+                     yet: show "preparing", not a meaningless 0/0. -->
+                <Badge v-else-if="d.state === 'queued'" variant="secondary">
+                  {{ t('downloads.state.queued') }}
+                </Badge>
+                <Badge v-else-if="d.state === 'downloading'" variant="secondary">
+                  {{ progressOf(d).total > 0 ? t('downloads.state.downloading', progressOf(d)) : t('downloads.state.preparing') }}
                 </Badge>
                 <Badge v-else-if="d.state === 'error'" variant="destructive">
                   {{ t(`downloads.error.${d.error ?? 'network'}`) }}
                 </Badge>
                 <Badge v-else variant="secondary">{{ t(`downloads.state.${d.state}`) }}</Badge>
-                <span class="text-muted-foreground">{{ fmtBytes(d.bytes) }}</span>
+                <span class="text-muted-foreground">{{ sizeLabel(d) }}</span>
                 <span class="ml-auto flex items-center gap-2">
                   <Button
                     v-if="d.state === 'downloading' || d.state === 'queued'"
@@ -106,6 +113,7 @@ import { useDownloadsStore } from '@/stores/downloads'
 import type { OfflineDownload } from '@/offline/types'
 import type { OfflinePlayback } from '@/offline/offlineAdapter'
 import { offlineRuntimeReady } from '@/offline/flag'
+import { projectedBytesFor } from '@/offline/downloadEngine'
 
 const AePlayer = defineAsyncComponent(() => import('@/components/player/aePlayer/AePlayer.vue'))
 
@@ -129,6 +137,16 @@ function fmtBytes(n: number): string {
   if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} GB`
   if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(0)} MB`
   return `${Math.max(1, Math.round(n / 1024))} KB`
+}
+
+/** "X из ~Y" while in flight (Y = duration-scaled projection stamped at
+ *  enqueue; legacy records fall back to the 24-min baseline), plain actual
+ *  size once done. Nothing yet downloaded → just the estimate. */
+function sizeLabel(d: OfflineDownload): string {
+  if (d.state === 'done' || d.bytes >= (d.projectedBytes ?? Infinity)) return fmtBytes(d.bytes)
+  const projected = d.projectedBytes ?? projectedBytesFor(d.quality)
+  if (d.bytes <= 0) return `~${fmtBytes(projected)}`
+  return `${fmtBytes(d.bytes)} / ~${fmtBytes(projected)}`
 }
 
 function play(animeId: string, group: OfflineDownload[]) {

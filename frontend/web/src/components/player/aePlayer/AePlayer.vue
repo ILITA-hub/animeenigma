@@ -377,6 +377,7 @@
         v-if="downloadDialogEp"
         :episode-number="downloadDialogEp.number"
         :season-count="seasonCount"
+        :duration-min="anime.durationMin"
         :sheet="sheetTeleport"
         :initial-scope="downloadScope"
         @confirm="onConfirmDownload"
@@ -514,7 +515,7 @@ interface SubTrack {
 
 const props = defineProps<{
   animeId: string
-  anime: { title: string; eps: number; still?: string }
+  anime: { title: string; eps: number; still?: string; durationMin?: number }
   theater: boolean
   isHentai?: boolean
   initialEpisode?: number
@@ -2317,6 +2318,7 @@ async function onConfirmDownload(quality: string, scope: 'episode' | 'season') {
       poster: props.anime.still,
       combo: comboSnapshot,
       quality,
+      durationMin: props.anime.durationMin,
       resolveFor: (target) => () => resolver.resolveStream(comboSnapshot.provider, props.animeId, target, comboSnapshot),
     })
   } else {
@@ -2327,6 +2329,7 @@ async function onConfirmDownload(quality: string, scope: 'episode' | 'season') {
       episode: ep,
       combo: comboSnapshot,
       quality,
+      durationMin: props.anime.durationMin,
       resolve: () => resolver.resolveStream(comboSnapshot.provider, props.animeId, ep, comboSnapshot),
     })
   }

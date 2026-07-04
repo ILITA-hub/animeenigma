@@ -2,7 +2,7 @@ import { reactive, readonly } from 'vue'
 import type { Combo, AudioKind, TrackLang, ContentKind } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { CapabilityReport } from '@/types/capabilities'
-import { capabilitiesApi } from '@/api/client'
+import { capabilitiesApi, animeApi } from '@/api/client'
 import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
 import { pickSmartDefault, pickSelectableFallback } from '@/composables/aePlayer/smartDefault'
 import { GROUP_PRIMARY_LANG } from '@/composables/aePlayer/providerGroups'
@@ -35,6 +35,8 @@ interface SeasonFlowState {
   request: SeasonDownloadRequest | null
   targets: EpisodeOption[]
   combo: Combo | null
+  /** Episode runtime (minutes) from the catalog detail — scales size estimates. */
+  durationMin: number | null
   /** One-shot result; the host turns it into a toast via consumeSeasonNotice(). */
   notice: SeasonFlowNotice | null
 }
@@ -44,6 +46,7 @@ const state = reactive<SeasonFlowState>({
   request: null,
   targets: [],
   combo: null,
+  durationMin: null,
   notice: null,
 })
 
@@ -56,6 +59,7 @@ function reset(notice: SeasonFlowNotice | null): void {
   state.request = null
   state.targets = []
   state.combo = null
+  state.durationMin = null
   state.notice = notice
 }
 
@@ -94,7 +98,19 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
   state.phase = 'resolving'
   state.request = request
   try {
-    const res = await capabilitiesApi.get(request.animeId)
+    // Detail fetch rides along only for episode_duration (scales the size
+    // estimates); its failure must never block the download flow.
+    const [res, durationMin] = await Promise.all([
+      capabilitiesApi.get(request.animeId),
+      animeApi
+        .getById(request.animeId)
+        .then((r) => {
+          const detail = (r.data?.data ?? r.data ?? null) as { episode_duration?: number } | null
+          const d = detail?.episode_duration
+          return typeof d === 'number' && d > 0 ? d : null
+        })
+        .catch(() => null),
+    ])
     if (mySeq !== seq) return
     const report = (res.data?.data ?? res.data ?? null) as CapabilityReport | null
     const combo = pickDefaultCombo(report, uiLang)
@@ -116,6 +132,7 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
     }
     state.targets = targets
     state.combo = combo
+    state.durationMin = durationMin
     state.phase = 'choose'
   } catch (e) {
     console.error('[seasonDownload] resolve failed', e)
@@ -141,6 +158,7 @@ export async function confirmSeasonDownload(quality: string, scope: 'episode' | 
       poster: req.poster,
       combo,
       quality,
+      durationMin: state.durationMin ?? undefined,
       resolveFor: (ep) => () => resolver.resolveStream(combo.provider, req.animeId, ep, combo),
     })
     reset({ kind: 'queued', n })

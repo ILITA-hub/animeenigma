@@ -19,6 +19,9 @@ export interface OfflineDownload {
   resourcesDone: number
   resourcesTotal: number
   createdAt: number
+  /** Duration-scaled size estimate (projectedBytesFor at enqueue) — the
+   *  "~450 MB" the UI shows next to live bytes. Absent on legacy records. */
+  projectedBytes?: number
   /** Local resume position, written by offline playback. */
   lastPositionSec?: number
   /** Entry URL for the player: /__offline/{id}/master.m3u8 or /__offline/{id}/media.mp4 */

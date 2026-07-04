@@ -22,6 +22,8 @@ export interface SeasonContext {
   poster?: string
   combo: Combo
   quality: string
+  /** Episode runtime in minutes — scales the engine's size projection. */
+  durationMin?: number
   /** Factory for the engine's fresh-resolve closure (re-called on signed-URL expiry). */
   resolveFor: (ep: EpisodeOption) => () => Promise<StreamResult>
 }
@@ -40,6 +42,7 @@ export async function enqueueSeason(targets: EpisodeOption[], ctx: SeasonContext
       episode: ep,
       combo: ctx.combo,
       quality: ctx.quality,
+      durationMin: ctx.durationMin,
       resolve: ctx.resolveFor(ep),
     })
     const rec = await getDownload(id)

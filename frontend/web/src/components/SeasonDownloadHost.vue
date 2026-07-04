@@ -15,6 +15,7 @@
         <DownloadDialog
           :episode-number="seasonFlow.targets[0]?.number ?? 1"
           :season-count="seasonFlow.targets.length"
+          :duration-min="seasonFlow.durationMin ?? undefined"
           :sheet="isMobile"
           initial-scope="season"
           @confirm="onConfirm"

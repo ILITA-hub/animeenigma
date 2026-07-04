@@ -23,7 +23,7 @@
         @click="scope = 'episode'"
       >
         <span>{{ $t('player.aePlayer.offline.scopeEpisode', { n: episodeNumber }) }}</span>
-        <span class="dl-scope-est">~{{ SIZE_HINT[quality] }}</span>
+        <span class="dl-scope-est" data-test="episode-estimate">~{{ episodeEstimate }}</span>
       </button>
       <button
         type="button"
@@ -57,10 +57,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { PROJECTED_BYTES, storageEstimate } from '@/offline/downloadEngine'
+import { projectedBytesFor, storageEstimate } from '@/offline/downloadEngine'
 
 const QUALITIES = ['480', '720', '1080'] as const
-const SIZE_HINT: Record<string, string> = { '480': '250 MB', '720': '450 MB', '1080': '900 MB' }
 const LS_KEY = 'ae.downloadQuality'
 
 const props = withDefaults(
@@ -68,11 +67,14 @@ const props = withDefaults(
     episodeNumber: number
     /** Episodes a season download would enqueue (pre-filtered). 0 = complete. */
     seasonCount: number
+    /** Episode runtime in minutes — scales the size estimates (12-min shorts
+     *  are half a 24-min episode, not a flat 900 MB at 1080p). */
+    durationMin?: number
     /** Bottom-sheet presentation (mobile). */
     sheet?: boolean
     initialScope?: 'episode' | 'season'
   }>(),
-  { sheet: false, initialScope: 'episode' },
+  { sheet: false, initialScope: 'episode', durationMin: undefined },
 )
 
 const emit = defineEmits<{
@@ -95,9 +97,14 @@ function fmtGb(bytes: number): string {
   return `${(bytes / 2 ** 30).toFixed(1)} GB`
 }
 
-const perEpisode = computed(() => PROJECTED_BYTES[quality.value] ?? PROJECTED_BYTES['720'])
+function fmtSize(bytes: number): string {
+  return bytes >= 2 ** 30 ? fmtGb(bytes) : `${Math.round(bytes / 2 ** 20)} MB`
+}
+
+const perEpisode = computed(() => projectedBytesFor(quality.value, props.durationMin))
 const projected = computed(() => perEpisode.value * (scope.value === 'season' ? props.seasonCount : 1))
-const seasonEstimate = computed(() => fmtGb(perEpisode.value * props.seasonCount))
+const episodeEstimate = computed(() => fmtSize(perEpisode.value))
+const seasonEstimate = computed(() => fmtSize(perEpisode.value * props.seasonCount))
 const lowSpace = computed(() => free.value !== null && projected.value > free.value)
 const freeLabel = computed(() => (free.value === null ? '' : fmtGb(free.value)))
 

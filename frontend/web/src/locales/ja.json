@@ -1960,7 +1960,8 @@
       "downloading": "ダウンロード中 {done}/{total}",
       "paused": "一時停止",
       "done": "完了",
-      "error": "失敗"
+      "error": "失敗",
+      "preparing": "準備中…"
     },
     "error": {
       "network": "ネットワークエラー — 再開で再試行",

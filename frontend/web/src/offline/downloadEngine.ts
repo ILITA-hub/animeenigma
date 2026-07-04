@@ -13,6 +13,9 @@ export interface DownloadRequest {
   episode: EpisodeOption
   combo: Combo
   quality: string
+  /** Episode runtime in minutes — scales the size projection (quota checks +
+   *  UI estimates). Absent/invalid → the 24-min baseline. */
+  durationMin?: number
   /** Fresh stream resolution — called again when signed URLs expire mid-run. */
   resolve: () => Promise<StreamResult>
 }
@@ -92,6 +95,21 @@ async function pacedFetch(url: string): Promise<Response> {
 
 class SignatureExpiredError extends Error {}
 
+/** Cache API rejects partial (206) responses outright — but range-gated MP4
+ *  hosts (Sibnet/AllVideo via the proxy) answer a no-Range GET with a
+ *  bytes 0-(n-1)/n 206 whose body IS the complete file. Restamp those as 200
+ *  so cache.put accepts them; a genuinely partial body still falls through
+ *  (put throws → retry → error:'network'). */
+function normalizeForCache(resp: Response): Response {
+  if (resp.status !== 206) return resp
+  const m = resp.headers.get('Content-Range')?.match(/bytes (\d+)-(\d+)\/(\d+)/)
+  if (!m || m[1] !== '0' || Number(m[2]) + 1 !== Number(m[3])) return resp
+  const headers = new Headers(resp.headers)
+  headers.delete('Content-Range')
+  headers.set('Content-Length', m[3])
+  return new Response(resp.body, { status: 200, headers })
+}
+
 async function fetchResource(url: string): Promise<Response> {
   let lastErr: unknown
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -99,7 +117,7 @@ async function fetchResource(url: string): Promise<Response> {
       const resp = await pacedFetch(url)
       if (resp.status === 401 || resp.status === 403) throw new SignatureExpiredError()
       if (!resp.ok) throw new Error(`http ${resp.status}`)
-      return resp
+      return normalizeForCache(resp)
     } catch (e) {
       if (e instanceof SignatureExpiredError) throw e
       lastErr = e
@@ -158,7 +176,7 @@ async function runDownload(id: string, req: DownloadRequest): Promise<void> {
   // downloaded yet); once disk fills mid-batch, every remaining queued item
   // must fail HERE, before paying for a scraper req.resolve().
   const headroom = await quotaHeadroom()
-  if (headroom !== null && headroom < (PROJECTED_BYTES[req.quality] ?? PROJECTED_BYTES['720'])) {
+  if (headroom !== null && headroom < projectedBytesFor(req.quality, req.durationMin)) {
     return setError('quota')
   }
 
@@ -303,12 +321,21 @@ async function pump(): Promise<void> {
 }
 
 // Conservative per-quality size projections for the pre-download quota check
-// (also shown as the dialog's size hint). Real size lands in `bytes` as it
-// downloads; QuotaExceededError mid-flight is still handled as error:'quota'.
+// (also shown as the dialog's size hint), calibrated for a ~24-min episode.
+// Real size lands in `bytes` as it downloads; QuotaExceededError mid-flight
+// is still handled as error:'quota'.
 export const PROJECTED_BYTES: Record<string, number> = {
   '480': 250 * 2 ** 20,
   '720': 450 * 2 ** 20,
   '1080': 900 * 2 ** 20,
+}
+
+/** Duration-aware projection: PROJECTED_BYTES is calibrated for ~24-min
+ *  episodes; a 12-min short projects half. Unknown/invalid duration → 24. */
+export function projectedBytesFor(quality: string, durationMin?: number): number {
+  const base = PROJECTED_BYTES[quality] ?? PROJECTED_BYTES['720']
+  const mins = typeof durationMin === 'number' && durationMin > 0 && durationMin < 600 ? durationMin : 24
+  return Math.round((base * mins) / 24)
 }
 
 function quotaHeadroom(): Promise<number | null> {
@@ -336,9 +363,10 @@ export async function enqueueDownload(req: DownloadRequest): Promise<string> {
     bytes: existing?.bytes ?? 0, resourcesDone: 0, resourcesTotal: 0,
     createdAt: existing?.createdAt ?? Date.now(),
     playlistLocalPath: offlinePath(id, 'master.m3u8'), subtitles: [],
+    projectedBytes: projectedBytesFor(req.quality, req.durationMin),
   }
   const headroom = await quotaHeadroom()
-  if (headroom !== null && headroom < (PROJECTED_BYTES[req.quality] ?? PROJECTED_BYTES['720'])) {
+  if (headroom !== null && headroom < baseRecord.projectedBytes) {
     await putDownload({ ...baseRecord, state: 'error', error: 'quota' })
     return id
   }

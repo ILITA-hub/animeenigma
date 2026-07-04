@@ -415,7 +415,7 @@
           <AePlayer
             v-else
             :anime-id="anime.id"
-            :anime="{ title: anime.title, eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage }"
+            :anime="{ title: anime.title, eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage, durationMin: anime.episodeDuration }"
             :theater="theaterMode"
             :is-hentai="isHentai"
             :initial-episode="resumeStartEpisode"

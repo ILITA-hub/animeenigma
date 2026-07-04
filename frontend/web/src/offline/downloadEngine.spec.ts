@@ -12,6 +12,9 @@ class FakeCache {
     return this.store.get(key)?.clone()
   }
   async put(req: string | Request, resp: Response) {
+    // Spec fidelity: the real Cache API rejects partial responses outright —
+    // without this the 206-normalization regression test cannot fail.
+    if (resp.status === 206) throw new TypeError('Partial response (status code 206) is unsupported')
     const key = typeof req === 'string' ? req : new URL(req.url).pathname
     this.store.set(key, resp)
   }
@@ -241,5 +244,45 @@ describe('downloadEngine — Vue-reactive inputs (DataCloneError regression)', (
     expect(() => structuredClone(rec!.episode)).not.toThrow()
     expect(() => structuredClone(rec!.combo)).not.toThrow()
     expect(rec!.episode).toMatchObject({ key: 7, number: 7 })
+  })
+})
+
+describe('projectedBytesFor — duration scaling', () => {
+  it('scales by runtime with a 24-min baseline', async () => {
+    const { projectedBytesFor } = await import('./downloadEngine')
+    expect(projectedBytesFor('1080', 12)).toBe(Math.round((900 * 2 ** 20) / 2))
+    expect(projectedBytesFor('1080')).toBe(900 * 2 ** 20)
+    expect(projectedBytesFor('480', 24)).toBe(250 * 2 ** 20)
+    expect(projectedBytesFor('720', 0)).toBe(450 * 2 ** 20) // invalid → baseline
+  })
+
+  it('stamps the duration-scaled projection onto the record', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    const id = await enqueueDownload({
+      ...req(async () => { throw new Error('halt') }),
+      durationMin: 12,
+    })
+    const rec = await getDownload(id)
+    expect(rec?.projectedBytes).toBe(Math.round((450 * 2 ** 20) / 2))
+  })
+})
+
+describe('downloadEngine — full-body 206 normalization (range-gated MP4 hosts)', () => {
+  // Sibnet/AllVideo answer a plain GET through the proxy with a
+  // bytes 0-(n-1)/n 206; Cache API rejects 206 outright, which used to fail
+  // every MP4 download as error:'network' while the server logged success.
+  it('caches an MP4 served as a complete 206 and finishes the download', async () => {
+    const { impl } = fakeCaches()
+    _installCachesForTests(impl)
+    const body = new Uint8Array(64)
+    vi.stubGlobal('fetch', mockFetch({
+      'media.mp4': () => new Response(body, {
+        status: 206,
+        headers: { 'Content-Range': 'bytes 0-63/64', 'Content-Length': '64' },
+      }),
+    }))
+    const id = await enqueueDownload(req(async () => ({ url: 'https://p.example/media.mp4', type: 'mp4' })))
+    await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
   })
 })

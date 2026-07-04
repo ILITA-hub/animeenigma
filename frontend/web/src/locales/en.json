@@ -1960,7 +1960,8 @@
       "downloading": "Downloading {done}/{total}",
       "paused": "Paused",
       "done": "Ready",
-      "error": "Failed"
+      "error": "Failed",
+      "preparing": "Preparing…"
     },
     "error": {
       "network": "Network error — resume to retry",
