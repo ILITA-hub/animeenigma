@@ -25,7 +25,7 @@
       {{ t('downloads.empty') }}
     </p>
 
-    <Card v-if="cellularBlocked" class="p-4 flex items-center justify-between gap-3" data-test="cellular-banner">
+    <Card v-if="cellularBlocked" class="p-4 flex items-center justify-between gap-3 mb-4" data-test="cellular-banner">
       <span class="text-sm text-warning">{{ t('downloads.cellularPaused') }}</span>
       <Button size="sm" variant="outline" @click="onCellularResume">{{ t('downloads.cellularResume') }}</Button>
     </Card>

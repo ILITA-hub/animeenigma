@@ -31,7 +31,12 @@ const rec = (over: Partial<OfflineDownload>): OfflineDownload => ({
 })
 
 describe('resumeNetworkPaused', () => {
-  beforeEach(async () => { await _resetDbForTests(); enqueueDownload.mockClear(); mockIsEngineWorking.mockClear() })
+  beforeEach(async () => {
+    await _resetDbForTests()
+    enqueueDownload.mockClear()
+    mockIsEngineWorking.mockReset()
+    mockIsEngineWorking.mockImplementation((_id: string) => false)
+  })
 
   it('re-enqueues only pausedBy:network records, rebuilding closures', async () => {
     await putDownload(rec({ id: 'net', pausedBy: 'network' }))
@@ -51,5 +56,22 @@ describe('resumeNetworkPaused', () => {
     const n = await resumeNetworkPaused()
     expect(n).toBe(0)
     expect(enqueueDownload).not.toHaveBeenCalled()
+  })
+
+  it('returns 0 and does not re-enqueue when navigator.onLine is false (offline guard)', async () => {
+    // Simulates airplane mode / connectivity loss: the cellular→none transition
+    // fires ensureCellularGuard's change handler, which must NOT resume if offline.
+    // resumeNetworkPaused is the belt-and-suspenders guard for the direct export path too.
+    await putDownload(rec({ id: 'net2', pausedBy: 'network' }))
+    const orig = Object.getOwnPropertyDescriptor(navigator, 'onLine')
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    try {
+      const n = await resumeNetworkPaused()
+      expect(n).toBe(0)
+      expect(enqueueDownload).not.toHaveBeenCalled()
+    } finally {
+      if (orig) Object.defineProperty(navigator, 'onLine', orig)
+      else Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+    }
   })
 })

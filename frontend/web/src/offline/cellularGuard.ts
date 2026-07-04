@@ -15,7 +15,7 @@ export function ensureCellularGuard(): void {
   onConnectionChange(() => {
     if (isCellular()) {
       if (!allowCellularThisSession()) void import('./downloadEngine').then((m) => m.pauseAllForCellular()).catch(() => {})
-    } else {
+    } else if (navigator.onLine) {
       void resumeNetworkPaused().catch(() => {})
     }
   })
@@ -29,6 +29,7 @@ export function ensureCellularGuard(): void {
  *  later trigger; a worker's final paused-write can theoretically drop a
  *  concurrent pausedBy stamp. */
 export async function resumeNetworkPaused(): Promise<number> {
+  if (!navigator.onLine) return 0
   const [{ enqueueDownload, isEngineWorking }, { makeExternalSubResolver }, { useProviderResolver }] = await Promise.all([
     import('./downloadEngine'),
     import('./externalSubs'),
