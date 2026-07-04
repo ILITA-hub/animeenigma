@@ -131,12 +131,13 @@ type AnimeToshoConfig struct {
 // the host-bound 127.0.0.1:9117 is only reachable from the operator's
 // browser, not from inside the library container.
 type JackettConfig struct {
-	BaseURL     string
-	APIKey      string
-	Categories  []string
-	HTTPTimeout time.Duration
-	UserAgent   string
-	Enabled     bool
+	BaseURL       string
+	APIKey        string
+	Categories    []string
+	IndexerFilter string
+	HTTPTimeout   time.Duration
+	UserAgent     string
+	Enabled       bool
 }
 
 // LibrarySearchConfig holds limits documented for the operator; the
@@ -200,6 +201,10 @@ func Load() (*Config, error) {
 			APIKey:  getEnv("JACKETT_API_KEY", ""),
 			// CSV → slice; empty env yields nil (all categories).
 			Categories: splitCSV(getEnv("JACKETT_CATEGORIES", "")),
+			// Aggregate-endpoint filter segment. "!status:failing" skips
+			// indexers Jackett marks failing (broken ones stall the whole
+			// aggregate ~100s, past JACKETT_TIMEOUT). "all" = unfiltered.
+			IndexerFilter: getEnv("JACKETT_INDEXER_FILTER", "!status:failing"),
 			// Jackett's aggregated `all` query fans out across ~20 indexers
 			// and routinely takes ~20s — far longer than a single indexer,
 			// hence a dedicated 30s default rather than the shared 15s.

@@ -430,15 +430,17 @@ func main() {
 	var jackettSearcher service.JackettSearcher
 	if cfg.Jackett.Enabled {
 		jackettSearcher = jackett.NewClient(jackett.Config{
-			BaseURL:     cfg.Jackett.BaseURL,
-			APIKey:      cfg.Jackett.APIKey,
-			Categories:  cfg.Jackett.Categories,
-			HTTPTimeout: cfg.Jackett.HTTPTimeout,
-			UserAgent:   cfg.Jackett.UserAgent,
+			BaseURL:       cfg.Jackett.BaseURL,
+			APIKey:        cfg.Jackett.APIKey,
+			Categories:    cfg.Jackett.Categories,
+			IndexerFilter: cfg.Jackett.IndexerFilter,
+			HTTPTimeout:   cfg.Jackett.HTTPTimeout,
+			UserAgent:     cfg.Jackett.UserAgent,
 		})
 		log.Infow("jackett primary search tier enabled",
 			"base_url", cfg.Jackett.BaseURL,
 			"categories", cfg.Jackett.Categories,
+			"indexer_filter", cfg.Jackett.IndexerFilter,
 			"timeout", cfg.Jackett.HTTPTimeout,
 		)
 	} else {

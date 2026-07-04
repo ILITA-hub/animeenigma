@@ -74,9 +74,11 @@ func TestSearch_RanksSeedersAndDropsLinkOnly(t *testing.T) {
 		t.Fatalf("Search returned error: %v", err)
 	}
 
-	// URL shape: aggregated results path + apikey + Query + Category[].
-	if seenPath != "/api/v2.0/indexers/all/results" {
-		t.Errorf("path: want /api/v2.0/indexers/all/results, got %q", seenPath)
+	// URL shape: aggregated results path (default filter skips indexers
+	// Jackett has marked failing — dead ones otherwise stall the whole
+	// aggregate past the client timeout) + apikey + Query + Category[].
+	if seenPath != "/api/v2.0/indexers/!status:failing/results" {
+		t.Errorf("path: want /api/v2.0/indexers/!status:failing/results, got %q", seenPath)
 	}
 	if !strings.Contains(seenRawQuery, "apikey=secret") {
 		t.Errorf("query missing apikey: %q", seenRawQuery)
@@ -124,6 +126,24 @@ func TestSearch_RanksSeedersAndDropsLinkOnly(t *testing.T) {
 	}
 	if mid.Quality != "2160p" {
 		t.Errorf("Quality: want 2160p, got %q", mid.Quality)
+	}
+}
+
+func TestSearch_IndexerFilterOverride(t *testing.T) {
+	var seenPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		mustWrite(t, w, `{"Results":[]}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{BaseURL: srv.URL, APIKey: "k", IndexerFilter: "all"})
+	if _, err := c.Search(context.Background(), "x", 10); err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if seenPath != "/api/v2.0/indexers/all/results" {
+		t.Errorf("path: want /api/v2.0/indexers/all/results, got %q", seenPath)
 	}
 }
 

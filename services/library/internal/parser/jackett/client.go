@@ -47,8 +47,16 @@ type Config struct {
 	// BaseURL of the Jackett instance. Default "http://jackett:9117"
 	// (the docker-network DNS name — NOT the host-bound 127.0.0.1:9117,
 	// which only the operator's browser can reach). The
-	// /api/v2.0/indexers/all/results path is appended by Search.
+	// /api/v2.0/indexers/{filter}/results path is appended by Search.
 	BaseURL string
+
+	// IndexerFilter is the aggregate-endpoint indexer filter segment
+	// (Jackett "filtered aggregate" syntax). Default "!status:failing":
+	// skip indexers Jackett currently marks failing — permanently broken
+	// ones (Cloudflare-challenged, dead domains) otherwise stall the whole
+	// aggregate response until Jackett's internal ~100s cap, far past
+	// HTTPTimeout, killing the tier. "all" restores the unfiltered fan-out.
+	IndexerFilter string
 
 	// APIKey is Jackett's server API key (Dashboard → top-right). Required:
 	// an empty key disables the whole primary tier upstream in main.go, so
@@ -74,7 +82,8 @@ type Client struct {
 }
 
 const (
-	defaultBaseURL = "http://jackett:9117"
+	defaultBaseURL       = "http://jackett:9117"
+	defaultIndexerFilter = "!status:failing"
 	defaultTimeout = 30 * time.Second
 	defaultUA      = "AnimeEnigma/1.0 (library service)"
 	defaultLimit   = 50
@@ -99,6 +108,9 @@ func NewClient(cfg Config) *Client {
 	}
 	if cfg.UserAgent == "" {
 		cfg.UserAgent = defaultUA
+	}
+	if cfg.IndexerFilter == "" {
+		cfg.IndexerFilter = defaultIndexerFilter
 	}
 	return &Client{
 		cfg: cfg,
@@ -189,7 +201,7 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]domain.
 // the query, and any configured categories.
 func (c *Client) buildURL(query string) (string, error) {
 	base := strings.TrimRight(c.cfg.BaseURL, "/")
-	u, err := url.Parse(base + "/api/v2.0/indexers/all/results")
+	u, err := url.Parse(base + "/api/v2.0/indexers/" + c.cfg.IndexerFilter + "/results")
 	if err != nil {
 		return "", err
 	}
