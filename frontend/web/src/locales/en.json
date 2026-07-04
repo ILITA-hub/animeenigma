@@ -513,9 +513,15 @@
         "downloaded": "Downloaded",
         "failed": "Download failed",
         "quality": "Download quality",
-        "estimate": "~{size} per episode",
         "start": "Download",
-        "cancel": "Cancel"
+        "cancel": "Cancel",
+        "scope": "What to download",
+        "scopeEpisode": "This episode ({n})",
+        "scopeSeason": "Whole season — {n} ep.",
+        "scopeSeasonTitle": "Download the whole season",
+        "seasonDone": "Season already downloaded",
+        "season": "Season",
+        "lowSpace": "May run out of space (~{free} free)"
       }
     }
   },

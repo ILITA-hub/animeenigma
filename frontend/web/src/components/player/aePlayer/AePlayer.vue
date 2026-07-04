@@ -288,6 +288,7 @@
           @select="onSelectEpisode"
           @mark-watched="onMarkWatched"
           @download="onDownloadEpisode"
+          @download-season="onDownloadSeason"
         />
       </div>
     </Teleport>
@@ -373,6 +374,10 @@
     <Teleport to="body" :disabled="!sheetTeleport">
       <DownloadDialog
         v-if="downloadDialogEp"
+        :episode-number="downloadDialogEp.number"
+        :season-count="seasonCount"
+        :sheet="sheetTeleport"
+        :initial-scope="downloadScope"
         @confirm="onConfirmDownload"
         @close="downloadDialogEp = null"
       />
@@ -483,6 +488,7 @@ import { recordPlayerEvent } from '@/utils/playerTelemetry'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import { offlineRuntimeReady } from '@/offline/flag'
 import { enqueueDownload, engineState } from '@/offline/downloadEngine'
+import { seasonTargets, enqueueSeason } from '@/offline/seasonDownload'
 import { listDownloads } from '@/offline/registry'
 import { makeOfflineResolver, offlineCapabilityReport } from '@/offline/offlineAdapter'
 
@@ -2250,7 +2256,9 @@ const activeMenuEl = computed<HTMLElement | null>(() => {
 // ─── Offline downloads (episode panel affordance) ──────────────────────────────
 
 const downloadDialogEp = ref<EpisodeOption | null>(null)
+const downloadScope = ref<'episode' | 'season'>('episode')
 const downloadStates = ref<Record<number, DownloadState>>({})
+const seasonCount = computed(() => seasonTargets(episodes.value, downloadStates.value).length)
 // offlineRuntimeReady() is non-reactive (navigator.serviceWorker.controller) —
 // a plain :downloadable="offlineRuntimeReady()" would never appear after the
 // SW's first claim. Track it in a ref, refreshed when the SW becomes ready.
@@ -2279,6 +2287,7 @@ watch(engineState.progress, () => {
 })
 
 function onDownloadEpisode(ep: EpisodeOption) {
+  downloadScope.value = 'episode'
   downloadDialogEp.value = ep
 }
 
@@ -2287,20 +2296,39 @@ function onDownloadCurrent() {
   if (ep) onDownloadEpisode(ep)
 }
 
-async function onConfirmDownload(quality: string) {
+function onDownloadSeason() {
+  const ep = selectedEpisode.value ?? episodes.value[0]
+  if (!ep) return
+  downloadScope.value = 'season'
+  downloadDialogEp.value = ep
+}
+
+async function onConfirmDownload(quality: string, scope: 'episode' | 'season') {
   const ep = downloadDialogEp.value
   downloadDialogEp.value = null
   if (!ep) return
   const comboSnapshot = { ...state.combo.value } // freeze — user may switch sources mid-download
-  await enqueueDownload({
-    animeId: props.animeId,
-    animeTitle: props.anime.title,
-    poster: props.anime.still,
-    episode: ep,
-    combo: comboSnapshot,
-    quality,
-    resolve: () => resolver.resolveStream(comboSnapshot.provider, props.animeId, ep, comboSnapshot),
-  })
+  if (scope === 'season') {
+    const targets = seasonTargets(episodes.value, downloadStates.value)
+    await enqueueSeason(targets, {
+      animeId: props.animeId,
+      animeTitle: props.anime.title,
+      poster: props.anime.still,
+      combo: comboSnapshot,
+      quality,
+      resolveFor: (target) => () => resolver.resolveStream(comboSnapshot.provider, props.animeId, target, comboSnapshot),
+    })
+  } else {
+    await enqueueDownload({
+      animeId: props.animeId,
+      animeTitle: props.anime.title,
+      poster: props.anime.still,
+      episode: ep,
+      combo: comboSnapshot,
+      quality,
+      resolve: () => resolver.resolveStream(comboSnapshot.provider, props.animeId, ep, comboSnapshot),
+    })
+  }
   void refreshDownloadStates()
 }
 

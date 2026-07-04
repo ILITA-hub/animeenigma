@@ -31,6 +31,17 @@
       <span class="flex-1" />
 
       <button
+        v-if="downloadable && episodes.length > 1"
+        type="button"
+        class="ep-chip ep-chip-season"
+        data-test="season-download"
+        :title="$t('player.aePlayer.offline.scopeSeasonTitle')"
+        @click="emit('download-season')"
+      >
+        <Download :size="11" aria-hidden="true" />
+        {{ $t('player.aePlayer.offline.season') }}
+      </button>
+      <button
         v-if="showJump && nextUnwatched"
         type="button"
         class="ep-chip"
@@ -257,6 +268,7 @@ const emit = defineEmits<{
   (e: 'select', ep: EpisodeOption): void
   (e: 'mark-watched'): void
   (e: 'download', ep: EpisodeOption): void
+  (e: 'download-season'): void
 }>()
 
 // ── V2b adaptive rules ───────────────────────────────────────────────────────
@@ -597,5 +609,24 @@ onMounted(() => {
   color: var(--brand-cyan);
   background: var(--cyan-a08);
   cursor: default;
+}
+
+.ep-chip-season {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Touch: grow the per-card download affordance to a real hit target
+   without shifting layout (negative margins reclaim the padding). */
+@media (pointer: coarse) {
+  .ep-dl {
+    padding: 12px;
+    margin: -10px -10px -10px auto;
+  }
+
+  .ep-chip {
+    min-height: 36px;
+  }
 }
 </style>

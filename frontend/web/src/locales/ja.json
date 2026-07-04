@@ -513,9 +513,15 @@
         "downloaded": "ダウンロード済み",
         "failed": "ダウンロード失敗",
         "quality": "ダウンロード画質",
-        "estimate": "1話あたり約{size}",
         "start": "ダウンロード",
-        "cancel": "キャンセル"
+        "cancel": "キャンセル",
+        "scope": "ダウンロード対象",
+        "scopeEpisode": "この話（{n}）",
+        "scopeSeason": "全シーズン — {n}話",
+        "scopeSeasonTitle": "シーズン全体をダウンロード",
+        "seasonDone": "全話ダウンロード済み",
+        "season": "シーズン",
+        "lowSpace": "容量が不足する可能性があります（空き ~{free}）"
       }
     }
   },

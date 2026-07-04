@@ -302,5 +302,16 @@ describe('EpisodesPanel', () => {
       const w = mountPanel({ downloadable: true, downloadStates: { 1: 'done' } })
       expect(w.find('[data-test="ep-downloaded-1"]').exists()).toBe(true)
     })
+
+    it('emits download-season from the header chip when downloadable', async () => {
+      const w = mountPanel({ downloadable: true })
+      await w.find('[data-test="season-download"]').trigger('click')
+      expect(w.emitted('download-season')).toHaveLength(1)
+    })
+
+    it('hides the season chip when not downloadable', () => {
+      const w = mountPanel({ downloadable: false })
+      expect(w.find('[data-test="season-download"]').exists()).toBe(false)
+    })
   })
 })

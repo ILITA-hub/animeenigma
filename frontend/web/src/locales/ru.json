@@ -513,9 +513,15 @@
         "downloaded": "Скачано",
         "failed": "Ошибка скачивания",
         "quality": "Качество загрузки",
-        "estimate": "~{size} на серию",
         "start": "Скачать",
-        "cancel": "Отмена"
+        "cancel": "Отмена",
+        "scope": "Что скачать",
+        "scopeEpisode": "Эта серия ({n})",
+        "scopeSeason": "Весь сезон — {n} сер.",
+        "scopeSeasonTitle": "Скачать весь сезон",
+        "seasonDone": "Весь сезон уже скачан",
+        "season": "Сезон",
+        "lowSpace": "Может не хватить места (свободно ~{free})"
       }
     }
   },
