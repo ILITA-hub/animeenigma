@@ -1,19 +1,19 @@
 <template>
-  <div
-    ref="rootRef"
-    class="pl"
-    :class="{ 'pl--theater': theater, 'pl--ui-hidden': !uiVisible, 'pl--pseudo-fs': pseudoFs }"
-    :style="{ '--prov': activeProviderHue }"
-    tabindex="0"
-    role="region"
-    :aria-label="$t('player.aePlayer.rootAria')"
-    @click.self="closeMenus"
-    @mouseenter="onPointerEnter"
-    @mouseleave="onPointerLeave"
-    @mousemove="wakeUi"
-    @touchstart.passive="onRootTouch"
-    data-test="ae-player"
-  >
+  <div class="pl-wrap" data-test="ae-player">
+    <div
+      ref="rootRef"
+      class="pl"
+      :class="{ 'pl--theater': theater, 'pl--ui-hidden': !uiVisible, 'pl--pseudo-fs': pseudoFs }"
+      :style="{ '--prov': activeProviderHue }"
+      tabindex="0"
+      role="region"
+      :aria-label="$t('player.aePlayer.rootAria')"
+      @click.self="closeMenus"
+      @mouseenter="onPointerEnter"
+      @mouseleave="onPointerLeave"
+      @mousemove="wakeUi"
+      @touchstart.passive="onRootTouch"
+    >
     <!-- Poster / still background — only until playback first starts; a
          mid-episode pause must NOT bring the poster back (disruptive in
          fullscreen where object-contain letterboxing exposes it). -->
@@ -387,6 +387,27 @@
         @click="closeAllSheets"
       />
     </Teleport>
+    </div>
+
+    <!-- Mobile action row (D6) — big under-player entries. Lives inside the
+         player component so every mount point (anime page, /downloads) gets
+         it with zero cross-component wiring. -->
+    <div v-if="isMobile" class="pl-actions" data-test="pl-actions">
+      <Button variant="soft" size="sm" class="pl-action" data-test="action-episodes" @click="toggleMenu('episodes')">
+        <ListVideo class="size-4" aria-hidden="true" />
+        {{ $t('player.aePlayer.epAbbrev') }} {{ selectedEpisode?.number ?? initialEpisode ?? 1 }}
+        <ChevronDown class="size-3.5 opacity-70" aria-hidden="true" />
+      </Button>
+      <Button v-if="!offline" variant="soft" size="sm" class="pl-action pl-action--src" data-test="action-source" @click="toggleMenu('source')">
+        <span class="pl-prov-dot" :style="{ background: activeProviderHue }" aria-hidden="true" />
+        <span class="pl-action-srcname">{{ activeProviderName || $t('player.aePlayer.source') }}</span>
+        <ChevronDown class="size-3.5 opacity-70" aria-hidden="true" />
+      </Button>
+      <Button v-if="!offline && canDownload" variant="soft" size="sm" class="pl-action" data-test="action-download" @click="onDownloadCurrent">
+        <Download class="size-4" aria-hidden="true" />
+        {{ $t('player.aePlayer.offline.download') }}
+      </Button>
+    </div>
   </div>
 </template>
 
@@ -401,7 +422,7 @@ import {
   toRef,
 } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { CircleAlert, ChevronDown, Pause, Play, X } from 'lucide-vue-next'
+import { CircleAlert, ChevronDown, Download, ListVideo, Pause, Play, X } from 'lucide-vue-next'
 
 import { userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -2261,6 +2282,11 @@ function onDownloadEpisode(ep: EpisodeOption) {
   downloadDialogEp.value = ep
 }
 
+function onDownloadCurrent() {
+  const ep = selectedEpisode.value ?? episodes.value.find((e) => e.number === (props.initialEpisode ?? 1)) ?? episodes.value[0]
+  if (ep) onDownloadEpisode(ep)
+}
+
 async function onConfirmDownload(quality: string) {
   const ep = downloadDialogEp.value
   downloadDialogEp.value = null
@@ -3222,5 +3248,57 @@ onUnmounted(() => {
 
 .pl-seekflash--fwd {
   right: 12%;
+}
+
+/* ── Under-player mobile action row ── */
+.pl-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 16px 0;
+}
+
+.pl-actions .pl-action {
+  flex: 1;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.pl-action--src {
+  min-width: 0;
+}
+
+.pl-action-srcname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+  /* Full-bleed: Anime.vue drops the card gutter (Task 9); square the box. */
+  .pl {
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  /* Top bar trim: smaller title, no per-episode subtitle text, tighter pad. */
+  .pl-top {
+    padding: 10px 12px 28px;
+    gap: 8px;
+  }
+
+  .pl-title {
+    font-size: 15px;
+  }
+
+  .pl-ep-title {
+    display: none;
+  }
+
+  .pl-resume {
+    left: 12px;
+    bottom: 76px;
+  }
 }
 </style>
