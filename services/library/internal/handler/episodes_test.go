@@ -109,6 +109,68 @@ func TestEpisodes_Get_HappyPath(t *testing.T) {
 	}
 }
 
+func TestEpisodes_Get_HasStoryboard_True(t *testing.T) {
+	repo := &stubEpisodeReader{ret: &domain.Episode{
+		ShikimoriID:   "12345",
+		EpisodeNumber: 3,
+		MinioPath:     "12345/3/",
+		HasStoryboard: true,
+	}}
+	url := &stubURL{}
+	h := NewEpisodesHandler(repo, url, nil)
+	r, w := newReq(t, "12345", "3")
+	h.Get(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, w.Body.String())
+	}
+	data, ok := raw["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("data field missing or wrong shape: %v", raw)
+	}
+	minioURL, _ := data["minio_url"].(string)
+	storyboardURL, ok := data["storyboard_url"].(string)
+	if !ok {
+		t.Fatalf("storyboard_url missing when HasStoryboard=true; body=%s", w.Body.String())
+	}
+	wantStoryboard := strings.Replace(minioURL, "playlist.m3u8", "storyboard.vtt", 1)
+	if storyboardURL != wantStoryboard {
+		t.Errorf("storyboard_url = %q, want %q (derived from minio_url %q)", storyboardURL, wantStoryboard, minioURL)
+	}
+	if storyboardURL != "http://stub.example/12345/3/storyboard.vtt" {
+		t.Errorf("storyboard_url = %q, want %q", storyboardURL, "http://stub.example/12345/3/storyboard.vtt")
+	}
+}
+
+func TestEpisodes_Get_HasStoryboard_False_KeyAbsent(t *testing.T) {
+	repo := &stubEpisodeReader{ret: &domain.Episode{
+		ShikimoriID:   "12345",
+		EpisodeNumber: 3,
+		MinioPath:     "12345/3/",
+		HasStoryboard: false,
+	}}
+	h := NewEpisodesHandler(repo, &stubURL{}, nil)
+	r, w := newReq(t, "12345", "3")
+	h.Get(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, w.Body.String())
+	}
+	data, ok := raw["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("data field missing or wrong shape: %v", raw)
+	}
+	if _, present := data["storyboard_url"]; present {
+		t.Errorf("storyboard_url present when HasStoryboard=false; body=%s", w.Body.String())
+	}
+}
+
 func TestEpisodes_Get_NotFound(t *testing.T) {
 	repo := &stubEpisodeReader{err: liberrors.NotFound("episode")}
 	h := NewEpisodesHandler(repo, &stubURL{}, nil)
@@ -215,6 +277,52 @@ func TestEpisodes_List_HappyPath(t *testing.T) {
 	}
 	if parsed.Data.Episodes[0].DurationSec != 1450 {
 		t.Errorf("ep0 duration = %d, want 1450", parsed.Data.Episodes[0].DurationSec)
+	}
+}
+
+func TestEpisodes_List_HasStoryboard(t *testing.T) {
+	repo := &stubEpisodeReader{listRet: []domain.Episode{
+		{ShikimoriID: "54974", EpisodeNumber: 1, MinioPath: "54974/1/", HasStoryboard: true},
+		{ShikimoriID: "54974", EpisodeNumber: 2, MinioPath: "54974/2/", HasStoryboard: false},
+	}}
+	url := &stubURL{}
+	h := NewEpisodesHandler(repo, url, nil)
+	r, w := newListReq(t, "54974")
+	h.List(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, w.Body.String())
+	}
+	data, ok := raw["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("data field missing or wrong shape: %v", raw)
+	}
+	episodes, ok := data["episodes"].([]interface{})
+	if !ok || len(episodes) != 2 {
+		t.Fatalf("episodes = %v, want 2 entries", data["episodes"])
+	}
+	ep0, ok := episodes[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("ep0 wrong shape: %v", episodes[0])
+	}
+	minioURL, _ := ep0["minio_url"].(string)
+	storyboardURL, present := ep0["storyboard_url"].(string)
+	if !present {
+		t.Fatalf("ep0 storyboard_url missing when HasStoryboard=true; body=%s", w.Body.String())
+	}
+	wantStoryboard := strings.Replace(minioURL, "playlist.m3u8", "storyboard.vtt", 1)
+	if storyboardURL != wantStoryboard {
+		t.Errorf("ep0 storyboard_url = %q, want %q (derived from minio_url %q)", storyboardURL, wantStoryboard, minioURL)
+	}
+	ep1, ok := episodes[1].(map[string]interface{})
+	if !ok {
+		t.Fatalf("ep1 wrong shape: %v", episodes[1])
+	}
+	if _, present := ep1["storyboard_url"]; present {
+		t.Errorf("ep1 storyboard_url present when HasStoryboard=false; body=%s", w.Body.String())
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -48,9 +49,10 @@ func NewEpisodesHandler(episodeRepo EpisodeStoreReader, urlBuilder URLBuilder, l
 
 // episodeResponse is the JSON shape locked in 04-SPEC.
 type episodeResponse struct {
-	MinioURL    string `json:"minio_url"`
-	DurationSec int    `json:"duration_sec,omitempty"`
-	SizeBytes   int64  `json:"size_bytes,omitempty"`
+	MinioURL      string `json:"minio_url"`
+	DurationSec   int    `json:"duration_sec,omitempty"`
+	SizeBytes     int64  `json:"size_bytes,omitempty"`
+	StoryboardURL string `json:"storyboard_url,omitempty"`
 }
 
 // episodeListItem is one entry in the List response — episode number +
@@ -61,6 +63,7 @@ type episodeListItem struct {
 	EpisodeNumber int    `json:"episode_number"`
 	MinioURL      string `json:"minio_url"`
 	DurationSec   int    `json:"duration_sec,omitempty"`
+	StoryboardURL string `json:"storyboard_url,omitempty"`
 }
 
 // listResponse wraps the episode array under "episodes" (consistent
@@ -94,6 +97,9 @@ func (h *EpisodesHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		if ep.DurationSec != nil {
 			item.DurationSec = *ep.DurationSec
+		}
+		if ep.HasStoryboard {
+			item.StoryboardURL = h.urlBuilder.URLFor(ep.MinioPath + ffmpeg.StoryboardVTTName)
 		}
 		items = append(items, item)
 	}
@@ -176,6 +182,9 @@ func (h *EpisodesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	if ep.SizeBytes != nil {
 		resp.SizeBytes = *ep.SizeBytes
+	}
+	if ep.HasStoryboard {
+		resp.StoryboardURL = h.urlBuilder.URLFor(ep.MinioPath + ffmpeg.StoryboardVTTName)
 	}
 	httputil.OK(w, resp)
 }
