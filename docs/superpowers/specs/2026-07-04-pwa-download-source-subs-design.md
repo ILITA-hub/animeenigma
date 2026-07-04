@@ -123,7 +123,7 @@ if (from === START_LOCATION && !navigator.onLine && offlineDownloadsEnabled && t
 **Confirm-time gate** (`DownloadDialog.vue`): when `isCellular()` and the session override is off, pressing «Начать» does not confirm — the dialog swaps its footer into an explicit second step: warning «Вы на мобильных данных. По умолчанию скачивание только по Wi-Fi.» with buttons «Качать по мобильным данным» (sets the session override, then emits confirm) and «Отмена» (back to the normal footer).
 
 **Engine gate + mid-run pause** (`downloadEngine.ts`):
-- `OfflineDownload.pausedBy?: 'user' | 'network'` — distinguishes a manual pause (never auto-resumed) from a network pause.
+- `OfflineDownload.pausedBy?: 'network'` — set only by the cellular guard; a manual pause leaves it unset and is never auto-resumed.
 - At the top of `runDownload` (next to the quota re-check, before `resolve()` so no scraper resolution is burned): `isCellular() && !allowCellular` → record goes `paused` with `pausedBy: 'network'`.
 - The engine subscribes to connection changes: switching **to** cellular without the override pauses the active download and every queued item (`pausedBy: 'network'`) and surfaces a notice; switching **back to Wi-Fi** auto-resumes exactly the `pausedBy === 'network'` records (user-paused ones stay paused), clearing `pausedBy`.
 
