@@ -6,7 +6,8 @@
 > first**. The CLAUDE.md "5 video players" table is a historical sketch; this
 > document describes the player as it is actually built today.
 >
-> Last verified against code: 2026-07-04 (mobile redesign + season downloads).
+> Last verified against code: 2026-07-04 (mobile redesign + season downloads;
+> scrub-preview storyboard sprites + SW segment cache, §5.5).
 
 ---
 
@@ -158,7 +159,7 @@ Key invariants:
 |------|------|
 | `AePlayer.vue` | Orchestrator. Owns `<video>`, wires every composable, runs the default-selection + URL-sync logic, renders overlays/menus. |
 | `PlayerControlBar.vue` | Play/pause, ±5s, volume, Source pill, CC, gear, PiP, fullscreen. |
-| `PlayerScrubBar.vue` / `ScrubPreview.vue` | Progress track + hover preview. |
+| `PlayerScrubBar.vue` / `ScrubPreview.vue` | Progress track + hover preview (§5.5). |
 | `SourcePanel.vue` | RAW/DUB slider, language slider (DUB), team chips, **provider list (top-3 + hacker)**, server list. The combo-selection UI. |
 | `ProviderChip.vue` | One provider row: state tint, hue dot, reason tooltip, BEST badge. |
 | `PlaybackSettingsMenu.vue` | Quality (Auto only), speed, autoplay-next (off), auto-skip-intro (off). |
@@ -182,6 +183,182 @@ Key invariants:
 | `useWatchTracking.ts` | Emits `watch_history` / `watch_progress`, room sync. |
 | `episodeSelection.ts` / `episodeProgress.ts` | Watching/finished/not-yet-aired episode state. |
 | `playerHotkeys.ts` | Key → action map. |
+
+---
+
+## 5.5 Scrub-bar hover preview (`ScrubPreview.vue`)
+
+Hovering the scrub track renders a thumbnail bubble above it. There are
+**three preview sources**, tried in this priority order:
+
+1. **Storyboard sprite mode** — library ("ae" first-party) episodes ship a
+   pre-baked WebVTT thumbnail track. When `StreamResult.storyboardUrl` is set
+   and the VTT parses, the component draws sprite crops out of a handful of
+   JPEG sheets and **never boots the shadow `hls.js` engine** — zero per-hover
+   proxy egress.
+2. **Shadow engine + SW segment cache** — no storyboard, but the PWA service
+   worker is registered: the shadow engine's own HLS segment fetches are
+   tagged `aescrub=1` and served cache-first from `ae-seg-v1` once warm.
+3. **Plain shadow engine** — no storyboard, no SW (killed, unsupported, or not
+   yet registered): the pre-existing live-seek-and-capture behavior, unchanged.
+
+Every fallback is silent: a broken storyboard VTT, a missing SW, or a cache
+miss never surfaces an error — the component just drops to the next source.
+
+**The "shadow engine"** (both sources #2 and #3) is a hidden, muted
+`<video>` (`shadowRef`, `ScrubPreview.vue`) that seeks independently of the
+main player and captures every decoded frame into a canvas cache keyed by a
+5s time bucket (LRU, `CACHE_MAX = 150` entries). A hover renders the nearest
+cached thumbnail **instantly** (no network); the shadow video only issues a
+real seek once the pointer *settles* (`SETTLE_MS = 180`), and a background
+pump prefetches a handful of evenly-spaced timeline points so the whole bar
+has distinct frames within seconds of the first hover. This is unrelated to —
+and does not reuse — `useVideoEngine.ts` (that composable is the main
+player's own `<video>`/hls.js wrapper); the shadow engine constructs and owns
+a second, independent `hls.js` instance pinned to `currentLevel = 0`
+(lowest quality — a 192×108 bubble needs no ABR). `scrubPreviewDebug.ts`
+mirrors engine/cache/queue health into `DebugHud.vue`'s **PREVIEW** row
+(hacker mode) for exactly this reason: "stale bubble" has two unrelated
+causes (frontend pump wedged vs. provider fragment latency) that look
+identical on screen.
+
+### Prop chain
+
+`storyboardUrl` hops down four components before it reaches the renderer:
+
+```
+AePlayer.vue          :preview-storyboard-url="currentStream?.storyboardUrl ?? null"
+  → PlayerControlBar.vue   previewStoryboardUrl prop → re-emitted :preview-storyboard-url
+    → PlayerScrubBar.vue     previewStoryboardUrl prop → passed as :storyboard-url
+      → ScrubPreview.vue       storyboardUrl prop
+```
+
+`currentStream` is the resolved `StreamResult` (`types/aePlayer.ts`). Only the
+**ae adapter** (`makeAeAdapter`, `useProviderResolver.ts`) ever populates
+`storyboardUrl` — every other adapter (scraper/EN, kodik, anime18/hanime,
+animejoy) leaves it `undefined`, which correctly routes those sources to
+preview source #2/#3 above. "Library content only" in practice means
+first-party `ae` episodes; Raw (JP) plays through the scraper chain
+(allanime/okru) today, not the library, so it never carries a storyboard
+either (see the `raw` provider removal in memory/CLAUDE.md history).
+
+### 1. Storyboard sprite mode — geometry, generation, signing
+
+**Geometry is LOCKED** (`services/library/internal/ffmpeg/storyboard.go`):
+5s cadence (`StoryboardCadenceSec`), 10×10 sheets of 160×90 JPEG tiles
+(`StoryboardCols`/`Rows`/`TileW`/`TileH`, `-q:v 8` — low quality is
+deliberate, this is a preview-only asset), file names `storyboard_NNN.jpg`
+(1-based, `sort.Strings` order) + `storyboard.vtt`
+(`StoryboardVTTName`), written under the episode's **existing** MinIO prefix
+alongside the HLS output (`{prefix}storyboard_NNN.jpg`, `{prefix}storyboard.vtt`
+— `minio/writer.go:UploadStoryboard`). Changing any of these constants means
+regenerating every stored storyboard.
+
+**Generation has two paths:**
+- `encoder_worker.go`'s step 8b runs the storyboard ffmpeg pass **after** the
+  HLS upload succeeds (a storyboard failure never blocks playable output) and
+  **before** the `library_episodes` insert (so `HasStoryboard` is known at
+  insert time, avoiding a second UPDATE). Skipped when `job.ShikimoriID == ""`
+  — pending/anonymous uploads have no episode row to flag. Any ffmpeg or
+  upload failure is logged and swallowed; the episode ships without a
+  preview, never blocked on it.
+- `storyboard_backfill.go` catches up episodes ingested before the pass
+  existed: pulls a batch of `backfillBatchSize = 50` storyboard-less rows
+  (oldest first) per cycle, processes the first one not in failure-backoff, a
+  per-episode failure enters a `backfillCooldown = 6h` in-memory cooldown so
+  one persistently-broken row can't starve the rest of the batch (the
+  starvation guard). Gated on the same disk-guard threshold the
+  download/encode admit path uses; `STORYBOARD_BACKFILL_ENABLED` (default
+  `true`) is the off switch, `STORYBOARD_BACKFILL_PAUSE_SEC` (default `60`,
+  `NewStoryboardBackfill`) the per-episode pause. Deliberately the
+  lowest-priority workload on the host — a 500-episode library backfills over
+  days, not minutes.
+- `has_storyboard BOOLEAN NOT NULL DEFAULT FALSE` (migration
+  `015_storyboard.sql`) is what both paths flip; it drives `HasStoryboard` in
+  the episode list/get handlers (`handler/episodes.go`) and is what makes
+  `GetAeStream` attach a `storyboard_url`/`RawStream.Storyboard` at all.
+
+**Signing chain:** catalog's `RawResolver.GetLibraryStream`
+(`raw_resolver.go`, backing `GET /api/anime/{id}/ae/stream`) signs the
+storyboard URL exactly like it signs the playlist URL (`streamsign.Sign`) and
+attaches it as `RawStream.Storyboard {url, exp, sig}` (`newLibraryStream`).
+The signed URL then passes through the HLS proxy like any other library
+asset: `libs/videoutils/proxy.go` detects the WebVTT response
+(Content-Type contains `vtt`, or a `.vtt` path suffix) and runs
+`rewriteVTTURLs` instead of the plain passthrough — it rewrites each
+`storyboard_NNN.jpg#xywh=x,y,w,h` cue payload into a signed
+`/api/streaming/hls-proxy` URL, the same treatment `rewriteM3U8URLs` gives
+playlist children (one correlation token minted per manifest, AR-EGRESS-04).
+Only image-cue lines match (the `vttImageCue` regex); `WEBVTT`/`NOTE`/timing
+lines and non-image payloads (real subtitle text, on a different proxy path)
+are left untouched.
+
+**Parser contract (`storyboardVtt.ts`):** `parseStoryboardVtt` accepts only
+absolute or root-relative cue URLs (`^(?:https?:)?\/\/` or a leading `/`) — a
+bare-relative cue (the raw `storyboard_003.jpg#xywh=…` the ffmpeg pass writes,
+before the proxy rewrite runs) means the rewrite didn't happen, and the cue is
+silently **skipped** rather than resolved client-side, which could never
+produce a fetchable *signed* URL anyway. Malformed cues degrade the same way
+— no throw, just fewer cues; an empty cue list falls straight through to the
+shadow engine (`storyCues = cues.length > 0 ? cues : null` in
+`ScrubPreview.vue`'s `loadStoryboard`). A `storyGen` generation token (mirrors
+the shadow engine's own `initToken`) guards a slow in-flight VTT fetch from
+clobbering a newer stream's cues if the episode changes mid-load.
+
+### 2. The SW segment cache (`src/pwa/segmentCache.ts`)
+
+Cache name `ae-seg-v1`, registered as a `workbox-routing` route in `src/sw.ts`
+alongside the offline-download and RU-edge-fallback routes. Reliability
+contract (owner directive 2026-07-04):
+
+| Property | Value |
+|---|---|
+| Cache key | the upstream `url=` query param only (`segmentCacheKey`) — `exp`/`sig`/`sess` rotate on every playlist rewrite and must NOT fragment the cache |
+| Eligible requests | `/api/streaming/hls-proxy` responses whose upstream path ends `.ts` or `.m4s` (`SEG_EXT`); `type=mp4` and any request carrying a `Range` header are excluded outright |
+| Serve policy | cache-first **only** for `aescrub=1`-marked requests (`markScrubUrl`, set by the shadow engine's `xhrSetup`); unmarked requests — i.e. the **main player** — always hit the network |
+| Write policy | every 200 response, marked or not, is teed into the cache in the background — the main player's own segment fetches feed the cache too, so a re-hover of a spot the main player already buffered can still hit |
+| Concurrency | `MAX_INFLIGHT_TEES = 4`; past the cap, the tee is skipped and the response is still returned normally |
+| Bounds | `SEG_MAX_ENTRIES = 150` FIFO (Cache API preserves insertion order, so the front of `cache.keys()` is oldest), `SEG_TTL_MS` = 3h (checked on read, expired entries deleted lazily) |
+| Storage guard | writes are dropped outright when `navigator.storage.estimate()` is unavailable, or headroom (`quota - usage`) is below `MIN_HEADROOM_BYTES` = 1 GB |
+| Failure mode | a write **never** blocks or fails the response — `event.waitUntil(writeSegment(...).catch(() => {}))` swallows every error |
+
+**Kill switch:** `registerPwa.ts`'s `shouldPurgeCacheKey` matches
+`ae-seg-*` (alongside the `workbox-*` app-shell precache) — when
+`/sw-config.json` reports `kill: true`, `unregisterAll()` unregisters the SW
+**and** purges the segment cache. `ae-offline-*` (user-downloaded episodes)
+deliberately does NOT match: the kill-switch retires a broken SW, it must
+never destroy user data.
+
+### Coverage caveats (read before assuming "previews work everywhere")
+
+- **Ranged segments bypass the cache entirely.** `handleSegmentRequest`
+  treats any request carrying a `Range` header as uncacheable — a cached full
+  200 response would corrupt a byte-range read. EXT-X-BYTERANGE streams
+  (multiple segments sharing one URL across ranges) always fall through to
+  plain network.
+- **Extension-less path-style segment CDNs are never keyed.**
+  `segmentCacheKey` requires the upstream path to end `.ts`/`.m4s`; CDNs that
+  serve path-style segments with no extension (the same okcdn quirk the
+  proxy already special-cases for M3U8 playlists without a `.m3u8` suffix —
+  see the comment at `proxy.go:739-745`) never get a cache key and silently
+  keep today's uncached behavior. Nothing breaks; those requests just never
+  benefit from the tee.
+- **MP4-progressive providers are excluded.** `segmentCacheKey` returns
+  `null` outright when `type=mp4` — there's no HLS segment concept to key on,
+  and a Range request would bypass it regardless.
+- **Safari is tee-only.** The shadow engine's Safari fallback is
+  `v.src = streamUrl` (native HLS — `Hls.isSupported()` is false) with no
+  `xhrSetup` hook, so Safari's shadow-engine fetches are never marked
+  `aescrub=1` and are never served from cache. They're still **teed** into
+  `ae-seg-v1` if the URL shape matches (any client's segment fetches are), so
+  Safari indirectly warms the cache for others — it just never reads from it
+  itself.
+- **Privacy.** The SW cache persists actual video segment bytes to disk —
+  including from 18+ (Hanime) sources, since the cache keys on URL shape, not
+  content rating — for up to 3h or 150 entries, where nothing persisted
+  client-side before this feature. The FIFO/TTL bounds and the
+  `sw-config.json` kill switch are the only mitigations; there is no
+  per-title or per-rating opt-out.
 
 ---
 
