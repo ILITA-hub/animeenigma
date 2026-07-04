@@ -5,6 +5,42 @@ Newest entry first. Used by the recovery operator to avoid repeating yesterday's
 
 ---
 
+## 2026-07-04 — animepahe
+
+**State before:** `policy=manual, health=down, status=degraded` — reason: `cdn_unreachable on ` (health_since 2026-07-01T18:00:21Z, policy_since 2026-06-26T08:17:08Z, last_probed_at unset in the last several cycles). Selected as the most-neglected "manual-only" candidate — down for ~56h, last worked on 2026-07-01 (two runs ago; miruro 07-02 and okru 07-03 in between, not repeating either). The bottom-of-file "Known-hard cases" note calling animepahe `policy=disabled` was already flagged stale by the 2026-07-01 entry (predates the 06-26 Camoufox revival) — not treated as a skip signal. allanime/animefever/animekai skipped as documented known-hard/disabled cases.
+
+**Root cause — genuine structural bug in the probe/timeout architecture, not an animepahe-side regression:**
+
+Walked the full `episodes→servers→stream` chain with `prefer=animepahe` on 3 popular-anime UUIDs. Two of three FAILED on the first hit (`request canceled` / `502 scraper upstream error`), then succeeded instantly on immediate retry. That pattern — first-call failure, instant retry success — is the documented "KNOWN FIRST-CALL LATENCY" quirk from the 2026-06-26 revival: animepahe is the only `solve_challenge=true` provider, so its stealth-scraper warm session must cold-solve a Cloudflare Turnstile challenge on first use.
+
+Traced why this "acceptable UX nuisance for manual selection" was actually causing the PERMANENT health=down state:
+- `services/stealth-scraper/app/config.py`: `STEALTH_CHALLENGE_SOLVE_TIMEOUT_MS` defaults to 30_000 (30s worst-case Turnstile solve) and `session_ttl_seconds` defaults to 600 (10 min warm-session idle expiry).
+- `services/scraper/internal/config/config.go`: `SCRAPER_PROVIDER_TIMEOUT` defaults to 8s — applied uniformly to EVERY provider by `Orchestrator.providerBudget()` inside the failover loop (`services/scraper/internal/service/orchestrator.go`), regardless of that provider's real latency profile.
+- The automated health probe runs on a 6h cadence, sample_size=1, fail_fast=true for `manual+down` providers (documented in the 2026-06-28 gogoanime entry below). 6h ≫ the 600s session TTL, so animepahe's warm session is **always** cold by the time the next probe fires. The probe's own HTTP client budget (`services/analytics/internal/probe/resolver.go`, 15s per call) is generous enough to cover a ~14-30s cold solve — but the scraper's internal 8s per-provider budget kills the attempt first, well before the cold solve can finish.
+- Net effect: **every single scheduled probe for animepahe was mathematically guaranteed to fail**, independent of whether animepahe actually works. This exactly explains the 2026-07-01 pattern in the entry below: fixed and verified working at ~02:5x, then flipped back to `down` at the very next 18:00 probe the same day — and has stayed down for the ~56h since, because nothing was different about the 6h probe attempts that followed.
+
+**Fix shipped (worktree → main, TDD, deployed + verified):**
+1. Added `Orchestrator.SetProviderTimeoutOverride(name, d)` + `providerBudgetFor(name)` to `services/scraper/internal/service/orchestrator.go`, letting ONE named provider get a longer per-provider failover budget without touching the global `SCRAPER_PROVIDER_TIMEOUT` (which stays 8s for every other provider — no failover-speed regression for the rest of the chain). Wrote 3 new tests first (`TestOrchestrator_PerProviderTimeoutOverride_{GrantsNamedProviderLongerBudget,OtherProvidersUnaffected,GetStreamGated}`) — confirmed red (compile failure) before implementing, all green after.
+2. New config field `AnimepaheProviderTimeout` / env `SCRAPER_ANIMEPAHE_PROVIDER_TIMEOUT` (default 35s = 30s sidecar solve budget + margin) in `services/scraper/internal/config/config.go`.
+3. Wired in `services/scraper/cmd/scraper-api/main.go`: `orchestrator.SetProviderTimeoutOverride("animepahe", cfg.AnimepaheProviderTimeout)` right after the existing global `SetProviderTimeout` call. Confirmed `adultOrch` (18+/hanime chain) never registers animepahe, so this is EN-chain-only.
+4. Full `go build ./...`, `go vet ./...`, `go test ./... -count=1` (all scraper packages) green. Committed `a29fcbf5`, pushed to `main`, redeployed `scraper` (`make redeploy-scraper` from this worktree — already equivalent to a clean `origin/main` checkout since it was branched fresh and carried only this commit; copied `docker/.env` in first per the worktree-deploy gotcha).
+
+**Manual verification (2026-07-04, post-fix, post-redeploy):**
+- Deploy logs confirm the override is live: `"per-provider failover budget configured" timeout=8s` then `"animepahe per-provider timeout override configured" timeout=35s`.
+- `GET /scraper/episodes?prefer=animepahe` (Classroom of the Elite 4, `6549ac79`) on the freshly-restarted container (genuinely cold — no prior warm session): **12.85s**, succeeded. This would have hit the old 8s ceiling and failed; it's living proof the fix closes exactly the gap that was killing every probe cycle.
+- `GET /scraper/servers` → 6 real `kwik.cx` servers (3 sub / 3 dub) ✅
+- `GET /scraper/stream?category=sub` → signed `https://vault-16.owocdn.top/.../uwu.m3u8` (AES-128 HLS) ✅
+- HLS master via gateway (`/api/streaming/hls-proxy` + exp/sig): HTTP 200, 44,894 bytes, valid `#EXTM3U` VOD playlist with `#EXT-X-KEY:METHOD=AES-128` ✅
+- First segment via the same proxy path: HTTP 200, `video/mp2t`, 123,712 bytes, real (encrypted) MPEG-TS payload ✅
+
+**Action taken:** Submitted `probe-result pass` citing commit `a29fcbf5` and the concrete cold-call timing + full-chain verification → state machine transitioned `down → recovering` at 2026-07-04T02:30:29Z. `policy=manual` preserved (promotion to `auto` is a human call / the state machine's own timer). Also corrected the stale "Known-hard cases" line at the bottom of this file (it still said `policy=disabled`, predating the 06-26 revival, and was actively misleading future runs toward skipping a genuinely fixable provider).
+
+**Outcome:** ✅ Recovered with a shipped code fix that addresses the actual structural cause (probe/timeout mismatch), not just a flag flip or a lucky transient retry.
+
+**Next step:** Confirm animepahe transitions `recovering → up` at the next scheduled 6h probe cycle (should now pass on its own — no manual intervention needed, since the timeout that was killing it is fixed). If it flips back to `down` again, the root cause is NOT this timeout mismatch and needs a fresh diagnosis (don't assume this fix again). Consider whether `nineanime`/`gogoanime`/`allanime` (other `engine=browser` providers) have similar per-provider latency profiles that don't fit the shared 8s budget — worth a quick check next time one of them shows a first-call-fails/retry-succeeds pattern.
+
+---
+
 ## 2026-07-03 — okru
 
 **State before:** `policy=manual, health=down, status=degraded` — reason: `cdn_unreachable on ` (health_since 2026-06-26T18:00:01Z, policy_since 2026-06-25T00:00:17Z, last_probed_at 2026-07-02T18:00:24Z). Selected as the most-neglected "manual-only" candidate — last worked 2026-06-26 (7 days), no "Failing" (auto+down) or stuck-"recovering" providers existed in the roster. Not repeating yesterday's miruro (documented known-hard, do-not-re-attempt-code-fix). allanime/animefever/animekai skipped as documented known-hard/disabled cases.
@@ -318,4 +354,4 @@ Consider auditing other providers (nineanime/okru) for similar probe false-negat
 
 - **allanime** — clock.json behind Cloudflare Turnstile (api.allanime.day). Policy=manual. No Go-level fix possible.
 - **animefever** — HLS segments 302→ad CDN (sf16-scmcdn-sg.ibytedtos.com) that 403s our egress. Policy=manual.
-- **animepahe** — DDoS-Guard→CF managed challenge, sidecar retired 2026-06-24. Policy=disabled.
+- ~~animepahe~~ — STALE, do not skip. Was DDoS-Guard→CF managed challenge / sidecar retired / policy=disabled as of 2026-06-24, but **revived via Camoufox 2026-06-26** (Turnstile-solve, `engine=browser`, `policy=manual`) — see 2026-07-01 and 2026-07-04 entries above. Structurally recoverable; treat any future down as a fresh diagnosis, not a known-hard case.
