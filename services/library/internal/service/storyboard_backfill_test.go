@@ -38,44 +38,74 @@ func (r *sbRecorder) snapshot() []string {
 
 // ---- Fakes ----
 
-// sbFakeRepo drives ListWithoutStoryboard from a queue of batches and records
-// every SetHasStoryboard id. onExhaust fires when the queue is drained (the
-// call that returns an empty page) — a test uses it to cancel the loop ctx.
+// sbFakeRepo is a FAITHFUL fake of the storyboard-less episode queue: it holds a
+// working set of episodes and derives ListWithoutStoryboard's result from the
+// live HasStoryboard flag state (NOT a pre-canned queue of batches). This is the
+// whole point of the rewrite — a canned-batch fake decouples list results from
+// flag state, so a wedged production worker (which re-selects the same broken
+// oldest row forever) would still pass an error-continue test. Here:
+//   - ListWithoutStoryboard returns, in insertion order (the tests seed
+//     oldest-first, mirroring the real created_at ASC), up to `limit` episodes
+//     whose flag is still false in this fake's own state.
+//   - SetHasStoryboard flips the flag, so a processed row drops out of the next
+//     list exactly like the real repo.
+//
+// onList(callNum) and onSet(id) fire AFTER the state mutation (outside the lock)
+// so a test can advance a clock or cancel the loop ctx deterministically.
 type sbFakeRepo struct {
 	mu        sync.Mutex
 	rec       *sbRecorder
-	batches   [][]domain.Episode
+	eps       []domain.Episode // working set; HasStoryboard is mutated in place
 	listErr   error
 	listCalls int
 	setCalls  []string
-	onExhaust func()
+	onList    func(call int)
+	onSet     func(id string)
 }
 
-func (r *sbFakeRepo) ListWithoutStoryboard(_ context.Context, _ int) ([]domain.Episode, error) {
+func (r *sbFakeRepo) ListWithoutStoryboard(_ context.Context, limit int) ([]domain.Episode, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.listCalls++
+	call := r.listCalls
 	if r.listErr != nil {
-		return nil, r.listErr
+		err := r.listErr
+		r.mu.Unlock()
+		return nil, err
 	}
-	if len(r.batches) == 0 {
-		if r.onExhaust != nil {
-			r.onExhaust()
+	var out []domain.Episode
+	for _, ep := range r.eps {
+		if ep.HasStoryboard {
+			continue
 		}
-		return nil, nil
+		out = append(out, ep)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
 	}
-	batch := r.batches[0]
-	r.batches = r.batches[1:]
-	return batch, nil
+	onList := r.onList
+	r.mu.Unlock()
+	if onList != nil {
+		onList(call)
+	}
+	return out, nil
 }
 
 func (r *sbFakeRepo) SetHasStoryboard(_ context.Context, id string) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.rec != nil {
 		r.rec.add("set")
 	}
 	r.setCalls = append(r.setCalls, id)
+	for i := range r.eps {
+		if r.eps[i].ID == id {
+			r.eps[i].HasStoryboard = true
+		}
+	}
+	onSet := r.onSet
+	r.mu.Unlock()
+	if onSet != nil {
+		onSet(id)
+	}
 	return nil
 }
 
@@ -115,17 +145,25 @@ func (s *sbFakeStore) UploadStoryboard(_ context.Context, prefix string, _ []str
 	return s.uploadErr
 }
 
-// sbFakeMaker records Storyboard sourcePaths + durations and errors on the
-// call numbers named in errOn (1-indexed). Each success mints its own temp
-// subdir so the worker's post-upload RemoveAll(filepath.Dir(VTTPath)) mirrors
-// the real Storyboard contract without wiping a shared dir.
+// sbFakeMaker records Storyboard sourcePaths + durations and can fail two ways:
+//   - errOn[callNum] (1-indexed) — fail the Nth call, then recover (used to
+//     model a transient failure that a cooldown-elapsed retry clears).
+//   - failDurations[durationSec] — fail UNCONDITIONALLY whenever an episode with
+//     that duration is processed. durationSec is the only per-episode signal that
+//     reaches Storyboard (the temp source path is random), so it is how a test
+//     pins a PERMANENT per-episode failure to one specific episode.
+//
+// Each success mints its own temp subdir so the worker's post-upload
+// RemoveAll(filepath.Dir(VTTPath)) mirrors the real Storyboard contract without
+// wiping a shared dir.
 type sbFakeMaker struct {
-	mu          sync.Mutex
-	rec         *sbRecorder
-	calls       int
-	sourcePaths []string
-	durations   []int
-	errOn       map[int]bool
+	mu            sync.Mutex
+	rec           *sbRecorder
+	calls         int
+	sourcePaths   []string
+	durations     []int
+	errOn         map[int]bool
+	failDurations map[int]bool
 }
 
 func (m *sbFakeMaker) Storyboard(_ context.Context, sourcePath string, durationSec int) (*ffmpeg.StoryboardResult, error) {
@@ -137,7 +175,7 @@ func (m *sbFakeMaker) Storyboard(_ context.Context, sourcePath string, durationS
 	}
 	m.sourcePaths = append(m.sourcePaths, sourcePath)
 	m.durations = append(m.durations, durationSec)
-	if m.errOn[m.calls] {
+	if m.errOn[m.calls] || m.failDurations[durationSec] {
 		return nil, errors.New("simulated storyboard failure")
 	}
 	dir, err := os.MkdirTemp("", "sb-out-")
@@ -148,6 +186,13 @@ func (m *sbFakeMaker) Storyboard(_ context.Context, sourcePath string, durationS
 		SheetPaths: []string{filepath.Join(dir, "storyboard_001.jpg")},
 		VTTPath:    filepath.Join(dir, "storyboard.vtt"),
 	}, nil
+}
+
+// callCount returns the number of Storyboard invocations so far (thread-safe).
+func (m *sbFakeMaker) callCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
 }
 
 // sbFakeGuard returns a canned Allow verdict; onCall fires each call so a test
@@ -174,6 +219,16 @@ func (g *sbFakeGuard) Allow(_ int) (bool, int, error) {
 
 func intPtr(v int) *int { return &v }
 
+// contains reports whether s appears in xs.
+func contains(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
 // TestBackfill_ProcessesEpisodeAndSetsFlag — one pending episode then an empty
 // page. The worker must download the prefix, storyboard the LOCAL playlist with
 // the episode's duration, upload the sprites under the same prefix, flip the
@@ -190,7 +245,9 @@ func TestBackfill_ProcessesEpisodeAndSetsFlag(t *testing.T) {
 		DurationSec:   intPtr(1400),
 		HasStoryboard: false,
 	}
-	repo := &sbFakeRepo{rec: rec, batches: [][]domain.Episode{{ep}}, onExhaust: cancel}
+	repo := &sbFakeRepo{rec: rec, eps: []domain.Episode{ep}}
+	// One episode, then it drops out via the flag. Cancel once it is flagged.
+	repo.onSet = func(string) { cancel() }
 	store := &sbFakeStore{rec: rec}
 	maker := &sbFakeMaker{rec: rec}
 	guard := &sbFakeGuard{allowed: true}
@@ -231,7 +288,7 @@ func TestBackfill_ProcessesEpisodeAndSetsFlag(t *testing.T) {
 func TestBackfill_DiskGuardDisallowedSkipsWork(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo := &sbFakeRepo{batches: [][]domain.Episode{{{ID: "ep-x", MinioPath: "aeProvider/1/RAW/1/"}}}}
+	repo := &sbFakeRepo{eps: []domain.Episode{{ID: "ep-x", MinioPath: "aeProvider/1/RAW/1/"}}}
 	store := &sbFakeStore{}
 	maker := &sbFakeMaker{}
 	// Guard disallows and cancels the loop after the first consultation.
@@ -251,33 +308,105 @@ func TestBackfill_DiskGuardDisallowedSkipsWork(t *testing.T) {
 	}
 }
 
-// TestBackfill_EpisodeErrorContinues — the first episode's Storyboard errors:
-// its flag must NOT be set (retried next full pass), but the second episode is
-// still processed to completion in the following cycle.
+// TestBackfill_EpisodeErrorContinues — a starvation guard. ep-1 is the oldest
+// storyboard-less row and its Storyboard fails PERMANENTLY (unconditional, keyed
+// on its duration). The failing row must NOT wedge the queue: ep-2, which sits
+// behind it, must still be processed to completion (upload + flag) within a
+// bounded number of cycles. ep-1's flag stays false throughout.
+//
+// This MUST fail against the pre-fix worker: that worker lists limit=1, so it
+// re-selects ep-1 (the oldest still-flagless row) every cycle forever and never
+// reaches ep-2. The safety cap in onList turns that wedge into a clean assertion
+// failure instead of a hang.
 func TestBackfill_EpisodeErrorContinues(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 
 	ep1 := domain.Episode{ID: "ep-1", MinioPath: "aeProvider/1/RAW/1/", DurationSec: intPtr(1000)}
 	ep2 := domain.Episode{ID: "ep-2", MinioPath: "aeProvider/2/RAW/1/", DurationSec: intPtr(1200)}
-	repo := &sbFakeRepo{
-		batches:   [][]domain.Episode{{ep1}, {ep2}},
-		onExhaust: cancel,
-	}
+	repo := &sbFakeRepo{eps: []domain.Episode{ep1, ep2}} // ep-1 oldest (front of slice)
 	store := &sbFakeStore{}
-	maker := &sbFakeMaker{errOn: map[int]bool{1: true}} // first Storyboard fails
+	// ep-1 (duration 1000) fails on EVERY attempt; ep-2 (duration 1200) succeeds.
+	maker := &sbFakeMaker{failDurations: map[int]bool{1000: true}}
 	guard := &sbFakeGuard{allowed: true}
+
+	repo.onSet = func(id string) {
+		if id == "ep-2" {
+			cancel() // ep-2 made it through despite ep-1 being broken → done
+		}
+	}
+	// Safety net: a wedged worker never flags ep-2, so bound the run and let the
+	// assertions below fail cleanly rather than looping forever.
+	repo.onList = func(call int) {
+		if call > 30 {
+			cancel()
+		}
+	}
 
 	b := NewStoryboardBackfill(repo, store, maker, guard, 20, time.Millisecond, "", nil)
 	b.Run(ctx)
 
-	if maker.calls != 2 {
-		t.Fatalf("Storyboard calls = %d, want 2 (both episodes attempted)", maker.calls)
+	// ep-2 must have been processed to completion.
+	if !contains(repo.setCalls, "ep-2") {
+		t.Fatalf("SetHasStoryboard ids = %v, want to include ep-2 (queue must advance past broken ep-1)", repo.setCalls)
 	}
-	// ep1 failed before UploadStoryboard/SetHasStoryboard; only ep2 completes.
-	if !reflect.DeepEqual(repo.setCalls, []string{"ep-2"}) {
-		t.Fatalf("SetHasStoryboard ids = %v, want [ep-2] (ep-1 failed, no flag)", repo.setCalls)
+	if !contains(store.uploadPrefix, ep2.MinioPath) {
+		t.Fatalf("UploadStoryboard prefixes = %v, want to include %s", store.uploadPrefix, ep2.MinioPath)
 	}
-	if len(store.uploadPrefix) != 1 || store.uploadPrefix[0] != ep2.MinioPath {
-		t.Fatalf("UploadStoryboard prefix = %v, want [%s] (only ep-2)", store.uploadPrefix, ep2.MinioPath)
+	// ep-1 permanently failed before upload/flag — it must NEVER be flagged.
+	if contains(repo.setCalls, "ep-1") {
+		t.Fatalf("SetHasStoryboard ids = %v, ep-1 must never be flagged (it fails permanently)", repo.setCalls)
+	}
+}
+
+// TestBackfill_FailedEpisodeRetriedAfterCooldown — a TRANSIENTLY failing episode
+// (fails once, would succeed on retry) must NOT be retried while it is cooling
+// down, and MUST become eligible again once the cooldown elapses. A fake clock
+// proves both halves without waiting the real 6h window.
+func TestBackfill_FailedEpisodeRetriedAfterCooldown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	ep := domain.Episode{ID: "ep-1", MinioPath: "aeProvider/1/RAW/1/", DurationSec: intPtr(1000)}
+	repo := &sbFakeRepo{eps: []domain.Episode{ep}}
+	store := &sbFakeStore{}
+	maker := &sbFakeMaker{errOn: map[int]bool{1: true}} // 1st attempt fails, retry succeeds
+	guard := &sbFakeGuard{allowed: true}
+
+	// Injectable clock — everything runs in this test goroutine (Run is called
+	// synchronously and every hook fires inside a fake method), so a plain
+	// captured variable needs no locking.
+	now := time.Unix(1_700_000_000, 0)
+
+	// attemptsWhileCoolingDown = number of Storyboard attempts made at the moment
+	// we finally jump the clock past the cooldown. If the cooldown gate works,
+	// ep-1 is skipped while cooling, so this is exactly 1 (the initial failure).
+	attemptsWhileCoolingDown := -1
+	repo.onList = func(call int) {
+		// Let the loop take a few cooldown-gated cycles first, then jump past the
+		// cooldown so the next eligibility check re-admits ep-1.
+		if call == 4 {
+			attemptsWhileCoolingDown = maker.callCount()
+			now = now.Add(2 * time.Hour) // > cooldown (set to 1h below)
+		}
+		if call > 50 { // safety: never hang if eligibility regresses
+			cancel()
+		}
+	}
+	repo.onSet = func(string) { cancel() } // ep-1 finally succeeds → done
+
+	b := NewStoryboardBackfill(repo, store, maker, guard, 20, time.Millisecond, "", nil)
+	b.cooldown = time.Hour
+	b.clock = func() time.Time { return now }
+	b.Run(ctx)
+
+	if attemptsWhileCoolingDown != 1 {
+		t.Fatalf("Storyboard attempts during cooldown = %d, want 1 (cooldown must gate the retry)", attemptsWhileCoolingDown)
+	}
+	if got := maker.callCount(); got != 2 {
+		t.Fatalf("total Storyboard attempts = %d, want 2 (fail, then post-cooldown success)", got)
+	}
+	if !reflect.DeepEqual(repo.setCalls, []string{"ep-1"}) {
+		t.Fatalf("SetHasStoryboard ids = %v, want [ep-1] (retried + succeeded after cooldown)", repo.setCalls)
 	}
 }

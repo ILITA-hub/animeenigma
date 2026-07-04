@@ -49,6 +49,18 @@ func (t *Transcoder) Storyboard(ctx context.Context, sourcePath string, duration
 	if err != nil {
 		return nil, fmt.Errorf("mkdir storyboard tmpdir: %w", err)
 	}
+	// Storyboard is best-effort + high-frequency: unlike Transcode (which RETAINS
+	// its dir on failure for admin debugging of encode jobs), a retained
+	// storyboard dir is pure junk accumulation. Clean `tmp` on EVERY error path;
+	// only the success path (ok=true) hands the dir to the caller, who owns
+	// RemoveAll(filepath.Dir(VTTPath)) after upload. The stderr ring buffer is
+	// still folded into the returned error, so the debugging signal survives.
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.RemoveAll(tmp)
+		}
+	}()
 	sheetTemplate := filepath.Join(tmp, "storyboard_%03d.jpg")
 	vf := fmt.Sprintf(
 		"fps=1/%d,scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,tile=%dx%d",
@@ -86,6 +98,7 @@ func (t *Transcoder) Storyboard(ctx context.Context, sourcePath string, duration
 	if err := os.WriteFile(vttPath, []byte(BuildStoryboardVTT(durationSec)), 0o644); err != nil {
 		return nil, fmt.Errorf("write storyboard vtt: %w", err)
 	}
+	ok = true // success: the caller now owns cleanup of tmp (via VTTPath's dir).
 	return &StoryboardResult{SheetPaths: sheets, VTTPath: vttPath}, nil
 }
 

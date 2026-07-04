@@ -93,6 +93,20 @@ func TestStoryboard_FfmpegFailureReturnsError(t *testing.T) {
 	if _, err := tr.Storyboard(context.Background(), src, 900); err == nil {
 		t.Fatal("expected error on ffmpeg failure")
 	}
+
+	// Unlike Transcode (which RETAINS its per-call dir on failure so admins can
+	// inspect a failed encode job), the storyboard pass is best-effort +
+	// high-frequency: it MUST clean its temp dir on every error path so junk
+	// dirs don't accumulate. Assert no storyboard-* dir survives.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read tmpdir: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "storyboard-") {
+			t.Errorf("storyboard-* temp dir must be cleaned on ffmpeg failure, found %q", e.Name())
+		}
+	}
 }
 
 // fakeFfprobeWithDuration emits a JSON blob with the specified duration (in seconds).
