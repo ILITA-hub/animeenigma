@@ -3,6 +3,7 @@ package videoutils
 import (
 	"bytes"
 	"io"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -403,5 +404,36 @@ func TestIsHLSDomainAllowed_RotatingSubdomains(t *testing.T) {
 				t.Errorf("isHLSDomainAllowed(%q) = %v, want %v", c.host, got, c.want)
 			}
 		})
+	}
+}
+
+// TestRewriteVTTURLs_StoryboardCues asserts rewriteVTTURLs rewrites a
+// storyboard thumbnail track's image cue payloads into signed proxy URLs
+// while leaving the #xywh sprite-sheet fragment and timing lines untouched —
+// the same treatment rewriteM3U8URLs already gives playlist children.
+func TestRewriteVTTURLs_StoryboardCues(t *testing.T) {
+	in := "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nstoryboard_001.jpg#xywh=0,0,160,90\n\n00:00:05.000 --> 00:00:10.000\nstoryboard_001.jpg#xywh=160,0,160,90\n"
+	out := rewriteVTTURLs(in, "http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard.vtt", "", "")
+	if !strings.Contains(out, "/api/streaming/hls-proxy?url="+url.QueryEscape("http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard_001.jpg")) {
+		t.Fatalf("cue URL not proxied:\n%s", out)
+	}
+	if !strings.Contains(out, "#xywh=160,0,160,90") {
+		t.Fatalf("xywh fragment must be preserved:\n%s", out)
+	}
+	if !strings.Contains(out, "&exp=") || !strings.Contains(out, "&sig=") {
+		t.Fatalf("sheet URLs must carry provenance:\n%s", out)
+	}
+	if !strings.Contains(out, "00:00:00.000 --> 00:00:05.000") {
+		t.Fatalf("timing lines must be untouched:\n%s", out)
+	}
+}
+
+// TestRewriteVTTURLs_NonImagePayloadUntouched asserts a real subtitle VTT
+// (non-storyboard, no image cue payloads) passes through rewriteVTTURLs
+// byte-for-byte unchanged.
+func TestRewriteVTTURLs_NonImagePayloadUntouched(t *testing.T) {
+	in := "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nSome subtitle text line\n"
+	if out := rewriteVTTURLs(in, "http://x/s.vtt", "", ""); out != in {
+		t.Fatalf("subtitle-style payload must pass through unchanged:\n%s", out)
 	}
 }

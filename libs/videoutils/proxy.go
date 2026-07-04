@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -745,6 +746,13 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 	isM3U8 := strings.Contains(contentType, "mpegurl") ||
 		strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
 
+	// Check if this is a WebVTT storyboard/thumbnail track — its cue payloads
+	// reference sprite-sheet JPEGs by bare relative name on the same private
+	// host the manifest itself came from, so they need the same proxy+sign
+	// rewrite the M3U8 branch above gives playlist children.
+	isVTT := strings.Contains(contentType, "vtt") ||
+		strings.HasSuffix(strings.ToLower(parsed.Path), ".vtt")
+
 	// Set CORS headers for frontend access
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
@@ -785,7 +793,44 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 		return bytesIn, bytesOut, nil
 	}
 
-	// Copy response headers for non-M3U8 content
+	if isVTT && resp.StatusCode == http.StatusOK {
+		// Read and rewrite the VTT content. Same rationale as the M3U8 branch
+		// above: a small cue-sheet payload, not a segment stream, so a bounded
+		// ReadAll is fine here.
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return 0, 0, fmt.Errorf("read vtt body: %w", err)
+		}
+		bytesIn = uint64(len(body))
+
+		// Rewrite storyboard image cue URLs in the VTT. Mint one per-manifest
+		// correlation token (AR-EGRESS-04), same as rewriteM3U8URLs does for
+		// playlist children — every sheet image fetched from this storyboard
+		// track groups into one aggregated egress row.
+		sess := newSessToken()
+		rewritten := rewriteVTTURLs(string(body), sourceURL, referer, sess)
+
+		// Set headers (skip Content-Length as it changed; skip the CORS headers we
+		// set ourselves above — an upstream that also sends Access-Control-Allow-*
+		// would otherwise duplicate them, and a response with two ACAO values is
+		// rejected by browsers as a CORS error).
+		for key, values := range resp.Header {
+			if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" || isProxySetCORSHeader(key) {
+				continue
+			}
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+
+		w.Header().Set("Content-Length", strconv.Itoa(len(rewritten)))
+		w.WriteHeader(resp.StatusCode)
+		n, _ := w.Write([]byte(rewritten))
+		bytesOut = uint64(n)
+		return bytesIn, bytesOut, nil
+	}
+
+	// Copy response headers for non-M3U8/VTT content
 	for key, values := range resp.Header {
 		// Skip hop-by-hop headers, Content-Type (we set it ourselves), and the
 		// CORS headers we set above — an upstream Access-Control-Allow-* would
@@ -858,6 +903,29 @@ func isProxySetCORSHeader(key string) bool {
 	return false
 }
 
+// manifestDirBase derives the directory base (scheme://host/dir/) a manifest's
+// relative child URLs resolve against — the directory the manifest itself
+// lives in, NOT the manifest URL. rewriteHLSURL's basePath argument resolves
+// relative URLs by plain concatenation (basePath + urlStr), so passing the
+// full manifest URL here would produce a mangled result (e.g.
+// ".../playlist.m3u8seg-1.ts"). Shared by rewriteM3U8URLs (playlist children)
+// and rewriteVTTURLs (storyboard cue sheets). Returns "" if manifestURL fails
+// to parse — callers treat that as "leave content unrewritten", mirroring the
+// original inline rewriteM3U8URLs behavior.
+func manifestDirBase(manifestURL string) string {
+	parsedBase, err := url.Parse(manifestURL)
+	if err != nil {
+		return ""
+	}
+	basePath := parsedBase.Scheme + "://" + parsedBase.Host
+	if lastSlash := strings.LastIndex(parsedBase.Path, "/"); lastSlash > 0 {
+		basePath += parsedBase.Path[:lastSlash+1]
+	} else {
+		basePath += "/"
+	}
+	return basePath
+}
+
 // rewriteM3U8URLs rewrites URLs in an M3U8 playlist to go through the proxy
 // Also fixes unsupported audio codecs (mp4a.40.1 -> mp4a.40.2)
 func rewriteM3U8URLs(content, baseURL, referer string) string {
@@ -867,18 +935,10 @@ func rewriteM3U8URLs(content, baseURL, referer string) string {
 		content = strings.ReplaceAll(content, "mp4a.40.1", "mp4a.40.2")
 	}
 
-	// Parse base URL for resolving relative URLs
-	parsedBase, err := url.Parse(baseURL)
-	if err != nil {
-		return content
-	}
-
 	// Get the base path for relative URLs (directory of the M3U8 file)
-	basePath := parsedBase.Scheme + "://" + parsedBase.Host
-	if lastSlash := strings.LastIndex(parsedBase.Path, "/"); lastSlash > 0 {
-		basePath += parsedBase.Path[:lastSlash+1]
-	} else {
-		basePath += "/"
+	basePath := manifestDirBase(baseURL)
+	if basePath == "" {
+		return content
 	}
 
 	// Mint ONE per-manifest correlation token. Every segment/child URL we
@@ -977,6 +1037,41 @@ func rewriteHLSURL(urlStr, basePath, referer, sess string) string {
 	}
 
 	return proxyURL
+}
+
+// vttImageCue matches storyboard-style cue payloads: an image path with an
+// optional #xywh fragment. Anything else (real subtitles) passes through.
+var vttImageCue = regexp.MustCompile(`^[^\s#]+\.(?:jpe?g|png|webp)(?:#.*)?$`)
+
+// rewriteVTTURLs rewrites image cue payloads in a WebVTT thumbnail track (a
+// storyboard track referencing sprite-sheet JPEGs on a private MinIO host) to
+// proxied+signed URLs, preserving #xywh fragments — the same treatment
+// rewriteM3U8URLs gives playlist children via rewriteHLSURL. Timing lines,
+// headers, and non-image payloads (real subtitle text) are left untouched.
+func rewriteVTTURLs(content, manifestURL, referer, sess string) string {
+	basePath := manifestDirBase(manifestURL)
+	if basePath == "" {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "WEBVTT") ||
+			strings.HasPrefix(trimmed, "NOTE") || strings.Contains(trimmed, "-->") {
+			continue
+		}
+		if !vttImageCue.MatchString(trimmed) {
+			continue
+		}
+		urlPart, frag, hasFrag := strings.Cut(trimmed, "#")
+		rewritten := rewriteHLSURL(urlPart, basePath, referer, sess)
+		if hasFrag {
+			rewritten += "#" + frag
+		}
+		lines[i] = rewritten
+	}
+	return strings.Join(lines, "\n")
 }
 
 // rewriteURIAttribute rewrites URI="..." attributes in M3U8 tags. sess is the
