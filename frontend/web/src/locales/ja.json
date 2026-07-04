@@ -534,7 +534,10 @@
         "subsOff": "オフ",
         "subsBundled": "ストリーム内蔵",
         "cellularWarn": "モバイルデータ通信中です。ダウンロードは既定でWi-Fiのみです。",
-        "cellularConfirm": "モバイルデータでダウンロード"
+        "cellularConfirm": "モバイルデータでダウンロード",
+        "sourceListFailed": "このソースのエピソード一覧を取得できませんでした",
+        "epUnavailable": "選択したソースにはこのエピソードがありません",
+        "cellularAutoPaused": "モバイルデータ:ダウンロードを一時停止しました"
       }
     }
   },

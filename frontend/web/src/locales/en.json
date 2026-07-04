@@ -534,7 +534,10 @@
         "subsOff": "Don't enable",
         "subsBundled": "Bundled with stream",
         "cellularWarn": "You're on mobile data. Downloads default to Wi-Fi only.",
-        "cellularConfirm": "Download over mobile data"
+        "cellularConfirm": "Download over mobile data",
+        "sourceListFailed": "Couldn't list episodes for that source",
+        "epUnavailable": "This episode isn't available from that source",
+        "cellularAutoPaused": "Mobile data: downloads paused"
       }
     }
   },

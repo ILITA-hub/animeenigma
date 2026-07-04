@@ -378,6 +378,10 @@
         :episode-number="downloadDialogEp.number"
         :season-count="seasonCount"
         :duration-min="anime.durationMin"
+        :report="report"
+        :initial-combo="dlInitialCombo"
+        :sub-options="dlSubOptions"
+        :load-teams="dlLoadTeams"
         :sheet="sheetTeleport"
         :initial-scope="downloadScope"
         @confirm="onConfirmDownload"
@@ -493,13 +497,14 @@ import { enqueueDownload, engineState } from '@/offline/downloadEngine'
 import { seasonTargets, enqueueSeason } from '@/offline/seasonDownload'
 import { listDownloads } from '@/offline/registry'
 import { makeOfflineResolver, offlineCapabilityReport } from '@/offline/offlineAdapter'
+import { makeExternalSubResolver } from '@/offline/externalSubs'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, ProviderRow, AudioKind, TrackLang } from '@/types/aePlayer'
+import type { StreamResult, ProviderRow, AudioKind, TrackLang, Combo } from '@/types/aePlayer'
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
-import type { DownloadState } from '@/offline/types'
+import type { DownloadState, SubPref, SubOption } from '@/offline/types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2300,10 +2305,45 @@ watch(engineState.progress, () => {
   dlRefreshQueued = true
   dlRefreshTimer = setTimeout(() => { dlRefreshQueued = false; void refreshDownloadStates() }, 1000)
 })
+watch(() => engineState.cellularPauses.value, () => {
+  // DownloadsPage mounts an inline offline AePlayer — skip there or the
+  // page's own watcher (Task 10) double-toasts the same event.
+  if (props.offline) return
+  toast.push(t('player.aePlayer.offline.cellularAutoPaused'), 'info', 5000)
+})
+
+const dlInitialCombo = computed<Combo>(() => ({ ...state.combo.value }))
+
+// Bundled entries come from the CURRENT stream (per-episode availability is
+// re-matched by the engine); external entries from the aggregated list.
+const dlSubOptions = computed<SubOption[]>(() => {
+  const opts: SubOption[] = []
+  const seen = new Set<string>()
+  for (const tr of providerBundledTracks.value) {
+    const key = `b:${tr.lang}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    opts.push({ key, label: `${t('player.aePlayer.offline.subsBundled')} · ${tr.lang.toUpperCase()}`, pref: { kind: 'bundled', lang: tr.lang } })
+  }
+  const bundledUrls = new Set(providerBundledTracks.value.map((b) => b.url))
+  for (const tr of subtitleTracks.value) {
+    if (bundledUrls.has(tr.url)) continue
+    const key = `e:${tr.provider}:${tr.lang}:${tr.label}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    opts.push({ key, label: `${tr.label} · ${tr.lang.toUpperCase()}`, pref: { kind: 'external', provider: tr.provider, lang: tr.lang, label: tr.label } })
+  }
+  return opts
+})
+
+function dlLoadTeams(provider: string, audio: AudioKind): Promise<string[]> {
+  return resolver.listTeams(provider, props.animeId, audio)
+}
 
 function onDownloadEpisode(ep: EpisodeOption) {
   downloadScope.value = 'episode'
   downloadDialogEp.value = ep
+  void ensureSubsLoaded()
 }
 
 function onDownloadCurrent() {
@@ -2318,13 +2358,27 @@ function onDownloadSeason() {
   downloadDialogEp.value = ep
 }
 
-async function onConfirmDownload(quality: string, scope: 'episode' | 'season') {
+async function onConfirmDownload(quality: string, scope: 'episode' | 'season', combo: Combo | null, subPref: SubPref | null) {
   const ep = downloadDialogEp.value
   downloadDialogEp.value = null
   if (!ep) return
-  const comboSnapshot = { ...state.combo.value } // freeze — user may switch sources mid-download
+  const comboSnapshot = combo ? { ...combo } : { ...state.combo.value } // freeze — user may switch sources mid-download
+  const resolveSubsFor = makeExternalSubResolver(props.animeId, subPref)
+  // A different provider lists episodes with its own keys — re-list and remap
+  // by episode NUMBER before resolving against it.
+  let eps = episodes.value
+  let target: EpisodeOption | undefined = ep
+  if (comboSnapshot.provider !== state.combo.value.provider) {
+    try {
+      eps = await resolver.listEpisodes(comboSnapshot.provider, props.animeId)
+    } catch {
+      toast.push(t('player.aePlayer.offline.sourceListFailed'), 'error')
+      return
+    }
+    target = eps.find((e) => e.number === ep.number)
+  }
   if (scope === 'season') {
-    const targets = seasonTargets(episodes.value, downloadStates.value)
+    const targets = seasonTargets(eps, downloadStates.value)
     await enqueueSeason(targets, {
       animeId: props.animeId,
       animeTitle: props.anime.title,
@@ -2332,18 +2386,27 @@ async function onConfirmDownload(quality: string, scope: 'episode' | 'season') {
       combo: comboSnapshot,
       quality,
       durationMin: props.anime.durationMin,
-      resolveFor: (target) => () => resolver.resolveStream(comboSnapshot.provider, props.animeId, target, comboSnapshot),
+      subPref: subPref ?? undefined,
+      resolveSubsFor,
+      resolveFor: (tg) => () => resolver.resolveStream(comboSnapshot.provider, props.animeId, tg, comboSnapshot),
     })
   } else {
+    if (!target) {
+      toast.push(t('player.aePlayer.offline.epUnavailable'), 'error')
+      return
+    }
+    const one = target
     await enqueueDownload({
       animeId: props.animeId,
       animeTitle: props.anime.title,
       poster: props.anime.still,
-      episode: ep,
+      episode: one,
       combo: comboSnapshot,
       quality,
       durationMin: props.anime.durationMin,
-      resolve: () => resolver.resolveStream(comboSnapshot.provider, props.animeId, ep, comboSnapshot),
+      subPref: subPref ?? undefined,
+      resolveSubs: resolveSubsFor?.(one),
+      resolve: () => resolver.resolveStream(comboSnapshot.provider, props.animeId, one, comboSnapshot),
     })
   }
   void refreshDownloadStates()
