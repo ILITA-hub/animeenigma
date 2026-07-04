@@ -3,11 +3,16 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const enqueueDownload = vi.fn(async (_req?: unknown) => 'id')
+// vi.fn() so individual tests can point it at a specific id via mockImplementation.
+// Named with the 'mock' prefix so Vitest's hoist-aware transform lets the factory
+// close over it even after vi.mock calls are moved to the top of the file.
+const mockIsEngineWorking = vi.fn((_id: string) => false)
+
 // vi.mock intercepts DYNAMIC imports too — these cover the guard's lazy loads.
 // externalSubs must be mocked as well: its static @/api/client chain pulls
 // router+i18n into the suite otherwise.
 vi.mock('./downloadEngine', () => ({
-  enqueueDownload, isEngineWorking: () => false, pauseAllForCellular: vi.fn(),
+  enqueueDownload, isEngineWorking: mockIsEngineWorking, pauseAllForCellular: vi.fn(),
 }))
 vi.mock('./externalSubs', () => ({ makeExternalSubResolver: () => undefined }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({
@@ -26,7 +31,7 @@ const rec = (over: Partial<OfflineDownload>): OfflineDownload => ({
 })
 
 describe('resumeNetworkPaused', () => {
-  beforeEach(async () => { await _resetDbForTests(); enqueueDownload.mockClear() })
+  beforeEach(async () => { await _resetDbForTests(); enqueueDownload.mockClear(); mockIsEngineWorking.mockClear() })
 
   it('re-enqueues only pausedBy:network records, rebuilding closures', async () => {
     await putDownload(rec({ id: 'net', pausedBy: 'network' }))
@@ -36,5 +41,15 @@ describe('resumeNetworkPaused', () => {
     expect(n).toBe(1)
     expect(enqueueDownload).toHaveBeenCalledTimes(1)
     expect(enqueueDownload.mock.calls[0][0]).toMatchObject({ animeId: 'a', subPref: undefined })
+  })
+
+  it('does not re-enqueue a pausedBy:network record whose id the engine is already working', async () => {
+    // isEngineWorking reports 'active-id' as in-flight — the guard must not
+    // double-enqueue a record the engine already has in its queue or active slot.
+    mockIsEngineWorking.mockImplementation((id: string) => id === 'active-id')
+    await putDownload(rec({ id: 'active-id', pausedBy: 'network' }))
+    const n = await resumeNetworkPaused()
+    expect(n).toBe(0)
+    expect(enqueueDownload).not.toHaveBeenCalled()
   })
 })

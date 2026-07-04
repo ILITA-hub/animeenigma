@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // Keep the engine's module-scope dynamic import of cellularGuard inert in tests.
 vi.mock('./cellularGuard', () => ({ ensureCellularGuard: () => {} }))
 
-import { enqueueDownload, removeDownload, _resetEngineForTests, _installCachesForTests } from './downloadEngine'
+import { enqueueDownload, removeDownload, _resetEngineForTests, _installCachesForTests, pauseAllForCellular, engineState } from './downloadEngine'
 import { _resetDbForTests, getDownload, putDownload } from './registry'
 import type { StreamResult } from '@/types/aePlayer'
 import * as network from './network'
@@ -293,6 +293,8 @@ describe('downloadEngine — full-body 206 normalization (range-gated MP4 hosts)
 })
 
 describe('cellular gate', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   it('on cellular without override: record parks as paused/pausedBy:network, resolve() never called', async () => {
     vi.spyOn(network, 'isCellular').mockReturnValue(true)
     vi.spyOn(network, 'allowCellularThisSession').mockReturnValue(false)
@@ -301,7 +303,6 @@ describe('cellular gate', () => {
     await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('paused'), { timeout: 10_000 })
     expect((await getDownload(id))?.pausedBy).toBe('network')
     expect(resolve).not.toHaveBeenCalled()
-    vi.restoreAllMocks()
   })
 
   it('with the session override the gate is open', async () => {
@@ -314,7 +315,56 @@ describe('cellular gate', () => {
     }))
     const id = await enqueueDownload(req(async () => ({ url: 'https://cdn.example/master.m3u8', type: 'hls' }) as StreamResult))
     await vi.waitFor(async () => expect((await getDownload(id))?.state).toBe('done'), { timeout: 10_000 })
-    vi.restoreAllMocks()
+  })
+
+  it('pauseAllForCellular parks active+queued records as network-paused, bumps cellularPauses once', async () => {
+    _installCachesForTests(fakeCaches().impl)
+    // Both enqueues happen on Wi-Fi so the cellular gate inside runDownload does not block them
+    vi.spyOn(network, 'isCellular').mockReturnValue(false)
+
+    // Latch keeps id1's resolve() blocked so pump stays active on id1 long enough
+    // for id2 to be sitting in the queue when pauseAllForCellular() is called.
+    let releaseLatch!: () => void
+    const latch = new Promise<void>((r) => { releaseLatch = r })
+
+    const req1 = req(async () => {
+      await latch
+      return { url: 'https://p.example/ep1.mp4', type: 'mp4' as const }
+    })
+    const req2 = {
+      ...req(async () => ({ url: 'https://p.example/ep2.mp4', type: 'mp4' as const })),
+      episode: { key: 2, label: 2, number: 2 },
+    }
+
+    vi.stubGlobal('fetch', mockFetch({
+      'ep1.mp4': () => new Response(new Uint8Array(8)),
+      'ep2.mp4': () => new Response(new Uint8Array(8)),
+    }))
+
+    const id1 = await enqueueDownload(req1)
+    const id2 = await enqueueDownload(req2)
+
+    // Pause the whole engine as if the device just switched to cellular.
+    // id1 is active (pump is awaiting its blocked resolve()); id2 is queued.
+    await pauseAllForCellular()
+
+    // The queued record is immediately parked as paused/network — no latch needed.
+    const rec2 = await getDownload(id2)
+    expect(rec2?.state).toBe('paused')
+    expect(rec2?.pausedBy).toBe('network')
+
+    // Exactly one cellular-pause event regardless of how many records were parked.
+    expect(engineState.cellularPauses.value).toBe(1)
+
+    // Release the latch: runDownload(id1) can now proceed, the worker hits the
+    // paused-set check, exits, and stamps the record as paused.
+    releaseLatch()
+
+    await vi.waitFor(async () => {
+      const r = await getDownload(id1)
+      expect(r?.state).toBe('paused')
+    }, { timeout: 10_000 })
+    expect((await getDownload(id1))?.pausedBy).toBe('network')
   })
 })
 
