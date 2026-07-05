@@ -452,6 +452,7 @@
             :initial-team="queryTeam"
             :initial-audio="queryAudio"
             :initial-lang="queryLang"
+            :initial-timestamp="queryTimestamp"
             :mal-id="anime.shikimoriId"
             @toggle-theater="setTheater(!theaterMode)"
             @combo-change="aeWtSeed = $event"
@@ -1252,6 +1253,15 @@ const queryProvider = computed(() => queryString('provider'))
 const queryTeam = computed(() => queryString('team'))
 const queryAudio = computed(() => queryString('audio'))
 const queryLang = computed(() => queryString('lang'))
+
+// Shared-link playback position (`?t=` seconds) — the Share button in the player
+// encodes the exact combo + episode + timestamp. Non-negative integer only.
+const queryTimestamp = computed<number | undefined>(() => {
+  const s = queryString('t')
+  if (s === undefined) return undefined
+  const n = parseInt(s, 10)
+  return Number.isFinite(n) && n > 0 ? n : undefined
+})
 
 // A `?provider=` deep-link always opens aePlayer (the param speaks aePlayer's
 // source vocabulary), so make sure we're not on the Classic Kodik fallback.

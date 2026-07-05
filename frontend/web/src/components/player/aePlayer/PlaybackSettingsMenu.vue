@@ -129,6 +129,18 @@
         />
       </div>
 
+      <div class="h-px mx-1 my-1.5 bg-[var(--border)]"/>
+
+      <!-- Share this moment — copies a link with the exact source/episode/time -->
+      <button
+        class="w-full flex items-center gap-2.5 px-2.5 py-[9px] rounded-[var(--r-sm)] bg-transparent border-0 text-[14px] text-[var(--ink-2)] text-left transition-colors hover:bg-white/[0.08] hover:text-white"
+        data-test="share-moment"
+        @click="emit('share')"
+      >
+        <Link class="size-4 flex-shrink-0" aria-hidden="true" />
+        <span class="flex-1">{{ $t('player.aePlayer.shareMoment') }}</span>
+      </button>
+
       <!-- Live debug mini-stats (hacker mode only) -->
       <template v-if="hackerMode && debugStats">
         <div class="h-px mx-1 my-1.5 bg-[var(--border)]"/>
@@ -146,7 +158,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Switch from '@/components/ui/Switch.vue'
-import { ChevronLeft, ChevronDown, Check, MonitorPlay, Gauge, SkipForward, FastForward, Terminal } from 'lucide-vue-next'
+import { ChevronLeft, ChevronDown, Check, MonitorPlay, Gauge, SkipForward, FastForward, Terminal, Link } from 'lucide-vue-next'
 
 defineProps<{
   quality: string
@@ -168,6 +180,7 @@ const emit = defineEmits<{
   (e: 'update:autoNext', value: boolean): void
   (e: 'update:autoSkip', value: boolean): void
   (e: 'update:hackerMode', value: boolean): void
+  (e: 'share'): void
 }>()
 
 type View = 'root' | 'quality' | 'speed'

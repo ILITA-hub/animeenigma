@@ -318,6 +318,7 @@
           @update:auto-next="v => { state.autoNext.value = v }"
           @update:auto-skip="v => { state.autoSkip.value = v }"
           @update:hacker-mode="v => { state.hackerMode.value = v }"
+          @share="onShare"
         />
       </div>
     </Teleport>
@@ -445,6 +446,7 @@ import EpisodesPanel from './EpisodesPanel.vue'
 import PlaybackSettingsMenu from './PlaybackSettingsMenu.vue'
 import SubtitlesMenu from './SubtitlesMenu.vue'
 import BrowseSubsModal from './BrowseSubsModal.vue'
+import { buildShareUrl } from './shareLink'
 import BigPlayButton from './overlays/BigPlayButton.vue'
 import BufferingOverlay from './overlays/BufferingOverlay.vue'
 import DebugHud, { type SeekTrace, type SourceDecision } from './overlays/DebugHud.vue'
@@ -531,6 +533,9 @@ const props = defineProps<{
   initialAudio?: string
   /** URL facet override (?lang=en|ru|ja). */
   initialLang?: string
+  /** Shared-link `?t=` — seek to this position (seconds) on the FIRST stream
+   *  load, once. Suppresses the passive resume chip for that load. */
+  initialTimestamp?: number
   /** Shikimori id (= MAL id) for AniSkip skip-times. Absent ⇒ no skip UI. */
   malId?: string | number
   /** Watch-Together: when set, the player mirrors playback (play/pause/seek)
@@ -1232,6 +1237,29 @@ function onMarkWatched() {
 const resumeChipDismissed = ref(false)
 const resumeChipUsed = ref(false)
 
+// Shared-link `?t=` → seek the video to this position on the FIRST stream load,
+// once. While it is pending it also suppresses the passive resume chip below:
+// the sharer's explicit position wins over the viewer's own saved progress for
+// this load. Cleared (→ 0) the moment the seek is applied, restoring normal
+// resume-chip behavior for every later episode.
+const initialSeekSec = ref(Math.max(0, props.initialTimestamp ?? 0))
+function applyInitialSeek() {
+  if (initialSeekSec.value <= 0) return
+  const target = initialSeekSec.value
+  initialSeekSec.value = 0 // consume once
+  const v = videoRef.value
+  if (!v) return
+  const seek = () => {
+    try {
+      v.currentTime = target
+    } catch {
+      /* element not seekable yet — best-effort */
+    }
+  }
+  if (v.readyState >= 1) seek()
+  else v.addEventListener('loadedmetadata', seek, { once: true })
+}
+
 function localResumeSec(ep: number): number {
   try {
     const data = JSON.parse(localStorage.getItem(`watch_progress:${props.animeId}`) || '{}')
@@ -1251,6 +1279,7 @@ const resumePosSec = computed(() => {
 })
 
 const resumeChipVisible = computed(() => {
+  if (initialSeekSec.value > 0) return false // shared-link position takes over
   if (resumeChipDismissed.value || resumeChipUsed.value) return false
   if (sourceError.value || isResolving.value) return false
   const pos = resumePosSec.value
@@ -1269,6 +1298,28 @@ function onResumeFromSaved() {
   v.currentTime = resumePosSec.value
   if (v.paused) void v.play().catch(() => {})
   writeProgress()
+}
+
+// Share "this exact moment" — copy a link that reproduces the live source, team,
+// audio/lang, episode, and current timestamp for the recipient. Built from the
+// resolved combo unconditionally (unlike the passive address-bar sync, which
+// only writes a pinned source), so an auto-selected source is still shared.
+async function onShare() {
+  const url = buildShareUrl({
+    origin: typeof window !== 'undefined' ? window.location.origin : '',
+    animeId: props.animeId,
+    combo: state.combo.value,
+    episode: selectedEpisode.value?.number ?? 0,
+    timeSec: currentTime.value,
+  })
+  try {
+    await navigator.clipboard.writeText(url)
+    toast.push(t('player.aePlayer.shareCopied'), 'success', 3000)
+  } catch {
+    // Clipboard blocked (insecure context / permission) — surface the link so
+    // the user can copy it by hand, mirroring the WT-invite fallback.
+    toast.push(t('player.aePlayer.shareCopyFailed'), 'info', 6000)
+  }
 }
 const sourceError = ref<string | null>(null)
 const resolvedServers = ref<{ id: string; label: string }[]>([])
@@ -1510,6 +1561,7 @@ async function loadEpisodesAndStream() {
     currentStream.value = stream
     applyOfflineAutoSub(ep.number, stream)
     await engine.load(stream)
+    applyInitialSeek() // shared-link `?t=` one-shot seek (no-op after first load)
     armPlaybackWatchdog() // catch a silent CODECS-less stall (manifest OK, no frags)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded
@@ -2207,6 +2259,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
     currentStream.value = stream
     applyOfflineAutoSub(ep.number, stream)
     await engine.load(stream)
+    applyInitialSeek() // shared-link `?t=` one-shot seek (no-op after first load)
     armPlaybackWatchdog() // catch a silent CODECS-less stall (manifest OK, no frags)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded

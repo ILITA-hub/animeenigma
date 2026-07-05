@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/notifications/internal/domain"
@@ -59,7 +58,7 @@ func BuildNewEpisodePayload(
 		WatchType:              combo.WatchType,
 		TranslationID:          combo.TranslationID,
 		TranslationTitle:       translationTitle,
-		WatchURL:               BuildWatchURL(anime.ID, combo.Player, maxWatched+1, translationTitle),
+		WatchURL:               BuildWatchURL(anime.ID),
 	}
 
 	out, err := json.Marshal(payload)
@@ -69,13 +68,16 @@ func BuildNewEpisodePayload(
 	return out, nil
 }
 
-// BuildWatchURL formats the new-episode deep-link consumed by the frontend
-// NotificationCard / store. aePlayer reads `provider` (its source id) and
-// `team` (the team TITLE, e.g. a Kodik translation title) to preselect the
-// source on mount; `episode` lands the user on the new episode:
+// BuildWatchURL formats the new-episode link consumed by the frontend
+// NotificationCard / store. It is deliberately a bare anime-page link with NO
+// query params: the old `?provider&team&episode` deep-link baked in a stale
+// `episode = maxWatched+1` (computed at notification-creation time) that the
+// frontend treated as a HARD override of its live resume state — so it kept
+// landing users on the wrong episode. Dropping the params lets the anime page's
+// unified watchState auto-select the correct episode on load (a caught-up
+// viewer lands on the newest episode naturally):
 //
-//	/anime/{anime_id}/watch?provider={provider}&team={team}&episode={ep}
-func BuildWatchURL(animeID, provider string, episode int, team string) string {
-	return fmt.Sprintf("/anime/%s/watch?provider=%s&team=%s&episode=%d",
-		animeID, url.QueryEscape(provider), url.QueryEscape(team), episode)
+//	/anime/{anime_id}
+func BuildWatchURL(animeID string) string {
+	return fmt.Sprintf("/anime/%s", animeID)
 }
