@@ -230,8 +230,26 @@ body {
   padding-right: var(--safe-right);
 }
 
+/* Desktop: the neon gradient washes stay pinned to the viewport while
+   content scrolls. NEVER via `background-attachment: fixed` — that flags
+   the document with HasBackgroundAttachmentFixedObjects, forcing ALL
+   scrolling onto the renderer main thread (full-viewport background
+   repaints + style/layout/Layerize every scrolled frame; DevTools-trace
+   round 4, 2026-07-04). A position:fixed pseudo-layer renders identically
+   (fixed attachment resolves against the viewport, same as inset:0) but
+   composites once and lets document scrolling stay on the compositor. */
 @media (hover: hover) and (pointer: fine) {
-  body { background-attachment: fixed; }
+  body { background: var(--color-base); }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(1000px 600px at 80% -200px, rgba(0, 212, 255, 0.08), transparent 60%),
+      radial-gradient(800px 500px at -10% 10%, rgba(255, 45, 124, 0.06), transparent 60%);
+  }
 }
 
 /* Custom scrollbar */
