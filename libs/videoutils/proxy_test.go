@@ -153,12 +153,12 @@ func TestIsDomainAllowed_CaseInsensitive(t *testing.T) {
 
 func TestIsHLSDomainAllowed_KnownDomains(t *testing.T) {
 	knownDomains := []string{
-		"megacloud.tv",
-		"netmagcdn.com",
-		"rapid-cloud.co",
+		"hanime.tv",
 		"jimaku.cc",
 		"cdnlibs.org",
-		"mcloud.to",
+		"solodcdn.com",
+		"mp4upload.com",
+		"turboviplay.com",
 	}
 
 	for _, domain := range knownDomains {
@@ -167,8 +167,8 @@ func TestIsHLSDomainAllowed_KnownDomains(t *testing.T) {
 }
 
 func TestIsHLSDomainAllowed_KnownSubdomains(t *testing.T) {
-	assert.True(t, isHLSDomainAllowed("cdn.megacloud.tv"))
-	assert.True(t, isHLSDomainAllowed("s1.netmagcdn.com"))
+	assert.True(t, isHLSDomainAllowed("cdn.hanime.tv"))
+	assert.True(t, isHLSDomainAllowed("a1.mp4upload.com"))
 	assert.True(t, isHLSDomainAllowed("files.jimaku.cc"))
 }
 
@@ -187,93 +187,35 @@ func TestIsHLSDomainAllowed_UnknownDomain(t *testing.T) {
 }
 
 func TestIsHLSDomainAllowed_PortStripping(t *testing.T) {
-	assert.True(t, isHLSDomainAllowed("megacloud.tv:443"), "should strip port and match domain")
-	assert.True(t, isHLSDomainAllowed("netmagcdn.com:8080"), "should strip port and match domain")
+	assert.True(t, isHLSDomainAllowed("hanime.tv:443"), "should strip port and match domain")
+	assert.True(t, isHLSDomainAllowed("jimaku.cc:8080"), "should strip port and match domain")
+	assert.True(t, isHLSDomainAllowed("minio:9000"), "should strip port and match first-party host")
 	assert.False(t, isHLSDomainAllowed("evil.com:443"), "should strip port but still reject unknown domain")
 }
 
-// TestHLSProxyAllowedDomainsList_MatchesProvenanceProjection verifies the
-// flat []string view of the allow-list is exactly the Domain projection of
-// the structured HLSProxyAllowedDomainsWithProvenance slice. This is the
-// load-bearing invariant for the structured-provenance refactor: any caller
-// that historically iterated HLSProxyAllowedDomains as []string must see the
-// same entries in the same order after the refactor.
-func TestHLSProxyAllowedDomainsList_MatchesProvenanceProjection(t *testing.T) {
-	list := HLSProxyAllowedDomainsList()
-	if len(list) != len(HLSProxyAllowedDomainsWithProvenance) {
-		t.Fatalf("list length %d != provenance length %d", len(list), len(HLSProxyAllowedDomainsWithProvenance))
-	}
-	for i, e := range HLSProxyAllowedDomainsWithProvenance {
-		if list[i] != e.Domain {
-			t.Errorf("index %d: list=%q, provenance.Domain=%q", i, list[i], e.Domain)
-		}
-	}
-	// Also lock the package-level HLSProxyAllowedDomains view (initialized
-	// from HLSProxyAllowedDomainsList) to the same projection.
-	if len(HLSProxyAllowedDomains) != len(HLSProxyAllowedDomainsWithProvenance) {
-		t.Fatalf("HLSProxyAllowedDomains length %d != provenance length %d",
-			len(HLSProxyAllowedDomains), len(HLSProxyAllowedDomainsWithProvenance))
-	}
-	for i, d := range HLSProxyAllowedDomains {
-		if d != HLSProxyAllowedDomainsWithProvenance[i].Domain {
-			t.Errorf("HLSProxyAllowedDomains[%d] = %q, want %q",
-				i, d, HLSProxyAllowedDomainsWithProvenance[i].Domain)
-		}
-	}
-}
-
-// TestHLSProxyAllowedDomainsWithProvenance_HasNonEmptyMetadata verifies every
-// entry carries Reason/Owner/Added — the audit script (scripts/audit-hls-allowlist.sh)
-// relies on these fields being populated. Entries with empty provenance
-// would silently print blank columns and defeat the quarterly review.
-func TestHLSProxyAllowedDomainsWithProvenance_HasNonEmptyMetadata(t *testing.T) {
-	for _, e := range HLSProxyAllowedDomainsWithProvenance {
-		if e.Domain == "" {
-			t.Errorf("entry has empty Domain: %+v", e)
-		}
-		if e.Reason == "" {
-			t.Errorf("entry %q has empty Reason", e.Domain)
-		}
-		if e.Owner == "" {
-			t.Errorf("entry %q has empty Owner", e.Domain)
-		}
-		if e.Added == "" {
-			t.Errorf("entry %q has empty Added date", e.Domain)
-		}
-	}
-}
-
-// TestHLSProxyAllowedDomains_HasAnimePaheHosts locks the three AnimePahe CDN
-// hosts in HLSProxyAllowedDomains. Without these, the HLS proxy returns 403
-// for every AnimePahe stream → user-visible breakage. This is a
-// regression-lock per SCRAPER-PAHE-05; the hosts are already present in
-// libs/videoutils/proxy.go from prior work — this test PREVENTS a future
-// PR from accidentally removing them.
-func TestHLSProxyAllowedDomains_HasAnimePaheHosts(t *testing.T) {
-	required := []string{"kwik.cx", "owocdn.top", "uwucdn.top"}
-	have := make(map[string]bool, len(HLSProxyAllowedDomains))
-	for _, d := range HLSProxyAllowedDomains {
-		have[d] = true
-	}
-	for _, host := range required {
-		if !have[host] {
-			t.Errorf("HLSProxyAllowedDomains missing AnimePahe CDN host %q (required by SCRAPER-PAHE-05)", host)
-		}
-	}
-}
-
-// TestHLSProxyAllowedDomains_Phase18Additions locks the 5 new Anitaku/Gogoanime
-// CDN hosts appended in Phase 18 Plan 18-04 Task 2. Missing entries cause the
-// HLS proxy to 403 every stream coming through the gogoanime.Provider failover
-// chain — user-visible breakage. Append-only edit: existing Phase 16 entries
-// are protected by TestHLSProxyAllowedDomains_Phase16RegressionLocked below.
-func TestHLSProxyAllowedDomains_Phase18Additions(t *testing.T) {
+// TestHLSProxyAllowedDomains_UnsignedPathHostsLocked is the regression lock
+// for the post-phase-out allow-list. Every entry here backs a path that
+// CANNOT ride signed-URL provenance yet: first-party docker-network hosts
+// plus catalog endpoints that return URLs unsigned (Kodik ad-free, Hanime,
+// AnimeLib, 18anime, subtitles). Removing one of these 403s that source;
+// a signed scraper CDN showing up here means the phase-out regressed —
+// scraper CDNs must NOT be re-added (they ride streamsign provenance).
+func TestHLSProxyAllowedDomains_UnsignedPathHostsLocked(t *testing.T) {
 	want := []string{
-		"anitaku.to",
-		"vibeplayer.site",
-		"premilkyway.com",
-		"dramiyos-cdn.com",
-		"cdn.cimovix.store",
+		// first-party
+		"stealth-scraper", "minio",
+		// Kodik ad-free HLS (unsigned catalog path)
+		"solodcdn.com", "cloud.solodcdn.com",
+		// Hanime CDN family (unsigned catalog path)
+		"hanime.tv", "highwinds-cdn.com", "htv-*.com", "hydaelyn-*.top", "zodiark-*.top",
+		// AnimeLib CDNs (unsigned catalog path)
+		"cdnlibs.org", "hentaicdn.org",
+		// 18anime embed mirrors (Get18AnimeStream strips provenance)
+		"mp4upload.com", "turboviplay.com", "turbosplayer.com",
+		// Japanese subtitle files (unsigned subtitle endpoints)
+		"jimaku.cc",
+		// AUTO-517 stop-gap (redirect target re-gated without a token)
+		"mt.nekostream.site",
 	}
 	present := make(map[string]bool, len(HLSProxyAllowedDomains))
 	for _, d := range HLSProxyAllowedDomains {
@@ -281,71 +223,36 @@ func TestHLSProxyAllowedDomains_Phase18Additions(t *testing.T) {
 	}
 	for _, d := range want {
 		if !present[d] {
-			t.Errorf("HLSProxyAllowedDomains missing %q (Phase 18 addition)", d)
+			t.Errorf("HLSProxyAllowedDomains missing unsigned-path host %q — that source would 403", d)
 		}
+	}
+	if len(HLSProxyAllowedDomains) != len(want) {
+		t.Errorf("HLSProxyAllowedDomains has %d entries, want %d — new entries need an unsigned "+
+			"serving path to justify them (prefer streamsign at the source; scraper CDNs ride provenance)",
+			len(HLSProxyAllowedDomains), len(want))
 	}
 }
 
-// TestHLSProxyAllowedDomains_Phase16RegressionLocked is the append-only
-// invariant guard: every Phase 16 entry (and the jimaku.cc Phase 14 entry that
-// shipped alongside) MUST still be present after the Phase 18 edit. Catches a
-// regression where a future maintainer accidentally clobbers the slice
-// declaration during an "append" edit.
-func TestHLSProxyAllowedDomains_Phase16RegressionLocked(t *testing.T) {
-	// kwik.cx + owocdn.top + uwucdn.top are AnimePahe CDN hosts (SCRAPER-PAHE-05).
-	// jimaku.cc carries the Japanese subtitle files (Phase 14).
-	want := []string{"kwik.cx", "owocdn.top", "uwucdn.top", "jimaku.cc"}
-	present := make(map[string]bool, len(HLSProxyAllowedDomains))
-	for _, d := range HLSProxyAllowedDomains {
-		present[d] = true
-	}
-	for _, d := range want {
-		if !present[d] {
-			t.Errorf("Phase 16/14 entry %q is missing — append-only invariant broken", d)
-		}
-	}
-}
-
-// TestHLSProxyAllowedDomains_HasStreamhgHls3Hosts locks the two hls3 CDN
-// hosts added in Phase 22 / SCRAPER-HEAL-10. Without these the multi-URL
-// fallback shipped in Plan 22-01 returns URLs the streaming service refuses
-// to proxy → user-visible breakage when hls2 signed URLs expire. This is a
-// regression-lock that PREVENTS a future PR from accidentally removing them.
-func TestHLSProxyAllowedDomains_HasStreamhgHls3Hosts(t *testing.T) {
-	required := []string{"managementadvisory.sbs", "exoplanethunting.space"}
-	have := make(map[string]bool, len(HLSProxyAllowedDomains))
-	for _, d := range HLSProxyAllowedDomains {
-		have[d] = true
-	}
-	for _, host := range required {
-		if !have[host] {
-			t.Errorf("HLSProxyAllowedDomains missing hls3 CDN host %q (required by SCRAPER-HEAL-10)", host)
-		}
-	}
-}
-
-// TestIsHLSDomainAllowed_Hls3Hosts exercises the gate behavior for the
-// Phase 22 hls3 CDN hosts. Subdomain match (HasSuffix on "."+allowed),
-// exact match, port-stripping, and the impostor-rejection contract are
-// all pinned. Threat T-22-06 (SSRF expansion) is mitigated by the leading
-// dot in the HasSuffix rule: `evilmanagementadvisory.sbs` does not match
-// `managementadvisory.sbs`.
-func TestIsHLSDomainAllowed_Hls3Hosts(t *testing.T) {
+// TestIsHLSDomainAllowed_ImpostorRejection pins the SSRF contract of the
+// gate: the leading dot in the HasSuffix rule rejects prefix impostors
+// (evilhanime.tv), and eTLD+1 entries never match a host that merely
+// EMBEDS the allowed domain (hanime.tv.attacker.com).
+func TestIsHLSDomainAllowed_ImpostorRejection(t *testing.T) {
 	cases := []struct {
 		host string
 		want bool
 	}{
-		{"managementadvisory.sbs", true},
-		{"cdn.managementadvisory.sbs", true},
-		{"a.b.managementadvisory.sbs", true},
-		{"cdn.managementadvisory.sbs:443", true},
-		{"managementadvisory.com", false},
-		{"evilmanagementadvisory.sbs", false},
-		{"managementadvisory.sbs.attacker.com", false},
-		{"exoplanethunting.space", true},
-		{"x.exoplanethunting.space", true},
-		{"exoplanethunting.org", false},
-		{"exoplanethunting.space:8080", true},
+		{"hanime.tv", true},
+		{"cdn.hanime.tv", true},
+		{"a.b.hanime.tv", true},
+		{"cdn.hanime.tv:443", true},
+		{"hanime.com", false},
+		{"evilhanime.tv", false},
+		{"hanime.tv.attacker.com", false},
+		{"solodcdn.com", true},
+		{"draco.cloud.solodcdn.com", true},
+		{"solodcdn.org", false},
+		{"evilsolodcdn.com", false},
 	}
 	for _, c := range cases {
 		if got := isHLSDomainAllowed(c.host); got != c.want {
@@ -375,27 +282,25 @@ func TestSolodcdnAllowed(t *testing.T) {
 	}
 }
 
-// TestIsHLSDomainAllowed_RotatingSubdomains exercises the rotating-subdomain
-// match policy needed by the new StreamHG + Earnvids CDNs (e.g.
-// OkqtSs1gBbNcA8e.premilkyway.com per segment fetch). The existing
-// strings.HasSuffix(host, "."+allowed) gate is the SSRF defense — the leading
-// dot prevents impostor TLDs like evilanitaku.to from matching anitaku.to.
-func TestIsHLSDomainAllowed_RotatingSubdomains(t *testing.T) {
+// TestIsHLSDomainAllowed_AnchoredPrefixWildcards exercises the anchored
+// prefix-wildcard patterns carried by the Hanime CDN family (htv-*.com,
+// hydaelyn-*.top, zodiark-*.top). The suffix anchor is the SSRF defense:
+// a matching prefix on the wrong TLD (htv-evil.attacker.io) must be
+// rejected — see matchHLSDomain.
+func TestIsHLSDomainAllowed_AnchoredPrefixWildcards(t *testing.T) {
 	cases := []struct {
 		host  string
 		want  bool
 		label string
 	}{
-		{"anitaku.to", true, "Phase 18 exact"},
-		{"sub.anitaku.to", true, "Phase 18 subdomain"},
-		{"OkqtSs1gBbNcA8e.premilkyway.com", true, "StreamHG rotating subdomain"},
-		{"pfabiWMFmEza.dramiyos-cdn.com", true, "Earnvids rotating subdomain"},
-		{"vibeplayer.site", true, "vibeplayer exact"},
-		{"cdn.cimovix.store", true, "subtitle host exact"},
-		{"evilanitaku.to", false, "impostor — no leading dot"},
-		{"premilkyway.com.evil.com", false, "TLD impostor"},
-		{"pacha.kwik.cx", true, "Phase 16 invariant — kwik subdomain"},
-		{"jimaku.cc", true, "Phase 14 invariant — jimaku exact"},
+		{"htv-belias.com", true, "htv wildcard — leftmost label"},
+		{"edge.htv-hydaelyn.com", true, "htv wildcard — inner label"},
+		{"hydaelyn-25x-07.top", true, "hydaelyn wildcard exact"},
+		{"zodiark-25x-03.top", true, "zodiark wildcard exact"},
+		{"htv-evil.attacker.io", false, "wildcard prefix on wrong TLD"},
+		{"nothtv-belias.com", false, "prefix must begin a DNS label"},
+		{"hydaelyn-25x-07.com", false, "hydaelyn wildcard anchored to .top"},
+		{"jimaku.cc", true, "subtitle host exact"},
 	}
 	for _, c := range cases {
 		c := c

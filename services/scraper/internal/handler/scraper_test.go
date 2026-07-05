@@ -12,42 +12,11 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
-	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 )
-
-// videoutilsHLSDomainAllowed is a test-local MIRROR of the package-private
-// libs/videoutils.isHLSDomainAllowed helper. We re-derive its logic here
-// (rather than exporting the original) to keep the libs surface minimal
-// per Plan 22-02 Task 1 Step 3.
-//
-// MIRROR: keep this in sync with libs/videoutils/proxy.go
-// isHLSDomainAllowed — same lowercase + port-strip + HasSuffix-on-
-// "."+allowed contract, same prefix-wildcard handling for `htv-*` style
-// entries. The regression-lock tests in libs/videoutils/proxy_test.go
-// pin the source behavior; this mirror only needs to share the same
-// rules at the call site.
-func videoutilsHLSDomainAllowed(host string) bool {
-	host = strings.ToLower(host)
-	if colonIdx := strings.LastIndex(host, ":"); colonIdx != -1 {
-		host = host[:colonIdx]
-	}
-	for _, allowed := range videoutils.HLSProxyAllowedDomains {
-		allowed = strings.ToLower(allowed)
-		if strings.HasSuffix(allowed, "*") {
-			prefix := allowed[:len(allowed)-1]
-			if strings.HasPrefix(host, prefix) || strings.Contains(host, "."+prefix) {
-				return true
-			}
-		} else if host == allowed || strings.HasSuffix(host, "."+allowed) {
-			return true
-		}
-	}
-	return false
-}
 
 // fakeProvider is a programmable domain.Provider used to drive the handler
 // tests without standing up a real upstream. Each method returns a value or
@@ -441,26 +410,20 @@ func (f *fakeGatedHandlerProvider) GetStreamWithGate(
 	return f.gatedStream, f.gatedFlag, f.gatedErr
 }
 
-// TestGetStream_MultiSource_BothHostsAllowlisted — Plan 22-02 Task 1
-// closes the architectural loop between Plan 22-01's multi-URL extractor
-// and Plan 22-02's HLS proxy allowlist (SCRAPER-HEAL-10).
+// TestGetStream_MultiSource_BothSourcesSurvive — Plan 22-01's multi-URL
+// extractor contract (SCRAPER-HEAL-10).
 //
 // A fake provider returns a *domain.Stream with TWO Sources:
 //   - hls2 primary: https://x.premilkyway.com/.../master.m3u8 (Phase 18)
 //   - hls3 secondary: https://managementadvisory.sbs/.../master.txt (Phase 22)
 //
-// The test asserts:
-//  1. Both Sources survive the JSON round-trip through GetStream's
-//     response envelope (handler doesn't drop the second source).
-//  2. BOTH source URL hostnames pass the videoutils allowlist gate —
-//     proving the streaming service will actually proxy them. Without
-//     the SCRAPER-HEAL-10 allowlist additions, this test would fail at
-//     the second source (managementadvisory.sbs) → user-visible
-//     breakage when hls2 expires.
-//
-// This is the end-to-end correctness check for the Phase 22 multi-URL
-// fallback path that 22-01 + 22-02 ship together.
-func TestGetStream_MultiSource_BothHostsAllowlisted(t *testing.T) {
+// The test asserts both Sources survive the JSON round-trip through
+// GetStream's response envelope in order (handler doesn't drop or reorder
+// the fallback source). The streaming proxy trusts these hosts via the
+// provenance signature catalog stamps on every scraper source URL
+// (streamsign.SignScraperStreamBody), NOT via the static allowlist — so
+// there is no allowlist-membership assertion here.
+func TestGetStream_MultiSource_BothSourcesSurvive(t *testing.T) {
 	t.Parallel()
 	fp := &fakeProvider{
 		name: "fakeprov",
@@ -501,9 +464,10 @@ func TestGetStream_MultiSource_BothHostsAllowlisted(t *testing.T) {
 		t.Fatalf("len(sources) = %d; want 2 (multi-URL fallback)", len(srcs))
 	}
 
-	// Walk each source, parse the host, and assert allowlist membership.
-	// The second source MUST be on the freshly-extended SCRAPER-HEAL-10
-	// allowlist; the first MUST stay on Phase 18's entries.
+	// Walk each source and sanity-check the host matches the expected
+	// family — guards against a future regression where the handler
+	// reorders or rewrites the source URLs in a way that breaks the
+	// fallback contract.
 	wantHosts := []string{"premilkyway.com", "managementadvisory.sbs"}
 	for i, raw := range srcs {
 		src, ok := raw.(map[string]any)
@@ -518,13 +482,6 @@ func TestGetStream_MultiSource_BothHostsAllowlisted(t *testing.T) {
 		if err != nil {
 			t.Fatalf("source[%d] url parse: %v", i, err)
 		}
-		if !videoutilsHLSDomainAllowed(u.Hostname()) {
-			t.Errorf("source[%d] host %q is NOT in HLSProxyAllowedDomains — "+
-				"streaming service would 403 (SCRAPER-HEAL-10 break)", i, u.Hostname())
-		}
-		// Also sanity-check the host matches the expected family — guards
-		// against a future regression where the handler reorders or
-		// rewrites the source URLs in a way that breaks the fallback contract.
 		if !strings.Contains(u.Hostname(), wantHosts[i]) {
 			t.Errorf("source[%d] host = %q; want to contain %q",
 				i, u.Hostname(), wantHosts[i])

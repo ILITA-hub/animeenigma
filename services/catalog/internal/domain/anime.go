@@ -296,7 +296,7 @@ type AnimejoyTeam struct {
 // resolved URL is an absolute https URL whose provenance token (Exp/Sig)
 // authorizes the un-allowlisted CDN host — the proxy follows the 302 to the
 // real CDN (dvNN.sibnet.ru / filevideo1.com) within the same fetch, so NO
-// HLSProxyAllowedDomainsWithProvenance entry is required. RU-sub only.
+// HLSProxyAllowedDomains entry is required. RU-sub only.
 type AnimejoyStream struct {
 	URL       string    `json:"url"`
 	Type      string    `json:"type"`

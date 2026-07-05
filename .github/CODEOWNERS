@@ -7,13 +7,9 @@
 #
 # Rules below are last-match-wins per GitHub's spec.
 
-# HLS proxy allow-list — see docs/security/hls-proxy-allowlist.md.
-# Any new entry adds a host that user clients and the scraper will trust;
-# this gate requires the security owner to sign off on additions.
+# HLS proxy allow-list (HLSProxyAllowedDomains in proxy.go). Any new entry
+# adds a host that user clients and the scraper will trust; this gate
+# requires the security owner to sign off on additions. Prefer signing at
+# the source (catalog streamsign) over adding entries.
 /libs/videoutils/proxy.go            @StaticVirtualObserver
-
-# The audit tooling itself shares the same owner — its output is the
-# evidence used during quarterly review, so changes need the same scrutiny.
-/libs/videoutils/cmd/audit-allowlist/ @StaticVirtualObserver
-/scripts/audit-hls-allowlist.sh      @StaticVirtualObserver
 /docs/security/                      @StaticVirtualObserver
