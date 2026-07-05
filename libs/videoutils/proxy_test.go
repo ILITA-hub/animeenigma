@@ -226,10 +226,19 @@ func TestHLSProxyAllowedDomains_UnsignedPathHostsLocked(t *testing.T) {
 			t.Errorf("HLSProxyAllowedDomains missing unsigned-path host %q — that source would 403", d)
 		}
 	}
-	if len(HLSProxyAllowedDomains) != len(want) {
-		t.Errorf("HLSProxyAllowedDomains has %d entries, want %d — new entries need an unsigned "+
-			"serving path to justify them (prefer streamsign at the source; scraper CDNs ride provenance)",
-			len(HLSProxyAllowedDomains), len(want))
+	// Set-equality tripwire: any entry not in want fails BY NAME. Adding a
+	// host for a new unsigned serving path is legitimate — extend want in
+	// the same commit (deliberate). A scraper CDN must never be re-added;
+	// those ride streamsign provenance.
+	expected := make(map[string]bool, len(want))
+	for _, d := range want {
+		expected[d] = true
+	}
+	for _, d := range HLSProxyAllowedDomains {
+		if !expected[d] {
+			t.Errorf("HLSProxyAllowedDomains has unexpected entry %q — scraper CDNs ride provenance "+
+				"signing; a new unsigned catalog path must extend this test's want list deliberately", d)
+		}
 	}
 }
 
