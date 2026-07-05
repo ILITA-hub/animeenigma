@@ -112,6 +112,7 @@
     "startFromEp1": "第1話から視聴",
     "markAsWatched": "視聴済みにする",
     "rewatchCount": "再視聴回数: {n}",
+    "rewatchLabel": "再視聴回数",
     "rewatchDec": "再視聴回数を減らす",
     "rewatchInc": "再視聴回数を増やす",
     "resume": {

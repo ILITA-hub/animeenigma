@@ -112,6 +112,7 @@
     "startFromEp1": "Start from ep. 1",
     "markAsWatched": "Mark as watched",
     "rewatchCount": "Rewatched: {n}",
+    "rewatchLabel": "Rewatched",
     "rewatchDec": "Decrease rewatch count",
     "rewatchInc": "Increase rewatch count",
     "resume": {

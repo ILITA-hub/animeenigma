@@ -82,8 +82,9 @@
         </span>
       </div>
 
-      <!-- Rewatch tally — muted ↻ N; stepper on own profile, ghost badge
-           (hidden at 0) on public ones. Design 2026-06-05. -->
+      <!-- Rewatch tally — muted ↻ N, hidden at 0 (own AND public); stepper on
+           own profile once count ≥ 1. The 0→1 bump lives in the anime-page
+           status menu. Design 2026-06-05, tightened 2026-07-05. -->
       <div class="shrink-0">
         <RewatchCounter
           :count="entry.rewatch_count || 0"

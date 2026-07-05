@@ -14,11 +14,12 @@ vi.mock('vue-i18n', async (importOriginal) => {
 // SUT imported AFTER vi.mock.
 import RewatchCounter from '../RewatchCounter.vue'
 
-// Group 6 — shared low-visual-weight rewatch counter (design 2026-06-05).
-// One component reused on the anime page AND My List rows. Pure prop-driven:
-// `count` in, `update:count` out. Read-only by default; editable shows a
-// subtle − N + stepper. Hidden entirely when count=0 in a read-only context so
-// it adds no clutter to never-rewatched anime.
+// Group 6 — shared low-visual-weight rewatch counter (design 2026-06-05,
+// hidden-at-0 tightened 2026-07-05). Used on My List rows (the anime-page
+// hero usage moved into the status dropdown). Pure prop-driven: `count` in,
+// `update:count` out. Read-only by default; editable shows a subtle − N +
+// stepper. Hidden entirely when count=0 — editable or not — so it adds no
+// clutter to never-rewatched anime.
 
 const TID = '[data-testid="rewatch-counter"]'
 const INC = '[data-testid="rewatch-inc"]'
@@ -44,10 +45,16 @@ describe('RewatchCounter — read-only display', () => {
 })
 
 describe('RewatchCounter — editable stepper', () => {
-  it('renders the control (add affordance) even at count=0 when editable', () => {
+  it('renders nothing at count=0 even when editable (no unlabeled ↻ − 0 +)', () => {
     const w = mount(RewatchCounter, { props: { count: 0, editable: true } })
+    expect(w.find(TID).exists()).toBe(false)
+  })
+
+  it('shows the stepper once count>0 and editable', () => {
+    const w = mount(RewatchCounter, { props: { count: 1, editable: true } })
     expect(w.find(TID).exists()).toBe(true)
     expect(w.find(INC).exists()).toBe(true)
+    expect(w.find(DEC).exists()).toBe(true)
   })
 
   it('increment emits update:count with count+1', async () => {
@@ -62,15 +69,6 @@ describe('RewatchCounter — editable stepper', () => {
     expect(w.emitted('update:count')?.[0]).toEqual([1])
   })
 
-  it('decrement at 0 does not emit a negative value', async () => {
-    const w = mount(RewatchCounter, { props: { count: 0, editable: true } })
-    const dec = w.find(DEC)
-    if (dec.exists()) await dec.trigger('click')
-    const emits = w.emitted('update:count') ?? []
-    for (const [v] of emits as Array<[number]>) {
-      expect(v).toBeGreaterThanOrEqual(0)
-    }
-  })
 })
 
 describe('RewatchCounter — surface-agnostic (same props → same render)', () => {

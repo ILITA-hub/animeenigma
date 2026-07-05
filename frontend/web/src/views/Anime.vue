@@ -201,6 +201,43 @@
                     <Check v-if="currentListStatus === status" class="size-4" aria-hidden="true" />
                   </button>
 
+                  <!-- Rewatch tally — moved here from the hero (an unlabeled
+                       ↻ − 0 + confused new users). Shown once it can matter:
+                       completed entries, or any entry with a count. +/− keep
+                       the menu open (click-outside only closes on outside). -->
+                  <div
+                    v-if="currentListStatus === 'completed' || currentRewatchCount > 0"
+                    data-testid="rewatch-menu-row"
+                    class="border-t border-white/10 px-4 py-3 flex items-center justify-between gap-2 text-sm text-white/80"
+                  >
+                    <span class="flex items-center gap-1.5">
+                      <span class="opacity-70" aria-hidden="true">↻</span>
+                      {{ $t('anime.rewatchLabel') }}
+                    </span>
+                    <span class="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        data-testid="rewatch-menu-dec"
+                        class="px-1.5 leading-none transition-colors hover:text-white disabled:opacity-40"
+                        :disabled="currentRewatchCount <= 0"
+                        :aria-label="$t('anime.rewatchDec')"
+                        @click="setRewatchCount(currentRewatchCount - 1)"
+                      >
+                        −
+                      </button>
+                      <span class="tabular-nums text-white">{{ currentRewatchCount }}</span>
+                      <button
+                        type="button"
+                        data-testid="rewatch-menu-inc"
+                        class="px-1.5 leading-none transition-colors hover:text-white"
+                        :aria-label="$t('anime.rewatchInc')"
+                        @click="setRewatchCount(currentRewatchCount + 1)"
+                      >
+                        +
+                      </button>
+                    </span>
+                  </div>
+
                   <!-- Remove from list -->
                   <div v-if="currentListStatus" class="border-t border-white/10">
                     <button
@@ -215,15 +252,6 @@
                 </div>
               </Transition>
             </div>
-
-            <!-- Rewatch tally — muted ↻ N beside the status badge; editable
-                 stepper, hidden entirely until the entry exists (design 2026-06-05). -->
-            <RewatchCounter
-              v-if="authStore.isAuthenticated && currentListStatus"
-              :count="currentRewatchCount"
-              editable
-              @update:count="setRewatchCount"
-            />
 
             <!-- Next Episode Info — sits between the status dropdown and the
                  admin kebab; shown to everyone (incl. anonymous), not auth-gated. -->
@@ -875,7 +903,6 @@ import Carousel from '@/components/carousel/Carousel.vue'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useWatchState } from '@/composables/useWatchState'
 import type { WatchCta } from '@/composables/watchState'
-import RewatchCounter from '@/components/anime/RewatchCounter.vue'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useSiteRatings } from '@/composables/useSiteRatings'
 import { useUserTimezone } from '@/composables/useUserTimezone'
@@ -1088,7 +1115,7 @@ async function dispatchWatchCta(cta: WatchCta) {
 
 const onWatchCtaClick = () => dispatchWatchCta(watchCta.value)
 
-// Manual rewatch-count stepper (RewatchCounter beside the status badge).
+// Manual rewatch-count stepper (row inside the status dropdown menu).
 // Optimistic; the PUT carries the current status so the entry isn't moved.
 async function setRewatchCount(n: number) {
   if (!anime.value || !currentListStatus.value) return

@@ -124,7 +124,6 @@ async function mountView() {
           transition: false,
           InviteButton: true,
           ResumePill: true,
-          RewatchCounter: true,
           Carousel: true,
           PosterCard: true,
           PosterImage: true,
