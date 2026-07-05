@@ -450,6 +450,29 @@ class TestWarmFetchCapacitySurfacing(unittest.TestCase):
         # The whole point: kind=capacity, NOT kind=error (the pre-fix flattening).
         self.assertEqual(json.loads(resp.body)["kind"], "capacity")
 
+    def test_capacity_in_warm_path_releases_the_leased_profile(self):
+        """`_warm_fetch_session` leases a profile BEFORE calling `_ensure_browser`
+        (which is where `_admit_launch` raises CapacityExceeded on a cold
+        launch). The warm-path except clause re-raises CapacityExceeded/
+        UserQuotaExceeded/PoolExhausted/ProviderWedged verbatim on the theory
+        that "the browser handle never opened on these paths, so there is
+        nothing to tear down" — true for the HANDLE, false for the LEASE taken
+        moments earlier. Left unreleased, every hard-RAM-refuse permanently
+        drains one shared Camoufox pool slot (gogoanime/animepahe/miruro/
+        nineanime all route discovery through this same warm-session path)."""
+        from app.engine import CapacityExceeded
+        eng = CamoufoxEngine(Config(pool_size=4, warming_enabled=False,
+                                    ram_soft_bytes=1000, ram_hard_bytes=2000))
+        eng._sample_ram = lambda: 2500
+        with self.assertRaises(CapacityExceeded):
+            run(eng._warm_fetch_session("nineanime", "https://9anime.me.uk", user_key="alice"))
+        free = [p for p in eng.profiles.all() if not p.leased]
+        self.assertEqual(
+            len(free), 4,
+            "profile leaked: a CapacityExceeded refusal must release its lease, "
+            "not strand the pool one slot smaller forever",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

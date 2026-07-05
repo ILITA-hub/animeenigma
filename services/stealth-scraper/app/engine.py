@@ -1038,8 +1038,13 @@ class CamoufoxEngine:
             # raising CapacityExceeded mid-launch) MUST keep their concrete class so
             # the /fetch handler emits the right `kind` (capacity / user_quota /
             # pool_exhausted / provider_wedged) instead of a flattened error. The
-            # browser handle never opened on these paths, so there is nothing to tear
-            # down here — let them propagate unchanged.
+            # browser HANDLE never opened on these paths, so there is no handle to
+            # tear down — but the profile LEASE taken at `_acquire_profile()` above
+            # already happened and is a separate thing. Without releasing it here,
+            # every hard-RAM refusal permanently strands one shared Camoufox pool
+            # slot (silent, uncounted by any crash/exception log — this exact class
+            # of profile stays "leased" forever with no session to ever free it).
+            self.profiles.release(profile, ok=False)
             raise
         except asyncio.CancelledError:
             # HTTP client disconnected while we were inside the browser.
