@@ -1207,7 +1207,8 @@
       "recsDesc": "Inspect and force-recompute a user's recommendations.",
       "feedbackDesc": "Read and triage user ideas, bugs and error reports.",
       "collectionsDesc": "Curate and publish editorial anime collections.",
-      "rawLibraryDesc": "Self-hosted torrent → HLS pipeline for raw-JP episodes."
+      "rawLibraryDesc": "Self-hosted torrent → HLS pipeline for raw-JP episodes.",
+      "secretFeaturesDesc": "Manage the footer secret-feature roulette."
     },
     "feedback": {
       "title": "Project Board",
@@ -1367,6 +1368,24 @@
       "forbidden": "You don't have permission",
       "serverError": "Server error, try again",
       "timeout": "Request timed out"
+    },
+    "secretFeatures": {
+      "title": "Secret Feature Roulette",
+      "subtitle": "Manage the hidden-feature roulette in the footer. This page will grow into role-based access management.",
+      "rouletteLabel": "Roulette enabled",
+      "rouletteHint": "Master switch — turns the footer roulette on or off for everyone.",
+      "colFeature": "Feature",
+      "colLink": "Direct link",
+      "colEnabled": "In roulette",
+      "note": "Toggles here apply to the roulette pool. Role-based access management is coming.",
+      "feature": {
+        "anidle": "Anidle",
+        "status": "Server status",
+        "themes": "OP/ED ratings",
+        "game": "Game rooms",
+        "downloads": "Downloads",
+        "showcaseEditor": "Showcase editor"
+      }
     },
     "collections": {
       "title": "Collections (admin)",

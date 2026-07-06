@@ -1207,7 +1207,8 @@
       "recsDesc": "ユーザーのレコメンドを確認し、強制再計算する。",
       "feedbackDesc": "ユーザーのアイデア・バグ・エラー報告を確認・整理する。",
       "collectionsDesc": "編集部のアニメコレクションを編集・公開する。",
-      "rawLibraryDesc": "生の日本語エピソード用のセルフホスト型 torrent → HLS パイプライン。"
+      "rawLibraryDesc": "生の日本語エピソード用のセルフホスト型 torrent → HLS パイプライン。",
+      "secretFeaturesDesc": "フッターのシークレット機能ルーレットを管理します。"
     },
     "feedback": {
       "title": "プロジェクトボード",
@@ -1367,6 +1368,24 @@
       "forbidden": "アクセス権限がありません",
       "serverError": "サーバーエラー、再試行してください",
       "timeout": "リクエストがタイムアウトしました"
+    },
+    "secretFeatures": {
+      "title": "シークレット機能ルーレット",
+      "subtitle": "フッターの隠し機能ルーレットを管理します。このページは今後、ロールベースのアクセス管理に発展します。",
+      "rouletteLabel": "ルーレット有効",
+      "rouletteHint": "マスタースイッチ — 全員に対してフッターのルーレットをオン／オフします。",
+      "colFeature": "機能",
+      "colLink": "直接リンク",
+      "colEnabled": "ルーレットに含める",
+      "note": "ここでの切り替えはルーレットのプールに適用されます。ロールベースのアクセス管理は近日公開予定です。",
+      "feature": {
+        "anidle": "Anidle",
+        "status": "サーバー状態",
+        "themes": "OP/ED評価",
+        "game": "ゲームルーム",
+        "downloads": "ダウンロード",
+        "showcaseEditor": "ショーケースエディター"
+      }
     },
     "collections": {
       "title": "コレクション (管理)",

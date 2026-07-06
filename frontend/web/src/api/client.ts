@@ -590,6 +590,26 @@ export const showcaseApi = {
     >(`/users/${userId}/compatibility`),
 }
 
+/** Admin view of the secret-feature roulette config. `features` holds only
+ *  explicit per-feature overrides; an absent key resolves to enabled (true). */
+export interface SecretFeatureConfig {
+  rouletteEnabled: boolean
+  features: Record<string, boolean>
+}
+
+/** Public, anonymous-readable roulette state the footer consumes to enforce
+ *  admin toggles. */
+export interface SecretFeaturePublicState {
+  rouletteEnabled: boolean
+  disabledKeys: string[]
+}
+
+/** Public secret-feature state feed (no auth). Callers fail open on error. */
+export const secretFeaturesApi = {
+  getState: () =>
+    apiClient.get<{ data: SecretFeaturePublicState }>('/secret-features/state'),
+}
+
 export const adminApi = {
   // Hide/unhide anime globally
   hideAnime: (animeId: string) => apiClient.post(`/admin/anime/${animeId}/hide`),
@@ -612,6 +632,16 @@ export const adminApi = {
     apiClient.post<CollectionItem | { data: CollectionItem }>(`/admin/collections/${id}/items`, body),
   removeCollectionItem: (id: string, animeId: string) =>
     apiClient.delete<void>(`/admin/collections/${id}/items/${animeId}`),
+  // Secret-feature roulette management (seed for future role-based access mgmt).
+  getSecretFeatures: () =>
+    apiClient.get<{ data: SecretFeatureConfig }>('/admin/secret-features'),
+  setSecretRoulette: (enabled: boolean) =>
+    apiClient.put<{ data: SecretFeatureConfig }>('/admin/secret-features/roulette', { enabled }),
+  setSecretFeature: (key: string, enabled: boolean) =>
+    apiClient.put<{ data: SecretFeatureConfig }>(
+      `/admin/secret-features/feature/${encodeURIComponent(key)}`,
+      { enabled },
+    ),
   // Admin feedback browser — user feedback/error reports (player service,
   // /api/admin/reports). Responses use the standard {success,data} envelope.
   listReports: (params?: { category?: string; status?: string; type?: string; source?: string; username?: string; from?: string; to?: string; page?: number; page_size?: number }) =>

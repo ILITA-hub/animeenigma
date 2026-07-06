@@ -33,6 +33,7 @@ func NewRouter(
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
 	capabilitiesHandler *handler.CapabilitiesHandler,
 	internalProviderPolicyHandler *handler.InternalProviderPolicyHandler,
+	secretFeatureHandler *handler.SecretFeatureHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -269,6 +270,11 @@ func NewRouter(
 			r.Get("/{characterId}", characterHandler.GetCharacter)
 		})
 
+		// Public secret-feature roulette state — the footer roulette reads this
+		// to enforce admin toggles (callers fail open on error). Admin
+		// management lives under /admin/secret-features below.
+		r.Get("/secret-features/state", secretFeatureHandler.PublicState)
+
 		// Admin routes (require authentication)
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(AuthMiddleware(cfg.JWT))
@@ -298,6 +304,12 @@ func NewRouter(
 			r.Delete("/collections/{id}", collectionHandler.Delete)
 			r.Post("/collections/{id}/items", collectionHandler.AddItem)
 			r.Delete("/collections/{id}/items/{animeId}", collectionHandler.RemoveItem)
+
+			// Secret-feature roulette management (seed for future role-based
+			// access management). Master switch + per-feature toggles.
+			r.Get("/secret-features", secretFeatureHandler.GetConfig)
+			r.Put("/secret-features/roulette", secretFeatureHandler.SetRoulette)
+			r.Put("/secret-features/feature/{key}", secretFeatureHandler.SetFeature)
 		})
 	})
 

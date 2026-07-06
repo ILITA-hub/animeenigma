@@ -428,6 +428,10 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/collections/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/characters", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/characters/*", proxyHandler.ProxyToCatalog)
+		// Secret-feature roulette public state (GET /api/secret-features/state).
+		// The footer roulette reads this to enforce admin toggles; fail-open on
+		// error. Admin management is covered by the /api/admin/* catch-all below.
+		r.HandleFunc("/secret-features/*", proxyHandler.ProxyToCatalog)
 
 		// Workstream hero-spotlight, v1.0 Phase 1 (HSB-BE-06) — hero spotlight
 		// aggregator. Public surface (anonymous allowed). Phase 3 adds 3

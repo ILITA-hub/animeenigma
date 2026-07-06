@@ -121,15 +121,17 @@
             {{ $t('footer.feedback.viewMine') }}
           </router-link>
         </template>
-        <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
-          @click="openSecretFeature"
-        >
-          <Sparkles class="size-4" aria-hidden="true" />
-          {{ $t('nav.secretFeature') }}
-        </button>
+        <template v-if="rouletteEnabled">
+          <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
+            @click="openSecretFeature"
+          >
+            <Sparkles class="size-4" aria-hidden="true" />
+            {{ $t('nav.secretFeature') }}
+          </button>
+        </template>
         <div class="flex items-center gap-3 sm:ml-auto">
           <a
             href="https://t.me/anime_enigma"
@@ -182,7 +184,8 @@ import { useStandaloneDisplay } from '@/pwa/standalone'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { reportFeError } from '@/utils/feErrorLog'
-import { pickSecretFeature } from '@/utils/secretFeatures'
+import { pickSecretFeature, applySecretFeatureAdminState, isRouletteEnabled } from '@/utils/secretFeatures'
+import { secretFeaturesApi } from '@/api/client'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -211,11 +214,32 @@ const commitUrl = commitHash
   ? `https://github.com/ILITA-hub/animeenigma/commit/${commitHash}`
   : ''
 
-// «Секретная фича» roulette — moved out of the Navbar into the footer. Rolls a
-// random eligible hidden/legacy feature per click (utils/secretFeatures.ts);
-// every target route stays directly reachable regardless.
+// «Секретная фича» roulette — lives in the footer. Rolls a random eligible
+// hidden/legacy feature per click (utils/secretFeatures.ts); every target route
+// stays directly reachable regardless. Admin can disable the whole roulette or
+// individual features (AdminSecretFeatures.vue) — enforced via the public
+// state feed below, which FAILS OPEN (defaults keep today's behavior).
+const rouletteEnabled = ref(true)
+
+async function loadSecretFeatureState(): Promise<void> {
+  try {
+    const res = await secretFeaturesApi.getState()
+    const state = res.data.data
+    applySecretFeatureAdminState({
+      rouletteEnabled: state.rouletteEnabled,
+      disabledKeys: state.disabledKeys ?? [],
+    })
+    rouletteEnabled.value = isRouletteEnabled()
+  } catch {
+    // Fail-open: keep the roulette on with no per-feature filter.
+    applySecretFeatureAdminState(null)
+    rouletteEnabled.value = true
+  }
+}
+
 function openSecretFeature(): void {
-  void router.push(pickSecretFeature(route.path).to)
+  const pick = pickSecretFeature(route.path)
+  if (pick) void router.push(pick.to)
 }
 
 // Auth-driven lifecycle: start polling on login, stop + clear state on
@@ -285,6 +309,7 @@ const reloadPage = () => window.location.reload()
 // Initialize auth state - fetch user if we have token but no user data
 onMounted(async () => {
   consumeAdminRedirectKey()
+  void loadSecretFeatureState()
   if (authStore.token && !authStore.user) {
     await authStore.fetchUser()
   }

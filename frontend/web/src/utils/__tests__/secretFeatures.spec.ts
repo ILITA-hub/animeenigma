@@ -24,10 +24,17 @@ vi.mock('@/stores/auth', () => ({
   }),
 }))
 
-import { pickSecretFeature, _resetSecretFeatureForTests } from '../secretFeatures'
+import {
+  pickSecretFeature,
+  applySecretFeatureAdminState,
+  isRouletteEnabled,
+  _resetSecretFeatureForTests,
+} from '../secretFeatures'
 
 function rollKeys(n: number, currentPath = '/'): string[] {
-  return Array.from({ length: n }, () => pickSecretFeature(currentPath).key)
+  return Array.from({ length: n }, () => pickSecretFeature(currentPath))
+    .filter((f): f is NonNullable<typeof f> => f != null)
+    .map((f) => f.key)
 }
 
 beforeEach(() => {
@@ -53,7 +60,7 @@ describe('pickSecretFeature', () => {
     h.isAuthenticated = true
     h.wallVisible = true
     const picks = Array.from({ length: 300 }, () => pickSecretFeature('/'))
-    const editor = picks.find((p) => p.key === 'showcase-editor')
+    const editor = picks.find((p) => p?.key === 'showcase-editor')
     expect(editor).toBeDefined()
     expect(editor!.to).toEqual({ path: '/profile', query: { showcase: 'edit' } })
   })
@@ -85,5 +92,41 @@ describe('pickSecretFeature', () => {
     h.standalone.value = true
     const keys = new Set(rollKeys(200, '/status'))
     expect(keys).toEqual(new Set(['anidle', 'themes', 'game']))
+  })
+})
+
+describe('admin override state', () => {
+  it('defaults fail-open: roulette enabled, nothing filtered', () => {
+    expect(isRouletteEnabled()).toBe(true)
+    const keys = new Set(rollKeys(200))
+    expect(keys).toEqual(new Set(['anidle', 'status', 'themes', 'game', 'downloads']))
+  })
+
+  it('admin-disabled keys are excluded from the pool', () => {
+    applySecretFeatureAdminState({ rouletteEnabled: true, disabledKeys: ['themes', 'game'] })
+    const keys = new Set(rollKeys(200))
+    expect(keys.has('themes')).toBe(false)
+    expect(keys.has('game')).toBe(false)
+    expect(keys.has('anidle')).toBe(true)
+  })
+
+  it('isRouletteEnabled reflects the master switch', () => {
+    applySecretFeatureAdminState({ rouletteEnabled: false, disabledKeys: [] })
+    expect(isRouletteEnabled()).toBe(false)
+  })
+
+  it('returns null when every eligible feature is admin-disabled', () => {
+    applySecretFeatureAdminState({
+      rouletteEnabled: true,
+      disabledKeys: ['anidle', 'status', 'themes', 'game', 'downloads', 'showcase-editor'],
+    })
+    expect(pickSecretFeature('/')).toBeNull()
+  })
+
+  it('null state resets to the fail-open default', () => {
+    applySecretFeatureAdminState({ rouletteEnabled: false, disabledKeys: ['anidle'] })
+    applySecretFeatureAdminState(null)
+    expect(isRouletteEnabled()).toBe(true)
+    expect(new Set(rollKeys(200)).has('anidle')).toBe(true)
   })
 })

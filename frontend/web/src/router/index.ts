@@ -210,6 +210,13 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'admin.collections.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // Secret-feature roulette management (seed for future role-based access mgmt).
+    path: '/admin/secret-features',
+    name: 'admin-secret-features',
+    component: () => import('@/views/admin/AdminSecretFeatures.vue'),
+    meta: { titleKey: 'admin.secretFeatures.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     // Phase 17 (UX-33) — editorial collections edit form.
     // :id === 'new' triggers the create flow.
     path: '/admin/collections/:id',
