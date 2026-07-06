@@ -486,7 +486,7 @@ func TestProbeProvider_EmptyRefs_NeverPass(t *testing.T) {
 	tgt := target("ae", emptyAS{}, fakeRes{})
 
 	for _, ff := range []bool{true, false} {
-		_, pass := e.probeProvider(context.Background(), tgt, nil, 0, ff)
+		_, pass, _ := e.probeProvider(context.Background(), tgt, nil, 0, ff)
 		if pass {
 			t.Errorf("failFast=%v: empty refs returned pass=true, want false", ff)
 		}
@@ -535,6 +535,43 @@ type resolverFunc func(context.Context, string, string, int, AnimeSlot, string) 
 
 func (f resolverFunc) Resolve(ctx context.Context, uuid, name string, ep int, slot AnimeSlot, prov string) ([]ResolvedStream, Stage, error) {
 	return f(ctx, uuid, name, ep, slot, prov)
+}
+
+// validatorFunc adapts a plain function to the Validator interface for one-off
+// fakes that need to return specific measurement fields on the Verdict.
+type validatorFunc func(context.Context, ResolvedStream) Verdict
+
+func (f validatorFunc) Validate(ctx context.Context, rs ResolvedStream) Verdict { return f(ctx, rs) }
+
+func TestProbeProviderAssemblesMeasure(t *testing.T) {
+	res := resolverFunc(func(_ context.Context, uuid, name string, ep int, slot AnimeSlot, prov string) ([]ResolvedStream, Stage, error) {
+		return []ResolvedStream{{Provider: prov, AnimeUUID: uuid, AnimeName: name, Slot: slot, MasterURL: "https://cdn.test/m.m3u8"}}, StageStream, nil
+	})
+	val := validatorFunc(func(_ context.Context, rs ResolvedStream) Verdict {
+		return Verdict{Provider: rs.Provider, AnimeName: rs.AnimeName, Slot: rs.Slot, Stage: StagePlayback,
+			Reason: streamprobe.ReasonPlayable, ManifestMs: 40, SegmentMs: 20, SegmentBytes: 250000, CDNHost: "cdn.test", Quality: "720p"}
+	})
+	e := &Engine{val: val, now: func() int64 { return 0 }}
+	tgt := ProbeTarget{Provider: "miruro", Resolver: res}
+	refs := []AnimeRef{{UUID: "u1", Name: "Frieren", Slot: SlotAnchor}}
+
+	_, pass, meas := e.probeProvider(context.Background(), tgt, refs, 1, true)
+	if !pass {
+		t.Fatal("expected pass")
+	}
+	if meas.CDNHost != "cdn.test" || meas.Quality != "720p" || meas.Anime != "Frieren" {
+		t.Fatalf("bad meta: %+v", meas)
+	}
+	if meas.ValidateMs != 60 { // ManifestMs + SegmentMs
+		t.Fatalf("ValidateMs = %d, want 60", meas.ValidateMs)
+	}
+	// throughput = bytes*8/segmentMs = 250000*8/20 = 100000 kbps
+	if meas.ThroughputKbps != 100000 {
+		t.Fatalf("ThroughputKbps = %d, want 100000", meas.ThroughputKbps)
+	}
+	if meas.SampleSize != 1 {
+		t.Fatalf("SampleSize = %d, want 1", meas.SampleSize)
+	}
 }
 
 func TestWarmupResolvesTopRefBestEffort(t *testing.T) {

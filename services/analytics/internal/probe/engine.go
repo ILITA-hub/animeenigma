@@ -62,7 +62,7 @@ func filterProbed(verdicts []Verdict) []Verdict {
 // When failFast is true, the first ref that fails makes all remaining refs receive
 // a StageNotTried verdict and probing stops early. pass is true when all probed
 // refs played (failFast=true) or when the top (index-0) ref played (failFast=false).
-func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeRef, sampleSize int, failFast bool) (verdicts []Verdict, pass bool) {
+func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeRef, sampleSize int, failFast bool) (verdicts []Verdict, pass bool, meas tickMeasure) {
 	defer func() {
 		if r := recover(); r != nil {
 			if e.log != nil {
@@ -78,13 +78,22 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 	if sampleSize > 0 && sampleSize < n {
 		n = sampleSize
 	}
+	meas.SampleSize = n
+	if n > 0 {
+		meas.Anime = refs[0].Name
+		meas.Slot = string(refs[0].Slot)
+	}
 
 	allPlayed := true  // AND of every probed ref's played; start optimistic
 	topPlayed := false // whether ref[0] was playable
 
 	for i := 0; i < n; i++ {
 		ref := refs[i]
+		rstart := time.Now()
 		streams, stage, rerr := t.Resolver.Resolve(ctx, ref.UUID, ref.Name, ref.Episode, ref.Slot, t.Provider)
+		if i == 0 {
+			meas.ResolveMs = time.Since(rstart).Milliseconds()
+		}
 		if rerr != nil {
 			if errors.Is(rerr, ErrProbeNotFound) {
 				// Provider has no catalogue entry for this anime: record a zero_match
@@ -121,6 +130,26 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 			refVerdicts = append(refVerdicts, e.val.Validate(ctx, s))
 		}
 		verdicts = append(verdicts, refVerdicts...)
+
+		if i == 0 && len(refVerdicts) > 0 {
+			rep := refVerdicts[0]
+			for _, rv := range refVerdicts {
+				if rv.Reason == streamprobe.ReasonPlayable {
+					rep = rv
+					break
+				}
+			}
+			meas.ValidateMs = rep.ManifestMs + rep.SegmentMs
+			if rep.SegmentMs > 0 {
+				meas.ThroughputKbps = rep.SegmentBytes * 8 / rep.SegmentMs
+			}
+			if rep.CDNHost != "" {
+				meas.CDNHost = rep.CDNHost
+			}
+			if rep.Quality != "" {
+				meas.Quality = rep.Quality
+			}
+		}
 
 		// A ref "played" if resolve succeeded AND at least one validate verdict is playable.
 		played := false
@@ -165,7 +194,7 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 	if n == 0 {
 		pass = false
 	}
-	return verdicts, pass
+	return verdicts, pass, meas
 }
 
 // resolveAndValidate resolves+validates one anime for a target, tagging the slot.
@@ -227,7 +256,7 @@ func (e *Engine) RunOnce(ctx context.Context) error {
 		// Legacy fallback: probe ALL targets, full sample, no fail_fast, no verdict POST.
 		for _, t := range e.targets {
 			refs, _ := t.AnimeSet.Resolve(ctx)
-			verdicts, _ := e.probeProvider(ctx, t, refs, 0, false)
+			verdicts, _, _ := e.probeProvider(ctx, t, refs, 0, false)
 			allVerdicts = append(allVerdicts, verdicts...)
 			provVerdicts = append(provVerdicts, Rollup(t.Provider, filterProbed(verdicts)))
 		}
@@ -256,18 +285,34 @@ func (e *Engine) RunOnce(ctx context.Context) error {
 				e.log.Infow("probe warmup complete", "provider", t.Provider, "warmup_ms", warmupMs)
 			}
 		}
-		_ = warmupMs // consumed in Task 5
-		verdicts, pass := e.probeProvider(ctx, t, refs, entry.SampleSize, entry.FailFast)
+		verdicts, pass, meas := e.probeProvider(ctx, t, refs, entry.SampleSize, entry.FailFast)
 
 		pv := Rollup(t.Provider, filterProbed(verdicts))
 		allVerdicts = append(allVerdicts, verdicts...)
 		provVerdicts = append(provVerdicts, pv)
 
-		// Report pass/fail back to catalog's state machine.
 		reason := ""
 		if !pass {
 			reason = pv.Reason
 		}
+		tm := &TickMetrics{
+			At:             time.Unix(e.now(), 0).UTC().Format(time.RFC3339),
+			Pass:           pass,
+			Reason:         reason,
+			ProviderUsed:   t.Provider,
+			Anime:          meas.Anime,
+			Slot:           meas.Slot,
+			SampleSize:     meas.SampleSize,
+			WarmupMs:       warmupMs,
+			ResolveMs:      meas.ResolveMs,
+			ValidateMs:     meas.ValidateMs,
+			ThroughputKbps: meas.ThroughputKbps,
+			CDNHost:        meas.CDNHost,
+			Quality:        meas.Quality,
+		}
+		_ = tm // wired into PostVerdict in Task 6
+
+		// Report pass/fail back to catalog's state machine.
 		if postErr := e.plan.PostVerdict(ctx, t.Provider, pass, reason); postErr != nil {
 			if e.log != nil {
 				e.log.Warnw("probe PostVerdict failed", "provider", t.Provider, "error", postErr)

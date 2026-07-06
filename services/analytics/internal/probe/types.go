@@ -90,3 +90,30 @@ type ProviderVerdict struct {
 	Status   Status
 	Reason   string // dominant failure classification with locus, "" when up
 }
+
+// TickMetrics is the JSON summary of one probe tick for a provider. Persisted to
+// stream_providers.last_tick_metrics and rendered on the Grafana "Last Tick
+// Metrics" panel. *Ms are milliseconds; ThroughputKbps is kilobits/sec.
+type TickMetrics struct {
+	At             string `json:"at"`
+	Pass           bool   `json:"pass"`
+	Reason         string `json:"reason"`
+	ProviderUsed   string `json:"provider_used"`
+	Anime          string `json:"anime"`
+	Slot           string `json:"slot"`
+	SampleSize     int    `json:"sample_size"`
+	WarmupMs       int64  `json:"warmup_ms,omitempty"`
+	ResolveMs      int64  `json:"resolve_ms"`
+	ValidateMs     int64  `json:"validate_ms"`
+	ThroughputKbps int64  `json:"throughput_kbps,omitempty"`
+	CDNHost        string `json:"cdn_host,omitempty"`
+	Quality        string `json:"quality,omitempty"`
+}
+
+// tickMeasure is the per-tick measurement probeProvider gathers from the top
+// ref; RunOnce finalizes it into a TickMetrics (adding At/Pass/Reason/Warmup).
+type tickMeasure struct {
+	ResolveMs, ValidateMs, ThroughputKbps int64
+	CDNHost, Quality, Anime, Slot         string
+	SampleSize                            int
+}
