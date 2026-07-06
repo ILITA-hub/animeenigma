@@ -155,6 +155,12 @@ func main() {
 		FfprobePath:    cfg.Encode.FfprobeBin,
 		Tmpdir:         cfg.Encode.Tmpdir,
 		MaxBitrateKbps: cfg.Encode.MaxBitrateKbps,
+		// Honor the same CPU-thread cap + scheduling niceness the encoder
+		// worker uses (LIBRARY_ENCODE_THREADS / _NICE) so a long operator
+		// batch run stays a good citizen on a busy host instead of grabbing
+		// every core at normal priority.
+		Threads: cfg.Encode.Threads,
+		Nice:    cfg.Encode.Nice,
 	}, log)
 
 	invalidator := service.NewCatalogInvalidator(service.InvalidatorConfig{
