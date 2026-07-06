@@ -19,14 +19,13 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/embeds"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
-	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/allanime"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/allanimeokru"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animekai"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/eighteenanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/miruro"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/nineanime"
-	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/okru"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/sidecar"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/transport"
@@ -401,46 +400,25 @@ func main() {
 	}
 	registerByStatus(animePaheProvider)
 
-	// Phase 26 (SCRAPER-HEAL-25) — AllAnime as the THIRD live EN provider.
-	// Lifted from services/catalog/internal/parser/allanime/ (copy-with-
-	// adaptation per CONTEXT.md D1). Ships ALWAYS-ON — no SCRAPER_ALLANIME_
-	// ENABLED gate. Operator can disable/degrade it via the catalog
-	// `scraper_providers` DB table if upstream goes hard down. Failover chain order:
-	// gogoanime → animepahe → allanime → [animekai gated].
-	allAnimeBaseHTTP := domain.NewBaseHTTPClient(log,
+	// allanime-okru — AllAnime GraphQL discovery + ok.ru ("Ok") stream resolution,
+	// clock-free (no api.allanime.day /apivtwo/clock). Folded 2026-07-06 from the
+	// former okru + allanime providers. EN failover slot: after animepahe.
+	allanimeOkruBaseHTTP := domain.NewBaseHTTPClient(log,
 		domain.WithPerHostRPS("api.allanime.day", 1.0, 2),
 		domain.WithPerHostRPS("allmanga.to", 1.0, 2),
-		domain.WithProvider("allanime"),
+		domain.WithProvider("allanime-okru"),
 		domain.WithTransport(egressTransport),
 	)
-	allAnimeProvider, err := allanime.New(allanime.Deps{
+	allanimeOkruProvider, err := allanimeokru.New(allanimeokru.Deps{
 		BaseURL: cfg.AllAnime.BaseURL,
-		HTTP:    allAnimeBaseHTTP,
+		HTTP:    allanimeOkruBaseHTTP,
 		Cache:   redisCache,
 		Log:     log,
 	})
 	if err != nil {
-		log.Fatalw("failed to construct AllAnime provider", "error", err)
+		log.Fatalw("failed to construct allanime-okru provider", "error", err)
 	}
-	registerByStatus(allAnimeProvider)
-
-	// okru — serves AllAnime's Ok (ok.ru) sources clock-free (no api.allanime.day
-	// clock endpoint). Registered immediately AFTER allanime so the EN failover
-	// order is gogoanime → animepahe → allanime → okru → miruro → …
-	// This client backs okru's DISCOVERY only (it wraps an internal allanime
-	// provider hitting api.allanime.day). The ok.ru page fetch happens in the
-	// embeds.OkruExtractor's own http.Client (mirrors vibeplayer), so a
-	// per-host RPS for ok.ru here would be dead config.
-	okruBaseHTTP := domain.NewBaseHTTPClient(log,
-		domain.WithPerHostRPS("api.allanime.day", 1.0, 2),
-		domain.WithProvider("okru"),
-		domain.WithTransport(egressTransport),
-	)
-	okruProvider, err := okru.New(okru.Deps{HTTP: okruBaseHTTP, Cache: redisCache, Log: log})
-	if err != nil {
-		log.Fatalw("failed to construct okru provider", "error", err)
-	}
-	registerByStatus(okruProvider)
+	registerByStatus(allanimeOkruProvider)
 
 	// animefever (was EN failover slot 4) was REMOVED from the binary 2026-07-05:
 	// its upstream is dead for EVERYONE — 100% of HLS segments 302 to a ByteDance
@@ -451,7 +429,7 @@ func main() {
 	// AnimefeverDisable migration + docs/scraper-framework.md.
 
 	// Phase 28 Plan 28-04 (SCRAPER-HEAL-37) — Miruro provider. Failover
-	// slot (between allanime/okru and 9anime; animefever removed 2026-07-05).
+	// slot (between allanime-okru and 9anime; animefever removed 2026-07-05).
 	// Uses the pure-Go
 	// secure-pipe transform from Plan 28-00's obfuscation.go. FindID
 	// resolves Shikimori/MAL → AniList via libs/idmapping ARM. Pipe
@@ -641,7 +619,7 @@ func main() {
 
 	// candidateProviders is now fully populated: registerByStatus appended every
 	// constructed EN provider's name in failover order above (gogoanime → animepahe
-	// → allanime → okru → miruro → nineanime → animekai-if-enabled). It drives the
+	// → allanime-okru → miruro → nineanime → animekai-if-enabled). It drives the
 	// Phase-3 runtime re-gate, the wiring-invariant fatal, and the Prometheus
 	// reflection below. No hand-maintained literal → it cannot drift from the
 	// actual registrations. (animefever removed from the binary 2026-07-05.)

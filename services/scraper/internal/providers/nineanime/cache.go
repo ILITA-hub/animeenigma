@@ -1,7 +1,7 @@
 package nineanime
 
 // cache.go — NineAnime per-key TTL strategies. Modeled after
-// services/scraper/internal/providers/allanime/cache.go +
+// services/scraper/internal/providers/allanimeokru/cache.go +
 // services/scraper/internal/providers/animepahe/malsync.go's positive +
 // negative cache pattern.
 //

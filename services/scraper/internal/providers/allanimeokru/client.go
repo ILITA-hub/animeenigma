@@ -1,4 +1,4 @@
-package okru
+package allanimeokru
 
 import (
 	"context"
@@ -14,18 +14,18 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/embeds"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
-	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/allanime"
 )
 
-const providerName = "okru"
+const providerName = "allanime-okru"
 
 var stageNames = health.AllStages
 
-// sourceLister is the discovery surface okru needs from allanime (test seam).
+// sourceLister is the discovery surface the provider needs from the internal
+// discovery client (test seam).
 type sourceLister interface {
 	FindID(ctx context.Context, ref domain.AnimeRef) (string, error)
 	ListEpisodes(ctx context.Context, providerID string) ([]domain.Episode, error)
-	EpisodeSourceURLs(ctx context.Context, episodeID string, category domain.Category) ([]allanime.NamedSource, error)
+	episodeSourceURLs(ctx context.Context, episodeID string, category domain.Category) ([]namedSource, error)
 }
 
 // streamExtractor is the ok.ru resolver (test seam).
@@ -35,9 +35,10 @@ type streamExtractor interface {
 
 // Deps is the constructor input for New().
 type Deps struct {
-	HTTP  *domain.BaseHTTPClient
-	Cache cache.Cache
-	Log   *logger.Logger
+	BaseURL string // forwarded to the AllAnime discovery client; empty ⇒ default
+	HTTP    *domain.BaseHTTPClient
+	Cache   cache.Cache
+	Log     *logger.Logger
 }
 
 // Provider implements domain.Provider, serving AllAnime's ok.ru "Ok" sources.
@@ -50,21 +51,21 @@ type Provider struct {
 	stages   map[string]domain.StageHealth
 }
 
-// New constructs the provider: an internal allanime discovery client + the
-// ok.ru extractor. Dependencies validated eagerly (mirrors allanime.New).
+// New constructs the provider: an internal AllAnime discovery client + the
+// ok.ru extractor. Dependencies validated eagerly (mirrors newDiscovery).
 func New(d Deps) (*Provider, error) {
 	if d.HTTP == nil {
-		return nil, errors.New("okru: Deps.HTTP is required")
+		return nil, errors.New("allanime-okru: Deps.HTTP is required")
 	}
 	if d.Cache == nil {
-		return nil, errors.New("okru: Deps.Cache is required")
+		return nil, errors.New("allanime-okru: Deps.Cache is required")
 	}
 	if d.Log == nil {
 		d.Log = logger.Default()
 	}
-	disc, err := allanime.New(allanime.Deps{HTTP: d.HTTP, Cache: d.Cache, Log: d.Log})
+	disc, err := newDiscovery(discoveryDeps{BaseURL: d.BaseURL, HTTP: d.HTTP, Cache: d.Cache, Log: d.Log})
 	if err != nil {
-		return nil, fmt.Errorf("okru: internal allanime: %w", err)
+		return nil, fmt.Errorf("allanime-okru: internal discovery: %w", err)
 	}
 	p := &Provider{
 		disc:      disc,
@@ -102,7 +103,7 @@ func (p *Provider) HealthCheck(ctx context.Context) domain.Health {
 	return domain.Health{Provider: providerName, Stages: snap}
 }
 
-// FindID / ListEpisodes delegate to the shared allanime discovery.
+// FindID / ListEpisodes delegate to the shared discovery.
 func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, error) {
 	id, err := p.disc.FindID(ctx, ref)
 	p.markStage(health.StageSearch, err)
@@ -123,7 +124,7 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	var all []domain.Server
 	var firstErr error
 	for _, cat := range []domain.Category{domain.CategorySub, domain.CategoryDub} {
-		srcs, err := p.disc.EpisodeSourceURLs(ctx, episodeID, cat)
+		srcs, err := p.disc.episodeSourceURLs(ctx, episodeID, cat)
 		if err != nil {
 			if cat == domain.CategorySub {
 				firstErr = err
@@ -144,7 +145,7 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	if len(all) == 0 {
 		err := firstErr
 		if err == nil {
-			err = domain.WrapNotFound(fmt.Errorf("no Ok source for %s", episodeID), "okru: ListServers")
+			err = domain.WrapNotFound(fmt.Errorf("no Ok source for %s", episodeID), "allanime-okru: ListServers")
 		}
 		p.markStage(health.StageServers, err)
 		return nil, err
@@ -155,7 +156,7 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 
 // GetStream resolves the first playable Ok source for the episode+category.
 func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverID string, category domain.Category) (*domain.Stream, error) {
-	srcs, err := p.disc.EpisodeSourceURLs(ctx, episodeID, category)
+	srcs, err := p.disc.episodeSourceURLs(ctx, episodeID, category)
 	if err != nil {
 		// Foreign-ID / not-found bubbles up as NotFound so the orchestrator skips us.
 		p.markStage(health.StageStream, err)
@@ -177,9 +178,9 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		}
 	}
 	if lastErr != nil {
-		err = domain.WrapExtractFailed(lastErr, "okru: GetStream")
+		err = domain.WrapExtractFailed(lastErr, "allanime-okru: GetStream")
 	} else {
-		err = domain.WrapNotFound(fmt.Errorf("no Ok source for %s", episodeID), "okru: GetStream")
+		err = domain.WrapNotFound(fmt.Errorf("no Ok source for %s", episodeID), "allanime-okru: GetStream")
 	}
 	p.markStage(health.StageStream, err)
 	return nil, err

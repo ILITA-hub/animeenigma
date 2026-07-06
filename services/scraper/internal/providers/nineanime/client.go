@@ -3,7 +3,7 @@ package nineanime
 // client.go — NineAnime provider. Implements domain.Provider for the
 // 9anime.me.uk upstream. Phase 28 SCRAPER-HEAL-39.
 //
-// Adapted from services/scraper/internal/providers/allanime/client.go's
+// Adapted from services/scraper/internal/providers/allanimeokru/client.go's
 // shape per CONTEXT.md D1 (copy-with-adaptation). The 6 method signatures,
 // markStage helper, stages map, and HealthCheck shape are identical; the
 // data path differs (WP REST API + WP-post HTML scrape + 1anime.site

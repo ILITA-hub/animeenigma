@@ -120,5 +120,5 @@
 //   - .planning/phases/28-provider-expansion-r2/28-CONTEXT.md (D1-D7)
 //   - .planning/phases/28-provider-expansion-r2/28-RESEARCH.md (9anime
 //     section + Code Examples + Pitfalls 4-6)
-//   - services/scraper/internal/providers/allanime/ — base template.
+//   - services/scraper/internal/providers/allanimeokru/ — base template.
 package nineanime

@@ -1,4 +1,4 @@
-package allanime
+package allanimeokru
 
 // DTOs for parsing AllAnime GraphQL responses.
 

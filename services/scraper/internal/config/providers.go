@@ -20,7 +20,7 @@ import (
 // scraper_operated name it doesn't recognize — so the name must stay listed here
 // even though nothing registers it.
 var KnownProviders = []string{
-	"gogoanime", "animepahe", "allanime", "okru", "animefever", "miruro", "nineanime", "animekai",
+	"gogoanime", "animepahe", "allanime", "allanime-okru", "animefever", "miruro", "nineanime", "animekai",
 	"18anime",
 }
 

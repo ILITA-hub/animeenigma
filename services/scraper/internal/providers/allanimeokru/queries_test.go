@@ -1,4 +1,4 @@
-package allanime
+package allanimeokru
 
 import (
 	"strings"

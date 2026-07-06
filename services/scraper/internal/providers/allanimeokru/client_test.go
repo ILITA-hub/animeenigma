@@ -1,4 +1,4 @@
-package okru
+package allanimeokru
 
 import (
 	"context"
@@ -8,13 +8,12 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
-	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/allanime"
 )
 
-// fakeLister stands in for the internal allanime discovery (sourceLister).
+// fakeLister stands in for the internal discovery client (sourceLister).
 type fakeLister struct {
-	sources map[string][]allanime.NamedSource // keyed by episodeID
-	foreign bool                              // when true, EpisodeSourceURLs returns NotFound
+	sources map[string][]namedSource // keyed by episodeID
+	foreign bool                     // when true, episodeSourceURLs returns NotFound
 }
 
 func (f *fakeLister) FindID(ctx context.Context, ref domain.AnimeRef) (string, error) {
@@ -25,9 +24,9 @@ func (f *fakeLister) ListEpisodes(ctx context.Context, providerID string) ([]dom
 	return nil, nil
 }
 
-func (f *fakeLister) EpisodeSourceURLs(ctx context.Context, episodeID string, category domain.Category) ([]allanime.NamedSource, error) {
+func (f *fakeLister) episodeSourceURLs(ctx context.Context, episodeID string, category domain.Category) ([]namedSource, error) {
 	if f.foreign {
-		return nil, domain.WrapNotFound(errors.New("foreign id"), "fakeLister: EpisodeSourceURLs")
+		return nil, domain.WrapNotFound(errors.New("foreign id"), "fakeLister: episodeSourceURLs")
 	}
 	return f.sources[episodeID], nil
 }
@@ -49,7 +48,7 @@ func (f *fakeExtractor) Extract(ctx context.Context, embedURL string, headers ht
 
 // newTestProvider builds a *Provider directly with fakes (same package → the
 // unexported fields are reachable), bypassing the network.
-func newTestProvider(t *testing.T, sources map[string][]allanime.NamedSource, extractorOK bool) *Provider {
+func newTestProvider(t *testing.T, sources map[string][]namedSource, extractorOK bool) *Provider {
 	t.Helper()
 	foreign := sources == nil
 	p := &Provider{
@@ -65,7 +64,7 @@ func newTestProvider(t *testing.T, sources map[string][]allanime.NamedSource, ex
 }
 
 func TestGetStream_OnlyOkSources(t *testing.T) {
-	p := newTestProvider(t, map[string][]allanime.NamedSource{
+	p := newTestProvider(t, map[string][]namedSource{
 		"SHOW:1": {
 			{Name: "Default", URL: "https://cdn.example/clock.m3u8"}, // must be IGNORED
 			{Name: "Ok", URL: "https://ok.ru/videoembed/123"},        // the only one resolved
@@ -82,7 +81,7 @@ func TestGetStream_OnlyOkSources(t *testing.T) {
 }
 
 func TestGetStream_NoOkSource_NotFound(t *testing.T) {
-	p := newTestProvider(t, map[string][]allanime.NamedSource{
+	p := newTestProvider(t, map[string][]namedSource{
 		"SHOW:1": {{Name: "Default", URL: "https://cdn.example/clock.m3u8"}},
 	}, true)
 	_, err := p.GetStream(context.Background(), "SHOW", "SHOW:1", "Ok", domain.CategorySub)
