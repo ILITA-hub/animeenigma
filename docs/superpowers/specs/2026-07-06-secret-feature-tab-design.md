@@ -58,9 +58,9 @@ Downloads tab condition tightens from `offlineDownloadsEnabled` to `offlineDownl
 
 `/status` router-link and its bullet separator removed. Route stays registered.
 
-### `Profile.vue`
+### `Profile.vue` + `router/index.ts`
 
-Honors `?showcase=edit`: when the profile shown is the user's own and `profileWallVisible` is true, call the existing `openShowcaseEditor()` once, then `router.replace` to strip the query. Ineligible visitors get the plain profile (query silently stripped).
+Honors `?showcase=edit`: when the profile shown is the user's own and `profileWallVisible` is true, call the existing `openShowcaseEditor()` once, then `router.replace` to strip the query. Ineligible visitors get the plain profile (query silently stripped). The `/profile` → `/user/:publicId` own-profile redirect in `router/index.ts` today drops the query string — it is fixed to preserve `to.query` (a latent bug regardless of this feature).
 
 ### i18n
 
@@ -75,7 +75,7 @@ Honors `?showcase=edit`: when the profile shown is the user's own and `profileWa
 ## Testing
 
 - `secretFeatures.spec.ts` — eligibility matrix (anon / authed non-admin / admin × browser / standalone), no-immediate-repeat, current-path exclusion, uniform pick over a seeded-ish loop.
-- `Navbar` spec — secret button renders; `/anidle` + `/downloads` links absent in browser view; `/downloads` present when standalone mocked.
+- Navbar has no existing unit spec and a mount needs ~12 module mocks for a template-level change — covered instead by vue-tsc, DS-lint, the real build, and e2e; all roll logic is tested in `secretFeatures.spec.ts`.
 - `MobileTabBar.spec.ts` — downloads tab visible only when standalone (existing spec mocks `offlineDownloadsEnabled: true`; add standalone mock both ways).
 - `Profile` spec — `?showcase=edit` opens the editor for an eligible owner; stripped for others.
 - Locale parity specs pick up the new key automatically.
