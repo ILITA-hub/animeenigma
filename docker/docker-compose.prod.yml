@@ -241,6 +241,30 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  policy:
+    build:
+      context: ..
+      dockerfile: services/policy/Dockerfile
+    container_name: animeenigma-policy
+    environment:
+      SERVER_PORT: 8098
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      DB_NAME: animeenigma
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+    expose:
+      - "8098"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   # =============================================================================
   # Frontend
   # =============================================================================

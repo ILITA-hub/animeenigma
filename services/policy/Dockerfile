@@ -3,7 +3,6 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
 RUN apk add --no-cache git
 
 # Copy go.work and all module files
@@ -38,35 +37,33 @@ COPY services/analytics/go.mod services/analytics/go.sum* ./services/analytics/
 COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/maintenance/
 COPY services/library/go.mod services/library/go.sum* ./services/library/
 COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/
-COPY services/recs/go.mod services/recs/go.sum* ./services/recs/
+COPY services/policy/go.mod services/policy/go.sum* ./services/policy/
 COPY services/anidle/go.mod services/anidle/go.sum* ./services/anidle/
 COPY services/fanfic/go.mod services/fanfic/go.sum* ./services/fanfic/
-COPY services/policy/go.mod services/policy/go.sum* ./services/policy/
 
-# Download dependencies
-RUN cd services/rooms && go mod download
+RUN cd services/policy && go mod download
 
-# Copy source code
+# Copy source
 COPY libs/ ./libs/
-COPY services/rooms/ ./services/rooms/
+COPY services/policy/ ./services/policy/
 
 # Build
-RUN cd services/rooms && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /rooms-api ./cmd/rooms-api
+RUN cd services/policy && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /policy-api ./cmd/policy-api
 
 # Runtime stage
 FROM alpine:3.19
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata wget
 
 WORKDIR /app
 
-COPY --from=builder /rooms-api .
+COPY --from=builder /policy-api .
 
 # M501: drop root — run as non-root 'app'. Binary listens on a >1024 port and
 # writes nothing to local disk (state is in postgres/redis/MinIO), so this is free.
 RUN addgroup -S app && adduser -S -G app app && chown -R app:app /app
 USER app
 
-EXPOSE 8084
+EXPOSE 8098
 
-CMD ["./rooms-api"]
+CMD ["./policy-api"]

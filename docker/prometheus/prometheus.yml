@@ -75,6 +75,11 @@ scrape_configs:
       - targets: ['recs:8094']
     metrics_path: /metrics
 
+  - job_name: 'policy'
+    static_configs:
+      - targets: ['policy:8098']
+    metrics_path: /metrics
+
   - job_name: 'library'
     static_configs:
       - targets: ['library:8089']
