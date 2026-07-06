@@ -271,10 +271,12 @@ describe('Profile.vue — showcase opt-in visibility', () => {
   it('?showcase=edit + owner → editor force-opened, marker query stripped', async () => {
     authUser = { public_id: 'testuser' }
     publicProfile = { showcase_state: 'none' }
-    const w = await mountProfileWithQuery('testuser', '?showcase=edit')
+    const w = await mountProfileWithQuery('testuser', '?showcase=edit&from=roulette')
     // force-edit reveals the showcase tab exactly like clicking "Add Showcase"
     expect(w.find('[data-tab="showcase"]').exists()).toBe(true)
     expect(router.currentRoute.value.query.showcase).toBeUndefined()
+    // only the marker is stripped — sibling params survive the replace
+    expect(router.currentRoute.value.query.from).toBe('roulette')
   })
 
   it('?showcase=edit + gate closed → no editor, marker query still stripped', async () => {
@@ -291,5 +293,7 @@ describe('Profile.vue — showcase opt-in visibility', () => {
     publicProfile = { showcase_state: 'none' }
     const w = await mountProfileWithQuery('testuser', '?showcase=edit')
     expect(w.find('[data-tab="showcase"]').exists()).toBe(false)
+    // non-owner: the marker must NOT be stripped
+    expect(router.currentRoute.value.query.showcase).toBe('edit')
   })
 })
