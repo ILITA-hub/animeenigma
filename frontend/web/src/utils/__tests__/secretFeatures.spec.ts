@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   isAuthenticated: false,
   wallVisible: false,
   gachaVisible: false,
+  fanficVisible: false,
 }))
 
 vi.mock('@/offline/flag', () => ({ offlineDownloadsEnabled: true }))
@@ -21,6 +22,13 @@ vi.mock('@/utils/gachaGate', () => ({
   useGachaVisible: () => ({
     get value() {
       return h.gachaVisible
+    },
+  }),
+}))
+vi.mock('@/utils/fanficGate', () => ({
+  useFanficVisible: () => ({
+    get value() {
+      return h.fanficVisible
     },
   }),
 }))
@@ -51,6 +59,7 @@ beforeEach(() => {
   h.isAuthenticated = false
   h.wallVisible = false
   h.gachaVisible = false
+  h.fanficVisible = false
 })
 
 describe('pickSecretFeature', () => {
@@ -166,5 +175,27 @@ describe('gacha entry (dark-shipped, admin-only client gate)', () => {
     h.gachaVisible = true
     applySecretFeatureAdminState({ rouletteEnabled: true, disabledKeys: ['gacha'] })
     expect(new Set(rollKeys(200)).has('gacha')).toBe(false)
+  })
+})
+
+describe('fanfic entry (dark-shipped, admin-only client gate)', () => {
+  it('is absent from the pool when fanfic is not visible', () => {
+    h.fanficVisible = false
+    expect(new Set(rollKeys(200)).has('fanfic')).toBe(false)
+  })
+
+  it('joins the pool once fanfic is visible (client eligibility → /fanfics)', () => {
+    h.fanficVisible = true
+    const fanfic = Array.from({ length: 200 }, () => pickSecretFeature('/')).find(
+      (p) => p?.key === 'fanfic',
+    )
+    expect(fanfic).toBeDefined()
+    expect(fanfic!.to).toBe('/fanfics')
+  })
+
+  it('stays out when admin-disabled even if fanfic is visible', () => {
+    h.fanficVisible = true
+    applySecretFeatureAdminState({ rouletteEnabled: true, disabledKeys: ['fanfic'] })
+    expect(new Set(rollKeys(200)).has('fanfic')).toBe(false)
   })
 })

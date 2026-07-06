@@ -72,15 +72,6 @@
           >
             {{ $t('gacha.nav_item') }}
           </router-link>
-          <!-- Fanfic engine nav item — gated by VITE_FANFIC_ADMIN_ONLY -->
-          <router-link
-            v-if="fanficVisible"
-            to="/fanfics"
-            class="nav-link-nt"
-            active-class="nav-link-nt--active"
-          >
-            {{ $t('fanfic.nav_item') }}
-          </router-link>
         </div>
 
         <!-- Right Section — Neon Tokyo tools row -->
@@ -284,17 +275,6 @@
               <span class="ml-auto text-orange-300 text-sm font-medium tabular-nums">{{ gachaBalance }}</span>
             </router-link>
 
-            <!-- Fanfic engine mobile link -->
-            <router-link
-              v-if="fanficVisible"
-              to="/fanfics"
-              class="px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-              active-class="text-cyan-400 bg-cyan-500/10"
-              @click="mobileMenuOpen = false"
-            >
-              {{ $t('fanfic.nav_item') }}
-            </router-link>
-
             <!-- Divider -->
             <div class="my-1 border-t border-white/10" />
 
@@ -423,7 +403,6 @@ import NotificationBell from '@/components/NotificationBell.vue'
 import NotificationDropdown from '@/components/NotificationDropdown.vue'
 import BrandMark from '@/components/layout/BrandMark.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
-import { useFanficVisible } from '@/utils/fanficGate'
 import { useGachaStore } from '@/stores/gacha'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useNotificationBadge } from '@/composables/useNotificationBadge'
@@ -432,9 +411,6 @@ import { downloadsNavVisible } from '@/offline/downloadGate'
 const router = useRouter()
 const { locale } = useI18n()
 const authStore = useAuthStore()
-
-// Fanfic engine gate — admin-only dark-ship (VITE_FANFIC_ADMIN_ONLY)
-const fanficVisible = useFanficVisible()
 
 // Gacha gate + balance chip
 const gachaVisible = useGachaVisible()

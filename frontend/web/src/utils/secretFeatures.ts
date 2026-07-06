@@ -2,6 +2,7 @@ import type { RouteLocationRaw } from 'vue-router'
 import { downloadsAppOnly } from '@/offline/downloadGate'
 import { useProfileWallVisible } from '@/utils/profileWallGate'
 import { useGachaVisible } from '@/utils/gachaGate'
+import { useFanficVisible } from '@/utils/fanficGate'
 import { useAuthStore } from '@/stores/auth'
 
 /**
@@ -15,7 +16,7 @@ import { useAuthStore } from '@/stores/auth'
  * the admin management page (AdminSecretFeatures.vue) renders this roster.
  */
 export interface SecretFeature {
-  key: 'anidle' | 'status' | 'themes' | 'game' | 'gacha' | 'downloads' | 'showcase-editor' | 'my-feedback'
+  key: 'anidle' | 'status' | 'themes' | 'game' | 'gacha' | 'fanfic' | 'downloads' | 'showcase-editor' | 'my-feedback'
   /** Navigation target for router.push (also the admin "direct link"). */
   to: RouteLocationRaw
   /** i18n key for the human label shown on the admin management page. */
@@ -41,6 +42,17 @@ export const SECRET_FEATURES: SecretFeature[] = [
     to: '/gacha',
     labelKey: 'admin.secretFeatures.feature.gacha',
     eligible: () => useGachaVisible().value,
+  },
+  {
+    // Fanfic engine — dark-shipped admin-only (VITE_FANFIC_ADMIN_ONLY), so
+    // client eligibility mirrors the fanfic visibility gate: it only rolls for
+    // users who can reach /fanfics (admins today). Moved here from the header
+    // nav — the /fanfics route stays directly reachable. No backend seed: its
+    // default roulette state is deferred to the future RBAC model.
+    key: 'fanfic',
+    to: '/fanfics',
+    labelKey: 'admin.secretFeatures.feature.fanfic',
+    eligible: () => useFanficVisible().value,
   },
   {
     // In the installed PWA downloads keep their normal nav link; only the
