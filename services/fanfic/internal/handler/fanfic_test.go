@@ -29,9 +29,13 @@ func (f *fakeGen) Generate(_ context.Context, userID string, _ domain.GenerateRe
 	return nil
 }
 
-type fakeLib struct{ deleted bool }
+type fakeLib struct {
+	deleted     bool
+	calledLimit int
+}
 
-func (f *fakeLib) List(_ context.Context, _ string, _, _ int) ([]domain.Fanfic, int64, error) {
+func (f *fakeLib) List(_ context.Context, _ string, limit, _ int) ([]domain.Fanfic, int64, error) {
+	f.calledLimit = limit
 	return []domain.Fanfic{{ID: "x", Title: "T"}}, 1, nil
 }
 func (f *fakeLib) Get(_ context.Context, _, id string) (*domain.Fanfic, error) {
@@ -70,6 +74,30 @@ func TestGenerate_ValidationError(t *testing.T) {
 	h.Generate(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestList_ClampsLimit(t *testing.T) {
+	cases := []struct {
+		query string
+		want  int
+	}{
+		{"limit=-1", 20},
+		{"limit=0", 20},
+		{"limit=500", 100},
+		{"limit=50", 50},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			lib := &fakeLib{}
+			h := NewHandler(&fakeGen{}, lib, nil)
+			req := withUser(httptest.NewRequest(http.MethodGet, "/api/fanfic?"+tc.query, nil))
+			rec := httptest.NewRecorder()
+			h.List(rec, req)
+			if lib.calledLimit != tc.want {
+				t.Errorf("List called with limit = %d, want %d", lib.calledLimit, tc.want)
+			}
+		})
 	}
 }
 

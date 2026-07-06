@@ -85,6 +85,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	userID := authz.UserIDFromContext(r.Context())
 	page := pagination.ParseIntParam(r.URL.Query().Get("page"), 1)
 	limit := pagination.ParseIntParam(r.URL.Query().Get("limit"), 20)
+	if limit < 1 {
+		limit = 20
+	}
 	if limit > 100 {
 		limit = 100
 	}
