@@ -38,15 +38,15 @@ beforeEach(() => {
 })
 
 describe('pickSecretFeature', () => {
-  it('anonymous browser view → pool is exactly anidle+status+downloads', () => {
+  it('anonymous browser view → pool is anidle+status+themes+game+downloads', () => {
     const keys = new Set(rollKeys(200))
-    expect(keys).toEqual(new Set(['anidle', 'status', 'downloads']))
+    expect(keys).toEqual(new Set(['anidle', 'status', 'themes', 'game', 'downloads']))
   })
 
   it('installed PWA → downloads leaves the pool (it kept its nav link)', () => {
     h.standalone.value = true
     const keys = new Set(rollKeys(200))
-    expect(keys).toEqual(new Set(['anidle', 'status']))
+    expect(keys).toEqual(new Set(['anidle', 'status', 'themes', 'game']))
   })
 
   it('authed + wall gate open → showcase editor joins with the deep-link target', () => {
@@ -76,11 +76,14 @@ describe('pickSecretFeature', () => {
     expect(keys.includes('anidle')).toBe(false)
   })
 
-  it('degrades gracefully when exclusions empty the alternatives', () => {
-    // Standalone + on /status: pool {anidle,status} minus current page = {anidle};
-    // the no-repeat filter must not empty it — anidle repeats.
+  it('excludes the current page from the enlarged always-on pool', () => {
+    // Standalone (downloads out) on /status: pool {anidle,status,themes,game}
+    // minus the current page = {anidle,themes,game}; status never rolls. With
+    // 4 unconditional entries the exclusion filters can no longer empty the
+    // alternatives, so the relax-on-empty guard in pickSecretFeature is now
+    // defensive-only (unreachable via gate state).
     h.standalone.value = true
-    const keys = new Set(rollKeys(50, '/status'))
-    expect(keys).toEqual(new Set(['anidle']))
+    const keys = new Set(rollKeys(200, '/status'))
+    expect(keys).toEqual(new Set(['anidle', 'themes', 'game']))
   })
 })

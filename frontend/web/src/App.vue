@@ -130,22 +130,6 @@
           <Sparkles class="size-4" aria-hidden="true" />
           {{ $t('nav.secretFeature') }}
         </button>
-        <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
-        <router-link
-          to="/themes"
-          class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
-        >
-          <Music class="size-4" aria-hidden="true" />
-          {{ $t('footer.opEd') }}
-        </router-link>
-        <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
-        <router-link
-          to="/game"
-          class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
-        >
-          <Gamepad2 class="size-4" aria-hidden="true" />
-          {{ $t('footer.gameRooms') }}
-        </router-link>
         <div class="flex items-center gap-3 sm:ml-auto">
           <a
             href="https://t.me/anime_enigma"
@@ -182,7 +166,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onErrorCaptured, ref, watch } from 'vue'
-import { TriangleAlert, Inbox, Send, Github, Mail, Sparkles, Music, Gamepad2 } from 'lucide-vue-next'
+import { TriangleAlert, Inbox, Send, Github, Mail, Sparkles } from 'lucide-vue-next'
 import { TooltipProvider } from 'reka-ui'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'

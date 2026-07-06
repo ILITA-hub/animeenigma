@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/auth'
  * random eligible entry; the routes themselves stay directly reachable.
  */
 export interface SecretFeature {
-  key: 'anidle' | 'status' | 'downloads' | 'showcase-editor'
+  key: 'anidle' | 'status' | 'themes' | 'game' | 'downloads' | 'showcase-editor'
   /** Navigation target for router.push. */
   to: RouteLocationRaw
   /** Evaluated at click time — Pinia stores and gates are live by then. */
@@ -19,6 +19,10 @@ export interface SecretFeature {
 export const SECRET_FEATURES: SecretFeature[] = [
   { key: 'anidle', to: '/anidle', eligible: () => true },
   { key: 'status', to: '/status', eligible: () => true },
+  // OP/ED ratings and game rooms — public pages with no nav chrome; the
+  // roulette is their only surfaced entry point (always reachable directly).
+  { key: 'themes', to: '/themes', eligible: () => true },
+  { key: 'game', to: '/game', eligible: () => true },
   {
     // In the installed PWA downloads keep their normal nav link; only the
     // browser view treats them as a secret.
