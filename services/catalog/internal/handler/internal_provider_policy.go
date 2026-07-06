@@ -106,6 +106,7 @@ type probePlanEntry struct {
 	Provider   string `json:"provider"`
 	SampleSize int    `json:"sample_size"`
 	FailFast   bool   `json:"fail_fast"`
+	Engine     string `json:"engine"`
 }
 
 // ProbePlan handles GET /internal/providers/probe-plan.
@@ -142,7 +143,7 @@ func (h *InternalProviderPolicyHandler) ProbePlan(w http.ResponseWriter, r *http
 		if cadence <= 0 || now.Sub(p.LastProbedAt) < cadence {
 			continue
 		}
-		plan = append(plan, probePlanEntry{Provider: p.Name, SampleSize: size, FailFast: ff})
+		plan = append(plan, probePlanEntry{Provider: p.Name, SampleSize: size, FailFast: ff, Engine: p.Engine})
 	}
 	httputil.OK(w, map[string]any{"plan": plan})
 }

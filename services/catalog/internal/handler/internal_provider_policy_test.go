@@ -180,3 +180,44 @@ func TestProbePlan_DueSet(t *testing.T) {
 		t.Fatalf("allanime plan=%+v want {1,true}", got["allanime"])
 	}
 }
+
+func TestProbePlanIncludesEngine(t *testing.T) {
+	db := newHandlerTestDB(t)
+	db.AutoMigrate(&domain.ScraperProvider{})
+	// Two scraper-operated rows, due to probe (LastProbedAt far in the past),
+	// one browser one http.
+	old := time.Now().Add(-48 * time.Hour).UTC()
+	for _, p := range []domain.ScraperProvider{
+		{Name: "miruro", Policy: domain.PolicyManual, Health: domain.HealthDown, Engine: "browser", ScraperOperated: true, Group: "en", LastProbedAt: old},
+		{Name: "allanime", Policy: domain.PolicyAuto, Health: domain.HealthUp, Engine: "http", ScraperOperated: true, Group: "en", LastProbedAt: old},
+	} {
+		if err := db.Create(&p).Error; err != nil {
+			t.Fatalf("seed %s: %v", p.Name, err)
+		}
+	}
+	h := handler.NewInternalProviderPolicyHandler(db, testProviderPolicyCfg(), testNopLogger())
+	rr := httptest.NewRecorder()
+	h.ProbePlan(rr, httptest.NewRequest("GET", "/internal/providers/probe-plan", nil))
+
+	var body struct {
+		Data struct {
+			Plan []struct {
+				Provider string `json:"provider"`
+				Engine   string `json:"engine"`
+			} `json:"plan"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got := map[string]string{}
+	for _, e := range body.Data.Plan {
+		got[e.Provider] = e.Engine
+	}
+	if got["miruro"] != "browser" {
+		t.Fatalf("miruro engine = %q, want browser (plan=%+v)", got["miruro"], body.Data.Plan)
+	}
+	if got["allanime"] != "http" {
+		t.Fatalf("allanime engine = %q, want http", got["allanime"])
+	}
+}
