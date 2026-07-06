@@ -662,13 +662,7 @@
         "footer": {
           "show": false
         },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "Playability"
-          }
-        ]
+        "showHeader": true
       },
       "pluginVersion": "10.3.3",
       "targets": [
@@ -679,7 +673,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", CASE policy WHEN 'auto' THEN 'yes (auto)' WHEN 'manual' THEN 'no (manual)' ELSE 'disabled' END AS \"In auto-failover chain\", health AS \"Health\", CASE WHEN policy = 'disabled' THEN 'Disabled' WHEN policy = 'auto' AND health = 'up' THEN 'UP' WHEN health = 'recovering' THEN 'Recovering' WHEN policy = 'auto' AND health = 'down' THEN 'Down' ELSE 'Degraded' END AS \"State\", last_probed_at AS \"Last probed\", EXTRACT(EPOCH FROM (now() - last_probed_at))::bigint AS \"Last tick\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", description AS \"Description\", ai_probe_notes AS \"AI Probe Notes\" FROM stream_providers ORDER BY scraper_operated DESC, \"group\", name",
+          "rawSql": "SELECT name AS provider, \"group\" AS \"Group\", CASE policy WHEN 'auto' THEN 'yes (auto)' WHEN 'manual' THEN 'no (manual)' ELSE 'disabled' END AS \"In auto-failover chain\", health AS \"Health\", CASE WHEN policy = 'disabled' THEN 'Disabled' WHEN policy = 'auto' AND health = 'up' THEN 'UP' WHEN health = 'recovering' THEN 'Recovering' WHEN policy = 'auto' AND health = 'down' THEN 'Down' ELSE 'Degraded' END AS \"State\", last_probed_at AS \"Last probed\", EXTRACT(EPOCH FROM (now() - last_probed_at))::bigint AS \"Last tick\", CASE WHEN scraper_operated AND engine = 'browser' THEN 'scraper · Camoufox' WHEN scraper_operated THEN 'scraper · HTTP' WHEN name = 'ae' THEN 'self-hosted' WHEN name = 'kodik-iframe' THEN 'FE iframe' ELSE 'catalog parser' END AS \"Resolved via\", description AS \"Description\", ai_probe_notes AS \"AI Probe Notes\", (CASE WHEN name = 'kodik-iframe' THEN 4 WHEN \"group\" = 'en' THEN 1 WHEN \"group\" = 'ru' THEN 2 WHEN \"group\" = 'adult' THEN 3 WHEN \"group\" = 'firstparty' THEN 5 ELSE 6 END + CASE WHEN policy = 'disabled' THEN 100 ELSE 0 END) AS sort_rank FROM stream_providers ORDER BY sort_rank, name",
           "refId": "A"
         },
         {
@@ -704,13 +698,26 @@
           }
         },
         {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "sort_rank",
+                "desc": false
+              }
+            ]
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
               "Health": true,
               "Last probed": true,
-              "probed_at": true
+              "probed_at": true,
+              "sort_rank": true
             },
             "indexByName": {
               "provider": 0,
@@ -753,7 +760,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Per-provider derived lifecycle state over time (provider_state), defaulting to the last 7 days regardless of the dashboard time picker. Reads the same 5-state scheme as the roster's State column — UP (auto + healthy) · Recovering · Down (auto + failing) · Degraded (manual-only, out of auto-failover) · Disabled (not registered). Catalog re-sets the gauge live on every probe-result transition, so each colored segment is a real state change; never-probed rows (ae/kodik/legacy/disabled) show a flat baseline band. Filtered by $provider.",
+      "description": "Per-provider derived lifecycle state over time (provider_state), defaulting to the last 7 days regardless of the dashboard time picker. Reads the same 5-state scheme as the roster's State column — UP (auto + healthy) · Recovering · Down (auto + failing) · Degraded (manual-only, out of auto-failover) · Disabled (not registered). Catalog re-sets the gauge live on every probe-result transition, so each colored segment is a real state change; never-probed rows (ae/kodik/legacy/disabled) show a flat baseline band. Filtered by $provider. The `group!=\"\"` matcher is REQUIRED: it drops the orphaned label-less provider_state series left behind when the `group` label was added to the gauge — those stale series linger for Prometheus' 15d retention and would otherwise draw a duplicate, frozen (wrong-state) row per provider plus a phantom `raw` row. Do not remove it.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -847,7 +854,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "provider_state{provider=~\"$provider\"}",
+          "expr": "provider_state{provider=~\"$provider\", group!=\"\"}",
           "legendFormat": "{{ provider }}",
           "refId": "A"
         }
