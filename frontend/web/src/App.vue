@@ -110,10 +110,6 @@
           </a>
         </template>
         <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
-        <router-link to="/status" class="text-white/60 hover:text-white/80 text-sm transition-colors">
-          {{ $t('status.title') }}
-        </router-link>
-        <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
         <FeedbackButton />
         <template v-if="MY_FEEDBACK_ENABLED && authStore.isAuthenticated">
           <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>

@@ -72,6 +72,15 @@
           >
             {{ $t('gacha.nav_item') }}
           </router-link>
+          <!-- Secret feature roulette — random hidden/legacy feature per click -->
+          <button
+            type="button"
+            class="nav-link-nt inline-flex items-center gap-1.5"
+            @click="openSecretFeature"
+          >
+            <Sparkles class="size-4" aria-hidden="true" />
+            {{ $t('nav.secretFeature') }}
+          </button>
         </div>
 
         <!-- Right Section — Neon Tokyo tools row -->
@@ -275,6 +284,15 @@
               <span class="ml-auto text-orange-300 text-sm font-medium tabular-nums">{{ gachaBalance }}</span>
             </router-link>
 
+            <button
+              type="button"
+              class="flex items-center gap-2 px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-left"
+              @click="openSecretFeature"
+            >
+              <Sparkles class="size-4 text-brand-cyan" aria-hidden="true" />
+              {{ $t('nav.secretFeature') }}
+            </button>
+
             <!-- Divider -->
             <div class="my-1 border-t border-white/10" />
 
@@ -394,7 +412,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
-import { Search, X, ChevronDown, Menu, Gem, Star, Bell } from 'lucide-vue-next'
+import { Search, X, ChevronDown, Menu, Gem, Star, Bell, Sparkles } from 'lucide-vue-next'
 import Avatar from '@/components/ui/Avatar.vue'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
@@ -407,6 +425,8 @@ import { useGachaStore } from '@/stores/gacha'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useNotificationBadge } from '@/composables/useNotificationBadge'
 import { offlineDownloadsEnabled } from '@/offline/flag'
+import { useStandaloneDisplay } from '@/pwa/standalone'
+import { pickSecretFeature } from '@/utils/secretFeatures'
 
 const router = useRouter()
 const { locale } = useI18n()
@@ -456,16 +476,24 @@ function openMobileNotifications(): void {
   void notificationsStore.fetchNotifications()
 }
 
-// Task 12 — /downloads is a build-time flag (offlineDownloadsEnabled), not a
-// reactive one, so filtering the plain array once at setup covers both the
-// desktop and mobile-drawer v-for loops that share navLinks.
-const navLinks = [
+// Hidden/legacy features (anidle, browser-view downloads, status) left the
+// nav for the «Secret feature» roulette — utils/secretFeatures.ts. Downloads
+// keeps its link only in the installed PWA, where offline playback lives;
+// standalone-ness is reactive, hence computed.
+const isStandalone = useStandaloneDisplay()
+const navLinks = computed(() => [
   { to: '/', label: 'nav.home' },
   { to: '/browse', label: 'nav.catalog' },
   { to: '/schedule', label: 'nav.schedule' },
-  { to: '/anidle', label: 'nav.anidle' },
-  { to: '/downloads', label: 'nav.downloads' },
-].filter((l) => l.to !== '/downloads' || offlineDownloadsEnabled)
+  ...(offlineDownloadsEnabled && isStandalone.value
+    ? [{ to: '/downloads', label: 'nav.downloads' }]
+    : []),
+])
+
+function openSecretFeature(): void {
+  mobileMenuOpen.value = false
+  void router.push(pickSecretFeature(router.currentRoute.value.path).to)
+}
 
 const languages = [
   { code: 'ru', name: 'Русский' },
