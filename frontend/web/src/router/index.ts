@@ -4,6 +4,7 @@ import i18n from '@/i18n'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { shouldFullReloadOnNav, setLiveSessionProbe } from '@/pwa/registerPwa'
 import { GACHA_ADMIN_ONLY } from '@/utils/gachaGate'
+import { FANFIC_ADMIN_ONLY } from '@/utils/fanficGate'
 import { stashPrefetch } from '@/utils/pagePrefetch'
 import { setFaviconVariant, faviconVariantForPath } from '@/utils/favicon'
 import { offlineDownloadsEnabled } from '@/offline/flag'
@@ -280,6 +281,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminGacha.vue'),
     meta: { titleKey: 'gacha.admin.title', requiresAuth: true, requiresAdmin: true }
   },
+  // ── Fanfic engine (dark-shipped via VITE_FANFIC_ADMIN_ONLY) ─────────────────
+  {
+    path: '/fanfics',
+    name: 'fanfics',
+    component: () => import('@/views/FanficsView.vue'),
+    meta: { titleKey: 'fanfic.nav_item', requiresAuth: true, fanficGated: true }
+  },
   {
     // Task 12 — offline downloads library (/downloads). Gated in the Navbar
     // link only (offlineDownloadsEnabled); the route itself stays reachable
@@ -378,6 +386,17 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.gachaGated) {
     const gachaVisible = GACHA_ADMIN_ONLY ? authStore.isAdmin : authStore.isAuthenticated
     if (!gachaVisible) {
+      next({ name: 'home' })
+      return
+    }
+  }
+
+  // Fanfic engine gate: fanficGated routes are only visible to admins when
+  // VITE_FANFIC_ADMIN_ONLY is true (dark-ship), or to any authenticated user
+  // when false (global release). Non-eligible users are redirected home.
+  if (to.meta.fanficGated) {
+    const fanficVisible = FANFIC_ADMIN_ONLY ? authStore.isAdmin : authStore.isAuthenticated
+    if (!fanficVisible) {
       next({ name: 'home' })
       return
     }

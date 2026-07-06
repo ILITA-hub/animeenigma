@@ -2015,5 +2015,63 @@
     "inAppOnly": "アプリでダウンロード",
     "installHint": "ダウンロードはAnimeEnigmaアプリで利用できます。ブラウザのアドレスバーのインストールアイコンからアプリを追加してください。",
     "installHintIos": "ダウンロードはAnimeEnigmaアプリで利用できます。Safariで「共有」→「ホーム画面に追加」からアプリを追加してください。"
+  },
+  "fanfic": {
+    "nav_item": "Fanfics",
+    "title": "Fanfic Generator",
+    "tabs": {
+      "generate": "Generate",
+      "library": "My Library"
+    },
+    "form": {
+      "anime": "Anime",
+      "animePlaceholder": "Search anime…",
+      "characters": "Characters",
+      "tags": "Tags",
+      "addTag": "Add tag",
+      "length": "Length",
+      "pov": "Point of view",
+      "rating": "Rating",
+      "language": "Language",
+      "prompt": "Prompt",
+      "promptPlaceholder": "What should it be about? Describe the plot, mood, details…",
+      "generate": "Generate"
+    },
+    "length": {
+      "drabble": "Drabble",
+      "oneshot": "One-shot",
+      "short": "Short story"
+    },
+    "pov": {
+      "first": "First person",
+      "third": "Third person"
+    },
+    "rating": {
+      "teen": "Teen",
+      "mature": "Mature",
+      "explicit": "Explicit (18+)",
+      "explicitConfirm": "This rating implies explicit 18+ content. Continue?"
+    },
+    "lang": {
+      "ru": "Russian",
+      "en": "English"
+    },
+    "library": {
+      "empty": "No fanfics yet. Generate your first one in the Generate tab.",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this fanfic? This cannot be undone.",
+      "loadError": "Failed to load the library."
+    },
+    "reader": {
+      "regenerate": "Regenerate",
+      "copy": "Copy",
+      "copied": "Copied",
+      "saved": "Saved to library",
+      "empty": "Fill in the form on the left and press Generate."
+    },
+    "status": {
+      "generating": "Generating…",
+      "failed": "Generation failed"
+    }
   }
 }
