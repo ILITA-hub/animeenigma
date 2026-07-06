@@ -199,38 +199,17 @@ func TestConfig_RedisAddrDerivation(t *testing.T) {
 	}
 }
 
-func TestProfileWallAdminOnly_DefaultsTrue(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
-	t.Setenv("PROFILE_WALL_ADMIN_ONLY", "")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if !cfg.ProfileWallAdminOnly {
-		t.Fatal("expected ProfileWallAdminOnly to default true")
-	}
-}
-
-func TestProfileWallAdminOnly_FalseWhenSet(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
-	t.Setenv("PROFILE_WALL_ADMIN_ONLY", "false")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if cfg.ProfileWallAdminOnly {
-		t.Fatal("expected ProfileWallAdminOnly false when env=false")
-	}
-}
-
-func TestFanficAdminOnly_DefaultsTrue(t *testing.T) {
+// FanficService default-URL coverage (formerly bundled into a now-deleted
+// test that also asserted on an old admin-only dark-ship config bool — see
+// RBAC and roulette Phase 2 Task 4). Access control for fanfic/gacha/
+// profile-wall is now runtime-resolved via the policy-service ruleset +
+// FeatureGate (services/gateway/internal/transport), not a config bool, so
+// it has no config-package unit test of its own.
+func TestConfig_FanficServiceDefault(t *testing.T) {
 	t.Setenv("JWT_SECRET", "x")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
-	}
-	if !cfg.FanficAdminOnly {
-		t.Fatal("expected FanficAdminOnly to default true")
 	}
 	if cfg.Services.FanficService == "" {
 		t.Fatal("expected a default FanficService URL")

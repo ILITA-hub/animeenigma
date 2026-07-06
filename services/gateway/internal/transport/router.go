@@ -602,33 +602,20 @@ func NewRouterWithCleanup(
 			r.HandleFunc("/admin/policy/*", proxyHandler.ProxyToPolicy)
 		})
 
-		// Profile showcase ("стена") — dark-shipped behind PROFILE_WALL_ADMIN_ONLY
-		// (mirror of the Gacha gate). When admin-only, BOTH read and write require
-		// JWT + admin. When open, read is public (OptionalJWT) and write falls
-		// through to the protected /users/* group below. The player handler also
-		// enforces owner-only writes from JWT claims (defense-in-depth).
-		// Registered BEFORE the protected /users/* group so chi matches the
-		// specific showcase routes first.
-		if cfg.ProfileWallAdminOnly {
-			r.Group(func(r chi.Router) {
-				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
-				r.Use(userRateLimit)
-				r.Use(AdminRoleMiddleware)
-				r.Get("/users/{userId}/showcase", proxyHandler.ProxyToPlayer)
-				r.Put("/users/me/showcase", proxyHandler.ProxyToPlayer)
-				r.Get("/users/{userId}/compatibility", proxyHandler.ProxyToPlayer)
-			})
-		} else {
-			r.Group(func(r chi.Router) {
-				r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
-				r.Use(userRateLimit)
-				r.Get("/users/{userId}/showcase", proxyHandler.ProxyToPlayer)
-			})
-			// PUT /users/me/showcase falls through to the protected /users/* group.
-			// GET /users/{userId}/compatibility also falls through — it always requires
-			// JWT (player's AuthMiddleware enforces it) and the protected /users/* group
-			// below applies JWTValidationMiddleware, so no explicit route is needed here.
-		}
+		// Profile showcase ("стена") — runtime-gated by the policy ruleset
+		// (flag "profile-wall"). OptionalJWT so the flag's eventual "everyone"
+		// audience is public (anonymous); the seed roles:[admin] reproduces the
+		// prior admin-only dark-ship. The player enforces owner-only writes
+		// from JWT claims downstream (defense-in-depth). Registered BEFORE the
+		// protected /users/* group so chi matches these specific routes first.
+		r.Group(func(r chi.Router) {
+			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
+			r.Use(FeatureGate("profile-wall", featureRuleset))
+			r.Get("/users/{userId}/showcase", proxyHandler.ProxyToPlayer)
+			r.Put("/users/me/showcase", proxyHandler.ProxyToPlayer)
+			r.Get("/users/{userId}/compatibility", proxyHandler.ProxyToPlayer)
+		})
 
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
@@ -740,8 +727,9 @@ func NewRouterWithCleanup(
 		// JWT-required (logged-in-only; guests blocked via BlockGuestRole).
 		// FeatureGate("gacha", ...) resolves the effective audience from the
 		// policy-service ruleset (RBAC and roulette Phase 2 Task 3) — this
-		// superseded the static cfg.GachaAdminOnly dark-ship bool (spec §12);
-		// flip it via the /admin/policy flags UI, not an env var + restart.
+		// superseded the static admin-only dark-ship config bool (spec §12,
+		// removed in Task 4); flip it via the /admin/policy flags UI, not an
+		// env var + restart.
 		// The internal credit endpoint (/internal/gacha/credit) is NOT
 		// registered here — Docker-network-only (D-05).
 		r.Route("/gacha", func(r chi.Router) {
@@ -752,7 +740,7 @@ func NewRouterWithCleanup(
 			r.Get("/images/*", proxyHandler.ProxyToGacha)
 
 			// Admin content API (Phase 2) — ALWAYS admin-gated, independent
-			// of the GachaAdminOnly dark-ship flag: these are admin tools,
+			// of the "gacha" feature flag's audience: these are admin tools,
 			// full stop. The gacha service re-validates JWT+admin downstream.
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
@@ -782,8 +770,9 @@ func NewRouterWithCleanup(
 		// Fanfic engine (spec 2026-07-06). JWT-required, guest-blocked, and
 		// gated by FeatureGate("fanfic", ...) — the policy-service ruleset
 		// (RBAC and roulette Phase 2 Task 3), superseding the static
-		// cfg.FanficAdminOnly dark-ship bool. Flip it via the /admin/policy
-		// flags UI, not an env var + restart. The SSE /generate route uses
+		// admin-only dark-ship config bool (removed in Task 4). Flip it via
+		// the /admin/policy flags UI, not an env var + restart. The SSE
+		// /generate route uses
 		// the flushing stream proxy (proxyStreamFlush) so token deltas reach
 		// the browser live.
 		r.Route("/fanfic", func(r chi.Router) {

@@ -26,24 +26,6 @@ type Config struct {
 	// these vars. Defaults: off + empty.
 	SystemBannerActive  bool
 	SystemBannerMessage string
-	// GachaAdminOnly is the gacha (Лудка) dark-ship gate (spec §12). When
-	// true, the /api/gacha/* route group additionally requires the admin
-	// role, so the лудка is forbidden/invisible to regular users on the
-	// live site until the bundled global-update release. Flip to false (env
-	// GACHA_ADMIN_ONLY=false + restart-gateway) to open it to all
-	// authenticated users. Default true.
-	//
-	// Deprecated: superseded by the policy-service ruleset + FeatureGate
-	// ("gacha") as of RBAC and roulette Phase 2 Task 3 — router.go no longer
-	// reads this field. Kept until Task 4 removes it entirely so any stray
-	// reference elsewhere still compiles.
-	GachaAdminOnly bool
-	// ProfileWallAdminOnly is the profile-showcase ("стена") dark-ship gate.
-	// When true, the /api/users/{id}/showcase routes additionally require the
-	// admin role, so the showcase is invisible to regular users until the
-	// bundled release. Flip GACHA_ADMIN_ONLY + PROFILE_WALL_ADMIN_ONLY=false
-	// together to reveal both. Default true.
-	ProfileWallAdminOnly bool
 	// PoisonClientIPs is the anti-scrape "tarpit" target list — exact IPs
 	// and/or CIDR ranges (comma-separated env POISON_CLIENT_IPS). Requests
 	// from these clients get structurally-valid but semantically-fake JSON
@@ -58,18 +40,6 @@ type Config struct {
 	// is the enroll→session→idx-bound-capability chain (Tasks 5/10).
 	// Rotate: set a new value + `make restart-gateway` (no rebuild).
 	ExternalAPIKey string
-	// FanficAdminOnly is the AI fanfic-engine dark-ship gate (spec
-	// 2026-07-06), mirroring GachaAdminOnly. When true, the /api/fanfic/*
-	// route group additionally requires the admin role, so the feature is
-	// forbidden/invisible to regular users until the bundled release. Flip
-	// to false (env FANFIC_ADMIN_ONLY=false + restart-gateway) to open it to
-	// all authenticated (non-guest) users. Default true.
-	//
-	// Deprecated: superseded by the policy-service ruleset + FeatureGate
-	// ("fanfic") as of RBAC and roulette Phase 2 Task 3 — router.go no
-	// longer reads this field. Kept until Task 4 removes it entirely so any
-	// stray reference elsewhere still compiles.
-	FanficAdminOnly bool
 	// RulesetRefresh is how often the gateway's in-memory rulesetCache polls
 	// policy-service's Docker-network-only /internal/policy/ruleset feed
 	// (env POLICY_RULESET_REFRESH). The cache is fail-static: a failed poll
@@ -126,9 +96,10 @@ type ServiceURLs struct {
 	// (/api/upscale/*). Internal segment-handle endpoints are Docker-network-only.
 	UpscalerService string
 	// FanficService — AI fanfic-generation engine (spec 2026-07-06). Port 8097.
-	// Exposes /api/fanfic/* (JWT; admin-gated during dark-ship via
-	// FanficAdminOnly). The SSE /generate route is proxied with per-chunk
-	// flushing (proxyStreamFlush) so token deltas reach the browser live.
+	// Exposes /api/fanfic/* (JWT; access resolved per-request via the
+	// policy-service ruleset + FeatureGate("fanfic") — see router.go). The
+	// SSE /generate route is proxied with per-chunk flushing
+	// (proxyStreamFlush) so token deltas reach the browser live.
 	FanficService string
 	// PolicyService — RBAC + roulette policy service (RBAC and roulette
 	// Phase 1). Port 8098. Exposes /api/policy/features/mine (JWT-optional)
@@ -231,16 +202,10 @@ func Load() (*Config, error) {
 		// Phase 11 / UX-24 — system-status banner env vars.
 		SystemBannerActive:  getEnvBool("SYSTEM_BANNER_ACTIVE", false),
 		SystemBannerMessage: getEnv("SYSTEM_BANNER_MESSAGE", ""),
-		// Gacha (Лудка) dark-ship admin-gate — default true (spec §12).
-		GachaAdminOnly: getEnvBool("GACHA_ADMIN_ONLY", true),
-		// Profile showcase ("стена") dark-ship gate — default true.
-		ProfileWallAdminOnly: getEnvBool("PROFILE_WALL_ADMIN_ONLY", true),
 		// Anti-scrape poison target list — empty = feature off.
 		PoisonClientIPs: httputil.ParseCommaList(getEnv("POISON_CLIENT_IPS", "")),
 		// Worker edge API key — empty = reject all /worker/* (fail-closed).
 		ExternalAPIKey: getEnv("EXTERNAL_API_KEY", ""),
-		// Fanfic engine dark-ship admin-gate — default true (spec 2026-07-06).
-		FanficAdminOnly: getEnvBool("FANFIC_ADMIN_ONLY", true),
 		// Policy ruleset cache refresh interval (RBAC and roulette Phase 2).
 		RulesetRefresh: getEnvDuration("POLICY_RULESET_REFRESH", 15*time.Second),
 	}
