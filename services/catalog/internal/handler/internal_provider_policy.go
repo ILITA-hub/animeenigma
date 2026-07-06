@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -84,8 +85,8 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 		"last_probed_at": p.LastProbedAt,
 		"reason":         p.Reason,
 	}
-	if len(req.Metrics) > 0 {
-		updates["last_tick_metrics"] = string(req.Metrics)
+	if m := bytes.TrimSpace(req.Metrics); len(m) > 0 && !bytes.Equal(m, []byte("null")) && !bytes.Equal(m, []byte("{}")) {
+		updates["last_tick_metrics"] = string(m)
 	}
 
 	if err := h.db.Model(&domain.ScraperProvider{}).

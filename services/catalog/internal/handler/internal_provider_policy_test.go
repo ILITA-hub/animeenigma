@@ -218,6 +218,19 @@ func TestProbeResultPersistsMetrics(t *testing.T) {
 	if !strings.Contains(p.LastTickMetrics, "kwik.cx") {
 		t.Fatalf("metrics wiped by metrics-less verdict: %q", p.LastTickMetrics)
 	}
+
+	// A verdict with an explicit JSON null metrics payload must also not wipe
+	// the stored summary (json.RawMessage("null") has len 4 > 0).
+	rr3 := httptest.NewRecorder()
+	h.ProbeResult(rr3, httptest.NewRequest(http.MethodPost, "/internal/providers/probe-result",
+		strings.NewReader(`{"provider":"miruro","pass":true,"reason":"","metrics":null}`)))
+	if rr3.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr3.Code, rr3.Body.String())
+	}
+	_ = db.First(&p, "name = ?", "miruro")
+	if !strings.Contains(p.LastTickMetrics, "kwik.cx") {
+		t.Fatalf("metrics wiped by null-metrics verdict: %q", p.LastTickMetrics)
+	}
 }
 
 func TestProbePlanIncludesEngine(t *testing.T) {

@@ -73,8 +73,11 @@ type Verdict struct {
 	Server    string
 	Stage     Stage
 	Reason    streamprobe.Reason
-	// Measurement fields, populated by HTTPValidator on the reached-playback
-	// path (zero otherwise). Consumed by the engine to assemble TickMetrics.
+	// Measurement fields, populated by HTTPValidator during validation:
+	// ManifestMs/CDNHost are set as soon as the master fetch is attempted (so
+	// they're present even on a failed provider); SegmentMs/SegmentBytes/Quality
+	// are set only when a media segment is reached. Zero-valued on Verdicts
+	// built outside the validator. Consumed by the engine to assemble TickMetrics.
 	ManifestMs   int64
 	SegmentMs    int64
 	SegmentBytes int64

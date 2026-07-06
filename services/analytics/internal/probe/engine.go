@@ -139,6 +139,8 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 					break
 				}
 			}
+			// Master-fetch + first-segment-fetch latency; intentionally excludes
+			// the intermediate variant-playlist fetch hop.
 			meas.ValidateMs = rep.ManifestMs + rep.SegmentMs
 			if rep.SegmentMs > 0 {
 				meas.ThroughputKbps = rep.SegmentBytes * 8 / rep.SegmentMs
