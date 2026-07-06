@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,6 +57,26 @@ func NewRouterWithCleanup(
 	if cfg.DevMode {
 		log.Warnw("⚠️  DEV MODE ENABLED — admin auth is BYPASSED. Do NOT use in production!")
 	}
+
+	// Policy ruleset cache — polls policy-service's Docker-network-only feed and
+	// backs the FeatureGate middleware. Fail-static; cold start uses per-flag
+	// failSafe. The returned cleanup cancels the refresher.
+	//
+	// rulesetRefreshInterval guards against the zero-value cfg.RulesetRefresh
+	// that older test callers' bare config.Config{} literals produce (they
+	// pre-date this field) — time.NewTicker panics on a non-positive
+	// duration, so config.Load()'s 15s default is re-applied here as a
+	// belt-and-suspenders fallback.
+	rulesetRefreshInterval := cfg.RulesetRefresh
+	if rulesetRefreshInterval <= 0 {
+		rulesetRefreshInterval = 15 * time.Second
+	}
+	rulesetCtx, rulesetCancel := context.WithCancel(context.Background())
+	featureRuleset := newRulesetCache(
+		httpRulesetFetch(cfg.Services.PolicyService, &http.Client{Timeout: 5 * time.Second}),
+		log,
+	)
+	featureRuleset.Start(rulesetCtx, rulesetRefreshInterval)
 
 	r := chi.NewRouter()
 
@@ -167,10 +188,12 @@ func NewRouterWithCleanup(
 	}
 	// Stop the worker enroll rate limiter's background goroutine when the
 	// router is torn down (mirrors the global rateLimiter.Stop pattern).
+	// Also cancels the policy ruleset cache's background refresher.
 	origCleanup := rateLimiter.Stop
 	combinedCleanup := func() {
 		origCleanup()
 		workerEnrollRL.Stop()
+		rulesetCancel()
 	}
 
 	// Health check
@@ -715,10 +738,10 @@ func NewRouterWithCleanup(
 
 		// Gacha (Лудка) service routes — workstream gacha, Phase 1.
 		// JWT-required (logged-in-only; guests blocked via BlockGuestRole).
-		// DARK-SHIP: while cfg.GachaAdminOnly is true the group ALSO requires
-		// the admin role, so the лудка is forbidden/invisible to regular users
-		// on the live site until the bundled global-update release (spec §12).
-		// Flip GACHA_ADMIN_ONLY=false to open it to all authenticated users.
+		// FeatureGate("gacha", ...) resolves the effective audience from the
+		// policy-service ruleset (RBAC and roulette Phase 2 Task 3) — this
+		// superseded the static cfg.GachaAdminOnly dark-ship bool (spec §12);
+		// flip it via the /admin/policy flags UI, not an env var + restart.
 		// The internal credit endpoint (/internal/gacha/credit) is NOT
 		// registered here — Docker-network-only (D-05).
 		r.Route("/gacha", func(r chi.Router) {
@@ -742,9 +765,7 @@ func NewRouterWithCleanup(
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 				r.Use(userRateLimit)
 				r.Use(BlockGuestRoleMiddleware)
-				if cfg.GachaAdminOnly {
-					r.Use(AdminRoleMiddleware)
-				}
+				r.Use(FeatureGate("gacha", featureRuleset))
 				r.Get("/wallet", proxyHandler.ProxyToGacha)
 
 				// Player pull engine (Phase 3): active banners (+my pity),
@@ -759,17 +780,17 @@ func NewRouterWithCleanup(
 		})
 
 		// Fanfic engine (spec 2026-07-06). JWT-required, guest-blocked, and
-		// admin-gated while FANFIC_ADMIN_ONLY (dark-ship, mirrors the Gacha
-		// gate). Flip FANFIC_ADMIN_ONLY=false to open it to all authenticated
-		// (non-guest) users. The SSE /generate route uses the flushing stream
-		// proxy (proxyStreamFlush) so token deltas reach the browser live.
+		// gated by FeatureGate("fanfic", ...) — the policy-service ruleset
+		// (RBAC and roulette Phase 2 Task 3), superseding the static
+		// cfg.FanficAdminOnly dark-ship bool. Flip it via the /admin/policy
+		// flags UI, not an env var + restart. The SSE /generate route uses
+		// the flushing stream proxy (proxyStreamFlush) so token deltas reach
+		// the browser live.
 		r.Route("/fanfic", func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
 			r.Use(BlockGuestRoleMiddleware)
-			if cfg.FanficAdminOnly {
-				r.Use(AdminRoleMiddleware)
-			}
+			r.Use(FeatureGate("fanfic", featureRuleset))
 			r.Post("/generate", proxyHandler.ProxyToFanficStream)
 			r.Get("/", proxyHandler.ProxyToFanfic)
 			r.Get("/tags", proxyHandler.ProxyToFanfic)

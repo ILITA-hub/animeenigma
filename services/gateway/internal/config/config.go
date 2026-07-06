@@ -32,6 +32,11 @@ type Config struct {
 	// live site until the bundled global-update release. Flip to false (env
 	// GACHA_ADMIN_ONLY=false + restart-gateway) to open it to all
 	// authenticated users. Default true.
+	//
+	// Deprecated: superseded by the policy-service ruleset + FeatureGate
+	// ("gacha") as of RBAC and roulette Phase 2 Task 3 — router.go no longer
+	// reads this field. Kept until Task 4 removes it entirely so any stray
+	// reference elsewhere still compiles.
 	GachaAdminOnly bool
 	// ProfileWallAdminOnly is the profile-showcase ("стена") dark-ship gate.
 	// When true, the /api/users/{id}/showcase routes additionally require the
@@ -59,7 +64,18 @@ type Config struct {
 	// forbidden/invisible to regular users until the bundled release. Flip
 	// to false (env FANFIC_ADMIN_ONLY=false + restart-gateway) to open it to
 	// all authenticated (non-guest) users. Default true.
+	//
+	// Deprecated: superseded by the policy-service ruleset + FeatureGate
+	// ("fanfic") as of RBAC and roulette Phase 2 Task 3 — router.go no
+	// longer reads this field. Kept until Task 4 removes it entirely so any
+	// stray reference elsewhere still compiles.
 	FanficAdminOnly bool
+	// RulesetRefresh is how often the gateway's in-memory rulesetCache polls
+	// policy-service's Docker-network-only /internal/policy/ruleset feed
+	// (env POLICY_RULESET_REFRESH). The cache is fail-static: a failed poll
+	// keeps serving the last-known-good snapshot, and FeatureGate falls back
+	// to each flag's failSafe until the first successful fetch ever lands.
+	RulesetRefresh time.Duration
 }
 
 type ServerConfig struct {
@@ -225,6 +241,8 @@ func Load() (*Config, error) {
 		ExternalAPIKey: getEnv("EXTERNAL_API_KEY", ""),
 		// Fanfic engine dark-ship admin-gate — default true (spec 2026-07-06).
 		FanficAdminOnly: getEnvBool("FANFIC_ADMIN_ONLY", true),
+		// Policy ruleset cache refresh interval (RBAC and roulette Phase 2).
+		RulesetRefresh: getEnvDuration("POLICY_RULESET_REFRESH", 15*time.Second),
 	}
 
 	// DevMode is only permitted in known development environments. Any

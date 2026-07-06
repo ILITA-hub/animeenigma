@@ -43,6 +43,19 @@ func buildPolicyGatewayRouter(t *testing.T) *policyTestGateway {
 
 	policyGot := make(chan string, 8)
 	policyBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// NewRouterWithCleanup's own rulesetCache (RBAC and roulette Phase 2
+		// Task 3) polls this exact path directly — a router-internal,
+		// Docker-network call made straight against cfg.Services.PolicyService,
+		// NOT a client request proxied through the gateway's route table. Every
+		// assertion below uses policyGot to pin exactly which CLIENT request
+		// reached this backend, so the cache's own background/startup poll
+		// must not be recorded here (it would otherwise sit in the buffered
+		// channel ahead of the request under test and fail unrelated assertions).
+		if r.URL.Path == "/internal/policy/ruleset" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success":true,"data":{"flags":{},"failSafe":{}}}`))
+			return
+		}
 		policyGot <- r.URL.Path
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"success":true,"data":{"visible":{},"anidle":true}}`))
