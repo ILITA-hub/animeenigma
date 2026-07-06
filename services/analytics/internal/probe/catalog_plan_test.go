@@ -105,7 +105,7 @@ func TestPostVerdict(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := PostVerdict(context.Background(), srv.URL, srv.Client(), "gogoanime", false, "status_403")
+	err := PostVerdict(context.Background(), srv.URL, srv.Client(), "gogoanime", false, "status_403", nil)
 	if err != nil {
 		t.Fatalf("PostVerdict returned error: %v", err)
 	}
@@ -123,6 +123,9 @@ func TestPostVerdict(t *testing.T) {
 	if posted["reason"] != "status_403" {
 		t.Errorf("expected reason=status_403 in body, got %v", posted["reason"])
 	}
+	if _, ok := posted["metrics"]; ok {
+		t.Errorf("expected metrics to be omitted when nil, got %v", posted["metrics"])
+	}
 }
 
 func TestPostVerdictNonOKStatus(t *testing.T) {
@@ -131,8 +134,29 @@ func TestPostVerdictNonOKStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := PostVerdict(context.Background(), srv.URL, srv.Client(), "gogoanime", true, "")
+	err := PostVerdict(context.Background(), srv.URL, srv.Client(), "gogoanime", true, "", nil)
 	if err == nil {
 		t.Fatal("expected error for non-200 status, got nil")
+	}
+}
+
+func TestPostVerdictIncludesMetrics(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	tm := &TickMetrics{At: "2026-07-06T00:00:00Z", Pass: true, ProviderUsed: "miruro", WarmupMs: 9800, ResolveMs: 1900, ThroughputKbps: 5400, CDNHost: "kwik.cx"}
+	if err := PostVerdict(context.Background(), srv.URL, srv.Client(), "miruro", true, "", tm); err != nil {
+		t.Fatalf("PostVerdict: %v", err)
+	}
+	m, ok := gotBody["metrics"].(map[string]any)
+	if !ok {
+		t.Fatalf("metrics missing from body: %+v", gotBody)
+	}
+	if m["cdn_host"] != "kwik.cx" || m["warmup_ms"].(float64) != 9800 {
+		t.Fatalf("bad metrics payload: %+v", m)
 	}
 }

@@ -310,10 +310,8 @@ func (e *Engine) RunOnce(ctx context.Context) error {
 			CDNHost:        meas.CDNHost,
 			Quality:        meas.Quality,
 		}
-		_ = tm // wired into PostVerdict in Task 6
-
-		// Report pass/fail back to catalog's state machine.
-		if postErr := e.plan.PostVerdict(ctx, t.Provider, pass, reason); postErr != nil {
+		// Report pass/fail (+ last-tick metrics) back to catalog's state machine.
+		if postErr := e.plan.PostVerdict(ctx, t.Provider, pass, reason, tm); postErr != nil {
 			if e.log != nil {
 				e.log.Warnw("probe PostVerdict failed", "provider", t.Provider, "error", postErr)
 			}

@@ -13,7 +13,7 @@ import (
 // without a real HTTP server.
 type PlanClient interface {
 	FetchPlan(ctx context.Context) ([]PlanEntry, error)
-	PostVerdict(ctx context.Context, provider string, pass bool, reason string) error
+	PostVerdict(ctx context.Context, provider string, pass bool, reason string, metrics *TickMetrics) error
 }
 
 type httpPlanClient struct {
@@ -33,8 +33,8 @@ func (c *httpPlanClient) FetchPlan(ctx context.Context) ([]PlanEntry, error) {
 	return FetchPlan(ctx, c.catalogURL, c.hc)
 }
 
-func (c *httpPlanClient) PostVerdict(ctx context.Context, p string, pass bool, reason string) error {
-	return PostVerdict(ctx, c.catalogURL, c.hc, p, pass, reason)
+func (c *httpPlanClient) PostVerdict(ctx context.Context, p string, pass bool, reason string, metrics *TickMetrics) error {
+	return PostVerdict(ctx, c.catalogURL, c.hc, p, pass, reason, metrics)
 }
 
 // PlanEntry is one provider the catalog says is due to probe this tick.
@@ -73,12 +73,17 @@ func FetchPlan(ctx context.Context, catalogURL string, c *http.Client) ([]PlanEn
 	return body.Data.Plan, nil
 }
 
-// PostVerdict reports a provider's probe pass/fail to catalog's state machine.
-// Calls POST /internal/providers/probe-result with body
-// {"provider":...,"pass":...,"reason":...} as expected by catalog's
-// InternalProviderPolicyHandler.ProbeResult.
-func PostVerdict(ctx context.Context, catalogURL string, c *http.Client, provider string, pass bool, reason string) error {
-	payload, _ := json.Marshal(map[string]any{"provider": provider, "pass": pass, "reason": reason})
+// PostVerdict reports a provider's probe pass/fail (+ optional last-tick metrics)
+// to catalog's state machine. Calls POST /internal/providers/probe-result with
+// body {"provider":...,"pass":...,"reason":...} as expected by catalog's
+// InternalProviderPolicyHandler.ProbeResult. metrics may be nil (omitted from
+// the body) for backward compatibility.
+func PostVerdict(ctx context.Context, catalogURL string, c *http.Client, provider string, pass bool, reason string, metrics *TickMetrics) error {
+	body := map[string]any{"provider": provider, "pass": pass, "reason": reason}
+	if metrics != nil {
+		body["metrics"] = metrics
+	}
+	payload, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, catalogURL+"/internal/providers/probe-result", bytes.NewReader(payload))
 	if err != nil {
 		return err

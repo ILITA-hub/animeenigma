@@ -73,6 +73,7 @@ type postedVerdict struct {
 	provider string
 	pass     bool
 	reason   string
+	metrics  *TickMetrics
 }
 
 func (f *fakePlan) FetchPlan(_ context.Context) ([]PlanEntry, error) {
@@ -82,8 +83,8 @@ func (f *fakePlan) FetchPlan(_ context.Context) ([]PlanEntry, error) {
 	return f.entries, nil
 }
 
-func (f *fakePlan) PostVerdict(_ context.Context, provider string, pass bool, reason string) error {
-	f.posted = append(f.posted, postedVerdict{provider: provider, pass: pass, reason: reason})
+func (f *fakePlan) PostVerdict(_ context.Context, provider string, pass bool, reason string, metrics *TickMetrics) error {
+	f.posted = append(f.posted, postedVerdict{provider: provider, pass: pass, reason: reason, metrics: metrics})
 	return nil
 }
 
@@ -94,7 +95,9 @@ func (errFetchPlan) FetchPlan(_ context.Context) ([]PlanEntry, error) {
 	return nil, context.DeadlineExceeded
 }
 
-func (errFetchPlan) PostVerdict(_ context.Context, _ string, _ bool, _ string) error { return nil }
+func (errFetchPlan) PostVerdict(_ context.Context, _ string, _ bool, _ string, _ *TickMetrics) error {
+	return nil
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
