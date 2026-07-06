@@ -62,7 +62,17 @@ func filterProbed(verdicts []Verdict) []Verdict {
 // When failFast is true, the first ref that fails makes all remaining refs receive
 // a StageNotTried verdict and probing stops early. pass is true when all probed
 // refs played (failFast=true) or when the top (index-0) ref played (failFast=false).
-func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeRef, sampleSize int, failFast bool) (verdicts []Verdict, pass bool, meas tickMeasure) {
+//
+// retryOnResolveErr enables ONE retry of a resolve that returns a non-definitive
+// error (anything other than ErrProbeNotFound). It is wired to browser-engine
+// providers, whose cold resolve (Camoufox → Turnstile → cf_clearance) is
+// transiently flaky: a warmup-pool race or a single Turnstile-solve hiccup errors
+// even while live playback works. Without the retry, one such false-negative flips
+// health to down and resets the multi-day manual→auto recovery climb — pinning a
+// working provider as "degraded" indefinitely (miruro, 2026-07-06). One retry
+// roughly squares the per-tick false-negative rate; a genuinely-down provider
+// still fails both attempts and is correctly reported down.
+func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeRef, sampleSize int, failFast, retryOnResolveErr bool) (verdicts []Verdict, pass bool, meas tickMeasure) {
 	defer func() {
 		if r := recover(); r != nil {
 			if e.log != nil {
@@ -91,6 +101,12 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 		ref := refs[i]
 		rstart := time.Now()
 		streams, stage, rerr := t.Resolver.Resolve(ctx, ref.UUID, ref.Name, ref.Episode, ref.Slot, t.Provider)
+		// Retry once on a transient (non-definitive) resolve error for flaky
+		// browser cold-resolves. ErrProbeNotFound is definitive ("no catalogue
+		// entry for this title") — never retried; the reroll branch below owns it.
+		if rerr != nil && retryOnResolveErr && !errors.Is(rerr, ErrProbeNotFound) {
+			streams, stage, rerr = t.Resolver.Resolve(ctx, ref.UUID, ref.Name, ref.Episode, ref.Slot, t.Provider)
+		}
 		if i == 0 {
 			meas.ResolveMs = time.Since(rstart).Milliseconds()
 		}
@@ -258,7 +274,7 @@ func (e *Engine) RunOnce(ctx context.Context) error {
 		// Legacy fallback: probe ALL targets, full sample, no fail_fast, no verdict POST.
 		for _, t := range e.targets {
 			refs, _ := t.AnimeSet.Resolve(ctx)
-			verdicts, _, _ := e.probeProvider(ctx, t, refs, 0, false)
+			verdicts, _, _ := e.probeProvider(ctx, t, refs, 0, false, false)
 			allVerdicts = append(allVerdicts, verdicts...)
 			provVerdicts = append(provVerdicts, Rollup(t.Provider, filterProbed(verdicts)))
 		}
@@ -287,7 +303,7 @@ func (e *Engine) RunOnce(ctx context.Context) error {
 				e.log.Infow("probe warmup complete", "provider", t.Provider, "warmup_ms", warmupMs)
 			}
 		}
-		verdicts, pass, meas := e.probeProvider(ctx, t, refs, entry.SampleSize, entry.FailFast)
+		verdicts, pass, meas := e.probeProvider(ctx, t, refs, entry.SampleSize, entry.FailFast, entry.Engine == EngineBrowser)
 
 		pv := Rollup(t.Provider, filterProbed(verdicts))
 		allVerdicts = append(allVerdicts, verdicts...)

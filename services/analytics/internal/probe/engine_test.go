@@ -489,7 +489,7 @@ func TestProbeProvider_EmptyRefs_NeverPass(t *testing.T) {
 	tgt := target("ae", emptyAS{}, fakeRes{})
 
 	for _, ff := range []bool{true, false} {
-		_, pass, _ := e.probeProvider(context.Background(), tgt, nil, 0, ff)
+		_, pass, _ := e.probeProvider(context.Background(), tgt, nil, 0, ff, false)
 		if pass {
 			t.Errorf("failFast=%v: empty refs returned pass=true, want false", ff)
 		}
@@ -558,7 +558,7 @@ func TestProbeProviderAssemblesMeasure(t *testing.T) {
 	tgt := ProbeTarget{Provider: "miruro", Resolver: res}
 	refs := []AnimeRef{{UUID: "u1", Name: "Frieren", Slot: SlotAnchor}}
 
-	_, pass, meas := e.probeProvider(context.Background(), tgt, refs, 1, true)
+	_, pass, meas := e.probeProvider(context.Background(), tgt, refs, 1, true, false)
 	if !pass {
 		t.Fatal("expected pass")
 	}
@@ -598,5 +598,83 @@ func TestWarmupResolvesTopRefBestEffort(t *testing.T) {
 	calls = 0
 	if got := e.warmup(context.Background(), tgt, nil); got != 0 || calls != 0 {
 		t.Fatalf("empty warmup: ms=%d calls=%d, want 0/0", got, calls)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Resolve retry (flaky browser cold-resolve resilience)
+// ---------------------------------------------------------------------------
+
+// TestProbeProvider_BrowserRetry_TransientResolveError_Recovers verifies that with
+// retryOnResolveErr=true (browser engine), a resolve that fails transiently on the
+// first attempt and succeeds on the second yields a PASS — one Turnstile hiccup no
+// longer false-negatives a working provider.
+func TestProbeProvider_BrowserRetry_TransientResolveError_Recovers(t *testing.T) {
+	var calls int
+	res := resolverFunc(func(_ context.Context, uuid, name string, _ int, slot AnimeSlot, prov string) ([]ResolvedStream, Stage, error) {
+		calls++
+		if calls == 1 {
+			return nil, StageStream, context.DeadlineExceeded // transient cold-resolve hiccup
+		}
+		return []ResolvedStream{{Provider: prov, AnimeUUID: uuid, AnimeName: name, Slot: slot, Server: "srv", Stage: StageStream}}, StageStream, nil
+	})
+	e := &Engine{val: fakeVal{}, now: func() int64 { return 0 }}
+	tgt := ProbeTarget{Provider: "miruro", Resolver: res}
+	refs := []AnimeRef{{UUID: "u1", Name: "Frieren", Slot: SlotAnchor}}
+
+	_, pass, _ := e.probeProvider(context.Background(), tgt, refs, 1, true, true) // retryOnResolveErr=true
+	if !pass {
+		t.Fatalf("expected pass after one retry recovered the transient error; calls=%d", calls)
+	}
+	if calls != 2 {
+		t.Fatalf("resolve calls=%d, want 2 (1 transient fail + 1 successful retry)", calls)
+	}
+}
+
+// TestProbeProvider_NoRetry_TransientResolveError_Fails verifies that with
+// retryOnResolveErr=false (http engine — the default), the transient error is the
+// verdict: no retry, provider reported not-played. Guards against regressing the
+// retry into an always-on double-resolve.
+func TestProbeProvider_NoRetry_TransientResolveError_Fails(t *testing.T) {
+	var calls int
+	res := resolverFunc(func(_ context.Context, uuid, name string, _ int, slot AnimeSlot, prov string) ([]ResolvedStream, Stage, error) {
+		calls++
+		if calls == 1 {
+			return nil, StageStream, context.DeadlineExceeded
+		}
+		return []ResolvedStream{{Provider: prov, AnimeUUID: uuid, AnimeName: name, Slot: slot, Server: "srv", Stage: StageStream}}, StageStream, nil
+	})
+	e := &Engine{val: fakeVal{}, now: func() int64 { return 0 }}
+	tgt := ProbeTarget{Provider: "gogoanime", Resolver: res}
+	refs := []AnimeRef{{UUID: "u1", Name: "Frieren", Slot: SlotAnchor}}
+
+	_, pass, _ := e.probeProvider(context.Background(), tgt, refs, 1, true, false) // retryOnResolveErr=false
+	if pass {
+		t.Fatal("expected fail without retry (transient error is the verdict)")
+	}
+	if calls != 1 {
+		t.Fatalf("resolve calls=%d, want 1 (no retry)", calls)
+	}
+}
+
+// TestProbeProvider_Retry_NotFoundNotRetried verifies that ErrProbeNotFound is
+// definitive: even with retryOnResolveErr=true the anchor is resolved exactly once
+// (then the reroll path handles it) — retrying the same missing title is pointless.
+func TestProbeProvider_Retry_NotFoundNotRetried(t *testing.T) {
+	var anchorCalls int
+	res := resolverFunc(func(_ context.Context, uuid, name string, _ int, slot AnimeSlot, prov string) ([]ResolvedStream, Stage, error) {
+		if uuid == "anchor" {
+			anchorCalls++
+			return nil, StageSearch, ErrProbeNotFound
+		}
+		return []ResolvedStream{{Provider: prov, AnimeUUID: uuid, AnimeName: name, Slot: slot, Server: "srv", Stage: StageStream}}, StageStream, nil
+	})
+	e := &Engine{val: fakeVal{}, pool: fakePool{items: []PopularAnime{{UUID: "pool", Name: "Pool"}}}, rng: rand.New(rand.NewSource(1)), now: func() int64 { return 0 }}
+	tgt := ProbeTarget{Provider: "miruro", Resolver: res}
+	refs := []AnimeRef{{UUID: "anchor", Name: "Anchor", Slot: SlotAnchor}}
+
+	_, _, _ = e.probeProvider(context.Background(), tgt, refs, 1, true, true) // retryOnResolveErr=true
+	if anchorCalls != 1 {
+		t.Fatalf("anchor resolve calls=%d, want 1 (ErrProbeNotFound must not be retried)", anchorCalls)
 	}
 }
