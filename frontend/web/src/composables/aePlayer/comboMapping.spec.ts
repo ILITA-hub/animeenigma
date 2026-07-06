@@ -32,7 +32,7 @@ describe('comboToWatchCombo', () => {
   })
   it('threads the en group through to english', () => {
     expect(comboToWatchCombo({ audio: 'sub', lang: 'en', provider: 'allanime-okru', server: '', team: 'SubsPlease' }, 'en'))
-      .toMatchObject({ player: 'english' })
+      .toEqual({ player: 'english', language: 'en', watch_type: 'sub', translation_id: '', translation_title: 'SubsPlease' })
   })
 })
 

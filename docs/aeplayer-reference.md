@@ -127,7 +127,7 @@ to the wrong group silently breaks language filtering.
 mirrors Go `domain.CapabilityReport`). Consumed by `useCapabilities.ts`.
 
 ```ts
-ProviderCap { provider, display_name, state, selectable, hacker_only, order, group, audios, reason, variants, family, ... }
+ProviderCap { provider, display_name, state, selectable, hacker_only, order, group, audios, reason, variants, ... }
 ```
 
 ### 4.1 The `family` field — collapsed taxonomy
