@@ -42,6 +42,7 @@ func NewGenerator(groq streamer, store fanficStore, quota quota, model string, l
 func (g *Generator) Generate(ctx context.Context, userID string, req domain.GenerateRequest, emit Emit) error {
 	release, err := g.quota.Acquire(ctx, userID)
 	if err != nil {
+		g.safeEmit(emit, "error", map[string]any{"message": err.Error()})
 		return err
 	}
 	defer release()

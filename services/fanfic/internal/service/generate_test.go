@@ -9,11 +9,13 @@ import (
 )
 
 type fakeStreamer struct {
-	out string
-	err error
+	out   string
+	err   error
+	calls int
 }
 
 func (f *fakeStreamer) Stream(_ context.Context, _, _ string, _ int, _ float64, onDelta func(string)) (string, int, error) {
+	f.calls++
 	if f.err != nil {
 		// A real streamer may still have emitted partial deltas before failing;
 		// exercise that by emitting once before returning the error.
@@ -215,5 +217,47 @@ func TestGenerate_QuotaErrorAbortsBeforePersistence(t *testing.T) {
 	}
 	if store.created != nil {
 		t.Errorf("expected no row created on quota rejection, got %+v", store.created)
+	}
+}
+
+// TestGenerate_QuotaErrorEmitsErrorEvent asserts that a quota rejection
+// (ErrQuotaExceeded — daily cap, or ErrBusy — cross-tab/stale-lock) emits a
+// single SSE "error" event before returning, so the handler's already-open
+// 200 SSE stream doesn't just go silent on the client. It must also not
+// create a fanfic row or reach the streamer.
+func TestGenerate_QuotaErrorEmitsErrorEvent(t *testing.T) {
+	store := &fakeStore{}
+	streamed := &fakeStreamer{out: "# T\n\nbody"}
+	q := &stubQuota{err: ErrQuotaExceeded}
+	g := NewGenerator(streamed, store, q, "llama-3.1-8b-instant", nil)
+
+	var events []string
+	var payloads []any
+	emit := func(event string, data any) error {
+		events = append(events, event)
+		payloads = append(payloads, data)
+		return nil
+	}
+
+	req := domain.GenerateRequest{Anime: domain.AnimeRef{Title: "Frieren"}, Length: "oneshot", POV: "third", Rating: "mature", Language: "ru"}
+	err := g.Generate(context.Background(), "user-1", req, emit)
+	if !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("expected ErrQuotaExceeded, got %v", err)
+	}
+	if len(events) != 1 || events[0] != "error" {
+		t.Fatalf("expected exactly one 'error' event, got %v", events)
+	}
+	msg, _ := payloads[0].(map[string]any)["message"].(string)
+	if msg != ErrQuotaExceeded.Error() {
+		t.Errorf("error payload message = %q, want %q", msg, ErrQuotaExceeded.Error())
+	}
+	if store.created != nil {
+		t.Errorf("expected no row created on quota rejection, got %+v", store.created)
+	}
+	if store.title != "" || store.usage != 0 {
+		t.Errorf("expected no persistence on quota rejection, got title=%q usage=%d", store.title, store.usage)
+	}
+	if streamed.calls != 0 {
+		t.Errorf("expected streamer not to be called on quota rejection, got %d calls", streamed.calls)
 	}
 }

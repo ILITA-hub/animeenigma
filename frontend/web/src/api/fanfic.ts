@@ -131,26 +131,36 @@ export const fanficApi = {
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const { events, rest } = parseSSEBuffer(buffer)
-      buffer = rest
-      for (const evt of events) handleSSEEvent(evt, handlers)
-    }
-    // Final flush: emit any bytes the stream-mode decoder was holding back
-    // for a pending multi-byte sequence. A well-formed stream terminates its
-    // last event with a trailing "\n\n" (see services/fanfic/internal/
-    // handler/fanfic.go's emit closure) and so has already dispatched every
-    // event inside the loop above; this is a safety net for a connection
-    // that ends mid-event (client abort, proxy cutoff) without that
-    // terminator — force one so parseSSEBuffer treats the dangling event as
-    // complete and we still get to dispatch it.
-    buffer += decoder.decode()
-    if (buffer) {
-      const { events } = parseSSEBuffer(buffer + '\n\n')
-      for (const evt of events) handleSSEEvent(evt, handlers)
+    try {
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const { events, rest } = parseSSEBuffer(buffer)
+        buffer = rest
+        for (const evt of events) handleSSEEvent(evt, handlers)
+      }
+      // Final flush: emit any bytes the stream-mode decoder was holding back
+      // for a pending multi-byte sequence. A well-formed stream terminates its
+      // last event with a trailing "\n\n" (see services/fanfic/internal/
+      // handler/fanfic.go's emit closure) and so has already dispatched every
+      // event inside the loop above; this is a safety net for a connection
+      // that ends mid-event (client abort, proxy cutoff) without that
+      // terminator — force one so parseSSEBuffer treats the dangling event as
+      // complete and we still get to dispatch it.
+      buffer += decoder.decode()
+      if (buffer) {
+        const { events } = parseSSEBuffer(buffer + '\n\n')
+        for (const evt of events) handleSSEEvent(evt, handlers)
+      }
+    } catch (err) {
+      // An aborted read (regenerate / component unmount via AbortController)
+      // rejects with an AbortError — that's an intentional cancellation, not
+      // a failure, so stay silent rather than surfacing it via onError.
+      if ((err instanceof DOMException && err.name === 'AbortError') || signal?.aborted) {
+        return
+      }
+      handlers.onError?.(err instanceof Error ? err.message : String(err))
     }
   },
 

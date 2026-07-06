@@ -194,4 +194,42 @@ describe('fanficApi.generate', () => {
     expect(onDone).toHaveBeenCalledWith('f1', 'T', 10)
     expect(onError).not.toHaveBeenCalled()
   })
+
+  it('swallows an AbortError from a cancelled read without calling onError', async () => {
+    const abortError = new DOMException('The user aborted a request.', 'AbortError')
+    const reader = {
+      read: vi.fn().mockRejectedValueOnce(abortError),
+    }
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: { getReader: () => reader },
+    } as unknown as Response)
+
+    const onError = vi.fn()
+    const onDone = vi.fn()
+    await expect(
+      fanficApi.generate(TEST_INPUT, { onError, onDone }),
+    ).resolves.toBeUndefined()
+
+    expect(onError).not.toHaveBeenCalled()
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
+  it('calls onError when a read fails with a non-abort error', async () => {
+    const boom = new Error('network drop')
+    const reader = {
+      read: vi.fn().mockRejectedValueOnce(boom),
+    }
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: { getReader: () => reader },
+    } as unknown as Response)
+
+    const onError = vi.fn()
+    await fanficApi.generate(TEST_INPUT, { onError })
+
+    expect(onError).toHaveBeenCalledWith('network drop')
+  })
 })
