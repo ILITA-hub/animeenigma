@@ -114,7 +114,7 @@ func Load() (*Config, error) {
 		// ad-free Kodik); animepahe is browser-engine (Camoufox) so it carries a
 		// custom long-timeout resolver; the rest are EN scraper-chain providers.
 		// Order is the dashboard tie-break order.
-		ProbeProviders: getEnv("PROBE_PROVIDERS", "gogoanime,miruro,allanime,okru,nineanime,animepahe,animefever,ae,kodik-noads,animejoy-sibnet,animejoy-allvideo"),
+		ProbeProviders: getEnv("PROBE_PROVIDERS", "gogoanime,miruro,allanime-okru,nineanime,animepahe,animefever,ae,kodik-noads,animejoy-sibnet,animejoy-allvideo"),
 	}, nil
 }
 

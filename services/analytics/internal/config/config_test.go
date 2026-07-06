@@ -21,7 +21,7 @@ func TestLoad_ProbeDefaults(t *testing.T) {
 	if cfg.FFprobePath != "ffprobe" {
 		t.Errorf("FFprobePath = %q, want ffprobe", cfg.FFprobePath)
 	}
-	if cfg.ProbeProviders != "gogoanime,miruro,allanime,okru,nineanime,animepahe,animefever,ae,kodik-noads" {
-		t.Errorf("ProbeProviders = %q, want gogoanime,...,nineanime,animepahe,animefever,ae,kodik-noads", cfg.ProbeProviders)
+	if cfg.ProbeProviders != "gogoanime,miruro,allanime-okru,nineanime,animepahe,animefever,ae,kodik-noads,animejoy-sibnet,animejoy-allvideo" {
+		t.Errorf("ProbeProviders = %q, want gogoanime,miruro,allanime-okru,...,animejoy-allvideo", cfg.ProbeProviders)
 	}
 }
