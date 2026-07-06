@@ -140,7 +140,6 @@ type AllAnimeConfig struct {
 	BaseURL string
 }
 
-
 // NineAnimeConfig is the per-provider override surface for nineanime.Provider
 // (Phase 28 — SCRAPER-HEAL-39). 9anime.me.uk is a brand-jack WordPress
 // instance accepted as a low-quality, last-resort source per CONTEXT.md D2.

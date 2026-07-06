@@ -276,7 +276,10 @@ func MiruroDubOnly(db *gorm.DB) error {
 }
 
 // AnimefeverDeclaim removes the unverified "Region-walled" / egress-IP-class claims
-// from the animefever provider description (AUTO-484 follow-up). The seed is
+// from the animefever provider description (AUTO-484 follow-up). SUPERSEDED by
+// AnimefeverDisable (2026-07-05), which flips status→disabled and rewrites the same
+// reason/description fields; Declaim is retained only because its guard already ran
+// on prod (a run-once migration can't be edited after the fact). The seed is
 // insert-if-absent and so never updates an existing prod row; this RUN-ONCE guarded
 // migration carries the corrected reason/description to live DBs. Guarded via the
 // catalog_migration_guards ledger so it is a no-op on every later boot. Idempotent;

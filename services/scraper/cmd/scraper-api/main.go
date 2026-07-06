@@ -232,16 +232,18 @@ func main() {
 	// status (AUTO-484): enabled → auto-failover chain; degraded → registered but
 	// EXCLUDED from auto-failover (reachable only via an explicit `prefer` /
 	// hacker-mode pin, sorted last in the player); disabled → not registered.
-	// candidateProviders is the ordered EN failover roster. It is NOT a
-	// hand-maintained literal — registerByStatus appends each provider's name as
-	// it is constructed+registered below, so this slice is DERIVED from the actual
-	// wiring and can never drift from it. It drives the runtime re-gate, the
-	// wiring-invariant fatal, and the Prometheus reflection further down (all of
-	// which run AFTER every registerByStatus call, so the slice is fully
-	// populated by then). Registration order == failover order (CONTEXT.md D5).
-	// A disabled provider is still constructed + passed to registerByStatus (which
-	// skips its orchestrator registration but records the candidate name), matching
-	// the previous literal that listed enabled+degraded+disabled candidates alike.
+	// candidateProviders is the ordered EN roster of providers THIS BINARY
+	// constructs. It is NOT a hand-maintained literal — registerByStatus appends
+	// each provider's name as it is constructed+registered below, so the slice is
+	// DERIVED from the actual wiring and can never drift from it. It drives the
+	// runtime re-gate and the wiring-invariant fatal further down (both run AFTER
+	// every registerByStatus call, so the slice is fully populated by then).
+	// Registration order == failover order (CONTEXT.md D5). A provider the DB marks
+	// disabled is still constructed + passed to registerByStatus (which records the
+	// name but skips the orchestrator registration), so it appears here. A CODELESS
+	// tombstone like animefever (disabled DB row, no provider code) is NOT
+	// constructed, so it is absent here — the Prometheus reflection keys off
+	// config.KnownProviders instead so the tombstone still shows on the dashboard.
 	var candidateProviders []string
 
 	// registerByStatus registers p into the EN orchestrator according to its DB
@@ -666,18 +668,12 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Phase 19 wiring invariant — now that candidateProviders is DERIVED from the
-	// registerByStatus calls (not a hand-maintained literal), the classic
-	// list-vs-registration drift is structurally impossible. This retained check
-	// guards the remaining invariant: every EN orchestrator registration must flow
-	// through registerByStatus (which is what appends the candidate name). Each
-	// candidate the DB marks `disabled` is skipped by registerByStatus, so
-	// expectedProviders counts only the not-disabled candidates; if that count ever
-	// diverges from the orchestrator's actual registrations — e.g. a future
-	// maintainer calls orchestrator.Register directly, bypassing the accumulator —
-	// this fatal surfaces it at boot.
-	// candidateProviders is accumulated above (failover order gogoanime → animepahe
-	// → allanime → okru → miruro → nineanime → animekai-if-enabled).
+	// Phase 19 wiring invariant (narrowed by the accumulator refactor). Since
+	// candidateProviders is now derived from the registerByStatus calls, the old
+	// literal-vs-registration drift is structurally impossible; this residual check
+	// only fires if a provider reached the orchestrator WITHOUT going through
+	// registerByStatus (a direct orchestrator.Register bypass → got > want). Cheap
+	// boot-time defense-in-depth; kept, not load-bearing.
 	expectedProviders := 0
 	for _, name := range candidateProviders {
 		if cfg.Providers.IsRegistered(name) {
@@ -716,10 +712,13 @@ func main() {
 
 	// ISS-023: reflect the provider-management config into Prometheus so the
 	// Grafana dashboard shows EVERY provider (enabled and disabled) with its
-	// reason/description. Disabled providers are not Register()-ed, so without
-	// this they would vanish from all metrics. Includes the adult group so
-	// 18anime appears in the provider-management dashboard.
-	for _, row := range cfg.Providers.Rows(append(append([]string{}, candidateProviders...), adultCandidates...)) {
+	// reason/description. Reflect the full KNOWN roster (config.KnownProviders =
+	// every scraper_operated name, incl. the adult group), NOT candidateProviders
+	// (which is derived from what this binary actually constructs). That gap
+	// matters for a codeless tombstone like animefever: it has a disabled DB row
+	// but no provider code, so it never joins candidateProviders — keying the
+	// reflection off KnownProviders keeps its row on the dashboard as intended.
+	for _, row := range cfg.Providers.Rows(config.KnownProviders) {
 		enabled := 0.0
 		if row.Enabled {
 			enabled = 1.0
