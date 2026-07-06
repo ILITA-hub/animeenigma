@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { providerToLegacyPlayer, comboToWatchCombo, watchComboToPartialCombo, comboToToken, tokenToCombo, type WtComboFields } from './comboMapping'
 
 describe('providerToLegacyPlayer', () => {
-  it('maps EN scraper ids to english', () => {
-    for (const id of ['allanime', 'okru', 'animepahe', 'gogoanime', 'nineanime', 'animefever', 'miruro']) {
-      expect(providerToLegacyPlayer(id)).toBe('english')
+  it('maps ourenglish-family providers to english', () => {
+    for (const id of ['gogoanime', 'allanime-okru', 'animepahe', 'nineanime', 'miruro']) {
+      expect(providerToLegacyPlayer(id, 'ourenglish')).toBe('english')
     }
   })
   it('maps 1:1 providers', () => {
@@ -30,6 +30,10 @@ describe('comboToWatchCombo', () => {
   it('returns null when provider has no legacy mapping', () => {
     expect(comboToWatchCombo({ audio: 'sub', lang: 'en', provider: 'nope', server: '', team: null })).toBeNull()
   })
+  it('threads the ourenglish family through to english', () => {
+    expect(comboToWatchCombo({ audio: 'sub', lang: 'en', provider: 'allanime-okru', server: '', team: 'SubsPlease' }, 'ourenglish'))
+      .toEqual({ player: 'english', language: 'en', watch_type: 'sub', translation_id: '', translation_title: 'SubsPlease' })
+  })
 })
 
 describe('watchComboToPartialCombo', () => {
@@ -44,12 +48,12 @@ describe('watchComboToPartialCombo', () => {
 })
 
 describe('comboToToken / tokenToCombo (WT room translation_id)', () => {
-  it('round-trips a full combo (sub/en/team/allanime/wixmp)', () => {
+  it('round-trips a full combo (sub/en/team/allanime-okru/wixmp)', () => {
     const fields: WtComboFields = {
       audio: 'sub',
       lang: 'en',
       team: 'SubsPlease',
-      provider: 'allanime',
+      provider: 'allanime-okru',
       server: 'wixmp',
     }
     expect(tokenToCombo(comboToToken(fields))).toEqual(fields)

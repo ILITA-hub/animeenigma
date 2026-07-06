@@ -973,7 +973,7 @@ const buildAvailable = (): WatchCombo[] => {
   for (const fam of rep.families) {
     for (const cap of fam.providers ?? []) {
       if (cap.state === 'no_content') continue
-      const player = providerToLegacyPlayer(cap.provider)
+      const player = providerToLegacyPlayer(cap.provider, fam.family)
       if (!player) continue
       const langs = GROUP_LANGS[cap.group]
       const audios = [...new Set((cap.audios ?? []).map((a) => (a === 'dub' ? 'dub' : 'sub')))]
@@ -1143,7 +1143,7 @@ const tracking = useWatchTracking(
       void loadEpisodeProgress()
     },
   },
-  () => comboToWatchCombo(state.combo.value),
+  () => comboToWatchCombo(state.combo.value, familyOfProvider(report.value, state.combo.value.provider)),
 )
 
 // ─── Watch-Together create seed ──────────────────────────────────────────────

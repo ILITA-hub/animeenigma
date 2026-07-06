@@ -3,18 +3,18 @@ import type { Combo, AudioKind, TrackLang } from '@/types/aePlayer'
 
 type LegacyPlayer = WatchCombo['player']
 
-// EN scraper chain -> coarse 'english'. Keep in sync with SCRAPER_IDS.
-const EN_SCRAPER_IDS = new Set(['allanime', 'okru', 'animepahe', 'gogoanime', 'nineanime', 'animefever', 'miruro'])
-
-/** Map a granular unified provider id -> coarse legacy WatchCombo.player (or null if unmappable). */
-export function providerToLegacyPlayer(providerId: string): LegacyPlayer | null {
-  if (EN_SCRAPER_IDS.has(providerId)) return 'english'
+/** Map a granular unified provider id -> coarse legacy WatchCombo.player (or null).
+ *  EN-chain membership is backend-driven: pass the provider's capability `family`
+ *  (from familyOfProvider) — family 'ourenglish' ⇒ 'english'. The remaining
+ *  single-provider families stay keyed on id. */
+export function providerToLegacyPlayer(providerId: string, family?: string): LegacyPlayer | null {
+  if (family === 'ourenglish') return 'english'
   switch (providerId) {
     case 'kodik': return 'kodik'
     case 'ae': return 'ae'
     case '18anime': return 'hanime'
-    case 'animelib': return 'animelib'
     case 'hanime': return 'hanime'
+    case 'animelib': return 'animelib'
     default: return null
   }
 }
@@ -30,8 +30,8 @@ export function clampLangForAudio(audio: AudioKind, lang: TrackLang): TrackLang 
 }
 
 /** Map a unified Combo -> legacy WatchCombo for persistence/resolve. Null if provider unmappable. */
-export function comboToWatchCombo(combo: Combo): WatchCombo | null {
-  const player = providerToLegacyPlayer(combo.provider)
+export function comboToWatchCombo(combo: Combo, family?: string): WatchCombo | null {
+  const player = providerToLegacyPlayer(combo.provider, family)
   if (!player) return null
   return {
     player,
