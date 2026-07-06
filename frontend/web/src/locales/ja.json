@@ -1141,6 +1141,8 @@
   "footer": {
     "rights": "All rights reserved",
     "build": "ビルド",
+    "opEd": "OP/ED評価",
+    "gameRooms": "ゲームルーム",
     "feedback": {
       "button": "フィードバックを送る",
       "title": "フィードバックを送る",
