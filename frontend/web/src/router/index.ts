@@ -96,10 +96,11 @@ const routes: RouteRecordRaw[] = [
     name: 'profile',
     component: () => import('@/views/ProfileSetup.vue'),
     meta: { titleKey: 'nav.profile', requiresAuth: true },
-    beforeEnter: (_to, _from, next) => {
+    beforeEnter: (to, _from, next) => {
       const authStore = useAuthStore()
       if (authStore.user?.public_id) {
-        next(`/user/${authStore.user.public_id}`)
+        // Keep the query (e.g. ?showcase=edit secret-feature deep link).
+        next({ path: `/user/${authStore.user.public_id}`, query: to.query })
       } else {
         next()
       }

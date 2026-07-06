@@ -161,6 +161,14 @@ async function mountProfile(publicIdParam = 'testuser') {
   return w
 }
 
+async function mountProfileWithQuery(publicIdParam = 'testuser', query = '') {
+  await router.push(`/profile/${publicIdParam}${query}`)
+  await router.isReady()
+  const w = mount(Profile, { global: { plugins: [i18n, router, createPinia()], stubs: globalStubs } })
+  await flushPromises()
+  return w
+}
+
 describe('Profile.vue — showcase opt-in visibility', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -258,5 +266,30 @@ describe('Profile.vue — showcase opt-in visibility', () => {
     await flushPromises()
     expect(w.find('[data-tab="showcase"]').exists()).toBe(false)
     expect(w.text()).toContain('Add Showcase')
+  })
+
+  it('?showcase=edit + owner → editor force-opened, marker query stripped', async () => {
+    authUser = { public_id: 'testuser' }
+    publicProfile = { showcase_state: 'none' }
+    const w = await mountProfileWithQuery('testuser', '?showcase=edit')
+    // force-edit reveals the showcase tab exactly like clicking "Add Showcase"
+    expect(w.find('[data-tab="showcase"]').exists()).toBe(true)
+    expect(router.currentRoute.value.query.showcase).toBeUndefined()
+  })
+
+  it('?showcase=edit + gate closed → no editor, marker query still stripped', async () => {
+    gateOpen = false
+    authUser = { public_id: 'testuser' }
+    publicProfile = { showcase_state: 'none' }
+    const w = await mountProfileWithQuery('testuser', '?showcase=edit')
+    expect(w.find('[data-tab="showcase"]').exists()).toBe(false)
+    expect(router.currentRoute.value.query.showcase).toBeUndefined()
+  })
+
+  it('?showcase=edit + visitor → ignored (no editor, query untouched for non-owner)', async () => {
+    authUser = { public_id: 'someone-else' }
+    publicProfile = { showcase_state: 'none' }
+    const w = await mountProfileWithQuery('testuser', '?showcase=edit')
+    expect(w.find('[data-tab="showcase"]').exists()).toBe(false)
   })
 })

@@ -1053,6 +1053,24 @@ function openShowcaseEditor() {
 
 // Tabs
 const activeTab = ref('watchlist')
+
+// Secret-feature deep link: /profile?showcase=edit (the own-profile redirect
+// preserves the query) opens the owner's showcase editor once, then strips
+// the marker so refresh/back don't re-trigger it.
+// (Placed after `activeTab` is declared — openShowcaseEditor() writes to it,
+// and this watcher's `immediate: true` callback fires synchronously at
+// `watch()`-call time, so it must run after that ref exists.)
+watch(
+  () => route.query.showcase === 'edit' && !!isOwnProfile.value,
+  (hit) => {
+    if (!hit) return
+    if (profileWallVisible.value) openShowcaseEditor()
+    const { showcase: _showcase, ...rest } = route.query
+    void router.replace({ query: rest })
+  },
+  { immediate: true },
+)
+
 const tabs = computed(() => {
   const baseTabs: Array<{ value: string; label: string }> = []
   if (showcaseTabVisible.value) baseTabs.push({ value: 'showcase', label: t('profile.tabs.showcase') })
