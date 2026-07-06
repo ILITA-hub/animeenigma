@@ -19,9 +19,6 @@ const (
 
 	// serversCacheTTL is the 15min cache for the per-episode server list.
 	serversCacheTTL = 15 * time.Minute
-
-	// streamTTLCap is the 5min cap on resolved stream URLs.
-	streamTTLCap = 5 * time.Minute
 )
 
 // cacheLayer wraps a libs/cache.Cache with allanime-specific key shapes.
@@ -114,63 +111,4 @@ func (l *cacheLayer) setServers(ctx context.Context, showID, ep, tt string, src 
 		return
 	}
 	_ = l.c.Set(ctx, keyServers(showID, ep, tt), src, serversCacheTTL)
-}
-
-// --- stream URL (one server, one episode) --------------------------------
-
-func keyStream(showID, ep, tt, server string) string {
-	return fmt.Sprintf("scraper:allanime:stream:%s:%s:%s:%s", showID, ep, tt, server)
-}
-
-// cachedStream is what we persist in Redis for a resolved stream URL.
-type cachedStream struct {
-	URL       string            `json:"url"`
-	Type      string            `json:"type"`
-	Quality   string            `json:"quality"`
-	Headers   map[string]string `json:"headers,omitempty"`
-	Subtitles []cachedSubtitle  `json:"subtitles,omitempty"`
-}
-
-type cachedSubtitle struct {
-	URL   string `json:"url"`
-	Lang  string `json:"lang"`
-	Label string `json:"label"`
-}
-
-func (l *cacheLayer) getStream(ctx context.Context, showID, ep, tt, server string) (*cachedStream, bool) {
-	var out cachedStream
-	if err := l.c.Get(ctx, keyStream(showID, ep, tt, server), &out); err == nil && out.URL != "" {
-		return &out, true
-	}
-	return nil, false
-}
-
-func (l *cacheLayer) setStream(ctx context.Context, showID, ep, tt, server string, s *cachedStream) {
-	if s == nil || s.URL == "" {
-		return
-	}
-	_ = l.c.Set(ctx, keyStream(showID, ep, tt, server), s, streamTTLCap)
-}
-
-// --- source classification (stream vs embed page) ------------------------
-//
-// Keyed by the exact resolved URL. AllAnime URLs rotate, so entries are
-// naturally short-lived; the TTL just amortizes repeated probes within a
-// server-list window.
-
-func keyClassification(rawURL string) string {
-	return fmt.Sprintf("scraper:allanime:classify:%s", rawURL)
-}
-
-// getClassification returns the cached sourceprobe.Kind (as int) for a URL.
-func (l *cacheLayer) getClassification(ctx context.Context, rawURL string) (int, bool) {
-	var k int
-	if err := l.c.Get(ctx, keyClassification(rawURL), &k); err == nil {
-		return k, true
-	}
-	return 0, false
-}
-
-func (l *cacheLayer) setClassification(ctx context.Context, rawURL string, kind int) {
-	_ = l.c.Set(ctx, keyClassification(rawURL), kind, serversCacheTTL)
 }

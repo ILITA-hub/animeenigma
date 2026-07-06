@@ -135,12 +135,14 @@ type AnimeKaiConfig struct {
 	BaseURL string
 }
 
-// AllAnimeConfig is the per-provider override surface for allanime.Provider
-// (Phase 26 — SCRAPER-HEAL-25). Unlike AnimeKai, AllAnime ships always-on
-// — there is no SCRAPER_ALLANIME_ENABLED gate. Operator can disable/degrade it
-// via the catalog `scraper_providers` DB table if the upstream goes hard down.
-// BaseURL defaults to https://api.allanime.day; override via
-// SCRAPER_ALLANIME_BASE_URL when the upstream rotates hostnames.
+// AllAnimeConfig is the per-provider override surface for the merged
+// allanimeokru.Provider (Phase 26 — SCRAPER-HEAL-25; folded 2026-07-06 from
+// the former standalone allanime + okru providers). Unlike AnimeKai, it ships
+// always-on — there is no SCRAPER_ALLANIME_ENABLED gate. Operator can
+// disable/degrade it via the catalog `scraper_providers` DB table if the
+// upstream goes hard down. BaseURL defaults to https://api.allanime.day
+// (AllAnime's GraphQL discovery, still reused for ok.ru stream resolution);
+// override via SCRAPER_ALLANIME_BASE_URL when the upstream rotates hostnames.
 type AllAnimeConfig struct {
 	BaseURL string
 }

@@ -316,23 +316,6 @@ func (d *discovery) episodeSourceURLs(ctx context.Context, episodeID string, cat
 	return out, nil
 }
 
-func cachedToStream(c *cachedStream) *domain.Stream {
-	out := &domain.Stream{
-		Sources: []domain.Source{
-			{URL: c.URL, Type: c.Type, Quality: c.Quality},
-		},
-		Headers: c.Headers,
-	}
-	for _, sub := range c.Subtitles {
-		out.Tracks = append(out.Tracks, domain.Track{
-			File:  sub.URL,
-			Label: sub.Label,
-			Kind:  "subtitles",
-		})
-	}
-	return out
-}
-
 // fetchSources POSTs the SourceUrls APQ and returns the (decrypted, if
 // needed) sourceUrls array.
 func (d *discovery) fetchSources(ctx context.Context, showID, ep, translationType string) ([]sourceURL, error) {
