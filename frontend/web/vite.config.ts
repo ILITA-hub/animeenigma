@@ -22,8 +22,13 @@ const MSK_ASSET_HOST = process.env.VITE_MSK_ASSET_HOST || ''
 // after it. Per-route match = no over-preloading other routes. The browser
 // dedupes the href against the later dynamic import(), so no double fetch, and
 // against the entry's own modulepreloads, so listing shared vendors is a no-op.
-// Disabled under MSK edge-routing (VITE_MSK_ASSET_HOST) where chunks are served
-// from the edge via window.__assetHost(), not these origin-relative URLs.
+// MSK-aware: the preload href is resolved through window.__assetHost() (the
+// bootstrap that index.html always defines) so it matches EXACTLY how the
+// runtime dynamic import resolves the chunk URL — origin-relative when no edge
+// base is cached (the default for everyone), or the edge origin once a user's
+// probe caches one. So it stays correct whether the build has MSK edge-routing
+// compiled in or not, and the browser dedupes the early preload against the
+// later import()'s fetch.
 function aeRouteModulePreload(): Plugin {
   // Most-specific first is not required (the injected script picks the longest
   // matching prefix); '/' matches the Home route by exact path only.
@@ -49,15 +54,16 @@ function aeRouteModulePreload(): Plugin {
               c.facadeModuleId.split('?')[0].replace(/\\/g, '/').endsWith(r.view)
           ) as import('rollup').OutputChunk | undefined
           if (!chunk) continue
-          // Facade chunk ONLY — deliberately NOT its import tree. On a saturated
-          // link these preloads are High-priority and sit in <head> before the
-          // entry <script>, so preloading the whole subtree (shared vendors +
-          // leaves like ass-compiler that aren't needed for first render) would
-          // contend with and delay the entry bundle. Shared vendors are already
+          // Facade chunk ONLY (bare fileName; the injected script resolves the
+          // href) — deliberately NOT its import tree. On a saturated link these
+          // preloads are High-priority and sit in <head> before the entry
+          // <script>, so preloading the whole subtree (shared vendors + leaves
+          // like ass-compiler that aren't needed for first render) would contend
+          // with and delay the entry bundle. Shared vendors are already
           // Vite-preloaded as entry deps; the facade's own deps still stream via
           // the runtime __vitePreload when the route executes. Removing the ONE
           // serial hop for the route chunk is the safe, net-positive win.
-          map[r.match] = ['/' + chunk.fileName]
+          map[r.match] = [chunk.fileName]
         }
         if (!Object.keys(map).length) return html
         // Longest-prefix match; keys longer than 1 char match as a path prefix,
@@ -66,8 +72,9 @@ function aeRouteModulePreload(): Plugin {
           `(function(){var M=${JSON.stringify(map)},p=location.pathname,b=null,n=-1;` +
           `for(var k in M){var m=k.length>1?(p===k||p.indexOf(k)===0):p===k;` +
           `if(m&&k.length>n){b=k;n=k.length}}` +
-          `if(b){var u=M[b];for(var i=0;i<u.length;i++){var l=document.createElement('link');` +
-          `l.rel='modulepreload';l.href=u[i];document.head.appendChild(l)}}})();`
+          `if(b){var H=window.__assetHost,u=M[b];for(var i=0;i<u.length;i++){` +
+          `var l=document.createElement('link');l.rel='modulepreload';` +
+          `l.href=H?H(u[i]):'/'+u[i];document.head.appendChild(l)}}})();`
         return {
           html,
           tags: [{ tag: 'script', attrs: {}, children: script, injectTo: 'head' as const }],
@@ -96,9 +103,9 @@ export default defineConfig({
     : {}),
   plugins: [
     vue(),
-    // Per-route modulepreload — off under MSK edge-routing (chunks come from the
-    // edge, not the origin-relative URLs this plugin emits).
-    ...(MSK_ASSET_HOST ? [] : [aeRouteModulePreload()]),
+    // Per-route modulepreload (MSK-aware — resolves hrefs via window.__assetHost
+    // so it's correct whether or not edge-routing is compiled in).
+    aeRouteModulePreload(),
     compression({
       algorithm: 'gzip',
       threshold: 1024,
