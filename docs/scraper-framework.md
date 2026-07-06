@@ -17,10 +17,15 @@ list of providers and runs sequential failover across them.
 `cmd/scraper-api/main.go` lines 330–455):
 
 ```
-gogoanime → animepahe → allanime → okru → miruro → nineanime
+gogoanime → animepahe → allanime-okru → miruro → nineanime
 ```
-(`animefever` was removed from the binary 2026-07-05 — dead upstream; it survives
-only as a disabled tombstone row in the catalog `stream_providers` DB.)
+(`allanime-okru` folds the former standalone `allanime` + `okru` providers into
+one AllAnime-GraphQL-discovery + ok.ru-stream-resolution provider, 2026-07-06 —
+the dead `api.allanime.day` clock-sync path was dropped in the merge; `allanime`
+survives only as a disabled tombstone row in `stream_providers`, kept in scraper
+`KnownProviders`. `animefever` was removed from the binary 2026-07-05 — dead
+upstream; it survives only as a disabled tombstone row in the catalog
+`stream_providers` DB.)
 
 Optional (flag-gated): `animekai` (appended last when `SCRAPER_ANIMEKAI_ENABLED=true`).
 
@@ -131,7 +136,9 @@ wins; if every provider returned `ErrNotFound`, return `ErrNotFound`
 services/scraper/internal/providers/
 ├── gogoanime/       # PRIMARY: Anitaku/Gogoanime (EN sub/dub, gatedProvider)
 ├── animepahe/       # 2nd: AnimePahe via Camoufox resolver sidecar (Kwik embed)
-├── allanime/        # 3rd: AllAnime (Phase 26)
+├── allanimeokru/    # 3rd: AllAnime (OK.ru) — AllAnime GraphQL discovery + ok.ru
+│                    # stream resolution (id "allanime-okru"). Folded 2026-07-06
+│                    # from the former allanime + okru providers; clock path dropped.
 │                    # (animefever/ REMOVED 2026-07-05 — dead upstream, tombstone row only)
 ├── miruro/          # Miruro, pure-Go secure-pipe transform (Phase 28)
 ├── nineanime/       # 9anime.me.uk — last-resort MP4 (Phase 28)

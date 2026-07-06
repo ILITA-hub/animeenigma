@@ -24,7 +24,7 @@ The "5 players" are now **source families inside one player**, chosen via the in
 
 > **RAW vs DUB:** the top slider's **RAW** position = `combo.audio:'sub'` (original audio — EN-sub/RU-sub/pure-JP all surface, language filter dropped); **DUB** = `combo.audio:'dub'` (localized; language slider EN/RU only, no JP dub). Subtitles default **OFF** and never auto-enable. Full model in the reference doc.
 >
-> **EN scraper backend** (`services/scraper/`) fails over **gogoanime → animepahe → allanime → okru → miruro → nineanime** (+ optional `animekai`); see [`docs/scraper-framework.md`](docs/scraper-framework.md). aePlayer is behind `VITE_AE_PLAYER_ENABLED` (defaults on).
+> **EN scraper backend** (`services/scraper/`) fails over **gogoanime → animepahe → allanime-okru → miruro → nineanime** (+ optional `animekai`); see [`docs/scraper-framework.md`](docs/scraper-framework.md). aePlayer is behind `VITE_AE_PLAYER_ENABLED` (defaults on).
 
 **Backend route family** (gateway → catalog → scraper microservice):
 - `GET /api/anime/{uuid}/scraper/episodes?prefer=<provider>`
@@ -59,7 +59,7 @@ Primary data sources:
 - **Shikimori** — metadata (titles, descriptions, posters, genres).
 - **Kodik** — RU iframe embed. Parser: `services/catalog/internal/parser/kodik/`.
 - **AniLib** — RU direct MP4. Parser: `services/catalog/internal/parser/animelib/`.
-- **OurEnglish (`services/scraper/`)** — EN via failover orchestrator. Order: `gogoanime` → `animepahe` _(disabled 2026-06-24 — resolver sidecar retired; code kept in roster for revival, so it stays in `candidateProviders` but is never registered while disabled)_ → `allanime` → `okru` → `miruro` (secure-pipe pure-Go obfuscation) → `nineanime` (MP4-only last-resort) → optional `animekai`. _(`animefever` was REMOVED from the binary 2026-07-05 — dead upstream, ad-swapped segments gone for everyone incl. residential; survives only as a disabled `scraper_operated` tombstone row in the catalog DB, kept in scraper `KnownProviders` so the remote-config loader validates.)_ Provider impls: `services/scraper/internal/providers/{name}/`. Embed extractors: `services/scraper/internal/embeds/`.
+- **OurEnglish (`services/scraper/`)** — EN via failover orchestrator. Order: `gogoanime` → `animepahe` _(disabled 2026-06-24 — resolver sidecar retired; code kept in roster for revival, so it stays in `candidateProviders` but is never registered while disabled)_ → `allanime-okru` _(AllAnime GraphQL discovery + ok.ru stream resolution, clock-free — folded 2026-07-06 from the former standalone `allanime` + `okru` providers; `allanime` survives only as a disabled tombstone row kept in scraper `KnownProviders`)_ → `miruro` (secure-pipe pure-Go obfuscation) → `nineanime` (MP4-only last-resort) → optional `animekai`. _(`animefever` was REMOVED from the binary 2026-07-05 — dead upstream, ad-swapped segments gone for everyone incl. residential; survives only as a disabled `scraper_operated` tombstone row in the catalog DB, kept in scraper `KnownProviders` so the remote-config loader validates.)_ Provider impls: `services/scraper/internal/providers/{name}/`. Embed extractors: `services/scraper/internal/embeds/`.
 - **Hanime** — 18+. Parser: `services/catalog/internal/parser/hanime/`.
 - **AllAnime raw-JP** — original-audio JP (Raw player). `services/catalog/internal/parser/allanime/` (+ `services/scraper/internal/providers/allanime/`).
 - **Jimaku.cc** — JP subtitle files (ASS/SRT/VTT). Consumed by OurEnglish, Raw players via `SubtitleOverlay.vue`.
