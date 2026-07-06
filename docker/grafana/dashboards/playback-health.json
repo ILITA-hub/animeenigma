@@ -743,12 +743,50 @@
       "type": "table"
     },
     {
+      "id": 140,
+      "type": "table",
+      "title": "Last Tick Metrics",
+      "description": "Summary of each provider's most recent probe tick: warmup (browser cold-solve), resolve + validate latency, first-segment throughput, CDN host and quality.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "aenigma-postgres"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "datasource": {
+            "type": "postgres",
+            "uid": "aenigma-postgres"
+          },
+          "rawSql": "SELECT name AS \"Provider\", round((last_tick_metrics::jsonb->>'warmup_ms')::numeric/1000,1) AS \"Warmup s\", round((last_tick_metrics::jsonb->>'resolve_ms')::numeric/1000,2) AS \"Resolve s\", round((last_tick_metrics::jsonb->>'validate_ms')::numeric/1000,2) AS \"Validate s\", round((last_tick_metrics::jsonb->>'throughput_kbps')::numeric/1000,1) AS \"Speed Mbps\", last_tick_metrics::jsonb->>'cdn_host' AS \"CDN\", last_tick_metrics::jsonb->>'quality' AS \"Quality\", (last_tick_metrics::jsonb->>'at')::timestamptz AS \"Last tick\" FROM stream_providers WHERE last_tick_metrics <> '' AND last_tick_metrics IS NOT NULL ORDER BY \"group\", name;"
+        }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 27
       },
       "id": 103,
       "panels": [],
@@ -834,7 +872,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 28
       },
       "id": 26,
       "options": {
@@ -869,7 +907,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 36
       },
       "id": 104,
       "panels": [],
@@ -907,7 +945,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 28
+        "y": 37
       },
       "id": 12,
       "options": {
@@ -968,7 +1006,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 28
+        "y": 37
       },
       "id": 13,
       "options": {
@@ -1021,7 +1059,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 35
+        "y": 44
       },
       "id": 23,
       "options": {
@@ -1075,7 +1113,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 35
+        "y": 44
       },
       "id": 24,
       "options": {
@@ -1164,7 +1202,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 35
+        "y": 44
       },
       "id": 31,
       "options": {
@@ -1229,7 +1267,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 51
       },
       "id": 105,
       "panels": [],
@@ -1249,7 +1287,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 52
       },
       "id": 46,
       "options": {
@@ -1287,7 +1325,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 52
       },
       "id": 47,
       "options": {
@@ -1325,7 +1363,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 51
+        "y": 60
       },
       "id": 48,
       "options": {
@@ -1363,7 +1401,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 51
+        "y": 60
       },
       "id": 49,
       "options": {
@@ -1401,7 +1439,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 51
+        "y": 60
       },
       "id": 50,
       "options": {
@@ -1432,7 +1470,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 59
+        "y": 68
       },
       "id": 106,
       "panels": [],
@@ -1469,7 +1507,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 60
+        "y": 69
       },
       "id": 42,
       "options": {
@@ -1540,7 +1578,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 60
+        "y": 69
       },
       "id": 43,
       "options": {
@@ -1611,7 +1649,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 60
+        "y": 69
       },
       "id": 44,
       "options": {
@@ -1658,7 +1696,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 67
+        "y": 76
       },
       "id": 107,
       "panels": [],
@@ -1737,7 +1775,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 77
       },
       "id": 60,
       "options": {
