@@ -568,6 +568,60 @@ func AllAnimeDegrade(db *gorm.DB) error {
 	return nil
 }
 
+// allanimeOkruMergeGuardKey marks AllanimeOkruMerge as applied.
+const allanimeOkruMergeGuardKey = "allanime_okru_merge"
+
+// AllanimeOkruMerge carries the okru+allanime fold to live DBs, exactly once.
+// It renames the existing `okru` row to `allanime-okru` (preserving status /
+// weight / engine) and disables the standalone `allanime` row (tombstone —
+// its clock stream path is dead; discovery+ok.ru now ship as allanime-okru).
+// On a fresh DB the seed already wrote both rows correctly, so either UPDATE
+// may affect 0 rows — that is EXPECTED, not an error. Guard-gated + idempotent.
+func AllanimeOkruMerge(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", allanimeOkruMergeGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check allanime-okru-merge guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator edit
+	}
+	// 1) Rename okru -> allanime-okru (only if no allanime-okru row exists yet,
+	//    so we never collide with a fresh-DB seed row).
+	var already int64
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "allanime-okru").Count(&already).Error; err != nil {
+		return fmt.Errorf("check allanime-okru presence: %w", err)
+	}
+	if already == 0 {
+		if err := db.Model(&domain.ScraperProvider{}).
+			Where("name = ?", "okru").
+			Updates(map[string]interface{}{
+				"name":        "allanime-okru",
+				"reason":      "AllAnime discovery + ok.ru ('Ok') CDN streams (clock-free)",
+				"description": "Folded okru+allanime (2026-07-06). AllAnime GraphQL discovery + ok.ru data-options → okcdn.ru HLS, bypassing the Cloudflare-Turnstile /apivtwo/clock endpoint. EN sub/dub, hardsubbed.",
+			}).Error; err != nil {
+			return fmt.Errorf("rename okru->allanime-okru: %w", err)
+		}
+	}
+	// 2) Tombstone the standalone allanime row (degraded -> disabled).
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "allanime").
+		Updates(map[string]interface{}{
+			"status": domain.StatusDisabled,
+			"reason": "Folded into allanime-okru (2026-07-06) — clock stream path was dead",
+		}).Error; err != nil {
+		return fmt.Errorf("disable allanime: %w", err)
+	}
+	if err := db.Create(&migrationGuard{Key: allanimeOkruMergeGuardKey}).Error; err != nil {
+		return fmt.Errorf("write allanime-okru-merge guard: %w", err)
+	}
+	return nil
+}
+
 // AnimepaheSidecarRetired records, exactly once, that the dedicated
 // animepahe-resolver stealth-Chromium sidecar was retired (2026-06-24) and that
 // animepahe is OFF but intentionally KEPT in the roster for possible later revival.

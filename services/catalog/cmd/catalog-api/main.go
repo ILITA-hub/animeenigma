@@ -328,6 +328,14 @@ func main() {
 		log.Errorw("remove-raw-provider migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) fold of the okru+allanime rows: renames okru ->
+	// allanime-okru (preserving status/weight) and tombstones the standalone
+	// allanime row. No-op on fresh DBs (the seed already writes the folded
+	// shape directly). Run-once via the catalog_migration_guards ledger.
+	if err := scraperprovider.AllanimeOkruMerge(db.DB); err != nil {
+		log.Errorw("allanime-okru-merge migration failed (continuing)", "error", err)
+	}
+
 	// One-time (guarded) back-fill of the legacy status tri-state onto the new
 	// (policy, health) dimensions: enabled→auto/up, degraded→manual/down,
 	// disabled→disabled/down. Run-once via the catalog_migration_guards ledger;

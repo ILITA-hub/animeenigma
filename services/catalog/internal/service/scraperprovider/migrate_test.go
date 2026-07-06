@@ -886,3 +886,77 @@ func TestMiruroCloudflareBlock_RefreshesDescriptionOnceIdempotent(t *testing.T) 
 		t.Fatalf("description = %q after operator edit + rerun, want untouched (not clobbered)", row.Description)
 	}
 }
+
+func TestAllanimeOkruMerge_RenamesOkruAndTombstonesAllanime(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Pre-existing live-DB state: okru enabled, allanime degraded (the shape
+	// before the fold).
+	if err := db.Create(&domain.ScraperProvider{Name: "okru", Status: domain.StatusEnabled, PreferenceWeight: 35}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{Name: "allanime", Status: domain.StatusDegraded, PreferenceWeight: 90}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraperprovider.AllanimeOkruMerge(db); err != nil {
+		t.Fatalf("AllanimeOkruMerge: %v", err)
+	}
+
+	var okru int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "okru").Count(&okru)
+	if okru != 0 {
+		t.Errorf("okru row still present, want renamed")
+	}
+	var merged domain.ScraperProvider
+	if err := db.Where("name = ?", "allanime-okru").First(&merged).Error; err != nil {
+		t.Fatalf("allanime-okru row missing: %v", err)
+	}
+	if merged.Status != domain.StatusEnabled || merged.PreferenceWeight != 35 {
+		t.Errorf("allanime-okru = %v/%d, want enabled/35", merged.Status, merged.PreferenceWeight)
+	}
+	var old domain.ScraperProvider
+	db.Where("name = ?", "allanime").First(&old)
+	if old.Status != domain.StatusDisabled {
+		t.Errorf("allanime status = %v, want disabled", old.Status)
+	}
+
+	// Idempotent: second run does not error and changes nothing.
+	if err := scraperprovider.AllanimeOkruMerge(db); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+}
+
+func TestAllanimeOkruMerge_FreshDBSeedAlreadyCorrect_NoopNotError(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Fresh-DB shape: the seed already wrote allanime-okru directly (no okru
+	// row exists) and allanime as disabled.
+	if err := db.Create(&domain.ScraperProvider{Name: "allanime-okru", Status: domain.StatusEnabled, PreferenceWeight: 35}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{Name: "allanime", Status: domain.StatusDisabled}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraperprovider.AllanimeOkruMerge(db); err != nil {
+		t.Fatalf("AllanimeOkruMerge on fresh DB should be a no-op, got: %v", err)
+	}
+
+	var merged domain.ScraperProvider
+	if err := db.Where("name = ?", "allanime-okru").First(&merged).Error; err != nil {
+		t.Fatalf("allanime-okru row missing: %v", err)
+	}
+	if merged.Status != domain.StatusEnabled || merged.PreferenceWeight != 35 {
+		t.Errorf("allanime-okru = %v/%d, want unchanged enabled/35", merged.Status, merged.PreferenceWeight)
+	}
+	var old domain.ScraperProvider
+	db.Where("name = ?", "allanime").First(&old)
+	if old.Status != domain.StatusDisabled {
+		t.Errorf("allanime status = %v, want disabled", old.Status)
+	}
+}
