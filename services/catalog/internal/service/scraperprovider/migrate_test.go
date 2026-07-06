@@ -487,34 +487,6 @@ func TestNineanimeBrowser_NoRow_ErrorsAndDoesNotWriteGuard(t *testing.T) {
 	}
 }
 
-func TestAllAnimeDegrade_FlipsOnceIdempotent(t *testing.T) {
-	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	// seed an enabled allanime row (the pre-existing live-DB state).
-	if err := db.Create(&domain.ScraperProvider{Name: "allanime", Status: domain.StatusEnabled}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := scraperprovider.AllAnimeDegrade(db); err != nil {
-		t.Fatalf("first: %v", err)
-	}
-	var row domain.ScraperProvider
-	db.Where("name = ?", "allanime").First(&row)
-	if row.Status != domain.StatusDegraded {
-		t.Fatalf("status = %q, want degraded", row.Status)
-	}
-	// operator re-enables; second run must NOT clobber (guard already written)
-	db.Model(&domain.ScraperProvider{}).Where("name = ?", "allanime").Update("status", domain.StatusEnabled)
-	if err := scraperprovider.AllAnimeDegrade(db); err != nil {
-		t.Fatalf("second: %v", err)
-	}
-	db.Where("name = ?", "allanime").First(&row)
-	if row.Status != domain.StatusEnabled {
-		t.Fatalf("status = %q after re-enable+rerun, want enabled (not clobbered)", row.Status)
-	}
-}
-
 func TestAnimefeverDisable_FlipsDegradedToDisabledOnceIdempotent(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
@@ -1019,5 +991,51 @@ func TestAllanimeOkruMerge_FreshDBSeedAlreadyCorrect_NoopNotError(t *testing.T) 
 	db.Where("name = ?", "allanime").First(&old)
 	if old.Status != domain.StatusDisabled {
 		t.Errorf("allanime status = %v, want disabled", old.Status)
+	}
+}
+
+// TestFreshDB_AllanimeTombstonedDisabled reproduces the REAL fresh-DB boot
+// order — AllanimeOkruMerge (no-op: empty table, nothing to rename/tombstone
+// yet) followed by SeedDefaults (inserts allanime disabled + allanime-okru
+// enabled/35) — and locks in the TERMINAL state so no later migration (e.g.
+// the retired AllAnimeDegrade, which used to run AFTER SeedDefaults and would
+// flip the freshly-seeded disabled allanime row back to degraded) can regress
+// the tombstone. allanime MUST stay disabled, not degraded.
+func TestFreshDB_AllanimeTombstonedDisabled(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Empty table — the real fresh-DB boot order: merge runs BEFORE seed.
+	if err := scraperprovider.AllanimeOkruMerge(db); err != nil {
+		t.Fatalf("AllanimeOkruMerge: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("SeedDefaults: %v", err)
+	}
+
+	var allanimeCount int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "allanime").Count(&allanimeCount)
+	if allanimeCount != 1 {
+		t.Fatalf("allanime row count = %d, want exactly 1", allanimeCount)
+	}
+	var allanime domain.ScraperProvider
+	db.Where("name = ?", "allanime").First(&allanime)
+	if allanime.Status != domain.StatusDisabled {
+		t.Errorf("allanime status = %q, want disabled (NOT degraded — tombstone must not be revived)", allanime.Status)
+	}
+
+	var merged domain.ScraperProvider
+	if err := db.Where("name = ?", "allanime-okru").First(&merged).Error; err != nil {
+		t.Fatalf("allanime-okru row missing: %v", err)
+	}
+	if merged.Status != domain.StatusEnabled || merged.PreferenceWeight != 35 {
+		t.Errorf("allanime-okru = %v/%d, want enabled/35", merged.Status, merged.PreferenceWeight)
+	}
+
+	var okruCount int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "okru").Count(&okruCount)
+	if okruCount != 0 {
+		t.Errorf("okru row count = %d, want 0 (no legacy row on a fresh DB)", okruCount)
 	}
 }

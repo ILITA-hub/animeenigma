@@ -266,16 +266,6 @@ func main() {
 		log.Errorw("animefever declaim migration failed (continuing)", "error", err)
 	}
 
-	// One-time (guarded) flip of allanime to status=degraded: its stream leg is
-	// dead (sources decode to /apivtwo/clock.json behind a Cloudflare Turnstile,
-	// unsolvable from our egress); the clock-free ok.ru sources are served by the
-	// new 'okru' provider. The seed ships degraded for fresh DBs only; this carries
-	// the flip to existing live DBs. Run-once via the ledger; a later operator
-	// re-enable in the DB is never clobbered.
-	if err := scraperprovider.AllAnimeDegrade(db.DB); err != nil {
-		log.Errorw("allanime degrade migration failed (continuing)", "error", err)
-	}
-
 	// One-time (guarded) refresh of the animepahe roster row: its dedicated
 	// animepahe-resolver stealth-Chromium sidecar was retired 2026-06-24. animepahe
 	// stays OFF (disabled) but is KEPT in the roster + candidateProviders so it can be

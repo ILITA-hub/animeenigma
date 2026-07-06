@@ -197,12 +197,13 @@ var defaultProviders = []domain.ScraperProvider{
 	{
 		// animejoy itself is NOT a row — it is the shared discovery/reference base
 		// (title→news_id→playlist, cached once); the two real provider rows below
-		// each resolve their own leg off that shared discovery (mirrors how 'okru'
-		// reuses AllAnime's GraphQL discovery). Promoted out of soak 2026-06-30
-		// (probe-verified playable end-to-end): Status=enabled with the default
-		// policy=auto/health=up, so they surface as normal selectable sources for ALL
-		// users (deriveProviderView keys hacker-only on Policy==manual; enabled needs
-		// no explicit policy/health). RU-SUB only — animejoy serves original (JP)
+		// each resolve their own leg off that shared discovery (mirrors how
+		// 'allanime-okru' reuses AllAnime's GraphQL discovery). Promoted out of
+		// soak 2026-06-30 (probe-verified playable end-to-end): Status=enabled
+		// with the default policy=auto/health=up, so they surface as normal
+		// selectable sources for ALL users (deriveProviderView keys hacker-only
+		// on Policy==manual; enabled needs no explicit policy/health). RU-SUB
+		// only — animejoy serves original (JP)
 		// audio + burned-in Russian subs in the Sibnet/AllVideo mirror MP4s, so
 		// SubDelivery=hard, no dub, no raw. Group is intrinsic ("ru", via
 		// intrinsicGroups) and scraper_operated is intentionally false (NOT in
