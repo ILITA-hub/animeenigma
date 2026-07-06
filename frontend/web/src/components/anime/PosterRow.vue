@@ -231,7 +231,16 @@ const nextEpLabel = computed(() =>
 }
 .is-top3 .rank { color: var(--cyan-a08); }
 
-/* Centered-glass kebab — vertically centered on the right edge, hover reveal */
+/* Centered-glass kebab — vertically centered on the right edge, hover reveal.
+   NOTE: backdrop-filter is deliberately NOT set at rest. A non-none
+   backdrop-filter forces its element onto its own compositor layer even at
+   opacity:0, so the idle (hover-hidden) kebab on every row would allocate a
+   blur layer. A Home column renders ~15 rows, ×3 columns = ~45 idle blur
+   layers, and content-visibility:auto creates them all in one Layerize pass
+   the instant the column scrolls into view — the dominant cost in the
+   2026-07-06 scroll trace. Applying the blur only on .prow:hover means the
+   layer is created for the single row the pointer is over, on interaction,
+   not for every off-screen row during scroll. */
 .rkc {
   position: absolute;
   top: 50%;
@@ -241,7 +250,6 @@ const nextEpLabel = computed(() =>
   height: 34px;
   border-radius: 9999px;
   background: var(--black-a60);
-  backdrop-filter: blur(6px);
   color: var(--foreground);
   display: grid;
   place-items: center;
@@ -249,6 +257,10 @@ const nextEpLabel = computed(() =>
   opacity: 0;
   transition: opacity 0.18s ease, background 0.18s ease;
 }
-.prow:hover .rkc { opacity: 1; }
+.prow:hover .rkc {
+  opacity: 1;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
 .rkc:hover { background: var(--brand-cyan); }
 </style>

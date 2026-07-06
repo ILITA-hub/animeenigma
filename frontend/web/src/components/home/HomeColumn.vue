@@ -61,6 +61,16 @@ defineProps<{
   border: 1px solid var(--line);
   border-radius: var(--r-xl); /* ~22px */
   padding: 18px;
+  /* First-reveal size hint for the .cv-below-fold content-visibility applied
+     from Home.vue. The shared `.cv-below-fold` default guesses 800px, but a
+     populated column is ~18px pad + ~50px header + ~15 PosterRows × ~104px
+     ≈ 1600px, so on the FIRST scroll the column expanded ~800px and shoved
+     CollectionsRow/ActivityFeed/LastUpdates down — a layout shift that
+     re-laid-out and re-layerized the whole tail (2026-07-06 scroll trace).
+     `auto` still learns the exact size after the first render; this only
+     tightens the pre-first-render estimate. Slightly under real height so a
+     short column (fewer items loaded) doesn't over-reserve. */
+  contain-intrinsic-height: auto 1500px;
 }
 
 .col-head {
