@@ -1142,7 +1142,7 @@
     "rights": "All rights reserved",
     "build": "ビルド",
     "feedback": {
-      "button": "フィードバックを送る",
+      "button": "フィードバック",
       "title": "フィードバックを送る",
       "categoryLabel": "どのような内容ですか？",
       "categoryBug": "バグ",
@@ -1385,7 +1385,8 @@
         "game": "ゲームルーム",
         "gacha": "ガチャ（ルドカ）",
         "downloads": "ダウンロード",
-        "showcaseEditor": "ショーケースエディター"
+        "showcaseEditor": "ショーケースエディター",
+        "myFeedback": "マイフィードバック"
       }
     },
     "collections": {

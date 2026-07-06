@@ -1,14 +1,19 @@
 <template>
   <div class="inline-flex">
-    <button
-      type="button"
-      class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
-      :aria-label="$t('footer.feedback.button')"
-      @click="handleClick"
-    >
-      <MessageSquare class="size-4" aria-hidden="true" />
-      {{ $t('footer.feedback.button') }}
-    </button>
+    <!-- Default trigger is the footer text link; consumers (e.g. MyFeedback.vue)
+         can override via the `trigger` slot to reuse this modal from their own
+         button. `open` runs the same auth-gate + modal-open flow. -->
+    <slot name="trigger" :open="handleClick">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
+        :aria-label="$t('footer.feedback.button')"
+        @click="handleClick"
+      >
+        <MessageSquare class="size-4" aria-hidden="true" />
+        {{ $t('footer.feedback.button') }}
+      </button>
+    </slot>
 
     <Modal v-model="showModal" :title="$t('footer.feedback.title')" size="lg">
       <div v-if="submitted" class="text-center py-4">

@@ -15,7 +15,7 @@ import { useAuthStore } from '@/stores/auth'
  * the admin management page (AdminSecretFeatures.vue) renders this roster.
  */
 export interface SecretFeature {
-  key: 'anidle' | 'status' | 'themes' | 'game' | 'gacha' | 'downloads' | 'showcase-editor'
+  key: 'anidle' | 'status' | 'themes' | 'game' | 'gacha' | 'downloads' | 'showcase-editor' | 'my-feedback'
   /** Navigation target for router.push (also the admin "direct link"). */
   to: RouteLocationRaw
   /** i18n key for the human label shown on the admin management page. */
@@ -60,6 +60,15 @@ export const SECRET_FEATURES: SecretFeature[] = [
     to: { path: '/profile', query: { showcase: 'edit' } },
     labelKey: 'admin.secretFeatures.feature.showcaseEditor',
     eligible: () => useAuthStore().isAuthenticated && useProfileWallVisible().value,
+  },
+  {
+    // "My feedback" archive — the footer link was removed (redundant with the
+    // Feedback menu's "View mine"), so the roulette is now a surfaced entry
+    // point. Login-only: the page lists the signed-in user's own reports.
+    key: 'my-feedback',
+    to: '/my-feedback',
+    labelKey: 'admin.secretFeatures.feature.myFeedback',
+    eligible: () => useAuthStore().isAuthenticated,
   },
 ]
 

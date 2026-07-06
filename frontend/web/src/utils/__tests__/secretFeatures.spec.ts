@@ -80,6 +80,17 @@ describe('pickSecretFeature', () => {
     expect(keys.has('showcase-editor')).toBe(false)
   })
 
+  it('authed → my-feedback joins the pool (login-only)', () => {
+    h.isAuthenticated = true
+    const keys = new Set(rollKeys(200))
+    expect(keys.has('my-feedback')).toBe(true)
+  })
+
+  it('anonymous → my-feedback stays out of the pool', () => {
+    const keys = new Set(rollKeys(200))
+    expect(keys.has('my-feedback')).toBe(false)
+  })
+
   it('never repeats the previous pick while alternatives exist', () => {
     const keys = rollKeys(100)
     for (let i = 1; i < keys.length; i++) {

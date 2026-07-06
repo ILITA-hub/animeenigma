@@ -7,8 +7,23 @@
   <div class="min-h-screen bg-background">
     <div class="container mx-auto px-4 py-8 max-w-3xl">
       <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
-        <h1 class="text-2xl font-semibold text-foreground font-display">{{ $t('myFeedback.title') }}</h1>
-        <span v-if="total > 0" class="text-sm text-muted-foreground">{{ $t('myFeedback.total', { n: total }) }}</span>
+        <div class="flex items-center gap-3 flex-wrap">
+          <h1 class="text-2xl font-semibold text-foreground font-display">{{ $t('myFeedback.title') }}</h1>
+          <span v-if="total > 0" class="text-sm text-muted-foreground">{{ $t('myFeedback.total', { n: total }) }}</span>
+        </div>
+        <FeedbackButton>
+          <template #trigger="{ open }">
+            <Button
+              variant="soft"
+              size="sm"
+              class="bg-brand-violet/20 text-brand-violet hover:bg-brand-violet/30"
+              @click="open"
+            >
+              <MessageSquarePlus class="size-4 mr-1.5" aria-hidden="true" />
+              {{ $t('footer.feedback.title') }}
+            </Button>
+          </template>
+        </FeedbackButton>
       </div>
       <p class="text-sm text-muted-foreground mb-4">{{ $t('myFeedback.subtitle') }}</p>
 
@@ -89,6 +104,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { MessageSquarePlus } from 'lucide-vue-next'
 import { userApi } from '@/api/client'
 import { dayStartISO, dayEndISO } from '@/utils/time'
 import { isFeedbackCategory } from '@/types/feedback'
@@ -96,6 +112,7 @@ import type { MyFeedbackItem, MyFeedbackResponse, FeedbackStatus } from '@/types
 import { Badge, Button, DatePicker, Spinner } from '@/components/ui'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PaginationBar from '@/components/ui/PaginationBar.vue'
+import FeedbackButton from '@/components/layout/FeedbackButton.vue'
 
 const { t, locale } = useI18n()
 

@@ -1142,7 +1142,7 @@
     "rights": "All rights reserved",
     "build": "build",
     "feedback": {
-      "button": "Send feedback",
+      "button": "Feedback",
       "title": "Send feedback",
       "categoryLabel": "What are you reporting?",
       "categoryBug": "Bug",
@@ -1385,7 +1385,8 @@
         "game": "Game rooms",
         "gacha": "Gacha (Ludka)",
         "downloads": "Downloads",
-        "showcaseEditor": "Showcase editor"
+        "showcaseEditor": "Showcase editor",
+        "myFeedback": "My feedback"
       }
     },
     "collections": {

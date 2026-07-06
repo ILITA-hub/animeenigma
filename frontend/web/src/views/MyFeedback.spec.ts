@@ -6,6 +6,11 @@ vi.mock('@/api/client', () => ({ userApi: { listMyReports: (...a: unknown[]) => 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (k: string, p?: Record<string, unknown>) => (p ? `${k}:${JSON.stringify(p)}` : k), locale: { value: 'ru' } }),
 }))
+// FeedbackButton drags in the auth store + i18n singleton via its import chain;
+// this page's tests only cover the report list, so mock it out entirely.
+vi.mock('@/components/layout/FeedbackButton.vue', () => ({
+  default: { name: 'FeedbackButton', template: '<div data-test="feedback-button" />' },
+}))
 
 import MyFeedback from './MyFeedback.vue'
 

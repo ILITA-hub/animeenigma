@@ -203,9 +203,10 @@ const isStandalone = useStandaloneDisplay()
 const { isMobile: isMobileViewport } = useMobilePlayer()
 const tabBarVisible = computed(() => isStandalone.value && isMobileViewport.value)
 
-// "My feedback" footer link re-enabled per owner approval of AUTO-436
-// (2026-06-11, in-chat). FeedbackButton.vue has the same flag.
-const MY_FEEDBACK_ENABLED = true
+// "My feedback" footer link hidden per owner request (2026-07-06, in-chat):
+// the Feedback menu already exposes "View mine", so the standalone footer link
+// is redundant. FeedbackButton.vue keeps its own flag ON for the in-modal links.
+const MY_FEEDBACK_ENABLED = false
 
 // Short git commit hash of the deployed build, baked in by `make redeploy-web`
 // (Dockerfile ARG VITE_GIT_COMMIT). Empty in dev / builds without a checkout.
