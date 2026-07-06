@@ -1,11 +1,8 @@
 # Build stage
 FROM golang:1.25-alpine AS builder
-
 WORKDIR /app
-
 RUN apk add --no-cache git
 
-# Copy go.work and all module files
 COPY go.work go.work.sum ./
 COPY libs/logger/go.mod libs/logger/go.sum* ./libs/logger/
 COPY libs/tracing/go.mod libs/tracing/go.sum* ./libs/tracing/
@@ -41,29 +38,19 @@ COPY services/recs/go.mod services/recs/go.sum* ./services/recs/
 COPY services/anidle/go.mod services/anidle/go.sum* ./services/anidle/
 COPY services/fanfic/go.mod services/fanfic/go.sum* ./services/fanfic/
 
-RUN cd services/themes && go mod download
+RUN cd services/fanfic && go mod download
 
-# Copy source
 COPY libs/ ./libs/
-COPY services/themes/ ./services/themes/
+COPY services/fanfic/ ./services/fanfic/
 
-# Build
-RUN cd services/themes && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /themes-api ./cmd/themes-api
+RUN cd services/fanfic && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /fanfic-api ./cmd/fanfic-api
 
 # Runtime stage
 FROM alpine:3.19
-
-RUN apk add --no-cache ca-certificates tzdata
-
+RUN apk add --no-cache ca-certificates tzdata wget
 WORKDIR /app
-
-COPY --from=builder /themes-api .
-
-# M501: drop root — run as non-root 'app'. Binary listens on a >1024 port and
-# writes nothing to local disk (state is in postgres/redis/MinIO), so this is free.
+COPY --from=builder /fanfic-api .
 RUN addgroup -S app && adduser -S -G app app && chown -R app:app /app
 USER app
-
-EXPOSE 8086
-
-CMD ["./themes-api"]
+EXPOSE 8097
+CMD ["./fanfic-api"]

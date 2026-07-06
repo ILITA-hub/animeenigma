@@ -1102,6 +1102,43 @@ services:
       timeout: 5s
       retries: 3
 
+  # Fanfic engine (spec 2026-07-06) — admin-only AI fanfiction generator on
+  # port 8097 (next free after upscaler:8096). Groq-backed; dark-shipped via
+  # FANFIC_ADMIN_ONLY at the gateway + VITE_FANFIC_ADMIN_ONLY on the web.
+  fanfic:
+    logging: *default-logging
+    build:
+      context: ..
+      dockerfile: services/fanfic/Dockerfile
+    container_name: animeenigma-fanfic
+    mem_limit: 256m
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8097
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      REDIS_HOST: redis
+      FANFIC_GROQ_API_KEY: ${FANFIC_GROQ_API_KEY}
+      FANFIC_GROQ_MODEL: ${FANFIC_GROQ_MODEL:-llama-3.1-8b-instant}
+      FANFIC_DAILY_CAP: "${FANFIC_DAILY_CAP:-100}"
+      TRACING_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8097:8097"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8097/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # Clickstream analytics ingestion (Plan 1). Postgres-backed events +
   # identity stitching; ClickHouse consolidation deferred. Port 8092.
   analytics:
