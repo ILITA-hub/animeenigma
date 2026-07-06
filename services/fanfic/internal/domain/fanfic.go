@@ -3,13 +3,14 @@ package domain
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 // Fanfic is one generated fanfiction, owned by the user who generated it.
 type Fanfic struct {
-	ID               string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ID               string         `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID           string         `gorm:"type:uuid;index;not null" json:"-"`
 	AnimeID          string         `gorm:"type:uuid;index" json:"anime_id"`
 	AnimeShikimoriID string         `gorm:"size:32;index" json:"anime_shikimori_id"`
@@ -42,3 +43,14 @@ const (
 )
 
 func (Fanfic) TableName() string { return "fanfics" }
+
+// BeforeCreate populates ID in Go so the row gets an id on every dialect
+// (Postgres's gen_random_uuid() default is not available on SQLite, which
+// hosts the in-memory repo tests). Every insert goes through GORM Create, so
+// this is the single dialect-independent ID-generation mechanism.
+func (f *Fanfic) BeforeCreate(*gorm.DB) error {
+	if f.ID == "" {
+		f.ID = uuid.NewString()
+	}
+	return nil
+}
