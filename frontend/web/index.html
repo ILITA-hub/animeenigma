@@ -40,6 +40,27 @@
          --color-base) so there is no white flash. -->
     <meta name="color-scheme" content="dark">
     <style>html{background-color:#08080f}</style>
+    <!-- Instant app-shell (2026-07-06 first-load trace): on a ~1Mbps self-hosted
+         link the entry bundle takes ~3s to arrive, and #app was empty until Vue
+         mounted — so first paint was a 3.2s dark blank. This inline shell (no
+         extra request, styles inlined since main.css hasn't loaded yet) paints a
+         branded loader at HTML-arrival instead. Vue's mount() replaces #app's
+         children, so the shell auto-removes the instant the app takes over. -->
+    <style>
+      #ae-boot{position:fixed;inset:0;z-index:0;display:flex;flex-direction:column;
+        align-items:center;justify-content:center;gap:18px;background:#08080f;
+        font-family:'Manrope',ui-sans-serif,system-ui,-apple-system,sans-serif}
+      #ae-boot .ae-boot-mark{font-size:26px;font-weight:600;letter-spacing:-.02em;
+        background:linear-gradient(90deg,#00d4ff,#a78bfa);-webkit-background-clip:text;
+        background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+      #ae-boot .ae-boot-track{width:116px;height:2px;border-radius:2px;overflow:hidden;
+        background:rgba(255,255,255,.10)}
+      #ae-boot .ae-boot-track::after{content:"";display:block;height:100%;width:40%;
+        border-radius:2px;background:linear-gradient(90deg,#00d4ff,#a78bfa);
+        animation:ae-boot-slide 1.1s ease-in-out infinite}
+      @keyframes ae-boot-slide{0%{transform:translateX(-120%)}100%{transform:translateX(340%)}}
+      @media (prefers-reduced-motion:reduce){#ae-boot .ae-boot-track::after{animation:none;opacity:.55}}
+    </style>
     <link rel="dns-prefetch" href="https://telegram.org">
     <link rel="preconnect" href="https://telegram.org" crossorigin>
     <link rel="dns-prefetch" href="https://oauth.telegram.org">
@@ -101,7 +122,12 @@
     </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div id="ae-boot" aria-hidden="true">
+        <div class="ae-boot-mark">AnimeEnigma</div>
+        <div class="ae-boot-track"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
