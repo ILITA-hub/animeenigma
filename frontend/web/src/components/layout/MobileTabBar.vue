@@ -41,7 +41,7 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { ArrowLeft, Home, LayoutGrid, Download, User } from 'lucide-vue-next'
 import { useStandaloneDisplay } from '@/pwa/standalone'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
-import { offlineDownloadsEnabled } from '@/offline/flag'
+import { downloadsNavVisible } from '@/offline/downloadGate'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -55,7 +55,7 @@ const items = computed(() => [
   { key: 'browse', to: '/browse', icon: LayoutGrid, label: 'nav.catalog' },
   // Browser view hides downloads (secret-feature pool covers it); the
   // installed PWA keeps the tab — offline playback lives there.
-  ...(offlineDownloadsEnabled && isStandalone.value
+  ...(downloadsNavVisible()
     ? [{ key: 'downloads', to: '/downloads', icon: Download, label: 'nav.downloads' }]
     : []),
   authStore.isAuthenticated

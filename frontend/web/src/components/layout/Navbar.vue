@@ -424,8 +424,7 @@ import { useGachaVisible } from '@/utils/gachaGate'
 import { useGachaStore } from '@/stores/gacha'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useNotificationBadge } from '@/composables/useNotificationBadge'
-import { offlineDownloadsEnabled } from '@/offline/flag'
-import { useStandaloneDisplay } from '@/pwa/standalone'
+import { downloadsNavVisible } from '@/offline/downloadGate'
 import { pickSecretFeature } from '@/utils/secretFeatures'
 
 const router = useRouter()
@@ -480,14 +479,11 @@ function openMobileNotifications(): void {
 // nav for the «Secret feature» roulette — utils/secretFeatures.ts. Downloads
 // keeps its link only in the installed PWA, where offline playback lives;
 // standalone-ness is reactive, hence computed.
-const isStandalone = useStandaloneDisplay()
 const navLinks = computed(() => [
   { to: '/', label: 'nav.home' },
   { to: '/browse', label: 'nav.catalog' },
   { to: '/schedule', label: 'nav.schedule' },
-  ...(offlineDownloadsEnabled && isStandalone.value
-    ? [{ to: '/downloads', label: 'nav.downloads' }]
-    : []),
+  ...(downloadsNavVisible() ? [{ to: '/downloads', label: 'nav.downloads' }] : []),
 ])
 
 function openSecretFeature(): void {
