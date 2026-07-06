@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import type { Ref } from 'vue'
+import { nextTick, type Ref } from 'vue'
 
 // vi.hoisted runs before the vue import, so it can only hold plain values;
 // the async mock factories below create the actual refs (they execute lazily
@@ -104,5 +104,16 @@ describe('MobileTabBar', () => {
     const w = mountBar()
     expect(w.find('[data-test="tab-downloads"]').classes()).toContain('tab-item--active')
     expect(w.find('[data-test="tab-home"]').classes()).not.toContain('tab-item--active')
+  })
+
+  it('hides the downloads tab in browser view (not installed PWA)', async () => {
+    standalone().value = true
+    const w1 = mountBar()
+    expect(w1.find('[data-test="tab-downloads"]').exists()).toBe(true)
+
+    standalone().value = false
+    const w2 = mountBar()
+    await nextTick()
+    expect(w2.find('[data-test="tab-downloads"]').exists()).toBe(false)
   })
 })

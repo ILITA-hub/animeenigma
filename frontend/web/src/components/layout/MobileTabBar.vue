@@ -53,7 +53,11 @@ const { isMobile } = useMobilePlayer()
 const items = computed(() => [
   { key: 'home', to: '/', icon: Home, label: 'nav.home' },
   { key: 'browse', to: '/browse', icon: LayoutGrid, label: 'nav.catalog' },
-  ...(offlineDownloadsEnabled ? [{ key: 'downloads', to: '/downloads', icon: Download, label: 'nav.downloads' }] : []),
+  // Browser view hides downloads (secret-feature pool covers it); the
+  // installed PWA keeps the tab — offline playback lives there.
+  ...(offlineDownloadsEnabled && isStandalone.value
+    ? [{ key: 'downloads', to: '/downloads', icon: Download, label: 'nav.downloads' }]
+    : []),
   authStore.isAuthenticated
     ? { key: 'profile', to: '/profile', icon: User, label: 'nav.profile' }
     : { key: 'profile', to: '/auth', icon: User, label: 'nav.login' },
