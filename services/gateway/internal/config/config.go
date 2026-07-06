@@ -178,7 +178,7 @@ func Load() (*Config, error) {
 			AnidleService:        getEnv("ANIDLE_SERVICE_URL", "http://anidle:8095"),
 			UpscalerService:      getEnv("UPSCALER_SERVICE_URL", "http://upscaler:8096"),
 			FanficService:        getEnv("FANFIC_SERVICE_URL", "http://fanfic:8097"),
-			PolicyService:        getEnv("POLICY_SERVICE_URL", "http://policy-service:8098"),
+			PolicyService:        getEnv("POLICY_SERVICE_URL", "http://policy:8098"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
