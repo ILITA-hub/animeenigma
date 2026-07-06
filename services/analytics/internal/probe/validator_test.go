@@ -201,3 +201,44 @@ func TestValidator_UsesNativeProxyPath(t *testing.T) {
 		t.Fatalf("want playable via native /api/v1/hls-proxy path; got %s", got.Reason)
 	}
 }
+
+// okProber is a VideoProber that always accepts (decode gate off for the test).
+type okProber struct{}
+
+func (okProber) Probe(_ context.Context, _ []byte) error { return nil }
+
+func TestValidatePopulatesMetrics(t *testing.T) {
+	const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\nvariant.m3u8\n"
+	const variant = "#EXTM3U\n#EXTINF:5.0,\nseg-1.ts\n"
+	segment := strings.Repeat("A", 200000) // 200 KB "segment"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := r.URL.Query().Get("url")
+		switch {
+		case strings.HasSuffix(raw, "master.m3u8"):
+			_, _ = w.Write([]byte(master))
+		case strings.HasSuffix(raw, "variant.m3u8"):
+			_, _ = w.Write([]byte(variant))
+		default: // seg-1.ts
+			_, _ = w.Write([]byte(segment))
+		}
+	}))
+	defer srv.Close()
+
+	v := NewHTTPValidator(srv.URL, srv.Client(), okProber{})
+	rs := ResolvedStream{Provider: "miruro", MasterURL: "https://cdn.example.test/master.m3u8"}
+	got := v.Validate(context.Background(), rs)
+
+	if !got.Playable() {
+		t.Fatalf("expected playable, got reason=%q", got.Reason)
+	}
+	if got.ManifestMs < 0 || got.SegmentBytes != int64(len(segment)) {
+		t.Fatalf("bad measures: ManifestMs=%d SegmentBytes=%d", got.ManifestMs, got.SegmentBytes)
+	}
+	if got.CDNHost != "cdn.example.test" {
+		t.Fatalf("CDNHost = %q, want cdn.example.test", got.CDNHost)
+	}
+	if got.Quality != "1080p" {
+		t.Fatalf("Quality = %q, want 1080p", got.Quality)
+	}
+}

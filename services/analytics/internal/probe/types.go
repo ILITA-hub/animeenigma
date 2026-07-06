@@ -73,6 +73,13 @@ type Verdict struct {
 	Server    string
 	Stage     Stage
 	Reason    streamprobe.Reason
+	// Measurement fields, populated by HTTPValidator on the reached-playback
+	// path (zero otherwise). Consumed by the engine to assemble TickMetrics.
+	ManifestMs   int64
+	SegmentMs    int64
+	SegmentBytes int64
+	CDNHost      string
+	Quality      string
 }
 
 func (v Verdict) Playable() bool { return v.Reason == streamprobe.ReasonPlayable }

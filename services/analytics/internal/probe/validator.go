@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -105,12 +106,34 @@ func looksLikeManifest(b []byte) bool {
 	return strings.Contains(string(b[:min(len(b), 64)]), "#EXTM3U")
 }
 
+var resolutionRe = regexp.MustCompile(`RESOLUTION=\d+x(\d+)`)
+
+// qualityFromMaster returns e.g. "1080p" from the first #EXT-X-STREAM-INF
+// RESOLUTION tag, or "" when absent.
+func qualityFromMaster(master []byte) string {
+	if m := resolutionRe.FindSubmatch(master); m != nil {
+		return string(m[1]) + "p"
+	}
+	return ""
+}
+
+// hostOf returns the hostname of a raw URL, or "" if unparseable.
+func hostOf(raw string) string {
+	if u, err := url.Parse(raw); err == nil {
+		return u.Hostname()
+	}
+	return ""
+}
+
 func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict {
 	ctx, cancel := context.WithTimeout(ctx, validatorBudget)
 	defer cancel()
 	verdict := Verdict{Provider: rs.Provider, AnimeUUID: rs.AnimeUUID, AnimeName: rs.AnimeName, Slot: rs.Slot, Server: rs.Server, Stage: StagePlayback}
+	verdict.CDNHost = hostOf(rs.MasterURL)
 
+	mstart := time.Now()
 	master, status, err := v.fetch(ctx, v.proxyURL(rs, rs.MasterURL))
+	verdict.ManifestMs = time.Since(mstart).Milliseconds()
 	if err != nil {
 		verdict.Reason = streamprobe.ReasonCDNUnreachable
 		return verdict
@@ -123,6 +146,7 @@ func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict
 		verdict.Reason = streamprobe.ReasonEmptyResponse
 		return verdict
 	}
+	verdict.Quality = qualityFromMaster(master)
 
 	// Progressive media (e.g. an AnimeJoy mp4): the upstream URL is the playable
 	// file itself, not an HLS manifest — there is no variant/segment chain to
@@ -150,7 +174,9 @@ func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict
 			verdict.Reason = streamprobe.ReasonEmptyResponse
 			return verdict
 		}
+		sstart := time.Now()
 		body, st, err := v.fetch(ctx, v.proxyURL(rs, line))
+		hopMs := time.Since(sstart).Milliseconds()
 		if err != nil {
 			verdict.Reason = streamprobe.ReasonCDNUnreachable
 			return verdict
@@ -164,7 +190,9 @@ func (v *HTTPValidator) Validate(ctx context.Context, rs ResolvedStream) Verdict
 			return verdict
 		}
 		if !looksLikeManifest(body) {
-			// reached a media segment
+			// reached a media segment — record throughput sample
+			verdict.SegmentMs = hopMs
+			verdict.SegmentBytes = int64(len(body))
 			if encrypted {
 				// Segment is AES-128 ciphertext — ffprobe would see random bytes
 				// and report no video stream. Reachability is sufficient here.
