@@ -222,3 +222,17 @@ func TestProfileWallAdminOnly_FalseWhenSet(t *testing.T) {
 		t.Fatal("expected ProfileWallAdminOnly false when env=false")
 	}
 }
+
+func TestFanficAdminOnly_DefaultsTrue(t *testing.T) {
+	t.Setenv("JWT_SECRET", "x")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.FanficAdminOnly {
+		t.Fatal("expected FanficAdminOnly to default true")
+	}
+	if cfg.Services.FanficService == "" {
+		t.Fatal("expected a default FanficService URL")
+	}
+}

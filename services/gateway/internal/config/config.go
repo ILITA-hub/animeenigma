@@ -53,6 +53,13 @@ type Config struct {
 	// is the enroll→session→idx-bound-capability chain (Tasks 5/10).
 	// Rotate: set a new value + `make restart-gateway` (no rebuild).
 	ExternalAPIKey string
+	// FanficAdminOnly is the AI fanfic-engine dark-ship gate (spec
+	// 2026-07-06), mirroring GachaAdminOnly. When true, the /api/fanfic/*
+	// route group additionally requires the admin role, so the feature is
+	// forbidden/invisible to regular users until the bundled release. Flip
+	// to false (env FANFIC_ADMIN_ONLY=false + restart-gateway) to open it to
+	// all authenticated (non-guest) users. Default true.
+	FanficAdminOnly bool
 }
 
 type ServerConfig struct {
@@ -102,7 +109,12 @@ type ServiceURLs struct {
 	// UpscalerService — video upscaler service. Port 8096. Admin-gated REST
 	// (/api/upscale/*). Internal segment-handle endpoints are Docker-network-only.
 	UpscalerService string
-	WebService      string
+	// FanficService — AI fanfic-generation engine (spec 2026-07-06). Port 8097.
+	// Exposes /api/fanfic/* (JWT; admin-gated during dark-ship via
+	// FanficAdminOnly). The SSE /generate route is proxied with per-chunk
+	// flushing (proxyStreamFlush) so token deltas reach the browser live.
+	FanficService string
+	WebService    string
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
@@ -157,6 +169,7 @@ func Load() (*Config, error) {
 			RecsService:          getEnv("RECS_SERVICE_URL", "http://recs:8094"),
 			AnidleService:        getEnv("ANIDLE_SERVICE_URL", "http://anidle:8095"),
 			UpscalerService:      getEnv("UPSCALER_SERVICE_URL", "http://upscaler:8096"),
+			FanficService:        getEnv("FANFIC_SERVICE_URL", "http://fanfic:8097"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
@@ -201,6 +214,8 @@ func Load() (*Config, error) {
 		PoisonClientIPs: httputil.ParseCommaList(getEnv("POISON_CLIENT_IPS", "")),
 		// Worker edge API key — empty = reject all /worker/* (fail-closed).
 		ExternalAPIKey: getEnv("EXTERNAL_API_KEY", ""),
+		// Fanfic engine dark-ship admin-gate — default true (spec 2026-07-06).
+		FanficAdminOnly: getEnvBool("FANFIC_ADMIN_ONLY", true),
 	}
 
 	// DevMode is only permitted in known development environments. Any

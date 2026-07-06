@@ -117,6 +117,19 @@ func (h *ProxyHandler) ProxyToUpscaler(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "upscaler")
 }
 
+// ProxyToFanfic proxies non-streaming fanfic routes (list/get/delete/tags) to
+// the fanfic service (spec 2026-07-06). Only /api/fanfic/* is exposed.
+func (h *ProxyHandler) ProxyToFanfic(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "fanfic")
+}
+
+// ProxyToFanficStream proxies the SSE generation route with per-chunk
+// flushing so token deltas reach the browser immediately (plain proxyStream
+// buffers ~2KB via io.Copy, which would make streaming arrive in bursts).
+func (h *ProxyHandler) ProxyToFanficStream(w http.ResponseWriter, r *http.Request) {
+	h.proxyStreamFlush(w, r, "fanfic")
+}
+
 // ProxyToLibrary proxies requests to the library service (workstream raw-jp / v0.2).
 // Phase 1 only exposes /health passthrough; Phases 2-5 add search + jobs + episodes
 // endpoints. Admin-protected routes (POST /jobs, DELETE /jobs/:id, etc.) are added
@@ -257,6 +270,54 @@ func (h *ProxyHandler) proxyStream(w http.ResponseWriter, r *http.Request, servi
 
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+// proxyStreamFlush is proxyStream but flushes after every read so SSE events
+// (fanfic /generate token deltas) are delivered to the browser as they
+// arrive, instead of sitting in io.Copy's ~2KB internal buffer. WriteDeadline
+// is cleared exactly like proxyStream, for the same reason (the gateway
+// server's WriteTimeout would otherwise re-cap a long-lived SSE response).
+func (h *ProxyHandler) proxyStreamFlush(w http.ResponseWriter, r *http.Request, service string) {
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+
+	resp, err := h.proxyService.ForwardStream(r, service)
+	if err != nil {
+		h.log.Errorw("stream proxy failed", "service", service, "error", err)
+		metrics.ProxyUpstreamErrors.WithLabelValues("forward_error", service).Inc()
+		httputil.Error(w, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 500 {
+		metrics.ProxyUpstreamErrors.WithLabelValues(strconv.Itoa(resp.StatusCode), service).Inc()
+	}
+
+	// Copy response headers, skipping CORS headers (gateway middleware handles CORS)
+	for key, values := range resp.Header {
+		if isCORSHeader(key) {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	buf := make([]byte, 4096)
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return
+			}
+			_ = rc.Flush()
+		}
+		if rerr != nil {
+			return
+		}
+	}
 }
 
 // isCORSHeader checks if a header is a CORS-related header

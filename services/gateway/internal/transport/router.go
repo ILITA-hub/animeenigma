@@ -321,6 +321,14 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/gacha/*", proxyHandler.ProxyToWeb)
 	})
 
+	// Fanfic engine SPA route (/fanfics — admin-gated in the router meta;
+	// dark-shipped via VITE_FANFIC_ADMIN_ONLY on the web). Unlike the
+	// /admin/gacha etc. pages above, this is a top-level (non-/admin) page
+	// so it is NOT wrapped in JWT/AdminRole middleware here — the actual
+	// /api/fanfic/* calls the page makes are gated server-side by the
+	// route group below (JWT + BlockGuestRole + conditional AdminRole).
+	r.HandleFunc("/fanfics", proxyHandler.ProxyToWeb)
+
 	// Magic-link SSO bridge routes (public, no JWT). These endpoints return
 	// 302 redirects for cross-domain (.ru → .org) login handoff; the gateway
 	// must relay the redirect verbatim to the browser (not chase it) so the
@@ -722,6 +730,25 @@ func NewRouterWithCleanup(
 				// Daily streak claim (Phase 4).
 				r.Post("/daily", proxyHandler.ProxyToGacha)
 			})
+		})
+
+		// Fanfic engine (spec 2026-07-06). JWT-required, guest-blocked, and
+		// admin-gated while FANFIC_ADMIN_ONLY (dark-ship, mirrors the Gacha
+		// gate). Flip FANFIC_ADMIN_ONLY=false to open it to all authenticated
+		// (non-guest) users. The SSE /generate route uses the flushing stream
+		// proxy (proxyStreamFlush) so token deltas reach the browser live.
+		r.Route("/fanfic", func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
+			r.Use(BlockGuestRoleMiddleware)
+			if cfg.FanficAdminOnly {
+				r.Use(AdminRoleMiddleware)
+			}
+			r.Post("/generate", proxyHandler.ProxyToFanficStream)
+			r.Get("/", proxyHandler.ProxyToFanfic)
+			r.Get("/tags", proxyHandler.ProxyToFanfic)
+			r.Get("/{id}", proxyHandler.ProxyToFanfic)
+			r.Delete("/{id}", proxyHandler.ProxyToFanfic)
 		})
 
 		// Upscaler service routes (admin-gated, port 8096). All /api/upscale/*
