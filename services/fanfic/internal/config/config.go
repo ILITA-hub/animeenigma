@@ -1,0 +1,102 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/database"
+)
+
+type Config struct {
+	Server   ServerConfig
+	Database database.Config
+	Redis    cache.Config
+	JWT      authz.JWTConfig
+	Groq     GroqConfig
+	DailyCap int // FANFIC_DAILY_CAP — max generations per user per day (default 100)
+}
+
+type ServerConfig struct {
+	Host string
+	Port int
+}
+
+func (s ServerConfig) Address() string { return fmt.Sprintf("%s:%d", s.Host, s.Port) }
+
+type GroqConfig struct {
+	APIKey  string
+	BaseURL string
+	Model   string
+	Timeout time.Duration
+}
+
+func Load() (*Config, error) {
+	if getEnv("JWT_SECRET", "") == "" {
+		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
+	}
+	if getEnv("FANFIC_GROQ_API_KEY", "") == "" {
+		return nil, fmt.Errorf("FANFIC_GROQ_API_KEY environment variable is required")
+	}
+	return &Config{
+		Server: ServerConfig{
+			Host: getEnv("SERVER_HOST", "0.0.0.0"),
+			Port: getEnvInt("SERVER_PORT", 8097),
+		},
+		Database: database.Config{
+			Host:     getEnv("DB_HOST", "localhost"),
+			Port:     getEnvInt("DB_PORT", 5432),
+			User:     getEnv("DB_USER", "postgres"),
+			Password: getEnv("DB_PASSWORD", "postgres"),
+			Database: getEnv("DB_NAME", "animeenigma"),
+			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+		},
+		Redis: cache.Config{
+			Host:     getEnv("REDIS_HOST", "redis"),
+			Port:     getEnvInt("REDIS_PORT", 6379),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       getEnvInt("REDIS_DB", 0),
+		},
+		JWT: authz.JWTConfig{
+			Secret:          getEnv("JWT_SECRET", ""),
+			Issuer:          getEnv("JWT_ISSUER", "animeenigma"),
+			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
+			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+		},
+		Groq: GroqConfig{
+			APIKey:  getEnv("FANFIC_GROQ_API_KEY", ""),
+			BaseURL: getEnv("FANFIC_GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+			Model:   getEnv("FANFIC_GROQ_MODEL", "llama-3.1-8b-instant"),
+			Timeout: getEnvDuration("FANFIC_GROQ_TIMEOUT", 120*time.Second),
+		},
+		DailyCap: getEnvInt("FANFIC_DAILY_CAP", 100),
+	}, nil
+}
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func getEnvInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func getEnvDuration(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return def
+}

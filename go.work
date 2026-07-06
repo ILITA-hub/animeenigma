@@ -19,6 +19,7 @@ use (
 	./services/anidle
 	./services/auth
 	./services/catalog
+	./services/fanfic
 	./services/gacha
 	./services/gateway
 	./services/library
