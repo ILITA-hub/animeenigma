@@ -20,7 +20,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/allanime"
-	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animefever"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animekai"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/eighteenanime"
@@ -98,15 +97,6 @@ func main() {
 	// its recording transport composes the egress recorder (WR-07). It is still
 	// registered before the gogoanime.Provider constructor (line ~248), which is
 	// the only ordering constraint the registry dispatch requires.
-
-	// Phase 28 (SCRAPER-HEAL-38) — vidstream_vip extractor for AnimeFever.
-	// Plain regex against inline `sources: [{"file":"...m3u8"}]` literal —
-	// NOT a Dean-Edwards-packer (CONTEXT.md D4 + RESEARCH.md Discretion).
-	// MUST be registered BEFORE the AnimeFever provider construction (Plan
-	// 28-02) so the embed Registry.Find lookup at GetStream time succeeds.
-	vidstreamVipExtractor := embeds.NewVidstreamVipExtractor()
-	registry.Register(vidstreamVipExtractor)
-	log.Infow("registered embed extractor", "name", vidstreamVipExtractor.Name())
 
 	// Redis cache — shared by malsync, episodes, stream TTLs. We fatal here
 	// instead of degrading gracefully because every AnimePahe response is
@@ -400,7 +390,7 @@ func main() {
 
 	// okru — serves AllAnime's Ok (ok.ru) sources clock-free (no api.allanime.day
 	// clock endpoint). Registered immediately AFTER allanime so the EN failover
-	// order is gogoanime → animepahe → allanime → okru → animefever → …
+	// order is gogoanime → animepahe → allanime → okru → miruro → …
 	// This client backs okru's DISCOVERY only (it wraps an internal allanime
 	// provider hitting api.allanime.day). The ok.ru page fetch happens in the
 	// embeds.OkruExtractor's own http.Client (mirrors vibeplayer), so a
@@ -416,32 +406,17 @@ func main() {
 	}
 	registerByStatus(okruProvider)
 
-	// Phase 28 (SCRAPER-HEAL-36) — AnimeFever as the FOURTH live EN provider.
-	// Failover slot 4 per CONTEXT.md D5. Always-on; operator disables/degrades it
-	// via the catalog `scraper_providers` DB table if upstream breaks.
-	// HTML-scrape + AJAX-POST data path; embed extraction delegated to the
-	// vidstream_vip extractor registered in Plan 28-03 (sibling Wave 1 plan).
-	animeFeverBaseHTTP := domain.NewBaseHTTPClient(log,
-		domain.WithPerHostRPS("animefever.cc", 1.0, 2),
-		domain.WithPerHostRPS("am.vidstream.vip", 1.0, 2),
-		domain.WithPerHostRPS("static-cdn-ca1.mofl.pro", 2.0, 4),
-		domain.WithProvider("animefever"),
-		domain.WithTransport(egressTransport),
-	)
-	animeFeverProvider, err := animefever.New(animefever.Deps{
-		BaseURL: cfg.AnimeFever.BaseURL,
-		HTTP:    animeFeverBaseHTTP,
-		Embeds:  registry,
-		Cache:   redisCache,
-		Log:     log,
-	})
-	if err != nil {
-		log.Fatalw("failed to construct AnimeFever provider", "error", err)
-	}
-	registerByStatus(animeFeverProvider)
+	// animefever (was EN failover slot 4) was REMOVED from the binary 2026-07-05:
+	// its upstream is dead for EVERYONE — 100% of HLS segments 302 to a ByteDance
+	// ad CDN that 403s, and a residential external A/B proved the content is gone
+	// regardless of egress (not IP-class-fixable; falsifies AUTO-484). It survives
+	// only as a disabled `scraper_operated` tombstone row in the catalog DB (kept
+	// in KnownProviders so the remote-config loader still validates). See the
+	// AnimefeverDisable migration + docs/scraper-framework.md.
 
 	// Phase 28 Plan 28-04 (SCRAPER-HEAL-37) — Miruro provider. Failover
-	// slot 5 (between allanime/animefever and 9anime). Uses the pure-Go
+	// slot (between allanime/okru and 9anime; animefever removed 2026-07-05).
+	// Uses the pure-Go
 	// secure-pipe transform from Plan 28-00's obfuscation.go. FindID
 	// resolves Shikimori/MAL → AniList via libs/idmapping ARM. Pipe
 	// endpoint lives at www.miruro.tv/api/secure/pipe; pro.ultracloud.cc
@@ -633,8 +608,8 @@ func main() {
 	// (Moved up from the wiring-invariant block so the regate closure can range
 	// over it; the invariant block still reads this same slice.)
 	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
-	// → allanime → animefever (28-02) → miruro (28-04) → nineanime (28-05).
-	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "okru", "animefever", "miruro", "nineanime"}
+	// → allanime → okru → miruro (28-04) → nineanime (28-05). (animefever removed 2026-07-05)
+	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "okru", "miruro", "nineanime"}
 	if cfg.AnimeKai.Enabled {
 		candidateProviders = append(candidateProviders, "animekai")
 	}
@@ -685,7 +660,7 @@ func main() {
 	// future maintainer dropping any Register() call surfaces the regression at
 	// boot via this fatal.
 	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
-	// → allanime → animefever (28-02) → miruro (28-04) → nineanime (28-05).
+	// → allanime → okru → miruro (28-04) → nineanime (28-05). (animefever removed 2026-07-05)
 	// (candidateProviders is declared above the StartProvidersRefresher call so
 	// the Phase-3 re-gate closure can range over the same slice this block uses.)
 	expectedProviders := 0
@@ -754,7 +729,6 @@ func main() {
 			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
 			"animekai_enabled", cfg.AnimeKai.Enabled,
 			"animekai_base_url", cfg.AnimeKai.BaseURL,
-			"animefever_base_url", cfg.AnimeFever.BaseURL,
 			"nineanime_base_url", cfg.NineAnime.BaseURL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

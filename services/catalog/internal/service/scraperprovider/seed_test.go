@@ -89,7 +89,7 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	}
 }
 
-func TestSeedDefaults_AnimeFeverDegradedWithReason(t *testing.T) {
+func TestSeedDefaults_AnimeFeverDisabledTombstone(t *testing.T) {
 	db := newDB(t)
 	if err := scraperprovider.SeedDefaults(db); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -98,11 +98,18 @@ func TestSeedDefaults_AnimeFeverDegradedWithReason(t *testing.T) {
 	if err := db.First(&af, "name = ?", "animefever").Error; err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	if !af.IsDegraded() {
-		t.Errorf("animefever status = %q, want degraded", af.Status)
+	// animefever is a disabled tombstone (dead upstream, provider code removed).
+	if af.Status != domain.StatusDisabled {
+		t.Errorf("animefever status = %q, want disabled", af.Status)
 	}
 	if af.Reason == "" || af.Description == "" {
 		t.Errorf("animefever must carry a reason/description in the DB: %+v", af)
+	}
+	// It MUST stay scraper_operated so the scraper's remote-config loader
+	// (which requires every scraper_operated name to be in KnownProviders)
+	// still validates — else the whole provider load hard-fails.
+	if !af.ScraperOperated {
+		t.Error("animefever tombstone must stay scraper_operated=true (remote-loader validation)")
 	}
 }
 

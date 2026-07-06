@@ -10,8 +10,15 @@ import (
 )
 
 // KnownProviders is the canonical set of scraper provider names that may appear
-// in scraper-providers.yaml. Anything else is a typo and fails validation.
-// Must match the registration names in cmd/scraper-api/main.go.
+// in scraper-providers.yaml / the catalog stream_providers roster. Anything else
+// is a typo and fails validation (LoadProviders + the remote loader).
+//
+// These are the registration names in cmd/scraper-api/main.go, PLUS "animefever":
+// its provider code was removed from the binary 2026-07-05 (dead upstream —
+// tombstone), but the catalog keeps a disabled `scraper_operated` animefever row
+// as the historical record, and the remote loader hard-fails on any
+// scraper_operated name it doesn't recognize — so the name must stay listed here
+// even though nothing registers it.
 var KnownProviders = []string{
 	"gogoanime", "animepahe", "allanime", "okru", "animefever", "miruro", "nineanime", "animekai",
 	"18anime",

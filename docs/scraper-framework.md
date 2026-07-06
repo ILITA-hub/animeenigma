@@ -17,8 +17,10 @@ list of providers and runs sequential failover across them.
 `cmd/scraper-api/main.go` lines 330–455):
 
 ```
-gogoanime → animepahe → allanime → animefever → miruro → nineanime
+gogoanime → animepahe → allanime → okru → miruro → nineanime
 ```
+(`animefever` was removed from the binary 2026-07-05 — dead upstream; it survives
+only as a disabled tombstone row in the catalog `stream_providers` DB.)
 
 Optional (flag-gated): `animekai` (appended last when `SCRAPER_ANIMEKAI_ENABLED=true`).
 
@@ -130,9 +132,9 @@ services/scraper/internal/providers/
 ├── gogoanime/       # PRIMARY: Anitaku/Gogoanime (EN sub/dub, gatedProvider)
 ├── animepahe/       # 2nd: AnimePahe via Camoufox resolver sidecar (Kwik embed)
 ├── allanime/        # 3rd: AllAnime (Phase 26)
-├── animefever/      # 4th: AnimeFever — currently DEGRADED (AUTO-484)
-├── miruro/          # 5th: Miruro, pure-Go secure-pipe transform (Phase 28)
-├── nineanime/       # 6th: 9anime.me.uk — last-resort MP4 (Phase 28)
+│                    # (animefever/ REMOVED 2026-07-05 — dead upstream, tombstone row only)
+├── miruro/          # Miruro, pure-Go secure-pipe transform (Phase 28)
+├── nineanime/       # 9anime.me.uk — last-resort MP4 (Phase 28)
 ├── animekai/        # Optional escape-hatch, flag-gated, stub methods
 └── eighteenanime/   # 18+ group, separate orchestrator (adultOrch)
 ```

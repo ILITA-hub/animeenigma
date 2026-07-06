@@ -929,8 +929,8 @@ func TestScraperHandler_GetHealth_OverlaysRealOracleAndPlayable(t *testing.T) {
 	now := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
 
 	// Self-report falsely shows stream_segment UP for both providers.
-	fever := &fakeProvider{name: "animefever", health: domain.Health{
-		Provider: "animefever",
+	nine := &fakeProvider{name: "nineanime", health: domain.Health{
+		Provider: "nineanime",
 		Stages:   map[string]domain.StageHealth{"stream": {Up: true}, "stream_segment": {Up: true}},
 	}}
 	kai := &fakeProvider{name: "animekai", health: domain.Health{
@@ -939,15 +939,15 @@ func TestScraperHandler_GetHealth_OverlaysRealOracleAndPlayable(t *testing.T) {
 	}}
 
 	cache := health.NewInMemoryHealthCacheWithNow(func() time.Time { return now })
-	// Real oracle: animefever's segment actually 502s. (animekai: no entry.)
-	cache.Update("animefever", health.ProviderHealth{
+	// Real oracle: nineanime's segment actually 502s. (animekai: no entry.)
+	cache.Update("nineanime", health.ProviderHealth{
 		LastUpdated: now.Add(-2 * time.Minute), // fresh
 		Stages: map[string]health.StageStatus{
 			health.StageStreamSegment: {Up: false, LastErr: "stream_segment: status 502 (depth 1)"},
 		},
 	})
 
-	h := newTestHandlerWithCache(t, cache, fever, kai)
+	h := newTestHandlerWithCache(t, cache, nine, kai)
 	h.SetNow(func() time.Time { return now })
 
 	rec := httptest.NewRecorder()
@@ -965,12 +965,12 @@ func TestScraperHandler_GetHealth_OverlaysRealOracleAndPlayable(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	// animefever: fake-green self-report overlaid with the real DOWN oracle.
-	if seg := wrapper.Data.Providers["animefever"].Stages["stream_segment"]; seg.Up {
-		t.Errorf("animefever stream_segment Up=true; want false (real oracle overlay)")
+	// nineanime: fake-green self-report overlaid with the real DOWN oracle.
+	if seg := wrapper.Data.Providers["nineanime"].Stages["stream_segment"]; seg.Up {
+		t.Errorf("nineanime stream_segment Up=true; want false (real oracle overlay)")
 	}
-	if v, ok := wrapper.Data.Playable["animefever"]; !ok || v {
-		t.Errorf("playable[animefever] = (%v, present=%v); want (false, true)", v, ok)
+	if v, ok := wrapper.Data.Playable["nineanime"]; !ok || v {
+		t.Errorf("playable[nineanime] = (%v, present=%v); want (false, true)", v, ok)
 	}
 	// animekai: no fresh oracle → omitted from playable; stage not claimed up.
 	if _, ok := wrapper.Data.Playable["animekai"]; ok {

@@ -22,9 +22,9 @@
 // needs to return the master URL + the megaplay.buzz Referer the CDN
 // enforces (master.m3u8 returns 403 without it).
 //
-// Pure stdlib — plaintext JSON, NO decryption (unlike megacloud). Mirrors
-// the vidstream_vip.go shape. SSRF mitigation: host-allowlist Matches, body
-// caps, absolute-URL validation, JSON-shape validation.
+// Pure stdlib — plaintext JSON, NO decryption (unlike megacloud). SSRF
+// mitigation: host-allowlist Matches, body caps, absolute-URL validation,
+// JSON-shape validation.
 package embeds
 
 import (

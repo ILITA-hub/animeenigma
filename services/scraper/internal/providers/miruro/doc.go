@@ -1,6 +1,6 @@
 // Package miruro implements the Miruro upstream provider for the scraper
-// service (SCRAPER-HEAL-37, Phase 28 Wave 2). Failover slot 5 — reached when
-// allanime AND animefever are both unhealthy.
+// service (SCRAPER-HEAL-37, Phase 28 Wave 2). A late failover slot — reached
+// when the earlier EN providers (gogoanime/animepahe/allanime/okru) are unhealthy.
 //
 // Architecture (CONTEXT.md D5 + SPIKE-MIRURO.md):
 //

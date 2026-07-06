@@ -275,6 +275,15 @@ func main() {
 		log.Errorw("animepahe sidecar-retired migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) durable DISABLE of animefever (dead for everyone —
+	// residential A/B proved the content is gone, not egress-fixable). The seed
+	// was degraded and AnimefeverDeclaim only refreshed reason/description, so
+	// this flips any DB still on degraded → disabled. Provider code removed from
+	// the scraper binary; the tombstone row is kept. Operator re-enable never clobbered.
+	if err := scraperprovider.AnimefeverDisable(db.DB); err != nil {
+		log.Errorw("animefever disable migration failed (continuing)", "error", err)
+	}
+
 	// One-time (guarded) REVIVAL of animepahe onto the Camoufox stealth-scraper
 	// sidecar (engine=browser, base_url=https://animepahe.pw, disabled→degraded).
 	// animepahe.pw's Cloudflare managed challenge is solvable from our own IP via

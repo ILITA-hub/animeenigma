@@ -515,6 +515,35 @@ func TestAllAnimeDegrade_FlipsOnceIdempotent(t *testing.T) {
 	}
 }
 
+func TestAnimefeverDisable_FlipsDegradedToDisabledOnceIdempotent(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Pre-change live-DB shape: an animefever row still on degraded (the seed
+	// default before this change; AnimefeverDeclaim only refreshed reason/desc).
+	if err := db.Create(&domain.ScraperProvider{Name: "animefever", Status: domain.StatusDegraded}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := scraperprovider.AnimefeverDisable(db); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	var row domain.ScraperProvider
+	db.Where("name = ?", "animefever").First(&row)
+	if row.Status != domain.StatusDisabled {
+		t.Fatalf("status = %q, want disabled", row.Status)
+	}
+	// operator re-enables; second run must NOT clobber (guard already written)
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "animefever").Update("status", domain.StatusEnabled)
+	if err := scraperprovider.AnimefeverDisable(db); err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	db.Where("name = ?", "animefever").First(&row)
+	if row.Status != domain.StatusEnabled {
+		t.Fatalf("status = %q after re-enable+rerun, want enabled (not clobbered)", row.Status)
+	}
+}
+
 func TestBackfillScraperOperated_SetsIntrinsicFlag(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

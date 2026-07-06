@@ -180,6 +180,9 @@ const miruroDubOnlyGuardKey = "miruro_dub_only"
 // animefeverDeclaimGuardKey marks AnimefeverDeclaim as applied.
 const animefeverDeclaimGuardKey = "animefever_declaim"
 
+// animefeverDisableGuardKey marks AnimefeverDisable as applied.
+const animefeverDisableGuardKey = "animefever_disable"
+
 // nineanimeBrowserGuardKey marks NineanimeBrowser as applied.
 const nineanimeBrowserGuardKey = "nineanime_browser"
 
@@ -308,6 +311,55 @@ func AnimefeverDeclaim(db *gorm.DB) error {
 
 	if err := db.Create(&migrationGuard{Key: animefeverDeclaimGuardKey}).Error; err != nil {
 		return fmt.Errorf("write animefever-declaim guard: %w", err)
+	}
+	return nil
+}
+
+// AnimefeverDisable flips animefever to status=disabled exactly once, carrying
+// the durable disable to live DBs. animefever is dead for EVERYONE (its HLS
+// segments 100% swap to a ByteDance ad CDN that 403s; a residential external
+// A/B on 2026-06-26 proved the content is gone regardless of egress — NOT
+// IP-class-fixable, falsifying AUTO-484). The live prod row was manually set to
+// disabled on 2026-06-26, but the seed was StatusDegraded and the earlier
+// AnimefeverDeclaim only refreshed reason/description (never status), so fresh
+// DBs re-seeded animefever DEGRADED. The seed default is now StatusDisabled and
+// this RUN-ONCE guarded migration flips any existing DB still on degraded.
+// The provider CODE was removed from the scraper binary; the tombstone row is
+// kept (scraper_operated) as the historical record + so the scraper's remote
+// loader validates. Guarded via catalog_migration_guards so it never clobbers a
+// later operator re-enable. Idempotent; safe to call every boot.
+func AnimefeverDisable(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", animefeverDisableGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check animefever-disable guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator re-enable
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "animefever").
+		Updates(map[string]interface{}{
+			"status":       domain.StatusDisabled,
+			"reason":       "Dead upstream — content gone for everyone (2026-06-26)",
+			"description":  "animefever.cc → am.vidstream.vip (StreamX.Me/JW player) returns a valid manifest, but 100% of its HLS segments 302-redirect to a ByteDance ad CDN (sf16-scmcdn-sg.ibytedtos.com / ad-site-i18n-sg) that 403s. Proven NOT egress-fixable: a residential external A/B (owner, 2026-06-26) got no real video either — the content is dead for EVERYONE, not IP-class-gated (falsifies AUTO-484). Not revivable by any browser/egress trick. Disabled + provider code removed from the scraper binary (tombstone); this row is kept as the historical record. Existing DBs flipped via AnimefeverDisable.",
+			"supports_sub": false,
+			"supports_dub": false,
+			"sub_delivery": "none",
+		})
+	if result.Error != nil {
+		return fmt.Errorf("animefever disable: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No animefever row to update (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("animefever disable: no row found for name=animefever")
+	}
+	if err := db.Create(&migrationGuard{Key: animefeverDisableGuardKey}).Error; err != nil {
+		return fmt.Errorf("write animefever-disable guard: %w", err)
 	}
 	return nil
 }

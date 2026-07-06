@@ -89,17 +89,19 @@ var defaultProviders = []domain.ScraperProvider{
 		QualityCeiling: "1080p", PreferenceWeight: 70,
 	},
 	{
-		Name: "animefever", Status: domain.StatusDegraded,
-		Reason: "Ad-substituted HLS segments (AUTO-484)",
+		Name: "animefever", Status: domain.StatusDisabled,
+		Reason: "Dead upstream — content gone for everyone (2026-06-26)",
 		Description: "animefever.cc → am.vidstream.vip (StreamX.Me/JW player) returns a valid " +
-			"manifest, but its HLS segments 302-redirect to an ad CDN " +
-			"(sf16-scmcdn-sg.ibytedtos.com / ad-site-i18n-sg) that 403s for us, so playback " +
-			"fails. The exact trigger for the ad swap is not confirmed. " +
-			"Degraded: kept manually selectable (hacker mode) but out of the auto-failover chain. " +
-			"Existing DBs updated via AnimefeverDeclaim.",
-		// sub_delivery "unknown": claimed hard, unverifiable by the 2026-06-29
-		// subprobe (degraded — ad-substituted segments 403, playback fails).
-		SupportsSub: true, SupportsDub: false, SubDelivery: "unknown",
+			"manifest, but 100% of its HLS segments 302-redirect to a ByteDance ad CDN " +
+			"(sf16-scmcdn-sg.ibytedtos.com / ad-site-i18n-sg) that 403s. Proven NOT egress-fixable: " +
+			"a residential external A/B (owner, 2026-06-26) got no real video either — the content " +
+			"is dead for EVERYONE, not IP-class-gated (falsifies AUTO-484). Not revivable by any " +
+			"browser/egress trick. Disabled + provider code removed from the scraper binary " +
+			"(tombstone); this row is kept as the historical record. Existing DBs flipped via AnimefeverDisable.",
+		// Kept a scraper_operated tombstone row so the scraper's remote-config
+		// loader (which requires every scraper_operated name to be in KnownProviders)
+		// still validates; the provider CODE is gone.
+		SupportsSub: false, SupportsDub: false, SubDelivery: "none",
 		QualityCeiling: "1080p", PreferenceWeight: 60,
 	},
 	{

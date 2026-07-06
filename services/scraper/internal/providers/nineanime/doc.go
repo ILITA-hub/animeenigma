@@ -5,7 +5,8 @@
 // It is the SIXTH and LAST provider in the EN failover chain:
 //
 //	gogoanime (degraded) → animepahe (degraded) → allanime (★ working) →
-//	  animefever → miruro → nineanime (THIS PROVIDER) → animekai (gated stub)
+//	  okru → miruro → nineanime (THIS PROVIDER) → animekai (gated stub)
+//	  (animefever removed from the binary 2026-07-05 — dead upstream)
 //
 // Per CONTEXT.md D2, 9anime.me.uk is EXPLICITLY ACCEPTED as a low-quality,
 // last-resort source. Operator policy "as many providers as possible"
@@ -120,5 +121,4 @@
 //   - .planning/phases/28-provider-expansion-r2/28-RESEARCH.md (9anime
 //     section + Code Examples + Pitfalls 4-6)
 //   - services/scraper/internal/providers/allanime/ — base template.
-//   - services/scraper/internal/providers/animefever/ — Wave 1 sibling.
 package nineanime
