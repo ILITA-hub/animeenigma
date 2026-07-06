@@ -176,6 +176,15 @@ func main() {
 		log.Errorw("split-kodik migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) fold of the okru+allanime rows: renames okru ->
+	// allanime-okru (preserving status/weight) and tombstones the standalone
+	// allanime row. MUST run BEFORE SeedDefaults so the okru->allanime-okru
+	// rename wins before the insert-if-absent seed adds a fresh allanime-okru
+	// row. Run-once via the catalog_migration_guards ledger.
+	if err := scraperprovider.AllanimeOkruMerge(db.DB); err != nil {
+		log.Errorw("allanime-okru-merge migration failed (continuing)", "error", err)
+	}
+
 	// Bootstrap stream_providers from the Go-embedded default roster
 	// (insert-if-absent; the DB is the SINGLE source of truth — the YAML was
 	// retired 2026-06-17, AUTO-484). Idempotent: operator edits are never
@@ -326,14 +335,6 @@ func main() {
 	// row must be removed explicitly. Run-once via the ledger; idempotent.
 	if err := scraperprovider.RemoveRawProvider(db.DB); err != nil {
 		log.Errorw("remove-raw-provider migration failed (continuing)", "error", err)
-	}
-
-	// One-time (guarded) fold of the okru+allanime rows: renames okru ->
-	// allanime-okru (preserving status/weight) and tombstones the standalone
-	// allanime row. No-op on fresh DBs (the seed already writes the folded
-	// shape directly). Run-once via the catalog_migration_guards ledger.
-	if err := scraperprovider.AllanimeOkruMerge(db.DB); err != nil {
-		log.Errorw("allanime-okru-merge migration failed (continuing)", "error", err)
 	}
 
 	// One-time (guarded) back-fill of the legacy status tri-state onto the new

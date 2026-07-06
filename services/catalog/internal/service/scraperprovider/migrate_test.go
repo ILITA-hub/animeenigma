@@ -929,6 +929,67 @@ func TestAllanimeOkruMerge_RenamesOkruAndTombstonesAllanime(t *testing.T) {
 	}
 }
 
+// TestAllanimeOkruMerge_BeforeSeed_PreservesLegacyWeight reproduces the REAL boot
+// order (the ordering bug fix in main.go): AllanimeOkruMerge MUST run BEFORE
+// SeedDefaults. If it instead ran after, SeedDefaults' insert-if-absent would
+// already have created a fresh allanime-okru row (weight 35) by the time the
+// merge's rename executed, its `already==0` guard would be false, the rename
+// would be skipped, and the legacy okru row (with its tuned weight) would be
+// orphaned forever. Calling merge first proves the rename wins and the legacy
+// weight survives the seed running afterward.
+func TestAllanimeOkruMerge_BeforeSeed_PreservesLegacyWeight(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Legacy live-DB shape: a tuned, enabled okru row and a degraded allanime
+	// row, with NO allanime-okru row yet.
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "okru", Status: domain.StatusEnabled, PreferenceWeight: 77,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "allanime", Status: domain.StatusDegraded,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// Fixed boot order: merge BEFORE seed.
+	if err := scraperprovider.AllanimeOkruMerge(db); err != nil {
+		t.Fatalf("AllanimeOkruMerge: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("SeedDefaults: %v", err)
+	}
+
+	var okruCount int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "okru").Count(&okruCount)
+	if okruCount != 0 {
+		t.Errorf("legacy okru row count = %d, want 0 (must be renamed away, not orphaned)", okruCount)
+	}
+
+	var mergedCount int64
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "allanime-okru").Count(&mergedCount)
+	if mergedCount != 1 {
+		t.Fatalf("allanime-okru row count = %d, want exactly 1 (no duplicate from the seed)", mergedCount)
+	}
+	var merged domain.ScraperProvider
+	db.Where("name = ?", "allanime-okru").First(&merged)
+	if merged.PreferenceWeight != 77 {
+		t.Errorf("allanime-okru preference_weight = %d, want 77 (legacy tuned weight must survive, not reset to the seed's 35)", merged.PreferenceWeight)
+	}
+	if merged.Status != domain.StatusEnabled {
+		t.Errorf("allanime-okru status = %q, want enabled", merged.Status)
+	}
+
+	var old domain.ScraperProvider
+	db.Where("name = ?", "allanime").First(&old)
+	if old.Status != domain.StatusDisabled {
+		t.Errorf("allanime status = %q, want disabled", old.Status)
+	}
+}
+
 func TestAllanimeOkruMerge_FreshDBSeedAlreadyCorrect_NoopNotError(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
