@@ -473,7 +473,7 @@ import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
 import { pickSmartDefault, pickRawBiased, pickSelectableFallback } from '@/composables/aePlayer/smartDefault'
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities, flattenCapabilities } from '@/composables/aePlayer/useCapabilities'
-import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
+import { rowsFromReport, familyOfProvider } from '@/composables/aePlayer/useProviderFeed'
 import { GROUP_LANGS, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
 import { pickEpisodeForProvider, shouldReselectEpisode } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
@@ -582,7 +582,7 @@ const engine = useVideoEngine(videoRef, state.hackerMode)
 // Guard point 1 — resolver. Offline: a ProviderResolver that reads local
 // downloads instead of hitting any network API (episodes + stream URLs resolve
 // to /__offline/… paths). Live: the real multi-provider resolver, unchanged.
-const resolver = props.offline ? makeOfflineResolver(props.offline) : useProviderResolver()
+const resolver = props.offline ? makeOfflineResolver(props.offline) : useProviderResolver((id) => familyOfProvider(report.value, id))
 const { t } = useI18n()
 const toast = useToast()
 const { isMobile, isCoarse } = useMobilePlayer()

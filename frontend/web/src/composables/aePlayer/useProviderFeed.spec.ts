@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
+import { rowsFromReport, familyOfProvider } from '@/composables/aePlayer/useProviderFeed'
 import type { CapabilityReport } from '@/types/capabilities'
 
 const report: CapabilityReport = {
@@ -99,5 +99,24 @@ describe('rowsFromReport', () => {
 
   it('yields an empty list for a null/malformed report', () => {
     expect(rowsFromReport(null, { audio: 'sub', lang: 'en', content: 'common' })).toEqual([])
+  })
+})
+
+const familyReport = {
+  anime_id: 'x',
+  families: [
+    { family: 'ourenglish', providers: [{ provider: 'gogoanime' }, { provider: 'allanime-okru' }] },
+    { family: 'kodik', providers: [{ provider: 'kodik' }] },
+  ],
+} as unknown as CapabilityReport
+
+describe('familyOfProvider', () => {
+  it('returns the family for a known provider', () => {
+    expect(familyOfProvider(familyReport, 'allanime-okru')).toBe('ourenglish')
+    expect(familyOfProvider(familyReport, 'kodik')).toBe('kodik')
+  })
+  it('returns undefined for an unknown provider or null report', () => {
+    expect(familyOfProvider(familyReport, 'nope')).toBeUndefined()
+    expect(familyOfProvider(null, 'gogoanime')).toBeUndefined()
   })
 })

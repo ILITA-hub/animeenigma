@@ -43,3 +43,16 @@ export function rowsFromReport(report: CapabilityReport | null, filter: RowFilte
   }
   return rows.sort((a, b) => b.order - a.order)
 }
+
+/** Provider id → its backend `family` ('ourenglish' | 'kodik' | …), read straight
+ *  from the capability feed. Single source of truth for "which backend serves this
+ *  provider" — the FE no longer hardcodes provider-id membership lists. */
+export function familyOfProvider(report: CapabilityReport | null, providerId: string): string | undefined {
+  if (!report || !Array.isArray(report.families)) return undefined
+  for (const fam of report.families) {
+    for (const cap of fam.providers ?? []) {
+      if (cap.provider === providerId) return fam.family
+    }
+  }
+  return undefined
+}
