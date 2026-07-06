@@ -55,3 +55,50 @@ func TestValidate_Caps(t *testing.T) {
 		t.Error("expected prompt-too-long error")
 	}
 }
+
+func TestValidate_TooManyTags(t *testing.T) {
+	r := validReq()
+	r.Tags = []string{}
+	for i := 0; i < 9; i++ {
+		r.Tags = append(r.Tags, "tag")
+	}
+	if err := r.Validate(); err == nil {
+		t.Error("expected too-many-tags error")
+	}
+}
+
+func TestValidate_TagTooLong(t *testing.T) {
+	r := validReq()
+	r.Tags = []string{strings.Repeat("a", 33)}
+	if err := r.Validate(); err == nil {
+		t.Error("expected tag-too-long error for 33-char ASCII tag")
+	}
+}
+
+func TestValidate_CyrillicRuneCounting(t *testing.T) {
+	// A byte-based len() would count 64 bytes (2 bytes/rune) and wrongly reject
+	// this as over the 32-char cap. Rune counting must accept it.
+	r := validReq()
+	r.Tags = []string{strings.Repeat("я", 32)}
+	if err := r.Validate(); err != nil {
+		t.Errorf("expected 32-Cyrillic-char tag to be accepted, got %v", err)
+	}
+
+	r = validReq()
+	r.Tags = []string{strings.Repeat("я", 33)}
+	if err := r.Validate(); err == nil {
+		t.Error("expected 33-Cyrillic-char tag to be rejected")
+	}
+
+	r = validReq()
+	r.Prompt = strings.Repeat("я", 2000)
+	if err := r.Validate(); err != nil {
+		t.Errorf("expected 2000-Cyrillic-char prompt to be accepted, got %v", err)
+	}
+
+	r = validReq()
+	r.Prompt = strings.Repeat("я", 2001)
+	if err := r.Validate(); err == nil {
+		t.Error("expected 2001-Cyrillic-char prompt to be rejected")
+	}
+}

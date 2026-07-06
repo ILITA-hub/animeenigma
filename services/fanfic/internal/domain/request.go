@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // AnimeRef is the anime snapshot the client sends (already fetched for the picker).
@@ -63,11 +64,11 @@ func (r GenerateRequest) Validate() error {
 		return fmt.Errorf("too many tags (max 8)")
 	}
 	for _, t := range r.Tags {
-		if len(t) > 32 {
+		if utf8.RuneCountInString(t) > 32 {
 			return fmt.Errorf("tag too long (max 32): %q", t)
 		}
 	}
-	if len(r.Prompt) > 2000 {
+	if utf8.RuneCountInString(r.Prompt) > 2000 {
 		return fmt.Errorf("prompt too long (max 2000)")
 	}
 	return nil
