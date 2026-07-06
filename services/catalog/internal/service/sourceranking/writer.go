@@ -14,7 +14,7 @@ const srcfixTTL = 24 * time.Hour
 // CURATED_TIER ids + EN scraper ids). Keeps garbage out of the public override key.
 // SYNC: keep in step with frontend providerRegistry.ts CURATED_TIER (+ EN scraper ids).
 var knownProviders = map[string]struct{}{
-	"ae": {}, "allanime": {}, "okru": {}, "gogoanime": {}, "miruro": {}, "animepahe": {},
+	"ae": {}, "allanime": {}, "allanime-okru": {}, "gogoanime": {}, "miruro": {}, "animepahe": {},
 	"animefever": {}, "nineanime": {}, "animekai": {}, "kodik": {},
 	"18anime": {}, "animelib": {}, "hanime": {},
 }

@@ -33,8 +33,8 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")
-	if !all.SupportsDub || all.PreferenceWeight != 90 || all.Group != "en" || !all.IsDegraded() {
-		t.Errorf("allanime seeded wrong: %+v", all)
+	if !all.SupportsDub || all.PreferenceWeight != 90 || all.Group != "en" || all.Status != domain.StatusDisabled {
+		t.Errorf("allanime seeded wrong (want disabled tombstone): %+v", all)
 	}
 	if !all.ScraperOperated {
 		t.Error("allanime should be scraper_operated=true")
@@ -55,13 +55,13 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 		t.Errorf("kodik-noads seeded wrong (want ru/enabled/not-scraper-operated): %+v", kodikNoads)
 	}
 	var okru domain.ScraperProvider
-	db.First(&okru, "name = ?", "okru")
+	db.First(&okru, "name = ?", "allanime-okru")
 	if !okru.IsEnabled() || okru.Group != "en" || !okru.ScraperOperated {
-		t.Errorf("okru seeded wrong (want en/enabled/scraper-operated): %+v", okru)
+		t.Errorf("allanime-okru seeded wrong (want en/enabled/scraper-operated): %+v", okru)
 	}
 	// sub_delivery "unknown": claimed hard but unverified by the 2026-06-29 subprobe (stream down).
 	if !okru.SupportsSub || !okru.SupportsDub || okru.SubDelivery != "unknown" || okru.PreferenceWeight != 35 {
-		t.Errorf("okru capabilities wrong (want sub+dub/unknown/35): %+v", okru)
+		t.Errorf("allanime-okru capabilities wrong (want sub+dub/unknown/35): %+v", okru)
 	}
 	// The two animejoy RU-sub legs: intrinsic group ru, NOT scraper-operated (kept
 	// out of the EN failover chain), enabled (promoted out of soak 2026-06-30 —

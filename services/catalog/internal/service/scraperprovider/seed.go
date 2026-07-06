@@ -18,28 +18,23 @@ import (
 // The reason/description columns record WHY each provider is in its state.
 var defaultProviders = []domain.ScraperProvider{
 	{
-		Name: "allanime", Status: domain.StatusDegraded,
-		Reason: "Stream broken — AllAnime sources behind Cloudflare Turnstile clock (2026-06-22)",
-		Description: "AllAnime discovery still works, but its primary sources decode to " +
-			"/apivtwo/clock.json behind a Cloudflare managed/Turnstile challenge (api.allanime.day) " +
-			"or a down bare host — unsolvable from our egress. Degraded: out of auto-failover, " +
-			"manually selectable (hacker mode). Its ok.ru ('Ok') sources are served clock-free by " +
-			"the 'okru' provider. Existing DBs flipped via AllAnimeDegrade.",
-		// sub_delivery "unknown": claimed hard, but unverifiable by the 2026-06-29
-		// subprobe (stream stage down — Cloudflare clock). Do not assert burned-in.
+		Name: "allanime", Status: domain.StatusDisabled,
+		Reason: "Folded into allanime-okru (2026-07-06) — clock stream path was dead",
+		Description: "AllAnime discovery + ok.ru streams now ship as the single 'allanime-okru' " +
+			"provider. AllAnime's own primary sources decode to /apivtwo/clock.json behind a " +
+			"Cloudflare Turnstile (unsolvable from our egress), so the standalone provider was " +
+			"dead. Disabled tombstone; kept as the historical record. Existing DBs flipped via " +
+			"AllanimeOkruMerge.",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 90,
 	},
 	{
-		Name: "okru", Status: domain.StatusEnabled,
-		Reason: "AllAnime 'Ok' sources via ok.ru CDN (clock-free)",
-		Description: "Reuses AllAnime's GraphQL discovery (api.allanime.day) and resolves ONLY its " +
-			"ok.ru ('Ok') sources via ok.ru data-options metadata → okcdn.ru HLS, bypassing the " +
-			"Cloudflare-Turnstile-walled /apivtwo/clock endpoint that broke allanime. EN sub/dub, " +
-			"hardsubbed (ok.ru has no soft-sub track).",
-		// sub_delivery "unknown": unverifiable by the 2026-06-29 subprobe (stream
-		// stage down). ok.ru has no soft-sub track so subs are *likely* burned-in,
-		// but we never confirmed it — don't assert hard.
+		Name: "allanime-okru", Status: domain.StatusEnabled,
+		Reason: "AllAnime discovery + ok.ru ('Ok') CDN streams (clock-free)",
+		Description: "Folded okru+allanime (2026-07-06). Reuses AllAnime's GraphQL discovery " +
+			"(api.allanime.day) and resolves ONLY its ok.ru ('Ok') sources via ok.ru data-options " +
+			"metadata → okcdn.ru HLS, bypassing the Cloudflare-Turnstile-walled /apivtwo/clock " +
+			"endpoint. EN sub/dub, hardsubbed (ok.ru has no soft-sub track).",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 35,
 	},
@@ -256,9 +251,8 @@ func intrinsicGroup(name string) string {
 // microservice (EN failover chain + 18+ orchestrator). Like Group, it is
 // intrinsic — derived from the name, never operator-editable.
 var scraperOperatedNames = map[string]bool{
-	"gogoanime": true, "animepahe": true, "allanime": true, "animefever": true,
+	"gogoanime": true, "animepahe": true, "allanime": true, "allanime-okru": true, "animefever": true,
 	"miruro": true, "nineanime": true, "animekai": true, "18anime": true,
-	"okru": true,
 }
 
 func isScraperOperated(name string) bool { return scraperOperatedNames[name] }

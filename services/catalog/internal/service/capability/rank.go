@@ -76,7 +76,7 @@ func variantsFromTraits(row domain.ScraperProvider) []domain.Variant {
 // displayName title-cases a provider id for UI.
 func displayName(provider string) string {
 	known := map[string]string{
-		"allanime": "AllAnime", "okru": "OK.ru", "gogoanime": "GogoAnime", "animepahe": "AnimePahe",
+		"allanime": "AllAnime", "allanime-okru": "AllAnime (OK.ru)", "gogoanime": "GogoAnime", "animepahe": "AnimePahe",
 		"animefever": "AnimeFever", "miruro": "Miruro", "nineanime": "9anime",
 		"animekai": "AnimeKai", "18anime": "18anime",
 	}
