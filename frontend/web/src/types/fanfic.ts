@@ -56,6 +56,8 @@ export interface Fanfic {
   model: string
   token_usage: number
   status: 'generating' | 'complete' | 'failed'
+  /** Set when status:'failed' (Go: ErrorMsg string `json:"error,omitempty"`). */
+  error?: string
   created_at: string
 }
 

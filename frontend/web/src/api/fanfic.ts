@@ -98,17 +98,32 @@ export const fanficApi = {
     // here to match it exactly — same scheme as utils/authBeacon.ts, the
     // other raw-fetch-with-Bearer-token call site in this codebase.
     const base = apiClient.defaults.baseURL ?? '/api'
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (auth.token) {
-      headers.Authorization = `Bearer ${auth.token}`
+
+    async function attempt(token: string | null): Promise<Response> {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) {
+        headers.Authorization = `Bearer ${token}`
+      }
+      return fetch(`${base}/fanfic/generate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(input),
+        credentials: 'include',
+        signal,
+      })
     }
-    const res = await fetch(`${base}/fanfic/generate`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(input),
-      credentials: 'include',
-      signal,
-    })
+
+    let res = await attempt(auth.token)
+    if (res.status === 401) {
+      // Safe to retry: a 401 is rejected at the gateway JWT middleware BEFORE
+      // it reaches the fanfic generation logic, so no fanfic row is created
+      // on a rejected attempt — refreshing and retrying once cannot
+      // double-generate.
+      const refreshed = await auth.refreshAccessToken()
+      if (refreshed) {
+        res = await attempt(auth.token)
+      }
+    }
     if (!res.ok || !res.body) {
       handlers.onError?.(`HTTP ${res.status}`)
       return
@@ -124,13 +139,19 @@ export const fanficApi = {
       buffer = rest
       for (const evt of events) handleSSEEvent(evt, handlers)
     }
-    // Flush any bytes the decoder was holding back mid multi-byte sequence.
-    // The server always terminates its last event with a trailing "\n\n"
-    // (see services/fanfic/internal/handler/fanfic.go's emit closure), so a
-    // well-formed stream has already fired every event by this point; a
-    // non-empty `buffer` here means the connection ended mid-event (client
-    // abort, proxy cutoff) and there is no complete event left to dispatch.
+    // Final flush: emit any bytes the stream-mode decoder was holding back
+    // for a pending multi-byte sequence. A well-formed stream terminates its
+    // last event with a trailing "\n\n" (see services/fanfic/internal/
+    // handler/fanfic.go's emit closure) and so has already dispatched every
+    // event inside the loop above; this is a safety net for a connection
+    // that ends mid-event (client abort, proxy cutoff) without that
+    // terminator — force one so parseSSEBuffer treats the dangling event as
+    // complete and we still get to dispatch it.
     buffer += decoder.decode()
+    if (buffer) {
+      const { events } = parseSSEBuffer(buffer + '\n\n')
+      for (const evt of events) handleSSEEvent(evt, handlers)
+    }
   },
 
   /** GET /api/fanfic?page=&limit= */
