@@ -141,26 +141,33 @@ latency and a throughput sample:
 1. **Admin health feed** (`/scraper/health/admin`, gateway
    `/api/admin/scraper/health`): the enriched DTO gains a `last_tick_metrics`
    field passed through from the row. Always populated regardless of dashboard.
-2. **Grafana** — the **"Provider Roster & Playability"** table panel in
-   `playback-health.json` is a **PostgreSQL-datasource** panel already selecting
-   from `stream_providers`. Extend its SQL to project the jsonb fields as
-   columns — **no new Prometheus gauges required**:
+2. **Grafana** — a **new dedicated table panel** `"Last Tick Metrics"`, placed
+   **immediately after** the existing `"Provider Roster & Playability"` panel in
+   the same `Roster` row of `playback-health.json`. It is a **PostgreSQL-datasource**
+   panel selecting straight from `stream_providers` — **no new Prometheus gauges
+   required**, and it stays decoupled from the roster panel (which already merges a
+   ClickHouse playability target, so widening it would be fiddly):
 
    ```sql
-   SELECT name AS provider,
-          "group" AS "Group",
-          CASE policy WHEN 'auto' THEN 'yes (auto)' WHEN 'manual' THEN 'no (manual)' END AS "Policy",
-          round((last_tick_metrics->>'warmup_ms')::numeric  / 1000, 1) AS "Warmup s",
-          round((last_tick_metrics->>'resolve_ms')::numeric / 1000, 2) AS "Resolve s",
+   SELECT name AS "Provider",
+          round((last_tick_metrics->>'warmup_ms')::numeric      / 1000, 1) AS "Warmup s",
+          round((last_tick_metrics->>'resolve_ms')::numeric     / 1000, 2) AS "Resolve s",
+          round((last_tick_metrics->>'validate_ms')::numeric    / 1000, 2) AS "Validate s",
           round((last_tick_metrics->>'throughput_kbps')::numeric / 1000, 1) AS "Speed Mbps",
-          last_tick_metrics->>'cdn_host' AS "CDN"
+          last_tick_metrics->>'cdn_host'  AS "CDN",
+          last_tick_metrics->>'quality'   AS "Quality",
+          (last_tick_metrics->>'at')::timestamptz AS "Last tick"
    FROM stream_providers
-   ...
+   WHERE last_tick_metrics IS NOT NULL
+   ORDER BY "group", name;
    ```
 
-   Column formatting (units, null → "—" for HTTP warmup) via SQL `round`/`coalesce`
-   + Grafana field overrides. The panel already merges a ClickHouse playability
-   target on the `provider` key; the new columns ride the existing Postgres target.
+   Positioning: splice the new panel object into the `panels` array right after the
+   roster panel and set its `gridPos.y` just below the roster's (shift the panels
+   below it down by the new panel's height). Column formatting (units, `NULL` →
+   "—" for HTTP `Warmup s`) via SQL `coalesce`/`round` + Grafana field overrides.
+   Rows appear only once a provider has been probed under the new pipeline
+   (`WHERE last_tick_metrics IS NOT NULL`).
 
 ## Testing
 
