@@ -53,6 +53,9 @@ interface GenerateFormVm {
   rating: string
   onRatingChange: (v: string) => Promise<void>
   prompt: string
+  MAX_PROMPT: number
+  promptLength: number
+  promptOverLimit: boolean
   canGenerate: boolean
   buildInput: () => unknown
   onSubmit: () => void
@@ -123,6 +126,28 @@ describe('GenerateForm', () => {
       vm.addCustomTag()
     }
     expect(vm.selectedTags.length).toBe(vm.MAX_TAGS)
+  })
+
+  it('blocks generation once the prompt exceeds the 2000-char cap', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as GenerateFormVm
+
+    vm.selectAnime({ id: 'anime-1', shikimori_id: '123', name: 'Test Anime', poster_url: 'http://x/p.jpg' })
+    vm.prompt = 'a'.repeat(2000)
+    await wrapper.vm.$nextTick()
+    expect(vm.promptLength).toBe(2000)
+    expect(vm.promptOverLimit).toBe(false)
+    expect(vm.canGenerate).toBe(true)
+
+    vm.prompt = 'a'.repeat(2001)
+    await wrapper.vm.$nextTick()
+    expect(vm.promptLength).toBe(2001)
+    expect(vm.promptOverLimit).toBe(true)
+    expect(vm.canGenerate).toBe(false)
+
+    const button = wrapper.findAll('button').find((b) => b.text().includes(ru.fanfic.form.generate))
+    expect(button?.attributes('disabled')).toBeDefined()
   })
 
   it('gates the Explicit rating behind a confirm dialog', async () => {

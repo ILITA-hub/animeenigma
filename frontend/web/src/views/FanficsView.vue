@@ -108,6 +108,20 @@ function onRemoveFanfic(id: string): void {
     readerFanfic.value = null
   }
 }
+
+// Exposed for src/views/__tests__/FanficsView.spec.ts — the streaming state
+// lives entirely in this component (Tabs only mounts one of #generate/
+// #library at a time, so a plain mount+DOM-only test can't reach the
+// SSE-driven reactive state or the `libraryGridRef` seam directly).
+defineExpose({
+  activeTab,
+  generating,
+  content,
+  genTitle,
+  genError,
+  libraryGridRef,
+  onGenerate,
+})
 </script>
 
 <template>

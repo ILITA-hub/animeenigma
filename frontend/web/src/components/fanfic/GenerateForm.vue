@@ -35,6 +35,7 @@ import type {
 
 const MAX_CHARACTERS = 6
 const MAX_TAGS = 8
+const MAX_PROMPT = 2000
 
 const props = withDefaults(defineProps<{ disabled?: boolean }>(), { disabled: false })
 const emit = defineEmits<{ generate: [input: GenerateInput] }>()
@@ -238,8 +239,21 @@ async function onRatingChange(value: string | number): Promise<void> {
 
 const prompt = ref('')
 
+// Rune-ish count (spread iterates by code point) to track the backend's
+// utf8.RuneCountInString(r.Prompt) > 2000 cap (services/fanfic/internal/
+// domain/request.go) closely enough — plain JS `.length`/`maxlength` count
+// UTF-16 code units, which over-count for astral-plane characters (emoji,
+// some CJK). `maxlength="2000"` on the textarea below is a coarse extra
+// guard; this is the authoritative one.
+const promptLength = computed(() => [...prompt.value].length)
+const promptOverLimit = computed(() => promptLength.value > MAX_PROMPT)
+
 const canGenerate = computed(
-  () => !!selectedAnime.value && prompt.value.trim().length > 0 && !props.disabled,
+  () =>
+    !!selectedAnime.value &&
+    prompt.value.trim().length > 0 &&
+    !promptOverLimit.value &&
+    !props.disabled,
 )
 
 function buildInput(): GenerateInput {
@@ -284,6 +298,9 @@ defineExpose({
   onRatingChange,
   onLanguageChange,
   prompt,
+  MAX_PROMPT,
+  promptLength,
+  promptOverLimit,
   canGenerate,
   buildInput,
   onSubmit,
@@ -432,9 +449,16 @@ defineExpose({
       <textarea
         v-model="prompt"
         rows="4"
+        maxlength="2000"
         class="w-full rounded-lg bg-white/5 border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 resize-y"
         :placeholder="t('fanfic.form.promptPlaceholder')"
       ></textarea>
+      <div
+        class="mt-1 text-right text-xs"
+        :class="promptOverLimit ? 'text-destructive' : 'text-muted-foreground'"
+      >
+        {{ promptLength }}/{{ MAX_PROMPT }}
+      </div>
     </div>
 
     <div class="flex justify-end">
