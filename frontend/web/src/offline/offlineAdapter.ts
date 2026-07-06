@@ -64,7 +64,7 @@ export function offlineCapabilityReport(p: OfflinePlayback): CapabilityReport {
     anime_id: p.animeId,
     families: [
       {
-        family: 'offline',
+        family: 'others',
         providers: [
           {
             provider: OFFLINE_PROVIDER_ID,

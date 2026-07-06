@@ -36,7 +36,7 @@ describe('useProviderResolver', () => {
         },
       }),
     }
-    const resolver = makeResolver({ scraperApi, familyOf: () => 'ourenglish' } as any)
+    const resolver = makeResolver({ scraperApi, groupOf: () => 'en' } as any)
     const eps = await resolver.listEpisodes('allanime-okru', 'anime-uuid')
     expect(eps[0].number).toBe(1)
     const stream = await resolver.resolveStream('allanime-okru', 'anime-uuid', eps[0], {
@@ -80,7 +80,7 @@ describe('useProviderResolver', () => {
         },
       }),
     }
-    const resolver = makeResolver({ scraperApi, familyOf: () => 'ourenglish' } as any)
+    const resolver = makeResolver({ scraperApi, groupOf: () => 'en' } as any)
     const eps = await resolver.listEpisodes('gogoanime', 'anime-uuid')
     const stream = await resolver.resolveStream('gogoanime', 'anime-uuid', eps[0], {
       audio: 'sub',
@@ -114,7 +114,7 @@ describe('useProviderResolver', () => {
         },
       }),
     }
-    const resolver = makeResolver({ scraperApi, familyOf: () => 'ourenglish' } as any)
+    const resolver = makeResolver({ scraperApi, groupOf: () => 'en' } as any)
     const eps = await resolver.listEpisodes('allanime-okru', 'uuid')
     const stream = await resolver.resolveStream('allanime-okru', 'uuid', eps[0], {
       audio: 'sub', lang: 'en', provider: 'allanime-okru', server: 'Yt-mp4', team: null,
@@ -186,7 +186,7 @@ describe('useProviderResolver', () => {
         data: { data: { url: 'http://x/h.m3u8', referer: 'https://18anime.ref', is_hls: true, quality: '720p' } },
       }),
     }
-    const resolver = makeResolver({ scraperApi, anime18Api, familyOf: () => undefined } as any)
+    const resolver = makeResolver({ scraperApi, anime18Api, groupOf: () => undefined } as any)
     const eps = await resolver.listEpisodes('18anime', 'uuid')
     expect(anime18Api.getEpisodes).toHaveBeenCalledWith('uuid')
     expect(scraperApi.getEpisodes).not.toHaveBeenCalled()
@@ -301,7 +301,7 @@ describe('useProviderResolver', () => {
         ] } },
       }),
     }
-    const resolver = makeResolver({ scraperApi, hanimeApi, familyOf: () => undefined } as any)
+    const resolver = makeResolver({ scraperApi, hanimeApi, groupOf: () => undefined } as any)
     const eps = await resolver.listEpisodes('hanime', 'uuid')
     expect(hanimeApi.getEpisodes).toHaveBeenCalledWith('uuid')
     expect(scraperApi.getEpisodes).not.toHaveBeenCalled()
@@ -357,7 +357,7 @@ describe('useProviderResolver', () => {
         },
       }),
     }
-    const resolver = makeResolver({ scraperApi, familyOf: () => 'ourenglish' } as any)
+    const resolver = makeResolver({ scraperApi, groupOf: () => 'en' } as any)
     const eps = await resolver.listEpisodes('gogoanime', 'anime-1')
     const res = await resolver.resolveStream('gogoanime', 'anime-1', eps[0], {
       audio: 'sub',

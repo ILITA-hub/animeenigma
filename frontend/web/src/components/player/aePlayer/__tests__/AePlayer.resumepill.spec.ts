@@ -17,7 +17,7 @@ const gogoCap = {
 }
 const report: CapabilityReport = {
   anime_id: 'anime-uuid',
-  families: [{ family: 'ourenglish', providers: [gogoCap] }],
+  families: [{ family: 'others', providers: [gogoCap] }],
 }
 
 vi.mock('@/composables/aePlayer/useCapabilities', () => ({

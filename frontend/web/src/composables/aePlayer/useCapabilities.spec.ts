@@ -9,14 +9,14 @@ const report: CapabilityReport = {
   anime_id: 'uuid-1',
   families: [
     {
-      family: 'ourenglish',
+      family: 'others',
       providers: [
         { ...feed, provider: 'gogoanime', display_name: 'Gogoanime', variants: [] },
         { ...feed, provider: 'allanime', display_name: 'AllAnime', variants: [] },
       ],
     },
     {
-      family: 'kodik',
+      family: 'others',
       providers: [
         { ...feed, provider: 'kodik', display_name: 'Kodik', group: 'ru', variants: [] },
       ],

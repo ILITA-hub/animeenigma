@@ -29,8 +29,8 @@ const gogoCap = {
 const kodikReport: CapabilityReport = {
   anime_id: 'anime-uuid',
   families: [
-    { family: 'kodik', providers: [kodikCap] },
-    { family: 'ourenglish', providers: [gogoCap] },
+    { family: 'others', providers: [kodikCap] },
+    { family: 'others', providers: [gogoCap] },
   ],
 }
 

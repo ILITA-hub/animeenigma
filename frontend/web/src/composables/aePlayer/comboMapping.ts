@@ -4,11 +4,11 @@ import type { Combo, AudioKind, TrackLang } from '@/types/aePlayer'
 type LegacyPlayer = WatchCombo['player']
 
 /** Map a granular unified provider id -> coarse legacy WatchCombo.player (or null).
- *  EN-chain membership is backend-driven: pass the provider's capability `family`
- *  (from familyOfProvider) — family 'ourenglish' ⇒ 'english'. The remaining
- *  single-provider families stay keyed on id. */
-export function providerToLegacyPlayer(providerId: string, family?: string): LegacyPlayer | null {
-  if (family === 'ourenglish') return 'english'
+ *  EN-chain membership is backend-driven: pass the provider's capability `group`
+ *  (from groupOfProvider) — group 'en' ⇒ 'english'. The remaining single-provider
+ *  families stay keyed on id. */
+export function providerToLegacyPlayer(providerId: string, group?: string): LegacyPlayer | null {
+  if (group === 'en') return 'english'
   switch (providerId) {
     case 'kodik': return 'kodik'
     case 'ae': return 'ae'
@@ -30,8 +30,8 @@ export function clampLangForAudio(audio: AudioKind, lang: TrackLang): TrackLang 
 }
 
 /** Map a unified Combo -> legacy WatchCombo for persistence/resolve. Null if provider unmappable. */
-export function comboToWatchCombo(combo: Combo, family?: string): WatchCombo | null {
-  const player = providerToLegacyPlayer(combo.provider, family)
+export function comboToWatchCombo(combo: Combo, group?: string): WatchCombo | null {
+  const player = providerToLegacyPlayer(combo.provider, group)
   if (!player) return null
   return {
     player,

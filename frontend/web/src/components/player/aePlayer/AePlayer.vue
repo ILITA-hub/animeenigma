@@ -473,7 +473,7 @@ import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
 import { pickSmartDefault, pickRawBiased, pickSelectableFallback } from '@/composables/aePlayer/smartDefault'
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities, flattenCapabilities } from '@/composables/aePlayer/useCapabilities'
-import { rowsFromReport, familyOfProvider } from '@/composables/aePlayer/useProviderFeed'
+import { rowsFromReport, groupOfProvider } from '@/composables/aePlayer/useProviderFeed'
 import { GROUP_LANGS, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
 import { pickEpisodeForProvider, shouldReselectEpisode } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
@@ -582,7 +582,7 @@ const engine = useVideoEngine(videoRef, state.hackerMode)
 // Guard point 1 — resolver. Offline: a ProviderResolver that reads local
 // downloads instead of hitting any network API (episodes + stream URLs resolve
 // to /__offline/… paths). Live: the real multi-provider resolver, unchanged.
-const resolver = props.offline ? makeOfflineResolver(props.offline) : useProviderResolver((id) => familyOfProvider(report.value, id))
+const resolver = props.offline ? makeOfflineResolver(props.offline) : useProviderResolver((id) => groupOfProvider(report.value, id))
 const { t } = useI18n()
 const toast = useToast()
 const { isMobile, isCoarse } = useMobilePlayer()
@@ -973,7 +973,7 @@ const buildAvailable = (): WatchCombo[] => {
   for (const fam of rep.families) {
     for (const cap of fam.providers ?? []) {
       if (cap.state === 'no_content') continue
-      const player = providerToLegacyPlayer(cap.provider, fam.family)
+      const player = providerToLegacyPlayer(cap.provider, cap.group)
       if (!player) continue
       const langs = GROUP_LANGS[cap.group]
       const audios = [...new Set((cap.audios ?? []).map((a) => (a === 'dub' ? 'dub' : 'sub')))]
@@ -1143,7 +1143,7 @@ const tracking = useWatchTracking(
       void loadEpisodeProgress()
     },
   },
-  () => comboToWatchCombo(state.combo.value, familyOfProvider(report.value, state.combo.value.provider)),
+  () => comboToWatchCombo(state.combo.value, groupOfProvider(report.value, state.combo.value.provider)),
 )
 
 // ─── Watch-Together create seed ──────────────────────────────────────────────

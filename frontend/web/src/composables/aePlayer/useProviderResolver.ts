@@ -8,8 +8,8 @@
  *
  * Wired adapters
  * ──────────────
- * • scraperAdapter  — covers the EN scraper chain (capability family "ourenglish",
- *   NOT 18anime) using scraperApi.getEpisodes / getServers / getStream (resp.data.data envelope).
+ * • scraperAdapter  — covers the EN scraper chain (capability group "en", NOT
+ *   18anime) using scraperApi.getEpisodes / getServers / getStream (resp.data.data envelope).
  * • anime18Adapter  — covers '18anime' via the SEPARATE anime18Api backend
  *   (/anime18/* routes), NOT the scraper chain. Uses anime18Api.getEpisodes /
  *   getStream (resp.data?.data || resp.data envelope).
@@ -223,8 +223,8 @@ export interface ResolverDeps {
   aeApi?: typeof aeApi
   hanimeApi?: typeof hanimeApi
   animejoyApi?: typeof animejoyApi
-  /** provider id → backend family (from the capability feed). Feed-driven EN-chain routing. */
-  familyOf?: (providerId: string) => string | undefined
+  /** provider id → backend group (from the capability feed). Feed-driven EN-chain routing. */
+  groupOf?: (providerId: string) => string | undefined
 }
 
 // ─── Adapters ────────────────────────────────────────────────────────────────
@@ -571,7 +571,7 @@ export interface ProviderResolver {
  *
  * Dispatching rules:
  * - provider === 'kodik'     → kodikAdapter (requires deps.kodikApi)
- * - familyOf(provider) === 'ourenglish' → scraperAdapter (requires deps.scraperApi)
+ * - groupOf(provider) === 'en' → scraperAdapter (requires deps.scraperApi)
  * - provider === '18anime'   → anime18Adapter via anime18Api (/anime18/* backend,
  *                              NOT the EN scraper chain; requires deps.anime18Api)
  * - provider === 'hanime'    → hanimeAdapter via hanimeApi (/hanime/* catalog
@@ -598,7 +598,7 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
       return makeKodikAdapter(deps.kodikApi)
     }
 
-    if (deps.familyOf?.(provider) === 'ourenglish') {
+    if (deps.groupOf?.(provider) === 'en') {
       if (!deps.scraperApi) {
         throw new NotAvailableError(provider, 'not available (scraperApi dep missing)')
       }
@@ -666,6 +666,6 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
  * `useProviderResolver()` — composable that wires the real clients.
  * Call this inside a Vue setup context.
  */
-export function useProviderResolver(familyOf?: (id: string) => string | undefined): ProviderResolver {
-  return makeResolver({ scraperApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi, familyOf })
+export function useProviderResolver(groupOf?: (id: string) => string | undefined): ProviderResolver {
+  return makeResolver({ scraperApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi, groupOf })
 }

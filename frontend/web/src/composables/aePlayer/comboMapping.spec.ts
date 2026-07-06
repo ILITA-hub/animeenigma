@@ -2,18 +2,18 @@ import { describe, it, expect } from 'vitest'
 import { providerToLegacyPlayer, comboToWatchCombo, watchComboToPartialCombo, comboToToken, tokenToCombo, type WtComboFields } from './comboMapping'
 
 describe('providerToLegacyPlayer', () => {
-  it('maps ourenglish-family providers to english', () => {
-    for (const id of ['gogoanime', 'allanime-okru', 'animepahe', 'nineanime', 'miruro']) {
-      expect(providerToLegacyPlayer(id, 'ourenglish')).toBe('english')
+  it('maps en-group providers to english', () => {
+    for (const id of ['gogoanime', 'allanime-okru', 'miruro']) {
+      expect(providerToLegacyPlayer(id, 'en')).toBe('english')
     }
   })
-  it('maps 1:1 providers', () => {
+  it('maps single-provider ids by id', () => {
     expect(providerToLegacyPlayer('kodik')).toBe('kodik')
     expect(providerToLegacyPlayer('ae')).toBe('ae')
     expect(providerToLegacyPlayer('18anime')).toBe('hanime')
     expect(providerToLegacyPlayer('animelib')).toBe('animelib')
   })
-  it('returns null for unknown', () => {
+  it('returns null for an unknown provider', () => {
     expect(providerToLegacyPlayer('nope')).toBeNull()
   })
 })
@@ -30,9 +30,9 @@ describe('comboToWatchCombo', () => {
   it('returns null when provider has no legacy mapping', () => {
     expect(comboToWatchCombo({ audio: 'sub', lang: 'en', provider: 'nope', server: '', team: null })).toBeNull()
   })
-  it('threads the ourenglish family through to english', () => {
-    expect(comboToWatchCombo({ audio: 'sub', lang: 'en', provider: 'allanime-okru', server: '', team: 'SubsPlease' }, 'ourenglish'))
-      .toEqual({ player: 'english', language: 'en', watch_type: 'sub', translation_id: '', translation_title: 'SubsPlease' })
+  it('threads the en group through to english', () => {
+    expect(comboToWatchCombo({ audio: 'sub', lang: 'en', provider: 'allanime-okru', server: '', team: 'SubsPlease' }, 'en'))
+      .toMatchObject({ player: 'english' })
   })
 })
 

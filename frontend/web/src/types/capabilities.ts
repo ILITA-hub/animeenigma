@@ -7,7 +7,7 @@ export interface CapabilityReport {
 }
 
 export interface SourceFamily {
-  family: string // 'ourenglish' | 'kodik' | 'animelib' | 'hanime'
+  family: '18+' | 'others' | 'aeProvider'
   providers: ProviderCap[]
 }
 

@@ -44,14 +44,15 @@ export function rowsFromReport(report: CapabilityReport | null, filter: RowFilte
   return rows.sort((a, b) => b.order - a.order)
 }
 
-/** Provider id → its backend `family` ('ourenglish' | 'kodik' | …), read straight
- *  from the capability feed. Single source of truth for "which backend serves this
- *  provider" — the FE no longer hardcodes provider-id membership lists. */
-export function familyOfProvider(report: CapabilityReport | null, providerId: string): string | undefined {
+/** Provider id → its backend `group` ('en' | 'ru' | 'adult' | 'firstparty'), read
+ *  straight from the capability feed. Single source of truth for "which language
+ *  facet / backend serves this provider" — the FE no longer reads the coarse
+ *  `family` label. */
+export function groupOfProvider(report: CapabilityReport | null, providerId: string): string | undefined {
   if (!report || !Array.isArray(report.families)) return undefined
   for (const fam of report.families) {
     for (const cap of fam.providers ?? []) {
-      if (cap.provider === providerId) return fam.family
+      if (cap.provider === providerId) return cap.group
     }
   }
   return undefined

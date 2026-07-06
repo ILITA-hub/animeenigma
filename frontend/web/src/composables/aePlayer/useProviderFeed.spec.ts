@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { rowsFromReport, familyOfProvider } from '@/composables/aePlayer/useProviderFeed'
+import { rowsFromReport, groupOfProvider } from '@/composables/aePlayer/useProviderFeed'
 import type { CapabilityReport } from '@/types/capabilities'
 
 const report: CapabilityReport = {
@@ -102,21 +102,23 @@ describe('rowsFromReport', () => {
   })
 })
 
-const familyReport = {
+const groupReport = {
   anime_id: 'x',
   families: [
-    { family: 'ourenglish', providers: [{ provider: 'gogoanime' }, { provider: 'allanime-okru' }] },
-    { family: 'kodik', providers: [{ provider: 'kodik' }] },
+    { family: 'others', providers: [
+      { provider: 'gogoanime', group: 'en' }, { provider: 'allanime-okru', group: 'en' },
+      { provider: 'kodik', group: 'ru' },
+    ] },
   ],
 } as unknown as CapabilityReport
 
-describe('familyOfProvider', () => {
-  it('returns the family for a known provider', () => {
-    expect(familyOfProvider(familyReport, 'allanime-okru')).toBe('ourenglish')
-    expect(familyOfProvider(familyReport, 'kodik')).toBe('kodik')
+describe('groupOfProvider', () => {
+  it('returns the group for a known provider', () => {
+    expect(groupOfProvider(groupReport, 'allanime-okru')).toBe('en')
+    expect(groupOfProvider(groupReport, 'kodik')).toBe('ru')
   })
   it('returns undefined for an unknown provider or null report', () => {
-    expect(familyOfProvider(familyReport, 'nope')).toBeUndefined()
-    expect(familyOfProvider(null, 'gogoanime')).toBeUndefined()
+    expect(groupOfProvider(groupReport, 'nope')).toBeUndefined()
+    expect(groupOfProvider(null, 'gogoanime')).toBeUndefined()
   })
 })
