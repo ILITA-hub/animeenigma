@@ -69,6 +69,23 @@ func TestFetchPlanNonOKStatus(t *testing.T) {
 	}
 }
 
+func TestFetchPlanDecodesEngine(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"data":{"plan":[
+			{"provider":"miruro","sample_size":1,"fail_fast":true,"engine":"browser"},
+			{"provider":"allanime","sample_size":3,"fail_fast":false,"engine":"http"}]}}`))
+	}))
+	defer srv.Close()
+
+	entries, err := FetchPlan(context.Background(), srv.URL, srv.Client())
+	if err != nil {
+		t.Fatalf("FetchPlan: %v", err)
+	}
+	if len(entries) != 2 || entries[0].Engine != "browser" || entries[1].Engine != "http" {
+		t.Fatalf("engine not decoded: %+v", entries)
+	}
+}
+
 func TestPostVerdict(t *testing.T) {
 	var capturedBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

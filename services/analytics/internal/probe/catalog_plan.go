@@ -42,6 +42,7 @@ type PlanEntry struct {
 	Provider   string `json:"provider"`
 	SampleSize int    `json:"sample_size"`
 	FailFast   bool   `json:"fail_fast"`
+	Engine     string `json:"engine"`
 }
 
 // FetchPlan asks catalog which providers are due now and how to probe each.
