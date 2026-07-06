@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   standalone: { value: false },
   isAuthenticated: false,
   wallVisible: false,
+  gachaVisible: false,
 }))
 
 vi.mock('@/offline/flag', () => ({ offlineDownloadsEnabled: true }))
@@ -13,6 +14,13 @@ vi.mock('@/utils/profileWallGate', () => ({
   useProfileWallVisible: () => ({
     get value() {
       return h.wallVisible
+    },
+  }),
+}))
+vi.mock('@/utils/gachaGate', () => ({
+  useGachaVisible: () => ({
+    get value() {
+      return h.gachaVisible
     },
   }),
 }))
@@ -42,6 +50,7 @@ beforeEach(() => {
   h.standalone.value = false
   h.isAuthenticated = false
   h.wallVisible = false
+  h.gachaVisible = false
 })
 
 describe('pickSecretFeature', () => {
@@ -128,5 +137,23 @@ describe('admin override state', () => {
     applySecretFeatureAdminState(null)
     expect(isRouletteEnabled()).toBe(true)
     expect(new Set(rollKeys(200)).has('anidle')).toBe(true)
+  })
+})
+
+describe('gacha entry (dark-shipped, admin-only client gate)', () => {
+  it('is absent from the pool when gacha is not visible', () => {
+    h.gachaVisible = false
+    expect(new Set(rollKeys(200)).has('gacha')).toBe(false)
+  })
+
+  it('joins the pool once gacha is visible (client eligibility)', () => {
+    h.gachaVisible = true
+    expect(new Set(rollKeys(200)).has('gacha')).toBe(true)
+  })
+
+  it('stays out when admin-disabled even if gacha is visible (its shipped default)', () => {
+    h.gachaVisible = true
+    applySecretFeatureAdminState({ rouletteEnabled: true, disabledKeys: ['gacha'] })
+    expect(new Set(rollKeys(200)).has('gacha')).toBe(false)
   })
 })

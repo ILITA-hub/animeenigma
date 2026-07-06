@@ -9,6 +9,12 @@ import "time"
 // sentinel) so it can never collide with a frontend SECRET_FEATURES entry.
 const RouletteMasterKey = "__roulette__"
 
+// SecretFeatureDefaultsDisabled lists feature keys that should start DISABLED in
+// the roulette (an admin enables them later on the management page). They are
+// seeded insert-if-absent at startup, so an admin's later toggle persists across
+// restarts. gacha is dark-shipped, so it ships off until deliberately enabled.
+var SecretFeatureDefaultsDisabled = []string{"gacha"}
+
 // SecretFeatureFlag is one admin-managed on/off override for the secret-feature
 // roulette. Rows are sparse: a feature (or the master switch) with no row
 // defaults to ENABLED. The canonical feature roster + client-side eligibility

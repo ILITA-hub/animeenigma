@@ -44,6 +44,26 @@ func TestSecretFeatureRepository_SetAndGetAll(t *testing.T) {
 	assert.True(t, got["__roulette__"])
 }
 
+func TestSecretFeatureRepository_SeedDefault_InsertIfAbsent(t *testing.T) {
+	r := NewSecretFeatureRepository(setupSecretFeatureTestDB(t))
+	ctx := context.Background()
+
+	// Seeds when the key is absent.
+	require.NoError(t, r.SeedDefault(ctx, "gacha", false))
+	got, err := r.GetAll(ctx)
+	require.NoError(t, err)
+	assert.False(t, got["gacha"])
+
+	// An admin enables it later, then a restart re-runs the seed — the seed must
+	// NOT clobber the admin's choice.
+	require.NoError(t, r.Set(ctx, "gacha", true))
+	require.NoError(t, r.SeedDefault(ctx, "gacha", false))
+	got, err = r.GetAll(ctx)
+	require.NoError(t, err)
+	assert.True(t, got["gacha"], "seed must not override an existing (admin-set) value")
+	assert.Len(t, got, 1)
+}
+
 func TestSecretFeatureRepository_Set_UpsertsExisting(t *testing.T) {
 	r := NewSecretFeatureRepository(setupSecretFeatureTestDB(t))
 	ctx := context.Background()

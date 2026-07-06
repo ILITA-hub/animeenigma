@@ -33,6 +33,20 @@ func (r *SecretFeatureRepository) GetAll(ctx context.Context) (map[string]bool, 
 	return out, nil
 }
 
+// SeedDefault inserts a flag ONLY if the key has no row yet (insert-if-absent).
+// Used to ship a feature disabled-by-default without ever clobbering an admin's
+// later toggle: once a row exists (enabled or disabled), this is a no-op.
+func (r *SecretFeatureRepository) SeedDefault(ctx context.Context, key string, enabled bool) error {
+	flag := domain.SecretFeatureFlag{Key: key, Enabled: enabled}
+	err := r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&flag).Error
+	if err != nil {
+		return fmt.Errorf("seed secret feature flag %q: %w", key, err)
+	}
+	return nil
+}
+
 // Set upserts a single flag (master switch or a feature key).
 func (r *SecretFeatureRepository) Set(ctx context.Context, key string, enabled bool) error {
 	flag := domain.SecretFeatureFlag{Key: key, Enabled: enabled}

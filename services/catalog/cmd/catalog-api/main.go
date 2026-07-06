@@ -415,6 +415,13 @@ func main() {
 	collectionRepo := repo.NewCollectionRepository(db.DB)
 	// Secret-feature roulette admin config store.
 	secretFeatureRepo := repo.NewSecretFeatureRepository(db.DB)
+	// Seed roulette features that ship DISABLED (insert-if-absent, so an admin's
+	// later toggle on the management page survives restarts).
+	for _, k := range domain.SecretFeatureDefaultsDisabled {
+		if err := secretFeatureRepo.SeedDefault(context.Background(), k, false); err != nil {
+			log.Warnw("failed to seed disabled secret feature", "key", k, "error", err)
+		}
+	}
 
 	// Initialize services
 	catalogService := service.NewCatalogService(

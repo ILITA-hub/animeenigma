@@ -1,6 +1,7 @@
 import type { RouteLocationRaw } from 'vue-router'
 import { downloadsAppOnly } from '@/offline/downloadGate'
 import { useProfileWallVisible } from '@/utils/profileWallGate'
+import { useGachaVisible } from '@/utils/gachaGate'
 import { useAuthStore } from '@/stores/auth'
 
 /**
@@ -14,7 +15,7 @@ import { useAuthStore } from '@/stores/auth'
  * the admin management page (AdminSecretFeatures.vue) renders this roster.
  */
 export interface SecretFeature {
-  key: 'anidle' | 'status' | 'themes' | 'game' | 'downloads' | 'showcase-editor'
+  key: 'anidle' | 'status' | 'themes' | 'game' | 'gacha' | 'downloads' | 'showcase-editor'
   /** Navigation target for router.push (also the admin "direct link"). */
   to: RouteLocationRaw
   /** i18n key for the human label shown on the admin management page. */
@@ -30,6 +31,17 @@ export const SECRET_FEATURES: SecretFeature[] = [
   // roulette is their only surfaced entry point (always reachable directly).
   { key: 'themes', to: '/themes', labelKey: 'admin.secretFeatures.feature.themes', eligible: () => true },
   { key: 'game', to: '/game', labelKey: 'admin.secretFeatures.feature.game', eligible: () => true },
+  {
+    // Gacha «Лудка» — dark-shipped (admin-only until VITE_GACHA_ADMIN_ONLY=false),
+    // so client eligibility mirrors the gacha visibility gate: it only rolls for
+    // users who can actually reach /gacha. Seeded DISABLED in the backend
+    // (domain.SecretFeatureDefaultsDisabled) so it stays off in the roulette
+    // until an admin enables it on the management page.
+    key: 'gacha',
+    to: '/gacha',
+    labelKey: 'admin.secretFeatures.feature.gacha',
+    eligible: () => useGachaVisible().value,
+  },
   {
     // In the installed PWA downloads keep their normal nav link; only the
     // browser view treats them as a secret.
