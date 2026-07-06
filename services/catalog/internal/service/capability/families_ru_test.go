@@ -195,7 +195,8 @@ func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
 		domain.ScraperProvider{Name: "hanime", Status: domain.StatusEnabled, Group: "adult", SupportsRaw: true},
 	)
 
-	// kodik present, animelib errors (omitted), hanime present → order en,kodik,hanime
+	// kodik present, animelib errors (omitted), hanime present → regrouped into
+	// wire families ["others" (en+kodik), "18+" (hanime)]
 	s := NewService(db, nil, fakeCatalog{
 		kodik:     []domain.KodikTranslation{{ID: 1, Title: "T", Type: "voice"}},
 		anilibErr: errors.New("not on animelib"),
@@ -358,6 +359,23 @@ func TestBuildFamilies_AnimejoyBothLegsInOrder(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("families = %v, want %v", got, want)
+		}
+	}
+
+	// The merged "others" family must preserve the pre-regroup assembly order:
+	// EN (allanime) first, then the two AnimeJoy legs in the order buildFamilies
+	// appends them (sibnet, then allvideo) — NOT the arbitrary DB insertion order.
+	gotProviders := make([]string, len(fams[0].Providers))
+	for i, p := range fams[0].Providers {
+		gotProviders[i] = p.Provider
+	}
+	wantProviders := []string{"allanime", "animejoy-sibnet", "animejoy-allvideo"}
+	if len(gotProviders) != len(wantProviders) {
+		t.Fatalf("others providers = %v, want %v", gotProviders, wantProviders)
+	}
+	for i := range wantProviders {
+		if gotProviders[i] != wantProviders[i] {
+			t.Fatalf("others providers = %v, want %v (order must match EN, sibnet, allvideo)", gotProviders, wantProviders)
 		}
 	}
 }
