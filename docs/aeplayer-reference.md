@@ -127,8 +127,41 @@ to the wrong group silently breaks language filtering.
 mirrors Go `domain.CapabilityReport`). Consumed by `useCapabilities.ts`.
 
 ```ts
-ProviderCap { provider, display_name, state, selectable, hacker_only, order, group, audios, reason, variants, ... }
+ProviderCap { provider, display_name, state, selectable, hacker_only, order, group, audios, reason, variants, family, ... }
 ```
+
+### 4.1 The `family` field — collapsed taxonomy
+
+The wire `family` field categorizes providers by streaming model into exactly three
+values:
+
+| `family` | Members | streaming model |
+|----------|---------|-----------------|
+| `"18+"` | `hanime`, `18anime` | Adult content sources (18+ rating, hentai content type) |
+| `"others"` | EN scraper chain (`gogoanime`, `allanime`, `okru`, `miruro`, `nineanime`, `animepahe`), `kodik` (HLS), `animelib`, `animejoy-sibnet`, `animejoy-allvideo` | General catalog providers; EN/RU/JP subtitled or dubbed sources, backend-driven or iframe-embed |
+| `"aeProvider"` | `ae` | First-party self-hosted sources (MinIO storage); audio/language config is per-title, not per-provider |
+
+**Key distinction: `family` vs `group`.** `family` describes *streaming transport*;
+`group` (`'en'|'ru'|'adult'|'firstparty'`) describes *served language and content type
+for filtering and UX*. EN-chain failover routing keys off `group === 'en'`, **not** the
+family label — the `"others"` family includes both EN and RU providers. To add a new
+provider, set its `group` (affects language filters and subtitle availability); `family`
+groups it by technical capability.
+
+**Note on Kodik surfaces.** There are **two separate Kodik components** in the player
+ecosystem:
+
+1. **Standalone iframe** (`KodikPlayer.vue`) — the legacy "Classic Kodik" fallback
+   toggle on the anime page (`views/Anime.vue`). NOT part of aePlayer; never appears
+   in the capability feed. Mounted only when `VITE_AE_PLAYER_ENABLED=false` or as a
+   manual fallback option.
+2. **HLS provider in aePlayer** — the in-aePlayer Kodik provider, family `"others"`,
+   group `'ru'`. Lives in the capability feed like every other provider; resolves via
+   the scraper backend to Kodik HLS URLs. Distinct from the iframe surface above.
+
+Both Kodik surfaces are maintained; the capability feed only reflects the HLS provider.
+
+---
 
 **`ChipState`** (`'active' | 'recovering' | 'degraded' | 'no_content'`) — the real
 set. (Older notes saying `disabled/down/irrelevant/wip` are wrong.)
