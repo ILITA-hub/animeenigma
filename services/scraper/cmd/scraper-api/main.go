@@ -232,7 +232,25 @@ func main() {
 	// status (AUTO-484): enabled → auto-failover chain; degraded → registered but
 	// EXCLUDED from auto-failover (reachable only via an explicit `prefer` /
 	// hacker-mode pin, sorted last in the player); disabled → not registered.
+	// candidateProviders is the ordered EN failover roster. It is NOT a
+	// hand-maintained literal — registerByStatus appends each provider's name as
+	// it is constructed+registered below, so this slice is DERIVED from the actual
+	// wiring and can never drift from it. It drives the runtime re-gate, the
+	// wiring-invariant fatal, and the Prometheus reflection further down (all of
+	// which run AFTER every registerByStatus call, so the slice is fully
+	// populated by then). Registration order == failover order (CONTEXT.md D5).
+	// A disabled provider is still constructed + passed to registerByStatus (which
+	// skips its orchestrator registration but records the candidate name), matching
+	// the previous literal that listed enabled+degraded+disabled candidates alike.
+	var candidateProviders []string
+
+	// registerByStatus registers p into the EN orchestrator according to its DB
+	// status (AUTO-484): enabled → auto-failover chain; degraded → registered but
+	// EXCLUDED from auto-failover (reachable only via an explicit `prefer` /
+	// hacker-mode pin, sorted last in the player); disabled → not registered. In
+	// every case p's name joins candidateProviders (the derived EN roster above).
 	registerByStatus := func(p domain.Provider) {
+		candidateProviders = append(candidateProviders, p.Name())
 		meta := cfg.Providers.Meta(p.Name())
 		switch cfg.Providers.Status(p.Name()) {
 		case config.StatusDisabled:
@@ -603,16 +621,12 @@ func main() {
 	anime18Handler := handler.NewScraperHandler(adultOrch, cache, log)
 	anime18Handler.WithProvidersConfig(&cfg.Providers)
 
-	// Phase 19/28 candidate set — also drives the Phase-3 runtime re-gate below
-	// and the wiring-invariant + Prometheus-reflection blocks further down.
-	// (Moved up from the wiring-invariant block so the regate closure can range
-	// over it; the invariant block still reads this same slice.)
-	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
-	// → allanime → okru → miruro (28-04) → nineanime (28-05). (animefever removed 2026-07-05)
-	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "okru", "miruro", "nineanime"}
-	if cfg.AnimeKai.Enabled {
-		candidateProviders = append(candidateProviders, "animekai")
-	}
+	// candidateProviders is now fully populated: registerByStatus appended every
+	// constructed EN provider's name in failover order above (gogoanime → animepahe
+	// → allanime → okru → miruro → nineanime → animekai-if-enabled). It drives the
+	// Phase-3 runtime re-gate, the wiring-invariant fatal, and the Prometheus
+	// reflection below. No hand-maintained literal → it cannot drift from the
+	// actual registrations. (animefever removed from the binary 2026-07-05.)
 
 	// Phase 3 — runtime re-gate: each catalog refresh moves providers in/out of
 	// the orchestrator's degraded failover map without a restart. Only EN-group
@@ -652,17 +666,18 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Phase 19 wiring invariant — adapts the Phase 18 invariant to the
-	// flag-conditional shape. Candidates are: gogoanime + animepahe
-	// (unconditional) and animekai (gated by SCRAPER_ANIMEKAI_ENABLED). Each
-	// candidate the DB marks `disabled` is intentionally not registered, so the
-	// expected count counts only the registered (enabled OR degraded) ones. A
-	// future maintainer dropping any Register() call surfaces the regression at
-	// boot via this fatal.
-	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
-	// → allanime → okru → miruro (28-04) → nineanime (28-05). (animefever removed 2026-07-05)
-	// (candidateProviders is declared above the StartProvidersRefresher call so
-	// the Phase-3 re-gate closure can range over the same slice this block uses.)
+	// Phase 19 wiring invariant — now that candidateProviders is DERIVED from the
+	// registerByStatus calls (not a hand-maintained literal), the classic
+	// list-vs-registration drift is structurally impossible. This retained check
+	// guards the remaining invariant: every EN orchestrator registration must flow
+	// through registerByStatus (which is what appends the candidate name). Each
+	// candidate the DB marks `disabled` is skipped by registerByStatus, so
+	// expectedProviders counts only the not-disabled candidates; if that count ever
+	// diverges from the orchestrator's actual registrations — e.g. a future
+	// maintainer calls orchestrator.Register directly, bypassing the accumulator —
+	// this fatal surfaces it at boot.
+	// candidateProviders is accumulated above (failover order gogoanime → animepahe
+	// → allanime → okru → miruro → nineanime → animekai-if-enabled).
 	expectedProviders := 0
 	for _, name := range candidateProviders {
 		if cfg.Providers.IsRegistered(name) {
