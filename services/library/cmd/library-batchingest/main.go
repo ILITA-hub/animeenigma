@@ -72,6 +72,7 @@ func main() {
 		concurrency  = flag.Int("concurrency", 1, "number of files to transcode in parallel (CPU-bound; keep low)")
 		force        = flag.Bool("force", false, "re-encode + re-upload even if the episode row already exists")
 		dryRun       = flag.Bool("dry-run", false, "print the file→(shikimori,episode) mapping and exit without encoding")
+		audioLang    = flag.String("audio-lang", "", "preferred audio-track language ISO code (e.g. eng) for dual-audio DUB packs; empty = ffmpeg default (original audio)")
 	)
 	flag.Parse()
 
@@ -181,7 +182,7 @@ func main() {
 		sem <- struct{}{}
 		go func() {
 			defer func() { <-sem }()
-			res := ingestOne(ctx, log, transcoder, writer, episodeRepo, cfg.Minio.Bucket, j, *force)
+			res := ingestOne(ctx, log, transcoder, writer, episodeRepo, cfg.Minio.Bucket, j, *force, *audioLang)
 			outc <- res
 			results <- res.kind
 		}()
@@ -223,6 +224,7 @@ func ingestOne(
 	bucket string,
 	j fileJob,
 	force bool,
+	audioLang string,
 ) (out struct {
 	kind  string
 	shiki string
@@ -240,8 +242,8 @@ func ingestOne(
 		return
 	}
 
-	log.Infow("transcoding", "file", filepath.Base(j.path), "shikimori_id", j.shikimoriID, "episode", j.episode)
-	result, err := transcoder.Transcode(ctx, j.path)
+	log.Infow("transcoding", "file", filepath.Base(j.path), "shikimori_id", j.shikimoriID, "episode", j.episode, "audio_lang", audioLang)
+	result, err := transcoder.TranscodeWithOpts(ctx, j.path, ffmpeg.TranscodeOpts{AudioLang: audioLang})
 	if err != nil {
 		out.kind, out.msg = "fail", fmt.Sprintf("transcode %s: %v", filepath.Base(j.path), err)
 		return

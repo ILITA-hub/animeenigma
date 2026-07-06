@@ -126,6 +126,73 @@ type ffprobeOutput struct {
 	} `json:"format"`
 }
 
+// TranscodeOpts carries optional per-call knobs. The zero value reproduces
+// the historical behavior (ffmpeg's default stream selection), so every
+// existing caller — the encoder worker's RAW/JP autocache path in
+// particular — keeps its original-audio semantics untouched.
+type TranscodeOpts struct {
+	// AudioLang, when non-empty, is the ISO-639 language of the audio track
+	// to burn into the output (e.g. "eng"). It is used by the admin
+	// batch-ingest DUB path: source releases are dual-audio (JP + EN) with
+	// Japanese usually first, and ffmpeg's default selection ("most channels,
+	// else first") would pick Japanese. When a matching track exists we map it
+	// explicitly; when none matches we fall back to ffmpeg's default (so a
+	// single-language source still encodes rather than failing).
+	AudioLang string
+}
+
+// probedAudioStream is the slice of an ffprobe audio-stream record we read to
+// resolve a language → `-map 0:a:N` ordinal.
+type probedAudioStream struct {
+	Tags struct {
+		Language string `json:"language"`
+	} `json:"tags"`
+}
+
+type ffprobeAudioStreams struct {
+	Streams []probedAudioStream `json:"streams"`
+}
+
+// langMatches reports whether an ffprobe language tag denotes the same
+// language the caller asked for, tolerating the 2-letter / 3-letter / English
+// spellings common in release metadata (en/eng/english, ja/jpn/japanese, …).
+func langMatches(tag, want string) bool {
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	want = strings.ToLower(strings.TrimSpace(want))
+	if tag == "" || want == "" {
+		return false
+	}
+	if tag == want {
+		return true
+	}
+	norm := func(s string) string {
+		switch s {
+		case "en", "eng", "english":
+			return "eng"
+		case "ja", "jp", "jpn", "japanese":
+			return "jpn"
+		case "ru", "rus", "russian":
+			return "rus"
+		}
+		return s
+	}
+	return norm(tag) == norm(want)
+}
+
+// selectAudioOrdinal returns the 0-based AUDIO-stream ordinal (the N in
+// `-map 0:a:N`) of the first audio stream whose language tag matches want.
+// The input slice MUST be the audio streams in ffprobe order. Returns
+// (0, false) when nothing matches — the caller then omits `-map` and lets
+// ffmpeg pick its default audio.
+func selectAudioOrdinal(streams []probedAudioStream, want string) (int, bool) {
+	for i, s := range streams {
+		if langMatches(s.Tags.Language, want) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // ScopedTempDir creates a fresh per-call scratch directory for an ffmpeg
 // pass: it first ensures base exists (MkdirAll, best-effort — so a
 // configured-but-not-yet-created tmpdir doesn't fail every call), then
@@ -207,9 +274,43 @@ func (t *Transcoder) probe(ctx context.Context, sourcePath string) (int, int) {
 	return int(durFloat), int(brBps / 1000)
 }
 
+// audioOrdinalForLang runs ffprobe over the audio streams only and returns the
+// 0-based audio ordinal (the N in `-map 0:a:N`) of the first track whose
+// language tag matches lang. Returns (0, false) on any ffprobe/parse error or
+// when no track matches — the caller then omits `-map` and lets ffmpeg choose
+// its default audio, so a probe failure degrades gracefully rather than
+// dropping audio.
+func (t *Transcoder) audioOrdinalForLang(ctx context.Context, sourcePath, lang string) (int, bool) {
+	cmd := exec.CommandContext(ctx, t.cfg.FfprobePath,
+		"-v", "error",
+		"-select_streams", "a",
+		"-show_entries", "stream_tags=language",
+		"-print_format", "json",
+		sourcePath,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		if t.log != nil {
+			t.log.Warnw("ffprobe audio streams failed; using ffmpeg default audio",
+				"source", sourcePath, "error", err)
+		}
+		return 0, false
+	}
+	var parsed ffprobeAudioStreams
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		if t.log != nil {
+			t.log.Warnw("ffprobe audio streams parse failed; using ffmpeg default audio",
+				"source", sourcePath, "error", err)
+		}
+		return 0, false
+	}
+	return selectAudioOrdinal(parsed.Streams, lang)
+}
+
 // Transcode is the public entry. Creates a per-call temp dir, runs
 // ffprobe, computes the chosen bitrate, runs ffmpeg, returns the
-// Result on success.
+// Result on success. It preserves ffmpeg's default audio selection
+// (the RAW/JP autocache path relies on this original-audio behavior).
 //
 // On non-zero ffmpeg exit, returns an error containing the stderr tail
 // and DOES NOT clean up the temp dir (the encoder worker writes both
@@ -218,6 +319,14 @@ func (t *Transcoder) probe(ctx context.Context, sourcePath string) (int, int) {
 // os.RemoveAll(filepath.Dir(result.PlaylistPath)) AFTER the MinIO
 // upload completes.
 func (t *Transcoder) Transcode(ctx context.Context, sourcePath string) (*Result, error) {
+	return t.TranscodeWithOpts(ctx, sourcePath, TranscodeOpts{})
+}
+
+// TranscodeWithOpts is Transcode plus optional per-call knobs (opts). With the
+// zero-value opts it is byte-for-byte the old Transcode. When opts.AudioLang is
+// set it maps the matching audio track explicitly (the admin DUB batch-ingest
+// path); a non-matching source falls back to ffmpeg's default audio.
+func (t *Transcoder) TranscodeWithOpts(ctx context.Context, sourcePath string, opts TranscodeOpts) (*Result, error) {
 	tmp, err := ScopedTempDir(t.cfg.Tmpdir, "encode-")
 	if err != nil {
 		return nil, err
@@ -239,8 +348,22 @@ func (t *Transcoder) Transcode(ctx context.Context, sourcePath string) (*Result,
 	args := []string{
 		"-hide_banner", "-nostats", "-y",
 		"-i", sourcePath,
-		"-c:v", "libx264", "-preset", "veryfast",
 	}
+	// Explicit audio-track selection for the DUB ingest path. When a track in
+	// the requested language exists, map first video + that audio; otherwise
+	// leave the stream map unset so ffmpeg's default selection still produces
+	// output (a single-language source, or one lacking the requested dub).
+	if opts.AudioLang != "" {
+		if ord, ok := t.audioOrdinalForLang(ctx, sourcePath, opts.AudioLang); ok {
+			args = append(args, "-map", "0:v:0", "-map", fmt.Sprintf("0:a:%d", ord))
+		} else if t.log != nil {
+			t.log.Warnw("no audio track matched requested language; using ffmpeg default",
+				"lang", opts.AudioLang, "source", sourcePath)
+		}
+	}
+	args = append(args,
+		"-c:v", "libx264", "-preset", "veryfast",
+	)
 	if t.cfg.Threads > 0 {
 		args = append(args, "-threads", strconv.Itoa(t.cfg.Threads))
 	}
