@@ -202,14 +202,10 @@ func main() {
 	// budget and starve the chain before failover reaches a healthy provider.
 	orchestrator.SetProviderTimeout(cfg.ProviderTimeout)
 	log.Infow("per-provider failover budget configured", "timeout", cfg.ProviderTimeout.String())
-	// animepahe's stealth-scraper warm session cold-solves a Cloudflare
-	// Turnstile challenge (up to 30s) and idle-expires every 600s — far shorter
-	// than the 6h health-probe cadence — so it is ALWAYS cold at probe time.
-	// The shared 8s ProviderTimeout kills that cold solve before it finishes,
-	// marking animepahe perpetually down regardless of real health (see
-	// docs/issues/provider-recovery-log.md 2026-07-04). Give it its own budget.
-	orchestrator.SetProviderTimeoutOverride("animepahe", cfg.AnimepaheProviderTimeout)
-	log.Infow("animepahe per-provider timeout override configured", "timeout", cfg.AnimepaheProviderTimeout.String())
+	// The longer BrowserProviderTimeout override for engine=browser providers is
+	// applied AFTER the catalog config load below — engine is DB-driven, so the
+	// offline-default cfg.Providers reports every provider as http and would grant
+	// none of them the browser budget.
 
 	// Prefer DB-backed provider config from catalog (the runtime source of truth);
 	// fall back to the all-enabled offline default already in cfg if catalog is
@@ -225,6 +221,26 @@ func main() {
 			cfg.Providers = pc
 			log.Infow("loaded provider config from catalog",
 				"source", pc.Source, "disabled", pc.DisabledNames(), "degraded", pc.DegradedNames())
+		}
+	}
+
+	// Grant EVERY engine=browser provider the longer shared browser failover
+	// budget (BrowserProviderTimeout). A browser provider's stealth-scraper warm
+	// session cold-solves a Cloudflare Turnstile challenge (up to 30s) and idle-
+	// expires every 600s — far shorter than the 6h health-probe cadence — so it
+	// is ALWAYS cold at probe time, and the shared 8s ProviderTimeout kills that
+	// cold solve before it finishes, marking the provider perpetually down
+	// regardless of real health (animepahe 2026-07-04; miruro hit the identical
+	// trap 2026-07-06). The browser set is DERIVED from the DB roster (not a
+	// hardcoded per-name list), so a new browser provider inherits it and none
+	// can be silently forgotten. Fast HTTP providers keep the short 8s chain
+	// budget (ISS-022). Boot-time, matching the registration model above: an
+	// engine flip in the DB takes effect on the next restart.
+	if cfg.BrowserProviderTimeout > 0 {
+		for _, name := range cfg.Providers.BrowserEngineNames() {
+			orchestrator.SetProviderTimeoutOverride(name, cfg.BrowserProviderTimeout)
+			log.Infow("browser-engine per-provider timeout override configured",
+				"provider", name, "timeout", cfg.BrowserProviderTimeout.String())
 		}
 	}
 

@@ -175,3 +175,32 @@ func TestLoadProviders_GroupIntrinsic(t *testing.T) {
 		t.Fatal("expected error when explicit group != intrinsic group")
 	}
 }
+
+func TestBrowserEngineNames(t *testing.T) {
+	// Mixed roster: two browser-engine providers (out of KnownProviders order in
+	// the map), the rest HTTP or engine-unset. Expect only the browser ones,
+	// returned in canonical KnownProviders order.
+	metas := map[string]ProviderMeta{
+		"miruro":    {Name: "miruro", Status: StatusDegraded, Engine: EngineBrowser},
+		"animepahe": {Name: "animepahe", Status: StatusDegraded, Engine: EngineBrowser},
+		"okru":      {Name: "okru", Status: StatusEnabled, Engine: EngineHTTP},
+		"allanime":  {Name: "allanime", Status: StatusEnabled}, // engine unset ⇒ http
+	}
+	got := newProvidersConfig(metas, "test").BrowserEngineNames()
+	want := []string{"animepahe", "miruro"} // KnownProviders order: animepahe before miruro
+	if len(got) != len(want) {
+		t.Fatalf("BrowserEngineNames() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("BrowserEngineNames()[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
+		}
+	}
+
+	// The offline all-enabled fallback carries no engine info (DB-driven), so no
+	// provider is browser — guards the catalog-down boot path from wrongly
+	// granting the long budget to HTTP-path providers.
+	if names := allProvidersEnabled("default").BrowserEngineNames(); len(names) != 0 {
+		t.Fatalf("offline fallback BrowserEngineNames() = %v, want empty", names)
+	}
+}

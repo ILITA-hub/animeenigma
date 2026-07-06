@@ -237,6 +237,13 @@ services:
       # the request before failover reaches a healthy provider. 8s is generous
       # for a working provider (<1s typical) yet under the 15s caller budget.
       SCRAPER_PROVIDER_TIMEOUT: ${SCRAPER_PROVIDER_TIMEOUT:-8s}
+      # Longer per-provider budget for EVERY engine=browser provider (miruro,
+      # animepahe, gogoanime, nineanime, + any future one — derived from the DB
+      # roster, not hardcoded). Their stealth-scraper cold Cloudflare solve (up to
+      # 30s) overruns the 8s chain budget, so without this the 6h health probe
+      # always kills the cold solve and the provider reads perpetually "down".
+      # Fast HTTP providers keep the short 8s budget. 35s = 30s solve + margin.
+      SCRAPER_BROWSER_PROVIDER_TIMEOUT: ${SCRAPER_BROWSER_PROVIDER_TIMEOUT:-35s}
       TRACING_ENABLED: "true"
       # AR-EGRESS-01/03 — BE egress recorder. The scraper ships recorded outbound
       # effects (per-provider host/bytes) to analytics /internal/effects via this

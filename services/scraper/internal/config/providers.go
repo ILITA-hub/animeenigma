@@ -115,6 +115,22 @@ func (p ProvidersConfig) EngineOf(name string) string {
 	return EngineHTTP
 }
 
+// BrowserEngineNames returns the KnownProviders whose resolved engine is
+// EngineBrowser, in KnownProviders order. main.go uses it to grant every
+// Camoufox/stealth-sidecar provider the longer shared browser failover budget
+// (their cold Cloudflare solve overruns the short HTTP chain budget) without
+// hardcoding a per-name list — a new browser provider added to the DB roster is
+// picked up automatically, so none can be silently forgotten.
+func (p ProvidersConfig) BrowserEngineNames() []string {
+	out := []string{}
+	for _, name := range KnownProviders {
+		if p.EngineOf(name) == EngineBrowser {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // BaseURLOf returns the DB-configured mirror base URL for a provider (empty when
 // unset — callers fall back to the provider's built-in default).
 func (p ProvidersConfig) BaseURLOf(name string) string {

@@ -40,18 +40,23 @@ type Config struct {
 	// caller budget). Set 0 to disable the per-provider cap.
 	ProviderTimeout time.Duration
 
-	// AnimepaheProviderTimeout overrides ProviderTimeout for the animepahe
-	// provider only. animepahe is the sole solve_challenge=true provider (its
-	// stealth-scraper warm session must cold-solve a Cloudflare Turnstile
-	// challenge, up to STEALTH_CHALLENGE_SOLVE_TIMEOUT_MS = 30s default) AND its
-	// warm session idle-expires after STEALTH_SESSION_TTL_SECONDS (600s) — far
-	// shorter than the 6h health-probe cadence. Every scheduled probe therefore
-	// hits a cold solve, which the shared 8s ProviderTimeout always kills before
-	// it finishes, marking animepahe perpetually "down" regardless of whether it
-	// actually works (see docs/issues/provider-recovery-log.md 2026-07-04). Read
-	// from SCRAPER_ANIMEPAHE_PROVIDER_TIMEOUT; default 35s (30s solve budget +
-	// margin). Set 0 to fall back to the global ProviderTimeout.
-	AnimepaheProviderTimeout time.Duration
+	// BrowserProviderTimeout overrides ProviderTimeout for EVERY engine=browser
+	// provider (miruro, animepahe, gogoanime, nineanime, + any future one — the
+	// set is derived from the DB roster, not hardcoded, so a new browser provider
+	// inherits it automatically). A browser provider's stealth-scraper warm
+	// session must cold-solve a Cloudflare Turnstile challenge (up to
+	// STEALTH_CHALLENGE_SOLVE_TIMEOUT_MS = 30s default) AND idle-expires after
+	// STEALTH_SESSION_TTL_SECONDS (600s) — far shorter than the 6h health-probe
+	// cadence — so every scheduled probe hits a cold solve. The shared 8s
+	// ProviderTimeout always kills that cold solve before it finishes, marking
+	// the provider perpetually "down" regardless of whether it actually works
+	// (see docs/issues/provider-recovery-log.md 2026-07-04 for animepahe; miruro
+	// hit the identical trap 2026-07-06). Fast HTTP providers KEEP the short 8s
+	// chain budget (they answer in <1s, and a long budget would let one hung
+	// HTTP provider starve the failover chain past the caller's 15s SCRAPER_
+	// TIMEOUT — ISS-022). Read from SCRAPER_BROWSER_PROVIDER_TIMEOUT; default 35s
+	// (30s solve budget + margin). Set 0 to fall back to the global ProviderTimeout.
+	BrowserProviderTimeout time.Duration
 
 	// Providers is the resolved provider-management config (scraper-providers.yaml,
 	// or env fallback). Source of truth for enable/disable + reason/description.
@@ -207,8 +212,8 @@ func Load() (*Config, error) {
 		NineAnime: NineAnimeConfig{
 			BaseURL: getEnv("SCRAPER_NINEANIME_BASE_URL", "https://9anime.me.uk"),
 		},
-		ProviderTimeout:          getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
-		AnimepaheProviderTimeout: getEnvDuration("SCRAPER_ANIMEPAHE_PROVIDER_TIMEOUT", 35*time.Second),
+		ProviderTimeout:        getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
+		BrowserProviderTimeout: getEnvDuration("SCRAPER_BROWSER_PROVIDER_TIMEOUT", 35*time.Second),
 	}
 	cfg.CatalogURL = getEnv("CATALOG_URL", "")
 	cfg.StealthScraperURL = getEnv("STEALTH_SCRAPER_URL", "http://stealth-scraper:3000")
