@@ -52,6 +52,7 @@ type providerWire struct {
 	PreferenceWeight int       `json:"preference_weight"`
 	Engine           string    `json:"engine"`
 	BaseURL          string    `json:"base_url"`
+	LastTickMetrics  string    `json:"last_tick_metrics"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
@@ -79,6 +80,7 @@ func toWire(p domain.ScraperProvider) providerWire {
 		PreferenceWeight: p.PreferenceWeight,
 		Engine:           p.Engine,
 		BaseURL:          p.BaseURL,
+		LastTickMetrics:  p.LastTickMetrics,
 		UpdatedAt:        p.UpdatedAt,
 	}
 }

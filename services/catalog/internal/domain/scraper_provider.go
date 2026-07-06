@@ -80,6 +80,13 @@ type ScraperProvider struct {
 	// No service logic reads it; routine catalog writes (health/policy/reason) never
 	// touch it, so it persists across auto-demote/promote cycles.
 	AIProbeNotes string `gorm:"column:ai_probe_notes" json:"ai_probe_notes"`
+	// LastTickMetrics is the JSON summary of the most recent probe tick (warmup/
+	// resolve/validate timings, throughput, CDN, quality), written by the
+	// probe-result handler and rendered on the Grafana "Last Tick Metrics" panel.
+	// Stored as text (the JSON blob); the panel casts ::jsonb. Empty until first
+	// probed under the warmup pipeline. Routine health/policy writes never touch
+	// it, so it persists across auto-demote/promote cycles (like ai_probe_notes).
+	LastTickMetrics string `gorm:"column:last_tick_metrics;type:text" json:"last_tick_metrics"`
 	// Capability traits (curated; refined per-title by live discovery in P2).
 	SupportsSub      bool   `json:"supports_sub"`
 	SupportsDub      bool   `json:"supports_dub"`

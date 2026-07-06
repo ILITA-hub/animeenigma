@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -178,6 +179,44 @@ func TestProbePlan_DueSet(t *testing.T) {
 		ff   bool
 	}{1, true}) {
 		t.Fatalf("allanime plan=%+v want {1,true}", got["allanime"])
+	}
+}
+
+func TestProbeResultPersistsMetrics(t *testing.T) {
+	db := newHandlerTestDB(t)
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "miruro", Policy: domain.PolicyManual, Health: domain.HealthDown,
+		Engine: "browser", ScraperOperated: true, Group: "en",
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h := handler.NewInternalProviderPolicyHandler(db, testProviderPolicyCfg(), testNopLogger())
+
+	body := `{"provider":"miruro","pass":true,"reason":"","metrics":{"warmup_ms":9800,"resolve_ms":1900,"cdn_host":"kwik.cx"}}`
+	rr := httptest.NewRecorder()
+	h.ProbeResult(rr, httptest.NewRequest(http.MethodPost, "/internal/providers/probe-result", strings.NewReader(body)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	var p domain.ScraperProvider
+	if err := db.First(&p, "name = ?", "miruro").Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if !strings.Contains(p.LastTickMetrics, `"cdn_host":"kwik.cx"`) {
+		t.Fatalf("last_tick_metrics not persisted: %q", p.LastTickMetrics)
+	}
+
+	// A verdict WITHOUT metrics must not wipe the stored summary.
+	rr2 := httptest.NewRecorder()
+	h.ProbeResult(rr2, httptest.NewRequest(http.MethodPost, "/internal/providers/probe-result",
+		strings.NewReader(`{"provider":"miruro","pass":false,"reason":"cdn_unreachable"}`)))
+	_ = db.First(&p, "name = ?", "miruro")
+	if !strings.Contains(p.LastTickMetrics, "kwik.cx") {
+		t.Fatalf("metrics wiped by metrics-less verdict: %q", p.LastTickMetrics)
 	}
 }
 

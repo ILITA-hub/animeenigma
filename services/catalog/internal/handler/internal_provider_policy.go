@@ -29,9 +29,10 @@ func NewInternalProviderPolicyHandler(db *gorm.DB, cfg config.ProviderPolicyConf
 }
 
 type probeResultReq struct {
-	Provider string `json:"provider"`
-	Pass     bool   `json:"pass"`
-	Reason   string `json:"reason"`
+	Provider string          `json:"provider"`
+	Pass     bool            `json:"pass"`
+	Reason   string          `json:"reason"`
+	Metrics  json.RawMessage `json:"metrics"`
 }
 
 // ProbeResult handles POST /internal/providers/probe-result.
@@ -75,16 +76,21 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 	}
 	providerpolicy.ApplyVerdict(&p, req.Pass, now, h.cfg.DemoteAfter, h.cfg.PromoteAfter)
 
+	updates := map[string]any{
+		"policy":         p.Policy,
+		"health":         p.Health,
+		"health_since":   p.HealthSince,
+		"policy_since":   p.PolicySince,
+		"last_probed_at": p.LastProbedAt,
+		"reason":         p.Reason,
+	}
+	if len(req.Metrics) > 0 {
+		updates["last_tick_metrics"] = string(req.Metrics)
+	}
+
 	if err := h.db.Model(&domain.ScraperProvider{}).
 		Where("name = ?", p.Name).
-		Updates(map[string]any{
-			"policy":         p.Policy,
-			"health":         p.Health,
-			"health_since":   p.HealthSince,
-			"policy_since":   p.PolicySince,
-			"last_probed_at": p.LastProbedAt,
-			"reason":         p.Reason,
-		}).Error; err != nil {
+		Updates(updates).Error; err != nil {
 		h.log.Errorw("probe-result persist failed", "provider", p.Name, "error", err)
 		http.Error(w, `{"success":false,"error":"persist failed"}`, http.StatusInternalServerError)
 		return
