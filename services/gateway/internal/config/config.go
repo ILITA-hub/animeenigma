@@ -114,6 +114,14 @@ type ServiceURLs struct {
 	// FanficAdminOnly). The SSE /generate route is proxied with per-chunk
 	// flushing (proxyStreamFlush) so token deltas reach the browser live.
 	FanficService string
+	// PolicyService — RBAC + roulette policy service (RBAC and roulette
+	// Phase 1). Port 8098. Exposes /api/policy/features/mine (JWT-optional)
+	// and /api/admin/policy/* (JWT + admin). The internal ruleset endpoint
+	// (/internal/policy/ruleset) is Docker-network-only and never registered
+	// at the gateway (D-05 security model). This task is proxy-only wiring —
+	// gateway-side enforcement of the ruleset against OTHER services (the
+	// FeatureGate middleware) is Phase 2.
+	PolicyService string
 	WebService    string
 	// Admin panel services
 	GrafanaService    string
@@ -170,6 +178,7 @@ func Load() (*Config, error) {
 			AnidleService:        getEnv("ANIDLE_SERVICE_URL", "http://anidle:8095"),
 			UpscalerService:      getEnv("UPSCALER_SERVICE_URL", "http://upscaler:8096"),
 			FanficService:        getEnv("FANFIC_SERVICE_URL", "http://fanfic:8097"),
+			PolicyService:        getEnv("POLICY_SERVICE_URL", "http://policy-service:8098"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),

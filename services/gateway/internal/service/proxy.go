@@ -372,6 +372,8 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.UpscalerService, nil
 	case "fanfic":
 		return s.serviceURLs.FanficService, nil
+	case "policy":
+		return s.serviceURLs.PolicyService, nil
 	case "analytics":
 		return s.serviceURLs.AnalyticsService, nil
 	case "watch-together":

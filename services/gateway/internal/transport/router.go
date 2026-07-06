@@ -319,6 +319,13 @@ func NewRouterWithCleanup(
 		// surrounding /admin group's JWT + AdminRoleMiddleware.
 		r.HandleFunc("/gacha", proxyHandler.ProxyToWeb)
 		r.HandleFunc("/gacha/*", proxyHandler.ProxyToWeb)
+
+		// Policy admin SPA route (/admin/policy — RBAC and roulette, Phase 3's
+		// AdminPolicy.vue) — same fall-through as /recs, /collections,
+		// /feedback, /gacha above. Auth is already enforced by the
+		// surrounding /admin group's JWT + AdminRoleMiddleware.
+		r.HandleFunc("/policy", proxyHandler.ProxyToWeb)
+		r.HandleFunc("/policy/*", proxyHandler.ProxyToWeb)
 	})
 
 	// Fanfic engine SPA route (/fanfics — admin-gated in the router meta;
@@ -551,6 +558,25 @@ func NewRouterWithCleanup(
 			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
 			r.HandleFunc("/anidle/*", proxyHandler.ProxyToAnidle)
+		})
+
+		// policy-service (RBAC and roulette, Phase 1 Task 6). Per-user
+		// visibility feed is JWT-OPTIONAL; admin CRUD is JWT + admin
+		// (defense-in-depth — policy re-applies both gates server-side).
+		// This is PROXY-ONLY routing: gateway-side ENFORCEMENT of the
+		// ruleset against other services' routes (the FeatureGate
+		// middleware) lands in Phase 2. /internal/policy/ruleset is
+		// Docker-network-only and is intentionally never registered here.
+		r.Group(func(r chi.Router) {
+			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
+			r.HandleFunc("/policy/features/mine", proxyHandler.ProxyToPolicy)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
+			r.Use(AdminRoleMiddleware)
+			r.HandleFunc("/admin/policy/*", proxyHandler.ProxyToPolicy)
 		})
 
 		// Profile showcase ("стена") — dark-shipped behind PROFILE_WALL_ADMIN_ONLY

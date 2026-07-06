@@ -77,6 +77,17 @@ func (h *ProxyHandler) ProxyToAnidle(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "anidle")
 }
 
+// ProxyToPolicy proxies requests to the policy service (RBAC and roulette,
+// Phase 1 Task 6). Only /api/policy/features/mine (JWT-optional) and
+// /api/admin/policy/* (JWT + admin) are exposed; the gateway router gates
+// those groups with OptionalJWTValidationMiddleware and
+// JWTValidationMiddleware+AdminRoleMiddleware respectively, so the handler
+// itself does not enforce auth. /internal/policy/ruleset is Docker-network-
+// only and is never routed through this handler.
+func (h *ProxyHandler) ProxyToPolicy(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "policy")
+}
+
 // ProxyToRooms proxies requests to rooms service
 func (h *ProxyHandler) ProxyToRooms(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "rooms")
