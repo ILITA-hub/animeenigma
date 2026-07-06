@@ -211,7 +211,7 @@ func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
 	for i, f := range fams {
 		got[i] = f.Family
 	}
-	want := []string{"ourenglish", "kodik", "hanime"}
+	want := []string{"others", "18+"}
 	if len(got) != len(want) {
 		t.Fatalf("families = %v, want %v", got, want)
 	}
@@ -351,7 +351,7 @@ func TestBuildFamilies_AnimejoyBothLegsInOrder(t *testing.T) {
 	for i, f := range fams {
 		got[i] = f.Family
 	}
-	want := []string{"ourenglish", "animejoy-sibnet", "animejoy-allvideo"}
+	want := []string{"others"}
 	if len(got) != len(want) {
 		t.Fatalf("families = %v, want %v", got, want)
 	}
@@ -375,7 +375,7 @@ func TestBuildFamilies_AnimejoyDiscoveryErrorBothAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fams) != 1 || fams[0].Family != "ourenglish" {
+	if len(fams) != 1 || fams[0].Family != "others" {
 		t.Fatalf("discovery error should yield EN-only, got %+v", fams)
 	}
 }
@@ -390,7 +390,7 @@ func TestBuildFamilies_NilCatalogENOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fams) != 1 || fams[0].Family != "ourenglish" {
+	if len(fams) != 1 || fams[0].Family != "others" {
 		t.Fatalf("nil catalog should yield EN-only, got %+v", fams)
 	}
 }

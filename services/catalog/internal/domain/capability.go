@@ -10,7 +10,7 @@ type CapabilityReport struct {
 
 // SourceFamily groups providers of one source kind; Providers is ranked best-first.
 type SourceFamily struct {
-	Family    string        `json:"family"` // "ourenglish" | "kodik" | "animelib" | "hanime"
+	Family    string        `json:"family"` // "18+" | "others" | "aeProvider"
 	Providers []ProviderCap `json:"providers"`
 }
 

@@ -130,7 +130,7 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 			families = append(families, sl.fam)
 		}
 	}
-	return families, nil
+	return regroupFamilies(families), nil
 }
 
 // BuildENFamily reads registered EN providers (enabled + degraded; disabled are
@@ -188,4 +188,40 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 		return caps[i].Provider < caps[j].Provider
 	})
 	return domain.SourceFamily{Family: "ourenglish", Providers: caps}, nil
+}
+
+// familyLabel maps an internally-assembled family string to the collapsed wire
+// taxonomy: "18+" (adult sources), "aeProvider" (first-party standalone), or
+// "others" (every language provider — EN chain, kodik, animelib, animejoy legs).
+func familyLabel(internal string) string {
+	switch internal {
+	case "hanime", "adult":
+		return "18+"
+	case "ae":
+		return "aeProvider"
+	default:
+		return "others"
+	}
+}
+
+// regroupFamilies collapses the internally-assembled per-source families into the
+// three wire families {aeProvider, others, 18+}. Providers are bucketed by
+// familyLabel, preserving input order within a bucket; buckets are emitted in
+// first-seen order (deterministic). PURE — the FE re-sorts by state/order, so the
+// merged intra-family order is not display-authoritative.
+func regroupFamilies(in []domain.SourceFamily) []domain.SourceFamily {
+	order := []string{}
+	byLabel := map[string][]domain.ProviderCap{}
+	for _, fam := range in {
+		label := familyLabel(fam.Family)
+		if _, seen := byLabel[label]; !seen {
+			order = append(order, label)
+		}
+		byLabel[label] = append(byLabel[label], fam.Providers...)
+	}
+	out := make([]domain.SourceFamily, 0, len(order))
+	for _, label := range order {
+		out = append(out, domain.SourceFamily{Family: label, Providers: byLabel[label]})
+	}
+	return out
 }
