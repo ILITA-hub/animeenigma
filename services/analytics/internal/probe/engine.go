@@ -4,10 +4,16 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/streamprobe"
 )
+
+// EngineBrowser is the ScraperProvider.Engine value for Camoufox-resolved
+// providers. Browser providers get a pre-probe warmup so the measured probe
+// runs against a warm cf_clearance session instead of a cold Turnstile solve.
+const EngineBrowser = "browser"
 
 // ProbeTarget binds a provider to its anime-set selection rule and its stream
 // resolver. The EN scraper providers share one spotlight AnimeSet + one HTTP
@@ -194,6 +200,20 @@ func (e *Engine) reroll(ctx context.Context, t ProbeTarget, ref AnimeRef) []Verd
 	return nil
 }
 
+// warmup resolves the top ref once, best-effort, to prime the browser session
+// (cold Cloudflare-Turnstile solve → cf_clearance cached on the pool profile).
+// Errors are swallowed — a failed warmup never marks the provider down; the
+// measured probe still runs and reports honestly. Returns elapsed ms.
+func (e *Engine) warmup(ctx context.Context, t ProbeTarget, refs []AnimeRef) int64 {
+	if len(refs) == 0 {
+		return 0
+	}
+	r := refs[0]
+	start := time.Now()
+	_, _, _ = t.Resolver.Resolve(ctx, r.UUID, r.Name, r.Episode, r.Slot, t.Provider)
+	return time.Since(start).Milliseconds()
+}
+
 func (e *Engine) RunOnce(ctx context.Context) error {
 	var allVerdicts []Verdict
 	var provVerdicts []ProviderVerdict
@@ -229,6 +249,14 @@ func (e *Engine) RunOnce(ctx context.Context) error {
 		}
 
 		refs, _ := t.AnimeSet.Resolve(ctx)
+		var warmupMs int64
+		if entry.Engine == EngineBrowser {
+			warmupMs = e.warmup(ctx, t, refs)
+			if e.log != nil {
+				e.log.Infow("probe warmup complete", "provider", t.Provider, "warmup_ms", warmupMs)
+			}
+		}
+		_ = warmupMs // consumed in Task 5
 		verdicts, pass := e.probeProvider(ctx, t, refs, entry.SampleSize, entry.FailFast)
 
 		pv := Rollup(t.Provider, filterProbed(verdicts))

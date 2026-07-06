@@ -2,6 +2,7 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"testing"
 
@@ -521,5 +522,41 @@ func TestEngine_PlanFetchError_FallbackLegacy(t *testing.T) {
 	// Two provider verdicts in the report.
 	if len(rep.run.ProviderVerdicts) != 2 {
 		t.Errorf("ProviderVerdicts count = %d, want 2", len(rep.run.ProviderVerdicts))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Warmup (browser-engine providers)
+// ---------------------------------------------------------------------------
+
+// resolverFunc adapts a plain function to the Resolver interface for one-off
+// counting/behavior fakes.
+type resolverFunc func(context.Context, string, string, int, AnimeSlot, string) ([]ResolvedStream, Stage, error)
+
+func (f resolverFunc) Resolve(ctx context.Context, uuid, name string, ep int, slot AnimeSlot, prov string) ([]ResolvedStream, Stage, error) {
+	return f(ctx, uuid, name, ep, slot, prov)
+}
+
+func TestWarmupResolvesTopRefBestEffort(t *testing.T) {
+	var calls int
+	res := resolverFunc(func(_ context.Context, uuid, name string, ep int, slot AnimeSlot, prov string) ([]ResolvedStream, Stage, error) {
+		calls++
+		return nil, StageStream, errors.New("cold solve failed") // best-effort: error must be swallowed
+	})
+	e := &Engine{now: func() int64 { return 0 }}
+	tgt := ProbeTarget{Provider: "miruro", Resolver: res}
+	refs := []AnimeRef{{UUID: "u1", Name: "Frieren", Slot: SlotAnchor}}
+
+	ms := e.warmup(context.Background(), tgt, refs)
+	if calls != 1 {
+		t.Fatalf("warmup resolve calls = %d, want 1", calls)
+	}
+	if ms < 0 {
+		t.Fatalf("warmup ms = %d, want >= 0", ms)
+	}
+	// No refs → no resolve, zero ms.
+	calls = 0
+	if got := e.warmup(context.Background(), tgt, nil); got != 0 || calls != 0 {
+		t.Fatalf("empty warmup: ms=%d calls=%d, want 0/0", got, calls)
 	}
 }
