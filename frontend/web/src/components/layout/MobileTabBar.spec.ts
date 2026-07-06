@@ -107,13 +107,16 @@ describe('MobileTabBar', () => {
   })
 
   it('hides the downloads tab in browser view (not installed PWA)', async () => {
-    standalone().value = true
-    const w1 = mountBar()
-    expect(w1.find('[data-test="tab-downloads"]').exists()).toBe(true)
-
     standalone().value = false
-    const w2 = mountBar()
+    const w = mountBar()
     await nextTick()
-    expect(w2.find('[data-test="tab-downloads"]').exists()).toBe(false)
+    expect(w.find('[data-test="tab-downloads"]').exists()).toBe(false)
+    // The entire bar is standalone-gated by v-if, so the DOM check above is
+    // vacuous on its own (nothing renders in browser view — a tab-home DOM
+    // check would fail the same way). Assert the items gate directly instead:
+    // downloads is the only tab that leaves; other tabs are unaffected.
+    const keys = (w.vm as unknown as { items: Array<{ key: string }> }).items.map((i) => i.key)
+    expect(keys).not.toContain('downloads')
+    expect(keys).toContain('home')
   })
 })
