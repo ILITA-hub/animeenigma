@@ -81,7 +81,8 @@
           >
             {{ $t(link.label) }}
           </router-link>
-          <!-- Gacha «Лудка» nav item — gated by VITE_GACHA_ADMIN_ONLY -->
+          <!-- Gacha «Лудка» nav item — visibility resolved at runtime via the
+               policy feed (useFeatureVisible / policy-service), not a build flag -->
           <router-link
             v-if="gachaVisible"
             to="/gacha"
@@ -173,7 +174,8 @@
             </div>
           </div>
 
-          <!-- Gacha balance chip — gated by VITE_GACHA_ADMIN_ONLY -->
+          <!-- Gacha balance chip — visibility resolved at runtime via the
+               policy feed (useFeatureVisible / policy-service), not a build flag -->
           <router-link
             v-if="gachaVisible"
             to="/gacha"

@@ -11,7 +11,6 @@ vi.mock('@/api/client', () => ({
 
 import {
   pickSecretFeature,
-  isRouletteEnabled,
   roulettePoolAvailable,
   _resetSecretFeatureForTests,
 } from '../secretFeatures'
@@ -82,18 +81,6 @@ describe('pickSecretFeature — pool is store.roulette (server-resolved), not cl
     const pick = pickSecretFeature('/')
     expect(pick).not.toBeNull()
     expect(pick!.to).toEqual({ path: '/profile', query: { showcase: 'edit' } })
-  })
-})
-
-describe('isRouletteEnabled — reflects store.rouletteEnabled', () => {
-  it('true when the store says the master switch is on', () => {
-    store.rouletteEnabled = true
-    expect(isRouletteEnabled()).toBe(true)
-  })
-
-  it('false when the store says the master switch is off (footer button hidden path)', () => {
-    store.rouletteEnabled = false
-    expect(isRouletteEnabled()).toBe(false)
   })
 })
 

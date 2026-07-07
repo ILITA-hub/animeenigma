@@ -1,5 +1,7 @@
 <!--
-  /fanfics — admin-gated (VITE_FANFIC_ADMIN_ONLY) fanfic generation engine.
+  /fanfics — fanfic generation engine. Route visibility resolved at runtime
+  via the policy feed (useFeatureVisible / policy-service, key 'fanfic'),
+  not a build flag.
 
   Two tabs:
     - "Генерировать": GenerateForm -> fanficApi.generate() SSE stream ->

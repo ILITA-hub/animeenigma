@@ -2,7 +2,8 @@
  * Fanfic engine API client (spec 2026-07-06).
  *
  * Routes (gateway-proxied under /api/fanfic/*, JWT-required, guest-blocked,
- * admin-gated while FANFIC_ADMIN_ONLY — see services/gateway/internal/
+ * access resolved per-request via the policy-service ruleset —
+ * FeatureGate("fanfic", ...) — see services/gateway/internal/
  * transport/router.go):
  *   POST   /api/fanfic/generate   — SSE stream (meta/delta/done/error)
  *   GET    /api/fanfic            — list (paginated)

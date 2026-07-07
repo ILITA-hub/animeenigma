@@ -84,11 +84,6 @@ export function secretFeatureDisplayPath(f: SecretFeature): string {
   return (loc.path ?? '') + q
 }
 
-/** Master switch — whether the footer roulette button should be shown at all. */
-export function isRouletteEnabled(): boolean {
-  return useFeatureVisibilityStore().rouletteEnabled
-}
-
 /**
  * Whether the roulette actually has anything to roll for the current user —
  * the intersection of the client registry ({@link SECRET_FEATURES}) and the

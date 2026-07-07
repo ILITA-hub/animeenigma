@@ -394,10 +394,22 @@ router.beforeEach(async (to, _from, next) => {
   // here defensively guarantees `ready` resolves even if this guard runs
   // before that boot fetch has kicked off. Awaiting an already-resolved
   // `ready` on later navigations is a no-op.
+  //
+  // RBAC-and-roulette P5 (Task 4 / B3): a bare `await ready` hangs a
+  // first-navigation deep-link to a gated route up to the axios 30s timeout
+  // if the policy service is down before failing open. Race `ready` against
+  // a short timeout instead — on timeout `loaded` is still false, so
+  // `resolveVisible` falls through to the same D1 failSafe (dark-ship →
+  // isAdmin) this guard already used on outright fetch failure. The store
+  // keeps loading in the background; nav visibility self-corrects reactively
+  // once the feed lands (useFeatureVisible is reactive on `loaded`/`visible`).
   if (to.meta.gachaGated || to.meta.fanficGated) {
     const featureVisibility = useFeatureVisibilityStore()
     featureVisibility.load()
-    await featureVisibility.ready
+    await Promise.race([
+      featureVisibility.ready,
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ])
 
     const feed = { loaded: featureVisibility.loaded, visible: featureVisibility.visible }
 

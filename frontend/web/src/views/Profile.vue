@@ -81,7 +81,9 @@
       <!-- Tabs -->
       <div class="max-w-4xl mx-auto px-4">
         <Tabs :model-value="activeTab" @update:model-value="onTabChange" :tabs="tabs" variant="underline" full-width class="mb-6">
-          <!-- Showcase Tab (dark-ship gate: VITE_PROFILE_WALL_ADMIN_ONLY) -->
+          <!-- Showcase Tab (dark-ship gate: visibility resolved at runtime via
+               the policy feed — useFeatureVisible / policy-service, key
+               'profile-wall' — not a build flag) -->
           <!-- One rule: shown ⟺ showcase is visible (or owner-revealed via the header button). -->
           <template v-if="showcaseTabVisible" #showcase>
             <ProfileShowcase
