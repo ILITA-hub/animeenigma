@@ -184,13 +184,14 @@ import { useStandaloneDisplay } from '@/pwa/standalone'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { reportFeError } from '@/utils/feErrorLog'
-import { pickSecretFeature, applySecretFeatureAdminState, isRouletteEnabled } from '@/utils/secretFeatures'
-import { secretFeaturesApi } from '@/api/client'
+import { pickSecretFeature } from '@/utils/secretFeatures'
+import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
 
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const notifStore = useNotificationsStore()
+const featureVisibilityStore = useFeatureVisibilityStore()
 
 // Workstream notifications / Phase 3 — feature flag baked at build time.
 // When false (rollback), skip mounting the toast AND skip starting the
@@ -215,25 +216,30 @@ const commitUrl = commitHash
   ? `https://github.com/ILITA-hub/animeenigma/commit/${commitHash}`
   : ''
 
-// «Секретная фича» roulette — lives in the footer. Rolls a random eligible
-// hidden/legacy feature per click (utils/secretFeatures.ts); every target route
-// stays directly reachable regardless. Admin can disable the whole roulette or
-// individual features via AdminPolicy.vue — enforced via the public
-// state feed below, which FAILS OPEN (defaults keep today's behavior).
+// «Секретная фича» roulette — lives in the footer. Rolls a random pool
+// entry per click (utils/secretFeatures.ts); every target route stays
+// directly reachable regardless. Pool membership + the master switch are
+// fully server-resolved via the feature-visibility store below (RBAC-and-
+// roulette P4 Task 3), loaded once from `GET /api/policy/features/mine`.
+//
+// The store's own `rouletteEnabled` ref defaults to false (only flips once a
+// successful fetch resolves), so mirroring it directly would hide the
+// button during the boot fetch AND on a total policy outage — a regression
+// from today's fail-open default. This local ref keeps that default: it
+// starts (and stays, on failure) `true`, and only adopts the server's value
+// once the feed actually loaded.
 const rouletteEnabled = ref(true)
 
 async function loadSecretFeatureState(): Promise<void> {
   try {
-    const res = await secretFeaturesApi.getState()
-    const state = res.data.data
-    applySecretFeatureAdminState({
-      rouletteEnabled: state.rouletteEnabled,
-      disabledKeys: state.disabledKeys ?? [],
-    })
-    rouletteEnabled.value = isRouletteEnabled()
+    await featureVisibilityStore.load()
+    if (featureVisibilityStore.loaded) {
+      rouletteEnabled.value = featureVisibilityStore.rouletteEnabled
+    }
+    // else: feed failed to load — keep the fail-open default (true).
   } catch {
-    // Fail-open: keep the roulette on with no per-feature filter.
-    applySecretFeatureAdminState(null)
+    // Defensive: store.load() swallows its own fetch errors, but keep this
+    // in case that ever changes. Fail-open: keep the roulette on.
     rouletteEnabled.value = true
   }
 }
