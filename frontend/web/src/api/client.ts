@@ -590,26 +590,6 @@ export const showcaseApi = {
     >(`/users/${userId}/compatibility`),
 }
 
-/** Admin view of the secret-feature roulette config. `features` holds only
- *  explicit per-feature overrides; an absent key resolves to enabled (true). */
-export interface SecretFeatureConfig {
-  rouletteEnabled: boolean
-  features: Record<string, boolean>
-}
-
-/** Public, anonymous-readable roulette state the footer consumes to enforce
- *  admin toggles. */
-export interface SecretFeaturePublicState {
-  rouletteEnabled: boolean
-  disabledKeys: string[]
-}
-
-/** Public secret-feature state feed (no auth). Callers fail open on error. */
-export const secretFeaturesApi = {
-  getState: () =>
-    apiClient.get<{ data: SecretFeaturePublicState }>('/secret-features/state'),
-}
-
 /** Standard user-resolve result (auth service, RBAC-and-roulette P3). */
 export interface ResolvedUser {
   id: string
@@ -649,8 +629,8 @@ export interface PolicyFlagsResponse {
  *  gets their resolved flags, an anonymous caller gets everyone-flags only.
  *  Fail-open server-side. This is what the frontend cuts over to in P4 —
  *  nav/dark-ship routes/profile-wall tab/footer roulette all read this
- *  instead of the old `VITE_*_ADMIN_ONLY` build flags + the secret-features
- *  admin facade below. */
+ *  instead of the old `VITE_*_ADMIN_ONLY` build flags + the retired
+ *  secret-features admin facade (removed P4 Task 4). */
 export interface FeaturesMineResponse {
   rouletteEnabled: boolean
   visible: string[]
@@ -698,20 +678,10 @@ export const adminApi = {
     apiClient.post<CollectionItem | { data: CollectionItem }>(`/admin/collections/${id}/items`, body),
   removeCollectionItem: (id: string, animeId: string) =>
     apiClient.delete<void>(`/admin/collections/${id}/items/${animeId}`),
-  // Secret-feature roulette management (seed for future role-based access mgmt).
-  getSecretFeatures: () =>
-    apiClient.get<{ data: SecretFeatureConfig }>('/admin/secret-features'),
-  setSecretRoulette: (enabled: boolean) =>
-    apiClient.put<{ data: SecretFeatureConfig }>('/admin/secret-features/roulette', { enabled }),
-  setSecretFeature: (key: string, enabled: boolean) =>
-    apiClient.put<{ data: SecretFeatureConfig }>(
-      `/admin/secret-features/feature/${encodeURIComponent(key)}`,
-      { enabled },
-    ),
   // RBAC-and-roulette P1 — policy-service admin CRUD (services/policy:8098,
   // gateway-proxied at /api/admin/policy/*, admin-JWT-gated). This is the
-  // runtime feature-access authority; the secret-features methods above are
-  // the older roulette-only facade.
+  // runtime feature-access authority (the older roulette-only
+  // /admin/secret-features facade was removed in P4 Task 4).
   getPolicyFlags: () =>
     apiClient.get<{ data: PolicyFlagsResponse } | PolicyFlagsResponse>('/admin/policy/flags'),
   setPolicyFlag: (key: string, payload: FeatureFlagPayload) =>

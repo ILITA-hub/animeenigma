@@ -202,7 +202,7 @@
           </template>
         </template>
 
-        <!-- ─── PROVIDERS TAB (placeholder — P4) ──────────────────────── -->
+        <!-- ─── PROVIDERS TAB (placeholder — deferred to P5) ──────────── -->
         <template #providers>
           <EmptyState
             :title="$t('admin.policy.providersPlaceholder.title')"

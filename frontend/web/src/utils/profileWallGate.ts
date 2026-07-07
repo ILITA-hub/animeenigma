@@ -5,7 +5,7 @@
  * Delegates to the runtime feature-visibility feed (`GET
  * /api/policy/features/mine`, composables/useFeatureVisible.ts) instead of
  * the retired VITE_PROFILE_WALL_ADMIN_ONLY build flag. The feed's per-key
- * fail-open fallback (utils/useFeatureVisible.ts `DARKSHIP_FALLBACK_ADMIN`)
+ * fail-open fallback (composables/useFeatureVisible.ts `DARKSHIP_FALLBACK_ADMIN`)
  * reproduces the old admin-only default while the feed hasn't loaded yet.
  * Mirror of utils/gachaGate.ts.
  */
