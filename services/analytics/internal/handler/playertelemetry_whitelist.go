@@ -2,13 +2,22 @@ package handler
 
 import "strings"
 
-// knownProviders is the canonical stream-source roster (verified against the
-// live analytics.events target values + the stream_providers seed). Keep in
-// sync when a provider is added/removed.
+// knownProviders is the canonical stream-source roster. It gates player-telemetry
+// ingestion (whitelistProvider) AND doubles as the playability scores-query roster
+// filter (see service/playability.go). It is the UNION of:
+//   - capability provider ids the FE sends as combo.provider on player-events
+//     (these land in events.target), and
+//   - probe_runs.provider names (PROBE_PROVIDERS), which use "kodik-noads" where
+//     the capability id is "kodik".
+// Keep in sync when a provider is added/removed.
 var knownProviders = map[string]struct{}{
-	"gogoanime": {}, "animepahe": {}, "allanime": {}, "animefever": {},
-	"miruro": {}, "nineanime": {}, "animekai": {}, "kodik": {}, "animelib": {},
-	"hanime": {}, "ae": {}, "18anime": {},
+	// EN chain
+	"gogoanime": {}, "allanime-okru": {}, "miruro": {}, "nineanime": {}, "animekai": {},
+	// RU / adult / first-party / per-title
+	"kodik": {}, "kodik-noads": {}, "animelib": {}, "hanime": {}, "ae": {}, "18anime": {},
+	"animejoy-sibnet": {}, "animejoy-allvideo": {},
+	// disabled tombstones (kept so any residual/legacy events still record)
+	"allanime": {}, "animepahe": {}, "animefever": {},
 }
 
 // whitelistProvider returns the canonical (lowercased) provider key if it is in

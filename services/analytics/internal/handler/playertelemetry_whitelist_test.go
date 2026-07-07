@@ -26,3 +26,21 @@ func TestWhitelistProvider(t *testing.T) {
 		}
 	}
 }
+
+func TestWhitelistProvider_CurrentRoster(t *testing.T) {
+	// Capability ids the FE actually sends on player-events, plus the probe roster name.
+	for _, p := range []string{
+		"allanime-okru", "animejoy-sibnet", "animejoy-allvideo", "kodik-noads",
+		"gogoanime", "miruro", "nineanime", "animekai", "kodik", "animelib", "hanime", "ae", "18anime",
+	} {
+		if got := whitelistProvider(p); got != p {
+			t.Errorf("whitelistProvider(%q) = %q, want %q (must be in roster)", p, got, p)
+		}
+	}
+	if got := whitelistProvider("  AllAnime-OKRU "); got != "allanime-okru" {
+		t.Errorf("whitelistProvider trims+lowercases: got %q", got)
+	}
+	if got := whitelistProvider("evil-injected"); got != "" {
+		t.Errorf("unknown provider must be dropped, got %q", got)
+	}
+}
