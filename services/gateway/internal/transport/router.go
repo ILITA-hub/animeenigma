@@ -602,6 +602,27 @@ func NewRouterWithCleanup(
 			r.HandleFunc("/admin/policy/*", proxyHandler.ProxyToPolicy)
 		})
 
+		// Task 2 (RBAC and roulette) — admin-only canonical user-resolve
+		// endpoint, proxied to AUTH (not catalog). Turns a UUID, username,
+		// public_id, or telegram_id into the canonical user record; consumed
+		// by other admin surfaces (recs picker, policy admin UI). Mirrors the
+		// /admin/policy/* group immediately above (same JWT + userRateLimit +
+		// AdminRoleMiddleware chain). CRITICAL ORDER: this is a static
+		// "/admin/users/..." path, so chi's route tree resolves it against the
+		// generic "/api/admin/*" -> catalog catch-all group above the SAME way
+		// "/admin/policy/*" already does (see TestRouter_Policy_AdminFlags_AdminJWT_ProxiesToPolicy
+		// for the sibling proof, and TestRouter_AdminUsersResolve_AdminJWT_ProxiesToAuth
+		// in router_resolve_test.go for this route) — a more specific static
+		// segment always wins over a shallower wildcard regardless of
+		// registration order, but this group is still placed next to its
+		// closest analog for readability.
+		r.Group(func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
+			r.Use(AdminRoleMiddleware)
+			r.HandleFunc("/admin/users/resolve", proxyHandler.ProxyToAuth)
+		})
+
 		// Profile showcase ("стена") — runtime-gated by the policy ruleset
 		// (flag "profile-wall"). OptionalJWT so the flag's eventual "everyone"
 		// audience is public (anonymous); the seed roles:[admin] reproduces the
