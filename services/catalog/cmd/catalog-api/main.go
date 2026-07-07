@@ -651,7 +651,12 @@ func main() {
 	// the scraper microservice at cfg.Scraper.APIURL) as a HealthSource.
 	// aeLibraryAdapter backs the first-party `ae` family's library-presence
 	// lookup via the raw resolver's library episode index.
-	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: libraryResolver})
+	// playabilityClient (Phase B) reads decayed per-provider watch scores from
+	// analytics for per-title promotion; reuses analyticsURL from the effects
+	// producer above. PLAYABILITY_INDEX_ENABLED=false is the kill switch.
+	playabilityEnabled := os.Getenv("PLAYABILITY_INDEX_ENABLED") != "false" // default true
+	playabilityClient := capability.NewPlayabilityClient(analyticsURL, playabilityEnabled)
+	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: libraryResolver}, playabilityClient)
 	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
 
 	// Initialize metrics collector

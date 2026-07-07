@@ -30,18 +30,19 @@ type HealthSource interface {
 // Service assembles capability reports. EN family (trait+health) plus the
 // per-title RU (kodik/animelib) and Hanime families when a CatalogSource is wired.
 type Service struct {
-	db      *gorm.DB
-	health  HealthSource
-	catalog CatalogSource // may be nil (skips RU/Hanime families)
-	cache   cache.Cache   // may be nil (skips caching)
-	log     *logger.Logger
-	library LibrarySource // may be nil (then `ae` is always no_content)
+	db          *gorm.DB
+	health      HealthSource
+	catalog     CatalogSource // may be nil (skips RU/Hanime families)
+	cache       cache.Cache   // may be nil (skips caching)
+	log         *logger.Logger
+	library     LibrarySource     // may be nil (then `ae` is always no_content)
+	playability PlayabilitySource // may be nil (then blend is health-only, no promotion)
 }
 
-// NewService constructs a capability Service. catalog, cache, log and library
-// may be nil.
-func NewService(db *gorm.DB, health HealthSource, catalog CatalogSource, c cache.Cache, log *logger.Logger, library LibrarySource) *Service {
-	return &Service{db: db, health: health, catalog: catalog, cache: c, log: log, library: library}
+// NewService constructs a capability Service. catalog, cache, log, library and
+// playability may be nil.
+func NewService(db *gorm.DB, health HealthSource, catalog CatalogSource, c cache.Cache, log *logger.Logger, library LibrarySource, playability PlayabilitySource) *Service {
+	return &Service{db: db, health: health, catalog: catalog, cache: c, log: log, library: library, playability: playability}
 }
 
 // Report assembles the full per-anime capability report, cache-first. The report
@@ -81,6 +82,16 @@ func (s *Service) Report(ctx context.Context, animeID string) (domain.Capability
 // animejoy-allvideo — first-party leads. The ae/adult families are DB-row-driven
 // (no CatalogSource needed) so they run regardless of whether catalog is wired.
 func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.SourceFamily, error) {
+	// Fetch playability scores ONCE per report (best-effort) and seed them into
+	// ctx before the fan-out below, so every family goroutine that closes over
+	// ctx sees the same seeded blend (newBlendData(nil) is the graceful nil-safe
+	// health-only path when playability is nil or the fetch failed).
+	var raw map[string]providerScore
+	if s.playability != nil {
+		raw = s.playability.Scores(ctx, animeID)
+	}
+	ctx = withBlend(ctx, newBlendData(raw))
+
 	type slot struct {
 		fam domain.SourceFamily
 		ok  bool
@@ -186,7 +197,7 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 		}
 		// EN rows are loaded with status<>'disabled', so IsRegistered() is always
 		// true here ⇒ ok is always true. hasContent=true for EN in Phase 1.
-		applyFeedFields(&cap, row, true)
+		applyFeedFields(ctx, &cap, row, true)
 		caps = append(caps, cap)
 	}
 	sort.SliceStable(caps, func(i, j int) bool {

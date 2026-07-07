@@ -96,7 +96,7 @@ func (s *Service) aeFamily(ctx context.Context, animeID string) (domain.SourceFa
 		variants = variantsFromTraits(row)
 	}
 	pc.Variants = variants
-	applyFeedFields(&pc, row, info.Present) // row verified registered above; ok is always true
+	applyFeedFields(ctx, &pc, row, info.Present) // row verified registered above; ok is always true
 	if usable {
 		pc.Audios = audios
 		pc.Lang = lang
@@ -115,7 +115,7 @@ func (s *Service) dbRowFamily(ctx context.Context, providerName, displayName, fa
 		return domain.SourceFamily{}, false
 	}
 	pc := domain.ProviderCap{Provider: providerName, DisplayName: displayName, Variants: variantsFromTraits(row)}
-	if !applyFeedFields(&pc, row, true) {
+	if !applyFeedFields(ctx, &pc, row, true) {
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: family, Providers: []domain.ProviderCap{pc}}, true

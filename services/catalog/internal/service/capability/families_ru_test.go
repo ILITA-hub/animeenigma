@@ -247,7 +247,7 @@ func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
 		anilibErr: errors.New("not on animelib"),
 		heps:      []domain.HanimeEpisode{{Slug: "ep-1"}},
 		hstream:   &domain.HanimeStream{Sources: []domain.HanimeSource{{Height: "1080"}}},
-	}, nil, nil, nil)
+	}, nil, nil, nil, nil)
 
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
@@ -417,7 +417,7 @@ func TestBuildFamilies_AnimejoyBothLegsInOrder(t *testing.T) {
 	)
 	s := NewService(db, nil, fakeCatalog{
 		ajTeams: []domain.AnimejoyTeam{{ID: "0", Name: "AnimeJoy", HasSibnet: true, HasAllVideo: true}},
-	}, nil, nil, nil)
+	}, nil, nil, nil, nil)
 
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
@@ -463,7 +463,7 @@ func TestBuildFamilies_AnimejoyDiscoveryErrorBothAbsent(t *testing.T) {
 	)
 	// Discovery error → GetAnimejoyTeams returns nil teams → both leg families
 	// absent; the feed still builds (EN-only).
-	s := NewService(db, nil, fakeCatalog{ajTeamsErr: errors.New("not on animejoy")}, nil, nil, nil)
+	s := NewService(db, nil, fakeCatalog{ajTeamsErr: errors.New("not on animejoy")}, nil, nil, nil, nil)
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
 		t.Fatal(err)
@@ -478,7 +478,7 @@ func TestBuildFamilies_NilCatalogENOnly(t *testing.T) {
 	// DB-row-driven ae/raw/adult families concurrently, so a plain `:memory:`
 	// DSN would hand a concurrent reader its own unmigrated connection.
 	db := newDB(t)
-	s := NewService(db, nil, nil, nil, nil, nil)
+	s := NewService(db, nil, nil, nil, nil, nil, nil)
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
 		t.Fatal(err)

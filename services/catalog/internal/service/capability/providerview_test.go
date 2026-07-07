@@ -34,7 +34,7 @@ func TestDeriveProviderView(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			row := domain.ScraperProvider{Status: c.status, Policy: c.policy, Health: c.health}
-			gotState, gotSel, gotHacker := deriveProviderView(row, c.hasContent)
+			gotState, gotSel, gotHacker := deriveProviderView(row, c.hasContent, 0, promoteFloor())
 			if gotState != c.wantState || gotSel != c.wantSel || gotHacker != c.wantHacker {
 				t.Fatalf("got (%q,%v,%v) want (%q,%v,%v)",
 					gotState, gotSel, gotHacker, c.wantState, c.wantSel, c.wantHacker)
@@ -68,5 +68,38 @@ func TestWireGroup(t *testing.T) {
 	}
 	if got := wireGroup("ru"); got != "ru" {
 		t.Fatalf("ru: got %q want %q", got, "ru")
+	}
+}
+
+func TestDeriveProviderView_PromotionFlipsManualWhenWatched(t *testing.T) {
+	row := domain.ScraperProvider{Policy: domain.PolicyManual, Health: domain.HealthUp}
+	// Below floor → stays degraded/hacker-only (unchanged Phase-A behavior).
+	if st, sel, hk := deriveProviderView(row, true, 0.2, promoteFloor()); st != "degraded" || !sel || !hk {
+		t.Errorf("below-floor manual = (%q,%v,%v), want degraded/true/true", st, sel, hk)
+	}
+	// At/above floor + has content → promoted to active/selectable/non-hacker.
+	if st, sel, hk := deriveProviderView(row, true, 0.9, promoteFloor()); st != "active" || !sel || hk {
+		t.Errorf("promoted manual = (%q,%v,%v), want active/true/false", st, sel, hk)
+	}
+	// Above floor but NO content → cannot promote (Phase A no_content wins).
+	if st, _, _ := deriveProviderView(row, false, 0.9, promoteFloor()); st != "degraded" {
+		// manual+no-content: manual gate still first for a NON-promoted row, but
+		// promotion is guarded by hasContent so it does not fire → degraded.
+		t.Errorf("no-content manual above floor = %q, want degraded", st)
+	}
+}
+
+func TestDeriveProviderView_UnchangedWithoutSignal(t *testing.T) {
+	// thisAnimeWatch=0 preserves the exact pre-Phase-B truth table.
+	auto := domain.ScraperProvider{Policy: domain.PolicyAuto, Health: domain.HealthUp}
+	if st, sel, hk := deriveProviderView(auto, true, 0, promoteFloor()); st != "active" || !sel || hk {
+		t.Errorf("auto+content = (%q,%v,%v), want active/true/false", st, sel, hk)
+	}
+	if st, _, _ := deriveProviderView(auto, false, 0, promoteFloor()); st != "no_content" {
+		t.Errorf("auto+no-content = %q, want no_content", st)
+	}
+	rec := domain.ScraperProvider{Policy: domain.PolicyAuto, Health: domain.HealthRecovering}
+	if st, _, _ := deriveProviderView(rec, true, 0, promoteFloor()); st != "recovering" {
+		t.Errorf("auto+recovering = %q, want recovering", st)
 	}
 }

@@ -8,7 +8,11 @@ import "github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 // hasContent is true for every family member that survived family-level presence
 // gating, except first-party `ae` whose hasContent is a live library lookup.
 // Phase 2 feeds EN providers' hasContent from the reactive no_content cache.
+// Phase B adds per-title promotion (see thisAnimeWatch/promoteFloor below).
 //
+//	content + thisAnimeWatch>=floor → active (selectable, non-hacker) — PROMOTION,
+//	                                   checked FIRST, overrides a manual policy for
+//	                                   THIS title only (see below)
 //	manual policy         → degraded (hacker-only; selectable only in hacker mode)
 //	auto + !content       → no_content (tinted, not selectable)
 //	auto + recovering     → recovering (selectable)
@@ -25,7 +29,20 @@ import "github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 // the machine's auto-demote); `policy=auto + health=down` is the deliberate grace
 // window where a transiently-canary-down provider STAYS selectable (live playback
 // in the user's browser is the real test, not the coarse daily canary).
-func deriveProviderView(row domain.ScraperProvider, hasContent bool) (state string, selectable, hackerOnly bool) {
+//
+// thisAnimeWatch is the decayed recent-watch-success weight for THIS title on
+// THIS provider (0 when analytics is unavailable or the provider has no
+// recorded watches); promoteFloor is the single tunable threshold (playability.go).
+// Promotion is guarded by hasContent — a no_content provider can't have real
+// watches for this title anyway, so it never conflicts with the Phase-A gate.
+func deriveProviderView(row domain.ScraperProvider, hasContent bool, thisAnimeWatch, promoteFloor float64) (state string, selectable, hackerOnly bool) {
+	// Per-title promotion (B3/B4): a has-content provider with enough recent
+	// this-title watch success flips to active/selectable regardless of a
+	// manual policy. Guarded by hasContent so it never overrides Phase-A
+	// no_content (a no_content provider can't have real watches anyway).
+	if hasContent && thisAnimeWatch >= promoteFloor {
+		return "active", true, false
+	}
 	if row.Policy == domain.PolicyManual {
 		return "degraded", true, true
 	}

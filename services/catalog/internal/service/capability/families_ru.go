@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
@@ -74,7 +75,7 @@ func (s *Service) noContentFamily(ctx context.Context, family, providerID, rowNa
 		return domain.SourceFamily{}, false
 	}
 	cap := domain.ProviderCap{Provider: providerID, DisplayName: displayName, Variants: variantsFromTraits(row)}
-	if !applyFeedFields(&cap, row, false) { // hasContent=false → no_content
+	if !applyFeedFields(ctx, &cap, row, false) { // hasContent=false → no_content
 		return domain.SourceFamily{}, false
 	}
 	cap.Reason = noContentReason(displayName)
@@ -98,16 +99,30 @@ func (s *Service) providerRow(ctx context.Context, name string) (domain.ScraperP
 // hasContent reports whether this title has content on the provider: the
 // catalog-backed families (kodik/animelib/hanime) and the trait-only raw/adult
 // rows pass true; first-party `ae` passes its live library-presence lookup.
-func applyFeedFields(cap *domain.ProviderCap, row domain.ScraperProvider, hasContent bool) bool {
+// Phase B: pulls the per-request blendData from ctx (seeded once in
+// buildFamilies), attaches the blended PlayabilityIndex (health-only when
+// analytics is unavailable — blendFrom/indexFor are nil-safe), and threads the
+// this-anime watch signal into promotion, counting a manual→active flip.
+func applyFeedFields(ctx context.Context, cap *domain.ProviderCap, row domain.ScraperProvider, hasContent bool) bool {
 	if !row.IsRegistered() { // disabled → omit
 		return false
 	}
-	state, selectable, hackerOnly := deriveProviderView(row, hasContent)
+	blend := blendFrom(ctx)
+	watch := blend.thisAnimeWatch(cap.Provider)
+	prevManual := row.Policy == domain.PolicyManual
+
+	state, selectable, hackerOnly := deriveProviderView(row, hasContent, watch, promoteFloor())
 	cap.State, cap.Selectable, cap.HackerOnly = state, selectable, hackerOnly
 	cap.Order = row.PreferenceWeight
 	cap.Group = wireGroup(row.Group)
 	cap.Audios = audiosFromTraits(row)
 	cap.Reason = row.Reason
+	cap.PlayabilityIndex = blend.indexFor(cap.Provider, row.Health)
+
+	// A manual-policy row that came out active was promoted → count it.
+	if prevManual && state == "active" {
+		metrics.CapabilityPlayabilityPromotionsTotal.Inc()
+	}
 	return true
 }
 
@@ -144,7 +159,7 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 		return domain.SourceFamily{}, false
 	}
 	cap := domain.ProviderCap{Provider: "kodik", DisplayName: "Kodik", Variants: variants}
-	if !applyFeedFields(&cap, row, true) {
+	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: "kodik", Providers: []domain.ProviderCap{cap}}, true
@@ -183,7 +198,7 @@ func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.So
 		return domain.SourceFamily{}, false
 	}
 	cap := domain.ProviderCap{Provider: "animelib", DisplayName: "AniLib", Variants: variants}
-	if !applyFeedFields(&cap, row, true) {
+	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: "animelib", Providers: []domain.ProviderCap{cap}}, true
@@ -240,7 +255,7 @@ func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.Sour
 		return domain.SourceFamily{}, false
 	}
 	cap := domain.ProviderCap{Provider: "hanime", DisplayName: "Hanime", Variants: []domain.Variant{variant}}
-	if !applyFeedFields(&cap, row, true) {
+	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: "hanime", Providers: []domain.ProviderCap{cap}}, true
@@ -295,7 +310,7 @@ func (s *Service) animejoyLegFamily(ctx context.Context, teams []domain.Animejoy
 		return domain.SourceFamily{}, false
 	}
 	cap := domain.ProviderCap{Provider: provider, DisplayName: displayName, Variants: variants}
-	if !applyFeedFields(&cap, row, true) {
+	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: provider, Providers: []domain.ProviderCap{cap}}, true
