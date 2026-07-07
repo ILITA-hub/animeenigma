@@ -131,11 +131,30 @@ type MineResponse struct {
 }
 
 // SeedFlags returns the insert-if-absent defaults so day-one behavior equals the
-// pre-RBAC dark-ship state. admin(): admin-only (mirrors *_ADMIN_ONLY=true).
-// everyone(): all-authenticated + roulette-eligible (the current SECRET_FEATURES
-// roster). gacha is admin-access AND roulette-eligible but seeded roulette-OFF
-// (mirrors catalog SecretFeatureDefaultsDisabled). The __roulette__ master is
-// seeded separately by the service (defaults ON).
+// pre-RBAC dark-ship state (D2 parity with the retired client-side
+// utils/secretFeatures.ts eligible() roster). admin(): admin-only (mirrors
+// *_ADMIN_ONLY=true). everyone(): all-authenticated + roulette-eligible (the
+// current SECRET_FEATURES roster). gacha is admin-access AND roulette-eligible
+// but seeded roulette-OFF (mirrors catalog SecretFeatureDefaultsDisabled). The
+// __roulette__ master is seeded separately by the service (defaults ON).
+//
+// Per-flag parity mapping to the old client roster:
+//   - fanfic: admin-only visibility (unchanged), but Roulette:true — the old
+//     roster rolled fanfic for admins with no backend disable, so admins DID
+//     see it come up in the roulette.
+//   - showcase-editor: admin-only (Roles:[admin]) — old client eligibility was
+//     `isAuthenticated && profileWallVisible`, and profile-wall is admin-only
+//     dark-ship, so only admins could ever reach it.
+//   - my-feedback: any-authenticated (Roles:[user,admin], NOT everyone) — old
+//     client eligibility was `isAuthenticated`, which excludes anonymous
+//     visitors; seeding it as `everyone` would leak it to anon (the bug this
+//     seed fixes).
+//
+// Accepted divergence: `downloads` stays `everyone` even though today it's
+// gated client-side on "PWA installed" — the Roles model has no way to express
+// "installed PWA", and everyone+roulette just means a browser (non-PWA) user
+// may occasionally roll a working /downloads page. Harmless (no one loses
+// access), so left as the simplest correct approximation.
 func SeedFlags() []FeatureFlag {
 	admin := func(key, label string) FeatureFlag {
 		return FeatureFlag{Key: key, Roles: StringList{RoleAdmin}, FailSafe: "admin", Label: label}
@@ -144,7 +163,7 @@ func SeedFlags() []FeatureFlag {
 		return FeatureFlag{Key: key, Roles: StringList{RoleEveryone}, Roulette: true, FailSafe: "everyone", Label: label}
 	}
 	return []FeatureFlag{
-		admin("fanfic", "Fanfic engine"),
+		{Key: "fanfic", Roles: StringList{RoleAdmin}, Roulette: true, FailSafe: "admin", Label: "Fanfic engine"},
 		admin("profile-wall", "Profile showcase wall"),
 		{Key: "gacha", Roles: StringList{RoleAdmin}, Roulette: false, FailSafe: "admin", Label: "Gacha «Лудка»"},
 		everyone("anidle", "Anidle"),
@@ -152,7 +171,7 @@ func SeedFlags() []FeatureFlag {
 		everyone("themes", "OP/ED themes"),
 		everyone("game", "Game rooms"),
 		everyone("downloads", "Downloads"),
-		everyone("showcase-editor", "Showcase editor"),
-		everyone("my-feedback", "My feedback"),
+		{Key: "showcase-editor", Roles: StringList{RoleAdmin}, Roulette: true, FailSafe: "admin", Label: "Showcase editor"},
+		{Key: "my-feedback", Roles: StringList{RoleUser, RoleAdmin}, Roulette: true, FailSafe: "everyone", Label: "My feedback"},
 	}
 }
