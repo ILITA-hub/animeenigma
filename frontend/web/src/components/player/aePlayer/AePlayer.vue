@@ -490,7 +490,7 @@ import { pickEpisodeForProvider, providerMissesTargetEpisode, shouldReselectEpis
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
-import { pickBestForLang, isHardsubbedCut } from '@/composables/aePlayer/pickDefaultSubtitle'
+import { pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
 import { useSubtitleCues } from '@/composables/aePlayer/useSubtitleCues'
 import { useSubtitleAutoSyncPref } from '@/composables/aePlayer/useSubtitleAutoSyncPref'
 import { useSubtitleAutoSync } from '@/composables/aePlayer/useSubtitleAutoSync'
@@ -2669,52 +2669,25 @@ watch(
   },
 )
 
-// Provider-bundled soft subs that shipped with the resolved stream.
-const providerBundledTracks = computed<SubTrack[]>(
-  () => (providerSubtitles.value ?? []) as SubTrack[],
-)
-
-// Whether the current cut has its subtitles BURNED INTO the video (hardsub): an
-// EN/RU SUB stream with no provider-bundled soft track. On such a source a soft
-// overlay would render a SECOND, redundant subtitle line stacked over the
-// burned-in one — the "Субтитры накладываются" report. A raw JP cut (lang 'ja')
-// is never hardsubbed (its subs come from the optional Jimaku/OpenSubtitles
-// overlay), and a provider that ships a real soft track isn't hardsubbed either.
-const isHardsubbed = computed(() =>
-  isHardsubbedCut({
-    audio: state.combo.value.audio,
-    lang: state.combo.value.lang,
-    hasBundledSoftTracks: providerBundledTracks.value.length > 0,
-    hasActiveProvider: !!activeProviderName.value,
-  }),
-)
-
 // Re-bind the chosen track to the persisted subtitle language whenever the track
 // list changes (new episode, or late provider/aggregation arrival). 'off' stays
-// off — there is no auto-enable. Skipped on a hardsubbed cut: re-applying the
-// persisted language there would stack a soft overlay on the burned-in subs.
+// off — there is no auto-enable.
 watch(subtitleTracks, () => {
   const lang = state.subLang.value
-  if (lang === 'off' || isHardsubbed.value) return
+  if (lang === 'off') return
   const track = pickBestForLang(subtitleTracks.value, lang)
   if (track) chosenSub.value = track
 })
 
-// Landing on a hardsubbed cut (e.g. switching from a raw-JP source to ae RU-sub
-// on the same episode) drops any soft track carried over from the previous
-// source so it can't stack on the burned-in subs. Fires only on the
-// off→hardsub transition, so a track the user EXPLICITLY browses for on a
-// hardsubbed source afterwards still sticks (no re-transition clears it).
-watch(isHardsubbed, (hard, was) => {
-  if (hard && !was && chosenSub.value) chosenSub.value = null
-})
-
 // Real distinct languages that have a loaded soft track (provider-bundled +
-// aggregated Jimaku/OpenSubtitles). Drives which RU/EN/JP fast buttons are
-// enabled. Empty on a hardsubbed cut: the quick rows disable and the "burned in
-// by {provider}" note shows instead of offering a stacking soft overlay.
+// aggregated Jimaku/OpenSubtitles). Drives which RU/EN/JP fast buttons are enabled.
 const availableSubLangs = computed(() =>
-  isHardsubbed.value ? [] : [...new Set(subtitleTracks.value.map((t) => t.lang))],
+  [...new Set(subtitleTracks.value.map((t) => t.lang))],
+)
+
+// Provider-bundled soft subs that shipped with the resolved stream.
+const providerBundledTracks = computed<SubTrack[]>(
+  () => (providerSubtitles.value ?? []) as SubTrack[],
 )
 
 // Per-language source label for the quick menu rows ("Русский · Crunchyroll").
@@ -2734,8 +2707,12 @@ const langSources = computed<Record<string, string>>(() => {
 // optional Jimaku/OpenSubtitles overlay — so the note never applies there.
 const hardsubNote = computed(() => {
   if (chosenSub.value) return null
-  if (!isHardsubbed.value) return null
-  return t('player.aePlayer.subs.hardsub', { provider: activeProviderName.value })
+  if (state.combo.value.audio !== 'sub') return null
+  if (state.combo.value.lang === 'ja') return null         // raw JP → overlay, not burned in
+  if (providerBundledTracks.value.length > 0) return null  // provider soft subs → not hardsubbed
+  const prov = activeProviderName.value
+  if (!prov) return null
+  return t('player.aePlayer.subs.hardsub', { provider: prov })
 })
 
 // Session opt-out: once the viewer explicitly turns subs off, offline

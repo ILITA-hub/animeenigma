@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickDefaultSubtitle, pickBestForLang, isHardsubbedCut } from './pickDefaultSubtitle'
+import { pickDefaultSubtitle, pickBestForLang } from './pickDefaultSubtitle'
 
 const T = (provider: string, lang: string, url = `${provider}-${lang}`) => ({ url, provider, lang, label: url, format: 'srt' })
 
@@ -39,26 +39,5 @@ describe('pickBestForLang', () => {
   it('does NOT fall back to another language (unlike pickDefaultSubtitle)', () => {
     expect(pickBestForLang([tracks[2]], 'en')).toBeNull()
     expect(pickDefaultSubtitle([tracks[2]], { lang: 'en' })?.url).toBe('ja-ji')
-  })
-})
-
-describe('isHardsubbedCut', () => {
-  const base = { audio: 'sub' as const, lang: 'ru', hasBundledSoftTracks: false, hasActiveProvider: true }
-
-  it('is true for an EN/RU SUB cut with no bundled soft track on a real provider', () => {
-    expect(isHardsubbedCut(base)).toBe(true)
-    expect(isHardsubbedCut({ ...base, lang: 'en' })).toBe(true)
-  })
-  it('is false for a raw JP cut (subs come from the overlay, not burned in)', () => {
-    expect(isHardsubbedCut({ ...base, lang: 'ja' })).toBe(false)
-  })
-  it('is false under DUB (no burned-in subs on a dub)', () => {
-    expect(isHardsubbedCut({ ...base, audio: 'dub' })).toBe(false)
-  })
-  it('is false when the provider ships a real soft track', () => {
-    expect(isHardsubbedCut({ ...base, hasBundledSoftTracks: true })).toBe(false)
-  })
-  it('is false before a provider is resolved (nothing playing yet)', () => {
-    expect(isHardsubbedCut({ ...base, hasActiveProvider: false })).toBe(false)
   })
 })
