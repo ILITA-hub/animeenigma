@@ -202,12 +202,65 @@
           </template>
         </template>
 
-        <!-- ─── PROVIDERS TAB (placeholder — deferred to P5) ──────────── -->
+        <!-- ─── PROVIDERS TAB (P5 Task 2) ──────────────────────────────
+             Facade over catalog's stream_providers table (Task 1): list +
+             flip policy auto<->disabled. Health is probe-owned — this tab
+             does NOT touch it. -->
         <template #providers>
-          <EmptyState
-            :title="$t('admin.policy.providersPlaceholder.title')"
-            :description="$t('admin.policy.providersPlaceholder.description')"
-          />
+          <div v-if="providersError === '403'" class="glass-card p-4 mb-6 border border-destructive/40">
+            <p class="text-destructive">{{ $t('admin.policy.error403') }}</p>
+          </div>
+          <div v-else-if="providersError" class="glass-card p-4 mb-6 border border-destructive/40">
+            <p class="text-destructive">{{ providersError }}</p>
+          </div>
+
+          <div v-if="isProvidersLoading" class="flex justify-center py-12">
+            <Spinner size="lg" />
+          </div>
+
+          <template v-else>
+            <div class="mb-6">
+              <h2 class="text-base font-semibold text-white">{{ $t('admin.policy.providers.title') }}</h2>
+              <p class="text-white/60 text-sm mt-1">{{ $t('admin.policy.providers.intro') }}</p>
+            </div>
+
+            <EmptyState
+              v-if="providerRows.length === 0"
+              :title="$t('admin.policy.providersPlaceholder.title')"
+              :description="$t('admin.policy.providersPlaceholder.description')"
+            />
+
+            <div v-else class="grid gap-4">
+              <Card v-for="row in providerRows" :key="row.name" padding="none" data-testid="provider-card">
+                <CardHeader class="flex flex-row flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <CardTitle class="text-base">{{ row.description || row.name }}</CardTitle>
+                    <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/40">
+                      <span class="font-mono">{{ row.name }}</span>
+                      <span>{{ $t('admin.policy.providers.groupLabel') }}: {{ row.group }}</span>
+                      <span>{{ $t('admin.policy.providers.engineLabel') }}: {{ row.engine }}</span>
+                    </p>
+                    <p v-if="row.reason" class="mt-1 text-xs text-white/50">{{ row.reason }}</p>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <Badge :variant="stateVariant(row.derived_state)" :data-testid="`provider-state-${row.name}`">
+                      {{ $t(`admin.policy.providers.state.${row.derived_state}`) }}
+                    </Badge>
+                    <span class="text-xs text-white/60">
+                      {{ row.policy !== 'disabled' ? $t('admin.policy.providers.autoLabel') : $t('admin.policy.providers.disabledLabel') }}
+                    </span>
+                    <Switch
+                      :model-value="row.policy !== 'disabled'"
+                      :disabled="row.saving"
+                      :aria-label="$t('admin.policy.providers.toggleLabel', { name: row.description || row.name })"
+                      :data-testid="`provider-switch-${row.name}`"
+                      @update:model-value="(v: boolean) => onToggleProvider(row, v)"
+                    />
+                  </div>
+                </CardHeader>
+              </Card>
+            </div>
+          </template>
         </template>
       </Tabs>
     </div>
@@ -235,10 +288,14 @@ import {
 import UserResolveInput from '@/components/admin/UserResolveInput.vue'
 import { useAdminPolicy } from '@/composables/useAdminPolicy'
 import type { FeatureFlag, FailSafe } from '@/composables/useAdminPolicy'
+import { useAdminProviders } from '@/composables/useAdminProviders'
+import type { ScraperProviderWire } from '@/composables/useAdminProviders'
 import { useOpenFeature } from '@/composables/useOpenFeature'
+import { useConfirm } from '@/composables/useConfirm'
 import { featureRoute } from '@/config/policyFeatures'
 import { adminApi, type ResolvedUser } from '@/api/client'
 import { useToast } from '@/composables/useToast'
+import type { BadgeVariants } from '@/components/ui/badge-variants'
 
 // Reserved master key: collapsed into `rouletteEnabled` by the backend and
 // excluded from the rendered flag roster (per §B3 of the design spec).
@@ -269,7 +326,9 @@ interface FlagRow extends FlagAudience {
 
 const { t } = useI18n()
 const policy = useAdminPolicy()
+const providers = useAdminProviders()
 const { openFeature } = useOpenFeature()
+const { confirm } = useConfirm()
 const toast = useToast()
 
 const activeTab = ref('features')
@@ -477,5 +536,98 @@ const previewResults = computed(() => {
   }))
 })
 
-onMounted(load)
+// ─── PROVIDERS TAB (P5 Task 2) ──────────────────────────────────────────
+interface ProviderRow extends ScraperProviderWire {
+  saving: boolean
+}
+
+const isProvidersLoading = ref(true)
+const providersError = ref<string | null>(null)
+const providerRows = ref<ProviderRow[]>([])
+
+function stateVariant(state: ScraperProviderWire['derived_state']): NonNullable<BadgeVariants['variant']> {
+  switch (state) {
+    case 'UP':
+      return 'success'
+    case 'Recovering':
+    case 'Degraded':
+      return 'warning'
+    case 'Down':
+      return 'destructive'
+    case 'Disabled':
+    default:
+      return 'default'
+  }
+}
+
+function handleProvidersError(e: unknown): void {
+  const err = e as { response?: { status?: number; data?: { error?: { message?: string } } }; message?: string }
+  providersError.value = err.response?.status === 403
+    ? '403'
+    : (err.response?.data?.error?.message || err.message || t('admin.policy.providers.loadError'))
+}
+
+async function loadProviders(): Promise<void> {
+  isProvidersLoading.value = true
+  providersError.value = null
+  try {
+    const list = await providers.list()
+    providerRows.value = list.map((p) => ({ ...p, saving: false }))
+  } catch (e) {
+    handleProvidersError(e)
+  } finally {
+    isProvidersLoading.value = false
+  }
+}
+
+// Applies the actual policy change: optimistic flip of `policy` (so the
+// Switch reflects the new state immediately), then reconciles with the
+// authoritative wire on success (derived_state/reason/health may differ from
+// what we guessed) or reverts on failure.
+async function applyProviderPolicy(row: ProviderRow, nextPolicy: 'auto' | 'disabled'): Promise<void> {
+  const previousPolicy = row.policy
+  const name = row.description || row.name
+  row.saving = true
+  row.policy = nextPolicy
+  try {
+    const updated = await providers.setPolicy(row.name, nextPolicy)
+    Object.assign(row, updated)
+    toast.push(
+      t(nextPolicy === 'disabled' ? 'admin.policy.providers.toastDisableSuccess' : 'admin.policy.providers.toastEnableSuccess', { name }),
+      'success',
+    )
+  } catch {
+    row.policy = previousPolicy
+    toast.push(
+      t(nextPolicy === 'disabled' ? 'admin.policy.providers.toastDisableError' : 'admin.policy.providers.toastEnableError', { name }),
+      'error',
+    )
+  } finally {
+    row.saving = false
+  }
+}
+
+// Switch ON -> auto (no confirm). Switch OFF -> disabled, gated behind a
+// confirm (disabling drops the provider from playback failover).
+async function onToggleProvider(row: ProviderRow, enabled: boolean): Promise<void> {
+  if (enabled) {
+    await applyProviderPolicy(row, 'auto')
+    return
+  }
+  const name = row.description || row.name
+  const confirmed = await confirm({
+    title: t('admin.policy.providers.confirmDisableTitle', { name }),
+    description: t('admin.policy.providers.confirmDisableBody', { name }),
+    confirmText: t('admin.policy.providers.disableAction'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  })
+  if (!confirmed) return
+  await applyProviderPolicy(row, 'disabled')
+}
+
+onMounted(() => {
+  load()
+  loadProviders()
+})
 </script>

@@ -1487,9 +1487,33 @@
         "visible": "Виден",
         "hidden": "Скрыт"
       },
+      "providers": {
+        "title": "Провайдеры скрапера",
+        "intro": "Переключайте провайдера между авто (участвует в цепочке failover) и отключён (исключён из failover). Health управляется пробником и обновляется сам.",
+        "loadError": "Не удалось загрузить провайдеров — попробуйте снова",
+        "groupLabel": "Группа",
+        "engineLabel": "Движок",
+        "toggleLabel": "Переключить {name} между авто и отключено",
+        "autoLabel": "Авто",
+        "disabledLabel": "Отключён",
+        "state": {
+          "UP": "Работает",
+          "Recovering": "Восстанавливается",
+          "Degraded": "Деградация",
+          "Down": "Не работает",
+          "Disabled": "Отключён"
+        },
+        "confirmDisableTitle": "Отключить {name}?",
+        "confirmDisableBody": "Отключение немедленно уберёт {name} из цепочки авто-failover — воспроизведение переключится на следующего провайдера.",
+        "disableAction": "Отключить",
+        "toastEnableSuccess": "{name}: включён режим авто",
+        "toastEnableError": "Не удалось снова включить {name} — попробуйте снова",
+        "toastDisableSuccess": "{name} отключён",
+        "toastDisableError": "Не удалось отключить {name} — попробуйте снова"
+      },
       "providersPlaceholder": {
-        "title": "Провайдеры",
-        "description": "Управление провайдерами появится в P5."
+        "title": "Нет провайдеров",
+        "description": "Провайдеры скрапера пока не зарегистрированы."
       }
     }
   },

@@ -624,6 +624,46 @@ export interface PolicyFlagsResponse {
   rouletteEnabled: boolean
 }
 
+/** Admin lever over a scraper provider's runtime policy. `manual` is
+ *  machine-set by the probe/self-heal state machine — NOT an admin lever
+ *  (the backend rejects it with 400; see services/catalog's SetPolicy). */
+export type ScraperProviderPolicy = 'auto' | 'manual' | 'disabled'
+
+/** RBAC-and-roulette P5 Task 2 — wire shape of `GET /api/admin/scraper-providers`
+ *  / `PUT .../{name}/policy` (services/catalog/internal/handler/admin_scraper_providers.go
+ *  `adminProviderWire`). Mirrors the internal scraper-facing `providerWire`
+ *  1:1 plus `derived_state`, the 5-state dashboard lifecycle label
+ *  (`UP|Recovering|Degraded|Down|Disabled`) the FE renders as a status pill
+ *  without re-implementing the policy+health precedence itself. */
+export interface ScraperProviderWire {
+  name: string
+  status: string
+  policy: ScraperProviderPolicy
+  health: 'up' | 'recovering' | 'down'
+  health_since: string
+  policy_since: string
+  last_probed_at: string
+  group: string
+  reason: string
+  description: string
+  scraper_operated: boolean
+  supports_sub: boolean
+  supports_dub: boolean
+  supports_raw: boolean
+  sub_delivery: string
+  quality_ceiling: string
+  preference_weight: number
+  engine: string
+  base_url: string
+  last_tick_metrics: string
+  updated_at: string
+  derived_state: 'UP' | 'Recovering' | 'Degraded' | 'Down' | 'Disabled'
+}
+
+export interface ScraperProvidersResponse {
+  providers: ScraperProviderWire[]
+}
+
 /** RBAC-and-roulette P4 — per-user feature-visibility feed
  *  (`GET /api/policy/features/mine`). JWT OPTIONAL: an authenticated caller
  *  gets their resolved flags, an anonymous caller gets everyone-flags only.
@@ -693,6 +733,19 @@ export const adminApi = {
     apiClient.put<{ data: { enabled: boolean } } | { enabled: boolean }>(
       '/admin/policy/roulette',
       { enabled },
+    ),
+  // RBAC-and-roulette P5 Task 2 — the Providers tab's facade over catalog's
+  // stream_providers table (Task 1: services/catalog/internal/handler/
+  // admin_scraper_providers.go). Admin levers are auto/disabled only —
+  // manual is machine-set by the probe/self-heal engine.
+  listScraperProviders: () =>
+    apiClient.get<{ data: ScraperProvidersResponse } | ScraperProvidersResponse>(
+      '/admin/scraper-providers',
+    ),
+  setScraperProviderPolicy: (name: string, policy: 'auto' | 'disabled') =>
+    apiClient.put<{ data: ScraperProviderWire } | ScraperProviderWire>(
+      `/admin/scraper-providers/${encodeURIComponent(name)}/policy`,
+      { policy },
     ),
   // Admin feedback browser — user feedback/error reports (player service,
   // /api/admin/reports). Responses use the standard {success,data} envelope.

@@ -6,6 +6,7 @@ import ru from '@/locales/ru.json'
 import ja from '@/locales/ja.json'
 import AdminPolicy from './AdminPolicy.vue'
 import type { FeatureFlag } from '@/composables/useAdminPolicy'
+import type { ScraperProviderWire } from '@/composables/useAdminProviders'
 
 // RBAC-and-roulette P3, Task 7 — AdminPolicy.vue Features tab.
 //
@@ -36,6 +37,40 @@ const flagEveryone: FeatureFlag = {
   updatedAt: '2026-07-01T00:00:00Z',
 }
 
+const providerUp: ScraperProviderWire = {
+  name: 'gogoanime',
+  status: 'enabled',
+  policy: 'auto',
+  health: 'up',
+  health_since: '2026-07-01T00:00:00Z',
+  policy_since: '2026-07-01T00:00:00Z',
+  last_probed_at: '2026-07-07T00:00:00Z',
+  group: 'en',
+  reason: '',
+  description: 'GogoAnime',
+  scraper_operated: true,
+  supports_sub: true,
+  supports_dub: true,
+  supports_raw: false,
+  sub_delivery: 'embedded',
+  quality_ceiling: '1080p',
+  preference_weight: 10,
+  engine: 'browser',
+  base_url: 'https://gogoanime.example',
+  last_tick_metrics: '',
+  updated_at: '2026-07-07T00:00:00Z',
+  derived_state: 'UP',
+}
+
+const providerDown: ScraperProviderWire = {
+  ...providerUp,
+  name: 'miruro',
+  description: 'Miruro',
+  health: 'down',
+  reason: 'circuit open',
+  derived_state: 'Down',
+}
+
 const mockList = vi.fn()
 const mockSetFlag = vi.fn()
 const mockSetRoulette = vi.fn()
@@ -51,6 +86,28 @@ vi.mock('@/composables/useAdminPolicy', async (importOriginal) => {
     }),
   }
 })
+
+// P5 Task 2 — Providers tab. useAdminProviders is mocked wholesale (mirrors
+// useAdminPolicy above); useConfirm is hoisted so the mock factory (which
+// vi.mock hoists above these const declarations) can close over it.
+const mockProvidersList = vi.fn()
+const mockSetPolicy = vi.fn()
+
+vi.mock('@/composables/useAdminProviders', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/composables/useAdminProviders')>()
+  return {
+    ...actual,
+    useAdminProviders: () => ({
+      list: mockProvidersList,
+      setPolicy: mockSetPolicy,
+    }),
+  }
+})
+
+const { confirmMock } = vi.hoisted(() => ({ confirmMock: vi.fn() }))
+vi.mock('@/composables/useConfirm', () => ({
+  useConfirm: () => ({ confirm: confirmMock }),
+}))
 
 vi.mock('@/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/client')>()
@@ -109,6 +166,9 @@ describe('AdminPolicy', () => {
     mockList.mockResolvedValue({ flags: [flagAdmin, flagEveryone], rouletteEnabled: true })
     mockSetFlag.mockResolvedValue(undefined)
     mockSetRoulette.mockResolvedValue(undefined)
+    mockProvidersList.mockResolvedValue([providerUp, providerDown])
+    mockSetPolicy.mockResolvedValue({ ...providerUp, policy: 'disabled', derived_state: 'Disabled' })
+    confirmMock.mockResolvedValue(true)
 
     const { adminApi } = await import('@/api/client')
     vi.mocked(adminApi.resolveUser).mockImplementation((q: string) => {
@@ -215,5 +275,70 @@ describe('AdminPolicy', () => {
     await w.find('[data-value="anonymous"]').trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="preview-result-previewDeny"]').text()).toContain('Visible')
+  })
+
+  // ─── PROVIDERS TAB (P5 Task 2) ──────────────────────────────────────────
+  describe('Providers tab', () => {
+    async function mountAndOpenProvidersTab() {
+      const w = mountComponent()
+      await flushPromises()
+      await w.find('#tab-providers').trigger('click')
+      await flushPromises()
+      return w
+    }
+
+    it('renders one row per provider with a status pill from derived_state', async () => {
+      const w = await mountAndOpenProvidersTab()
+
+      const cards = w.findAll('[data-testid="provider-card"]')
+      expect(cards.length).toBe(2)
+      expect(cards[0].text()).toContain('GogoAnime')
+      expect(w.find('[data-testid="provider-state-gogoanime"]').text()).toContain('Up')
+      expect(cards[1].text()).toContain('Miruro')
+      expect(w.find('[data-testid="provider-state-miruro"]').text()).toContain('Down')
+      // The reason surfaces for the down provider.
+      expect(cards[1].text()).toContain('circuit open')
+    })
+
+    it('toggling a provider OFF opens the confirm dialog and, on confirm, calls setPolicy(name, "disabled")', async () => {
+      const w = await mountAndOpenProvidersTab()
+
+      await w.find('[data-testid="provider-switch-gogoanime"]').trigger('click')
+      await flushPromises()
+
+      expect(confirmMock).toHaveBeenCalledTimes(1)
+      expect(mockSetPolicy).toHaveBeenCalledWith('gogoanime', 'disabled')
+    })
+
+    it('does not call setPolicy when the disable confirm is cancelled', async () => {
+      confirmMock.mockResolvedValueOnce(false)
+      const w = await mountAndOpenProvidersTab()
+
+      await w.find('[data-testid="provider-switch-gogoanime"]').trigger('click')
+      await flushPromises()
+
+      expect(confirmMock).toHaveBeenCalledTimes(1)
+      expect(mockSetPolicy).not.toHaveBeenCalled()
+    })
+
+    it('toggling a disabled provider ON calls setPolicy(name, "auto") with no confirm', async () => {
+      const disabledProvider: ScraperProviderWire = {
+        ...providerUp,
+        name: 'nineanime',
+        description: 'NineAnime',
+        policy: 'disabled',
+        derived_state: 'Disabled',
+      }
+      mockProvidersList.mockResolvedValue([disabledProvider])
+      mockSetPolicy.mockResolvedValue({ ...disabledProvider, policy: 'auto', derived_state: 'UP' })
+
+      const w = await mountAndOpenProvidersTab()
+
+      await w.find('[data-testid="provider-switch-nineanime"]').trigger('click')
+      await flushPromises()
+
+      expect(confirmMock).not.toHaveBeenCalled()
+      expect(mockSetPolicy).toHaveBeenCalledWith('nineanime', 'auto')
+    })
   })
 })

@@ -1487,9 +1487,33 @@
         "visible": "表示",
         "hidden": "非表示"
       },
+      "providers": {
+        "title": "スクレイパープロバイダー",
+        "intro": "プロバイダーを自動（フェイルオーバーチェーンに参加）と無効（フェイルオーバーから除外）の間で切り替えます。ヘルスはプローブが管理し、自動的に更新されます。",
+        "loadError": "プロバイダーを読み込めませんでした — もう一度お試しください",
+        "groupLabel": "グループ",
+        "engineLabel": "エンジン",
+        "toggleLabel": "{name} を自動と無効の間で切り替える",
+        "autoLabel": "自動",
+        "disabledLabel": "無効",
+        "state": {
+          "UP": "稼働中",
+          "Recovering": "復旧中",
+          "Degraded": "劣化",
+          "Down": "停止中",
+          "Disabled": "無効"
+        },
+        "confirmDisableTitle": "{name} を無効にしますか？",
+        "confirmDisableBody": "無効にすると {name} は自動フェイルオーバーチェーンから即座に外れ、再生は次のプロバイダーに切り替わります。",
+        "disableAction": "無効にする",
+        "toastEnableSuccess": "{name} を自動に設定しました",
+        "toastEnableError": "{name} を再度有効にできませんでした — もう一度お試しください",
+        "toastDisableSuccess": "{name} を無効にしました",
+        "toastDisableError": "{name} を無効にできませんでした — もう一度お試しください"
+      },
       "providersPlaceholder": {
-        "title": "プロバイダー",
-        "description": "プロバイダー管理は P5 で提供予定です。"
+        "title": "プロバイダーなし",
+        "description": "登録されたスクレイパープロバイダーはまだありません。"
       }
     }
   },

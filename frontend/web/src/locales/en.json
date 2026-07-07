@@ -1487,9 +1487,33 @@
         "visible": "Visible",
         "hidden": "Hidden"
       },
+      "providers": {
+        "title": "Scraper providers",
+        "intro": "Flip a provider between auto (in the failover chain) and disabled (dropped from failover). Health is probe-owned and updates on its own.",
+        "loadError": "Couldn't load providers — try again",
+        "groupLabel": "Group",
+        "engineLabel": "Engine",
+        "toggleLabel": "Toggle {name} between auto and disabled",
+        "autoLabel": "Auto",
+        "disabledLabel": "Disabled",
+        "state": {
+          "UP": "Up",
+          "Recovering": "Recovering",
+          "Degraded": "Degraded",
+          "Down": "Down",
+          "Disabled": "Disabled"
+        },
+        "confirmDisableTitle": "Disable {name}?",
+        "confirmDisableBody": "Disabling removes {name} from the auto-failover chain immediately — playback falls over to the next provider instead.",
+        "disableAction": "Disable",
+        "toastEnableSuccess": "{name} set to auto",
+        "toastEnableError": "Couldn't re-enable {name} — try again",
+        "toastDisableSuccess": "{name} disabled",
+        "toastDisableError": "Couldn't disable {name} — try again"
+      },
       "providersPlaceholder": {
-        "title": "Providers",
-        "description": "Provider management is coming in P5."
+        "title": "No providers",
+        "description": "No scraper providers are registered yet."
       }
     }
   },
