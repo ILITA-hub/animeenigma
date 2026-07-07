@@ -89,6 +89,19 @@ export function isRouletteEnabled(): boolean {
   return useFeatureVisibilityStore().rouletteEnabled
 }
 
+/**
+ * Whether the roulette actually has anything to roll for the current user —
+ * the intersection of the client registry ({@link SECRET_FEATURES}) and the
+ * server-resolved `store.roulette` pool. `rouletteEnabled` alone fails open
+ * (stays true) on a total policy-feed outage, but an empty `store.roulette`
+ * makes {@link pickSecretFeature} always return null — this lets callers
+ * (the App.vue footer button) hide instead of rendering a dead affordance.
+ */
+export function roulettePoolAvailable(): boolean {
+  const store = useFeatureVisibilityStore()
+  return SECRET_FEATURES.some((f) => store.roulette.includes(f.key))
+}
+
 let lastKey: SecretFeature['key'] | null = null
 
 /**

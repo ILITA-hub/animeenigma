@@ -121,7 +121,7 @@
             {{ $t('footer.feedback.viewMine') }}
           </router-link>
         </template>
-        <template v-if="rouletteEnabled">
+        <template v-if="rouletteEnabled && hasRoulettePool">
           <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
           <button
             type="button"
@@ -184,7 +184,7 @@ import { useStandaloneDisplay } from '@/pwa/standalone'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { reportFeError } from '@/utils/feErrorLog'
-import { pickSecretFeature } from '@/utils/secretFeatures'
+import { pickSecretFeature, roulettePoolAvailable } from '@/utils/secretFeatures'
 import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
 
 const authStore = useAuthStore()
@@ -229,6 +229,14 @@ const commitUrl = commitHash
 // starts (and stays, on failure) `true`, and only adopts the server's value
 // once the feed actually loaded.
 const rouletteEnabled = ref(true)
+
+// The pool itself (store.roulette) has no fail-open default — on a total
+// policy-feed outage it stays empty, which would make pickSecretFeature
+// always return null. Gate the button on a non-empty pool too, so an outage
+// hides the button instead of rendering a dead affordance that no-ops on
+// click. This is separate from rouletteEnabled (the master switch) and does
+// not change its fail-open behavior.
+const hasRoulettePool = computed(() => roulettePoolAvailable())
 
 async function loadSecretFeatureState(): Promise<void> {
   try {

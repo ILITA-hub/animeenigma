@@ -9,7 +9,12 @@ vi.mock('@/api/client', () => ({
   featuresApi: { getFeaturesMine: vi.fn() },
 }))
 
-import { pickSecretFeature, isRouletteEnabled, _resetSecretFeatureForTests } from '../secretFeatures'
+import {
+  pickSecretFeature,
+  isRouletteEnabled,
+  roulettePoolAvailable,
+  _resetSecretFeatureForTests,
+} from '../secretFeatures'
 import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
 
 function rollKeys(n: number, currentPath = '/'): string[] {
@@ -89,5 +94,38 @@ describe('isRouletteEnabled — reflects store.rouletteEnabled', () => {
   it('false when the store says the master switch is off (footer button hidden path)', () => {
     store.rouletteEnabled = false
     expect(isRouletteEnabled()).toBe(false)
+  })
+})
+
+describe('roulettePoolAvailable — footer button dead-affordance guard (P4 Task 3 review fix)', () => {
+  it('false when store.roulette is empty (e.g. total policy-feed outage) even though the master switch fails open', () => {
+    store.rouletteEnabled = true
+    store.roulette = []
+    expect(roulettePoolAvailable()).toBe(false)
+  })
+
+  it('true when store.roulette has at least one key the client registry knows', () => {
+    store.rouletteEnabled = true
+    store.roulette = ['anidle']
+    expect(roulettePoolAvailable()).toBe(true)
+  })
+
+  it('false when store.roulette only has keys the client registry does not know', () => {
+    store.roulette = ['some-future-key']
+    expect(roulettePoolAvailable()).toBe(false)
+  })
+
+  it('the button-visibility gate is rouletteEnabled AND roulettePoolAvailable — either false hides it', () => {
+    store.rouletteEnabled = false
+    store.roulette = ['anidle']
+    expect(store.rouletteEnabled && roulettePoolAvailable()).toBe(false)
+
+    store.rouletteEnabled = true
+    store.roulette = []
+    expect(store.rouletteEnabled && roulettePoolAvailable()).toBe(false)
+
+    store.rouletteEnabled = true
+    store.roulette = ['anidle']
+    expect(store.rouletteEnabled && roulettePoolAvailable()).toBe(true)
   })
 })
