@@ -39,6 +39,11 @@ type ProviderCap struct {
 	// language from `group` as before (Phase C source-panel truth).
 	Lang string `json:"lang,omitempty"`
 
+	// PlayabilityIndex is the blended, decayed rank score (Phase B). Higher =
+	// more playable. The FE sorts the `degraded` bucket by it. omitempty drops
+	// it when analytics is unavailable and the blend was skipped.
+	PlayabilityIndex float64 `json:"playability_index,omitempty"`
+
 	Variants []Variant `json:"variants"`
 }
 
