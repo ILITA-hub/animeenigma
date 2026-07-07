@@ -179,4 +179,41 @@ describe('AdminPolicy', () => {
     expect(w.find('[data-testid="preview-result-anidle"]').text()).toContain('Visible')
     expect(w.find('[data-testid="preview-result-fanfic"]').text()).toContain('Hidden')
   })
+
+  it('ignores a stale selected target user once the preview identity is switched back to anonymous', async () => {
+    const DENY_UUID = '22222222-2222-2222-2222-222222222222'
+    const flagEveryoneDenyX: FeatureFlag = {
+      key: 'previewDeny',
+      roles: ['everyone'],
+      allowUsers: [],
+      denyUsers: [DENY_UUID],
+      roulette: false,
+      failSafe: 'everyone',
+      label: 'Preview Deny Target',
+      updatedAt: '2026-07-01T00:00:00Z',
+    }
+    mockList.mockResolvedValue({ flags: [flagEveryoneDenyX], rouletteEnabled: true })
+
+    const w = mountComponent()
+    await flushPromises()
+
+    // Switch off anonymous and select a target user that is on the deny list —
+    // deny wins, so the flag should read Hidden for that identity+user pair.
+    await w.find('[data-value="user"]').trigger('click')
+    const resolveInputs = w.findAllComponents({ name: 'UserResolveInput' })
+    await resolveInputs[resolveInputs.length - 1]!.vm.$emit('resolve', {
+      id: DENY_UUID,
+      username: 'UserX',
+      public_id: 'userx',
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="preview-result-previewDeny"]').text()).toContain('Hidden')
+
+    // Switch back to anonymous — a real anonymous request carries no userID,
+    // so the stale target-user selection must be ignored and the
+    // roles:['everyone'] flag must read Visible, not Hidden.
+    await w.find('[data-value="anonymous"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="preview-result-previewDeny"]').text()).toContain('Visible')
+  })
 })

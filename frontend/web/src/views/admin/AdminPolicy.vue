@@ -173,7 +173,12 @@
                   :aria-label="$t('admin.policy.preview.identityLabel')"
                 />
                 <div class="flex items-center gap-2">
-                  <UserResolveInput mode="chip" @resolve="setPreviewUser" />
+                  <span class="text-xs text-white/50">{{ $t('admin.policy.preview.userLabel') }}</span>
+                  <UserResolveInput
+                    mode="chip"
+                    :aria-label="$t('admin.policy.preview.userLabel')"
+                    @resolve="setPreviewUser"
+                  />
                   <Chip v-if="previewUser" removable size="sm" @remove="clearPreviewUser">
                     {{ previewUser.username }}
                   </Chip>
@@ -410,16 +415,21 @@ function removeDenyUser(row: FlagRow, id: string): void {
 
 async function saveRow(row: FlagRow): Promise<void> {
   row.saving = true
+  // Snapshot the exact payload BEFORE the await — if the admin edits the row
+  // while the PUT is in flight, `row.original` must reflect what was actually
+  // sent, not whatever `row` looks like by the time the response lands. That
+  // keeps a mid-flight edit dirty so its own Save still fires.
+  const payload = {
+    roles: [...row.roles],
+    allowUsers: [...row.allowUsers],
+    denyUsers: [...row.denyUsers],
+    roulette: row.roulette,
+    failSafe: row.failSafe,
+    label: row.label,
+  }
   try {
-    await policy.setFlag(row.key, {
-      roles: [...row.roles],
-      allowUsers: [...row.allowUsers],
-      denyUsers: [...row.denyUsers],
-      roulette: row.roulette,
-      failSafe: row.failSafe,
-      label: row.label,
-    })
-    row.original = snapshotAudience(row)
+    await policy.setFlag(row.key, payload)
+    row.original = snapshotAudience(payload)
     toast.push(t('admin.policy.toastSaveSuccess', { label: row.label }), 'success')
   } catch {
     toast.push(t('admin.policy.toastSaveError', { label: row.label }), 'error')
@@ -455,13 +465,17 @@ function canAccess(row: FlagRow, identity: PreviewIdentity, userId?: string): bo
   return false
 }
 
-const previewResults = computed(() =>
-  rows.value.map((row) => ({
+const previewResults = computed(() => {
+  // A real anonymous request carries NO userID — a leftover selected target
+  // user from a previous identity must not leak into the anonymous preview
+  // (e.g. roles:['everyone'], denyUsers:[X] would wrongly show Hidden).
+  const previewUserId = previewIdentity.value === 'anonymous' ? undefined : previewUser.value?.id
+  return rows.value.map((row) => ({
     key: row.key,
     label: row.label,
-    visible: canAccess(row, previewIdentity.value, previewUser.value?.id),
-  })),
-)
+    visible: canAccess(row, previewIdentity.value, previewUserId),
+  }))
+})
 
 onMounted(load)
 </script>
