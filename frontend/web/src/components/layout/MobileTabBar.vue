@@ -1,8 +1,11 @@
 <template>
   <!-- Installed-PWA bottom tab bar. In standalone mode there is no browser
-       chrome (no back button, no URL bar), so navigation must live in-app.
+       chrome (no URL bar), so navigation must live in-app.
        Mobile-only + standalone-only by design: the browser tab keeps its own
-       chrome and the desktop PWA keeps the top navbar. -->
+       chrome and the desktop PWA keeps the top navbar. No in-app Back tab here:
+       on mobile the OS back button + edge-swipe gesture already cover it (a
+       second Back control is redundant); the desktop PWA gets its Back control
+       in the top navbar instead, where no OS-level back exists. -->
   <nav
     v-if="isStandalone && isMobile"
     class="fixed inset-x-0 bottom-0 z-40 px-4"
@@ -10,16 +13,6 @@
     data-test="mobile-tabbar"
   >
     <div class="tabbar-capsule glass-nav glass-mobile-nav rounded-2xl border border-white/10 flex items-stretch">
-      <button
-        type="button"
-        class="tab-item"
-        data-test="tab-back"
-        :aria-label="$t('nav.back')"
-        @click="router.back()"
-      >
-        <ArrowLeft class="size-5" aria-hidden="true" />
-        <span class="tab-label">{{ $t('nav.back') }}</span>
-      </button>
       <RouterLink
         v-for="it in items"
         :key="it.to"
@@ -37,15 +30,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { ArrowLeft, Home, LayoutGrid, Download, User } from 'lucide-vue-next'
+import { useRoute, RouterLink } from 'vue-router'
+import { Home, LayoutGrid, Download, User } from 'lucide-vue-next'
 import { useStandaloneDisplay } from '@/pwa/standalone'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { downloadsNavVisible } from '@/offline/downloadGate'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
-const router = useRouter()
 const authStore = useAuthStore()
 const isStandalone = useStandaloneDisplay()
 const { isMobile } = useMobilePlayer()

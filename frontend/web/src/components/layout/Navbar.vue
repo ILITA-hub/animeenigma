@@ -42,14 +42,32 @@
     />
     <nav class="relative max-w-7xl mx-auto px-4 lg:px-8">
       <div class="flex items-center justify-between h-14 md:h-16">
-        <!-- Logo — BrandMark icon + wordmark -->
-        <router-link to="/" class="brand-link">
-          <BrandMark />
-          <span class="brand-wordmark">
-            <span class="brand-b1">Anime</span><span class="brand-b2">Enigma</span>
-          </span>
-          <span class="brand-beta">beta</span>
-        </router-link>
+        <!-- Left group: in-app Back (desktop PWA only) + brand logo -->
+        <div class="flex items-center gap-1">
+          <!-- Installed desktop PWA has no browser chrome (no back button),
+               so provide an in-app Back control here. Standalone + desktop
+               only: browser tabs keep their own back button, and mobile
+               standalone relies on the OS back button + edge-swipe gesture. -->
+          <button
+            v-if="isStandalone && isDesktop"
+            type="button"
+            class="icon-btn-nt"
+            data-test="app-back"
+            :aria-label="$t('nav.back')"
+            :title="$t('nav.back')"
+            @click="router.back()"
+          >
+            <ArrowLeft class="size-5" />
+          </button>
+          <!-- Logo — BrandMark icon + wordmark -->
+          <router-link to="/" class="brand-link">
+            <BrandMark />
+            <span class="brand-wordmark">
+              <span class="brand-b1">Anime</span><span class="brand-b2">Enigma</span>
+            </span>
+            <span class="brand-beta">beta</span>
+          </router-link>
+        </div>
 
         <!-- Desktop Navigation -->
         <div class="hidden md:flex items-center gap-1">
@@ -394,7 +412,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
-import { Search, X, ChevronDown, Menu, Gem, Star, Bell } from 'lucide-vue-next'
+import { Search, X, ChevronDown, Menu, Gem, Star, Bell, ArrowLeft } from 'lucide-vue-next'
 import Avatar from '@/components/ui/Avatar.vue'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
@@ -407,10 +425,15 @@ import { useGachaStore } from '@/stores/gacha'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useNotificationBadge } from '@/composables/useNotificationBadge'
 import { downloadsNavVisible } from '@/offline/downloadGate'
+import { useStandaloneDisplay } from '@/pwa/standalone'
 
 const router = useRouter()
 const { locale } = useI18n()
 const authStore = useAuthStore()
+
+// Installed-PWA detection — drives the desktop in-app Back button (a standalone
+// desktop window has no browser chrome, so no OS-level back exists).
+const isStandalone = useStandaloneDisplay()
 
 // Gacha gate + balance chip
 const gachaVisible = useGachaVisible()

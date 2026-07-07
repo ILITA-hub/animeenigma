@@ -80,17 +80,16 @@ describe('MobileTabBar', () => {
     expect(w.find('[data-test="mobile-tabbar"]').exists()).toBe(false)
   })
 
-  it('shows back/home/browse/downloads/profile tabs', () => {
+  it('shows home/browse/downloads/profile tabs', () => {
     const w = mountBar()
-    for (const key of ['back', 'home', 'browse', 'downloads', 'profile']) {
+    for (const key of ['home', 'browse', 'downloads', 'profile']) {
       expect(w.find(`[data-test="tab-${key}"]`).exists()).toBe(true)
     }
   })
 
-  it('back button delegates to router.back', async () => {
+  it('has no in-app Back tab (the OS back button + swipe cover it on mobile)', () => {
     const w = mountBar()
-    await w.find('[data-test="tab-back"]').trigger('click')
-    expect(h.back).toHaveBeenCalledTimes(1)
+    expect(w.find('[data-test="tab-back"]').exists()).toBe(false)
   })
 
   it('profile tab targets /auth for anonymous users', async () => {
