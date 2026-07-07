@@ -26,6 +26,7 @@ COPY services/upscaler/go.mod services/upscaler/go.sum* ./services/upscaler/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
 COPY services/streaming/go.mod services/streaming/go.sum* ./services/streaming/
 COPY services/player/go.mod services/player/go.sum* ./services/player/
+COPY services/recs/go.mod services/recs/go.sum* ./services/recs/
 COPY services/rooms/go.mod services/rooms/go.sum* ./services/rooms/
 COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/scheduler/go.mod services/scheduler/go.sum* ./services/scheduler/
