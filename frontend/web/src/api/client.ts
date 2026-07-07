@@ -644,6 +644,32 @@ export interface PolicyFlagsResponse {
   rouletteEnabled: boolean
 }
 
+/** RBAC-and-roulette P4 — per-user feature-visibility feed
+ *  (`GET /api/policy/features/mine`). JWT OPTIONAL: an authenticated caller
+ *  gets their resolved flags, an anonymous caller gets everyone-flags only.
+ *  Fail-open server-side. This is what the frontend cuts over to in P4 —
+ *  nav/dark-ship routes/profile-wall tab/footer roulette all read this
+ *  instead of the old `VITE_*_ADMIN_ONLY` build flags + the secret-features
+ *  admin facade below. */
+export interface FeaturesMineResponse {
+  rouletteEnabled: boolean
+  visible: string[]
+  roulette: string[]
+}
+
+function unwrapFeaturesMine(response: AxiosResponse<unknown>): FeaturesMineResponse {
+  const data = response.data as { data?: FeaturesMineResponse } | FeaturesMineResponse | undefined
+  if (data && typeof data === 'object' && 'data' in data) {
+    return data.data as FeaturesMineResponse
+  }
+  return data as FeaturesMineResponse
+}
+
+export const featuresApi = {
+  getFeaturesMine: (): Promise<FeaturesMineResponse> =>
+    apiClient.get<{ data: FeaturesMineResponse } | FeaturesMineResponse>('/policy/features/mine').then(unwrapFeaturesMine),
+}
+
 export const adminApi = {
   // Hide/unhide anime globally
   hideAnime: (animeId: string) => apiClient.post(`/admin/anime/${animeId}/hide`),
