@@ -165,3 +165,12 @@ var LibraryJobsTranscodingSQL string
 //
 //go:embed 015_storyboard.sql
 var StoryboardSQL string
+
+// EpisodeAudioLangSQL is migrations/016_episode_audio_lang.sql embedded as a
+// string. Adds library_episodes.audio_lang + quality (persisted by
+// library-batchingest at ingest; read by catalog AeTitleInfo). main.go applies
+// this via db.Exec(EpisodeAudioLangSQL). Idempotent ADD COLUMN IF NOT EXISTS;
+// must follow 002 (which created library_episodes).
+//
+//go:embed 016_episode_audio_lang.sql
+var EpisodeAudioLangSQL string

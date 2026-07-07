@@ -224,6 +224,13 @@ func main() {
 	if err := db.DB.Exec(migrations.StoryboardSQL).Error; err != nil {
 		log.Fatalw("failed to apply storyboard migration", "error", err)
 	}
+	// 016: adds library_episodes.audio_lang + quality — persisted by
+	// library-batchingest at ingest so the catalog `ae` capability reports real
+	// dub/sub + language + quality. Idempotent ADD COLUMN IF NOT EXISTS; must
+	// follow 002 (which created library_episodes, already applied above).
+	if err := db.DB.Exec(migrations.EpisodeAudioLangSQL).Error; err != nil {
+		log.Fatalw("failed to apply episode audio_lang migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {
