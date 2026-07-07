@@ -174,9 +174,10 @@ git commit -m "feat(web): footer roulette pool from policy /features/mine (retir
 
 - [ ] **Step 1: Write the parity test**
 
-`frontend/web/src/composables/featureVisibility.parity.spec.ts`: seed the store with the day-one-equivalent `mine` for two identities and assert the resulting visibility matches today's:
-- **admin** `mine = { rouletteEnabled:true, visible:[all 10 keys], roulette:[anidle,status,themes,game,downloads,showcase-editor,my-feedback] }` → `useFeatureVisible('fanfic'|'gacha'|'profile-wall')` all true; footer pool = the 7 roulette keys.
-- **user** `mine = { rouletteEnabled:true, visible:[anidle,status,themes,game,downloads,showcase-editor,my-feedback], roulette:[same 7] }` → fanfic/gacha/profile-wall false; footer pool = the 7. (gacha NOT in roulette, matching seed.)
+`frontend/web/src/composables/featureVisibility.parity.spec.ts`: seed the store with the day-one-equivalent `mine` (matching the CORRECTED seed in `services/policy/internal/domain/feature_flag.go` after the Task-3 parity fix) for three identities and assert visibility matches today's:
+- **admin** `mine = { rouletteEnabled:true, visible:[all 10 keys], roulette:[anidle,status,themes,game,downloads,fanfic,showcase-editor,my-feedback] (8) }` → `useFeatureVisible('fanfic'|'gacha'|'profile-wall')` all true; footer pool = those 8. (gacha NOT in roulette — seed roulette:false.)
+- **user** `mine = { rouletteEnabled:true, visible:[anidle,status,themes,game,downloads,my-feedback], roulette:[same 6] }` → fanfic/gacha/profile-wall false; footer pool = those 6. (showcase-editor + fanfic are admin-only, absent.)
+- **anon** `mine = { rouletteEnabled:true, visible:[anidle,status,themes,game,downloads], roulette:[same 5] }` → fanfic/gacha/profile-wall false; footer pool = those 5. (my-feedback + showcase-editor + fanfic absent — the parity fix.)
 
 - [ ] **Step 2: Run, verify fail (or pass if logic already correct)**
 
