@@ -36,6 +36,16 @@ cat <<'JSON'
 JSON
 `
 
+// fakeFfprobeScriptWithHeight is fakeFfprobeScript plus a `streams` array
+// (an audio stream with no height, then a video stream at 720p) — exercises
+// probe()'s video-height extraction, which ignores non-video streams and
+// streams that don't report a height.
+const fakeFfprobeScriptWithHeight = `#!/bin/sh
+cat <<'JSON'
+{"format":{"duration":"1450.5","bit_rate":"3200000"},"streams":[{"codec_type":"audio"},{"codec_type":"video","height":720}]}
+JSON
+`
+
 // lastArg in POSIX sh: shift down to the final argument via `eval`.
 // We capture it into PLAYLIST.
 const lastArgPrelude = `# Walk argv to its last element.
@@ -144,6 +154,40 @@ func TestTranscode_SuccessPath(t *testing.T) {
 	// Temp dir MUST NOT be cleaned by Transcode on success (caller does it).
 	if _, err := os.Stat(res.PlaylistPath); err != nil {
 		t.Errorf("playlist must exist post-Transcode: %v", err)
+	}
+}
+
+// TestTranscode_ResultCarriesHeight asserts Result.Height is populated from
+// the source video stream's ffprobe-reported height. Per Task 1's feasibility
+// note: every other test in this file mocks ffmpeg/ffprobe with fake shell
+// scripts rather than driving a real media fixture (there is no checked-in
+// media file in this repo), so this test mirrors that established pattern
+// instead of introducing a real-ffmpeg/ffprobe dependency.
+func TestTranscode_ResultCarriesHeight(t *testing.T) {
+	dir := t.TempDir()
+	ffprobeBin := filepath.Join(dir, "fake_ffprobe.sh")
+	ffmpegBin := filepath.Join(dir, "fake_ffmpeg.sh")
+	writeScript(t, ffprobeBin, fakeFfprobeScriptWithHeight)
+	writeScript(t, ffmpegBin, fakeFfmpegSucceedScript)
+
+	tr := NewTranscoder(Config{
+		BinaryPath:     ffmpegBin,
+		FfprobePath:    ffprobeBin,
+		Tmpdir:         filepath.Join(dir, "tmp"),
+		MaxBitrateKbps: 5000,
+	}, nil)
+
+	source := filepath.Join(dir, "fake_source.mp4")
+	if err := os.WriteFile(source, []byte("source"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	res, err := tr.Transcode(context.Background(), source)
+	if err != nil {
+		t.Fatalf("Transcode: %v", err)
+	}
+	if res.Height != 720 {
+		t.Fatalf("Result.Height = %d, want 720", res.Height)
 	}
 }
 

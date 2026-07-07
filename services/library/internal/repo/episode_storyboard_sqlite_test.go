@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS library_episodes (
 	size_bytes INTEGER,
 	source TEXT NOT NULL DEFAULT 'admin',
 	track TEXT NOT NULL DEFAULT 'raw',
+	audio_lang TEXT NOT NULL DEFAULT '',
+	quality TEXT NOT NULL DEFAULT '',
 	downloaded_at DATETIME,
 	last_fetch_at DATETIME,
 	fetch_count INTEGER NOT NULL DEFAULT 0,

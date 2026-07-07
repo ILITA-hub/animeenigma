@@ -55,6 +55,14 @@ type Episode struct {
 	SizeBytes     *int64        `gorm:"type:bigint;column:size_bytes" json:"size_bytes,omitempty"`
 	Source        EpisodeSource `gorm:"type:episode_source;not null;default:admin;column:source" json:"source"`
 	Track         EpisodeTrack  `gorm:"type:episode_track;not null;default:raw;column:track" json:"track"`
+	// AudioLang and Quality surface the encoder's ACTUAL output (ISO-639 audio
+	// language + e.g. "720p") for the Phase C source-panel truth work. Empty
+	// string (not NULL) for pre-existing rows and any path that hasn't started
+	// populating them yet — `not null;default:''` so AutoMigrate backfills
+	// existing rows safely and callers can compare against "" without a nil
+	// check.
+	AudioLang     string        `gorm:"type:text;not null;default:'';column:audio_lang" json:"audio_lang,omitempty"`
+	Quality       string        `gorm:"type:text;not null;default:'';column:quality" json:"quality,omitempty"`
 	DownloadedAt  *time.Time    `gorm:"column:downloaded_at" json:"downloaded_at,omitempty"`
 	LastFetchAt   *time.Time    `gorm:"column:last_fetch_at" json:"last_fetch_at,omitempty"`
 	FetchCount    int64         `gorm:"type:bigint;not null;default:0;column:fetch_count" json:"fetch_count"`

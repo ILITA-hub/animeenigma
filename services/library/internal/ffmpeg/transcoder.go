@@ -48,6 +48,12 @@ type Result struct {
 	SegmentPaths []string // absolute paths to {tmp}/segment_NNN.ts, sorted ASC
 	DurationSec  int      // from ffprobe
 	SizeBytes    int64    // playlist + all segments
+	// Height is the source video stream's height in pixels, as reported by
+	// ffprobe. The transcode argv never applies `-vf scale`, so the encoded
+	// output height always matches the probed source height. Zero when
+	// ffprobe failed, its output didn't parse, or no video stream was
+	// reported — callers must treat 0 as "unknown", not "0p".
+	Height int
 }
 
 // Transcoder is the public façade. Safe for concurrent use — each
@@ -118,12 +124,23 @@ func (r *ringBuffer) String() string {
 	return string(r.buf)
 }
 
-// ffprobeOutput is the minimal subset of ffprobe's JSON we read.
+// ffprobeOutput is the minimal subset of ffprobe's JSON we read. Streams is
+// populated by the SAME `-show_streams` flag probe() already passes to
+// ffprobe (previously requested but unparsed) — reading it to find the video
+// stream's height costs no extra subprocess.
 type ffprobeOutput struct {
 	Format struct {
 		Duration string `json:"duration"`
 		BitRate  string `json:"bit_rate"`
 	} `json:"format"`
+	Streams []ffprobeStream `json:"streams"`
+}
+
+// ffprobeStream is the minimal subset of an ffprobe stream record needed to
+// find the source video's height (CodecType == "video").
+type ffprobeStream struct {
+	CodecType string `json:"codec_type"`
+	Height    int    `json:"height"`
 }
 
 // TranscodeOpts carries optional per-call knobs. The zero value reproduces
@@ -241,11 +258,12 @@ func (t *Transcoder) runFfmpeg(ctx context.Context, args []string, label string)
 	return nil
 }
 
-// probe runs ffprobe and returns (durationSec, bitrateKbps). On parse
-// failure both come back as zero; the caller substitutes the default
-// bitrate cap. Errors from exec.Run are NOT fatal — probe is
-// best-effort metadata.
-func (t *Transcoder) probe(ctx context.Context, sourcePath string) (int, int) {
+// probe runs ffprobe and returns (durationSec, bitrateKbps, height). height
+// is the first video stream's pixel height, or 0 when none was reported. On
+// parse failure all three come back as zero; the caller substitutes the
+// default bitrate cap and treats height as unknown. Errors from exec.Run are
+// NOT fatal — probe is best-effort metadata.
+func (t *Transcoder) probe(ctx context.Context, sourcePath string) (int, int, int) {
 	cmd := exec.CommandContext(ctx, t.cfg.FfprobePath,
 		"-v", "error",
 		"-print_format", "json",
@@ -259,7 +277,7 @@ func (t *Transcoder) probe(ctx context.Context, sourcePath string) (int, int) {
 			t.log.Warnw("ffprobe failed; falling back to bitrate cap",
 				"source", sourcePath, "error", err)
 		}
-		return 0, 0
+		return 0, 0, 0
 	}
 	var parsed ffprobeOutput
 	if err := json.Unmarshal(out, &parsed); err != nil {
@@ -267,11 +285,18 @@ func (t *Transcoder) probe(ctx context.Context, sourcePath string) (int, int) {
 			t.log.Warnw("ffprobe output parse failed",
 				"source", sourcePath, "error", err)
 		}
-		return 0, 0
+		return 0, 0, 0
 	}
 	durFloat, _ := strconv.ParseFloat(parsed.Format.Duration, 64)
 	brBps, _ := strconv.ParseInt(parsed.Format.BitRate, 10, 64)
-	return int(durFloat), int(brBps / 1000)
+	height := 0
+	for _, s := range parsed.Streams {
+		if s.CodecType == "video" && s.Height > 0 {
+			height = s.Height
+			break
+		}
+	}
+	return int(durFloat), int(brBps / 1000), height
 }
 
 // audioOrdinalForLang runs ffprobe over the audio streams only and returns the
@@ -332,7 +357,7 @@ func (t *Transcoder) TranscodeWithOpts(ctx context.Context, sourcePath string, o
 		return nil, err
 	}
 
-	durationSec, sourceKbps := t.probe(ctx, sourcePath)
+	durationSec, sourceKbps, height := t.probe(ctx, sourcePath)
 
 	bv := t.cfg.MaxBitrateKbps
 	if sourceKbps > 0 && sourceKbps < bv {
@@ -408,5 +433,6 @@ func (t *Transcoder) TranscodeWithOpts(ctx context.Context, sourcePath string, o
 		SegmentPaths: matches,
 		DurationSec:  durationSec,
 		SizeBytes:    total,
+		Height:       height,
 	}, nil
 }

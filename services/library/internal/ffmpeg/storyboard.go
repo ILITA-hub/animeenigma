@@ -33,7 +33,7 @@ type StoryboardResult struct {
 // Low JPEG quality is deliberate (preview-only asset, bandwidth-first).
 func (t *Transcoder) Storyboard(ctx context.Context, sourcePath string, durationSec int) (*StoryboardResult, error) {
 	if durationSec <= 0 {
-		durationSec, _ = t.probe(ctx, sourcePath) // backfill callers may not know it
+		durationSec, _, _ = t.probe(ctx, sourcePath) // backfill callers may not know it
 	}
 	if durationSec <= 0 {
 		return nil, fmt.Errorf("storyboard: unknown duration for %s", sourcePath)
