@@ -8,6 +8,7 @@
  * no router.push) — calling window.open would open a second app instance.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { _resetStandaloneForTests } from '@/pwa/standalone'
 
 const pushSpy = vi.fn()
 
@@ -17,6 +18,10 @@ vi.mock('vue-router', () => ({
 
 import { useOpenFeature } from './useOpenFeature'
 
+// isStandalone is backed by the canonical useStandaloneDisplay() singleton
+// (frontend/web/src/pwa/standalone.ts) — it caches its result on first call,
+// so each test must reset the cache AFTER installing its own matchMedia mock
+// but BEFORE useOpenFeature() (which triggers the first read) runs.
 function mockMatchMedia(standaloneMatches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -28,6 +33,7 @@ function mockMatchMedia(standaloneMatches: boolean) {
       removeEventListener: vi.fn(),
     })),
   })
+  _resetStandaloneForTests()
 }
 
 function makeClickEvent(): MouseEvent {
@@ -43,6 +49,7 @@ describe('useOpenFeature', () => {
     // @ts-expect-error — cleanup jsdom global between tests
     delete window.matchMedia
     delete (navigator as unknown as { standalone?: boolean }).standalone
+    _resetStandaloneForTests()
   })
 
   it('standalone=true: openFeature prevents default and routes inside the app', () => {

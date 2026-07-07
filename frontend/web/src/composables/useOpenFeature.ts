@@ -1,4 +1,5 @@
 import { useRouter } from 'vue-router'
+import { useStandaloneDisplay } from '@/pwa/standalone'
 
 /**
  * RBAC-and-roulette policy admin UI (Task 6) — contextual "open feature"
@@ -24,9 +25,7 @@ import { useRouter } from 'vue-router'
 export function useOpenFeature() {
   const router = useRouter()
 
-  const isStandalone =
-    window.matchMedia?.('(display-mode: standalone)')?.matches === true ||
-    (navigator as unknown as { standalone?: boolean }).standalone === true
+  const isStandalone = useStandaloneDisplay().value
 
   function openFeature(e: MouseEvent, route: string): void {
     if (isStandalone) {
