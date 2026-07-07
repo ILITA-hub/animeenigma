@@ -12,6 +12,20 @@ import { shouldRedirectToDownloads } from '@/pwa/offlineBoot'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Races `promise` against a `ms` timeout, guaranteeing the timer is cleared
+// either way — a bare `Promise.race([p, new Promise(r => setTimeout(r, ms))])`
+// never clears its timeout, leaking a pending timer for the full `ms` on every
+// call where `p` wins first (RBAC-and-roulette P5 review fix). Used by the
+// gachaGated/fanficGated guard below to bound the cold-load wait on
+// featureVisibility.ready without leaving a dangling setTimeout behind it.
+function raceWithTimeout(promise: Promise<unknown>, ms: number): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout>
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(resolve, ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -406,10 +420,7 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.gachaGated || to.meta.fanficGated) {
     const featureVisibility = useFeatureVisibilityStore()
     featureVisibility.load()
-    await Promise.race([
-      featureVisibility.ready,
-      new Promise((resolve) => setTimeout(resolve, 2500)),
-    ])
+    await raceWithTimeout(featureVisibility.ready, 2500)
 
     const feed = { loaded: featureVisibility.loaded, visible: featureVisibility.visible }
 
