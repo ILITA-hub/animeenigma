@@ -277,6 +277,9 @@ func ingestOne(
 			MinioPath:     prefix,
 			DurationSec:   &dur,
 			SizeBytes:     &size,
+			Track:         langToTrack(audioLang),
+			AudioLang:     normalizeLang(audioLang),
+			Quality:       formatHeight(result.Height),
 		}
 		if err := episodeRepo.Create(ctx, ep); err != nil {
 			if appErr, ok := liberrors.IsAppError(err); ok && appErr.Code == liberrors.CodeAlreadyExists {
@@ -373,4 +376,38 @@ func max1(n int) int {
 		return 1
 	}
 	return n
+}
+
+// normalizeLang lowercases + maps ISO-639-1 aliases to the -2 form we compare on.
+func normalizeLang(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "en", "eng":
+		return "eng"
+	case "ru", "rus":
+		return "rus"
+	case "ja", "jp", "jpn":
+		return "jpn"
+	default:
+		return strings.ToLower(strings.TrimSpace(s))
+	}
+}
+
+// langToTrack maps an ingest audio language to the stored Track. Localized
+// languages (eng/rus) are dubs; original/Japanese/empty stays raw (original audio).
+func langToTrack(audioLang string) domain.EpisodeTrack {
+	switch normalizeLang(audioLang) {
+	case "eng", "rus":
+		return domain.EpisodeTrackDub
+	default:
+		return domain.EpisodeTrackRaw
+	}
+}
+
+// formatHeight formats the video height to a resolution string.
+// Returns "" for height 0 (unknown), else "NNNp" (e.g. "1080p").
+func formatHeight(h int) string {
+	if h == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%dp", h)
 }
