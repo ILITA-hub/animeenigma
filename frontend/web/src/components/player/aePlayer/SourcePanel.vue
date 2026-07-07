@@ -239,11 +239,13 @@ const langIndex = computed(() =>
   langOptions.findIndex(o => o.value === props.lang),
 )
 
-// State bucket → available sources float to the top of the full list, backend
-// `order` (desc) is the tiebreak within each bucket. 'degraded'/'recovering'
-// are selectable-but-not-auto (AUTO-484) so they rank below 'active' but above
-// 'no_content'. Array.prototype.sort is stable, so equal keys keep input order
-// (rows already arrive `order`-sorted from rowsFromReport).
+// State bucket → available sources float to the top of the full list. Backend
+// `order` (desc) is the within-bucket tiebreak for every bucket EXCEPT
+// 'degraded', which tiebreaks by `playability_index` (desc) then `order`
+// (Phase B). 'degraded'/'recovering' are selectable-but-not-auto (AUTO-484) so
+// they rank below 'active' but above 'no_content'. Array.prototype.sort is
+// stable, so equal keys keep input order (rows already arrive `order`-sorted
+// from rowsFromReport).
 const STATE_RANK: Record<ChipState, number> = {
   active: 0,
   recovering: 1,
