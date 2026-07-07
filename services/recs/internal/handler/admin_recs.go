@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -70,8 +71,19 @@ func (h *AdminRecsHandler) resolveUserID(ctx context.Context, raw string) (strin
 	}
 	var id string
 	q := h.db.WithContext(ctx).Table("users").Select("id")
+	// Only add the telegram_id clause when raw parses as an int64 — mirrors
+	// the auth resolver (services/auth/internal/handler/user_resolve.go). A
+	// digit-only string that overflows int64 (e.g. 20+ digits) must NOT be
+	// bound into a numeric column comparison: Postgres/sqlite reject it with
+	// an out-of-range error (SQLSTATE 22003), which would surface as a 500
+	// instead of a clean 404. Falling back to the non-telegram query keeps
+	// that case a graceful not-found.
 	if digitsRe.MatchString(raw) {
-		q = q.Where("username = ? OR public_id = ? OR telegram_id = ?", raw, raw, raw)
+		if n, perr := strconv.ParseInt(raw, 10, 64); perr == nil {
+			q = q.Where("username = ? OR public_id = ? OR telegram_id = ?", raw, raw, n)
+		} else {
+			q = q.Where("username = ? OR public_id = ?", raw, raw)
+		}
 	} else {
 		q = q.Where("username = ? OR public_id = ?", raw, raw)
 	}

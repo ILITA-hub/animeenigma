@@ -218,7 +218,7 @@ const commitUrl = commitHash
 // «Секретная фича» roulette — lives in the footer. Rolls a random eligible
 // hidden/legacy feature per click (utils/secretFeatures.ts); every target route
 // stays directly reachable regardless. Admin can disable the whole roulette or
-// individual features (AdminSecretFeatures.vue) — enforced via the public
+// individual features via AdminPolicy.vue — enforced via the public
 // state feed below, which FAILS OPEN (defaults keep today's behavior).
 const rouletteEnabled = ref(true)
 

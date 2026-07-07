@@ -447,6 +447,14 @@ func TestAdminRecsHandler_ResolveUserID_ByUsernamePublicIDAndTelegramID(t *testi
 	id, err = h.resolveUserID(ctx, "999999999")
 	require.NoError(t, err)
 	assert.Equal(t, "", id, "unmatched telegram_id-shaped input")
+
+	// A digit-string that overflows int64 (>19 digits) must resolve to a
+	// clean not-found, NOT a 500 from a DB-level out-of-range error on the
+	// telegram_id numeric comparison (SQLSTATE 22003 on Postgres). Mirrors
+	// the auth resolver's strconv.ParseInt guard.
+	id, err = h.resolveUserID(ctx, "999999999999999999999")
+	require.NoError(t, err)
+	assert.Equal(t, "", id, "over-range digit string resolves to not-found, not an error")
 }
 
 // ----------------------------------------------------------------------------

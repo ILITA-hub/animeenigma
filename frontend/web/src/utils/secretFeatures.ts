@@ -12,8 +12,10 @@ import { useAuthStore } from '@/stores/auth'
  *
  * This file is the single source of truth for the pool + client-side
  * eligibility. Admin on/off overrides are layered on top via
- * {@link applySecretFeatureAdminState} (fetched from the backend by App.vue);
- * the admin management page (AdminSecretFeatures.vue) renders this roster.
+ * {@link applySecretFeatureAdminState} (fetched from the backend by App.vue).
+ * This roster still feeds the footer roulette pool, but the admin management
+ * page for it is AdminPolicy.vue (policy-service flags) — the old dedicated
+ * AdminSecretFeatures.vue page was removed.
  */
 export interface SecretFeature {
   key: 'anidle' | 'status' | 'themes' | 'game' | 'gacha' | 'fanfic' | 'downloads' | 'showcase-editor' | 'my-feedback'
