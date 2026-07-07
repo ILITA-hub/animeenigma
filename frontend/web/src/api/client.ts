@@ -618,6 +618,32 @@ export interface ResolvedUser {
   telegram_id?: number
 }
 
+/** RBAC-and-roulette P1 — policy-service feature-flag runtime access rule.
+ *  `failSafe` decides who can reach the feature when the policy service
+ *  itself is unreachable (gateway FeatureGate fails static to this value).
+ *  `allowUsers`/`denyUsers` are user ID (UUID) arrays, not usernames. */
+export type FailSafe = 'admin' | 'everyone'
+
+export interface FeatureFlag {
+  key: string
+  roles: string[]
+  allowUsers: string[]
+  denyUsers: string[]
+  roulette: boolean
+  failSafe: FailSafe
+  label: string
+  updatedAt: string
+}
+
+/** Body for PUT /admin/policy/flags/{key} — the same shape as FeatureFlag
+ *  minus the server-owned `key`/`updatedAt` fields. */
+export type FeatureFlagPayload = Omit<FeatureFlag, 'key' | 'updatedAt'>
+
+export interface PolicyFlagsResponse {
+  flags: FeatureFlag[]
+  rouletteEnabled: boolean
+}
+
 export const adminApi = {
   // Hide/unhide anime globally
   hideAnime: (animeId: string) => apiClient.post(`/admin/anime/${animeId}/hide`),
@@ -654,6 +680,22 @@ export const adminApi = {
   setSecretFeature: (key: string, enabled: boolean) =>
     apiClient.put<{ data: SecretFeatureConfig }>(
       `/admin/secret-features/feature/${encodeURIComponent(key)}`,
+      { enabled },
+    ),
+  // RBAC-and-roulette P1 — policy-service admin CRUD (services/policy:8098,
+  // gateway-proxied at /api/admin/policy/*, admin-JWT-gated). This is the
+  // runtime feature-access authority; the secret-features methods above are
+  // the older roulette-only facade.
+  getPolicyFlags: () =>
+    apiClient.get<{ data: PolicyFlagsResponse } | PolicyFlagsResponse>('/admin/policy/flags'),
+  setPolicyFlag: (key: string, payload: FeatureFlagPayload) =>
+    apiClient.put<{ data: { key: string } } | { key: string }>(
+      `/admin/policy/flags/${encodeURIComponent(key)}`,
+      payload,
+    ),
+  setPolicyRoulette: (enabled: boolean) =>
+    apiClient.put<{ data: { enabled: boolean } } | { enabled: boolean }>(
+      '/admin/policy/roulette',
       { enabled },
     ),
   // Admin feedback browser — user feedback/error reports (player service,
