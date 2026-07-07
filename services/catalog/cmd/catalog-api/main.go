@@ -260,6 +260,15 @@ func main() {
 		log.Errorw("miruro browser-revival migration failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) refresh of the allanime-okru roster description: 2026-07-07
+	// daily-recovery finding that api.allanime.day's `episode` (sourceUrls) resolver
+	// now rejects every query with a new AA_CRYPTO_MISSING anti-scraping error.
+	// Description-only — reason is probe-managed and status/policy/health stay with
+	// the self-healing machine.
+	if err := scraperprovider.AllanimeOkruCryptoBlock(db.DB); err != nil {
+		log.Errorw("allanime-okru crypto-block migration failed (continuing)", "error", err)
+	}
+
 	// Remove unverified "Region-walled" / egress-IP-class claims from animefever
 	// description (AUTO-484 follow-up). Run-once via the ledger.
 	if err := scraperprovider.AnimefeverDeclaim(db.DB); err != nil {

@@ -1039,3 +1039,46 @@ func TestFreshDB_AllanimeTombstonedDisabled(t *testing.T) {
 		t.Errorf("okru row count = %d, want 0 (no legacy row on a fresh DB)", okruCount)
 	}
 }
+
+func TestAllanimeOkruCryptoBlock_RefreshesDescriptionOnceIdempotent(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Pre-existing live-DB state: allanime-okru manual+down with the probe-managed
+	// generic reason and the old (pre-crypto-gate) description.
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "allanime-okru", Status: domain.StatusDegraded, Policy: domain.PolicyManual, Health: domain.HealthDown,
+		Reason:      "cdn_unreachable on ",
+		Description: "Folded okru+allanime (2026-07-06). AllAnime GraphQL discovery + ok.ru data-options → okcdn.ru HLS, bypassing the Cloudflare-Turnstile /apivtwo/clock endpoint. EN sub/dub, hardsubbed.",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraperprovider.AllanimeOkruCryptoBlock(db); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	var row domain.ScraperProvider
+	db.Where("name = ?", "allanime-okru").First(&row)
+	if !strings.Contains(row.Description, "AA_CRYPTO_MISSING") {
+		t.Fatalf("description not refreshed with the crypto-gate finding: %q", row.Description)
+	}
+	// reason/status/policy/health are NOT this migration's concern — untouched.
+	if row.Reason != "cdn_unreachable on " {
+		t.Fatalf("reason should be untouched (probe-managed): %q", row.Reason)
+	}
+	if row.Policy != domain.PolicyManual || row.Health != domain.HealthDown {
+		t.Fatalf("policy/health should be untouched (state-machine-owned): policy=%q health=%q", row.Policy, row.Health)
+	}
+
+	// A later operator's own description edit must NOT be clobbered by a rerun
+	// (guard already written).
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "allanime-okru").Update("description", "operator note")
+	if err := scraperprovider.AllanimeOkruCryptoBlock(db); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	db.Where("name = ?", "allanime-okru").First(&row)
+	if row.Description != "operator note" {
+		t.Fatalf("description = %q after operator edit + rerun, want untouched (not clobbered)", row.Description)
+	}
+}

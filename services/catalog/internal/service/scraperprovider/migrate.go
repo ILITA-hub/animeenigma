@@ -204,6 +204,9 @@ const miruroCloudflareBlockGuardKey = "miruro_cloudflare_block_2026_07_02"
 // miruroBrowserRevivalGuardKey marks MiruroBrowserRevival as applied.
 const miruroBrowserRevivalGuardKey = "miruro_browser_revival"
 
+// allanimeOkruCryptoBlockGuardKey marks AllanimeOkruCryptoBlock as applied.
+const allanimeOkruCryptoBlockGuardKey = "allanime_okru_crypto_block_2026_07_07"
+
 // RemoveRawProvider hard-deletes the legacy standalone "raw" JP provider row
 // (removed 2026-06-30 — AllAnime + ok.ru cover JP-original audio). The seed no
 // longer creates it, but insert-if-absent seeding never deletes an existing
@@ -811,6 +814,62 @@ func MiruroBrowserRevival(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: miruroBrowserRevivalGuardKey}).Error; err != nil {
 		return fmt.Errorf("write miruro-browser-revival guard: %w", err)
+	}
+	return nil
+}
+
+// AllanimeOkruCryptoBlock records, exactly once, the 2026-07-07 daily-recovery-run
+// finding that AllAnime's own `api.allanime.day` GraphQL API now rejects every
+// `episode(...)` (sourceUrls) query — the resolver allanime-okru's discovery
+// depends on for BOTH its AllAnime-native sources and its ok.ru/okcdn.ru CDN
+// leg — with a new application-level error `{"code":"AA_CRYPTO_MISSING"}` on
+// `path:["episode"]`. Confirmed from clean egress: FindID (shows search) and
+// ListEpisodes (show detail) still succeed normally; only the sourceUrls
+// resolver is gated. Reproduced deterministically across 2 different shows,
+// both sub and dub translationType, and with/without the full query text (vs
+// persisted-query-only) — the persisted-query-only path (what our client
+// sends) avoids Cloudflare's interactive Turnstile entirely and reaches the
+// GraphQL resolver cleanly, which then itself returns AA_CRYPTO_MISSING. This
+// is a deliberate, fresh anti-scraping gate on AllAnime's highest-value
+// resolver (the one that leaks playable stream URLs), not a transport/CDN
+// issue — no request-shape variation (Referer, User-Agent, translationType)
+// changes the outcome. A real fix requires reverse-engineering what
+// crypto/signature material AllAnime's own web client now sends (likely only
+// derivable by rendering their real frontend in a browser — a "v3.2"-class
+// architecture change in the same family as the miruro Cloudflare block
+// (MiruroCloudflareBlock) and the original allanime clock.json Turnstile
+// wall), correctly out of scope for a single automated recovery run.
+//
+// Deliberately updates ONLY `description` — never `reason` (the probe/state-machine
+// overwrites `reason` on every cycle; only `description` is durable operator
+// context) and never `status`/`policy`/`health` (owned by the self-healing state
+// machine). Guarded via the ledger so a later operator's own description edit is
+// never clobbered.
+func AllanimeOkruCryptoBlock(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", allanimeOkruCryptoBlockGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check allanime-okru-crypto-block guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator edit
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "allanime-okru").
+		Update("description", "AllAnime GraphQL discovery + ok.ru ('Ok') CDN streams (clock-free). As of 2026-07-07, api.allanime.day's `episode` GraphQL resolver (sourceUrls — the field both the AllAnime-native and ok.ru CDN legs depend on) rejects every query with a new application-level error `{\"code\":\"AA_CRYPTO_MISSING\"}` on path:[\"episode\"] — confirmed from clean egress on 2 shows, sub+dub, with/without full query text. Search and show-detail queries are unaffected; only sourceUrls is gated. This is a deliberate fresh anti-scraping measure on AllAnime's highest-value resolver, not a CDN/transport blip — no request-shape variation changes the outcome. A real fix needs reverse-engineering AllAnime's client-side crypto/signature scheme (likely only derivable via a real browser render, a 'v3.2'-class change in the same family as MiruroCloudflareBlock) — flagged for human review, not attempted in an automated recovery run.")
+	if result.Error != nil {
+		return fmt.Errorf("allanime-okru crypto-block: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No allanime-okru row to update (seed did not run / row hard-deleted). Do
+		// NOT write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("allanime-okru crypto-block: no row found for name=allanime-okru")
+	}
+	if err := db.Create(&migrationGuard{Key: allanimeOkruCryptoBlockGuardKey}).Error; err != nil {
+		return fmt.Errorf("write allanime-okru-crypto-block guard: %w", err)
 	}
 	return nil
 }
