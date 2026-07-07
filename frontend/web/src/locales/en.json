@@ -1214,7 +1214,7 @@
       "feedbackDesc": "Read and triage user ideas, bugs and error reports.",
       "collectionsDesc": "Curate and publish editorial anime collections.",
       "rawLibraryDesc": "Self-hosted torrent → HLS pipeline for raw-JP episodes.",
-      "secretFeaturesDesc": "Manage the footer secret-feature roulette."
+      "policyDesc": "Runtime feature access — roles, per-user overrides, and the roulette pool."
     },
     "feedback": {
       "title": "Project Board",

@@ -1214,7 +1214,7 @@
       "feedbackDesc": "ユーザーのアイデア・バグ・エラー報告を確認・整理する。",
       "collectionsDesc": "編集部のアニメコレクションを編集・公開する。",
       "rawLibraryDesc": "生の日本語エピソード用のセルフホスト型 torrent → HLS パイプライン。",
-      "secretFeaturesDesc": "フッターのシークレット機能ルーレットを管理します。"
+      "policyDesc": "ランタイムの機能アクセス管理 — ロール、ユーザー単位の上書き、ルーレットプール。"
     },
     "feedback": {
       "title": "プロジェクトボード",

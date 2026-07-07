@@ -211,11 +211,18 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'admin.collections.title', requiresAuth: true, requiresAdmin: true }
   },
   {
-    // Secret-feature roulette management (seed for future role-based access mgmt).
+    // RBAC-and-roulette P3 (Task 8): runtime feature-access + roulette
+    // management, absorbing the old secret-feature roulette page below.
+    path: '/admin/policy',
+    name: 'admin-policy',
+    component: () => import('@/views/admin/AdminPolicy.vue'),
+    meta: { titleKey: 'admin.policy.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    // Old secret-feature roulette page — absorbed into /admin/policy above.
+    // Kept as a redirect so existing bookmarks/links still resolve.
     path: '/admin/secret-features',
-    name: 'admin-secret-features',
-    component: () => import('@/views/admin/AdminSecretFeatures.vue'),
-    meta: { titleKey: 'admin.secretFeatures.title', requiresAuth: true, requiresAdmin: true }
+    redirect: '/admin/policy'
   },
   {
     // Phase 17 (UX-33) — editorial collections edit form.
