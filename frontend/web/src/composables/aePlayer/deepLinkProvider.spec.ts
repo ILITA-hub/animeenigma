@@ -24,6 +24,10 @@ const capMap = new Map<string, ProviderCap>([
   ['kodik',     makeCap({ provider: 'kodik',     group: 'ru', audios: ['dub', 'sub'] })],
   ['ae',        makeCap({ provider: 'ae',        group: 'firstparty', audios: ['sub', 'dub'] })],
   ['hanime',    makeCap({ provider: 'hanime',    group: 'adult', audios: ['dub'] })],
+  // ae-en-dub: a real per-title `lang` (Phase C source-panel truth) — its
+  // `firstparty` group nominally serves en/ru/ja, but this cap is only
+  // actually dubbed in English.
+  ['ae-en-dub', makeCap({ provider: 'ae-en-dub', group: 'firstparty', audios: ['dub'], lang: 'en' })],
   // animelib is OMITTED — disabled providers are not present in the feed
 ])
 
@@ -50,6 +54,14 @@ describe('resolveDeepLinkProvider', () => {
   it('preserves the current lang when the provider supports it (ae keeps ru)', () => {
     expect(resolveDeepLinkProvider('ae', { audio: 'dub', lang: 'ru' }, 'common', capMap))
       .toEqual({ provider: 'ae', audio: 'dub', lang: 'ru' })
+  })
+
+  it("clamps to the cap's real per-title lang (ae-en-dub) instead of the group's nominal set", () => {
+    // ae-en-dub's group (firstparty) nominally serves en/ru/ja, but its real
+    // per-title lang is en-only — a `?provider=ae-en-dub` deep-link arriving
+    // with the current lang set to ru must clamp to en, not keep ru.
+    expect(resolveDeepLinkProvider('ae-en-dub', { audio: 'dub', lang: 'ru' }, 'common', capMap))
+      .toEqual({ provider: 'ae-en-dub', audio: 'dub', lang: 'en' })
   })
 
   it('pins an 18+ provider only on a hentai title', () => {

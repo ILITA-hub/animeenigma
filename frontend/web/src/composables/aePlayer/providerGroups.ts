@@ -25,3 +25,14 @@ export const GROUP_PRIMARY_LANG: Record<ProviderGroup, TrackLang> = {
 export function langForProviderUnderRaw(group: ProviderGroup, currentLang: TrackLang): TrackLang {
   return GROUP_LANGS[group].includes(currentLang) ? currentLang : GROUP_PRIMARY_LANG[group]
 }
+
+// A cap's real per-title `lang` (Phase C source-panel truth — set only for
+// ae's probed dub variant) overrides the group's default language set, so
+// e.g. an ae English dub routes under EN only, not every language the
+// `firstparty` group nominally serves. Caps without `lang` fall back to the
+// group's full set. Single helper so every language-relevance call site
+// (relevance filter, smart default, deep-link clamp, AePlayer's combo
+// enumeration) agrees on this rule.
+export function langsForCap(cap: { group: ProviderGroup; lang?: TrackLang }): TrackLang[] {
+  return cap.lang ? [cap.lang] : GROUP_LANGS[cap.group]
+}

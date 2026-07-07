@@ -1,5 +1,5 @@
 import type { ProviderRow, TrackLang } from '@/types/aePlayer'
-import { GROUP_LANGS } from './providerGroups'
+import { langsForCap } from './providerGroups'
 
 /** Pick the default provider: the highest-`order` row that is actually
  *  selectable and `active`. Rows arrive pre-sorted by order, but sort
@@ -20,9 +20,11 @@ export function pickSmartDefault(rows: ProviderRow[]): ProviderRow | null {
 /** RAW (original-audio) default: prefer the best active source whose group
  *  serves the requested language (don't yank a RU-sub watcher onto an EN
  *  source), then fall back to the global best active source. Honors the
- *  "never cross language" rule while the language slider stays DUB-only. */
+ *  "never cross language" rule while the language slider stays DUB-only.
+ *  Uses `langsForCap` so a row with a real per-title `lang` (ae's probed
+ *  dub) is matched on that language, not its group's full nominal set. */
 export function pickRawBiased(rows: ProviderRow[], lang: TrackLang): ProviderRow | null {
-  const inLang = rows.filter(r => GROUP_LANGS[r.group].includes(lang))
+  const inLang = rows.filter(r => langsForCap(r).includes(lang))
   return pickSmartDefault(inLang) ?? pickSmartDefault(rows)
 }
 

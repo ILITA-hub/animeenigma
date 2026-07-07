@@ -474,7 +474,7 @@ import { pickSmartDefault, pickRawBiased, pickSelectableFallback } from '@/compo
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities, flattenCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rowsFromReport, groupOfProvider } from '@/composables/aePlayer/useProviderFeed'
-import { GROUP_LANGS, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
+import { langsForCap, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
 import { pickEpisodeForProvider, providerMissesTargetEpisode, shouldReselectEpisode } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
@@ -979,7 +979,7 @@ const buildAvailable = (): WatchCombo[] => {
       // for ae's probed dub) overrides the group's default language set, so
       // e.g. an ae English dub routes under EN only, not every language
       // `firstparty` nominally serves. Caps without `lang` are unchanged.
-      const langs = cap.lang ? [cap.lang] : GROUP_LANGS[cap.group]
+      const langs = langsForCap(cap)
       const audios = [...new Set((cap.audios ?? []).map((a) => (a === 'dub' ? 'dub' : 'sub')))]
       for (const audio of audios) {
         for (const language of langs) {

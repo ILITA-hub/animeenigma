@@ -30,6 +30,11 @@ export interface ProviderRow {
   hackerOnly: boolean
   order: number
   audios: AudioKind[]
+  /** Real per-title language override (Phase C source-panel truth — set ONLY
+   *  for the first-party `ae` provider's probed dub variant). Mirrors
+   *  `ProviderCap.lang`; see `langsForCap` in providerGroups.ts for how it
+   *  narrows the group's default language set. */
+  lang?: TrackLang
   reason?: string
 }
 

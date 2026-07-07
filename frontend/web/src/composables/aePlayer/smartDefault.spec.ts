@@ -63,6 +63,19 @@ describe('pickRawBiased', () => {
     ]
     expect(pickRawBiased(rows, 'ja')?.id).toBe('gogoanime')
   })
+
+  // Phase C source-panel truth: a row's real per-title `lang` (set only for
+  // ae's probed dub variant) must gate the language match, not the
+  // `firstparty` group's full nominal set (en/ru/ja). Before the fix this used
+  // GROUP_LANGS[row.group] directly, so a higher-order ae en-dub row would
+  // wrongly win a `ru` RAW-biased pick over a real ru source (kodik).
+  it("excludes a row whose real per-title lang doesn't match, even though its group nominally serves it", () => {
+    const rows = [
+      row('ae', { group: 'firstparty', lang: 'en', order: 90 }),
+      row('kodik', { group: 'ru', order: 80 }),
+    ]
+    expect(pickRawBiased(rows, 'ru')?.id).toBe('kodik')
+  })
 })
 
 describe('pickSelectableFallback', () => {

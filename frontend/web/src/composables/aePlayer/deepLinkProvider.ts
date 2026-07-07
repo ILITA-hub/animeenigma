@@ -1,6 +1,6 @@
 import type { AudioKind, ContentKind, TrackLang } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
-import { GROUP_LANGS, GROUP_CONTENT } from './providerGroups'
+import { GROUP_CONTENT, langsForCap } from './providerGroups'
 
 /** The audio/lang/provider a `?provider=` deep-link should pin the player to. */
 export interface DeepLinkPin {
@@ -39,7 +39,11 @@ export function resolveDeepLinkProvider(
   if (!cap) return null
   const group = cap.group
   if (!GROUP_CONTENT[group]?.includes(content)) return null
-  const langs = GROUP_LANGS[group] ?? []
+  // A cap's real per-title `lang` (Phase C source-panel truth — set only for
+  // ae's probed dub) overrides the group's default language set, so an
+  // `?provider=ae` deep-link clamps to the dub's actual language instead of
+  // every language `firstparty` nominally serves.
+  const langs = langsForCap(cap) ?? []
   // Audio kinds the provider serves, restricted to pickable sub/dub.
   const audios = cap.audios.filter((a): a is AudioKind => a === 'sub' || a === 'dub')
   if (langs.length === 0 || audios.length === 0) return null

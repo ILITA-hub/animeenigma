@@ -100,6 +100,25 @@ describe('rowsFromReport', () => {
   it('yields an empty list for a null/malformed report', () => {
     expect(rowsFromReport(null, { audio: 'sub', lang: 'en', content: 'common' })).toEqual([])
   })
+
+  // Phase C source-panel truth: a cap's real per-title `lang` (set only for
+  // ae's probed dub variant) must narrow the DUB relevance gate to that exact
+  // language, not the `firstparty` group's full nominal set (en/ru/ja). Before
+  // the fix, `relevant()` read GROUP_LANGS[cap.group] directly, so an ae
+  // English dub would wrongly satisfy DUB+RU and DUB+JA too.
+  it('an ae en-dub cap (cap.lang) is included under DUB+EN and excluded under DUB+RU', () => {
+    const aeReport = {
+      anime_id: 'ae-title',
+      families: [
+        { family: 'aeProvider', providers: [
+          { provider: 'ae', display_name: 'AnimeEnigma', state: 'active', selectable: true,
+            hacker_only: false, order: 100, group: 'firstparty', audios: ['dub'], lang: 'en', variants: [] },
+        ] },
+      ],
+    } as unknown as CapabilityReport
+    expect(rowsFromReport(aeReport, { audio: 'dub', lang: 'en', content: 'common' }).map(r => r.id)).toEqual(['ae'])
+    expect(rowsFromReport(aeReport, { audio: 'dub', lang: 'ru', content: 'common' })).toEqual([])
+  })
 })
 
 const groupReport = {

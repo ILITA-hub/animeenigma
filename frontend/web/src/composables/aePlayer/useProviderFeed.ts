@@ -1,6 +1,6 @@
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 import type { ProviderRow, AudioKind, TrackLang, ContentKind } from '@/types/aePlayer'
-import { GROUP_LANGS, GROUP_CONTENT } from './providerGroups'
+import { GROUP_CONTENT, langsForCap } from './providerGroups'
 
 export interface RowFilter { audio: AudioKind; lang: TrackLang; content: ContentKind }
 
@@ -10,7 +10,11 @@ function relevant(cap: ProviderCap, f: RowFilter): boolean {
   if (GROUP_CONTENT[g].includes('hentai') && f.content === 'hentai') return true
   if (!GROUP_CONTENT[g].includes(f.content)) return false
   if (f.audio === 'dub') {
-    return cap.audios.includes('dub') && GROUP_LANGS[g].includes(f.lang)
+    // A cap's real per-title `lang` (Phase C source-panel truth — set only for
+    // ae's probed dub) overrides the group's default language set, so an ae
+    // English dub matches DUB+EN only, not every language `firstparty`
+    // nominally serves.
+    return cap.audios.includes('dub') && langsForCap(cap).includes(f.lang)
   }
   // RAW (audio === 'sub'): original voices — any language group, sub caps.
   // The language slider is hidden under RAW, so the lang filter is intentionally
@@ -25,6 +29,7 @@ function toRow(cap: ProviderCap): ProviderRow {
     id: cap.provider, label: cap.display_name, group: cap.group, state: cap.state,
     selectable: cap.selectable, hackerOnly: cap.hacker_only, order: cap.order,
     audios,
+    lang: cap.lang,
     reason: cap.reason,
   }
 }
