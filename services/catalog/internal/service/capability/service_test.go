@@ -1,11 +1,19 @@
 package capability_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/capability"
+	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -103,5 +111,67 @@ func TestBuildENFamilyPopulatesFeedFields(t *testing.T) {
 	af := byName["animefever"]
 	if af.State != "degraded" || !af.Selectable || !af.HackerOnly || af.Reason != "ad-substitution" {
 		t.Fatalf("animefever feed fields wrong: %+v", af)
+	}
+}
+
+// TestAdminDisable_ExcludedFromCapabilityFeed is the capability-feed-level
+// regression for the SetPolicy/capability-feed split-brain bug: an admin
+// disabling a provider via PUT /api/admin/scraper-providers/{name}/policy
+// must make it disappear from GET /api/anime/{id}/capabilities (the player
+// Source panel's feed), not just flip the `policy` column.
+//
+// BuildENFamily filters on the stored `status` column (`WHERE status <>
+// 'disabled'`), while the admin handler's only lever is `policy` — so this
+// drives the REAL handler.SetPolicy (not a direct DB write mimicking its
+// output) against a shared DB, then asserts the capability service's
+// BuildENFamily no longer emits the provider. Catches a regression where
+// SetPolicy stops writing the derived `status` alongside `policy`.
+func TestAdminDisable_ExcludedFromCapabilityFeed(t *testing.T) {
+	db := newDB(t)
+	db.Create(&domain.ScraperProvider{
+		Name: "gogoanime", Status: domain.StatusEnabled, Policy: domain.PolicyAuto, Health: domain.HealthUp,
+		Group: "en", ScraperOperated: true, SupportsSub: true, PreferenceWeight: 85,
+	})
+	db.Create(&domain.ScraperProvider{
+		Name: "nineanime", Status: domain.StatusEnabled, Policy: domain.PolicyAuto, Health: domain.HealthUp,
+		Group: "en", ScraperOperated: true, SupportsSub: true, PreferenceWeight: 40,
+	})
+
+	svc := capability.NewService(db, nil, nil, nil, nil, nil)
+
+	// Sanity: both providers are live in the feed before the disable.
+	before, err := svc.BuildENFamily(context.Background())
+	if err != nil {
+		t.Fatalf("BuildENFamily (before): %v", err)
+	}
+	if len(before.Providers) != 2 {
+		t.Fatalf("want 2 providers before disable, got %d (%+v)", len(before.Providers), before.Providers)
+	}
+
+	// Drive the REAL admin handler to disable gogoanime — exactly the path a
+	// Providers-tab admin action takes.
+	adminHandler := handler.NewAdminScraperProvidersHandler(db, &logger.Logger{SugaredLogger: zap.NewNop().Sugar()})
+	body, _ := json.Marshal(map[string]string{"policy": "disabled"})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/scraper-providers/gogoanime/policy", bytes.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("name", "gogoanime")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	adminHandler.SetPolicy(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("SetPolicy status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+
+	after, err := svc.BuildENFamily(context.Background())
+	if err != nil {
+		t.Fatalf("BuildENFamily (after): %v", err)
+	}
+	for _, p := range after.Providers {
+		if p.Provider == "gogoanime" {
+			t.Fatalf("gogoanime still present in capability feed after admin disable: %+v", after.Providers)
+		}
+	}
+	if len(after.Providers) != 1 || after.Providers[0].Provider != "nineanime" {
+		t.Fatalf("want only nineanime left, got %+v", after.Providers)
 	}
 }

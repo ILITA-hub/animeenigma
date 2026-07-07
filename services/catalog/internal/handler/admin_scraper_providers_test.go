@@ -131,6 +131,13 @@ func TestAdminScraperProviders_SetPolicy_Disabled(t *testing.T) {
 	if row.Policy != domain.PolicyDisabled {
 		t.Fatalf("Policy = %q, want disabled", row.Policy)
 	}
+	// The capability feed (service/capability BuildENFamily) filters disabled EN
+	// providers on this stored `status` column, NOT `policy` — so SetPolicy MUST
+	// also persist status=disabled or the feed keeps serving the "disabled"
+	// provider (split-brain bug, see admin_scraper_providers.go SetPolicy doc).
+	if row.Status != domain.StatusDisabled {
+		t.Fatalf("Status = %q, want disabled (stored status must track policy so the capability feed excludes it)", row.Status)
+	}
 	if !row.PolicySince.After(originalPolicySince) {
 		t.Fatalf("PolicySince did not advance: %v (was %v)", row.PolicySince, originalPolicySince)
 	}
@@ -155,13 +162,16 @@ func TestAdminScraperProviders_SetPolicy_Disabled(t *testing.T) {
 	}
 }
 
-// TestAdminScraperProviders_SetPolicy_Auto verifies flipping back to auto.
+// TestAdminScraperProviders_SetPolicy_Auto verifies flipping back to auto, and
+// that the stored status is re-derived from (policy=auto, current health) —
+// health=down here so WireStatus() yields degraded, not enabled.
 func TestAdminScraperProviders_SetPolicy_Auto(t *testing.T) {
 	db := newAdminScraperProvidersTestDB(t)
 	if err := db.Create(&domain.ScraperProvider{
 		Name:   "gogoanime",
 		Policy: domain.PolicyDisabled,
 		Health: domain.HealthDown,
+		Status: domain.StatusDisabled,
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +191,41 @@ func TestAdminScraperProviders_SetPolicy_Auto(t *testing.T) {
 	}
 	if row.Policy != domain.PolicyAuto {
 		t.Fatalf("Policy = %q, want auto", row.Policy)
+	}
+	if row.Status != domain.StatusDegraded {
+		t.Fatalf("Status = %q, want degraded (auto+down derives to degraded, not the stale disabled)", row.Status)
+	}
+}
+
+// TestAdminScraperProviders_SetPolicy_Auto_HealthUp verifies re-enabling a
+// healthy provider derives status=enabled (auto+up), so it is immediately
+// selectable/active in the capability feed again.
+func TestAdminScraperProviders_SetPolicy_Auto_HealthUp(t *testing.T) {
+	db := newAdminScraperProvidersTestDB(t)
+	if err := db.Create(&domain.ScraperProvider{
+		Name:   "gogoanime",
+		Policy: domain.PolicyDisabled,
+		Health: domain.HealthUp,
+		Status: domain.StatusDisabled,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	h := handler.NewAdminScraperProvidersHandler(db, testNopLogger())
+	body, _ := json.Marshal(map[string]string{"policy": "auto"})
+	req := reqWithNameParam(http.MethodPut, "/api/admin/scraper-providers/gogoanime/policy", "gogoanime", body)
+	rr := httptest.NewRecorder()
+	h.SetPolicy(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	var row domain.ScraperProvider
+	if err := db.Where("name = ?", "gogoanime").First(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != domain.StatusEnabled {
+		t.Fatalf("Status = %q, want enabled (auto+up)", row.Status)
 	}
 }
 

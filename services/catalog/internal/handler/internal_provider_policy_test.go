@@ -109,6 +109,89 @@ func TestProbeResult_SkipsDisabled(t *testing.T) {
 	}
 }
 
+// TestProbeResult_RaceWithAdminDisable_DoesNotClobber is the TOCTOU regression
+// for the ProbeResult hard-lock fix: ApplyVerdict/the mutation decision are
+// computed off the row read at the TOP of the handler (h.db.First), but if an
+// admin's SetPolicy(disabled) commits in the window before this handler's own
+// Updates() runs, the probe write must NOT silently revert that disable.
+//
+// A single-threaded test can't literally interleave two HTTP requests, so a
+// gorm "gorm:before_update" hook simulates the race deterministically: right
+// before ProbeResult's own UPDATE statement executes, it performs the
+// concurrent admin disable out-of-band. The guarded `Updates(...).Where("policy
+// <> disabled")` must then affect 0 rows, and the handler must report
+// "skipped" instead of persisting (or gauge-reporting) the stale pre-disable
+// verdict.
+func TestProbeResult_RaceWithAdminDisable_DoesNotClobber(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{
+		Name:            "gogoanime",
+		Policy:          domain.PolicyAuto,
+		Health:          domain.HealthUp,
+		ScraperOperated: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	var raced bool
+	if err := db.Callback().Update().Before("gorm:update").Register("test:race_admin_disable", func(tx *gorm.DB) {
+		if raced {
+			return // guard against recursing into our own simulated write
+		}
+		raced = true
+		// Run on `tx` (the transaction gorm's own Update wraps itself in), not
+		// the outer `db` — a fresh query on `db` would grab a SEPARATE pooled
+		// connection, which for sqlite ":memory:" (no shared-cache DSN here) is
+		// an entirely different, empty database and errors "no such table".
+		// Raw SQL also bypasses gorm's Model/Update callback chain (no
+		// recursion into this same hook).
+		if err := tx.Exec("UPDATE stream_providers SET policy = ? WHERE name = ?",
+			domain.PolicyDisabled, "gogoanime").Error; err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := handler.NewInternalProviderPolicyHandler(db, testProviderPolicyCfg(), testNopLogger())
+	rr := httptest.NewRecorder()
+	body := strings.NewReader(`{"provider":"gogoanime","pass":false,"reason":"status_403"}`)
+	h.ProbeResult(rr, httptest.NewRequest("POST", "/internal/providers/probe-result", body))
+
+	if rr.Code != 200 {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !raced {
+		t.Fatal("race hook never fired — test setup is broken")
+	}
+
+	var resp struct {
+		Data struct {
+			Skipped bool `json:"skipped"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v (body=%s)", err, rr.Body.String())
+	}
+	if !resp.Data.Skipped {
+		t.Fatalf("expected skipped:true once the row was disabled mid-flight, body=%s", rr.Body.String())
+	}
+
+	var p domain.ScraperProvider
+	if err := db.First(&p, "name = ?", "gogoanime").Error; err != nil {
+		t.Fatal(err)
+	}
+	if p.Policy != domain.PolicyDisabled {
+		t.Fatalf("policy = %q, want disabled to survive the race (probe must not clobber a concurrent admin disable)", p.Policy)
+	}
+}
+
 func TestProbeResult_UnknownProvider(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {

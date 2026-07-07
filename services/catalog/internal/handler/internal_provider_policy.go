@@ -89,11 +89,28 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 		updates["last_tick_metrics"] = string(m)
 	}
 
-	if err := h.db.Model(&domain.ScraperProvider{}).
-		Where("name = ?", p.Name).
-		Updates(updates).Error; err != nil {
-		h.log.Errorw("probe-result persist failed", "provider", p.Name, "error", err)
+	// disabled is a hard lock: guard the write with "policy <> disabled" so a
+	// row that an admin disabled in the window between our First() read above
+	// and this Updates() (TOCTOU) is NOT clobbered back to a live policy —
+	// without this, a probe verdict racing an admin's SetPolicy(disabled)
+	// could silently re-enable a provider the admin just turned off.
+	result := h.db.Model(&domain.ScraperProvider{}).
+		Where("name = ? AND policy <> ?", p.Name, domain.PolicyDisabled).
+		Updates(updates)
+	if result.Error != nil {
+		h.log.Errorw("probe-result persist failed", "provider", p.Name, "error", result.Error)
 		http.Error(w, `{"success":false,"error":"persist failed"}`, http.StatusInternalServerError)
+		return
+	}
+	if result.RowsAffected == 0 {
+		// Lost the race: the row was disabled after our read. Don't emit a
+		// gauge/response built from the stale (pre-disable) in-memory verdict.
+		httputil.OK(w, map[string]any{
+			"provider": p.Name,
+			"policy":   domain.PolicyDisabled,
+			"health":   p.Health,
+			"skipped":  true,
+		})
 		return
 	}
 

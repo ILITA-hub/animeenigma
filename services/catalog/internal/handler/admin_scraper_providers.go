@@ -70,7 +70,20 @@ type setPolicyRequest struct {
 // SetPolicy handles PUT /api/admin/scraper-providers/{name}/policy. The only
 // admin levers are auto/disabled — manual is a machine-set state driven by
 // the probe state machine, so it (and any other value) is rejected with 400.
-// Health/HealthSince are left untouched; only Policy + PolicySince change.
+// Health/HealthSince are left untouched; Policy + PolicySince change, and the
+// derived Status is written alongside them (see below).
+//
+// The capability feed (GET /api/anime/{id}/capabilities — what the player
+// Source panel consumes) filters disabled EN providers on the STORED `status`
+// column, not `policy` (service/capability/service.go BuildENFamily: `WHERE
+// status <> 'disabled'`). Every other writer of this table keeps `status` in
+// lock-step with `policy` for the disabled case (BackfillPolicyHealth,
+// AnimefeverDisable, AnimepaheBrowserRevival, … in service/scraperprovider/
+// migrate.go) — that invariant is why an admin disable must ALSO persist the
+// derived status here: skipping it would leave the row split-brain (policy=
+// disabled but status stale-enabled), so the feed keeps serving a provider
+// that auto-failover — which derives from live policy via WireStatus() — has
+// already stopped routing to.
 func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
@@ -102,17 +115,24 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Derive the new stored status from the new policy + the provider's current
+	// (probe-owned, untouched) health — exactly the mapping BackfillPolicyHealth/
+	// the roster migrations use — so the persisted column never lags behind
+	// policy for the disabled case the capability feed's query relies on.
+	provider.Policy = policy
+	newStatus := provider.WireStatus()
+
 	now := time.Now()
 	if err := h.db.WithContext(r.Context()).Model(&domain.ScraperProvider{}).
 		Where("name = ?", name).
-		Updates(map[string]any{"policy": policy, "policy_since": now}).Error; err != nil {
+		Updates(map[string]any{"policy": policy, "policy_since": now, "status": newStatus}).Error; err != nil {
 		h.log.Errorw("failed to update scraper provider policy", "name", name, "error", err)
 		httputil.Error(w, liberrors.Internal("failed to update scraper provider policy"))
 		return
 	}
 
-	h.log.Infow("scraper provider policy updated", "name", name, "policy", policy)
-	provider.Policy = policy
+	h.log.Infow("scraper provider policy updated", "name", name, "policy", policy, "status", newStatus)
 	provider.PolicySince = now
+	provider.Status = newStatus
 	httputil.OK(w, toAdminWire(provider))
 }
