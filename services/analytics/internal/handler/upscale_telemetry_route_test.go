@@ -79,6 +79,7 @@ func TestUpscaleTelemetryHandler_RouteIsolation(t *testing.T) {
 		nil, // readThresholds — optional, guarded by NewRouter's nil-check
 		nil, // playerRanking  — optional, guarded by NewRouter's nil-check
 		nil, // probe          — optional, guarded by NewRouter's nil-check
+		nil, // playability    — optional, guarded by NewRouter's nil-check
 		upscaleTelemetry,
 		logger.Default(),
 		metrics.NewCollector("test-route-isolation"),

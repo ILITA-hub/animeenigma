@@ -241,8 +241,16 @@ func main() {
 		upscaleTelemetryHandler = handler.NewUpscaleTelemetryHandler(repo.NewClickHouseStore(chConn))
 	}
 
+	// Playability scores handler (Phase B Source-panel index): only wired when
+	// ClickHouse is available, since both repo queries it drives (watch decay +
+	// probe-up decay) read from CH tables.
+	var playabilityHandler *handler.PlayabilityHandler
+	if chConn != nil {
+		playabilityHandler = handler.NewPlayabilityHandler(chConn)
+	}
+
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, probeHandler, upscaleTelemetryHandler, log, collector)
+	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, probeHandler, playabilityHandler, upscaleTelemetryHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {

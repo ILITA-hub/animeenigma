@@ -26,6 +26,7 @@ import (
 //	POST /internal/read-thresholds/recompute (internal — scheduler daily trigger)
 //	POST /internal/player-ranking/recompute  (internal — scheduler daily trigger)
 //	POST /internal/probe/run           (internal — scheduler daily trigger; on-demand probe)
+//	GET  /internal/playability          (internal — per-provider decayed watch/probe scores)
 //	POST /internal/upscale-telemetry   (internal — GPU telemetry from upscaler; CD-15; never gateway-proxied)
 func NewRouter(
 	collect *handler.CollectHandler,
@@ -36,6 +37,7 @@ func NewRouter(
 	readThresholds *handler.ReadThresholdHandler,
 	playerRanking *handler.PlayerRankingHandler,
 	probe *handler.ProbeHandler,
+	playability *handler.PlayabilityHandler,
 	upscaleTelemetry *handler.UpscaleTelemetryHandler,
 	log *logger.Logger,
 	collector *metrics.Collector,
@@ -100,6 +102,13 @@ func NewRouter(
 	// never gateway-proxied.
 	if probe != nil {
 		r.Post("/internal/probe/run", probe.ServeHTTP)
+	}
+	// /internal/playability returns per-provider decayed watch/probe scores for
+	// the Source-panel playability index (Phase B). Only wired when ClickHouse
+	// is available (the two repo queries need the CH connection). Docker-network
+	// only — never gateway-proxied.
+	if playability != nil {
+		r.Get("/internal/playability", playability.ServeHTTP)
 	}
 	// /internal/upscale-telemetry ingests per-worker GPU telemetry batches from
 	// the upscaler service (CD-15). The upscaler is the trust boundary — the
