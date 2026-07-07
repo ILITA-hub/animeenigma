@@ -468,6 +468,9 @@ func main() {
 	// Secret-feature roulette management (admin) + public state.
 	secretFeatureService := service.NewSecretFeatureService(secretFeatureRepo, log)
 	secretFeatureHandler := handler.NewSecretFeatureHandler(secretFeatureService, log)
+	// Providers facade (spec 2026-07-07-rbac-roulette-p5-providers-facade-design.md
+	// §A1) — admin read/write over stream_providers.Policy.
+	adminScraperProvidersHandler := handler.NewAdminScraperProvidersHandler(db.DB, log)
 	// Phase 18 (UX-34) — skip-intro/skip-outro proxy of aniskip.com.
 	// Stateless handler with embedded http.Client + shared redis cache.
 	skipTimesHandler := handler.NewSkipTimesHandler(redisCache, log)
@@ -663,7 +666,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, secretFeatureHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, secretFeatureHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

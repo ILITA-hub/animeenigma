@@ -34,6 +34,7 @@ func NewRouter(
 	capabilitiesHandler *handler.CapabilitiesHandler,
 	internalProviderPolicyHandler *handler.InternalProviderPolicyHandler,
 	secretFeatureHandler *handler.SecretFeatureHandler,
+	adminScraperProvidersHandler *handler.AdminScraperProvidersHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -310,6 +311,12 @@ func NewRouter(
 			r.Get("/secret-features", secretFeatureHandler.GetConfig)
 			r.Put("/secret-features/roulette", secretFeatureHandler.SetRoulette)
 			r.Put("/secret-features/feature/{key}", secretFeatureHandler.SetFeature)
+
+			// Providers facade (spec 2026-07-07-rbac-roulette-p5-providers-facade-design.md
+			// §A1) — admin read/write over stream_providers.Policy. Pure DB facade;
+			// self-heal engine, probe pipeline, and /capabilities derivation untouched.
+			r.Get("/scraper-providers", adminScraperProvidersHandler.List)
+			r.Put("/scraper-providers/{name}/policy", adminScraperProvidersHandler.SetPolicy)
 		})
 	})
 
