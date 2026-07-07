@@ -107,8 +107,6 @@ func main() {
 		&domain.ScraperProvider{},
 		&domain.Character{},
 		&domain.AnimeCharacter{},
-		// Secret-feature roulette admin on/off overrides (seed for future RBAC).
-		&domain.SecretFeatureFlag{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
@@ -421,15 +419,6 @@ func main() {
 	characterRepo := repo.NewCharacterRepository(db.DB)
 	// Phase 17 (UX-33) — editorial collections repo.
 	collectionRepo := repo.NewCollectionRepository(db.DB)
-	// Secret-feature roulette admin config store.
-	secretFeatureRepo := repo.NewSecretFeatureRepository(db.DB)
-	// Seed roulette features that ship DISABLED (insert-if-absent, so an admin's
-	// later toggle on the management page survives restarts).
-	for _, k := range domain.SecretFeatureDefaultsDisabled {
-		if err := secretFeatureRepo.SeedDefault(context.Background(), k, false); err != nil {
-			log.Warnw("failed to seed disabled secret feature", "key", k, "error", err)
-		}
-	}
 
 	// Initialize services
 	catalogService := service.NewCatalogService(
@@ -465,9 +454,6 @@ func main() {
 	// Phase 17 (UX-33) — editorial collections service + handler.
 	collectionService := service.NewCollectionService(collectionRepo, log)
 	collectionHandler := handler.NewCollectionHandler(collectionService, log)
-	// Secret-feature roulette management (admin) + public state.
-	secretFeatureService := service.NewSecretFeatureService(secretFeatureRepo, log)
-	secretFeatureHandler := handler.NewSecretFeatureHandler(secretFeatureService, log)
 	// Providers facade (spec 2026-07-07-rbac-roulette-p5-providers-facade-design.md
 	// §A1) — admin read/write over stream_providers.Policy.
 	adminScraperProvidersHandler := handler.NewAdminScraperProvidersHandler(db.DB, log)
@@ -666,7 +652,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, secretFeatureHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
