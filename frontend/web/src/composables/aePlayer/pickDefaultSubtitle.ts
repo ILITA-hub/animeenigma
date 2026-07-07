@@ -27,3 +27,29 @@ export function pickDefaultSubtitle(tracks: SubTrack[], opts: { lang: string }):
 export function pickBestForLang(tracks: SubTrack[], lang: string): SubTrack | null {
   return best(tracks.filter((t) => t.lang === lang))
 }
+
+/**
+ * A "hardsubbed" cut has its subtitles burned into the video pixels rather than
+ * shipped as a selectable soft track. Rendering a soft overlay on top of one
+ * DOUBLES the subtitles — the "Субтитры накладываются" (subtitles overlap)
+ * report. True only for an EN/RU SUB stream that ships no provider-bundled soft
+ * track and is playing on a real provider. A raw JP cut (`lang === 'ja'`) is
+ * never hardsubbed — its subs come from the optional Jimaku/OpenSubtitles
+ * overlay — and a provider that bundles a real soft track isn't hardsubbed
+ * either. AePlayer uses this to suppress the soft-overlay UI (quick rows, the
+ * persisted-language re-bind, and any track carried over from a prior source) so
+ * the burned-in subs are never doubled.
+ */
+export function isHardsubbedCut(opts: {
+  audio: 'sub' | 'dub'
+  lang: string
+  hasBundledSoftTracks: boolean
+  hasActiveProvider: boolean
+}): boolean {
+  return (
+    opts.audio === 'sub' &&
+    opts.lang !== 'ja' &&
+    !opts.hasBundledSoftTracks &&
+    opts.hasActiveProvider
+  )
+}

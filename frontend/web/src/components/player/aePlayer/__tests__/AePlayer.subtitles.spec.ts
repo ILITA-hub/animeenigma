@@ -286,6 +286,21 @@ describe('AePlayer — subtitle wiring (Task 6 regression guard)', () => {
     expect(overlay.exists()).toBe(true)
   })
 
+  it('marks the <video> crossorigin="anonymous" so the auto-sync VAD can read cross-origin audio', async () => {
+    // The auto-sync VAD taps a non-interruptive captureStream() fork
+    // (subtitleAudioTap.ts) — playback audio never depends on this attr. But on a
+    // CORS-tainted element the fork's audio is silent, so crossorigin is what
+    // lets auto-sync actually LOCK on native cross-origin MP4 (animejoy-sibnet/
+    // allvideo, 18anime, hanime). Safe because every stream is proxied (ACAO:*).
+    const wrapper = mountPlayer()
+    await flushPromises()
+    await nextTick()
+
+    const video = wrapper.find('video')
+    expect(video.exists()).toBe(true)
+    expect(video.attributes('crossorigin')).toBe('anonymous')
+  })
+
   it('SubtitleOverlay offset includes the auto-sync term (Task 7 regression guard)', async () => {
     // Inject a non-zero auto-sync offset so the assertion fails if the template
     // reverts to `state.subOffset.value` (0) instead of `effectiveOffset`

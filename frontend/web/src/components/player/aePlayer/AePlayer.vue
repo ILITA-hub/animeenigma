@@ -25,12 +25,23 @@
     />
     <div class="pl-grain" aria-hidden="true" />
 
-    <!-- Video element -->
+    <!-- Video element.
+         crossorigin="anonymous" lets the subtitle auto-sync VAD read audio from
+         cross-origin sources. The VAD taps a captureStream() fork
+         (subtitleAudioTap.ts); on a CORS-tainted element that fork's audio is
+         silent, so this attr is what makes auto-sync actually LOCK on native
+         cross-origin MP4 (animejoy-sibnet/allvideo, 18anime, hanime). Safe
+         because every stream is served through the HLS proxy (ACAO: *); the
+         MSE/blob path is same-origin and unaffected, and the public
+         exp/sig-signed proxy needs no cookies. NOTE: playback audio does NOT
+         depend on this — the tap is non-interruptive — so its absence would only
+         degrade VAD accuracy, never silence sound. -->
     <video
       ref="videoRef"
       class="absolute inset-0 w-full h-full object-contain z-[1]"
       playsinline
       preload="auto"
+      crossorigin="anonymous"
       @play="onVideoPlay"
       @pause="onVideoPause"
       @ended="onEnded"
@@ -479,7 +490,7 @@ import { pickEpisodeForProvider, providerMissesTargetEpisode, shouldReselectEpis
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
-import { pickBestForLang } from '@/composables/aePlayer/pickDefaultSubtitle'
+import { pickBestForLang, isHardsubbedCut } from '@/composables/aePlayer/pickDefaultSubtitle'
 import { useSubtitleCues } from '@/composables/aePlayer/useSubtitleCues'
 import { useSubtitleAutoSyncPref } from '@/composables/aePlayer/useSubtitleAutoSyncPref'
 import { useSubtitleAutoSync } from '@/composables/aePlayer/useSubtitleAutoSync'
@@ -1436,28 +1447,43 @@ function onSetQuality(q: string) {
     const pq = perUrlHlsQualities.value.find((x) => x.label === q)
     if (pq) localStorage.setItem(KODIK_QUALITY_PREF_KEY, String(pq.value))
     else if (q === 'Auto') localStorage.removeItem(KODIK_QUALITY_PREF_KEY)
-    void reResolveAtPosition()
+    // Same episode, new manifest URL → resolveStreamForCurrentEpisode keeps the
+    // playhead (keepPosition) so the quality swap is seamless.
+    void resolveStreamForCurrentEpisode()
     return
   }
   engine.setLevel(q)
 }
 
-// Re-resolve the current episode's stream, restoring playback position and
-// play state — used for per-URL quality switches where the new quality lives
-// at a different manifest URL.
-async function reResolveAtPosition() {
+// Restore the playhead (and play state) after a stream swap that stayed on the
+// same episode — a provider/facet/quality switch must not dump the viewer back
+// to 0:00. Restoring the real position ALSO stops the regressed near-zero
+// playhead from clobbering saved watch-progress on the next heartbeat/beacon
+// (both persist the CURRENT playhead, not the max), which is why "resume from
+// the same moment" vanished after a mid-watch source switch. No-op when there's
+// nothing to restore (a fresh load sits at 0).
+function restorePlayhead(t: number, wasPlaying: boolean) {
   const v = videoRef.value
-  const t = v?.currentTime ?? 0
-  const wasPlaying = v ? !v.paused : false
-  await resolveStreamForCurrentEpisode()
-  const v2 = videoRef.value
-  if (!v2 || t <= 0) return
+  if (!v || t <= 0.5) return
   const restore = () => {
-    v2.currentTime = t
-    if (wasPlaying) void v2.play().catch(() => {})
+    try {
+      v.currentTime = t
+    } catch {
+      /* not seekable yet — best-effort */
+    }
+    if (wasPlaying) void v.play().catch(() => {})
   }
-  if (v2.readyState >= 1) restore()
-  else v2.addEventListener('loadedmetadata', restore, { once: true })
+  if (v.readyState >= 1) restore()
+  else v.addEventListener('loadedmetadata', restore, { once: true })
+}
+
+// Snapshot the playhead + play state to hand to restorePlayhead after a
+// same-episode stream swap. `keep` is false for a genuine episode change (start
+// fresh at 0); wasPlaying is gated on a real position so a fresh 0:00 load never
+// auto-resumes.
+function capturePlayhead(keep: boolean): { restoreT: number; wasPlaying: boolean } {
+  const restoreT = keep ? (videoRef.value?.currentTime ?? 0) : 0
+  return { restoreT, wasPlaying: restoreT > 0 && state.playing.value }
 }
 
 // Initialize selectedEpisode from initialEpisode (NEVER episodesAired).
@@ -1513,6 +1539,12 @@ watch(() => state.combo.value.audio, () => {
 async function loadEpisodesAndStream() {
   const provider = state.combo.value.provider
   if (!provider) return
+
+  // Playhead-preservation: capture the episode the viewer is on BEFORE the
+  // re-list (which may reassign selectedEpisode). If the switched-to source
+  // still serves this episode, the playhead is restored after load (below) so a
+  // mid-watch source switch doesn't restart at 0:00 or regress saved progress.
+  const keepEpNum = selectedEpisode.value?.number ?? null
 
   sourceError.value = null
   isResolving.value = true
@@ -1585,8 +1617,12 @@ async function loadEpisodesAndStream() {
     // winner's stream descriptor after resuming from engine.load.
     currentStream.value = stream
     applyOfflineAutoSub(ep.number, stream)
+    // Restore the playhead only when the switched-to source stayed on the same
+    // episode — a provider change that lands on a different episode starts fresh.
+    const { restoreT, wasPlaying } = capturePlayhead(keepEpNum !== null && ep.number === keepEpNum)
     await engine.load(stream)
     applyInitialSeek() // shared-link `?t=` one-shot seek (no-op after first load)
+    restorePlayhead(restoreT, wasPlaying)
     armPlaybackWatchdog() // catch a silent CODECS-less stall (manifest OK, no frags)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded
@@ -2260,7 +2296,7 @@ function goToNextEpisode() {
   }
 }
 
-async function resolveStreamForEpisode(ep: EpisodeOption) {
+async function resolveStreamForEpisode(ep: EpisodeOption, keepPosition = false) {
   const provider = state.combo.value.provider
   if (!provider) return
   sourceError.value = null
@@ -2283,8 +2319,12 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
     // Set BEFORE the await — see loadEpisodesAndStream.
     currentStream.value = stream
     applyOfflineAutoSub(ep.number, stream)
+    // Same-episode re-resolve (facet/server/team/quality switch) keeps the
+    // viewer's spot; a genuine episode change (keepPosition=false) starts fresh.
+    const { restoreT, wasPlaying } = capturePlayhead(keepPosition)
     await engine.load(stream)
     applyInitialSeek() // shared-link `?t=` one-shot seek (no-op after first load)
+    restorePlayhead(restoreT, wasPlaying)
     armPlaybackWatchdog() // catch a silent CODECS-less stall (manifest OK, no frags)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded
@@ -2326,7 +2366,9 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
 async function resolveStreamForCurrentEpisode() {
   const ep = selectedEpisode.value
   if (!ep) return
-  await resolveStreamForEpisode(ep)
+  // Same episode, different stream (audio/lang/server/team/quality) → keep the
+  // playhead so the swap is seamless and can't regress saved progress.
+  await resolveStreamForEpisode(ep, true)
 }
 
 // ─── Menu state ───────────────────────────────────────────────────────────────
@@ -2618,25 +2660,52 @@ watch(
   },
 )
 
+// Provider-bundled soft subs that shipped with the resolved stream.
+const providerBundledTracks = computed<SubTrack[]>(
+  () => (providerSubtitles.value ?? []) as SubTrack[],
+)
+
+// Whether the current cut has its subtitles BURNED INTO the video (hardsub): an
+// EN/RU SUB stream with no provider-bundled soft track. On such a source a soft
+// overlay would render a SECOND, redundant subtitle line stacked over the
+// burned-in one — the "Субтитры накладываются" report. A raw JP cut (lang 'ja')
+// is never hardsubbed (its subs come from the optional Jimaku/OpenSubtitles
+// overlay), and a provider that ships a real soft track isn't hardsubbed either.
+const isHardsubbed = computed(() =>
+  isHardsubbedCut({
+    audio: state.combo.value.audio,
+    lang: state.combo.value.lang,
+    hasBundledSoftTracks: providerBundledTracks.value.length > 0,
+    hasActiveProvider: !!activeProviderName.value,
+  }),
+)
+
 // Re-bind the chosen track to the persisted subtitle language whenever the track
 // list changes (new episode, or late provider/aggregation arrival). 'off' stays
-// off — there is no auto-enable.
+// off — there is no auto-enable. Skipped on a hardsubbed cut: re-applying the
+// persisted language there would stack a soft overlay on the burned-in subs.
 watch(subtitleTracks, () => {
   const lang = state.subLang.value
-  if (lang === 'off') return
+  if (lang === 'off' || isHardsubbed.value) return
   const track = pickBestForLang(subtitleTracks.value, lang)
   if (track) chosenSub.value = track
 })
 
-// Real distinct languages that have a loaded soft track (provider-bundled +
-// aggregated Jimaku/OpenSubtitles). Drives which RU/EN/JP fast buttons are enabled.
-const availableSubLangs = computed(() =>
-  [...new Set(subtitleTracks.value.map((t) => t.lang))],
-)
+// Landing on a hardsubbed cut (e.g. switching from a raw-JP source to ae RU-sub
+// on the same episode) drops any soft track carried over from the previous
+// source so it can't stack on the burned-in subs. Fires only on the
+// off→hardsub transition, so a track the user EXPLICITLY browses for on a
+// hardsubbed source afterwards still sticks (no re-transition clears it).
+watch(isHardsubbed, (hard, was) => {
+  if (hard && !was && chosenSub.value) chosenSub.value = null
+})
 
-// Provider-bundled soft subs that shipped with the resolved stream.
-const providerBundledTracks = computed<SubTrack[]>(
-  () => (providerSubtitles.value ?? []) as SubTrack[],
+// Real distinct languages that have a loaded soft track (provider-bundled +
+// aggregated Jimaku/OpenSubtitles). Drives which RU/EN/JP fast buttons are
+// enabled. Empty on a hardsubbed cut: the quick rows disable and the "burned in
+// by {provider}" note shows instead of offering a stacking soft overlay.
+const availableSubLangs = computed(() =>
+  isHardsubbed.value ? [] : [...new Set(subtitleTracks.value.map((t) => t.lang))],
 )
 
 // Per-language source label for the quick menu rows ("Русский · Crunchyroll").
@@ -2656,12 +2725,8 @@ const langSources = computed<Record<string, string>>(() => {
 // optional Jimaku/OpenSubtitles overlay — so the note never applies there.
 const hardsubNote = computed(() => {
   if (chosenSub.value) return null
-  if (state.combo.value.audio !== 'sub') return null
-  if (state.combo.value.lang === 'ja') return null         // raw JP → overlay, not burned in
-  if (providerBundledTracks.value.length > 0) return null  // provider soft subs → not hardsubbed
-  const prov = activeProviderName.value
-  if (!prov) return null
-  return t('player.aePlayer.subs.hardsub', { provider: prov })
+  if (!isHardsubbed.value) return null
+  return t('player.aePlayer.subs.hardsub', { provider: activeProviderName.value })
 })
 
 // Session opt-out: once the viewer explicitly turns subs off, offline

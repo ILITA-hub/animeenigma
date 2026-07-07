@@ -116,6 +116,10 @@ export function useVideoEngine(
 
     // Progressive MP4 — native playback. The backend proxy injects Referer and
     // serves byte ranges, so the element can seek directly.
+    // INVARIANT: stream.url MUST be an HLS-proxy URL (ACAO: *). The <video>
+    // element carries crossorigin="anonymous" (for the subtitle-VAD captureStream
+    // fork), so a native load of a non-CORS host here would FAIL to play. Every
+    // adapter wraps its URL via buildProxyUrl → never hand a raw CDN url to this.
     if (stream.type === 'mp4') {
       v.src = stream.url
       return

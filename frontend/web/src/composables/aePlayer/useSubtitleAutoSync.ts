@@ -98,11 +98,12 @@ export function useSubtitleAutoSync(opts: {
     lastT = t
   }
 
-  // createMediaElementSource binds an element only ONCE for its lifetime, and
-  // closing the AudioContext does not release that binding. So the tap is created
-  // exactly once per element and kept alive; disable / episode-change only stop
-  // accumulating (active=false) and must NOT dispose the tap or close the context
-  // (that would re-bind-throw on re-arm and can mute playback). Dispose only on unmount.
+  // The tap analyses a non-interruptive captureStream fork (subtitleAudioTap.ts)
+  // and never touches the element's own audio output, so it can NEVER silence
+  // playback. It's created once and kept alive purely to avoid re-acquiring the
+  // capture on every toggle; disable / episode-change just stop accumulating
+  // (active=false). A creation failure (no captureStream — Safari) marks
+  // auto-sync 'unsupported'; playback is unaffected in every case.
   function ensureTap() {
     if (tap || !opts.videoElement.value) return
     try { tap = makeTap(opts.videoElement.value); tap.onFrame(ingest) }
