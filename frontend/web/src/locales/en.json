@@ -1433,6 +1433,64 @@
       "save": "Save",
       "saved": "Saved",
       "preview": "Preview"
+    },
+    "policy": {
+      "title": "Policy",
+      "subtitle": "Runtime feature access — roles, per-user overrides, and the roulette pool.",
+      "tabs": {
+        "features": "Features",
+        "providers": "Providers"
+      },
+      "master": {
+        "label": "Roulette enabled",
+        "hint": "Master switch — turns the footer roulette on or off for everyone."
+      },
+      "rolesLabel": "Roles",
+      "roles": {
+        "admin": "Admin",
+        "user": "User",
+        "everyone": "Everyone"
+      },
+      "allow": {
+        "label": "Allow list",
+        "hint": "These users can always access this feature, regardless of role."
+      },
+      "deny": {
+        "label": "Deny list",
+        "hint": "These users are always blocked, overriding everything else."
+      },
+      "failSafe": {
+        "admin": "Admin-only",
+        "everyone": "Everyone"
+      },
+      "rouletteToggleLabel": "In roulette pool",
+      "openLabel": "Open",
+      "openAria": "Open {label} in a new tab",
+      "save": "Save",
+      "noFeatures": "No feature flags yet.",
+      "error403": "Admins only",
+      "toastSaveSuccess": "Saved {label}",
+      "toastSaveError": "Couldn't save {label} — try again",
+      "toastRouletteSuccess": "Roulette updated",
+      "toastRouletteError": "Couldn't update the roulette switch — try again",
+      "preview": {
+        "title": "Access check",
+        "subtitle": "Pick an identity to see which features they'd be able to reach.",
+        "identityLabel": "Identity",
+        "identity": {
+          "anonymous": "Anonymous",
+          "guest": "Guest",
+          "user": "User",
+          "admin": "Admin"
+        },
+        "userLabel": "Target user (optional)",
+        "visible": "Visible",
+        "hidden": "Hidden"
+      },
+      "providersPlaceholder": {
+        "title": "Providers",
+        "description": "Provider management is coming in P4."
+      }
     }
   },
   "about": {

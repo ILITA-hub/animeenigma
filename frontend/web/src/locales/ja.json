@@ -1433,6 +1433,64 @@
       "save": "保存",
       "saved": "保存しました",
       "preview": "プレビュー"
+    },
+    "policy": {
+      "title": "ポリシー",
+      "subtitle": "ランタイムの機能アクセス管理 — ロール、ユーザー単位の上書き、ルーレットプール。",
+      "tabs": {
+        "features": "フィーチャー",
+        "providers": "プロバイダー"
+      },
+      "master": {
+        "label": "ルーレット有効",
+        "hint": "マスタースイッチ — フッターのルーレットを全員に対してオン・オフします。"
+      },
+      "rolesLabel": "ロール",
+      "roles": {
+        "admin": "管理者",
+        "user": "ユーザー",
+        "everyone": "全員"
+      },
+      "allow": {
+        "label": "許可リスト",
+        "hint": "これらのユーザーはロールに関係なく常にこの機能にアクセスできます。"
+      },
+      "deny": {
+        "label": "拒否リスト",
+        "hint": "これらのユーザーは他のすべての設定より優先して常にブロックされます。"
+      },
+      "failSafe": {
+        "admin": "管理者のみ",
+        "everyone": "全員"
+      },
+      "rouletteToggleLabel": "ルーレットプールに含める",
+      "openLabel": "開く",
+      "openAria": "{label} を新しいタブで開く",
+      "save": "保存",
+      "noFeatures": "フィーチャーフラグはまだありません。",
+      "error403": "管理者のみ",
+      "toastSaveSuccess": "{label} を保存しました",
+      "toastSaveError": "{label} を保存できませんでした — もう一度お試しください",
+      "toastRouletteSuccess": "ルーレットを更新しました",
+      "toastRouletteError": "ルーレットスイッチを更新できませんでした — もう一度お試しください",
+      "preview": {
+        "title": "アクセス確認",
+        "subtitle": "アイデンティティを選んで、どのフィーチャーに到達できるか確認します。",
+        "identityLabel": "アイデンティティ",
+        "identity": {
+          "anonymous": "匿名",
+          "guest": "ゲスト",
+          "user": "ユーザー",
+          "admin": "管理者"
+        },
+        "userLabel": "対象ユーザー（任意）",
+        "visible": "表示",
+        "hidden": "非表示"
+      },
+      "providersPlaceholder": {
+        "title": "プロバイダー",
+        "description": "プロバイダー管理は P4 で提供予定です。"
+      }
     }
   },
   "about": {
