@@ -3,9 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
@@ -16,8 +18,11 @@ import (
 
 // fakeUserResolveRepo is a handwritten in-memory fake implementing the four
 // getters userResolveRepo needs — no testify/mock, matches project convention.
+// failQ, when non-empty, makes every getter return a non-notfound error for
+// that query (simulating a real backend failure, e.g. DB outage).
 type fakeUserResolveRepo struct {
 	users []domain.User
+	failQ string
 }
 
 func newFakeUserResolveRepo() *fakeUserResolveRepo {
@@ -35,6 +40,9 @@ func newFakeUserResolveRepo() *fakeUserResolveRepo {
 }
 
 func (f *fakeUserResolveRepo) GetByID(ctx context.Context, id string) (*domain.User, error) {
+	if f.failQ != "" && id == f.failQ {
+		return nil, fmt.Errorf("db down")
+	}
 	for i := range f.users {
 		if f.users[i].ID == id {
 			return &f.users[i], nil
@@ -44,6 +52,9 @@ func (f *fakeUserResolveRepo) GetByID(ctx context.Context, id string) (*domain.U
 }
 
 func (f *fakeUserResolveRepo) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
+	if f.failQ != "" && username == f.failQ {
+		return nil, fmt.Errorf("db down")
+	}
 	for i := range f.users {
 		if f.users[i].Username == username {
 			return &f.users[i], nil
@@ -53,6 +64,9 @@ func (f *fakeUserResolveRepo) GetByUsername(ctx context.Context, username string
 }
 
 func (f *fakeUserResolveRepo) GetByPublicID(ctx context.Context, publicID string) (*domain.User, error) {
+	if f.failQ != "" && publicID == f.failQ {
+		return nil, fmt.Errorf("db down")
+	}
 	for i := range f.users {
 		if f.users[i].PublicID == publicID {
 			return &f.users[i], nil
@@ -62,6 +76,9 @@ func (f *fakeUserResolveRepo) GetByPublicID(ctx context.Context, publicID string
 }
 
 func (f *fakeUserResolveRepo) GetByTelegramID(ctx context.Context, telegramID int64) (*domain.User, error) {
+	if f.failQ != "" && strconv.FormatInt(telegramID, 10) == f.failQ {
+		return nil, fmt.Errorf("db down")
+	}
 	for i := range f.users {
 		if f.users[i].TelegramID != nil && *f.users[i].TelegramID == telegramID {
 			return &f.users[i], nil
@@ -83,17 +100,24 @@ func TestResolve(t *testing.T) {
 		q          string
 		wantID     string
 		wantStatus int
+		repoFailQ  string // when set, the fake repo returns a non-notfound error for this q
 	}{
-		{"by uuid", "11111111-1111-1111-1111-111111111111", "11111111-1111-1111-1111-111111111111", 200},
-		{"by username", "oronemu", "11111111-1111-1111-1111-111111111111", 200},
-		{"by public_id", "orovanity", "11111111-1111-1111-1111-111111111111", 200},
-		{"by telegram_id", "100200300", "11111111-1111-1111-1111-111111111111", 200},
-		{"not found", "ghost", "", 404},
-		{"empty q", "", "", 400},
+		{"by uuid", "11111111-1111-1111-1111-111111111111", "11111111-1111-1111-1111-111111111111", 200, ""},
+		{"by username", "oronemu", "11111111-1111-1111-1111-111111111111", 200, ""},
+		{"by public_id", "orovanity", "11111111-1111-1111-1111-111111111111", 200, ""},
+		{"by telegram_id", "100200300", "11111111-1111-1111-1111-111111111111", 200, ""},
+		{"not found", "ghost", "", 404, ""},
+		{"empty q", "", "", 400, ""},
+		{"whitespace q", "   ", "", 400, ""},
+		// A real repo failure (e.g. DB outage) must surface as 500, never as
+		// a misleading 404 — see the IMPORTANT finding this covers.
+		{"repo error surfaces as 500 not 404", "dbdown", "", 500, "dbdown"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			h := NewUserResolveHandler(newFakeUserResolveRepo(), testLogger())
+			repo := newFakeUserResolveRepo()
+			repo.failQ = c.repoFailQ
+			h := NewUserResolveHandler(repo, testLogger())
 			req := httptest.NewRequest(http.MethodGet, "/api/admin/users/resolve?q="+url.QueryEscape(c.q), nil)
 			rec := httptest.NewRecorder()
 			h.Resolve(rec, req)

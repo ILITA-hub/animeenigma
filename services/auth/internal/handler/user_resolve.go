@@ -2,14 +2,17 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
+	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
+	"gorm.io/gorm"
 )
 
 var resolveUUIDRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -45,7 +48,8 @@ type resolvedUser struct {
 }
 
 // Resolve turns any of {UUID, username, public_id, telegram_id} into the
-// canonical user. 400 when q is empty, 404 when no user matches.
+// canonical user. 400 when q is empty, 404 when no user matches, 500 when a
+// repo call fails for a reason other than "not found" (e.g. DB outage).
 func (h *UserResolveHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q == "" {
@@ -53,7 +57,12 @@ func (h *UserResolveHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u := h.lookup(r.Context(), q)
+	u, err := h.lookup(r.Context(), q)
+	if err != nil {
+		h.log.Errorw("user resolve lookup failed", "q", q, "error", err)
+		httputil.Error(w, liberrors.Internal("failed to resolve user"))
+		return
+	}
 	if u == nil {
 		httputil.NotFound(w, "user")
 		return
@@ -67,28 +76,65 @@ func (h *UserResolveHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// isNotFoundErr reports whether err represents "no such record" as opposed to
+// a real backend failure. Repo getters signal not-found either via a wrapped
+// gorm.ErrRecordNotFound or (GetByUsername/GetByID/GetByPublicID) a
+// *liberrors.AppError with Code == NotFound; any other non-nil error is a
+// genuine failure (e.g. DB outage) and must not be swallowed as a 404.
+func isNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true
+	}
+	if appErr, ok := liberrors.IsAppError(err); ok && appErr.Code == liberrors.CodeNotFound {
+		return true
+	}
+	return false
+}
+
 // lookup tries, in order: UUID (by id), all-digits (by telegram_id), then
-// username, then public_id. Repo getters vary in not-found behavior (some
-// return a NotFound *AppError, GetByTelegramID returns nil,nil) — both are
-// treated as "no match, try the next strategy".
-func (h *UserResolveHandler) lookup(ctx context.Context, q string) *domain.User {
+// username, then public_id. A "not found" from any strategy falls through to
+// the next one; a real repo error short-circuits immediately so Resolve can
+// return 500 instead of a misleading 404.
+func (h *UserResolveHandler) lookup(ctx context.Context, q string) (*domain.User, error) {
 	if resolveUUIDRe.MatchString(q) {
-		if u, err := h.repo.GetByID(ctx, q); err == nil && u != nil {
-			return u
+		u, err := h.repo.GetByID(ctx, q)
+		if err == nil && u != nil {
+			return u, nil
+		}
+		if err != nil && !isNotFoundErr(err) {
+			return nil, err
 		}
 	}
+	// NOTE: a digit-only username could in principle collide with another
+	// user's telegram_id, but telegram_id is tried first by design here
+	// (admin-only tool, acceptable trade-off).
 	if resolveDigitsRe.MatchString(q) {
-		if n, err := strconv.ParseInt(q, 10, 64); err == nil {
-			if u, err := h.repo.GetByTelegramID(ctx, n); err == nil && u != nil {
-				return u
+		if n, perr := strconv.ParseInt(q, 10, 64); perr == nil {
+			u, err := h.repo.GetByTelegramID(ctx, n)
+			if err == nil && u != nil {
+				return u, nil
+			}
+			if err != nil && !isNotFoundErr(err) {
+				return nil, err
 			}
 		}
 	}
-	if u, err := h.repo.GetByUsername(ctx, q); err == nil && u != nil {
-		return u
+	u, err := h.repo.GetByUsername(ctx, q)
+	if err == nil && u != nil {
+		return u, nil
 	}
-	if u, err := h.repo.GetByPublicID(ctx, q); err == nil && u != nil {
-		return u
+	if err != nil && !isNotFoundErr(err) {
+		return nil, err
 	}
-	return nil
+	u, err = h.repo.GetByPublicID(ctx, q)
+	if err == nil && u != nil {
+		return u, nil
+	}
+	if err != nil && !isNotFoundErr(err) {
+		return nil, err
+	}
+	return nil, nil
 }
