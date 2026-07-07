@@ -1,27 +1,20 @@
 /**
- * Fanfic engine visibility gate (spec 2026-07-06).
+ * Fanfic engine visibility gate (RBAC-and-roulette P4 Task 2 cutover).
  *
- * VITE_FANFIC_ADMIN_ONLY defaults to TRUE (unset = true = admin-only dark-ship),
- * mirroring GACHA_ADMIN_ONLY in utils/gachaGate.ts. Flip to 'false' to expose
- * the feature to every authenticated (non-guest) user.
+ * Delegates to the runtime feature-visibility feed (`GET
+ * /api/policy/features/mine`, composables/useFeatureVisible.ts) instead of
+ * the retired VITE_FANFIC_ADMIN_ONLY build flag. The feed's per-key
+ * fail-open fallback (utils/useFeatureVisible.ts `DARKSHIP_FALLBACK_ADMIN`)
+ * reproduces the old admin-only default while the feed hasn't loaded yet.
  *
  * Usage: `const fanficVisible = useFanficVisible()`
  */
-import { computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-
-/** True ⟹ only admins see the fanfic engine; false ⟹ every authenticated user. */
-export const FANFIC_ADMIN_ONLY =
-  (import.meta.env.VITE_FANFIC_ADMIN_ONLY as string | undefined) !== 'false'
+import { useFeatureVisible } from '@/composables/useFeatureVisible'
 
 /**
  * Returns a reactive boolean ref: whether the current user should see fanfic
  * engine features (navbar item, /fanfics route, generate/library UI).
  */
 export function useFanficVisible() {
-  const authStore = useAuthStore()
-  return computed(() => {
-    if (FANFIC_ADMIN_ONLY) return authStore.isAdmin
-    return authStore.isAuthenticated
-  })
+  return useFeatureVisible('fanfic')
 }

@@ -1,26 +1,20 @@
 /**
- * Gacha visibility gate.
+ * Gacha visibility gate (RBAC-and-roulette P4 Task 2 cutover).
  *
- * VITE_GACHA_ADMIN_ONLY defaults to TRUE (unset = true = admin-only dark-ship).
- * The bundled release flips it to 'false' to expose the feature to all users.
+ * Delegates to the runtime feature-visibility feed (`GET
+ * /api/policy/features/mine`, composables/useFeatureVisible.ts) instead of
+ * the retired VITE_GACHA_ADMIN_ONLY build flag. The feed's per-key
+ * fail-open fallback (utils/useFeatureVisible.ts `DARKSHIP_FALLBACK_ADMIN`)
+ * reproduces the old admin-only default while the feed hasn't loaded yet.
  *
  * Usage: `const gachaVisible = useGachaVisible()`
  */
-import { computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-
-/** True ⟹ only admins see gacha; false ⟹ every authenticated user sees it. */
-export const GACHA_ADMIN_ONLY =
-  (import.meta.env.VITE_GACHA_ADMIN_ONLY as string | undefined) !== 'false'
+import { useFeatureVisible } from '@/composables/useFeatureVisible'
 
 /**
  * Returns a reactive boolean ref: whether the current user should see gacha
  * features (navbar item, balance chip, routes, Profile tab).
  */
 export function useGachaVisible() {
-  const authStore = useAuthStore()
-  return computed(() => {
-    if (GACHA_ADMIN_ONLY) return authStore.isAdmin
-    return authStore.isAuthenticated
-  })
+  return useFeatureVisible('gacha')
 }

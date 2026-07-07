@@ -3,8 +3,8 @@ import { useAuthStore } from '@/stores/auth'
 import i18n from '@/i18n'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { shouldFullReloadOnNav, setLiveSessionProbe } from '@/pwa/registerPwa'
-import { GACHA_ADMIN_ONLY } from '@/utils/gachaGate'
-import { FANFIC_ADMIN_ONLY } from '@/utils/fanficGate'
+import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
+import { resolveVisible } from '@/composables/useFeatureVisible'
 import { stashPrefetch } from '@/utils/pagePrefetch'
 import { setFaviconVariant, faviconVariantForPath } from '@/utils/favicon'
 import { offlineDownloadsEnabled } from '@/offline/flag'
@@ -269,7 +269,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Anidle.vue'),
     meta: { titleKey: 'anidle.nav_item' }
   },
-  // ── Gacha «Лудка» routes (dark-shipped via VITE_GACHA_ADMIN_ONLY) ──────────
+  // ── Gacha «Лудка» routes (dark-ship visibility from the policy feed) ──────
   {
     path: '/gacha',
     name: 'gacha',
@@ -288,7 +288,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminGacha.vue'),
     meta: { titleKey: 'gacha.admin.title', requiresAuth: true, requiresAdmin: true }
   },
-  // ── Fanfic engine (dark-shipped via VITE_FANFIC_ADMIN_ONLY) ─────────────────
+  // ── Fanfic engine (dark-ship visibility from the policy feed) ───────────────
   {
     path: '/fanfics',
     name: 'fanfics',
@@ -345,7 +345,7 @@ router.beforeEach((to, from) => {
   }
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
 
   // Update page title
@@ -387,23 +387,26 @@ router.beforeEach((to, _from, next) => {
     return
   }
 
-  // Gacha «Лудка» gate: gachaGated routes are only visible to admins when
-  // VITE_GACHA_ADMIN_ONLY is true (dark-ship), or to any authenticated user
-  // when false (global release). Non-eligible users are redirected home.
-  if (to.meta.gachaGated) {
-    const gachaVisible = GACHA_ADMIN_ONLY ? authStore.isAdmin : authStore.isAuthenticated
-    if (!gachaVisible) {
+  // Gacha «Лудка» + fanfic engine gates: both dark-ship routes now defer to
+  // the runtime feature-visibility feed (RBAC-and-roulette P4) instead of
+  // the retired VITE_GACHA_ADMIN_ONLY / VITE_FANFIC_ADMIN_ONLY build flags.
+  // `load()` is idempotent (App.vue also boots it at app start) — calling it
+  // here defensively guarantees `ready` resolves even if this guard runs
+  // before that boot fetch has kicked off. Awaiting an already-resolved
+  // `ready` on later navigations is a no-op.
+  if (to.meta.gachaGated || to.meta.fanficGated) {
+    const featureVisibility = useFeatureVisibilityStore()
+    featureVisibility.load()
+    await featureVisibility.ready
+
+    const feed = { loaded: featureVisibility.loaded, visible: featureVisibility.visible }
+
+    if (to.meta.gachaGated && !resolveVisible('gacha', feed, authStore.isAdmin)) {
       next({ name: 'home' })
       return
     }
-  }
 
-  // Fanfic engine gate: fanficGated routes are only visible to admins when
-  // VITE_FANFIC_ADMIN_ONLY is true (dark-ship), or to any authenticated user
-  // when false (global release). Non-eligible users are redirected home.
-  if (to.meta.fanficGated) {
-    const fanficVisible = FANFIC_ADMIN_ONLY ? authStore.isAdmin : authStore.isAuthenticated
-    if (!fanficVisible) {
+    if (to.meta.fanficGated && !resolveVisible('fanfic', feed, authStore.isAdmin)) {
       next({ name: 'home' })
       return
     }

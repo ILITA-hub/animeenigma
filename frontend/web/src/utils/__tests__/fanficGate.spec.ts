@@ -8,52 +8,51 @@ vi.mock('@/api/client', () => ({
   featuresApi: { getFeaturesMine: vi.fn() },
 }))
 
-describe('profileWallGate (RBAC-and-roulette P4 Task 2 — feed-driven)', () => {
+describe('fanficGate (RBAC-and-roulette P4 Task 2 — feed-driven)', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('delegates to useFeatureVisible("profile-wall"): feed loaded + key present → visible', async () => {
+  it('delegates to useFeatureVisible("fanfic"): feed loaded + key present → visible', async () => {
     const { useFeatureVisibilityStore } = await import('@/stores/featureVisibility')
-    const { useProfileWallVisible } = await import('@/utils/profileWallGate')
+    const { useFanficVisible } = await import('@/utils/fanficGate')
     const feed = useFeatureVisibilityStore()
     feed.loaded = true
-    feed.visible = new Set(['profile-wall'])
+    feed.visible = new Set(['fanfic'])
 
-    const visible = useProfileWallVisible()
+    const visible = useFanficVisible()
     expect(visible.value).toBe(true)
   })
 
   it('feed loaded + key absent → hidden, even for an admin', async () => {
     const { useFeatureVisibilityStore } = await import('@/stores/featureVisibility')
     const { useAuthStore } = await import('@/stores/auth')
-    const { useProfileWallVisible } = await import('@/utils/profileWallGate')
+    const { useFanficVisible } = await import('@/utils/fanficGate')
     const feed = useFeatureVisibilityStore()
     feed.loaded = true
     feed.visible = new Set([])
     const auth = useAuthStore()
     auth.user = { id: 'a1', username: 'admin', email: 'a@a.com', role: 'admin' } as never
 
-    const visible = useProfileWallVisible()
+    const visible = useFanficVisible()
     expect(visible.value).toBe(false)
   })
 
   it('feed not loaded → fail-open fallback is admin-only (admin sees it)', async () => {
     const { useAuthStore } = await import('@/stores/auth')
-    const { useProfileWallVisible } = await import('@/utils/profileWallGate')
+    const { useFanficVisible } = await import('@/utils/fanficGate')
     const auth = useAuthStore()
     auth.user = { id: 'a1', username: 'admin', email: 'a@a.com', role: 'admin' } as never
 
-    const visible = useProfileWallVisible()
+    const visible = useFanficVisible()
     expect(visible.value).toBe(true)
   })
 
-  it('feed not loaded → fail-open fallback hides it from a non-admin (default)', async () => {
+  it('feed not loaded → fail-open fallback hides it from a non-admin', async () => {
     const { useAuthStore } = await import('@/stores/auth')
-    const { useProfileWallVisible } = await import('@/utils/profileWallGate')
+    const { useFanficVisible } = await import('@/utils/fanficGate')
     const auth = useAuthStore()
-    // isAdmin = user.value?.role === 'admin'; set role to non-admin so isAdmin=false
-    auth.user = { role: 'user', id: 'x', username: 'test', email: 'test@test.com' } as never
+    auth.user = { id: 'u1', username: 'user', email: 'u@u.com', role: 'user' } as never
 
-    const visible = useProfileWallVisible()
+    const visible = useFanficVisible()
     expect(visible.value).toBe(false)
   })
 })
