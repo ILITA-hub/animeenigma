@@ -18,6 +18,7 @@ func NewRouter(
 	userHandler *handler.UserHandler,
 	sessionsHandler *handler.SessionsHandler,
 	magicLinkHandler *handler.MagicLinkHandler,
+	userResolveHandler *handler.UserResolveHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -99,6 +100,16 @@ func NewRouter(
 
 			// Public routes
 			r.Get("/{userId}", userHandler.GetUser)
+		})
+
+		// Admin-only canonical user-resolve endpoint — turns a UUID, username,
+		// public_id, or telegram_id into the canonical user record. Consumed by
+		// other admin surfaces (recs picker, policy admin UI) needing to
+		// resolve an arbitrary identifier to a user.
+		r.Route("/admin/users", func(r chi.Router) {
+			r.Use(AuthMiddleware(jwtConfig))
+			r.Use(AdminMiddleware)
+			r.Get("/resolve", userResolveHandler.Resolve)
 		})
 	})
 
