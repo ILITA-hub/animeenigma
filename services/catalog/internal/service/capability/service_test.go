@@ -137,7 +137,7 @@ func TestAdminDisable_ExcludedFromCapabilityFeed(t *testing.T) {
 		Group: "en", ScraperOperated: true, SupportsSub: true, PreferenceWeight: 40,
 	})
 
-	svc := capability.NewService(db, nil, nil, nil, nil, nil)
+	svc := capability.NewService(db, nil, nil, nil, nil, nil, nil)
 
 	// Sanity: both providers are live in the feed before the disable.
 	before, err := svc.BuildENFamily(context.Background())
