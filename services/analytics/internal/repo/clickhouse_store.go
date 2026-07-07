@@ -328,6 +328,78 @@ HAVING resolves >= ?`
 	return out, rows.Err()
 }
 
+// PlayabilityWatchRow is one provider's decayed watch-success weights.
+type PlayabilityWatchRow struct {
+	Provider       string
+	ThisAnimeWatch float64
+	GlobalWatch    float64
+}
+
+// PlayabilityProbeRow is one provider's decayed recent-up weight.
+type PlayabilityProbeRow struct {
+	Provider string
+	RecentUp float64
+}
+
+// playabilityWatchQuery weights each successful player_resolve by exp-decay
+// (tau=14d) and splits global vs this-anime via sumIf on the Nullable anime_id.
+// Provider dimension is `target` (where whitelisted player-event providers land).
+const playabilityWatchQuery = `SELECT target AS provider,
+       sum(exp(-dateDiff('day', timestamp, now()) / 14.0)) AS global_watch,
+       sumIf(exp(-dateDiff('day', timestamp, now()) / 14.0), anime_id = ?) AS this_anime_watch
+FROM events
+WHERE effect_kind = 'player_resolve'
+  AND JSONExtractBool(properties,'reached_playback')
+  AND target != ''
+  AND timestamp >= now() - INTERVAL 60 DAY
+GROUP BY target`
+
+// playabilityProbeQuery weights each playable probe run by exp-decay (tau=14d).
+const playabilityProbeQuery = `SELECT provider,
+       sum(exp(-dateDiff('day', run_ts, now()) / 14.0)) AS recent_up
+FROM probe_runs
+WHERE playable = 1
+  AND run_ts >= now() - INTERVAL 60 DAY
+GROUP BY provider`
+
+// QueryPlayabilityWatch returns per-provider global + this-anime decayed watch weights.
+func QueryPlayabilityWatch(ctx context.Context, conn driver.Conn, animeID string) ([]PlayabilityWatchRow, error) {
+	rows, err := conn.Query(ctx, playabilityWatchQuery, animeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []PlayabilityWatchRow
+	for rows.Next() {
+		var r PlayabilityWatchRow
+		if err := rows.Scan(&r.Provider, &r.GlobalWatch, &r.ThisAnimeWatch); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// QueryPlayabilityProbeUp returns per-provider decayed recent-up weights.
+func QueryPlayabilityProbeUp(ctx context.Context, conn driver.Conn) ([]PlayabilityProbeRow, error) {
+	rows, err := conn.Query(ctx, playabilityProbeQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []PlayabilityProbeRow
+	for rows.Next() {
+		var r PlayabilityProbeRow
+		if err := rows.Scan(&r.Provider, &r.RecentUp); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // PurgeOlderThanCH is a no-op: ClickHouse retention is handled declaratively by
 // the events table's native `TTL ... DELETE`, so the Go purge cron is retired
 // for the ClickHouse backend (RESEARCH §Don't Hand-Roll). cutoff is accepted
