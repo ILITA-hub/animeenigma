@@ -1375,6 +1375,12 @@
       "serverError": "サーバーエラー、再試行してください",
       "timeout": "リクエストがタイムアウトしました"
     },
+    "userResolve": {
+      "placeholder": "username、public_id、Telegram ID、またはUUID",
+      "notFound": "「{q}」に一致するユーザーが見つかりません",
+      "add": "追加",
+      "resolving": "検索中…"
+    },
     "secretFeatures": {
       "title": "シークレット機能ルーレット",
       "subtitle": "フッターの隠し機能ルーレットを管理します。このページは今後、ロールベースのアクセス管理に発展します。",

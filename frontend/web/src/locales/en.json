@@ -1375,6 +1375,12 @@
       "serverError": "Server error, try again",
       "timeout": "Request timed out"
     },
+    "userResolve": {
+      "placeholder": "username, public_id, Telegram ID, or UUID",
+      "notFound": "No user found for \"{q}\"",
+      "add": "Add",
+      "resolving": "Resolving…"
+    },
     "secretFeatures": {
       "title": "Secret Feature Roulette",
       "subtitle": "Manage the hidden-feature roulette in the footer. This page will grow into role-based access management.",

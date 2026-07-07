@@ -610,9 +610,23 @@ export const secretFeaturesApi = {
     apiClient.get<{ data: SecretFeaturePublicState }>('/secret-features/state'),
 }
 
+/** Standard user-resolve result (auth service, RBAC-and-roulette P3). */
+export interface ResolvedUser {
+  id: string
+  username: string
+  public_id: string
+  telegram_id?: string
+}
+
 export const adminApi = {
   // Hide/unhide anime globally
   hideAnime: (animeId: string) => apiClient.post(`/admin/anime/${animeId}/hide`),
+  // Standard user resolver — turns a typed identifier (username / public_id /
+  // Telegram ID / UUID) into a user. 404 when no match; 400 on empty q.
+  resolveUser: (q: string) =>
+    apiClient.get<ResolvedUser | { data: ResolvedUser }>('/admin/users/resolve', {
+      params: { q },
+    }),
   unhideAnime: (animeId: string) => apiClient.delete(`/admin/anime/${animeId}/hide`),
   // Update shikimori_id
   updateShikimoriId: (animeId: string, shikimoriId: string) =>
