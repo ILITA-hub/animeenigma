@@ -24,7 +24,7 @@ const MOCK_USER = {
   id: 'user-1',
   username: 'oronemu',
   public_id: 'oronemu-public',
-  telegram_id: '123456789',
+  telegram_id: 123456789,
 }
 
 function mountComponent() {

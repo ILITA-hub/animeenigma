@@ -615,7 +615,7 @@ export interface ResolvedUser {
   id: string
   username: string
   public_id: string
-  telegram_id?: string
+  telegram_id?: number
 }
 
 export const adminApi = {
