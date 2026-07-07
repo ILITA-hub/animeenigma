@@ -251,11 +251,17 @@ const STATE_RANK: Record<ChipState, number> = {
   no_content: 3,
 }
 const sortedRows = computed(() =>
-  [...props.rows].sort(
-    (a, b) =>
-      STATE_RANK[a.state] - STATE_RANK[b.state] ||
-      b.order - a.order,
-  ),
+  [...props.rows].sort((a, b) => {
+    const stateDiff = STATE_RANK[a.state] - STATE_RANK[b.state]
+    if (stateDiff) return stateDiff
+    // Within the degraded bucket, rank by real playability; order is the final
+    // tiebreak. Other buckets keep backend `order` (desc). (Promoted providers
+    // arrive as `active` and sort with the active bucket.)
+    if (a.state === 'degraded') {
+      return (b.playability_index ?? 0) - (a.playability_index ?? 0) || b.order - a.order
+    }
+    return b.order - a.order
+  }),
 )
 const activeRows = computed(() => sortedRows.value.filter(r => r.state === 'active'))
 const activeCount = computed(() => activeRows.value.length)

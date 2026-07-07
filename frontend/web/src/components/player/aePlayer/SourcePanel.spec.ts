@@ -56,8 +56,12 @@ describe('SourcePanel collapse', () => {
   const mountOpts = { global: { mocks: { $t: (k: string) => k } } }
   // order encodes rank: higher = better. gogoanime > allanime > miruro > animepahe > animefever
   const ord: Record<string, number> = { gogoanime: 95, allanime: 90, miruro: 85, animepahe: 80, animefever: 75 }
-  const a = (id: string, state: ProviderRow['state'] = 'active'): ProviderRow =>
-    r(id, { state, order: ord[id] ?? 50, selectable: state === 'active' || state === 'degraded' || state === 'recovering' })
+  const a = (id: string, state: ProviderRow['state'] = 'active', over: Partial<ProviderRow> = {}): ProviderRow =>
+    r(id, {
+      state, order: ord[id] ?? 50,
+      selectable: state === 'active' || state === 'degraded' || state === 'recovering',
+      ...over,
+    })
   const collapseRows = [a('gogoanime'), a('allanime'), a('miruro')]
   const fiveRows = [a('gogoanime'), a('allanime'), a('miruro'), a('animepahe'), a('animefever')]
   const cb = {
@@ -121,5 +125,34 @@ describe('SourcePanel collapse', () => {
     })
     const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
     expect(ids).toEqual(['allanime', 'miruro', 'gogoanime'])
+  })
+
+  it('sorts the degraded bucket by playability_index desc, order as final tiebreak (hacker mode)', () => {
+    // All three degraded → within-bucket order is by playability_index desc,
+    // NOT by `order` (gogoanime has the highest order but the lowest index).
+    const rows = [
+      a('gogoanime', 'degraded', { order: 90, playability_index: 0.5 }),
+      a('miruro', 'degraded', { order: 10, playability_index: 4.2 }),
+      a('nineanime', 'degraded', { order: 50, playability_index: 2.0 }),
+    ]
+    const w = mount(SourcePanel, {
+      props: { ...cb, rows, provider: '', hackerMode: true, playbackError: false } as any,
+      ...mountOpts,
+    })
+    const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
+    expect(ids).toEqual(['miruro', 'nineanime', 'gogoanime'])
+  })
+
+  it('keeps active bucket ordered by `order` (index does NOT reorder active)', () => {
+    const rows = [
+      a('allanime', 'active', { order: 10, playability_index: 0.1 }),
+      a('miruro', 'active', { order: 90, playability_index: 5.0 }),
+    ]
+    const w = mount(SourcePanel, {
+      props: { ...cb, rows, provider: '', hackerMode: true, playbackError: false } as any,
+      ...mountOpts,
+    })
+    const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
+    expect(ids).toEqual(['miruro', 'allanime']) // by order desc, index ignored
   })
 })

@@ -41,6 +41,10 @@ export interface ProviderCap {
    *  instead of every language the `firstparty` group nominally serves.
    *  Every other provider (en/ru/adult groups) omits this. */
   lang?: 'en' | 'ru' | 'ja'
+  /** Blended, decayed playability rank (Phase B). Higher = more playable. The
+   *  panel sorts the `degraded` bucket by it. Absent when analytics is
+   *  unavailable and the backend skipped the blend. */
+  playability_index?: number
 
   // ─── Decoration / variant labels (still consumed by deriveCapLabels) ────────
   variants: CapVariant[]

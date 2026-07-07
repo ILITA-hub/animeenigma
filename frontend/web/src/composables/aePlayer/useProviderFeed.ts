@@ -31,6 +31,7 @@ function toRow(cap: ProviderCap): ProviderRow {
     audios,
     lang: cap.lang,
     reason: cap.reason,
+    playability_index: cap.playability_index,
   }
 }
 

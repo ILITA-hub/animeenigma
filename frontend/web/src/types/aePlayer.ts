@@ -36,6 +36,8 @@ export interface ProviderRow {
    *  narrows the group's default language set. */
   lang?: TrackLang
   reason?: string
+  /** Mirrors `ProviderCap.playability_index`; drives the degraded-bucket sort. */
+  playability_index?: number
 }
 
 /** The user's current source selection. */
