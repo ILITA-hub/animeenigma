@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickSmartDefault, pickRawBiased, pickSelectableFallback } from './smartDefault'
+import { pickSmartDefault, pickRawBiased, pickSelectableFallback, defaultPool } from './smartDefault'
 import type { ProviderRow } from '@/types/aePlayer'
 
 const row = (
@@ -75,6 +75,55 @@ describe('pickRawBiased', () => {
       row('kodik', { group: 'ru', order: 80 }),
     ]
     expect(pickRawBiased(rows, 'ru')?.id).toBe('kodik')
+  })
+})
+
+describe('defaultPool', () => {
+  // ae is auto-cached and can be PARTIAL — sometimes only a late episode (e.g.
+  // Frieren ep 27 of 28), flagged by the backend as `partialLibrary`. On a fresh
+  // open with no requested episode we want to land on episode 1 of a full
+  // source, so a PARTIAL ae (firstparty) is dropped from the auto-default when a
+  // real alternative exists. A COMPLETE ae library (no flag) stays the default;
+  // a specified episode (resume / deep-link) keeps even a partial ae eligible.
+  const partialAe = (over: Partial<ProviderRow> = {}) =>
+    row('ae', { group: 'firstparty', order: 100, partialLibrary: true, ...over })
+  const completeAe = (over: Partial<ProviderRow> = {}) =>
+    row('ae', { group: 'firstparty', order: 100, ...over })
+
+  it('keeps a partial ae when an episode IS specified (resume / deep-link)', () => {
+    const rows = [partialAe(), row('animejoy-sibnet', { group: 'ru', order: 25 })]
+    expect(defaultPool(rows, true).map((r) => r.id)).toContain('ae')
+  })
+
+  it('drops a PARTIAL ae for an unspecified open when an active alternative exists', () => {
+    const rows = [partialAe(), row('animejoy-sibnet', { group: 'ru', order: 25 })]
+    const pool = defaultPool(rows, false)
+    expect(pool.map((r) => r.id)).not.toContain('ae')
+    expect(pool.map((r) => r.id)).toContain('animejoy-sibnet')
+  })
+
+  it('KEEPS a COMPLETE ae (no partialLibrary flag) as the default for a fresh open', () => {
+    const rows = [completeAe(), row('animejoy-sibnet', { group: 'ru', order: 25 })]
+    expect(defaultPool(rows, false).map((r) => r.id)).toContain('ae')
+  })
+
+  it('keeps a partial ae when it is the only ACTIVE selectable source (no alternative)', () => {
+    const rows = [
+      partialAe(),
+      row('gogoanime', { state: 'degraded', selectable: false, order: 85 }),
+    ]
+    expect(defaultPool(rows, false).map((r) => r.id)).toContain('ae')
+  })
+
+  it('Frieren shape: fresh RAW/sub open picks the full animejoy source, not the partial ae', () => {
+    const rows = [
+      partialAe({ audios: ['sub'] }), // library holds only ep 27
+      row('animejoy-sibnet', { group: 'ru', order: 25, audios: ['sub'] }),
+      row('gogoanime', { state: 'degraded', selectable: false, order: 85 }),
+    ]
+    // Under RAW the language slider is hidden; ja has no in-group source, so the
+    // pick falls through to the global best of the ae-free pool.
+    expect(pickRawBiased(defaultPool(rows, false), 'ja')?.id).toBe('animejoy-sibnet')
   })
 })
 

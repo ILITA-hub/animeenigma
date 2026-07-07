@@ -34,3 +34,26 @@ export function pickRawBiased(rows: ProviderRow[], lang: TrackLang): ProviderRow
 export function pickSelectableFallback(rows: ProviderRow[]): ProviderRow | null {
   return [...rows].filter(r => r.selectable).sort((a, b) => b.order - a.order)[0] ?? null
 }
+
+/** Candidate pool for the SMART DEFAULT (not a manual pick).
+ *
+ *  The first-party `ae` library is auto-cached and can be PARTIAL — sometimes
+ *  only a late episode (e.g. Frieren ep 27 of 28) — yet it ranks highest
+ *  (order 100), so it would win every default and open its lone late file
+ *  instead of episode 1. On a fresh open with no requested episode we drop a
+ *  PARTIAL ae (`partialLibrary`, backend-flagged when the library lacks ep 1)
+ *  so the player lands on episode 1 of a full source — BUT only while a real
+ *  alternative remains (an active, selectable non-firstparty source); if the
+ *  partial ae is the only thing that can play, we keep it rather than dead-end.
+ *  A COMPLETE ae library (covers ep 1) is never dropped and stays the preferred
+ *  default. A specified episode (resume / deep-link) leaves even a partial ae
+ *  eligible — the per-episode failover handles a miss — and ae is ALWAYS still
+ *  manually selectable in the Source panel. */
+export function defaultPool(rows: ProviderRow[], episodeSpecified: boolean): ProviderRow[] {
+  if (episodeSpecified) return rows
+  const isPartialAe = (r: ProviderRow) => r.group === 'firstparty' && r.partialLibrary === true
+  const withoutPartialAe = rows.filter(r => !isPartialAe(r))
+  if (withoutPartialAe.length === rows.length) return rows // no partial ae to drop
+  const hasActiveAlternative = withoutPartialAe.some(r => r.state === 'active' && r.selectable)
+  return hasActiveAlternative ? withoutPartialAe : rows
+}

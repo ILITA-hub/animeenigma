@@ -45,6 +45,11 @@ export interface ProviderCap {
    *  panel sorts the `degraded` bucket by it. Absent when analytics is
    *  unavailable and the backend skipped the blend. */
   playability_index?: number
+  /** Set ONLY for a first-party `ae` library that is present but lacks episode 1
+   *  (a late-only auto-cache). Keeps such a library out of the fresh-open smart
+   *  default (see `defaultPool`); ae stays manually selectable. Absent for a
+   *  complete ae library and every non-ae provider. */
+  partial_library?: boolean
 
   // ─── Decoration / variant labels (still consumed by deriveCapLabels) ────────
   variants: CapVariant[]

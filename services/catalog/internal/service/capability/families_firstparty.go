@@ -101,6 +101,11 @@ func (s *Service) aeFamily(ctx context.Context, animeID string) (domain.SourceFa
 		pc.Audios = audios
 		pc.Lang = lang
 	}
+	// Late-only library flag: a present ae library that doesn't hold episode 1
+	// must not win the fresh-open smart default (the FE would otherwise open its
+	// lone late episode instead of ep 1). Complete libraries (covers ep 1) omit
+	// this and stay the preferred default.
+	pc.PartialLibrary = info.Present && !info.CoversFirstEpisode
 	return domain.SourceFamily{Family: "ae", Providers: []domain.ProviderCap{pc}}, true
 }
 

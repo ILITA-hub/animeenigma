@@ -38,6 +38,11 @@ export interface ProviderRow {
   reason?: string
   /** Mirrors `ProviderCap.playability_index`; drives the degraded-bucket sort. */
   playability_index?: number
+  /** Mirrors `ProviderCap.partial_library` — set ONLY for a first-party `ae`
+   *  library that is present but lacks episode 1 (a late-only auto-cache). Keeps
+   *  such a library out of the fresh-open smart default (see `defaultPool`); ae
+   *  stays manually selectable. Absent/false for a complete ae + all others. */
+  partialLibrary?: boolean
 }
 
 /** The user's current source selection. */

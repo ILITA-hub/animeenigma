@@ -122,6 +122,14 @@ type AeInfo struct {
 	AudioLang string
 	Track     string
 	Quality   string
+	// CoversFirstEpisode is true when the self-hosted library holds episode 1.
+	// ae is auto-cached and frequently PARTIAL — it often holds only a late
+	// episode (e.g. Frieren ep 27 of 28). A fresh/first-time open with no
+	// requested episode must land on episode 1, so the capability feed carries
+	// this so the FE keeps a late-only ae library OUT of the smart default
+	// (it stays manually selectable). A complete library covers ep 1 and stays
+	// the preferred default.
+	CoversFirstEpisode bool
 }
 
 // RawStream is the resolved playable stream + subtitle tracks.
@@ -257,6 +265,9 @@ func (r *RawResolver) AeTitleInfo(ctx context.Context, animeID string) (AeInfo, 
 		}
 		if info.Quality == "" && ep.Quality != "" {
 			info.Quality = ep.Quality
+		}
+		if ep.Number == 1 {
+			info.CoversFirstEpisode = true
 		}
 	}
 	if info.Track == "" {

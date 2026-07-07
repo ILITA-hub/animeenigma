@@ -114,6 +114,57 @@ func TestAeFamilyRealRawJapanese(t *testing.T) {
 	}
 }
 
+// A present library that does NOT hold episode 1 (a late-only auto-cache) is
+// flagged PartialLibrary so the FE keeps it out of the fresh-open smart default.
+func TestAeFamilyLateOnlyLibraryIsPartial(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Group: "firstparty", SupportsSub: true, SupportsRaw: true,
+	})
+	s := &Service{db: db, library: fakeLibrary{aeInfo: service.AeInfo{
+		Present: true, Track: "raw", CoversFirstEpisode: false, // holds only a late episode
+	}}}
+	fam, ok := s.aeFamily(context.Background(), "uuid")
+	if !ok {
+		t.Fatal("ae family expected")
+	}
+	if p := fam.Providers[0]; !p.PartialLibrary || p.State != "active" {
+		t.Fatalf("late-only ae must be active + PartialLibrary=true: %+v", p)
+	}
+}
+
+// A complete library (covers ep 1) is NOT partial — it stays the preferred
+// smart default.
+func TestAeFamilyCompleteLibraryNotPartial(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Group: "firstparty", SupportsSub: true, SupportsRaw: true,
+	})
+	s := &Service{db: db, library: fakeLibrary{aeInfo: service.AeInfo{
+		Present: true, Track: "raw", CoversFirstEpisode: true,
+	}}}
+	fam, ok := s.aeFamily(context.Background(), "uuid")
+	if !ok {
+		t.Fatal("ae family expected")
+	}
+	if p := fam.Providers[0]; p.PartialLibrary {
+		t.Fatalf("complete ae (covers ep 1) must not be PartialLibrary: %+v", p)
+	}
+}
+
+// Absent content (no_content) is never flagged partial — nothing to keep out of
+// the default; the FE already filters no_content out.
+func TestAeFamilyAbsentNotPartial(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp, Group: "firstparty",
+	})
+	s := &Service{db: db, library: fakeLibrary{}}
+	fam, _ := s.aeFamily(context.Background(), "uuid")
+	if p := fam.Providers[0]; p.PartialLibrary {
+		t.Fatalf("absent ae must not be PartialLibrary: %+v", p)
+	}
+}
+
 func TestAeFamilyAbsentIsNoContent(t *testing.T) {
 	db := newDB(t, domain.ScraperProvider{
 		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp, Group: "firstparty",

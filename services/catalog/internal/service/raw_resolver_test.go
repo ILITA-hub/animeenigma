@@ -502,6 +502,43 @@ func TestRawResolver_AeTitleInfo_NoDubIsRaw(t *testing.T) {
 	}
 }
 
+// A library that holds episode 1 sets CoversFirstEpisode — a complete/early
+// library that can serve a fresh open on ep 1.
+func TestRawResolver_AeTitleInfo_CoversFirstEpisode(t *testing.T) {
+	r := newAeInfoResolver(t, `{"success":true,"data":{"episodes":[
+		{"episode_number":1,"minio_url":"http://minio:9000/x/1/playlist.m3u8","quality":"1080p"},
+		{"episode_number":2,"minio_url":"http://minio:9000/x/2/playlist.m3u8"}
+	]}}`)
+
+	got, err := r.AeTitleInfo(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("AeTitleInfo: %v", err)
+	}
+	if !got.CoversFirstEpisode {
+		t.Errorf("CoversFirstEpisode = false, want true (library holds ep 1)")
+	}
+}
+
+// A late-only auto-cache (e.g. Frieren ep 27 of 28) does NOT cover ep 1 — the
+// FE keeps it out of the fresh-open smart default so the player opens ep 1 from
+// a full source.
+func TestRawResolver_AeTitleInfo_LateOnlyDoesNotCoverFirst(t *testing.T) {
+	r := newAeInfoResolver(t, `{"success":true,"data":{"episodes":[
+		{"episode_number":27,"minio_url":"http://minio:9000/x/27/playlist.m3u8","track":"raw","quality":"1080p"}
+	]}}`)
+
+	got, err := r.AeTitleInfo(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("AeTitleInfo: %v", err)
+	}
+	if !got.Present {
+		t.Fatal("Present = false, want true (a late episode exists)")
+	}
+	if got.CoversFirstEpisode {
+		t.Errorf("CoversFirstEpisode = true, want false (library holds only ep 27)")
+	}
+}
+
 // TestRawResolver_AeTitleInfo_EmptyLibraryNotPresent proves an
 // empty/unavailable library yields a zero AeInfo (Present=false), matching
 // GetLibraryEpisodes' own Available=false contract.

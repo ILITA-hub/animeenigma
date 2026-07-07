@@ -481,7 +481,7 @@ import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/aePla
 import { useI18n } from 'vue-i18n'
 import { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
-import { pickSmartDefault, pickRawBiased, pickSelectableFallback } from '@/composables/aePlayer/smartDefault'
+import { pickSmartDefault, pickRawBiased, pickSelectableFallback, defaultPool } from '@/composables/aePlayer/smartDefault'
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities, flattenCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rowsFromReport, groupOfProvider } from '@/composables/aePlayer/useProviderFeed'
@@ -1052,11 +1052,20 @@ watch(
 // language when a same-language source exists), plain best under DUB, with a
 // dead-player fallback to the top-ranked SELECTABLE (degraded) row so a
 // fully-degraded fleet still attempts playback instead of dead-ending.
+//
+// When no specific episode was requested (a fresh / first-time open, initial
+// episode ≤ 1), ae's partial first-party library must NOT win the default — it
+// may hold only a late auto-cached episode and would open that instead of
+// episode 1. `defaultPool` drops firstparty in that case (unless ae is the only
+// playable source). A resume / deep-link to a real episode (> 1) keeps ae
+// eligible; ae is always still MANUALLY selectable in the Source panel.
 function pickFacetDefault(): ProviderRow | null {
+  const episodeSpecified = (props.initialEpisode ?? 1) > 1
+  const pool = defaultPool(rows.value, episodeSpecified)
   const primary =
     state.combo.value.audio === 'sub'
-      ? pickRawBiased(rows.value, state.combo.value.lang)
-      : pickSmartDefault(rows.value)
+      ? pickRawBiased(pool, state.combo.value.lang)
+      : pickSmartDefault(pool)
   return primary ?? pickSelectableFallback(rows.value)
 }
 

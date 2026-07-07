@@ -44,6 +44,15 @@ type ProviderCap struct {
 	// it when analytics is unavailable and the blend was skipped.
 	PlayabilityIndex float64 `json:"playability_index,omitempty"`
 
+	// PartialLibrary is set ONLY for the first-party `ae` provider when its
+	// self-hosted library is present but does NOT include episode 1 (a late-only
+	// auto-cache, e.g. Frieren ep 27 of 28). The FE keeps such a library out of
+	// the fresh-open smart default so the player opens episode 1 from a full
+	// source; ae stays MANUALLY selectable. A complete ae library (covers ep 1)
+	// omits this and remains the preferred default. Always false/omitted for
+	// every non-ae provider (they list their full episode range).
+	PartialLibrary bool `json:"partial_library,omitempty"`
+
 	Variants []Variant `json:"variants"`
 }
 
