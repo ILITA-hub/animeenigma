@@ -35,17 +35,25 @@ import (
 
 // uuidRe matches the canonical UUID v4 form (8-4-4-4-12 hex with hyphens).
 // We use it to decide whether the {user_id} URL param is already a UUID, or
-// whether it needs to be resolved from username / public_id.
+// whether it needs to be resolved from username / public_id / telegram_id.
 var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// digitsRe matches an all-digits string — used to decide whether the
+// {user_id} URL param should also be tried against telegram_id (numeric),
+// mirroring the standard resolver's identifier set (services/auth's
+// UserResolveHandler / GET /api/admin/users/resolve).
+var digitsRe = regexp.MustCompile(`^[0-9]+$`)
 
 // resolveUserID accepts a string from the URL param and returns the canonical
 // UUID. The param may be any of: (a) a UUID v4 — returned as-is, (b) a
-// username, (c) a public_id. The lookup is a single SELECT against the users
-// table the player service shares with auth.
+// username, (c) a public_id, (d) a telegram_id (only tried when raw is
+// all-digits). The lookup is a single SELECT against the users table the
+// player service shares with auth.
 //
 // Behavior:
 //   - Returns the raw input + nil if it already matches the UUID v4 format.
-//   - Returns the resolved UUID + nil on a successful username/public_id lookup.
+//   - Returns the resolved UUID + nil on a successful
+//     username/public_id/telegram_id lookup.
 //   - Returns "" + nil if the lookup completes cleanly but the user does
 //     not exist (caller treats as 404).
 //   - Returns the raw input + nil if the users table is unreachable
@@ -61,12 +69,13 @@ func (h *AdminRecsHandler) resolveUserID(ctx context.Context, raw string) (strin
 		return raw, nil
 	}
 	var id string
-	err := h.db.WithContext(ctx).
-		Table("users").
-		Select("id").
-		Where("username = ? OR public_id = ?", raw, raw).
-		Limit(1).
-		Scan(&id).Error
+	q := h.db.WithContext(ctx).Table("users").Select("id")
+	if digitsRe.MatchString(raw) {
+		q = q.Where("username = ? OR public_id = ? OR telegram_id = ?", raw, raw, raw)
+	} else {
+		q = q.Where("username = ? OR public_id = ?", raw, raw)
+	}
+	err := q.Limit(1).Scan(&id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", nil

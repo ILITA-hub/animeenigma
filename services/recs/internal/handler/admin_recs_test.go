@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // adminCacheStub satisfies the Get+Set+Delete surface AdminRecsHandler
@@ -387,6 +388,65 @@ func TestAdminRecsHandler_GetAdminRecs_PinRowHasZeroPreS12Rank(t *testing.T) {
 	for _, row := range env.Data.Recs[1:] {
 		assert.GreaterOrEqual(t, row.PreS12Rank, 1, "body row must carry a real pre_s12_rank")
 	}
+}
+
+// ----------------------------------------------------------------------------
+// resolveUserID tests
+// ----------------------------------------------------------------------------
+
+// setupUsersTableFixture creates a minimal "users" table mirroring the
+// columns resolveUserID queries (id, username, public_id, telegram_id) and
+// seeds two rows: one resolvable by username/public_id, one resolvable only
+// by telegram_id (100200300 — doesn't collide with any other fixture value
+// in this file). Deliberately separate from setupRecsTestDB (which several
+// other admin_recs_test.go cases rely on NOT having a users table, to
+// exercise resolveUserID's "users table missing" fall-through) — this helper
+// is opt-in per-test so it can't affect those cases.
+func setupUsersTableFixture(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	require.NoError(t, db.Exec(`CREATE TABLE users (
+		id TEXT PRIMARY KEY,
+		username TEXT,
+		public_id TEXT,
+		telegram_id INTEGER
+	)`).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO users (id, username, public_id, telegram_id) VALUES (?, ?, ?, ?)`,
+		"22222222-2222-2222-2222-222222222222", "resolveuser", "resolvepublic", nil,
+	).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO users (id, username, public_id, telegram_id) VALUES (?, ?, ?, ?)`,
+		"33333333-3333-3333-3333-333333333333", "tguser", "tgpublic", 100200300,
+	).Error)
+}
+
+func TestAdminRecsHandler_ResolveUserID_ByUsernamePublicIDAndTelegramID(t *testing.T) {
+	db := setupRecsTestDB(t)
+	setupUsersTableFixture(t, db)
+	cache := newAdminCacheStub()
+	recsRepo := repo.NewRecsRepository(db)
+	precompute := recs.NewOrchestrator([]recs.SignalModule{})
+	h := NewAdminRecsHandler(db, recsRepo, cache, nil, precompute, logger.Default())
+
+	ctx := context.Background()
+
+	id, err := h.resolveUserID(ctx, "resolveuser")
+	require.NoError(t, err)
+	assert.Equal(t, "22222222-2222-2222-2222-222222222222", id, "username lookup")
+
+	id, err = h.resolveUserID(ctx, "resolvepublic")
+	require.NoError(t, err)
+	assert.Equal(t, "22222222-2222-2222-2222-222222222222", id, "public_id lookup")
+
+	id, err = h.resolveUserID(ctx, "100200300")
+	require.NoError(t, err)
+	assert.Equal(t, "33333333-3333-3333-3333-333333333333", id, "telegram_id lookup")
+
+	// A digit-string that matches no username/public_id/telegram_id resolves
+	// to "" (caller treats as 404), not an error.
+	id, err = h.resolveUserID(ctx, "999999999")
+	require.NoError(t, err)
+	assert.Equal(t, "", id, "unmatched telegram_id-shaped input")
 }
 
 // ----------------------------------------------------------------------------
