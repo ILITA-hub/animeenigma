@@ -115,10 +115,23 @@ func TestKodikFamily_MapsTeamsAndCategories(t *testing.T) {
 	}
 }
 
-func TestKodikFamily_OmittedWhenEmptyOrError(t *testing.T) {
-	if _, ok := (&Service{catalog: fakeCatalog{kodik: nil}}).kodikFamily(context.Background(), "u"); ok {
-		t.Error("empty kodik should be omitted")
+func TestKodikFamily_EmptyNoContent(t *testing.T) {
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "kodik-noads", Status: domain.StatusEnabled, Group: "ru", SupportsSub: true, SupportsDub: true}),
+		catalog: fakeCatalog{kodik: nil}}
+	fam, ok := s.kodikFamily(context.Background(), "u")
+	if !ok || fam.Family != "kodik" || len(fam.Providers) != 1 {
+		t.Fatalf("empty kodik should surface a present no_content family: ok=%v fam=%+v", ok, fam)
 	}
+	p := fam.Providers[0]
+	if p.State != "no_content" || p.Selectable {
+		t.Errorf("kodik no_content feed wrong: %+v", p)
+	}
+	if p.Reason != "No content for this title on Kodik" {
+		t.Errorf("kodik no_content reason = %q", p.Reason)
+	}
+}
+
+func TestKodikFamily_ErrorOmitted(t *testing.T) {
 	if _, ok := (&Service{catalog: fakeCatalog{kodikErr: errors.New("boom")}}).kodikFamily(context.Background(), "u"); ok {
 		t.Error("errored kodik should be omitted")
 	}
@@ -148,6 +161,22 @@ func TestAnimelibFamily_SoftHardFromHasSubtitles(t *testing.T) {
 	}
 	if dub.Category != "dub" || dub.SubDelivery != "none" {
 		t.Errorf("dub wrong: %+v", dub)
+	}
+}
+
+func TestAnimelibFamily_EmptyNoContent(t *testing.T) {
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "animelib", Status: domain.StatusEnabled, Group: "ru", SupportsSub: true, SupportsDub: true}),
+		catalog: fakeCatalog{anilib: nil}}
+	fam, ok := s.animelibFamily(context.Background(), "uuid")
+	if !ok || fam.Family != "animelib" || len(fam.Providers) != 1 {
+		t.Fatalf("empty animelib should surface a present no_content family: ok=%v fam=%+v", ok, fam)
+	}
+	p := fam.Providers[0]
+	if p.State != "no_content" || p.Selectable {
+		t.Errorf("animelib no_content feed wrong: %+v", p)
+	}
+	if p.Reason != "No content for this title on AniLib" {
+		t.Errorf("animelib no_content reason = %q", p.Reason)
 	}
 }
 
@@ -185,6 +214,22 @@ func TestHanimeFamily_StreamErrorKeepsFamilyWithoutQuality(t *testing.T) {
 	v := fam.Providers[0].Variants[0]
 	if v.QualitySource != "unknown" || len(v.Qualities) != 0 {
 		t.Errorf("expected no qualities, got %+v", v)
+	}
+}
+
+func TestHanimeFamily_EmptyNoContent(t *testing.T) {
+	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "hanime", Status: domain.StatusEnabled, Group: "adult", SupportsRaw: true}),
+		catalog: fakeCatalog{heps: nil}}
+	fam, ok := s.hanimeFamily(context.Background(), "uuid")
+	if !ok || fam.Family != "hanime" || len(fam.Providers) != 1 {
+		t.Fatalf("empty hanime should surface a present no_content family: ok=%v fam=%+v", ok, fam)
+	}
+	p := fam.Providers[0]
+	if p.State != "no_content" || p.Selectable {
+		t.Errorf("hanime no_content feed wrong: %+v", p)
+	}
+	if p.Reason != "No content for this title on Hanime" {
+		t.Errorf("hanime no_content reason = %q", p.Reason)
 	}
 }
 
@@ -295,15 +340,37 @@ func TestAnimejoyLegFamily_BothLegsPresentDegraded(t *testing.T) {
 	}
 }
 
-func TestAnimejoyLegFamily_SibnetOnlyDropsAllVideo(t *testing.T) {
-	s := &Service{db: newDB(t, ajRow("animejoy-sibnet", 25), ajRow("animejoy-allvideo", 20))}
+// ajRowActive builds an animejoy leg row with the real (post-soak) seed shape —
+// Status=enabled, default policy=auto/health=up (mirrors seed.go, promoted out
+// of soak 2026-06-30) — UNLIKE ajRow's policy=manual fixture. Used by the
+// no_content tests below: with policy=manual, deriveProviderView short-circuits
+// to "degraded" regardless of hasContent, which would mask the no_content state
+// this task adds — the real DB rows are policy=auto, so that's what these tests
+// must seed to observe "no_content".
+func ajRowActive(name string, weight int) domain.ScraperProvider {
+	return domain.ScraperProvider{
+		Name: name, Status: domain.StatusEnabled,
+		Group: "ru", PreferenceWeight: weight, SupportsSub: true,
+	}
+}
+
+func TestAnimejoyLegFamily_SibnetOnlyAllVideoNoContent(t *testing.T) {
+	s := &Service{db: newDB(t, ajRowActive("animejoy-sibnet", 25), ajRowActive("animejoy-allvideo", 20))}
 	teams := []domain.AnimejoyTeam{{ID: "0", HasSibnet: true, HasAllVideo: false}}
 
 	if _, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-sibnet", "Sibnet", "sibnet"); !ok {
 		t.Error("sibnet family should be present when a team has the sibnet leg")
 	}
-	if _, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-allvideo", "AllVideo", "allvideo"); ok {
-		t.Error("allvideo family must be ABSENT when no team has the allvideo leg")
+	av, ok := s.animejoyLegFamily(context.Background(), teams, "animejoy-allvideo", "AllVideo", "allvideo")
+	if !ok || av.Family != "animejoy-allvideo" || len(av.Providers) != 1 {
+		t.Fatalf("allvideo family must be a PRESENT no_content family when no team has the allvideo leg: ok=%v fam=%+v", ok, av)
+	}
+	p := av.Providers[0]
+	if p.State != "no_content" || p.Selectable {
+		t.Errorf("allvideo no_content feed wrong: %+v", p)
+	}
+	if p.Reason != "No content for this title on AllVideo" {
+		t.Errorf("allvideo no_content reason = %q", p.Reason)
 	}
 }
 
@@ -319,10 +386,18 @@ func TestAnimejoyLegFamily_NoNameOmitsTeam(t *testing.T) {
 	}
 }
 
-func TestAnimejoyLegFamily_EmptyTeamsAbsent(t *testing.T) {
-	s := &Service{db: newDB(t, ajRow("animejoy-sibnet", 25))}
-	if _, ok := s.animejoyLegFamily(context.Background(), nil, "animejoy-sibnet", "Sibnet", "sibnet"); ok {
-		t.Error("no teams → family must be absent (no_content), not present")
+func TestAnimejoyLegFamily_EmptyTeamsNoContent(t *testing.T) {
+	s := &Service{db: newDB(t, ajRowActive("animejoy-sibnet", 25))}
+	fam, ok := s.animejoyLegFamily(context.Background(), nil, "animejoy-sibnet", "Sibnet", "sibnet")
+	if !ok || fam.Family != "animejoy-sibnet" || len(fam.Providers) != 1 {
+		t.Fatalf("no teams → family must be a PRESENT no_content family, not absent: ok=%v fam=%+v", ok, fam)
+	}
+	p := fam.Providers[0]
+	if p.State != "no_content" || p.Selectable {
+		t.Errorf("animejoy-sibnet no_content feed wrong: %+v", p)
+	}
+	if p.Reason != "No content for this title on Sibnet" {
+		t.Errorf("animejoy-sibnet no_content reason = %q", p.Reason)
 	}
 }
 

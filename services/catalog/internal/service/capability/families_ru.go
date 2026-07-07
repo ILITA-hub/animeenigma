@@ -56,6 +56,31 @@ func formatQuality(h string) string {
 	return h
 }
 
+// noContentReason is the title-specific tooltip for a tinted no_content provider
+// — the provider exists but this title has nothing on it.
+func noContentReason(displayName string) string {
+	return "No content for this title on " + displayName
+}
+
+// noContentFamily builds a single-provider family in the no_content state: the
+// provider is REGISTERED but this title has no content on it, so it surfaces
+// tinted + non-selectable in the hacker-mode selector (a full diagnostic view)
+// instead of being dropped. providerID is the wire id the FE resolver keys on
+// (e.g. "kodik"); rowName is the stream_providers row to read policy/health from
+// (e.g. "kodik-noads"). Returns ok=false only when the row is absent or disabled.
+func (s *Service) noContentFamily(ctx context.Context, family, providerID, rowName, displayName string) (domain.SourceFamily, bool) {
+	row, ok := s.providerRow(ctx, rowName)
+	if !ok {
+		return domain.SourceFamily{}, false
+	}
+	cap := domain.ProviderCap{Provider: providerID, DisplayName: displayName, Variants: variantsFromTraits(row)}
+	if !applyFeedFields(&cap, row, false) { // hasContent=false → no_content
+		return domain.SourceFamily{}, false
+	}
+	cap.Reason = noContentReason(displayName)
+	return domain.SourceFamily{Family: family, Providers: []domain.ProviderCap{cap}}, true
+}
+
 // providerRow loads one stream_providers row by name. ok=false when absent.
 func (s *Service) providerRow(ctx context.Context, name string) (domain.ScraperProvider, bool) {
 	if s.db == nil {
@@ -88,8 +113,10 @@ func applyFeedFields(cap *domain.ProviderCap, row domain.ScraperProvider, hasCon
 
 // kodikFamily builds the "kodik" family: one provider whose variants are the
 // real translation teams (Kodik exposes team names; iframe hides quality). Best
-// effort — returns ok=false on error, when the anime isn't on Kodik, or when the
-// `kodik-noads` DB row is disabled (the served no-ads variant gates the family).
+// effort — returns ok=false on error or when the `kodik-noads` DB row is absent
+// or disabled (the served no-ads variant gates the family). When the anime isn't
+// on Kodik (empty translations), the family still surfaces tinted as no_content
+// (see noContentFamily) rather than being dropped.
 func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.SourceFamily, bool) {
 	trs, err := s.catalog.GetKodikTranslations(ctx, animeID)
 	if err != nil {
@@ -99,7 +126,7 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 		return domain.SourceFamily{}, false
 	}
 	if len(trs) == 0 {
-		return domain.SourceFamily{}, false
+		return s.noContentFamily(ctx, "kodik", "kodik", "kodik-noads", "Kodik")
 	}
 	variants := make([]domain.Variant, 0, len(trs))
 	for _, tr := range trs {
@@ -125,7 +152,9 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 
 // animelibFamily builds the "animelib" family from translation teams of the
 // first episode: real team names, soft/hard subs from HasSubtitles. Best effort —
-// also omitted when the `animelib` DB row is disabled.
+// omitted on error or when the `animelib` DB row is absent or disabled. When the
+// anime isn't on AniLib (empty translations), the family still surfaces tinted as
+// no_content (see noContentFamily) rather than being dropped.
 func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.SourceFamily, bool) {
 	const firstEpisode = 1
 	trs, err := s.catalog.GetAnimeLibTranslations(ctx, animeID, firstEpisode)
@@ -136,7 +165,7 @@ func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.So
 		return domain.SourceFamily{}, false
 	}
 	if len(trs) == 0 {
-		return domain.SourceFamily{}, false
+		return s.noContentFamily(ctx, "animelib", "animelib", "animelib", "AniLib")
 	}
 	variants := make([]domain.Variant, 0, len(trs))
 	for _, tr := range trs {
@@ -161,9 +190,11 @@ func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.So
 }
 
 // hanimeFamily builds the "hanime" family: a single raw variant with the quality
-// ladder of the first episode's stream. Best effort — omitted when the anime
-// isn't on Hanime or the `hanime` DB row is disabled; quality is dropped (not the
-// whole family) if the stream call fails after episodes resolve.
+// ladder of the first episode's stream. Best effort — omitted on error or when
+// the `hanime` DB row is absent or disabled; quality is dropped (not the whole
+// family) if the stream call fails after episodes resolve. When the anime isn't
+// on Hanime (empty episodes), the family still surfaces tinted as no_content (see
+// noContentFamily) rather than being dropped.
 func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.SourceFamily, bool) {
 	eps, err := s.catalog.GetHanimeEpisodes(ctx, animeID)
 	if err != nil {
@@ -173,7 +204,7 @@ func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.Sour
 		return domain.SourceFamily{}, false
 	}
 	if len(eps) == 0 {
-		return domain.SourceFamily{}, false
+		return s.noContentFamily(ctx, "hanime", "hanime", "hanime", "Hanime")
 	}
 
 	qualities := []string{}
@@ -232,9 +263,13 @@ func animejoyTeamHasLeg(t domain.AnimejoyTeam, leg string) bool {
 // report. Each qualifying team (one that carries this leg) becomes a single RU-sub
 // variant; AnimeJoy serves baked/iframe subs, so SubDelivery is always "hard" and
 // quality is unknown (resolved per-stream later). Best effort — returns ok=false
-// (no_content) when no team carries this leg, or when the provider's DB row is
-// disabled. The teams slice is the SAME for both legs: the caller resolves
-// discovery once, never two network calls.
+// when the provider's DB row is absent or disabled. When no team carries this leg
+// (a successful-but-empty discovery), the family still surfaces tinted as
+// no_content (see noContentFamily) rather than being dropped — an upstream
+// discovery ERROR is handled by the caller (buildFamilies), which skips both legs
+// entirely so a transient failure never surfaces a misleading no_content. The
+// teams slice is the SAME for both legs: the caller resolves discovery once,
+// never two network calls.
 func (s *Service) animejoyLegFamily(ctx context.Context, teams []domain.AnimejoyTeam, provider, displayName, leg string) (domain.SourceFamily, bool) {
 	variants := make([]domain.Variant, 0, len(teams))
 	for _, t := range teams {
@@ -253,7 +288,7 @@ func (s *Service) animejoyLegFamily(ctx context.Context, teams []domain.Animejoy
 		variants = append(variants, v)
 	}
 	if len(variants) == 0 {
-		return domain.SourceFamily{}, false
+		return s.noContentFamily(ctx, provider, provider, provider, displayName)
 	}
 	row, ok := s.providerRow(ctx, provider)
 	if !ok {

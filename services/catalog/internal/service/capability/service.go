@@ -72,11 +72,14 @@ func (s *Service) Report(ctx context.Context, animeID string) (domain.Capability
 
 // buildFamilies assembles every family concurrently. The EN family is required
 // (its error fails the report); the first-party (ae/adult) and RU/Hanime
-// families are best-effort (omitted on error or when the anime isn't on that
-// provider). Order is stable: ae, ourenglish, adult, kodik, animelib,
-// hanime, animejoy-sibnet, animejoy-allvideo — first-party leads. The
-// ae/adult families are DB-row-driven (no CatalogSource needed) so they run
-// regardless of whether catalog is wired.
+// families are best-effort — omitted on a fetch error, an absent/disabled DB
+// row, or (AnimeJoy only) a discovery error. When the anime simply has no
+// content on a per-title provider (kodik/animelib/hanime/animejoy legs), that
+// family still surfaces tinted as no_content (see noContentFamily) rather than
+// being omitted, so the hacker-mode selector is a full diagnostic view. Order is
+// stable: ae, ourenglish, adult, kodik, animelib, hanime, animejoy-sibnet,
+// animejoy-allvideo — first-party leads. The ae/adult families are DB-row-driven
+// (no CatalogSource needed) so they run regardless of whether catalog is wired.
 func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.SourceFamily, error) {
 	type slot struct {
 		fam domain.SourceFamily
@@ -105,11 +108,16 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 		go func() { defer wg.Done(); animelib.fam, animelib.ok = s.animelibFamily(ctx, animeID) }()
 		go func() { defer wg.Done(); hanime.fam, hanime.ok = s.hanimeFamily(ctx, animeID) }()
 		// AnimeJoy: resolve discovery ONCE, then build BOTH leg families from the
-		// shared teams (no second network call). Discovery failure → empty teams →
-		// both leg families absent (no_content).
+		// shared teams (no second network call). A discovery ERROR keeps both legs
+		// absent (a transient failure must never surface a misleading no_content);
+		// only a successful-but-empty discovery lets animejoyLegFamily surface
+		// no_content.
 		go func() {
 			defer wg.Done()
-			teams, _ := s.catalog.GetAnimejoyTeams(ctx, animeID)
+			teams, ajErr := s.catalog.GetAnimejoyTeams(ctx, animeID)
+			if ajErr != nil {
+				return // discovery error → both legs absent (not a misleading no_content)
+			}
 			ajSibnet.fam, ajSibnet.ok = s.animejoyLegFamily(ctx, teams, "animejoy-sibnet", "Sibnet", "sibnet")
 			ajAllVideo.fam, ajAllVideo.ok = s.animejoyLegFamily(ctx, teams, "animejoy-allvideo", "AllVideo", "allvideo")
 		}()
