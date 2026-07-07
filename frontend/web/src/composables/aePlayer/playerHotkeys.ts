@@ -26,6 +26,13 @@ const SUB_OFFSET_STEP = 0.1
  * shortcut (or focus is in a text field, where typing must not be hijacked).
  */
 export function mapKeyToAction(e: KeyboardEvent): HotkeyAction | null {
+  // A Ctrl/Cmd/Alt chord is a browser/OS command (copy, paste, cut, select-all,
+  // find, print, focus URL bar…), never a bare player hotkey. Let it through so
+  // the player never swallows e.g. Ctrl/Cmd+C over selectable subtitle text.
+  // Shift is intentionally NOT excluded — it only produces an uppercase letter,
+  // which the case-insensitive mapping below still treats as the same hotkey.
+  if (e.ctrlKey || e.metaKey || e.altKey) return null
+
   // Never intercept keystrokes meant for a text field.
   const target = e.target as HTMLElement | null
   if (target) {

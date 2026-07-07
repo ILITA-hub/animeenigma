@@ -1,10 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { mapKeyToAction } from './playerHotkeys'
 
+type Mods = { ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean }
+
 /** Build a minimal KeyboardEvent-like object for the mapper. */
-function ev(key: string, target: Partial<HTMLElement> = {}): KeyboardEvent {
+function ev(key: string, target: Partial<HTMLElement> = {}, mods: Mods = {}): KeyboardEvent {
   return {
     key,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...mods,
     target: { tagName: 'DIV', isContentEditable: false, ...target },
   } as unknown as KeyboardEvent
 }
@@ -61,5 +68,26 @@ describe('mapKeyToAction', () => {
     expect(mapKeyToAction(ev(' ', { tagName: 'INPUT' }))).toBeNull()
     expect(mapKeyToAction(ev('k', { tagName: 'TEXTAREA' }))).toBeNull()
     expect(mapKeyToAction(ev('f', { tagName: 'DIV', isContentEditable: true }))).toBeNull()
+  })
+
+  it('never hijacks Ctrl/Cmd+C — the browser copy must pass through', () => {
+    expect(mapKeyToAction(ev('c', {}, { ctrlKey: true }))).toBeNull()
+    expect(mapKeyToAction(ev('c', {}, { metaKey: true }))).toBeNull()
+    expect(mapKeyToAction(ev('C', {}, { metaKey: true }))).toBeNull()
+  })
+
+  it('lets every other Ctrl/Cmd/Alt browser shortcut through, even ones that collide with a hotkey', () => {
+    expect(mapKeyToAction(ev('f', {}, { ctrlKey: true }))).toBeNull() // find
+    expect(mapKeyToAction(ev('p', {}, { metaKey: true }))).toBeNull() // print
+    expect(mapKeyToAction(ev('x', {}, { ctrlKey: true }))).toBeNull() // cut
+    expect(mapKeyToAction(ev('l', {}, { ctrlKey: true }))).toBeNull() // focus URL bar
+    expect(mapKeyToAction(ev('5', {}, { ctrlKey: true }))).toBeNull() // no decile-seek on a chord
+    expect(mapKeyToAction(ev('k', {}, { altKey: true }))).toBeNull()
+  })
+
+  it('still fires bare and Shift-modified hotkeys (Shift is just uppercase, not a browser command)', () => {
+    expect(mapKeyToAction(ev('c'))).toEqual({ type: 'subs' })
+    expect(mapKeyToAction(ev('C', {}, { shiftKey: true }))).toEqual({ type: 'subs' })
+    expect(mapKeyToAction(ev('Z', {}, { shiftKey: true }))).toEqual({ type: 'sub-offset', value: -0.1 })
   })
 })
