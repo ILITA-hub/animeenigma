@@ -41,6 +41,36 @@ export function pickEpisodeForProvider(
 }
 
 /**
+ * Whether an AUTO-selected source should be rejected because its episode list
+ * doesn't actually carry the episode the viewer wants.
+ *
+ * True only when the target falls WITHIN the source's coverage (≤ its highest
+ * episode) yet is absent — i.e. the source is missing an episode it should have:
+ *  - a partial first-party library that only holds LATE episodes (e.g. ae has
+ *    only ep 27 while a first-time viewer wants ep 1 — `pickEpisodeForProvider`
+ *    would otherwise snap them UP to ep 27), or
+ *  - a hole in the middle of an otherwise-covering list.
+ *
+ * A target ABOVE the source's newest episode is treated as "not aired on this
+ * source yet" and kept (nearest-below) rather than churning through every
+ * source hunting for an episode nobody has. Empty list ⇒ false (the caller
+ * handles "no episodes" separately). Pure: testable in isolation.
+ */
+export function providerMissesTargetEpisode(
+  eps: EpisodeOption[],
+  targetNumber: number,
+): boolean {
+  if (eps.length === 0) return false
+  let max = 0
+  let hasExact = false
+  for (const e of eps) {
+    if (e.number === targetNumber) hasExact = true
+    if (e.number > max) max = e.number
+  }
+  return !hasExact && targetNumber <= max
+}
+
+/**
  * Decide whether the player should re-pick its episode when `initialEpisode`
  * changes AFTER mount. Resume/watch-progress resolves asynchronously, so the
  * prop flips from its mount value (default 1) to e.g. `lastWatched + 1` a tick

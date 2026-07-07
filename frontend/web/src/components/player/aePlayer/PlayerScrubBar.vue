@@ -4,7 +4,7 @@
     class="pl-track"
     role="slider"
     tabindex="0"
-    aria-label="Seek"
+    :aria-label="$t('player.aePlayer.seek')"
     :aria-valuemin="0"
     :aria-valuemax="100"
     :aria-valuenow="Math.round(progress)"

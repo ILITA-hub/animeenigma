@@ -475,7 +475,7 @@ import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider
 import { useCapabilities, flattenCapabilities } from '@/composables/aePlayer/useCapabilities'
 import { rowsFromReport, groupOfProvider } from '@/composables/aePlayer/useProviderFeed'
 import { GROUP_LANGS, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
-import { pickEpisodeForProvider, shouldReselectEpisode } from '@/composables/aePlayer/episodeSelection'
+import { pickEpisodeForProvider, providerMissesTargetEpisode, shouldReselectEpisode } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useSubtitleTracks } from '@/composables/aePlayer/useSubtitleTracks'
@@ -889,9 +889,9 @@ function armPlaybackWatchdog() {
     if (engine.fragLoadedCount.value > 0) return // fragments flowing — just slow
     void (async () => {
       if (await advanceToNextSource('silent stall')) {
-        toast.push("That source won't play — switching to the next best…", 'info', 4000)
+        toast.push(t('player.aePlayer.switchNotPlaying'), 'info', 4000)
       } else if (!sourceError.value) {
-        sourceError.value = 'Stream unavailable'
+        sourceError.value = t('player.aePlayer.streamUnavailable')
       }
     })()
   }, PLAYBACK_WATCHDOG_MS)
@@ -1514,6 +1514,10 @@ async function loadEpisodesAndStream() {
   isResolving.value = true
   switchingSource = false // resolve owns error handling now — handoff window over
   hasStarted.value = false
+  // Re-listing a provider: its servers are unknown until the resolve below, so
+  // drop the previous provider's stale set. This also keeps advanceToNextSource's
+  // server-first dodge from targeting a nonexistent server of the new provider.
+  resolvedServers.value = []
   const token = ++resolveToken
   resolveStartedAt = performance.now()
   reachedReported = false
@@ -1526,6 +1530,25 @@ async function loadEpisodesAndStream() {
 
     episodes.value = eps
 
+    // Which episode does the viewer want? Resume-resolved selection, else the
+    // initial/first episode.
+    const targetNum =
+      selectedEpisode.value?.number ?? props.initialEpisode ?? 1
+
+    // Episode-aware auto-default: a source that was AUTO-selected (smart default
+    // or failover) but doesn't actually carry the episode the viewer wants is the
+    // wrong source for them — ae's partial library can hold only ep 27 while a
+    // first-time viewer wants ep 1, and pickEpisodeForProvider would otherwise
+    // snap them UP to ep 27. Advance to the next-best source instead of silently
+    // playing a different episode. A manual pick (providerAutoSelected=false) is
+    // respected as-is; an exhausted / hacker-suppressed / room-pinned advance
+    // falls through and plays what this source does have rather than dead-ending.
+    // Runs BEFORE loadTeams so a source we're about to abandon never fires a
+    // wasted teams fetch.
+    if (providerAutoSelected.value && providerMissesTargetEpisode(eps, targetNum)) {
+      if (await advanceToNextSource('source missing the requested episode')) return
+    }
+
     // Provider-native teams (e.g. Kodik translation titles) for the Source
     // panel, scoped to the current audio facet. Best-effort — never blocks the
     // stream resolve.
@@ -1534,12 +1557,10 @@ async function loadEpisodesAndStream() {
     // Preserve the selected episode across provider changes: keep the same
     // episode NUMBER when the new source has it, and never snap back to EP 1
     // when it doesn't (pickEpisodeForProvider handles the nearest-fallback).
-    const targetNum =
-      selectedEpisode.value?.number ?? props.initialEpisode ?? 1
     const ep = pickEpisodeForProvider(eps, targetNum, selectedEpisode.value)
 
     if (!ep) {
-      sourceError.value = 'No episodes available from this source'
+      sourceError.value = t('player.aePlayer.noEpisodes')
       return
     }
 
@@ -1585,12 +1606,12 @@ async function loadEpisodesAndStream() {
     // going until a source actually resolves AND plays — never strands on a
     // dead provider.
     if (await advanceToNextSource('resolve failed')) {
-      toast.push("That source isn't available — switching to the next best…", 'info', 4000)
+      toast.push(t('player.aePlayer.switchNotAvailable'), 'info', 4000)
       return
     }
     // advanceToNextSource may have set a hacker-mode "suppressed" message — keep it.
     if (!sourceError.value) {
-      sourceError.value = isNotAvailable ? "This source isn't available yet" : 'Stream unavailable'
+      sourceError.value = isNotAvailable ? t('player.aePlayer.sourceUnavailable') : t('player.aePlayer.streamUnavailable')
     }
   } finally {
     if (token === resolveToken) {
@@ -1679,7 +1700,7 @@ function repickProviderForFacet() {
   resetSourceSwitching()
   const pick = pickFacetDefault()
   if (!pick) {
-    sourceError.value = 'No source for this language / audio'
+    sourceError.value = t('player.aePlayer.noSourceForFacet')
     return
   }
   providerAutoSelected.value = true
@@ -1972,7 +1993,7 @@ function onVideoError() {
   // this native error is from the source we're leaving, not a dead destination.
   if (!v?.error || isResolving.value || switchingSource) return
   setBuffering(false)
-  sourceError.value = 'Stream unavailable'
+  sourceError.value = t('player.aePlayer.streamUnavailable')
 }
 
 // hls.js fatal (dead playlist / unrecoverable). Dynamic BEST: try the next
@@ -1998,10 +2019,10 @@ watch(engine.fatal, async (f) => {
   // the intent and returns false — "BEST" is only meaningful if it lands on a
   // source that plays, but in hacker mode we let you verify that manually.
   if (await advanceToNextSource('playback fatal')) {
-    toast.push("That source failed — switching to the next best…", 'info', 4000)
+    toast.push(t('player.aePlayer.switchFailed'), 'info', 4000)
     return
   }
-  if (!sourceError.value) sourceError.value = 'Stream unavailable'
+  if (!sourceError.value) sourceError.value = t('player.aePlayer.streamUnavailable')
 })
 
 // ─── Hacker mode (debug HUD) ──────────────────────────────────────────────────
@@ -2279,13 +2300,13 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
       lang: state.combo.value.lang,
     })
     if (await advanceToNextSource('resolve failed')) {
-      toast.push("That source isn't available — switching to the next best…", 'info', 4000)
+      toast.push(t('player.aePlayer.switchNotAvailable'), 'info', 4000)
       return
     }
     if (!sourceError.value) {
       sourceError.value = isNotAvailable
-        ? "This source isn't available yet"
-        : 'Stream unavailable'
+        ? t('player.aePlayer.sourceUnavailable')
+        : t('player.aePlayer.streamUnavailable')
     }
   } finally {
     if (token === resolveToken) {

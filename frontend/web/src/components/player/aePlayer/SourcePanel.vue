@@ -22,7 +22,7 @@
           style="background: var(--white-a8);"
           :data-on="audioIndex"
           role="radiogroup"
-          aria-label="Audio"
+          :aria-label="$t('player.aePlayer.audio')"
         >
           <!-- Sliding thumb -->
           <span
@@ -62,7 +62,7 @@
           style="background: var(--white-a8); display: grid; grid-template-columns: repeat(2, 1fr);"
           :data-on="langIndex"
           role="radiogroup"
-          aria-label="Language"
+          :aria-label="$t('player.aePlayer.language')"
         >
           <!-- Sliding thumb (2 cols) -->
           <span

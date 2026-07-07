@@ -2,21 +2,24 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PlayerScrubBar from './PlayerScrubBar.vue'
 
+// $t is used for the accessibility aria-label; stub it to echo the key.
+const stub = { global: { mocks: { $t: (k: string) => k } } }
+
 describe('PlayerScrubBar', () => {
   it('renders fill at the given progress', () => {
-    const w = mount(PlayerScrubBar, { props: { progress: 40, buffered: 55, durationSec: 1421, chapters: [] } })
+    const w = mount(PlayerScrubBar, { props: { progress: 40, buffered: 55, durationSec: 1421, chapters: [] }, ...stub })
     expect(w.find('[data-test="fill"]').attributes('style')).toContain('40%')
   })
   it('renders NO chapter markers when none provided', () => {
-    const w = mount(PlayerScrubBar, { props: { progress: 0, buffered: 0, durationSec: 1421, chapters: [] } })
+    const w = mount(PlayerScrubBar, { props: { progress: 0, buffered: 0, durationSec: 1421, chapters: [] }, ...stub })
     expect(w.findAll('[data-test="chapter"]').length).toBe(0)
   })
   it('renders chapter markers when provided', () => {
-    const w = mount(PlayerScrubBar, { props: { progress: 0, buffered: 0, durationSec: 1421, chapters: [{ kind: 'intro', startPct: 2, widthPct: 5 }] } })
+    const w = mount(PlayerScrubBar, { props: { progress: 0, buffered: 0, durationSec: 1421, chapters: [{ kind: 'intro', startPct: 2, widthPct: 5 }] }, ...stub })
     expect(w.findAll('[data-test="chapter"]').length).toBe(1)
   })
   it('emits seek with a 0..100 pct on click', async () => {
-    const w = mount(PlayerScrubBar, { props: { progress: 0, buffered: 0, durationSec: 1421, chapters: [] } })
+    const w = mount(PlayerScrubBar, { props: { progress: 0, buffered: 0, durationSec: 1421, chapters: [] }, ...stub })
     await w.find('[data-test="track"]').trigger('click', { clientX: 50 })
     expect(w.emitted('seek')).toBeTruthy()
   })
@@ -32,6 +35,7 @@ describe('PlayerScrubBar', () => {
           { startPct: 2, widthPct: 2, tone: 'bad' as const, label: '2048 KB · 900 ms' },
         ],
       },
+      ...stub,
     })
     const frags = w.findAll('[data-test="frag"]')
     expect(frags.length).toBe(2)
@@ -42,11 +46,12 @@ describe('PlayerScrubBar', () => {
   it('renders no fragment layer by default', () => {
     const w = mount(PlayerScrubBar, {
       props: { progress: 10, buffered: 30, durationSec: 1400, chapters: [] },
+      ...stub,
     })
     expect(w.findAll('[data-test="frag"]').length).toBe(0)
   })
   it('is a keyboard slider: role + arrows emit seek ±5s', async () => {
-    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] } })
+    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] }, ...stub })
     const track = w.find('[data-test="track"]')
     expect(track.attributes('role')).toBe('slider')
     expect(track.attributes('tabindex')).toBe('0')
@@ -58,7 +63,7 @@ describe('PlayerScrubBar', () => {
     expect(seeks[1][0]).toBeCloseTo(49.5)
   })
   it('Up/Down arrows also seek ±5s (WAI-ARIA slider pattern)', async () => {
-    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] } })
+    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] }, ...stub })
     const track = w.find('[data-test="track"]')
     await track.trigger('keydown', { key: 'ArrowUp' })
     await track.trigger('keydown', { key: 'ArrowDown' })
@@ -67,7 +72,7 @@ describe('PlayerScrubBar', () => {
     expect(seeks[1][0]).toBeCloseTo(49.5)
   })
   it('Home/End jump to the start/end of the timeline', async () => {
-    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] } })
+    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] }, ...stub })
     const track = w.find('[data-test="track"]')
     await track.trigger('keydown', { key: 'Home' })
     await track.trigger('keydown', { key: 'End' })

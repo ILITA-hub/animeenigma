@@ -13,11 +13,11 @@ describe('resolveStartEpisode', () => {
   it('watching (last < total) → last + 1', () => {
     expect(resolveStartEpisode(5, 12)).toBe(6)
   })
-  it('caught up (last == total) → last (re-load the final ep)', () => {
-    expect(resolveStartEpisode(12, 12)).toBe(12)
+  it('caught up / fully watched (last >= total) → ep 1 (fresh rewatch)', () => {
+    expect(resolveStartEpisode(12, 12)).toBe(1)
   })
-  it('clamps a stale last > total to total', () => {
-    expect(resolveStartEpisode(14, 12)).toBe(12)
+  it('a stale last > total is still fully watched → ep 1', () => {
+    expect(resolveStartEpisode(14, 12)).toBe(1)
   })
   it('unknown total (0) treats any positive last as watching', () => {
     expect(resolveStartEpisode(20, 0)).toBe(21)

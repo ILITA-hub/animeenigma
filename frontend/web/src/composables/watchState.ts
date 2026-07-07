@@ -60,15 +60,19 @@ export function clampLastWatched(lastWatched: number, totalEpisodes: number): nu
 /**
  * The episode the player should mount on. The ONLY start-episode authority.
  *   first-time (0)            → 1
- *   caught up (last >= total) → last   (re-load the final episode)
+ *   fully watched (last >= total) → 1   (re-open from the start, a fresh rewatch)
  *   otherwise                 → last + 1
  * Always returns a number >= 1.
+ *
+ * A fully-watched anime re-opens on episode 1, matching the "rewatch" CTA — the
+ * old "re-load the final episode" behaviour stranded finished viewers on the
+ * last episode instead of letting them start over.
  */
 export function resolveStartEpisode(lastWatched: number, totalEpisodes: number): number {
   const last = clampLastWatched(lastWatched, totalEpisodes)
   if (last <= 0) return 1
   const total = totalEpisodes > 0 ? totalEpisodes : 0
-  if (total > 0 && last >= total) return last
+  if (total > 0 && last >= total) return 1
   return last + 1
 }
 

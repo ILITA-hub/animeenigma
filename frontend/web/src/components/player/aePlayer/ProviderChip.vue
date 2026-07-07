@@ -55,7 +55,7 @@
       <span
         v-if="isSelected"
         class="ml-auto flex-shrink-0 text-[var(--brand-cyan)]"
-        aria-label="Selected"
+        :aria-label="$t('player.aePlayer.selected')"
       >
         <Check class="size-[14px]" aria-hidden="true" />
       </span>
