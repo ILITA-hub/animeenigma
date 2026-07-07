@@ -975,7 +975,11 @@ const buildAvailable = (): WatchCombo[] => {
       if (cap.state === 'no_content') continue
       const player = providerToLegacyPlayer(cap.provider, cap.group)
       if (!player) continue
-      const langs = GROUP_LANGS[cap.group]
+      // A cap's real per-title `lang` (Phase C source-panel truth — set only
+      // for ae's probed dub) overrides the group's default language set, so
+      // e.g. an ae English dub routes under EN only, not every language
+      // `firstparty` nominally serves. Caps without `lang` are unchanged.
+      const langs = cap.lang ? [cap.lang] : GROUP_LANGS[cap.group]
       const audios = [...new Set((cap.audios ?? []).map((a) => (a === 'dub' ? 'dub' : 'sub')))]
       for (const audio of audios) {
         for (const language of langs) {

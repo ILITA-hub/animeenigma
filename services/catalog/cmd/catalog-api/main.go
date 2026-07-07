@@ -694,22 +694,12 @@ func main() {
 
 // aeLibraryAdapter satisfies capability.LibrarySource: the first-party `ae`
 // family is `active` (selectable) only when the title is self-hosted in the
-// library. Presence = the raw resolver's library episode index reports
-// available episodes for the anime.
+// library, and its variants/audios/lang reflect the real per-title audio
+// facts (Phase C source-panel truth) — both derived by aeFamily from the one
+// AeTitleInfo call below.
 type aeLibraryAdapter struct{ r *service.RawResolver }
 
-func (a aeLibraryAdapter) HasLibraryTitle(ctx context.Context, animeID string) (bool, error) {
-	resp, err := a.r.GetLibraryEpisodes(ctx, animeID)
-	if err != nil {
-		return false, err
-	}
-	return resp.Available && len(resp.Episodes) > 0, nil
-}
-
-// AeTitleInfo delegates to the raw resolver's aggregation — Phase C
-// source-panel truth. Not yet consumed by aeFamily (that rewrite is the
-// next task); wired here so capability.LibrarySource has a real
-// implementation ready to go.
+// AeTitleInfo delegates to the raw resolver's aggregation.
 func (a aeLibraryAdapter) AeTitleInfo(ctx context.Context, animeID string) (service.AeInfo, error) {
 	return a.r.AeTitleInfo(ctx, animeID)
 }

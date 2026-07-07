@@ -24,13 +24,20 @@ type ProviderCap struct {
 
 	// Phase-1 single-source-of-truth feed fields. Computed server-side from the
 	// DB row via deriveProviderView; the player renders these verbatim.
-	State      string   `json:"state"`        // active | recovering | degraded | no_content
+	State      string   `json:"state"` // active | recovering | degraded | no_content
 	Selectable bool     `json:"selectable"`
-	HackerOnly bool     `json:"hacker_only"`  // true only for degraded
-	Order      int      `json:"order"`        // preference_weight; FE sorts desc
-	Group      string   `json:"group"`        // en | ru | adult | firstparty
-	Audios     []string `json:"audios"`       // ["sub","dub"] from supports_* (binary audio model)
+	HackerOnly bool     `json:"hacker_only"` // true only for degraded
+	Order      int      `json:"order"`       // preference_weight; FE sorts desc
+	Group      string   `json:"group"`       // en | ru | adult | firstparty
+	Audios     []string `json:"audios"`      // ["sub","dub"] from supports_* (binary audio model)
 	Reason     string   `json:"reason,omitempty"`
+
+	// Lang overrides the group's default language set (GROUP_LANGS on the FE)
+	// with the real per-title language a dub was probed in. Set ONLY for the
+	// first-party `ae` provider's real dub variant ("en" | "ru") — every other
+	// provider (en/ru/adult groups) leaves this empty and the FE keeps deriving
+	// language from `group` as before (Phase C source-panel truth).
+	Lang string `json:"lang,omitempty"`
 
 	Variants []Variant `json:"variants"`
 }
@@ -42,7 +49,7 @@ type Variant struct {
 	Team          *Team    `json:"team,omitempty"` // RU only; nil for EN (reserved — backlog)
 	SubDelivery   string   `json:"sub_delivery"`   // "soft" | "hard" | "none"
 	Qualities     []string `json:"qualities,omitempty"`
-	QualitySource string   `json:"quality_source"` // "hls_master" | "discrete" | "unknown" | "trait"
+	QualitySource string   `json:"quality_source"` // "hls_master" | "discrete" | "unknown" | "trait" | "probed"
 	Source        string   `json:"source"`         // "trait" | "discovered"
 }
 

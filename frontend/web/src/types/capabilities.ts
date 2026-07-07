@@ -35,6 +35,12 @@ export interface ProviderCap {
   audios: ('sub' | 'dub')[]
   /** Human-readable explanation for a non-active state (tooltip text). */
   reason?: string
+  /** Real per-title dub language (Phase C source-panel truth) — set ONLY for
+   *  the first-party `ae` provider's probed dub variant. Overrides the
+   *  group's default language set so an ae English dub routes under EN
+   *  instead of every language the `firstparty` group nominally serves.
+   *  Every other provider (en/ru/adult groups) omits this. */
+  lang?: 'en' | 'ru' | 'ja'
 
   // ─── Decoration / variant labels (still consumed by deriveCapLabels) ────────
   variants: CapVariant[]
@@ -45,6 +51,6 @@ export interface CapVariant {
   team?: { id?: string; name: string }
   sub_delivery: 'soft' | 'hard' | 'none'
   qualities?: string[]
-  quality_source: 'hls_master' | 'discrete' | 'unknown' | 'trait'
+  quality_source: 'hls_master' | 'discrete' | 'unknown' | 'trait' | 'probed'
   source: 'trait' | 'discovered'
 }
