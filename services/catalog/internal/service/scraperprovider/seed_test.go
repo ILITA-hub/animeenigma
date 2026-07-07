@@ -54,6 +54,10 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	if kodikNoads.Group != "ru" || kodikNoads.ScraperOperated || !kodikNoads.IsEnabled() {
 		t.Errorf("kodik-noads seeded wrong (want ru/enabled/not-scraper-operated): %+v", kodikNoads)
 	}
+	// Ranks directly under ae (100), above the AnimeJoy RU-sub legs (25/20).
+	if kodikNoads.PreferenceWeight != 90 {
+		t.Errorf("kodik-noads preference_weight = %d, want 90 (under ae, above sibnet/allvideo)", kodikNoads.PreferenceWeight)
+	}
 	var okru domain.ScraperProvider
 	db.First(&okru, "name = ?", "allanime-okru")
 	if !okru.IsEnabled() || okru.Group != "en" || !okru.ScraperOperated {

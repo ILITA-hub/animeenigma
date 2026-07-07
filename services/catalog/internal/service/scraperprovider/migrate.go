@@ -207,6 +207,9 @@ const miruroBrowserRevivalGuardKey = "miruro_browser_revival"
 // allanimeOkruCryptoBlockGuardKey marks AllanimeOkruCryptoBlock as applied.
 const allanimeOkruCryptoBlockGuardKey = "allanime_okru_crypto_block_2026_07_07"
 
+// bumpKodikNoadsPriorityGuardKey marks BumpKodikNoadsPriority as applied.
+const bumpKodikNoadsPriorityGuardKey = "bump_kodik_noads_priority_90_2026_07_07"
+
 // RemoveRawProvider hard-deletes the legacy standalone "raw" JP provider row
 // (removed 2026-06-30 — AllAnime + ok.ru cover JP-original audio). The seed no
 // longer creates it, but insert-if-absent seeding never deletes an existing
@@ -870,6 +873,46 @@ func AllanimeOkruCryptoBlock(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: allanimeOkruCryptoBlockGuardKey}).Error; err != nil {
 		return fmt.Errorf("write allanime-okru-crypto-block guard: %w", err)
+	}
+	return nil
+}
+
+// BumpKodikNoadsPriority raises the kodik-noads roster row's preference_weight to
+// 90 exactly once, carrying the new Source-panel rank to live DBs (2026-07-07).
+// The `kodik` capability family reads THIS row's weight into cap.Order, and the
+// FE sorts the active bucket by order desc, so this lifts Kodik from dead-last
+// (weight 0) to directly under the first-party `ae` (100) and above every other
+// source — the EN scraper chain (gogoanime 85, …) and the AnimeJoy RU-sub legs
+// (sibnet 25, allvideo 20). The seed is insert-if-absent and never updates an
+// existing prod row; this RUN-ONCE guarded migration is the only thing that
+// bumps live DBs. Guarded via the catalog_migration_guards ledger so it is a
+// no-op on every later boot and an operator who re-tunes the weight in the DB is
+// NOT clobbered. Idempotent; safe to call every boot.
+func BumpKodikNoadsPriority(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", bumpKodikNoadsPriorityGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check bump-kodik-noads-priority guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator re-tune
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "kodik-noads").
+		Update("preference_weight", 90)
+	if result.Error != nil {
+		return fmt.Errorf("bump kodik-noads priority (preference_weight=90): %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No kodik-noads row to bump (seed did not run / row hard-deleted). Do NOT
+		// write the guard, so a later boot (after the row exists) retries.
+		return fmt.Errorf("bump kodik-noads priority: no row found for name=kodik-noads")
+	}
+	if err := db.Create(&migrationGuard{Key: bumpKodikNoadsPriorityGuardKey}).Error; err != nil {
+		return fmt.Errorf("write bump-kodik-noads-priority guard: %w", err)
 	}
 	return nil
 }

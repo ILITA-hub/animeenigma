@@ -177,7 +177,13 @@ var defaultProviders = []domain.ScraperProvider{
 		Description: "Direct ad-free Kodik HLS resolved via kodikextract (solodcdn CDN). " +
 			"A real stream, so it is playback-probed.",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
-		QualityCeiling: "1080p", PreferenceWeight: 0,
+		// PreferenceWeight 90: Kodik ranks directly under the first-party `ae`
+		// (100) and above every other source — including the EN scraper chain
+		// (gogoanime 85, …) and the AnimeJoy RU-sub legs (sibnet 25, allvideo 20).
+		// The `kodik` capability family reads THIS row's weight into cap.Order, so
+		// this is the sole lever for Kodik's Source-panel rank. Live DBs are carried
+		// by BumpKodikNoadsPriority (seed is insert-if-absent, never updates prod).
+		QualityCeiling: "1080p", PreferenceWeight: 90,
 	},
 	{
 		Name: "animelib", Status: domain.StatusDisabled,

@@ -1082,3 +1082,69 @@ func TestAllanimeOkruCryptoBlock_RefreshesDescriptionOnceIdempotent(t *testing.T
 		t.Fatalf("description = %q after operator edit + rerun, want untouched (not clobbered)", row.Description)
 	}
 }
+
+func TestBumpKodikNoadsPriority_RaisesWeightOnceIdempotent(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := scraperprovider.SeedDefaults(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Simulate a pre-existing live DB where kodik-noads still sits at the old
+	// dead-last weight (fresh DBs already seed 90; the migration must also carry
+	// prod rows created before the seed bump).
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "kodik-noads").
+		Update("preference_weight", 0).Error; err != nil {
+		t.Fatalf("preset kodik-noads weight=0: %v", err)
+	}
+
+	if err := scraperprovider.BumpKodikNoadsPriority(db); err != nil {
+		t.Fatalf("bump kodik-noads priority: %v", err)
+	}
+
+	var noads, ae, sibnet, allvideo domain.ScraperProvider
+	db.First(&noads, "name = ?", "kodik-noads")
+	db.First(&ae, "name = ?", "ae")
+	db.First(&sibnet, "name = ?", "animejoy-sibnet")
+	db.First(&allvideo, "name = ?", "animejoy-allvideo")
+	if noads.PreferenceWeight != 90 {
+		t.Errorf("kodik-noads preference_weight = %d, want 90", noads.PreferenceWeight)
+	}
+	// The whole point: under ae, above the AnimeJoy RU-sub legs.
+	if !(noads.PreferenceWeight < ae.PreferenceWeight) {
+		t.Errorf("kodik-noads (%d) must rank UNDER ae (%d)", noads.PreferenceWeight, ae.PreferenceWeight)
+	}
+	if !(noads.PreferenceWeight > sibnet.PreferenceWeight && noads.PreferenceWeight > allvideo.PreferenceWeight) {
+		t.Errorf("kodik-noads (%d) must rank ABOVE sibnet (%d) and allvideo (%d)",
+			noads.PreferenceWeight, sibnet.PreferenceWeight, allvideo.PreferenceWeight)
+	}
+
+	// A later operator re-tune must NOT be clobbered by a rerun (guard written).
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "kodik-noads").Update("preference_weight", 42)
+	if err := scraperprovider.BumpKodikNoadsPriority(db); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	db.First(&noads, "name = ?", "kodik-noads")
+	if noads.PreferenceWeight != 42 {
+		t.Errorf("kodik-noads weight = %d after operator re-tune + rerun, want 42 (not clobbered)", noads.PreferenceWeight)
+	}
+}
+
+func TestBumpKodikNoadsPriority_NoRow_ErrorsAndDoesNotWriteGuard(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// No kodik-noads row exists — the migration must error and NOT write its guard
+	// so a later boot (after the row is seeded) retries.
+	if err := scraperprovider.BumpKodikNoadsPriority(db); err == nil {
+		t.Fatal("expected an error when kodik-noads row is absent")
+	}
+	var guards int64
+	db.Table("catalog_migration_guards").
+		Where("key = ?", "bump_kodik_noads_priority_90_2026_07_07").Count(&guards)
+	if guards != 0 {
+		t.Errorf("guard written despite no row found (count=%d); a later boot must retry", guards)
+	}
+}

@@ -326,6 +326,14 @@ func main() {
 		log.Errorw("add-animejoy-providers migration failed (continuing)", "error", err)
 	}
 
+	// Raise kodik-noads' preference_weight to 90 so Kodik ranks directly under the
+	// first-party `ae` and above every other Source-panel source (EN chain +
+	// AnimeJoy RU-sub legs). MUST run AFTER SeedDefaults (fresh DBs create the row
+	// there). Run-once via the ledger; a later operator re-tune is never clobbered.
+	if err := scraperprovider.BumpKodikNoadsPriority(db.DB); err != nil {
+		log.Errorw("bump-kodik-noads-priority migration failed (continuing)", "error", err)
+	}
+
 	// Hard-delete the retired standalone "raw" JP provider row (removed 2026-06-30).
 	// The seed no longer creates it, but insert-if-absent never deletes the existing
 	// prod row, and the Grafana roster reads stream_providers directly — so the stale
