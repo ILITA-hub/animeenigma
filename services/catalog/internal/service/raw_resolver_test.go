@@ -175,7 +175,7 @@ func TestRawResolver_GetLibraryEpisodes_HappyPath(t *testing.T) {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"success":true,"data":{"episodes":[{"episode_number":1,"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8"},{"episode_number":2,"minio_url":"http://minio:9000/raw-library/57466/2/playlist.m3u8"}]}}`)
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[{"episode_number":1,"minio_url":"http://minio:9000/raw-library/57466/1/playlist.m3u8","track":"dub","audio_lang":"eng","quality":"1080p"},{"episode_number":2,"minio_url":"http://minio:9000/raw-library/57466/2/playlist.m3u8"}]}}`)
 	}))
 	defer libSrv.Close()
 
@@ -191,6 +191,12 @@ func TestRawResolver_GetLibraryEpisodes_HappyPath(t *testing.T) {
 	}
 	if len(got.Episodes) != 2 || got.Episodes[0].Number != 1 || got.Episodes[1].Number != 2 {
 		t.Errorf("episodes = %+v", got.Episodes)
+	}
+	if got.Episodes[0].Track != "dub" || got.Episodes[0].AudioLang != "eng" || got.Episodes[0].Quality != "1080p" {
+		t.Errorf("episode[0] audio facts = %+v, want track=dub audio_lang=eng quality=1080p", got.Episodes[0])
+	}
+	if got.Episodes[1].Track != "" || got.Episodes[1].AudioLang != "" || got.Episodes[1].Quality != "" {
+		t.Errorf("episode[1] audio facts = %+v, want all empty (omitted by fake response)", got.Episodes[1])
 	}
 }
 
@@ -424,4 +430,89 @@ func TestRawResolver_GetLibraryStream_SignalFailureDoesNotAffectResult(t *testin
 	}
 	// Give the goroutine a moment to run+fail without affecting anything.
 	time.Sleep(50 * time.Millisecond)
+}
+
+// ---- Phase C: AeTitleInfo per-title audio aggregation ----
+
+// newAeInfoResolver spins up a fake library server returning the given raw
+// episodes JSON body and returns a RawResolver wired to it.
+func newAeInfoResolver(t *testing.T, episodesJSON string) *RawResolver {
+	t.Helper()
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, episodesJSON)
+	}))
+	t.Cleanup(libSrv.Close)
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	return NewRawResolver(libClient, animeRepo, cacheC, nil)
+}
+
+// TestRawResolver_AeTitleInfo_AnyDubEpisodeWins proves that a single dub
+// episode among otherwise-raw episodes makes the whole title a dub, and
+// records that episode's audio_lang + the first non-empty quality seen.
+func TestRawResolver_AeTitleInfo_AnyDubEpisodeWins(t *testing.T) {
+	r := newAeInfoResolver(t, `{"success":true,"data":{"episodes":[
+		{"episode_number":1,"minio_url":"http://minio:9000/x/1/playlist.m3u8","track":"raw","quality":"720p"},
+		{"episode_number":2,"minio_url":"http://minio:9000/x/2/playlist.m3u8","track":"dub","audio_lang":"rus","quality":"1080p"}
+	]}}`)
+
+	got, err := r.AeTitleInfo(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("AeTitleInfo: %v", err)
+	}
+	if !got.Present {
+		t.Fatal("Present = false, want true (episodes exist)")
+	}
+	if got.Track != "dub" || got.AudioLang != "rus" {
+		t.Errorf("got Track=%q AudioLang=%q, want dub/rus", got.Track, got.AudioLang)
+	}
+	if got.Quality != "720p" {
+		t.Errorf("Quality = %q, want %q (first non-empty episode quality)", got.Quality, "720p")
+	}
+}
+
+// TestRawResolver_AeTitleInfo_NoDubIsRaw proves that with no dub episodes
+// present, the title aggregates to Track="raw" (original/sub) and no
+// AudioLang.
+func TestRawResolver_AeTitleInfo_NoDubIsRaw(t *testing.T) {
+	r := newAeInfoResolver(t, `{"success":true,"data":{"episodes":[
+		{"episode_number":1,"minio_url":"http://minio:9000/x/1/playlist.m3u8","quality":"1080p"},
+		{"episode_number":2,"minio_url":"http://minio:9000/x/2/playlist.m3u8"}
+	]}}`)
+
+	got, err := r.AeTitleInfo(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("AeTitleInfo: %v", err)
+	}
+	if !got.Present {
+		t.Fatal("Present = false, want true (episodes exist)")
+	}
+	if got.Track != "raw" {
+		t.Errorf("Track = %q, want %q when no episode is a dub", got.Track, "raw")
+	}
+	if got.AudioLang != "" {
+		t.Errorf("AudioLang = %q, want empty when no episode is a dub", got.AudioLang)
+	}
+	if got.Quality != "1080p" {
+		t.Errorf("Quality = %q, want %q", got.Quality, "1080p")
+	}
+}
+
+// TestRawResolver_AeTitleInfo_EmptyLibraryNotPresent proves an
+// empty/unavailable library yields a zero AeInfo (Present=false), matching
+// GetLibraryEpisodes' own Available=false contract.
+func TestRawResolver_AeTitleInfo_EmptyLibraryNotPresent(t *testing.T) {
+	r := newAeInfoResolver(t, `{"success":true,"data":{"episodes":[]}}`)
+
+	got, err := r.AeTitleInfo(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("AeTitleInfo: %v", err)
+	}
+	if got != (AeInfo{}) {
+		t.Errorf("got %+v, want zero AeInfo for an empty library", got)
+	}
 }

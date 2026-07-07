@@ -65,10 +65,16 @@ type envelope struct {
 
 // EpisodeListItem is one entry in the List response (episode number +
 // playlist URL). Mirrors services/library/internal/handler.episodeListItem.
+// Track/AudioLang/Quality (Phase C source-panel truth) surface the encoder's
+// actual per-episode audio facts; the raw resolver's AeTitleInfo aggregates
+// them into a per-title verdict (dub vs original + modal quality).
 type EpisodeListItem struct {
 	EpisodeNumber int    `json:"episode_number"`
 	MinIOURL      string `json:"minio_url"`
 	DurationSec   int    `json:"duration_sec"`
+	Track         string `json:"track,omitempty"`
+	AudioLang     string `json:"audio_lang,omitempty"`
+	Quality       string `json:"quality,omitempty"`
 }
 
 // listEnvelope wraps the {episodes:[...]} list payload.

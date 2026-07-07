@@ -4,11 +4,16 @@ import (
 	"context"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
 )
 
-// LibrarySource reports whether AnimeEnigma has a title self-hosted (library/MinIO).
+// LibrarySource reports whether AnimeEnigma has a title self-hosted
+// (library/MinIO), and (Phase C) the aggregated per-title audio facts.
+// HasLibraryTitle is kept — aeFamily below still calls it — alongside the
+// richer AeTitleInfo that the next task's aeFamily rewrite will consume.
 type LibrarySource interface {
 	HasLibraryTitle(ctx context.Context, animeID string) (bool, error)
+	AeTitleInfo(ctx context.Context, animeID string) (service.AeInfo, error)
 }
 
 // aeFamily builds the first-party "ae" family. The provider is ALWAYS emitted

@@ -705,3 +705,11 @@ func (a aeLibraryAdapter) HasLibraryTitle(ctx context.Context, animeID string) (
 	}
 	return resp.Available && len(resp.Episodes) > 0, nil
 }
+
+// AeTitleInfo delegates to the raw resolver's aggregation — Phase C
+// source-panel truth. Not yet consumed by aeFamily (that rewrite is the
+// next task); wired here so capability.LibrarySource has a real
+// implementation ready to go.
+func (a aeLibraryAdapter) AeTitleInfo(ctx context.Context, animeID string) (service.AeInfo, error) {
+	return a.r.AeTitleInfo(ctx, animeID)
+}

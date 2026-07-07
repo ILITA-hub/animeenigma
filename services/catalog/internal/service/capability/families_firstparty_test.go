@@ -6,14 +6,22 @@ import (
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
 )
 
 type fakeLibrary struct {
 	has bool
 	err error
+
+	aeInfo    service.AeInfo
+	aeInfoErr error
 }
 
 func (f fakeLibrary) HasLibraryTitle(context.Context, string) (bool, error) { return f.has, f.err }
+
+func (f fakeLibrary) AeTitleInfo(context.Context, string) (service.AeInfo, error) {
+	return f.aeInfo, f.aeInfoErr
+}
 
 func TestAeFamilyPresent(t *testing.T) {
 	db := newDB(t, domain.ScraperProvider{

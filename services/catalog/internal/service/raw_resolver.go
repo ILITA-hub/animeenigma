@@ -99,11 +99,29 @@ func (r *RawResolver) fireSignal(fn func()) bool {
 }
 
 // RawEpisode is what the handler returns to the frontend. Mirrors the shape
-// of domain.RawEpisode for client-side parity.
+// of domain.RawEpisode for client-side parity. Track/AudioLang/Quality
+// (Phase C source-panel truth) carry the self-hosted encoder's actual
+// per-episode audio facts through from the library, feeding AeTitleInfo's
+// per-title aggregation below.
 type RawEpisode struct {
-	ID     string `json:"id"`
-	Number int    `json:"number"`
-	Title  string `json:"title"`
+	ID        string `json:"id"`
+	Number    int    `json:"number"`
+	Title     string `json:"title"`
+	Track     string `json:"track,omitempty"`
+	AudioLang string `json:"audio_lang,omitempty"`
+	Quality   string `json:"quality,omitempty"`
+}
+
+// AeInfo aggregates the self-hosted ("ae") audio facts for a title: whether
+// any episode is a localized dub (and which language) vs original audio,
+// plus a representative quality. Present=false means the library has
+// nothing self-hosted for this title yet (a legitimate empty state, not an
+// error) — callers should treat a zero AeInfo as "no ae data".
+type AeInfo struct {
+	Present   bool
+	AudioLang string
+	Track     string
+	Quality   string
 }
 
 // RawStream is the resolved playable stream + subtitle tracks.
@@ -206,12 +224,45 @@ func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*
 	out := make([]RawEpisode, 0, len(items))
 	for _, it := range items {
 		out = append(out, RawEpisode{
-			ID:     fmt.Sprintf("%d", it.EpisodeNumber),
-			Number: it.EpisodeNumber,
-			Title:  "",
+			ID:        fmt.Sprintf("%d", it.EpisodeNumber),
+			Number:    it.EpisodeNumber,
+			Title:     "",
+			Track:     it.Track,
+			AudioLang: it.AudioLang,
+			Quality:   it.Quality,
 		})
 	}
 	return &EpisodesResponse{Episodes: out, Available: true, Source: "library"}, nil
+}
+
+// aeDubTrack is the library's episode_track value for a localized dub
+// (mirrors services/library/internal/domain.EpisodeTrackDub — that package
+// is unexported outside the library service, so the literal is repeated
+// here rather than imported).
+const aeDubTrack = "dub"
+
+// AeTitleInfo aggregates the self-hosted audio facts for a title: whether
+// ANY episode is a localized dub (recording its audio_lang) vs original,
+// plus a representative (first non-empty) quality. Best-effort — an
+// empty/absent library yields Present=false, not an error.
+func (r *RawResolver) AeTitleInfo(ctx context.Context, animeID string) (AeInfo, error) {
+	resp, err := r.GetLibraryEpisodes(ctx, animeID)
+	if err != nil || resp == nil || !resp.Available || len(resp.Episodes) == 0 {
+		return AeInfo{}, err
+	}
+	info := AeInfo{Present: true}
+	for _, ep := range resp.Episodes {
+		if ep.Track == aeDubTrack && info.AudioLang == "" {
+			info.AudioLang, info.Track = ep.AudioLang, ep.Track
+		}
+		if info.Quality == "" && ep.Quality != "" {
+			info.Quality = ep.Quality
+		}
+	}
+	if info.Track == "" {
+		info.Track = "raw" // original/sub when no dub episode was found
+	}
+	return info, nil
 }
 
 // GetLibraryStream resolves an episode's playable HLS stream STRICTLY from the

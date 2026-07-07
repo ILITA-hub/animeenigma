@@ -47,23 +47,34 @@ func NewEpisodesHandler(episodeRepo EpisodeStoreReader, urlBuilder URLBuilder, l
 	}
 }
 
-// episodeResponse is the JSON shape locked in 04-SPEC.
+// episodeResponse is the JSON shape locked in 04-SPEC. Track/AudioLang/
+// Quality (Phase C source-panel truth) surface the encoder's actual
+// per-episode audio facts so downstream (catalog's AeTitleInfo) can tell a
+// localized dub from the original track.
 type episodeResponse struct {
 	MinioURL      string `json:"minio_url"`
 	DurationSec   int    `json:"duration_sec,omitempty"`
 	SizeBytes     int64  `json:"size_bytes,omitempty"`
 	StoryboardURL string `json:"storyboard_url,omitempty"`
+	Track         string `json:"track,omitempty"`
+	AudioLang     string `json:"audio_lang,omitempty"`
+	Quality       string `json:"quality,omitempty"`
 }
 
 // episodeListItem is one entry in the List response — episode number +
 // its playlist URL, so the first-party ("ae") provider can render an
 // episode list straight from what's actually in MinIO (no upstream
-// metadata source needed).
+// metadata source needed). Track/AudioLang/Quality mirror episodeResponse
+// (Phase C) — this is the shape catalog's RawResolver.GetLibraryEpisodes
+// actually consumes for the per-title AeTitleInfo aggregation.
 type episodeListItem struct {
 	EpisodeNumber int    `json:"episode_number"`
 	MinioURL      string `json:"minio_url"`
 	DurationSec   int    `json:"duration_sec,omitempty"`
 	StoryboardURL string `json:"storyboard_url,omitempty"`
+	Track         string `json:"track,omitempty"`
+	AudioLang     string `json:"audio_lang,omitempty"`
+	Quality       string `json:"quality,omitempty"`
 }
 
 // listResponse wraps the episode array under "episodes" (consistent
@@ -94,6 +105,9 @@ func (h *EpisodesHandler) List(w http.ResponseWriter, r *http.Request) {
 		item := episodeListItem{
 			EpisodeNumber: ep.EpisodeNumber,
 			MinioURL:      h.urlBuilder.URLFor(ep.MinioPath + "playlist.m3u8"),
+			Track:         string(ep.Track),
+			AudioLang:     ep.AudioLang,
+			Quality:       ep.Quality,
 		}
 		if ep.DurationSec != nil {
 			item.DurationSec = *ep.DurationSec
@@ -176,7 +190,12 @@ func (h *EpisodesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Build response. MinioPath already ends with "/" — we append
 	// "playlist.m3u8".
 	url := h.urlBuilder.URLFor(ep.MinioPath + "playlist.m3u8")
-	resp := episodeResponse{MinioURL: url}
+	resp := episodeResponse{
+		MinioURL:  url,
+		Track:     string(ep.Track),
+		AudioLang: ep.AudioLang,
+		Quality:   ep.Quality,
+	}
 	if ep.DurationSec != nil {
 		resp.DurationSec = *ep.DurationSec
 	}
