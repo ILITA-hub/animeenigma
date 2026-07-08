@@ -181,16 +181,29 @@ describe('AdminPolicy', () => {
     })
   })
 
-  it('renders one card per non-master flag with its label + failSafe badge', async () => {
+  it('renders one card per non-master flag with its label + derived audience badge', async () => {
     const w = mountComponent()
     await flushPromises()
 
     const cards = w.findAll('[data-testid="flag-card"]')
     expect(cards.length).toBe(2)
     expect(cards[0].text()).toContain('Fanfic engine')
-    expect(cards[0].find('[data-testid="failsafe-badge"]').text()).toBe('Admin-only')
+    expect(cards[0].find('[data-testid="audience-badge"]').text()).toBe('Admin only')
     expect(cards[1].text()).toContain('Anidle')
-    expect(cards[1].find('[data-testid="failsafe-badge"]').text()).toBe('Everyone')
+    expect(cards[1].find('[data-testid="audience-badge"]').text()).toBe('Everyone')
+  })
+
+  it('updates the derived audience badge live as role chips toggle', async () => {
+    const w = mountComponent()
+    await flushPromises()
+
+    // fanfic seeds roles:['admin'] -> "Admin only". Adding `everyone` should
+    // immediately widen the badge to "Everyone" (no Save required — it mirrors
+    // the mutable draft).
+    const card = w.findAll('[data-testid="flag-card"]')[0]
+    expect(card.find('[data-testid="audience-badge"]').text()).toBe('Admin only')
+    await card.find('[data-testid="role-chip-fanfic-everyone"]').trigger('click')
+    expect(card.find('[data-testid="audience-badge"]').text()).toBe('Everyone')
   })
 
   it('toggling a role chip and clicking Save calls setFlag with the mutated roles', async () => {
@@ -221,11 +234,12 @@ describe('AdminPolicy', () => {
     expect(mockSetRoulette).toHaveBeenCalledWith(false)
   })
 
-  it('toggling a per-flag roulette Switch + Save includes roulette in the setFlag payload', async () => {
+  it('toggling the roulette role chip + Save includes roulette in the setFlag payload', async () => {
     const w = mountComponent()
     await flushPromises()
 
-    await w.find('[data-testid="roulette-switch-anidle"]').trigger('click')
+    // anidle seeds roulette:true — toggling the chip flips it to false.
+    await w.find('[data-testid="roulette-chip-anidle"]').trigger('click')
     await w.find('[data-testid="save-button-anidle"]').trigger('click')
     await flushPromises()
 

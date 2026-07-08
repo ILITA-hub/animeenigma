@@ -46,10 +46,14 @@
 
             <div v-else class="grid gap-4 mb-8">
               <Card v-for="row in rows" :key="row.key" padding="none" data-testid="flag-card">
-                <CardHeader class="flex flex-row flex-wrap items-start justify-between gap-3">
-                  <div>
+                <!-- Compact one-line top row: name · key/open · audience · Save.
+                     Audience badge is derived live from the (mutable) roles
+                     draft; failSafe is preserved in the payload but no longer
+                     surfaced (it's an outage-only lever, not a per-edit knob). -->
+                <CardHeader class="flex flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
                     <CardTitle class="text-base">{{ row.label }}</CardTitle>
-                    <p class="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/40">
+                    <span class="inline-flex items-center gap-2 text-xs text-white/40">
                       <span class="font-mono">{{ row.key }}</span>
                       <a
                         v-if="featureRoute(row.key)"
@@ -63,26 +67,21 @@
                         {{ $t('admin.policy.openLabel') }}
                         <ExternalLink class="size-3" aria-hidden="true" />
                       </a>
-                    </p>
+                    </span>
                   </div>
-                  <div class="flex items-center gap-3">
-                    <Badge
-                      v-if="row.failSafe === 'admin'"
-                      class="bg-brand-violet/20 text-brand-violet"
-                      data-testid="failsafe-badge"
+                  <div class="flex items-center gap-2 shrink-0">
+                    <Badge :variant="AUDIENCE_VARIANT[audienceKind(row.roles)]" data-testid="audience-badge">
+                      {{ $t(`admin.policy.audience.${audienceKind(row.roles)}`) }}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      :loading="row.saving"
+                      :disabled="row.saving || !isDirty(row)"
+                      :data-testid="`save-button-${row.key}`"
+                      @click="saveRow(row)"
                     >
-                      {{ $t('admin.policy.failSafe.admin') }}
-                    </Badge>
-                    <Badge v-else variant="success" data-testid="failsafe-badge">
-                      {{ $t('admin.policy.failSafe.everyone') }}
-                    </Badge>
-                    <Switch
-                      :model-value="row.roulette"
-                      :disabled="row.saving"
-                      :aria-label="$t('admin.policy.rouletteToggleLabel')"
-                      :data-testid="`roulette-switch-${row.key}`"
-                      @update:model-value="(v: boolean) => (row.roulette = v)"
-                    />
+                      {{ $t('admin.policy.save') }}
+                    </Button>
                   </div>
                 </CardHeader>
 
@@ -103,11 +102,24 @@
                       >
                         {{ $t(`admin.policy.roles.${role}`) }}
                       </Chip>
+                      <!-- Roulette membership rendered as a distinct "role" chip
+                           (owner ask): toggles the same `roulette` bool the old
+                           per-flag Switch drove; Save persists it. -->
+                      <Chip
+                        :active="row.roulette"
+                        size="sm"
+                        class="gap-1"
+                        :data-testid="`roulette-chip-${row.key}`"
+                        @click="row.roulette = !row.roulette"
+                      >
+                        <Sparkles class="size-3" aria-hidden="true" />
+                        {{ $t('admin.policy.rouletteRole') }}
+                      </Chip>
                     </div>
                   </div>
 
                   <!-- Allow / deny lists -->
-                  <div class="grid gap-4 sm:grid-cols-2 mb-4">
+                  <div class="grid gap-4 sm:grid-cols-2">
                     <div>
                       <p class="text-xs uppercase tracking-wide text-white/50 mb-1">
                         {{ $t('admin.policy.allow.label') }}
@@ -144,18 +156,6 @@
                       </div>
                       <UserResolveInput mode="chip" @resolve="(u) => addDenyUser(row, u)" />
                     </div>
-                  </div>
-
-                  <div class="flex justify-end">
-                    <Button
-                      size="sm"
-                      :loading="row.saving"
-                      :disabled="row.saving || !isDirty(row)"
-                      :data-testid="`save-button-${row.key}`"
-                      @click="saveRow(row)"
-                    >
-                      {{ $t('admin.policy.save') }}
-                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -270,7 +270,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ExternalLink } from 'lucide-vue-next'
+import { ExternalLink, Sparkles } from 'lucide-vue-next'
 import {
   Badge,
   Button,
@@ -303,6 +303,26 @@ const RESERVED_MASTER_KEY = '__roulette__'
 
 const ROLE_OPTIONS = ['admin', 'user', 'everyone'] as const
 type RoleOption = (typeof ROLE_OPTIONS)[number]
+
+// Effective-audience summary badge (replaces the old read-only failSafe badge).
+// Derived live from the mutable roles draft so it updates as chips toggle. The
+// broadest matching role wins: everyone > any signed-in (user) > admin-only;
+// an empty/allow-list-only rule reads "restricted".
+type AudienceKind = 'everyone' | 'signedIn' | 'adminOnly' | 'restricted'
+
+function audienceKind(roles: string[]): AudienceKind {
+  if (roles.includes('everyone')) return 'everyone'
+  if (roles.includes('user')) return 'signedIn'
+  if (roles.includes('admin')) return 'adminOnly'
+  return 'restricted'
+}
+
+const AUDIENCE_VARIANT: Record<AudienceKind, NonNullable<BadgeVariants['variant']>> = {
+  everyone: 'success',
+  signedIn: 'primary',
+  adminOnly: 'info',
+  restricted: 'default',
+}
 
 const PREVIEW_IDENTITIES = ['anonymous', 'guest', 'user', 'admin'] as const
 type PreviewIdentity = (typeof PREVIEW_IDENTITIES)[number]

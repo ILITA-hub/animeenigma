@@ -1459,11 +1459,13 @@
         "label": "Deny list",
         "hint": "These users are always blocked, overriding everything else."
       },
-      "failSafe": {
-        "admin": "Admin-only",
-        "everyone": "Everyone"
+      "audience": {
+        "everyone": "Everyone",
+        "signedIn": "Signed-in",
+        "adminOnly": "Admin only",
+        "restricted": "Restricted"
       },
-      "rouletteToggleLabel": "In roulette pool",
+      "rouletteRole": "One of the Secret Features",
       "openLabel": "Open",
       "openAria": "Open {label} in a new tab",
       "save": "Save",

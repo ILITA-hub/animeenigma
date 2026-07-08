@@ -1459,11 +1459,13 @@
         "label": "拒否リスト",
         "hint": "これらのユーザーは他のすべての設定より優先して常にブロックされます。"
       },
-      "failSafe": {
-        "admin": "管理者のみ",
-        "everyone": "全員"
+      "audience": {
+        "everyone": "全員",
+        "signedIn": "ログイン済み",
+        "adminOnly": "管理者のみ",
+        "restricted": "制限付き"
       },
-      "rouletteToggleLabel": "ルーレットプールに含める",
+      "rouletteRole": "シークレット機能の一つ",
       "openLabel": "開く",
       "openAria": "{label} を新しいタブで開く",
       "save": "保存",
