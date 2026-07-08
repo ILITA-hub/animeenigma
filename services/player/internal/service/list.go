@@ -249,19 +249,29 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID, username stri
 		oldStatus = existingEntry.Status
 	}
 	if oldStatus != req.Status && username != "" {
-		activityEvent := &domain.ActivityEvent{
-			UserID:   userID,
-			Username: username,
-			AnimeID:  req.AnimeID,
-			Type:     "status_change",
-			OldValue: oldStatus,
-			NewValue: req.Status,
+		// Same-day aggregation (mirrors the review dedup in review.go):
+		// old_value keeps the day-start status; repo.Update bumps created_at
+		// so the event resurfaces in the feed.
+		existingEvent, _ := s.activityRepo.GetTodayByUserAnimeType(ctx, userID, req.AnimeID, "status_change")
+		var activityErr error
+		if existingEvent != nil {
+			existingEvent.NewValue = req.Status
+			activityErr = s.activityRepo.Update(ctx, existingEvent)
+		} else {
+			activityErr = s.activityRepo.Create(ctx, &domain.ActivityEvent{
+				UserID:   userID,
+				Username: username,
+				AnimeID:  req.AnimeID,
+				Type:     "status_change",
+				OldValue: oldStatus,
+				NewValue: req.Status,
+			})
 		}
-		if err := s.activityRepo.Create(ctx, activityEvent); err != nil {
+		if activityErr != nil {
 			s.log.Errorw("failed to record status change activity",
 				"user_id", userID,
 				"anime_id", req.AnimeID,
-				"error", err,
+				"error", activityErr,
 			)
 		}
 	}
