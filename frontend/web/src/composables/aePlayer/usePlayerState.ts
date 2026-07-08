@@ -28,7 +28,11 @@ export function usePlayerState() {
   // (hardsub), which is not a selectable track. `string` (not TrackLang):
   // browsed tracks (Jimaku/OpenSubtitles) can be any language.
   const subLang = ref<string>('off')
-  const subSize = ref(26)
+  // subSize/subBg are percentages driving SubtitleOverlay's font scale + background
+  // alpha (and the appearance-panel preview). subSize = % of the auto-computed base
+  // (100 = unchanged); the SubtitlesMenu slider ranges 50–200. (Was 26 — a stale px
+  // leftover that sat below the slider's own 50 min and rendered subs microscopic.)
+  const subSize = ref(100)
   const subBg = ref(45)
   const subOffset = ref(0)
 

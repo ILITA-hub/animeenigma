@@ -65,6 +65,8 @@
       :fullscreen-container="rootRef"
       :windowed-container="rootRef"
       :offset="effectiveOffset"
+      :size-scale="state.subSize.value"
+      :bg-opacity="state.subBg.value"
     />
 
     <!-- Source error overlay -->

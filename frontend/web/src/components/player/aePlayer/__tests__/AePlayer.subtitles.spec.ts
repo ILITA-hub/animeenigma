@@ -301,6 +301,21 @@ describe('AePlayer — subtitle wiring (Task 6 regression guard)', () => {
     expect(video.attributes('crossorigin')).toBe('anonymous')
   })
 
+  it('passes the appearance size/background prefs to SubtitleOverlay (appearance-wiring guard)', async () => {
+    // The "Subtitle appearance" sliders write state.subSize / state.subBg. If those
+    // never reach SubtitleOverlay, dragging them changes only the in-panel preview
+    // and has ZERO effect on the rendered subtitles (the reported bug). Guard the
+    // wiring at the prop boundary: overlay must receive the state defaults.
+    const wrapper = mountPlayer()
+    await flushPromises()
+    await nextTick()
+
+    const overlay = wrapper.findComponent({ name: 'SubtitleOverlay' })
+    expect(overlay.exists()).toBe(true)
+    expect(overlay.props('sizeScale')).toBe(100) // % of auto base (usePlayerState default)
+    expect(overlay.props('bgOpacity')).toBe(45)  // % background opacity (usePlayerState default)
+  })
+
   it('SubtitleOverlay offset includes the auto-sync term (Task 7 regression guard)', async () => {
     // Inject a non-zero auto-sync offset so the assertion fails if the template
     // reverts to `state.subOffset.value` (0) instead of `effectiveOffset`

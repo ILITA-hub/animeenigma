@@ -200,6 +200,7 @@ import { List, ChevronRight, ChevronLeft, Settings2 } from 'lucide-vue-next'
 import Stepper from '@/components/ui/Stepper.vue'
 import Switch from '@/components/ui/Switch.vue'
 import { fmtResume } from '@/composables/aePlayer/episodeProgress'
+import { subtitleBgColor } from '@/utils/subtitleStyle'
 import type { SyncEvent } from '@/composables/aePlayer/subtitleAlign'
 
 const { t: $t } = useI18n()
@@ -272,10 +273,11 @@ const offsetHint = computed(() => {
     : $t('player.aePlayer.subs.offsetEarlier', { seconds })
 })
 
-// Live preview: scale font size and background opacity from the sliders.
-// Dynamic object binding (not a literal) — DS-lint inline-color rule does not apply.
+// Live preview: scale font size and background opacity from the sliders. The
+// background uses the SAME shared mapping as the real renderer (SubtitleOverlay),
+// so the preview can't drift from what actually renders over the video.
 const previewStyle = computed(() => ({
   fontSize: `${(18 * props.subSize) / 100}px`,
-  background: `rgba(0, 0, 0, ${((props.subBg / 100) * 0.85).toFixed(2)})`,
+  background: subtitleBgColor(props.subBg),
 }))
 </script>

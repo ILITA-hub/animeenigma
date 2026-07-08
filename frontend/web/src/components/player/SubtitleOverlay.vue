@@ -25,6 +25,7 @@
 import { ref, shallowRef, watch, onMounted, onUnmounted, computed } from 'vue'
 import type { SubtitleCue } from '@/utils/subtitle-parser'
 import { fetchAndParseCues } from '@/utils/subtitle-parser'
+import { subtitleBgColor } from '@/utils/subtitleStyle'
 
 const props = withDefaults(defineProps<{
   videoElement: HTMLVideoElement | null
@@ -45,10 +46,24 @@ const props = withDefaults(defineProps<{
   windowedContainer?: HTMLElement | null
   /** Timing offset in seconds. Positive = show subtitles later, negative = earlier. */
   offset?: number
+  /**
+   * User "Text size" preference as a percentage of the auto-computed base size
+   * (100 = auto/unchanged). Scales every cue, including ASS cues with an explicit
+   * font size, so the appearance slider always has an effect.
+   */
+  sizeScale?: number
+  /**
+   * User "Background" opacity preference, 0–100 (%). Mapped to a black-box alpha
+   * via ×0.85 — the exact formula the appearance-panel live preview uses — so the
+   * preview matches what renders over the video.
+   */
+  bgOpacity?: number
 }>(), {
   fullscreenContainer: null,
   windowedContainer: null,
   offset: 0,
+  sizeScale: 100,
+  bgOpacity: 45,
 })
 
 const emit = defineEmits<{
@@ -216,12 +231,15 @@ function cuePositionStyle(cue: SubtitleCue, stackIndex: number = 0): Record<stri
   return style
 }
 
-// Text style from ASS cue styles
+// Text style from ASS cue styles + user appearance prefs (size / background).
 function cueTextStyle(cue: SubtitleCue): Record<string, string> {
+  // Size: scale the ASS-specified size, or the auto base, by the user's percent.
+  const px = (cue.style?.fontSize ?? baseFontSize.value) * (props.sizeScale / 100)
   const style: Record<string, string> = {
-    backgroundColor: 'var(--black-a80)',
+    // Shared mapping — kept in lockstep with the appearance-panel preview.
+    backgroundColor: subtitleBgColor(props.bgOpacity),
     color: '#ffffff',
-    fontSize: `${baseFontSize.value}px`,
+    fontSize: `${px}px`,
     lineHeight: '1.5',
     textShadow: '1px 1px 2px var(--black-a80)',
     whiteSpace: 'pre-wrap',
@@ -229,7 +247,6 @@ function cueTextStyle(cue: SubtitleCue): Record<string, string> {
   }
 
   if (cue.style?.color) style.color = cue.style.color
-  if (cue.style?.fontSize) style.fontSize = `${cue.style.fontSize}px`
   if (cue.style?.bold) style.fontWeight = 'bold'
   if (cue.style?.italic) style.fontStyle = 'italic'
 
