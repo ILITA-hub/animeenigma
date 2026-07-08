@@ -43,49 +43,31 @@ Deduplicate the service list.
 
 Before linting and deploying, run the **`simplify`** skill over the changes this update produced to fold in reuse / simplification / efficiency / altitude cleanups. Invoke **`/simplify`** — it reviews the changed code and applies behavior-preserving quality fixes to the working tree. It does NOT hunt for bugs (that's `/code-review`); it only cleans up.
 
+- **Default depth = ONE cleanup agent.** Invoke `/simplify` with a single review agent that folds all four angles (reuse / simplification / efficiency / altitude) into one pass. The built-in skill fans out to 4 agents by default — for a normal update that is ~4× the tokens for the same one-or-two findings, so override it down to 1. (This session's data: 4 agents = ~48% of the whole run for a 30-line diff.)
+- **Big update → offer the fuller pass first.** If the diff is large — roughly **>150 changed lines**, **>5 non-test files**, OR it spans **multiple services/subsystems** — propose the full 4-agent (one-per-angle) simplify and run it only if the owner opts in. Otherwise stay at 1 agent.
 - Run it **once**, on the diff this update produced, and let it apply its fixes. If the work was already committed (e.g. done in a worktree), simplify's fixes land as new uncommitted changes that step 6 (commit) then captures as a follow-up cleanup.
 - Run it **before** step 3 (lint) and step 4 (deploy) so the cleaned-up version is what gets linted, deployed, and committed — never deploy first and simplify after.
 - **Skip it only** when this update touched no code (docs / `CLAUDE.md` / changelog-only changes) — there is nothing to simplify.
 - Don't separately re-verify simplify's output here — the lint/build step (3) and health check (4) catch any regression.
 
-### 3. Lint & build checks
+### 3. Verify (lint + build + tests) — terse, script-driven
 
-**If Go services or libs changed:**
+**Frontend** (`frontend/web/**` changed) — ONE script runs DS-lint + eslint(touched) + `bun run build` (type truth) + vitest(touched) and prints ~5 status lines (dumps only the failing gate's log):
 ```bash
-cd /data/animeenigma && golangci-lint run ./libs/... ./services/... 2>&1 || true
+bin/ae-fe-verify.sh <touched-file ...>   # no args → derives touched files from `git diff HEAD`
 ```
-If `golangci-lint` is not installed locally, skip Go lint.
+This REPLACES the old separate `bun lint` + `bun run build` — do NOT also run them. If `/frontend-verify` was **just** run green earlier in this session, skip this (identical gates — don't double-build). Run `frontend/web/scripts/i18n-lint.sh` + the locale vitest specs ONLY when locale JSON changed.
 
-**If frontend changed:**
+**Go** (`services/**` or `libs/**` changed):
 ```bash
-cd /data/animeenigma/frontend/web && bun lint 2>&1
-```
-Frontend lint must pass with 0 errors. If there are errors, **fix them** before deploying.
-
-If any lint check fails, fix the issues before proceeding.
-
-### 4. Deploy
-
-**Pre-deploy: land everything on `main` and deploy FROM `main` — never from a random branch.**
-
-`make redeploy-*` builds from the SHARED working tree at `/data/animeenigma`, NOT from any worktree. So before redeploying:
-
-1. **If the work was done in a `git worktree`, merge it into `main` first.** Commit in the worktree, then merge those commits into `main` (push to `origin/main`). Don't deploy the worktree in isolation and leave `main` behind — `main` is the deploy source of truth.
-2. **Check what branch the shared tree is on** (`git -C /data/animeenigma branch --show-current`). If it's sitting on a stray feature branch (parallel agents do this — see [[feedback_always_work_on_main_worktrees]]), do NOT `make redeploy-*` as-is: that ships the stray branch's code PLUS other agents' uncommitted hunks. Get `main`'s code into the build path first (e.g. build/deploy from a clean `main` worktree, or bring the shared tree's build path to `main`), then deploy.
-3. **Only deploy code that is on `main`.** If you can't get the change onto `main` cleanly, STOP and surface it rather than deploying from a random branch.
-
-Then: list the services to redeploy and why (one line, for the record), and redeploy them immediately — do NOT pause for confirmation.
-
-Run `make redeploy-<service>` for each service sequentially from `/data/animeenigma`. For frontend, use `make redeploy-web`.
-
-If any redeploy fails, stop and fix the error.
-
-After all deployments:
-```bash
-make health
+cd /data/animeenigma && golangci-lint run ./libs/... ./services/... 2>&1 || true   # skip if not installed
 ```
 
-### 5. Update the changelog for LastUpdates.vue
+Fix any failure before proceeding. Docs / `CLAUDE.md` / script-only changes → nothing to verify here.
+
+### 4. Update the changelog for LastUpdates.vue — user-facing changes only
+
+**Skip entirely for internal-only changes** (tooling / bin scripts / docs / CLAUDE.md / pure refactors with no user-visible effect) — users don't care, and a no-user-impact change needs no web redeploy either.
 
 Generate user-facing changelog entries and prepend them to **`frontend/web/changelog.full.json`** (the full-history source of truth — NOT the served file).
 
@@ -138,32 +120,34 @@ Anti-examples (do NOT ship these — old "informative + enthusiastic" tone):
 
 If a change is too small to bear Trump-mode (one-line config tweak), prefer a short Trump-mode entry over no entry — never silently fall back to a friendly tone.
 
-**Rules:**
-- Edit `frontend/web/changelog.full.json` (the full-history source). Read it first, update it, write back.
-- If today's date group already exists at the top, merge new entries into it
-- Otherwise, prepend a new date group
-- Never trim `changelog.full.json` — it keeps the complete history
-- After editing, regenerate the served file: `cd frontend/web && node scripts/changelog-trim.mjs` (writes the latest 30 entries to `public/changelog.json`). Commit BOTH files.
+**Add entries with the script** (handles today's-group merge + served-file regen; no hand-editing JSON):
+```bash
+bin/ae-changelog-add.sh fix "🔧 …" feature "🎉 …"      # one or more <type> "<message>" pairs
+```
+It appends to today's group in `changelog.full.json` (creates it if absent), then regenerates `public/changelog.json` (latest 30). Commit BOTH files (step 5 does). Never hand-edit `public/changelog.json`; never trim `changelog.full.json`.
 
-### 6. Commit & push
+### 5. Commit & push (land on `main`)
 
-1. Stage all changed files: `git add -A`
-2. Generate a conventional commit message summarizing the changes
-3. Include co-authors:
-   ```
-   Co-Authored-By: Claude Code <noreply@anthropic.com>
-   Co-Authored-By: 0neymik0 <0neymik0@gmail.com>
-   Co-Authored-By: NANDIorg <super.egor.mamonov@yandex.ru>
-   ```
-4. Create the commit
-5. Push: `git push`
+Deploy builds from `main`, so land there FIRST. One script stages, commits (co-authors auto-appended), rebases onto `origin/main`, and pushes `HEAD:main`:
+```bash
+printf '%s\n' 'fix(scope): conventional subject' '' 'Optional body.' | bin/ae-land.sh <file ...>
+```
+Pass explicit paths (the worktree index may hold unrelated hunks). On a **rebase conflict** it STOPS and prints the conflicted files — resolve them (for `changelog.*`, prefer re-running `bin/ae-changelog-add.sh` so entries land atop the incoming group), then `git add <files> && GIT_EDITOR=true git rebase --continue && git push origin HEAD:main`. It never force-pushes.
+
+### 6. Deploy (only if a service changed)
+
+Map changes → services (step 1). If nothing under `services/**`, `libs/**`, or `frontend/web/**` that affects the running app changed (docs / scripts / CLAUDE.md / changelog-less internal work), **skip deploy.** Otherwise, one script ff-syncs the shared tree to `origin/main`, redeploys each service, and checks the container is up (no full 14-service `make health`):
+```bash
+bin/ae-deploy.sh web            # e.g. frontend;  or:  bin/ae-deploy.sh catalog gateway
+```
+`libs/**` → redeploy ALL Go services (`auth catalog gateway player rooms scheduler streaming themes`). It refuses to force-sync a dirty/diverged shared tree — resolve that manually if it reports it. For a broad multi-service check after Go changes you may still run `make health`.
 
 ### 7. Report
 
 Summarize:
 - What was implemented (human-readable)
-- Which services were redeployed
-- Health check results
-- Changelog entries added
+- Which services were redeployed (or "no deploy — internal-only")
+- Verify + container-up results
+- Changelog entries added (or "skipped — internal-only")
 - Commit hash and message
 - Push status

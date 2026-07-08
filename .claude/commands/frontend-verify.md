@@ -19,6 +19,8 @@ If nothing under `frontend/web/` changed, there is nothing to verify — say so 
 
 ## Gates (run in order; fix-then-rerun on failure)
 
+**Fast path:** gates 1 + 3 + 4 + 5 (DS-lint · eslint · build · vitest) are bundled in **`bin/ae-fe-verify.sh <touched-file …>`**, which prints ~5 status lines instead of ~120 and dumps only the failing gate. Run that; add gate 2 (i18n) only when locale JSON changed, and the cascade Chrome smoke only if opted-in (below). The per-gate commands below are the manual fallback / reference.
+
 ### 1. Design-System lint (build-enforced)
 ```bash
 cd "$CLAUDE_PROJECT_DIR/frontend/web" && bash scripts/design-system-lint.sh

@@ -125,3 +125,15 @@ will fail the build).
    assertions, `vitest run src/components/home/spotlight/`, `vue-tsc`, DS
    lint, then an in-browser smoke at 1440px + 390px (DS-NF-06 — jsdom can't
    catch TW4 cascade bugs).
+
+## Recipe: add a Spotlight card type (5 anchors, ~50 lines)
+
+`HeroSpotlightBlock` (workstream `hero-spotlight`) is a 9-card rotating carousel; a 10th touches 5 anchors. Read the guidelines above alongside this recipe.
+
+1. **BE resolver** — create `services/catalog/internal/service/spotlight/cards/{new_type}.go` implementing `spotlight.Resolver` (`Type()` + `Resolve(ctx, userID *string) (*spotlight.Card, error)`). Mirror `featured.go` («Рекомендуем сегодня»): manual `cache.Get`/`cache.Set` with `errors.Is(err, cache.ErrNotFound)`; return `(nil,nil)` ineligible, `(nil,err)` failure, `(*Card,nil)` success. Multi-item resolvers MUST apply `spotlight.AdaptiveSlice` (1-2-3 layout rule). Login-only resolvers return `(nil,nil)` when `userID==nil`. Carry the `spotlight:` Redis key prefix for new keys (HSB-NF-03). Co-locate a `_test.go` with handwritten fakes (no testify/mock).
+2. **BE Data type** — add the JSON-shaped `{NewType}Data` struct to `services/catalog/internal/service/spotlight/types.go` (extends the Card union). Add a round-trip marshal/unmarshal test to `types_test.go`.
+3. **BE DI** — add a `cards.New{NewType}Resolver(...)` call to the `spotlightResolvers` slice in `services/catalog/cmd/catalog-api/main.go`. Stable order = tie-break display order.
+4. **FE SFC** — create `frontend/web/src/components/home/spotlight/cards/{NewType}Card.vue` with a typed `data` prop (the step-5 variant). Honor UI-SPEC: ONLY `font-medium`/`font-semibold`, `p-4 md:p-6 lg:p-8` padding, Tailwind-utility-only, `min-h-[400px] md:min-h-[340px] lg:min-h-[320px]`. Add `target="_blank"` + `rel="noopener noreferrer"` on external anchors. Co-locate a `.spec.ts` (≥5 Vitest assertions).
+5. **FE dispatch + i18n + types** — extend the `SpotlightCard` discriminated union in `frontend/web/src/types/spotlight.ts` with `{ type:'{new_type}', data:{NewType}Data }`; add a `v-else-if="active.type === '{new_type}'"` branch to the dispatch chain in `HeroSpotlightBlock.vue` (DO NOT switch to `<component :is>` — keep the typed chain so vue-tsc narrows props); add a `spotlight.{newType}.*` sub-namespace to BOTH `frontend/web/src/locales/en.json` and `ru.json` (parity test `frontend/web/src/locales/__tests__/spotlight-keys.spec.ts` fails on mismatch).
+
+Verify: `cd services/catalog && go test ./internal/service/spotlight/... -count=1 -race` and `cd frontend/web && bunx vitest run src/components/home/spotlight/ src/locales/__tests__/spotlight-keys.spec.ts && bunx tsc --noEmit`. E2E regression: `frontend/web/e2e/spotlight.spec.ts`.
