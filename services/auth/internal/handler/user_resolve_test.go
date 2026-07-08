@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
@@ -34,6 +35,7 @@ func newFakeUserResolveRepo() *fakeUserResolveRepo {
 				Username:   "oronemu",
 				PublicID:   "orovanity",
 				TelegramID: &tgID,
+				Role:       authz.RoleAdmin,
 			},
 		},
 	}
@@ -128,7 +130,8 @@ func TestResolve(t *testing.T) {
 				var env struct {
 					Success bool `json:"success"`
 					Data    struct {
-						ID string `json:"id"`
+						ID   string `json:"id"`
+						Role string `json:"role"`
 					} `json:"data"`
 				}
 				if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
@@ -139,6 +142,11 @@ func TestResolve(t *testing.T) {
 				}
 				if env.Data.ID != c.wantID {
 					t.Fatalf("id=%q want %q", env.Data.ID, c.wantID)
+				}
+				// Role must be surfaced so the policy access-check preview can
+				// evaluate a specific user by their real role, not a guess.
+				if env.Data.Role != string(authz.RoleAdmin) {
+					t.Fatalf("role=%q want %q", env.Data.Role, authz.RoleAdmin)
 				}
 			}
 		})

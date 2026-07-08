@@ -39,12 +39,16 @@ func NewUserResolveHandler(repo userResolveRepo, log *logger.Logger) *UserResolv
 	return &UserResolveHandler{repo: repo, log: log}
 }
 
-// resolvedUser is the response shape for a successful resolve.
+// resolvedUser is the response shape for a successful resolve. Role is the
+// user's canonical role ("user"/"admin") — consumers like the policy admin's
+// access-check preview need it to evaluate a specific user's real access
+// (role + per-user allow/deny overrides), not a hand-picked hypothetical role.
 type resolvedUser struct {
 	ID         string `json:"id"`
 	Username   string `json:"username"`
 	PublicID   string `json:"public_id"`
 	TelegramID *int64 `json:"telegram_id,omitempty"`
+	Role       string `json:"role"`
 }
 
 // Resolve turns any of {UUID, username, public_id, telegram_id} into the
@@ -73,6 +77,7 @@ func (h *UserResolveHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 		Username:   u.Username,
 		PublicID:   u.PublicID,
 		TelegramID: u.TelegramID,
+		Role:       string(u.Role),
 	})
 }
 

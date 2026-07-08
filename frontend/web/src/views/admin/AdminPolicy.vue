@@ -166,11 +166,15 @@
               <h2 class="text-base font-semibold text-white mb-1">{{ $t('admin.policy.preview.title') }}</h2>
               <p class="text-white/60 text-sm mb-4">{{ $t('admin.policy.preview.subtitle') }}</p>
 
-              <div class="flex flex-wrap items-center gap-4 mb-4">
+              <div class="flex flex-wrap items-center gap-4 mb-2">
+                <!-- When a specific user is picked the check evaluates THAT
+                     user (real role + overrides), so the hypothetical-identity
+                     control is inert — grey it out to signal that. -->
                 <SegmentedControl
                   v-model="previewIdentity"
                   :options="identityOptions"
                   :aria-label="$t('admin.policy.preview.identityLabel')"
+                  :class="previewUser ? 'opacity-40 pointer-events-none' : ''"
                 />
                 <div class="flex items-center gap-2">
                   <span class="text-xs text-white/50">{{ $t('admin.policy.preview.userLabel') }}</span>
@@ -179,11 +183,20 @@
                     :aria-label="$t('admin.policy.preview.userLabel')"
                     @resolve="setPreviewUser"
                   />
-                  <Chip v-if="previewUser" removable size="sm" @remove="clearPreviewUser">
-                    {{ previewUser.username }}
+                  <Chip
+                    v-if="previewUser"
+                    removable
+                    size="sm"
+                    data-testid="preview-user-chip"
+                    @remove="clearPreviewUser"
+                  >
+                    {{ previewUser.username }}<span class="opacity-60"> · {{ previewRoleLabel }}</span>
                   </Chip>
                 </div>
               </div>
+              <p v-if="previewUser" class="text-xs text-white/50 mb-4" data-testid="preview-user-hint">
+                {{ $t('admin.policy.preview.checkingUser', { username: previewUser.username, role: previewRoleLabel }) }}
+              </p>
 
               <ul class="grid gap-2 sm:grid-cols-2">
                 <li
@@ -535,7 +548,17 @@ function clearPreviewUser(): void {
   previewUser.value = null
 }
 
-function canAccess(row: FlagRow, identity: PreviewIdentity, userId?: string): boolean {
+// A resolved user's role ("admin"/"user"); unknown/missing falls back to
+// "user" so the by-user check still evaluates against a signed-in identity.
+const previewRoleLabel = computed(() => {
+  const role = previewUser.value?.role
+  const known = role === 'admin' || role === 'user' ? role : 'user'
+  return t(`admin.policy.roles.${known}`)
+})
+
+// identity is a plain string: one of PREVIEW_IDENTITIES for the hypothetical
+// check, or a resolved user's real role for the by-user check.
+function canAccess(row: FlagRow, identity: string, userId?: string): boolean {
   if (identity === 'guest') return false
   if (userId && row.denyUsers.includes(userId)) return false
   if (userId && row.allowUsers.includes(userId)) return true
@@ -545,14 +568,22 @@ function canAccess(row: FlagRow, identity: PreviewIdentity, userId?: string): bo
 }
 
 const previewResults = computed(() => {
-  // A real anonymous request carries NO userID — a leftover selected target
-  // user from a previous identity must not leak into the anonymous preview
-  // (e.g. roles:['everyone'], denyUsers:[X] would wrongly show Hidden).
-  const previewUserId = previewIdentity.value === 'anonymous' ? undefined : previewUser.value?.id
+  // Two modes:
+  //  - A specific user is selected → evaluate as THAT user: their real role
+  //    (from resolve) + their id, so per-user allow/deny overrides apply. The
+  //    identity segmented control is ignored (and disabled in the template).
+  //    This is the fix for "access check by user": the old code keyed the id
+  //    off the identity control and dropped it under the anonymous default, so
+  //    picking a user did nothing.
+  //  - No user → the hypothetical identity control drives it. anonymous/guest
+  //    carry no userID, so per-user overrides don't apply.
+  const u = previewUser.value
+  const identity = u ? (u.role || 'user') : previewIdentity.value
+  const userId = u ? u.id : undefined
   return rows.value.map((row) => ({
     key: row.key,
     label: row.label,
-    visible: canAccess(row, previewIdentity.value, previewUserId),
+    visible: canAccess(row, identity, userId),
   }))
 })
 

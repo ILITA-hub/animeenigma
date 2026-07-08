@@ -596,6 +596,9 @@ export interface ResolvedUser {
   username: string
   public_id: string
   telegram_id?: number
+  /** Canonical role ("user"/"admin"). Optional so older cached shapes don't
+   *  break; consumers that need it fall back to "user". */
+  role?: string
 }
 
 /** RBAC-and-roulette P1 — policy-service feature-flag runtime access rule.

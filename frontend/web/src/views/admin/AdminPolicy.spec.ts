@@ -254,41 +254,89 @@ describe('AdminPolicy', () => {
     expect(w.find('[data-testid="preview-result-fanfic"]').text()).toContain('Hidden')
   })
 
-  it('ignores a stale selected target user once the preview identity is switched back to anonymous', async () => {
-    const DENY_UUID = '22222222-2222-2222-2222-222222222222'
-    const flagEveryoneDenyX: FeatureFlag = {
-      key: 'previewDeny',
-      roles: ['everyone'],
+  it('evaluates a selected user by their REAL role (fixes the by-user no-op); clearing reverts to the identity control', async () => {
+    const ADMIN_UUID = '33333333-3333-3333-3333-333333333333'
+    const flagAdminOnly: FeatureFlag = {
+      key: 'adminFlag',
+      roles: ['admin'],
       allowUsers: [],
-      denyUsers: [DENY_UUID],
+      denyUsers: [],
       roulette: false,
-      failSafe: 'everyone',
-      label: 'Preview Deny Target',
+      failSafe: 'admin',
+      label: 'Admin Flag',
       updatedAt: '2026-07-01T00:00:00Z',
     }
-    mockList.mockResolvedValue({ flags: [flagEveryoneDenyX], rouletteEnabled: true })
+    mockList.mockResolvedValue({ flags: [flagAdminOnly], rouletteEnabled: true })
 
     const w = mountComponent()
     await flushPromises()
 
-    // Switch off anonymous and select a target user that is on the deny list —
-    // deny wins, so the flag should read Hidden for that identity+user pair.
-    await w.find('[data-value="user"]').trigger('click')
+    // Identity control is on its 'anonymous' default, no user picked → the
+    // admin-only flag reads Hidden.
+    expect(w.find('[data-testid="preview-result-adminFlag"]').text()).toContain('Hidden')
+
+    // Resolve an ADMIN user WITHOUT touching the identity control. The old code
+    // dropped the userID under the anonymous default so this stayed Hidden (the
+    // reported bug); now the user's real role grants access → Visible.
     const resolveInputs = w.findAllComponents({ name: 'UserResolveInput' })
     await resolveInputs[resolveInputs.length - 1]!.vm.$emit('resolve', {
-      id: DENY_UUID,
-      username: 'UserX',
-      public_id: 'userx',
+      id: ADMIN_UUID,
+      username: 'AdminX',
+      public_id: 'adminx',
+      role: 'admin',
     })
     await flushPromises()
-    expect(w.find('[data-testid="preview-result-previewDeny"]').text()).toContain('Hidden')
+    expect(w.find('[data-testid="preview-result-adminFlag"]').text()).toContain('Visible')
 
-    // Switch back to anonymous — a real anonymous request carries no userID,
-    // so the stale target-user selection must be ignored and the
-    // roles:['everyone'] flag must read Visible, not Hidden.
-    await w.find('[data-value="anonymous"]').trigger('click')
+    // Clearing the user reverts to the (anonymous) identity control → Hidden.
+    await w.find('[data-testid="preview-user-chip"] [data-testid="chip-remove"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-testid="preview-result-previewDeny"]').text()).toContain('Visible')
+    expect(w.find('[data-testid="preview-result-adminFlag"]').text()).toContain('Hidden')
+  })
+
+  it('a selected user still loses to the deny-list, and a non-admin cannot reach an admin-only flag', async () => {
+    const UUID = '44444444-4444-4444-4444-444444444444'
+    const flags: FeatureFlag[] = [
+      {
+        key: 'adminFlag',
+        roles: ['admin'],
+        allowUsers: [],
+        denyUsers: [],
+        roulette: false,
+        failSafe: 'admin',
+        label: 'Admin Flag',
+        updatedAt: '2026-07-01T00:00:00Z',
+      },
+      {
+        key: 'denyFlag',
+        roles: ['everyone'],
+        allowUsers: [],
+        denyUsers: [UUID],
+        roulette: false,
+        failSafe: 'everyone',
+        label: 'Deny Flag',
+        updatedAt: '2026-07-01T00:00:00Z',
+      },
+    ]
+    mockList.mockResolvedValue({ flags, rouletteEnabled: true })
+
+    const w = mountComponent()
+    await flushPromises()
+
+    // Resolve a regular USER who is on denyFlag's deny list.
+    const resolveInputs = w.findAllComponents({ name: 'UserResolveInput' })
+    await resolveInputs[resolveInputs.length - 1]!.vm.$emit('resolve', {
+      id: UUID,
+      username: 'UserX',
+      public_id: 'userx',
+      role: 'user',
+    })
+    await flushPromises()
+
+    // admin-only flag: role 'user' doesn't grant → Hidden.
+    expect(w.find('[data-testid="preview-result-adminFlag"]').text()).toContain('Hidden')
+    // everyone flag but the user is deny-listed → deny wins → Hidden.
+    expect(w.find('[data-testid="preview-result-denyFlag"]').text()).toContain('Hidden')
   })
 
   // ─── PROVIDERS TAB (P5 Task 2) ──────────────────────────────────────────

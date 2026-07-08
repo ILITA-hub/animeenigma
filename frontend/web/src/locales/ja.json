@@ -1486,6 +1486,7 @@
           "admin": "管理者"
         },
         "userLabel": "対象ユーザー（任意）",
+        "checkingUser": "{username}（{role}）のアクセスを表示中 — ロールで確認するにはユーザーをクリアしてください。",
         "visible": "表示",
         "hidden": "非表示"
       },

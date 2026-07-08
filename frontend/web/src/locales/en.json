@@ -1486,6 +1486,7 @@
           "admin": "Admin"
         },
         "userLabel": "Target user (optional)",
+        "checkingUser": "Showing access for {username} ({role}) — clear the user to test a role instead.",
         "visible": "Visible",
         "hidden": "Hidden"
       },
