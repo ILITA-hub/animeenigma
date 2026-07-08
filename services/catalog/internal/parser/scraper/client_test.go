@@ -278,6 +278,19 @@ func TestClient_BaseURLOverridable(t *testing.T) {
 	}
 }
 
+// TestNewClient_ZeroTimeoutFallback_ExceedsBrowserProviderBudget guards the
+// client-level fallback default against the same regression class as
+// config_test.go's Load() check: it must stay above the scraper's 35s
+// SCRAPER_BROWSER_PROVIDER_TIMEOUT, or a caller that passes timeout==0
+// silently cuts off a browser-engine provider's cold-solve attempt.
+func TestNewClient_ZeroTimeoutFallback_ExceedsBrowserProviderBudget(t *testing.T) {
+	c := NewClient("http://scraper:8088", 0)
+	const browserProviderBudget = 35 * time.Second
+	if c.httpClient.Timeout <= browserProviderBudget {
+		t.Fatalf("zero-timeout fallback = %s, want > %s (SCRAPER_BROWSER_PROVIDER_TIMEOUT)", c.httpClient.Timeout, browserProviderBudget)
+	}
+}
+
 func TestClient_GetAnime18Episodes_BuildsURL(t *testing.T) {
 	var path, query string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

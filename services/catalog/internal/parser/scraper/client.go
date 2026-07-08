@@ -46,18 +46,21 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// NewClient builds a Client. timeout==0 falls back to a 15s default.
+// NewClient builds a Client. timeout==0 falls back to a 40s default.
 //
 // Production wiring: NewClient(cfg.Scraper.APIURL, cfg.Scraper.Timeout)
 // where cfg.Scraper.APIURL defaults to http://scraper:8088 and the
-// timeout defaults to 15s.
+// timeout defaults to 40s — above the scraper's own 35s
+// SCRAPER_BROWSER_PROVIDER_TIMEOUT budget for engine=browser providers'
+// cold Cloudflare/Turnstile solves, so this client never cuts a request
+// off before that budget gets to run.
 //
 // REVIEW.md WR-01: baseURL has trailing slashes trimmed so request URLs
 // like baseURL + "/scraper/episodes" never produce "//scraper/episodes"
 // (which chi normalizes, but proxies/IDS in the middle may not).
 func NewClient(baseURL string, timeout time.Duration) *Client {
 	if timeout <= 0 {
-		timeout = 15 * time.Second
+		timeout = 40 * time.Second
 	}
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),

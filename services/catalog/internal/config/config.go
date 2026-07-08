@@ -86,7 +86,11 @@ type TelegramConfig struct {
 
 // ScraperConfig configures the thin client targeting the scraper
 // microservice (Phase 15+). APIURL defaults to http://scraper:8088 to
-// match the docker-compose scraper service block. Timeout defaults to 15s.
+// match the docker-compose scraper service block. Timeout defaults to 40s
+// — must stay above SCRAPER_BROWSER_PROVIDER_TIMEOUT (35s, scraper's own
+// per-provider budget for engine=browser providers' cold Cloudflare/
+// Turnstile solves), or catalog cuts the request before that budget ever
+// gets to run (ISS-022 follow-up, 2026-07-08 animepahe recovery).
 type ScraperConfig struct {
 	APIURL  string
 	Timeout time.Duration
@@ -189,7 +193,7 @@ func Load() (*Config, error) {
 		},
 		Scraper: ScraperConfig{
 			APIURL:  getEnv("SCRAPER_API_URL", "http://scraper:8088"),
-			Timeout: getEnvDuration("SCRAPER_TIMEOUT", 15*time.Second),
+			Timeout: getEnvDuration("SCRAPER_TIMEOUT", 40*time.Second),
 		},
 		OpenSubtitles: OpenSubtitlesConfig{
 			APIKey:    getEnv("OPENSUBTITLES_API_KEY", ""),

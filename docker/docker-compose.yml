@@ -233,9 +233,9 @@ services:
       # then re-gates from the DB on the next refresh.
       # ISS-022: per-provider failover budget. Without it, one hung provider
       # early in the chain (animepahe when animepahe.pw is down, ~55s of retries)
-      # consumes the whole request budget so catalog's 15s SCRAPER_TIMEOUT kills
+      # consumes the whole request budget so catalog's SCRAPER_TIMEOUT kills
       # the request before failover reaches a healthy provider. 8s is generous
-      # for a working provider (<1s typical) yet under the 15s caller budget.
+      # for a working provider (<1s typical) yet under catalog's caller budget.
       SCRAPER_PROVIDER_TIMEOUT: ${SCRAPER_PROVIDER_TIMEOUT:-8s}
       # Longer per-provider budget for EVERY engine=browser provider (miruro,
       # animepahe, gogoanime, nineanime, + any future one — derived from the DB
@@ -243,6 +243,12 @@ services:
       # 30s) overruns the 8s chain budget, so without this the 6h health probe
       # always kills the cold solve and the provider reads perpetually "down".
       # Fast HTTP providers keep the short 8s budget. 35s = 30s solve + margin.
+      # NOTE: catalog's own SCRAPER_TIMEOUT (see catalog service block) must
+      # stay ABOVE this value — otherwise catalog closes the connection to
+      # the scraper before this budget ever gets to run, defeating it
+      # entirely (found 2026-07-08 diagnosing animepahe: every prefer=
+      # animepahe call, including the health probe, died at catalog's old
+      # 15s ceiling regardless of this 35s scraper-side budget).
       SCRAPER_BROWSER_PROVIDER_TIMEOUT: ${SCRAPER_BROWSER_PROVIDER_TIMEOUT:-35s}
       TRACING_ENABLED: "true"
       # AR-EGRESS-01/03 — BE egress recorder. The scraper ships recorded outbound
@@ -680,6 +686,15 @@ services:
       # uses STREAM_TOKEN_SECRET, and every token is rejected.
       STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:-stream-secret-change-in-production}
       SCRAPER_API_URL: http://scraper:8088
+      # Must stay ABOVE the scraper's SCRAPER_BROWSER_PROVIDER_TIMEOUT (35s,
+      # scraper service block below) — otherwise catalog closes the request
+      # to the scraper before that budget ever gets to run a cold-solve
+      # attempt for engine=browser providers (animepahe/gogoanime/miruro/
+      # nineanime), so the browser budget is silently defeated one layer up
+      # and every prefer=<browser-provider> call (incl. the health probe)
+      # fails regardless of whether the provider actually works. 40s = 35s
+      # scraper budget + margin. Found 2026-07-08 diagnosing animepahe.
+      SCRAPER_TIMEOUT: ${SCRAPER_TIMEOUT:-40s}
       JIMAKU_API_KEY: ${JIMAKU_API_KEY:-}
       OPENSUBTITLES_API_KEY: ${OPENSUBTITLES_API_KEY:-}
       OPENSUBTITLES_USER_AGENT: ${OPENSUBTITLES_USER_AGENT:-AnimeEnigma/1.0}
