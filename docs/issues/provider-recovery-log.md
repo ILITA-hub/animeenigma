@@ -5,6 +5,49 @@ Newest entry first. Used by the recovery operator to avoid repeating yesterday's
 
 ---
 
+## 2026-07-08 — animepahe
+
+**State before:** `policy=manual, health=down, status=degraded` — reason: `cdn_unreachable on ` (health_since 2026-07-08T00:00:56Z — that morning's midnight probe — policy_since 2026-06-26T08:17:08Z, last_probed_at 2026-07-08T00:00:56Z). Selected as the most-neglected manual+down candidate: last worked 2026-07-04 (4-day gap), not repeating yesterday's allanime-okru, not a documented known-hard case in the strict sense (see miruro recheck below).
+
+**Selection note — miruro recheck first:** miruro (`policy=auto, health=down`, flipped down again at 2026-07-08T00:00:40Z) is technically the sole "Failing" (auto+down) provider and would normally be top priority, but it's the documented 2026-07-02 Cloudflare-WAF known-hard case whose own next-step says "just confirm whether the block has lifted before spending more time." Did a quick recheck: `GET https://www.miruro.tv/` still returns HTTP 403 with `cf-mitigated: challenge` (Turnstile "Just a moment..." page) — unchanged from 07-02. Per the known-hard guardrail, did not re-burn a full run on it and rotated to animepahe.
+
+**Root cause — a fresh, previously-invisible structural bug, NOT an animepahe-side regression, one layer above the class of bug already fixed twice this week (07-04 animepahe, 07-06 miruro generalization):**
+
+Walked `episodes→servers→stream` with `prefer=animepahe` on a probe-pool anime UUID. First call: `GET /api/anime/{uuid}/scraper/episodes?prefer=animepahe` hung for exactly **15.005s** then failed: `"scraper http: ... context deadline exceeded (Client.Timeout exceeded while awaiting headers)"`. `docker compose logs scraper` confirmed the scraper's own handler was cancelled at exactly `duration_ms: 15000` with `status: 499` (client disconnected) — i.e. the scraper itself was still mid-attempt (a cold Camoufox/Turnstile solve) when the caller gave up and closed the connection.
+
+Traced the two timeout knobs involved:
+- `services/catalog/internal/config/config.go` — catalog's own outbound HTTP client to the scraper service, `SCRAPER_TIMEOUT`, defaulted to **15s** (`services/catalog/internal/parser/scraper/client.go`, same fallback).
+- `docker/docker-compose.yml` — the scraper's own per-provider failover budget for `engine=browser` providers, `SCRAPER_BROWSER_PROVIDER_TIMEOUT`, was raised to **35s** on 2026-07-06 (generalized from the 07-04 animepahe-specific fix) specifically so a cold Turnstile solve (up to 30s) wouldn't get killed by the internal 8s chain budget.
+
+Nobody had propagated that 35s figure to the layer *above* it. Catalog's 15s client timeout still fires first every time, closing the TCP connection to the scraper mid-solve — so the 07-06 fix never actually gets a chance to run for any request that needs more than 15s, including the automated 6h health probe itself. This exactly explains why animepahe kept flipping back to `down` on every probe cycle even after two rounds of fixes this week: the inner budget was fixed, but the outer caller was never told about it. Confirmed via the roster's own `last_tick_metrics` from that morning's probe (captured *before* my fix): `warmup_ms:5039, resolve_ms:10089` — **15,128ms total, just over the old 15s ceiling** — smoking-gun corroboration from production telemetry, not just my own repro.
+
+Also found (and left alone, out of scope): the analytics probe already has a dedicated 90s HTTP client specifically for animepahe (`services/analytics/cmd/analytics-api/main.go:184-186`, with a comment explicitly anticipating a 30-60s cold solve) — a *correct*, deliberate fix on the analytics→catalog leg. But it's moot as long as catalog→scraper (the leg one hop further in) still caps out at 15s regardless of what the outer caller is willing to wait for.
+
+**Fix shipped (worktree → main, TDD, deployed + verified):**
+1. Wrote `TestLoad_ScraperTimeout_ExceedsBrowserProviderBudget` (`services/catalog/internal/config/config_test.go`, new file — no prior config tests existed) and `TestNewClient_ZeroTimeoutFallback_ExceedsBrowserProviderBudget` (`services/catalog/internal/parser/scraper/client_test.go`) — both asserting `Timeout > 35s`. Confirmed **red** against pre-fix code (`15s`) before implementing.
+2. Raised `SCRAPER_TIMEOUT` default `15s → 40s` (35s scraper budget + margin) in both `config.go`'s `getEnvDuration` default and `client.go`'s zero-timeout fallback, so the invariant holds regardless of which layer supplies it.
+3. `docker/docker-compose.yml`: added an explicit `SCRAPER_TIMEOUT: ${SCRAPER_TIMEOUT:-40s}` line to the catalog service block (previously unset anywhere, silently relying on the Go default) with a comment cross-referencing `SCRAPER_BROWSER_PROVIDER_TIMEOUT`; updated the now-stale ISS-022 comment on the scraper block that hardcoded "15s caller budget" in prose.
+4. Full `go build ./...`, `go vet ./...`, `go test ./... -count=1` (whole `catalog` module, all packages) green.
+5. Committed `4e736c72` in this worktree (branched fresh off `origin/main`, zero divergence), pushed straight to `main`, redeployed `catalog` (`make redeploy-catalog`).
+
+**Manual verification (2026-07-08, post-fix, post-redeploy):**
+- Restarted `stealth-scraper` for a clean pool (`pool_size=4, free_profiles=4, live_browsers=0` — confirmed clean) so the next test would be a genuinely cold solve, not reuse of an already-warmed session.
+- **Cold** `GET /api/anime/{uuid}/scraper/episodes?prefer=animepahe` via the public gateway (`:8000`): **12.96s**, HTTP 200, 13 real episodes. (Cold-solve time is inherently variable, 12-15s typical per the 07-04 entry, up to 30s+ worst case per the sidecar's own budget — the fix's 40s ceiling comfortably covers that range where the old 15s did not, as directly demonstrated by the pre-fix repro above.)
+- `GET /scraper/servers` → 2 real `kwik.cx` sub servers ✅
+- `GET /scraper/stream?category=sub` → signed `https://vault-01.uwucdn.top/.../uwu.m3u8` (AES-128 HLS) ✅
+- HLS master via the real public proxy (`/api/streaming/hls-proxy` + exp/sig/referer): HTTP 200, 45,207 bytes, valid `#EXTM3U` VOD playlist with `#EXT-X-KEY:METHOD=AES-128`, segment URIs correctly rewritten through the proxy ✅
+- First segment via the same public proxy path: HTTP 200, `video/mp2t`, 271,104 bytes, real encrypted MPEG-TS payload ✅
+
+**Incidental observation (not chased, noted for whoever picks a browser provider next):** at both pool-health checks today (before and immediately after my testing, i.e. independent of my own traffic), `stealth-scraper` showed 3 of 4 profiles leased with only 1 session accounted for — the same recurring stuck-lease pattern already diagnosed and partially fixed 3× this week (nineanime 07-05, plus 2 earlier instances). A plain restart cleared it both times (as before), but the leak clearly has more than one source; today's fix is unrelated to it and doesn't address it.
+
+**Action taken:** Submitted `probe-result pass` citing commit `4e736c72` and the concrete before/after verification (including the smoking-gun `last_tick_metrics` corroboration) → state machine transitioned `down → recovering` at 2026-07-08T02:29:59Z. `policy=manual` preserved (promotion to `auto` is a human call / the state machine's own timer).
+
+**Outcome:** ✅ Recovered with a shipped code fix that addresses the actual structural cause — a caller/callee timeout mismatch one layer above the class already fixed twice this week — not a flag flip or lucky retry. Because the fix lives in catalog's shared scraper client (used by every `prefer=<provider>` call, not just animepahe), it should also unstick the *next* time gogoanime, miruro, or nineanime needs a cold browser-engine solve — did not re-verify those three today (out of scope, one-provider-per-run), but flagging for whoever picks one of them next: if a `cdn_unreachable`-reasoned probe failure shows a `last_tick_metrics.warmup_ms + resolve_ms` close to but under the *old* 15s figure, this exact fix already covers it; if it's a different failure signature, diagnose fresh.
+
+**Next step:** Confirm animepahe transitions `recovering → up` at the next scheduled probe cycle (should now pass on its own — no manual intervention needed). Consider proactively re-checking gogoanime and nineanime's next probe cycle for the same signature now that this fix is live, since both are also `engine=browser` and have been flapping down repeatedly. The stuck-lease pool pattern (see incidental observation above) remains an open, recurring issue worth a dedicated future run rather than another ad-hoc restart.
+
+---
+
 ## 2026-07-07 — allanime-okru
 
 **State before:** `policy=manual, health=down, status=degraded` — reason: `AllAnime discovery + ok.ru ('Ok') CDN streams (clock-free)` (a static/descriptive leftover, not a real probe-failure reason; health_since 2026-07-03T18:00:00Z, policy_since 2026-06-25T00:00:17Z, last_probed_at 2026-07-06T02:39:33Z — from the 2026-07-06 okru+allanime fold, not a fresh probe). Selected as the most-neglected manual+down candidate: last genuinely diagnosed as "okru" on 2026-07-03 (4 days ago, longer than animepahe's 3-day gap), not a documented known-hard case, and not repeating gogoanime (07-06) or nineanime (07-05). No "Failing" (auto+down) provider existed at selection time (miruro is auto+up; nineanime had just flipped to `recovering` moments before selection, not stuck).
