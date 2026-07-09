@@ -69,6 +69,39 @@ func TestFoldSeasonStripsBracketCounterAndPart(t *testing.T) {
 	}
 }
 
+// homoglyphify swaps the Cyrillic letters AnimeJoy replaces with Latin lookalikes
+// on its obfuscated title rows (e.g. news_id 5600), reproducing that exact
+// corruption class from a clean catalog title.
+func homoglyphify(s string) string {
+	return strings.NewReplacer(
+		"Р", "P", "е", "e", "а", "a", "р", "p", "о", "o",
+		"с", "c", "х", "x", "у", "y", "к", "k",
+	).Replace(s)
+}
+
+// A homoglyph-obfuscated title must fold to the same string as its clean twin so
+// the codepoint-based jaroWinkler still clears the 0.85 gate. Regression guard
+// for report 2026-07-09T06-40-52 (AllVideo/Sibnet hidden for Mushoku Tensei III
+// because "Peинкapнaция…" scored 0.75 against the clean "Реинкарнация…").
+func TestFoldSeasonNormalizesHomoglyphs(t *testing.T) {
+	clean := "Реинкарнация безработного: История о приключениях в другом мире"
+	homoglyph := homoglyphify(clean)
+	if homoglyph == clean {
+		t.Fatal("homoglyphify produced no substitution; test would be vacuous")
+	}
+	fc, fh := foldSeason(clean), foldSeason(homoglyph)
+	if fc != fh {
+		t.Fatalf("homoglyph fold did not converge:\n clean=%q\n homo =%q", fc, fh)
+	}
+	if s := jaroWinkler(fc, fh); s < fuzzyThreshold {
+		t.Fatalf("converged homoglyph folds scored below threshold: %v", s)
+	}
+	// Safety: folding must NOT drag an unrelated title above the gate.
+	if s := jaroWinkler(foldSeason("Наруто: Ураганные хроники"), fh); s >= fuzzyThreshold {
+		t.Fatalf("unrelated title spuriously matched homoglyph fold: %v", s)
+	}
+}
+
 // Two season-variants of the same series should fold to (near) the same string,
 // so the bare-title fuzzy score is high and season disambiguation is left to the
 // section/number logic in scoreAndPick.

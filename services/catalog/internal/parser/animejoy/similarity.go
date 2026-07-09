@@ -125,7 +125,49 @@ func foldSeason(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	s = bracketCountRe.ReplaceAllString(s, " ")
 	s = seasonRe.ReplaceAllString(s, " ")
+	// Unify Cyrillic/Latin homoglyphs AFTER the season markers are stripped (those
+	// regexes match the clean Cyrillic/Latin forms; folding first would mangle
+	// "сезон"/"part" past recognition). See foldConfusables.
+	s = foldConfusables(s)
 	s = punctRe.ReplaceAllString(s, " ")
 	s = wsRe.ReplaceAllString(s, " ")
 	return strings.TrimSpace(s)
+}
+
+// latinToCyrConfusables maps each Latin letter that shares a glyph with a
+// Cyrillic letter to that Cyrillic letter. AnimeJoy publishes some title rows
+// with these homoglyphs swapped in — e.g. news_id 5600 renders "Реинкарнация" as
+// "Peинкapнaция", mixing Latin P/e/a/p/o/c/x/y/k into the Cyrillic word. Because
+// jaroWinkler compares runes by codepoint, one such swap silently tanks the
+// fuzzy score (0.99 → 0.75), dropping the row below the 0.85 gate so the whole
+// title resolves to "no match" (report 2026-07-09T06-40-52: AllVideo + Sibnet
+// hidden for Mushoku Tensei III).
+//
+// Cyrillic is the canonical target because these rows are Russian: a clean
+// catalog title stays byte-identical (its letters are never in the map), so the
+// obfuscated candidate is what folds back onto it. Only the identical-glyph set
+// is mapped (upper- and lower-case share the shape), keeping the blast radius on
+// genuinely-Latin romaji titles minimal — and harmless regardless, since the
+// fold is deterministic and applied to BOTH query and candidate. The map is 1:1,
+// so it only unifies scripts, never loses signal.
+var latinToCyrConfusables = map[rune]rune{
+	'a': 'а', 'c': 'с', 'e': 'е', 'o': 'о',
+	'p': 'р', 'x': 'х', 'y': 'у', 'k': 'к',
+}
+
+// foldConfusables rewrites the Latin/Cyrillic homoglyphs above to the canonical
+// Cyrillic script. Input MUST already be lower-cased (uppercase homoglyphs are
+// folded by foldSeason's ToLower first). Applied to BOTH query and candidate
+// titles, so any pair is transformed identically and can never regress.
+func foldConfusables(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if m, ok := latinToCyrConfusables[r]; ok {
+			b.WriteRune(m)
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

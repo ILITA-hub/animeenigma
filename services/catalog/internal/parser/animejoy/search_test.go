@@ -126,6 +126,33 @@ func TestScoreAndPickCodeGeassR2(t *testing.T) {
 	}
 }
 
+// End-to-end regression for report 2026-07-09T06-40-52: AnimeJoy's Mushoku
+// Tensei S3 row (news_id 5600) publishes its title in Latin/Cyrillic homoglyphs
+// ("Peинкapнaция…"). Before foldConfusables the top (and only) hit scored 0.75
+// against the clean catalog title, so scoreAndPick returned no match, the
+// playlist came back empty, and both AllVideo + Sibnet families rendered
+// no_content. With the fold it must resolve to 5600.
+func TestScoreAndPickHomoglyphTitle(t *testing.T) {
+	hits := []searchHit{{
+		NewsID:  "5600",
+		Title:   homoglyphify("Реинкарнация безработного: История о приключениях в другом мире (3 сезон) [02 из ХХ]"),
+		Section: "tv-serialy",
+	}}
+	q := Query{
+		Titles: []string{
+			"Mushoku Tensei III: Isekai Ittara Honki Dasu",
+			"Mushoku Tensei: Jobless Reincarnation Season 3",
+			"Реинкарнация безработного: История о приключениях в другом мире 3",
+		},
+		Season: 3,
+		Kind:   "TV",
+		Year:   2026,
+	}
+	if got, ok := scoreAndPick(hits, q); !ok || got != "5600" {
+		t.Fatalf("homoglyph S3: want 5600, got %q ok=%v", got, ok)
+	}
+}
+
 func TestScoreAndPickRejectsWrongKind(t *testing.T) {
 	hits := parseSearchResults(readFixture(t, "search_codegeass.html"))
 	// A movie query should not pick a tv-serialy row; it should land on one of
