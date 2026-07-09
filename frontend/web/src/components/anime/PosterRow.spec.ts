@@ -45,6 +45,15 @@ describe('PosterRow', () => {
     expect(w.find('[data-testid="next-ep"]').exists()).toBe(true)
   })
 
+  it('links ongoing cards to the plain anime page — never forces a ?episode= hint', () => {
+    // Regression: the ongoing row used to deep-link to ?episode=(aired+1), which
+    // skipped fresh viewers past ep 1 (feedback 2026-07-09). The resume state
+    // machine on the anime page is the sole start-episode authority, so the row
+    // must NOT carry an episode hint — the "next episode" number is display-only.
+    const w = mountRow({ href: '/anime/42', nextEpisode: { ep: 2, when: '2026-06-10T12:00:00Z' } }, 'ongoing')
+    expect(w.get('.prow').attributes('href')).toBe('/anime/42')
+  })
+
   it('shows the rank numeral for the top variant', () => {
     const w = mountRow({}, 'top', 1)
     expect(w.find('[data-testid="rank"]').text()).toBe('1')

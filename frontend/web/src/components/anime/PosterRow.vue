@@ -1,5 +1,10 @@
 <template>
-  <router-link :to="to" class="prow group" :class="{ 'is-top3': variant === 'top' && rank !== undefined && rank <= 3 }">
+  <!-- Always link to the plain anime page (model.href) — the resume state
+       machine there is the sole start-episode authority (ep 1 for a fresh
+       viewer, lastWatched+1 for a returning one). Do NOT append a ?episode=
+       hint here: the ongoing row once linked to aired+1, which skipped viewers
+       who had not watched ep 1 straight past it (user feedback 2026-07-09). -->
+  <router-link :to="model.href" class="prow group" :class="{ 'is-top3': variant === 'top' && rank !== undefined && rank <= 3 }">
     <!-- rank numeral (top variant) -->
     <div v-if="variant === 'top' && rank !== undefined" class="rank" aria-hidden="true" data-testid="rank">{{ rank }}</div>
 
@@ -88,13 +93,6 @@ const kebabEl = ref<HTMLButtonElement | null>(null)
 function onKebab() {
   if (kebabEl.value) emit('openMenu', kebabEl.value)
 }
-
-// Ongoing deep-link parity: link to next episode when available
-const to = computed(() =>
-  props.variant === 'ongoing' && props.model.nextEpisode
-    ? `${props.model.href}?episode=${props.model.nextEpisode.ep}`
-    : props.model.href
-)
 
 // Script-level computed labels — avoids $t() in templates (no i18n plugin in unit tests)
 const openMenuLabel = computed(() => t('contextMenu.openMenu'))
