@@ -76,6 +76,23 @@ export function shouldFatalOnNetworkError(
   return playlistDead || netRetries >= maxRetries
 }
 
+export interface PlaybackSnapshot {
+  time: number
+  wasPlaying: boolean
+}
+
+/**
+ * Snapshot position + play state from a <video> element. MUST be read BEFORE
+ * hls.js's destroy() runs on a fatal error: destroy() → detachMedia() makes
+ * hls.js strip the element's src and call media.load(), which per the HTML
+ * media-load algorithm resets currentTime to 0 synchronously — before the
+ * player's own fatal-error watcher or a retry click ever run. Capturing here
+ * is the only point that still sees the real position.
+ */
+export function snapshotPlayback(media: { currentTime: number; paused: boolean }): PlaybackSnapshot {
+  return { time: media.currentTime, wasPlaying: !media.paused }
+}
+
 export function useVideoEngine(
   videoEl: Ref<HTMLVideoElement | null>,
   // When provided and false, skip building the per-fragment hacker-mode stats
@@ -85,6 +102,10 @@ export function useVideoEngine(
   collectStats?: Ref<boolean>,
 ) {
   const fatal = ref<string | null>(null)
+  // Position salvaged the instant a fatal error is declared — see snapshotPlayback.
+  // Reset per-load (below) so a stale snapshot from a prior failure can never
+  // leak into an unrelated later capture.
+  const lastKnownPlayback = ref<PlaybackSnapshot | null>(null)
   const levels = ref<QualityLevel[]>([])
   const currentLevelLabel = ref('')
   const fragStats = ref<FragStat[]>([])
@@ -107,6 +128,7 @@ export function useVideoEngine(
     if (!v) return
     const gen = ++loadGen
     fatal.value = null
+    lastKnownPlayback.value = null
     levels.value = []
     currentLevelLabel.value = ''
     fragStats.value = []
@@ -205,6 +227,7 @@ export function useVideoEngine(
           d === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
           d === Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT
         if (shouldFatalOnNetworkError(playlistDead, netRetries)) {
+          lastKnownPlayback.value = snapshotPlayback(v)
           fatal.value = 'network'
           destroy()
           return
@@ -214,6 +237,7 @@ export function useVideoEngine(
       } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
         hls.recoverMediaError()
       } else {
+        lastKnownPlayback.value = snapshotPlayback(v)
         fatal.value = 'unrecoverable'
         destroy()
       }
@@ -239,5 +263,5 @@ export function useVideoEngine(
 
   onUnmounted(destroy)
 
-  return { fatal, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, fragLoadedCount }
+  return { fatal, lastKnownPlayback, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, fragLoadedCount }
 }

@@ -1491,10 +1491,16 @@ function restorePlayhead(t: number, wasPlaying: boolean) {
 // Snapshot the playhead + play state to hand to restorePlayhead after a
 // same-episode stream swap. `keep` is false for a genuine episode change (start
 // fresh at 0); wasPlaying is gated on a real position so a fresh 0:00 load never
-// auto-resumes.
+// auto-resumes. Prefer engine.lastKnownPlayback when a fatal error just fired:
+// hls.js's destroy() already reset videoRef's own currentTime to 0 by the time
+// a retry/failover reaches here (see useVideoEngine's snapshotPlayback), so the
+// live element is not a safe read in that case.
 function capturePlayhead(keep: boolean): { restoreT: number; wasPlaying: boolean } {
-  const restoreT = keep ? (videoRef.value?.currentTime ?? 0) : 0
-  return { restoreT, wasPlaying: restoreT > 0 && state.playing.value }
+  if (!keep) return { restoreT: 0, wasPlaying: false }
+  const salvaged = engine.lastKnownPlayback.value
+  const restoreT = salvaged ? salvaged.time : (videoRef.value?.currentTime ?? 0)
+  const wasPlaying = restoreT > 0 && (salvaged ? salvaged.wasPlaying : state.playing.value)
+  return { restoreT, wasPlaying }
 }
 
 // Initialize selectedEpisode from initialEpisode (NEVER episodesAired).

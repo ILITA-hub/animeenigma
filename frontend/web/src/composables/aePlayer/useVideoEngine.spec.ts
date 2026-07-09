@@ -1,5 +1,55 @@
-import { describe, it, expect } from 'vitest'
-import { chooseLoadStrategy, buildLevelLabels, shouldFatalOnNetworkError } from './useVideoEngine'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ref } from 'vue'
+import {
+  chooseLoadStrategy,
+  buildLevelLabels,
+  shouldFatalOnNetworkError,
+  snapshotPlayback,
+  useVideoEngine,
+} from './useVideoEngine'
+
+// hls.js is dynamically imported only inside load(); mock it so the fatal-error
+// test never pulls the real module. `hlsMockState` is read/written by the mock
+// factory (hoisted above this module's imports by vi.mock), so it must be
+// created via vi.hoisted rather than a plain module-scope `let`.
+const hlsMockState = vi.hoisted(() => ({ instances: [] as any[] }))
+
+vi.mock('hls.js', () => {
+  class MockHls {
+    static isSupported() {
+      return true
+    }
+    static Events = { MANIFEST_PARSED: 'hlsManifestParsed', LEVEL_SWITCHED: 'hlsLevelSwitched', FRAG_LOADED: 'hlsFragLoaded', ERROR: 'hlsError' }
+    static ErrorTypes = { NETWORK_ERROR: 'networkError', MEDIA_ERROR: 'mediaError', OTHER_ERROR: 'otherError' }
+    static ErrorDetails = { MANIFEST_LOAD_ERROR: 'manifestLoadError', MANIFEST_LOAD_TIMEOUT: 'manifestLoadTimeOut', MANIFEST_PARSING_ERROR: 'manifestParsingError', LEVEL_LOAD_ERROR: 'levelLoadError', LEVEL_LOAD_TIMEOUT: 'levelLoadTimeOut' }
+    handlers: Record<string, ((...args: unknown[]) => void)[]> = {}
+    media: any = null
+    constructor() {
+      hlsMockState.instances.push(this)
+    }
+    loadSource() {}
+    attachMedia(media: any) {
+      this.media = media
+    }
+    startLoad() {}
+    on(event: string, cb: (...args: unknown[]) => void) {
+      (this.handlers[event] ??= []).push(cb)
+    }
+    // Mirrors the real hls.js: destroy() -> detachMedia() -> BufferController
+    // strips the element's src and calls media.load(), which zeroes currentTime
+    // synchronously. This is the exact clobber snapshotPlayback must beat.
+    destroy() {
+      if (this.media) {
+        this.media.currentTime = 0
+        this.media.paused = true
+      }
+    }
+    trigger(event: string, data: unknown) {
+      (this.handlers[event] || []).forEach((cb) => cb(null, data))
+    }
+  }
+  return { default: MockHls }
+})
 
 describe('shouldFatalOnNetworkError', () => {
   it('bails immediately on a dead playlist (manifest/level load), no retries', () => {
@@ -55,5 +105,52 @@ describe('buildLevelLabels', () => {
   it('returns empty for empty/unlabelable input', () => {
     expect(buildLevelLabels([])).toEqual([])
     expect(buildLevelLabels([{}])).toEqual([])
+  })
+})
+
+describe('snapshotPlayback', () => {
+  it('reads position + play state as-is', () => {
+    expect(snapshotPlayback({ currentTime: 312.4, paused: false })).toEqual({ time: 312.4, wasPlaying: true })
+    expect(snapshotPlayback({ currentTime: 0, paused: true })).toEqual({ time: 0, wasPlaying: false })
+  })
+})
+
+describe('useVideoEngine — fatal error salvages the playhead', () => {
+  beforeEach(() => {
+    hlsMockState.instances.length = 0
+  })
+
+  it('captures position + play state BEFORE destroy() zeroes them on a fatal network error', async () => {
+    // Bug repro (2026-07-09 tNeymik report): a mid-episode fatal error used to
+    // leave the retry/failover path reading currentTime AFTER hls.js's destroy()
+    // already reset it to 0, restarting playback at 0:00 despite real progress.
+    const video: any = { currentTime: 312.4, paused: false }
+    const videoRef = ref(video)
+    const engine = useVideoEngine(videoRef)
+
+    await engine.load({ url: 'https://example.test/master.m3u8', type: 'hls' })
+    expect(engine.lastKnownPlayback.value).toBeNull() // fresh load — nothing salvaged yet
+
+    const hlsInstance = hlsMockState.instances[0]
+    hlsInstance.trigger('hlsError', { fatal: true, type: 'networkError', details: 'manifestLoadError' })
+
+    expect(engine.lastKnownPlayback.value).toEqual({ time: 312.4, wasPlaying: true })
+    expect(engine.fatal.value).toBe('network')
+    // Confirms destroy() really did clobber the live element — proving the caller
+    // cannot recover this position by reading videoRef after the fact.
+    expect(video.currentTime).toBe(0)
+  })
+
+  it('resets the salvaged snapshot on the next load so a stale value cannot leak forward', async () => {
+    const video: any = { currentTime: 100, paused: true }
+    const videoRef = ref(video)
+    const engine = useVideoEngine(videoRef)
+
+    await engine.load({ url: 'https://example.test/a.m3u8', type: 'hls' })
+    hlsMockState.instances[0].trigger('hlsError', { fatal: true, type: 'networkError', details: 'manifestLoadError' })
+    expect(engine.lastKnownPlayback.value).not.toBeNull()
+
+    await engine.load({ url: 'https://example.test/b.m3u8', type: 'hls' })
+    expect(engine.lastKnownPlayback.value).toBeNull()
   })
 })
