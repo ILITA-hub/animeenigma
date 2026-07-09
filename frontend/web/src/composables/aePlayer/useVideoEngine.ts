@@ -216,6 +216,14 @@ export function useVideoEngine(
     // source (the dynamic-BEST path). Transient fragment errors still get a few
     // startLoad() retries before giving up.
     let netRetries = 0
+    // Snapshot the playhead BEFORE destroy() (see snapshotPlayback) and declare
+    // the fatal state. Shared by both destroy()-ing branches below so the
+    // salvage-then-destroy sequence can't drift out of sync between them.
+    const declareFatal = (kind: string) => {
+      lastKnownPlayback.value = snapshotPlayback(v)
+      fatal.value = kind
+      destroy()
+    }
     hls.on(Hls.Events.ERROR, (_e: unknown, data: any) => {
       if (!data?.fatal) return
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -227,9 +235,7 @@ export function useVideoEngine(
           d === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
           d === Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT
         if (shouldFatalOnNetworkError(playlistDead, netRetries)) {
-          lastKnownPlayback.value = snapshotPlayback(v)
-          fatal.value = 'network'
-          destroy()
+          declareFatal('network')
           return
         }
         netRetries++
@@ -237,9 +243,7 @@ export function useVideoEngine(
       } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
         hls.recoverMediaError()
       } else {
-        lastKnownPlayback.value = snapshotPlayback(v)
-        fatal.value = 'unrecoverable'
-        destroy()
+        declareFatal('unrecoverable')
       }
     })
   }

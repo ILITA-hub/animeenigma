@@ -1498,8 +1498,8 @@ function restorePlayhead(t: number, wasPlaying: boolean) {
 function capturePlayhead(keep: boolean): { restoreT: number; wasPlaying: boolean } {
   if (!keep) return { restoreT: 0, wasPlaying: false }
   const salvaged = engine.lastKnownPlayback.value
-  const restoreT = salvaged ? salvaged.time : (videoRef.value?.currentTime ?? 0)
-  const wasPlaying = restoreT > 0 && (salvaged ? salvaged.wasPlaying : state.playing.value)
+  const restoreT = salvaged?.time ?? videoRef.value?.currentTime ?? 0
+  const wasPlaying = restoreT > 0 && (salvaged?.wasPlaying ?? state.playing.value)
   return { restoreT, wasPlaying }
 }
 
