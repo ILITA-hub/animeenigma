@@ -217,8 +217,9 @@
 
         <!-- ─── PROVIDERS TAB (P5 Task 2) ──────────────────────────────
              Facade over catalog's stream_providers table (Task 1): list +
-             flip policy auto<->disabled. Health is probe-owned — this tab
-             does NOT touch it. -->
+             set policy to any of auto/manual/disabled (all three are admin
+             levers — nothing is machine-set). Health is probe-owned — this
+             tab does NOT touch it. -->
         <template #providers>
           <div v-if="providersError === '403'" class="glass-card p-4 mb-6 border border-destructive/40">
             <p class="text-destructive">{{ $t('admin.policy.error403') }}</p>
@@ -259,15 +260,13 @@
                     <Badge :variant="stateVariant(row.derived_state)" :data-testid="`provider-state-${row.name}`">
                       {{ $t(`admin.policy.providers.state.${row.derived_state}`) }}
                     </Badge>
-                    <span class="text-xs text-white/60">
-                      {{ row.policy !== 'disabled' ? $t('admin.policy.providers.autoLabel') : $t('admin.policy.providers.disabledLabel') }}
-                    </span>
-                    <Switch
-                      :model-value="row.policy !== 'disabled'"
-                      :disabled="row.saving"
+                    <SegmentedControl
+                      :model-value="row.policy"
+                      :options="providerPolicyOptions"
                       :aria-label="$t('admin.policy.providers.toggleLabel', { name: row.name })"
-                      :data-testid="`provider-switch-${row.name}`"
-                      @update:model-value="(v: boolean) => onToggleProvider(row, v)"
+                      :class="row.saving ? 'opacity-40 pointer-events-none' : ''"
+                      :data-testid="`provider-policy-${row.name}`"
+                      @update:model-value="(v: string) => onSelectProviderPolicy(row, v as ScraperProviderPolicy)"
                     />
                   </div>
                 </CardHeader>
@@ -302,7 +301,7 @@ import UserResolveInput from '@/components/admin/UserResolveInput.vue'
 import { useAdminPolicy } from '@/composables/useAdminPolicy'
 import type { FeatureFlag, FailSafe } from '@/composables/useAdminPolicy'
 import { useAdminProviders } from '@/composables/useAdminProviders'
-import type { ScraperProviderWire } from '@/composables/useAdminProviders'
+import type { ScraperProviderPolicy, ScraperProviderWire } from '@/composables/useAdminProviders'
 import { useOpenFeature } from '@/composables/useOpenFeature'
 import { useConfirm } from '@/composables/useConfirm'
 import { featureRoute } from '@/config/policyFeatures'
@@ -596,6 +595,22 @@ const isProvidersLoading = ref(true)
 const providersError = ref<string | null>(null)
 const providerRows = ref<ProviderRow[]>([])
 
+// All three policy values are admin levers (probe auto demote/promote retired
+// 2026-07-08 — nothing machine-sets policy): auto = in the failover chain,
+// manual = parked out of auto-failover but still manually selectable,
+// disabled = dropped entirely.
+const PROVIDER_POLICIES: ScraperProviderPolicy[] = ['auto', 'manual', 'disabled']
+
+const providerPolicyOptions = computed(() =>
+  PROVIDER_POLICIES.map((p) => ({ value: p, label: t(`admin.policy.providers.policy.${p}`) })),
+)
+
+const PROVIDER_POLICY_TOASTS: Record<ScraperProviderPolicy, { success: string; error: string }> = {
+  auto: { success: 'admin.policy.providers.toastEnableSuccess', error: 'admin.policy.providers.toastEnableError' },
+  manual: { success: 'admin.policy.providers.toastManualSuccess', error: 'admin.policy.providers.toastManualError' },
+  disabled: { success: 'admin.policy.providers.toastDisableSuccess', error: 'admin.policy.providers.toastDisableError' },
+}
+
 function stateVariant(state: ScraperProviderWire['derived_state']): NonNullable<BadgeVariants['variant']> {
   switch (state) {
     case 'UP':
@@ -632,10 +647,10 @@ async function loadProviders(): Promise<void> {
 }
 
 // Applies the actual policy change: optimistic flip of `policy` (so the
-// Switch reflects the new state immediately), then reconciles with the
-// authoritative wire on success (derived_state/reason/health may differ from
-// what we guessed) or reverts on failure.
-async function applyProviderPolicy(row: ProviderRow, nextPolicy: 'auto' | 'disabled'): Promise<void> {
+// segmented control reflects the new state immediately), then reconciles with
+// the authoritative wire on success (derived_state/reason/health may differ
+// from what we guessed) or reverts on failure.
+async function applyProviderPolicy(row: ProviderRow, nextPolicy: ScraperProviderPolicy): Promise<void> {
   const previousPolicy = row.policy
   const name = row.description || row.name
   row.saving = true
@@ -643,26 +658,23 @@ async function applyProviderPolicy(row: ProviderRow, nextPolicy: 'auto' | 'disab
   try {
     const updated = await providers.setPolicy(row.name, nextPolicy)
     Object.assign(row, updated)
-    toast.push(
-      t(nextPolicy === 'disabled' ? 'admin.policy.providers.toastDisableSuccess' : 'admin.policy.providers.toastEnableSuccess', { name }),
-      'success',
-    )
+    toast.push(t(PROVIDER_POLICY_TOASTS[nextPolicy].success, { name }), 'success')
   } catch {
     row.policy = previousPolicy
-    toast.push(
-      t(nextPolicy === 'disabled' ? 'admin.policy.providers.toastDisableError' : 'admin.policy.providers.toastEnableError', { name }),
-      'error',
-    )
+    toast.push(t(PROVIDER_POLICY_TOASTS[nextPolicy].error, { name }), 'error')
   } finally {
     row.saving = false
   }
 }
 
-// Switch ON -> auto (no confirm). Switch OFF -> disabled, gated behind a
-// confirm (disabling drops the provider from playback failover).
-async function onToggleProvider(row: ProviderRow, enabled: boolean): Promise<void> {
-  if (enabled) {
-    await applyProviderPolicy(row, 'auto')
+// auto/manual apply directly; disabled is gated behind a destructive confirm
+// (disabling drops the provider from playback entirely — manual only parks it
+// out of auto-failover, it stays manually selectable). Re-selecting the
+// current policy is a no-op.
+async function onSelectProviderPolicy(row: ProviderRow, next: ScraperProviderPolicy): Promise<void> {
+  if (next === row.policy) return
+  if (next !== 'disabled') {
+    await applyProviderPolicy(row, next)
     return
   }
   const name = row.description || row.name

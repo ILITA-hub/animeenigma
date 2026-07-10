@@ -627,9 +627,11 @@ export interface PolicyFlagsResponse {
   rouletteEnabled: boolean
 }
 
-/** Admin lever over a scraper provider's runtime policy. `manual` is
- *  machine-set by the probe/self-heal state machine — NOT an admin lever
- *  (the backend rejects it with 400; see services/catalog's SetPolicy). */
+/** Admin lever over a scraper provider's runtime policy. All three values are
+ *  admin-set (the probe engine's auto demote/promote was retired 2026-07-08 —
+ *  nothing machine-sets policy): `auto` = in the failover chain, `manual` =
+ *  parked out of auto-failover but still manually selectable, `disabled` =
+ *  dropped entirely. See services/catalog's SetPolicy. */
 export type ScraperProviderPolicy = 'auto' | 'manual' | 'disabled'
 
 /** RBAC-and-roulette P5 Task 2 — wire shape of `GET /api/admin/scraper-providers`
@@ -642,7 +644,7 @@ export interface ScraperProviderWire {
   name: string
   status: string
   policy: ScraperProviderPolicy
-  health: 'up' | 'recovering' | 'down'
+  health: 'up' | 'degraded' | 'recovering' | 'down'
   health_since: string
   policy_since: string
   last_probed_at: string
@@ -739,13 +741,14 @@ export const adminApi = {
     ),
   // RBAC-and-roulette P5 Task 2 — the Providers tab's facade over catalog's
   // stream_providers table (Task 1: services/catalog/internal/handler/
-  // admin_scraper_providers.go). Admin levers are auto/disabled only —
-  // manual is machine-set by the probe/self-heal engine.
+  // admin_scraper_providers.go). All three policy values are admin levers —
+  // nothing is machine-set (probe auto demote/promote retired 2026-07-08);
+  // manual parks a provider out of auto-failover, still manually selectable.
   listScraperProviders: () =>
     apiClient.get<{ data: ScraperProvidersResponse } | ScraperProvidersResponse>(
       '/admin/scraper-providers',
     ),
-  setScraperProviderPolicy: (name: string, policy: 'auto' | 'disabled') =>
+  setScraperProviderPolicy: (name: string, policy: ScraperProviderPolicy) =>
     apiClient.put<{ data: ScraperProviderWire } | ScraperProviderWire>(
       `/admin/scraper-providers/${encodeURIComponent(name)}/policy`,
       { policy },

@@ -15,9 +15,9 @@ import (
 
 // AdminScraperProvidersHandler exposes admin read/write endpoints over
 // catalog's stream_providers table — a facade over ScraperProvider.Policy
-// (spec 2026-07-07-rbac-roulette-p5-providers-facade-design.md §A1) so a
-// future FE Providers tab can list providers and flip policy between
-// auto/disabled at runtime. This is a pure DB read/write of the Policy
+// (spec 2026-07-07-rbac-roulette-p5-providers-facade-design.md §A1) so the
+// FE Providers tab can list providers and flip policy between
+// auto/manual/disabled at runtime. This is a pure DB read/write of the Policy
 // column: it does NOT call or modify the self-heal engine
 // (service/providerpolicy/engine.go), the probe pipeline, or capability
 // derivation — Health stays probe-owned.
@@ -67,10 +67,12 @@ type setPolicyRequest struct {
 	Policy string `json:"policy"`
 }
 
-// SetPolicy handles PUT /api/admin/scraper-providers/{name}/policy. The only
-// levers exposed here are auto/disabled — manual is an SQL-only admin park
-// state (the probe machine never sets policy; auto demotion retired
-// 2026-07-08), so it (and any other value) is rejected with 400.
+// SetPolicy handles PUT /api/admin/scraper-providers/{name}/policy. All three
+// policy values are admin levers: auto (in the failover chain), manual (parked
+// out of auto-failover but still manually selectable), and disabled (dropped
+// entirely). Policy is admin-only — the probe machine never sets it (auto
+// demotion retired 2026-07-08), so this endpoint is also the park lever;
+// manual no longer requires SQL. Any other value is rejected with 400.
 // Health/HealthSince are left untouched; Policy + PolicySince change, and the
 // derived Status is written alongside them (see below).
 //
@@ -80,11 +82,12 @@ type setPolicyRequest struct {
 // status <> 'disabled'`). Every other writer of this table keeps `status` in
 // lock-step with `policy` for the disabled case (BackfillPolicyHealth,
 // AnimefeverDisable, AnimepaheBrowserRevival, … in service/scraperprovider/
-// migrate.go) — that invariant is why an admin disable must ALSO persist the
-// derived status here: skipping it would leave the row split-brain (policy=
-// disabled but status stale-enabled), so the feed keeps serving a provider
-// that auto-failover — which derives from live policy via WireStatus() — has
-// already stopped routing to.
+// migrate.go) — that invariant is why an admin policy write must ALSO persist
+// the derived status here (disable → status=disabled, manual park →
+// status=degraded via WireStatus()): skipping it would leave the row
+// split-brain (policy=disabled but status stale-enabled), so the feed keeps
+// serving a provider that auto-failover — which derives from live policy via
+// WireStatus() — has already stopped routing to.
 func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
@@ -98,10 +101,12 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 	switch req.Policy {
 	case string(domain.PolicyAuto):
 		policy = domain.PolicyAuto
+	case string(domain.PolicyManual):
+		policy = domain.PolicyManual
 	case string(domain.PolicyDisabled):
 		policy = domain.PolicyDisabled
 	default:
-		httputil.BadRequest(w, `policy must be "auto" or "disabled"`)
+		httputil.BadRequest(w, `policy must be "auto", "manual" or "disabled"`)
 		return
 	}
 
@@ -118,8 +123,9 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 
 	// Derive the new stored status from the new policy + the provider's current
 	// (probe-owned, untouched) health — exactly the mapping BackfillPolicyHealth/
-	// the roster migrations use — so the persisted column never lags behind
-	// policy for the disabled case the capability feed's query relies on.
+	// the roster migrations use (disabled → disabled, manual → degraded) — so
+	// the persisted column never lags behind policy for the cases the
+	// capability feed's query relies on.
 	provider.Policy = policy
 	newStatus := provider.WireStatus()
 

@@ -367,10 +367,10 @@ describe('AdminPolicy', () => {
       expect(cards[1].text()).toContain('circuit open')
     })
 
-    it('toggling a provider OFF opens the confirm dialog and, on confirm, calls setPolicy(name, "disabled")', async () => {
+    it('selecting "disabled" opens the confirm dialog and, on confirm, calls setPolicy(name, "disabled")', async () => {
       const w = await mountAndOpenProvidersTab()
 
-      await w.find('[data-testid="provider-switch-gogoanime"]').trigger('click')
+      await w.find('[data-testid="provider-policy-gogoanime"] [data-value="disabled"]').trigger('click')
       await flushPromises()
 
       expect(confirmMock).toHaveBeenCalledTimes(1)
@@ -381,14 +381,14 @@ describe('AdminPolicy', () => {
       confirmMock.mockResolvedValueOnce(false)
       const w = await mountAndOpenProvidersTab()
 
-      await w.find('[data-testid="provider-switch-gogoanime"]').trigger('click')
+      await w.find('[data-testid="provider-policy-gogoanime"] [data-value="disabled"]').trigger('click')
       await flushPromises()
 
       expect(confirmMock).toHaveBeenCalledTimes(1)
       expect(mockSetPolicy).not.toHaveBeenCalled()
     })
 
-    it('toggling a disabled provider ON calls setPolicy(name, "auto") with no confirm', async () => {
+    it('selecting "auto" on a disabled provider calls setPolicy(name, "auto") with no confirm', async () => {
       const disabledProvider: ScraperProviderWire = {
         ...providerUp,
         name: 'nineanime',
@@ -401,11 +401,60 @@ describe('AdminPolicy', () => {
 
       const w = await mountAndOpenProvidersTab()
 
-      await w.find('[data-testid="provider-switch-nineanime"]').trigger('click')
+      await w.find('[data-testid="provider-policy-nineanime"] [data-value="auto"]').trigger('click')
       await flushPromises()
 
       expect(confirmMock).not.toHaveBeenCalled()
       expect(mockSetPolicy).toHaveBeenCalledWith('nineanime', 'auto')
+    })
+
+    // The old binary facade rendered `policy !== 'disabled'` as "Auto", so a
+    // manual (admin-parked) provider FALSELY read Auto — the segmented control
+    // must mark the manual segment active, not auto.
+    it('a policy="manual" row renders with the Manual segment active (NOT Auto)', async () => {
+      const manualProvider: ScraperProviderWire = {
+        ...providerUp,
+        name: 'miruro',
+        description: 'Miruro',
+        policy: 'manual',
+        status: 'degraded',
+        derived_state: 'Disabled',
+      }
+      mockProvidersList.mockResolvedValue([manualProvider])
+
+      const w = await mountAndOpenProvidersTab()
+
+      const control = w.find('[data-testid="provider-policy-miruro"]')
+      expect(control.find('[data-value="manual"]').attributes('aria-checked')).toBe('true')
+      expect(control.find('[data-value="auto"]').attributes('aria-checked')).toBe('false')
+    })
+
+    it('selecting "manual" calls setPolicy(name, "manual") directly — no confirm', async () => {
+      mockSetPolicy.mockResolvedValue({
+        ...providerUp,
+        policy: 'manual',
+        status: 'degraded',
+        derived_state: 'Disabled',
+      })
+
+      const w = await mountAndOpenProvidersTab()
+
+      await w.find('[data-testid="provider-policy-gogoanime"] [data-value="manual"]').trigger('click')
+      await flushPromises()
+
+      expect(confirmMock).not.toHaveBeenCalled()
+      expect(mockSetPolicy).toHaveBeenCalledWith('gogoanime', 'manual')
+    })
+
+    it('re-selecting the current policy is a no-op (no setPolicy call)', async () => {
+      const w = await mountAndOpenProvidersTab()
+
+      // gogoanime seeds policy:'auto' — clicking Auto again does nothing.
+      await w.find('[data-testid="provider-policy-gogoanime"] [data-value="auto"]').trigger('click')
+      await flushPromises()
+
+      expect(confirmMock).not.toHaveBeenCalled()
+      expect(mockSetPolicy).not.toHaveBeenCalled()
     })
   })
 })

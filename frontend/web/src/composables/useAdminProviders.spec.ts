@@ -85,6 +85,17 @@ describe('useAdminProviders', () => {
     expect(result).toEqual(disabled)
   })
 
+  it("setPolicy('gogoanime','manual') PUTs the admin park lever (manual is admin-set now, not machine-set)", async () => {
+    const manual: ScraperProviderWire = { ...gogoanime, policy: 'manual', status: 'degraded', derived_state: 'Disabled' }
+    setPolicySpy.mockResolvedValue({ data: { success: true, data: manual } })
+
+    const { setPolicy } = useAdminProviders()
+    const result = await setPolicy('gogoanime', 'manual')
+
+    expect(setPolicySpy).toHaveBeenCalledWith('gogoanime', 'manual')
+    expect(result).toEqual(manual)
+  })
+
   it("setPolicy('gogoanime','auto') calls through with 'auto' and unwraps a bare response", async () => {
     const auto: ScraperProviderWire = { ...gogoanime, policy: 'auto', derived_state: 'UP' }
     setPolicySpy.mockResolvedValue({ data: auto })

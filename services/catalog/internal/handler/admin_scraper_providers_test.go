@@ -246,12 +246,20 @@ func TestAdminScraperProviders_SetPolicy_UnknownName(t *testing.T) {
 	}
 }
 
-// TestAdminScraperProviders_SetPolicy_RejectsManual verifies manual is an
-// SQL-only park state and NOT a lever of this endpoint — same rejection path
-// as any other invalid value.
-func TestAdminScraperProviders_SetPolicy_RejectsManual(t *testing.T) {
+// TestAdminScraperProviders_SetPolicy_Manual verifies manual is an admin lever
+// of this endpoint (nothing machine-sets policy since auto demote/promote was
+// retired 2026-07-08 — this endpoint is the park lever, no SQL required):
+// parking an auto provider returns 200, persists policy=manual, re-derives the
+// stored status to degraded (out of auto-failover but still manually
+// selectable), and reports the Disabled dashboard band.
+func TestAdminScraperProviders_SetPolicy_Manual(t *testing.T) {
 	db := newAdminScraperProvidersTestDB(t)
-	if err := db.Create(&domain.ScraperProvider{Name: "gogoanime", Policy: domain.PolicyAuto, Health: domain.HealthUp}).Error; err != nil {
+	if err := db.Create(&domain.ScraperProvider{
+		Name:   "gogoanime",
+		Policy: domain.PolicyAuto,
+		Health: domain.HealthUp,
+		Status: domain.StatusEnabled,
+	}).Error; err != nil {
 		t.Fatal(err)
 	}
 	h := handler.NewAdminScraperProvidersHandler(db, testNopLogger())
@@ -260,16 +268,32 @@ func TestAdminScraperProviders_SetPolicy_RejectsManual(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.SetPolicy(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
 	}
 
 	var row domain.ScraperProvider
 	if err := db.Where("name = ?", "gogoanime").First(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	if row.Policy != domain.PolicyAuto {
-		t.Fatalf("Policy should be unchanged, got %q", row.Policy)
+	if row.Policy != domain.PolicyManual {
+		t.Fatalf("Policy = %q, want manual", row.Policy)
+	}
+	if row.Status != domain.StatusDegraded {
+		t.Fatalf("Status = %q, want degraded (manual+up derives to degraded: parked but still selectable)", row.Status)
+	}
+
+	var respBody struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &respBody); err != nil {
+		t.Fatalf("decode: %v (body=%s)", err, rr.Body.String())
+	}
+	if respBody.Data["policy"] != "manual" {
+		t.Fatalf("response policy = %v, want manual", respBody.Data["policy"])
+	}
+	if respBody.Data["derived_state"] != domain.StateDisabled {
+		t.Fatalf("response derived_state = %v, want %v", respBody.Data["derived_state"], domain.StateDisabled)
 	}
 }
 

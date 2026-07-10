@@ -1493,13 +1493,16 @@
       },
       "providers": {
         "title": "スクレイパープロバイダー",
-        "intro": "プロバイダーを自動（フェイルオーバーチェーンに参加）と無効（フェイルオーバーから除外）の間で切り替えます。ヘルスはプローブが管理し、自動的に更新されます。",
+        "intro": "各プロバイダーのポリシーを設定します：自動（フェイルオーバーチェーンに参加）、手動（自動フェイルオーバーから外れるが手動選択は可能）、無効（再生から完全に除外）。ヘルスはプローブが管理し、自動的に更新されます。",
         "loadError": "プロバイダーを読み込めませんでした — もう一度お試しください",
         "groupLabel": "グループ",
         "engineLabel": "エンジン",
-        "toggleLabel": "{name} を自動と無効の間で切り替える",
-        "autoLabel": "自動",
-        "disabledLabel": "無効",
+        "toggleLabel": "{name} のポリシーを設定：自動・手動・無効",
+        "policy": {
+          "auto": "自動",
+          "manual": "手動",
+          "disabled": "無効"
+        },
         "state": {
           "UP": "稼働中",
           "Recovering": "復旧中",
@@ -1513,7 +1516,9 @@
         "toastEnableSuccess": "{name} を自動に設定しました",
         "toastEnableError": "{name} を再度有効にできませんでした — もう一度お試しください",
         "toastDisableSuccess": "{name} を無効にしました",
-        "toastDisableError": "{name} を無効にできませんでした — もう一度お試しください"
+        "toastDisableError": "{name} を無効にできませんでした — もう一度お試しください",
+        "toastManualSuccess": "{name} を手動に設定しました — 自動フェイルオーバー対象外、手動選択は可能です",
+        "toastManualError": "{name} を手動に設定できませんでした — もう一度お試しください"
       },
       "providersPlaceholder": {
         "title": "プロバイダーなし",

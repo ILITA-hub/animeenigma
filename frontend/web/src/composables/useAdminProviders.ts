@@ -26,9 +26,10 @@ export function useAdminProviders() {
     return unwrap<ScraperProvidersResponse>(res.data).providers
   }
 
-  // Admin levers are auto/disabled only — manual is machine-set by the
-  // probe/self-heal engine and rejected by the backend (400).
-  async function setPolicy(name: string, policy: 'auto' | 'disabled'): Promise<ScraperProviderWire> {
+  // All three policy values are admin levers — nothing is machine-set
+  // (probe auto demote/promote retired 2026-07-08). `manual` parks the
+  // provider out of auto-failover while keeping it manually selectable.
+  async function setPolicy(name: string, policy: ScraperProviderPolicy): Promise<ScraperProviderWire> {
     const res = await adminApi.setScraperProviderPolicy(name, policy)
     return unwrap<ScraperProviderWire>(res.data)
   }
