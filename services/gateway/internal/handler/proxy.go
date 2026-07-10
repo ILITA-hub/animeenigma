@@ -62,6 +62,39 @@ func (h *ProxyHandler) ProxyToCatalog(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "catalog")
 }
 
+// ProxyToCatalogScraperJSON proxies the /api/anime/{id}/scraper/* JSON routes
+// (episodes/servers/stream/health) to catalog using the 45s scraperJSONClient
+// instead of the plain 15s client — see ProxyService.scraperJSONClient for
+// why: a cold engine=browser provider solve (animepahe/gogoanime/miruro/
+// nineanime) can legitimately take longer than 15s even on a healthy
+// provider, and catalog's own SCRAPER_TIMEOUT is already 40s.
+func (h *ProxyHandler) ProxyToCatalogScraperJSON(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.proxyService.ForwardScraperJSON(r, "catalog")
+	if err != nil {
+		h.log.Errorw("proxy failed", "service", "catalog", "error", err)
+		metrics.ProxyUpstreamErrors.WithLabelValues("forward_error", "catalog").Inc()
+		httputil.Error(w, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 500 {
+		metrics.ProxyUpstreamErrors.WithLabelValues(strconv.Itoa(resp.StatusCode), "catalog").Inc()
+	}
+
+	for key, values := range resp.Header {
+		if isCORSHeader(key) {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
 // ProxyToPlayer proxies requests to player service
 func (h *ProxyHandler) ProxyToPlayer(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "player")

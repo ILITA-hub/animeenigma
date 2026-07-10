@@ -97,7 +97,20 @@ type ProxyService struct {
 	// still bounded by the transport's ResponseHeaderTimeout; the body is
 	// bounded by the request context + the streaming router's WriteTimeout.
 	streamClient *http.Client
-	log          *logger.Logger
+	// scraperJSONClient serves the /api/anime/{id}/scraper/* JSON routes
+	// (episodes/servers/stream/health). These bodies are small, but discovery
+	// for a cold engine=browser provider (animepahe/gogoanime/miruro/
+	// nineanime — a Camoufox Turnstile solve) can legitimately take up to
+	// catalog's own SCRAPER_TIMEOUT (40s, itself sized to the scraper's 35s
+	// BrowserProviderTimeout). The plain `client`'s 15s cap sits OUTSIDE both
+	// of those already-fixed budgets and was never raised to match them, so
+	// real users hit a gateway-side 500 ("context deadline exceeded") on any
+	// cold resolve over 15s even though catalog/scraper would have succeeded
+	// — reproduced live 2026-07-10 on a fully-recovered animepahe. 45s gives
+	// the 40s inner budget a margin, same rationale as streamClient's split
+	// from the plain client above (small body, just a slow one).
+	scraperJSONClient *http.Client
+	log               *logger.Logger
 }
 
 func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyService {
@@ -148,6 +161,10 @@ func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyS
 			// No total Timeout — the streamed body must not be truncated.
 			Transport: streamTransport,
 		},
+		scraperJSONClient: &http.Client{
+			Timeout:   45 * time.Second,
+			Transport: transport,
+		},
 		log: log,
 	}
 }
@@ -166,6 +183,14 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 // transport's ResponseHeaderTimeout.
 func (s *ProxyService) ForwardStream(r *http.Request, service string) (*http.Response, error) {
 	return s.forwardWith(s.streamClient, r, service)
+}
+
+// ForwardScraperJSON forwards the request using the scraperJSONClient (45s)
+// instead of the plain 15s client. Use for the /api/anime/{id}/scraper/*
+// JSON routes, whose discovery can ride a cold engine=browser provider solve
+// well past 15s even on a healthy provider.
+func (s *ProxyService) ForwardScraperJSON(r *http.Request, service string) (*http.Response, error) {
+	return s.forwardWith(s.scraperJSONClient, r, service)
 }
 
 // ForwardNoRedirect forwards the request to the appropriate service without

@@ -446,6 +446,13 @@ func NewRouterWithCleanup(
 
 		// Catalog service routes (public)
 		r.HandleFunc("/anime", proxyHandler.ProxyToCatalog)
+		// Scraper JSON routes (episodes/servers/stream/health) need the longer
+		// scraperJSONClient timeout (cold engine=browser provider discovery can
+		// exceed the plain client's 15s even on a healthy provider) — MUST be
+		// registered BEFORE the generic /anime/* below (same "specific-before-
+		// general" gotcha as /admin/scraper/* vs /admin/* further down).
+		r.HandleFunc("/anime/{id}/scraper/*", proxyHandler.ProxyToCatalogScraperJSON)
+		r.HandleFunc("/anime/_/scraper/health", proxyHandler.ProxyToCatalogScraperJSON)
 		r.HandleFunc("/anime/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/genres", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/studios", proxyHandler.ProxyToCatalog)

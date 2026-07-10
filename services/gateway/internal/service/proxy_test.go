@@ -300,6 +300,62 @@ func TestProxyService_Forward_APIClientTruncatesSlowBody(t *testing.T) {
 	}
 }
 
+// newTestCatalogProxy points the catalog service URL at a test backend.
+func newTestCatalogProxy(catalogURL string) *ProxyService {
+	return NewProxyService(config.ServiceURLs{
+		CatalogService: catalogURL,
+	}, logger.Default())
+}
+
+// TestProxyService_ForwardScraperJSON_SurvivesPast15s — 2026-07-10 finding:
+// a cold engine=browser scraper provider (animepahe/gogoanime/miruro/
+// nineanime) discovery call can legitimately take longer than 15s even on a
+// HEALTHY provider (catalog's own SCRAPER_TIMEOUT is already 40s), but the
+// plain 15s API client sat one layer further out and was never raised to
+// match — real users got a gateway 500 on any cold resolve over 15s.
+// ForwardScraperJSON (the /api/anime/{id}/scraper/* route family) must
+// tolerate a body/response that takes longer than 15s.
+func TestProxyService_ForwardScraperJSON_SurvivesPast15s(t *testing.T) {
+	t.Parallel()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(16 * time.Second)
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"success":true,"data":{"episodes":[]}}`)
+	}))
+	defer backend.Close()
+
+	p := newTestCatalogProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/anime/x/scraper/episodes", nil)
+	resp, err := p.ForwardScraperJSON(req, "catalog")
+	if err != nil {
+		t.Fatalf("ForwardScraperJSON: %v (a 16s-slow but healthy backend must not be treated as down)", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d; want 200", resp.StatusCode)
+	}
+}
+
+// TestProxyService_Forward_APIClientTruncatesSlowScraperBody is the control:
+// the existing 15s API-JSON client (Forward, used by every OTHER /api/anime/*
+// route) MUST still fail a response past its total timeout. Proves the split
+// is real and scoped to ForwardScraperJSON, not a blanket timeout raise.
+func TestProxyService_Forward_APIClientTruncatesSlowScraperBody(t *testing.T) {
+	t.Parallel()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(16 * time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestCatalogProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/anime/x", nil)
+	_, err := p.Forward(req, "catalog")
+	if err == nil {
+		t.Error("Forward succeeded against a 16s-slow backend; expected the 15s total Timeout to fire")
+	}
+}
+
 // newTestRoomsProxy points the rooms service URL at a test backend.
 func newTestRoomsProxy(roomsURL string) *ProxyService {
 	return NewProxyService(config.ServiceURLs{

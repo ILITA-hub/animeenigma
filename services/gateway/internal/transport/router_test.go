@@ -473,3 +473,47 @@ func TestRouter_AdminReportsRequiresAdmin(t *testing.T) {
 		t.Errorf("non-admin status = %d; want 403", rec.Code)
 	}
 }
+
+// TestRouter_AnimeScraperJSONSurvivesPast15s — 2026-07-10 finding: a cold
+// engine=browser scraper provider (animepahe/gogoanime/miruro/nineanime)
+// discovery call can legitimately take longer than 15s even on a HEALTHY
+// provider (catalog's own SCRAPER_TIMEOUT is already 40s), but the gateway's
+// plain 15s API client sat one layer further out and was never raised to
+// match — real users got a gateway 500 on any cold resolve over 15s.
+// /api/anime/{id}/scraper/* MUST be routed to ProxyToCatalogScraperJSON
+// (45s), registered BEFORE the generic /anime/* wildcard (15s) — this proves
+// both the chi route-registration order and the end-to-end client wiring
+// against the real router, not just the ProxyService unit tests.
+func TestRouter_AnimeScraperJSONSurvivesPast15s(t *testing.T) {
+	slowCatalog := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(16 * time.Second)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true,"data":{"episodes":[]}}`))
+	}))
+	defer slowCatalog.Close()
+
+	cfg := &config.Config{
+		Server:   config.ServerConfig{Host: "127.0.0.1", Port: 0},
+		JWT:      gatewayTestJWTConfig(),
+		Services: config.ServiceURLs{AuthService: "http://auth-unused:8080", CatalogService: slowCatalog.URL},
+		RateLimit: config.RateLimitConfig{
+			RequestsPerSecond: 1000,
+			BurstSize:         1000,
+		},
+		CORSOrigins: []string{},
+	}
+	log := logger.Default()
+	proxySvc := service.NewProxyService(cfg.Services, log)
+	proxyHandler := handler.NewProxyHandler(proxySvc, log)
+	router, stop := NewRouterWithCleanup(proxyHandler, cfg, log, sharedGatewayCollector(), nil)
+	t.Cleanup(stop)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/anime/test-id/scraper/episodes?prefer=animepahe", nil)
+	req.RemoteAddr = "10.0.0.9:1234"
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200 (body=%q) — a 16s-slow but healthy provider discovery must not 500 at the gateway", rec.Code, rec.Body.String())
+	}
+}
