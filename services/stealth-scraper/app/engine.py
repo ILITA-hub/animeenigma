@@ -170,6 +170,11 @@ class CamoufoxEngine:
         self.profiles = ProfileManager(cfg.profile_dir, cfg.pool_size)
         self._handles: dict[str, _CamoufoxHandle] = {}     # profile id -> handle
         self._sessions: dict[str, Session] = {}            # session id -> Session
+        # Per-(provider,origin) warm-fetch lock (SCRAPER-HEAL-04): serializes
+        # concurrent _warm_fetch_session() callers for the SAME key so a second
+        # caller reuses the first's session instead of racing it — see
+        # _fetch_lock() for why an unlocked get-or-create leaks a profile.
+        self._fetch_locks: dict[str, asyncio.Lock] = {}
         self._recipes: dict[str, Recipe] = {
             "gogoanime": GogoanimeRecipe(),
             "nineanime": NineAnimeRecipe(),
@@ -914,6 +919,26 @@ class CamoufoxEngine:
             await asyncio.sleep(1.2)
         return False
 
+    def _fetch_lock(self, key: str) -> asyncio.Lock:
+        """Lock guarding one (provider,origin) warm-session's get-or-create.
+
+        Without this, two concurrent _warm_fetch_session() calls for the SAME
+        key both see no existing session (nothing here awaits before the
+        lease), both lease a DISTINCT profile, and the loser's session/profile
+        is silently orphaned when the winner's `self._sessions[key] = session`
+        overwrites the shared dict slot — no exception, no crash flag, no
+        admission-gate counter. That's the "N of pool_size profiles leased,
+        unaccounted for" signature that recurred repeatedly in production
+        despite three earlier fixes, because those all targeted exception
+        paths and this is a success-path race (animepahe 2026-07-10).
+        Dict lookup/creation here has no await, so it can't itself race.
+        """
+        lock = self._fetch_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._fetch_locks[key] = lock
+        return lock
+
     async def _warm_fetch_session(
         self, provider: str, origin: str, user_key: str | None = None
     ) -> Session:
@@ -923,140 +948,141 @@ class CamoufoxEngine:
         to the FIRST user_key that creates it, and the quota is enforced only
         when a NEW session must be opened (an existing warm reuse is free)."""
         key = f"fetch::{provider}::{origin}"
-        existing = self._sessions.get(key)
-        if existing is not None and existing.page is not None:
-            # Poison-fence the REUSE path: a cheap liveness probe. A poisoned
-            # page (Target closed) would otherwise be handed back and re-navved
-            # on the next fetch (the AUTO-527 loop). On failure: evict + fall
-            # through to recreate a fresh warm session.
+        async with self._fetch_lock(key):
+            existing = self._sessions.get(key)
+            if existing is not None and existing.page is not None:
+                # Poison-fence the REUSE path: a cheap liveness probe. A poisoned
+                # page (Target closed) would otherwise be handed back and re-navved
+                # on the next fetch (the AUTO-527 loop). On failure: evict + fall
+                # through to recreate a fresh warm session.
+                try:
+                    await existing.page.evaluate("()=>1")
+                    return existing
+                except Exception:  # noqa: BLE001
+                    # Liveness probe failed: the page (and therefore the browser slot)
+                    # is dead. Mirror the poison-fence path EXACTLY (see _in_page_fetch):
+                    # aclose_session() only closes the PAGE, so the browser handle/
+                    # context survive — if we stop there, profile.launched stays True
+                    # and _ensure_browser's launched-guard would hand the reaper back
+                    # the DEAD context (mark_healthy, no relaunch). We must ALSO tear
+                    # the handle down via _teardown(reason='crash') so launched==False
+                    # and _handles[pid] is popped, forcing a real cold relaunch. Order
+                    # matches the poison-fence: evict the session, THEN teardown.
+                    # _teardown(reason='crash') calls mark_crashed itself, so set the
+                    # real reason on the Profile first (don't double-mark).
+                    dead = existing.profile
+                    dead.last_error = existing.last_error or "liveness-probe: page dead"
+                    await self.aclose_session(key)
+                    await self._teardown(dead, reason="crash")
+
+            # A NEW warm session is about to be opened — enforce the per-user quota
+            # (the reuse path above returns before here, so a shared hit is free).
+            self._enforce_user_quota(user_key)
+
+            profile = await self._acquire_profile()
+            if profile is None:
+                metrics.POOL_EXHAUSTED_TOTAL.inc()
+                raise PoolExhausted("no free browser profile (pool/sessions exhausted)")
+            proxy = self.pool.select(sticky_key=profile.id)
+            if proxy is None:
+                self.profiles.release(profile, ok=False)
+                raise RecipeError("no proxy available for fetch warm")
+
+            recipe = self._recipes.get(provider)
+
             try:
-                await existing.page.evaluate("()=>1")
-                return existing
-            except Exception:  # noqa: BLE001
-                # Liveness probe failed: the page (and therefore the browser slot)
-                # is dead. Mirror the poison-fence path EXACTLY (see _in_page_fetch):
-                # aclose_session() only closes the PAGE, so the browser handle/
-                # context survive — if we stop there, profile.launched stays True
-                # and _ensure_browser's launched-guard would hand the reaper back
-                # the DEAD context (mark_healthy, no relaunch). We must ALSO tear
-                # the handle down via _teardown(reason='crash') so launched==False
-                # and _handles[pid] is popped, forcing a real cold relaunch. Order
-                # matches the poison-fence: evict the session, THEN teardown.
-                # _teardown(reason='crash') calls mark_crashed itself, so set the
-                # real reason on the Profile first (don't double-mark).
-                dead = existing.profile
-                dead.last_error = existing.last_error or "liveness-probe: page dead"
-                await self.aclose_session(key)
-                await self._teardown(dead, reason="crash")
-
-        # A NEW warm session is about to be opened — enforce the per-user quota
-        # (the reuse path above returns before here, so a shared hit is free).
-        self._enforce_user_quota(user_key)
-
-        profile = await self._acquire_profile()
-        if profile is None:
-            metrics.POOL_EXHAUSTED_TOTAL.inc()
-            raise PoolExhausted("no free browser profile (pool/sessions exhausted)")
-        proxy = self.pool.select(sticky_key=profile.id)
-        if proxy is None:
-            self.profiles.release(profile, ok=False)
-            raise RecipeError("no proxy available for fetch warm")
-
-        recipe = self._recipes.get(provider)
-
-        try:
-            # solve_challenge providers (Cloudflare Turnstile, e.g. animepahe) need
-            # a CLEAN profile: an aged/pooled profile accumulates CF
-            # challenge-platform state (cookies, but also localStorage/IndexedDB on
-            # challenges.cloudflare.com that clear_cookies cannot reach
-            # cross-origin), and a failed prior attempt POISONS re-solving — the
-            # click stops yielding cf_clearance (proven: a fresh profile solves, a
-            # copy of the poisoned pool profile does not). Wipe + cold-launch the
-            # leased profile so every solve starts from genuinely clean state. The
-            # deterministic fingerprint is derived from profile.id (not the
-            # on-disk dir), so identity is preserved.
-            #
-            # This runs INSIDE the try (not before it): it used to sit ahead of
-            # this block, so a CancelledError (HTTP client disconnect) from the
-            # recycle teardown leaked the just-acquired profile forever — none of
-            # the except clauses below could see it. Every solve_challenge
-            # provider (currently only animepahe) hit this on EVERY warm fetch,
-            # silently draining the shared browser pool.
-            if recipe is not None and getattr(recipe, "solve_challenge", False):
-                await self._teardown(profile, reason="recycle")
-                _rm_dir(profile.user_data_dir)
-
-            context = await self._ensure_browser(profile, proxy.id)
-            page = await context.new_page()
-            resp = await page.goto(
-                origin, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
-            )
-            status = resp.status if resp else 0
-            try:
-                title = await page.title()
-            except Exception:  # noqa: BLE001
-                title = ""
-            if looks_like_challenge(status, title):
-                # A recipe may opt into SOLVING a Cloudflare managed/Turnstile
-                # challenge (click the checkbox + poll for cf_clearance) rather
-                # than rotating the exit on the first interstitial. Recipes
-                # without the flag fall straight through to the rotate path —
-                # behavior is unchanged for them.
-                recipe = self._recipes.get(provider)
-                solved = False
+                # solve_challenge providers (Cloudflare Turnstile, e.g. animepahe) need
+                # a CLEAN profile: an aged/pooled profile accumulates CF
+                # challenge-platform state (cookies, but also localStorage/IndexedDB on
+                # challenges.cloudflare.com that clear_cookies cannot reach
+                # cross-origin), and a failed prior attempt POISONS re-solving — the
+                # click stops yielding cf_clearance (proven: a fresh profile solves, a
+                # copy of the poisoned pool profile does not). Wipe + cold-launch the
+                # leased profile so every solve starts from genuinely clean state. The
+                # deterministic fingerprint is derived from profile.id (not the
+                # on-disk dir), so identity is preserved.
+                #
+                # This runs INSIDE the try (not before it): it used to sit ahead of
+                # this block, so a CancelledError (HTTP client disconnect) from the
+                # recycle teardown leaked the just-acquired profile forever — none of
+                # the except clauses below could see it. Every solve_challenge
+                # provider (currently only animepahe) hit this on EVERY warm fetch,
+                # silently draining the shared browser pool.
                 if recipe is not None and getattr(recipe, "solve_challenge", False):
-                    try:
-                        solved = await self._solve_cf_challenge(page, context, origin)
-                    except Exception:  # noqa: BLE001 — any solve fault ⇒ rotate
-                        solved = False
-                if solved:
-                    metrics.CHALLENGE_TOTAL.labels(
-                        host=host_of(origin) or "?", kind="warm_solved"
-                    ).inc()
-                else:
-                    await _safe_close_page(page)
-                    self.pool.mark_blocked(proxy.id)
-                    self.profiles.release(profile, ok=False)
-                    metrics.CHALLENGE_TOTAL.labels(host=host_of(origin) or "?", kind="warm").inc()
-                    metrics.PROXY_BLOCK_TOTAL.labels(proxy_id=proxy.id).inc()
-                    raise ChallengeError(
-                        f"challenge warming {origin}", host=host_of(origin), kind="warm"
-                    )
-            session = Session(
-                id=key, profile=profile, proxy_id=proxy.id, referer=origin,
-                user_agent=profile.user_agent, cdn_host=host_of(origin),
-                master_url=origin, expires_at=time.time() + self.cfg.session_ttl_seconds,
-                page=page, player_url=origin, provider=provider, user_key=user_key,
-            )
-            self._sessions[key] = session
-            metrics.ACTIVE_SESSIONS.set(len(self._sessions))
-            return session
-        except ChallengeError:
-            raise
-        except (CapacityExceeded, UserQuotaExceeded, PoolExhausted, ProviderWedged):
-            # Typed back-pressure/quota signals (e.g. _ensure_browser → _admit_launch
-            # raising CapacityExceeded mid-launch) MUST keep their concrete class so
-            # the /fetch handler emits the right `kind` (capacity / user_quota /
-            # pool_exhausted / provider_wedged) instead of a flattened error. The
-            # browser HANDLE never opened on these paths, so there is no handle to
-            # tear down — but the profile LEASE taken at `_acquire_profile()` above
-            # already happened and is a separate thing. Without releasing it here,
-            # every hard-RAM refusal permanently strands one shared Camoufox pool
-            # slot (silent, uncounted by any crash/exception log — this exact class
-            # of profile stays "leased" forever with no session to ever free it).
-            self.profiles.release(profile, ok=False)
-            raise
-        except asyncio.CancelledError:
-            # HTTP client disconnected while we were inside the browser.
-            # CancelledError is BaseException, not Exception — without this
-            # handler the profile leaks permanently leased.
-            await self._teardown(profile, reason="crash")
-            self.profiles.release(profile, ok=False)
-            raise
-        except Exception as exc:  # noqa: BLE001
-            await self._teardown(profile, reason="crash")
-            self.profiles.release(profile, ok=False)
-            raise RecipeError(f"fetch warm failed for {origin}: {exc}") from exc
+                    await self._teardown(profile, reason="recycle")
+                    _rm_dir(profile.user_data_dir)
+
+                context = await self._ensure_browser(profile, proxy.id)
+                page = await context.new_page()
+                resp = await page.goto(
+                    origin, wait_until="domcontentloaded", timeout=self.cfg.nav_timeout_ms
+                )
+                status = resp.status if resp else 0
+                try:
+                    title = await page.title()
+                except Exception:  # noqa: BLE001
+                    title = ""
+                if looks_like_challenge(status, title):
+                    # A recipe may opt into SOLVING a Cloudflare managed/Turnstile
+                    # challenge (click the checkbox + poll for cf_clearance) rather
+                    # than rotating the exit on the first interstitial. Recipes
+                    # without the flag fall straight through to the rotate path —
+                    # behavior is unchanged for them.
+                    recipe = self._recipes.get(provider)
+                    solved = False
+                    if recipe is not None and getattr(recipe, "solve_challenge", False):
+                        try:
+                            solved = await self._solve_cf_challenge(page, context, origin)
+                        except Exception:  # noqa: BLE001 — any solve fault ⇒ rotate
+                            solved = False
+                    if solved:
+                        metrics.CHALLENGE_TOTAL.labels(
+                            host=host_of(origin) or "?", kind="warm_solved"
+                        ).inc()
+                    else:
+                        await _safe_close_page(page)
+                        self.pool.mark_blocked(proxy.id)
+                        self.profiles.release(profile, ok=False)
+                        metrics.CHALLENGE_TOTAL.labels(host=host_of(origin) or "?", kind="warm").inc()
+                        metrics.PROXY_BLOCK_TOTAL.labels(proxy_id=proxy.id).inc()
+                        raise ChallengeError(
+                            f"challenge warming {origin}", host=host_of(origin), kind="warm"
+                        )
+                session = Session(
+                    id=key, profile=profile, proxy_id=proxy.id, referer=origin,
+                    user_agent=profile.user_agent, cdn_host=host_of(origin),
+                    master_url=origin, expires_at=time.time() + self.cfg.session_ttl_seconds,
+                    page=page, player_url=origin, provider=provider, user_key=user_key,
+                )
+                self._sessions[key] = session
+                metrics.ACTIVE_SESSIONS.set(len(self._sessions))
+                return session
+            except ChallengeError:
+                raise
+            except (CapacityExceeded, UserQuotaExceeded, PoolExhausted, ProviderWedged):
+                # Typed back-pressure/quota signals (e.g. _ensure_browser → _admit_launch
+                # raising CapacityExceeded mid-launch) MUST keep their concrete class so
+                # the /fetch handler emits the right `kind` (capacity / user_quota /
+                # pool_exhausted / provider_wedged) instead of a flattened error. The
+                # browser HANDLE never opened on these paths, so there is no handle to
+                # tear down — but the profile LEASE taken at `_acquire_profile()` above
+                # already happened and is a separate thing. Without releasing it here,
+                # every hard-RAM refusal permanently strands one shared Camoufox pool
+                # slot (silent, uncounted by any crash/exception log — this exact class
+                # of profile stays "leased" forever with no session to ever free it).
+                self.profiles.release(profile, ok=False)
+                raise
+            except asyncio.CancelledError:
+                # HTTP client disconnected while we were inside the browser.
+                # CancelledError is BaseException, not Exception — without this
+                # handler the profile leaks permanently leased.
+                await self._teardown(profile, reason="crash")
+                self.profiles.release(profile, ok=False)
+                raise
+            except Exception as exc:  # noqa: BLE001
+                await self._teardown(profile, reason="crash")
+                self.profiles.release(profile, ok=False)
+                raise RecipeError(f"fetch warm failed for {origin}: {exc}") from exc
 
     async def _in_page_fetch(
         self, session: Session, url: str, header_allowlist: tuple[str, ...] = ()
