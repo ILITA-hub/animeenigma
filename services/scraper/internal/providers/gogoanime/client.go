@@ -58,6 +58,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/fuzzy"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/sidecar"
 )
 
 // probeFunc is the streamprobe.Probe signature, exposed for test injection.
@@ -208,6 +209,11 @@ type Deps struct {
 	// extraction through a real browser instead.
 	UseBrowser     func() bool
 	BrowserResolve BrowserResolveFunc
+
+	// SessionAlive asks the stealth-scraper whether a cached stream URL's
+	// embedded session still exists ("gone" ⇒ treat the cache hit as a miss).
+	// nil disables the gate (in-process extraction paths never need it).
+	SessionAlive func(ctx context.Context, sid string) string
 }
 
 // BrowserResolveFunc resolves an embed/wrapper URL (a gogoanime server ID) to a
@@ -232,6 +238,10 @@ type Provider struct {
 	// Browser-engine delegation (DB engine=browser → stealth-scraper sidecar).
 	useBrowser     func() bool
 	browserResolve BrowserResolveFunc
+
+	// sessionAlive gates cached stream URLs whose source is a stealth-scraper
+	// proxy URL — nil disables the gate. See cachedSessionGone.
+	sessionAlive func(ctx context.Context, sid string) string
 
 	// stages is the in-memory health snapshot, updated on each method call.
 	stagesMu sync.Mutex
@@ -280,6 +290,7 @@ func New(d Deps) (*Provider, error) {
 		probe:          probe,
 		useBrowser:     d.UseBrowser,
 		browserResolve: d.BrowserResolve,
+		sessionAlive:   d.SessionAlive,
 		stages:         make(map[string]domain.StageHealth, len(stageNames)),
 	}
 	// Pre-seed all four stages so HealthCheck always returns the canonical
@@ -887,8 +898,13 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 
 	var cached domain.Stream
 	if err := p.cache.Get(ctx, cacheKey, &cached); err == nil {
-		p.markStage(health.StageStream, nil)
-		return &cached, nil
+		if !p.cachedSessionGone(ctx, &cached) {
+			p.markStage(health.StageStream, nil)
+			return &cached, nil
+		}
+		// Dead stealth session behind the cached URL (Layer B safety net) —
+		// serving it would 410 every segment. Drop and re-resolve.
+		_ = p.cache.Delete(ctx, cacheKey)
 	}
 
 	// engine=browser: the megaplay player resolves its stream id + (rotating)
@@ -965,6 +981,21 @@ func classifyStreamErr(err error) string {
 // stealth-scraper sidecar (DB engine=browser + a resolver wired).
 func (p *Provider) browserEnabled() bool {
 	return p.useBrowser != nil && p.browserResolve != nil && p.useBrowser()
+}
+
+// cachedSessionGone reports whether a cached stream's first source is a
+// stealth-scraper proxy URL whose session the sidecar declares gone. False
+// whenever the gate is disabled, the URL isn't sidecar-shaped, or the sidecar
+// says alive/rehydratable (fail-open lives in SessionAlive itself).
+func (p *Provider) cachedSessionGone(ctx context.Context, s *domain.Stream) bool {
+	if p.sessionAlive == nil || s == nil || len(s.Sources) == 0 {
+		return false
+	}
+	sid, ok := sidecar.SIDFromProxyURL(s.Sources[0].URL)
+	if !ok {
+		return false
+	}
+	return p.sessionAlive(ctx, sid) == "gone"
 }
 
 // streamViaBrowser resolves an embed/server URL through the sidecar and records

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -346,4 +347,46 @@ func snippet(b []byte) string {
 		return s[:160]
 	}
 	return s
+}
+
+// SIDFromProxyURL extracts the stealth-scraper session id from a sidecar
+// stream-proxy URL (http://stealth-scraper:3000/hls?sid=...&url=...). Returns
+// ok=false for every non-sidecar URL so callers can gate cheaply.
+func SIDFromProxyURL(rawURL string) (string, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Path != "/hls" {
+		return "", false
+	}
+	sid := u.Query().Get("sid")
+	return sid, sid != ""
+}
+
+// SessionAlive reports the sidecar's liveness verdict for sid: "alive",
+// "rehydratable" or "gone". FAIL-OPEN: any transport/decode error returns
+// "alive" — a sidecar hiccup must not stampede cache re-resolves.
+func (c *Client) SessionAlive(ctx context.Context, sid string) string {
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodGet, c.baseURL+"/session/"+url.PathEscape(sid)+"/alive", nil)
+	if err != nil {
+		return "alive"
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "alive"
+	}
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "alive"
+	}
+	var out struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1024)).Decode(&out); err != nil {
+		return "alive"
+	}
+	switch out.State {
+	case "alive", "rehydratable", "gone":
+		return out.State
+	}
+	return "alive"
 }

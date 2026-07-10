@@ -2,7 +2,10 @@ package gogoanime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
@@ -89,6 +92,168 @@ func TestGetStreamWithGate_BrowserEngine_PicksMegaplayServer(t *testing.T) {
 	if st == nil || len(st.Sources) != 1 {
 		t.Error("want a stream with 1 source")
 	}
+}
+
+// streamCacheKey mirrors GetStream's cache-key derivation so tests can
+// pre-seed the fakeCache at the exact key GetStream will look up.
+func streamCacheKey(providerID, episodeID, serverID string) string {
+	h := sha256.Sum256([]byte(serverID))
+	return fmt.Sprintf("stream:%s:%s:%s:%s", providerName, providerID, episodeID, hex.EncodeToString(h[:8]))
+}
+
+// newGatedBrowserProvider builds a Provider directly (bypassing
+// newBrowserProvider, which doesn't expose the underlying fakeCache or accept
+// a SessionAlive closure) so the dead-sid gate tests can pre-seed the cache
+// and assert on Delete calls.
+func newGatedBrowserProvider(t *testing.T, resolve BrowserResolveFunc, sessionAlive func(context.Context, string) string) (*Provider, *fakeCache) {
+	t.Helper()
+	log := newTestLogger(t)
+	fc := newFakeCache()
+	p, err := New(Deps{
+		HTTP:           domain.NewBaseHTTPClient(log, domain.WithMaxRetries(0)),
+		Embeds:         domain.NewRegistry(),
+		MalSync:        &fakeMalSync{mappings: map[string]string{}, misses: map[string]bool{}},
+		Cache:          fc,
+		Log:            log,
+		UseBrowser:     func() bool { return true },
+		BrowserResolve: resolve,
+		SessionAlive:   sessionAlive,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return p, fc
+}
+
+// TestGetStream_CachedDeadSidRefetches: a cache hit whose source URL embeds a
+// stealth-scraper sid that the sidecar reports "gone" must be treated as a
+// cache MISS — entry deleted, browser resolve re-run. Any other state (or a
+// nil SessionAlive) serves the cache untouched.
+func TestGetStream_CachedDeadSidRefetches(t *testing.T) {
+	t.Parallel()
+
+	const providerID, episodeID, serverID = "pid", "eid", "https://megaplay.buzz/stream/s-2/1/sub"
+	cacheKey := streamCacheKey(providerID, episodeID, serverID)
+	cachedStream := domain.Stream{
+		Sources: []domain.Source{{URL: "http://stealth-scraper:3000/hls?sid=abc123def456abc123def456abc12345&url=y", Type: "hls"}},
+	}
+	plainCDNStream := domain.Stream{
+		Sources: []domain.Source{{URL: "https://vault-99.owocdn.top/stream/uwu.m3u8", Type: "hls"}},
+	}
+
+	t.Run("gone -> refetches and deletes stale entry", func(t *testing.T) {
+		t.Parallel()
+		var resolveCalls int
+		fresh := okStream()
+		p, fc := newGatedBrowserProvider(t,
+			func(context.Context, string, domain.Category) (*domain.Stream, error) {
+				resolveCalls++
+				return fresh, nil
+			},
+			func(context.Context, string) string { return "gone" },
+		)
+		if err := fc.Set(context.Background(), cacheKey, cachedStream, 0); err != nil {
+			t.Fatalf("seed cache: %v", err)
+		}
+		st, err := p.GetStream(context.Background(), providerID, episodeID, serverID, domain.CategorySub)
+		if err != nil {
+			t.Fatalf("GetStream: %v", err)
+		}
+		if resolveCalls != 1 {
+			t.Errorf("BrowserResolve calls = %d; want 1", resolveCalls)
+		}
+		if st.Sources[0].URL != fresh.Sources[0].URL {
+			t.Errorf("got stale cached stream, want fresh resolve result")
+		}
+		deleted := fc.snapshotDeleted()
+		if len(deleted) == 0 || deleted[0] != cacheKey {
+			t.Errorf("deleted = %v; want first delete to be %q", deleted, cacheKey)
+		}
+	})
+
+	t.Run("alive -> serves cache untouched", func(t *testing.T) {
+		t.Parallel()
+		var resolveCalls int
+		p, fc := newGatedBrowserProvider(t,
+			func(context.Context, string, domain.Category) (*domain.Stream, error) {
+				resolveCalls++
+				return okStream(), nil
+			},
+			func(context.Context, string) string { return "alive" },
+		)
+		if err := fc.Set(context.Background(), cacheKey, cachedStream, 0); err != nil {
+			t.Fatalf("seed cache: %v", err)
+		}
+		st, err := p.GetStream(context.Background(), providerID, episodeID, serverID, domain.CategorySub)
+		if err != nil {
+			t.Fatalf("GetStream: %v", err)
+		}
+		if resolveCalls != 0 {
+			t.Errorf("BrowserResolve calls = %d; want 0 (cache should be served)", resolveCalls)
+		}
+		if st.Sources[0].URL != cachedStream.Sources[0].URL {
+			t.Errorf("got %q; want cached URL %q", st.Sources[0].URL, cachedStream.Sources[0].URL)
+		}
+		if len(fc.snapshotDeleted()) != 0 {
+			t.Errorf("deleted = %v; want none", fc.snapshotDeleted())
+		}
+	})
+
+	t.Run("nil SessionAlive -> gate disabled, serves cache untouched", func(t *testing.T) {
+		t.Parallel()
+		var resolveCalls int
+		p, fc := newGatedBrowserProvider(t,
+			func(context.Context, string, domain.Category) (*domain.Stream, error) {
+				resolveCalls++
+				return okStream(), nil
+			},
+			nil,
+		)
+		if err := fc.Set(context.Background(), cacheKey, cachedStream, 0); err != nil {
+			t.Fatalf("seed cache: %v", err)
+		}
+		st, err := p.GetStream(context.Background(), providerID, episodeID, serverID, domain.CategorySub)
+		if err != nil {
+			t.Fatalf("GetStream: %v", err)
+		}
+		if resolveCalls != 0 {
+			t.Errorf("BrowserResolve calls = %d; want 0 (gate disabled)", resolveCalls)
+		}
+		if st.Sources[0].URL != cachedStream.Sources[0].URL {
+			t.Errorf("got %q; want cached URL %q", st.Sources[0].URL, cachedStream.Sources[0].URL)
+		}
+	})
+
+	t.Run("no sid in cached URL -> SessionAlive not called, serves cache", func(t *testing.T) {
+		t.Parallel()
+		var resolveCalls, aliveCalls int
+		p, fc := newGatedBrowserProvider(t,
+			func(context.Context, string, domain.Category) (*domain.Stream, error) {
+				resolveCalls++
+				return okStream(), nil
+			},
+			func(context.Context, string) string {
+				aliveCalls++
+				return "gone"
+			},
+		)
+		if err := fc.Set(context.Background(), cacheKey, plainCDNStream, 0); err != nil {
+			t.Fatalf("seed cache: %v", err)
+		}
+		st, err := p.GetStream(context.Background(), providerID, episodeID, serverID, domain.CategorySub)
+		if err != nil {
+			t.Fatalf("GetStream: %v", err)
+		}
+		if aliveCalls != 0 {
+			t.Errorf("SessionAlive calls = %d; want 0 (non-sidecar URL)", aliveCalls)
+		}
+		if resolveCalls != 0 {
+			t.Errorf("BrowserResolve calls = %d; want 0", resolveCalls)
+		}
+		if st.Sources[0].URL != plainCDNStream.Sources[0].URL {
+			t.Errorf("got %q; want cached URL %q", st.Sources[0].URL, plainCDNStream.Sources[0].URL)
+		}
+	})
 }
 
 func TestPickBrowserEmbed(t *testing.T) {

@@ -14,11 +14,12 @@ import (
 // providers. Order-sensitive logs (getLog/setLog) capture every Get/Set call
 // so assertions can verify the cache key shapes.
 type fakeCache struct {
-	mu     sync.Mutex
-	data   map[string][]byte
-	expiry map[string]time.Time
-	getLog []string
-	setLog []string
+	mu      sync.Mutex
+	data    map[string][]byte
+	expiry  map[string]time.Time
+	getLog  []string
+	setLog  []string
+	deleted []string
 }
 
 func newFakeCache() *fakeCache {
@@ -62,6 +63,7 @@ func (f *fakeCache) Set(ctx context.Context, key string, value interface{}, ttl 
 func (f *fakeCache) Delete(ctx context.Context, keys ...string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.deleted = append(f.deleted, keys...)
 	for _, k := range keys {
 		delete(f.data, k)
 		delete(f.expiry, k)
@@ -115,6 +117,14 @@ func (f *fakeCache) snapshotGetLog() []string {
 	defer f.mu.Unlock()
 	cp := make([]string, len(f.getLog))
 	copy(cp, f.getLog)
+	return cp
+}
+
+func (f *fakeCache) snapshotDeleted() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cp := make([]string, len(f.deleted))
+	copy(cp, f.deleted)
 	return cp
 }
 

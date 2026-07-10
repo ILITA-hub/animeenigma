@@ -358,6 +358,7 @@ func main() {
 		Probe:          nil,
 		UseBrowser:     gogoUseBrowser,
 		BrowserResolve: gogoBrowserResolve,
+		SessionAlive:   stealthClient.SessionAlive,
 	})
 	if err != nil {
 		log.Fatalw("failed to construct Gogoanime provider", "error", err)
