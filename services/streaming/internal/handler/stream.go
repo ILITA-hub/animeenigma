@@ -6,7 +6,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
@@ -39,6 +41,22 @@ type StreamHandler struct {
 
 func NewStreamHandler(streamingService *service.StreamingService, log *logger.Logger) *StreamHandler {
 	return NewStreamHandlerWithSessions(streamingService, nil, log)
+}
+
+// parseSolodcdnEdges splits STREAMING_SOLODCDN_EDGES ("p12,p13,p14") into edge
+// labels, trimming blanks. An empty/unset value yields nil so videoutils applies
+// its built-in default pool (defaultSolodcdnEdges).
+func parseSolodcdnEdges(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var edges []string
+	for _, e := range strings.Split(raw, ",") {
+		if e = strings.TrimSpace(e); e != "" {
+			edges = append(edges, e)
+		}
+	}
+	return edges
 }
 
 // minioHost strips the optional port from a MinIO endpoint
@@ -76,6 +94,15 @@ func NewStreamHandlerWithSessions(streamingService *service.StreamingService, hl
 				proxyCfg.FirstPartyHosts = append(proxyCfg.FirstPartyHosts, host)
 			}
 		}
+	}
+
+	// Layer A — solodcdn edge rotation (AUTO-562 playback self-healing). The
+	// sibling-edge pool comes from STREAMING_SOLODCDN_EDGES (default p12,p13,p14);
+	// each rotation the shared proxy performs is folded into
+	// proxy_edge_rotations_total here, keeping libs/videoutils Prometheus-free.
+	proxyCfg.SolodcdnEdges = parseSolodcdnEdges(os.Getenv("STREAMING_SOLODCDN_EDGES"))
+	proxyCfg.OnEdgeRotation = func(from, to, outcome string) {
+		metrics.ProxyEdgeRotations.WithLabelValues(from, to, outcome).Inc()
 	}
 
 	return &StreamHandler{

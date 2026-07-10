@@ -61,6 +61,24 @@ type ProxyConfig struct {
 	// exempts EXACTLY these hosts; every other host is blocked from dialing a
 	// private/loopback/link-local address. Match is exact (case-insensitive).
 	FirstPartyHosts []string `json:"first_party_hosts" yaml:"first_party_hosts"`
+
+	// SolodcdnEdges is the sibling-edge pool for Kodik/solodcdn edge rotation
+	// (Layer A of the playback self-healing design, AUTO-562). When a
+	// p<N>.solodcdn.com edge answers >=500 for a path, the HLS proxy re-fetches
+	// the identical path on these sibling edges (skipping the one that failed,
+	// capped at maxSolodcdnRotations). Empty => the built-in default
+	// (defaultSolodcdnEdges). The streaming service populates this from
+	// STREAMING_SOLODCDN_EDGES.
+	SolodcdnEdges []string `json:"solodcdn_edges" yaml:"solodcdn_edges"`
+
+	// OnEdgeRotation, when set, is invoked once per attempted solodcdn edge
+	// rotation with (fromEdge, toEdge, outcome) where outcome is one of
+	// "success" (sibling served <400), "fail" (sibling also >=400), or "error"
+	// (transport error reaching the sibling). It is the observability seam the
+	// streaming service uses to emit proxy_edge_rotations_total WITHOUT this
+	// shared lib taking a Prometheus dependency — mirrors UpstreamSigner. Not
+	// serialized.
+	OnEdgeRotation func(from, to, outcome string) `json:"-" yaml:"-"`
 }
 
 // fetchURLFor returns the URL the proxy should actually GET for sourceURL:
@@ -523,6 +541,112 @@ func (e *DomainNotAllowedError) Error() string {
 	return fmt.Sprintf("domain not allowed for HLS proxy: %s", e.Domain)
 }
 
+// solodcdnEdgeRe matches the rotating Kodik ad-free edge hosts
+// p<N>.solodcdn.com (p12, p13, p14, ...). ONLY these hosts are eligible for
+// edge rotation — the anchored pattern is what fences AUTO-562's retry to the
+// solodcdn family and keeps every other CDN path a no-op.
+var solodcdnEdgeRe = regexp.MustCompile(`^p\d+\.solodcdn\.com$`)
+
+// defaultSolodcdnEdges is the fallback edge pool used when ProxyConfig.SolodcdnEdges
+// is empty (STREAMING_SOLODCDN_EDGES unset). Treat as read-only.
+var defaultSolodcdnEdges = []string{"p12", "p13", "p14"}
+
+// maxSolodcdnRotations caps how many sibling edges we try after the first 5xx.
+const maxSolodcdnRotations = 2
+
+// edgesOrDefault returns the configured edge pool, or the built-in default when
+// none is configured.
+func edgesOrDefault(edges []string) []string {
+	if len(edges) == 0 {
+		return defaultSolodcdnEdges
+	}
+	return edges
+}
+
+// maybeRotateSolodcdnEdge implements Layer A of the playback self-healing design
+// (docs/superpowers/specs/2026-07-10-playback-self-healing-design.md, AUTO-562):
+// when the first upstream response is >=500 AND the request host is a
+// p<N>.solodcdn.com edge, it re-fetches the identical path on sibling edges
+// (skipping the one that failed), capped at maxSolodcdnRotations, and returns
+// the first response that comes back <500. It is a no-op for a <500 response or
+// a non-solodcdn host, so every EN/Raw/Hanime/ae proxy path through this shared
+// lib is untouched. 4xx is never retried: only >=500 enters the loop, and a
+// sibling that answers <500 (INCLUDING a 4xx) stops it. Every superseded
+// response body is drained+closed; the returned response always carries a live
+// body for the caller to process. Each attempt fires the OnEdgeRotation hook
+// with (fromEdge, toEdge, outcome).
+func (p *VideoProxy) maybeRotateSolodcdnEdge(resp *http.Response, sourceURL string, do func(siblingURL string) (*http.Response, error)) *http.Response {
+	if resp.StatusCode < 500 {
+		return resp
+	}
+	parsed, err := url.Parse(sourceURL)
+	if err != nil {
+		return resp
+	}
+	host := strings.ToLower(parsed.Host)
+	if colon := strings.LastIndex(host, ":"); colon != -1 {
+		host = host[:colon] // strip any :port before matching
+	}
+	if !solodcdnEdgeRe.MatchString(host) {
+		return resp
+	}
+	fromEdge := host[:strings.IndexByte(host, '.')] // "p12.solodcdn.com" -> "p12"
+
+	current := resp
+	rotations := 0
+	for _, edge := range edgesOrDefault(p.config.SolodcdnEdges) {
+		if rotations >= maxSolodcdnRotations {
+			break
+		}
+		if edge == fromEdge {
+			continue // never retry the edge that just failed
+		}
+		rotations++
+
+		sibling := *parsed
+		sibling.Host = edge + ".solodcdn.com"
+		siblingURL := sibling.String()
+
+		sResp, sErr := do(siblingURL)
+		if sErr != nil {
+			// Transport error reaching the sibling: keep the current response
+			// (its body is still live) and try the next edge.
+			p.reportEdgeRotation(fromEdge, edge, "error")
+			continue
+		}
+		if sResp.StatusCode < 500 {
+			outcome := "success"
+			if sResp.StatusCode >= 400 {
+				outcome = "fail" // a 4xx is authoritative — stop, but it didn't heal
+			}
+			p.reportEdgeRotation(fromEdge, edge, outcome)
+			drainClose(current.Body)
+			return sResp
+		}
+		// Sibling is also >=500: adopt it as the current response (so its body
+		// stays live for the caller's HTML/error detection) and keep rotating.
+		p.reportEdgeRotation(fromEdge, edge, "fail")
+		drainClose(current.Body)
+		current = sResp
+	}
+	return current
+}
+
+// reportEdgeRotation fires the OnEdgeRotation observability hook when configured.
+func (p *VideoProxy) reportEdgeRotation(from, to, outcome string) {
+	if p.config.OnEdgeRotation != nil {
+		p.config.OnEdgeRotation(from, to, outcome)
+	}
+}
+
+// drainClose drains a small bounded prefix of a superseded upstream body before
+// closing it, so the underlying keep-alive connection can be returned to the
+// pool instead of being torn down.
+func drainClose(body io.ReadCloser) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(body, 8*1024))
+	_ = body.Close()
+}
+
 // ProxyWithReferer proxies a stream with a custom Referer header
 // This is needed for HLS streams that require specific referer for authentication
 func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) error {
@@ -552,34 +676,45 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 		return 0, 0, &DomainNotAllowedError{Domain: parsed.Host}
 	}
 
-	// Create upstream request (fetch URL may be a presigned rewrite of
-	// sourceURL for self-hosted MinIO; sourceURL itself stays the base for
-	// M3U8 rewriting + provenance below).
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.fetchURLFor(sourceURL), nil)
-	if err != nil {
-		return 0, 0, fmt.Errorf("create request: %w", err)
-	}
-
-	// Set headers for upstream request
-	req.Header.Set("User-Agent", p.config.UserAgent)
-	if referer != "" {
-		req.Header.Set("Referer", referer)
-		// Also set Origin which some CDNs check
-		if parsedReferer, err := url.Parse(referer); err == nil {
-			req.Header.Set("Origin", parsedReferer.Scheme+"://"+parsedReferer.Host)
+	// Build an upstream GET for a given fetch URL, applying the same UA/Referer/
+	// Origin/Range headers. Factored out so solodcdn edge rotation (below) can
+	// re-issue the identical request against a sibling edge host. The fetch URL
+	// may be a presigned rewrite of the source for self-hosted MinIO; the
+	// original sourceURL stays the base for M3U8 rewriting + provenance below.
+	doUpstream := func(fetchURL string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchURL, nil)
+		if err != nil {
+			return nil, err
 		}
-	}
-
-	// Handle range requests for seeking
-	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
-		req.Header.Set("Range", rangeHeader)
+		req.Header.Set("User-Agent", p.config.UserAgent)
+		if referer != "" {
+			req.Header.Set("Referer", referer)
+			// Also set Origin which some CDNs check
+			if parsedReferer, err := url.Parse(referer); err == nil {
+				req.Header.Set("Origin", parsedReferer.Scheme+"://"+parsedReferer.Host)
+			}
+		}
+		// Handle range requests for seeking
+		if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+			req.Header.Set("Range", rangeHeader)
+		}
+		return p.client.Do(req)
 	}
 
 	// Make upstream request
-	resp, err := p.client.Do(req)
+	resp, err := doUpstream(p.fetchURLFor(sourceURL))
 	if err != nil {
 		return 0, 0, fmt.Errorf("upstream request: %w", err)
 	}
+
+	// solodcdn edge self-heal (AUTO-562): a p<N>.solodcdn.com edge that answers
+	// >=500 for a path often has a healthy sibling edge serving the identical
+	// path (verified live 2026-07-10: p12 302→p14 200). Retry siblings before
+	// surfacing the 502. No-op for every non-solodcdn host and every <500
+	// response, so EN/Raw/Hanime/ae paths through this shared lib are untouched.
+	resp = p.maybeRotateSolodcdnEdge(resp, sourceURL, func(siblingURL string) (*http.Response, error) {
+		return doUpstream(p.fetchURLFor(siblingURL))
+	})
 	defer resp.Body.Close()
 
 	// Detect upstream errors (403, 5xx, etc.) — don't forward garbage to HLS.js
