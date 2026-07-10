@@ -1059,7 +1059,7 @@ services:
       retries: 3
 
   # Degradation governor (graceful-degradation Phase 2,
-  # docs/superpowers/specs/2026-07-10-graceful-degradation-design.md) — port 8099.
+  # docs/superpowers/specs/2026-07-10-graceful-degradation-design.md) — port 8100.
   # Polls the ae:* Prometheus recording rules, applies enter-fast/exit-slow
   # hysteresis + the owner override (bin/degradation-override.sh), and
   # publishes the platform degradation level: Redis ae:degradation:level
@@ -1076,18 +1076,18 @@ services:
     mem_limit: 128m
     restart: unless-stopped
     environment:
-      SERVER_PORT: 8099
+      SERVER_PORT: 8100
       REDIS_HOST: redis
       GOVERNOR_PROMETHEUS_URL: http://prometheus:9090/prometheus
       GOVERNOR_ANALYTICS_URL: http://analytics:8092
       TRACING_ENABLED: "true"
     ports:
-      - "127.0.0.1:8099:8099"
+      - "127.0.0.1:8100:8100"
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8099/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8100/health"]
       interval: 30s
       timeout: 5s
       retries: 3

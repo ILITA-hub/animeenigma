@@ -14,7 +14,7 @@ type SnapshotProvider interface {
 }
 
 // StatusHandler serves the current published degradation state. Consumed for
-// debugging (host 127.0.0.1:8099) and by Docker-network peers that prefer HTTP
+// debugging (host 127.0.0.1:8100) and by Docker-network peers that prefer HTTP
 // over Redis; not gateway-routed.
 type StatusHandler struct {
 	gov SnapshotProvider

@@ -92,7 +92,7 @@ scrape_configs:
   # rendered on the Degradation Overview dashboard.
   - job_name: 'governor'
     static_configs:
-      - targets: ['governor:8099']
+      - targets: ['governor:8100']
     metrics_path: /metrics
 
   - job_name: 'library'

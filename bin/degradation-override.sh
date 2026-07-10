@@ -31,7 +31,7 @@ case "$cmd" in
       echo "override        : none"
     fi
     # Live governor view (richer: raw signals, hysteresis target, prom health).
-    curl -sf --max-time 3 http://127.0.0.1:8099/api/degradation/status 2>/dev/null \
+    curl -sf --max-time 3 http://127.0.0.1:8100/api/degradation/status 2>/dev/null \
       | python3 -m json.tool 2>/dev/null || true
     ;;
   set)

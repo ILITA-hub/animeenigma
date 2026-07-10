@@ -66,6 +66,6 @@ COPY --from=builder /governor-api .
 RUN addgroup -S app && adduser -S -G app app && chown -R app:app /app
 USER app
 
-EXPOSE 8099
+EXPOSE 8100
 
 CMD ["./governor-api"]

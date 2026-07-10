@@ -35,7 +35,7 @@ static usage**, or they false-positive permanently on this box.
                           │                ├─▶ Grafana "Degradation / Overview" dashboard  (NEW, Phase 1)
                           │                ├─▶ Grafana alerts ─▶ maintenance-webhook       (NEW rules, existing pipe)
                           │                ▼
-                          └────── governor service :8099 (NEW, Phase 2)
+                          └────── governor service :8100 (NEW, Phase 2)
                                    poll rules via Prom HTTP API → hysteresis → level 0/1/2
                                    ├─▶ Redis  ae:degradation:level + reasons (+ manual override key)
                                    ├─▶ /metrics  ae_degradation_level, ae_degradation_reason_active{signal}
@@ -113,7 +113,7 @@ Both → existing maintenance-webhook route.
 
 ## Phase 2 — governor service (BUILT 2026-07-10, same day as Phase 1)
 
-Tiny Go service `services/governor/` (:8099, standard layout, `libs/{logger,metrics,cache}`):
+Tiny Go service `services/governor/` (:8100, standard layout, `libs/{logger,metrics,cache}`):
 evaluator loop (15 s tick) queries `ae:*` instant vectors via Prometheus HTTP API
 (`http://prometheus:9090/prometheus/api/v1/query`). Hysteresis: **enter fast, exit slow** — enter L1/L2
 after 4 consecutive breach ticks (~60 s), exit after 20 clean ticks (~5 min); manual override via Redis
@@ -142,7 +142,7 @@ Consumers poll Redis every ~5 s (all services already require Redis; nil-Redis �
 | Phase | Contents | UXΔ | CDI | MVQ |
 |-------|----------|-----|-----|-----|
 | **1 — Awareness (this change)** | node-exporter, recording rules, Degradation Overview dashboard, 2 host-pressure alerts, this spec | +1 (Better) — admin/owner visibility; end-users untouched | 0.01 * 8 | Griffin 90%/85% |
-| **2 — Governor** | services/governor :8099, Redis/level publication, CH transitions, dashboard state row upgrade | +1 (Better) | 0.04 * 13 | Basilisk 82%/78% |
+| **2 — Governor** | services/governor :8100, Redis/level publication, CH transitions, dashboard state row upgrade | +1 (Better) | 0.04 * 13 | Basilisk 82%/78% |
 | **3 — Actuation wave 1** | library claim-gate, Camoufox clamp, scheduler cron guard | +3 (Better) — critical UX survives spikes | 0.08 * 21 | Phoenix 88%/82% |
 
 Whole feature: UXΔ = +3 (Better) · CDI = 0.08 * 34 · MVQ = Phoenix 88%/82%.

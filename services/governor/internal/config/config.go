@@ -46,7 +46,7 @@ func (s ServerConfig) Address() string { return fmt.Sprintf("%s:%d", s.Host, s.P
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Server: ServerConfig{Host: getEnv("SERVER_HOST", "0.0.0.0"), Port: getEnvInt("SERVER_PORT", 8099)},
+		Server: ServerConfig{Host: getEnv("SERVER_HOST", "0.0.0.0"), Port: getEnvInt("SERVER_PORT", 8100)},
 		Redis: cache.Config{
 			Host: getEnv("REDIS_HOST", "redis"), Port: getEnvInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASSWORD", ""), DB: getEnvInt("REDIS_DB", 0),

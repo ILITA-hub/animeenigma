@@ -490,7 +490,7 @@ health: ## Check health of all services (docker-compose)
 	@curl -sf http://localhost:8093/health > /dev/null && echo "✓ gacha:8093" || echo "✗ gacha:8093"
 	@curl -sf http://localhost:8094/health > /dev/null && echo "✓ recs:8094" || echo "✗ recs:8094"
 	@curl -sf http://localhost:8098/health > /dev/null && echo "✓ policy:8098" || echo "✗ policy:8098"
-	@curl -sf http://localhost:8099/health > /dev/null && echo "✓ governor:8099" || echo "✗ governor:8099"
+	@curl -sf http://localhost:8100/health > /dev/null && echo "✓ governor:8100" || echo "✗ governor:8100"
 
 metrics: ## Fetch metrics from all services
 	@echo "=== Gateway Metrics ==="

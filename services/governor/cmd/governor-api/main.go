@@ -1,4 +1,4 @@
-// Package main is the governor entrypoint (port 8099).
+// Package main is the governor entrypoint (port 8100).
 //
 // governor — the graceful-degradation authority (Phase 2 of
 // docs/superpowers/specs/2026-07-10-graceful-degradation-design.md). Every
