@@ -95,6 +95,14 @@ scrape_configs:
       - targets: ['governor:8100']
     metrics_path: /metrics
 
+  # Camoufox sidecar (stealth-scraper). Was never scraped before 2026-07-10 —
+  # its stealth_* pool/RAM gauges and the Phase-3 ae_degradation_shed{camoufox}
+  # gauge feed the Degradation Overview heavy-actors + shed panels.
+  - job_name: 'stealth-scraper'
+    static_configs:
+      - targets: ['stealth-scraper:3000']
+    metrics_path: /metrics
+
   - job_name: 'library'
     static_configs:
       - targets: ['library:8089']
