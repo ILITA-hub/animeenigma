@@ -481,6 +481,7 @@ function cardTitle(card: SpotlightCard): string {
   switch (card.type) {
     case 'featured':
     case 'random_tail':
+    case 'curated':
       return getLocalizedTitle(
         card.data.anime.name,
         card.data.anime.name_ru,
@@ -505,12 +506,6 @@ function cardTitle(card: SpotlightCard): string {
         card.data.anime.name_jp,
       )
     case 'continue_watching_new':
-      return getLocalizedTitle(
-        card.data.anime.name,
-        card.data.anime.name_ru,
-        card.data.anime.name_jp,
-      )
-    case 'curated':
       return getLocalizedTitle(
         card.data.anime.name,
         card.data.anime.name_ru,
