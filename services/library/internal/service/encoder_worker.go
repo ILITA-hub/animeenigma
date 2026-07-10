@@ -355,7 +355,7 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 		p.failJob(ctx, job, "upload_error", err.Error())
 		return
 	}
-	uploadBytes := sumFileSizes(files)
+	uploadBytes := SumFileSizes(files)
 	if p.metrics != nil {
 		p.metrics.AddUploadBytes(uploadBytes)
 	}
@@ -474,12 +474,12 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 	}
 }
 
-// sumFileSizes totals the on-disk size of every path, skipping any that can't be
+// SumFileSizes totals the on-disk size of every path, skipping any that can't be
 // stat'd. The storage service upload path returns only the resolved backend id
 // (not a byte count), so the encoder recomputes the uploaded volume here for the
 // library_upload_bytes_total metric — the files still exist on disk at this point
 // (temp-dir cleanup runs later, in step 10).
-func sumFileSizes(paths []string) int64 {
+func SumFileSizes(paths []string) int64 {
 	var total int64
 	for _, p := range paths {
 		if st, err := os.Stat(p); err == nil {

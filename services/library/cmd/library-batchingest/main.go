@@ -263,7 +263,7 @@ func ingestOne(
 		out.kind, out.msg = "fail", fmt.Sprintf("upload %s: %v", prefix, err)
 		return
 	}
-	uploadedBytes := sumFileSizes(files)
+	uploadedBytes := service.SumFileSizes(files)
 
 	if !exists {
 		dur := result.DurationSec
@@ -296,19 +296,6 @@ func ingestOne(
 		"size_bytes", result.SizeBytes, "upload_bytes", uploadedBytes, "forced", force)
 	out.kind = "done"
 	return
-}
-
-// sumFileSizes totals the on-disk size of every path (skipping unreadable ones).
-// The storage service upload path returns only the resolved backend id, so this
-// CLI recomputes the uploaded volume for its per-episode log line.
-func sumFileSizes(paths []string) int64 {
-	var total int64
-	for _, p := range paths {
-		if st, err := os.Stat(p); err == nil {
-			total += st.Size()
-		}
-	}
-	return total
 }
 
 // resolveJobs walks dir (non-recursive + one level) and maps each matching
