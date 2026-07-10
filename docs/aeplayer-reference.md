@@ -115,6 +115,8 @@ GROUP_PRIMARY_LANG = { en:'en', ru:'ru', adult:'en', jp:'ja', firstparty:'ja' } 
 | `jp` | Raw (AllAnime raw) | JA | common |
 | `firstparty` | `ae` (self-hosted) | EN, RU, JA | common |
 
+> **ae servers (2026-07-10):** `ae` episodes live on one or both storage backends — local MinIO (`storage='minio'`) and external S3 (`s3.firstvds.ru`, `storage='s3'`). When an episode exists in BOTH, the ae stream response carries `servers:[{id:'minio',label:'Local'},{id:'s3',label:'Cloud'}]` and the Source panel's generic Server section lights up (combo.server → `&server=` on `/ae/stream`; default = Local). Single-copy episodes get no server list. Auto/torrent ingests default to S3; admin manual jobs default to MinIO with a per-job picker. Placement authority: `services/storage` (:8099).
+
 To **add a provider to a group**, you change the backend `group` it emits — and if
 it's a brand-new group, you add one row to each of the three maps above. Adding it
 to the wrong group silently breaks language filtering.

@@ -74,6 +74,12 @@ Player → streaming HLS proxy → backend. `libs/videoutils` presign seam becom
 - Pool eviction applies only to `storage='minio'` episodes; S3 content is never auto-evicted.
 - Env: storage service gets `STORAGE_MINIO_*` + `STORAGE_S3_*` (S3 side defaults from existing `S3_*` vars in `docker/.env`).
 
+## Errata (as-built, 2026-07-10)
+
+- `GET /internal/storage/resolve` was built as `GET /internal/storage/base-urls` + client-side `URLFor` (cacheable, fewer round-trips).
+- The migration cmd lives at `services/library/cmd/library-storage-migrate` (needs the library DB), not `services/storage/cmd/storage-migrate`; the storage service gained a `POST /internal/storage/copy` cross-backend endpoint for it.
+- The streaming proxy does NOT add the S3 host to `FirstPartyHosts` (public host needs no SSRF-guard exemption; presigning is independent of that list).
+
 ## Phasing
 
 1. **Phase 1:** `services/storage` + library refactor + catalog/streaming/player server dimension + autocache migration.

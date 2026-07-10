@@ -269,6 +269,7 @@ After ANY implementation work (features, bug fixes, refactoring), **always invok
 | notifications | 8090 | /metrics | Generic notification engine (new episodes, future types) |
 | watch-together | 8091 | /metrics | Co-watch service (Redis-only; rooms + sync + chat) |
 | recs | 8094 | /metrics | Recommendation engine (extracted from player, spec 2026-06-11) |
+| storage | 8099 | /metrics | Storage placement authority — user-content writes/moves/deletes across local MinIO + external S3 (`s3.firstvds.ru`); internal-only, no gateway route |
 | governor | 8100 | /metrics | Degradation governor (pressure level via Redis `ae:degradation:level`; spec 2026-07-10) |
 | web | 80 | - | Vue 3 frontend (nginx) |
 
