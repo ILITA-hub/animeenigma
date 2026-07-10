@@ -73,3 +73,129 @@ func TestAdminMaintenance_ListAndSet(t *testing.T) {
 		t.Errorf("gate settings missing opus: %s", string(env.Data.Settings))
 	}
 }
+
+// withID stamps a chi URL param "id" onto req (mirrors the RouteContext
+// injection the router does for real requests) and returns the wrapped req.
+func withID(req *http.Request, id string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+// 1. Admin SetRoutine with a malformed body → 400 before the service is touched.
+func TestAdminSetRoutine_invalidJSON(t *testing.T) {
+	admin, _ := seededMaintHandlers(t)
+	req := withID(httptest.NewRequest(http.MethodPut, "/x", strings.NewReader("not json")), "provider_recovery")
+	rec := httptest.NewRecorder()
+	admin.SetRoutine(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d; want 400, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// 2. Admin SetRoutine on an unknown id → 404 (liberrors.NotFound propagates
+// through httputil.Error, not flattened to 500).
+func TestAdminSetRoutine_unknownID(t *testing.T) {
+	admin, _ := seededMaintHandlers(t)
+	req := withID(httptest.NewRequest(http.MethodPut, "/x", strings.NewReader(`{"enabled":true,"settings":{}}`)), "nope")
+	rec := httptest.NewRecorder()
+	admin.SetRoutine(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d; want 404, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// 3. Admin SetRoutine with non-object settings → 400 (the service's
+// isJSONObject rejection surfaces as InvalidInput → 400 via httputil.Error).
+func TestAdminSetRoutine_nonObjectSettings(t *testing.T) {
+	admin, _ := seededMaintHandlers(t)
+	req := withID(httptest.NewRequest(http.MethodPut, "/x", strings.NewReader(`{"enabled":true,"settings":null}`)), "provider_recovery")
+	rec := httptest.NewRecorder()
+	admin.SetRoutine(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d; want 400, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// 4. Internal Gate on an unknown id → 404.
+func TestInternalGate_unknownID(t *testing.T) {
+	_, internal := seededMaintHandlers(t)
+	req := withID(httptest.NewRequest(http.MethodGet, "/x", nil), "nope")
+	rec := httptest.NewRecorder()
+	internal.Gate(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d; want 404, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// 5. Internal SetStatus happy path: 200, and it must NOT clobber enabled/settings
+// — a subsequent Gate still decodes and reads back its seed defaults, and the
+// admin List reflects the written LastSummary.
+func TestInternalSetStatus_happyPathPreservesIntent(t *testing.T) {
+	admin, internal := seededMaintHandlers(t)
+
+	req := withID(httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{"ok":true,"summary":"synced"}`)), "git_autosync")
+	rec := httptest.NewRecorder()
+	internal.SetStatus(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("setstatus code = %d; want 200, body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Gate still decodes cleanly (enabled/settings untouched by the status write).
+	greq := withID(httptest.NewRequest(http.MethodGet, "/x", nil), "git_autosync")
+	grec := httptest.NewRecorder()
+	internal.Gate(grec, greq)
+	if grec.Code != http.StatusOK {
+		t.Fatalf("gate code = %d; want 200", grec.Code)
+	}
+	var genv struct {
+		Data struct {
+			Enabled  bool            `json:"enabled"`
+			Settings json.RawMessage `json:"settings"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(grec.Body.Bytes(), &genv); err != nil {
+		t.Fatalf("gate decode after setstatus: %v (%s)", err, grec.Body.String())
+	}
+	if !genv.Data.Enabled {
+		t.Errorf("setstatus clobbered enabled: git_autosync seed default is true, got false")
+	}
+
+	// LastSummary is observable through the admin List projection.
+	lrec := httptest.NewRecorder()
+	admin.List(lrec, httptest.NewRequest(http.MethodGet, "/api/admin/policy/maintenance/routines", nil))
+	var lenv struct {
+		Data struct {
+			Routines []domain.MaintenanceRoutine `json:"routines"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(lrec.Body.Bytes(), &lenv); err != nil {
+		t.Fatalf("list decode: %v (%s)", err, lrec.Body.String())
+	}
+	var found bool
+	for _, r := range lenv.Data.Routines {
+		if r.ID == "git_autosync" {
+			found = true
+			if r.LastSummary != "synced" {
+				t.Errorf("LastSummary = %q; want %q", r.LastSummary, "synced")
+			}
+			if r.LastOK == nil || !*r.LastOK {
+				t.Errorf("LastOK = %v; want true", r.LastOK)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("git_autosync missing from list: %s", lrec.Body.String())
+	}
+}
+
+// 6. Internal SetStatus on an unknown id → 404.
+func TestInternalSetStatus_unknownID(t *testing.T) {
+	_, internal := seededMaintHandlers(t)
+	req := withID(httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{"ok":true,"summary":"x"}`)), "nope")
+	rec := httptest.NewRecorder()
+	internal.SetStatus(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d; want 404, body=%s", rec.Code, rec.Body.String())
+	}
+}
