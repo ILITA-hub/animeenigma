@@ -2,8 +2,11 @@ package domain
 
 import "time"
 
-// ProviderPolicy is the admin/machine intent dimension. disabled is the only
-// hard admin lock; auto<->manual are machine-driven by the probe state machine.
+// ProviderPolicy is the admin intent dimension. All three values are
+// admin-only (SQL/admin endpoint) — the probe state machine never mutates
+// policy (auto→manual demotion retired 2026-07-08). disabled is the hard
+// lock (not registered); manual parks a provider out of auto-failover while
+// keeping it hacker-selectable.
 type ProviderPolicy string
 
 const (
@@ -17,6 +20,7 @@ type ProviderHealth string
 
 const (
 	HealthUp         ProviderHealth = "up"
+	HealthDegraded   ProviderHealth = "degraded" // one failed probe, pending confirmation — transient, still failover-trusted
 	HealthRecovering ProviderHealth = "recovering"
 	HealthDown       ProviderHealth = "down"
 )
@@ -61,8 +65,9 @@ type ScraperProvider struct {
 	// former Enabled bool (migrated 2026-06-17). Controls failover participation:
 	// only StatusEnabled providers join the auto-failover chain.
 	Status ProviderStatus `gorm:"size:16;default:'enabled'" json:"status"`
-	// Policy/Health are the machine-managed self-healing dimensions (spec
-	// 2026-06-23). Status above is DERIVED for the wire via WireStatus().
+	// Health is machine-managed by the probe state machine (spec 2026-06-23,
+	// hysteresis 2026-07-08); Policy is admin-only. Status above is DERIVED
+	// for the wire via WireStatus().
 	Policy       ProviderPolicy `gorm:"size:16;default:'auto'" json:"policy"`
 	Health       ProviderHealth `gorm:"size:16;default:'up'" json:"health"`
 	HealthSince  time.Time      `json:"health_since"`
@@ -78,14 +83,14 @@ type ScraperProvider struct {
 	// AIProbeNotes is a free-form analysis field curated by the AI probe operator
 	// and surfaced as the "AI Probe Notes" column on the playback-health dashboard.
 	// No service logic reads it; routine catalog writes (health/policy/reason) never
-	// touch it, so it persists across auto-demote/promote cycles.
+	// touch it, so it persists across probe health cycles.
 	AIProbeNotes string `gorm:"column:ai_probe_notes" json:"ai_probe_notes"`
 	// LastTickMetrics is the JSON summary of the most recent probe tick (warmup/
 	// resolve/validate timings, throughput, CDN, quality), written by the
 	// probe-result handler and rendered on the Grafana "Last Tick Metrics" panel.
 	// Stored as text (the JSON blob); the panel casts ::jsonb. Empty until first
 	// probed under the warmup pipeline. Routine health/policy writes never touch
-	// it, so it persists across auto-demote/promote cycles (like ai_probe_notes).
+	// it, so it persists across probe health cycles (like ai_probe_notes).
 	LastTickMetrics string `gorm:"column:last_tick_metrics;type:text" json:"last_tick_metrics"`
 	// Capability traits (curated; refined per-title by live discovery in P2).
 	SupportsSub      bool   `json:"supports_sub"`
@@ -132,8 +137,11 @@ func (p ScraperProvider) IsDegraded() bool { return p.Status == StatusDegraded }
 // degraded). Disabled providers are not registered.
 func (p ScraperProvider) IsRegistered() bool { return p.Status != StatusDisabled }
 
-// Eligible reports auto-failover eligibility: policy auto AND health up.
-func (p ScraperProvider) Eligible() bool { return p.Policy == PolicyAuto && p.Health == HealthUp }
+// Eligible reports auto-failover eligibility: policy auto AND health up or
+// degraded (degraded is a warning, not a confirmed outage — stays trusted).
+func (p ScraperProvider) Eligible() bool {
+	return p.Policy == PolicyAuto && (p.Health == HealthUp || p.Health == HealthDegraded)
+}
 
 // Derived-state labels for the playback-health dashboard. These are the single
 // source of truth shared by the roster table's State column (the Postgres CASE
@@ -141,28 +149,29 @@ func (p ScraperProvider) Eligible() bool { return p.Policy == PolicyAuto && p.He
 // (StateCode) that feeds the "Provider State History" timeline.
 const (
 	StateUP         = "UP"         // auto + up: in auto-failover and healthy
-	StateRecovering = "Recovering" // health recovering (any policy)
-	StateDegraded   = "Degraded"   // manual-only: registered, out of auto-failover
-	StateDown       = "Down"       // auto + down: in auto-failover but failing
-	StateDisabled   = "Disabled"   // policy disabled: not registered
+	StateRecovering = "Recovering" // auto + recovering: climbing back after a confirmed outage
+	StateDegraded   = "Degraded"   // transient: one failed probe, pending confirmation (still in auto-failover)
+	StateDown       = "Down"       // auto + down: confirmed failing (two consecutive fails)
+	StateDisabled   = "Disabled"   // admin lock: policy manual or disabled
 )
 
 // DerivedState collapses (policy, health) into the dashboard's 5-state
 // lifecycle label. The branch ORDER is significant and mirrors the roster
 // table's SQL CASE one-for-one (docker/grafana/dashboards/playback-health.json):
-// disabled → UP(auto+up) → Recovering(any) → Down(auto+down) → Degraded(else).
+// Disabled(manual|disabled) → UP(auto+up) → Recovering → Degraded(auto+degraded)
+// → Down(else).
 func (p ScraperProvider) DerivedState() string {
 	switch {
-	case p.Policy == PolicyDisabled:
+	case p.Policy == PolicyDisabled || p.Policy == PolicyManual:
 		return StateDisabled
 	case p.Policy == PolicyAuto && p.Health == HealthUp:
 		return StateUP
 	case p.Health == HealthRecovering:
 		return StateRecovering
-	case p.Policy == PolicyAuto && p.Health == HealthDown:
-		return StateDown
-	default: // manual (up or down)
+	case p.Policy == PolicyAuto && p.Health == HealthDegraded:
 		return StateDegraded
+	default: // auto + down
+		return StateDown
 	}
 }
 
@@ -185,12 +194,17 @@ func (p ScraperProvider) StateCode() float64 {
 }
 
 // WireStatus derives the legacy tri-state the scraper failover gate consumes.
+// auto+degraded stays enabled — a single failed probe is a warning, not a
+// confirmed outage, and runtime failover already covers a genuine miss. Note
+// the deliberate axis split with DerivedState: manual shows as "Disabled" on
+// the dashboard but keeps degraded here, so hacker-mode selectability is
+// unchanged.
 func (p ScraperProvider) WireStatus() ProviderStatus {
 	switch p.Policy {
 	case PolicyDisabled:
 		return StatusDisabled
 	case PolicyAuto:
-		if p.Health == HealthUp {
+		if p.Health == HealthUp || p.Health == HealthDegraded {
 			return StatusEnabled
 		}
 		return StatusDegraded
@@ -207,6 +221,8 @@ func (p ScraperProvider) ProbeCadence(c CadenceConfig) time.Duration {
 	switch p.Health {
 	case HealthUp:
 		return c.Up
+	case HealthDegraded:
+		return c.Up // re-probe next cycle to confirm/clear (Phase-1 interim; Phase 2 replaces)
 	case HealthRecovering:
 		return c.Recovering
 	default: // down
@@ -223,8 +239,8 @@ func (p ScraperProvider) ProbeSample(c CadenceConfig) (int, bool) {
 		return 0, false
 	}
 	switch {
-	case p.Health == HealthUp:
-		return c.FullSample, false // full picture, no abort
+	case p.Health == HealthUp, p.Health == HealthDegraded:
+		return c.FullSample, false // full picture, no abort (degraded: honest confirm/clear)
 	case p.Health == HealthRecovering:
 		return c.RecoveringSample, true
 	case p.Policy == PolicyManual: // manual+down

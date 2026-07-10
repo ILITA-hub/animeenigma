@@ -42,8 +42,9 @@ type probeResultReq struct {
 // Response on success: {"success":true,"data":{"provider","policy","health"}}
 // Response on skip (disabled or !scraper_operated): {"success":true,"data":{..., "skipped":true}}
 //
-// The handler is idempotent: repeated calls with the same verdict converge
-// to the same state (ApplyVerdict is pure-functional over the DB row).
+// Repeated calls with the same verdict converge (fail walks up→degraded→down,
+// then down is absorbing; pass climbs back to up). Policy is admin-only and
+// never mutated here — ApplyVerdict advances health alone.
 func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *http.Request) {
 	var req probeResultReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Provider == "" {
@@ -75,8 +76,11 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 	if req.Reason != "" {
 		p.Reason = req.Reason
 	}
-	providerpolicy.ApplyVerdict(&p, req.Pass, now, h.cfg.DemoteAfter, h.cfg.PromoteAfter)
+	providerpolicy.ApplyVerdict(&p, req.Pass, now, h.cfg.PromoteAfter)
 
+	// policy/policy_since are no-op writes of the unchanged values (ApplyVerdict
+	// never mutates policy) — kept so the TOCTOU disabled-guard below retains
+	// the same Updates call shape.
 	updates := map[string]any{
 		"policy":         p.Policy,
 		"health":         p.Health,

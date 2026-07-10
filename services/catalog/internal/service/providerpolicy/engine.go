@@ -6,13 +6,22 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
-// ApplyHealth advances a provider's health from a probe pass/fail.
+// ApplyHealth advances a provider's health from a probe pass/fail, with
+// one-fail hysteresis on the way down:
+// up --fail--> degraded (pending confirmation) --fail--> down ;
+// degraded --pass--> up (false alarm cleared) ;
 // down --pass--> recovering ; recovering --pass after promoteAfter--> up ;
-// any fail --> down. HealthSince is reset only on a real state change.
+// recovering/down --fail--> down. HealthSince is reset only on a real
+// state change.
 func ApplyHealth(p *domain.ScraperProvider, pass bool, now time.Time, promoteAfter time.Duration) {
 	prev := p.Health
 	if !pass {
-		p.Health = domain.HealthDown
+		switch p.Health {
+		case domain.HealthUp:
+			p.Health = domain.HealthDegraded // first fail: warn, stay failover-trusted
+		default: // degraded, recovering, down, unseeded
+			p.Health = domain.HealthDown
+		}
 	} else {
 		switch p.Health {
 		case domain.HealthDown:
@@ -21,6 +30,8 @@ func ApplyHealth(p *domain.ScraperProvider, pass bool, now time.Time, promoteAft
 			if now.Sub(p.HealthSince) >= promoteAfter {
 				p.Health = domain.HealthUp
 			}
+		case domain.HealthDegraded:
+			p.Health = domain.HealthUp // one pass clears the pending warning
 		case domain.HealthUp:
 			// stay
 		default: // unseeded
@@ -32,25 +43,10 @@ func ApplyHealth(p *domain.ScraperProvider, pass bool, now time.Time, promoteAft
 	}
 }
 
-// ApplyPolicy advances policy from sustained health. disabled is immune.
-func ApplyPolicy(p *domain.ScraperProvider, now time.Time, demoteAfter time.Duration) {
-	switch p.Policy {
-	case domain.PolicyAuto:
-		if p.Health == domain.HealthDown && now.Sub(p.HealthSince) >= demoteAfter {
-			p.Policy = domain.PolicyManual
-			p.PolicySince = now
-		}
-	case domain.PolicyManual:
-		if p.Health == domain.HealthUp {
-			p.Policy = domain.PolicyAuto
-			p.PolicySince = now
-		}
-	}
-}
-
-// ApplyVerdict is the full per-probe transition: health, then policy, then stamp.
-func ApplyVerdict(p *domain.ScraperProvider, pass bool, now time.Time, demoteAfter, promoteAfter time.Duration) {
+// ApplyVerdict is the full per-probe transition: health, then stamp. Policy
+// is admin-only and never mutated here (the 24h auto→manual demotion and
+// manual→auto promotion were retired 2026-07-08 with the hysteresis redesign).
+func ApplyVerdict(p *domain.ScraperProvider, pass bool, now time.Time, promoteAfter time.Duration) {
 	ApplyHealth(p, pass, now, promoteAfter)
-	ApplyPolicy(p, now, demoteAfter)
 	p.LastProbedAt = now
 }

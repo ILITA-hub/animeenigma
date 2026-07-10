@@ -68,8 +68,9 @@ type setPolicyRequest struct {
 }
 
 // SetPolicy handles PUT /api/admin/scraper-providers/{name}/policy. The only
-// admin levers are auto/disabled — manual is a machine-set state driven by
-// the probe state machine, so it (and any other value) is rejected with 400.
+// levers exposed here are auto/disabled — manual is an SQL-only admin park
+// state (the probe machine never sets policy; auto demotion retired
+// 2026-07-08), so it (and any other value) is rejected with 400.
 // Health/HealthSince are left untouched; Policy + PolicySince change, and the
 // derived Status is written alongside them (see below).
 //

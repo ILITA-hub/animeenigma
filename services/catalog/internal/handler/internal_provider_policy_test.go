@@ -27,7 +27,6 @@ func newHandlerTestDB(t *testing.T) *gorm.DB {
 
 func testProviderPolicyCfg() config.ProviderPolicyConfig {
 	return config.ProviderPolicyConfig{
-		DemoteAfter:  24 * time.Hour,
 		PromoteAfter: 24 * time.Hour,
 		Cadence: domain.CadenceConfig{
 			Up:               6 * time.Hour,
@@ -68,11 +67,62 @@ func TestProbeResult_FlipsRow(t *testing.T) {
 	}
 	var p domain.ScraperProvider
 	db.First(&p, "name = ?", "gogoanime")
-	if p.Policy != domain.PolicyManual { // down >24h + fail -> demote
-		t.Fatalf("policy=%s want manual", p.Policy)
+	if p.Health != domain.HealthDown {
+		t.Fatalf("health=%s want down", p.Health)
+	}
+	if p.Policy != domain.PolicyAuto { // sustained down never demotes — policy is admin-only
+		t.Fatalf("policy=%s want auto", p.Policy)
 	}
 	if p.LastProbedAt.IsZero() {
 		t.Fatal("last_probed_at not stamped")
+	}
+}
+
+// TestProbeResult_FirstFailGoesDegraded is the hysteresis headline: a single
+// failed probe against a healthy auto provider lands `degraded` (a warning,
+// still in auto-failover), NOT `down`, and never touches policy.
+func TestProbeResult_FirstFailGoesDegraded(t *testing.T) {
+	db := newHandlerTestDB(t)
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{
+		Name:            "miruro",
+		Policy:          domain.PolicyAuto,
+		Health:          domain.HealthUp,
+		HealthSince:     time.Now().Add(-72 * time.Hour),
+		ScraperOperated: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	h := handler.NewInternalProviderPolicyHandler(db, testProviderPolicyCfg(), testNopLogger())
+	rr := httptest.NewRecorder()
+	body := strings.NewReader(`{"provider":"miruro","pass":false,"reason":"canary_false_negative"}`)
+	h.ProbeResult(rr, httptest.NewRequest("POST", "/internal/providers/probe-result", body))
+
+	if rr.Code != 200 {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Policy string `json:"policy"`
+			Health string `json:"health"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v (body=%s)", err, rr.Body.String())
+	}
+	if resp.Data.Health != string(domain.HealthDegraded) || resp.Data.Policy != string(domain.PolicyAuto) {
+		t.Fatalf("response (policy,health)=(%s,%s) want (auto,degraded)", resp.Data.Policy, resp.Data.Health)
+	}
+	var p domain.ScraperProvider
+	db.First(&p, "name = ?", "miruro")
+	if p.Health != domain.HealthDegraded || p.Policy != domain.PolicyAuto {
+		t.Fatalf("persisted (policy,health)=(%s,%s) want (auto,degraded)", p.Policy, p.Health)
+	}
+	if !p.Eligible() {
+		t.Fatal("degraded provider must stay failover-eligible")
 	}
 }
 

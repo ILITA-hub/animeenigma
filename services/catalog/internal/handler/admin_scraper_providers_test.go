@@ -92,8 +92,10 @@ func TestAdminScraperProviders_List(t *testing.T) {
 	if allanime["policy"] != "manual" || allanime["health"] != "recovering" {
 		t.Fatalf("allanime policy/health = %v/%v, want manual/recovering", allanime["policy"], allanime["health"])
 	}
-	if allanime["derived_state"] != domain.StateRecovering {
-		t.Fatalf("allanime derived_state = %v, want %v", allanime["derived_state"], domain.StateRecovering)
+	// manual is an admin lock: the dashboard band is Disabled regardless of
+	// health (hysteresis redesign 2026-07-08; WireStatus selectability unchanged).
+	if allanime["derived_state"] != domain.StateDisabled {
+		t.Fatalf("allanime derived_state = %v, want %v", allanime["derived_state"], domain.StateDisabled)
 	}
 }
 
@@ -244,9 +246,9 @@ func TestAdminScraperProviders_SetPolicy_UnknownName(t *testing.T) {
 	}
 }
 
-// TestAdminScraperProviders_SetPolicy_RejectsManual verifies manual is a
-// machine-set state and NOT an admin lever — same rejection path as any other
-// invalid value.
+// TestAdminScraperProviders_SetPolicy_RejectsManual verifies manual is an
+// SQL-only park state and NOT a lever of this endpoint — same rejection path
+// as any other invalid value.
 func TestAdminScraperProviders_SetPolicy_RejectsManual(t *testing.T) {
 	db := newAdminScraperProvidersTestDB(t)
 	if err := db.Create(&domain.ScraperProvider{Name: "gogoanime", Policy: domain.PolicyAuto, Health: domain.HealthUp}).Error; err != nil {

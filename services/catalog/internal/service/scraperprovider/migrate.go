@@ -730,11 +730,9 @@ func AddAnimejoyProviders(db *gorm.DB) error {
 //
 // Deliberately updates ONLY `description` — never `reason` (the probe/state-machine
 // overwrites `reason` on every cycle; only `description` is durable operator
-// context) and never `status`/`policy`/`health` (owned by the self-healing state
-// machine; PROVIDER_DEMOTE_AFTER will auto-demote policy=auto→manual on its own
-// after 24h of continued health=down, same as it would for any other failing
-// auto-policy provider — no need to fight it here). Guarded via the ledger so a
-// later operator's own description edit is never clobbered.
+// context) and never `status`/`policy`/`health` (health is owned by the probe
+// state machine, policy by the admin — no need to fight either here). Guarded
+// via the ledger so a later operator's own description edit is never clobbered.
 func MiruroCloudflareBlock(db *gorm.DB) error {
 	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
 		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
@@ -749,7 +747,7 @@ func MiruroCloudflareBlock(db *gorm.DB) error {
 	}
 	result := db.Model(&domain.ScraperProvider{}).
 		Where("name = ?", "miruro").
-		Update("description", "Miruro aggregator: AnimePahe/kwik.cx HLS via the kiwi server (vault-*.uwucdn HLS), 1080p, AES-128 encrypted segments served through the streaming proxy. EN sub. Playback-probed. As of 2026-07-02, www.miruro.tv sits behind a Cloudflare WAF managed-rule block on every path (including the bare homepage and static assets) — a hard 'Sorry, you have been blocked' firewall page, not a solvable Turnstile challenge, and identically reproduced by the live scraper's own properly-encoded requests. Was healthy through 2026-07-01T12:00Z. This is the T-28-04-01 threat doc.go already anticipated: the stdlib-only Go client (no headless browser, D3 gate 2) cannot pass it. A real fix needs routing miruro through the Camoufox stealth-scraper roster (v3.2-class change) — flagged for human review, not attempted in an automated recovery run. Self-healing state machine will auto-demote policy=auto→manual after 24h of continued health=down (PROVIDER_DEMOTE_AFTER) if the block persists.")
+		Update("description", "Miruro aggregator: AnimePahe/kwik.cx HLS via the kiwi server (vault-*.uwucdn HLS), 1080p, AES-128 encrypted segments served through the streaming proxy. EN sub. Playback-probed. As of 2026-07-02, www.miruro.tv sits behind a Cloudflare WAF managed-rule block on every path (including the bare homepage and static assets) — a hard 'Sorry, you have been blocked' firewall page, not a solvable Turnstile challenge, and identically reproduced by the live scraper's own properly-encoded requests. Was healthy through 2026-07-01T12:00Z. This is the T-28-04-01 threat doc.go already anticipated: the stdlib-only Go client (no headless browser, D3 gate 2) cannot pass it. A real fix needs routing miruro through the Camoufox stealth-scraper roster (v3.2-class change) — flagged for human review, not attempted in an automated recovery run.")
 	if result.Error != nil {
 		return fmt.Errorf("miruro cloudflare-block: %w", result.Error)
 	}
@@ -845,9 +843,9 @@ func MiruroBrowserRevival(db *gorm.DB) error {
 //
 // Deliberately updates ONLY `description` — never `reason` (the probe/state-machine
 // overwrites `reason` on every cycle; only `description` is durable operator
-// context) and never `status`/`policy`/`health` (owned by the self-healing state
-// machine). Guarded via the ledger so a later operator's own description edit is
-// never clobbered.
+// context) and never `status`/`policy`/`health` (health is owned by the probe
+// state machine, policy by the admin). Guarded via the ledger so a later
+// operator's own description edit is never clobbered.
 func AllanimeOkruCryptoBlock(db *gorm.DB) error {
 	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
 		return fmt.Errorf("migrate catalog_migration_guards: %w", err)

@@ -17,11 +17,14 @@ func TestWireStatus(t *testing.T) {
 		want   domain.ProviderStatus
 	}{
 		{"auto+up eligible", domain.PolicyAuto, domain.HealthUp, domain.StatusEnabled},
+		{"auto+degraded stays in failover", domain.PolicyAuto, domain.HealthDegraded, domain.StatusEnabled},
 		{"auto+down failing", domain.PolicyAuto, domain.HealthDown, domain.StatusDegraded},
 		{"auto+recovering", domain.PolicyAuto, domain.HealthRecovering, domain.StatusDegraded},
+		{"manual+up", domain.PolicyManual, domain.HealthUp, domain.StatusDegraded},
 		{"manual+down", domain.PolicyManual, domain.HealthDown, domain.StatusDegraded},
 		{"manual+recovering", domain.PolicyManual, domain.HealthRecovering, domain.StatusDegraded},
 		{"disabled", domain.PolicyDisabled, domain.HealthDown, domain.StatusDisabled},
+		{"disabled+up", domain.PolicyDisabled, domain.HealthUp, domain.StatusDisabled},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -47,6 +50,7 @@ func TestProbeCadenceAndSample(t *testing.T) {
 		wantFF      bool
 	}{
 		{"up", domain.PolicyAuto, domain.HealthUp, 6 * time.Hour, 5, false},
+		{"degraded re-probes next cycle", domain.PolicyAuto, domain.HealthDegraded, 6 * time.Hour, 5, false},
 		{"recovering", domain.PolicyManual, domain.HealthRecovering, 12 * time.Hour, 3, true},
 		{"manual-down", domain.PolicyManual, domain.HealthDown, 24 * time.Hour, 1, true},
 		{"failing auto-down", domain.PolicyAuto, domain.HealthDown, 6 * time.Hour, 5, true},
@@ -105,10 +109,11 @@ func TestDerivedStateAndCode(t *testing.T) {
 	}{
 		{"auto+up", domain.PolicyAuto, domain.HealthUp, domain.StateUP, 4},
 		{"auto+recovering", domain.PolicyAuto, domain.HealthRecovering, domain.StateRecovering, 3},
+		{"auto+degraded", domain.PolicyAuto, domain.HealthDegraded, domain.StateDegraded, 2},
 		{"auto+down", domain.PolicyAuto, domain.HealthDown, domain.StateDown, 1},
-		{"manual+up", domain.PolicyManual, domain.HealthUp, domain.StateDegraded, 2},
-		{"manual+down", domain.PolicyManual, domain.HealthDown, domain.StateDegraded, 2},
-		{"manual+recovering", domain.PolicyManual, domain.HealthRecovering, domain.StateRecovering, 3},
+		{"manual+up", domain.PolicyManual, domain.HealthUp, domain.StateDisabled, 0},
+		{"manual+down", domain.PolicyManual, domain.HealthDown, domain.StateDisabled, 0},
+		{"manual+recovering", domain.PolicyManual, domain.HealthRecovering, domain.StateDisabled, 0},
 		{"disabled+down", domain.PolicyDisabled, domain.HealthDown, domain.StateDisabled, 0},
 		{"disabled+up", domain.PolicyDisabled, domain.HealthUp, domain.StateDisabled, 0},
 	}

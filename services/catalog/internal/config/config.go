@@ -131,12 +131,12 @@ type PrometheusConfig struct {
 
 // ProviderPolicyConfig holds the thresholds and cadences used by the
 // probe-result endpoint (Task 6) to apply ApplyVerdict transitions.
-// DemoteAfter: how long a provider must be down before auto→manual.
 // PromoteAfter: how long a recovering provider must pass before up.
 // Cadence: per-health-state probe intervals + sample sizes.
+// (The demote-after threshold was dropped 2026-07-08 — policy is admin-only
+// now; the probe machine never auto-demotes auto→manual.)
 type ProviderPolicyConfig struct {
 	Cadence      domain.CadenceConfig
-	DemoteAfter  time.Duration
 	PromoteAfter time.Duration
 }
 
@@ -220,7 +220,6 @@ func Load() (*Config, error) {
 				RecoveringSample: getEnvInt("PROBE_RECOVERING_SAMPLE", 3),
 				FullSample:       getEnvInt("PROBE_FULL_SAMPLE", 5),
 			},
-			DemoteAfter:  getEnvDuration("PROVIDER_DEMOTE_AFTER", 24*time.Hour),
 			PromoteAfter: getEnvDuration("PROVIDER_PROMOTE_AFTER", 24*time.Hour),
 		},
 	}, nil
