@@ -8,7 +8,7 @@
 - **Predecessor:** `docs/superpowers/specs/2026-07-06-fanfic-engine-design.md` (v1, shipped). This spec builds the two follow-ups deferred in v1 §12.
 - **Owner decisions (locked in brainstorming 2026-07-10):**
   - Build **both** features together, one spec + one plan.
-  - #1 «Continue» = **append in place, sectioned** (`--- / ### Часть N`) into the same fanfic's `content`; **one-click, reuse everything** (no per-continue steering input).
+  - #1 «Continue» = **append in place, sectioned** (`--- / ## Часть N`) into the same fanfic's `content`; **one-click, reuse everything** (no per-continue steering input).
   - #2 «Canon continuation» = a **toggle in the existing generate form**; synopsis fetched **server-side** via `CATALOG_URL` (reserved for exactly this in v1 §2); the free-prompt becomes an optional "direction" hint.
 
 ---
@@ -17,7 +17,7 @@
 
 Extend the shipped admin-only fanfic engine (`services/fanfic/` :8097) with the two owner-requested v2 features, reusing the existing SSE generation pipeline, quota, persistence, and reader:
 
-1. **«Continue this story»** — a one-click action on a *saved, complete* fanfic that generates the next part and **appends** it to that same fanfic's `content`, sectioned by a divider + `### Часть N` heading. Prior parts are fed back as context so the continuation stays coherent. Repeatable.
+1. **«Continue this story»** — a one-click action on a *saved, complete* fanfic that generates the next part and **appends** it to that same fanfic's `content`, sectioned by a divider + `## Часть N` heading. Prior parts are fed back as context so the continuation stays coherent. Repeatable.
 2. **«Continuation of the series»** — a generation **mode** (a toggle in the generate form) where the model continues the anime's *actual* plot beyond where it ended, with the real anime synopsis (catalog `Description`) preloaded server-side into the model context.
 
 **Non-goal (v2):** per-episode / per-arc summaries (catalog stores none — synopsis only); sequel-chain rows / per-part deletion (we append in place); continuing someone else's or an incomplete fanfic; any public/non-admin exposure (the `FeatureGate("fanfic")` policy gate is inherited unchanged).
@@ -49,7 +49,7 @@ PartCount int  `gorm:"default:1"     json:"part_count"` // 1 on generate, +1 per
 ```
 
 - `Canon` — persisted so (a) the library can badge canon stories and (b) a Continue reuses the same canon mode. Zero value `false` is correct for existing rows (GORM AutoMigrate adds the column defaulted false).
-- `PartCount` — **set explicitly to `1` in the generate service path** (not left to the GORM `default:` tag) to sidestep the known "GORM omits zero-value fields" trap. Incremented to `N` on each successful continue and used to render the `### Часть N` heading, so we never re-parse `content` to count parts.
+- `PartCount` — **set explicitly to `1` in the generate service path** (not left to the GORM `default:` tag) to sidestep the known "GORM omits zero-value fields" trap. Incremented to `N` on each successful continue and used to render the `## Часть N` heading, so we never re-parse `content` to count parts.
 
 Both are backward-compatible additive columns; no migration beyond AutoMigrate.
 
@@ -88,7 +88,7 @@ Same SSE envelope as `/generate` (`meta` / `delta` / `done` / `error`), with `do
 
 ```
 event: meta   data: {"id":"<uuid>","model":"llama-3.1-8b-instant","part":2}
-event: delta  data: {"text":"—\n\n### Часть 2\n\n..."}
+event: delta  data: {"text":"—\n\n## Часть 2\n\n..."}
 ...
 event: done   data: {"id":"<uuid>","part":2,"token_usage":1876}
 ```
@@ -118,7 +118,7 @@ New `service.Continue(ctx, userID, id string, emit Emit) error`:
 3. Reconstruct a `GenerateRequest` from the stored row (length, POV, rating, language, characters, tags, **canon**, anime snapshot) and build **continue-mode** messages:
    - System prompt is the same rating/POV/language shape **minus** the "start with `# Title`" instruction, **plus** "это ПРОДОЛЖЕНИЕ; не пиши заголовок, продолжай историю следующей частью".
    - The prior `content` is fed back as context, **capped to a budget** (`FANFIC_CONTINUE_CONTEXT_RUNES`, default ~24 000 runes ≈ ~6k tokens); if the story exceeds it, feed the **tail** (most recent text) — the recent scene matters most for continuity.
-4. Build the part **prefix** `"\n\n---\n\n### {Часть|Part} {N}\n\n"` (N = `PartCount+1`, heading word by `language`) and **emit it as the opening `delta`** — so the live reader shows the divider + heading exactly as it will be persisted (live view == stored content). Then stream Groq (`max_tokens` from the stored `length`), relaying body deltas and accumulating the body.
+4. Build the part **prefix** `"\n\n---\n\n## {Часть|Part} {N}\n\n"` (N = `PartCount+1`, heading word by `language`) and **emit it as the opening `delta`** — so the live reader shows the divider + heading exactly as it will be persisted (live view == stored content). Then stream Groq (`max_tokens` from the stored `length`), relaying body deltas and accumulating the body.
 5. On completion: strip any stray leading H1 the model emits (`SplitTitle`, keep body), then persist `prefix + strippedBody` via the atomic append below (§6). Emit `done` with the part number.
 
 ### 5.3 Prompt templates
@@ -192,7 +192,7 @@ New env (all with safe defaults; none secret):
 - opens `continueStory(readerFanfic.id, ...)`, appends `delta` text live onto `readerFanfic.content` (the reader re-renders the growing document), and on `done` bumps the local `part_count` and re-`refresh()`es the library grid.
 - disabled while a continue is streaming; an inline error surfaces on `error`.
 
-**`renderFanfic.ts` + `FanficReader.vue`:** add an `hr` block type (`---` / `***` / `___` line → `{ type: 'hr' }` → `<hr>`), so the part divider renders as a rule instead of the literal characters. `### ` already renders as `<h3>`.
+**`renderFanfic.ts` + `FanficReader.vue`:** add an `hr` block type (`---` / `***` / `___` line → `{ type: 'hr' }` → `<hr>`), so the part divider renders as a rule instead of literal characters. The part heading is `## Часть N` — the reader already maps `# `→`<h2>` (title) and `## `→`<h3>` (section); it has **no** `### ` rule, so the heading must stay at `## `.
 
 **`LibraryGrid.vue`:** a small «канон» Badge on cards where `f.canon` (brand-hue Badge, DS-compliant).
 
@@ -203,8 +203,8 @@ New env (all with safe defaults; none secret):
 ## 11. Quota / observability / safety
 
 - **Quota:** Continue + canon generations both pass through `quota.Acquire` and the daily cap (`FANFIC_DAILY_CAP`); Redis outage fails open (unchanged).
-- **Metrics:** extend `fanfic_generations_total` with an `action` label (`generate` | `continue`) and a `canon` label (`true` | `false`). `fanfic_tokens_total` counts continue tokens too.
-- **Logging:** continue/canon log `user_id`, `fanfic_id`, `action`, `canon`, `part`, `token_usage`, `status`.
+- **Metrics:** unchanged — the standard `http_*` histograms (`metrics.NewCollector("fanfic")`) already cover both endpoints. No custom fanfic counter exists today; the new `action`/`canon` signal rides on structured logs (below) rather than a new metric — a dedicated counter is a deferred nicety, out of v2 scope.
+- **Logging:** continue/canon log `user_id`, `fanfic_id`, `action` (`generate`|`continue`), `canon`, `part`, `token_usage`, `status` via `libs/logger`.
 - **Safety stance:** unchanged from v1 — all characters framed 18+, Explicit behind the existing 18+ confirm; canon mode adds no new content surface (same rating tiers). The synopsis is treated as untrusted catalog data injected as prose context, never as instructions.
 
 ---
@@ -214,7 +214,7 @@ New env (all with safe defaults; none secret):
 - **Go (unit):**
   - `prompt.go` — canon system/user assembly (RU+EN, per tier) and `BuildContinueMessages` (no-title instruction, prior-context inclusion, tail-truncation at the rune budget).
   - `catalog` client — synopsis parse from the `{success,data}` envelope; id vs shikimori fallback; error/empty → graceful `("","",err)`, against a fake `httptest` server.
-  - `service.Continue` — owner scoping, `complete`-only guard, append text shape (`--- / ### Часть N`), `part_count`/`token_usage` accounting; canon `Generate` calls the client and degrades soft when it returns empty.
+  - `service.Continue` — owner scoping, `complete`-only guard, append text shape (`--- / ## Часть N`), `part_count`/`token_usage` accounting; canon `Generate` calls the client and degrades soft when it returns empty.
   - `repo.AppendPart` — atomic append + counters + owner scope (`NotFound` on non-owner), on the sqlite in-memory repo.
   - `handler` — `/{id}/continue` SSE happy path + `409` on non-complete + `404` on non-owner.
 - **Frontend (vitest):** `continueStory` SSE reader parsing (incl. `part`), canon toggle wiring in `GenerateForm`, `renderFanfic` `hr` block, library canon badge; i18n en/ru/ja parity.
