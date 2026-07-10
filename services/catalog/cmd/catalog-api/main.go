@@ -666,10 +666,15 @@ func main() {
 
 	// Create HTTP server
 	srv := &http.Server{
-		Addr:         cfg.Server.Address(),
-		Handler:      tracing.HTTPMiddleware("catalog")(router),
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:        cfg.Server.Address(),
+		Handler:     tracing.HTTPMiddleware("catalog")(router),
+		ReadTimeout: 30 * time.Second,
+		// WriteTimeout must exceed the slowest synchronous handler. SyncCalendar
+		// (POST /api/anime/calendar-sync) fetches Shikimori's calendar, reconciles
+		// against AniList, and imports/updates anime — routinely 45-60s+ — so 30s
+		// silently killed the connection (client saw EOF) right as the handler
+		// finished, even though the sync itself completed and wrote to the DB.
+		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
