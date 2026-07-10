@@ -3,7 +3,12 @@ import { mount } from '@vue/test-utils'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
 import { useSubtitleTimingOffset } from '@/composables/useSubtitleTimingOffset'
 
-vi.mock('vue-i18n', () => ({
+// importOriginal (not a bare object) so createI18n stays real: this component
+// imports Button from the @/components/ui barrel, which transitively pulls
+// @/i18n — whose module-eval calls createI18n() at import time. A bare-object
+// mock drops that export and the whole suite fails to load (0 tests run).
+vi.mock('vue-i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-i18n')>()),
   useI18n: () => ({ t: (k: string) => k }),
 }))
 
