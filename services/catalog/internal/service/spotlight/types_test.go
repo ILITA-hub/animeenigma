@@ -63,16 +63,19 @@ func TestTypes_JSONShape(t *testing.T) {
 				t.Fatalf("marshal: %v", err)
 			}
 
-			// Top-level keys must be exactly {type, data}.
+			// Top-level keys must be exactly {type, priority, data}.
 			var top map[string]any
 			if err := json.Unmarshal(raw, &top); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
-			if len(top) != 2 {
-				t.Fatalf("expected exactly 2 top-level keys (type, data); got %d: %v", len(top), top)
+			if len(top) != 3 {
+				t.Fatalf("expected exactly 3 top-level keys (type, priority, data); got %d: %v", len(top), top)
 			}
 			if _, ok := top["type"]; !ok {
 				t.Fatalf("missing top-level key `type` in %s", raw)
+			}
+			if _, ok := top["priority"]; !ok {
+				t.Fatalf("missing top-level key `priority` in %s", raw)
 			}
 			if _, ok := top["data"]; !ok {
 				t.Fatalf("missing top-level key `data` in %s", raw)

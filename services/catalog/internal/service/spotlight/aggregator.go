@@ -22,6 +22,10 @@ const (
 	overallBudget = 2 * time.Second
 	// snapshotTTL is the per-day fallback retention — HSB-BE-04.
 	snapshotTTL = 24 * time.Hour
+	// defaultCardPriority is assigned to any card whose resolver left
+	// Priority at its zero value — so only the curated resolver (1.5) needs
+	// to set a non-default weight; the other 8 resolvers stay untouched.
+	defaultCardPriority = 1.0
 )
 
 // Aggregator dispatches per-card resolvers concurrently and assembles
@@ -174,7 +178,11 @@ func (a *Aggregator) Resolve(ctx context.Context, userID *string) (*Response, er
 			// not an error.
 			continue
 		}
-		cards = append(cards, *res.card)
+		c := *res.card
+		if c.Priority == 0 {
+			c.Priority = defaultCardPriority
+		}
+		cards = append(cards, c)
 	}
 
 	// Zero-card outcome — try snapshot fallback (HSB-BE-04). When every

@@ -33,10 +33,13 @@ type ChangelogEntry struct {
 // Card is the outer discriminated-union envelope. Each resolver produces
 // a Card with its own Type discriminator (e.g. "featured") and a
 // per-type Data struct embedded as `any`. The TypeScript side narrows on
-// the `type` field.
+// the `type` field. Priority is a display weight (default 1.0, normalized
+// by the aggregator); the frontend uses it as the weight in the carousel's
+// random opening-slide pick.
 type Card struct {
-	Type string `json:"type"`
-	Data any    `json:"data"`
+	Type     string  `json:"type"`
+	Priority float64 `json:"priority"`
+	Data     any     `json:"data"`
 }
 
 // FeaturedData is the payload for `Card{Type: "featured"}` — a single
