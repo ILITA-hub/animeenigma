@@ -11,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/maintenancegate"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
@@ -166,6 +167,11 @@ func main() {
 	shedWatcher := cache.NewDegradationWatcher(redisCache, 5*time.Second)
 	shedWatcher.Start(context.Background())
 	jobService.SetShedChecker(shedWatcher)
+
+	// P3 maintenance enforcement: gate + status-ping shikimori_sync,
+	// subtitle_probe, and playability_canary against policy-service's
+	// /admin/policy routines. Fail-open (unreachable ⇒ jobs still run).
+	jobService.SetMaintenanceGate(maintenancegate.New(cfg.Jobs.PolicyServiceURL, 3*time.Second))
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler

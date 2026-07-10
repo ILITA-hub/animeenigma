@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/maintenancegate"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/jobs"
 	"github.com/robfig/cron/v3"
@@ -23,6 +24,7 @@ type JobService struct {
 	autocacheLogicAJob         *jobs.AutocacheLogicAJob
 	autocachePredictionJob     *jobs.AutocachePredictionJob
 	shed                       shedChecker
+	maint                      *maintenancegate.Client
 	log                        *logger.Logger
 	lastShikimoriRun           time.Time
 	lastCleanupRun             time.Time
@@ -99,23 +101,50 @@ func (s *JobService) skipIfDegraded(job string) bool {
 	return true
 }
 
+// SetMaintenanceGate wires the shared maintenance-enforcement client (P3).
+// Nil-safe by contract: a nil client (not wired) always fails open.
+func (s *JobService) SetMaintenanceGate(m *maintenancegate.Client) {
+	s.maint = m
+}
+
+// maintPaused reports whether an admin has paused this routine via /admin/policy.
+// Nil gate (not wired) ⇒ run (fail-open).
+func (s *JobService) maintPaused(ctx context.Context, id string) bool {
+	if s.maint == nil || s.maint.Enabled(ctx, id) {
+		return false
+	}
+	s.log.Infow("skipping job: routine paused via /admin/policy", "routine", id)
+	return true
+}
+
+func (s *JobService) postStatus(ctx context.Context, id string, ok bool, summary string) {
+	if s.maint != nil {
+		s.maint.PostStatus(ctx, id, ok, summary)
+	}
+}
+
 // Start starts the job scheduler
 func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, playbackProbeCron, readThresholdCron, providerRankingCron, subtitleProbeCron, autocacheLogicACron, autocachePredictionCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
+		if s.maintPaused(ctx, "shikimori_sync") {
+			return
+		}
 		s.log.Info("starting scheduled Shikimori sync")
 		start := time.Now()
 		if err := s.shikimoriJob.Run(ctx); err != nil {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("shikimori_sync", "error").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("shikimori_sync").Observe(time.Since(start).Seconds())
 			s.log.Errorw("Shikimori sync failed", "error", err)
+			s.postStatus(ctx, "shikimori_sync", false, "sync error: "+err.Error())
 		} else {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("shikimori_sync", "success").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("shikimori_sync").Observe(time.Since(start).Seconds())
 			metrics.SchedulerJobLastSuccess.WithLabelValues("shikimori_sync").SetToCurrentTime()
 			s.lastShikimoriRun = time.Now()
 			s.log.Info("Shikimori sync completed successfully")
+			s.postStatus(ctx, "shikimori_sync", true, "sync ok")
 		}
 	})
 	if err != nil {
@@ -202,18 +231,25 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 				return
 			}
 			ctx := context.Background()
+			if s.maintPaused(ctx, "playability_canary") {
+				return
+			}
 			s.log.Info("starting scheduled playback-health probe")
 			start := time.Now()
 			if err := s.probeTriggerJob.Run(ctx); err != nil {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("playback_probe", "error").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("playback_probe").Observe(time.Since(start).Seconds())
 				s.log.Errorw("playback-health probe failed", "error", err)
+				s.postStatus(ctx, "playability_canary", false, "probe error: "+err.Error())
+				s.postStatus(ctx, "provider_self_heal", false, "probe error: "+err.Error())
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("playback_probe", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("playback_probe").Observe(time.Since(start).Seconds())
 				metrics.SchedulerJobLastSuccess.WithLabelValues("playback_probe").SetToCurrentTime()
 				s.lastProbeRun = time.Now()
 				s.log.Info("playback-health probe completed successfully")
+				s.postStatus(ctx, "playability_canary", true, "probe ok")
+				s.postStatus(ctx, "provider_self_heal", true, "probe ok")
 			}
 		})
 		if err != nil {
@@ -290,18 +326,23 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 	if s.subtitleProbeJob != nil {
 		_, err = s.cron.AddFunc(subtitleProbeCron, func() {
 			ctx := context.Background()
+			if s.maintPaused(ctx, "subtitle_probe") {
+				return
+			}
 			s.log.Info("starting scheduled subtitle-health probe")
 			start := time.Now()
 			if err := s.subtitleProbeJob.Run(ctx); err != nil {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("subtitle_probe", "error").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("subtitle_probe").Observe(time.Since(start).Seconds())
 				s.log.Errorw("subtitle-health probe failed", "error", err)
+				s.postStatus(ctx, "subtitle_probe", false, "probe error: "+err.Error())
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("subtitle_probe", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("subtitle_probe").Observe(time.Since(start).Seconds())
 				metrics.SchedulerJobLastSuccess.WithLabelValues("subtitle_probe").SetToCurrentTime()
 				s.lastSubtitleProbeRun = time.Now()
 				s.log.Info("subtitle-health probe completed successfully")
+				s.postStatus(ctx, "subtitle_probe", true, "probe ok")
 			}
 		})
 		if err != nil {
