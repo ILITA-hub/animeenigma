@@ -247,13 +247,13 @@
               <Card v-for="row in providerRows" :key="row.name" padding="none" data-testid="provider-card">
                 <CardHeader class="flex flex-row flex-wrap items-start justify-between gap-3">
                   <div>
-                    <CardTitle class="text-base">{{ row.description || row.name }}</CardTitle>
+                    <CardTitle class="text-base font-mono">{{ row.name }}</CardTitle>
                     <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/40">
-                      <span class="font-mono">{{ row.name }}</span>
                       <span>{{ $t('admin.policy.providers.groupLabel') }}: {{ row.group }}</span>
                       <span>{{ $t('admin.policy.providers.engineLabel') }}: {{ row.engine }}</span>
                     </p>
-                    <p v-if="row.reason" class="mt-1 text-xs text-white/50">{{ row.reason }}</p>
+                    <p v-if="row.reason" class="mt-1 text-xs text-white/60">{{ row.reason }}</p>
+                    <p v-if="row.description" class="mt-1 text-xs text-white/50">{{ row.description }}</p>
                   </div>
                   <div class="flex items-center gap-3">
                     <Badge :variant="stateVariant(row.derived_state)" :data-testid="`provider-state-${row.name}`">
@@ -265,7 +265,7 @@
                     <Switch
                       :model-value="row.policy !== 'disabled'"
                       :disabled="row.saving"
-                      :aria-label="$t('admin.policy.providers.toggleLabel', { name: row.description || row.name })"
+                      :aria-label="$t('admin.policy.providers.toggleLabel', { name: row.name })"
                       :data-testid="`provider-switch-${row.name}`"
                       @update:model-value="(v: boolean) => onToggleProvider(row, v)"
                     />

@@ -355,8 +355,13 @@ describe('AdminPolicy', () => {
       const cards = w.findAll('[data-testid="provider-card"]')
       expect(cards.length).toBe(2)
       expect(cards[0].text()).toContain('GogoAnime')
+      // The provider machine name is always rendered (was previously buried when
+      // description held long operator prose — case-sensitive so it can't match
+      // the 'GogoAnime' description).
+      expect(cards[0].text()).toContain('gogoanime')
       expect(w.find('[data-testid="provider-state-gogoanime"]').text()).toContain('Up')
       expect(cards[1].text()).toContain('Miruro')
+      expect(cards[1].text()).toContain('miruro')
       expect(w.find('[data-testid="provider-state-miruro"]').text()).toContain('Down')
       // The reason surfaces for the down provider.
       expect(cards[1].text()).toContain('circuit open')
