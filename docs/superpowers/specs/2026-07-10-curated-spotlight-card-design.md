@@ -114,8 +114,9 @@ func (r *CuratedResolver) Type() string { return "curated" }
   ```
 
 ### 4.2 `CuratedCard.vue` (+ `.spec.ts`)
-- Mirrors `FeaturedCard.vue`: single-root `SpotlightCardShell`, `backdrop="poster-blur"`
-  with the anime poster, hero layout, CTA `router-link` (`buttonVariants`) to the watch page.
+- Mirrors `FeaturedCard.vue`: single-root `SpotlightCardShell`, `backdrop="none"` with a
+  custom `#background` hero poster + scrim (not `poster-blur`), hero layout, CTA
+  `router-link` (`buttonVariants`) to the watch page.
 - **Accent `cyan`** (the "content-core" triad slot). Differentiated from Featured by a
   distinct kicker **icon** (e.g. `Award` / `BadgeCheck`) — no 4th hue (DS-lint rule).
 - Kicker `t('spotlight.curated.title')`, `font-medium` (never semibold).

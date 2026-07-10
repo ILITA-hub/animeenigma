@@ -23,4 +23,11 @@ describe('weightedRandomIndex', () => {
     expect(weightedRandomIndex(cards, () => 0.5)).toBe(1)
     expect(weightedRandomIndex(cards, () => 0.8)).toBe(2)
   })
+
+  it('falls back to uniform when all weights are zero/non-positive', () => {
+    const cards = [card('a', 0), card('b', 0)]
+    // total <= 0 → Math.floor(rng() * length)
+    expect(weightedRandomIndex(cards, () => 0)).toBe(0)
+    expect(weightedRandomIndex(cards, () => 0.9)).toBe(1)
+  })
 })
