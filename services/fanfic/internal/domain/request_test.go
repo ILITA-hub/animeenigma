@@ -102,3 +102,36 @@ func TestValidate_CyrillicRuneCounting(t *testing.T) {
 		t.Error("expected 2001-Cyrillic-char prompt to be rejected")
 	}
 }
+
+func TestValidate_CanonRequiresAnimeIdentity(t *testing.T) {
+	base := GenerateRequest{
+		Anime:    AnimeRef{Title: "Frieren"}, // title set, but no id / shikimori_id
+		Length:   "oneshot",
+		POV:      "third",
+		Rating:   "teen",
+		Language: "ru",
+		Canon:    true,
+	}
+	if err := base.Validate(); err == nil {
+		t.Fatal("expected error: canon without anime id/shikimori_id must be rejected")
+	}
+
+	withID := base
+	withID.Anime.ID = "11111111-1111-1111-1111-111111111111"
+	if err := withID.Validate(); err != nil {
+		t.Fatalf("canon with anime.id should pass, got %v", err)
+	}
+
+	withShiki := base
+	withShiki.Anime.ShikimoriID = "52991"
+	if err := withShiki.Validate(); err != nil {
+		t.Fatalf("canon with shikimori_id should pass, got %v", err)
+	}
+
+	// Non-canon with no identity stays valid (unchanged behavior).
+	nonCanon := base
+	nonCanon.Canon = false
+	if err := nonCanon.Validate(); err != nil {
+		t.Fatalf("non-canon without identity should pass, got %v", err)
+	}
+}

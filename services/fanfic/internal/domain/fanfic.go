@@ -24,6 +24,8 @@ type Fanfic struct {
 	Rating           string         `gorm:"size:16" json:"rating"`
 	Language         string         `gorm:"size:8" json:"language"`
 	Prompt           string         `gorm:"type:text" json:"prompt"`
+	Canon            bool           `gorm:"default:false" json:"canon"`
+	PartCount        int            `gorm:"default:1" json:"part_count"`
 	Title            string         `gorm:"size:512" json:"title"`
 	Content          string         `gorm:"type:text" json:"content"`
 	Model            string         `gorm:"size:64" json:"model"`

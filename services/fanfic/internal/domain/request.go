@@ -31,6 +31,7 @@ type GenerateRequest struct {
 	Rating     string         `json:"rating"`
 	Language   string         `json:"language"`
 	Prompt     string         `json:"prompt"`
+	Canon      bool           `json:"canon"`
 }
 
 var (
@@ -70,6 +71,9 @@ func (r GenerateRequest) Validate() error {
 	}
 	if utf8.RuneCountInString(r.Prompt) > 2000 {
 		return fmt.Errorf("prompt too long (max 2000)")
+	}
+	if r.Canon && strings.TrimSpace(r.Anime.ID) == "" && strings.TrimSpace(r.Anime.ShikimoriID) == "" {
+		return fmt.Errorf("canon mode requires an anime id or shikimori_id")
 	}
 	return nil
 }
