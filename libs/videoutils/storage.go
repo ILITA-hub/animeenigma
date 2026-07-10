@@ -113,6 +113,58 @@ func (s *Storage) PresignURL(rawURL string) (string, bool) {
 	return signed.String(), true
 }
 
+// MultiStorage composes several Storage backends (e.g. local MinIO + an
+// external S3-compatible host) and routes presign requests to whichever one
+// owns the URL's host. This is the seam that lets the HLS proxy presign
+// upstream GETs for library episodes that may live on EITHER backend
+// depending on which one ingested them — catalog signs stream URLs for both
+// hosts identically, so the proxy just needs to know which Storage to ask.
+//
+// Construction never dials: it only holds references to already-built
+// *Storage values (see NewStorage:51-66).
+type MultiStorage struct {
+	storages []*Storage
+}
+
+// NewMultiStorage wraps one or more Storage backends. Nil entries are
+// skipped, so callers can pass an optional backend that may be absent
+// (e.g. external S3 when unconfigured) without a manual nil check:
+// NewMultiStorage(minioStorage, s3Storage) where s3Storage may be nil.
+func NewMultiStorage(ss ...*Storage) *MultiStorage {
+	m := &MultiStorage{}
+	for _, s := range ss {
+		if s != nil {
+			m.storages = append(m.storages, s)
+		}
+	}
+	return m
+}
+
+// PresignURL routes rawURL to the first wrapped Storage whose IsOwnHost
+// matches and returns its presigned GET URL. A URL matching none of the
+// wrapped hosts returns ("", false), same contract as Storage.PresignURL,
+// so the caller fetches it unchanged.
+func (m *MultiStorage) PresignURL(rawURL string) (string, bool) {
+	for _, s := range m.storages {
+		if s.IsOwnHost(rawURL) {
+			return s.PresignURL(rawURL)
+		}
+	}
+	return "", false
+}
+
+// Hosts returns the endpoint host[:port] of every wrapped Storage, in
+// registration order. Used to seed the HLS proxy's first-party host
+// allowlist (the SSRF dial guard) for every backend this MultiStorage can
+// presign for.
+func (m *MultiStorage) Hosts() []string {
+	hosts := make([]string, 0, len(m.storages))
+	for _, s := range m.storages {
+		hosts = append(hosts, s.endpoint)
+	}
+	return hosts
+}
+
 // EnsureBucket creates the bucket if it doesn't exist
 func (s *Storage) EnsureBucket(ctx context.Context) error {
 	exists, err := s.client.BucketExists(ctx, s.bucketName)

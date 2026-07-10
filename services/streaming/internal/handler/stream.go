@@ -40,7 +40,7 @@ type StreamHandler struct {
 }
 
 func NewStreamHandler(streamingService *service.StreamingService, log *logger.Logger) *StreamHandler {
-	return NewStreamHandlerWithSessions(streamingService, nil, log)
+	return NewStreamHandlerWithSessions(streamingService, nil, nil, log)
 }
 
 // parseSolodcdnEdges splits STREAMING_SOLODCDN_EDGES ("p12,p13,p14") into edge
@@ -59,9 +59,10 @@ func parseSolodcdnEdges(raw string) []string {
 	return edges
 }
 
-// minioHost strips the optional port from a MinIO endpoint
-// ("minio:9000" -> "minio"; a bare "minio" is returned unchanged).
-func minioHost(endpoint string) string {
+// storageHost strips the optional port from a storage endpoint
+// ("minio:9000" -> "minio"; a bare "minio" or "s3.firstvds.ru" is returned
+// unchanged). Used for both the local MinIO and optional external S3 hosts.
+func storageHost(endpoint string) string {
 	if endpoint == "" {
 		return ""
 	}
@@ -73,25 +74,37 @@ func minioHost(endpoint string) string {
 
 // NewStreamHandlerWithSessions wires the HLS egress aggregator (AR-EGRESS-04).
 // A nil aggregator degrades to no egress accounting (proxy behavior unchanged).
-func NewStreamHandlerWithSessions(streamingService *service.StreamingService, hlsSessions *service.HLSSessions, log *logger.Logger) *StreamHandler {
+//
+// s3Storage is the OPTIONAL external S3-compatible backend library episodes
+// may also live on, alongside local MinIO (streamingService's Storage()).
+// A nil s3Storage degrades to MinIO-only presigning, unchanged from before
+// this parameter existed.
+func NewStreamHandlerWithSessions(streamingService *service.StreamingService, s3Storage *videoutils.Storage, hlsSessions *service.HLSSessions, log *logger.Logger) *StreamHandler {
 	// Create video proxy with default config for HLS proxying
 	proxyCfg := videoutils.DefaultProxyConfig()
 	proxyCfg.AllowedDomains = videoutils.HLSProxyAllowedDomains
 	// First-party internal hosts the proxy legitimately reaches over the Docker
 	// network — they resolve to private IPs, so the SSRF dial guard (#64/#65)
 	// exempts EXACTLY these. The stealth-scraper sidecar /hls restreamer is one;
-	// the MinIO endpoint host is added below when storage is wired.
+	// the storage hosts (MinIO + optional external S3) are added below.
 	proxyCfg.FirstPartyHosts = []string{"stealth-scraper"}
-	// Self-hosted library (`ae` provider) HLS lives in a PRIVATE MinIO
-	// bucket. The proxy gates entry on our HMAC sig / provenance tokens,
-	// then presigns the actual MinIO read here so the bucket never needs to
-	// be public. Only URLs whose host is our MinIO endpoint are rewritten;
-	// every external-CDN fetch is left untouched.
+	// Self-hosted library (`ae` provider) HLS lives in a PRIVATE bucket on
+	// EITHER local MinIO or an external S3-compatible host — catalog signs
+	// stream URLs for both identically, so the proxy routes each upstream
+	// GET through MultiStorage, which presigns against whichever backend
+	// actually owns the URL's host. The proxy gates entry on our HMAC sig /
+	// provenance tokens first, then presigns the actual storage read here
+	// so neither bucket ever needs to be public. Only URLs whose host is one
+	// of the wrapped storages' endpoints are rewritten; every external-CDN
+	// fetch is left untouched.
 	if streamingService != nil {
-		if st := streamingService.Storage(); st != nil {
-			proxyCfg.UpstreamSigner = st.PresignURL
-			if host := minioHost(st.Endpoint()); host != "" {
-				proxyCfg.FirstPartyHosts = append(proxyCfg.FirstPartyHosts, host)
+		multi := videoutils.NewMultiStorage(streamingService.Storage(), s3Storage)
+		if hosts := multi.Hosts(); len(hosts) > 0 {
+			proxyCfg.UpstreamSigner = multi.PresignURL
+			for _, endpoint := range hosts {
+				if host := storageHost(endpoint); host != "" {
+					proxyCfg.FirstPartyHosts = append(proxyCfg.FirstPartyHosts, host)
+				}
 			}
 		}
 	}

@@ -63,6 +63,20 @@ func main() {
 		log.Warnw("failed to ensure bucket exists", "error", err)
 	}
 
+	// Optional second storage backend: external S3-compatible host (library
+	// episodes may live here alongside local MinIO). Nil when S3_ENDPOINT is
+	// unset — the HLS proxy then presigns only against MinIO, unchanged from
+	// before this existed. EnsureBucket is deliberately NOT called here:
+	// unlike MinIO, this bucket is provisioned out-of-band on the external
+	// host, and streaming only ever reads from it (never uploads).
+	var s3Storage *videoutils.Storage
+	if cfg.S3Storage != nil {
+		s3Storage, err = videoutils.NewStorage(*cfg.S3Storage)
+		if err != nil {
+			log.Fatalw("failed to connect to S3 storage", "error", err)
+		}
+	}
+
 	// Initialize video proxy
 	proxy := videoutils.NewVideoProxy(cfg.Proxy)
 
@@ -91,7 +105,7 @@ func main() {
 	defer hlsSessions.Stop()
 
 	// Initialize handlers
-	streamHandler := handler.NewStreamHandlerWithSessions(streamingService, hlsSessions, log)
+	streamHandler := handler.NewStreamHandlerWithSessions(streamingService, s3Storage, hlsSessions, log)
 	uploadHandler := handler.NewUploadHandler(streamingService, log)
 
 	// Initialize image proxy

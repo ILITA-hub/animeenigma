@@ -16,6 +16,11 @@ type Config struct {
 	Server    ServerConfig
 	Redis     cache.Config
 	Storage   videoutils.StorageConfig
+	// S3Storage is the OPTIONAL external S3-compatible backend (e.g.
+	// s3.firstvds.ru) library episodes may also live on, alongside local
+	// MinIO. Nil when S3_ENDPOINT is unset — the HLS proxy then presigns
+	// only against Storage, same as before this field existed.
+	S3Storage *videoutils.StorageConfig
 	Proxy     videoutils.ProxyConfig
 	JWT       authz.JWTConfig
 	Stream    StreamConfig
@@ -63,6 +68,23 @@ func Load() (*Config, error) {
 
 	allowedDomains := httputil.ParseCommaList(getEnv("PROXY_ALLOWED_DOMAINS", ""))
 
+	// Second (optional) storage backend: external S3-compatible host for
+	// library episodes, alongside local MinIO. S3_ENDPOINT/S3_ACCESS_KEY/
+	// S3_SECRET_KEY are shared with the `backup` service's env vars, but
+	// S3_BUCKET there is the DB-backups bucket ("animeenigma") — library
+	// episodes live in a separate bucket, S3_LIBRARY_BUCKET, default
+	// "raw-library" to match local MinIO's bucket name.
+	var s3Storage *videoutils.StorageConfig
+	if endpoint := getEnv("S3_ENDPOINT", ""); endpoint != "" {
+		s3Storage = &videoutils.StorageConfig{
+			Endpoint:        endpoint,
+			AccessKeyID:     getEnv("S3_ACCESS_KEY", ""),
+			SecretAccessKey: getEnv("S3_SECRET_KEY", ""),
+			UseSSL:          getEnvBool("S3_USE_SSL", true),
+			BucketName:      getEnv("S3_LIBRARY_BUCKET", "raw-library"),
+		}
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
@@ -82,6 +104,7 @@ func Load() (*Config, error) {
 			BucketName:      getEnv("MINIO_BUCKET", "animeenigma"),
 			Region:          getEnv("MINIO_REGION", "us-east-1"),
 		},
+		S3Storage: s3Storage,
 		Proxy: videoutils.ProxyConfig{
 			// Full Firefox UA (see libs/videoutils DefaultProxyConfig): a real
 			// browser engine token is required by UA-locked CDNs like okcdn.
