@@ -226,6 +226,24 @@ func bestFuzzy(foldedTitles []string, cand string) float64 {
 // "season N" form for synonym-shaped titles.
 var seasonNumRe = regexp.MustCompile(`(?i)(\d+)\s*сезон|сезон\s*(\d+)|season\s*(\d+)|(\d+)(?:nd|rd|st|th)\s*season`)
 
+// romanSeasonRe matches a standalone Latin roman numeral (II–IX) used as a
+// season marker, e.g. "Overlord IV" or "Mushoku Tensei III: Isekai …" (mid-title
+// before a subtitle colon). It must be a whole token — bounded by a non-letter or
+// string edge on both sides — so it never fires inside a word ("aktiv", "vivy").
+// Single-letter numerals (I/V/X) are excluded as too ambiguous with ordinary
+// title letters. Roman 5/10 seasons are vanishingly rare and not worth the risk.
+var romanSeasonRe = regexp.MustCompile(`(?i)(?:^|[^\p{L}])(viii|vii|vi|iv|iii|ii|ix)(?:[^\p{L}]|$)`)
+
+var romanSeasons = map[string]int{
+	"ii": 2, "iii": 3, "iv": 4, "vi": 6, "vii": 7, "viii": 8, "ix": 9,
+}
+
+// trailingDigitRe matches a bare trailing single digit 2–9 (the Shikimori/AnimeJoy
+// RU form, e.g. "…в другом мире 3"), requiring a non-alphanumeric separator before
+// it so a title that is itself a number ("86") or a multi-digit trailing count
+// ("Mob Psycho 100") is not misread. 0 and 1 are excluded (1 == the default).
+var trailingDigitRe = regexp.MustCompile(`[^\p{L}\d]([2-9])\s*$`)
+
 // DetectSeason is the exported entry point catalog callers use to derive a
 // best-effort season number from an anime's primary title for the discovery
 // Query. It delegates to the same detectSeason heuristic the internal scorer
@@ -242,14 +260,22 @@ func DetectSeason(title string) int {
 // fixtures carry it; defaulting to 1 keeps a bare title from out-ranking the
 // explicit season-1 row for a season-1 query).
 func detectSeason(title string) int {
-	m := seasonNumRe.FindStringSubmatch(strings.ToLower(title))
-	if m == nil {
-		return 1
-	}
-	for _, g := range m[1:] {
-		if g != "" {
-			return atoiSafe(g)
+	low := strings.ToLower(title)
+	// 1. Explicit "N сезон" / "season N" markers are the most reliable.
+	if m := seasonNumRe.FindStringSubmatch(low); m != nil {
+		for _, g := range m[1:] {
+			if g != "" {
+				return atoiSafe(g)
+			}
 		}
+	}
+	// 2. Standalone roman numeral (e.g. "Mushoku Tensei III: …").
+	if m := romanSeasonRe.FindStringSubmatch(low); m != nil {
+		return romanSeasons[m[1]]
+	}
+	// 3. Bare trailing single digit (e.g. "… в другом мире 3").
+	if m := trailingDigitRe.FindStringSubmatch(low); m != nil {
+		return atoiSafe(m[1])
 	}
 	return 1
 }

@@ -21,6 +21,43 @@ func TestDetectSeasonExported(t *testing.T) {
 	}
 }
 
+// A standalone Latin roman numeral (II–IX) is a season marker even when it sits
+// mid-title before a subtitle colon — the exact shape of the report
+// 2026-07-09T06-40-52 catalog name "Mushoku Tensei III: Isekai Ittara Honki
+// Dasu", which must resolve to season 3 (was silently defaulting to 1).
+func TestDetectSeasonRomanNumeral(t *testing.T) {
+	cases := map[string]int{
+		"Mushoku Tensei III: Isekai Ittara Honki Dasu": 3, // roman before a colon
+		"Overlord IV":                     4, // trailing roman
+		"Kaguya-sama wa Kokurasetai II":   2,
+		"Vinland Saga Part IX":            9,
+		"無職転生 III ～異世界行ったら本気だす～": 3, // roman between CJK, space-delimited
+	}
+	for title, want := range cases {
+		if got := DetectSeason(title); got != want {
+			t.Errorf("DetectSeason(%q) = %d, want %d", title, got, want)
+		}
+	}
+}
+
+// A bare trailing single digit 2–9 (the AnimeJoy/Shikimori RU form, e.g.
+// "…в другом мире 3") is a season marker. Multi-digit trailing numbers, a bare
+// "0", or a title that is itself a number must NOT be misread as a season.
+func TestDetectSeasonTrailingDigit(t *testing.T) {
+	cases := map[string]int{
+		"Реинкарнация безработного: История о приключениях в другом мире 3": 3,
+		"Vinland Saga Part 2": 2,
+		"Steins;Gate 0":       1, // 0 is not a season → default
+		"Mob Psycho 100":      1, // multi-digit trailing = part of title
+		"86":                  1, // the title IS a number
+	}
+	for title, want := range cases {
+		if got := DetectSeason(title); got != want {
+			t.Errorf("DetectSeason(%q) = %d, want %d", title, got, want)
+		}
+	}
+}
+
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", name))
