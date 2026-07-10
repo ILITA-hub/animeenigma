@@ -98,6 +98,25 @@ func TestMultiStorage_Hosts(t *testing.T) {
 	}
 }
 
+// TestMultiStorage_IsOwnHost covers the metrics-labeling seam: ae playback
+// served from EITHER backend must be recognized as our own, everything else
+// must not.
+func TestMultiStorage_IsOwnHost(t *testing.T) {
+	minio := newFakeStorage(t, "minio-fake:9000", false)
+	s3 := newFakeStorage(t, "s3-fake:443", true)
+	multi := NewMultiStorage(minio, s3)
+
+	if !multi.IsOwnHost("http://minio-fake:9000/raw-library/x.m3u8") {
+		t.Errorf("expected minio-fake host to be recognized as own")
+	}
+	if !multi.IsOwnHost("https://s3-fake:443/raw-library/x.m3u8") {
+		t.Errorf("expected s3-fake host to be recognized as own")
+	}
+	if multi.IsOwnHost("https://some-cdn.example/x.m3u8") {
+		t.Errorf("expected foreign host NOT to be recognized as own")
+	}
+}
+
 // TestMultiStorage_NilEntriesSkipped locks in that a caller can pass an
 // optional second Storage (e.g. external S3, absent when unconfigured) as a
 // nil *Storage without a manual nil check.

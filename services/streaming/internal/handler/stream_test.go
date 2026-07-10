@@ -53,3 +53,51 @@ func TestHLSProxy_DomainNotAllowed_Returns502(t *testing.T) {
 		t.Errorf("body is empty; the silent-200 bug emitted Content-Length:0 — we want a real error message")
 	}
 }
+
+// TestStorageProxyWiring_S3HostNotFirstParty locks the SSRF-guard contract:
+// FirstPartyHosts exempts ONLY Docker-private hosts (stealth-scraper, minio)
+// from the dial-time private-IP + redirect checks. The external S3 host
+// resolves public and passes the guarded dialer with no exemption — listing
+// it would only strip DNS-rebind protection for that host. Presigning for it
+// is unaffected: the MultiStorage still wraps both backends.
+func TestStorageProxyWiring_S3HostNotFirstParty(t *testing.T) {
+	newStorage := func(endpoint string, ssl bool) *videoutils.Storage {
+		s, err := videoutils.NewStorage(videoutils.StorageConfig{
+			Endpoint:        endpoint,
+			AccessKeyID:     "fake",
+			SecretAccessKey: "fake",
+			UseSSL:          ssl,
+			BucketName:      "raw-library",
+			Region:          "us-east-1",
+		})
+		if err != nil {
+			t.Fatalf("NewStorage(%q): %v", endpoint, err)
+		}
+		return s
+	}
+	minio := newStorage("minio:9000", false)
+	s3 := newStorage("s3-fake.example", true)
+
+	multi, firstParty := storageProxyWiring(minio, s3)
+
+	has := func(host string) bool {
+		for _, h := range firstParty {
+			if h == host {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("stealth-scraper") || !has("minio") {
+		t.Errorf("FirstPartyHosts = %v; want it to contain stealth-scraper and minio", firstParty)
+	}
+	if has("s3-fake.example") {
+		t.Errorf("FirstPartyHosts = %v; external S3 host must NOT be exempted from the SSRF dial guard", firstParty)
+	}
+
+	// Both backends must still be presign-routable via the MultiStorage.
+	if !multi.IsOwnHost("http://minio:9000/raw-library/x.m3u8") ||
+		!multi.IsOwnHost("https://s3-fake.example/raw-library/x.m3u8") {
+		t.Errorf("MultiStorage must recognize both storage hosts as own; hosts = %v", multi.Hosts())
+	}
+}

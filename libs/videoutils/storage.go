@@ -153,10 +153,21 @@ func (m *MultiStorage) PresignURL(rawURL string) (string, bool) {
 	return "", false
 }
 
+// IsOwnHost reports whether rawURL points at ANY of the wrapped storage
+// backends. Used by the HLS proxy to label self-hosted (`ae` provider)
+// playback traffic distinctly from external-CDN traffic in metrics,
+// regardless of which backend serves the episode.
+func (m *MultiStorage) IsOwnHost(rawURL string) bool {
+	for _, s := range m.storages {
+		if s.IsOwnHost(rawURL) {
+			return true
+		}
+	}
+	return false
+}
+
 // Hosts returns the endpoint host[:port] of every wrapped Storage, in
-// registration order. Used to seed the HLS proxy's first-party host
-// allowlist (the SSRF dial guard) for every backend this MultiStorage can
-// presign for.
+// registration order.
 func (m *MultiStorage) Hosts() []string {
 	hosts := make([]string, 0, len(m.storages))
 	for _, s := range m.storages {
