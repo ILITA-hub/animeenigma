@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -67,6 +69,56 @@ func TestMaintenanceService_UnknownID_NotFound(t *testing.T) {
 	}
 	if err := svc.SetRoutine(ctx, "nope", true, domain.SettingsJSON("{}")); !isNotFound(err) {
 		t.Errorf("set unknown err = %v; want NotFound", err)
+	}
+	if err := svc.SetStatus(ctx, "nope", true, "x", nil); !isNotFound(err) {
+		t.Errorf("setStatus unknown err = %v; want NotFound", err)
+	}
+}
+
+func TestMaintenanceService_SetStatus_stampsLastRun(t *testing.T) {
+	svc := newMaintSvc(t)
+	ctx := context.Background()
+	if err := svc.SeedDefaults(ctx); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := svc.SetStatus(ctx, "git_autosync", true, "synced 3 repos", nil); err != nil {
+		t.Fatalf("setStatus: %v", err)
+	}
+	g, err := svc.Gate(ctx, "git_autosync")
+	if err != nil {
+		t.Fatalf("gate: %v", err)
+	}
+	if g.LastRunAt == nil {
+		t.Errorf("LastRunAt not stamped")
+	}
+	if g.LastOK == nil || !*g.LastOK {
+		t.Errorf("LastOK = %v; want true", g.LastOK)
+	}
+	if g.LastSummary != "synced 3 repos" {
+		t.Errorf("LastSummary = %q; want %q", g.LastSummary, "synced 3 repos")
+	}
+}
+
+func TestMaintenanceService_SetStatus_truncatesOnRuneBoundary(t *testing.T) {
+	svc := newMaintSvc(t)
+	ctx := context.Background()
+	if err := svc.SeedDefaults(ctx); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// 600 two-byte Cyrillic runes: a byte slice at 512 would split a rune.
+	summary := strings.Repeat("я", 600)
+	if err := svc.SetStatus(ctx, "git_autosync", false, summary, nil); err != nil {
+		t.Fatalf("setStatus: %v", err)
+	}
+	g, err := svc.Gate(ctx, "git_autosync")
+	if err != nil {
+		t.Fatalf("gate: %v", err)
+	}
+	if !utf8.ValidString(g.LastSummary) {
+		t.Errorf("stored summary is not valid UTF-8")
+	}
+	if n := utf8.RuneCountInString(g.LastSummary); n != 512 {
+		t.Errorf("stored summary rune count = %d; want 512", n)
 	}
 }
 

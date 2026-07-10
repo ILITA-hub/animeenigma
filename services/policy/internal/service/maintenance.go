@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sort"
 	"time"
+	"unicode/utf8"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -71,8 +72,12 @@ func (s *MaintenanceService) SetStatus(ctx context.Context, id string, ok bool, 
 	if err := s.mustExist(ctx, id); err != nil {
 		return err
 	}
-	if len(summary) > 512 {
-		summary = summary[:512]
+	// LastSummary is varchar(512) — counts CHARACTERS, not bytes. This is a
+	// bilingual EN/RU codebase; a byte slice would split a multi-byte Cyrillic
+	// rune and store invalid UTF-8 (Postgres text rejects it). Truncate on rune
+	// boundaries to 512 runes.
+	if utf8.RuneCountInString(summary) > 512 {
+		summary = string([]rune(summary)[:512])
 	}
 	return s.repo.SetStatus(ctx, id, ok, summary, next)
 }
