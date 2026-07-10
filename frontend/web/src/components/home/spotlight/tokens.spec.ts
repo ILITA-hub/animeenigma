@@ -20,7 +20,7 @@ import {
 } from './tokens'
 
 // Authoritative list of every card variant currently in SpotlightCard.
-// Kept in sync with frontend/web/src/types/spotlight.ts:215..224. Updating
+// Kept in sync with frontend/web/src/types/spotlight.ts:246..257. Updating
 // the union without updating this list (and cardTokens) will fail tsc.
 const EXPECTED_TYPES: readonly SpotlightCardType[] = [
   'featured',
@@ -32,6 +32,7 @@ const EXPECTED_TYPES: readonly SpotlightCardType[] = [
   'now_watching',
   'not_time_yet',
   'continue_watching_new',
+  'curated',
 ] as const
 
 // Brand triad only (DS alignment A-1, 2026-06-10, user-approved).
@@ -51,11 +52,12 @@ const VALID_ICONS: readonly SpotlightIconName[] = [
   'shuffle',
   'wrench',
   'lightning',
+  'star',
 ] as const
 
 describe('cardTokens', () => {
-  it('has exactly 9 entries — one per SpotlightCard variant', () => {
-    expect(Object.keys(cardTokens)).toHaveLength(9)
+  it('has exactly 10 entries — one per SpotlightCard variant', () => {
+    expect(Object.keys(cardTokens)).toHaveLength(10)
   })
 
   it.each(EXPECTED_TYPES)('has a token for %s', (type) => {

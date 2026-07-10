@@ -131,6 +131,7 @@ export const cardTokens: CardTokenMap = {
   now_watching:          { accent: 'pink',   kickerKey: 'spotlight.nowWatching.title',         icon: 'pulse'    },
   not_time_yet:          { accent: 'violet', kickerKey: 'spotlight.notTimeYet.title',          icon: 'clock'    },
   continue_watching_new: { accent: 'pink',   kickerKey: 'spotlight.continueWatchingNew.title', icon: 'play'     },
+  curated:               { accent: 'cyan',   kickerKey: 'spotlight.curated.title',             icon: 'star'     },
 }
 
 
