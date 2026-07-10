@@ -18,6 +18,10 @@ type Config struct {
 	JWT      authz.JWTConfig
 	Groq     GroqConfig
 	DailyCap int // FANFIC_DAILY_CAP — max generations per user per day (default 100)
+
+	CatalogURL           string
+	CatalogTimeout       time.Duration
+	ContinueContextRunes int
 }
 
 type ServerConfig struct {
@@ -73,6 +77,10 @@ func Load() (*Config, error) {
 			Timeout: getEnvDuration("FANFIC_GROQ_TIMEOUT", 120*time.Second),
 		},
 		DailyCap: getEnvInt("FANFIC_DAILY_CAP", 100),
+
+		CatalogURL:           getEnv("CATALOG_URL", "http://catalog:8081"),
+		CatalogTimeout:       getEnvDuration("FANFIC_CATALOG_TIMEOUT", 5*time.Second),
+		ContinueContextRunes: getEnvInt("FANFIC_CONTINUE_CONTEXT_RUNES", 24000),
 	}, nil
 }
 

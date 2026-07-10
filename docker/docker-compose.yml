@@ -1242,6 +1242,9 @@ services:
       FANFIC_GROQ_API_KEY: ${FANFIC_GROQ_API_KEY}
       FANFIC_GROQ_MODEL: ${FANFIC_GROQ_MODEL:-llama-3.1-8b-instant}
       FANFIC_DAILY_CAP: "${FANFIC_DAILY_CAP:-100}"
+      CATALOG_URL: http://catalog:8081
+      FANFIC_CATALOG_TIMEOUT: 5s
+      FANFIC_CONTINUE_CONTEXT_RUNES: "24000"
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8097:8097"
@@ -1250,6 +1253,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      catalog:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8097/health"]
       interval: 30s

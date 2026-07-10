@@ -16,6 +16,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
+	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/catalog"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/groq"
@@ -69,7 +70,8 @@ func main() {
 	groqClient := groq.New(cfg.Groq.APIKey, cfg.Groq.BaseURL, cfg.Groq.Model, cfg.Groq.Timeout)
 	fanficRepo := repo.NewRepository(db.DB)
 	quota := service.NewQuota(newRedisQuotaStore(redis), cfg.DailyCap, time.Now)
-	generator := service.NewGenerator(groqClient, fanficRepo, quota, cfg.Groq.Model, log)
+	catalogClient := catalog.NewClient(cfg.CatalogURL, cfg.CatalogTimeout, log)
+	generator := service.NewGenerator(groqClient, fanficRepo, quota, catalogClient, cfg.Groq.Model, cfg.ContinueContextRunes, log)
 	h := handler.NewHandler(generator, fanficRepo, log)
 
 	mc := metrics.NewCollector("fanfic")
