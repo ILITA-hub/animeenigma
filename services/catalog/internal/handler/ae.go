@@ -44,11 +44,14 @@ func (h *AeHandler) GetAeEpisodes(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, resp)
 }
 
-// GetAeStream — GET /api/anime/{animeId}/ae/stream?episode={n}&quality={q}.
+// GetAeStream — GET /api/anime/{animeId}/ae/stream?episode={n}&quality={q}&server={s}.
 //
-// First-party provider stream: resolves STRICTLY from MinIO (no AllAnime
-// fallback) and returns a proxy-signed URL. 404 when the episode isn't
-// encoded locally yet.
+// First-party provider stream: resolves STRICTLY from the self-hosted library
+// (MinIO or S3, no AllAnime fallback) and returns a proxy-signed URL. server
+// optionally pins a dual-storage episode to "minio" or "s3" (mirrors
+// scraper.go's server-param read); absent, the resolver auto-prefers the
+// local minio copy. 404 when the episode isn't encoded on the requested (or
+// any) storage; 400 when server is set to anything other than minio/s3.
 func (h *AeHandler) GetAeStream(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")
 	if animeID == "" {
@@ -66,8 +69,9 @@ func (h *AeHandler) GetAeStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	quality := r.URL.Query().Get("quality") // optional
+	server := r.URL.Query().Get("server")   // optional; "" | "minio" | "s3"
 
-	stream, err := h.resolver.GetLibraryStream(r.Context(), animeID, episode, quality)
+	stream, err := h.resolver.GetLibraryStream(r.Context(), animeID, episode, quality, server)
 	if err != nil {
 		httputil.Error(w, err)
 		return

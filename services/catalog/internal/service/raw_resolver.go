@@ -149,6 +149,18 @@ type RawStream struct {
 	Exp        string         `json:"exp,omitempty"`
 	Sig        string         `json:"sig,omitempty"`
 	Storyboard *RawStoryboard `json:"storyboard,omitempty"`
+	// Servers lists the storage backends this episode is available on, ONLY
+	// when it exists on BOTH (dual-storage). Absent (nil) for the common
+	// single-copy case — the FE source panel only renders a Local/Cloud
+	// picker when there's an actual choice to make.
+	Servers []RawServer `json:"servers,omitempty"`
+}
+
+// RawServer is one dual-storage playback option surfaced to the frontend
+// (`?server=minio|s3` on the ae stream endpoint selects between them).
+type RawServer struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 // RawStoryboard points at the episode's WebVTT thumbnail track (signed for
@@ -230,7 +242,7 @@ func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*
 		return empty, nil
 	}
 	out := make([]RawEpisode, 0, len(items))
-	for _, it := range items {
+	for _, it := range dedupeLibraryEpisodes(items) {
 		out = append(out, RawEpisode{
 			ID:        fmt.Sprintf("%d", it.EpisodeNumber),
 			Number:    it.EpisodeNumber,
@@ -241,6 +253,29 @@ func (r *RawResolver) GetLibraryEpisodes(ctx context.Context, animeID string) (*
 		})
 	}
 	return &EpisodesResponse{Episodes: out, Available: true, Source: "library"}, nil
+}
+
+// dedupeLibraryEpisodes collapses ListEpisodes' union of minio+s3 rows down
+// to one entry per episode_number (dual storage presence is a playback-time
+// choice, not a second episode — every ae aggregate downstream of this
+// list, capabilities/AeTitleInfo/partial_library included, must not
+// double-count a dual-present episode). Preserves first-seen order; when an
+// episode number appears on both storages, the minio row wins (matches
+// GetLibraryStream's own minio-first default preference).
+func dedupeLibraryEpisodes(items []library.EpisodeListItem) []library.EpisodeListItem {
+	out := make([]library.EpisodeListItem, 0, len(items))
+	index := make(map[int]int, len(items)) // episode_number -> index in out
+	for _, it := range items {
+		if i, ok := index[it.EpisodeNumber]; ok {
+			if out[i].Storage != "minio" && it.Storage == "minio" {
+				out[i] = it
+			}
+			continue
+		}
+		index[it.EpisodeNumber] = len(out)
+		out = append(out, it)
+	}
+	return out
 }
 
 // aeDubTrack is the library's episode_track value for a localized dub
@@ -276,11 +311,23 @@ func (r *RawResolver) AeTitleInfo(ctx context.Context, animeID string) (AeInfo, 
 	return info, nil
 }
 
+// validLibraryServers is the set of accepted ?server= values for
+// GetLibraryStream: "" (auto — prefer minio, else s3), "minio", "s3".
+var validLibraryServers = map[string]bool{"": true, "minio": true, "s3": true}
+
 // GetLibraryStream resolves an episode's playable HLS stream STRICTLY from the
 // self-hosted library — no AllAnime fallback. Backs the first-party ("ae")
 // provider AND the raw provider (both reflect on-prem availability only).
-// Returns errors.NotFound when the episode is not encoded locally.
-func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string) (*RawStream, error) {
+//
+// server pins which storage copy to serve when the episode is dual-present:
+// "" auto-prefers the local minio copy over s3, "minio"/"s3" force that
+// specific backend. An invalid server value returns errors.InvalidInput
+// (400 via httputil.Error). Returns errors.NotFound when the episode isn't
+// encoded on the requested (or any, for server="") storage.
+func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string, server string) (*RawStream, error) {
+	if !validLibraryServers[server] {
+		return nil, errors.InvalidInput(`server must be one of: "", "minio", "s3"`)
+	}
 	if r.library == nil {
 		return nil, errors.NotFound("library not configured")
 	}
@@ -299,29 +346,53 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		return nil, errors.NotFound("episode not in library")
 	}
 
-	resp, err := r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber)
+	// Union-fetch both storages: this both resolves the requested copy AND
+	// tells us whether the episode is dual-present (Servers list). Cheap —
+	// the library is on the same docker network with a 2s-max timeout.
+	minioResp, err := r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber, "minio")
 	if err != nil {
 		return nil, errors.Wrap(err, errors.CodeUnavailable, "library unavailable")
 	}
-	if resp == nil {
-		// MISS: pool does not have this episode. Fire a non-blocking
-		// best-effort backfill demand so it's cached next time, then
-		// return NotFound. context.WithoutCancel so a client disconnect
-		// can't cancel the in-flight signal; the error is dropped
-		// (best-effort). Bounded + drop-on-full via fireSignal (WR-01).
-		mal, ep := anime.ShikimoriID, episodeNumber
-		// Ordered fallback titles (name_jp → romaji → name_en) so the library
-		// Planner can search trackers by title; empties are dropped server-side.
-		titles := []string{anime.NameJP, anime.Name, anime.NameEN}
-		trigger := &library.DemandTrigger{Player: "ae", WatchedEpisode: episodeNumber}
-		if claims, ok := authz.ClaimsFromContext(ctx); ok && claims != nil {
-			trigger.UserID = claims.UserID
-			trigger.Username = claims.Username
+	s3Resp, err := r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber, "s3")
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeUnavailable, "library unavailable")
+	}
+
+	var resp *library.EpisodeResponse
+	switch server {
+	case "minio":
+		resp = minioResp
+	case "s3":
+		resp = s3Resp
+	default: // "" → prefer minio, else s3
+		if minioResp != nil {
+			resp = minioResp
+		} else {
+			resp = s3Resp
 		}
-		sigCtx := context.WithoutCancel(ctx)
-		r.fireSignal(func() {
-			_ = r.library.RecordDemand(sigCtx, mal, ep, "backfill", titles, trigger)
-		})
+	}
+
+	if resp == nil {
+		// A request pinned to a specific storage that just doesn't have THIS
+		// copy (while the other storage does) is NOT a pool miss — the
+		// episode is encoded, only the requested copy is absent. Only fire
+		// the best-effort backfill-demand signal on a genuine full miss
+		// (neither storage has it).
+		if minioResp == nil && s3Resp == nil {
+			mal, ep := anime.ShikimoriID, episodeNumber
+			// Ordered fallback titles (name_jp → romaji → name_en) so the library
+			// Planner can search trackers by title; empties are dropped server-side.
+			titles := []string{anime.NameJP, anime.Name, anime.NameEN}
+			trigger := &library.DemandTrigger{Player: "ae", WatchedEpisode: episodeNumber}
+			if claims, ok := authz.ClaimsFromContext(ctx); ok && claims != nil {
+				trigger.UserID = claims.UserID
+				trigger.Username = claims.Username
+			}
+			sigCtx := context.WithoutCancel(ctx)
+			r.fireSignal(func() {
+				_ = r.library.RecordDemand(sigCtx, mal, ep, "backfill", titles, trigger)
+			})
+		}
 		return nil, errors.NotFound("episode not in library")
 	}
 	if !anime.HasRaw {
@@ -336,5 +407,10 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 	r.fireSignal(func() {
 		_ = r.library.RecordFetch(sigCtx, mal, ep)
 	})
-	return newLibraryStream(resp.MinIOURL, quality, resp.StoryboardURL), nil
+
+	stream := newLibraryStream(resp.MinIOURL, quality, resp.StoryboardURL)
+	if minioResp != nil && s3Resp != nil {
+		stream.Servers = []RawServer{{ID: "minio", Label: "Local"}, {ID: "s3", Label: "Cloud"}}
+	}
+	return stream, nil
 }

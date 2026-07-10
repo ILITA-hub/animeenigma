@@ -238,7 +238,7 @@ func TestRawResolver_GetLibraryStream_SignedAndLibraryOnly(t *testing.T) {
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
-	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "")
 	if err != nil {
 		t.Fatalf("GetLibraryStream: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestRawResolver_GetLibraryStream_StoryboardSigned(t *testing.T) {
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
-	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "")
 	if err != nil {
 		t.Fatalf("GetLibraryStream: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestRawResolver_GetLibraryStream_NoStoryboardWhenAbsent(t *testing.T) {
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
-	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "")
 	if err != nil {
 		t.Fatalf("GetLibraryStream: %v", err)
 	}
@@ -322,9 +322,258 @@ func TestRawResolver_GetLibraryStream_404WhenAbsent(t *testing.T) {
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
-	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 99, "")
+	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 99, "", "")
 	if err == nil {
 		t.Fatal("expected NotFound error when episode absent from library")
+	}
+}
+
+// ---- Task 5: dual-storage union + ?server= selection ----
+
+// dualStorageLibHandler fakes GET /api/library/episodes/{sk}/{ep} so a
+// ?storage=minio request hits minioURL and ?storage=s3 hits s3URL. An empty
+// (unset) storage query param — as the library service itself does — is
+// treated as "prefer minio". Empty *URL means that storage 404s (episode
+// absent there).
+func dualStorageLibHandler(minioURL, s3URL string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		storage := r.URL.Query().Get("storage")
+		var url string
+		switch storage {
+		case "minio":
+			url = minioURL
+		case "s3":
+			url = s3URL
+		default:
+			if minioURL != "" {
+				url = minioURL
+			} else {
+				url = s3URL
+			}
+		}
+		if url == "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success":true,"data":{"minio_url":%q,"storage":%q}}`, url, storage)
+	}
+}
+
+// dualStorageLibServer wraps dualStorageLibHandler in an httptest.Server.
+func dualStorageLibServer(t *testing.T, minioURL, s3URL string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(dualStorageLibHandler(minioURL, s3URL))
+}
+
+// TestRawResolver_GetLibraryStream_DualStorage_ServersPresentDefaultMinio
+// proves that when an episode exists on BOTH storages, the resolved stream
+// carries a Servers list (Local/Cloud) AND the default (server="") pick is
+// the local minio copy.
+func TestRawResolver_GetLibraryStream_DualStorage_ServersPresentDefaultMinio(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	const (
+		minioURL = "http://minio:9000/raw-library/57466/1/playlist.m3u8"
+		s3URL    = "https://s3.firstvds.ru/raw-library/57466/1/playlist.m3u8"
+	)
+	libSrv := dualStorageLibServer(t, minioURL, s3URL)
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "")
+	if err != nil {
+		t.Fatalf("GetLibraryStream: %v", err)
+	}
+	if got.URL != minioURL {
+		t.Errorf("URL = %q, want the minio copy %q (default prefers local)", got.URL, minioURL)
+	}
+	if len(got.Servers) != 2 {
+		t.Fatalf("Servers = %+v, want 2 entries (dual-storage)", got.Servers)
+	}
+	want := []RawServer{{ID: "minio", Label: "Local"}, {ID: "s3", Label: "Cloud"}}
+	if got.Servers[0] != want[0] || got.Servers[1] != want[1] {
+		t.Errorf("Servers = %+v, want %+v", got.Servers, want)
+	}
+}
+
+// TestRawResolver_GetLibraryStream_S3Only_NoServersResolvesS3 proves that an
+// episode present ONLY on s3 has no Servers list (nothing to choose between)
+// and the default (server="") resolution still finds it via the s3 fallback.
+func TestRawResolver_GetLibraryStream_S3Only_NoServersResolvesS3(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	const s3URL = "https://s3.firstvds.ru/raw-library/57466/1/playlist.m3u8"
+	libSrv := dualStorageLibServer(t, "", s3URL)
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "")
+	if err != nil {
+		t.Fatalf("GetLibraryStream: %v", err)
+	}
+	if got.URL != s3URL {
+		t.Errorf("URL = %q, want the s3 copy %q", got.URL, s3URL)
+	}
+	if got.Servers != nil {
+		t.Errorf("Servers = %+v, want nil (single-copy s3-only episode)", got.Servers)
+	}
+}
+
+// TestRawResolver_GetLibraryStream_ExplicitServerS3_SignsS3URL proves an
+// explicit ?server=s3 request on a dual-storage episode resolves + signs the
+// s3 copy (not the minio default), while still reporting Servers (the
+// episode is genuinely dual-present).
+func TestRawResolver_GetLibraryStream_ExplicitServerS3_SignsS3URL(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	const (
+		minioURL = "http://minio:9000/raw-library/57466/1/playlist.m3u8"
+		s3URL    = "https://s3.firstvds.ru/raw-library/57466/1/playlist.m3u8"
+	)
+	libSrv := dualStorageLibServer(t, minioURL, s3URL)
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "s3")
+	if err != nil {
+		t.Fatalf("GetLibraryStream: %v", err)
+	}
+	if got.URL != s3URL {
+		t.Errorf("URL = %q, want the explicitly-requested s3 copy %q", got.URL, s3URL)
+	}
+	if got.Exp == "" || got.Sig == "" {
+		t.Errorf("expected the s3 URL to be signed same as minio, got exp=%q sig=%q", got.Exp, got.Sig)
+	}
+	if len(got.Servers) != 2 {
+		t.Errorf("Servers = %+v, want 2 entries (dual-storage, regardless of which was requested)", got.Servers)
+	}
+}
+
+// TestRawResolver_GetLibraryStream_ExplicitServerNotOnThatStorage_404NotMISS
+// proves that requesting a storage the episode doesn't have (while the other
+// storage DOES have it) returns a clean NotFound — NOT a 500, and NOT a
+// genuine backfill-demand MISS signal (the episode isn't actually missing
+// from the library, just from the requested copy).
+func TestRawResolver_GetLibraryStream_ExplicitServerNotOnThatStorage_404NotMISS(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	const minioURL = "http://minio:9000/raw-library/57466/1/playlist.m3u8"
+	internalCalls := make(chan string, 4)
+	episodeHandler := dualStorageLibHandler(minioURL, "") // minio-only
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/internal/library/autocache/") {
+			internalCalls <- r.URL.Path
+			fmt.Fprint(w, `{"ok":true}`)
+			return
+		}
+		episodeHandler(w, r)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "s3")
+	if err == nil {
+		t.Fatal("expected NotFound when the episode isn't on the explicitly-requested storage")
+	}
+	if !isNotFound(err) {
+		t.Fatalf("expected a clean NotFound (400/404), not a 500-shaped error: %v", err)
+	}
+	select {
+	case p := <-internalCalls:
+		t.Errorf("must NOT fire a backfill demand for a wrong-storage request (episode exists on minio), got call to %q", p)
+	case <-time.After(100 * time.Millisecond):
+		// expected: no signal fired
+	}
+}
+
+// TestRawResolver_GetLibraryStream_InvalidServer_400 proves an unrecognized
+// ?server= value is rejected with errors.InvalidInput (→ 400 via
+// httputil.Error), mirroring how handler/scraper.go validates its own
+// server param.
+func TestRawResolver_GetLibraryStream_InvalidServer_400(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+	r := NewRawResolver(nil, animeRepo, cacheC, nil)
+
+	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "gcs")
+	if err == nil {
+		t.Fatal("expected an error for an invalid server value")
+	}
+	appErr, ok := errors.IsAppError(err)
+	if !ok || appErr.Code != errors.CodeInvalidInput {
+		t.Fatalf("got err %v, want a libs/errors AppError with CodeInvalidInput", err)
+	}
+}
+
+// ---- Task 5: GetLibraryEpisodes union-dedupe by episode_number ----
+
+// TestRawResolver_GetLibraryEpisodes_DualStorageDedupedByNumber proves that
+// when ListEpisodes returns two rows for the same episode_number (one per
+// storage — the union the library API now returns), GetLibraryEpisodes
+// collapses them to a single entry so ae aggregates (capabilities,
+// AeTitleInfo, partial_library) never double-count a dual-present episode.
+func TestRawResolver_GetLibraryEpisodes_DualStorageDedupedByNumber(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[
+			{"episode_number":1,"minio_url":"https://s3.firstvds.ru/x/1/playlist.m3u8","storage":"s3","track":"raw","quality":"720p"},
+			{"episode_number":1,"minio_url":"http://minio:9000/x/1/playlist.m3u8","storage":"minio","track":"dub","audio_lang":"eng","quality":"1080p"},
+			{"episode_number":2,"minio_url":"http://minio:9000/x/2/playlist.m3u8","storage":"minio"}
+		]}}`)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryEpisodes(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("GetLibraryEpisodes: %v", err)
+	}
+	if len(got.Episodes) != 2 {
+		t.Fatalf("len(Episodes) = %d, want 2 (deduped by episode_number), got %+v", len(got.Episodes), got.Episodes)
+	}
+	// The minio row must win when both storages hold the same episode number.
+	if got.Episodes[0].Track != "dub" || got.Episodes[0].AudioLang != "eng" || got.Episodes[0].Quality != "1080p" {
+		t.Errorf("episode[0] (deduped) = %+v, want the minio row's audio facts (dub/eng/1080p)", got.Episodes[0])
+	}
+}
+
+// TestRawResolver_AeTitleInfo_DualStorageDoesNotDoubleCount proves
+// AeTitleInfo (which every ae capability aggregate reads) sees the deduped
+// count — a dual-present single dub episode still yields exactly one
+// CoversFirstEpisode+dub verdict, not an inflated one.
+func TestRawResolver_AeTitleInfo_DualStorageDoesNotDoubleCount(t *testing.T) {
+	r := newAeInfoResolver(t, `{"success":true,"data":{"episodes":[
+		{"episode_number":1,"minio_url":"http://minio:9000/x/1/playlist.m3u8","storage":"minio","track":"dub","audio_lang":"eng","quality":"1080p"},
+		{"episode_number":1,"minio_url":"https://s3.firstvds.ru/x/1/playlist.m3u8","storage":"s3","track":"dub","audio_lang":"eng","quality":"1080p"}
+	]}}`)
+
+	got, err := r.AeTitleInfo(context.Background(), testAnimeID)
+	if err != nil {
+		t.Fatalf("AeTitleInfo: %v", err)
+	}
+	if !got.Present || !got.CoversFirstEpisode {
+		t.Fatalf("got %+v, want Present+CoversFirstEpisode true", got)
+	}
+	if got.Track != "dub" || got.AudioLang != "eng" {
+		t.Errorf("got Track=%q AudioLang=%q, want dub/eng", got.Track, got.AudioLang)
 	}
 }
 
@@ -365,7 +614,7 @@ func TestRawResolver_GetLibraryStream_HIT_FiresRecordFetch(t *testing.T) {
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
-	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "")
 	if err != nil {
 		t.Fatalf("GetLibraryStream HIT: %v", err)
 	}
@@ -394,7 +643,7 @@ func TestRawResolver_GetLibraryStream_MISS_FiresRecordDemand(t *testing.T) {
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
-	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 99, "")
+	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 99, "", "")
 	if err == nil {
 		t.Fatal("MISS must still return NotFound unchanged")
 	}
@@ -421,7 +670,7 @@ func TestRawResolver_GetLibraryStream_SignalFailureDoesNotAffectResult(t *testin
 	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
 	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
 
-	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "")
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "")
 	if err != nil {
 		t.Fatalf("a failing serve-signal must not fail the resolution, got err %v", err)
 	}

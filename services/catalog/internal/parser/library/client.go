@@ -51,6 +51,7 @@ type Client struct {
 // return the inner payload.
 type EpisodeResponse struct {
 	MinIOURL      string `json:"minio_url"`
+	Storage       string `json:"storage,omitempty"`
 	DurationSec   int    `json:"duration_sec"`
 	SizeBytes     int64  `json:"size_bytes"`
 	StoryboardURL string `json:"storyboard_url,omitempty"`
@@ -71,6 +72,7 @@ type envelope struct {
 type EpisodeListItem struct {
 	EpisodeNumber int    `json:"episode_number"`
 	MinIOURL      string `json:"minio_url"`
+	Storage       string `json:"storage,omitempty"`
 	DurationSec   int    `json:"duration_sec"`
 	Track         string `json:"track,omitempty"`
 	AudioLang     string `json:"audio_lang,omitempty"`
@@ -117,13 +119,16 @@ func NewClient(cfg Config) *Client {
 }
 
 // GetEpisode fetches the library_episodes row for (shikimoriID,
-// episode) over HTTP. Behavior:
+// episode) over HTTP. storage optionally pins the lookup to one backend
+// ("minio" or "s3") via ?storage=; empty leaves it to the library's own
+// default preference (local minio copy when the episode exists on both).
+// Behavior:
 //
 //   - 200 → returns a non-nil *EpisodeResponse parsed from the
 //     envelope. MinIOURL is validated non-empty (defensive against
 //     partial server bugs).
 //   - 404 → returns (nil, nil): legitimate empty state (no library
-//     row yet).
+//     row yet, or none on the requested storage).
 //   - 5xx → returns (nil, wrapped error) — transient; caller
 //     should NOT cache the decision.
 //   - other 4xx → returns (nil, wrapped error).
@@ -132,7 +137,7 @@ func NewClient(cfg Config) *Client {
 //
 // Empty shikimoriID and non-positive episode are rejected before any
 // request is issued.
-func (c *Client) GetEpisode(ctx context.Context, shikimoriID string, episode int) (*EpisodeResponse, error) {
+func (c *Client) GetEpisode(ctx context.Context, shikimoriID string, episode int, storage string) (*EpisodeResponse, error) {
 	if shikimoriID == "" {
 		return nil, fmt.Errorf("library: empty shikimori_id")
 	}
@@ -145,6 +150,9 @@ func (c *Client) GetEpisode(ctx context.Context, shikimoriID string, episode int
 		url.PathEscape(shikimoriID),
 		strconv.Itoa(episode),
 	)
+	if storage != "" {
+		u += "?storage=" + url.QueryEscape(storage)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("library: build request: %w", err)

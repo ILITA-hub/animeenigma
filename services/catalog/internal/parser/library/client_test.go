@@ -24,13 +24,16 @@ func TestGetEpisode_HappyPath(t *testing.T) {
 		if r.URL.Path != "/api/library/episodes/57466/1" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
+		if r.URL.RawQuery != "" {
+			t.Errorf("unexpected query: %s, want none when storage is empty", r.URL.RawQuery)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, happyEnvelope())
 	}))
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	got, err := c.GetEpisode(context.Background(), "57466", 1)
+	got, err := c.GetEpisode(context.Background(), "57466", 1, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -48,6 +51,29 @@ func TestGetEpisode_HappyPath(t *testing.T) {
 	}
 }
 
+// TestGetEpisode_StoragePinsQueryParam proves a non-empty storage argument is
+// forwarded as ?storage=<value> — the Task 4 library API contract this
+// client pins the lookup to one backend with.
+func TestGetEpisode_StoragePinsQueryParam(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("storage"); got != "s3" {
+			t.Errorf("storage query param = %q, want %q", got, "s3")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"minio_url":"https://s3.firstvds.ru/raw-library/57466/1/playlist.m3u8","storage":"s3"}}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	got, err := c.GetEpisode(context.Background(), "57466", 1, "s3")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Storage != "s3" {
+		t.Errorf("Storage = %q, want %q", got.Storage, "s3")
+	}
+}
+
 func TestGetEpisode_EmptyMinIOURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -56,7 +82,7 @@ func TestGetEpisode_EmptyMinIOURL(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	_, err := c.GetEpisode(context.Background(), "57466", 1)
+	_, err := c.GetEpisode(context.Background(), "57466", 1, "")
 	if err == nil {
 		t.Fatal("expected error on empty minio_url, got nil")
 	}
@@ -72,7 +98,7 @@ func TestGetEpisode_NotFoundReturnsNilNil(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	got, err := c.GetEpisode(context.Background(), "57466", 1)
+	got, err := c.GetEpisode(context.Background(), "57466", 1, "")
 	if err != nil {
 		t.Fatalf("404 must return nil error, got %v", err)
 	}
@@ -88,7 +114,7 @@ func TestGetEpisode_500ReturnsWrappedError(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	_, err := c.GetEpisode(context.Background(), "57466", 1)
+	_, err := c.GetEpisode(context.Background(), "57466", 1, "")
 	if err == nil {
 		t.Fatal("expected error on 500")
 	}
@@ -104,7 +130,7 @@ func TestGetEpisode_503ReturnsWrappedError(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
-	_, err := c.GetEpisode(context.Background(), "57466", 1)
+	_, err := c.GetEpisode(context.Background(), "57466", 1, "")
 	if err == nil {
 		t.Fatal("expected error on 503")
 	}
@@ -123,7 +149,7 @@ func TestGetEpisode_TimeoutReturnsError(t *testing.T) {
 
 	c := NewClient(Config{APIURL: srv.URL, Timeout: 10 * time.Millisecond})
 	start := time.Now()
-	_, err := c.GetEpisode(context.Background(), "57466", 1)
+	_, err := c.GetEpisode(context.Background(), "57466", 1, "")
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("expected timeout error")
@@ -161,7 +187,7 @@ func TestGetEpisode_InvalidArgs_NoRequestSent(t *testing.T) {
 		{"57466", -1},
 	}
 	for _, tc := range cases {
-		if _, err := c.GetEpisode(context.Background(), tc.shikimoriID, tc.episode); err == nil {
+		if _, err := c.GetEpisode(context.Background(), tc.shikimoriID, tc.episode, ""); err == nil {
 			t.Errorf("expected error for (%q, %d), got nil", tc.shikimoriID, tc.episode)
 		}
 	}
@@ -207,7 +233,7 @@ func TestNewClient_TrimsTrailingSlash(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{APIURL: srv.URL + "/", Timeout: 2 * time.Second})
-	if _, err := c.GetEpisode(context.Background(), "X", 1); err != nil {
+	if _, err := c.GetEpisode(context.Background(), "X", 1, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := "/api/library/episodes/X/1"
@@ -246,6 +272,33 @@ func TestListEpisodes_HappyPath(t *testing.T) {
 	}
 	if got[1].EpisodeNumber != 2 {
 		t.Errorf("ep1 number = %d, want 2", got[1].EpisodeNumber)
+	}
+}
+
+// TestListEpisodes_DualStorageItemsCarryStorage proves ListEpisodes passes
+// the per-row storage field through unchanged — the raw resolver needs it to
+// dedupe union episode lists and prefer the local minio copy.
+func TestListEpisodes_DualStorageItemsCarryStorage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"success":true,"data":{"episodes":[
+			{"episode_number":1,"minio_url":"http://minio:9000/raw-library/54974/1/playlist.m3u8","storage":"minio"},
+			{"episode_number":1,"minio_url":"https://s3.firstvds.ru/raw-library/54974/1/playlist.m3u8","storage":"s3"},
+			{"episode_number":2,"minio_url":"https://s3.firstvds.ru/raw-library/54974/2/playlist.m3u8","storage":"s3"}
+		]}}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIURL: srv.URL, Timeout: 2 * time.Second})
+	got, err := c.ListEpisodes(context.Background(), "54974")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want 3 (union, undeduped at the client layer)", len(got))
+	}
+	if got[0].Storage != "minio" || got[1].Storage != "s3" || got[2].Storage != "s3" {
+		t.Errorf("storage passthrough = [%q %q %q], want [minio s3 s3]", got[0].Storage, got[1].Storage, got[2].Storage)
 	}
 }
 
