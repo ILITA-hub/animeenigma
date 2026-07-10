@@ -879,6 +879,11 @@ function statusVariant(row: MaintenanceRow) { return STATUS_VARIANT[routineStatu
 function statusLabel(row: MaintenanceRow) { return t(`admin.policy.maintenance.status.${routineStatus(row)}`) }
 
 // ── enable/pause (instant, confirm-gated on pause) ──
+// DECOUPLED from knob edits: the toggle persists ONLY the last-saved settings
+// (`row.settings`), never the in-progress `row.draft`, and never resets the
+// knob draft/dirty baseline. So flipping the Switch while a knob edit is
+// pending neither commits that edit nor clears its unsaved state — knobs
+// commit exclusively through the explicit Save button (`saveKnobs`).
 async function onToggleRoutine(row: MaintenanceRow, enabled: boolean): Promise<void> {
   const name = routineName(row.id)
   if (!enabled) {
@@ -891,7 +896,18 @@ async function onToggleRoutine(row: MaintenanceRow, enabled: boolean): Promise<v
     })
     if (!ok) return
   }
-  await applyRoutine(row, enabled, currentSettings(row), enabled ? 'toastEnable' : 'toastPause')
+  const prev = row.enabled
+  row.saving = true
+  row.enabled = enabled
+  try {
+    await maintenance.setRoutine(row.id, { enabled, settings: row.settings })
+    toast.push(t(`admin.policy.maintenance.${enabled ? 'toastEnable' : 'toastPause'}Success`, { name }), 'success')
+  } catch {
+    row.enabled = prev
+    toast.push(t(`admin.policy.maintenance.${enabled ? 'toastEnable' : 'toastPause'}Error`, { name }), 'error')
+  } finally {
+    row.saving = false
+  }
 }
 
 // ── save knobs (explicit) ──
@@ -906,24 +922,20 @@ function currentSettings(row: MaintenanceRow): Record<string, unknown> {
 function isKnobDirty(row: MaintenanceRow): boolean {
   return JSON.stringify(currentSettings(row)) !== row.original
 }
+// The ONLY path that persists knob draft edits and advances the dirty
+// baseline. Enabled-state is passed through unchanged (Save doesn't toggle).
 async function saveKnobs(row: MaintenanceRow): Promise<void> {
-  await applyRoutine(row, row.enabled, currentSettings(row), 'toastSave')
-}
-
-async function applyRoutine(row: MaintenanceRow, enabled: boolean, settings: Record<string, unknown>, kind: 'toastEnable' | 'toastPause' | 'toastSave'): Promise<void> {
-  const prevEnabled = row.enabled
   const name = routineName(row.id)
+  const settings = currentSettings(row)
   row.saving = true
-  row.enabled = enabled
   try {
-    await maintenance.setRoutine(row.id, { enabled, settings })
+    await maintenance.setRoutine(row.id, { enabled: row.enabled, settings })
     row.settings = settings
     row.draft = { ...settings }
     row.original = JSON.stringify(settings)
-    toast.push(t(`admin.policy.maintenance.${kind}Success`, { name }), 'success')
+    toast.push(t('admin.policy.maintenance.toastSaveSuccess', { name }), 'success')
   } catch {
-    row.enabled = prevEnabled
-    toast.push(t(`admin.policy.maintenance.${kind}Error`, { name }), 'error')
+    toast.push(t('admin.policy.maintenance.toastSaveError', { name }), 'error')
   } finally {
     row.saving = false
   }

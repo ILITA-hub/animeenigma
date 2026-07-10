@@ -531,5 +531,30 @@ describe('AdminPolicy', () => {
       const w = await mountAndOpenMaintenanceTab()
       expect(w.find('[data-testid="routine-save-provider_recovery"]').attributes('disabled')).toBeDefined()
     })
+
+    it('toggle persists SAVED settings, not the unsaved knob draft (decoupled from Save)', async () => {
+      // provider_recovery seeds settings.model:'sonnet' + a `model` select knob.
+      mockMaintenanceList.mockResolvedValue([maintRow({ lastRunAt: new Date().toISOString() })])
+      confirmMock.mockResolvedValue(true)
+      const w = await mountAndOpenMaintenanceTab()
+
+      // Edit the Model SegmentedControl sonnet -> opus WITHOUT clicking Save.
+      // The rendered option button carries data-value; clicking it emits
+      // update:modelValue('opus') into row.draft.model.
+      await w.find('[data-testid="routine-card"] [data-value="opus"]').trigger('click')
+      await flushPromises()
+      // The edit made the knob dirty (Save now enabled) — proves the draft moved.
+      expect(w.find('[data-testid="routine-save-provider_recovery"]').attributes('disabled')).toBeUndefined()
+
+      // Now pause via the Switch (confirm -> true). The toggle must send the
+      // SAVED model ('sonnet'), NOT the unsaved draft ('opus').
+      await w.find('[data-testid="routine-switch-provider_recovery"]').trigger('click')
+      await flushPromises()
+
+      expect(mockSetRoutine).toHaveBeenCalledWith('provider_recovery', {
+        enabled: false,
+        settings: { model: 'sonnet' },
+      })
+    })
   })
 })
