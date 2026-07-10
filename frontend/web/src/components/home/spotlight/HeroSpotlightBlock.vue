@@ -134,6 +134,11 @@
             :key="`continue_watching_new:${currentIndex}`"
             :data="active.data"
           />
+          <CuratedCard
+            v-else-if="active.type === 'curated'"
+            :key="`curated:${currentIndex}`"
+            :data="active.data"
+          />
         </transition>
       </div>
       <!-- SR-only pause announcement (UI-SPEC §A11y; F1.3/F6.1 resolution).
@@ -173,9 +178,11 @@ import TelegramNewsCard from './cards/TelegramNewsCard.vue'
 import NowWatchingCard from './cards/NowWatchingCard.vue'
 import NotTimeYetCard from './cards/NotTimeYetCard.vue'
 import ContinueWatchingNewCard from './cards/ContinueWatchingNewCard.vue'
+import CuratedCard from './cards/CuratedCard.vue'
 import { getLocalizedTitle } from '@/utils/title'
 import { preloadImage } from '@/utils/preload-image'
 import { cardPosterUrl } from '@/composables/useImageProxy'
+import { weightedRandomIndex } from './weightedRandom'
 
 // Locked at 7000 ms per HSB-FE-03. Do not parametrize — the cadence is part
 // of the product spec, not a knob.
@@ -387,6 +394,10 @@ function cardImageUrls(card: SpotlightCard): string[] {
       const hero = (card.data.posts ?? [])[0]
       return hero?.image_url ? [hero.image_url] : []
     }
+    case 'curated':
+      return card.data.anime.poster_url
+        ? [cardPosterUrl(card.data.anime.poster_url, 640)]
+        : []
     default:
       return []
   }
@@ -427,7 +438,7 @@ function schedulePrefetch(): void {
 // guarantees we seed exactly once, after the response has populated.
 watch(() => cards.value.length, (n) => {
   if (n > 0 && !initialized) {
-    currentIndex.value = Math.floor(Math.random() * n)
+    currentIndex.value = weightedRandomIndex(cards.value)
     initialized = true
     startCycle()
     schedulePrefetch()
@@ -494,6 +505,12 @@ function cardTitle(card: SpotlightCard): string {
         card.data.anime.name_jp,
       )
     case 'continue_watching_new':
+      return getLocalizedTitle(
+        card.data.anime.name,
+        card.data.anime.name_ru,
+        card.data.anime.name_jp,
+      )
+    case 'curated':
       return getLocalizedTitle(
         card.data.anime.name,
         card.data.anime.name_ru,
