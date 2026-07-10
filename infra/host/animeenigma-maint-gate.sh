@@ -12,7 +12,10 @@ MAINT_POLICY_BASE="${MAINT_POLICY_BASE:-http://localhost:8098}"
 maint_gate_enabled() {
   local id="$1" body enabled
   body=$(curl -fsS -m 4 "$MAINT_POLICY_BASE/internal/maintenance/routines/$id" 2>/dev/null) || return 0
-  enabled=$(printf '%s' "$body" | jq -r '.data.enabled // empty' 2>/dev/null) || return 0
+  # jq's `//` treats JSON `false` like null (falsy default), which would swallow
+  # an explicit enabled:false. Use strict equality so ONLY a real boolean false
+  # pauses the routine; null/missing/true all fall through to "true" (run).
+  enabled=$(printf '%s' "$body" | jq -r 'if (.data.enabled == false) then "false" else "true" end' 2>/dev/null) || return 0
   [ "$enabled" = "false" ] && return 1
   return 0
 }
@@ -21,7 +24,9 @@ maint_gate_enabled() {
 maint_gate_setting() {
   local id="$1" key="$2" body
   body=$(curl -fsS -m 4 "$MAINT_POLICY_BASE/internal/maintenance/routines/$id" 2>/dev/null) || return 0
-  printf '%s' "$body" | jq -r --arg k "$key" '.data.settings[$k] // empty' 2>/dev/null || true
+  # Same `//` landmine: a boolean-false (or 0) setting would be swallowed as
+  # "missing". Only a genuinely null/absent key yields empty; false/0/"x" print.
+  printf '%s' "$body" | jq -r --arg k "$key" 'if (.data.settings[$k] == null) then empty else (.data.settings[$k]|tostring) end' 2>/dev/null || true
 }
 
 # maint_status <routine_id> <ok:0|1> <summary> -> fire-and-forget status POST
