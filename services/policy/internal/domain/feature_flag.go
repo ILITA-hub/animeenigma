@@ -171,6 +171,7 @@ func SeedFlags() []FeatureFlag {
 		everyone("themes", "OP/ED themes"),
 		everyone("game", "Game rooms"),
 		everyone("downloads", "Downloads"),
+		everyone("tips", "Tips & hotkeys"),
 		{Key: "showcase-editor", Roles: StringList{RoleAdmin}, Roulette: true, FailSafe: "admin", Label: "Showcase editor"},
 		{Key: "my-feedback", Roles: StringList{RoleUser, RoleAdmin}, Roulette: true, FailSafe: "everyone", Label: "My feedback"},
 	}

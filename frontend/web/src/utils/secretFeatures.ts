@@ -17,7 +17,17 @@ import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
  * AdminPolicy.vue, which edits the same policy flags this feed reads).
  */
 export interface SecretFeature {
-  key: 'anidle' | 'status' | 'themes' | 'game' | 'gacha' | 'fanfic' | 'downloads' | 'showcase-editor' | 'my-feedback'
+  key:
+    | 'anidle'
+    | 'status'
+    | 'themes'
+    | 'game'
+    | 'gacha'
+    | 'fanfic'
+    | 'downloads'
+    | 'showcase-editor'
+    | 'my-feedback'
+    | 'tips'
   /** Navigation target for router.push (also the admin "direct link"). */
   to: RouteLocationRaw
   /** i18n key for the human label shown on the admin management page. */
@@ -69,6 +79,13 @@ export const SECRET_FEATURES: SecretFeature[] = [
     key: 'my-feedback',
     to: '/my-feedback',
     labelKey: 'admin.secretFeatures.feature.myFeedback',
+  },
+  {
+    // Secret tips & hotkeys page — deliberately nav-less; discovered via the
+    // roulette or the global `?` hotkey (App.vue + utils/globalHotkeys.ts).
+    key: 'tips',
+    to: '/tips',
+    labelKey: 'admin.secretFeatures.feature.tips',
   },
 ]
 

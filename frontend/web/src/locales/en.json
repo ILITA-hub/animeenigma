@@ -1399,7 +1399,8 @@
         "downloads": "Downloads",
         "showcaseEditor": "Showcase editor",
         "myFeedback": "My feedback",
-        "fanfic": "Fanfic engine"
+        "fanfic": "Fanfic engine",
+        "tips": "Tips & hotkeys"
       }
     },
     "collections": {
@@ -1557,6 +1558,82 @@
         "a": "A small self-hosted group of anime fans. The code is open and contributions are welcome via the project repository. No company, no shareholders, no roadmap pressure — just folks who wanted a better way to watch anime."
       }
     }
+  },
+  "tips": {
+    "title": "Secret tips & hotkeys",
+    "subtitle": "You found the hidden page. Everything the interface never tells you — keyboard shortcuts and features tucked away around the site.",
+    "player": {
+      "title": "Player hotkeys"
+    },
+    "groups": {
+      "playback": "Playback",
+      "volume": "Volume",
+      "subtitles": "Subtitles",
+      "view": "View"
+    },
+    "keys": {
+      "playPause": "Play / pause",
+      "seekBack": "Back 5 seconds",
+      "seekFwd": "Forward 5 seconds",
+      "seekPct": "Jump to 0–90% of the episode",
+      "homeEnd": "To the start / end (progress bar focused)",
+      "volUp": "Volume up 5%",
+      "volDown": "Volume down 5%",
+      "mute": "Mute / unmute",
+      "subs": "Toggle subtitles",
+      "subEarlier": "Subtitles 0.1 s earlier",
+      "subLater": "Subtitles 0.1 s later",
+      "fullscreen": "Fullscreen",
+      "pip": "Picture-in-picture",
+      "closePanels": "Close player panels",
+      "help": "Open this secret page (works almost anywhere)",
+      "escape": "Close modals, drawers, the poster lightbox, theater mode",
+      "chat": "Chat: send / new line",
+      "spotlight": "Flip the home-page spotlight (when focused)"
+    },
+    "global": {
+      "title": "Everywhere on the site"
+    },
+    "tricks": {
+      "title": "Tips & hidden features",
+      "roulette": {
+        "title": "Secret feature roulette",
+        "body": "The «Secret feature» button in the footer teleports you to a random hidden page — this one included."
+      },
+      "rawdub": {
+        "title": "RAW vs DUB",
+        "body": "The switch at the top of the player: DUB is localized voice-over, RAW is the original Japanese audio — pair it with subtitles from the menu."
+      },
+      "autosync": {
+        "title": "Subtitle auto-sync",
+        "body": "Subtitles drifting? The subtitles menu has an auto-sync switch that aligns timing to detected speech automatically."
+      },
+      "storyboard": {
+        "title": "Timeline previews",
+        "body": "Hover the player timeline to peek at scene thumbnails before you seek."
+      },
+      "contextmenu": {
+        "title": "Poster context menu",
+        "body": "Right-click any anime poster: open in a new tab, mark the next episode watched, or download a whole season."
+      },
+      "theater": {
+        "title": "Theater mode",
+        "body": "The button in the player controls stretches video across the page width — halfway between windowed and fullscreen."
+      },
+      "pwa": {
+        "title": "Install as an app",
+        "body": "Install AnimeEnigma as an app (PWA) to unlock offline episode downloads — with a Wi-Fi-only option."
+      },
+      "watchtogether": {
+        "title": "Watch together",
+        "body": "The button inside the player creates a private room; playback stays in sync for everyone, chat included."
+      },
+      "report": {
+        "title": "Report a broken stream",
+        "body": "Stream won't play? The report button in the player pings the admins directly — with logs attached."
+      }
+    },
+    "secretNote": "This page isn't in any menu. Now you know why. Keep it secret… or don't."
   },
   "system": {
     "statusBanner": {

@@ -167,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onErrorCaptured, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onErrorCaptured, ref, watch } from 'vue'
 import { TriangleAlert, Inbox, Send, Github, Mail, Sparkles } from 'lucide-vue-next'
 import { TooltipProvider } from 'reka-ui'
 import { useRoute, useRouter } from 'vue-router'
@@ -185,6 +185,7 @@ import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { reportFeError } from '@/utils/feErrorLog'
 import { pickSecretFeature, roulettePoolAvailable } from '@/utils/secretFeatures'
+import { isHelpHotkey } from '@/utils/globalHotkeys'
 import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
 
 const authStore = useAuthStore()
@@ -257,6 +258,16 @@ function openSecretFeature(): void {
   if (pick) void router.push(pick.to)
 }
 
+// Global `?` → secret tips & hotkeys page. The `<video>` guard keeps a
+// stray keystroke from yanking the user off an active watch surface (the
+// player owns its own window-level hotkeys while mounted).
+function onGlobalKeydown(e: KeyboardEvent): void {
+  if (!isHelpHotkey(e)) return
+  if (document.querySelector('video')) return
+  if (route.path === '/tips') return
+  void router.push('/tips')
+}
+
 // Auth-driven lifecycle: start polling on login, stop + clear state on
 // logout. immediate=true so an already-authenticated tab on page-load
 // also kicks the engine. The store's start() is idempotent.
@@ -324,10 +335,15 @@ const reloadPage = () => window.location.reload()
 // Initialize auth state - fetch user if we have token but no user data
 onMounted(async () => {
   consumeAdminRedirectKey()
+  window.addEventListener('keydown', onGlobalKeydown)
   void loadSecretFeatureState()
   if (authStore.token && !authStore.user) {
     await authStore.fetchUser()
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onGlobalKeydown)
 })
 
 // Phase 12 / UA-100: also surface after route changes, since the

@@ -190,6 +190,14 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'about.title' }
   },
   {
+    // Secret tips & hotkeys page — no nav chrome; reached via the footer
+    // roulette or the global `?` hotkey (feedback 2026-07-08T15-21-31).
+    path: '/tips',
+    name: 'tips',
+    component: () => import('@/views/TipsPage.vue'),
+    meta: { titleKey: 'tips.title' }
+  },
+  {
     // Admin dashboard landing — Vue replacement for the old hardcoded gateway
     // HTML page. Lists every admin tool as a styled card. Non-strict matching
     // covers both `/admin` and `/admin/`. Auth enforced by the guard below
