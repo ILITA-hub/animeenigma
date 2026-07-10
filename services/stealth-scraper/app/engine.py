@@ -841,7 +841,7 @@ class CamoufoxEngine:
                 ).inc()
                 if page is not None:
                     await _safe_close_page(page)
-                self.profiles.release(profile, ok=True)
+                self.profiles.release(profile, ok=False)
                 self.store.delete(sid)
                 return None
 

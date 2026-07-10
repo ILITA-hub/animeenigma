@@ -5,7 +5,6 @@ invalid records refuse and are deleted."""
 import tempfile
 import time
 import unittest
-from unittest import mock
 
 from app.config import Config
 from app.engine import CamoufoxEngine, SessionGone
