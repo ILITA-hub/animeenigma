@@ -2285,18 +2285,26 @@
       "ru": "Russian",
       "en": "English"
     },
+    "canon": {
+      "label": "Canon continuation",
+      "hint": "Continue the anime's real plot, past where it ended.",
+      "directionLabel": "Where should the plot go? (optional)",
+      "directionPlaceholder": "e.g. Frieren finds an old letter from Himmel…"
+    },
     "library": {
       "empty": "No fanfics yet. Generate your first one in the Generate tab.",
       "delete": "Delete",
       "deleteConfirm": "Delete this fanfic? This cannot be undone.",
-      "loadError": "Failed to load the library."
+      "loadError": "Failed to load the library.",
+      "canonBadge": "canon"
     },
     "reader": {
       "regenerate": "Regenerate",
       "copy": "Copy",
       "copied": "Copied",
       "saved": "Saved to library",
-      "empty": "Fill in the form on the left and press Generate."
+      "empty": "Fill in the form on the left and press Generate.",
+      "continue": "Continue"
     },
     "status": {
       "generating": "Generating…",
