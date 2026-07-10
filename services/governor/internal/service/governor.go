@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
-	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/governor/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/governor/internal/govmetrics"
 )
 
 // VerdictSource yields the instantaneous pressure verdict (promquery.Client).
@@ -103,7 +103,7 @@ func (g *Governor) RunTick(ctx context.Context) {
 		g.failCount++
 		fails := g.failCount
 		g.mu.Unlock()
-		metrics.GovernorEvalFailuresTotal.Inc()
+		govmetrics.GovernorEvalFailuresTotal.Inc()
 		g.log.Warnw("prometheus poll failed", "consecutive", fails, "error", err)
 		if fails < g.promFailTicks {
 			// Grace window: keep the last published level alive (TTL refresh).
@@ -118,11 +118,9 @@ func (g *Governor) RunTick(ctx context.Context) {
 		g.mu.Unlock()
 	}
 
-	computed := g.machine.Level()
+	computed := domain.LevelNormal
 	if promHealthy {
 		computed, _ = g.machine.Tick(verdict.Target)
-	} else {
-		computed = domain.LevelNormal
 	}
 
 	override, oerr := g.store.Override(ctx)
@@ -165,7 +163,7 @@ func (g *Governor) RunTick(ctx context.Context) {
 			Reasons:      flattenReasons(reasons),
 			SignalValues: verdict.Signals,
 		}
-		metrics.GovernorTransitionsTotal.WithLabelValues(strconv.Itoa(int(published))).Inc()
+		govmetrics.GovernorTransitionsTotal.WithLabelValues(strconv.Itoa(int(published))).Inc()
 		g.log.Infow("degradation level transition",
 			"from", prev, "to", published, "reasons", tr.Reasons)
 		g.sink.Report(ctx, tr)
@@ -183,7 +181,7 @@ func (g *Governor) publish(ctx context.Context, level domain.Level, reasons []do
 	if err := g.store.PublishLevel(ctx, level, reasons, g.levelTTL); err != nil {
 		g.log.Warnw("redis publish failed (consumers fail open)", "error", err)
 	}
-	metrics.DegradationLevel.Set(float64(level))
+	govmetrics.DegradationLevel.Set(float64(level))
 
 	active := map[string]bool{}
 	for _, r := range reasons {
@@ -197,7 +195,7 @@ func (g *Governor) publish(ctx context.Context, level domain.Level, reasons []do
 			if active[sig+"\x00"+sev] {
 				v = 1
 			}
-			metrics.DegradationReasonActive.WithLabelValues(sig, sev).Set(v)
+			govmetrics.DegradationReasonActive.WithLabelValues(sig, sev).Set(v)
 		}
 	}
 	for _, syn := range []string{domain.ReasonManualOverride, domain.ReasonPrometheusUnreachable} {
@@ -205,7 +203,7 @@ func (g *Governor) publish(ctx context.Context, level domain.Level, reasons []do
 		if active[syn+"\x00"+domain.SeverityInfo] {
 			v = 1
 		}
-		metrics.DegradationReasonActive.WithLabelValues(syn, domain.SeverityInfo).Set(v)
+		govmetrics.DegradationReasonActive.WithLabelValues(syn, domain.SeverityInfo).Set(v)
 	}
 }
 

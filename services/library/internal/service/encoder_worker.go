@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
-	gometrics "github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/autocache"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
@@ -113,10 +112,9 @@ type EncoderPool struct {
 	pollInterval time.Duration
 
 	// shed gates NEW encode claims while the platform degradation level is
-	// Elevated+ (graceful-degradation Phase 3). Nil = never shed. A running
-	// ffmpeg always finishes — only admission pauses.
-	shed       ShedChecker
-	shedLogged bool
+	// Elevated+ (graceful-degradation Phase 3). A running ffmpeg always
+	// finishes — only admission pauses.
+	shed *shedGate
 
 	wg sync.WaitGroup
 }
@@ -156,31 +154,12 @@ func NewEncoderPool(
 		log:          log,
 		invalidator:  invalidator,
 		pollInterval: 2 * time.Second,
+		shed:         newShedGate("library_encode", log),
 	}
 }
 
 // SetShedChecker wires the degradation watcher (nil-safe; call before Start).
-func (p *EncoderPool) SetShedChecker(c ShedChecker) { p.shed = c }
-
-// shedClaims mirrors WorkerPool.shedClaims for the encode side
-// (ae_degradation_shed{subsystem="library_encode"}).
-func (p *EncoderPool) shedClaims() bool {
-	shed := p.shed != nil && p.shed.ShouldShed(1)
-	if shed != p.shedLogged {
-		p.shedLogged = shed
-		v := 0.0
-		if shed {
-			v = 1
-			if p.log != nil {
-				p.log.Infow("pausing new encode claims: platform degraded", "level", p.shed.Level())
-			}
-		} else if p.log != nil {
-			p.log.Infow("resuming encode claims: degradation cleared")
-		}
-		gometrics.DegradationShed.WithLabelValues("library_encode").Set(v)
-	}
-	return shed
-}
+func (p *EncoderPool) SetShedChecker(c ShedChecker) { p.shed.set(c) }
 
 // Start launches worker goroutines; returns immediately. Goroutines
 // exit on <-ctx.Done().
@@ -218,7 +197,7 @@ func (p *EncoderPool) runWorker(ctx context.Context, idx int) {
 		if ctx.Err() != nil {
 			return
 		}
-		if p.shedClaims() {
+		if p.shed.shed() {
 			if !p.sleep(ctx, p.pollInterval) {
 				return
 			}

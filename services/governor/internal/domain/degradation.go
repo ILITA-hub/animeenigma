@@ -4,7 +4,11 @@
 // docs/superpowers/specs/2026-07-10-graceful-degradation-design.md.
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/cache"
+)
 
 // Level is the platform-wide degradation level. Heavy subsystems (library
 // torrent/encode, Camoufox warming, scheduler heavy crons) consume it via
@@ -22,7 +26,9 @@ const (
 // dead governor degrades to "no shedding" — never to "everything shed").
 const (
 	// RedisLevelKey holds the current published level as "0" | "1" | "2".
-	RedisLevelKey = "ae:degradation:level"
+	// Aliased to the shared consumer-side constant so producer and consumers
+	// can never drift apart.
+	RedisLevelKey = cache.DegradationLevelKey
 	// RedisReasonsKey holds the JSON-encoded reasons slice for the current level.
 	RedisReasonsKey = "ae:degradation:reasons"
 	// RedisOverrideKey, when set to "0" | "1" | "2" (by the owner via
