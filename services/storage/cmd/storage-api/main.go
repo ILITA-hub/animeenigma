@@ -82,16 +82,20 @@ func main() {
 	router := transport.NewRouter(storageHandler, log, metricsCollector)
 
 	srv := &http.Server{
-		Addr:    cfg.Server.Address(),
-		Handler: tracing.HTTPMiddleware("storage")(router),
-		// WriteTimeout must accommodate the BULK routes: /internal/storage/copy
-		// streams a whole episode prefix (potentially multi-GB) cross-backend
-		// before it can respond — a 1.8GB prefix blew through the previous 30s
-		// during the 2026-07-10 storage migration. This service is Docker-
-		// network-only (never internet-facing), so a generous cap is safe; it
-		// must stay >= libs/storageclient's longOpTimeout.
+		Addr: cfg.Server.Address(),
+		// ScopedTimeout keeps every route on a 30s effective response ceiling
+		// EXCEPT /internal/storage/copy, which streams a whole episode prefix
+		// (potentially multi-GB) cross-backend before it can respond — a 1.8GB
+		// prefix blew through a flat 30s during the 2026-07-10 storage
+		// migration. The server-wide WriteTimeout is raised ONLY as the copy
+		// route's ultimate bound (it must stay >= libs/storageclient's
+		// longOpTimeout); every other route still times out at 30s via the
+		// middleware, so a hung list/ingest/delete cannot hold its connection
+		// open for 20 minutes. Docker-network-only service, never
+		// internet-facing.
+		Handler:      tracing.HTTPMiddleware("storage")(transport.ScopedTimeout(router, 30*time.Second)),
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 20 * time.Minute,
+		WriteTimeout: 21 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
 

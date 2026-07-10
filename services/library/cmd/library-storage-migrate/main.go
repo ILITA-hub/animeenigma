@@ -24,6 +24,31 @@
 // (below) heals it on the next run by re-verifying s3 then deleting the minio
 // leftovers.
 //
+// Flip-failure matrix (step 5 outcomes; the evictor selects from the same
+// storage='minio' pool with NO coordination, so the row can vanish or change
+// under us between selection and flip):
+//
+//	UpdateStorage → NotFound (row vanished — evictor race):
+//	    the evictor deletes objects THEN the row, so the minio prefix is its
+//	    responsibility — leave minio alone. Our just-copied s3 prefix is an
+//	    orphan nothing references (reconcile only revisits rows flipped to
+//	    s3), so UNDO it (delete the s3 prefix). Count as skip.
+//	UpdateStorage → other error, re-read shows storage='s3':
+//	    a concurrent flip won; the copy is verified and the row is
+//	    authoritative on s3 — success. No deletes here: local cleanup belongs
+//	    to whoever flipped (or the next run's reconcile pass).
+//	UpdateStorage → other error, re-read shows storage='minio':
+//	    flip genuinely failed. UNDO the s3 copy (it would leak forever
+//	    otherwise), leave minio + row untouched, count as skip — the next run
+//	    reselects and retries the whole sequence.
+//	UpdateStorage → other error, re-read shows NotFound:
+//	    row vanished mid-flip — same as the NotFound case: undo s3, leave
+//	    minio alone, skip.
+//	UpdateStorage → other error, re-read ALSO errors:
+//	    state unknowable — touch NOTHING (the s3 prefix may leak until an
+//	    operator re-runs; that beats deleting data whose DB state is
+//	    unknown). Count as skip, log loudly.
+//
 // It runs INSIDE the library container (DB + storage-service reachability) via
 // `docker compose run --rm --entrypoint /app/library-storage-migrate library
 // [flags]`. It never touches the running service.
@@ -42,12 +67,28 @@ import (
 	"os"
 
 	"github.com/ILITA-hub/animeenigma/libs/database"
+	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/storageclient"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/repo"
 )
+
+// objectStore is the narrow slice of *storageclient.Client the migration
+// sequence uses — a seam so the safety-critical branches of migrateOne /
+// reconcileLeftovers are unit-testable with a fake.
+type objectStore interface {
+	List(ctx context.Context, storage, prefix string) ([]storageclient.Object, error)
+	CopyPrefix(ctx context.Context, fromStorage, toStorage, prefix string) (int, int64, error)
+	DeletePrefix(ctx context.Context, storage, prefix string) (int, error)
+}
+
+// episodeStore is the narrow slice of *repo.EpisodeRepository migrateOne uses.
+type episodeStore interface {
+	UpdateStorage(ctx context.Context, id string, storage string) error
+	GetByID(ctx context.Context, id string) (*domain.Episode, error)
+}
 
 func main() {
 	var (
@@ -137,19 +178,21 @@ func main() {
 
 // migrateOne runs the copy-verify-flip-delete sequence for a single episode.
 // Returns (true, bytesMigrated) on success; (false, 0) on any skip. A skip
-// leaves BOTH the DB row (still minio) and the local objects untouched.
+// leaves BOTH the DB row (still minio, if it still exists) and the local
+// objects untouched; a just-copied s3 prefix is undone where the flip-failure
+// matrix (package doc) says it would otherwise leak.
 func migrateOne(
 	ctx context.Context,
 	log *logger.Logger,
-	client *storageclient.Client,
-	episodeRepo *repo.EpisodeRepository,
+	store objectStore,
+	episodes episodeStore,
 	ep domain.Episode,
 ) (bool, int64) {
 	prefix := ep.MinioPath
 	fields := []any{"episode_id", ep.ID, "shikimori_id", ep.ShikimoriID, "episode", ep.EpisodeNumber, "prefix", prefix}
 
 	// 1. Source inventory.
-	srcObjs, err := client.List(ctx, domain.BackendMinio, prefix)
+	srcObjs, err := store.List(ctx, domain.BackendMinio, prefix)
 	if err != nil {
 		log.Errorw("migrate skip: list minio failed", append(fields, "error", err)...)
 		return false, 0
@@ -161,14 +204,14 @@ func migrateOne(
 	}
 
 	// 2. Cross-backend copy (server-side).
-	copied, copiedBytes, err := client.CopyPrefix(ctx, domain.BackendMinio, domain.BackendS3, prefix)
+	copied, copiedBytes, err := store.CopyPrefix(ctx, domain.BackendMinio, domain.BackendS3, prefix)
 	if err != nil {
 		log.Errorw("migrate skip: copy minio to s3 failed", append(fields, "error", err)...)
 		return false, 0
 	}
 
 	// 3. Target inventory.
-	dstObjs, err := client.List(ctx, domain.BackendS3, prefix)
+	dstObjs, err := store.List(ctx, domain.BackendS3, prefix)
 	if err != nil {
 		log.Errorw("migrate skip: list s3 failed after copy (local objects left intact)", append(fields, "error", err)...)
 		return false, 0
@@ -185,14 +228,47 @@ func migrateOne(
 		return false, 0
 	}
 
-	// 5. Flip the DB row — s3 is now authoritative.
-	if err := episodeRepo.UpdateStorage(ctx, ep.ID, domain.BackendS3); err != nil {
-		log.Errorw("migrate skip: flip row to s3 failed (row still minio; s3 copy is a benign duplicate)", append(fields, "error", err)...)
-		return false, 0
+	// 5. Flip the DB row — s3 is now authoritative. Failure outcomes follow
+	// the flip-failure matrix in the package doc.
+	if err := episodes.UpdateStorage(ctx, ep.ID, domain.BackendS3); err != nil {
+		if isNotFound(err) {
+			// Row vanished between selection and flip (evictor race). The
+			// evictor owns the minio prefix; our s3 copy is an unreferenced
+			// orphan — undo it.
+			undoS3Copy(ctx, log, store, prefix, fields, "row vanished before flip (evicted concurrently)")
+			return false, 0
+		}
+		// Transient flip failure — re-read to decide which state we are in.
+		cur, gerr := episodes.GetByID(ctx, ep.ID)
+		switch {
+		case gerr == nil && cur.Storage == domain.BackendS3:
+			// A concurrent flip won; the copy is verified and the row is
+			// authoritative on s3 — success. Local cleanup belongs to whoever
+			// flipped (or the next run's reconcile pass).
+			log.Warnw("flip errored but row is already s3 (concurrent flip won); leaving local cleanup to that run",
+				append(fields, "error", err)...)
+			return true, srcBytes
+		case gerr == nil:
+			// Row still on minio: the flip genuinely failed. Undo the s3 copy —
+			// nothing would ever revisit it (reconcile only iterates rows
+			// already flipped to s3), so it would leak forever.
+			undoS3Copy(ctx, log, store, prefix, fields, fmt.Sprintf("flip row to s3 failed: %v", err))
+			return false, 0
+		case isNotFound(gerr):
+			// Row vanished mid-flip — same as the NotFound flip outcome.
+			undoS3Copy(ctx, log, store, prefix, fields, "row vanished during flip (evicted concurrently)")
+			return false, 0
+		default:
+			// State unknowable — touch NOTHING. A leaked s3 prefix beats
+			// deleting data whose DB state is unknown.
+			log.Errorw("migrate skip: flip failed AND re-read failed — leaving both prefixes and the row untouched",
+				append(fields, "flip_error", err, "reread_error", gerr)...)
+			return false, 0
+		}
 	}
 
 	// 6. Reclaim local disk.
-	deleted, err := client.DeletePrefix(ctx, domain.BackendMinio, prefix)
+	deleted, err := store.DeletePrefix(ctx, domain.BackendMinio, prefix)
 	if err != nil {
 		// Row is already s3 (authoritative + verified); the stale minio objects
 		// are benign and the RECONCILE pass will clean them on the next run.
@@ -205,6 +281,28 @@ func migrateOne(
 	return true, srcBytes
 }
 
+// undoS3Copy deletes the just-copied s3 prefix after a failed/moot flip so an
+// unreferenced copy does not leak (the reconcile pass only revisits rows that
+// DID flip to s3 — an unflipped or vanished row's s3 objects would otherwise
+// be orphaned forever). Never touches minio. Best-effort: a failed undo is
+// loudly logged for manual cleanup — nothing references the prefix either way.
+func undoS3Copy(ctx context.Context, log *logger.Logger, store objectStore, prefix string, fields []any, reason string) {
+	deleted, err := store.DeletePrefix(ctx, domain.BackendS3, prefix)
+	if err != nil {
+		log.Errorw("migrate skip: "+reason+"; undo of the s3 copy ALSO failed — orphaned s3 prefix needs manual cleanup",
+			append(fields, "error", err)...)
+		return
+	}
+	log.Errorw("migrate skip: "+reason+" — undid the s3 copy",
+		append(fields, "s3_deleted", deleted)...)
+}
+
+// isNotFound reports whether err is the libs/errors NotFound domain error.
+func isNotFound(err error) bool {
+	appErr, ok := liberrors.IsAppError(err)
+	return ok && appErr.Code == liberrors.CodeNotFound
+}
+
 // reconcileLeftovers heals crash-between-flip-and-delete states: for each row
 // already flipped to s3, if the local minio prefix still holds objects, re-verify
 // the s3 copy matches then delete the minio leftovers. A row whose minio prefix
@@ -213,7 +311,7 @@ func migrateOne(
 func reconcileLeftovers(
 	ctx context.Context,
 	log *logger.Logger,
-	client *storageclient.Client,
+	store objectStore,
 	flipped []domain.Episode,
 ) (int, int) {
 	var cleaned, skipped int
@@ -221,7 +319,7 @@ func reconcileLeftovers(
 		prefix := ep.MinioPath
 		fields := []any{"episode_id", ep.ID, "shikimori_id", ep.ShikimoriID, "episode", ep.EpisodeNumber, "prefix", prefix}
 
-		minioObjs, err := client.List(ctx, domain.BackendMinio, prefix)
+		minioObjs, err := store.List(ctx, domain.BackendMinio, prefix)
 		if err != nil {
 			log.Errorw("reconcile skip: list minio failed", append(fields, "error", err)...)
 			skipped++
@@ -233,7 +331,7 @@ func reconcileLeftovers(
 		}
 
 		// Stale local objects present. Only delete them if s3 still verifies.
-		s3Objs, err := client.List(ctx, domain.BackendS3, prefix)
+		s3Objs, err := store.List(ctx, domain.BackendS3, prefix)
 		if err != nil {
 			log.Errorw("reconcile skip: list s3 failed", append(fields, "error", err)...)
 			skipped++
@@ -246,7 +344,7 @@ func reconcileLeftovers(
 			skipped++
 			continue
 		}
-		deleted, err := client.DeletePrefix(ctx, domain.BackendMinio, prefix)
+		deleted, err := store.DeletePrefix(ctx, domain.BackendMinio, prefix)
 		if err != nil {
 			log.Errorw("reconcile skip: delete minio leftovers failed", append(fields, "error", err)...)
 			skipped++

@@ -8,6 +8,7 @@ package transport
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -17,6 +18,29 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/storage/internal/handler"
 )
+
+// copyPath is the one long-running route exempt from the short per-request
+// timeout: a cross-backend prefix copy streams a whole (potentially multi-GB)
+// episode before it can respond, which legitimately takes minutes.
+const copyPath = "/internal/storage/copy"
+
+// ScopedTimeout wraps next so every route EXCEPT /internal/storage/copy keeps
+// an effective `short` response ceiling (503 via http.TimeoutHandler past it),
+// while the copy route passes through untouched and is bounded only by the
+// server's WriteTimeout. This lets main.go raise the server-wide WriteTimeout
+// for the copy route without letting a hung List/ingest/delete request hold
+// its connection open for the same 20 minutes.
+func ScopedTimeout(next http.Handler, short time.Duration) http.Handler {
+	shortHandler := http.TimeoutHandler(next, short,
+		`{"success":false,"error":{"code":"TIMEOUT","message":"request exceeded the storage service response deadline"}}`)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == copyPath {
+			next.ServeHTTP(w, r)
+			return
+		}
+		shortHandler.ServeHTTP(w, r)
+	})
+}
 
 // NewRouter builds the chi router for the storage service.
 //

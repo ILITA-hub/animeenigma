@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"gorm.io/gorm"
 )
@@ -82,8 +83,35 @@ func TestUpdateStorage_FlipsRowAndDropsFromSelection(t *testing.T) {
 	if len(remaining) != 0 {
 		t.Fatalf("after flip, migratable set = %v, want empty", ids(remaining))
 	}
-	// Unknown id is a tolerated no-op (row may have been evicted concurrently).
-	if err := r.UpdateStorage(ctx, "nope", domain.BackendS3); err != nil {
-		t.Fatalf("UpdateStorage(unknown) = %v, want nil no-op", err)
+	// Unknown id must surface NotFound — the migrator relies on this to detect
+	// a row evicted concurrently (it must NOT go on to delete the local prefix).
+	err = r.UpdateStorage(ctx, "nope", domain.BackendS3)
+	if err == nil {
+		t.Fatal("UpdateStorage(unknown) = nil, want NotFound (vanished-row detection)")
+	}
+	if appErr, ok := liberrors.IsAppError(err); !ok || appErr.Code != liberrors.CodeNotFound {
+		t.Fatalf("UpdateStorage(unknown) = %v, want liberrors NotFound", err)
+	}
+}
+
+// TestGetByID_FoundAndNotFound covers the migrator's flip-failure re-read
+// disambiguator.
+func TestGetByID_FoundAndNotFound(t *testing.T) {
+	db := newSQLiteEpisodeDB(t)
+	r := NewEpisodeRepository(db)
+	ctx := context.Background()
+	mkMigrateEpisode(t, db, "e9", domain.BackendMinio, domain.EpisodeSourceAutocache, time.Now().Add(-1*time.Hour))
+
+	got, err := r.GetByID(ctx, "e9")
+	if err != nil {
+		t.Fatalf("GetByID(e9): %v", err)
+	}
+	if got.ID != "e9" || got.Storage != domain.BackendMinio {
+		t.Fatalf("GetByID(e9) = %+v, want id=e9 storage=minio", got)
+	}
+
+	_, err = r.GetByID(ctx, "missing")
+	if appErr, ok := liberrors.IsAppError(err); !ok || appErr.Code != liberrors.CodeNotFound {
+		t.Fatalf("GetByID(missing) = %v, want liberrors NotFound", err)
 	}
 }

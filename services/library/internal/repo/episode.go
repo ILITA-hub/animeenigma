@@ -169,15 +169,42 @@ func (r *EpisodeRepository) ListByStorageSource(ctx context.Context, storage str
 // The storage-migrate operator flips the row BEFORE deleting the local prefix,
 // so a crash between flip and delete leaves a benign dual-presence state (the s3
 // row is authoritative; the stale minio objects are cleaned on the next re-run).
-// Scoped to the given id (single-column Updates); returns nil on success.
+//
+// Unlike the tolerant no-op updates elsewhere in this repo, a zero
+// RowsAffected here returns liberrors.NotFound: the migrator MUST know when the
+// row vanished (the evictor selects from the same storage='minio' pool with no
+// coordination) — silently "succeeding" would let it delete the local prefix
+// for an episode whose row no longer exists. Scoped to the given id
+// (single-column Update); nil on success.
 func (r *EpisodeRepository) UpdateStorage(ctx context.Context, id string, storage string) error {
-	if err := r.db.WithContext(ctx).
+	res := r.db.WithContext(ctx).
 		Model(&domain.Episode{}).
 		Where("id = ?", id).
-		Update("storage", storage).Error; err != nil {
-		return liberrors.Wrap(err, liberrors.CodeInternal, "update episode storage")
+		Update("storage", storage)
+	if res.Error != nil {
+		return liberrors.Wrap(res.Error, liberrors.CodeInternal, "update episode storage")
+	}
+	if res.RowsAffected == 0 {
+		return liberrors.NotFound("episode")
 	}
 	return nil
+}
+
+// GetByID returns the single episode row identified by id, or
+// liberrors.NotFound when no such row exists. The storage-migrate operator
+// uses it to disambiguate a failed UpdateStorage: re-reading tells it whether
+// a concurrent flip won (row now 's3'), the row still awaits migration (still
+// 'minio'), or the row vanished entirely (evictor race).
+func (r *EpisodeRepository) GetByID(ctx context.Context, id string) (*domain.Episode, error) {
+	var ep domain.Episode
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&ep).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, liberrors.NotFound("episode")
+	}
+	if err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "fetch episode by id")
+	}
+	return &ep, nil
 }
 
 // BumpFetch sets last_fetch_at=now() and increments fetch_count for the
