@@ -66,6 +66,18 @@ if ! check; then
   exit 1
 fi
 
+# shellcheck source=/dev/null
+if [ -r /usr/local/lib/animeenigma/maint-gate.sh ]; then
+  . /usr/local/lib/animeenigma/maint-gate.sh
+elif [ -r "$(dirname "$0")/animeenigma-maint-gate.sh" ]; then
+  . "$(dirname "$0")/animeenigma-maint-gate.sh"
+fi
+
+if command -v maint_gate_enabled >/dev/null 2>&1 && ! maint_gate_enabled provider_recovery; then
+  log "skip: provider_recovery paused via /admin/policy"
+  exit 0
+fi
+
 log "=== provider-recovery run START (model=$MODEL, repo=$REPO) ==="
 cd "$REPO" || { log "FAIL: cannot cd into $REPO"; exit 1; }
 
@@ -76,4 +88,7 @@ PROMPT="$(cat "$PROMPT_FILE")"
   >>"$LOG" 2>&1
 rc=$?
 log "=== provider-recovery run END (exit=$rc) ==="
+if command -v maint_status >/dev/null 2>&1; then
+  maint_status provider_recovery "$rc" "recovery run exit=$rc (model=$MODEL)"
+fi
 exit "$rc"
