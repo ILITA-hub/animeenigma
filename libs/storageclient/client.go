@@ -36,6 +36,14 @@ import (
 // stay well under 30s even on a slow self-hosted link.
 const defaultTimeout = 30 * time.Second
 
+// longOpTimeout is the http.Client timeout for BULK server-side operations
+// (CopyPrefix): a cross-backend prefix copy streams every object through the
+// storage service sequentially, so a multi-GB episode legitimately takes
+// minutes — the 2026-07-10 storage migration saw a 1.8GB prefix blow through
+// the 30s default. Must stay <= the storage service's server WriteTimeout for
+// these routes (services/storage/cmd/storage-api/main.go).
+const longOpTimeout = 20 * time.Minute
+
 // baseURLsTTL is how long a BaseURLs() response is cached before the next
 // call re-fetches it. URLFor() rides this cache, so repeated URLFor calls
 // for the same Client don't each round-trip to the storage service.
@@ -50,6 +58,9 @@ const defaultUploadConcurrency = 8
 type Client struct {
 	baseURL string
 	http    *http.Client
+	// longHTTP is the long-timeout twin of http, used only by bulk
+	// server-side operations (CopyPrefix) that legitimately run for minutes.
+	longHTTP *http.Client
 
 	mu         sync.Mutex
 	baseURLs   map[string]string
@@ -60,8 +71,9 @@ type Client struct {
 // (e.g. "http://storage:8099"). Trailing slashes are trimmed.
 func New(baseURL string) *Client {
 	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    &http.Client{Timeout: defaultTimeout},
+		baseURL:  strings.TrimRight(baseURL, "/"),
+		http:     &http.Client{Timeout: defaultTimeout},
+		longHTTP: &http.Client{Timeout: longOpTimeout},
 	}
 }
 
@@ -322,7 +334,9 @@ func (c *Client) Move(ctx context.Context, storage, fromPrefix, toPrefix string)
 func (c *Client) CopyPrefix(ctx context.Context, fromStorage, toStorage, prefix string) (int, int64, error) {
 	req := copyPrefixRequest{FromStorage: fromStorage, ToStorage: toStorage, Prefix: prefix}
 	var resp copyResponse
-	if err := c.doJSON(ctx, http.MethodPost, "/internal/storage/copy", req, &resp); err != nil {
+	// Long-timeout client: a multi-GB prefix streams through the storage
+	// service sequentially and legitimately takes minutes.
+	if err := c.doJSONLong(ctx, http.MethodPost, "/internal/storage/copy", req, &resp); err != nil {
 		return 0, 0, err
 	}
 	return resp.Copied, resp.Bytes, nil
@@ -465,6 +479,16 @@ func (c *Client) downloadOne(ctx context.Context, u GetURL, destDir string) erro
 // be nil (GET/DELETE-with-no-body); out may be nil when the caller doesn't
 // need the payload.
 func (c *Client) doJSON(ctx context.Context, method, path string, reqBody, out interface{}) error {
+	return c.doJSONWith(ctx, c.http, method, path, reqBody, out)
+}
+
+// doJSONLong is doJSON on the long-timeout client — for bulk server-side
+// operations (CopyPrefix) that legitimately run for minutes.
+func (c *Client) doJSONLong(ctx context.Context, method, path string, reqBody, out interface{}) error {
+	return c.doJSONWith(ctx, c.longHTTP, method, path, reqBody, out)
+}
+
+func (c *Client) doJSONWith(ctx context.Context, hc *http.Client, method, path string, reqBody, out interface{}) error {
 	var body io.Reader
 	if reqBody != nil {
 		b, err := json.Marshal(reqBody)
@@ -482,7 +506,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody, out i
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.http.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
 		return fmt.Errorf("storageclient: %s %s: %w", method, path, err)
 	}
