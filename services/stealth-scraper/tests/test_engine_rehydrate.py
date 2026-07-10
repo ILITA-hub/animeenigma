@@ -7,7 +7,7 @@ import time
 import unittest
 
 from app.config import Config
-from app.engine import CamoufoxEngine, SessionGone
+from app.engine import CamoufoxEngine, CapacityExceeded, SessionGone
 from app.sessionstore import camoufox_build
 from tests.test_engine_lifecycle import _Page, _resolve_public, run
 
@@ -104,6 +104,22 @@ class TestRehydrate(unittest.TestCase):
         with self.assertRaises(SessionGone):
             run(eng.proxy_fetch(rec["sid"], "https://cdn.mewstream.buzz/x.ts"))
         self.assertIsNone(eng.store.load(rec["sid"]))
+        self.assertTrue(all(not p.leased for p in eng.profiles.all()))
+
+    def test_capacity_exceeded_is_retryable_not_deleted(self):
+        # A transient RAM-pressure refusal from _admit_launch() must surface as
+        # plain SessionGone (410 at /hls, retryable) — NOT delete the persisted
+        # record and NOT release a profile that was never leased (F1).
+        eng = _engine()
+        rec = _record(eng)
+
+        def _raise_capacity():
+            raise CapacityExceeded("full")
+
+        eng._admit_launch = _raise_capacity
+        with self.assertRaises(SessionGone):
+            run(eng.proxy_fetch(rec["sid"], "https://cdn.mewstream.buzz/x.ts"))
+        self.assertIsNotNone(eng.store.load(rec["sid"]))
         self.assertTrue(all(not p.leased for p in eng.profiles.all()))
 
     def test_lease_prefers_recorded_profile(self):

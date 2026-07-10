@@ -51,6 +51,27 @@ class TestSessionPersistence(unittest.TestCase):
         self.assertEqual(rec["profile_id"], prof.id)
         self.assertEqual(rec["player_url"], page.url)
 
+    def test_open_session_leaves_last_persist_zero(self):
+        # F2: _open_session must NOT stamp last_persist — the initial record
+        # carries the short unactivated_grace expires_at, and proxy_fetch's
+        # refresh-persist is throttled to >60s since last_persist. Leaving
+        # last_persist at the dataclass default (0.0) makes the FIRST
+        # proxy_fetch persist immediately, sliding the record to the full TTL
+        # before the throttle window could let it go stale mid-playback.
+        eng = _engine()
+        prof = eng.profiles.lease()
+        page = _Page()
+        sess = run(eng._open_session(
+            {"master_url": "https://cdn.mewstream.buzz/m.m3u8",
+             "referer": "https://megaplay.buzz/"},
+            context=None, proxy_id="direct", profile=prof, page=page,
+        ))
+        self.assertEqual(sess.last_persist, 0.0)
+
+        run(eng.proxy_fetch(sess.id, "https://cdn.mewstream.buzz/seg1.ts"))
+        rec = eng.store.load(sess.id)
+        self.assertGreater(rec["expires_at"], time.time() + 500)
+
     def test_proxy_fetch_refreshes_record_throttled(self):
         eng = _engine()
         sess = _attach_session(eng, _Page())

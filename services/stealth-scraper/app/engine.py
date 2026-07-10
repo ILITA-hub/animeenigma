@@ -736,7 +736,15 @@ class CamoufoxEngine:
             user_key=user_key,
         )
         self._sessions[sid] = session
-        session.last_persist = time.time()
+        # Deliberately leave last_persist at its dataclass default (0.0): this
+        # initial record carries the SHORT unactivated_grace expires_at, and
+        # proxy_fetch's refresh-persist is throttled to >60s since last_persist.
+        # If we stamped last_persist here, the record would sit un-refreshed
+        # (still on the short grace) for up to a minute of active playback
+        # before the throttle would allow the first real persist — a window
+        # where the record can expire while the session is actually alive.
+        # Leaving it at 0.0 makes the FIRST proxy_fetch persist immediately,
+        # sliding the record to the full session_ttl_seconds right away.
         self.store.save(self._session_record(session))
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         return session
@@ -812,7 +820,20 @@ class CamoufoxEngine:
             existing = self._sessions.get(sid)
             if existing is not None:  # lost the race — another fetch rebuilt it
                 return existing
-            self._admit_launch()
+            # CapacityExceeded is a TRANSIENT RAM condition, not a dead sid — it
+            # must not fall through to the generic `except Exception` below,
+            # which would delete the still-good persisted record and (once
+            # profile exists) release a lease that was never taken. Catching it
+            # here, BEFORE the lease, means: no profile to release, the record
+            # survives so a later, less-pressured fetch can still rehydrate, and
+            # the caller sees plain SessionGone (proxy_fetch -> /hls -> 410) that
+            # the FE's retry net + Go liveness gate already handle — instead of
+            # a dead-end RecipeError -> 400.
+            try:
+                self._admit_launch()
+            except CapacityExceeded:
+                metrics.REHYDRATE_TOTAL.labels(result="error").inc()
+                return None
             profile = self.profiles.lease(preferred=rec.get("profile_id"))
             if profile is None:
                 metrics.REHYDRATE_TOTAL.labels(result="no_profile").inc()
@@ -821,7 +842,11 @@ class CamoufoxEngine:
             try:
                 context = await self._ensure_browser(profile, rec["proxy_id"])
                 page = await context.new_page()
-                await page.goto(rec["player_url"], wait_until="domcontentloaded")
+                await page.goto(
+                    rec["player_url"],
+                    wait_until="domcontentloaded",
+                    timeout=self.cfg.nav_timeout_ms,
+                )
                 session = Session(
                     id=sid,
                     profile=profile,
