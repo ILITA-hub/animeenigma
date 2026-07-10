@@ -1479,6 +1479,10 @@ function restorePlayhead(t: number, wasPlaying: boolean) {
   const restore = () => {
     try {
       v.currentTime = t
+      // Keep the reactive clock in step with the seeked element: resetPlaybackClock
+      // zeroed it for the swap, and a PAUSED preserve fires no rAF/writeProgress to
+      // re-sync, so the scrub bar / time pill would otherwise read 0:00 at position t.
+      currentTime.value = t
     } catch {
       /* not seekable yet — best-effort */
     }
@@ -1637,6 +1641,7 @@ async function loadEpisodesAndStream() {
     // Restore the playhead only when the switched-to source stayed on the same
     // episode — a provider change that lands on a different episode starts fresh.
     const { restoreT, wasPlaying } = capturePlayhead(keepEpNum !== null && ep.number === keepEpNum)
+    resetPlaybackClock() // drop the outgoing source's playhead before the swap
     await engine.load(stream)
     applyInitialSeek() // shared-link `?t=` one-shot seek (no-op after first load)
     restorePlayhead(restoreT, wasPlaying)
@@ -1817,6 +1822,23 @@ const bufferedPct = ref(0)
 /** true once playback has started for the current stream — gates the poster */
 const hasStarted = ref(false)
 let rafId: number | null = null
+
+// Clear all playback-derived reactive state at a source swap. currentTime.value
+// is synced from the <video> element ONLY by the rAF loop (while playing) and
+// the final writeProgress() on pause — neither runs between attaching a new
+// source and the first play. Without this, the OUTGOING source's playhead
+// lingers in currentTime.value while the incoming source sits paused at 0, so
+// currentTime-derived UI reads a stale position: e.g. a viewer parked in the
+// ending, then switching server/episode, saw the "Skip Ending" chip render
+// before pressing play (activeSkipSegment saw the stale ~ending-window time).
+// restorePlayhead() re-seats currentTime.value when a same-episode swap keeps
+// the position; a fresh (episode-change) load leaves it at 0.
+function resetPlaybackClock() {
+  currentTime.value = 0
+  duration.value = 0
+  bufferedPct.value = 0
+  state.progress.value = 0
+}
 
 /** rAF-path snap rates (see writeProgress) — mirrors SubtitleOverlay's
  *  TIME_SYNC_HZ pattern. 4 Hz time / half-percent buffered ≈ sub-pixel on
@@ -2339,6 +2361,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption, keepPosition = false) 
     // Same-episode re-resolve (facet/server/team/quality switch) keeps the
     // viewer's spot; a genuine episode change (keepPosition=false) starts fresh.
     const { restoreT, wasPlaying } = capturePlayhead(keepPosition)
+    resetPlaybackClock() // drop the outgoing source's playhead before the swap
     await engine.load(stream)
     applyInitialSeek() // shared-link `?t=` one-shot seek (no-op after first load)
     restorePlayhead(restoreT, wasPlaying)
