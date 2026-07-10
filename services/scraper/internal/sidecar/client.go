@@ -365,6 +365,11 @@ func SIDFromProxyURL(rawURL string) (string, bool) {
 // "rehydratable" or "gone". FAIL-OPEN: any transport/decode error returns
 // "alive" — a sidecar hiccup must not stampede cache re-resolves.
 func (c *Client) SessionAlive(ctx context.Context, sid string) string {
+	// Liveness is a hot-path gate on every cached-stream serve — bound it tightly;
+	// a slow sidecar fails open to "alive" rather than stalling playback.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, c.baseURL+"/session/"+url.PathEscape(sid)+"/alive", nil)
 	if err != nil {

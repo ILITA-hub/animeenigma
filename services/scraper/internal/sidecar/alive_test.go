@@ -41,3 +41,16 @@ func TestSessionAliveFailsOpen(t *testing.T) {
 		t.Fatalf("errors must fail open to alive, got %q", got)
 	}
 }
+
+func TestSessionAliveHonorsContextDeadline(t *testing.T) {
+	// Verify that SessionAlive respects a tight deadline and fails open to "alive"
+	// rather than waiting for the full 90s sidecar timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancel()
+	time.Sleep(time.Millisecond) // Ensure context has expired before calling
+
+	c := New("http://127.0.0.1:1", 90*time.Second) // generous sidecar timeout, but our 2s bound should fire first
+	if got := c.SessionAlive(ctx, "deadbeef"); got != "alive" {
+		t.Fatalf("deadline expiry must fail open to alive, got %q", got)
+	}
+}
