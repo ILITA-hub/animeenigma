@@ -88,14 +88,18 @@ mirror `domain.SeedFlags`' first-boot-only insert.
 
 | Purpose | Method + path | Auth | Consumer |
 |---------|---------------|------|----------|
-| List (with status) | `GET /api/admin/maintenance/routines` | admin (gateway) | web page |
-| Update | `PUT /api/admin/maintenance/routines/{id}` `{enabled?, settings?}` | admin (gateway) | web page |
+| List (with status) | `GET /api/admin/policy/maintenance/routines` | admin (gateway) | web page |
+| Update | `PUT /api/admin/policy/maintenance/routines/{id}` `{enabled, settings}` | admin (gateway) | web page |
 | Gate read | `GET /internal/maintenance/routines/{id}` → `{enabled, settings}` | none (loopback + not gateway-proxied) | host scripts (`localhost:8098`), Docker services (`http://policy:8098`) |
 | Status write-back | `POST /internal/maintenance/routines/{id}/status` `{ok, summary, next_run_at?}` | none (internal) | each routine after it runs |
 
-- `/api/admin/*` reaches policy-service via the existing gateway admin proxy (same
-  route family as `/api/admin/scraper-providers`). Add the proxy path if not already
-  covered by a catch-all; verify against `services/gateway` routing.
+- **Admin routes nest under `/api/admin/policy/maintenance/*`** (verified against
+  `services/gateway/internal/transport/router.go`): the existing `/admin/policy/*`
+  proxy group already forwards to policy-service with the JWT+admin chain, so this
+  needs **ZERO gateway change**. A flat `/api/admin/maintenance/*` was rejected — it
+  would fall through the generic `/api/admin/*` → catalog catch-all to the wrong
+  service. Update body is a **full replace** of `{enabled, settings}` (the FE holds
+  the whole row, so both are always sent).
 - `/internal/*` is **not** gateway-proxied (Docker-network + host-loopback only),
   matching catalog's `/internal/*`. No token — protected by not being exposed and by
   loopback binding.
