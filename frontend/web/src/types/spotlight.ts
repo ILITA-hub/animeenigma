@@ -87,6 +87,10 @@ export interface FeaturedData {
   reason_i18n_key?: string
 }
 
+export interface CuratedData {
+  anime: SpotlightAnime
+}
+
 export interface RandomTailData {
   anime: SpotlightAnime
 }
@@ -239,7 +243,7 @@ export interface ContinueWatchingNewData {
 /*  chain inside HeroSpotlightBlock.vue.                                    */
 /* ──────────────────────────────────────────────────────────────────────── */
 
-export type SpotlightCard =
+export type SpotlightCard = (
   | { type: 'featured'; data: FeaturedData }
   | { type: 'random_tail'; data: RandomTailData }
   | { type: 'latest_news'; data: LatestNewsData }
@@ -249,6 +253,8 @@ export type SpotlightCard =
   | { type: 'now_watching'; data: NowWatchingData }
   | { type: 'not_time_yet'; data: NotTimeYetData }
   | { type: 'continue_watching_new'; data: ContinueWatchingNewData }
+  | { type: 'curated'; data: CuratedData }
+) & { priority?: number }
 
 /* ──────────────────────────────────────────────────────────────────────── */
 /*  Top-level fetch envelope returned by `GET /api/home/spotlight`.         */
