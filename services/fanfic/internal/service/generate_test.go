@@ -51,6 +51,10 @@ func (s *fakeStore) MarkFailed(_ context.Context, id, msg string) error {
 	s.failedID, s.failedMsg = id, msg
 	return nil
 }
+func (s *fakeStore) Get(_ context.Context, _, _ string) (*domain.Fanfic, error) { return nil, nil }
+func (s *fakeStore) AppendPart(_ context.Context, _, _, _ string, _, _ int) error {
+	return nil
+}
 
 type noopQuota struct{}
 
@@ -72,7 +76,7 @@ func (q *stubQuota) Acquire(_ context.Context, _ string) (func(), error) {
 
 func TestGenerate_StreamsPersistsAndSplitsTitle(t *testing.T) {
 	store := &fakeStore{}
-	g := NewGenerator(&fakeStreamer{out: "# Тяжесть столетий\n\nКогда солнце..."}, store, noopQuota{}, "llama-3.1-8b-instant", nil)
+	g := NewGenerator(&fakeStreamer{out: "# Тяжесть столетий\n\nКогда солнце..."}, store, noopQuota{}, nil, "llama-3.1-8b-instant", 24000, nil)
 
 	var events []string
 	emit := func(event string, _ any) error { events = append(events, event); return nil }
@@ -102,7 +106,7 @@ func TestGenerate_StreamsPersistsAndSplitsTitle(t *testing.T) {
 // scalar anime fields already covered above.
 func TestGenerate_SnapshotsCharactersAndTags(t *testing.T) {
 	store := &fakeStore{}
-	g := NewGenerator(&fakeStreamer{out: "# T\n\nbody"}, store, noopQuota{}, "llama-3.1-8b-instant", nil)
+	g := NewGenerator(&fakeStreamer{out: "# T\n\nbody"}, store, noopQuota{}, nil, "llama-3.1-8b-instant", 24000, nil)
 
 	req := domain.GenerateRequest{
 		Anime:      domain.AnimeRef{Title: "Frieren", ShikimoriID: "52991"},
@@ -144,7 +148,7 @@ func contains(haystack, needle string) bool {
 func TestGenerate_StreamerErrorMarksFailedAndEmitsError(t *testing.T) {
 	store := &fakeStore{}
 	streamErr := errors.New("groq status 503: upstream overloaded")
-	g := NewGenerator(&fakeStreamer{err: streamErr}, store, noopQuota{}, "llama-3.1-8b-instant", nil)
+	g := NewGenerator(&fakeStreamer{err: streamErr}, store, noopQuota{}, nil, "llama-3.1-8b-instant", 24000, nil)
 
 	var events []string
 	emit := func(event string, _ any) error { events = append(events, event); return nil }
@@ -176,7 +180,7 @@ func TestGenerate_StreamerErrorMarksFailedAndEmitsError(t *testing.T) {
 // returns nil.
 func TestGenerate_EmitErrorDoesNotAbortPersistence(t *testing.T) {
 	store := &fakeStore{}
-	g := NewGenerator(&fakeStreamer{out: "# Title\n\nBody text"}, store, noopQuota{}, "llama-3.1-8b-instant", nil)
+	g := NewGenerator(&fakeStreamer{out: "# Title\n\nBody text"}, store, noopQuota{}, nil, "llama-3.1-8b-instant", 24000, nil)
 
 	emitCalls := 0
 	emit := func(event string, _ any) error {
@@ -206,7 +210,7 @@ func TestGenerate_EmitErrorDoesNotAbortPersistence(t *testing.T) {
 func TestGenerate_QuotaErrorAbortsBeforePersistence(t *testing.T) {
 	store := &fakeStore{}
 	q := &stubQuota{err: ErrBusy}
-	g := NewGenerator(&fakeStreamer{out: "# T\n\nbody"}, store, q, "llama-3.1-8b-instant", nil)
+	g := NewGenerator(&fakeStreamer{out: "# T\n\nbody"}, store, q, nil, "llama-3.1-8b-instant", 24000, nil)
 
 	req := domain.GenerateRequest{Anime: domain.AnimeRef{Title: "Frieren"}, Length: "oneshot", POV: "third", Rating: "mature", Language: "ru"}
 	if err := g.Generate(context.Background(), "user-1", req, nil); !errors.Is(err, ErrBusy) {
@@ -229,7 +233,7 @@ func TestGenerate_QuotaErrorEmitsErrorEvent(t *testing.T) {
 	store := &fakeStore{}
 	streamed := &fakeStreamer{out: "# T\n\nbody"}
 	q := &stubQuota{err: ErrQuotaExceeded}
-	g := NewGenerator(streamed, store, q, "llama-3.1-8b-instant", nil)
+	g := NewGenerator(streamed, store, q, nil, "llama-3.1-8b-instant", 24000, nil)
 
 	var events []string
 	var payloads []any

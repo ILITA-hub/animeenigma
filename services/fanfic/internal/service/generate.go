@@ -21,22 +21,35 @@ type fanficStore interface {
 	Create(ctx context.Context, f *domain.Fanfic) error
 	UpdateResult(ctx context.Context, id, title, content string, usage int) error
 	MarkFailed(ctx context.Context, id, msg string) error
+	Get(ctx context.Context, userID, id string) (*domain.Fanfic, error)
+	AppendPart(ctx context.Context, userID, id, appended string, addedUsage, newPartCount int) error
 }
 
 type quota interface {
 	Acquire(ctx context.Context, userID string) (func(), error)
 }
 
-type Generator struct {
-	groq  streamer
-	store fanficStore
-	quota quota
-	model string
-	log   *logger.Logger
+// synopsisFetcher preloads an anime's real synopsis for canon mode. Nil-safe:
+// a nil fetcher (or a non-canon request) skips the preload.
+type synopsisFetcher interface {
+	FetchSynopsis(ctx context.Context, animeID, shikimoriID string) (title, synopsis string, err error)
 }
 
-func NewGenerator(groq streamer, store fanficStore, quota quota, model string, log *logger.Logger) *Generator {
-	return &Generator{groq: groq, store: store, quota: quota, model: model, log: log}
+type Generator struct {
+	groq         streamer
+	store        fanficStore
+	quota        quota
+	catalog      synopsisFetcher
+	model        string
+	contextRunes int
+	log          *logger.Logger
+}
+
+func NewGenerator(groq streamer, store fanficStore, quota quota, catalog synopsisFetcher, model string, contextRunes int, log *logger.Logger) *Generator {
+	if contextRunes <= 0 {
+		contextRunes = 24000
+	}
+	return &Generator{groq: groq, store: store, quota: quota, catalog: catalog, model: model, contextRunes: contextRunes, log: log}
 }
 
 func (g *Generator) Generate(ctx context.Context, userID string, req domain.GenerateRequest, emit Emit) error {
@@ -63,6 +76,8 @@ func (g *Generator) Generate(ctx context.Context, userID string, req domain.Gene
 		Rating:           req.Rating,
 		Language:         req.Language,
 		Prompt:           req.Prompt,
+		Canon:            req.Canon,
+		PartCount:        1,
 		Model:            g.model,
 		Status:           domain.StatusGenerating,
 	}
@@ -71,7 +86,18 @@ func (g *Generator) Generate(ctx context.Context, userID string, req domain.Gene
 	}
 	g.safeEmit(emit, "meta", map[string]any{"id": f.ID, "model": g.model})
 
-	system, user := BuildMessages(req)
+	synopsis := ""
+	if req.Canon && g.catalog != nil {
+		if _, syn, err := g.catalog.FetchSynopsis(ctx, req.Anime.ID, req.Anime.ShikimoriID); err != nil {
+			if g.log != nil {
+				g.log.Warnw("canon synopsis preload failed; continuing without it", "anime_id", req.Anime.ID, "error", err)
+			}
+		} else {
+			synopsis = syn
+		}
+	}
+
+	system, user := BuildMessages(req, synopsis)
 	text, usage, err := g.groq.Stream(ctx, system, user, MaxTokensFor(req.Length), 0.9, func(delta string) {
 		g.safeEmit(emit, "delta", map[string]any{"text": delta})
 	})
