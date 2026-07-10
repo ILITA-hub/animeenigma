@@ -18,6 +18,7 @@ COPY libs/httputil/go.mod libs/httputil/go.sum* ./libs/httputil/
 COPY libs/pagination/go.mod libs/pagination/go.sum* ./libs/pagination/
 COPY libs/animeparser/go.mod libs/animeparser/go.sum* ./libs/animeparser/
 COPY libs/videoutils/go.mod libs/videoutils/go.sum* ./libs/videoutils/
+COPY libs/storageclient/go.mod libs/storageclient/go.sum* ./libs/storageclient/
 COPY libs/idmapping/go.mod libs/idmapping/go.sum* ./libs/idmapping/
 COPY libs/kodikextract/go.mod libs/kodikextract/go.sum* ./libs/kodikextract/
 COPY libs/metrics/go.mod libs/metrics/go.sum* ./libs/metrics/
