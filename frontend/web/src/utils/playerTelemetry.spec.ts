@@ -58,6 +58,30 @@ describe('playerTelemetry', () => {
     expect(navigator.sendBeacon as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
   })
 
+  it('accepts playback_start_rejected events with the DOMException name in error_kind', () => {
+    const beacon = navigator.sendBeacon as ReturnType<typeof vi.fn>
+    beacon.mockReturnValue(false) // force the fetch fallback so the body is inspectable
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>
+
+    recordPlayerEvent({
+      kind: 'playback_start_rejected',
+      provider: 'kodik',
+      anime_id: 'abc',
+      episode: 6,
+      error_kind: 'NotAllowedError',
+    })
+    flushPlayerTelemetry('test')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.events).toHaveLength(1)
+    expect(body.events[0]).toMatchObject({
+      kind: 'playback_start_rejected',
+      provider: 'kodik',
+      error_kind: 'NotAllowedError',
+    })
+  })
+
   it('ignores events with invalid kind', () => {
     // TypeScript would prevent this, but at runtime bad data can arrive
     recordPlayerEvent({ kind: 'unknown' as 'resolve', provider: 'gogoanime', anime_id: 'abc' })

@@ -34,7 +34,8 @@ func NewPlayerTelemetryHandler(sink Sink) *PlayerTelemetryHandler {
 
 // wirePlayerEvent is one player telemetry event in the wire batch.
 type wirePlayerEvent struct {
-	// Kind must be "resolve" or "stall"; other values are silently dropped.
+	// Kind must be "resolve", "stall", or "playback_start_rejected"; other
+	// values are silently dropped.
 	Kind     string `json:"kind"`
 	Provider string `json:"provider"`
 
@@ -105,6 +106,10 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		case "stall":
 			effectKind = "player_stall"
 			durationMS = we.StallMS
+		case "playback_start_rejected":
+			// Browser vetoed video.play() (e.g. NotAllowedError from an
+			// autoplay policy). The DOMException name arrives in error_kind.
+			effectKind = "player_playback_start_rejected"
 		default:
 			continue // skip unknown kinds
 		}

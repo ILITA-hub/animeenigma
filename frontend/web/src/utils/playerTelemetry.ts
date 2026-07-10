@@ -12,7 +12,7 @@
  */
 
 export interface PlayerEvent {
-  kind: 'resolve' | 'stall'
+  kind: 'resolve' | 'stall' | 'playback_start_rejected'
   provider: string
   anime_id: string
   episode?: number
@@ -112,7 +112,7 @@ export function recordPlayerEvent(e: PlayerEvent): void {
   try {
     if (!e) return
     if (!e.provider || !e.provider.trim()) return
-    if (e.kind !== 'resolve' && e.kind !== 'stall') return
+    if (e.kind !== 'resolve' && e.kind !== 'stall' && e.kind !== 'playback_start_rejected') return
 
     const event: PlayerEvent = {
       ...e,

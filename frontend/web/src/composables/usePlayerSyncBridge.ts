@@ -97,6 +97,12 @@ function computeTargetTime(correctionTime: number, serverTs: number): number {
 export function usePlayerSyncBridge(
   videoRef: Ref<HTMLVideoElement | null>,
   room: WatchTogetherRoomHandle,
+  opts?: {
+    /** Called when a remote-driven play() is rejected (e.g. NotAllowedError
+     *  from the browser's autoplay policy) so the host player can surface its
+     *  blocked-playback UI instead of silently desyncing from the room. */
+    onPlayRejected?: (err: unknown) => void
+  },
 ): void {
   // ── Closure-scoped state (one bridge instance per player) ──
 
@@ -251,9 +257,10 @@ export function usePlayerSyncBridge(
             v.currentTime = e.time
             lastAppliedTime = e.time
           }
-          // Swallow the play()-rejected promise (autoplay policy etc.) — the
-          // UI will surface its own banner if autoplay is blocked.
-          v.play().catch(() => {})
+          // Forward a play() rejection (autoplay policy etc.) to the host
+          // player so it can raise its blocked-playback overlay — a silently
+          // vetoed play() would leave this member desynced from the room.
+          v.play().catch((err: unknown) => opts?.onPlayRejected?.(err))
         })
         startTickLoop()
         return

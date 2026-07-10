@@ -77,6 +77,18 @@ function safeStringify(v: unknown, maxLen = 2000): string {
   if (typeof v !== 'object' || v === null) {
     return String(v).slice(0, maxLen)
   }
+  // Error / DOMException have NO enumerable own props, so JSON.stringify
+  // renders them as the useless "{}" — exactly the "[Unhandled Promise
+  // Rejection] {}" seen in user error reports. Serialize name/message
+  // explicitly (DOMException instanceof Error holds in modern browsers, but
+  // duck-type as a fallback for older ones).
+  if (v instanceof Error) {
+    return `${v.name}: ${v.message}`.slice(0, maxLen)
+  }
+  const duck = v as { name?: unknown; message?: unknown; stack?: unknown }
+  if (typeof duck.name === 'string' && typeof duck.message === 'string' && 'stack' in v) {
+    return `${duck.name}: ${duck.message}`.slice(0, maxLen)
+  }
   try {
     const seen = new WeakSet<object>()
     const s = JSON.stringify(v, (_key, val) => {

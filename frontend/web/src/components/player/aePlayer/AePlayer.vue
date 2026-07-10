@@ -86,6 +86,34 @@
       </div>
     </div>
 
+    <!-- Autoplay-blocked overlay: the browser vetoed play() (NotAllowedError).
+         The stream is healthy — offer an explicit click-to-play instead of
+         letting the player look dead or failing over to another source. -->
+    <div
+      v-if="playbackBlocked && !sourceError && !isResolving"
+      role="alert"
+      aria-live="assertive"
+      class="absolute inset-0 z-[2] flex items-center justify-center"
+      style="background: var(--black-a80);"
+      @click.stop
+    >
+      <div class="flex flex-col items-center gap-3 text-center px-8">
+        <button
+          type="button"
+          class="pl-blocked-play"
+          data-test="autoplay-blocked-play"
+          :aria-label="$t('player.aePlayer.play')"
+          @click="attemptPlay"
+        >
+          <Play :size="34" aria-hidden="true" />
+        </button>
+        <p class="text-sm font-medium text-foreground">{{ $t('player.aePlayer.autoplayBlocked') }}</p>
+        <p v-if="playbackBlockedHint" class="text-xs text-muted-foreground max-w-md">
+          {{ $t('player.aePlayer.autoplayBlockedHint') }}
+        </p>
+      </div>
+    </div>
+
     <!-- Top bar -->
     <div class="pl-top" @click.stop>
       <!-- Title block -->
@@ -136,7 +164,7 @@
     <!-- Overlays -->
 
     <BigPlayButton
-      :visible="!state.playing.value && !sourceError && !showBuffering && !isResolving"
+      :visible="!state.playing.value && !sourceError && !showBuffering && !isResolving && !playbackBlocked"
       @play="togglePlay"
     />
 
@@ -605,7 +633,7 @@ const { isMobile, isCoarse } = useMobilePlayer()
 // play/pause/seek/time-tick both ways). When the room is null/undefined the
 // bridge is never instantiated and the player behaves exactly as standalone.
 if (props.room) {
-  usePlayerSyncBridge(videoRef, props.room)
+  usePlayerSyncBridge(videoRef, props.room, { onPlayRejected: handlePlayRejection })
 }
 
 // True iff mounted inside a WT room — the room's combo is authoritative, so
@@ -899,6 +927,11 @@ function armPlaybackWatchdog() {
     if (tok !== resolveToken) return            // superseded by a newer resolve
     if (hasStarted.value) return                // already playing
     if (sourceError.value) return               // already errored/handled
+    // Browser vetoed play() (NotAllowedError): the stream is fine, only the
+    // START was blocked. Without this guard the watchdog misreads "blocked" as
+    // "stalled" — especially on native MP4 sources where fragLoadedCount stays
+    // 0 — and churns through every provider pulling gigabytes for nothing.
+    if (playbackBlocked.value) return
     if (engine.fragLoadedCount.value > 0) return // fragments flowing — just slow
     void (async () => {
       if (await advanceToNextSource('silent stall')) {
@@ -1322,7 +1355,7 @@ function onResumeFromSaved() {
   if (!v) return
   resumeChipUsed.value = true
   v.currentTime = resumePosSec.value
-  if (v.paused) void v.play().catch(() => {})
+  if (v.paused) attemptPlay()
   writeProgress()
 }
 
@@ -1348,6 +1381,67 @@ async function onShare() {
   }
 }
 const sourceError = ref<string | null>(null)
+
+// ── Autoplay-blocked state ────────────────────────────────────────────────────
+// Any browser can reject video.play() with NotAllowedError — strict autoplay
+// policies (Firefox "Block Audio and Video", Chrome's engagement heuristics,
+// Safari power-saving), blocker extensions, or a play() that lands outside the
+// user-gesture window (our resolves are async, so the click's activation can
+// expire before play() runs). The media itself is FINE — segments/bytes load —
+// only STARTING is vetoed. These rejections used to be swallowed
+// (`void v.play()`), so affected users saw a dead player while the stall
+// watchdog churned through every source. All play() calls now funnel through
+// attemptPlay(); a NotAllowedError raises this dedicated overlay and must
+// NEVER count as a dead source.
+const playbackBlocked = ref(false)
+// Second consecutive rejection (the overlay's own button also got vetoed) →
+// show the browser-permission hint.
+const playbackBlockedHint = ref(false)
+let blockReported = false // one playback_start_rejected event per resolve
+
+function handlePlayRejection(err: unknown) {
+  const name = err instanceof Error ? err.name : ''
+  // AbortError (play() interrupted by a load/pause during source swaps) and
+  // friends are benign lifecycle noise — only a browser start-veto matters.
+  if (name !== 'NotAllowedError') return
+  if (playbackBlocked.value) playbackBlockedHint.value = true
+  playbackBlocked.value = true
+  if (!blockReported) {
+    blockReported = true
+    recordPlayerEvent({
+      kind: 'playback_start_rejected',
+      provider: state.combo.value.provider,
+      anime_id: props.animeId,
+      episode: selectedEpisode.value?.number,
+      error_kind: name,
+      audio: state.combo.value.audio,
+      lang: state.combo.value.lang,
+    })
+  }
+  const msg = err instanceof Error && err.message ? `: ${err.message}` : ''
+  console.warn(`[AePlayer] play() rejected — ${name}${msg}`)
+}
+
+function resetPlaybackBlocked() {
+  playbackBlocked.value = false
+  playbackBlockedHint.value = false
+  blockReported = false
+}
+
+// The single sanctioned way to start playback. Success clears the blocked
+// overlay (the user allowed autoplay / the veto lifted); a veto raises it.
+function attemptPlay() {
+  const v = videoRef.value
+  if (!v) return
+  v.play().then(
+    () => {
+      playbackBlocked.value = false
+      playbackBlockedHint.value = false
+    },
+    handlePlayRejection,
+  )
+}
+
 const resolvedServers = ref<{ id: string; label: string }[]>([])
 const teams = ref<string[]>([])
 // Latest-wins guard for the team chips, independent of resolveToken: the team
@@ -1433,7 +1527,7 @@ function swapMp4Source(url: string) {
     'loadedmetadata',
     () => {
       v.currentTime = t
-      if (wasPlaying) void v.play()
+      if (wasPlaying) attemptPlay()
     },
     { once: true },
   )
@@ -1486,7 +1580,7 @@ function restorePlayhead(t: number, wasPlaying: boolean) {
     } catch {
       /* not seekable yet — best-effort */
     }
-    if (wasPlaying) void v.play().catch(() => {})
+    if (wasPlaying) attemptPlay()
   }
   if (v.readyState >= 1) restore()
   else v.addEventListener('loadedmetadata', restore, { once: true })
@@ -1571,6 +1665,7 @@ async function loadEpisodesAndStream() {
   isResolving.value = true
   switchingSource = false // resolve owns error handling now — handoff window over
   hasStarted.value = false
+  resetPlaybackBlocked() // new stream = a fresh autoplay verdict
   // Re-listing a provider: its servers are unknown until the resolve below, so
   // drop the previous provider's stale set. This also keeps advanceToNextSource's
   // server-first dodge from targeting a nonexistent server of the new provider.
@@ -2032,6 +2127,7 @@ function onTimeUpdate() {
   if (!hasStarted.value && v && v.currentTime > 0 && !v.paused) {
     hasStarted.value = true
     clearPlaybackWatchdog() // real playback — cancel the stall watchdog
+    resetPlaybackBlocked() // actually playing — any autoplay veto is history
     resetSourceSwitching() // a source that actually plays earns a fresh budget
     // A source that actually plays must clear any stale error overlay: the
     // fallback chain can set sourceError='Stream unavailable' when the switch
@@ -2342,6 +2438,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption, keepPosition = false) 
   isResolving.value = true
   switchingSource = false // resolve owns error handling now — handoff window over
   hasStarted.value = false
+  resetPlaybackBlocked() // new stream = a fresh autoplay verdict
   const token = ++resolveToken
   resolveStartedAt = performance.now()
   reachedReported = false
@@ -2868,7 +2965,7 @@ function togglePlay() {
   const v = videoRef.value
   if (!v) return
   if (v.paused) {
-    void v.play()
+    attemptPlay()
   } else {
     v.pause()
   }
@@ -3489,6 +3586,24 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+/* Autoplay-blocked overlay's click-to-play button (in-flow inside the overlay
+   column, unlike the absolutely-positioned center-pause). */
+.pl-blocked-play {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid var(--white-a30);
+  background: var(--scrim-bg-strong);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.pl-blocked-play:hover {
+  transform: scale(1.06);
 }
 
 /* Double-tap ±10s flash */

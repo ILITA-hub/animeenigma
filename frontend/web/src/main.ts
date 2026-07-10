@@ -79,7 +79,9 @@ window.addEventListener('unhandledrejection', (event) => {
   const reason = event.reason
   reportFeError({
     kind: 'unhandledrejection',
-    message: reason instanceof Error ? reason.message : String(reason),
+    // Include the error NAME: DOMExceptions (NotAllowedError, AbortError, …)
+    // often carry an empty or generic message, and the name is the diagnosis.
+    message: reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason),
     stack: reason instanceof Error ? reason.stack : undefined,
   })
   console.error('[Unhandled Promise Rejection]', event.reason)

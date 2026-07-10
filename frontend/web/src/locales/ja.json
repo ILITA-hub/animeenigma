@@ -444,6 +444,8 @@
       "watchTogether": "一緒に視聴",
       "sourceUnavailable": "このソースはまだ利用できません",
       "streamUnavailable": "ストリームを利用できません",
+      "autoplayBlocked": "ブラウザが再生をブロックしました — 再生ボタンを押してください",
+      "autoplayBlockedHint": "それでも再生できない場合は、ブラウザの設定でこのサイトの自動再生を許可してください（例: Firefox はアドレスバーの権限アイコン → 自動再生 → 音声と動画を許可）。その後もう一度お試しください。",
       "noSourceForFacet": "この言語 / 音声に対応するソースがありません",
       "switchNotPlaying": "このソースは再生できません — 次に最適なソースに切り替えます…",
       "switchNotAvailable": "このソースは利用できません — 次に最適なソースに切り替えます…",

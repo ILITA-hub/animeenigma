@@ -444,6 +444,8 @@
       "watchTogether": "Watch Together",
       "sourceUnavailable": "This source isn't available yet",
       "streamUnavailable": "Stream unavailable",
+      "autoplayBlocked": "Playback was blocked by your browser — press play to start",
+      "autoplayBlockedHint": "Still blocked? Allow media autoplay for this site in your browser settings (e.g. Firefox: permissions icon in the address bar → Autoplay → Allow Audio and Video), then try again.",
       "noSourceForFacet": "No source for this language / audio",
       "switchNotPlaying": "That source won't play — switching to the next best…",
       "switchNotAvailable": "That source isn't available — switching to the next best…",

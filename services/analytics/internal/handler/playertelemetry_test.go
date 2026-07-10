@@ -205,6 +205,39 @@ func TestPlayerTelemetry_SkipsEmptyProvider(t *testing.T) {
 	}
 }
 
+// TestPlayerTelemetry_PlaybackStartRejected: the browser-veto kind maps to its
+// own effect_kind and carries the DOMException name in properties.error_kind.
+func TestPlayerTelemetry_PlaybackStartRejected(t *testing.T) {
+	sink := &effectSink{}
+	h := NewPlayerTelemetryHandler(sink)
+
+	body := `{"events":[{"kind":"playback_start_rejected","provider":"kodik","anime_id":"a1","episode":6,"error_kind":"NotAllowedError","audio":"sub","lang":"ru"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sink.count() != 1 {
+		t.Fatalf("expected 1 event enqueued, got %d", sink.count())
+	}
+	row := sink.events[0]
+	if row.EffectKind != "player_playback_start_rejected" {
+		t.Errorf("EffectKind = %q, want player_playback_start_rejected", row.EffectKind)
+	}
+	if row.Target != "kodik" {
+		t.Errorf("Target = %q, want kodik", row.Target)
+	}
+	var props map[string]any
+	if err := json.Unmarshal([]byte(row.Properties), &props); err != nil {
+		t.Fatalf("bad properties JSON: %v", err)
+	}
+	if props["error_kind"] != "NotAllowedError" {
+		t.Errorf("properties.error_kind = %v, want NotAllowedError", props["error_kind"])
+	}
+}
+
 // TestPlayerTelemetry_SkipsUnknownKind: events with kind not in {resolve,stall} are dropped.
 func TestPlayerTelemetry_SkipsUnknownKind(t *testing.T) {
 	sink := &effectSink{}
