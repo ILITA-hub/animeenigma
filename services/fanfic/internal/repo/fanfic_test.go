@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/domain"
@@ -150,6 +151,42 @@ func TestList_OrderedNewestFirstAndPaginated(t *testing.T) {
 	}
 	if page[0].ID != items[1].ID {
 		t.Errorf("paginated item = %s; want %s", page[0].ID, items[1].ID)
+	}
+}
+
+func TestAppendPart(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	f := &domain.Fanfic{
+		UserID: "u1", AnimeTitle: "Frieren", Status: domain.StatusComplete,
+		Content: "первая часть", TokenUsage: 100, PartCount: 1,
+	}
+	if err := repo.Create(ctx, f); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := repo.AppendPart(ctx, "u1", f.ID, "\n\n---\n\n## Часть 2\n\nвторая часть", 55, 2); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	got, err := repo.Get(ctx, "u1", f.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.PartCount != 2 {
+		t.Errorf("part_count = %d, want 2", got.PartCount)
+	}
+	if got.TokenUsage != 155 {
+		t.Errorf("token_usage = %d, want 155", got.TokenUsage)
+	}
+	if !strings.Contains(got.Content, "первая часть") || !strings.Contains(got.Content, "вторая часть") {
+		t.Errorf("content missing a part: %q", got.Content)
+	}
+
+	// Non-owner append affects zero rows -> NotFound.
+	if err := repo.AppendPart(ctx, "someone-else", f.ID, "x", 1, 3); err == nil {
+		t.Error("expected NotFound for non-owner append")
 	}
 }
 

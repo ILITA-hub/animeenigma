@@ -56,6 +56,27 @@ func (r *Repository) MarkFailed(ctx context.Context, id, msg string) error {
 	return nil
 }
 
+// AppendPart atomically appends `appended` to content, sets part_count, and
+// adds addedUsage to token_usage — owner-scoped. The `content || ?` SQL
+// expression avoids a read-modify-write race. Zero rows affected (missing or
+// non-owner) returns NotFound.
+func (r *Repository) AppendPart(ctx context.Context, userID, id, appended string, addedUsage, newPartCount int) error {
+	res := r.db.WithContext(ctx).Model(&domain.Fanfic{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(map[string]interface{}{
+			"content":     gorm.Expr("content || ?", appended),
+			"part_count":  newPartCount,
+			"token_usage": gorm.Expr("token_usage + ?", addedUsage),
+		})
+	if res.Error != nil {
+		return liberrors.Wrap(res.Error, liberrors.CodeInternal, "append fanfic part")
+	}
+	if res.RowsAffected == 0 {
+		return liberrors.NotFound("fanfic")
+	}
+	return nil
+}
+
 // List returns the user's fanfics newest-first, paginated, plus the total
 // count for that user (ignoring limit/offset).
 func (r *Repository) List(ctx context.Context, userID string, limit, offset int) ([]domain.Fanfic, int64, error) {
