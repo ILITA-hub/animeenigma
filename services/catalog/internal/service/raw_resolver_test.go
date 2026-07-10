@@ -366,6 +366,34 @@ func dualStorageLibServer(t *testing.T, minioURL, s3URL string) *httptest.Server
 	return httptest.NewServer(dualStorageLibHandler(minioURL, s3URL))
 }
 
+// splitStorageLibHandler routes ?storage=minio and ?storage=s3 to independent
+// handlers so tests can fail one storage (e.g. 500) while the other serves.
+func splitStorageLibHandler(minio, s3 http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("storage") {
+		case "s3":
+			s3(w, r)
+		default:
+			minio(w, r)
+		}
+	}
+}
+
+// serveEpisode returns a handler answering 200 with the given playlist URL.
+func serveEpisode(url string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success":true,"data":{"minio_url":%q}}`, url)
+	}
+}
+
+// serveStatus returns a handler answering with a bare status code.
+func serveStatus(code int) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(code)
+	}
+}
+
 // TestRawResolver_GetLibraryStream_DualStorage_ServersPresentDefaultMinio
 // proves that when an episode exists on BOTH storages, the resolved stream
 // carries a Servers list (Local/Cloud) AND the default (server="") pick is
@@ -515,6 +543,114 @@ func TestRawResolver_GetLibraryStream_InvalidServer_400(t *testing.T) {
 	appErr, ok := errors.IsAppError(err)
 	if !ok || appErr.Code != errors.CodeInvalidInput {
 		t.Fatalf("got err %v, want a libs/errors AppError with CodeInvalidInput", err)
+	}
+}
+
+// ---- Task 5 review fix: per-storage failure isolation ----
+
+// TestRawResolver_GetLibraryStream_S3ProbeError_DefaultStillServesMinio is
+// the reviewer's single-point-of-failure regression: with the default
+// server="", a 5xx from the s3 lookup must NOT fail a resolution the minio
+// copy can serve — the stream serves from minio and only the Servers list
+// (whose dual-presence answer we couldn't get) is omitted.
+func TestRawResolver_GetLibraryStream_S3ProbeError_DefaultStillServesMinio(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	const minioURL = "http://minio:9000/raw-library/57466/1/playlist.m3u8"
+	libSrv := httptest.NewServer(splitStorageLibHandler(
+		serveEpisode(minioURL),
+		serveStatus(http.StatusInternalServerError),
+	))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "")
+	if err != nil {
+		t.Fatalf("an s3-side 500 must not fail a minio-served stream, got err %v", err)
+	}
+	if got.URL != minioURL {
+		t.Errorf("URL = %q, want the minio copy %q", got.URL, minioURL)
+	}
+	if got.Servers != nil {
+		t.Errorf("Servers = %+v, want nil (dual-presence unknown while s3 probe errors)", got.Servers)
+	}
+}
+
+// TestRawResolver_GetLibraryStream_ExplicitMinio_S3ErrorIgnored proves an
+// explicit server=minio request is served even while the s3 endpoint errors:
+// only the requested storage's lookup may hard-fail the resolution.
+func TestRawResolver_GetLibraryStream_ExplicitMinio_S3ErrorIgnored(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	const minioURL = "http://minio:9000/raw-library/57466/1/playlist.m3u8"
+	libSrv := httptest.NewServer(splitStorageLibHandler(
+		serveEpisode(minioURL),
+		serveStatus(http.StatusServiceUnavailable),
+	))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	got, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "minio")
+	if err != nil {
+		t.Fatalf("server=minio must not depend on the s3 probe, got err %v", err)
+	}
+	if got.URL != minioURL {
+		t.Errorf("URL = %q, want %q", got.URL, minioURL)
+	}
+	if got.Exp == "" || got.Sig == "" {
+		t.Errorf("expected a signed stream, got exp=%q sig=%q", got.Exp, got.Sig)
+	}
+	if got.Servers != nil {
+		t.Errorf("Servers = %+v, want nil (s3 presence unknown)", got.Servers)
+	}
+}
+
+// TestRawResolver_GetLibraryStream_ExplicitS3_S3ErrorIsUnavailableNotMiss
+// proves an explicit server=s3 request against a failing s3 lookup surfaces
+// a clean CodeUnavailable (5xx) — NOT a false NotFound, and NOT a backfill-
+// demand MISS signal (the s3 state is unknown, not confirmed absent).
+func TestRawResolver_GetLibraryStream_ExplicitS3_S3ErrorIsUnavailableNotMiss(t *testing.T) {
+	cacheC := newTestRedis(t)
+	_, animeRepo := newTestDBWithAnime(t, makeAnime(false, testShikimoriID))
+
+	const minioURL = "http://minio:9000/raw-library/57466/1/playlist.m3u8"
+	internalCalls := make(chan string, 4)
+	episodeHandler := splitStorageLibHandler(
+		serveEpisode(minioURL),
+		serveStatus(http.StatusInternalServerError),
+	)
+	libSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/internal/library/autocache/") {
+			internalCalls <- r.URL.Path
+			fmt.Fprint(w, `{"ok":true}`)
+			return
+		}
+		episodeHandler(w, r)
+	}))
+	defer libSrv.Close()
+
+	libClient := library.NewClient(library.Config{APIURL: libSrv.URL, Timeout: 2 * time.Second})
+	r := NewRawResolver(libClient, animeRepo, cacheC, nil)
+
+	_, err := r.GetLibraryStream(context.Background(), testAnimeID, 1, "", "s3")
+	if err == nil {
+		t.Fatal("expected an error when the explicitly-requested s3 lookup 500s")
+	}
+	appErr, ok := errors.IsAppError(err)
+	if !ok || appErr.Code != errors.CodeUnavailable {
+		t.Fatalf("got err %v, want CodeUnavailable (clean 5xx, not a false 404)", err)
+	}
+	select {
+	case p := <-internalCalls:
+		t.Errorf("must NOT fire a backfill demand when the s3 state is unknown (lookup errored), got call to %q", p)
+	case <-time.After(100 * time.Millisecond):
+		// expected: no signal fired
 	}
 }
 

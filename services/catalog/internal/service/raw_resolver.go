@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -324,6 +325,12 @@ var validLibraryServers = map[string]bool{"": true, "minio": true, "s3": true}
 // specific backend. An invalid server value returns errors.InvalidInput
 // (400 via httputil.Error). Returns errors.NotFound when the episode isn't
 // encoded on the requested (or any, for server="") storage.
+//
+// Storage failures are ISOLATED: only the storage the stream is actually
+// served from can hard-fail the resolution (CodeUnavailable). The other
+// storage's lookup is a best-effort dual-presence probe — on error it is
+// logged and the Servers list is omitted, but the stream still serves. For
+// server="" the resolution hard-fails only when NO storage resolved.
 func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, episodeNumber int, quality string, server string) (*RawStream, error) {
 	if !validLibraryServers[server] {
 		return nil, errors.InvalidInput(`server must be one of: "", "minio", "s3"`)
@@ -346,29 +353,66 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		return nil, errors.NotFound("episode not in library")
 	}
 
-	// Union-fetch both storages: this both resolves the requested copy AND
-	// tells us whether the episode is dual-present (Servers list). Cheap —
-	// the library is on the same docker network with a 2s-max timeout.
-	minioResp, err := r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber, "minio")
-	if err != nil {
-		return nil, errors.Wrap(err, errors.CodeUnavailable, "library unavailable")
-	}
-	s3Resp, err := r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber, "s3")
-	if err != nil {
-		return nil, errors.Wrap(err, errors.CodeUnavailable, "library unavailable")
+	// Union-fetch both storages concurrently: this both resolves the
+	// requested copy AND tells us whether the episode is dual-present
+	// (Servers list). Cheap — the library is on the same docker network with
+	// a 2s-max timeout. Errors are captured PER STORAGE and isolated below:
+	// a failing lookup on the storage we don't actually need to serve from
+	// must never fail the resolution (it only costs the Servers list), or an
+	// s3-side outage would break every minio-served ae stream and vice versa.
+	var (
+		minioResp, s3Resp *library.EpisodeResponse
+		minioErr, s3Err   error
+		wg                sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		minioResp, minioErr = r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber, "minio")
+	}()
+	go func() {
+		defer wg.Done()
+		s3Resp, s3Err = r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber, "s3")
+	}()
+	wg.Wait()
+
+	// logProbeErr surfaces a best-effort other-storage probe failure without
+	// failing the resolution (the only casualty is the Servers list).
+	logProbeErr := func(storage string, probeErr error) {
+		if probeErr != nil && r.log != nil {
+			r.log.Warnw("ae dual-storage presence probe failed; omitting servers list",
+				"anime_id", animeID, "episode", episodeNumber, "storage", storage, "error", probeErr)
+		}
 	}
 
 	var resp *library.EpisodeResponse
 	switch server {
 	case "minio":
+		// Only the explicitly-requested storage's lookup may hard-fail; the
+		// other side is a presence probe for the Servers list only.
+		if minioErr != nil {
+			return nil, errors.Wrap(minioErr, errors.CodeUnavailable, "library unavailable")
+		}
+		logProbeErr("s3", s3Err)
 		resp = minioResp
 	case "s3":
+		if s3Err != nil {
+			return nil, errors.Wrap(s3Err, errors.CodeUnavailable, "library unavailable")
+		}
+		logProbeErr("minio", minioErr)
 		resp = s3Resp
-	default: // "" → prefer minio, else s3
-		if minioResp != nil {
+	default: // "" → prefer minio, else s3; hard-fail only when NEITHER resolved
+		logProbeErr("minio", minioErr)
+		logProbeErr("s3", s3Err)
+		switch {
+		case minioResp != nil:
 			resp = minioResp
-		} else {
+		case s3Resp != nil:
 			resp = s3Resp
+		case minioErr != nil:
+			return nil, errors.Wrap(minioErr, errors.CodeUnavailable, "library unavailable")
+		case s3Err != nil:
+			return nil, errors.Wrap(s3Err, errors.CodeUnavailable, "library unavailable")
 		}
 	}
 
@@ -376,9 +420,10 @@ func (r *RawResolver) GetLibraryStream(ctx context.Context, animeID string, epis
 		// A request pinned to a specific storage that just doesn't have THIS
 		// copy (while the other storage does) is NOT a pool miss — the
 		// episode is encoded, only the requested copy is absent. Only fire
-		// the best-effort backfill-demand signal on a genuine full miss
-		// (neither storage has it).
-		if minioResp == nil && s3Resp == nil {
+		// the best-effort backfill-demand signal on a genuine full miss:
+		// both storages CONFIRMED absent (nil result, nil error). An errored
+		// probe leaves that storage's state unknown, so no demand either.
+		if minioResp == nil && s3Resp == nil && minioErr == nil && s3Err == nil {
 			mal, ep := anime.ShikimoriID, episodeNumber
 			// Ordered fallback titles (name_jp → romaji → name_en) so the library
 			// Planner can search trackers by title; empties are dropped server-side.
