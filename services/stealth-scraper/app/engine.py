@@ -84,6 +84,7 @@ from .recipes.base import host_allowed, host_of, looks_like_challenge
 from .recipes.gogoanime import GogoanimeRecipe
 from .recipes.miruro import MiruroRecipe
 from .recipes.nineanime import NineAnimeRecipe
+from .sessionstore import SessionStore, camoufox_build
 from .streamproxy import looks_like_m3u8, make_wrap, rewrite_playlist
 from .tunnels import ProxyPool, build_pool_from_config
 
@@ -129,6 +130,9 @@ class Session:
     # Quota accounting key (opaque user id or salted IP hash; never logged in
     # clear). None ⇒ unbounded (the caller opted out of per-user accounting).
     user_key: str | None = None
+    # Wall-clock of the last persisted-record refresh (Layer B). Throttles
+    # store writes to ~1/min instead of one per proxied segment.
+    last_persist: float = 0.0
 
 
 class _CamoufoxHandle:
@@ -168,6 +172,7 @@ class CamoufoxEngine:
         self.cfg = cfg
         self.pool: ProxyPool = build_pool_from_config(cfg)
         self.profiles = ProfileManager(cfg.profile_dir, cfg.pool_size)
+        self.store = SessionStore(os.path.join(cfg.profile_dir, "sessions"))
         self._handles: dict[str, _CamoufoxHandle] = {}     # profile id -> handle
         self._sessions: dict[str, Session] = {}            # session id -> Session
         # Per-(provider,origin) warm-fetch lock (SCRAPER-HEAL-04): serializes
@@ -625,6 +630,7 @@ class CamoufoxEngine:
         candidates.sort(key=lambda t: t[0])
         _, sid, session = candidates[0]
         self._sessions.pop(sid, None)
+        self.store.delete(sid)
         self._spawn(_safe_close_page(session.page))
         self.profiles.release(session.profile, ok=True)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
@@ -667,6 +673,21 @@ class CamoufoxEngine:
             self._evict_expired()  # drop idle/expired not-in-use sessions
             metrics.ADMISSION_TOTAL.labels(action="soft_evict").inc()
 
+    def _session_record(self, session: Session) -> dict:
+        return {
+            "sid": session.id,
+            "master_url": session.master_url,
+            "player_url": session.player_url,
+            "referer": session.referer,
+            "profile_id": session.profile.id,
+            "proxy_id": session.proxy_id,
+            "user_key": session.user_key,
+            "cdn_host": session.cdn_host,
+            "expires_at": session.expires_at,
+            "camoufox_build": camoufox_build(),
+            "created_at": time.time(),
+        }
+
     async def _open_session(
         self, partial: dict, context: Any, proxy_id: str, profile: Profile, page: Any,
         user_key: str | None = None,
@@ -696,6 +717,8 @@ class CamoufoxEngine:
             user_key=user_key,
         )
         self._sessions[sid] = session
+        session.last_persist = time.time()
+        self.store.save(self._session_record(session))
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         return session
 
@@ -790,6 +813,12 @@ class CamoufoxEngine:
 
         # Bump the sliding window again on completion.
         session.expires_at = time.time() + self.cfg.session_ttl_seconds
+
+        # Refresh the persisted record so a redeploy mid-watch can rehydrate
+        # with an accurate deadline — throttled, segments arrive every ~4s.
+        if time.time() - session.last_persist > 60:
+            session.last_persist = time.time()
+            self.store.save(self._session_record(session))
 
         text_head = body[:64].decode("utf-8", "ignore")
         if looks_like_m3u8(text_head, ctype):
@@ -1227,6 +1256,7 @@ class CamoufoxEngine:
         session = self._sessions.pop(sid, None)
         if session is None:
             return False
+        self.store.delete(sid)
         await _safe_close_page(session.page)
         self.profiles.release(session.profile, ok=True)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
@@ -1241,6 +1271,7 @@ class CamoufoxEngine:
         for sid, session in list(self._sessions.items()):
             if session.expires_at <= now and session.in_use <= 0:
                 self._sessions.pop(sid, None)
+                self.store.delete(sid)
                 self._spawn(_safe_close_page(session.page))
                 self.profiles.release(session.profile, ok=True)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
@@ -1278,6 +1309,10 @@ class CamoufoxEngine:
                 await _safe_close_page(session.page)
                 self.profiles.release(session.profile, ok=True)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
+        # Drop persisted records of sessions that died with a previous process
+        # (crash/redeploy without a clean aclose_session/_evict_* pass) so
+        # they don't accumulate forever on the volume.
+        self.store.sweep(time.time())
         # Retire over-used, unleased profiles: tear the browser down and clear
         # the on-disk user_data_dir so cookie/cache cruft can't grow unbounded.
         for p in self.profiles.all():
