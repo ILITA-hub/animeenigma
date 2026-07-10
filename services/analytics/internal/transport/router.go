@@ -28,6 +28,7 @@ import (
 //	POST /internal/probe/run           (internal — scheduler daily trigger; on-demand probe)
 //	GET  /internal/playability          (internal — per-provider decayed watch/probe scores)
 //	POST /internal/upscale-telemetry   (internal — GPU telemetry from upscaler; CD-15; never gateway-proxied)
+//	POST /internal/degradation/transition (internal — governor level-transition history; never gateway-proxied)
 func NewRouter(
 	collect *handler.CollectHandler,
 	clientError *handler.ClientErrorHandler,
@@ -39,6 +40,7 @@ func NewRouter(
 	probe *handler.ProbeHandler,
 	playability *handler.PlayabilityHandler,
 	upscaleTelemetry *handler.UpscaleTelemetryHandler,
+	degradationTransition *handler.DegradationTransitionHandler,
 	log *logger.Logger,
 	collector *metrics.Collector,
 ) http.Handler {
@@ -116,6 +118,13 @@ func NewRouter(
 	// never gateway-proxied.
 	if upscaleTelemetry != nil {
 		r.Post("/internal/upscale-telemetry", upscaleTelemetry.ServeHTTP)
+	}
+	// /internal/degradation/transition ingests governor level transitions
+	// (graceful-degradation Phase 2) — the durable what/when/why history
+	// behind the Degradation Overview dashboard annotations. Docker-network
+	// only — never gateway-proxied.
+	if degradationTransition != nil {
+		r.Post("/internal/degradation/transition", degradationTransition.ServeHTTP)
 	}
 
 	return r

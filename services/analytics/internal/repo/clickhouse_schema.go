@@ -171,6 +171,24 @@ LEFT JOIN (
   ORDER BY (worker_id, ts)
   TTL toDateTime(ts) + INTERVAL 90 DAY DELETE
   SETTINGS index_granularity = 8192`
+
+	// createDegradationTransitionsTableDDL records one row per published
+	// degradation-level change from the governor service (graceful-degradation
+	// Phase 2) — the durable "what changed, when, and why" history rendered as
+	// annotations on the Degradation Overview dashboard. Transitions are rare
+	// (a handful per pressure event), so a 365-day TTL costs nothing and keeps
+	// a year of incident context.
+	createDegradationTransitionsTableDDL = `CREATE TABLE IF NOT EXISTS degradation_transitions (
+    ts            DateTime64(3) CODEC(Delta, ZSTD(1)),
+    from_level    UInt8,
+    to_level      UInt8,
+    reasons       Array(String),
+    signal_values Map(String, Float64)
+) ENGINE = MergeTree
+  PARTITION BY toYYYYMM(ts)
+  ORDER BY ts
+  TTL toDateTime(ts) + INTERVAL 365 DAY DELETE
+  SETTINGS index_granularity = 8192`
 )
 
 // EnsureSchema idempotently creates the ClickHouse analytics schema: the
@@ -187,6 +205,7 @@ func EnsureSchema(ctx context.Context, conn driver.Conn) error {
 		alterProbeRunsAddAnimeNameDDL,
 		createResolvedViewDDL,
 		createUpscaleTelemetryTableDDL,
+		createDegradationTransitionsTableDDL,
 	} {
 		if err := conn.Exec(ctx, ddl); err != nil {
 			return err

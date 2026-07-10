@@ -500,3 +500,40 @@ func (s *ClickHouseStore) InsertUpscaleTelemetry(ctx context.Context, rows []Ups
 	}
 	return batch.Send()
 }
+
+// DegradationTransitionRow is one governor level change, mirroring the
+// governor's domain.Transition JSON (snake_case field names).
+type DegradationTransitionRow struct {
+	TS           time.Time          `json:"ts"`
+	FromLevel    uint8              `json:"from_level"`
+	ToLevel      uint8              `json:"to_level"`
+	Reasons      []string           `json:"reasons"`
+	SignalValues map[string]float64 `json:"signal_values"`
+}
+
+// InsertDegradationTransition persists one degradation-level transition to the
+// degradation_transitions table. Transitions are rare, so single-row inserts
+// (no batching) are fine; column order MUST match
+// createDegradationTransitionsTableDDL exactly.
+func (s *ClickHouseStore) InsertDegradationTransition(ctx context.Context, row DegradationTransitionRow) error {
+	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO degradation_transitions")
+	if err != nil {
+		return err
+	}
+	if row.Reasons == nil {
+		row.Reasons = []string{}
+	}
+	if row.SignalValues == nil {
+		row.SignalValues = map[string]float64{}
+	}
+	if err := batch.Append(
+		row.TS,           // ts            DateTime64(3)
+		row.FromLevel,    // from_level    UInt8
+		row.ToLevel,      // to_level      UInt8
+		row.Reasons,      // reasons       Array(String)
+		row.SignalValues, // signal_values Map(String, Float64)
+	); err != nil {
+		return err
+	}
+	return batch.Send()
+}

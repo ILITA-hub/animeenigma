@@ -111,7 +111,7 @@ Group **Host Pressure** in the provisioned `rules.yml` (mirror in `infra/grafana
 
 Both → existing maintenance-webhook route.
 
-## Phase 2 — governor service (design summary; separate session)
+## Phase 2 — governor service (BUILT 2026-07-10, same day as Phase 1)
 
 Tiny Go service `services/governor/` (:8099, standard layout, `libs/{logger,metrics,cache}`):
 evaluator loop (15 s tick) queries `ae:*` instant vectors via Prometheus HTTP API

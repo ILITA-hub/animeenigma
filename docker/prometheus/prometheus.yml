@@ -87,6 +87,14 @@ scrape_configs:
       - targets: ['policy:8098']
     metrics_path: /metrics
 
+  # Degradation governor (graceful-degradation Phase 2): exposes the
+  # authoritative ae_degradation_level / ae_degradation_reason_active gauges
+  # rendered on the Degradation Overview dashboard.
+  - job_name: 'governor'
+    static_configs:
+      - targets: ['governor:8099']
+    metrics_path: /metrics
+
   - job_name: 'library'
     static_configs:
       - targets: ['library:8089']

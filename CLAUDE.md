@@ -269,6 +269,7 @@ After ANY implementation work (features, bug fixes, refactoring), **always invok
 | notifications | 8090 | /metrics | Generic notification engine (new episodes, future types) |
 | watch-together | 8091 | /metrics | Co-watch service (Redis-only; rooms + sync + chat) |
 | recs | 8094 | /metrics | Recommendation engine (extracted from player, spec 2026-06-11) |
+| governor | 8099 | /metrics | Degradation governor (pressure level via Redis `ae:degradation:level`; spec 2026-07-10) |
 | web | 80 | - | Vue 3 frontend (nginx) |
 
 ### Gateway Routing

@@ -26,6 +26,7 @@ COPY services/upscaler/go.mod services/upscaler/go.sum* ./services/upscaler/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
 COPY services/streaming/go.mod services/streaming/go.sum* ./services/streaming/
 COPY services/player/go.mod services/player/go.sum* ./services/player/
+COPY services/recs/go.mod services/recs/go.sum* ./services/recs/
 COPY services/rooms/go.mod services/rooms/go.sum* ./services/rooms/
 COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/scheduler/go.mod services/scheduler/go.sum* ./services/scheduler/
@@ -38,19 +39,18 @@ COPY services/analytics/go.mod services/analytics/go.sum* ./services/analytics/
 COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/maintenance/
 COPY services/library/go.mod services/library/go.sum* ./services/library/
 COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/
-COPY services/recs/go.mod services/recs/go.sum* ./services/recs/
+COPY services/policy/go.mod services/policy/go.sum* ./services/policy/
 COPY services/anidle/go.mod services/anidle/go.sum* ./services/anidle/
 COPY services/fanfic/go.mod services/fanfic/go.sum* ./services/fanfic/
-COPY services/policy/go.mod services/policy/go.sum* ./services/policy/
 
-RUN cd services/recs && go mod download
+RUN cd services/governor && go mod download
 
 # Copy source
 COPY libs/ ./libs/
-COPY services/recs/ ./services/recs/
+COPY services/governor/ ./services/governor/
 
 # Build
-RUN cd services/recs && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /recs-api ./cmd/recs-api
+RUN cd services/governor && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /governor-api ./cmd/governor-api
 
 # Runtime stage
 FROM alpine:3.19
@@ -59,13 +59,13 @@ RUN apk add --no-cache ca-certificates tzdata wget
 
 WORKDIR /app
 
-COPY --from=builder /recs-api .
+COPY --from=builder /governor-api .
 
 # M501: drop root — run as non-root 'app'. Binary listens on a >1024 port and
-# writes nothing to local disk (state is in postgres/redis/MinIO), so this is free.
+# writes nothing to local disk (state is in Redis + Prometheus + ClickHouse).
 RUN addgroup -S app && adduser -S -G app app && chown -R app:app /app
 USER app
 
-EXPOSE 8094
+EXPOSE 8099
 
-CMD ["./recs-api"]
+CMD ["./governor-api"]

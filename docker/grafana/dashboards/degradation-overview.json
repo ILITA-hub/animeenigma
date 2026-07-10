@@ -1,6 +1,22 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "aenigma-clickhouse"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "orange",
+        "name": "Degradation transitions",
+        "target": {
+          "queryType": "sql",
+          "format": 1,
+          "rawSql": "SELECT toUnixTimestamp64Milli(ts) AS time, concat('L', toString(from_level), ' → L', toString(to_level), ': ', arrayStringConcat(reasons, ', ')) AS text FROM analytics.degradation_transitions WHERE $__timeFilter(ts) ORDER BY ts"
+        }
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
@@ -10,19 +26,32 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
       "panels": [],
       "title": "Degradation state — what & when",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 2,
       "type": "stat",
-      "title": "Pressure level (preview)",
-      "description": "0 Normal · 1 Elevated · 2 Critical. Computed by the ae:pressure_level:preview recording rule from PSI stall ratios + memory floor — no hysteresis (the Phase-2 governor adds smoothing and becomes the authoritative level).",
-      "gridPos": { "h": 8, "w": 4, "x": 0, "y": 1 },
+      "title": "Level (governor)",
+      "description": "AUTHORITATIVE published degradation level (ae_degradation_level): the governor's hysteresis-smoothed decision (enter ~60s, exit ~5min) plus owner override — exactly what consumers read from Redis. 0 Normal · 1 Elevated · 2 Critical.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -30,20 +59,48 @@
             {
               "type": "value",
               "options": {
-                "0": { "text": "Normal", "color": "green", "index": 0 },
-                "1": { "text": "Elevated", "color": "yellow", "index": 1 },
-                "2": { "text": "Critical", "color": "red", "index": 2 }
+                "0": {
+                  "text": "Normal",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Elevated",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Critical",
+                  "color": "red",
+                  "index": 2
+                }
               }
             }
           ],
-          "noValue": "no data",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "noValue": "governor down",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
@@ -52,7 +109,94 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "ae_degradation_level",
+          "instant": true,
+          "legendFormat": "level",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "id": 21,
+      "type": "stat",
+      "title": "Level (preview, raw)",
+      "description": "Instantaneous threshold verdict (ae:pressure_level:preview recording rule) with NO hysteresis. When this flaps while the governor holds steady, the hysteresis is doing its job.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Normal",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Elevated",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Critical",
+                  "color": "red",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "no data",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:pressure_level:preview",
           "instant": true,
@@ -62,27 +206,61 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 3,
       "type": "state-timeline",
       "title": "Level over time (when)",
-      "description": "Preview degradation level across the selected range. Phase 2 replaces this with the governor's authoritative ae_degradation_level plus ClickHouse-backed transition annotations.",
-      "gridPos": { "h": 8, "w": 12, "x": 4, "y": 1 },
+      "description": "Published (governor) degradation level across the selected range. Orange annotation markers = transitions from the ClickHouse history, labeled with from→to and the reasons.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 4,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": { "fillOpacity": 70, "lineWidth": 0, "spanNulls": false },
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
           "mappings": [
             {
               "type": "value",
               "options": {
-                "0": { "text": "Normal", "color": "green", "index": 0 },
-                "1": { "text": "Elevated", "color": "yellow", "index": 1 },
-                "2": { "text": "Critical", "color": "red", "index": 2 }
+                "0": {
+                  "text": "Normal",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Elevated",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Critical",
+                  "color": "red",
+                  "index": 2
+                }
               }
             }
           ],
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
@@ -91,14 +269,24 @@
         "showValue": "auto",
         "alignValue": "center",
         "rowHeight": 0.9,
-        "legend": { "showLegend": false, "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
-          "expr": "ae:pressure_level:preview",
+          "expr": "ae_degradation_level",
           "legendFormat": "level",
           "range": true,
           "refId": "A"
@@ -109,37 +297,90 @@
       "id": 4,
       "type": "text",
       "title": "How to read this",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
       "options": {
         "mode": "markdown",
-        "content": "**What / when / why** for graceful degradation (spec: `docs/superpowers/specs/2026-07-10-graceful-degradation-design.md`).\n\n- **When** — level timeline (left). **Why** — *Breached signals* below names the exact trigger; host + bandwidth rows show the raw signals.\n- **What** — *Heavy actors* row = shed candidates (Camoufox, library torrent/encode, upscaler). Phase 3 pauses their admission at Elevated+.\n- **Thresholds** (Elevated → Critical): PSI cpu `some` 25→45% · PSI io `full` 15→30% · PSI mem `full` 5→15% · MemAvailable 10→5%.\n- Swap stays ~90% on this box by design — context only, never a trigger.\n- Phase 1 = awareness only: nothing is shed yet. Phase 2 governor adds hysteresis + Redis + ClickHouse history; Phase 3 wires actuation."
+        "content": "**What / when / why** for graceful degradation (spec: `docs/superpowers/specs/2026-07-10-graceful-degradation-design.md`).\n\n- **When** — governor level timeline (left); orange annotations = transitions with reasons (ClickHouse `degradation_transitions`, 365d).\n- **Why** — *Active reasons* below names what justifies the CURRENT level; *Breached signals* shows the raw threshold verdicts; host + bandwidth rows show the underlying signals.\n- **What** — *Heavy actors* row = shed candidates (Camoufox, library torrent/encode, upscaler). Phase 3 pauses their admission at Elevated+.\n- **Hysteresis**: enter after ~60s sustained breach, exit after ~5min clean — the preview stat flapping while the governor holds = working as intended.\n- **Override**: `bin/degradation-override.sh set 0|1|2` pins the level (reason `manual_override`); `clear` releases. Consumers read Redis `ae:degradation:level` (TTL'd — dead governor fails open to Normal).\n- **Thresholds** (Elevated → Critical): PSI cpu `some` 25→45% · PSI io `full` 15→30% · PSI mem `full` 5→15% · MemAvailable 10→5%. Swap is context-only (chronically ~90% on this box by design)."
       }
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "id": 5,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "id": 22,
       "type": "state-timeline",
-      "title": "Breached signals (why)",
-      "description": "Which signal is past its threshold, per severity. Yellow rows = elevated-tier breaches, red rows = critical-tier breaches. This is the 'why' behind every level change.",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 9 },
+      "title": "Active reasons (governor)",
+      "description": "Which reasons currently justify the published level (ae_degradation_reason_active). Yellow = elevated-tier signal, red = critical-tier, blue = info (manual_override / prometheus_unreachable).",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": { "fillOpacity": 70, "lineWidth": 0, "spanNulls": false },
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
           "mappings": [
             {
               "type": "value",
               "options": {
-                "0": { "text": "ok", "color": "transparent", "index": 0 },
-                "1": { "text": "breach", "index": 1 }
+                "0": {
+                  "text": "ok",
+                  "color": "transparent",
+                  "index": 0
+                },
+                "1": {
+                  "text": "active",
+                  "index": 1
+                }
               }
             }
           ],
-          "color": { "mode": "fixed", "fixedColor": "yellow" }
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          }
         },
         "overrides": [
           {
-            "matcher": { "id": "byFrameRefID", "options": "B" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
           }
         ]
       },
@@ -148,12 +389,134 @@
         "showValue": "never",
         "alignValue": "center",
         "rowHeight": 0.85,
-        "legend": { "showLegend": false, "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "ae_degradation_reason_active{severity=\"elevated\"}",
+          "legendFormat": "{{signal}} · elevated",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "ae_degradation_reason_active{severity=\"critical\"}",
+          "legendFormat": "{{signal}} · critical",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "ae_degradation_reason_active{severity=\"info\"}",
+          "legendFormat": "{{signal}}",
+          "range": true,
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "id": 5,
+      "type": "state-timeline",
+      "title": "Breached signals (preview thresholds, raw)",
+      "description": "Instantaneous threshold verdicts per signal, before hysteresis. Yellow rows = elevated-tier breaches, red rows = critical-tier. Compare with 'Active reasons' above to see what the governor accepted as sustained.",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "ok",
+                  "color": "transparent",
+                  "index": 0
+                },
+                "1": {
+                  "text": "breach",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "center",
+        "rowHeight": 0.85,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:pressure_breach:elevated",
           "legendFormat": "{{signal}} · elevated",
@@ -161,7 +524,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:pressure_breach:critical",
           "legendFormat": "{{signal}} · critical",
@@ -172,24 +538,39 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
       "id": 6,
       "panels": [],
       "title": "Why — host pressure signals",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 7,
       "type": "timeseries",
       "title": "PSI — pressure stall ratios",
       "description": "Kernel pressure-stall information: share of wall-clock time tasks were stalled waiting for the resource. 'some' = at least one task stalled; 'full' = all non-idle tasks stalled. These are the primary degradation triggers.",
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 18 },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -197,40 +578,108 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true,
             "axisSoftMax": 0.5
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "cpu · some" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#5794F2" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "memory · full" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#B877D9" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "io · full" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "io · some" },
+            "matcher": {
+              "id": "byName",
+              "options": "cpu · some"
+            },
             "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "#FFCB7D" } },
-              { "id": "custom.lineStyle", "value": { "dash": [4, 4], "fill": "dash" } }
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory · full"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B877D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "io · full"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "io · some"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FFCB7D"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    4,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
             ]
           }
         ]
       },
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_psi_cpu_some:ratio",
           "legendFormat": "cpu · some",
@@ -238,7 +687,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_psi_mem_full:ratio",
           "legendFormat": "memory · full",
@@ -246,7 +698,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_psi_io_full:ratio",
           "legendFormat": "io · full",
@@ -254,7 +709,10 @@
           "refId": "C"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_psi_io_some:ratio",
           "legendFormat": "io · some",
@@ -264,17 +722,27 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 8,
       "type": "timeseries",
       "title": "CPU utilization / load per core",
       "description": "Context signals (not triggers): overall CPU busy ratio and 5-minute load average divided by core count (8 cores). Load/core > 1 means runnable tasks exceed capacity.",
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 18 },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -282,19 +750,36 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_cpu_used:ratio",
           "legendFormat": "cpu used",
@@ -302,7 +787,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_load5_per_core:ratio",
           "legendFormat": "load5 / core",
@@ -312,18 +800,28 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 9,
       "type": "timeseries",
       "title": "Memory available / swap used",
       "description": "MemAvailable/MemTotal is a trigger (Elevated <10%, Critical <5%). Swap-used is context only — this box intentionally runs ~90% swap; memory PSI is the honest stall signal.",
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 27 },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
           "min": 0,
           "max": 1,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -331,24 +829,55 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "swap used" },
-            "properties": [{ "id": "custom.lineStyle", "value": { "dash": [4, 4], "fill": "dash" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "swap used"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    4,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "calcs": ["mean", "min"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "mean",
+            "min"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_mem_available:ratio",
           "legendFormat": "mem available",
@@ -356,7 +885,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_swap_used:ratio",
           "legendFormat": "swap used",
@@ -366,17 +898,27 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 10,
       "type": "timeseries",
       "title": "Disk IO utilization (busiest device)",
       "description": "Share of time the busiest block device spent doing IO. Sustained ~100% alongside io PSI = torrent/ffmpeg signature.",
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 27 },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -384,19 +926,36 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_disk_io_util:ratio",
           "legendFormat": "io util",
@@ -407,24 +966,39 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
       "id": 11,
       "panels": [],
       "title": "Why — bandwidth (uplink vs consumers)",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 12,
       "type": "timeseries",
       "title": "Egress breakdown (bits/s)",
       "description": "Pairs the vnstat uplink truth with per-consumer counters: playback (streaming HLS proxy — CRITICAL tier, must survive) vs torrent upload (HEAVY tier, shed first) vs everything else. 10m windows smooth vnstat's 5-minute buckets.",
-      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 37 },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 0,
+        "y": 43
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "bps",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -432,36 +1006,97 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "uplink total" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#5794F2" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "uplink total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "playback (HLS proxy)" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "playback (HLS proxy)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "torrent upload" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "torrent upload"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "other" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#B877D9" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "other"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B877D9"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_egress:bytes_per_second * 8",
           "legendFormat": "uplink total",
@@ -469,7 +1104,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:playback_egress:bytes_per_second * 8",
           "legendFormat": "playback (HLS proxy)",
@@ -477,7 +1115,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:torrent_upload:bytes_per_second * 8",
           "legendFormat": "torrent upload",
@@ -485,7 +1126,10 @@
           "refId": "C"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:egress_other:bytes_per_second * 8",
           "legendFormat": "other",
@@ -495,17 +1139,27 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 13,
       "type": "timeseries",
       "title": "Ingress (bits/s)",
       "description": "Host download side: vnstat RX total vs the torrent download share (HEAVY tier).",
-      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 37 },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 43
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "bps",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -513,28 +1167,67 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "downlink total" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#5794F2" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "downlink total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "torrent download" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "torrent download"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:host_ingress:bytes_per_second * 8",
           "legendFormat": "downlink total",
@@ -542,7 +1235,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "ae:torrent_download:bytes_per_second * 8",
           "legendFormat": "torrent download",
@@ -553,24 +1249,39 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 46 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
       "id": 14,
       "panels": [],
       "title": "What — heavy actors (shed candidates)",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 15,
       "type": "timeseries",
       "title": "Camoufox RAM",
       "description": "Combined RSS of the Camoufox/Firefox process tree (stealth_ram_bytes). Admission soft budget 2 GiB, hard 3 GiB; Phase 3 clamps the soft budget at Elevated.",
-      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 47 },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 53
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -578,19 +1289,35 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "max"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "stealth_ram_bytes",
           "legendFormat": "process-tree RSS",
@@ -600,17 +1327,27 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 16,
       "type": "timeseries",
       "title": "Camoufox pool / sessions",
       "description": "Live browser profiles, free slots, and retained stream sessions. Phase 3 stops warming at Elevated and refuses new solves (kind=degraded) at Critical.",
-      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 47 },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 53
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -618,19 +1355,35 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "max"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "stealth_browser_pool_size",
           "legendFormat": "pool size",
@@ -638,7 +1391,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "stealth_pool_free",
           "legendFormat": "free",
@@ -646,7 +1402,10 @@
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "stealth_active_sessions",
           "legendFormat": "active sessions",
@@ -656,17 +1415,27 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 17,
       "type": "timeseries",
       "title": "Library activity",
       "description": "Active torrents plus encodes completed per 10m. Phase 3 stops the workers claiming NEW download/encode jobs at Elevated (running ffmpeg always finishes).",
-      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 47 },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 53
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -674,19 +1443,35 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "max"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "library_active_torrents",
           "legendFormat": "active torrents",
@@ -694,7 +1479,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "increase(library_encode_duration_seconds_count[10m])",
           "legendFormat": "encodes finished / 10m",
@@ -704,17 +1492,27 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 18,
       "type": "timeseries",
       "title": "Upscaler queue depth",
       "description": "Jobs by status in the upscaler lease queue. Finalize/mux runs local CPU; a later actuation wave can pause new segment leases.",
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 47 },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 53
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -722,19 +1520,35 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "max"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "upscale_queue_depth",
           "legendFormat": "{{status}}",
@@ -744,17 +1558,27 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 19,
       "type": "timeseries",
       "title": "HLS proxy active connections (CRITICAL-tier demand)",
       "description": "Live playback connections through the streaming proxy — the demand the degradation system protects. Rising connections + rising pressure = exactly when shedding should kick in.",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 55 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 61
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -762,19 +1586,36 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "proxy_active_connections",
           "legendFormat": "active connections",
@@ -784,17 +1625,27 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "id": 20,
       "type": "timeseries",
       "title": "Library disk free",
       "description": "Free bytes on the library volume. The existing disk guard (LIBRARY_DISK_FREE_MIN_PCT=20) already refuses new downloads below its floor — an actuation primitive this design builds on.",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 55 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 61
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisPlacement": "auto",
             "drawStyle": "line",
@@ -802,19 +1653,35 @@
             "lineWidth": 1,
             "gradientMode": "none",
             "showPoints": "never",
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
             "spanNulls": true
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "calcs": ["min"], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "min"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
           "editorMode": "code",
           "expr": "library_disk_free_bytes",
           "legendFormat": "free",
@@ -826,7 +1693,11 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["degradation", "pressure", "infra"],
+  "tags": [
+    "degradation",
+    "pressure",
+    "infra"
+  ],
   "templating": {
     "list": []
   },

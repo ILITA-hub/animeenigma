@@ -249,8 +249,16 @@ func main() {
 		playabilityHandler = handler.NewPlayabilityHandler(chConn)
 	}
 
+	// Degradation-transition handler (graceful-degradation Phase 2): only wired
+	// when ClickHouse is available so the insert target exists. When nil the
+	// route is not mounted and the governor's best-effort sink logs the 404.
+	var degradationTransitionHandler *handler.DegradationTransitionHandler
+	if chConn != nil {
+		degradationTransitionHandler = handler.NewDegradationTransitionHandler(repo.NewClickHouseStore(chConn))
+	}
+
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, probeHandler, playabilityHandler, upscaleTelemetryHandler, log, collector)
+	router := transport.NewRouter(collectHandler, clientErrorHandler, playerTelemetryHandler, effectsHandler, adminHandler, readThresholdHandler, playerRankingHandler, probeHandler, playabilityHandler, upscaleTelemetryHandler, degradationTransitionHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {
