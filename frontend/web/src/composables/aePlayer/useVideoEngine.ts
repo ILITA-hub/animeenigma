@@ -110,6 +110,13 @@ export function useVideoEngine(
   const currentLevelLabel = ref('')
   const fragStats = ref<FragStat[]>([])
   const bandwidthEstimate = ref(0)
+  // Which Kodik solodcdn edge actually served the last fragment, and the compact
+  // attempt trail behind that choice — read from the streaming proxy's
+  // X-AE-Edge-Served / X-AE-Edge-Trail response headers. Empty for non-Kodik
+  // sources (no header). Surfaced in the hacker-mode HUD (metrics + logic, not
+  // just the decision). See docs/superpowers/specs/2026-07-10-kodik-edge-failover-design.md.
+  const servedEdge = ref('')
+  const edgeTrail = ref('')
   // Cheap always-on signal: how many fragments have loaded for the current
   // stream. The silent-stall watchdog needs "are fragments flowing?" even when
   // the detailed fragStats array isn't being built (hacker mode off).
@@ -133,6 +140,8 @@ export function useVideoEngine(
     currentLevelLabel.value = ''
     fragStats.value = []
     bandwidthEstimate.value = 0
+    servedEdge.value = ''
+    edgeTrail.value = ''
     fragLoadedCount.value = 0
     destroy()
 
@@ -208,6 +217,15 @@ export function useVideoEngine(
         { start: f.start ?? 0, duration: f.duration ?? 0, size: st.total ?? 0, loadMs },
       ]
       bandwidthEstimate.value = hls?.bandwidthEstimate ?? 0
+      // Edge telemetry from the streaming proxy (Kodik/solodcdn only). The XHR
+      // response headers ride on data.networkDetails; getResponseHeader returns
+      // null for a header that isn't present (non-Kodik source), leaving these
+      // empty. Exposed cross-origin via Access-Control-Expose-Headers.
+      const xhr = data?.networkDetails
+      if (xhr?.getResponseHeader) {
+        servedEdge.value = xhr.getResponseHeader('X-AE-Edge-Served') || ''
+        edgeTrail.value = xhr.getResponseHeader('X-AE-Edge-Trail') || ''
+      }
     })
     // Bounded network-error retries. A failed PLAYLIST load (manifest/level —
     // e.g. a megaplay CDN host that 403/502s our IP) means this source is dead:
@@ -267,5 +285,5 @@ export function useVideoEngine(
 
   onUnmounted(destroy)
 
-  return { fatal, lastKnownPlayback, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, fragLoadedCount }
+  return { fatal, lastKnownPlayback, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, servedEdge, edgeTrail, fragLoadedCount }
 }

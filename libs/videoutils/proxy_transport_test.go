@@ -27,8 +27,11 @@ func TestNewIPv4Transport_ConnectionPoolConfig(t *testing.T) {
 	if tr.MaxIdleConns != 100 {
 		t.Fatalf("MaxIdleConns = %d, want 100 (Go default, must be preserved)", tr.MaxIdleConns)
 	}
-	if tr.ResponseHeaderTimeout != 20*time.Second {
-		t.Fatalf("ResponseHeaderTimeout = %v, want 20s (finding L781)", tr.ResponseHeaderTimeout)
+	// 45s (raised from 20s, 2026-07-10 Kodik edge-failover design): a solodcdn
+	// edge can be slow to first byte while it cold-starts / prepares HLS — we'd
+	// rather wait than prematurely abandon a slow-but-alive edge.
+	if tr.ResponseHeaderTimeout != 45*time.Second {
+		t.Fatalf("ResponseHeaderTimeout = %v, want 45s (finding L781; widened for cold-start edges)", tr.ResponseHeaderTimeout)
 	}
 }
 
@@ -37,7 +40,7 @@ func TestNewIPv4Transport_ConnectionPoolConfig(t *testing.T) {
 // NOT hang the proxy forever — the transport's ResponseHeaderTimeout aborts the
 // upstream request and ProxyStreamCounted returns an error, freeing the slot.
 //
-// The constructor sets a generous 20s in production; here we shrink the timeout
+// The constructor sets a generous 45s in production; here we shrink the timeout
 // on the same transport to keep the test fast while still exercising the real
 // client.Do error path through ProxyStreamCounted.
 func TestProxyStream_ResponseHeaderTimeoutFires(t *testing.T) {

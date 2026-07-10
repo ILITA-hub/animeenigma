@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -79,6 +80,18 @@ type ProxyConfig struct {
 	// shared lib taking a Prometheus dependency — mirrors UpstreamSigner. Not
 	// serialized.
 	OnEdgeRotation func(from, to, outcome string) `json:"-" yaml:"-"`
+
+	// OnEdgeAttempt, when set, is invoked once per upstream attempt in a
+	// solodcdn failover sequence — INCLUDING the nominal (first) attempt — with
+	// (edge, outcome, elapsedMs). outcome is one of "ok" (<400), "http4xx",
+	// "http5xx", "dial_error" (hard transport error), or "timeout" (response-
+	// header window elapsed). Feeds proxy_edge_attempt_seconds. Not serialized.
+	OnEdgeAttempt func(edge, outcome string, ms int64) `json:"-" yaml:"-"`
+
+	// OnEdgeServed, when set, is invoked once with the edge that ultimately
+	// served the returned (<400) response. Feeds proxy_edge_selected_total. Not
+	// serialized.
+	OnEdgeServed func(edge string) `json:"-" yaml:"-"`
 }
 
 // fetchURLFor returns the URL the proxy should actually GET for sourceURL:
@@ -214,9 +227,13 @@ func newIPv4Transport(firstParty []string) *http.Transport {
 	// proxy slot indefinitely (streaming caps concurrency at 50 → pool
 	// exhaustion → 503). This caps only the header wait, NOT the body stream —
 	// the body still flows under the request context (cancelled on client
-	// disconnect), so large MP4s are unaffected. 20s is deliberately generous:
-	// some CDNs are genuinely slow to first byte on large manifests.
-	t.ResponseHeaderTimeout = 20 * time.Second
+	// disconnect), so large MP4s are unaffected. 45s is deliberately generous:
+	// a Kodik solodcdn edge (and some other CDNs) can be slow to first byte
+	// while it cold-starts / prepares the HLS on demand — we'd rather WAIT for
+	// it to answer (200 or an honest 5xx that trips edge failover) than abandon
+	// a slow-but-alive edge prematurely. Only a genuinely hung edge burns the
+	// full window before its timeout error rotates to a sibling.
+	t.ResponseHeaderTimeout = 45 * time.Second
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		// Coerce any TCP dial to IPv4-only.
 		switch network {
@@ -563,36 +580,138 @@ func edgesOrDefault(edges []string) []string {
 	return edges
 }
 
-// maybeRotateSolodcdnEdge implements Layer A of the playback self-healing design
-// (docs/superpowers/specs/2026-07-10-playback-self-healing-design.md, AUTO-562):
-// when the first upstream response is >=500 AND the request host is a
-// p<N>.solodcdn.com edge, it re-fetches the identical path on sibling edges
-// (skipping the one that failed), capped at maxSolodcdnRotations, and returns
-// the first response that comes back <500. It is a no-op for a <500 response or
-// a non-solodcdn host, so every EN/Raw/Hanime/ae proxy path through this shared
-// lib is untouched. 4xx is never retried: only >=500 enters the loop, and a
-// sibling that answers <500 (INCLUDING a 4xx) stops it. Every superseded
-// response body is drained+closed; the returned response always carries a live
-// body for the caller to process. Each attempt fires the OnEdgeRotation hook
-// with (fromEdge, toEdge, outcome).
-func (p *VideoProxy) maybeRotateSolodcdnEdge(resp *http.Response, sourceURL string, do func(siblingURL string) (*http.Response, error)) *http.Response {
-	if resp.StatusCode < 500 {
-		return resp
+// edgeAttempt records one upstream attempt in a solodcdn edge-failover sequence,
+// for the X-AE-Edge-Trail response header and per-attempt metrics.
+type edgeAttempt struct {
+	edge    string // "p13"; "" for a non-solodcdn single attempt
+	outcome string // ok | http4xx | http5xx | dial_error | timeout
+	ms      int64
+}
+
+// edgeFailover carries fetchWithEdgeFailover's result beyond the *http.Response:
+// which edge produced the returned response (served), and the ordered trail of
+// every attempt made.
+type edgeFailover struct {
+	served string // edge of the returned response; "" for a non-solodcdn fetch
+	trail  []edgeAttempt
+}
+
+// trailString renders the attempt trail as a compact "edge:outcome:ms" CSV for
+// the X-AE-Edge-Trail header, e.g. "p13:timeout:45003,p12:ok:210" — the LOGIC
+// and METRICS behind edge selection, not just the final decision.
+func (ef edgeFailover) trailString() string {
+	parts := make([]string, 0, len(ef.trail))
+	for _, a := range ef.trail {
+		parts = append(parts, a.edge+":"+a.outcome+":"+strconv.FormatInt(a.ms, 10))
 	}
-	parsed, err := url.Parse(sourceURL)
+	return strings.Join(parts, ",")
+}
+
+// classifyEdgeOutcome maps a single fetch result to a trail/metric outcome token.
+// A response-header timeout surfaces as a net.Error whose Timeout() is true; any
+// other transport error (dial refused/reset/DNS) is "dial_error". Both trigger
+// edge rotation — the distinction is only for observability.
+func classifyEdgeOutcome(resp *http.Response, err error) string {
 	if err != nil {
-		return resp
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return "timeout"
+		}
+		return "dial_error"
 	}
-	host := strings.ToLower(parsed.Host)
+	switch {
+	case resp.StatusCode >= 500:
+		return "http5xx"
+	case resp.StatusCode >= 400:
+		return "http4xx"
+	default:
+		return "ok"
+	}
+}
+
+// rotationOutcome maps a sibling attempt's fine-grained outcome to the coarser
+// proxy_edge_rotations_total vocabulary (success|fail|error) the existing
+// dashboard expects: a transport-level failure is "error", a <400 answer is
+// "success", and any >=400 (authoritative 4xx OR still-5xx) is "fail".
+func rotationOutcome(o string) string {
+	switch o {
+	case "dial_error", "timeout":
+		return "error"
+	case "ok":
+		return "success"
+	default: // http4xx, http5xx
+		return "fail"
+	}
+}
+
+// solodcdnEdgeOf returns the "p<N>" label for a p<N>.solodcdn.com host, or ""
+// when host is not a solodcdn edge (port stripped before matching).
+func solodcdnEdgeOf(rawHost string) string {
+	host := strings.ToLower(rawHost)
 	if colon := strings.LastIndex(host, ":"); colon != -1 {
-		host = host[:colon] // strip any :port before matching
+		host = host[:colon]
 	}
 	if !solodcdnEdgeRe.MatchString(host) {
-		return resp
+		return ""
 	}
-	fromEdge := host[:strings.IndexByte(host, '.')] // "p12.solodcdn.com" -> "p12"
+	return host[:strings.IndexByte(host, '.')] // "p12.solodcdn.com" -> "p12"
+}
 
-	current := resp
+// fetchWithEdgeFailover implements Layer A of the playback self-healing design
+// (docs/superpowers/specs/2026-07-10-kodik-edge-failover-design.md; extends
+// AUTO-562): it issues the request for sourceURL via do and, when the host is a
+// p<N>.solodcdn.com edge, transparently fails over across sibling edges on a
+// hard transport error, a response-header timeout, OR a >=500 response. The
+// nominal edge is tried FIRST; siblings (the configured pool minus the nominal)
+// follow, capped at maxSolodcdnRotations. A <400 answer (including an
+// authoritative 4xx) stops the sequence.
+//
+// For any non-solodcdn host it performs a SINGLE attempt and returns its
+// (resp,err) unchanged — every EN/Raw/Hanime/ae path through this shared lib is
+// byte-for-byte untouched. It returns the served response (which may be a >=500
+// fallback when every edge answered >=500), an edgeFailover with the served-edge
+// and full trail, and an error only when EVERY attempt failed at the transport
+// layer (no live response to hand back). Each attempt fires OnEdgeAttempt; each
+// sibling rotation fires OnEdgeRotation. drainClose reclaims superseded bodies.
+func (p *VideoProxy) fetchWithEdgeFailover(sourceURL string, do func(fetchURL string) (*http.Response, error)) (*http.Response, edgeFailover, error) {
+	var ef edgeFailover
+
+	// timed runs one attempt, records it into the trail, and fires OnEdgeAttempt.
+	timed := func(fetchURL, edge string) (*http.Response, error) {
+		start := time.Now()
+		resp, err := do(fetchURL)
+		att := edgeAttempt{edge: edge, outcome: classifyEdgeOutcome(resp, err), ms: time.Since(start).Milliseconds()}
+		ef.trail = append(ef.trail, att)
+		if p.config.OnEdgeAttempt != nil {
+			p.config.OnEdgeAttempt(edge, att.outcome, att.ms)
+		}
+		return resp, err
+	}
+
+	parsed, perr := url.Parse(sourceURL)
+	fromEdge := ""
+	if perr == nil {
+		fromEdge = solodcdnEdgeOf(parsed.Host)
+	}
+
+	// Non-solodcdn host (or unparseable): single attempt, unchanged semantics.
+	if fromEdge == "" {
+		resp, err := timed(sourceURL, "")
+		return resp, ef, err
+	}
+
+	// Nominal (first) attempt on the edge the URL already carries.
+	resp, err := timed(sourceURL, fromEdge)
+	if err == nil && resp.StatusCode < 500 {
+		ef.served = fromEdge // <400 or authoritative 4xx — serve it, no rotation
+		return resp, ef, nil
+	}
+
+	// Nominal failed (>=500 OR transport error/timeout) → rotate to siblings.
+	current, currentErr, currentEdge := resp, err, fromEdge
+	if err != nil {
+		currentEdge = "" // no live response from the nominal edge
+	}
 	rotations := 0
 	for _, edge := range edgesOrDefault(p.config.SolodcdnEdges) {
 		if rotations >= maxSolodcdnRotations {
@@ -605,31 +724,39 @@ func (p *VideoProxy) maybeRotateSolodcdnEdge(resp *http.Response, sourceURL stri
 
 		sibling := *parsed
 		sibling.Host = edge + ".solodcdn.com"
-		siblingURL := sibling.String()
+		sResp, sErr := timed(sibling.String(), edge)
+		p.reportEdgeRotation(fromEdge, edge, rotationOutcome(classifyEdgeOutcome(sResp, sErr)))
 
-		sResp, sErr := do(siblingURL)
 		if sErr != nil {
-			// Transport error reaching the sibling: keep the current response
-			// (its body is still live) and try the next edge.
-			p.reportEdgeRotation(fromEdge, edge, "error")
+			// Transport error reaching the sibling: keep whatever live response we
+			// have (if any) and try the next edge.
+			if current == nil {
+				currentErr = sErr
+			}
 			continue
 		}
 		if sResp.StatusCode < 500 {
-			outcome := "success"
-			if sResp.StatusCode >= 400 {
-				outcome = "fail" // a 4xx is authoritative — stop, but it didn't heal
+			// Healed (<400) or authoritative 4xx — adopt and stop.
+			if current != nil {
+				drainClose(current.Body)
 			}
-			p.reportEdgeRotation(fromEdge, edge, outcome)
-			drainClose(current.Body)
-			return sResp
+			ef.served = edge
+			return sResp, ef, nil
 		}
-		// Sibling is also >=500: adopt it as the current response (so its body
-		// stays live for the caller's HTML/error detection) and keep rotating.
-		p.reportEdgeRotation(fromEdge, edge, "fail")
-		drainClose(current.Body)
-		current = sResp
+		// Sibling is also >=500: adopt as the live fallback and keep rotating.
+		if current != nil {
+			drainClose(current.Body)
+		}
+		current, currentErr, currentEdge = sResp, nil, edge
 	}
-	return current
+
+	// Exhausted: return the last live response (a >=500 the caller turns into a
+	// 502) or, if we never got one, the last transport error.
+	if current != nil {
+		ef.served = currentEdge
+		return current, ef, nil
+	}
+	return nil, ef, currentErr
 }
 
 // reportEdgeRotation fires the OnEdgeRotation observability hook when configured.
@@ -701,20 +828,18 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 		return p.client.Do(req)
 	}
 
-	// Make upstream request
-	resp, err := doUpstream(p.fetchURLFor(sourceURL))
+	// Make the upstream request through solodcdn edge failover (Layer A of the
+	// playback self-healing design; extends AUTO-562). For a p<N>.solodcdn.com
+	// edge this rotates to a sibling on a >=500, a hard transport error, OR a
+	// response-header timeout — "try another p straight ahead". No-op for every
+	// non-solodcdn host, so EN/Raw/Hanime/ae paths through this shared lib are
+	// untouched. edgeInfo carries the served-edge + attempt trail for telemetry.
+	resp, edgeInfo, err := p.fetchWithEdgeFailover(sourceURL, func(fetchURL string) (*http.Response, error) {
+		return doUpstream(p.fetchURLFor(fetchURL))
+	})
 	if err != nil {
 		return 0, 0, fmt.Errorf("upstream request: %w", err)
 	}
-
-	// solodcdn edge self-heal (AUTO-562): a p<N>.solodcdn.com edge that answers
-	// >=500 for a path often has a healthy sibling edge serving the identical
-	// path (verified live 2026-07-10: p12 302→p14 200). Retry siblings before
-	// surfacing the 502. No-op for every non-solodcdn host and every <500
-	// response, so EN/Raw/Hanime/ae paths through this shared lib are untouched.
-	resp = p.maybeRotateSolodcdnEdge(resp, sourceURL, func(siblingURL string) (*http.Response, error) {
-		return doUpstream(p.fetchURLFor(siblingURL))
-	})
 	defer resp.Body.Close()
 
 	// Detect upstream errors (403, 5xx, etc.) — don't forward garbage to HLS.js
@@ -752,7 +877,20 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Range")
-	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges, X-AE-Edge-Served, X-AE-Edge-Trail")
+
+	// Surface which solodcdn edge actually served + the full attempt trail, so
+	// the aePlayer hacker-mode HUD (and any debugging) sees the METRICS + LOGIC
+	// behind edge selection, not just the final decision. Empty for every
+	// non-solodcdn source (edgeInfo.served == ""), so other providers are
+	// header-for-header unchanged. Exposed above so cross-origin JS can read it.
+	if edgeInfo.served != "" {
+		w.Header().Set("X-AE-Edge-Served", edgeInfo.served)
+		w.Header().Set("X-AE-Edge-Trail", edgeInfo.trailString())
+		if p.config.OnEdgeServed != nil {
+			p.config.OnEdgeServed(edgeInfo.served)
+		}
+	}
 
 	if isM3U8 && resp.StatusCode == http.StatusOK {
 		// Read and rewrite M3U8 content. This is a small manifest (not a

@@ -48,6 +48,32 @@ var (
 		[]string{"from", "to", "outcome"},
 	)
 
+	// ProxyEdgeAttemptSeconds is the latency of EVERY solodcdn edge attempt
+	// (including the nominal one), labeled by edge and outcome ("ok", "http4xx",
+	// "http5xx", "dial_error", "timeout"). It exposes the METRICS behind edge
+	// selection — e.g. how long a cold edge took before answering, or how long a
+	// timeout burned before rotating. Buckets stretch to 60s to capture the 45s
+	// response-header window. HistogramVec => no series until first use.
+	ProxyEdgeAttemptSeconds = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "proxy_edge_attempt_seconds",
+			Help:    "Latency of each solodcdn edge attempt by edge and outcome",
+			Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 45, 60},
+		},
+		[]string{"edge", "outcome"},
+	)
+
+	// ProxyEdgeSelected counts which solodcdn edge ultimately served a playable
+	// (<400) response, labeled by edge — the DECISION, for "what share of traffic
+	// each edge carries". CounterVec => no series until first use.
+	ProxyEdgeSelected = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "proxy_edge_selected_total",
+			Help: "Total playable responses served per solodcdn edge",
+		},
+		[]string{"edge"},
+	)
+
 	// SubtitleRequestsTotal counts subtitle fetch requests by source and status.
 	SubtitleRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{

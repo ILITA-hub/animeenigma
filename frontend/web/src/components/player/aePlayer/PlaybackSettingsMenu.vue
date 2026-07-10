@@ -149,6 +149,13 @@
           <div>BUF  {{ debugStats.buffer }}</div>
           <div>LVL  {{ debugStats.level }}</div>
           <div>FRAG {{ debugStats.frag }}</div>
+          <!-- Kodik/solodcdn edge telemetry — metrics + logic, not just the
+               served edge. Only present for Kodik sources (edge non-empty). -->
+          <template v-if="debugStats.edge">
+            <div data-test="debug-edge">EDGE {{ debugStats.edge }}</div>
+            <div v-if="debugStats.edgeTrail">TRY  {{ debugStats.edgeTrail }}</div>
+            <div v-if="debugStats.edgeRot">ROT  ×{{ debugStats.edgeRot }}</div>
+          </template>
         </div>
       </template>
     </template>
@@ -170,8 +177,17 @@ defineProps<{
   autoNext: boolean
   autoSkip: boolean
   hackerMode: boolean
-  /** compact live debug numbers; null hides the section */
-  debugStats?: { bw: string; buffer: string; level: string; frag: string } | null
+  /** compact live debug numbers; null hides the section. edge* fields are the
+   *  Kodik/solodcdn edge telemetry (empty/0 for every other source). */
+  debugStats?: {
+    bw: string
+    buffer: string
+    level: string
+    frag: string
+    edge?: string
+    edgeTrail?: string
+    edgeRot?: number
+  } | null
 }>()
 
 const emit = defineEmits<{

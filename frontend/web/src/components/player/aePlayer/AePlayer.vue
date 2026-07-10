@@ -2333,11 +2333,30 @@ const fragOverlay = computed(() => {
 })
 
 // Compact line set for the settings-menu mini-stats section.
+// Render the raw X-AE-Edge-Trail header ("p13:timeout:45003,p12:ok:210") as the
+// hacker-mode logic+metrics line: "p13 45.0s✗ → p12 0.21s✓". A trailing ✓ marks
+// the edge that served (outcome "ok"); every other outcome is a ✗ with its
+// latency, so a cold-start wait or a burned timeout is legible at a glance.
+function formatEdgeTrail(raw: string): string {
+  if (!raw) return ''
+  return raw
+    .split(',')
+    .map((part) => {
+      const [edge, outcome, ms] = part.split(':')
+      const secs = Number(ms) / 1000
+      const t = Number.isFinite(secs) ? (secs >= 10 ? secs.toFixed(1) : secs.toFixed(2)) : '?'
+      return `${edge} ${t}s${outcome === 'ok' ? '✓' : '✗'}`
+    })
+    .join(' → ')
+}
+
 const debugStats = computed(() => {
   if (!state.hackerMode.value) return null
   const bwv = engine.bandwidthEstimate.value
   const frs = engine.fragStats.value
   const last = frs[frs.length - 1]
+  const edge = engine.servedEdge.value
+  const trail = engine.edgeTrail.value
   return {
     bw: bwv > 0 ? `${(bwv / 1_000_000).toFixed(1)} Mbit/s` : '—',
     buffer: `+${playbackStats.value.bufferAheadSec.toFixed(1)}s / −${playbackStats.value.bufferBehindSec.toFixed(1)}s`,
@@ -2345,6 +2364,11 @@ const debugStats = computed(() => {
       engine.currentLevelLabel.value ||
       (currentStream.value?.type === 'mp4' ? 'mp4' : '—'),
     frag: last ? `${Math.round(last.size / 1024)} KB · ${Math.round(last.loadMs)} ms` : '—',
+    // Kodik/solodcdn edge telemetry — empty for every other source (no header).
+    // The decision (served edge) + the logic/metrics (attempt trail, rotations).
+    edge,
+    edgeTrail: edge ? formatEdgeTrail(trail) : '',
+    edgeRot: edge && trail ? trail.split(',').length - 1 : 0,
   }
 })
 

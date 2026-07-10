@@ -107,13 +107,20 @@ func NewStreamHandlerWithSessions(streamingService *service.StreamingService, s3
 		proxyCfg.UpstreamSigner = ownStorages.PresignURL
 	}
 
-	// Layer A — solodcdn edge rotation (AUTO-562 playback self-healing). The
-	// sibling-edge pool comes from STREAMING_SOLODCDN_EDGES (default p12,p13,p14);
-	// each rotation the shared proxy performs is folded into
-	// proxy_edge_rotations_total here, keeping libs/videoutils Prometheus-free.
+	// Layer A — solodcdn edge failover (extends AUTO-562 playback self-healing).
+	// The sibling-edge pool comes from STREAMING_SOLODCDN_EDGES (default
+	// p12,p13,p14); the shared proxy's edge telemetry is folded into Prometheus
+	// here, keeping libs/videoutils Prometheus-free (the auto-registration trap:
+	// single-emitter metrics live in the emitting service, fed via callbacks).
 	proxyCfg.SolodcdnEdges = parseSolodcdnEdges(os.Getenv("STREAMING_SOLODCDN_EDGES"))
 	proxyCfg.OnEdgeRotation = func(from, to, outcome string) {
 		metrics.ProxyEdgeRotations.WithLabelValues(from, to, outcome).Inc()
+	}
+	proxyCfg.OnEdgeAttempt = func(edge, outcome string, ms int64) {
+		metrics.ProxyEdgeAttemptSeconds.WithLabelValues(edge, outcome).Observe(float64(ms) / 1000)
+	}
+	proxyCfg.OnEdgeServed = func(edge string) {
+		metrics.ProxyEdgeSelected.WithLabelValues(edge).Inc()
 	}
 
 	return &StreamHandler{

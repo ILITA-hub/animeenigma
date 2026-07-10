@@ -154,3 +154,44 @@ describe('useVideoEngine — fatal error salvages the playhead', () => {
     expect(engine.lastKnownPlayback.value).toBeNull()
   })
 })
+
+describe('useVideoEngine — solodcdn edge telemetry from FRAG_LOADED headers', () => {
+  beforeEach(() => {
+    hlsMockState.instances.length = 0
+  })
+
+  const fragWith = (headers: Record<string, string> | null) => ({
+    frag: { stats: { loading: { start: 0, end: 100 }, total: 1000 }, start: 0, duration: 6 },
+    networkDetails: headers ? { getResponseHeader: (h: string) => headers[h] ?? null } : undefined,
+  })
+
+  it('reads X-AE-Edge-Served / X-AE-Edge-Trail off the fragment XHR', async () => {
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/master.m3u8', type: 'hls' })
+    hlsMockState.instances[0].trigger('hlsFragLoaded', fragWith({
+      'X-AE-Edge-Served': 'p12',
+      'X-AE-Edge-Trail': 'p13:timeout:45003,p12:ok:210',
+    }))
+    expect(engine.servedEdge.value).toBe('p12')
+    expect(engine.edgeTrail.value).toBe('p13:timeout:45003,p12:ok:210')
+  })
+
+  it('leaves edge telemetry empty for a non-Kodik source (no headers)', async () => {
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/master.m3u8', type: 'hls' })
+    hlsMockState.instances[0].trigger('hlsFragLoaded', fragWith({}))
+    expect(engine.servedEdge.value).toBe('')
+    expect(engine.edgeTrail.value).toBe('')
+  })
+
+  it('resets edge telemetry on the next load', async () => {
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/a.m3u8', type: 'hls' })
+    hlsMockState.instances[0].trigger('hlsFragLoaded', fragWith({ 'X-AE-Edge-Served': 'p14', 'X-AE-Edge-Trail': 'p14:ok:99' }))
+    expect(engine.servedEdge.value).toBe('p14')
+
+    await engine.load({ url: 'https://example.test/b.m3u8', type: 'hls' })
+    expect(engine.servedEdge.value).toBe('')
+    expect(engine.edgeTrail.value).toBe('')
+  })
+})

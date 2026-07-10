@@ -5,15 +5,24 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// timeoutErr is a net.Error whose Timeout() reports true — models the
+// transport's ResponseHeaderTimeout firing (classifyEdgeOutcome => "timeout").
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "timeout awaiting response headers" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
 // statusServer is a tiny httptest upstream that always answers `code` with
 // `body`, registered for cleanup. Used to build real *http.Response values (with
-// live bodies over keep-alive conns) for the edge-rotation unit tests.
+// live bodies over keep-alive conns) for the edge-failover unit tests.
 func statusServer(t *testing.T, code int, body string) *httptest.Server {
 	t.Helper()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -24,183 +33,257 @@ func statusServer(t *testing.T, code int, body string) *httptest.Server {
 	return s
 }
 
-// TestMaybeRotateSolodcdnEdge_SuccessOnSibling: a 500 from the p12 edge rotates
-// to the first healthy sibling (p13) and serves it — the AUTO-562 happy path.
-func TestMaybeRotateSolodcdnEdge_SuccessOnSibling(t *testing.T) {
+// route helpers: each returns a do()-style thunk for one edge's behaviour.
+func srv(s *httptest.Server) func() (*http.Response, error) {
+	return func() (*http.Response, error) { return http.Get(s.URL) }
+}
+func dialErr() func() (*http.Response, error) {
+	return func() (*http.Response, error) { return nil, fmt.Errorf("dial: connection refused") }
+}
+func hdrTimeout() func() (*http.Response, error) {
+	return func() (*http.Response, error) { return nil, timeoutErr{} }
+}
+
+// edgeRoute builds a do(fetchURL) that routes by solodcdn edge label ("p12") to
+// the matching per-edge behaviour. A "" key routes non-solodcdn fetches.
+func edgeRoute(routes map[string]func() (*http.Response, error)) func(string) (*http.Response, error) {
+	return func(fetchURL string) (*http.Response, error) {
+		edge := ""
+		if u, err := url.Parse(fetchURL); err == nil {
+			edge = solodcdnEdgeOf(u.Host)
+		}
+		if r, ok := routes[edge]; ok {
+			return r()
+		}
+		return nil, fmt.Errorf("test: no route for edge %q (%s)", edge, fetchURL)
+	}
+}
+
+// recorder captures the OnEdgeRotation and OnEdgeAttempt hook streams.
+type recorder struct {
+	rotations [][3]string // {from, to, outcome}
+	attempts  []string    // "edge:outcome" in attempt order (mirrors the trail)
+}
+
+func recordingProxy(edges []string) (*VideoProxy, *recorder) {
+	rec := &recorder{}
+	p := NewVideoProxy(ProxyConfig{
+		SolodcdnEdges:  edges,
+		OnEdgeRotation: func(from, to, outcome string) { rec.rotations = append(rec.rotations, [3]string{from, to, outcome}) },
+		OnEdgeAttempt:  func(edge, outcome string, _ int64) { rec.attempts = append(rec.attempts, edge+":"+outcome) },
+	})
+	return p, rec
+}
+
+// trailPairs renders an edgeFailover trail as "edge:outcome" (dropping the
+// timing, which varies) so tests can assert order+outcome deterministically.
+func trailPairs(ef edgeFailover) []string {
+	out := make([]string, 0, len(ef.trail))
+	for _, a := range ef.trail {
+		out = append(out, a.edge+":"+a.outcome)
+	}
+	return out
+}
+
+const p12URL = "https://p12.solodcdn.com/s/m/seg-1.ts"
+
+// --- Nominal serves directly (no rotation) --------------------------------
+
+func TestFetchWithEdgeFailover_NominalOK(t *testing.T) {
+	ok := statusServer(t, http.StatusOK, "#EXTM3U\n")
+	p, rec := recordingProxy([]string{"p12", "p13", "p14"})
+
+	resp, ef, err := p.fetchWithEdgeFailover(p12URL, edgeRoute(map[string]func() (*http.Response, error){"p12": srv(ok)}))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "p12", ef.served)
+	assert.Equal(t, []string{"p12:ok"}, trailPairs(ef))
+	assert.Empty(t, rec.rotations, "a healthy nominal edge never rotates")
+	assert.Equal(t, []string{"p12:ok"}, rec.attempts)
+}
+
+func TestFetchWithEdgeFailover_Nominal4xxNoRotation(t *testing.T) {
+	nf := statusServer(t, http.StatusNotFound, "nope")
+	p, rec := recordingProxy([]string{"p12", "p13", "p14"})
+
+	resp, ef, err := p.fetchWithEdgeFailover(p12URL, edgeRoute(map[string]func() (*http.Response, error){"p12": srv(nf)}))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "a 4xx is authoritative — serve it")
+	assert.Equal(t, "p12", ef.served)
+	assert.Empty(t, rec.rotations, "4xx must not trigger any sibling fetch")
+	assert.Equal(t, []string{"p12:http4xx"}, rec.attempts)
+}
+
+// --- >=500 rotation (existing AUTO-562 behaviour, preserved) ---------------
+
+func TestFetchWithEdgeFailover_Nominal5xxSiblingOK(t *testing.T) {
 	bad := statusServer(t, http.StatusInternalServerError, "boom")
 	good := statusServer(t, http.StatusOK, "#EXTM3U\n")
+	p, rec := recordingProxy([]string{"p12", "p13", "p14"})
 
-	var hooks [][3]string
-	p := NewVideoProxy(ProxyConfig{
-		SolodcdnEdges:  []string{"p12", "p13", "p14"},
-		OnEdgeRotation: func(from, to, outcome string) { hooks = append(hooks, [3]string{from, to, outcome}) },
-	})
-
-	first, err := http.Get(bad.URL + "/seg-1.ts") // the failed p12 response
+	resp, ef, err := p.fetchWithEdgeFailover(p12URL, edgeRoute(map[string]func() (*http.Response, error){
+		"p12": srv(bad), "p13": srv(good),
+	}))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	var calls []string
-	out := p.maybeRotateSolodcdnEdge(first, "https://p12.solodcdn.com/seg-1.ts", func(siblingURL string) (*http.Response, error) {
-		calls = append(calls, siblingURL)
-		return http.Get(good.URL + "/seg-1.ts")
-	})
-	defer out.Body.Close()
-
-	assert.Equal(t, http.StatusOK, out.StatusCode)
-	assert.Equal(t, []string{"https://p13.solodcdn.com/seg-1.ts"}, calls, "stops at the first healthy sibling; never tries p14")
-	assert.Equal(t, [][3]string{{"p12", "p13", "success"}}, hooks)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "p13", ef.served, "stops at the first healthy sibling; never tries p14")
+	assert.Equal(t, []string{"p12:http5xx", "p13:ok"}, trailPairs(ef))
+	assert.Equal(t, [][3]string{{"p12", "p13", "success"}}, rec.rotations)
 }
 
-// TestMaybeRotateSolodcdnEdge_Never4xxRetry: a 4xx first response must NOT
-// trigger any rotation (only >=500 enters the loop).
-func TestMaybeRotateSolodcdnEdge_Never4xxRetry(t *testing.T) {
-	notfound := statusServer(t, http.StatusNotFound, "nope")
-	p := NewVideoProxy(ProxyConfig{
-		SolodcdnEdges:  []string{"p12", "p13", "p14"},
-		OnEdgeRotation: func(_, _, _ string) { t.Fatal("hook must not fire for a 4xx first response") },
-	})
-
-	first, err := http.Get(notfound.URL + "/x.ts")
-	require.NoError(t, err)
-
-	called := false
-	out := p.maybeRotateSolodcdnEdge(first, "https://p12.solodcdn.com/x.ts", func(string) (*http.Response, error) {
-		called = true
-		return nil, nil
-	})
-	defer out.Body.Close()
-
-	assert.Equal(t, http.StatusNotFound, out.StatusCode)
-	assert.False(t, called, "4xx must not trigger any sibling fetch")
-}
-
-// TestMaybeRotateSolodcdnEdge_CappedAtTwoAlternates: with a large edge pool and
-// every sibling also failing 5xx, exactly maxSolodcdnRotations (2) siblings are
-// tried — the failed edge is skipped and the cap holds independent of pool size.
-func TestMaybeRotateSolodcdnEdge_CappedAtTwoAlternates(t *testing.T) {
+func TestFetchWithEdgeFailover_All5xxCappedAtTwo(t *testing.T) {
 	bad := statusServer(t, http.StatusServiceUnavailable, "err")
+	p, rec := recordingProxy([]string{"p12", "p13", "p14", "p15", "p16"})
 
-	var hooks [][3]string
-	p := NewVideoProxy(ProxyConfig{
-		SolodcdnEdges:  []string{"p12", "p13", "p14", "p15", "p16"},
-		OnEdgeRotation: func(from, to, outcome string) { hooks = append(hooks, [3]string{from, to, outcome}) },
-	})
-
-	first, err := http.Get(bad.URL + "/x.ts")
+	resp, ef, err := p.fetchWithEdgeFailover(p12URL, edgeRoute(map[string]func() (*http.Response, error){
+		"p12": srv(bad), "p13": srv(bad), "p14": srv(bad), "p15": srv(bad), "p16": srv(bad),
+	}))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	var calls []string
-	out := p.maybeRotateSolodcdnEdge(first, "https://p12.solodcdn.com/x.ts", func(siblingURL string) (*http.Response, error) {
-		calls = append(calls, siblingURL)
-		return http.Get(bad.URL + "/x.ts") // every sibling also 5xx
-	})
-	defer out.Body.Close()
-
-	assert.Equal(t, []string{"https://p13.solodcdn.com/x.ts", "https://p14.solodcdn.com/x.ts"}, calls,
-		"capped at 2 alternates: p13, p14; p15/p16 never reached")
-	assert.Equal(t, http.StatusServiceUnavailable, out.StatusCode, "falls back to the last (still-500) response for the caller's 502")
-	assert.Equal(t, [][3]string{{"p12", "p13", "fail"}, {"p12", "p14", "fail"}}, hooks)
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode, "falls back to the last 5xx for the caller's 502")
+	assert.Equal(t, "p14", ef.served)
+	assert.Equal(t, []string{"p12:http5xx", "p13:http5xx", "p14:http5xx"}, trailPairs(ef), "nominal + exactly 2 siblings; p15/p16 unreached")
+	assert.Equal(t, [][3]string{{"p12", "p13", "fail"}, {"p12", "p14", "fail"}}, rec.rotations)
 }
 
-// TestMaybeRotateSolodcdnEdge_NonSolodcdnNoop: a 500 from any non-solodcdn host
-// is returned untouched — the retry is fenced to the p<N>.solodcdn.com family.
-func TestMaybeRotateSolodcdnEdge_NonSolodcdnNoop(t *testing.T) {
+func TestFetchWithEdgeFailover_Sibling4xxStopsWithFail(t *testing.T) {
 	bad := statusServer(t, http.StatusInternalServerError, "boom")
-	p := NewVideoProxy(ProxyConfig{
-		OnEdgeRotation: func(_, _, _ string) { t.Fatal("hook must not fire for a non-solodcdn host") },
-	})
+	nf := statusServer(t, http.StatusNotFound, "nf")
+	p, rec := recordingProxy([]string{"p12", "p13", "p14"})
 
-	first, err := http.Get(bad.URL + "/x.ts")
+	resp, ef, err := p.fetchWithEdgeFailover(p12URL, edgeRoute(map[string]func() (*http.Response, error){
+		"p12": srv(bad), "p13": srv(nf),
+	}))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	called := false
-	out := p.maybeRotateSolodcdnEdge(first, "https://cdn.example.com/x.ts", func(string) (*http.Response, error) {
-		called = true
-		return nil, nil
-	})
-	defer out.Body.Close()
-
-	assert.Equal(t, http.StatusInternalServerError, out.StatusCode)
-	assert.False(t, called, "non-solodcdn host must not rotate")
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, "p13", ef.served)
+	assert.Equal(t, [][3]string{{"p12", "p13", "fail"}}, rec.rotations, "a sibling 4xx stops rotation immediately")
+	assert.Equal(t, []string{"p12:http5xx", "p13:http4xx"}, trailPairs(ef))
 }
 
-// TestMaybeRotateSolodcdnEdge_TransportErrorThenSuccess: a transport error on
-// the first sibling keeps the original response's body live, then the second
-// sibling succeeds — the error outcome is recorded and the cap still counts it.
-func TestMaybeRotateSolodcdnEdge_TransportErrorThenSuccess(t *testing.T) {
-	bad := statusServer(t, http.StatusBadGateway, "boom")
+// --- NEW: primary transport-error / timeout rotates "straight ahead" -------
+
+func TestFetchWithEdgeFailover_NominalDialErrorSiblingOK(t *testing.T) {
+	good := statusServer(t, http.StatusOK, "#EXTM3U\n")
+	p, rec := recordingProxy([]string{"p12", "p13", "p14"})
+
+	// The report's failure mode: the nominal edge hangs/resets (browser status:0),
+	// which is a PRIMARY transport error — AUTO-562 never rotated on this. Now it
+	// fails over to a sibling straight ahead.
+	resp, ef, err := p.fetchWithEdgeFailover(p12URL, edgeRoute(map[string]func() (*http.Response, error){
+		"p12": dialErr(), "p13": srv(good),
+	}))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "p13", ef.served)
+	assert.Equal(t, []string{"p12:dial_error", "p13:ok"}, trailPairs(ef))
+	assert.Equal(t, [][3]string{{"p12", "p13", "success"}}, rec.rotations)
+}
+
+func TestFetchWithEdgeFailover_NominalTimeoutSiblingOK(t *testing.T) {
+	good := statusServer(t, http.StatusOK, "#EXTM3U\n")
+	p, rec := recordingProxy([]string{"p12", "p13", "p14"})
+
+	// A cold edge that accepts TCP but blows the (generous) response-header window
+	// surfaces as a timeout — also rotates now.
+	resp, ef, err := p.fetchWithEdgeFailover(p12URL, edgeRoute(map[string]func() (*http.Response, error){
+		"p12": hdrTimeout(), "p13": srv(good),
+	}))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "p13", ef.served)
+	assert.Equal(t, []string{"p12:timeout", "p13:ok"}, trailPairs(ef))
+	assert.Equal(t, [][3]string{{"p12", "p13", "success"}}, rec.rotations)
+}
+
+func TestFetchWithEdgeFailover_AllDialErrorReturnsError(t *testing.T) {
+	p, rec := recordingProxy([]string{"p12", "p13", "p14"})
+
+	resp, ef, err := p.fetchWithEdgeFailover(p12URL, edgeRoute(map[string]func() (*http.Response, error){
+		"p12": dialErr(), "p13": dialErr(), "p14": dialErr(),
+	}))
+
+	require.Error(t, err, "every edge failed at the transport layer → surface the error (caller 502)")
+	assert.Nil(t, resp)
+	assert.Equal(t, "", ef.served)
+	assert.Equal(t, []string{"p12:dial_error", "p13:dial_error", "p14:dial_error"}, trailPairs(ef))
+	assert.Equal(t, [][3]string{{"p12", "p13", "error"}, {"p12", "p14", "error"}}, rec.rotations)
+}
+
+// --- Fencing + defaults ----------------------------------------------------
+
+func TestFetchWithEdgeFailover_NonSolodcdnSingleAttempt(t *testing.T) {
+	bad := statusServer(t, http.StatusInternalServerError, "boom")
+	p, rec := recordingProxy(nil)
+
+	// A non-solodcdn host does exactly one attempt and returns it verbatim — no
+	// rotation, empty served edge (so no X-AE-Edge headers are emitted).
+	resp, ef, err := p.fetchWithEdgeFailover("https://cdn.example.com/x.ts",
+		edgeRoute(map[string]func() (*http.Response, error){"": srv(bad)}))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, "", ef.served)
+	assert.Equal(t, []string{":http5xx"}, trailPairs(ef))
+	assert.Empty(t, rec.rotations, "non-solodcdn host must never rotate")
+}
+
+func TestFetchWithEdgeFailover_NonSolodcdnErrorPropagates(t *testing.T) {
+	p, _ := recordingProxy(nil)
+
+	resp, ef, err := p.fetchWithEdgeFailover("https://cdn.example.com/x.ts",
+		edgeRoute(map[string]func() (*http.Response, error){"": dialErr()}))
+
+	require.Error(t, err, "a non-solodcdn transport error is returned unchanged, not rotated")
+	assert.Nil(t, resp)
+	assert.Equal(t, "", ef.served)
+	assert.Equal(t, []string{":dial_error"}, trailPairs(ef))
+}
+
+func TestFetchWithEdgeFailover_DefaultEdgePool(t *testing.T) {
+	bad := statusServer(t, http.StatusInternalServerError, "boom")
 	good := statusServer(t, http.StatusOK, "ok")
+	p, rec := recordingProxy(nil) // empty pool => built-in default p12,p13,p14
 
-	var hooks [][3]string
-	p := NewVideoProxy(ProxyConfig{
-		SolodcdnEdges:  []string{"p12", "p13", "p14"},
-		OnEdgeRotation: func(from, to, outcome string) { hooks = append(hooks, [3]string{from, to, outcome}) },
-	})
-
-	first, err := http.Get(bad.URL + "/x.ts")
+	// Nominal is p13; default pool skips it and the first sibling is p12.
+	resp, ef, err := p.fetchWithEdgeFailover("https://p13.solodcdn.com/x.ts",
+		edgeRoute(map[string]func() (*http.Response, error){"p13": srv(bad), "p12": srv(good)}))
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	attempt := 0
-	out := p.maybeRotateSolodcdnEdge(first, "https://p12.solodcdn.com/x.ts", func(siblingURL string) (*http.Response, error) {
-		attempt++
-		if attempt == 1 {
-			return nil, fmt.Errorf("dial p13: connection refused")
-		}
-		return http.Get(good.URL + "/x.ts")
-	})
-	defer out.Body.Close()
-
-	assert.Equal(t, http.StatusOK, out.StatusCode)
-	assert.Equal(t, [][3]string{{"p12", "p13", "error"}, {"p12", "p14", "success"}}, hooks)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "p12", ef.served)
+	assert.Equal(t, [][3]string{{"p13", "p12", "success"}}, rec.rotations)
 }
 
-// TestMaybeRotateSolodcdnEdge_Sibling4xxStopsWithFail: a sibling that answers
-// 4xx is authoritative — rotation stops (never retry 4xx) and the outcome is
-// recorded as fail (it didn't heal playback).
-func TestMaybeRotateSolodcdnEdge_Sibling4xxStopsWithFail(t *testing.T) {
-	bad := statusServer(t, http.StatusInternalServerError, "boom")
-	notfound := statusServer(t, http.StatusNotFound, "nf")
+// --- trailString rendering -------------------------------------------------
 
-	var hooks [][3]string
-	p := NewVideoProxy(ProxyConfig{
-		SolodcdnEdges:  []string{"p12", "p13", "p14"},
-		OnEdgeRotation: func(from, to, outcome string) { hooks = append(hooks, [3]string{from, to, outcome}) },
-	})
-
-	first, err := http.Get(bad.URL + "/x.ts")
-	require.NoError(t, err)
-
-	calls := 0
-	out := p.maybeRotateSolodcdnEdge(first, "https://p12.solodcdn.com/x.ts", func(string) (*http.Response, error) {
-		calls++
-		return http.Get(notfound.URL + "/x.ts")
-	})
-	defer out.Body.Close()
-
-	assert.Equal(t, http.StatusNotFound, out.StatusCode)
-	assert.Equal(t, 1, calls, "a sibling 4xx stops rotation immediately")
-	assert.Equal(t, [][3]string{{"p12", "p13", "fail"}}, hooks)
+func TestEdgeFailover_TrailString(t *testing.T) {
+	ef := edgeFailover{trail: []edgeAttempt{
+		{edge: "p13", outcome: "timeout", ms: 45003},
+		{edge: "p12", outcome: "ok", ms: 210},
+	}}
+	assert.Equal(t, "p13:timeout:45003,p12:ok:210", ef.trailString())
 }
 
-// TestMaybeRotateSolodcdnEdge_DefaultEdgePool: an empty SolodcdnEdges falls back
-// to the built-in default (p12,p13,p14).
-func TestMaybeRotateSolodcdnEdge_DefaultEdgePool(t *testing.T) {
-	bad := statusServer(t, http.StatusInternalServerError, "boom")
-	good := statusServer(t, http.StatusOK, "ok")
-
-	p := NewVideoProxy(ProxyConfig{}) // no SolodcdnEdges configured
-
-	first, err := http.Get(bad.URL + "/x.ts")
-	require.NoError(t, err)
-
-	var calls []string
-	out := p.maybeRotateSolodcdnEdge(first, "https://p13.solodcdn.com/x.ts", func(siblingURL string) (*http.Response, error) {
-		calls = append(calls, siblingURL)
-		return http.Get(good.URL + "/x.ts")
-	})
-	defer out.Body.Close()
-
-	assert.Equal(t, http.StatusOK, out.StatusCode)
-	// From-edge p13 is skipped; default pool p12,p13,p14 => first sibling is p12.
-	assert.Equal(t, []string{"https://p12.solodcdn.com/x.ts"}, calls)
+func TestClassifyEdgeOutcome(t *testing.T) {
+	assert.Equal(t, "timeout", classifyEdgeOutcome(nil, timeoutErr{}))
+	assert.Equal(t, "dial_error", classifyEdgeOutcome(nil, fmt.Errorf("connection refused")))
+	assert.Equal(t, "http5xx", classifyEdgeOutcome(&http.Response{StatusCode: 503}, nil))
+	assert.Equal(t, "http4xx", classifyEdgeOutcome(&http.Response{StatusCode: 404}, nil))
+	assert.Equal(t, "ok", classifyEdgeOutcome(&http.Response{StatusCode: 200}, nil))
 }
