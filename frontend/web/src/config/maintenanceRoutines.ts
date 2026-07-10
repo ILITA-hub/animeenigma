@@ -59,7 +59,7 @@ export const MAINTENANCE_ROUTINES: MaintenanceRoutineDescriptor[] = [
     group: 'cluster',
     nameKey: 'admin.policy.maintenance.routines.provider_self_heal',
     knobs: [
-      { key: 'demote_after', type: 'select', labelKey: 'admin.policy.maintenance.knobs.demoteAfter', options: ['12h', '24h', '48h'] },
+      { key: 'promote_after', type: 'select', labelKey: 'admin.policy.maintenance.knobs.promoteAfter', options: ['12h', '24h', '48h'] },
       { key: 'probe_every', type: 'select', labelKey: 'admin.policy.maintenance.knobs.probeEvery', options: ['3h', '6h', '12h'] },
     ],
   },

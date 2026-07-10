@@ -1574,7 +1574,7 @@
           "suppressedAlertsPlaceholder": "アラート名を入力して Enter",
           "model": "モデル",
           "highWaterPct": "ディスク上限 %",
-          "demoteAfter": "降格までの時間",
+          "promoteAfter": "昇格までの時間",
           "probeEvery": "プローブ間隔"
         }
       }

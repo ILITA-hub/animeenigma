@@ -1574,7 +1574,7 @@
           "suppressedAlertsPlaceholder": "Alert name, then Enter",
           "model": "Model",
           "highWaterPct": "Disk high-water %",
-          "demoteAfter": "Demote after",
+          "promoteAfter": "Promote after",
           "probeEvery": "Probe every"
         }
       }

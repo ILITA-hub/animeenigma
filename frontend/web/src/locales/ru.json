@@ -1574,7 +1574,7 @@
           "suppressedAlertsPlaceholder": "Название алерта, затем Enter",
           "model": "Модель",
           "highWaterPct": "Порог заполнения диска, %",
-          "demoteAfter": "Понизить через",
+          "promoteAfter": "Повысить через",
           "probeEvery": "Проба каждые"
         }
       }

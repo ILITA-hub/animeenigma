@@ -76,7 +76,7 @@ func SeedRoutines() []MaintenanceRoutine {
 		r("subtitle_probe", `{}`),
 		r("shikimori_sync", `{}`),
 		r("playability_canary", `{}`),
-		r("provider_self_heal", `{"demote_after":"24h","probe_every":"6h"}`),
+		r("provider_self_heal", `{"promote_after":"24h","probe_every":"6h"}`),
 	}
 }
 
