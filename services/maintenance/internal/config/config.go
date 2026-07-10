@@ -39,6 +39,11 @@ type Config struct {
 	// callers land in a future plan.
 	TestMode   bool
 	CatalogURL string
+	// PolicyURL is policy-service's base URL — the maintenancegate client
+	// consults it to check whether the maintenance_bot routine is enabled and
+	// its auto_apply_max_risk cap. Docker default; overridden to localhost in
+	// maintenance.env since the bot is host-native.
+	PolicyURL string
 }
 
 type GrafanaConfig struct {
@@ -133,6 +138,7 @@ func Load() (*Config, error) {
 		FeedbackBaseURL:   getEnv("FEEDBACK_BASE_URL", "https://animeenigma.org"),
 		TestMode:          getEnvBool("MAINTENANCE_TEST_MODE", false),
 		CatalogURL:        getEnv("CATALOG_URL", "http://catalog:8081"),
+		PolicyURL:         getEnv("POLICY_URL", "http://policy:8098"),
 	}, nil
 }
 

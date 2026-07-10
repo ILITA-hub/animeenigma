@@ -1,9 +1,14 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/maintenancegate"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/state"
@@ -20,6 +25,27 @@ func newTestService(t *testing.T, admins []string) *service {
 		state: m,
 		cfg:   &config.Config{Admins: admins},
 	}
+}
+
+// newGateServer stands up a fake policy-service /internal/maintenance/routines/{id}
+// endpoint returning the given enabled flag + auto_apply_max_risk setting, in the
+// envelope shape maintenancegate.Client expects.
+func newGateServer(t *testing.T, enabled bool, maxRisk string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		settings := map[string]any{}
+		if maxRisk != "" {
+			settings["auto_apply_max_risk"] = maxRisk
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"enabled":  enabled,
+				"settings": settings,
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func buttonResult(risk domain.FixRisk, category, target string) *domain.AnalysisResult {
@@ -107,6 +133,76 @@ func TestDecideAutoApply_GrafanaAlertBugAutoApplies(t *testing.T) {
 	apply, _, reason := s.decideAutoApply(grafanaMsg, res)
 	if !apply {
 		t.Fatalf("Grafana-sourced medium bug must auto-apply; got apply=false reason=%q", reason)
+	}
+}
+
+// TestDecideAutoApply_GateDisabled: when the maintenance_bot routine is
+// disabled via /admin/policy, decideAutoApply must refuse to auto-apply even
+// a low-risk fix — the daemon falls back to the admin button path.
+func TestDecideAutoApply_GateDisabled(t *testing.T) {
+	srv := newGateServer(t, false, "")
+	s := newTestService(t, nil)
+	s.maint = maintenancegate.New(srv.URL, time.Second)
+
+	res := buttonResult(domain.RiskLow, "bug", "svc-gate-disabled")
+	apply, _, reason := s.decideAutoApply(msgFrom(""), res)
+	if apply {
+		t.Fatalf("gate disabled: apply=true, want false (reason=%q)", reason)
+	}
+	if reason == "" {
+		t.Error("gate-disabled button path returned empty reason")
+	}
+}
+
+// TestDecideAutoApply_RiskCeiling_LowCapsMedium: auto_apply_max_risk="low"
+// must cap a medium-risk admin-sourced bug fix that would otherwise auto-apply.
+func TestDecideAutoApply_RiskCeiling_LowCapsMedium(t *testing.T) {
+	const admin = "0neymik0"
+	srv := newGateServer(t, true, "low")
+	s := newTestService(t, []string{admin})
+	s.maint = maintenancegate.New(srv.URL, time.Second)
+
+	res := buttonResult(domain.RiskMedium, "bug", "svc-ceiling-low")
+	apply, _, reason := s.decideAutoApply(msgFrom(admin), res)
+	if apply {
+		t.Fatalf("max_risk=low must cap a medium-risk fix: apply=true, want false (reason=%q)", reason)
+	}
+	if reason == "" {
+		t.Error("risk-ceiling button path returned empty reason")
+	}
+}
+
+// TestDecideAutoApply_RiskCeiling_NoneCapsLow: auto_apply_max_risk="none"
+// must cap even a normally-always-auto low-risk fix.
+func TestDecideAutoApply_RiskCeiling_NoneCapsLow(t *testing.T) {
+	srv := newGateServer(t, true, "none")
+	s := newTestService(t, nil)
+	s.maint = maintenancegate.New(srv.URL, time.Second)
+
+	res := buttonResult(domain.RiskLow, "bug", "svc-ceiling-none")
+	apply, _, reason := s.decideAutoApply(msgFrom(""), res)
+	if apply {
+		t.Fatalf("max_risk=none must cap a low-risk fix: apply=true, want false (reason=%q)", reason)
+	}
+	if reason == "" {
+		t.Error("risk-ceiling button path returned empty reason")
+	}
+}
+
+// TestDecideAutoApply_GateUnreachable_FailsOpen: when the policy service is
+// unreachable, both Enabled and MaxRisk fail open (enabled=true, no cap), so
+// decideAutoApply behaves exactly as it did before the gate existed.
+func TestDecideAutoApply_GateUnreachable_FailsOpen(t *testing.T) {
+	s := newTestService(t, nil)
+	s.maint = maintenancegate.New("http://127.0.0.1:1/", 200*time.Millisecond) // unreachable
+
+	res := buttonResult(domain.RiskLow, "bug", "svc-gate-unreachable")
+	apply, label, reason := s.decideAutoApply(msgFrom(""), res)
+	if !apply {
+		t.Fatalf("unreachable gate must fail open: apply=false, want true (reason=%q)", reason)
+	}
+	if label == "" {
+		t.Error("auto-apply returned empty label")
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/maintenancegate"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/classifier"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/dispatcher"
@@ -171,6 +172,7 @@ func main() {
 		workChan: workChan,
 		fb:       feedback.NewClient(cfg.PlayerInternalURL, log),
 		http:     &http.Client{Timeout: 10 * time.Second},
+		maint:    maintenancegate.New(cfg.PolicyURL, 3*time.Second),
 	}
 
 	go svc.run(ctx)
@@ -199,6 +201,7 @@ type service struct {
 	workChan chan workItem
 	fb       *feedback.Client
 	http     *http.Client
+	maint    *maintenancegate.Client
 	mu       sync.Mutex
 
 	// interrupts maps a source message ID (the message wearing the 👀 reaction)
@@ -1505,6 +1508,9 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 	// AI believes the fix landed — "ai_done" awaits human verification in the
 	// admin feedback board before someone promotes it to "resolved".
 	s.fb.TrySetStatus(fix.FeedbackID, feedback.StatusAIDone)
+	if s.maint != nil {
+		s.maint.PostStatus(context.Background(), "maintenance_bot", true, "auto-fixed "+fix.FixPlan.Target)
+	}
 }
 
 // decideAutoApply implements the risk-gated active auto-fix policy. It returns
@@ -1518,6 +1524,11 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 // Feature work is never auto-implemented. A per-target loop guard (recently-fixed
 // or >2 attempts in 30m) downgrades to a button to prevent runaway fix loops.
 func (s *service) decideAutoApply(msg domain.ClassifiedMessage, result *domain.AnalysisResult) (apply bool, label, reason string) {
+	// Maintenance gate: when the bot routine is paused, never auto-apply (fall
+	// back to the button path; the poller/analysis keep running).
+	if s.maint != nil && !s.maint.Enabled(context.Background(), "maintenance_bot") {
+		return false, "", "maintenance_bot paused via /admin/policy — needs admin button"
+	}
 	if result.Tier != domain.TierButtonFix || result.FixPlan == nil {
 		return false, "", "not an applicable button fix"
 	}
@@ -1549,6 +1560,15 @@ func (s *service) decideAutoApply(msg domain.ClassifiedMessage, result *domain.A
 		return false, "", "high/unknown risk: needs admin button"
 	}
 
+	// Cap by the admin-configured max auto-apply risk (none<low<medium). A gate
+	// error/unset knob ⇒ "" ⇒ no cap (fail-open).
+	if s.maint != nil {
+		if ceiling := s.maint.MaxRisk(context.Background(), "maintenance_bot"); ceiling != "" &&
+			riskRank(result.Risk) > ceilingRank(ceiling) {
+			return false, "", "auto_apply_max_risk ceiling — needs admin button"
+		}
+	}
+
 	// Loop guard — never auto-apply the same target in a tight window.
 	target := result.FixPlan.Target
 	if target != "" {
@@ -1560,6 +1580,35 @@ func (s *service) decideAutoApply(msg domain.ClassifiedMessage, result *domain.A
 		}
 	}
 	return true, label, ""
+}
+
+// riskRank orders domain.FixRisk for the auto_apply_max_risk ceiling
+// comparison (low < medium < high/unset).
+func riskRank(r domain.FixRisk) int {
+	switch r {
+	case domain.RiskLow:
+		return 1
+	case domain.RiskMedium:
+		return 2
+	default: // RiskHigh or unset
+		return 3
+	}
+}
+
+// ceilingRank orders the auto_apply_max_risk knob value (none < low < medium).
+// An empty or unrecognized ceiling ranks above every risk level, i.e. no cap
+// (fail-open — matches maintenancegate.MaxRisk's ""-on-error contract).
+func ceilingRank(c string) int {
+	switch c {
+	case "none":
+		return 0
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	default: // "" (gate error/unset) or unknown ⇒ no cap
+		return 3
+	}
 }
 
 // isGrafanaAlert reports whether the message originated from our own Grafana
