@@ -109,6 +109,27 @@ vi.mock('@/composables/useConfirm', () => ({
   useConfirm: () => ({ confirm: confirmMock }),
 }))
 
+// Maintenance tab (Task 7) — useAdminMaintenance is mocked wholesale, mirroring
+// useAdminProviders above.
+const mockMaintenanceList = vi.fn()
+const mockSetRoutine = vi.fn()
+
+vi.mock('@/composables/useAdminMaintenance', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/composables/useAdminMaintenance')>()
+  return {
+    ...actual,
+    useAdminMaintenance: () => ({ list: mockMaintenanceList, setRoutine: mockSetRoutine }),
+  }
+})
+
+function maintRow(over: Record<string, unknown> = {}) {
+  return {
+    id: 'provider_recovery', enabled: true, settings: { model: 'sonnet' },
+    lastRunAt: '2026-07-10T00:00:00Z', lastOk: true, lastSummary: 'adopted okru · exit 0',
+    nextRunAt: null, updatedAt: '2026-07-10T00:00:00Z', ...over,
+  }
+}
+
 vi.mock('@/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/client')>()
   return {
@@ -168,6 +189,8 @@ describe('AdminPolicy', () => {
     mockSetRoulette.mockResolvedValue(undefined)
     mockProvidersList.mockResolvedValue([providerUp, providerDown])
     mockSetPolicy.mockResolvedValue({ ...providerUp, policy: 'disabled', derived_state: 'Disabled' })
+    mockMaintenanceList.mockResolvedValue([maintRow()])
+    mockSetRoutine.mockResolvedValue(undefined)
     confirmMock.mockResolvedValue(true)
 
     const { adminApi } = await import('@/api/client')
@@ -455,6 +478,58 @@ describe('AdminPolicy', () => {
 
       expect(confirmMock).not.toHaveBeenCalled()
       expect(mockSetPolicy).not.toHaveBeenCalled()
+    })
+  })
+
+  // ─── MAINTENANCE TAB (Task 7) ────────────────────────────────────────────
+  describe('Maintenance tab', () => {
+    async function mountAndOpenMaintenanceTab() {
+      const w = mountComponent()
+      await flushPromises()
+      await w.find('#tab-maintenance').trigger('click')
+      await flushPromises()
+      return w
+    }
+
+    it('renders a card per routine from the composable', async () => {
+      mockMaintenanceList.mockResolvedValue([
+        maintRow({ lastRunAt: new Date().toISOString() }),
+        maintRow({ id: 'git_autosync', settings: {}, lastRunAt: new Date().toISOString() }),
+      ])
+      const w = await mountAndOpenMaintenanceTab()
+      expect(w.findAll('[data-testid="routine-card"]').length).toBe(2)
+    })
+
+    it('confirms before pausing and calls setRoutine with enabled=false', async () => {
+      mockMaintenanceList.mockResolvedValue([maintRow({ lastRunAt: new Date().toISOString() })])
+      confirmMock.mockResolvedValue(true)
+      const w = await mountAndOpenMaintenanceTab()
+      // Switch is stubbed as a <button> that emits update:modelValue(!current).
+      await w.find('[data-testid="routine-switch-provider_recovery"]').trigger('click')
+      await flushPromises()
+      expect(confirmMock).toHaveBeenCalled()
+      expect(mockSetRoutine).toHaveBeenCalledWith('provider_recovery', expect.objectContaining({ enabled: false }))
+    })
+
+    it('does NOT pause when confirm is declined', async () => {
+      mockMaintenanceList.mockResolvedValue([maintRow({ lastRunAt: new Date().toISOString() })])
+      confirmMock.mockResolvedValue(false)
+      const w = await mountAndOpenMaintenanceTab()
+      await w.find('[data-testid="routine-switch-provider_recovery"]').trigger('click')
+      await flushPromises()
+      expect(mockSetRoutine).not.toHaveBeenCalled()
+    })
+
+    it('maps a failed last run to the destructive status badge', async () => {
+      mockMaintenanceList.mockResolvedValue([maintRow({ lastOk: false, lastRunAt: new Date().toISOString() })])
+      const w = await mountAndOpenMaintenanceTab()
+      expect(w.find('[data-testid="routine-status-provider_recovery"]').text()).toContain('Failed')
+    })
+
+    it('disables Save until a knob changes', async () => {
+      mockMaintenanceList.mockResolvedValue([maintRow({ lastRunAt: new Date().toISOString() })])
+      const w = await mountAndOpenMaintenanceTab()
+      expect(w.find('[data-testid="routine-save-provider_recovery"]').attributes('disabled')).toBeDefined()
     })
   })
 })

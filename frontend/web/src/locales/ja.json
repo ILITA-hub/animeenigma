@@ -1440,7 +1440,8 @@
       "subtitle": "ランタイムの機能アクセス管理 — ロール、ユーザー単位の上書き、ルーレットプール。",
       "tabs": {
         "features": "フィーチャー",
-        "providers": "プロバイダー"
+        "providers": "プロバイダー",
+        "maintenance": "メンテナンス"
       },
       "master": {
         "label": "ルーレット有効",
@@ -1531,6 +1532,45 @@
       "providersPlaceholder": {
         "title": "プロバイダーなし",
         "description": "登録されたスクレイパープロバイダーはまだありません。"
+      },
+      "maintenance": {
+        "title": "メンテナンスルーチン",
+        "intro": "バックグラウンドルーチンを一時停止・再開し、安全な設定を調整します。ホストルーチンの一時停止は次回実行をスキップしますが、スケジュールは維持されます。",
+        "loadError": "メンテナンスルーチンの読み込みに失敗しました。",
+        "groups": { "host": "ホストルーチン", "cluster": "クラスター内ルーチン" },
+        "enabled": "有効",
+        "paused": "一時停止中",
+        "toggleLabel": "{name} を切り替え",
+        "confirmPauseTitle": "{name} を一時停止しますか？",
+        "confirmPauseBody": "再開するまで {name} は実行されません。一時停止中は自動復旧やクリーンアップは行われません。",
+        "pauseAction": "一時停止",
+        "toastEnableSuccess": "{name} を再開しました",
+        "toastEnableError": "{name} を再開できませんでした",
+        "toastPauseSuccess": "{name} を一時停止しました",
+        "toastPauseError": "{name} を一時停止できませんでした",
+        "toastSaveSuccess": "{name} の設定を保存しました",
+        "toastSaveError": "{name} の設定を保存できませんでした",
+        "status": { "ok": "OK", "failed": "失敗", "stale": "古い", "never": "実行履歴なし" },
+        "routines": {
+          "maintenance_bot": "メンテナンスボット",
+          "provider_recovery": "毎日のプロバイダ復旧",
+          "git_autosync": "Git 自動同期",
+          "disk_prune": "ディスク整理",
+          "build_cache_prune": "ビルドキャッシュ整理",
+          "subtitle_probe": "字幕プローブ",
+          "shikimori_sync": "Shikimori 同期",
+          "playability_canary": "再生カナリア",
+          "provider_self_heal": "プロバイダ自己修復"
+        },
+        "knobs": {
+          "autoApplyMaxRisk": "自動適用の最大リスク",
+          "suppressedAlerts": "抑制するアラート",
+          "suppressedAlertsPlaceholder": "アラート名を入力して Enter",
+          "model": "モデル",
+          "highWaterPct": "ディスク上限 %",
+          "demoteAfter": "降格までの時間",
+          "probeEvery": "プローブ間隔"
+        }
       }
     }
   },

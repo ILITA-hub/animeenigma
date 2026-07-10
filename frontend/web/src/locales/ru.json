@@ -1440,7 +1440,8 @@
       "subtitle": "Управление доступом к функциям в реальном времени — роли, персональные правила и пул рулетки.",
       "tabs": {
         "features": "Фичи",
-        "providers": "Провайдеры"
+        "providers": "Провайдеры",
+        "maintenance": "Обслуживание"
       },
       "master": {
         "label": "Рулетка включена",
@@ -1531,6 +1532,45 @@
       "providersPlaceholder": {
         "title": "Нет провайдеров",
         "description": "Провайдеры скрапера пока не зарегистрированы."
+      },
+      "maintenance": {
+        "title": "Регламентные процессы",
+        "intro": "Приостанавливайте или возобновляйте фоновые процессы и настраивайте их безопасные параметры. Пауза хост-процесса пропускает следующий запуск — расписание сохраняется.",
+        "loadError": "Не удалось загрузить регламентные процессы.",
+        "groups": { "host": "Хост-процессы", "cluster": "Процессы в кластере" },
+        "enabled": "Включён",
+        "paused": "На паузе",
+        "toggleLabel": "Переключить {name}",
+        "confirmPauseTitle": "Поставить {name} на паузу?",
+        "confirmPauseBody": "{name} не будет запускаться, пока вы не возобновите его. Авто-восстановление и очистка на паузе не выполняются.",
+        "pauseAction": "Пауза",
+        "toastEnableSuccess": "{name} возобновлён",
+        "toastEnableError": "Не удалось возобновить {name}",
+        "toastPauseSuccess": "{name} на паузе",
+        "toastPauseError": "Не удалось поставить на паузу {name}",
+        "toastSaveSuccess": "Настройки {name} сохранены",
+        "toastSaveError": "Не удалось сохранить настройки {name}",
+        "status": { "ok": "OK", "failed": "Сбой", "stale": "Устарело", "never": "Ещё не запускался" },
+        "routines": {
+          "maintenance_bot": "Бот обслуживания",
+          "provider_recovery": "Ежедневное восстановление провайдеров",
+          "git_autosync": "Git-автосинхронизация",
+          "disk_prune": "Очистка диска",
+          "build_cache_prune": "Очистка кэша сборки",
+          "subtitle_probe": "Проба субтитров",
+          "shikimori_sync": "Синхронизация Shikimori",
+          "playability_canary": "Канарейка воспроизводимости",
+          "provider_self_heal": "Само-восстановление провайдеров"
+        },
+        "knobs": {
+          "autoApplyMaxRisk": "Макс. риск авто-применения",
+          "suppressedAlerts": "Подавленные алерты",
+          "suppressedAlertsPlaceholder": "Название алерта, затем Enter",
+          "model": "Модель",
+          "highWaterPct": "Порог заполнения диска, %",
+          "demoteAfter": "Понизить через",
+          "probeEvery": "Проба каждые"
+        }
       }
     }
   },

@@ -1440,7 +1440,8 @@
       "subtitle": "Runtime feature access — roles, per-user overrides, and the roulette pool.",
       "tabs": {
         "features": "Features",
-        "providers": "Providers"
+        "providers": "Providers",
+        "maintenance": "Maintenance"
       },
       "master": {
         "label": "Roulette enabled",
@@ -1531,6 +1532,45 @@
       "providersPlaceholder": {
         "title": "No providers",
         "description": "No scraper providers are registered yet."
+      },
+      "maintenance": {
+        "title": "Maintenance routines",
+        "intro": "Pause or resume background routines and tune their safe knobs. Pausing a host routine skips its next run — the schedule stays intact.",
+        "loadError": "Failed to load maintenance routines.",
+        "groups": { "host": "Host routines", "cluster": "In-cluster routines" },
+        "enabled": "Enabled",
+        "paused": "Paused",
+        "toggleLabel": "Toggle {name}",
+        "confirmPauseTitle": "Pause {name}?",
+        "confirmPauseBody": "{name} will skip its runs until you resume it. Auto-recovery and cleanup won't happen while paused.",
+        "pauseAction": "Pause",
+        "toastEnableSuccess": "{name} resumed",
+        "toastEnableError": "Couldn't resume {name}",
+        "toastPauseSuccess": "{name} paused",
+        "toastPauseError": "Couldn't pause {name}",
+        "toastSaveSuccess": "Saved {name} settings",
+        "toastSaveError": "Couldn't save {name} settings",
+        "status": { "ok": "OK", "failed": "Failed", "stale": "Stale", "never": "No runs yet" },
+        "routines": {
+          "maintenance_bot": "Maintenance bot",
+          "provider_recovery": "Daily provider recovery",
+          "git_autosync": "Git autosync",
+          "disk_prune": "Disk prune",
+          "build_cache_prune": "Build-cache prune",
+          "subtitle_probe": "Subtitle probe",
+          "shikimori_sync": "Shikimori sync",
+          "playability_canary": "Playability canary",
+          "provider_self_heal": "Provider self-heal"
+        },
+        "knobs": {
+          "autoApplyMaxRisk": "Auto-apply max risk",
+          "suppressedAlerts": "Suppressed alerts",
+          "suppressedAlertsPlaceholder": "Alert name, then Enter",
+          "model": "Model",
+          "highWaterPct": "Disk high-water %",
+          "demoteAfter": "Demote after",
+          "probeEvery": "Probe every"
+        }
       }
     }
   },

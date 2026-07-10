@@ -274,6 +274,127 @@
             </div>
           </template>
         </template>
+
+        <!-- ─── MAINTENANCE TAB ─────────────────────────────────────────────
+             Pull-config control board: pause/resume each routine + tune safe
+             knobs + read last-run status. Host routines' toggles are a PAUSE
+             (the systemd timer still fires; the script early-exits). -->
+        <template #maintenance>
+          <div v-if="maintError === '403'" class="glass-card p-4 mb-6 border border-destructive/40">
+            <p class="text-destructive">{{ $t('admin.policy.error403') }}</p>
+          </div>
+          <div v-else-if="maintError" class="glass-card p-4 mb-6 border border-destructive/40">
+            <p class="text-destructive">{{ maintError }}</p>
+          </div>
+
+          <div v-if="isMaintLoading" class="flex justify-center py-12">
+            <Spinner size="lg" />
+          </div>
+
+          <template v-else>
+            <div class="mb-6">
+              <h2 class="text-base font-semibold text-white">{{ $t('admin.policy.maintenance.title') }}</h2>
+              <p class="text-white/60 text-sm mt-1">{{ $t('admin.policy.maintenance.intro') }}</p>
+            </div>
+
+            <EmptyState v-if="maintRows.length === 0" class="mb-8">
+              {{ $t('admin.policy.maintenance.loadError') }}
+            </EmptyState>
+
+            <div v-for="group in maintGroups" :key="group.key" class="mb-8">
+              <p class="text-xs uppercase tracking-wide text-white/50 mb-3">{{ $t(group.titleKey) }}</p>
+              <div class="grid gap-4">
+                <Card v-for="row in group.rows" :key="row.id" padding="none" data-testid="routine-card">
+                  <CardHeader class="flex flex-row flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <CardTitle class="text-base">{{ routineName(row.id) }}</CardTitle>
+                      <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/40">
+                        <span class="font-mono">{{ row.id }}</span>
+                      </p>
+                      <p class="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/60">
+                        <Badge :variant="statusVariant(row)" :data-testid="`routine-status-${row.id}`">
+                          {{ statusLabel(row) }}
+                        </Badge>
+                        <span v-if="row.lastSummary">{{ row.lastSummary }}</span>
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                      <span class="text-xs text-white/60">
+                        {{ row.enabled ? $t('admin.policy.maintenance.enabled') : $t('admin.policy.maintenance.paused') }}
+                      </span>
+                      <Switch
+                        :model-value="row.enabled"
+                        :disabled="row.saving"
+                        :aria-label="$t('admin.policy.maintenance.toggleLabel', { name: routineName(row.id) })"
+                        :data-testid="`routine-switch-${row.id}`"
+                        @update:model-value="(v: boolean) => onToggleRoutine(row, v)"
+                      />
+                    </div>
+                  </CardHeader>
+
+                  <CardContent v-if="row.enabled && (routineDescriptor(row.id)?.knobs.length ?? 0) > 0" class="pt-0">
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <div v-for="knob in routineDescriptor(row.id)!.knobs" :key="knob.key">
+                        <p class="text-xs uppercase tracking-wide text-white/50 mb-2">{{ $t(knob.labelKey) }}</p>
+
+                        <SegmentedControl
+                          v-if="knob.type === 'select'"
+                          :model-value="String(row.draft[knob.key] ?? '')"
+                          :options="segOptions(knob.options)"
+                          :aria-label="$t(knob.labelKey)"
+                          @update:model-value="(v: string) => (row.draft[knob.key] = v)"
+                        />
+
+                        <Input
+                          v-else-if="knob.type === 'number'"
+                          type="number"
+                          :min="knob.min"
+                          :max="knob.max"
+                          :model-value="String(row.draft[knob.key] ?? '')"
+                          :aria-label="$t(knob.labelKey)"
+                          @update:model-value="(v: string | number) => (row.draft[knob.key] = v)"
+                        />
+
+                        <div v-else-if="knob.type === 'chips'">
+                          <div class="flex flex-wrap gap-2 mb-2">
+                            <Chip
+                              v-for="a in alertList(row)"
+                              :key="a"
+                              removable
+                              size="sm"
+                              @remove="removeAlert(row, a)"
+                            >
+                              {{ a }}
+                            </Chip>
+                          </div>
+                          <Input
+                            v-model="alertDraft[row.id]"
+                            type="text"
+                            :placeholder="$t(knob.placeholderKey)"
+                            :aria-label="$t(knob.labelKey)"
+                            @keyup.enter="addAlert(row)"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="mt-4 flex justify-end">
+                      <Button
+                        size="sm"
+                        :loading="row.saving"
+                        :disabled="row.saving || !isKnobDirty(row)"
+                        :data-testid="`routine-save-${row.id}`"
+                        @click="saveKnobs(row)"
+                      >
+                        {{ $t('admin.policy.save') }}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </template>
+        </template>
       </Tabs>
     </div>
   </div>
@@ -292,6 +413,7 @@ import {
   CardTitle,
   Chip,
   EmptyState,
+  Input,
   SegmentedControl,
   Spinner,
   Switch,
@@ -302,6 +424,9 @@ import { useAdminPolicy } from '@/composables/useAdminPolicy'
 import type { FeatureFlag, FailSafe } from '@/composables/useAdminPolicy'
 import { useAdminProviders } from '@/composables/useAdminProviders'
 import type { ScraperProviderPolicy, ScraperProviderWire } from '@/composables/useAdminProviders'
+import { useAdminMaintenance } from '@/composables/useAdminMaintenance'
+import type { MaintenanceRoutineWire } from '@/composables/useAdminMaintenance'
+import { MAINTENANCE_ROUTINES, routineDescriptor } from '@/config/maintenanceRoutines'
 import { useOpenFeature } from '@/composables/useOpenFeature'
 import { useConfirm } from '@/composables/useConfirm'
 import { featureRoute } from '@/config/policyFeatures'
@@ -367,6 +492,7 @@ const activeTab = ref('features')
 const tabDefs = computed(() => [
   { value: 'features', label: t('admin.policy.tabs.features') },
   { value: 'providers', label: t('admin.policy.tabs.providers') },
+  { value: 'maintenance', label: t('admin.policy.tabs.maintenance') },
 ])
 
 const isLoading = ref(true)
@@ -685,8 +811,145 @@ async function onSelectProviderPolicy(row: ProviderRow, next: ScraperProviderPol
   await applyProviderPolicy(row, 'disabled')
 }
 
+// ─── MAINTENANCE TAB ────────────────────────────────────────────────────
+interface MaintenanceRow extends MaintenanceRoutineWire {
+  saving: boolean
+  draft: Record<string, unknown>      // knob edit buffer
+  original: string                    // JSON of settings at load/save (dirty check)
+}
+
+const maintenance = useAdminMaintenance()
+const isMaintLoading = ref(true)
+const maintError = ref<string | null>(null)
+const maintRows = ref<MaintenanceRow[]>([])
+const alertDraft = ref<Record<string, string>>({}) // per-routine "add suppressed alert" input
+
+function toMaintRow(w: MaintenanceRoutineWire): MaintenanceRow {
+  return { ...w, saving: false, draft: { ...w.settings }, original: JSON.stringify(w.settings ?? {}) }
+}
+
+async function loadMaintenance(): Promise<void> {
+  isMaintLoading.value = true
+  maintError.value = null
+  try {
+    const list = await maintenance.list()
+    // Render in registry order (host first, then cluster); unknown ids appended.
+    const order = new Map(MAINTENANCE_ROUTINES.map((d, i) => [d.id, i]))
+    maintRows.value = list
+      .map(toMaintRow)
+      .sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999))
+  } catch (e) {
+    maintError.value = maintErrText(e)
+  } finally {
+    isMaintLoading.value = false
+  }
+}
+
+function maintErrText(e: unknown): string {
+  const err = e as { response?: { status?: number; data?: { error?: { message?: string } } }; message?: string }
+  return err.response?.status === 403 ? '403' : (err.response?.data?.error?.message || err.message || t('admin.policy.maintenance.loadError'))
+}
+
+const maintGroups = computed(() => {
+  const host = maintRows.value.filter((r) => (routineDescriptor(r.id)?.group ?? 'host') === 'host')
+  const cluster = maintRows.value.filter((r) => routineDescriptor(r.id)?.group === 'cluster')
+  return [
+    { key: 'host', titleKey: 'admin.policy.maintenance.groups.host', rows: host },
+    { key: 'cluster', titleKey: 'admin.policy.maintenance.groups.cluster', rows: cluster },
+  ].filter((g) => g.rows.length > 0)
+})
+
+function routineName(id: string): string {
+  const d = routineDescriptor(id)
+  return d ? t(d.nameKey) : id
+}
+
+// ── status badge ──
+type MaintStatus = 'ok' | 'failed' | 'stale' | 'never'
+function routineStatus(row: MaintenanceRow): MaintStatus {
+  if (!row.lastRunAt) return 'never'
+  const stale = routineDescriptor(row.id)?.staleAfterMs
+  if (stale && Date.now() - new Date(row.lastRunAt).getTime() > stale) return 'stale'
+  return row.lastOk === false ? 'failed' : 'ok'
+}
+const STATUS_VARIANT: Record<MaintStatus, NonNullable<BadgeVariants['variant']>> = {
+  ok: 'success', failed: 'destructive', stale: 'warning', never: 'default',
+}
+function statusVariant(row: MaintenanceRow) { return STATUS_VARIANT[routineStatus(row)] }
+function statusLabel(row: MaintenanceRow) { return t(`admin.policy.maintenance.status.${routineStatus(row)}`) }
+
+// ── enable/pause (instant, confirm-gated on pause) ──
+async function onToggleRoutine(row: MaintenanceRow, enabled: boolean): Promise<void> {
+  const name = routineName(row.id)
+  if (!enabled) {
+    const ok = await confirm({
+      title: t('admin.policy.maintenance.confirmPauseTitle', { name }),
+      description: t('admin.policy.maintenance.confirmPauseBody', { name }),
+      confirmText: t('admin.policy.maintenance.pauseAction'),
+      cancelText: t('common.cancel'),
+      variant: 'destructive',
+    })
+    if (!ok) return
+  }
+  await applyRoutine(row, enabled, currentSettings(row), enabled ? 'toastEnable' : 'toastPause')
+}
+
+// ── save knobs (explicit) ──
+function currentSettings(row: MaintenanceRow): Record<string, unknown> {
+  // Coerce number knobs from their string Input values.
+  const out: Record<string, unknown> = { ...row.settings, ...row.draft }
+  for (const k of routineDescriptor(row.id)?.knobs ?? []) {
+    if (k.type === 'number' && out[k.key] !== undefined && out[k.key] !== '') out[k.key] = Number(out[k.key])
+  }
+  return out
+}
+function isKnobDirty(row: MaintenanceRow): boolean {
+  return JSON.stringify(currentSettings(row)) !== row.original
+}
+async function saveKnobs(row: MaintenanceRow): Promise<void> {
+  await applyRoutine(row, row.enabled, currentSettings(row), 'toastSave')
+}
+
+async function applyRoutine(row: MaintenanceRow, enabled: boolean, settings: Record<string, unknown>, kind: 'toastEnable' | 'toastPause' | 'toastSave'): Promise<void> {
+  const prevEnabled = row.enabled
+  const name = routineName(row.id)
+  row.saving = true
+  row.enabled = enabled
+  try {
+    await maintenance.setRoutine(row.id, { enabled, settings })
+    row.settings = settings
+    row.draft = { ...settings }
+    row.original = JSON.stringify(settings)
+    toast.push(t(`admin.policy.maintenance.${kind}Success`, { name }), 'success')
+  } catch {
+    row.enabled = prevEnabled
+    toast.push(t(`admin.policy.maintenance.${kind}Error`, { name }), 'error')
+  } finally {
+    row.saving = false
+  }
+}
+
+// ── suppressed-alerts chip editor (maintenance_bot) ──
+function alertList(row: MaintenanceRow): string[] {
+  const v = row.draft['suppressed_alerts']
+  return Array.isArray(v) ? (v as string[]) : []
+}
+function addAlert(row: MaintenanceRow): void {
+  const val = (alertDraft.value[row.id] || '').trim()
+  if (!val) return
+  const cur = alertList(row)
+  if (!cur.includes(val)) row.draft['suppressed_alerts'] = [...cur, val]
+  alertDraft.value[row.id] = ''
+}
+function removeAlert(row: MaintenanceRow, v: string): void {
+  row.draft['suppressed_alerts'] = alertList(row).filter((x) => x !== v)
+}
+
+function segOptions(opts: string[]) { return opts.map((o) => ({ value: o, label: o })) }
+
 onMounted(() => {
   load()
   loadProviders()
+  loadMaintenance()
 })
 </script>
