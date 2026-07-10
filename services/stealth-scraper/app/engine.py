@@ -84,7 +84,12 @@ from .recipes.base import host_allowed, host_of, looks_like_challenge
 from .recipes.gogoanime import GogoanimeRecipe
 from .recipes.miruro import MiruroRecipe
 from .recipes.nineanime import NineAnimeRecipe
-from .sessionstore import SessionStore, camoufox_build
+from .sessionstore import (
+    SessionStore,
+    camoufox_build,
+    read_warm_marker,
+    write_warm_marker,
+)
 from .streamproxy import looks_like_m3u8, make_wrap, rewrite_playlist
 from .tunnels import ProxyPool, build_pool_from_config
 
@@ -347,13 +352,21 @@ class CamoufoxEngine:
         try:
             page = await context.new_page()
             profile.user_agent = await page.evaluate("() => navigator.userAgent")
-            if self.cfg.warming_enabled and self._warming_allowed():
+            marker = read_warm_marker(profile.user_data_dir)
+            marker_fresh = (
+                marker is not None
+                and marker.get("camoufox_build") == camoufox_build()
+                and time.time() - marker.get("warmed_at", 0)
+                < self.cfg.warm_marker_ttl_seconds
+            )
+            if self.cfg.warming_enabled and self._warming_allowed() and not marker_fresh:
                 from .warming import warm_profile
 
                 await warm_profile(
                     page, self.cfg.warming_sites, self._log,
                     nav_timeout_ms=self.cfg.nav_timeout_ms,
                 )
+                write_warm_marker(profile.user_data_dir)
             await page.close()
         except Exception:  # noqa: BLE001
             profile.user_agent = profile.user_agent or ""

@@ -113,6 +113,10 @@ class Config:
     # How long a resolved stream session (cookies + master url) is advertised as
     # fresh. cf_clearance typically lives ~30 min; keep this comfortably under it.
     session_ttl_seconds: int = 600
+    # How long a persisted per-profile warm marker (see sessionstore.
+    # read_warm_marker/write_warm_marker) suppresses re-warming a relaunched
+    # profile. Invalidated automatically by a Camoufox version change.
+    warm_marker_ttl_seconds: int = 86400
     # Hard timeout for a single in-page /hls fetch (playlist/segment). Unlike
     # resolve(), this path was unbounded — a hung CDN fetch pinned a browser slot
     # until the TTL. On timeout the session is torn down and the slot reclaimed.
@@ -188,6 +192,7 @@ class Config:
             challenge_solve_timeout_ms=_int(g("STEALTH_CHALLENGE_SOLVE_TIMEOUT_MS"), 30_000),
             challenge_click_max=_int(g("STEALTH_CHALLENGE_CLICK_MAX"), 3),
             session_ttl_seconds=_int(g("STEALTH_SESSION_TTL_SECONDS"), 600),
+            warm_marker_ttl_seconds=_int(g("STEALTH_WARM_MARKER_TTL_SECONDS"), 86400),
             fetch_timeout_ms=_int(g("STEALTH_FETCH_TIMEOUT_MS"), 20_000),
             max_body_bytes=_int(g("STEALTH_MAX_BODY_BYTES"), 64 * 1024 * 1024),
             unactivated_grace_seconds=_int(g("STEALTH_UNACTIVATED_GRACE_SECONDS"), 45),

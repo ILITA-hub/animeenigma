@@ -86,3 +86,30 @@ class SessionStore:
                 self.delete(sid)
                 dropped += 1
         return dropped
+
+
+_WARM_MARKER = "warmed.json"
+
+
+def read_warm_marker(user_data_dir: str) -> dict | None:
+    path = os.path.join(user_data_dir, _WARM_MARKER)
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def write_warm_marker(user_data_dir: str) -> None:
+    import time as _time
+
+    path = os.path.join(user_data_dir, _WARM_MARKER)
+    tmp = f"{path}.tmp"
+    try:
+        os.makedirs(user_data_dir, exist_ok=True)
+        with open(tmp, "w") as f:
+            json.dump({"warmed_at": _time.time(),
+                       "camoufox_build": camoufox_build()}, f)
+        os.replace(tmp, path)
+    except OSError:
+        pass  # best-effort — a missed marker only costs one extra warm
