@@ -42,15 +42,30 @@ func TestSessionAliveFailsOpen(t *testing.T) {
 	}
 }
 
-func TestSessionAliveHonorsContextDeadline(t *testing.T) {
-	// Verify that SessionAlive respects a tight deadline and fails open to "alive"
-	// rather than waiting for the full 90s sidecar timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
-	defer cancel()
-	time.Sleep(time.Millisecond) // Ensure context has expired before calling
+func TestSessionAliveBoundedBySlowSidecar(t *testing.T) {
+	// Discriminating proof of the internal 2s bound: the server answers
+	// {"state":"gone"} only after a 3s sleep, and the caller imposes NO deadline
+	// of its own. Un-fixed code (inheriting the 90s client timeout) would wait
+	// out the sleep and return "gone" in ~3s; fixed code trips its own 2s bound
+	// and fails open to "alive" in ~2s.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done(): // client hung up — unblock so srv.Close() is fast
+			return
+		case <-time.After(3 * time.Second):
+		}
+		w.Write([]byte(`{"state":"gone"}`))
+	}))
+	defer srv.Close()
 
-	c := New("http://127.0.0.1:1", 90*time.Second) // generous sidecar timeout, but our 2s bound should fire first
-	if got := c.SessionAlive(ctx, "deadbeef"); got != "alive" {
-		t.Fatalf("deadline expiry must fail open to alive, got %q", got)
+	c := New(srv.URL, 90*time.Second) // generous client timeout; only the internal bound can fire
+	start := time.Now()
+	got := c.SessionAlive(context.Background(), "deadbeef")
+	elapsed := time.Since(start)
+	if got != "alive" {
+		t.Fatalf("slow sidecar must fail open to alive, got %q", got)
+	}
+	if elapsed >= 2900*time.Millisecond {
+		t.Fatalf("SessionAlive not bounded: took %v (want < 2.9s)", elapsed)
 	}
 }
