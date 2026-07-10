@@ -242,3 +242,11 @@ async def hls(
 async def close_session(sid: str) -> JSONResponse:
     engine: CamoufoxEngine = app.state.engine
     return JSONResponse({"closed": await engine.aclose_session(sid)})
+
+
+@app.get("/session/{sid}/alive")
+async def session_alive(sid: str) -> JSONResponse:
+    """Liveness gate for the Go scraper's Redis stream cache (Layer B safety
+    net): 'gone' ⇒ the scraper treats its cached stream URL as a miss."""
+    engine: CamoufoxEngine = app.state.engine
+    return JSONResponse({"state": engine.session_state(sid)})

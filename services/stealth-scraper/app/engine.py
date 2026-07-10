@@ -1498,6 +1498,23 @@ class CamoufoxEngine:
         metrics.POOL_FREE.set(free)
         metrics.POOL_CRASHED.set(counts.get("crashed", 0))
 
+    def session_state(self, sid: str) -> str:
+        """Liveness for the scraper's cached-stream gate: ``alive`` (registered
+        live session), ``rehydratable`` (valid persisted record — a fetch will
+        lazily rebuild it), ``gone`` (nothing usable; the caller must
+        re-resolve). Cheap: dict lookup + at most one small JSON read."""
+        session = self._sessions.get(sid)
+        if session is not None and session.expires_at > time.time():
+            return "alive"
+        rec = self.store.load(sid)
+        if (
+            rec is not None
+            and rec.get("camoufox_build") == camoufox_build()
+            and rec.get("expires_at", 0) > time.time()
+        ):
+            return "rehydratable"
+        return "gone"
+
 
 class SessionGone(Exception):
     def __init__(self, sid: str):
