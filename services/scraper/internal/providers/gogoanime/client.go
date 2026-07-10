@@ -882,6 +882,15 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	return servers, nil
 }
 
+// streamCacheKey derives GetStream's Redis cache key: the serverID is hashed
+// for bounded key length, namespaced by provider/providerID/episodeID.
+// Exposed (unexported, same package) so tests can pre-seed the cache at the
+// exact key GetStream will look up instead of re-deriving it themselves.
+func streamCacheKey(providerID, episodeID, serverID string) string {
+	h := sha256.Sum256([]byte(serverID))
+	return fmt.Sprintf("stream:%s:%s:%s:%s", providerName, providerID, episodeID, hex.EncodeToString(h[:8]))
+}
+
 // GetStream delegates to the embeds.Registry's matching extractor and caches
 // the result with TTL min(parsedExpiry-30s, 5min). Already-expired URLs are
 // NOT cached (the cache would just hand out a known-bad URL on next request).
@@ -893,8 +902,7 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	_ = category // informational only (sub/dub baked into serverID already).
 	// Cache key: hash the serverID for bounded length. Shared by BOTH the
 	// in-process extractor path and the browser-engine (sidecar) path.
-	h := sha256.Sum256([]byte(serverID))
-	cacheKey := fmt.Sprintf("stream:%s:%s:%s:%s", providerName, providerID, episodeID, hex.EncodeToString(h[:8]))
+	cacheKey := streamCacheKey(providerID, episodeID, serverID)
 
 	var cached domain.Stream
 	if err := p.cache.Get(ctx, cacheKey, &cached); err == nil {

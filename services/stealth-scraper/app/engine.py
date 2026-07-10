@@ -795,8 +795,9 @@ class CamoufoxEngine:
         Lock lifecycle: the per-sid lock in ``self._rehydrate_locks`` is
         deliberately never removed. Popping it inside the ``finally`` while
         still under ``async with lock:`` would let a late-arriving concurrent
-        caller ``setdefault`` a brand-new, unlocked ``asyncio.Lock`` for the
-        same sid and start a second rehydrate before the first one's ``async
+        caller's ``_rehydrate_lock()`` create a brand-new, unlocked
+        ``asyncio.Lock`` for the same sid and start a second rehydrate before
+        the first one's ``async
         with`` actually releases the original lock — two coroutines rebuilding
         the same sid at once. Leaving the entry in place means every future
         call for this sid contends on the SAME lock object, which is correct;
@@ -815,8 +816,7 @@ class CamoufoxEngine:
             self.store.delete(sid)
             return None
 
-        lock = self._rehydrate_locks.setdefault(sid, asyncio.Lock())
-        async with lock:
+        async with self._rehydrate_lock(sid):
             existing = self._sessions.get(sid)
             if existing is not None:  # lost the race — another fetch rebuilt it
                 return existing
@@ -1154,6 +1154,19 @@ class CamoufoxEngine:
         if lock is None:
             lock = asyncio.Lock()
             self._fetch_locks[key] = lock
+        return lock
+
+    def _rehydrate_lock(self, sid: str) -> asyncio.Lock:
+        """Lock guarding one sid's lazy rehydrate — mirrors ``_fetch_lock()``
+        (get-then-create, no await between the check and the store, so it
+        can't itself race) rather than ``dict.setdefault(sid, asyncio.Lock())``,
+        which always constructs a throwaway ``asyncio.Lock()`` on every call
+        (the default-value argument is evaluated eagerly) even when the key
+        already exists. See ``_rehydrate`` for why the entry is never popped."""
+        lock = self._rehydrate_locks.get(sid)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._rehydrate_locks[sid] = lock
         return lock
 
     async def _warm_fetch_session(

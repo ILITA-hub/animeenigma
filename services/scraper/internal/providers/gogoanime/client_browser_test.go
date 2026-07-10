@@ -2,10 +2,7 @@ package gogoanime
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
@@ -92,13 +89,6 @@ func TestGetStreamWithGate_BrowserEngine_PicksMegaplayServer(t *testing.T) {
 	if st == nil || len(st.Sources) != 1 {
 		t.Error("want a stream with 1 source")
 	}
-}
-
-// streamCacheKey mirrors GetStream's cache-key derivation so tests can
-// pre-seed the fakeCache at the exact key GetStream will look up.
-func streamCacheKey(providerID, episodeID, serverID string) string {
-	h := sha256.Sum256([]byte(serverID))
-	return fmt.Sprintf("stream:%s:%s:%s:%s", providerName, providerID, episodeID, hex.EncodeToString(h[:8]))
 }
 
 // newGatedBrowserProvider builds a Provider directly (bypassing

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 
 _SID_RE = re.compile(r"^[a-f0-9]{8,64}$")
 
@@ -101,14 +102,12 @@ def read_warm_marker(user_data_dir: str) -> dict | None:
 
 
 def write_warm_marker(user_data_dir: str) -> None:
-    import time as _time
-
     path = os.path.join(user_data_dir, _WARM_MARKER)
     tmp = f"{path}.tmp"
     try:
         os.makedirs(user_data_dir, exist_ok=True)
         with open(tmp, "w") as f:
-            json.dump({"warmed_at": _time.time(),
+            json.dump({"warmed_at": time.time(),
                        "camoufox_build": camoufox_build()}, f)
         os.replace(tmp, path)
     except OSError:
