@@ -198,6 +198,12 @@ class CamoufoxEngine:
         # path (cheap) and force-resamples on a near-hard read.
         self._ram_bytes: int = 0
         self._ram_task: Any = None
+        # Governor-published degradation level (graceful-degradation Phase 3),
+        # refreshed by _degradation_loop. 0 when the poller is disabled, the
+        # governor is unreachable, or the level key is absent — FAIL-OPEN.
+        self._degradation_level: int = 0
+        self._degradation_task: Any = None
+        self._degradation_warned: bool = False
 
     def set_logger(self, log: Any) -> None:
         self._log = log
@@ -209,8 +215,13 @@ class CamoufoxEngine:
         metrics.ACTIVE_SESSIONS.set(0)
         self._reaper_task = asyncio.create_task(self._reaper_loop())
         self._ram_task = asyncio.create_task(self._ram_sampler_loop())
+        if self.cfg.governor_url:
+            self._degradation_task = asyncio.create_task(self._degradation_loop())
 
     async def stop(self) -> None:
+        if self._degradation_task is not None:
+            self._degradation_task.cancel()
+            self._degradation_task = None
         if self._reaper_task is not None:
             self._reaper_task.cancel()
             self._reaper_task = None
@@ -387,6 +398,7 @@ class CamoufoxEngine:
         recipe = self._recipes.get(provider)
         if recipe is None:
             raise RecipeError(f"unknown provider: {provider}")
+        self._shed_new_work()
 
         self._evict_expired()
         self._enforce_user_quota(user_key)
@@ -545,9 +557,58 @@ class CamoufoxEngine:
                 if self._log:
                     self._log.exception("ram sampler tick failed")
 
+    async def _degradation_loop(self) -> None:
+        """Poll the governor's status endpoint (graceful-degradation Phase 3)
+        and cache the published level. Fail-open: any error, timeout, or shape
+        mismatch reads as level 0 — the sidecar must never shed because the
+        signal is missing. Runs in a thread executor (stdlib urllib; the
+        sidecar deliberately has no async HTTP client dependency)."""
+        import json as _json
+        import urllib.request as _rq
+
+        url = self.cfg.governor_url.rstrip("/") + "/api/degradation/status"
+
+        def _fetch() -> int:
+            with _rq.urlopen(url, timeout=3) as resp:  # noqa: S310 (fixed internal URL)
+                body = _json.loads(resp.read(65536))
+            level = int(body.get("data", {}).get("level", 0))
+            return level if 0 <= level <= 2 else 0
+
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                await asyncio.sleep(self.cfg.degradation_poll_seconds)
+                level = await loop.run_in_executor(None, _fetch)
+                if level != self._degradation_level and self._log:
+                    self._log.info("degradation level %d -> %d", self._degradation_level, level)
+                self._degradation_level = level
+                self._degradation_warned = False
+            except asyncio.CancelledError:
+                break
+            except Exception:  # noqa: BLE001 — fail-open on ANY poll failure
+                if not self._degradation_warned and self._log:
+                    self._log.warning("governor poll failed; degradation level fails open to 0")
+                self._degradation_warned = True
+                self._degradation_level = 0
+            metrics.DEGRADATION_LEVEL_SEEN.set(self._degradation_level)
+            metrics.DEGRADATION_SHED.labels(subsystem="camoufox").set(
+                0 if self._degradation_level < 1 else self._degradation_level
+            )
+
+    def _shed_new_work(self) -> None:
+        """Raise DegradedShed when the host is at Critical pressure — gates the
+        two NEW-work entry points (resolve, browser_fetch). Session reuse and
+        /hls proxy fetches for existing sessions are never gated (they serve
+        in-flight playback, the very thing shedding protects)."""
+        if self._degradation_level >= 2:
+            raise DegradedShed("new work refused: host degradation level 2 (critical)")
+
     def _warming_allowed(self) -> bool:
         """False once combined RSS reaches the soft budget — new profiles are
-        not warmed under back-pressure (existing leases untouched)."""
+        not warmed under back-pressure (existing leases untouched) — or while
+        the platform degradation level is Elevated+ (Phase 3 shedding)."""
+        if self._degradation_level >= 1:
+            return False
         return self._read_ram() < self.cfg.ram_soft_bytes
 
     def _evict_one_lru(self) -> bool:
@@ -765,6 +826,7 @@ class CamoufoxEngine:
         providers whose whole site is challenge-gated (e.g. 9anime DDoS-Guard):
         the in-page fetch clears the challenge a curl/Go client cannot. SSRF is
         gated by the recipe's static ``allowed_hosts``."""
+        self._shed_new_work()
         recipe = self._recipes.get(provider)
         if recipe is None:
             raise RecipeError(f"unknown provider: {provider}")
@@ -1339,6 +1401,16 @@ class ProviderWedged(RecipeError):
     def __init__(self, message: str, provider: str = ""):
         super().__init__(message)
         self.provider = provider
+
+
+class DegradedShed(RecipeError):
+    """A NEW resolve/fetch was refused because the host is at Critical
+    degradation pressure (governor level 2, graceful-degradation Phase 3).
+    503 (retryable) with kind="degraded"; the Go breaker parks the provider and
+    half-open-retries once pressure clears. In-flight sessions are untouched —
+    active playback is exactly what the shedding protects."""
+
+    kind = "degraded"
 
 
 class FetchTimeout(Exception):

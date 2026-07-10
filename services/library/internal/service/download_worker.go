@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	gometrics "github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
 	libtorrent "github.com/ILITA-hub/animeenigma/services/library/internal/torrent"
@@ -57,7 +58,21 @@ type WorkerPool struct {
 	handlesMu sync.RWMutex
 	handles   map[string]libtorrent.DownloadHandle
 
+	// shed gates NEW job claims while the platform degradation level is
+	// Elevated+ (graceful-degradation Phase 3). Nil = never shed. Running
+	// downloads always finish — only admission pauses.
+	shed       ShedChecker
+	shedLogged bool
+
 	wg sync.WaitGroup
+}
+
+// ShedChecker is the narrow degradation-consumer surface (satisfied by
+// *cache.DegradationWatcher). Shared by WorkerPool, EncoderPool and the
+// storyboard backfill loop.
+type ShedChecker interface {
+	ShouldShed(min int) bool
+	Level() int
 }
 
 // NewWorkerPool constructs a WorkerPool. workers must be >= 1.
@@ -95,6 +110,30 @@ func NewWorkerPool(
 	}
 }
 
+// SetShedChecker wires the degradation watcher (nil-safe; call before Start).
+func (p *WorkerPool) SetShedChecker(c ShedChecker) { p.shed = c }
+
+// shedClaims reports whether new-claim admission is currently shed, updating
+// the ae_degradation_shed{subsystem="library_download"} gauge and logging on
+// state changes only.
+func (p *WorkerPool) shedClaims() bool {
+	shed := p.shed != nil && p.shed.ShouldShed(1)
+	if shed != p.shedLogged {
+		p.shedLogged = shed
+		v := 0.0
+		if shed {
+			v = 1
+			if p.log != nil {
+				p.log.Infow("pausing new download claims: platform degraded", "level", p.shed.Level())
+			}
+		} else if p.log != nil {
+			p.log.Infow("resuming download claims: degradation cleared")
+		}
+		gometrics.DegradationShed.WithLabelValues("library_download").Set(v)
+	}
+	return shed
+}
+
 // Start launches the worker goroutines + a 5s active-count publisher.
 // Returns immediately; goroutines exit on <-ctx.Done().
 func (p *WorkerPool) Start(ctx context.Context) {
@@ -113,6 +152,12 @@ func (p *WorkerPool) runWorker(ctx context.Context, idx int) {
 	for {
 		if ctx.Err() != nil {
 			return
+		}
+		if p.shedClaims() {
+			if !p.sleep(ctx, p.pollInterval) {
+				return
+			}
+			continue
 		}
 		job, err := p.jobRepo.Claim(ctx)
 		if err != nil {
@@ -396,4 +441,3 @@ func (p *WorkerPool) publishActiveCount(ctx context.Context) {
 		}
 	}
 }
-

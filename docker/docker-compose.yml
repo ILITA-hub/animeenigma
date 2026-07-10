@@ -177,6 +177,10 @@ services:
       STEALTH_RAM_HARD_BYTES: ${STEALTH_RAM_HARD_BYTES:-3221225472}
       STEALTH_RAM_SAMPLE_SECONDS: ${STEALTH_RAM_SAMPLE_SECONDS:-5}
       STEALTH_USER_QUOTA: ${STEALTH_USER_QUOTA:-2}
+      # Graceful-degradation Phase 3: poll the governor and shed under host
+      # pressure (stop warming at Elevated, refuse NEW resolves kind=degraded
+      # at Critical; in-flight sessions/playback untouched). Empty = disabled.
+      STEALTH_GOVERNOR_URL: ${STEALTH_GOVERNOR_URL:-http://governor:8100}
       STEALTH_SESSION_TTL_SECONDS: ${STEALTH_SESSION_TTL_SECONDS:-600}
       STEALTH_GEOIP: ${STEALTH_GEOIP:-true}
       STEALTH_HUMANIZE: ${STEALTH_HUMANIZE:-true}

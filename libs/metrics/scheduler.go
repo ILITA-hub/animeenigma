@@ -49,3 +49,13 @@ var (
 		[]string{"component"},
 	)
 )
+
+// SchedulerJobSkippedTotal counts cron runs skipped before execution (e.g.
+// reason="degraded" when the degradation level gates a heavy job).
+var SchedulerJobSkippedTotal = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "scheduler_job_skipped_total",
+		Help: "Scheduled job runs skipped before execution, by job and reason.",
+	},
+	[]string{"job", "reason"},
+)

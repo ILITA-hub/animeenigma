@@ -23,6 +23,13 @@ def _int(value: str | None, default: int) -> int:
         return default
 
 
+def _float(value: str | None, default: float) -> float:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
 def _csv(value: str | None, default: list[str]) -> list[str]:
     if not value:
         return list(default)
@@ -61,6 +68,12 @@ class Config:
 
     # Session aging / warming
     warming_enabled: bool = False
+    # Graceful-degradation Phase 3: the engine polls the governor's status
+    # endpoint and sheds under host pressure (stop warming at level 1, refuse
+    # NEW resolves/fetches at level 2; in-flight sessions untouched). Empty
+    # governor_url disables the poller entirely (level pinned at 0).
+    governor_url: str = "http://governor:8100"
+    degradation_poll_seconds: float = 5.0
     warming_sites: list[str] = field(
         default_factory=lambda: [
             "https://www.google.com/",
@@ -165,6 +178,8 @@ class Config:
             proxy_cooldown_seconds=float(_int(g("STEALTH_PROXY_COOLDOWN_SECONDS"), 120)),
             max_proxy_retries=_int(g("STEALTH_MAX_PROXY_RETRIES"), 2),
             warming_enabled=_bool(g("STEALTH_WARMING_ENABLED"), False),
+            governor_url=g("STEALTH_GOVERNOR_URL", "http://governor:8100").strip(),
+            degradation_poll_seconds=_float(g("STEALTH_DEGRADATION_POLL_SECONDS"), 5.0),
             warming_sites=_csv(g("STEALTH_WARMING_SITES"), Config().warming_sites),
             nav_timeout_ms=_int(g("STEALTH_NAV_TIMEOUT_MS"), 30_000),
             resolve_timeout_ms=_int(g("STEALTH_RESOLVE_TIMEOUT_MS"), 60_000),

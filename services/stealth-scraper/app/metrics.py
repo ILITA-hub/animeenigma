@@ -118,3 +118,14 @@ USER_QUOTA_REJECTED_TOTAL = Counter(
     "stealth_user_quota_rejected_total",
     "Resolves/fetches rejected because the user_key held >= quota sessions.",
 )
+
+DEGRADATION_SHED = Gauge(
+    "ae_degradation_shed",
+    "Shed intensity currently applied by this subsystem (0 none, 1 warming paused, 2 refusing new work).",
+    ["subsystem"],
+)
+
+DEGRADATION_LEVEL_SEEN = Gauge(
+    "stealth_degradation_level_seen",
+    "Last governor degradation level observed by the sidecar poller.",
+)

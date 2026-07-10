@@ -159,6 +159,13 @@ func main() {
 
 	// Initialize services
 	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, probeTriggerJob, readThresholdJob, providerRankingJob, subtitleProbeJob, autocacheLogicAJob, autocachePredictionJob, log)
+
+	// Graceful-degradation Phase 3: heavy crons skip their tick while the
+	// governor-published level is Elevated+ (Redis ae:degradation:level;
+	// fail-open — missing key/governor reads as Normal).
+	shedWatcher := cache.NewDegradationWatcher(redisCache, 5*time.Second)
+	shedWatcher.Start(context.Background())
+	jobService.SetShedChecker(shedWatcher)
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler

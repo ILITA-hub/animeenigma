@@ -537,12 +537,92 @@
       ]
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "id": 23,
+      "type": "state-timeline",
+      "title": "Shed state (what is actually paused)",
+      "description": "ae_degradation_shed as reported by the consumers themselves: library download/encode claim gates + storyboard backfill, and the Camoufox sidecar (1 = new-work admission paused at Elevated, 2 = refusing at Critical). Scheduler skips are momentary — see scheduler_job_skipped_total{reason=\"degraded\"} instead.",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "admitting",
+                  "color": "transparent",
+                  "index": 0
+                },
+                "1": {
+                  "text": "paused",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "refusing",
+                  "color": "red",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "center",
+        "rowHeight": 0.85,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "ae_degradation_shed",
+          "legendFormat": "{{subsystem}}",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 23
+        "y": 29
       },
       "id": 6,
       "panels": [],
@@ -562,7 +642,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 30
       },
       "fieldConfig": {
         "defaults": {
@@ -734,7 +814,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 30
       },
       "fieldConfig": {
         "defaults": {
@@ -812,7 +892,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 33
+        "y": 39
       },
       "fieldConfig": {
         "defaults": {
@@ -910,7 +990,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 33
+        "y": 39
       },
       "fieldConfig": {
         "defaults": {
@@ -970,7 +1050,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 48
       },
       "id": 11,
       "panels": [],
@@ -990,7 +1070,7 @@
         "h": 9,
         "w": 16,
         "x": 0,
-        "y": 43
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {
@@ -1151,7 +1231,7 @@
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 43
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {
@@ -1253,7 +1333,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 58
       },
       "id": 14,
       "panels": [],
@@ -1273,7 +1353,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 53
+        "y": 59
       },
       "fieldConfig": {
         "defaults": {
@@ -1339,7 +1419,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 53
+        "y": 59
       },
       "fieldConfig": {
         "defaults": {
@@ -1427,7 +1507,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 53
+        "y": 59
       },
       "fieldConfig": {
         "defaults": {
@@ -1504,7 +1584,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 53
+        "y": 59
       },
       "fieldConfig": {
         "defaults": {
@@ -1570,7 +1650,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 61
+        "y": 67
       },
       "fieldConfig": {
         "defaults": {
@@ -1637,7 +1717,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 61
+        "y": 67
       },
       "fieldConfig": {
         "defaults": {

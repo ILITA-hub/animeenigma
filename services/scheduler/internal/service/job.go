@@ -22,6 +22,7 @@ type JobService struct {
 	subtitleProbeJob           *jobs.SubtitleProbeTriggerJob
 	autocacheLogicAJob         *jobs.AutocacheLogicAJob
 	autocachePredictionJob     *jobs.AutocachePredictionJob
+	shed                       shedChecker
 	log                        *logger.Logger
 	lastShikimoriRun           time.Time
 	lastCleanupRun             time.Time
@@ -66,6 +67,36 @@ func NewJobService(
 		autocachePredictionJob: autocachePredictionJob,
 		log:                    log,
 	}
+}
+
+// shedChecker is the narrow degradation-consumer surface (satisfied by
+// *cache.DegradationWatcher). Nil-safe by contract: a nil checker never sheds.
+type shedChecker interface {
+	ShouldShed(min int) bool
+	Level() int
+}
+
+// SetShedChecker wires the graceful-degradation watcher (Phase 3). Heavy jobs
+// (syncs, probes, recomputes, autocache) skip their tick while the platform
+// degradation level is Elevated or worse; light/awareness jobs (subtitle
+// probe, cleanup, shikimori metadata sync) always run.
+func (s *JobService) SetShedChecker(c interface {
+	ShouldShed(min int) bool
+	Level() int
+}) {
+	s.shed = c
+}
+
+// skipIfDegraded reports whether a heavy job's tick should be skipped because
+// the host is under pressure. The skip is observable: a per-job counter and a
+// log line (the cron fires again on its next tick — nothing is queued).
+func (s *JobService) skipIfDegraded(job string) bool {
+	if s.shed == nil || !s.shed.ShouldShed(1) {
+		return false
+	}
+	metrics.SchedulerJobSkippedTotal.WithLabelValues(job, "degraded").Inc()
+	s.log.Infow("skipping heavy job: platform degraded", "job", job, "level", s.shed.Level())
+	return true
 }
 
 // Start starts the job scheduler
@@ -114,6 +145,9 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 
 	// Schedule top anime sync job
 	_, err = s.cron.AddFunc(topAnimeCron, func() {
+		if s.skipIfDegraded("top_anime_sync") {
+			return
+		}
 		ctx := context.Background()
 		s.log.Info("starting scheduled top anime sync")
 		start := time.Now()
@@ -135,6 +169,9 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 
 	// Schedule calendar sync job
 	_, err = s.cron.AddFunc(calendarCron, func() {
+		if s.skipIfDegraded("calendar_sync") {
+			return
+		}
 		ctx := context.Background()
 		s.log.Info("starting scheduled calendar sync")
 		start := time.Now()
@@ -161,6 +198,9 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 	// scraper playability canary.
 	if s.probeTriggerJob != nil {
 		_, err = s.cron.AddFunc(playbackProbeCron, func() {
+			if s.skipIfDegraded("playback_probe") {
+				return
+			}
 			ctx := context.Background()
 			s.log.Info("starting scheduled playback-health probe")
 			start := time.Now()
@@ -189,6 +229,9 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 	// Redis hash. Skipped if no job was wired (analytics URL unset).
 	if s.readThresholdJob != nil {
 		_, err = s.cron.AddFunc(readThresholdCron, func() {
+			if s.skipIfDegraded("read_threshold") {
+				return
+			}
 			ctx := context.Background()
 			s.log.Info("starting scheduled read-threshold recompute")
 			start := time.Now()
@@ -217,6 +260,9 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 	// Redis keys the catalog serves. Skipped if no job was wired.
 	if s.providerRankingJob != nil {
 		_, err = s.cron.AddFunc(providerRankingCron, func() {
+			if s.skipIfDegraded("provider_ranking") {
+				return
+			}
 			ctx := context.Background()
 			s.log.Info("starting scheduled provider-ranking recompute")
 			start := time.Now()
@@ -271,6 +317,9 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 	// LibraryInternalURL → nil job from main.go) disables it cleanly.
 	if s.autocacheLogicAJob != nil {
 		_, err = s.cron.AddFunc(autocacheLogicACron, func() {
+			if s.skipIfDegraded("autocache_logic_a") {
+				return
+			}
 			ctx := context.Background()
 			s.log.Info("starting scheduled autocache Logic A sweep")
 			start := time.Now()
@@ -298,6 +347,9 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 	// UNCONDITIONALLY (always on) and constructed unconditionally in main.go.
 	if s.autocachePredictionJob != nil {
 		_, err = s.cron.AddFunc(autocachePredictionCron, func() {
+			if s.skipIfDegraded("autocache_prediction") {
+				return
+			}
 			ctx := context.Background()
 			s.log.Info("starting scheduled autocache prediction sweep")
 			start := time.Now()

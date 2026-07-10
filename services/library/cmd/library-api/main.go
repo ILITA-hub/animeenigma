@@ -310,6 +310,13 @@ func main() {
 	diskGuard := service.NewDiskGuard(cfg.Torrent.DownloadDir, libMetrics, log)
 	go diskGuard.Run(rootCtx, cfg.Disk.PollInterval)
 
+	// Graceful-degradation Phase 3: download/encode/storyboard workers pause
+	// NEW-work admission while the governor-published level (Redis
+	// ae:degradation:level) is Elevated+. Fail-open: missing key/governor
+	// reads as Normal; running work always finishes.
+	shedWatcher := cache.NewDegradationWatcher(redisCache, 5*time.Second)
+	shedWatcher.Start(rootCtx)
+
 	// Worker pool. workers race for queued jobs via FOR UPDATE SKIP
 	// LOCKED; each drives queued → downloading and stops at
 	// status='encoding' (Phase 4 owns the encoder).
@@ -322,6 +329,7 @@ func main() {
 		cfg.Worker.ProgressTick,
 		log,
 	)
+	pool.SetShedChecker(shedWatcher)
 	pool.Start(rootCtx)
 	log.Infow("worker pool started",
 		"workers", cfg.Worker.Count,
@@ -411,6 +419,7 @@ func main() {
 		log,
 		catalogInvalidator,
 	)
+	encoderPool.SetShedChecker(shedWatcher)
 	encoderPool.Start(rootCtx)
 	log.Infow("encoder pool started",
 		"workers", cfg.Encode.Workers,
@@ -441,6 +450,7 @@ func main() {
 			cfg.Encode.Tmpdir,
 			log,
 		)
+		storyboardBackfill.SetShedChecker(shedWatcher)
 		go storyboardBackfill.Run(rootCtx)
 		log.Infow("storyboard backfill worker started",
 			"pause_sec", cfg.Storyboard.BackfillPauseSec,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	gometrics "github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
 )
@@ -97,6 +98,11 @@ type StoryboardBackfill struct {
 	// episode gets exactly one immediate retry per process lifetime before it
 	// re-enters cooldown. That is acceptable for this lowest-priority tier.
 	failedAt map[string]time.Time
+	// shed pauses the whole cycle while the platform degradation level is
+	// Elevated+ (graceful-degradation Phase 3; this loop is explicitly the
+	// lowest-priority workload on the host). Nil = never shed.
+	shed       ShedChecker
+	shedLogged bool
 	// cooldown + clock are struct fields (not consts/time.Now calls) purely so a
 	// test can shrink the window and drive a fake clock — mirroring how `pause`
 	// is injectable. Production uses backfillCooldown + time.Now.
@@ -139,10 +145,32 @@ func NewStoryboardBackfill(
 // Run is the ctx-aware background loop. It exits promptly on ctx cancellation
 // (the sleepCtx select observes ctx.Done). Wire it as a goroutine in main.go
 // behind cfg.Storyboard.BackfillEnabled.
+// SetShedChecker wires the degradation watcher (nil-safe; call before Run).
+func (b *StoryboardBackfill) SetShedChecker(c ShedChecker) { b.shed = c }
+
 func (b *StoryboardBackfill) Run(ctx context.Context) {
 	for {
 		if ctx.Err() != nil {
 			return
+		}
+		// Lowest-priority workload: pause the whole cycle under degradation.
+		if b.shed != nil && b.shed.ShouldShed(1) {
+			if !b.shedLogged {
+				b.shedLogged = true
+				gometrics.DegradationShed.WithLabelValues("library_storyboard").Set(1)
+				if b.log != nil {
+					b.log.Infow("pausing storyboard backfill: platform degraded", "level", b.shed.Level())
+				}
+			}
+			sleepCtx(ctx, b.pause)
+			continue
+		}
+		if b.shedLogged {
+			b.shedLogged = false
+			gometrics.DegradationShed.WithLabelValues("library_storyboard").Set(0)
+			if b.log != nil {
+				b.log.Infow("resuming storyboard backfill: degradation cleared")
+			}
 		}
 		// Drop the cycle on any disk risk — a guard error counts as "no".
 		if ok, freePct, err := b.guard.Allow(b.minFreePct); err != nil || !ok {

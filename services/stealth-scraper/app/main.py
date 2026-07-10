@@ -26,6 +26,7 @@ from .config import Config
 from .engine import (
     CamoufoxEngine,
     CapacityExceeded,
+    DegradedShed,
     FetchTimeout,
     PoolExhausted,
     ProviderWedged,
@@ -126,6 +127,13 @@ async def resolve(req: ResolveRequest) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": str(exc), "kind": "not_found"}, status_code=404
         )
+    except DegradedShed as exc:
+        # Graceful-degradation Phase 3: host at Critical pressure — refuse NEW
+        # work. 503 (retryable); the Go breaker reads kind=degraded and parks
+        # the provider until pressure clears.
+        return JSONResponse(
+            {"success": False, "error": str(exc), "kind": "degraded"}, status_code=503
+        )
     except CapacityExceeded as exc:
         return JSONResponse(
             {"success": False, "error": str(exc), "kind": "capacity"}, status_code=503
@@ -179,6 +187,9 @@ async def fetch(req: FetchRequest) -> JSONResponse:
         })
     except NotFoundError as exc:
         return JSONResponse({"success": False, "error": str(exc), "kind": "not_found"}, status_code=404)
+    except DegradedShed as exc:
+        # Phase 3 shedding: see the /resolve ladder.
+        return JSONResponse({"success": False, "error": str(exc), "kind": "degraded"}, status_code=503)
     except CapacityExceeded as exc:
         return JSONResponse({"success": False, "error": str(exc), "kind": "capacity"}, status_code=503)
     except UserQuotaExceeded as exc:

@@ -47,6 +47,10 @@ var wedgedKinds = map[string]string{
 	"exhausted":       "pool_exhausted", // legacy alias (pre-Phase-1 sidecar)
 	"capacity":        "capacity",
 	"user_quota":      "user_quota",
+	// Phase 3 (graceful degradation): sidecar refuses NEW resolves while the
+	// host is at Critical pressure. Treated as wedged so the breaker parks the
+	// provider (half-open retry re-probes once pressure clears).
+	"degraded": "degraded",
 }
 
 // ProviderWedgedError wraps domain.ErrProviderDown for the subset of sidecar

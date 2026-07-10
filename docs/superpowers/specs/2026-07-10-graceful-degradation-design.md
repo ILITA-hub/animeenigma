@@ -124,7 +124,7 @@ every transition to ClickHouse `analytics.degradation_transitions`
 Fail-safe: if Prometheus is unreachable ≥ 3 ticks → publish level 0 + `governor_up 0` metric
 (fail-open: never shed on missing data; alert covers governor death via `up`).
 
-## Phase 3 — actuation (first wave, owner-picked; separate session)
+## Phase 3 — actuation (first wave, owner-picked; BUILT 2026-07-10, same day)
 
 Consumers poll Redis every ~5 s (all services already require Redis; nil-Redis ⇒ never degrade — fail-open):
 
