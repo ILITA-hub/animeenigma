@@ -152,7 +152,8 @@ describe('useProviderResolver', () => {
     const stream = await resolver.resolveStream('ae', 'uuid', eps[0], {
       audio: 'sub', lang: 'ja', provider: 'ae', server: '', team: null,
     })
-    expect(aeApi.getStream).toHaveBeenCalledWith('uuid', 1)
+    // No server picked → the &server= param is not sent (undefined).
+    expect(aeApi.getStream).toHaveBeenCalledWith('uuid', 1, undefined, undefined)
     expect(stream.type).toBe('hls')
     const params = proxyParams(stream.url)
     expect(params.get('url')).toBe('http://minio:9000/raw-library/54974/1/playlist.m3u8')
@@ -161,6 +162,30 @@ describe('useProviderResolver', () => {
     expect(params.get('sig')).toBe('deadbeef')
     // MinIO needs no Referer.
     expect(params.get('referer')).toBeNull()
+  })
+
+  it('ae: forwards combo.server and surfaces stream.servers (dual-storage episode)', async () => {
+    const aeApi = {
+      getEpisodes: vi.fn(),
+      getStream: vi.fn().mockResolvedValue({
+        data: { data: {
+          url: 'http://s3.example/raw-library/54974/1/playlist.m3u8',
+          type: 'hls', source: 'library', exp: '1799999999', sig: 'deadbeef',
+          servers: [{ id: 'minio', label: 'Local' }, { id: 's3', label: 'Cloud' }],
+        } },
+      }),
+    }
+    const resolver = makeResolver({ aeApi } as any)
+    const stream = await resolver.resolveStream('ae', 'uuid', { key: 1, label: 1, number: 1 }, {
+      audio: 'sub', lang: 'ja', provider: 'ae', server: 's3', team: null,
+    })
+    expect(aeApi.getStream).toHaveBeenCalledWith('uuid', 1, undefined, 's3')
+    // Backend-provided servers (episode exists in BOTH storages) surface on the
+    // StreamResult so SourcePanel renders the generic Server section.
+    expect(stream.servers).toEqual([
+      { id: 'minio', label: 'Local' },
+      { id: 's3', label: 'Cloud' },
+    ])
   })
 
   it('ae: surfaces a typed error when the episode has no local copy', async () => {
