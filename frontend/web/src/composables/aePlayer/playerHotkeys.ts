@@ -4,6 +4,10 @@
  * Kept as a standalone pure function so the key→action contract is unit-tested
  * without mounting the player. AePlayer.vue attaches a `keydown` listener
  * scoped to its own root element and dispatches the returned action.
+ *
+ * Two mirrors depend on this contract — update them when it changes:
+ * - utils/globalHotkeys.ts duplicates the chord + text-field guard below;
+ * - views/TipsPage.vue renders the key→action table as a user cheatsheet.
  */
 
 export type HotkeyAction =

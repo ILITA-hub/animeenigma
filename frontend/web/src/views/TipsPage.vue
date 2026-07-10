@@ -23,22 +23,7 @@
             <CardTitle class="text-base">{{ t(group.titleKey) }}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div
-              v-for="row in group.rows"
-              :key="row.descKey"
-              class="flex items-center justify-between gap-4 py-2 border-b border-border last:border-0"
-            >
-              <span class="text-sm text-white/70">{{ t(row.descKey) }}</span>
-              <span class="flex items-center gap-1 shrink-0">
-                <template v-for="(alt, i) in row.keys" :key="i">
-                  <span v-if="i > 0" class="text-xs text-muted-foreground">/</span>
-                  <kbd
-                    class="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-md border border-border bg-muted font-mono text-xs text-white/90"
-                    >{{ alt }}</kbd
-                  >
-                </template>
-              </span>
-            </div>
+            <HotkeyRows :rows="group.rows" />
           </CardContent>
         </Card>
       </div>
@@ -51,22 +36,7 @@
       </div>
       <Card>
         <CardContent class="pt-4">
-          <div
-            v-for="row in globalRows"
-            :key="row.descKey"
-            class="flex items-center justify-between gap-4 py-2 border-b border-border last:border-0"
-          >
-            <span class="text-sm text-white/70">{{ t(row.descKey) }}</span>
-            <span class="flex items-center gap-1 shrink-0">
-              <template v-for="(alt, i) in row.keys" :key="i">
-                <span v-if="i > 0" class="text-xs text-muted-foreground">/</span>
-                <kbd
-                  class="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-md border border-border bg-muted font-mono text-xs text-white/90"
-                  >{{ alt }}</kbd
-                >
-              </template>
-            </span>
-          </div>
+          <HotkeyRows :rows="globalRows" />
         </CardContent>
       </Card>
     </section>
@@ -119,18 +89,14 @@ import {
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
+import HotkeyRows from '@/components/tips/HotkeyRows.vue'
 
 const { t } = useI18n()
 
-interface HotkeyRow {
-  /** Alternative key labels rendered as <kbd>, joined by "/". */
-  keys: string[]
-  descKey: string
-}
-
 // Mirrors composables/aePlayer/playerHotkeys.ts — keep in sync when the
 // player's key→action contract changes.
-const playerGroups: { titleKey: string; rows: HotkeyRow[] }[] = [
+// Row shapes are validated structurally by HotkeyRows' `rows` prop.
+const playerGroups = [
   {
     titleKey: 'tips.groups.playback',
     rows: [
@@ -167,7 +133,7 @@ const playerGroups: { titleKey: string; rows: HotkeyRow[] }[] = [
   },
 ]
 
-const globalRows: HotkeyRow[] = [
+const globalRows = [
   { keys: ['?'], descKey: 'tips.keys.help' },
   { keys: ['Esc'], descKey: 'tips.keys.escape' },
   { keys: ['Enter', 'Shift+Enter'], descKey: 'tips.keys.chat' },
