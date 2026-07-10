@@ -1096,6 +1096,54 @@ services:
       timeout: 5s
       retries: 3
 
+  # storage-service (spec 2026-07-10) — single authority for user-content
+  # object storage across two S3-compatible backends: local MinIO (fast,
+  # limited disk) + external s3.firstvds.ru (ample space). Owns placement
+  # policy (which content class lands where) and every write/move/copy/
+  # delete against either bucket; no other service constructs a MinIO/S3
+  # client for user content. Docker-network-internal only, no gateway
+  # route. Port 8099 (next free after policy:8098). See
+  # docs/superpowers/specs/2026-07-10-storage-service-design.md.
+  storage:
+    logging: *default-logging
+    build:
+      context: ..
+      dockerfile: services/storage/Dockerfile
+    container_name: animeenigma-storage
+    mem_limit: 256m             # M494: OOM guardrail (host-OOM -> single-container restart)
+    restart: unless-stopped
+    environment:
+      STORAGE_PORT: 8099
+      STORAGE_MINIO_ENDPOINT: minio:9000
+      STORAGE_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      STORAGE_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      STORAGE_MINIO_BUCKET: raw-library
+      STORAGE_MINIO_USE_SSL: "false"
+      # External S3 (s3.firstvds.ru) — same account as the `backup` service,
+      # separate bucket (raw-library, created 2026-07-10). Empty S3_ENDPOINT
+      # in docker/.env just leaves the s3 backend absent (dev-safe fallback
+      # to minio in service.Placement).
+      STORAGE_S3_ENDPOINT: ${S3_ENDPOINT}
+      STORAGE_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      STORAGE_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      STORAGE_S3_BUCKET: raw-library
+      STORAGE_S3_USE_SSL: "true"
+      STORAGE_CLASS_LIBRARY_AUTO: s3
+      STORAGE_CLASS_LIBRARY_MANUAL: minio
+      STORAGE_CLASS_UPSCALED: s3
+      TRACING_ENABLED: "true"
+    ports:
+      # Debug only — no gateway route; every real caller is Docker-network.
+      - "127.0.0.1:8099:8099"
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8099/internal/storage/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # anidle guessing game service (spec 2026-06-15) — port 8095.
   anidle:
     logging: *default-logging

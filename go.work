@@ -32,6 +32,7 @@ use (
 	./services/rooms
 	./services/scheduler
 	./services/scraper
+	./services/storage
 	./services/streaming
 	./services/themes
 	./services/upscaler
