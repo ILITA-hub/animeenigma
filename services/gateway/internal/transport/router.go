@@ -805,6 +805,7 @@ func NewRouterWithCleanup(
 			r.Use(BlockGuestRoleMiddleware)
 			r.Use(FeatureGate("fanfic", featureRuleset))
 			r.Post("/generate", proxyHandler.ProxyToFanficStream)
+			r.Post("/{id}/continue", proxyHandler.ProxyToFanficStream)
 			r.Get("/", proxyHandler.ProxyToFanfic)
 			r.Get("/tags", proxyHandler.ProxyToFanfic)
 			r.Get("/{id}", proxyHandler.ProxyToFanfic)
