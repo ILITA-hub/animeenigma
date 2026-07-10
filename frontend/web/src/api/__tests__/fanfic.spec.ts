@@ -65,7 +65,7 @@ describe('handleSSEEvent', () => {
   it('dispatches meta via onMeta with (id, model)', () => {
     const onMeta = vi.fn()
     handleSSEEvent({ event: 'meta', data: { id: 'x', model: 'llama' } }, { onMeta })
-    expect(onMeta).toHaveBeenCalledWith('x', 'llama')
+    expect(onMeta).toHaveBeenCalledWith('x', 'llama', undefined)
   })
 
   it('dispatches done via onDone with (id, title, tokenUsage)', () => {
@@ -74,7 +74,7 @@ describe('handleSSEEvent', () => {
       { event: 'done', data: { id: 'x', title: 'The Title', token_usage: 123 } },
       { onDone },
     )
-    expect(onDone).toHaveBeenCalledWith('x', 'The Title', 123)
+    expect(onDone).toHaveBeenCalledWith('x', 'The Title', 123, undefined)
   })
 
   it('dispatches error via onError with (message)', () => {
@@ -91,6 +91,19 @@ describe('handleSSEEvent', () => {
     const onDelta = vi.fn()
     handleSSEEvent({ event: 'ping', data: {} }, { onDelta })
     expect(onDelta).not.toHaveBeenCalled()
+  })
+
+  it('handleSSEEvent surfaces the part number on meta/done', () => {
+    const parts: number[] = []
+    handleSSEEvent(
+      { event: 'meta', data: { id: 'f1', model: 'm', part: 2 } },
+      { onMeta: (_id, _model, part) => part !== undefined && parts.push(part) },
+    )
+    handleSSEEvent(
+      { event: 'done', data: { id: 'f1', title: '', token_usage: 5, part: 2 } },
+      { onDone: (_id, _t, _u, part) => part !== undefined && parts.push(part) },
+    )
+    expect(parts).toEqual([2, 2])
   })
 })
 
@@ -164,10 +177,10 @@ describe('fanficApi.generate', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer token-1')
-    expect(onMeta).toHaveBeenCalledWith('f1', 'llama-3')
+    expect(onMeta).toHaveBeenCalledWith('f1', 'llama-3', undefined)
     expect(onDelta).toHaveBeenNthCalledWith(1, 'Hello ')
     expect(onDelta).toHaveBeenNthCalledWith(2, 'world')
-    expect(onDone).toHaveBeenCalledWith('f1', 'T', 10)
+    expect(onDone).toHaveBeenCalledWith('f1', 'T', 10, undefined)
     expect(onError).not.toHaveBeenCalled()
     expect(refreshAccessToken).not.toHaveBeenCalled()
   })
@@ -191,7 +204,7 @@ describe('fanficApi.generate', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer token-1')
     expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer token-2')
-    expect(onDone).toHaveBeenCalledWith('f1', 'T', 10)
+    expect(onDone).toHaveBeenCalledWith('f1', 'T', 10, undefined)
     expect(onError).not.toHaveBeenCalled()
   })
 

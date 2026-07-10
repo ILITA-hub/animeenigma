@@ -34,6 +34,7 @@ export interface GenerateInput {
   rating: FanficRating
   language: FanficLang
   prompt: string
+  canon?: boolean
 }
 
 /** One generated fanfic, as returned by list()/get(). */
@@ -59,6 +60,8 @@ export interface Fanfic {
   /** Set when status:'failed' (Go: ErrorMsg string `json:"error,omitempty"`). */
   error?: string
   created_at: string
+  canon: boolean
+  part_count: number
 }
 
 /** A curated tag suggestion (GET /api/fanfic/tags). */
@@ -70,8 +73,8 @@ export interface FanficTag {
 
 /** Callbacks dispatched from the /generate SSE stream, in event order. */
 export interface StreamHandlers {
-  onMeta?: (id: string, model: string) => void
+  onMeta?: (id: string, model: string, part?: number) => void
   onDelta?: (text: string) => void
-  onDone?: (id: string, title: string, tokenUsage: number) => void
+  onDone?: (id: string, title: string, tokenUsage: number, part?: number) => void
   onError?: (message: string) => void
 }

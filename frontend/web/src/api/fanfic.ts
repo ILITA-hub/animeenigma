@@ -68,8 +68,8 @@ export function parseSSEBuffer(buffer: string): { events: SSEEvent[]; rest: stri
 export function handleSSEEvent(evt: SSEEvent, h: StreamHandlers): void {
   switch (evt.event) {
     case 'meta': {
-      const d = evt.data as { id: string; model: string }
-      h.onMeta?.(d.id, d.model)
+      const d = evt.data as { id: string; model: string; part?: number }
+      h.onMeta?.(d.id, d.model, d.part)
       break
     }
     case 'delta': {
@@ -78,8 +78,8 @@ export function handleSSEEvent(evt: SSEEvent, h: StreamHandlers): void {
       break
     }
     case 'done': {
-      const d = evt.data as { id: string; title: string; token_usage: number }
-      h.onDone?.(d.id, d.title, d.token_usage)
+      const d = evt.data as { id: string; title: string; token_usage: number; part?: number }
+      h.onDone?.(d.id, d.title, d.token_usage, d.part)
       break
     }
     case 'error': {
@@ -90,79 +90,97 @@ export function handleSSEEvent(evt: SSEEvent, h: StreamHandlers): void {
   }
 }
 
+/**
+ * Shared SSE-over-fetch plumbing for the /generate and /{id}/continue
+ * streaming endpoints. Uses fetch + ReadableStream to consume SSE (axios has
+ * no streaming-body reader in the browser), so the Authorization header is
+ * attached manually here, mirroring the EXACT scheme apiClient's request
+ * interceptor uses (`Authorization: Bearer <token>`, see src/api/client.ts)
+ * — this raw call never passes through that interceptor.
+ */
+async function streamSSE(
+  path: string,
+  body: unknown,
+  handlers: StreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const auth = useAuthStore()
+  const base = apiClient.defaults.baseURL ?? '/api'
+
+  async function attempt(token: string | null): Promise<Response> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+    return fetch(`${base}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body ?? {}),
+      credentials: 'include',
+      signal,
+    })
+  }
+
+  let res = await attempt(auth.token)
+  if (res.status === 401) {
+    // Safe to retry: a 401 is rejected at the gateway JWT middleware BEFORE
+    // it reaches the fanfic generation logic, so no fanfic row is created
+    // on a rejected attempt — refreshing and retrying once cannot
+    // double-generate.
+    const refreshed = await auth.refreshAccessToken()
+    if (refreshed) {
+      res = await attempt(auth.token)
+    }
+  }
+  if (!res.ok || !res.body) {
+    handlers.onError?.(`HTTP ${res.status}`)
+    return
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const { events, rest } = parseSSEBuffer(buffer)
+      buffer = rest
+      for (const evt of events) handleSSEEvent(evt, handlers)
+    }
+    // Final flush: emit any bytes the stream-mode decoder was holding back
+    // for a pending multi-byte sequence. A well-formed stream terminates its
+    // last event with a trailing "\n\n" (see services/fanfic/internal/
+    // handler/fanfic.go's emit closure) and so has already dispatched every
+    // event inside the loop above; this is a safety net for a connection
+    // that ends mid-event (client abort, proxy cutoff) without that
+    // terminator — force one so parseSSEBuffer treats the dangling event as
+    // complete and we still get to dispatch it.
+    buffer += decoder.decode()
+    if (buffer) {
+      const { events } = parseSSEBuffer(buffer + '\n\n')
+      for (const evt of events) handleSSEEvent(evt, handlers)
+    }
+  } catch (err) {
+    // An aborted read (regenerate / component unmount via AbortController)
+    // rejects with an AbortError — that's an intentional cancellation, not
+    // a failure, so stay silent rather than surfacing it via onError.
+    if ((err instanceof DOMException && err.name === 'AbortError') || signal?.aborted) {
+      return
+    }
+    handlers.onError?.(err instanceof Error ? err.message : String(err))
+  }
+}
+
 export const fanficApi = {
   /** Stream a generation. Uses fetch + ReadableStream to consume SSE. */
   async generate(input: GenerateInput, handlers: StreamHandlers, signal?: AbortSignal): Promise<void> {
-    const auth = useAuthStore()
-    // fetch bypasses apiClient's axios interceptor (no streaming-body reader
-    // on axios in the browser), so the Bearer header + base URL are built
-    // here to match it exactly — same scheme as utils/authBeacon.ts, the
-    // other raw-fetch-with-Bearer-token call site in this codebase.
-    const base = apiClient.defaults.baseURL ?? '/api'
+    return streamSSE('/fanfic/generate', input, handlers, signal)
+  },
 
-    async function attempt(token: string | null): Promise<Response> {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) {
-        headers.Authorization = `Bearer ${token}`
-      }
-      return fetch(`${base}/fanfic/generate`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(input),
-        credentials: 'include',
-        signal,
-      })
-    }
-
-    let res = await attempt(auth.token)
-    if (res.status === 401) {
-      // Safe to retry: a 401 is rejected at the gateway JWT middleware BEFORE
-      // it reaches the fanfic generation logic, so no fanfic row is created
-      // on a rejected attempt — refreshing and retrying once cannot
-      // double-generate.
-      const refreshed = await auth.refreshAccessToken()
-      if (refreshed) {
-        res = await attempt(auth.token)
-      }
-    }
-    if (!res.ok || !res.body) {
-      handlers.onError?.(`HTTP ${res.status}`)
-      return
-    }
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    try {
-      for (;;) {
-        const { value, done } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const { events, rest } = parseSSEBuffer(buffer)
-        buffer = rest
-        for (const evt of events) handleSSEEvent(evt, handlers)
-      }
-      // Final flush: emit any bytes the stream-mode decoder was holding back
-      // for a pending multi-byte sequence. A well-formed stream terminates its
-      // last event with a trailing "\n\n" (see services/fanfic/internal/
-      // handler/fanfic.go's emit closure) and so has already dispatched every
-      // event inside the loop above; this is a safety net for a connection
-      // that ends mid-event (client abort, proxy cutoff) without that
-      // terminator — force one so parseSSEBuffer treats the dangling event as
-      // complete and we still get to dispatch it.
-      buffer += decoder.decode()
-      if (buffer) {
-        const { events } = parseSSEBuffer(buffer + '\n\n')
-        for (const evt of events) handleSSEEvent(evt, handlers)
-      }
-    } catch (err) {
-      // An aborted read (regenerate / component unmount via AbortController)
-      // rejects with an AbortError — that's an intentional cancellation, not
-      // a failure, so stay silent rather than surfacing it via onError.
-      if ((err instanceof DOMException && err.name === 'AbortError') || signal?.aborted) {
-        return
-      }
-      handlers.onError?.(err instanceof Error ? err.message : String(err))
-    }
+  /** Stream a continuation of a saved fanfic (empty body — params reused server-side). */
+  async continueStory(id: string, handlers: StreamHandlers, signal?: AbortSignal): Promise<void> {
+    return streamSSE(`/fanfic/${encodeURIComponent(id)}/continue`, undefined, handlers, signal)
   },
 
   /** GET /api/fanfic?page=&limit= */
