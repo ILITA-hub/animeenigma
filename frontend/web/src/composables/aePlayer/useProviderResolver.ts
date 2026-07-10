@@ -110,6 +110,9 @@ interface LibraryStream {
   // Optional WebVTT thumbnail track (best-effort ffmpeg pass; absent for older
   // encodes). Signed for the HLS proxy on the same trust path as the playlist.
   storyboard?: { url: string; exp?: string; sig?: string }
+  // Present ONLY when this episode exists in BOTH storages (e.g. [{id:'minio',
+  // label:'Local'},{id:'s3',label:'Cloud'}]); absent for a single-copy episode.
+  servers?: { id: string; label: string }[]
 }
 
 // ─── Anime18 types (mirrored from Anime18Player) ────────────────────────────
@@ -324,8 +327,8 @@ function makeAeAdapter(api: typeof aeApi): ProviderAdapter {
       }))
     },
 
-    async resolveStream(animeId: string, ep: EpisodeOption): Promise<StreamResult> {
-      const resp = await api.getStream(animeId, ep.number)
+    async resolveStream(animeId: string, ep: EpisodeOption, combo: Combo): Promise<StreamResult> {
+      const resp = await api.getStream(animeId, ep.number, undefined, combo.server || undefined)
       const stream: LibraryStream = resp.data?.data ?? resp.data
       if (!stream?.url) {
         throw new NotAvailableError('ae', 'has no local copy of this episode')
@@ -335,6 +338,10 @@ function makeAeAdapter(api: typeof aeApi): ProviderAdapter {
       return {
         url: buildProxyUrl(stream.url, '', type, { exp: stream.exp, sig: stream.sig }),
         type,
+        // Present ONLY when the episode exists in both storages (Local + Cloud);
+        // absent for a single-copy episode, matching the scraper adapter's
+        // servers-only-when-plural convention.
+        servers: stream.servers ?? [],
         // Proxy the WebVTT thumbnail track the same way as the playlist, but
         // with NO streamType marker: it's plain text, not m3u8/mp4, so the
         // proxy must not apply playlist-rewrite or range-passthrough paths.

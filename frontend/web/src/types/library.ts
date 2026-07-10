@@ -18,6 +18,10 @@ export type JobStatus =
 
 export type JobSource = 'nyaa' | 'animetosho' | 'manual' | 'jackett'
 
+/** Storage backend a job targets / an episode row actually lives on.
+ *  `''` (empty) on a job means "use the default (minio)". */
+export type StorageBackend = 'minio' | 's3'
+
 export interface Job {
   id: string
   source: JobSource
@@ -33,6 +37,8 @@ export interface Job {
   created_at: string
   updated_at: string
   completed_at?: string
+  /** Requested storage-backend override at job creation; '' = default (minio). */
+  storage?: '' | StorageBackend
 }
 
 /**
@@ -63,6 +69,8 @@ export interface Episode {
   duration_sec?: number
   size_bytes?: number
   created_at: string
+  /** Backend this row's minio_path prefix actually lives on. */
+  storage: StorageBackend
 }
 
 export interface LibraryHealth {
@@ -80,4 +88,6 @@ export interface CreateJobPayload {
   quality?: string
   size_bytes?: number
   shikimori_id?: string
+  /** Destination storage backend; '' (or omitted) = default (minio). */
+  storage?: '' | StorageBackend
 }

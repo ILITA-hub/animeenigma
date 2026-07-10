@@ -53,6 +53,14 @@
           <div class="w-32">
             <Input v-model.number="searchMalId" type="number" size="sm" placeholder="MAL ID" aria-label="MAL ID" />
           </div>
+          <div class="w-44">
+            <Select
+              v-model="selectedStorage"
+              :options="storageOptions"
+              size="sm"
+              :label="$t('player.adminLibrary.storage.label')"
+            />
+          </div>
           <Button
             type="submit"
             variant="default"
@@ -143,9 +151,14 @@
                 <div class="text-white font-medium truncate" :title="job.title">{{ job.title }}</div>
                 <div class="text-xs text-white/40 font-mono mt-0.5">{{ job.id.slice(0, 8) }} · {{ job.source }}</div>
               </div>
-              <Badge :variant="statusVariant(job.status)" size="sm">
-                {{ $t('player.adminLibrary.jobs.status.' + job.status) }}
-              </Badge>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <span :class="storageBadgeClass(job.storage)">
+                  {{ storageLabel(job.storage) }}
+                </span>
+                <Badge :variant="statusVariant(job.status)" size="sm">
+                  {{ $t('player.adminLibrary.jobs.status.' + job.status) }}
+                </Badge>
+              </div>
             </div>
             <div class="h-2 bg-white/10 rounded overflow-hidden mb-1">
               <div
@@ -186,7 +199,12 @@
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
-                  <div class="text-white text-sm font-medium truncate" :title="job.title">{{ job.title }}</div>
+                  <div class="flex items-center gap-2 mb-0.5">
+                    <div class="text-white text-sm font-medium truncate" :title="job.title">{{ job.title }}</div>
+                    <span :class="storageBadgeClass(job.storage)">
+                      {{ storageLabel(job.storage) }}
+                    </span>
+                  </div>
                   <div
                     v-if="job.error_text"
                     class="text-xs text-destructive mt-1 truncate"
@@ -219,7 +237,12 @@
               :key="job.id"
               class="glass-card p-3 border border-warning/30"
             >
-              <div class="text-white text-sm font-medium truncate mb-2" :title="job.title">{{ job.title }}</div>
+              <div class="flex items-center gap-2 mb-2">
+                <div class="text-white text-sm font-medium truncate" :title="job.title">{{ job.title }}</div>
+                <span :class="storageBadgeClass(job.storage)">
+                  {{ storageLabel(job.storage) }}
+                </span>
+              </div>
               <div class="relative">
                 <Input
                   v-model="pendingLinkSearchQueries[job.id]"
@@ -262,14 +285,18 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { adminLibraryApi, animeApi } from '@/api/client'
-import type { Job, JobStatus, Release, LibraryHealth, CreateJobPayload } from '@/types/library'
+import type { Job, JobStatus, Release, LibraryHealth, CreateJobPayload, StorageBackend } from '@/types/library'
 import Badge from '@/components/ui/Badge.vue'
 import Button from '@/components/ui/Button.vue'
 import { Spinner } from '@/components/ui'
 import Input from '@/components/ui/Input.vue'
+import Select from '@/components/ui/Select.vue'
+import type { SelectOption } from '@/components/ui/Select.vue'
 import { useConfirm } from '@/composables/useConfirm'
 
+const { t } = useI18n()
 const { confirm } = useConfirm()
 
 // Phase 5 (LIB-09): RawLibrary admin view.
@@ -295,6 +322,10 @@ const searchMalId = ref<number | undefined>(undefined)
 const searchResults = ref<Release[]>([])
 const searching = ref(false)
 
+// Destination storage for the NEXT queued job (applies at queue-time, not
+// retroactively — existing jobs/episodes keep whatever they were created with).
+const selectedStorage = ref<StorageBackend>('minio')
+
 const activeJobs = ref<Job[]>([])
 const failedJobs = ref<Job[]>([])
 const pendingLinkJobs = ref<Job[]>([])
@@ -316,7 +347,28 @@ const totalActiveJobs = computed(() => {
   return Object.values(health.value.active_jobs_by_status).reduce((a, b) => a + b, 0)
 })
 
+const storageOptions = computed<SelectOption[]>(() => [
+  { value: 'minio', label: t('player.adminLibrary.storage.minio') },
+  { value: 's3', label: t('player.adminLibrary.storage.s3') },
+])
+
 // ---- Helpers ----
+// Storage badge: cyan for local MinIO, indigo for cloud S3 — both DS-exempt
+// brand/provider hues (see CLAUDE.md Design System section). Treats '' / undefined
+// (jobs created before storage plumbing shipped, or a plain default) as minio.
+function storageLabel(storage: '' | StorageBackend | undefined): string {
+  return storage === 's3'
+    ? t('player.adminLibrary.storage.s3')
+    : t('player.adminLibrary.storage.minio')
+}
+
+function storageBadgeClass(storage: '' | StorageBackend | undefined): string {
+  const base = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium'
+  return storage === 's3'
+    ? `${base} bg-indigo-500/20 text-indigo-400`
+    : `${base} bg-cyan-500/20 text-cyan-400`
+}
+
 // Provider chip colour: jackett (primary multi-indexer tier) = success
 // green, animetosho = cyan primary, nyaa (+ any fallback) = purple info.
 function providerBadgeVariant(source: Release['source']): 'success' | 'primary' | 'info' {
@@ -456,6 +508,7 @@ async function queueJob(release: Release) {
     uploader: release.uploader,
     quality: release.quality,
     size_bytes: release.size_bytes,
+    storage: selectedStorage.value,
   }
   try {
     const resp = await adminLibraryApi.createJob(payload)

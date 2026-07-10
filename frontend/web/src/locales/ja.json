@@ -380,6 +380,11 @@
           "jackett": "Jackett"
         }
       },
+      "storage": {
+        "label": "ストレージ",
+        "minio": "ローカル (MinIO)",
+        "s3": "クラウド (S3)"
+      },
       "jobs": {
         "title": "アクティブなジョブ",
         "empty": "アクティブなジョブはありません。",

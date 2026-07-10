@@ -1004,9 +1004,9 @@ export const charactersApi = {
 export const aeApi = {
   getEpisodes: (animeId: string) =>
     apiClient.get(`/anime/${animeId}/ae/episodes`),
-  getStream: (animeId: string, episode: number, quality?: string) =>
+  getStream: (animeId: string, episode: number, quality?: string, server?: string) =>
     apiClient.get(`/anime/${animeId}/ae/stream`, {
-      params: { episode, ...(quality && { quality }) },
+      params: { episode, ...(quality && { quality }), ...(server && { server }) },
     }),
 }
 

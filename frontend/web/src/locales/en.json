@@ -380,6 +380,11 @@
           "jackett": "Jackett"
         }
       },
+      "storage": {
+        "label": "Storage",
+        "minio": "Local (MinIO)",
+        "s3": "Cloud (S3)"
+      },
       "jobs": {
         "title": "Active jobs",
         "empty": "No active jobs.",
