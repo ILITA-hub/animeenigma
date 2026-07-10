@@ -669,6 +669,22 @@ export interface ScraperProvidersResponse {
   providers: ScraperProviderWire[]
 }
 
+// Maintenance routines (Maintenance tab). Nested under /admin/policy/* so it
+// reuses the existing gateway admin-policy proxy group (no gateway change).
+export interface MaintenanceRoutineWire {
+  id: string
+  enabled: boolean
+  settings: Record<string, unknown>
+  lastRunAt: string | null
+  lastOk: boolean | null
+  lastSummary: string
+  nextRunAt: string | null
+  updatedAt: string
+}
+export interface MaintenanceRoutinesResponse {
+  routines: MaintenanceRoutineWire[]
+}
+
 /** RBAC-and-roulette P4 — per-user feature-visibility feed
  *  (`GET /api/policy/features/mine`). JWT OPTIONAL: an authenticated caller
  *  gets their resolved flags, an anonymous caller gets everyone-flags only.
@@ -752,6 +768,18 @@ export const adminApi = {
     apiClient.put<{ data: ScraperProviderWire } | ScraperProviderWire>(
       `/admin/scraper-providers/${encodeURIComponent(name)}/policy`,
       { policy },
+    ),
+  // Maintenance tab — services/policy admin CRUD over background routines
+  // (services/policy/internal/handler/admin_maintenance.go), nested under the
+  // existing /admin/policy/* proxy group.
+  getMaintenanceRoutines: () =>
+    apiClient.get<{ data: MaintenanceRoutinesResponse } | MaintenanceRoutinesResponse>(
+      '/admin/policy/maintenance/routines',
+    ),
+  setMaintenanceRoutine: (id: string, body: { enabled: boolean; settings: Record<string, unknown> }) =>
+    apiClient.put<{ data: { id: string } } | { id: string }>(
+      `/admin/policy/maintenance/routines/${encodeURIComponent(id)}`,
+      body,
     ),
   // Admin feedback browser — user feedback/error reports (player service,
   // /api/admin/reports). Responses use the standard {success,data} envelope.
