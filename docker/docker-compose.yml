@@ -309,6 +309,39 @@ services:
       timeout: 5s
       retries: 3
 
+  # Host pressure signals (CPU/memory/disk/PSI) for the graceful-degradation
+  # awareness layer (docs/superpowers/specs/2026-07-10-graceful-degradation-design.md).
+  # Reads the host's /proc + /sys read-only; the pressure collector exposes the
+  # kernel PSI files (/proc/pressure/*) as node_pressure_* — the primary
+  # "under pressure" signals for the Degradation Overview dashboard and the
+  # (Phase 2) governor. Network metrics come from vnstat-exporter, not from
+  # here (this container sits in the compose netns, so its own netdev view is
+  # not the host's).
+  node-exporter:
+    logging: *default-logging
+    image: prom/node-exporter:v1.11.1
+    container_name: animeenigma-node-exporter
+    mem_limit: 128m             # M494-style OOM guardrail
+    restart: unless-stopped
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      # Ignore container-runtime mount churn; keep the real host filesystems.
+      - "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      # Host-published for manual debugging only (Prometheus scrapes the
+      # internal docker-network port node-exporter:9100). 9100 and 9110 are
+      # taken on the host (docker-proxy + vnstat debug), so this one is 9111.
+      - "127.0.0.1:9111:9100"
+    # No healthcheck: the image is a bare static binary (no shell/wget).
+    # Liveness is covered by the Prometheus `up{job="node"}` series and the
+    # existing service-unreachable alert.
+
   prometheus:
     logging: *default-logging
     image: prom/prometheus:v2.50.1
@@ -329,6 +362,9 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Recording rules (dir mount — edits inside propagate without recreate;
+      # apply with a lifecycle reload: curl -X POST localhost:9090/prometheus/-/reload).
+      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/prometheus/-/healthy"]

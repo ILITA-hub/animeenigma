@@ -2,6 +2,13 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Degradation-awareness recording rules (ae:* pressure signals + level preview).
+# Mounted as a DIRECTORY (./prometheus/rules) so future rule edits only need a
+# reload — unlike this file, whose single-file bind mount pins the inode and
+# needs a container recreate after edits.
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
 scrape_configs:
   # Prometheus self-monitoring
   - job_name: 'prometheus'
@@ -114,6 +121,16 @@ scrape_configs:
   - job_name: 'vnstat'
     static_configs:
       - targets: ['vnstat-exporter:9100']
+    metrics_path: /metrics
+
+  # Host pressure signals (CPU/memory/disk/PSI) for the graceful-degradation
+  # awareness layer (docs/superpowers/specs/2026-07-10-graceful-degradation-design.md).
+  # node-exporter reads the host's /proc + /sys via ro mounts; the PSI
+  # pressure-stall metrics (node_pressure_*) are the primary "under pressure"
+  # signals consumed by docker/prometheus/rules/degradation.yml.
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
     metrics_path: /metrics
 
   # M571: OTel Collector self-telemetry (otelcol_*). The collector exposes its own

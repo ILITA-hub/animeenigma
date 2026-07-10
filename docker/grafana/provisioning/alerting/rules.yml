@@ -1052,3 +1052,109 @@ groups:
         annotations:
           summary: "Provider group {{ $labels.group }}: multiple sources failed together"
           description: "2+ providers in the {{ $labels.group }} group are actively Down in the auto chain for 30m — a correlated outage (shared cause), not gradual degrade. Check the Camoufox pool / shared dependency and /api/admin/scraper/health."
+
+  # Host Pressure (graceful-degradation Phase 1,
+  # docs/superpowers/specs/2026-07-10-graceful-degradation-design.md).
+  # Thresholds live in docker/prometheus/rules/degradation.yml — these rules only
+  # watch the ae:pressure_level:preview recording rule, so retuning a threshold
+  # never touches Grafana provisioning. The `for:` durations are the Phase-1
+  # substitute for governor hysteresis. Mirrored in
+  # infra/grafana/alerts/host-pressure.yaml (keep in sync).
+  - orgId: 1
+    name: Host Pressure
+    folder: Alerts
+    interval: 1m
+    rules:
+      - uid: host-pressure-sustained
+        title: HostPressureSustained
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: ae:pressure_level:preview
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.5]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host under sustained pressure (level >= Elevated for 15m)"
+          description: "The degradation level preview has been Elevated or worse for 15 minutes. Open the Degradation Overview dashboard (/admin/grafana/d/degradation-overview) — the 'Breached signals' panel names the trigger (PSI cpu/io/mem or low MemAvailable) and the heavy-actors row shows who is eating the box."
+
+      - uid: host-pressure-critical
+        title: HostPressureCritical
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: ae:pressure_level:preview
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1.5]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        labels:
+          severity: critical
+        annotations:
+          summary: "Host pressure CRITICAL (level 2 for 5m)"
+          description: "Critical-tier pressure thresholds breached for 5 minutes — latency-sensitive UX (playback, navigation) is likely degrading. Check the Degradation Overview dashboard (/admin/grafana/d/degradation-overview) 'Breached signals' + heavy-actors panels; consider manually pausing library jobs / Camoufox until the Phase-3 automatic actuation ships."

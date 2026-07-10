@@ -1,0 +1,106 @@
+# Degradation-awareness recording rules (Phase 1 of the graceful-degradation design,
+# docs/superpowers/specs/2026-07-10-graceful-degradation-design.md).
+#
+# These rules define the pressure-signal math ONCE: the Degradation Overview
+# dashboard renders them, the host-pressure alerts threshold them, and the
+# Phase-2 governor service will poll the very same series (with hysteresis)
+# to decide the authoritative degradation level.
+#
+# Thresholds use PSI stall ratios, NOT static usage: this box runs at ~90% swap
+# chronically while staying healthy — static-usage triggers would false-positive
+# permanently. PSI (avg share of wall-clock time tasks were stalled) is the
+# kernel's purpose-built "under pressure" signal.
+
+groups:
+  - name: ae_degradation_signals
+    interval: 15s
+    rules:
+      # --- Host pressure (node-exporter) -------------------------------------
+      # "some" = at least one task stalled; "full" = ALL non-idle tasks stalled.
+      - record: ae:host_psi_cpu_some:ratio
+        expr: rate(node_pressure_cpu_waiting_seconds_total[2m])
+      - record: ae:host_psi_mem_full:ratio
+        expr: rate(node_pressure_memory_stalled_seconds_total[2m])
+      - record: ae:host_psi_io_some:ratio
+        expr: rate(node_pressure_io_waiting_seconds_total[2m])
+      - record: ae:host_psi_io_full:ratio
+        expr: rate(node_pressure_io_stalled_seconds_total[2m])
+      - record: ae:host_cpu_used:ratio
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m]))
+      - record: ae:host_load5_per_core:ratio
+        expr: node_load5 / count(count by (cpu) (node_cpu_seconds_total{mode="idle"}))
+      - record: ae:host_mem_available:ratio
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes
+      # Context only — chronically high on this box; deliberately NOT a level trigger.
+      - record: ae:host_swap_used:ratio
+        expr: 1 - (node_memory_SwapFree_bytes / clamp_min(node_memory_SwapTotal_bytes, 1))
+      - record: ae:host_disk_io_util:ratio
+        expr: max(rate(node_disk_io_time_seconds_total[2m]))
+
+      # --- Bandwidth pairing (vnstat uplink truth vs per-consumer counters) ---
+      # 10m windows: vnstat updates in 5-minute buckets; shorter windows are steppy.
+      - record: ae:host_egress:bytes_per_second
+        expr: sum(rate(vnstat_interface_tx_bytes_total[10m]))
+      - record: ae:host_ingress:bytes_per_second
+        expr: sum(rate(vnstat_interface_rx_bytes_total[10m]))
+      - record: ae:playback_egress:bytes_per_second
+        expr: sum(rate(proxy_bytes_transferred_total[10m]))
+      - record: ae:torrent_upload:bytes_per_second
+        expr: sum(rate(library_upload_bytes_total[10m]))
+      - record: ae:torrent_download:bytes_per_second
+        expr: sum(rate(library_download_bytes_total[10m]))
+      # Uplink egress not attributable to playback or torrents (nginx static,
+      # images, API responses, backups, ...).
+      - record: ae:egress_other:bytes_per_second
+        expr: >-
+          clamp_min(
+            ae:host_egress:bytes_per_second
+            - ae:playback_egress:bytes_per_second
+            - ae:torrent_upload:bytes_per_second
+          , 0)
+
+  - name: ae_degradation_levels
+    interval: 15s
+    rules:
+      # Phase-1 PREVIEW of the governor's level decision: raw threshold breaches,
+      # no hysteresis. The Phase-2 governor polls the ae:host_* signals and applies
+      # enter-fast/exit-slow smoothing; until then this preview drives the
+      # dashboard state row and the host-pressure alerts (which add their own
+      # `for:` duration as the smoothing).
+      #
+      # Per-signal breach bools keep their identity via the `signal` label so the
+      # dashboard can show WHY a level was raised, not just that it was.
+      - record: ae:pressure_breach:elevated
+        expr: ae:host_psi_cpu_some:ratio > bool 0.25
+        labels: {signal: psi_cpu_some}
+      - record: ae:pressure_breach:elevated
+        expr: ae:host_psi_io_full:ratio > bool 0.15
+        labels: {signal: psi_io_full}
+      - record: ae:pressure_breach:elevated
+        expr: ae:host_psi_mem_full:ratio > bool 0.05
+        labels: {signal: psi_mem_full}
+      - record: ae:pressure_breach:elevated
+        expr: ae:host_mem_available:ratio < bool 0.10
+        labels: {signal: mem_available}
+
+      - record: ae:pressure_breach:critical
+        expr: ae:host_psi_cpu_some:ratio > bool 0.45
+        labels: {signal: psi_cpu_some}
+      - record: ae:pressure_breach:critical
+        expr: ae:host_psi_io_full:ratio > bool 0.30
+        labels: {signal: psi_io_full}
+      - record: ae:pressure_breach:critical
+        expr: ae:host_psi_mem_full:ratio > bool 0.15
+        labels: {signal: psi_mem_full}
+      - record: ae:pressure_breach:critical
+        expr: ae:host_mem_available:ratio < bool 0.05
+        labels: {signal: mem_available}
+
+      - record: ae:pressure_elevated:bool
+        expr: clamp_max(sum(ae:pressure_breach:elevated), 1)
+      - record: ae:pressure_critical:bool
+        expr: clamp_max(sum(ae:pressure_breach:critical), 1)
+      # 0 = Normal, 1 = Elevated, 2 = Critical (critical thresholds are strictly
+      # tighter than elevated, so critical=1 implies elevated=1).
+      - record: ae:pressure_level:preview
+        expr: ae:pressure_elevated:bool + ae:pressure_critical:bool
