@@ -9,6 +9,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/storageclient v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/tracing v0.0.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
@@ -87,6 +88,7 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/httputil => ../../libs/httputil
 	github.com/ILITA-hub/animeenigma/libs/logger => ../../libs/logger
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
+	github.com/ILITA-hub/animeenigma/libs/storageclient => ../../libs/storageclient
 	github.com/ILITA-hub/animeenigma/libs/tracing => ../../libs/tracing
 	github.com/ILITA-hub/animeenigma/libs/videoutils => ../../libs/videoutils
 )

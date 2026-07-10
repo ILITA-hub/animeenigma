@@ -50,13 +50,18 @@ type UpscaleJob struct {
 	// ffprobe result at segmenting time. Persisted so the finalizer can derive
 	// the UPSCALED-{height}p output prefix deterministically (sourceHeight ×
 	// scale) without re-reading the possibly-gone source file.
-	SourceHeight int        `gorm:"type:int;not null;default:0;column:source_height" json:"source_height"`
-	SegmentCount int        `gorm:"type:int;not null;default:0;column:segment_count" json:"segment_count"`
-	OutputPrefix string     `gorm:"type:text;column:output_prefix" json:"output_prefix,omitempty"`
-	ErrorText    string     `gorm:"type:text;column:error_text" json:"error_text,omitempty"`
-	CreatedAt    time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt    time.Time  `gorm:"column:updated_at" json:"updated_at"`
-	CompletedAt  *time.Time `gorm:"column:completed_at" json:"completed_at,omitempty"`
+	SourceHeight int    `gorm:"type:int;not null;default:0;column:source_height" json:"source_height"`
+	SegmentCount int    `gorm:"type:int;not null;default:0;column:segment_count" json:"segment_count"`
+	OutputPrefix string `gorm:"type:text;column:output_prefix" json:"output_prefix,omitempty"`
+	// Storage is the storage-service backend id the finalized HLS output
+	// resolved to (class "upscaled" resolves to s3 in prod). Recorded at
+	// finalize alongside OutputPrefix; empty for jobs with no output yet. No
+	// legacy rows exist (zero completed jobs predate the storage-service move).
+	Storage     string     `gorm:"type:text;not null;default:'';column:storage" json:"storage,omitempty"`
+	ErrorText   string     `gorm:"type:text;column:error_text" json:"error_text,omitempty"`
+	CreatedAt   time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	CompletedAt *time.Time `gorm:"column:completed_at" json:"completed_at,omitempty"`
 }
 
 func (UpscaleJob) TableName() string {

@@ -324,19 +324,18 @@ func openIntegrationDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// ── Recording MinIO writer (mirrors fakeUploader's recording + playlist-last) ─
+// ── Recording storage writer (mirrors fakeUploader's recording + playlist-last) ─
 //
-// OrchestratorDeps.Writer is an interface (EnsureBucket + Upload), so we pass a
-// recording implementation rather than reach into the unexported
-// newWriterWithUploader. It records the exact object key order the orchestrator
-// hands it and captures the segments-done count at the moment the playlist is
+// OrchestratorDeps.Writer is an interface (Upload returning the resolved
+// storage id — the storagegw.Gateway contract), so we pass a recording
+// implementation. It records the exact object key order the orchestrator hands
+// it and captures the segments-done count at the moment the playlist is
 // written, so we can assert the playlist-last invariant at the orchestrator →
-// writer boundary (the byte-level PutObject ordering inside minio.Writer is
-// covered by minio/writer_test.go's TestUpload_PlaylistLast_AndContentType).
+// writer boundary (the byte-level PUT ordering inside storageclient.UploadFiles
+// is covered by libs/storageclient's TestUploadFiles_SegmentsBeforePlaylist).
 
 type recordingWriter struct {
 	mu             sync.Mutex
-	bucketEnsured  int
 	uploadedKeys   []string // object keys in the exact order they were uploaded
 	segmentsAtPlay int      // # of .ts uploaded when playlist.m3u8 was uploaded (-1 = never)
 	lastPrefix     string
@@ -346,23 +345,14 @@ func newRecordingWriter() *recordingWriter {
 	return &recordingWriter{segmentsAtPlay: -1}
 }
 
-func (w *recordingWriter) EnsureBucket(_ context.Context) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.bucketEnsured++
-	return nil
-}
-
-func (w *recordingWriter) Upload(_ context.Context, prefix string, filePaths []string) (int64, error) {
+func (w *recordingWriter) Upload(_ context.Context, prefix string, filePaths []string) (string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.lastPrefix = prefix
-	var total int64
 	segCount := 0
 	for _, p := range filePaths {
-		fi, err := os.Stat(p)
-		if err != nil {
-			return total, fmt.Errorf("recordingWriter: stat %q: %w", p, err)
+		if _, err := os.Stat(p); err != nil {
+			return "", fmt.Errorf("recordingWriter: stat %q: %w", p, err)
 		}
 		key := prefix
 		if !strings.HasSuffix(key, "/") {
@@ -370,20 +360,21 @@ func (w *recordingWriter) Upload(_ context.Context, prefix string, filePaths []s
 		}
 		key += filepath.Base(p)
 		w.uploadedKeys = append(w.uploadedKeys, key)
-		total += fi.Size()
 		if strings.HasSuffix(p, "playlist.m3u8") {
 			w.segmentsAtPlay = segCount
 		} else if strings.HasSuffix(p, ".ts") {
 			segCount++
 		}
 	}
-	return total, nil
+	// Resolved backend id, as the storage service would return for class
+	// "upscaled" (s3 in prod) — the orchestrator must record this on the job.
+	return "s3", nil
 }
 
-func (w *recordingWriter) snapshot() (keys []string, segsAtPlay, bucketEnsured int, prefix string) {
+func (w *recordingWriter) snapshot() (keys []string, segsAtPlay int, prefix string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return append([]string(nil), w.uploadedKeys...), w.segmentsAtPlay, w.bucketEnsured, w.lastPrefix
+	return append([]string(nil), w.uploadedKeys...), w.segmentsAtPlay, w.lastPrefix
 }
 
 // ── In-memory MinIO stand-in for model artifacts (T30 pull-on-demand) ────────
@@ -1210,18 +1201,18 @@ func TestMockE2E_FullChainWithSpotResumeExecAndMetrics(t *testing.T) {
 	if finalJob.OutputPrefix == "" {
 		t.Fatal("final job has empty OutputPrefix — finalize/upload did not record it")
 	}
+	if finalJob.Storage != "s3" {
+		t.Fatalf("final job Storage = %q, want s3 (the resolved backend id the writer returned)", finalJob.Storage)
+	}
 	if finalJob.SegmentCount != totalSegments {
 		t.Fatalf("final job SegmentCount = %d, want %d", finalJob.SegmentCount, totalSegments)
 	}
-	t.Logf("final job: status=done prefix=%q segments=%d codec=%q",
-		finalJob.OutputPrefix, finalJob.SegmentCount, finalJob.SourceCodec)
+	t.Logf("final job: status=done prefix=%q storage=%q segments=%d codec=%q",
+		finalJob.OutputPrefix, finalJob.Storage, finalJob.SegmentCount, finalJob.SourceCodec)
 
-	// ── Assert the recording MinIO writer received playlist.m3u8 AFTER the .ts
-	// segments (playlist-last invariant) and the bucket was ensured. ─────────
-	keys, segsAtPlay, bucketEnsured, prefix := h.writer.snapshot()
-	if bucketEnsured < 1 {
-		t.Errorf("EnsureBucket was never called; got %d", bucketEnsured)
-	}
+	// ── Assert the recording storage writer received playlist.m3u8 AFTER the
+	// .ts segments (playlist-last invariant). ─────────────────────────────────
+	keys, segsAtPlay, prefix := h.writer.snapshot()
 	assertPlaylistLast(t, keys)
 	if segsAtPlay < 1 {
 		t.Errorf("playlist.m3u8 was uploaded after %d .ts segments, want ≥1 (playlist-last invariant)", segsAtPlay)

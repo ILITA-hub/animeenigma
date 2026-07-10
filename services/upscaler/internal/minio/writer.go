@@ -1,7 +1,14 @@
-// Package minio is the upscaler service's HLS uploader. Ported from
-// services/library/internal/minio/writer.go with the same semantics:
+// Package minio is the upscaler service's direct MinIO writer for INTERNAL
+// artifacts ONLY: model-weight tars (admin upload + worker serve) and per-job
+// log dumps (LogBuffer flush). These are infra, not user content, and
+// deliberately stay on local MinIO.
 //
-//   - Idempotent bucket bootstrap (`raw-library` is created at service
+// User-content HLS OUTPUT does NOT go through this package anymore — the
+// orchestrator's finalize path uploads via internal/storagegw (the storage
+// service, class "upscaled", external s3 in prod). Semantics, ported from
+// services/library/internal/minio/writer.go:
+//
+//   - Idempotent bucket bootstrap (main.go calls EnsureBucket at service
 //     start; BucketAlreadyOwnedByYou is swallowed).
 //   - Concurrent segment upload + LAST playlist upload so HLS clients
 //     never see a playlist referring to an unfinished segment.

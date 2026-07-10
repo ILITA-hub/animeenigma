@@ -35,7 +35,7 @@ type orchJobRepo interface {
 	List(ctx context.Context, f repo.JobFilter) ([]domain.UpscaleJob, error)
 	UpdateStatus(ctx context.Context, id string, status domain.JobStatus, errText string) error
 	SetSourceMeta(ctx context.Context, id, codec, pixfmt, fps string, height, segCount int) error
-	SetOutputPrefix(ctx context.Context, id, prefix string) error
+	SetOutput(ctx context.Context, id, prefix, storage string) error
 }
 
 // orchSegmentRepo is the slice of SegmentRepository the orchestrator drives.
@@ -65,10 +65,13 @@ type orchFinalizer interface {
 	Concat(ctx context.Context, upscaledSegDir string, sc ffmpeg.Sidecars, probe source.ProbeResult, out string) error
 }
 
-// orchWriter uploads the finalized HLS package to object storage.
+// orchWriter uploads the finalized HLS package through the storage service
+// (storagegw.Gateway in production — class "upscaled", external s3 in prod).
+// Upload returns the backend id the storage service resolved so the
+// orchestrator records where the output landed. Bucket existence is the
+// storage service's concern — no EnsureBucket on this path anymore.
 type orchWriter interface {
-	EnsureBucket(ctx context.Context) error
-	Upload(ctx context.Context, prefix string, filePaths []string) (int64, error)
+	Upload(ctx context.Context, prefix string, filePaths []string) (string, error)
 }
 
 // hlsLister enumerates the playlist + segment files produced by Concat. Pulled
@@ -401,12 +404,6 @@ func (o *Orchestrator) finalizeJob(ctx context.Context, job *domain.UpscaleJob) 
 		return
 	}
 
-	// Ensure the destination bucket exists.
-	if err := o.writer.EnsureBucket(ctx); err != nil {
-		o.failJob(ctx, job.ID, fmt.Sprintf("ensure bucket: %v", err))
-		return
-	}
-
 	// scaleHeight = persisted source height × job.Scale. Both are durable
 	// columns set at segmenting time, so the prefix is deterministic and needs
 	// NO filesystem access at finalize. When SourceHeight is 0 (legacy/unprobed
@@ -415,13 +412,14 @@ func (o *Orchestrator) finalizeJob(ctx context.Context, job *domain.UpscaleJob) 
 	scaleHeight := o.scaleHeight(job)
 
 	prefix := autocache.UpscaledPrefix(job.ShikimoriID, job.Episode, scaleHeight)
-	if _, err := o.writer.Upload(ctx, prefix, hlsFiles); err != nil {
+	storage, err := o.writer.Upload(ctx, prefix, hlsFiles)
+	if err != nil {
 		o.failJob(ctx, job.ID, fmt.Sprintf("upload: %v", err))
 		return
 	}
 
-	if err := o.jobs.SetOutputPrefix(ctx, job.ID, prefix); err != nil {
-		o.failJob(ctx, job.ID, fmt.Sprintf("set output prefix: %v", err))
+	if err := o.jobs.SetOutput(ctx, job.ID, prefix, storage); err != nil {
+		o.failJob(ctx, job.ID, fmt.Sprintf("set output: %v", err))
 		return
 	}
 
@@ -436,7 +434,7 @@ func (o *Orchestrator) finalizeJob(ctx context.Context, job *domain.UpscaleJob) 
 		}
 	}
 
-	o.log.Infow("orchestrator: job finalized", "job_id", job.ID, "prefix", prefix)
+	o.log.Infow("orchestrator: job finalized", "job_id", job.ID, "prefix", prefix, "storage", storage)
 }
 
 // scaleHeight computes the target output height = job.SourceHeight × job.Scale,

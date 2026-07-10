@@ -374,6 +374,7 @@ func openTransportTestDB(t *testing.T) *gorm.DB {
 			source_height     INTEGER NOT NULL DEFAULT 0,
 			segment_count     INTEGER NOT NULL DEFAULT 0,
 			output_prefix     TEXT,
+			storage           TEXT NOT NULL DEFAULT '',
 			error_text        TEXT,
 			created_at        DATETIME,
 			updated_at        DATETIME,

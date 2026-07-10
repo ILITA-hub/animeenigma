@@ -31,8 +31,10 @@ func (s ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
 
-// MinioConfig drives the upscaler's MinIO writer (staging uploads).
-// Mirrors services/library/internal/config.MinioConfig.
+// MinioConfig drives the upscaler's direct MinIO writer — INTERNAL artifacts
+// only (model-weight tars, per-job log dumps), which deliberately stay on
+// local MinIO. User-content HLS output goes through the storage service
+// (StorageURL) instead. Mirrors services/library/internal/config.MinioConfig.
 type MinioConfig struct {
 	Endpoint          string
 	AccessKey         string
@@ -44,7 +46,12 @@ type MinioConfig struct {
 
 // UpscalerConfig holds upscaler-specific knobs.
 type UpscalerConfig struct {
-	LibraryURL           string
+	LibraryURL string
+	// StorageURL is the internal storage service (services/storage/,
+	// Docker-network-only) that places + presigns the finalized HLS OUTPUT
+	// (class "upscaled" — external s3 in prod). MinIO below stays for
+	// internal artifacts only (model weights, per-job logs).
+	StorageURL           string
 	MinIO                MinioConfig
 	JobCapabilitySecret  string
 	SegmentSeconds       int
@@ -97,6 +104,7 @@ func Load() (*Config, error) {
 		},
 		Upscaler: UpscalerConfig{
 			LibraryURL:           getEnv("LIBRARY_URL", "http://library:8089"),
+			StorageURL:           getEnv("UPSCALER_STORAGE_URL", "http://storage:8099"),
 			JobCapabilitySecret:  getEnv("JOB_CAPABILITY_SECRET", ""),
 			SegmentSeconds:       getEnvInt("SEGMENT_SECONDS", 45),
 			DefaultScale:         getEnvInt("DEFAULT_SCALE", 2),

@@ -183,7 +183,7 @@ func TestJobRepository_SetSourceMeta(t *testing.T) {
 	}
 }
 
-func TestJobRepository_SetOutputPrefix(t *testing.T) {
+func TestJobRepository_SetOutput(t *testing.T) {
 	db := openTestDB(t)
 	r := NewJobRepository(db)
 	ctx := context.Background()
@@ -193,8 +193,8 @@ func TestJobRepository_SetOutputPrefix(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := r.SetOutputPrefix(ctx, job.ID, "uploads/upscaler/X/1/"); err != nil {
-		t.Fatalf("SetOutputPrefix: %v", err)
+	if err := r.SetOutput(ctx, job.ID, "uploads/upscaler/X/1/", "s3"); err != nil {
+		t.Fatalf("SetOutput: %v", err)
 	}
 
 	got, err := r.Get(ctx, job.ID)
@@ -203,6 +203,9 @@ func TestJobRepository_SetOutputPrefix(t *testing.T) {
 	}
 	if got.OutputPrefix != "uploads/upscaler/X/1/" {
 		t.Fatalf("OutputPrefix = %q, want uploads/upscaler/X/1/", got.OutputPrefix)
+	}
+	if got.Storage != "s3" {
+		t.Fatalf("Storage = %q, want s3", got.Storage)
 	}
 }
 

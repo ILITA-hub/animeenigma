@@ -12,6 +12,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/storageclient"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/analyticsclient"
@@ -25,6 +26,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/source"
+	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/storagegw"
 	"github.com/ILITA-hub/animeenigma/services/upscaler/internal/transport"
 )
 
@@ -134,11 +136,15 @@ func main() {
 	sweeper := service.NewSweeperWithLogger(segmentRepo, workerRepo, log)
 
 	// Orchestrator: drives jobs queued→segmenting→upscaling→finalizing→done.
-	// Constructs the source/ffmpeg/minio collaborators it needs.
+	// Constructs the source/ffmpeg/storage collaborators it needs.
 	resolver := source.NewResolver(cfg.Upscaler.TorrentsDir, cfg.Upscaler.StagingDir)
 	prober := source.NewProber("")       // ffprobe on PATH
 	segmenter := ffmpeg.NewSegmenter("") // ffmpeg on PATH
 	finalizer := ffmpeg.NewFinalizer("")
+
+	// Direct MinIO writer — INTERNAL artifacts only (model-weight tars + per-job
+	// log dumps in cfg.Upscaler.MinIO.Bucket). User-content HLS output goes
+	// through the storage service (storageGW below) instead.
 	upWriter, err := upminio.New(upminio.Config{
 		Endpoint:          cfg.Upscaler.MinIO.Endpoint,
 		AccessKey:         cfg.Upscaler.MinIO.AccessKey,
@@ -150,6 +156,25 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to init minio writer", "error", err)
 	}
+	// Bootstrap the internal-artifacts bucket once at startup. Best-effort:
+	// the finalize path no longer calls EnsureBucket (output goes via the
+	// storage service), so without this the first model upload / log flush
+	// would hit a missing bucket on a fresh MinIO.
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := upWriter.EnsureBucket(ctx); err != nil {
+			log.Warnw("internal-artifacts bucket bootstrap failed (model upload / log flush may error until MinIO is reachable)",
+				"bucket", cfg.Upscaler.MinIO.Bucket, "error", err)
+		}
+		cancel()
+	}
+
+	// Storage-service gateway — the finalize write path for upscaled HLS
+	// output (class "upscaled" → external s3 in prod; the output bucket is the
+	// storage service's per-backend raw-library, NOT the legacy local
+	// upscaler-output bucket).
+	storageGW := storagegw.New(storageclient.New(cfg.Upscaler.StorageURL), cfg.Upscaler.MinIO.UploadConcurrency)
+
 	// Per-job log ring-buffer (Task 12b): Redis-backed RPUSH/LTRIM ring with a
 	// MinIO flusher for durable dumps at finalize. The log PRODUCER (worker log
 	// streaming over the WS) is Task 18 — until then the buffer is simply empty,
@@ -166,7 +191,7 @@ func main() {
 		Prober:         prober,
 		Segmenter:      segmenter,
 		Finalizer:      finalizer,
-		Writer:         upWriter,
+		Writer:         storageGW,
 		LogBuffer:      logBuffer,
 		StagingDir:     cfg.Upscaler.StagingDir,
 		SegmentSeconds: cfg.Upscaler.SegmentSeconds,

@@ -112,12 +112,16 @@ func (r *JobRepository) SetSourceMeta(ctx context.Context, id, codec, pixfmt, fp
 		}).Error
 }
 
-// SetOutputPrefix records the MinIO object prefix where finalized segments are stored.
-func (r *JobRepository) SetOutputPrefix(ctx context.Context, id, prefix string) error {
+// SetOutput records where the finalized HLS output landed: the object prefix
+// plus the storage-service backend id it resolved to (class "upscaled").
+func (r *JobRepository) SetOutput(ctx context.Context, id, prefix, storage string) error {
 	return r.db.WithContext(ctx).
 		Model(&domain.UpscaleJob{}).
 		Where("id = ?", id).
-		Update("output_prefix", prefix).Error
+		Updates(map[string]interface{}{
+			"output_prefix": prefix,
+			"storage":       storage,
+		}).Error
 }
 
 // NextEligible returns the oldest non-terminal job that has at least one

@@ -25,6 +25,7 @@ type orchFakeJobRepo struct {
 	statusCalls []orchStatusCall
 	sourceMeta  map[string]orchSourceMeta
 	outputs     map[string]string
+	storages    map[string]string
 
 	// updateStatusErrOn, when non-nil, returns an error for the matching status.
 	updateStatusErrOn map[domain.JobStatus]error
@@ -51,6 +52,7 @@ func newOrchFakeJobRepo(jobs ...*domain.UpscaleJob) *orchFakeJobRepo {
 		jobs:       m,
 		sourceMeta: make(map[string]orchSourceMeta),
 		outputs:    make(map[string]string),
+		storages:   make(map[string]string),
 	}
 }
 
@@ -97,12 +99,14 @@ func (f *orchFakeJobRepo) SetSourceMeta(_ context.Context, id, codec, pixfmt, fp
 	return nil
 }
 
-func (f *orchFakeJobRepo) SetOutputPrefix(_ context.Context, id, prefix string) error {
+func (f *orchFakeJobRepo) SetOutput(_ context.Context, id, prefix, storage string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.outputs[id] = prefix
+	f.storages[id] = storage
 	if j, ok := f.jobs[id]; ok {
 		j.OutputPrefix = prefix
+		j.Storage = storage
 	}
 	return nil
 }
@@ -236,39 +240,31 @@ func (f *orchFakeFinalizer) Concat(_ context.Context, upscaledSegDir string, _ f
 	return f.err
 }
 
-// orchFakeWriter records EnsureBucket + Upload calls.
+// orchFakeWriter records Upload calls and returns a fixed resolved storage id
+// (mirroring storagegw.Gateway.Upload's contract).
 type orchFakeWriter struct {
 	mu sync.Mutex
 
-	ensureCalls int
 	uploadCalls int
 	lastPrefix  string
 	lastFiles   []string
-	ensureErr   error
 	uploadErr   error
+	storage     string // resolved backend id to return; "" defaults to "s3"
 }
 
-func (f *orchFakeWriter) EnsureBucket(_ context.Context) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.ensureCalls++
-	return f.ensureErr
-}
-
-func (f *orchFakeWriter) Upload(_ context.Context, prefix string, filePaths []string) (int64, error) {
+func (f *orchFakeWriter) Upload(_ context.Context, prefix string, filePaths []string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.uploadCalls++
 	f.lastPrefix = prefix
 	f.lastFiles = append([]string(nil), filePaths...)
 	if f.uploadErr != nil {
-		return 0, f.uploadErr
+		return "", f.uploadErr
 	}
-	var total int64
-	for range filePaths {
-		total += 100
+	if f.storage == "" {
+		return "s3", nil
 	}
-	return total, nil
+	return f.storage, nil
 }
 
 // ── Helper: build an orchestrator over fakes ──────────────────────────────────
@@ -476,9 +472,6 @@ func TestFinalizeJobUploadsAndCompletes(t *testing.T) {
 	if h.fin.calls != 1 {
 		t.Fatalf("expected Concat called exactly once, got %d", h.fin.calls)
 	}
-	if h.wr.ensureCalls != 1 {
-		t.Errorf("expected EnsureBucket once, got %d", h.wr.ensureCalls)
-	}
 	if h.wr.uploadCalls != 1 {
 		t.Errorf("expected Upload once, got %d", h.wr.uploadCalls)
 	}
@@ -489,6 +482,11 @@ func TestFinalizeJobUploadsAndCompletes(t *testing.T) {
 	}
 	if got := jobs.outputs["job-3"]; got != wantPrefix {
 		t.Errorf("output prefix recorded = %q, want %q", got, wantPrefix)
+	}
+	// The backend id the storage service resolved (fake returns "s3") must be
+	// recorded on the job row alongside the prefix.
+	if got := jobs.storages["job-3"]; got != "s3" {
+		t.Errorf("resolved storage recorded = %q, want s3", got)
 	}
 	if got := jobs.statusCountFor("job-3", domain.JobDone); got != 1 {
 		t.Errorf("expected done flip once, got %d", got)
