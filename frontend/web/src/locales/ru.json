@@ -1513,12 +1513,20 @@
         "confirmDisableTitle": "Отключить {name}?",
         "confirmDisableBody": "Отключение немедленно уберёт {name} из цепочки авто-failover — воспроизведение переключится на следующего провайдера.",
         "disableAction": "Отключить",
-        "toastEnableSuccess": "{name}: включён режим авто",
-        "toastEnableError": "Не удалось снова включить {name} — попробуйте снова",
-        "toastDisableSuccess": "{name} отключён",
-        "toastDisableError": "Не удалось отключить {name} — попробуйте снова",
-        "toastManualSuccess": "{name} переведён в ручной режим — вне авто-failover, но доступен для ручного выбора",
-        "toastManualError": "Не удалось перевести {name} в ручной режим — попробуйте снова"
+        "toasts": {
+          "auto": {
+            "success": "{name}: включён режим авто",
+            "error": "Не удалось снова включить {name} — попробуйте снова"
+          },
+          "manual": {
+            "success": "{name} переведён в ручной режим — вне авто-failover, но доступен для ручного выбора",
+            "error": "Не удалось перевести {name} в ручной режим — попробуйте снова"
+          },
+          "disabled": {
+            "success": "{name} отключён",
+            "error": "Не удалось отключить {name} — попробуйте снова"
+          }
+        }
       },
       "providersPlaceholder": {
         "title": "Нет провайдеров",

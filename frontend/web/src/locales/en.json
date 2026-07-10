@@ -1513,12 +1513,20 @@
         "confirmDisableTitle": "Disable {name}?",
         "confirmDisableBody": "Disabling removes {name} from the auto-failover chain immediately — playback falls over to the next provider instead.",
         "disableAction": "Disable",
-        "toastEnableSuccess": "{name} set to auto",
-        "toastEnableError": "Couldn't re-enable {name} — try again",
-        "toastDisableSuccess": "{name} disabled",
-        "toastDisableError": "Couldn't disable {name} — try again",
-        "toastManualSuccess": "{name} parked to manual — out of auto-failover, still hand-selectable",
-        "toastManualError": "Couldn't set {name} to manual — try again"
+        "toasts": {
+          "auto": {
+            "success": "{name} set to auto",
+            "error": "Couldn't re-enable {name} — try again"
+          },
+          "manual": {
+            "success": "{name} parked to manual — out of auto-failover, still hand-selectable",
+            "error": "Couldn't set {name} to manual — try again"
+          },
+          "disabled": {
+            "success": "{name} disabled",
+            "error": "Couldn't disable {name} — try again"
+          }
+        }
       },
       "providersPlaceholder": {
         "title": "No providers",

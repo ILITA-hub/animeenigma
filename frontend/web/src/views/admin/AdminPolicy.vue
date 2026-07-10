@@ -605,11 +605,6 @@ const providerPolicyOptions = computed(() =>
   PROVIDER_POLICIES.map((p) => ({ value: p, label: t(`admin.policy.providers.policy.${p}`) })),
 )
 
-const PROVIDER_POLICY_TOASTS: Record<ScraperProviderPolicy, { success: string; error: string }> = {
-  auto: { success: 'admin.policy.providers.toastEnableSuccess', error: 'admin.policy.providers.toastEnableError' },
-  manual: { success: 'admin.policy.providers.toastManualSuccess', error: 'admin.policy.providers.toastManualError' },
-  disabled: { success: 'admin.policy.providers.toastDisableSuccess', error: 'admin.policy.providers.toastDisableError' },
-}
 
 function stateVariant(state: ScraperProviderWire['derived_state']): NonNullable<BadgeVariants['variant']> {
   switch (state) {
@@ -658,10 +653,10 @@ async function applyProviderPolicy(row: ProviderRow, nextPolicy: ScraperProvider
   try {
     const updated = await providers.setPolicy(row.name, nextPolicy)
     Object.assign(row, updated)
-    toast.push(t(PROVIDER_POLICY_TOASTS[nextPolicy].success, { name }), 'success')
+    toast.push(t(`admin.policy.providers.toasts.${nextPolicy}.success`, { name }), 'success')
   } catch {
     row.policy = previousPolicy
-    toast.push(t(PROVIDER_POLICY_TOASTS[nextPolicy].error, { name }), 'error')
+    toast.push(t(`admin.policy.providers.toasts.${nextPolicy}.error`, { name }), 'error')
   } finally {
     row.saving = false
   }

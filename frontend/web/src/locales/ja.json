@@ -1513,12 +1513,20 @@
         "confirmDisableTitle": "{name} を無効にしますか？",
         "confirmDisableBody": "無効にすると {name} は自動フェイルオーバーチェーンから即座に外れ、再生は次のプロバイダーに切り替わります。",
         "disableAction": "無効にする",
-        "toastEnableSuccess": "{name} を自動に設定しました",
-        "toastEnableError": "{name} を再度有効にできませんでした — もう一度お試しください",
-        "toastDisableSuccess": "{name} を無効にしました",
-        "toastDisableError": "{name} を無効にできませんでした — もう一度お試しください",
-        "toastManualSuccess": "{name} を手動に設定しました — 自動フェイルオーバー対象外、手動選択は可能です",
-        "toastManualError": "{name} を手動に設定できませんでした — もう一度お試しください"
+        "toasts": {
+          "auto": {
+            "success": "{name} を自動に設定しました",
+            "error": "{name} を再度有効にできませんでした — もう一度お試しください"
+          },
+          "manual": {
+            "success": "{name} を手動に設定しました — 自動フェイルオーバー対象外、手動選択は可能です",
+            "error": "{name} を手動に設定できませんでした — もう一度お試しください"
+          },
+          "disabled": {
+            "success": "{name} を無効にしました",
+            "error": "{name} を無効にできませんでした — もう一度お試しください"
+          }
+        }
       },
       "providersPlaceholder": {
         "title": "プロバイダーなし",
