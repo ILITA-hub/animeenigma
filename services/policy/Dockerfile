@@ -43,6 +43,7 @@ COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/
 COPY services/policy/go.mod services/policy/go.sum* ./services/policy/
 COPY services/anidle/go.mod services/anidle/go.sum* ./services/anidle/
 COPY services/fanfic/go.mod services/fanfic/go.sum* ./services/fanfic/
+COPY services/storage/go.mod services/storage/go.sum* ./services/storage/
 
 RUN cd services/policy && go mod download
 

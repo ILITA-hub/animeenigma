@@ -12,17 +12,29 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 )
 
-// fakeObjectStore implements objectStore with per-(storage,prefix) canned
-// listings and records every DeletePrefix call so tests can assert exactly
-// what was (not) deleted.
+// fakeObjectStore implements objectStore over a STATEFUL "objects" map keyed
+// "storage|prefix" → the objects actually present there right now. This is
+// what makes the migrate-guard's pre-copy List(s3, prefix) call behave
+// correctly against the existing tests: a prefix reports empty until either
+// a test explicitly seeds it (modeling pre-existing destination content) or
+// CopyPrefix populates it (modeling a real cross-backend copy). Records every
+// DeletePrefix call so tests can assert exactly what was (not) deleted.
 type fakeObjectStore struct {
-	// lists maps "storage|prefix" → canned listing. Missing key → empty list.
-	lists map[string][]storageclient.Object
-	// errors, keyed the same way, override lists.
+	// objects maps "storage|prefix" → objects currently present. Seed this
+	// directly to model pre-existing state (source content, or — for the
+	// pre-flight-guard tests — content already sitting at the destination).
+	objects map[string][]storageclient.Object
+	// errors, keyed the same way, override objects on List.
 	listErrs map[string]error
 
 	copyErr error
 	copies  []string // "from>to|prefix"
+	// copyResultOverride lets a test make CopyPrefix land a DIFFERENT object
+	// set at the destination than the source holds (e.g. the verify-mismatch
+	// test), keyed "storage|prefix" for the destination side. Absent →
+	// CopyPrefix mirrors the source objects onto the destination (the normal
+	// case).
+	copyResultOverride map[string][]storageclient.Object
 
 	deleteErr map[string]error // keyed "storage|prefix"
 	deletes   []string         // "storage|prefix"
@@ -31,10 +43,11 @@ type fakeObjectStore struct {
 func key(storage, prefix string) string { return storage + "|" + prefix }
 
 func (f *fakeObjectStore) List(_ context.Context, storage, prefix string) ([]storageclient.Object, error) {
-	if err := f.listErrs[key(storage, prefix)]; err != nil {
+	k := key(storage, prefix)
+	if err := f.listErrs[k]; err != nil {
 		return nil, err
 	}
-	return f.lists[key(storage, prefix)], nil
+	return f.objects[k], nil
 }
 
 func (f *fakeObjectStore) CopyPrefix(_ context.Context, from, to, prefix string) (int, int64, error) {
@@ -42,27 +55,44 @@ func (f *fakeObjectStore) CopyPrefix(_ context.Context, from, to, prefix string)
 	if f.copyErr != nil {
 		return 0, 0, f.copyErr
 	}
-	objs := f.lists[key(to, prefix)]
-	c, b := countBytes(objs)
+	if f.objects == nil {
+		f.objects = map[string][]storageclient.Object{}
+	}
+	dstKey := key(to, prefix)
+	if override, ok := f.copyResultOverride[dstKey]; ok {
+		f.objects[dstKey] = override
+	} else {
+		f.objects[dstKey] = f.objects[key(from, prefix)]
+	}
+	c, b := countBytes(f.objects[dstKey])
 	return c, b, nil
 }
 
 func (f *fakeObjectStore) DeletePrefix(_ context.Context, storage, prefix string) (int, error) {
-	if err := f.deleteErr[key(storage, prefix)]; err != nil {
+	k := key(storage, prefix)
+	if err := f.deleteErr[k]; err != nil {
 		return 0, err
 	}
-	f.deletes = append(f.deletes, key(storage, prefix))
-	return len(f.lists[key(storage, prefix)]), nil
+	n := len(f.objects[k])
+	delete(f.objects, k)
+	f.deletes = append(f.deletes, k)
+	return n, nil
 }
 
-// fakeEpisodeStore implements episodeStore with a scripted flip outcome and
-// re-read result.
+// fakeEpisodeStore implements episodeStore with a scripted flip outcome,
+// re-read result, and sibling-lookup result (the pre-flight guard).
 type fakeEpisodeStore struct {
 	updateErr error
 	updated   []string // ids UpdateStorage was called with
 
 	getEp  *domain.Episode
 	getErr error
+
+	// sibling controls GetByShikimoriEpisode. Both nil (the zero value)
+	// defaults to NotFound — "no s3 sibling row", the common case every
+	// pre-existing test implicitly relies on.
+	sibling    *domain.Episode
+	siblingErr error
 }
 
 func (f *fakeEpisodeStore) UpdateStorage(_ context.Context, id string, _ string) error {
@@ -72,6 +102,16 @@ func (f *fakeEpisodeStore) UpdateStorage(_ context.Context, id string, _ string)
 
 func (f *fakeEpisodeStore) GetByID(_ context.Context, _ string) (*domain.Episode, error) {
 	return f.getEp, f.getErr
+}
+
+func (f *fakeEpisodeStore) GetByShikimoriEpisode(_ context.Context, _ string, _ int, _ string) (*domain.Episode, error) {
+	if f.sibling != nil {
+		return f.sibling, nil
+	}
+	if f.siblingErr != nil {
+		return nil, f.siblingErr
+	}
+	return nil, liberrors.NotFound("episode")
 }
 
 // objs builds a canned listing of n objects, each `size` bytes.
@@ -109,11 +149,13 @@ func has(list []string, want string) bool {
 }
 
 // TestMigrateOne_HappyPath — full sequence: copy, verify, flip, delete local.
+// The s3 side is left unseeded so the pre-flight guard's List(s3, prefix)
+// check sees an empty destination; CopyPrefix then mirrors the source onto
+// it (the fake's default), giving the matching post-copy listing.
 func TestMigrateOne_HappyPath(t *testing.T) {
 	ep := testEpisode()
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
 		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
-		key(domain.BackendS3, ep.MinioPath):    objs(3, 100),
 	}}
 	episodes := &fakeEpisodeStore{}
 
@@ -132,14 +174,21 @@ func TestMigrateOne_HappyPath(t *testing.T) {
 	}
 }
 
-// TestMigrateOne_VerifyMismatchSkips — s3 listing disagrees with minio →
-// nothing flipped, nothing deleted on either side.
+// TestMigrateOne_VerifyMismatchSkips — s3 listing disagrees with minio after
+// the copy → nothing flipped, nothing deleted on either side. The mismatch is
+// modeled via copyResultOverride (what lands at the destination), not a
+// pre-seeded s3 entry — a pre-seeded entry would trip the NEW pre-flight
+// guard instead of reaching the post-copy verify this test targets.
 func TestMigrateOne_VerifyMismatchSkips(t *testing.T) {
 	ep := testEpisode()
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
-		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
-		key(domain.BackendS3, ep.MinioPath):    objs(2, 100), // count mismatch
-	}}
+	store := &fakeObjectStore{
+		objects: map[string][]storageclient.Object{
+			key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
+		},
+		copyResultOverride: map[string][]storageclient.Object{
+			key(domain.BackendS3, ep.MinioPath): objs(2, 100), // count mismatch
+		},
+	}
 	episodes := &fakeEpisodeStore{}
 
 	ok, _ := migrateOne(context.Background(), testLog(t), store, episodes, ep)
@@ -154,13 +203,70 @@ func TestMigrateOne_VerifyMismatchSkips(t *testing.T) {
 	}
 }
 
+// TestMigrateOne_SiblingRowExistsSkips — an s3 sibling row already exists for
+// this (shikimori_id, episode_number) → the pre-flight guard skips BEFORE any
+// CopyPrefix call, touching neither the row nor either backend.
+func TestMigrateOne_SiblingRowExistsSkips(t *testing.T) {
+	ep := testEpisode()
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
+		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
+	}}
+	sibling := &domain.Episode{
+		ID:            "ep-sibling",
+		ShikimoriID:   ep.ShikimoriID,
+		EpisodeNumber: ep.EpisodeNumber,
+		MinioPath:     ep.MinioPath,
+		Storage:       domain.BackendS3,
+	}
+	episodes := &fakeEpisodeStore{sibling: sibling}
+
+	ok, bytes := migrateOne(context.Background(), testLog(t), store, episodes, ep)
+	if ok || bytes != 0 {
+		t.Fatalf("migrateOne = (%v, %d), want (false, 0) when an s3 sibling row exists", ok, bytes)
+	}
+	if len(episodes.updated) != 0 {
+		t.Fatalf("row was flipped despite a live s3 sibling; updated=%v", episodes.updated)
+	}
+	if len(store.copies) != 0 {
+		t.Fatalf("CopyPrefix invoked despite a live s3 sibling; copies=%v", store.copies)
+	}
+	if len(store.deletes) != 0 {
+		t.Fatalf("objects deleted despite a live s3 sibling; deletes=%v", store.deletes)
+	}
+}
+
+// TestMigrateOne_S3PrefixNonEmptySkips — no sibling row is found, but the s3
+// prefix itself already holds objects (defense in depth for content the DB
+// check might miss) → the pre-flight guard skips BEFORE any CopyPrefix call.
+func TestMigrateOne_S3PrefixNonEmptySkips(t *testing.T) {
+	ep := testEpisode()
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
+		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
+		key(domain.BackendS3, ep.MinioPath):    objs(1, 50), // pre-existing destination content
+	}}
+	episodes := &fakeEpisodeStore{} // no sibling row (default NotFound)
+
+	ok, bytes := migrateOne(context.Background(), testLog(t), store, episodes, ep)
+	if ok || bytes != 0 {
+		t.Fatalf("migrateOne = (%v, %d), want (false, 0) when the s3 prefix already has objects", ok, bytes)
+	}
+	if len(episodes.updated) != 0 {
+		t.Fatalf("row was flipped despite pre-existing s3 content; updated=%v", episodes.updated)
+	}
+	if len(store.copies) != 0 {
+		t.Fatalf("CopyPrefix invoked despite pre-existing s3 content; copies=%v", store.copies)
+	}
+	if len(store.deletes) != 0 {
+		t.Fatalf("objects deleted despite pre-existing s3 content; deletes=%v", store.deletes)
+	}
+}
+
 // TestMigrateOne_VanishedRow — UpdateStorage reports NotFound (evictor won the
 // race): the minio prefix is left alone, the orphaned s3 copy is undone, skip.
 func TestMigrateOne_VanishedRow(t *testing.T) {
 	ep := testEpisode()
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
 		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
-		key(domain.BackendS3, ep.MinioPath):    objs(3, 100),
 	}}
 	episodes := &fakeEpisodeStore{updateErr: liberrors.NotFound("episode")}
 
@@ -181,9 +287,8 @@ func TestMigrateOne_VanishedRow(t *testing.T) {
 // reconcile pass only revisits rows flipped to s3), minio untouched, skip.
 func TestMigrateOne_FlipFailedRowStillMinio(t *testing.T) {
 	ep := testEpisode()
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
 		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
-		key(domain.BackendS3, ep.MinioPath):    objs(3, 100),
 	}}
 	still := testEpisode() // storage still minio
 	episodes := &fakeEpisodeStore{updateErr: errors.New("db connection reset"), getEp: &still}
@@ -206,9 +311,8 @@ func TestMigrateOne_FlipFailedRowStillMinio(t *testing.T) {
 // next reconcile).
 func TestMigrateOne_FlipFailedConcurrentFlipWon(t *testing.T) {
 	ep := testEpisode()
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
 		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
-		key(domain.BackendS3, ep.MinioPath):    objs(3, 100),
 	}}
 	flippedRow := testEpisode()
 	flippedRow.Storage = domain.BackendS3
@@ -228,9 +332,8 @@ func TestMigrateOne_FlipFailedConcurrentFlipWon(t *testing.T) {
 // prefix beats deleting data whose DB state is unknown).
 func TestMigrateOne_FlipFailedRereadFailed(t *testing.T) {
 	ep := testEpisode()
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
 		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
-		key(domain.BackendS3, ep.MinioPath):    objs(3, 100),
 	}}
 	episodes := &fakeEpisodeStore{updateErr: errors.New("db down"), getErr: errors.New("db still down")}
 
@@ -248,7 +351,7 @@ func TestMigrateOne_FlipFailedRereadFailed(t *testing.T) {
 func TestReconcile_HealsMatchingLeftover(t *testing.T) {
 	ep := testEpisode()
 	ep.Storage = domain.BackendS3
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
 		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
 		key(domain.BackendS3, ep.MinioPath):    objs(3, 100),
 	}}
@@ -270,7 +373,7 @@ func TestReconcile_HealsMatchingLeftover(t *testing.T) {
 func TestReconcile_SkipsMismatchedLeftover(t *testing.T) {
 	ep := testEpisode()
 	ep.Storage = domain.BackendS3
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
 		key(domain.BackendMinio, ep.MinioPath): objs(3, 100),
 		key(domain.BackendS3, ep.MinioPath):    objs(3, 90), // byte mismatch
 	}}
@@ -289,7 +392,7 @@ func TestReconcile_SkipsMismatchedLeftover(t *testing.T) {
 func TestReconcile_CleanRowIsNoop(t *testing.T) {
 	ep := testEpisode()
 	ep.Storage = domain.BackendS3
-	store := &fakeObjectStore{lists: map[string][]storageclient.Object{
+	store := &fakeObjectStore{objects: map[string][]storageclient.Object{
 		key(domain.BackendS3, ep.MinioPath): objs(3, 100),
 		// no minio entry → empty listing
 	}}

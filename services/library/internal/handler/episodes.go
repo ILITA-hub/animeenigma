@@ -133,6 +133,21 @@ func (h *EpisodesHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
+	// The repo returned rows but EVERY single one was skipped due to a
+	// URLFor error (storage service down / BaseURLs unavailable) — this is an
+	// outage, not the legitimate "nothing encoded yet" empty state, and must
+	// not be surfaced as the ordinary empty-array 200: catalog caches that
+	// response for 10 minutes as "ae has no content" for the title. A partial
+	// failure (some rows still resolved) keeps returning 200 with whatever
+	// survived.
+	if len(eps) > 0 && len(items) == 0 {
+		if h.log != nil {
+			h.log.Errorw("episodes list: URLFor failed for every row — surfacing as an error instead of an empty 200",
+				"shikimori_id", shikimoriID, "row_count", len(eps))
+		}
+		httputil.Error(w, liberrors.Internal("failed to resolve any episode URL"))
+		return
+	}
 	httputil.OK(w, listResponse{Episodes: items})
 }
 

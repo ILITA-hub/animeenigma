@@ -283,6 +283,21 @@ func TestEpisodes_Get_InternalError(t *testing.T) {
 	}
 }
 
+// erroringURLBuilder lets tests script URLFor failures per-call — either for
+// every call (allErr) or for specific paths (errPaths) — to exercise the
+// per-row-skip vs total-outage branches of EpisodesHandler.List.
+type erroringURLBuilder struct {
+	allErr   bool
+	errPaths map[string]bool
+}
+
+func (s *erroringURLBuilder) URLFor(_ context.Context, _ string, path string) (string, error) {
+	if s.allErr || s.errPaths[path] {
+		return "", errors.New("urlFor failed")
+	}
+	return "http://stub.example/" + path, nil
+}
+
 func newListReq(t *testing.T, shikimoriID string) (*http.Request, *httptest.ResponseRecorder) {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, "/episodes/"+shikimoriID, nil)
@@ -455,5 +470,53 @@ func TestEpisodes_List_InternalError(t *testing.T) {
 	h.List(w, r)
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", w.Code)
+	}
+}
+
+// TestEpisodes_List_AllURLForFailuresSurface5xx — the repo returned rows, but
+// EVERY row's URLFor failed (storage service down / BaseURLs unavailable).
+// This must NOT be the ordinary empty-array 200 (catalog caches that 10min as
+// "ae has no content"): it must surface as a 5xx.
+func TestEpisodes_List_AllURLForFailuresSurface5xx(t *testing.T) {
+	repo := &stubEpisodeReader{listRet: []domain.Episode{
+		{ShikimoriID: "54974", EpisodeNumber: 1, MinioPath: "54974/1/"},
+		{ShikimoriID: "54974", EpisodeNumber: 2, MinioPath: "54974/2/"},
+	}}
+	url := &erroringURLBuilder{allErr: true}
+	h := NewEpisodesHandler(repo, url, nil)
+	r, w := newListReq(t, "54974")
+	h.List(w, r)
+	if w.Code < 500 {
+		t.Fatalf("status = %d, want 5xx when every row's URLFor fails; body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestEpisodes_List_PartialURLForFailureReturns200WithRemaining — only one of
+// two rows fails URLFor: single-row failures still just skip that row, so the
+// response stays 200 with the surviving item.
+func TestEpisodes_List_PartialURLForFailureReturns200WithRemaining(t *testing.T) {
+	repo := &stubEpisodeReader{listRet: []domain.Episode{
+		{ShikimoriID: "54974", EpisodeNumber: 1, MinioPath: "54974/1/"},
+		{ShikimoriID: "54974", EpisodeNumber: 2, MinioPath: "54974/2/"},
+	}}
+	url := &erroringURLBuilder{errPaths: map[string]bool{"54974/1/playlist.m3u8": true}}
+	h := NewEpisodesHandler(repo, url, nil)
+	r, w := newListReq(t, "54974")
+	h.List(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 when only one row's URLFor fails; body=%s", w.Code, w.Body.String())
+	}
+	var parsed struct {
+		Data struct {
+			Episodes []struct {
+				EpisodeNumber int `json:"episode_number"`
+			} `json:"episodes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(parsed.Data.Episodes) != 1 || parsed.Data.Episodes[0].EpisodeNumber != 2 {
+		t.Fatalf("episodes = %+v, want exactly episode 2", parsed.Data.Episodes)
 	}
 }

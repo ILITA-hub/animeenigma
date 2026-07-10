@@ -10,6 +10,13 @@
 //
 // Per-episode sequence (NON-NEGOTIABLE — this is destructive prod data):
 //
+//  0. Pre-flight sibling guard: skip (loudly, counted as a skip, non-zero
+//     exit) if EITHER an s3 sibling row already exists for this
+//     (shikimori_id, episode_number), OR List(s3, prefix) itself already
+//     reports objects. Reason: CopyPrefix would silently overwrite a live
+//     sibling's objects, and a later flip failure would then have
+//     undoS3Copy DELETE them — data loss for the sibling row. Neither branch
+//     touches minio or the DB row.
 //  1. List(minio, prefix)                 → source object count + total bytes
 //  2. CopyPrefix(minio → s3, prefix)      → server-side cross-backend copy
 //  3. List(s3, prefix)                    → target object count + total bytes
@@ -88,6 +95,10 @@ type objectStore interface {
 type episodeStore interface {
 	UpdateStorage(ctx context.Context, id string, storage string) error
 	GetByID(ctx context.Context, id string) (*domain.Episode, error)
+	// GetByShikimoriEpisode backs the pre-flight sibling guard: storage-pinned
+	// to domain.BackendS3 so migrateOne can detect a live s3 sibling row for
+	// the same (shikimori_id, episode_number) before ever touching CopyPrefix.
+	GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int, storage string) (*domain.Episode, error)
 }
 
 func main() {
@@ -200,6 +211,36 @@ func migrateOne(
 	srcCount, srcBytes := countBytes(srcObjs)
 	if srcCount == 0 {
 		log.Warnw("migrate skip: row on minio but no objects under prefix (anomaly)", fields...)
+		return false, 0
+	}
+
+	// 0 (pre-flight). Sibling guard — CopyPrefix would silently overwrite a
+	// live sibling's objects, and a later flip failure would then have
+	// undoS3Copy DELETE them (data loss for the sibling row). Skip loudly,
+	// touching neither minio nor the row, if EITHER:
+	//   (a) an s3 sibling row already exists for this (shikimori_id,
+	//       episode_number) — the same lookup the episodes-GET handler uses,
+	//       storage-pinned to 's3' so it never matches our own minio row; or
+	//   (b) List(s3, prefix) itself already reports objects at the target
+	//       prefix — defense in depth for destination content the DB check
+	//       might miss (e.g. an out-of-band write or a stale partial copy).
+	if sibling, serr := episodes.GetByShikimoriEpisode(ctx, ep.ShikimoriID, ep.EpisodeNumber, domain.BackendS3); serr == nil {
+		log.Errorw("migrate skip: s3 sibling row already exists for this (shikimori_id, episode_number) — CopyPrefix would overwrite its objects",
+			append(fields, "sibling_id", sibling.ID, "sibling_prefix", sibling.MinioPath)...)
+		return false, 0
+	} else if !isNotFound(serr) {
+		log.Errorw("migrate skip: sibling-row pre-flight lookup failed", append(fields, "error", serr)...)
+		return false, 0
+	}
+	dstPreObjs, err := store.List(ctx, domain.BackendS3, prefix)
+	if err != nil {
+		log.Errorw("migrate skip: s3 pre-flight prefix check failed", append(fields, "error", err)...)
+		return false, 0
+	}
+	if len(dstPreObjs) > 0 {
+		preCount, preBytes := countBytes(dstPreObjs)
+		log.Errorw("migrate skip: s3 prefix already has objects — CopyPrefix would overwrite them",
+			append(fields, "s3_existing_count", preCount, "s3_existing_bytes", preBytes)...)
 		return false, 0
 	}
 
