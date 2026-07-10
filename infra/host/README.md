@@ -230,3 +230,64 @@ source /usr/local/lib/animeenigma/maint-gate.sh
 maint_gate_enabled git_autosync && echo RUN
 maint_gate_setting disk_prune high_water_pct     # -> 80
 ```
+
+---
+
+## 5. docker disk/build-cache prune
+
+Container disk hygiene, **adopted into the repo 2026-07-10** (previously
+host-only, unversioned crons) so `/admin/policy` can pause or tune it like the
+other maintenance routines. One script, two modes:
+
+- **`daily`** → routine `disk_prune` — `docker system prune -af --filter until=72h`,
+  but **only when disk usage exceeds `high_water_pct`** (setting, default `80`).
+  Below that threshold it's a no-op (logged + status-pinged, no docker call).
+- **`weekly`** → routine `build_cache_prune` — `docker builder prune -f
+  --reserved-space 30GB` + `docker image prune -f`, unconditionally (gate-only,
+  no threshold).
+
+> **Behavior change vs. the old host-only crons:** the daily prune used to run
+> unconditionally; it is now threshold-gated on `high_water_pct`. The
+> enabled/disabled gate is the hard control — the threshold just avoids
+> needless pruning when disk usage is already healthy.
+
+**This replaces the old host-only `/etc/cron.d/docker-prune` and
+`/etc/cron.weekly/docker-prune`.** Remove both when installing this file (see
+below) so the two don't double-prune.
+
+### Files
+
+| Repo (source of truth)                          | Installed to                                                  |
+|--------------------------------------------------|----------------------------------------------------------------|
+| `infra/host/animeenigma-docker-prune.sh`        | `/usr/local/bin/animeenigma-docker-prune.sh` (mode 755)        |
+| `infra/host/animeenigma-docker-prune.cron`      | `/etc/cron.d/animeenigma-docker-prune` (root:root, mode 644)   |
+
+### Install / update
+
+```bash
+install -m 755 infra/host/animeenigma-docker-prune.sh   /usr/local/bin/animeenigma-docker-prune.sh
+install -m 644 infra/host/animeenigma-docker-prune.cron /etc/cron.d/animeenigma-docker-prune
+
+# Remove the old unversioned crons this replaces:
+rm -f /etc/cron.d/docker-prune /etc/cron.weekly/docker-prune
+# cron picks up /etc/cron.d/* automatically; no reload needed.
+```
+
+### Configure (optional, via `/admin/policy`)
+
+Both routines default to **enabled**. Pause either from `/admin/policy` (routine
+IDs `disk_prune`, `build_cache_prune`), or tune `disk_prune`'s `high_water_pct`
+setting (percent, default `80`) to change how full `/` must be before a daily
+prune actually runs. Requires `/usr/local/lib/animeenigma/maint-gate.sh`
+installed (see §4 above) — **fail-safe:** if the helper is missing or
+policy-service is unreachable, `disk_prune` and `build_cache_prune` both run
+exactly as they did before this change (gate absent/unreachable ⇒ never
+silently disables disk hygiene).
+
+### Inspect
+
+```bash
+tail -f /var/log/animeenigma-docker-prune.log       # outcomes, one line per run
+/usr/local/bin/animeenigma-docker-prune.sh daily     # run the daily routine by hand
+/usr/local/bin/animeenigma-docker-prune.sh weekly    # run the weekly routine by hand
+```
