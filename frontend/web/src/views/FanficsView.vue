@@ -88,6 +88,7 @@ async function onCopy(): Promise<void> {
 
 onBeforeUnmount(() => {
   abortController?.abort()
+  continueAbort?.abort()
 })
 
 // ── Library tab: reader dialog ──────────────────────────────────────────────
@@ -111,6 +112,35 @@ function onRemoveFanfic(id: string): void {
   }
 }
 
+const continuing = ref(false)
+let continueAbort: AbortController | null = null
+
+async function onContinueFanfic(): Promise<void> {
+  const f = readerFanfic.value
+  if (!f || continuing.value) return
+  continuing.value = true
+  continueAbort?.abort()
+  continueAbort = new AbortController()
+  await fanficApi.continueStory(
+    f.id,
+    {
+      onDelta: (text) => {
+        if (readerFanfic.value) readerFanfic.value.content += text
+      },
+      onDone: (_id, _title, _usage, part) => {
+        if (readerFanfic.value && part) readerFanfic.value.part_count = part
+        continuing.value = false
+        libraryGridRef.value?.refresh()
+      },
+      onError: () => {
+        continuing.value = false
+      },
+    },
+    continueAbort.signal,
+  )
+  continuing.value = false
+}
+
 // Exposed for src/views/__tests__/FanficsView.spec.ts — the streaming state
 // lives entirely in this component (Tabs only mounts one of #generate/
 // #library at a time, so a plain mount+DOM-only test can't reach the
@@ -123,6 +153,8 @@ defineExpose({
   genError,
   libraryGridRef,
   onGenerate,
+  continuing,
+  onContinueFanfic,
 })
 </script>
 
@@ -166,7 +198,10 @@ defineExpose({
     </div>
 
     <Modal v-model="readerOpen" :title="readerFanfic?.title" size="xl">
-      <FanficReader v-if="readerFanfic" :title="readerFanfic.title" :content="readerFanfic.content" />
+      <FanficReader v-if="readerFanfic" :title="readerFanfic.title" :content="readerFanfic.content" :streaming="continuing" />
+      <template v-if="readerFanfic && readerFanfic.status === 'complete'" #footer>
+        <Button :loading="continuing" @click="onContinueFanfic">{{ t('fanfic.reader.continue') }}</Button>
+      </template>
     </Modal>
   </div>
 </template>

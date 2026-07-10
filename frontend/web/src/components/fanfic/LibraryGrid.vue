@@ -86,6 +86,7 @@ defineExpose({ refresh: load, items })
             <p class="text-xs text-muted-foreground truncate mb-2">{{ f.anime_title }}</p>
             <div class="flex flex-wrap items-center gap-1 mb-2">
               <Badge :variant="ratingVariant(f.rating)" size="sm">{{ t(`fanfic.rating.${f.rating}`) }}</Badge>
+              <Badge v-if="f.canon" variant="primary" size="sm">{{ t('fanfic.library.canonBadge') }}</Badge>
               <Badge v-for="tag in f.tags.slice(0, 2)" :key="tag" size="sm">{{ tag }}</Badge>
             </div>
             <p v-if="f.status === 'failed'" class="text-xs text-destructive">{{ t('fanfic.status.failed') }}</p>
