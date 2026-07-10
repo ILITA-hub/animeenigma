@@ -8,15 +8,16 @@
  * library, no innerHTML, just headings (#/##) + blank-line paragraphs.
  */
 
-export type FanficBlock = { type: 'h2' | 'h3' | 'p'; text: string }
+export type FanficBlock = { type: 'h2' | 'h3' | 'p' | 'hr'; text: string }
 
-/** Minimal, safe fanfic renderer: headings (#/##) + blank-line paragraphs. */
+/** Minimal, safe fanfic renderer: headings (#/##) + blank-line paragraphs + hr dividers. */
 export function renderFanfic(md: string): FanficBlock[] {
   const blocks: FanficBlock[] = []
   for (const raw of md.split(/\n{2,}/)) {
     const chunk = raw.trim()
     if (!chunk) continue
-    if (chunk.startsWith('## ')) blocks.push({ type: 'h3', text: chunk.slice(3).trim() })
+    if (/^([-*_])\1{2,}$/.test(chunk)) blocks.push({ type: 'hr', text: '' })
+    else if (chunk.startsWith('## ')) blocks.push({ type: 'h3', text: chunk.slice(3).trim() })
     else if (chunk.startsWith('# ')) blocks.push({ type: 'h2', text: chunk.slice(2).trim() })
     else blocks.push({ type: 'p', text: chunk.replace(/\n/g, ' ') })
   }

@@ -28,6 +28,7 @@ const blocks = computed(() => renderFanfic(props.content))
     <template v-for="(b, i) in blocks" :key="i">
       <h2 v-if="b.type === 'h2'" class="text-xl font-semibold text-foreground mt-6 mb-2">{{ b.text }}</h2>
       <h3 v-else-if="b.type === 'h3'" class="text-lg font-semibold text-foreground mt-4 mb-2">{{ b.text }}</h3>
+      <hr v-else-if="b.type === 'hr'" class="my-6 border-border" />
       <p v-else class="text-muted-foreground leading-relaxed mb-3">{{ b.text }}</p>
     </template>
     <span
