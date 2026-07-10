@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/policy/internal/domain"
@@ -52,6 +53,23 @@ func TestMaintenanceRepo_SeedGetSetIntent(t *testing.T) {
 	all, err := r.GetAll(ctx)
 	if err != nil || len(all) != 9 {
 		t.Fatalf("getall len = %d err = %v; want 9", len(all), err)
+	}
+}
+
+// TestMaintenanceRepo_GetByID_NotFound locks the miss contract Task 3 depends on:
+// a lookup of an unknown id returns a nil routine and an error satisfying
+// errors.Is(err, gorm.ErrRecordNotFound).
+func TestMaintenanceRepo_GetByID_NotFound(t *testing.T) {
+	db := newMaintDB(t)
+	r := NewMaintenanceRepository(db)
+	ctx := context.Background()
+
+	got, err := r.GetByID(ctx, "does-not-exist")
+	if got != nil {
+		t.Errorf("routine = %+v; want nil", got)
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("err = %v; want errors.Is(..., gorm.ErrRecordNotFound)", err)
 	}
 }
 

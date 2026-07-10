@@ -1,4 +1,4 @@
-// Package repo persists policy-service maintenance routine intent + status.
+// maintenance.go — persistence for admin-controllable maintenance routines.
 package repo
 
 import (
