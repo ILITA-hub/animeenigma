@@ -20,7 +20,7 @@ import { useCharacters } from '@/composables/useCharacters'
 import { useConfirm } from '@/composables/useConfirm'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
-import { Input, Select, Chip, Button } from '@/components/ui'
+import { Input, Select, Chip, Button, Switch } from '@/components/ui'
 import type { CharacterCardModel } from '@/types/character'
 import type {
   GenerateInput,
@@ -238,6 +238,7 @@ async function onRatingChange(value: string | number): Promise<void> {
 // ── Prompt + submit ──────────────────────────────────────────────────────────
 
 const prompt = ref('')
+const canon = ref(false)
 
 // Rune-ish count (spread iterates by code point) to track the backend's
 // utf8.RuneCountInString(r.Prompt) > 2000 cap (services/fanfic/internal/
@@ -251,7 +252,7 @@ const promptOverLimit = computed(() => promptLength.value > MAX_PROMPT)
 const canGenerate = computed(
   () =>
     !!selectedAnime.value &&
-    prompt.value.trim().length > 0 &&
+    (canon.value || prompt.value.trim().length > 0) &&
     !promptOverLimit.value &&
     !props.disabled,
 )
@@ -266,6 +267,7 @@ function buildInput(): GenerateInput {
     rating: rating.value,
     language: language.value,
     prompt: prompt.value.trim(),
+    canon: canon.value,
   }
 }
 
@@ -298,6 +300,7 @@ defineExpose({
   onRatingChange,
   onLanguageChange,
   prompt,
+  canon,
   MAX_PROMPT,
   promptLength,
   promptOverLimit,
@@ -443,15 +446,26 @@ defineExpose({
       />
     </div>
 
+    <!-- Canon continuation -->
+    <div class="flex items-center justify-between rounded-xl border border-border bg-card p-3">
+      <div>
+        <p class="text-sm font-medium text-white/80">{{ t('fanfic.canon.label') }}</p>
+        <p class="text-xs text-muted-foreground">{{ t('fanfic.canon.hint') }}</p>
+      </div>
+      <Switch v-model="canon" :aria-label="t('fanfic.canon.label')" />
+    </div>
+
     <!-- Prompt -->
     <div>
-      <label class="block text-sm font-medium text-white/70 mb-2">{{ t('fanfic.form.prompt') }}</label>
+      <label class="block text-sm font-medium text-white/70 mb-2">
+        {{ canon ? t('fanfic.canon.directionLabel') : t('fanfic.form.prompt') }}
+      </label>
       <textarea
         v-model="prompt"
         rows="4"
         maxlength="2000"
         class="w-full rounded-lg bg-white/5 border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 resize-y"
-        :placeholder="t('fanfic.form.promptPlaceholder')"
+        :placeholder="canon ? t('fanfic.canon.directionPlaceholder') : t('fanfic.form.promptPlaceholder')"
       ></textarea>
       <div
         class="mt-1 text-right text-xs"

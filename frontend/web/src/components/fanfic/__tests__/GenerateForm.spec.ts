@@ -163,4 +163,15 @@ describe('GenerateForm', () => {
     await vm.onRatingChange('explicit')
     expect(vm.rating).toBe('explicit')
   })
+
+  it('canon mode makes the prompt optional and is emitted in the input', async () => {
+    const wrapper = mountForm() // existing helper/mount used elsewhere in this file
+    const vm = wrapper.vm as any
+    vm.selectedAnime = { id: 'a1', title: 'Frieren' }
+    vm.prompt = ''
+    vm.canon = true
+    await wrapper.vm.$nextTick()
+    expect(vm.canGenerate).toBe(true) // empty prompt is OK in canon mode
+    expect(vm.buildInput().canon).toBe(true)
+  })
 })
