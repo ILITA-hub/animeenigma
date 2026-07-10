@@ -17,6 +17,8 @@ func NewRouter(
 	adminH *handler.AdminFlagsHandler,
 	publicH *handler.PublicFlagsHandler,
 	internalH *handler.InternalRulesetHandler,
+	adminMaintH *handler.AdminMaintenanceHandler,
+	internalMaintH *handler.InternalMaintenanceHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -39,6 +41,10 @@ func NewRouter(
 
 	// Docker-network-only ruleset feed (gateway does NOT proxy /internal/*).
 	r.Get("/internal/policy/ruleset", internalH.GetRuleset)
+	// Docker-network + host-loopback only (never gateway-proxied) — a routine
+	// reads its gate then writes back status after each run.
+	r.Get("/internal/maintenance/routines/{id}", internalMaintH.Gate)
+	r.Post("/internal/maintenance/routines/{id}/status", internalMaintH.SetStatus)
 
 	r.Route("/api", func(r chi.Router) {
 		// Per-user visibility feed — JWT OPTIONAL (anonymous ⇒ everyone-flags).
@@ -54,6 +60,10 @@ func NewRouter(
 			r.Get("/flags", adminH.List)
 			r.Put("/flags/{key}", adminH.SetFlag)
 			r.Put("/roulette", adminH.SetRoulette)
+			// Maintenance routines share the /admin/policy JWT+admin gate, so the
+			// gateway needs NO new proxy route (/admin/policy/* already forwards here).
+			r.Get("/maintenance/routines", adminMaintH.List)
+			r.Put("/maintenance/routines/{id}", adminMaintH.SetRoutine)
 		})
 	})
 

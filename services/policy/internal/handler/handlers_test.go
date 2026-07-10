@@ -53,8 +53,11 @@ func newTestServer(t *testing.T) (http.Handler, authz.JWTConfig) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.FeatureFlag{}))
+	require.NoError(t, db.AutoMigrate(&domain.MaintenanceRoutine{}))
 	svc := service.NewPolicyService(repo.NewFeatureFlagRepository(db), logger.Default())
 	require.NoError(t, svc.SeedDefaults(context.Background()))
+	maintSvc := service.NewMaintenanceService(repo.NewMaintenanceRepository(db), logger.Default())
+	require.NoError(t, maintSvc.SeedDefaults(context.Background()))
 	// AccessTokenTTL MUST be set — the zero value makes GenerateTokenPair mint a
 	// token with ExpiresAt==IssuedAt, which authz.ValidateAccessToken treats as
 	// already-expired (no leeway), turning every admin-token test into a 401.
@@ -63,6 +66,8 @@ func newTestServer(t *testing.T) (http.Handler, authz.JWTConfig) {
 		handler.NewAdminFlagsHandler(svc, logger.Default()),
 		handler.NewPublicFlagsHandler(svc, logger.Default()),
 		handler.NewInternalRulesetHandler(svc, logger.Default()),
+		handler.NewAdminMaintenanceHandler(maintSvc, logger.Default()),
+		handler.NewInternalMaintenanceHandler(maintSvc, logger.Default()),
 		jwtCfg, logger.Default(), getSharedCollector(),
 	)
 	return router, jwtCfg
@@ -132,4 +137,45 @@ func TestAdminSetFlag_thenMineReflects(t *testing.T) {
 	var resp envelope[domain.MineResponse]
 	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &resp))
 	require.Contains(t, resp.Data.Visible, "fanfic")
+}
+
+func TestAdminMaintenanceRoutines_admin_ok(t *testing.T) {
+	router, cfg := newTestServer(t)
+	tok := adminToken(t, cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/policy/maintenance/routines", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "maintenance_bot")
+}
+
+func TestAdminMaintenanceRoutines_nonAdmin_forbidden(t *testing.T) {
+	router, cfg := newTestServer(t)
+	m := authz.NewJWTManager(cfg)
+	pair, err := m.GenerateTokenPair("oronemu", "oronemu", authz.RoleUser, "s3")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/policy/maintenance/routines", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestAdminMaintenanceRoutines_noToken_unauthorized(t *testing.T) {
+	router, _ := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/policy/maintenance/routines", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestInternalMaintenanceRoutines_gate_ok(t *testing.T) {
+	router, _ := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/internal/maintenance/routines/git_autosync", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
 }

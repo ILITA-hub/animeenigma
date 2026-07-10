@@ -62,7 +62,7 @@ func main() {
 		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
 	}
 
-	if err := db.AutoMigrate(&domain.FeatureFlag{}); err != nil {
+	if err := db.AutoMigrate(&domain.FeatureFlag{}, &domain.MaintenanceRoutine{}); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 
@@ -83,7 +83,14 @@ func main() {
 	publicH := handler.NewPublicFlagsHandler(policySvc, log)
 	internalH := handler.NewInternalRulesetHandler(policySvc, log)
 
-	router := transport.NewRouter(adminH, publicH, internalH, cfg.JWT, log, metrics.NewCollector("policy"))
+	maintSvc := service.NewMaintenanceService(repo.NewMaintenanceRepository(db.DB), log)
+	if err := maintSvc.SeedDefaults(context.Background()); err != nil {
+		log.Fatalw("failed to seed maintenance routines", "error", err)
+	}
+	adminMaintH := handler.NewAdminMaintenanceHandler(maintSvc, log)
+	internalMaintH := handler.NewInternalMaintenanceHandler(maintSvc, log)
+
+	router := transport.NewRouter(adminH, publicH, internalH, adminMaintH, internalMaintH, cfg.JWT, log, metrics.NewCollector("policy"))
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
