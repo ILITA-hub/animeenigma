@@ -229,8 +229,9 @@ func TestFetchWithEdgeFailover_NonSolodcdnSingleAttempt(t *testing.T) {
 	bad := statusServer(t, http.StatusInternalServerError, "boom")
 	p, rec := recordingProxy(nil)
 
-	// A non-solodcdn host does exactly one attempt and returns it verbatim — no
-	// rotation, empty served edge (so no X-AE-Edge headers are emitted).
+	// A non-solodcdn host takes the fast path: exactly one plain attempt, returned
+	// verbatim — no rotation, no trail, no OnEdgeAttempt metric (the failover
+	// machinery must never touch the universal per-segment path).
 	resp, ef, err := p.fetchWithEdgeFailover("https://cdn.example.com/x.ts",
 		edgeRoute(map[string]func() (*http.Response, error){"": srv(bad)}))
 	require.NoError(t, err)
@@ -238,8 +239,9 @@ func TestFetchWithEdgeFailover_NonSolodcdnSingleAttempt(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	assert.Equal(t, "", ef.served)
-	assert.Equal(t, []string{":http5xx"}, trailPairs(ef))
+	assert.Empty(t, ef.trail, "fast path records no attempt trail")
 	assert.Empty(t, rec.rotations, "non-solodcdn host must never rotate")
+	assert.Empty(t, rec.attempts, "no OnEdgeAttempt fired for non-solodcdn traffic")
 }
 
 func TestFetchWithEdgeFailover_NonSolodcdnErrorPropagates(t *testing.T) {
@@ -251,7 +253,7 @@ func TestFetchWithEdgeFailover_NonSolodcdnErrorPropagates(t *testing.T) {
 	require.Error(t, err, "a non-solodcdn transport error is returned unchanged, not rotated")
 	assert.Nil(t, resp)
 	assert.Equal(t, "", ef.served)
-	assert.Equal(t, []string{":dial_error"}, trailPairs(ef))
+	assert.Empty(t, ef.trail, "fast path records no attempt trail")
 }
 
 func TestFetchWithEdgeFailover_DefaultEdgePool(t *testing.T) {

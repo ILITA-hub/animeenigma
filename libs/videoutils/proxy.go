@@ -676,42 +676,51 @@ func solodcdnEdgeOf(rawHost string) string {
 func (p *VideoProxy) fetchWithEdgeFailover(sourceURL string, do func(fetchURL string) (*http.Response, error)) (*http.Response, edgeFailover, error) {
 	var ef edgeFailover
 
-	// timed runs one attempt, records it into the trail, and fires OnEdgeAttempt.
-	timed := func(fetchURL, edge string) (*http.Response, error) {
-		start := time.Now()
-		resp, err := do(fetchURL)
-		att := edgeAttempt{edge: edge, outcome: classifyEdgeOutcome(resp, err), ms: time.Since(start).Milliseconds()}
-		ef.trail = append(ef.trail, att)
-		if p.config.OnEdgeAttempt != nil {
-			p.config.OnEdgeAttempt(edge, att.outcome, att.ms)
-		}
-		return resp, err
+	// Fast path — the universal per-segment hot path (every EN/Raw/Hanime/ae/
+	// non-edge Kodik fetch): one plain attempt, no url.Parse, no regex, no trail,
+	// no metrics. The cheap substring gate keeps the parse+regex off the ~all-
+	// segments-succeed path so the failover machinery only touches actual
+	// p<N>.solodcdn.com edges. cloud.solodcdn.com (unsigned manifest host, not a
+	// rotatable edge) also takes this path via the fromEdge == "" guard below.
+	if !strings.Contains(sourceURL, ".solodcdn.com") {
+		resp, err := do(sourceURL)
+		return resp, ef, err
 	}
-
 	parsed, perr := url.Parse(sourceURL)
 	fromEdge := ""
 	if perr == nil {
 		fromEdge = solodcdnEdgeOf(parsed.Host)
 	}
-
-	// Non-solodcdn host (or unparseable): single attempt, unchanged semantics.
 	if fromEdge == "" {
-		resp, err := timed(sourceURL, "")
+		resp, err := do(sourceURL)
 		return resp, ef, err
 	}
 
+	// timed runs one edge attempt, records it into the trail, fires OnEdgeAttempt,
+	// and returns the classified outcome (reused by the rotation hook below).
+	timed := func(fetchURL, edge string) (*http.Response, error, string) {
+		start := time.Now()
+		resp, err := do(fetchURL)
+		ms := time.Since(start).Milliseconds()
+		outcome := classifyEdgeOutcome(resp, err)
+		ef.trail = append(ef.trail, edgeAttempt{edge: edge, outcome: outcome, ms: ms})
+		if p.config.OnEdgeAttempt != nil {
+			p.config.OnEdgeAttempt(edge, outcome, ms)
+		}
+		return resp, err, outcome
+	}
+
 	// Nominal (first) attempt on the edge the URL already carries.
-	resp, err := timed(sourceURL, fromEdge)
+	resp, err, _ := timed(sourceURL, fromEdge)
 	if err == nil && resp.StatusCode < 500 {
 		ef.served = fromEdge // <400 or authoritative 4xx — serve it, no rotation
 		return resp, ef, nil
 	}
 
 	// Nominal failed (>=500 OR transport error/timeout) → rotate to siblings.
+	// currentEdge is only read when current != nil, at which point it always holds
+	// a real edge (fromEdge on a live nominal >=500, or the adopted sibling below).
 	current, currentErr, currentEdge := resp, err, fromEdge
-	if err != nil {
-		currentEdge = "" // no live response from the nominal edge
-	}
 	rotations := 0
 	for _, edge := range edgesOrDefault(p.config.SolodcdnEdges) {
 		if rotations >= maxSolodcdnRotations {
@@ -724,8 +733,8 @@ func (p *VideoProxy) fetchWithEdgeFailover(sourceURL string, do func(fetchURL st
 
 		sibling := *parsed
 		sibling.Host = edge + ".solodcdn.com"
-		sResp, sErr := timed(sibling.String(), edge)
-		p.reportEdgeRotation(fromEdge, edge, rotationOutcome(classifyEdgeOutcome(sResp, sErr)))
+		sResp, sErr, sOutcome := timed(sibling.String(), edge)
+		p.reportEdgeRotation(fromEdge, edge, rotationOutcome(sOutcome))
 
 		if sErr != nil {
 			// Transport error reaching the sibling: keep whatever live response we
