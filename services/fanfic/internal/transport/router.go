@@ -14,13 +14,14 @@ import (
 
 // NewRouter builds the chi router for the fanfic service.
 //
-//	GET  /health              (public, GET+HEAD)
-//	GET  /metrics             (public, prom)
-//	POST /api/fanfic/generate (JWT) — SSE
-//	GET  /api/fanfic          (JWT) — list
-//	GET  /api/fanfic/tags     (JWT) — curated tags (registered before /{id})
-//	GET  /api/fanfic/{id}     (JWT)
-//	DELETE /api/fanfic/{id}   (JWT)
+//	GET    /health                  (public, GET+HEAD)
+//	GET    /metrics                (public, prom)
+//	POST   /api/fanfic/generate    (JWT) — SSE
+//	POST   /api/fanfic/{id}/continue (JWT) — SSE, appends next part
+//	GET    /api/fanfic             (JWT) — list
+//	GET    /api/fanfic/tags        (JWT) — curated tags (registered before /{id})
+//	GET    /api/fanfic/{id}        (JWT)
+//	DELETE /api/fanfic/{id}        (JWT)
 func NewRouter(h *handler.Handler, jwtConfig authz.JWTConfig, log *logger.Logger, mc *metrics.Collector) http.Handler {
 	r := chi.NewRouter()
 
@@ -44,6 +45,7 @@ func NewRouter(h *handler.Handler, jwtConfig authz.JWTConfig, log *logger.Logger
 	r.Route("/api/fanfic", func(r chi.Router) {
 		r.Use(AuthMiddleware(jwtConfig))
 		r.Post("/generate", h.Generate)
+		r.Post("/{id}/continue", h.Continue)
 		r.Get("/", h.List)
 		r.Get("/tags", h.Tags) // must be registered before /{id} or chi captures "tags" as the id param
 		r.Get("/{id}", h.Get)

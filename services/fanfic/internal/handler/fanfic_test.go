@@ -11,9 +11,16 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/service"
+	"github.com/go-chi/chi/v5"
 )
 
-type fakeGen struct{ events []string }
+type fakeGen struct {
+	events []string
+
+	// continue-specific: see fakeGen.Continue below.
+	continueCalled bool
+	continueEvents []string
+}
 
 // NOTE: emit is typed as the named service.Emit, not the structurally
 // identical literal func(string, any) error — see the comment on the
@@ -29,9 +36,24 @@ func (f *fakeGen) Generate(_ context.Context, userID string, _ domain.GenerateRe
 	return nil
 }
 
+// Continue emits continueEvents (defaults to none) and records that it was
+// called, for TestContinue_StreamsWhenComplete.
+func (f *fakeGen) Continue(_ context.Context, userID, id string, emit service.Emit) error {
+	f.continueCalled = true
+	for _, e := range f.continueEvents {
+		_ = emit(e, map[string]any{"id": id, "user": userID})
+	}
+	return nil
+}
+
 type fakeLib struct {
 	deleted     bool
 	calledLimit int
+
+	// get/getErr: when set, override the default Get behavior below, for
+	// TestContinue_409OnNonComplete / TestContinue_StreamsWhenComplete.
+	get    *domain.Fanfic
+	getErr error
 }
 
 func (f *fakeLib) List(_ context.Context, _ string, limit, _ int) ([]domain.Fanfic, int64, error) {
@@ -39,6 +61,12 @@ func (f *fakeLib) List(_ context.Context, _ string, limit, _ int) ([]domain.Fanf
 	return []domain.Fanfic{{ID: "x", Title: "T"}}, 1, nil
 }
 func (f *fakeLib) Get(_ context.Context, _, id string) (*domain.Fanfic, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	if f.get != nil {
+		return f.get, nil
+	}
 	return &domain.Fanfic{ID: id, Title: "T", Content: "hi"}, nil
 }
 func (f *fakeLib) SoftDelete(_ context.Context, _, _ string) error { f.deleted = true; return nil }
@@ -46,6 +74,16 @@ func (f *fakeLib) SoftDelete(_ context.Context, _, _ string) error { f.deleted =
 func withUser(r *http.Request) *http.Request {
 	claims := &authz.Claims{UserID: "u-1"}
 	return r.WithContext(authz.ContextWithClaims(r.Context(), claims))
+}
+
+// withURLParam injects a chi route param into the request context, mirroring
+// the pattern used across other services' handler tests (e.g.
+// services/library/internal/handler/episodes_test.go) since this file has no
+// pre-existing chi-param helper of its own.
+func withURLParam(r *http.Request, key, value string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add(key, value)
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
 
 func TestGenerate_SSE(t *testing.T) {
@@ -111,5 +149,40 @@ func TestTags(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 	if len(resp.Data) == 0 {
 		t.Error("expected curated tags")
+	}
+}
+
+func TestContinue_409OnNonComplete(t *testing.T) {
+	repo := &fakeLib{get: &domain.Fanfic{ID: "f1", UserID: "u-1", Status: domain.StatusGenerating}}
+	h := NewHandler(&fakeGen{}, repo, nil)
+
+	req := withUser(httptest.NewRequest(http.MethodPost, "/api/fanfic/f1/continue", nil))
+	req = withURLParam(req, "id", "f1")
+	rec := httptest.NewRecorder()
+	h.Continue(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rec.Code)
+	}
+}
+
+func TestContinue_StreamsWhenComplete(t *testing.T) {
+	repo := &fakeLib{get: &domain.Fanfic{ID: "f1", UserID: "u-1", Status: domain.StatusComplete}}
+	gen := &fakeGen{continueEvents: []string{"meta", "delta", "done"}}
+	h := NewHandler(gen, repo, nil)
+
+	req := withUser(httptest.NewRequest(http.MethodPost, "/api/fanfic/f1/continue", nil))
+	req = withURLParam(req, "id", "f1")
+	rec := httptest.NewRecorder()
+	h.Continue(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("content-type = %q", ct)
+	}
+	if !gen.continueCalled {
+		t.Fatal("expected gen.Continue to be called")
 	}
 }

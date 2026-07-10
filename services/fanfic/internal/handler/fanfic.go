@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
+	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/pagination"
@@ -23,6 +24,7 @@ import (
 // would fail to satisfy this interface if the literal type were used here.
 type generator interface {
 	Generate(ctx context.Context, userID string, req domain.GenerateRequest, emit service.Emit) error
+	Continue(ctx context.Context, userID, id string, emit service.Emit) error
 }
 
 // libraryStore is the subset of repo.Repository this handler depends on.
@@ -78,6 +80,53 @@ func (h *Handler) Generate(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithoutCancel(r.Context())
 	if err := h.gen.Generate(ctx, userID, req, emit); err != nil && h.log != nil {
 		h.log.Warnw("fanfic generation ended with error", "user_id", userID, "error", err)
+	}
+}
+
+// Continue streams the next part of an existing fanfic as SSE and appends it
+// on completion. Ownership + complete-status are checked BEFORE switching to
+// SSE so a rejected request returns a real 404/409 (not an SSE error frame).
+func (h *Handler) Continue(w http.ResponseWriter, r *http.Request) {
+	userID := authz.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Unauthorized(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+
+	f, err := h.repo.Get(r.Context(), userID, id)
+	if err != nil {
+		httputil.Error(w, err) // owner-scoped NotFound -> 404
+		return
+	}
+	if f.Status != domain.StatusComplete {
+		httputil.Error(w, liberrors.New(liberrors.CodeConflict, "fanfic is not complete"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	rc := http.NewResponseController(w)
+	emit := func(event string, data any) error {
+		payload, err := json.Marshal(data)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, payload); err != nil {
+			return err
+		}
+		return rc.Flush()
+	}
+
+	// Detach from the request context so a client disconnect does NOT abort
+	// server-side accumulation + persistence (spec §4), same as Generate.
+	ctx := context.WithoutCancel(r.Context())
+	if err := h.gen.Continue(ctx, userID, id, emit); err != nil && h.log != nil {
+		h.log.Warnw("fanfic continue ended with error", "user_id", userID, "fanfic_id", id, "error", err)
 	}
 }
 
