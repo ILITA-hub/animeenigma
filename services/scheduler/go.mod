@@ -5,22 +5,21 @@ go 1.25.0
 require (
 	github.com/ILITA-hub/animeenigma/libs/cache v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/database v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
-	github.com/ILITA-hub/animeenigma/libs/streamprobe v0.0.0-00010101000000-000000000000
 	github.com/ILITA-hub/animeenigma/libs/tracing v0.0.0
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.11.1
 	gorm.io/driver/sqlite v1.6.0
-	gorm.io/gorm v1.30.0
+	gorm.io/gorm v1.31.2
 )
 
 require (
 	github.com/ILITA-hub/animeenigma/libs/authz v0.0.0-20260605053210-7d61fcc7b6d6 // indirect
-	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0 // indirect
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -80,6 +79,7 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/errors => ../../libs/errors
 	github.com/ILITA-hub/animeenigma/libs/httputil => ../../libs/httputil
 	github.com/ILITA-hub/animeenigma/libs/logger => ../../libs/logger
+	github.com/ILITA-hub/animeenigma/libs/maintenancegate => ../../libs/maintenancegate
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
 	github.com/ILITA-hub/animeenigma/libs/streamprobe => ../../libs/streamprobe
 	github.com/ILITA-hub/animeenigma/libs/tracing => ../../libs/tracing

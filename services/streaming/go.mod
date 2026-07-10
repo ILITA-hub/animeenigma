@@ -12,7 +12,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/tracing v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/videoutils v0.0.0
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/minio/minio-go/v7 v7.0.67
 	github.com/prometheus/client_golang v1.23.2
 	golang.org/x/image v0.41.0

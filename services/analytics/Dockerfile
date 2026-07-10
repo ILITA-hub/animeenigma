@@ -22,6 +22,7 @@ COPY libs/storageclient/go.mod libs/storageclient/go.sum* ./libs/storageclient/
 COPY libs/idmapping/go.mod libs/idmapping/go.sum* ./libs/idmapping/
 COPY libs/kodikextract/go.mod libs/kodikextract/go.sum* ./libs/kodikextract/
 COPY libs/metrics/go.mod libs/metrics/go.sum* ./libs/metrics/
+COPY libs/maintenancegate/go.mod libs/maintenancegate/go.sum* ./libs/maintenancegate/
 COPY services/auth/go.mod services/auth/go.sum* ./services/auth/
 COPY services/upscaler/go.mod services/upscaler/go.sum* ./services/upscaler/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/

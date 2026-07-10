@@ -10,6 +10,7 @@ use (
 	./libs/idmapping
 	./libs/kodikextract
 	./libs/logger
+	./libs/maintenancegate
 	./libs/metrics
 	./libs/pagination
 	./libs/storageclient
