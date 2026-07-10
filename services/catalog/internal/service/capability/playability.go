@@ -16,6 +16,7 @@ const (
 	wHealth    = 1.0
 
 	hUp   = 1.0 // health term multipliers (pre-wHealth)
+	hDeg  = 0.0 // one-fail warning: neutral (below up/recovering, above down)
 	hRec  = 0.3
 	hDown = -1.0
 
@@ -95,11 +96,13 @@ func healthTerm(h domain.ProviderHealth) float64 {
 	switch h {
 	case domain.HealthUp:
 		return hUp
+	case domain.HealthDegraded:
+		return hDeg
 	case domain.HealthRecovering:
 		return hRec
 	case domain.HealthDown:
 		return hDown
-	default:
+	default: // unseeded
 		return 0
 	}
 }

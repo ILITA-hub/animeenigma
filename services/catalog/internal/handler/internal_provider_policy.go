@@ -78,14 +78,13 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 	}
 	providerpolicy.ApplyVerdict(&p, req.Pass, now, h.cfg.PromoteAfter)
 
-	// policy/policy_since are no-op writes of the unchanged values (ApplyVerdict
-	// never mutates policy) — kept so the TOCTOU disabled-guard below retains
-	// the same Updates call shape.
+	// policy/policy_since are NOT written: ApplyVerdict never mutates policy
+	// (admin-only), and omitting them also closes the write-back window where
+	// an admin's auto→manual park racing this handler would be clobbered by
+	// the stale value read above.
 	updates := map[string]any{
-		"policy":         p.Policy,
 		"health":         p.Health,
 		"health_since":   p.HealthSince,
-		"policy_since":   p.PolicySince,
 		"last_probed_at": p.LastProbedAt,
 		"reason":         p.Reason,
 	}

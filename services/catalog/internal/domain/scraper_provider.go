@@ -137,11 +137,9 @@ func (p ScraperProvider) IsDegraded() bool { return p.Status == StatusDegraded }
 // degraded). Disabled providers are not registered.
 func (p ScraperProvider) IsRegistered() bool { return p.Status != StatusDisabled }
 
-// Eligible reports auto-failover eligibility: policy auto AND health up or
-// degraded (degraded is a warning, not a confirmed outage — stays trusted).
-func (p ScraperProvider) Eligible() bool {
-	return p.Policy == PolicyAuto && (p.Health == HealthUp || p.Health == HealthDegraded)
-}
+// Eligible reports auto-failover eligibility — exactly the WireStatus enabled
+// tri-state (policy auto AND health up|degraded), kept as one source of truth.
+func (p ScraperProvider) Eligible() bool { return p.WireStatus() == StatusEnabled }
 
 // Derived-state labels for the playback-health dashboard. These are the single
 // source of truth shared by the roster table's State column (the Postgres CASE

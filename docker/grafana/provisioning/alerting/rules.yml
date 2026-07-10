@@ -962,11 +962,13 @@ groups:
             datasourceUid: PBFA97CFB590B2093
             model:
               # Per group, fires when the HEALTHIEST provider is registered
-              # (>=1, so all-Disabled steady-state groups are excluded) but below
-              # auto-playable (<3 => no UP/Recovering). `max by (group)` never
+              # (>=1, so all-Disabled/manual steady-state groups are excluded)
+              # but below serving-or-imminent (<2 => best is Down; Degraded=2 is
+              # a one-fail warning still IN auto-failover, Recovering=3 is
+              # passing probes and climbing back). `max by (group)` never
               # yields an empty result, so a fully-Down group still produces a
-              # value to threshold (the naive count(...>=3)==0 would vanish).
-              expr: (max by (group) (provider_state) < 3) and (max by (group) (provider_state) >= 1)
+              # value to threshold (the naive count(...>=2)==0 would vanish).
+              expr: (max by (group) (provider_state) < 2) and (max by (group) (provider_state) >= 1)
               instant: true
               refId: A
           - refId: B
@@ -998,7 +1000,7 @@ groups:
           severity: critical
         annotations:
           summary: "Provider group {{ $labels.group }}: no auto-playable source"
-          description: "Every provider in the {{ $labels.group }} group is Down or only manually-selectable (Degraded) for 30m — auto-failover cannot serve this group. Check /api/admin/scraper/health and the playback-health roster."
+          description: "Every registered provider in the {{ $labels.group }} group is confirmed Down (two consecutive failed probes) for 30m — auto-failover cannot serve this group. Check /api/admin/scraper/health and the playback-health roster."
 
       - uid: provider-fleet-correlated-down
         title: ProviderFleetCorrelatedDown
@@ -1013,10 +1015,10 @@ groups:
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
-              # Count of providers per group actively failing IN the auto chain
-              # (state==1 Down). Gradual attrition is auto-demoted to manual
-              # (Degraded=2) and never counts here, so >=2 means a correlated
-              # simultaneous failure (shared cause), not slow one-at-a-time aging.
+              # Count of providers per group confirmed Down IN the auto chain
+              # (state==1: two consecutive failed probes). One-fail blips sit at
+              # Degraded=2 and never count here, so >=2 means a correlated
+              # simultaneous failure (shared cause), not independent flapping.
               expr: count by (group) (provider_state == 1)
               instant: true
               refId: A

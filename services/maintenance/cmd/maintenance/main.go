@@ -1187,8 +1187,9 @@ func (s *service) scraperProviderFaultLine() string {
 // formatProviderFaultLine builds the one-line unhealthy-provider summary from a
 // provider roster. Pure (no I/O) for testability. Considers only the "en"
 // failover group; lists providers that are degraded OR whose health is not
-// "up" (so an in-chain provider that's failing but not yet auto-demoted still
-// shows), excluding admin-disabled ones (intentionally off, not a fault).
+// "up" (so an in-chain provider with a pending one-fail warning or confirmed
+// down still shows), excluding admin-disabled ones (intentionally off, not a
+// fault).
 // Returns "" when nothing is faulted.
 func formatProviderFaultLine(providers []scraperProviderRow) string {
 	var parts []string
