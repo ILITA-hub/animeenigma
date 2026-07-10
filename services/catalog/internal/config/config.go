@@ -38,7 +38,10 @@ type Config struct {
 	// the block. Default true. Env: SPOTLIGHT_ENABLED.
 	SpotlightEnabled bool
 	// SpotlightCuratedShikimoriID pins the anime featured by the `curated`
-	// spotlight card (env SPOTLIGHT_CURATED_SHIKIMORI_ID). Empty disables it.
+	// spotlight card (env SPOTLIGHT_CURATED_SHIKIMORI_ID). Unset ⇒ defaults
+	// to "63403"; explicitly set to an empty string ⇒ the curated card is
+	// disabled (loaded via getEnvAllowEmpty, which distinguishes unset from
+	// explicitly-empty — plain os.Getenv cannot).
 	SpotlightCuratedShikimoriID string
 	// Prometheus — base URL for the spotlight platform_stats card's
 	// instant queries (workstream hero-spotlight). Default mirrors the
@@ -212,7 +215,7 @@ func Load() (*Config, error) {
 			Timeout: getEnvDuration("LIBRARY_API_TIMEOUT", 2*time.Second),
 		},
 		SpotlightEnabled:            getEnvBool("SPOTLIGHT_ENABLED", true),
-		SpotlightCuratedShikimoriID: getEnv("SPOTLIGHT_CURATED_SHIKIMORI_ID", "63403"),
+		SpotlightCuratedShikimoriID: getEnvAllowEmpty("SPOTLIGHT_CURATED_SHIKIMORI_ID", "63403"),
 		Prometheus: PrometheusConfig{
 			URL: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090/prometheus"),
 		},
@@ -232,6 +235,17 @@ func Load() (*Config, error) {
 func getEnv(key, defaultVal string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
+	}
+	return defaultVal
+}
+
+// getEnvAllowEmpty returns the env value when the key is SET (even to an
+// empty string), else defaultVal. Unlike getEnv, an explicitly-empty value
+// is honored — used where empty carries meaning (here: disabling the
+// curated spotlight card).
+func getEnvAllowEmpty(key, defaultVal string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
 	}
 	return defaultVal
 }

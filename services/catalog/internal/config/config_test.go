@@ -32,3 +32,24 @@ func TestLoad_ScraperTimeout_ExceedsBrowserProviderBudget(t *testing.T) {
 			cfg.Scraper.Timeout, browserProviderBudget)
 	}
 }
+
+// TestGetEnvAllowEmpty guards the curated-spotlight config-load fix: an
+// operator setting SPOTLIGHT_CURATED_SHIKIMORI_ID="" must disable the card
+// (SpotlightCuratedShikimoriID == ""), not silently fall back to the
+// "63403" default the way plain os.Getenv-backed getEnv would, since
+// os.Getenv cannot distinguish "unset" from "explicitly empty".
+func TestGetEnvAllowEmpty(t *testing.T) {
+	const k = "SPOTLIGHT_CURATED_SHIKIMORI_ID_TEST"
+	os.Unsetenv(k)
+	if got := getEnvAllowEmpty(k, "63403"); got != "63403" {
+		t.Errorf("unset: got %q, want default 63403", got)
+	}
+	t.Setenv(k, "")
+	if got := getEnvAllowEmpty(k, "63403"); got != "" {
+		t.Errorf("explicit-empty: got %q, want empty", got)
+	}
+	t.Setenv(k, "999")
+	if got := getEnvAllowEmpty(k, "63403"); got != "999" {
+		t.Errorf("set: got %q, want 999", got)
+	}
+}

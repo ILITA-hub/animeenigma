@@ -6,7 +6,7 @@ Secrets live in `docker/.env` (host-only, git-ignored). Non-secret service-disco
 
 **BE egress recorder** (catalog/scraper/streaming — Activity Register v4.0 Phase 2): `ANALYTICS_INTERNAL_URL` (default `http://analytics:8092`) — ship recorded outbound egress effects (host/provider/bytes, one aggregated row per HLS watch session) to analytics `POST /internal/effects` over the Docker network. Non-secret service-discovery URL; producer is non-blocking + drop-on-full (analytics outage never affects requests). `/internal/effects` NOT gateway-proxied (Docker-network-only).
 
-**Catalog:** `SHIKIMORI_CLIENT_ID`, `SHIKIMORI_CLIENT_SECRET`, `KODIK_API_KEY` (if using), `JIMAKU_API_KEY` (if using JP subtitles). `SPOTLIGHT_CURATED_SHIKIMORI_ID` (default `63403` — Shikimori ID featured by the `curated` spotlight card ("Куратор рекомендует" / "Curator Recommends"); empty string disables the card. Card shows only while the anime is `ongoing`.)
+**Catalog:** `SHIKIMORI_CLIENT_ID`, `SHIKIMORI_CLIENT_SECRET`, `KODIK_API_KEY` (if using), `JIMAKU_API_KEY` (if using JP subtitles). `SPOTLIGHT_CURATED_SHIKIMORI_ID` (Shikimori ID featured by the `curated` spotlight card ("Куратор рекомендует" / "Curator Recommends"); unset ⇒ defaults to `63403`; explicitly set to an empty string ⇒ the curated card is disabled. Card shows only while the anime is `ongoing`.)
 
 **Streaming:** `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`.
 
