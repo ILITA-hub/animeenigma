@@ -37,6 +37,9 @@ type Config struct {
 	// a bare 404 with no body so the frontend HSB-FE-02 v-if hides
 	// the block. Default true. Env: SPOTLIGHT_ENABLED.
 	SpotlightEnabled bool
+	// SpotlightCuratedShikimoriID pins the anime featured by the `curated`
+	// spotlight card (env SPOTLIGHT_CURATED_SHIKIMORI_ID). Empty disables it.
+	SpotlightCuratedShikimoriID string
 	// Prometheus — base URL for the spotlight platform_stats card's
 	// instant queries (workstream hero-spotlight). Default mirrors the
 	// gateway's PROMETHEUS_SERVICE_URL incl. the /prometheus route-prefix.
@@ -208,7 +211,8 @@ func Load() (*Config, error) {
 			APIURL:  getEnv("LIBRARY_API_URL", "http://library:8089"),
 			Timeout: getEnvDuration("LIBRARY_API_TIMEOUT", 2*time.Second),
 		},
-		SpotlightEnabled: getEnvBool("SPOTLIGHT_ENABLED", true),
+		SpotlightEnabled:            getEnvBool("SPOTLIGHT_ENABLED", true),
+		SpotlightCuratedShikimoriID: getEnv("SPOTLIGHT_CURATED_SHIKIMORI_ID", "63403"),
 		Prometheus: PrometheusConfig{
 			URL: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090/prometheus"),
 		},

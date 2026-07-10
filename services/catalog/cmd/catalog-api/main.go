@@ -638,6 +638,8 @@ func main() {
 		cards.NewNowWatchingResolver(cards.NewGormNowWatchingAdapter(db.DB), redisCache, spotlightRng, log),
 		cards.NewNotTimeYetResolver(spotlightPlayerClient, redisCache, spotlightRng, log),
 		cards.NewContinueWatchingNewResolver(spotlightPlayerClient, redisCache, spotlightRng, log),
+		// Curated «Куратор рекомендует» — one env-pinned, airing-gated anime.
+		cards.NewCuratedResolver(animeRepo, redisCache, log, cfg.SpotlightCuratedShikimoriID),
 	}
 	spotlightAggregator := spotlight.NewAggregator(redisCache, log, spotlightResolvers)
 	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)
