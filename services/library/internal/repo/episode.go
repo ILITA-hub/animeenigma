@@ -144,6 +144,42 @@ func (r *EpisodeRepository) UpdateMinioPath(ctx context.Context, id string, path
 	return nil
 }
 
+// ListByStorageSource returns every episode row currently on backend `storage`
+// with the given `source` (e.g. storage='minio', source='autocache' — the
+// storage-migrate operator's selection set), ordered by created_at ASC for
+// deterministic, resumable processing. Both filters are BOUND `?` params.
+//
+// Selection scoped to storage='minio' + already-flipped rows never reselected is
+// what makes the migration idempotent: a row that has already been copied to s3
+// and flipped (storage='s3') is invisible to this query, so a re-run only ever
+// picks up rows still awaiting migration.
+func (r *EpisodeRepository) ListByStorageSource(ctx context.Context, storage string, source domain.EpisodeSource) ([]domain.Episode, error) {
+	var eps []domain.Episode
+	if err := r.db.WithContext(ctx).
+		Where("storage = ? AND source = ?", storage, source).
+		Order("created_at ASC").
+		Find(&eps).Error; err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "list episodes by storage+source")
+	}
+	return eps, nil
+}
+
+// UpdateStorage repoints a single episode row's storage backend (e.g. 'minio' →
+// 's3') after its objects have been copied AND re-List-verified on the target.
+// The storage-migrate operator flips the row BEFORE deleting the local prefix,
+// so a crash between flip and delete leaves a benign dual-presence state (the s3
+// row is authoritative; the stale minio objects are cleaned on the next re-run).
+// Scoped to the given id (single-column Updates); returns nil on success.
+func (r *EpisodeRepository) UpdateStorage(ctx context.Context, id string, storage string) error {
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Episode{}).
+		Where("id = ?", id).
+		Update("storage", storage).Error; err != nil {
+		return liberrors.Wrap(err, liberrors.CodeInternal, "update episode storage")
+	}
+	return nil
+}
+
 // BumpFetch sets last_fetch_at=now() and increments fetch_count for the
 // (shikimori_id, episode_number) row — the "viewed by any user" freshness +
 // popularity signal the ae serve HIT path fires (SERVE-02). The increment uses

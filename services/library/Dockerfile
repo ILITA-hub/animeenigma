@@ -56,6 +56,10 @@ COPY services/library/ ./services/library/
 # multi-file season pack into MinIO; see its package doc).
 RUN cd services/library && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /library-api ./cmd/library-api
 RUN cd services/library && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /library-batchingest ./cmd/library-batchingest
+# One-shot storage-migrate operator tool (cmd/library-storage-migrate — used via
+# `docker compose run` to move episode content minio → external S3 with a
+# copy-verify-flip-delete safety sequence; see its package doc).
+RUN cd services/library && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /library-storage-migrate ./cmd/library-storage-migrate
 
 # Runtime stage
 FROM alpine:3.19
@@ -71,6 +75,7 @@ WORKDIR /app
 
 COPY --from=builder /library-api .
 COPY --from=builder /library-batchingest /app/library-batchingest
+COPY --from=builder /library-storage-migrate /app/library-storage-migrate
 
 EXPOSE 8089
 
