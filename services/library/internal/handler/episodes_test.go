@@ -27,6 +27,7 @@ type stubEpisodeReader struct {
 
 	gotShikimoriID   string
 	gotEpisodeNumber int
+	gotStorage       string
 	gotListShikimori string
 }
 
@@ -35,9 +36,10 @@ func (s *stubEpisodeReader) ListRecentDistinct(_ context.Context, limit int) ([]
 	return s.recentRet, s.recentErr
 }
 
-func (s *stubEpisodeReader) GetByShikimoriEpisode(_ context.Context, id string, n int) (*domain.Episode, error) {
+func (s *stubEpisodeReader) GetByShikimoriEpisode(_ context.Context, id string, n int, storage string) (*domain.Episode, error) {
 	s.gotShikimoriID = id
 	s.gotEpisodeNumber = n
+	s.gotStorage = storage
 	return s.ret, s.err
 }
 
@@ -50,9 +52,9 @@ type stubURL struct {
 	last string
 }
 
-func (s *stubURL) URLFor(path string) string {
+func (s *stubURL) URLFor(_ context.Context, _ string, path string) (string, error) {
 	s.last = path
-	return "http://stub.example/" + path
+	return "http://stub.example/" + path, nil
 }
 
 func newReq(t *testing.T, shikimoriID, episode string) (*http.Request, *httptest.ResponseRecorder) {
@@ -106,6 +108,56 @@ func TestEpisodes_Get_HappyPath(t *testing.T) {
 	}
 	if parsed.Data.SizeBytes != 123456 {
 		t.Errorf("SizeBytes = %d, want 123456", parsed.Data.SizeBytes)
+	}
+}
+
+// TestEpisodes_Get_StoragePreference is the storage-service Task-4 anchor: the
+// GET threads an explicit ?storage= to the repo (backend pin) and defaults to ""
+// (repo minio-preference) when absent, and the resolved backend surfaces in the
+// "storage" field of the response.
+func TestEpisodes_Get_StoragePreference(t *testing.T) {
+	// Explicit ?storage=s3 → passed through; response carries the row's storage.
+	repo := &stubEpisodeReader{ret: &domain.Episode{
+		ShikimoriID: "12345", EpisodeNumber: 3, MinioPath: "aeProvider/12345/RAW/3/", Storage: "s3",
+	}}
+	h := NewEpisodesHandler(repo, &stubURL{}, nil)
+	r := httptest.NewRequest(http.MethodGet, "/episodes/12345/3?storage=s3", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("shikimori_id", "12345")
+	rctx.URLParams.Add("episode", "3")
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	h.Get(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if repo.gotStorage != "s3" {
+		t.Errorf("repo storage arg = %q, want s3 (from ?storage=)", repo.gotStorage)
+	}
+	var parsed struct {
+		Data struct {
+			Storage string `json:"storage"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if parsed.Data.Storage != "s3" {
+		t.Errorf("response storage = %q, want s3", parsed.Data.Storage)
+	}
+
+	// No ?storage= → default "" (repo applies minio-preference).
+	repo2 := &stubEpisodeReader{ret: &domain.Episode{
+		ShikimoriID: "12345", EpisodeNumber: 3, MinioPath: "aeProvider/12345/RAW/3/", Storage: "minio",
+	}}
+	h2 := NewEpisodesHandler(repo2, &stubURL{}, nil)
+	r2, w2 := newReq(t, "12345", "3")
+	h2.Get(w2, r2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w2.Code, w2.Body.String())
+	}
+	if repo2.gotStorage != "" {
+		t.Errorf("repo storage arg = %q, want empty (no ?storage=)", repo2.gotStorage)
 	}
 }
 

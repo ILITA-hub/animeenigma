@@ -18,16 +18,17 @@ import (
 // handler needs. Pulled out so tests can inject a stub without
 // spinning up Postgres.
 type EpisodeStoreReader interface {
-	GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int) (*domain.Episode, error)
+	GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int, storage string) (*domain.Episode, error)
 	List(ctx context.Context, shikimoriID string) ([]domain.Episode, error)
 	ListRecentDistinct(ctx context.Context, limit int) ([]domain.Episode, error)
 }
 
-// URLBuilder is the slice of *minio.Writer the handler needs (the
-// URLFor method). The episodes endpoint returns the playlist URL
-// the streaming proxy fronts.
+// URLBuilder is the slice of storagegw.Gateway the handler needs (the URLFor
+// method). URLFor now takes the row's storage backend + path and returns the
+// public URL the streaming proxy fronts (base URL differs per backend:
+// http://minio:9000/raw-library vs https://s3.firstvds.ru/raw-library).
 type URLBuilder interface {
-	URLFor(path string) string
+	URLFor(ctx context.Context, storage, path string) (string, error)
 }
 
 // EpisodesHandler implements GET /api/library/episodes/{shikimori_id}/{episode}.
@@ -53,6 +54,7 @@ func NewEpisodesHandler(episodeRepo EpisodeStoreReader, urlBuilder URLBuilder, l
 // localized dub from the original track.
 type episodeResponse struct {
 	MinioURL      string `json:"minio_url"`
+	Storage       string `json:"storage,omitempty"`
 	DurationSec   int    `json:"duration_sec,omitempty"`
 	SizeBytes     int64  `json:"size_bytes,omitempty"`
 	StoryboardURL string `json:"storyboard_url,omitempty"`
@@ -70,6 +72,7 @@ type episodeResponse struct {
 type episodeListItem struct {
 	EpisodeNumber int    `json:"episode_number"`
 	MinioURL      string `json:"minio_url"`
+	Storage       string `json:"storage,omitempty"`
 	DurationSec   int    `json:"duration_sec,omitempty"`
 	StoryboardURL string `json:"storyboard_url,omitempty"`
 	Track         string `json:"track,omitempty"`
@@ -102,9 +105,20 @@ func (h *EpisodesHandler) List(w http.ResponseWriter, r *http.Request) {
 	items := make([]episodeListItem, 0, len(eps))
 	for i := range eps {
 		ep := &eps[i]
+		playlistURL, err := h.urlBuilder.URLFor(r.Context(), ep.Storage, ep.MinioPath+"playlist.m3u8")
+		if err != nil {
+			// An unknown storage backend is a data/config problem, not a per-request
+			// error — log and skip this one row rather than 500 the whole list.
+			if h.log != nil {
+				h.log.Warnw("episodes list: URLFor failed, skipping row",
+					"shikimori_id", ep.ShikimoriID, "episode", ep.EpisodeNumber, "storage", ep.Storage, "error", err)
+			}
+			continue
+		}
 		item := episodeListItem{
 			EpisodeNumber: ep.EpisodeNumber,
-			MinioURL:      h.urlBuilder.URLFor(ep.MinioPath + "playlist.m3u8"),
+			MinioURL:      playlistURL,
+			Storage:       ep.Storage,
 			Track:         string(ep.Track),
 			AudioLang:     ep.AudioLang,
 			Quality:       ep.Quality,
@@ -113,7 +127,9 @@ func (h *EpisodesHandler) List(w http.ResponseWriter, r *http.Request) {
 			item.DurationSec = *ep.DurationSec
 		}
 		if ep.HasStoryboard {
-			item.StoryboardURL = h.urlBuilder.URLFor(ep.MinioPath + ffmpeg.StoryboardVTTName)
+			if sbURL, err := h.urlBuilder.URLFor(r.Context(), ep.Storage, ep.MinioPath+ffmpeg.StoryboardVTTName); err == nil {
+				item.StoryboardURL = sbURL
+			}
 		}
 		items = append(items, item)
 	}
@@ -174,7 +190,11 @@ func (h *EpisodesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ep, err := h.episodeRepo.GetByShikimoriEpisode(r.Context(), shikimoriID, episode)
+	// Optional ?storage= pins the lookup to one backend; absent, the repo prefers
+	// the local 'minio' copy when the episode exists on both minio and s3.
+	storage := r.URL.Query().Get("storage")
+
+	ep, err := h.episodeRepo.GetByShikimoriEpisode(r.Context(), shikimoriID, episode, storage)
 	if err != nil {
 		// Map liberrors.NotFound → 404; everything else surfaces via the
 		// liberrors helper which httputil.Error already understands.
@@ -188,10 +208,15 @@ func (h *EpisodesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build response. MinioPath already ends with "/" — we append
-	// "playlist.m3u8".
-	url := h.urlBuilder.URLFor(ep.MinioPath + "playlist.m3u8")
+	// "playlist.m3u8". URLFor picks the base URL for the row's actual backend.
+	url, err := h.urlBuilder.URLFor(r.Context(), ep.Storage, ep.MinioPath+"playlist.m3u8")
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
 	resp := episodeResponse{
 		MinioURL:  url,
+		Storage:   ep.Storage,
 		Track:     string(ep.Track),
 		AudioLang: ep.AudioLang,
 		Quality:   ep.Quality,
@@ -203,7 +228,9 @@ func (h *EpisodesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		resp.SizeBytes = *ep.SizeBytes
 	}
 	if ep.HasStoryboard {
-		resp.StoryboardURL = h.urlBuilder.URLFor(ep.MinioPath + ffmpeg.StoryboardVTTName)
+		if sbURL, err := h.urlBuilder.URLFor(r.Context(), ep.Storage, ep.MinioPath+ffmpeg.StoryboardVTTName); err == nil {
+			resp.StoryboardURL = sbURL
+		}
 	}
 	httputil.OK(w, resp)
 }

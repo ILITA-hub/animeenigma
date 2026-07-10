@@ -1377,12 +1377,9 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${LIBRARY_DB_NAME:-library}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
-      # Phase 04 (raw-jp / v0.2) — MinIO writer + ffmpeg encoder.
-      LIBRARY_MINIO_ENDPOINT: minio:9000
-      LIBRARY_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      LIBRARY_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      LIBRARY_MINIO_BUCKET: ${LIBRARY_MINIO_BUCKET:-raw-library}
-      LIBRARY_MINIO_USE_SSL: "false"
+      # All object I/O flows through the internal storage service (services/storage,
+      # port 8099, Docker-network-only) — the embedded MinIO writer was deleted.
+      LIBRARY_STORAGE_URL: http://storage:8099
       LIBRARY_ENCODE_WORKERS: ${LIBRARY_ENCODE_WORKERS:-2}
       LIBRARY_ENCODE_TMPDIR: /tmp/encode
       LIBRARY_FFMPEG_BIN: /usr/bin/ffmpeg
@@ -1408,7 +1405,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
+      storage:
         condition: service_healthy
       jackett:
         condition: service_healthy

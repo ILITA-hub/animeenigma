@@ -36,15 +36,16 @@ import (
 	"strconv"
 	"strings"
 
-	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/database"
+	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/storageclient"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
-	lminio "github.com/ILITA-hub/animeenigma/services/library/internal/minio"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/storagegw"
 )
 
 // noopInvalMetrics satisfies service.InvalidationMetrics without pulling in
@@ -73,6 +74,7 @@ func main() {
 		force        = flag.Bool("force", false, "re-encode + re-upload even if the episode row already exists")
 		dryRun       = flag.Bool("dry-run", false, "print the file→(shikimori,episode) mapping and exit without encoding")
 		audioLang    = flag.String("audio-lang", "", "preferred audio-track language ISO code (e.g. eng) for dual-audio DUB packs; empty = ffmpeg default (original audio)")
+		storageFlag  = flag.String("storage", "minio", "storage backend override for this batch: minio (local) or s3 (external); passed to the storage service as a library-manual override")
 	)
 	flag.Parse()
 
@@ -135,20 +137,9 @@ func main() {
 	defer db.Close()
 	episodeRepo := repo.NewEpisodeRepository(db.DB)
 
-	writer, err := lminio.New(lminio.Config{
-		Endpoint:          cfg.Minio.Endpoint,
-		AccessKey:         cfg.Minio.AccessKey,
-		SecretKey:         cfg.Minio.SecretKey,
-		Bucket:            cfg.Minio.Bucket,
-		UseSSL:            cfg.Minio.UseSSL,
-		UploadConcurrency: cfg.Minio.UploadConcurrency,
-	}, log)
-	if err != nil {
-		log.Fatalw("minio init", "error", err)
-	}
-	if err := writer.EnsureBucket(ctx); err != nil {
-		log.Fatalw("minio ensure bucket", "error", err)
-	}
+	// Object I/O flows through the internal storage service (which owns bucket
+	// bootstrap + placement); this CLI just talks to it via the Gateway adapter.
+	storageGW := storagegw.New(storageclient.New(cfg.Storage.URL), cfg.Storage.UploadConcurrency)
 
 	transcoder := ffmpeg.NewTranscoder(ffmpeg.Config{
 		BinaryPath:     cfg.Encode.FfmpegBin,
@@ -188,7 +179,7 @@ func main() {
 		sem <- struct{}{}
 		go func() {
 			defer func() { <-sem }()
-			res := ingestOne(ctx, log, transcoder, writer, episodeRepo, cfg.Minio.Bucket, j, *force, *audioLang)
+			res := ingestOne(ctx, log, transcoder, storageGW, episodeRepo, j, *force, *audioLang, *storageFlag)
 			outc <- res
 			results <- res.kind
 		}()
@@ -225,12 +216,12 @@ func ingestOne(
 	ctx context.Context,
 	log *logger.Logger,
 	transcoder *ffmpeg.Transcoder,
-	writer *lminio.Writer,
+	gw *storagegw.Gateway,
 	episodeRepo *repo.EpisodeRepository,
-	bucket string,
 	j fileJob,
 	force bool,
 	audioLang string,
+	storageOverride string,
 ) (out struct {
 	kind  string
 	shiki string
@@ -239,11 +230,14 @@ func ingestOne(
 	out.shiki = j.shikimoriID
 	prefix := fmt.Sprintf("%s/%d/", j.shikimoriID, j.episode)
 
-	// Idempotency: skip before the expensive transcode unless -force.
-	existing, err := episodeRepo.GetByShikimoriEpisode(ctx, j.shikimoriID, j.episode)
+	// Idempotency: skip before the expensive transcode unless -force. Scope the
+	// presence-check to the DESTINATION backend this batch writes to — a
+	// pre-existing s3 row must NOT block a minio ingest, and vice versa; skip only
+	// when a row already exists for the SAME backend we would write.
+	existing, err := episodeRepo.GetByShikimoriEpisode(ctx, j.shikimoriID, j.episode, storageOverride)
 	exists := err == nil && existing != nil
 	if exists && !force {
-		log.Infow("episode already exists; skipping", "shikimori_id", j.shikimoriID, "episode", j.episode)
+		log.Infow("episode already exists on this storage; skipping", "shikimori_id", j.shikimoriID, "episode", j.episode, "storage", storageOverride)
 		out.kind = "skip"
 		return
 	}
@@ -262,11 +256,14 @@ func ingestOne(
 
 	files := append([]string{}, result.SegmentPaths...)
 	files = append(files, result.PlaylistPath)
-	bytes, err := writer.Upload(ctx, prefix, files)
+	// library-manual class + the -storage override → the storage service places
+	// the files on exactly that backend and returns its resolved id.
+	storage, err := gw.Upload(ctx, domain.ClassLibraryManual, storageOverride, prefix, files)
 	if err != nil {
 		out.kind, out.msg = "fail", fmt.Sprintf("upload %s: %v", prefix, err)
 		return
 	}
+	uploadedBytes := sumFileSizes(files)
 
 	if !exists {
 		dur := result.DurationSec
@@ -275,6 +272,7 @@ func ingestOne(
 			ShikimoriID:   j.shikimoriID,
 			EpisodeNumber: j.episode,
 			MinioPath:     prefix,
+			Storage:       storage,
 			DurationSec:   &dur,
 			SizeBytes:     &size,
 			Track:         langToTrack(audioLang),
@@ -294,10 +292,23 @@ func ingestOne(
 
 	log.Infow("episode ingested",
 		"shikimori_id", j.shikimoriID, "episode", j.episode,
-		"minio_prefix", prefix, "duration_sec", result.DurationSec,
-		"size_bytes", result.SizeBytes, "upload_bytes", bytes, "forced", force)
+		"minio_prefix", prefix, "storage", storage, "duration_sec", result.DurationSec,
+		"size_bytes", result.SizeBytes, "upload_bytes", uploadedBytes, "forced", force)
 	out.kind = "done"
 	return
+}
+
+// sumFileSizes totals the on-disk size of every path (skipping unreadable ones).
+// The storage service upload path returns only the resolved backend id, so this
+// CLI recomputes the uploaded volume for its per-episode log line.
+func sumFileSizes(paths []string) int64 {
+	var total int64
+	for _, p := range paths {
+		if st, err := os.Stat(p); err == nil {
+			total += st.Size()
+		}
+	}
+	return total
 }
 
 // resolveJobs walks dir (non-recursive + one level) and maps each matching

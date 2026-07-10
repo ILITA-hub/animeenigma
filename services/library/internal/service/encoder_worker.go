@@ -29,6 +29,12 @@ type EncoderJobStore interface {
 	ClaimForEncoding(ctx context.Context) (*domain.Job, error)
 	GetByID(ctx context.Context, id string) (*domain.Job, error)
 	UpdateStatus(ctx context.Context, id string, newStatus domain.JobStatus, errorText string) error
+	// UpdateStorage writes the RESOLVED storage backend (returned by the upload)
+	// back onto the job row after a successful upload, mirroring how
+	// library_episodes.audio_lang/quality record the actual output rather than
+	// the request. The Link handler later reads it to know which backend to
+	// list/move the pending objects from.
+	UpdateStorage(ctx context.Context, id, storage string) error
 }
 
 // EpisodeStore is the slice of *repo.EpisodeRepository the encoder
@@ -47,14 +53,16 @@ type Transcoder interface {
 	Storyboard(ctx context.Context, sourcePath string, durationSec int) (*ffmpeg.StoryboardResult, error)
 }
 
-// Uploader is the surface the worker consumes from
-// internal/minio.Writer.
+// Uploader is the surface the worker consumes from storagegw.Gateway (the
+// adapter over libs/storageclient). Upload routes the storage service by
+// content class + per-job override and returns the RESOLVED backend id the
+// files landed on; the worker records that on the job + episode rows.
 type Uploader interface {
-	Upload(ctx context.Context, prefix string, filePaths []string) (int64, error)
-	URLFor(path string) string
-	// UploadStoryboard puts the storyboard sprite sheets + VTT under the
-	// episode prefix. Consumed best-effort by the worker.
-	UploadStoryboard(ctx context.Context, prefix string, sheetPaths []string, vttPath string) error
+	Upload(ctx context.Context, class, override, prefix string, filePaths []string) (storage string, err error)
+	// UploadStoryboard puts the storyboard sprite sheets + VTT under the episode
+	// prefix on the SAME resolved backend the HLS landed on. Consumed
+	// best-effort by the worker.
+	UploadStoryboard(ctx context.Context, storage, prefix string, sheetPaths []string, vttPath string) error
 }
 
 // EpisodeDetector is the surface the worker consumes from
@@ -82,10 +90,10 @@ type EncodeMetrics interface {
 // via JobStore.ClaimForEncoding(...). Each goroutine drives one job at a
 // time:
 //
-//   ClaimForEncoding() [encoding → transcoding, atomic + non-claimable] →
-//     resolve source → detect episode → Transcode → status=uploading →
-//     Upload → status=done (insert library_episodes row when
-//     shikimori_id != "").
+//	ClaimForEncoding() [encoding → transcoding, atomic + non-claimable] →
+//	  resolve source → detect episode → Transcode → status=uploading →
+//	  Upload → status=done (insert library_episodes row when
+//	  shikimori_id != "").
 //
 // The atomic flip to 'transcoding' (a state nobody claims) is what stops a
 // second idle worker from re-claiming a row mid-ffmpeg — the row drops out
@@ -332,16 +340,30 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 		prefix = fmt.Sprintf("pending/%s/%d/", job.ID, episode)
 	}
 
-	// 8. Upload (segments concurrently, playlist last).
+	// 8. Upload (segments concurrently, playlist last). Content class routes the
+	// storage service: autocache (Planner-driven) content is library-auto, every
+	// other ingest is library-manual (which alone honors the per-job override).
+	// The upload returns the RESOLVED backend id — recorded on the job + episode.
+	class := domain.ClassLibraryManual
+	if job.Source == domain.JobSourceAutocache {
+		class = domain.ClassLibraryAuto
+	}
 	files := append([]string{}, result.SegmentPaths...)
 	files = append(files, result.PlaylistPath)
-	bytes, err := p.uploader.Upload(ctx, prefix, files)
+	storage, err := p.uploader.Upload(ctx, class, job.Storage, prefix, files)
 	if err != nil {
 		p.failJob(ctx, job, "upload_error", err.Error())
 		return
 	}
+	uploadBytes := sumFileSizes(files)
 	if p.metrics != nil {
-		p.metrics.AddUploadBytes(bytes)
+		p.metrics.AddUploadBytes(uploadBytes)
+	}
+	// Persist the resolved backend back onto the job row (best-effort: the
+	// episode row below is the authoritative serving pointer, so a write-back
+	// blip only affects a later Link of an unresolved job — logged, never fatal).
+	if err := p.jobRepo.UpdateStorage(ctx, job.ID, storage); err != nil && p.log != nil {
+		p.log.Warnw("encoder: job storage write-back failed", "job_id", job.ID, "storage", storage, "error", err)
 	}
 
 	// 8b. Storyboard pass (scrub-preview sprites) — strictly best-effort: any
@@ -360,7 +382,7 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 				"job_id", job.ID, "error", sbErr)
 		}
 	} else {
-		if upErr := p.uploader.UploadStoryboard(ctx, prefix, sb.SheetPaths, sb.VTTPath); upErr != nil {
+		if upErr := p.uploader.UploadStoryboard(ctx, storage, prefix, sb.SheetPaths, sb.VTTPath); upErr != nil {
 			if p.log != nil {
 				p.log.Warnw("storyboard upload failed", "job_id", job.ID, "error", upErr)
 			}
@@ -381,8 +403,12 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 			EpisodeNumber: episode,
 			JobID:         &jobIDCopy,
 			MinioPath:     prefix,
-			DurationSec:   &duration,
-			SizeBytes:     &size,
+			// Storage is the backend the upload actually resolved to (minio for
+			// library-manual, s3 for library-auto in prod). The evictor's LOCAL-disk
+			// queries scope to storage='minio', so an s3 row is correctly excluded.
+			Storage:     storage,
+			DurationSec: &duration,
+			SizeBytes:   &size,
 			// Storage class drives the Accountant byte-accounting and the
 			// Evictor's order (autocache is evicted before admin) + freshness
 			// windows. Without this the column defaulted to 'admin', so every
@@ -434,7 +460,8 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 			"minio_prefix", prefix,
 			"duration_sec", result.DurationSec,
 			"size_bytes", result.SizeBytes,
-			"upload_bytes", bytes,
+			"storage", storage,
+			"upload_bytes", uploadBytes,
 		)
 	}
 
@@ -445,6 +472,21 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 	if p.invalidator != nil && job.ShikimoriID != "" {
 		p.invalidator.Invalidate(ctx, job.ShikimoriID)
 	}
+}
+
+// sumFileSizes totals the on-disk size of every path, skipping any that can't be
+// stat'd. The storage service upload path returns only the resolved backend id
+// (not a byte count), so the encoder recomputes the uploaded volume here for the
+// library_upload_bytes_total metric — the files still exist on disk at this point
+// (temp-dir cleanup runs later, in step 10).
+func sumFileSizes(paths []string) int64 {
+	var total int64
+	for _, p := range paths {
+		if st, err := os.Stat(p); err == nil {
+			total += st.Size()
+		}
+	}
+	return total
 }
 
 // episodeSourceFor maps a job's source to the episode storage class. Only the
@@ -462,13 +504,13 @@ func episodeSourceFor(js domain.JobSource) domain.EpisodeSource {
 
 // videoExtensions is the recognised set; lowercased.
 var videoExtensions = map[string]bool{
-	".mp4": true,
-	".mkv": true,
-	".avi": true,
-	".mov": true,
-	".m4v": true,
+	".mp4":  true,
+	".mkv":  true,
+	".avi":  true,
+	".mov":  true,
+	".m4v":  true,
 	".webm": true,
-	".ts":  true,
+	".ts":   true,
 }
 
 // DefaultSourceResolver implements SourcePathResolver by walking

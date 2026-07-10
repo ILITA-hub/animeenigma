@@ -21,17 +21,19 @@ type EpisodeStore interface {
 	UpdateMinioPath(ctx context.Context, id, path string) error
 }
 
-// Mover is the slice of minio.Writer the migrator needs: a server-side
-// copy-then-delete of every object under src into dst. *minio.Writer satisfies
-// it. Defined as a seam so the test injects a fake without live MinIO.
+// Mover is the slice of storagegw.Gateway the migrator needs: a server-side
+// copy-then-delete of every object under src into dst on a given backend. The
+// migrator only relocates LEGACY ADMIN content, which lives exclusively on local
+// MinIO, so it always passes domain.BackendMinio. Defined as a seam so the test
+// injects a fake without a live storage service.
 //
-// CONTRACT (see minio.Writer.Move): Move copies ALL objects first and, on ANY
-// copy error, aborts WITHOUT deleting the sources — so a failed Move leaves the
-// source intact and the migrator can safely leave the row on its old path and
+// CONTRACT (see the storage service Move): Move copies ALL objects first and, on
+// ANY copy error, aborts WITHOUT deleting the sources — so a failed Move leaves
+// the source intact and the migrator can safely leave the row on its old path and
 // re-attempt on the next boot. The migrator therefore must NOT issue a separate
 // delete; Move owns source removal.
 type Mover interface {
-	Move(ctx context.Context, src, dst string) error
+	Move(ctx context.Context, storage, src, dst string) error
 }
 
 // migratorLogger is the structured-logging seam (a subset of *logger.Logger,
@@ -98,7 +100,7 @@ func (m *Migrator) Migrate(ctx context.Context) (migrated int, err error) {
 		// Move FIRST. On error, Move has aborted before deleting sources (no
 		// data loss) — leave the row on its old path and continue; next boot
 		// re-attempts.
-		if mvErr := m.mover.Move(ctx, ep.MinioPath, newPrefix); mvErr != nil {
+		if mvErr := m.mover.Move(ctx, domain.BackendMinio, ep.MinioPath, newPrefix); mvErr != nil {
 			if m.log != nil {
 				m.log.Warnw("autocache migrate: Move failed, leaving row on old path",
 					"id", ep.ID, "src", ep.MinioPath, "dst", newPrefix, "error", mvErr)

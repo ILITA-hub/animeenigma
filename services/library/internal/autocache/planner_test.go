@@ -54,7 +54,7 @@ type fakePresence struct {
 	present map[string]bool
 }
 
-func (f *fakePresence) GetByShikimoriEpisode(_ context.Context, shikimoriID string, ep int) (*domain.Episode, error) {
+func (f *fakePresence) GetByShikimoriEpisode(_ context.Context, shikimoriID string, ep int, _ string) (*domain.Episode, error) {
 	if f.present[key(shikimoriID, ep)] {
 		return &domain.Episode{ShikimoriID: shikimoriID, EpisodeNumber: ep}, nil
 	}

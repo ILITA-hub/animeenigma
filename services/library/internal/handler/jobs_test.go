@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
+	"github.com/ILITA-hub/animeenigma/libs/storageclient"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/autocache"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
@@ -108,24 +109,29 @@ func (s *fakeStoreH) Retry(_ context.Context, oldID string) (*domain.Job, error)
 	return fresh, nil
 }
 
-// fakeMover stubs MinIO Move / ListObjectsByPrefix for the Link
-// handler tests.
+// fakeMover stubs the storage-service List / Move for the Link handler tests.
 type fakeMover struct {
 	keys      []string
 	listErr   error
 	moveErr   error
-	moveCalls []struct{ src, dst string }
+	listCalls []struct{ storage, prefix string }
+	moveCalls []struct{ storage, src, dst string }
 }
 
-func (m *fakeMover) ListObjectsByPrefix(_ context.Context, _ string) ([]string, error) {
+func (m *fakeMover) List(_ context.Context, storage, prefix string) ([]storageclient.Object, error) {
+	m.listCalls = append(m.listCalls, struct{ storage, prefix string }{storage, prefix})
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
-	return m.keys, nil
+	objs := make([]storageclient.Object, 0, len(m.keys))
+	for _, k := range m.keys {
+		objs = append(objs, storageclient.Object{Key: k})
+	}
+	return objs, nil
 }
 
-func (m *fakeMover) Move(_ context.Context, src, dst string) error {
-	m.moveCalls = append(m.moveCalls, struct{ src, dst string }{src, dst})
+func (m *fakeMover) Move(_ context.Context, storage, src, dst string) error {
+	m.moveCalls = append(m.moveCalls, struct{ storage, src, dst string }{storage, src, dst})
 	return m.moveErr
 }
 
@@ -661,6 +667,14 @@ func TestJobsHandler_Link_HappyPath(t *testing.T) {
 	if mover.moveCalls[0].dst != "aeProvider/57466/RAW/3/" {
 		t.Errorf("Move dst = %q, want aeProvider/57466/RAW/3/", mover.moveCalls[0].dst)
 	}
+	// A pre-write-back (Storage="") job defaults to the minio backend for both
+	// the list and the move.
+	if mover.moveCalls[0].storage != "minio" {
+		t.Errorf("Move storage = %q, want minio (job.Storage empty → default)", mover.moveCalls[0].storage)
+	}
+	if len(mover.listCalls) != 1 || mover.listCalls[0].storage != "minio" {
+		t.Errorf("List calls = %+v, want one on storage=minio", mover.listCalls)
+	}
 	if len(eps.created) != 1 {
 		t.Fatalf("expected 1 episode insert, got %d", len(eps.created))
 	}
@@ -669,6 +683,9 @@ func TestJobsHandler_Link_HappyPath(t *testing.T) {
 	}
 	if eps.created[0].MinioPath != "aeProvider/57466/RAW/3/" {
 		t.Errorf("episode minio_path = %q, want aeProvider/57466/RAW/3/", eps.created[0].MinioPath)
+	}
+	if eps.created[0].Storage != "minio" {
+		t.Errorf("episode storage = %q, want minio", eps.created[0].Storage)
 	}
 	// Job row's shikimori_id should be flipped.
 	if store.byID["job-1"].ShikimoriID != "57466" {

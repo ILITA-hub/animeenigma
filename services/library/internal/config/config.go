@@ -16,10 +16,11 @@ import (
 // Nyaa + AnimeTosho + LibrarySearch sub-configs that drive the
 // search endpoint. Phase 3 adds the Torrent / Worker / Disk knobs
 // (workstream raw-jp / v0.2). Phase 4 adds Encode + Minio for the
-// ffmpeg/HLS transcoder + MinIO writer.
+// ffmpeg/HLS transcoder + Storage (the internal storage service the
+// transcoder's output is uploaded through).
 type Config struct {
-	Server        ServerConfig
-	Database      database.Config
+	Server   ServerConfig
+	Database database.Config
 	// Redis is added in v4.0 Phase 3 (AR-EFFECT-01) so the GORM db_read P95
 	// ReadGate refresher has a Redis handle to snapshot the read_thresholds
 	// hash. The shared REDIS_* trio is already provided by docker-compose.
@@ -33,7 +34,7 @@ type Config struct {
 	Worker        WorkerConfig
 	Disk          DiskConfig
 	Encode        EncodeConfig
-	Minio         MinioConfig
+	Storage       StorageConfig
 	// CatalogInternal — workstream raw-jp, Phase 06 (v0.2). After
 	// every successful encode the library service POSTs to
 	// {CATALOG_INTERNAL_API_URL}/internal/cache/invalidate/raw/{id}
@@ -75,13 +76,13 @@ type EncodeConfig struct {
 	Nice           int
 }
 
-// MinioConfig drives services/library/internal/minio.Writer.
-type MinioConfig struct {
-	Endpoint          string
-	AccessKey         string
-	SecretKey         string
-	Bucket            string
-	UseSSL            bool
+// StorageConfig points the library at the internal storage service
+// (services/storage/, Docker-network-only) that now owns all object I/O — the
+// embedded MinIO writer was deleted. URL is the base URL of that service;
+// UploadConcurrency caps the concurrent-segment PUT fan-out the encoder /
+// batchingest drive through libs/storageclient.
+type StorageConfig struct {
+	URL               string
 	UploadConcurrency int
 }
 
@@ -251,13 +252,13 @@ func Load() (*Config, error) {
 			Threads:        getEnvInt("LIBRARY_ENCODE_THREADS", 3),
 			Nice:           getEnvInt("LIBRARY_ENCODE_NICE", 15),
 		},
-		Minio: MinioConfig{
-			Endpoint:          getEnv("LIBRARY_MINIO_ENDPOINT", "minio:9000"),
-			AccessKey:         getEnv("LIBRARY_MINIO_ACCESS_KEY", "minioadmin"),
-			SecretKey:         getEnv("LIBRARY_MINIO_SECRET_KEY", "minioadmin"),
-			Bucket:            getEnv("LIBRARY_MINIO_BUCKET", "raw-library"),
-			UseSSL:            getEnvBool("LIBRARY_MINIO_USE_SSL", false),
-			UploadConcurrency: getEnvInt("LIBRARY_MINIO_UPLOAD_CONCURRENCY", 8),
+		Storage: StorageConfig{
+			URL: getEnv("LIBRARY_STORAGE_URL", "http://storage:8099"),
+			// New env is LIBRARY_UPLOAD_CONCURRENCY; the old
+			// LIBRARY_MINIO_UPLOAD_CONCURRENCY stays as a fallback so an
+			// operator's existing override keeps working across the swap.
+			UploadConcurrency: getEnvInt("LIBRARY_UPLOAD_CONCURRENCY",
+				getEnvInt("LIBRARY_MINIO_UPLOAD_CONCURRENCY", 8)),
 		},
 		CatalogInternal: CatalogInternalConfig{
 			APIURL:  getEnv("CATALOG_INTERNAL_API_URL", "http://catalog:8081"),

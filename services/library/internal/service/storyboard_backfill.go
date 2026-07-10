@@ -25,12 +25,14 @@ type BackfillEpisodeRepo interface {
 	SetHasStoryboard(ctx context.Context, id string) error
 }
 
-// StoryboardStore is the slice of *minio.Writer the backfill worker needs:
+// StoryboardStore is the slice of storagegw.Gateway the backfill worker needs:
 // pull the episode's HLS payload down for a local ffmpeg input, and push the
-// generated sprite sheets + VTT back under the same prefix.
+// generated sprite sheets + VTT back under the same prefix. Both calls are
+// storage-aware — an episode may live on minio OR s3, so the worker passes the
+// row's Storage backend.
 type StoryboardStore interface {
-	DownloadPrefix(ctx context.Context, prefix, destDir string) error
-	UploadStoryboard(ctx context.Context, prefix string, sheetPaths []string, vttPath string) error
+	DownloadPrefix(ctx context.Context, storage, prefix, destDir string) error
+	UploadStoryboard(ctx context.Context, storage, prefix string, sheetPaths []string, vttPath string) error
 }
 
 // StoryboardMaker is the slice of *ffmpeg.Transcoder the backfill worker needs.
@@ -230,7 +232,7 @@ func (b *StoryboardBackfill) processOne(ctx context.Context, ep domain.Episode) 
 	// 1. Pull the HLS payload (playlist.m3u8 + segments) down so ffmpeg has a
 	//    local input; segments are referenced relatively, so the co-located
 	//    dir is a valid -i source.
-	if err := b.store.DownloadPrefix(ctx, ep.MinioPath, dir); err != nil {
+	if err := b.store.DownloadPrefix(ctx, ep.Storage, ep.MinioPath, dir); err != nil {
 		b.warn(ctx, "storyboard backfill: download prefix failed",
 			"episode_id", ep.ID, "prefix", ep.MinioPath, "error", err)
 		return false
@@ -253,7 +255,7 @@ func (b *StoryboardBackfill) processOne(ctx context.Context, ep domain.Episode) 
 	defer func() { _ = os.RemoveAll(filepath.Dir(sb.VTTPath)) }()
 
 	// 3. Push the sprites back under the same episode prefix.
-	if err := b.store.UploadStoryboard(ctx, ep.MinioPath, sb.SheetPaths, sb.VTTPath); err != nil {
+	if err := b.store.UploadStoryboard(ctx, ep.Storage, ep.MinioPath, sb.SheetPaths, sb.VTTPath); err != nil {
 		b.warn(ctx, "storyboard backfill: upload failed",
 			"episode_id", ep.ID, "prefix", ep.MinioPath, "error", err)
 		return false

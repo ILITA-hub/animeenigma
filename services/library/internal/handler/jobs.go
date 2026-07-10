@@ -9,6 +9,7 @@ import (
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/storageclient"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/autocache"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
@@ -30,13 +31,14 @@ type JobStoreAPI interface {
 	Retry(ctx context.Context, oldID string) (*domain.Job, error)
 }
 
-// MinioMover is the slice of *minio.Writer the Phase-5 Link handler
-// needs. ListObjectsByPrefix is used to detect the existing episode
-// number from `pending/{job_id}/{ep}/`; Move does the server-side
-// CopyObject + RemoveObject sequence.
-type MinioMover interface {
-	ListObjectsByPrefix(ctx context.Context, prefix string) ([]string, error)
-	Move(ctx context.Context, srcPrefix, dstPrefix string) error
+// StorageMover is the slice of storagegw.Gateway the Phase-5 Link handler needs.
+// Both calls are storage-aware: List enumerates the pending objects on the job's
+// RESOLVED backend (job.Storage, written back by the encoder after upload) to
+// detect the episode number from `pending/{job_id}/{ep}/`; Move does the
+// server-side relocation WITHIN that same backend.
+type StorageMover interface {
+	List(ctx context.Context, storage, prefix string) ([]storageclient.Object, error)
+	Move(ctx context.Context, storage, srcPrefix, dstPrefix string) error
 }
 
 // EpisodeStore is the slice of *repo.EpisodeRepository the Link
@@ -78,7 +80,7 @@ type JobsHandler struct {
 	diskGuard    DiskGuardAPI
 	evictor      EvictorAPI // Phase-10 second pre-admit gate; nil → gate skipped.
 	canceller    JobCanceller
-	mover        MinioMover
+	mover        StorageMover
 	episodeStore EpisodeStore
 	metrics      *metrics.LibraryMetrics
 	minFreePct   int
@@ -113,7 +115,7 @@ func NewJobsHandlerWithLink(
 	diskGuard DiskGuardAPI,
 	evictor EvictorAPI,
 	canceller JobCanceller,
-	mover MinioMover,
+	mover StorageMover,
 	episodeStore EpisodeStore,
 	libMetrics *metrics.LibraryMetrics,
 	minFreePct int,
@@ -456,36 +458,45 @@ func (h *JobsHandler) Link(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The encoder wrote the resolved backend onto job.Storage after upload; an
+	// older row that predates the write-back defaults to "minio" (the migration-017
+	// column default), which is where every pre-storage-service pending upload lives.
+	storage := job.Storage
+	if storage == "" {
+		storage = domain.BackendMinio
+	}
+
 	srcPrefix := "pending/" + id + "/"
-	keys, err := h.mover.ListObjectsByPrefix(r.Context(), srcPrefix)
+	objects, err := h.mover.List(r.Context(), storage, srcPrefix)
 	if err != nil {
 		if h.log != nil {
-			h.log.Warnw("list pending objects", "job_id", id, "error", err)
+			h.log.Warnw("list pending objects", "job_id", id, "storage", storage, "error", err)
 		}
 		httputil.Error(w, liberrors.Internal("list pending objects"))
 		return
 	}
-	if len(keys) == 0 {
+	if len(objects) == 0 {
 		httputil.Error(w, liberrors.Internal("orphan job has no minio objects"))
 		return
 	}
 
-	episodeNum, err := parseEpisodeFromPendingKey(keys[0], srcPrefix)
+	episodeNum, err := parseEpisodeFromPendingKey(objects[0].Key, srcPrefix)
 	if err != nil {
 		if h.log != nil {
-			h.log.Warnw("parse episode from minio path", "key", keys[0], "error", err)
+			h.log.Warnw("parse episode from minio path", "key", objects[0].Key, "error", err)
 		}
 		httputil.Error(w, liberrors.Internal("could not parse episode number from minio path"))
 		return
 	}
 
 	// Link a resolved episode into the unified autocache pool layout
-	// (aeProvider/<mal>/RAW/<ep>/) so new admin content needs no migration.
+	// (aeProvider/<mal>/RAW/<ep>/) so new admin content needs no migration. The
+	// move stays within the job's backend; the episode row records that backend.
 	dstPrefix := autocache.RawPrefix(body.ShikimoriID, episodeNum)
 	srcEpPrefix := srcPrefix + strconv.Itoa(episodeNum) + "/"
-	if err := h.mover.Move(r.Context(), srcEpPrefix, dstPrefix); err != nil {
+	if err := h.mover.Move(r.Context(), storage, srcEpPrefix, dstPrefix); err != nil {
 		if h.log != nil {
-			h.log.Warnw("minio move", "src", srcEpPrefix, "dst", dstPrefix, "error", err)
+			h.log.Warnw("minio move", "storage", storage, "src", srcEpPrefix, "dst", dstPrefix, "error", err)
 		}
 		httputil.Error(w, liberrors.Internal("minio move failed"))
 		return
@@ -497,6 +508,7 @@ func (h *JobsHandler) Link(w http.ResponseWriter, r *http.Request) {
 		EpisodeNumber: episodeNum,
 		JobID:         &jobID,
 		MinioPath:     dstPrefix,
+		Storage:       storage,
 	}
 	if err := h.episodeStore.Create(r.Context(), ep); err != nil {
 		httputil.Error(w, err)

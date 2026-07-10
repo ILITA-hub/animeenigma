@@ -30,9 +30,12 @@ type demandDrainer interface {
 
 // presenceChecker is the slice of *repo.EpisodeRepository the Planner needs.
 // GetByShikimoriEpisode returns a non-nil *Episode + nil error when present, or
-// a not-found error when absent (the present-check).
+// a not-found error when absent (the present-check). The Planner passes storage=""
+// (present-in-ANY-backend, minio-first): autocache's job is making an episode
+// AVAILABLE, and a copy on EITHER local minio OR external s3 means it is already
+// watchable — so a present row in either store correctly suppresses a new download.
 type presenceChecker interface {
-	GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int) (*domain.Episode, error)
+	GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int, storage string) (*domain.Episode, error)
 }
 
 // jobEnqueuer is the slice of *repo.JobRepository the Planner needs.
@@ -261,7 +264,10 @@ func (p *Planner) plan(ctx context.Context, d domain.AutocacheDemand, cfg *domai
 
 	// 1. Present-check (TRIG-04): already in the pool → enqueue nothing, drop the
 	// demand row (RESEARCH Pitfall 6 — delete only on confirmed presence).
-	ep, err := p.presence.GetByShikimoriEpisode(ctx, d.MALID, d.Episode)
+	// storage="" = present in EITHER backend (minio OR s3) counts as available,
+	// which is the correct gate here: autocache exists to make an episode
+	// watchable, and an s3 copy is just as watchable as a minio one.
+	ep, err := p.presence.GetByShikimoriEpisode(ctx, d.MALID, d.Episode, "")
 	if err == nil && ep != nil {
 		if delErr := p.demand.Delete(ctx, d.MALID, d.Episode); delErr != nil && p.log != nil {
 			p.log.Warnw("autocache planner: delete present demand failed", "mal", d.MALID, "ep", d.Episode, "error", delErr)

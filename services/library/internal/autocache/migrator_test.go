@@ -24,8 +24,12 @@ type fakeMover struct {
 	failOn string
 }
 
-func (m *fakeMover) Move(_ context.Context, src, dst string) error {
+func (m *fakeMover) Move(_ context.Context, storage, src, dst string) error {
 	m.calls = append(m.calls, moveCall{src: src, dst: dst})
+	// The migrator only ever relocates local admin content.
+	if storage != domain.BackendMinio {
+		return errors.New("migrator must move on the minio backend, got " + storage)
+	}
 	if m.failOn != "" && src == m.failOn {
 		return errors.New("copy failed")
 	}

@@ -17,13 +17,14 @@ import (
 
 // stubJobStore is a minimal in-memory JobStore mirror.
 type stubJobStore struct {
-	mu             sync.Mutex
-	rows           map[string]*domain.Job
-	statusHistory  []statusEvent
-	getByIDHook    func(id string) (*domain.Job, error)
-	claimQueue     []*domain.Job
-	claimErr       error
-	updateErr      error
+	mu            sync.Mutex
+	rows          map[string]*domain.Job
+	statusHistory []statusEvent
+	getByIDHook   func(id string) (*domain.Job, error)
+	claimQueue    []*domain.Job
+	claimErr      error
+	updateErr     error
+	storageWrites map[string]string // job id → resolved storage written back
 }
 
 type statusEvent struct {
@@ -92,10 +93,23 @@ func (s *stubJobStore) UpdateStatus(_ context.Context, id string, status domain.
 	return nil
 }
 
+func (s *stubJobStore) UpdateStorage(_ context.Context, id, storage string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.storageWrites == nil {
+		s.storageWrites = map[string]string{}
+	}
+	s.storageWrites[id] = storage
+	if r, ok := s.rows[id]; ok {
+		r.Storage = storage
+	}
+	return nil
+}
+
 // stubEpisodeStore records every Create call.
 type stubEpisodeStore struct {
-	mu       sync.Mutex
-	created  []domain.Episode
+	mu        sync.Mutex
+	created   []domain.Episode
 	createErr error
 }
 
@@ -147,41 +161,50 @@ func (s *stubTranscoder) Storyboard(_ context.Context, sourcePath string, _ int)
 	}, nil
 }
 
-// stubUploader records every Upload call.
+// stubUploader records every Upload call, including the class/override the
+// encoder routes the storage service by.
 type stubUploader struct {
-	mu       sync.Mutex
-	uploads  []uploadCall
-	err      error
-	bytes    int64
+	mu      sync.Mutex
+	uploads []uploadCall
+	err     error
+	// storage is the resolved backend id Upload returns (default "minio").
+	storage string
 
-	uploadStoryboardErr    error
-	uploadStoryboardPrefix string
+	uploadStoryboardErr     error
+	uploadStoryboardPrefix  string
+	uploadStoryboardStorage string
 }
 
 type uploadCall struct {
-	prefix string
-	files  []string
+	class    string
+	override string
+	prefix   string
+	files    []string
 }
 
-func (s *stubUploader) Upload(_ context.Context, prefix string, filePaths []string) (int64, error) {
+func (s *stubUploader) Upload(_ context.Context, class, override, prefix string, filePaths []string) (string, error) {
 	if s.err != nil {
-		return 0, s.err
+		return "", s.err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.uploads = append(s.uploads, uploadCall{prefix: prefix, files: append([]string(nil), filePaths...)})
-	if s.bytes == 0 {
-		return 1234, nil
+	s.uploads = append(s.uploads, uploadCall{
+		class:    class,
+		override: override,
+		prefix:   prefix,
+		files:    append([]string(nil), filePaths...),
+	})
+	if s.storage == "" {
+		return "minio", nil
 	}
-	return s.bytes, nil
+	return s.storage, nil
 }
 
-func (s *stubUploader) URLFor(path string) string { return "http://stub/" + path }
-
-func (s *stubUploader) UploadStoryboard(_ context.Context, prefix string, _ []string, _ string) error {
+func (s *stubUploader) UploadStoryboard(_ context.Context, storage, prefix string, _ []string, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.uploadStoryboardPrefix = prefix
+	s.uploadStoryboardStorage = storage
 	return s.uploadStoryboardErr
 }
 
@@ -210,11 +233,11 @@ func (s *stubResolver) Resolve(_ context.Context, _ *domain.Job, _ string) (stri
 
 // stubMetrics records every method call.
 type stubMetrics struct {
-	mu              sync.Mutex
-	jobsTotal       []string
-	encodeDur       []float64
-	uploadBytes     int64
-	encodeFailures  []string
+	mu             sync.Mutex
+	jobsTotal      []string
+	encodeDur      []float64
+	uploadBytes    int64
+	encodeFailures []string
 }
 
 func (s *stubMetrics) IncJobsTotal(status string) {
@@ -279,7 +302,7 @@ func newHappyPool(t *testing.T, job *domain.Job) (*EncoderPool, *stubJobStore, *
 		DurationSec:  1450,
 		SizeBytes:    1024,
 	}}
-	up := &stubUploader{bytes: 9999}
+	up := &stubUploader{storage: "minio"}
 	det := &stubDetector{ep: 1, ok: true}
 	res := &stubResolver{path: filepath.Join(dir, "src.mp4")}
 	mt := &stubMetrics{}
@@ -305,9 +328,12 @@ func TestEncoder_PrefersKnownJobEpisode(t *testing.T) {
 		Source:      domain.JobSourceAutocache,
 		Status:      domain.JobStatusEncoding,
 	}
-	pool, js, es, _, _ := newHappyPool(t, job)
+	pool, js, es, up, _ := newHappyPool(t, job)
 	// Force filename detection to FAIL — the known job.Episode must be used.
 	pool.detector = &stubDetector{ep: 0, ok: false}
+	// The storage service routes an autocache (library-auto) job to s3 in prod;
+	// have the stub resolve to s3 so we can prove the resolved backend flows through.
+	up.storage = "s3"
 
 	pool.processJob(context.Background(), &domain.Job{
 		ID:          "job-ep",
@@ -334,6 +360,17 @@ func TestEncoder_PrefersKnownJobEpisode(t *testing.T) {
 	}
 	if es.created[0].DownloadedAt == nil {
 		t.Fatalf("episode DownloadedAt is nil; want set (freshness rule-1 basis)")
+	}
+	// Autocache jobs route the storage service by ClassLibraryAuto (→ s3 in prod).
+	if len(up.uploads) != 1 || up.uploads[0].class != domain.ClassLibraryAuto {
+		t.Fatalf("upload class = %+v, want %q (autocache job)", up.uploads, domain.ClassLibraryAuto)
+	}
+	// The resolved backend (s3 here) is written back to the job + episode rows.
+	if js.storageWrites["job-ep"] != "s3" {
+		t.Fatalf("job storage write-back = %q, want s3", js.storageWrites["job-ep"])
+	}
+	if es.created[0].Storage != "s3" {
+		t.Fatalf("episode Storage = %q, want s3 (resolved backend)", es.created[0].Storage)
 	}
 }
 
@@ -403,12 +440,27 @@ func TestEncoder_HappyPath_WithShikimoriID(t *testing.T) {
 	if len(up.uploads[0].files) != 2 {
 		t.Fatalf("upload files = %d, want 2", len(up.uploads[0].files))
 	}
-	// Metrics: encode duration observed; upload bytes recorded.
+	// A manual/admin job routes the storage service by ClassLibraryManual with the
+	// job's (empty) storage override.
+	if up.uploads[0].class != domain.ClassLibraryManual {
+		t.Fatalf("upload class = %q, want %q (non-autocache job)", up.uploads[0].class, domain.ClassLibraryManual)
+	}
+	if up.uploads[0].override != "" {
+		t.Fatalf("upload override = %q, want empty (job.Storage unset)", up.uploads[0].override)
+	}
+	// The resolved backend id is written back onto both the job row and the episode row.
+	if js.storageWrites["job-1"] != "minio" {
+		t.Fatalf("job storage write-back = %q, want minio", js.storageWrites["job-1"])
+	}
+	if es.created[0].Storage != "minio" {
+		t.Fatalf("episode Storage = %q, want minio (resolved backend)", es.created[0].Storage)
+	}
+	// Metrics: encode duration observed; upload bytes recorded (playlist 7B + seg 4B).
 	if len(mt.encodeDur) != 1 {
 		t.Fatalf("encodeDur calls = %d, want 1", len(mt.encodeDur))
 	}
-	if mt.uploadBytes != 9999 {
-		t.Fatalf("uploadBytes = %d, want 9999", mt.uploadBytes)
+	if mt.uploadBytes != 11 {
+		t.Fatalf("uploadBytes = %d, want 11 (#EXTM3U=7 + AAAA=4)", mt.uploadBytes)
 	}
 }
 
@@ -713,7 +765,7 @@ func newHappyPoolWithInvalidator(t *testing.T, job *domain.Job, inv CatalogInval
 		DurationSec:  1450,
 		SizeBytes:    1024,
 	}}
-	up := &stubUploader{bytes: 9999}
+	up := &stubUploader{storage: "minio"}
 	det := &stubDetector{ep: 1, ok: true}
 	res := &stubResolver{path: filepath.Join(dir, "src.mp4")}
 	mt := &stubMetrics{}

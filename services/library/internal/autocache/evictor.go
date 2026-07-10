@@ -45,11 +45,14 @@ type jobAccountant interface {
 	SumInflightJobBytes(ctx context.Context) (int64, error)
 }
 
-// objectDeleter is the MinIO seam (*minio.Writer.DeletePrefix — Plan 01). It deletes
-// every object under a row's minio_path prefix, hard-failing on the first error so the
-// Evictor can leave the row intact and retry rather than orphan a serving pointer.
+// objectDeleter is the storage seam (storagegw.Gateway.DeletePrefix). It deletes
+// every object under a row's minio_path prefix on the given backend, hard-failing
+// on the first error so the Evictor can leave the row intact and retry rather than
+// orphan a serving pointer. The Evictor only ever evicts storage='minio' rows
+// (its candidate queries scope to minio), so the backend is effectively always
+// minio — but passing the row's Storage keeps it correct if that ever widens.
 type objectDeleter interface {
-	DeletePrefix(ctx context.Context, prefix string) error
+	DeletePrefix(ctx context.Context, storage, prefix string) error
 }
 
 // Freshness is the gauge-label string for an episode's Fresh/Stale classification.
@@ -249,7 +252,7 @@ func (e *Evictor) usedBytesLocked(ctx context.Context) (int64, error) {
 // error is returned (the objects are already gone — the lesser evil, and a re-list
 // won't re-find live objects).
 func (e *Evictor) evictOne(ctx context.Context, ep domain.Episode) error {
-	if err := e.objects.DeletePrefix(ctx, ep.MinioPath); err != nil {
+	if err := e.objects.DeletePrefix(ctx, ep.Storage, ep.MinioPath); err != nil {
 		return err // objects (partially) survive → leave the row, caller continues
 	}
 	if err := e.pool.DeleteByID(ctx, ep.ID); err != nil {

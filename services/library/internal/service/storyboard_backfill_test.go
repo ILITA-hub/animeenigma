@@ -125,7 +125,7 @@ type sbFakeStore struct {
 	uploadPrefix  []string
 }
 
-func (s *sbFakeStore) DownloadPrefix(_ context.Context, prefix, destDir string) error {
+func (s *sbFakeStore) DownloadPrefix(_ context.Context, _, prefix, destDir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.rec != nil {
@@ -135,7 +135,7 @@ func (s *sbFakeStore) DownloadPrefix(_ context.Context, prefix, destDir string) 
 	return s.downloadErr
 }
 
-func (s *sbFakeStore) UploadStoryboard(_ context.Context, prefix string, _ []string, _ string) error {
+func (s *sbFakeStore) UploadStoryboard(_ context.Context, _, prefix string, _ []string, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.rec != nil {

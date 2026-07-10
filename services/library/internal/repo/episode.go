@@ -37,20 +37,38 @@ func (r *EpisodeRepository) Create(ctx context.Context, ep *domain.Episode) erro
 	}
 	// pgx surfaces the unique-violation as a string we can match on.
 	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "duplicate key") || strings.Contains(msg, "library_episodes_shikimori_ep_uniq") {
+	if strings.Contains(msg, "duplicate key") || strings.Contains(msg, "library_episodes_shikimori_ep_storage_uniq") {
 		return liberrors.AlreadyExists("episode")
 	}
 	return liberrors.Wrap(err, liberrors.CodeInternal, "create episode")
 }
 
-// GetByShikimoriEpisode returns the episode row matching the
-// (shikimori_id, episode_number) pair, or liberrors.NotFound if no
-// such row exists.
-func (r *EpisodeRepository) GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int) (*domain.Episode, error) {
+// GetByShikimoriEpisode returns the episode row matching the (shikimori_id,
+// episode_number) pair, or liberrors.NotFound if no such row exists.
+//
+// Since migration 017 the same (shikimori_id, episode_number) can have TWO rows
+// (a local 'minio' copy AND an external 's3' copy), so the lookup takes an
+// explicit storage-preference argument to stay DETERMINISTIC:
+//   - storage != "" → filter to exactly that backend (the caller wants the row
+//     on a specific store — e.g. batchingest checking presence in its ingest
+//     destination, or the episodes GET honoring an explicit ?storage=).
+//   - storage == "" → no filter; prefer the local 'minio' row when both exist
+//     (ORDER BY storage='minio' DESC), else return whichever single row is
+//     present. This is the "present in any backend, minio-first" gate the
+//     autocache Planner and the default episodes GET use.
+func (r *EpisodeRepository) GetByShikimoriEpisode(ctx context.Context, shikimoriID string, episodeNumber int, storage string) (*domain.Episode, error) {
+	q := r.db.WithContext(ctx).
+		Where("shikimori_id = ? AND episode_number = ?", shikimoriID, episodeNumber)
+	if storage != "" {
+		q = q.Where("storage = ?", storage)
+	} else {
+		// Deterministic minio-first preference. The boolean expression evaluates
+		// to 1/0 on both Postgres and the sqlite test harness; DESC puts the
+		// local minio row first.
+		q = q.Order("(storage = 'minio') DESC")
+	}
 	var ep domain.Episode
-	err := r.db.WithContext(ctx).
-		Where("shikimori_id = ? AND episode_number = ?", shikimoriID, episodeNumber).
-		First(&ep).Error
+	err := q.First(&ep).Error
 	if stderrors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, liberrors.NotFound("episode")
 	}

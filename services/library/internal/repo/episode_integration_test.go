@@ -107,7 +107,7 @@ func TestEpisodeRepository_CreateGetRoundtrip(t *testing.T) {
 	if ep.ID == "" {
 		t.Fatalf("expected server-filled id")
 	}
-	got, err := r.GetByShikimoriEpisode(context.Background(), "57466", 1)
+	got, err := r.GetByShikimoriEpisode(context.Background(), "57466", 1, "")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestEpisodeRepository_NotFound(t *testing.T) {
 	defer cleanup()
 	r := NewEpisodeRepository(db)
 
-	_, err := r.GetByShikimoriEpisode(context.Background(), "doesnotexist", 1)
+	_, err := r.GetByShikimoriEpisode(context.Background(), "doesnotexist", 1, "")
 	if err == nil {
 		t.Fatalf("expected NotFound, got nil")
 	}
@@ -235,7 +235,7 @@ func TestEpisodeRepository_ListAdminLegacyPath_FiltersAndRepoints(t *testing.T) 
 		t.Fatalf("remaining legacy row = %s, want legacy2 (%s)", after[0].ID, legacy2.ID)
 	}
 	// Confirm the repoint actually persisted to the row.
-	reread, err := r.GetByShikimoriEpisode(ctx, "300", 1)
+	reread, err := r.GetByShikimoriEpisode(ctx, "300", 1, "")
 	if err != nil {
 		t.Fatalf("re-read repointed row: %v", err)
 	}
@@ -325,6 +325,46 @@ func TestEpisodeRepository_DualStorageUniqueConstraint(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Fatalf("list len = %d, want 2 (minio + s3 rows, dup rejected)", len(got))
+	}
+}
+
+// TestEpisodeRepository_GetByShikimoriEpisode_StoragePreference is the Task-4
+// storage-preference contract: with two rows for the same (shikimori_id,
+// episode_number) differing only by storage, an explicit storage argument pins
+// the returned row to that backend, while an empty argument is deterministic —
+// it prefers the local 'minio' row.
+func TestEpisodeRepository_GetByShikimoriEpisode_StoragePreference(t *testing.T) {
+	db, cleanup := openFullEpisodeTestDB(t)
+	defer cleanup()
+	r := NewEpisodeRepository(db)
+	ctx := context.Background()
+
+	// Insert s3 FIRST so an unordered .First() would surface it — proving the
+	// minio-preference ORDER BY (not insertion order) drives the empty-arg pick.
+	s3Ep := &domain.Episode{ShikimoriID: "9300", EpisodeNumber: 1, MinioPath: "aeProvider/9300/RAW/1/", Storage: "s3"}
+	minioEp := &domain.Episode{ShikimoriID: "9300", EpisodeNumber: 1, MinioPath: "aeProvider/9300/RAW/1/", Storage: "minio"}
+	for _, ep := range []*domain.Episode{s3Ep, minioEp} {
+		if err := r.Create(ctx, ep); err != nil {
+			t.Fatalf("create %s: %v", ep.Storage, err)
+		}
+	}
+
+	// Explicit storage pins the backend.
+	gotS3, err := r.GetByShikimoriEpisode(ctx, "9300", 1, "s3")
+	if err != nil {
+		t.Fatalf("get s3: %v", err)
+	}
+	if gotS3.Storage != "s3" {
+		t.Fatalf("explicit ?storage=s3 returned storage=%q, want s3", gotS3.Storage)
+	}
+
+	// Empty arg → minio-first deterministic preference.
+	gotDefault, err := r.GetByShikimoriEpisode(ctx, "9300", 1, "")
+	if err != nil {
+		t.Fatalf("get default: %v", err)
+	}
+	if gotDefault.Storage != "minio" {
+		t.Fatalf("empty storage arg returned storage=%q, want minio (minio-first preference)", gotDefault.Storage)
 	}
 }
 

@@ -90,7 +90,7 @@ type fakeDeleter struct {
 	failPrefix map[string]error
 }
 
-func (f *fakeDeleter) DeletePrefix(_ context.Context, prefix string) error {
+func (f *fakeDeleter) DeletePrefix(_ context.Context, _, prefix string) error {
 	if f.failPrefix != nil {
 		if err := f.failPrefix[prefix]; err != nil {
 			return err // record nothing — the object delete did not complete

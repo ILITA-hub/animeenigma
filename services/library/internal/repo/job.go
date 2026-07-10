@@ -439,6 +439,34 @@ func (r *JobRepository) UpdateShikimoriID(ctx context.Context, id, shikimoriID s
 	return nil
 }
 
+// UpdateStorage writes the RESOLVED storage backend id (e.g. "minio" / "s3")
+// onto a job row by id and bumps updated_at. The encoder worker calls this after
+// a successful upload so a later Link of an unresolved (pending) job knows which
+// backend to list/move its objects from. Best-effort by its caller — a missing
+// row returns NotFound but the encoder only logs it (the episode row is the
+// authoritative serving pointer). Empty id is rejected so a typo upstream can't
+// run an unbounded UPDATE; an empty storage is allowed (the empty-string
+// class-default sentinel, though the encoder always passes a concrete backend).
+func (r *JobRepository) UpdateStorage(ctx context.Context, id, storage string) error {
+	if id == "" {
+		return liberrors.InvalidInput("job id required")
+	}
+	res := r.db.WithContext(ctx).
+		Model(&domain.Job{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"storage":    storage,
+			"updated_at": time.Now(),
+		})
+	if res.Error != nil {
+		return liberrors.Wrap(res.Error, liberrors.CodeInternal, "update job storage")
+	}
+	if res.RowsAffected == 0 {
+		return liberrors.NotFound("job")
+	}
+	return nil
+}
+
 // Retry re-enqueues a failed job. The old row is preserved (still
 // in 'failed') for the audit trail; the returned new row inherits
 // every user-facing field plus the SPEC-locked error_text marker

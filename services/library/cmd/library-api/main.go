@@ -12,6 +12,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/storageclient"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/autocache"
@@ -20,13 +21,13 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/handler"
 	libmetrics "github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
-	lminio "github.com/ILITA-hub/animeenigma/services/library/internal/minio"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/animetosho"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/filename"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/jackett"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/nyaa"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/storagegw"
 	libtorrent "github.com/ILITA-hub/animeenigma/services/library/internal/torrent"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/transport"
 	"github.com/ILITA-hub/animeenigma/services/library/migrations"
@@ -346,23 +347,15 @@ func main() {
 		"progress_tick", cfg.Worker.ProgressTick,
 	)
 
-	// Phase 4: MinIO writer — idempotent bucket bootstrap at startup.
-	writer, err := lminio.New(lminio.Config{
-		Endpoint:          cfg.Minio.Endpoint,
-		AccessKey:         cfg.Minio.AccessKey,
-		SecretKey:         cfg.Minio.SecretKey,
-		Bucket:            cfg.Minio.Bucket,
-		UseSSL:            cfg.Minio.UseSSL,
-		UploadConcurrency: cfg.Minio.UploadConcurrency,
-	}, log)
-	if err != nil {
-		log.Fatalw("minio client init", "error", err)
-	}
-	if err := writer.EnsureBucket(rootCtx); err != nil {
-		log.Fatalw("minio bucket bootstrap", "error", err)
-	}
-	log.Infow("minio writer ready",
-		"endpoint", cfg.Minio.Endpoint, "bucket", cfg.Minio.Bucket, "ssl", cfg.Minio.UseSSL)
+	// Object I/O now flows entirely through the internal storage service
+	// (services/storage/, Docker-network-only), which owns backend placement,
+	// bucket bootstrap, and presigning — the embedded MinIO writer was deleted.
+	// The Gateway is a thin adapter over libs/storageclient injected everywhere
+	// the writer used to be. No bucket bootstrap here (the storage service does it).
+	storageClient := storageclient.New(cfg.Storage.URL)
+	storageGW := storagegw.New(storageClient, cfg.Storage.UploadConcurrency)
+	log.Infow("storage gateway ready",
+		"storage_url", cfg.Storage.URL, "upload_concurrency", cfg.Storage.UploadConcurrency)
 
 	// Phase 07 (POOL-02): one-time admin-content migration into the unified
 	// pool. For every pre-existing admin episode still on the legacy
@@ -374,7 +367,7 @@ func main() {
 	// Idempotent (skips aeProvider/ rows) + restart-safe; Warnw (never Fatalw)
 	// on error so a partial/retryable migration re-runs next boot instead of
 	// crash-looping. Mirrors the jobRepo.ResumeInterrupted* boot-once pattern.
-	poolMigrator := autocache.NewMigrator(episodeRepo, writer, log)
+	poolMigrator := autocache.NewMigrator(episodeRepo, storageGW, log)
 	if migrated, err := poolMigrator.Migrate(rootCtx); err != nil {
 		log.Warnw("autocache pool migration failed (will retry next boot)", "error", err)
 	} else {
@@ -421,7 +414,7 @@ func main() {
 		jobRepo,
 		episodeRepo,
 		transcoder,
-		writer,
+		storageGW,
 		detector,
 		sourceResolver,
 		libMetrics,
@@ -451,7 +444,7 @@ func main() {
 	if cfg.Storyboard.BackfillEnabled {
 		storyboardBackfill := service.NewStoryboardBackfill(
 			episodeRepo,
-			writer,
+			storageGW,
 			transcoder,
 			diskGuard,
 			cfg.Disk.MinFreePct,
@@ -535,7 +528,7 @@ func main() {
 	// non-terminal autocache jobs) so the budget counts materialized + in-flight,
 	// closing the admit→materialize overshoot. Arg order: (config, pool, jobs,
 	// objects, metrics, log).
-	evictor := autocache.NewEvictor(autocacheConfigRepo, episodeRepo, jobRepo, writer, libMetrics, log)
+	evictor := autocache.NewEvictor(autocacheConfigRepo, episodeRepo, jobRepo, storageGW, libMetrics, log)
 	evictor.Start(rootCtx)
 	log.Infow("autocache evictor started")
 
@@ -547,7 +540,7 @@ func main() {
 		diskGuard,
 		evictor,
 		pool,
-		writer,
+		storageGW,
 		episodeRepo,
 		libMetrics,
 		cfg.Disk.MinFreePct,
@@ -555,7 +548,7 @@ func main() {
 	)
 
 	// Phase 4: episodes handler (read-only).
-	episodesHandler := handler.NewEpisodesHandler(episodeRepo, writer, log)
+	episodesHandler := handler.NewEpisodesHandler(episodeRepo, storageGW, log)
 
 	// Phase 07 (POOL-04 + POOL-05): live-editable autocache config —
 	// singleton GET/PATCH at /api/library/autocache/config. The typed
