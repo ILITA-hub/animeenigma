@@ -141,48 +141,50 @@ func (p ScraperProvider) IsRegistered() bool { return p.Status != StatusDisabled
 // tri-state (policy auto AND health up|degraded), kept as one source of truth.
 func (p ScraperProvider) Eligible() bool { return p.WireStatus() == StatusEnabled }
 
-// Derived-state labels for the playback-health dashboard. These are the single
-// source of truth shared by the roster table's State column (the Postgres CASE
-// in playback-health.json mirrors this exactly) and the provider_state gauge
-// (StateCode) that feeds the "Provider State History" timeline.
+// State labels for the playback-health dashboard's roster "State" column and
+// the /admin/policy pill — both driven by DerivedState. The Postgres CASE in
+// playback-health.json mirrors DerivedState one-for-one.
 const (
-	StateUP         = "UP"         // auto + up: in auto-failover and healthy
-	StateRecovering = "Recovering" // auto + recovering: climbing back after a confirmed outage
-	StateDegraded   = "Degraded"   // transient: one failed probe, pending confirmation (still in auto-failover)
-	StateDown       = "Down"       // auto + down: confirmed failing (two consecutive fails)
-	StateDisabled   = "Disabled"   // admin lock: policy manual or disabled
+	StateUP         = "UP"         // health up
+	StateRecovering = "Recovering" // health recovering: climbing back after a confirmed outage
+	StateDegrading  = "Degrading"  // health degraded: one failed probe, pending confirmation
+	StateDown       = "Down"       // health down: confirmed failing (two consecutive fails)
+	StateDisabled   = "Disabled"   // admin lock: policy disabled ONLY (a parked manual provider shows its health, not this)
 )
 
-// DerivedState collapses (policy, health) into the dashboard's 5-state
-// lifecycle label. The branch ORDER is significant and mirrors the roster
-// table's SQL CASE one-for-one (docker/grafana/dashboards/playback-health.json):
-// Disabled(manual|disabled) → UP(auto+up) → Recovering → Degraded(auto+degraded)
-// → Down(else).
+// DerivedState is the HEALTH-lifecycle label shown on the playback-health
+// roster "State" column (the Postgres CASE mirrors this one-for-one) and the
+// /admin/policy pill. Only an explicit admin disable (policy=disabled) reads as
+// "Disabled"; a parked manual provider shows its LIVE health on the same
+// 4-state scale as auto — the roster's separate "In auto-failover chain" column
+// carries the auto/manual distinction. Deliberately DECOUPLED from StateCode
+// (the failover-participation gauge behind the fleet alerts).
 func (p ScraperProvider) DerivedState() string {
-	switch {
-	case p.Policy == PolicyDisabled || p.Policy == PolicyManual:
+	if p.Policy == PolicyDisabled {
 		return StateDisabled
-	case p.Policy == PolicyAuto && p.Health == HealthUp:
+	}
+	switch p.Health {
+	case HealthUp:
 		return StateUP
-	case p.Health == HealthRecovering:
+	case HealthRecovering:
 		return StateRecovering
-	case p.Policy == PolicyAuto && p.Health == HealthDegraded:
-		return StateDegraded
-	default: // auto + down
+	case HealthDegraded:
+		return StateDegrading
+	default: // down
 		return StateDown
 	}
 }
 
-// StateCode is the numeric encoding of DerivedState for the provider_state
-// Prometheus gauge / Grafana state-timeline. Higher = healthier; the panel maps
-// each code back to its colored label. Kept in lock-step with DerivedState.
-func (p ScraperProvider) StateCode() float64 {
+// DerivedStateCode is the numeric encoding of DerivedState, feeding the
+// provider_health_state gauge behind the "Provider State History" timeline.
+// Higher = healthier; kept in lock-step with DerivedState.
+func (p ScraperProvider) DerivedStateCode() float64 {
 	switch p.DerivedState() {
 	case StateUP:
 		return 4
 	case StateRecovering:
 		return 3
-	case StateDegraded:
+	case StateDegrading:
 		return 2
 	case StateDown:
 		return 1
@@ -191,12 +193,35 @@ func (p ScraperProvider) StateCode() float64 {
 	}
 }
 
+// StateCode is the FAILOVER-PARTICIPATION lifecycle behind the provider_state
+// gauge that the fleet alert rules aggregate `by (group)`. Manual and disabled
+// providers are NOT in the auto-failover chain, so both collapse to 0 — this is
+// DELIBERATELY different from DerivedState (the health display label) so a
+// parked-but-healthy provider never masks the "no auto-playable source" alert
+// math. Encoding: 4=UP, 3=Recovering, 2=Degraded(one failed probe), 1=Down,
+// 0=not in auto-failover (manual or disabled).
+func (p ScraperProvider) StateCode() float64 {
+	if p.Policy != PolicyAuto {
+		return 0
+	}
+	switch p.Health {
+	case HealthUp:
+		return 4
+	case HealthRecovering:
+		return 3
+	case HealthDegraded:
+		return 2
+	default: // down
+		return 1
+	}
+}
+
 // WireStatus derives the legacy tri-state the scraper failover gate consumes.
 // auto+degraded stays enabled — a single failed probe is a warning, not a
 // confirmed outage, and runtime failover already covers a genuine miss. Note
-// the deliberate axis split with DerivedState: manual shows as "Disabled" on
-// the dashboard but keeps degraded here, so hacker-mode selectability is
-// unchanged.
+// the deliberate axis split with DerivedState: a manual provider shows its live
+// health on the dashboard but stays degraded here (out of auto-failover, still
+// hacker-mode selectable), so selectability is unchanged.
 func (p ScraperProvider) WireStatus() ProviderStatus {
 	switch p.Policy {
 	case PolicyDisabled:

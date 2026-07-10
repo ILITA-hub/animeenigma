@@ -1514,7 +1514,7 @@
         "state": {
           "UP": "Up",
           "Recovering": "Recovering",
-          "Degraded": "Degraded",
+          "Degrading": "Degrading",
           "Down": "Down",
           "Disabled": "Disabled"
         },

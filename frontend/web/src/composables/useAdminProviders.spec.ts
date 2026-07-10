@@ -86,7 +86,7 @@ describe('useAdminProviders', () => {
   })
 
   it("setPolicy('gogoanime','manual') PUTs the admin park lever (manual is admin-set now, not machine-set)", async () => {
-    const manual: ScraperProviderWire = { ...gogoanime, policy: 'manual', status: 'degraded', derived_state: 'Disabled' }
+    const manual: ScraperProviderWire = { ...gogoanime, policy: 'manual', status: 'degraded', derived_state: 'Recovering' }
     setPolicySpy.mockResolvedValue({ data: { success: true, data: manual } })
 
     const { setPolicy } = useAdminProviders()

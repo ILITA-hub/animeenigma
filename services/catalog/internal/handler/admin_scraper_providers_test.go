@@ -92,10 +92,11 @@ func TestAdminScraperProviders_List(t *testing.T) {
 	if allanime["policy"] != "manual" || allanime["health"] != "recovering" {
 		t.Fatalf("allanime policy/health = %v/%v, want manual/recovering", allanime["policy"], allanime["health"])
 	}
-	// manual is an admin lock: the dashboard band is Disabled regardless of
-	// health (hysteresis redesign 2026-07-08; WireStatus selectability unchanged).
-	if allanime["derived_state"] != domain.StateDisabled {
-		t.Fatalf("allanime derived_state = %v, want %v", allanime["derived_state"], domain.StateDisabled)
+	// A parked manual provider shows its LIVE health on the dashboard (only an
+	// explicit policy=disabled reads as Disabled); manual+recovering => Recovering.
+	// The auto/manual split lives in the roster's "In auto-failover chain" column.
+	if allanime["derived_state"] != domain.StateRecovering {
+		t.Fatalf("allanime derived_state = %v, want %v", allanime["derived_state"], domain.StateRecovering)
 	}
 }
 
@@ -292,8 +293,11 @@ func TestAdminScraperProviders_SetPolicy_Manual(t *testing.T) {
 	if respBody.Data["policy"] != "manual" {
 		t.Fatalf("response policy = %v, want manual", respBody.Data["policy"])
 	}
-	if respBody.Data["derived_state"] != domain.StateDisabled {
-		t.Fatalf("response derived_state = %v, want %v", respBody.Data["derived_state"], domain.StateDisabled)
+	// Parking an auto+up provider to manual keeps its LIVE health on the pill
+	// (UP) — only an explicit policy=disabled reads as Disabled. The manual
+	// distinction surfaces via Status=degraded / the "In auto-failover" column.
+	if respBody.Data["derived_state"] != domain.StateUP {
+		t.Fatalf("response derived_state = %v, want %v", respBody.Data["derived_state"], domain.StateUP)
 	}
 }
 

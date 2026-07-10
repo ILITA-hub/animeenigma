@@ -1514,7 +1514,7 @@
         "state": {
           "UP": "稼働中",
           "Recovering": "復旧中",
-          "Degraded": "劣化",
+          "Degrading": "劣化中",
           "Down": "停止中",
           "Disabled": "無効"
         },

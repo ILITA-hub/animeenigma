@@ -48,6 +48,7 @@ func EmitProviderStates(db *gorm.DB) error {
 	}
 	for _, r := range rows {
 		metrics.ProviderState.WithLabelValues(r.Name, r.Group).Set(r.StateCode())
+		metrics.ProviderHealthState.WithLabelValues(r.Name, r.Group).Set(r.DerivedStateCode())
 	}
 	return nil
 }

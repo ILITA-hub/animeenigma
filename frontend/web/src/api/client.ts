@@ -637,9 +637,11 @@ export type ScraperProviderPolicy = 'auto' | 'manual' | 'disabled'
 /** RBAC-and-roulette P5 Task 2 — wire shape of `GET /api/admin/scraper-providers`
  *  / `PUT .../{name}/policy` (services/catalog/internal/handler/admin_scraper_providers.go
  *  `adminProviderWire`). Mirrors the internal scraper-facing `providerWire`
- *  1:1 plus `derived_state`, the 5-state dashboard lifecycle label
- *  (`UP|Recovering|Degraded|Down|Disabled`) the FE renders as a status pill
- *  without re-implementing the policy+health precedence itself. */
+ *  1:1 plus `derived_state`, the 5-state dashboard health-lifecycle label
+ *  (`UP|Recovering|Degrading|Down|Disabled`) the FE renders as a status pill
+ *  without re-implementing the policy+health precedence itself. Only an explicit
+ *  admin disable reads as `Disabled`; a parked manual provider shows its live
+ *  health. */
 export interface ScraperProviderWire {
   name: string
   status: string
@@ -662,7 +664,7 @@ export interface ScraperProviderWire {
   base_url: string
   last_tick_metrics: string
   updated_at: string
-  derived_state: 'UP' | 'Recovering' | 'Degraded' | 'Down' | 'Disabled'
+  derived_state: 'UP' | 'Recovering' | 'Degrading' | 'Down' | 'Disabled'
 }
 
 export interface ScraperProvidersResponse {

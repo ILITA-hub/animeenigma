@@ -117,21 +117,41 @@ var (
 		[]string{"provider", "status", "reason", "description"},
 	)
 
-	// ProviderState is the derived-lifecycle gauge feeding the playback-health
-	// "Provider State History" timeline. Value is the numeric StateCode of the
-	// (policy, health) pair — 4=UP, 3=Recovering, 2=Degraded (one failed probe,
-	// pending confirmation), 1=Down, 0=Disabled (admin lock: manual/disabled)
-	// (see domain.ScraperProvider.StateCode). Unlike provider_info (boot-only
-	// snapshot), catalog re-sets this on every probe-result transition, so the
-	// gauge holds the current state between probes and Prometheus scraping
-	// records the continuous weekly history. Catalog is the SOLE emitter (covers
-	// the full roster), so there is no duplicate-series-across-targets concern.
-	// Carries a `group` label (domain.ScraperProvider.Group) alongside `provider`
-	// so Grafana fleet-level alert rules can aggregate `by (group)`.
+	// ProviderState is the FAILOVER-PARTICIPATION lifecycle gauge the Grafana
+	// fleet alert rules aggregate `by (group)` (ProviderFleetNoAutoPlayable /
+	// ProviderFleetCorrelatedDown). Value is domain.ScraperProvider.StateCode —
+	// 4=UP, 3=Recovering, 2=Degraded (one failed probe), 1=Down, 0=not in
+	// auto-failover (manual OR disabled). Manual/disabled collapse to 0 so a
+	// parked-but-healthy provider never masks the "no auto-playable source"
+	// alert math (see StateCode's decoupling from DerivedState). The health
+	// DISPLAY timeline uses provider_health_state instead. Unlike provider_info
+	// (boot-only snapshot), catalog re-sets this on every probe-result
+	// transition, so the gauge holds the current state between probes. Catalog
+	// is the SOLE emitter (covers the full roster), so there is no
+	// duplicate-series-across-targets concern. Carries a `group` label
+	// (domain.ScraperProvider.Group) alongside `provider` for the `by (group)`
+	// alert aggregation.
 	ProviderState = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "provider_state",
-			Help: "Derived provider lifecycle state code (4=UP, 3=Recovering, 2=Degraded(one failed probe, pending confirm), 1=Down, 0=Disabled(admin lock: manual/disabled)) per (provider, group), for the Grafana state-history timeline",
+			Help: "Failover-participation lifecycle code (4=UP, 3=Recovering, 2=Degraded(one failed probe), 1=Down, 0=not-in-auto-failover(manual|disabled)) per (provider, group), for the fleet alert rules",
+		},
+		[]string{"provider", "group"},
+	)
+
+	// ProviderHealthState is the HEALTH-lifecycle gauge feeding the
+	// playback-health "Provider State History" timeline. Value is
+	// domain.ScraperProvider.DerivedStateCode — 4=UP, 3=Recovering, 2=Degrading,
+	// 1=Down, 0=Disabled. Unlike ProviderState (which collapses manual/disabled
+	// to 0 for the failover-participation alerts), this shows a parked manual
+	// provider's LIVE health on the same 4-state scale as auto; only an explicit
+	// admin disable (policy=disabled) reads as 0/Disabled. Catalog is the sole
+	// emitter and re-sets it on every probe-result transition + boot seed,
+	// alongside ProviderState.
+	ProviderHealthState = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "provider_health_state",
+			Help: "Provider health lifecycle code (4=UP, 3=Recovering, 2=Degrading, 1=Down, 0=Disabled(policy disabled)) per (provider, group), for the Grafana state-history timeline",
 		},
 		[]string{"provider", "group"},
 	)

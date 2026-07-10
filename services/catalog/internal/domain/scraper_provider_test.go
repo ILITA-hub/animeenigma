@@ -99,32 +99,45 @@ func TestScraperProviderSchema_AutoMigrate(t *testing.T) {
 	}
 }
 
+// TestDerivedStateAndCode covers the deliberate axis split (see
+// scraper_provider.go): DerivedState/DerivedStateCode are the HEALTH display
+// (a parked manual provider shows its live health; only policy=disabled reads
+// as Disabled), while StateCode is the FAILOVER-PARTICIPATION encoding behind
+// the fleet alerts (manual AND disabled collapse to 0).
 func TestDerivedStateAndCode(t *testing.T) {
 	cases := []struct {
-		name   string
-		policy domain.ProviderPolicy
-		health domain.ProviderHealth
-		want   string
-		code   float64
+		name         string
+		policy       domain.ProviderPolicy
+		health       domain.ProviderHealth
+		wantState    string  // DerivedState (health display label)
+		wantHealth   float64 // DerivedStateCode (health timeline gauge)
+		wantFailover float64 // StateCode (failover-participation alert gauge)
 	}{
-		{"auto+up", domain.PolicyAuto, domain.HealthUp, domain.StateUP, 4},
-		{"auto+recovering", domain.PolicyAuto, domain.HealthRecovering, domain.StateRecovering, 3},
-		{"auto+degraded", domain.PolicyAuto, domain.HealthDegraded, domain.StateDegraded, 2},
-		{"auto+down", domain.PolicyAuto, domain.HealthDown, domain.StateDown, 1},
-		{"manual+up", domain.PolicyManual, domain.HealthUp, domain.StateDisabled, 0},
-		{"manual+down", domain.PolicyManual, domain.HealthDown, domain.StateDisabled, 0},
-		{"manual+recovering", domain.PolicyManual, domain.HealthRecovering, domain.StateDisabled, 0},
-		{"disabled+down", domain.PolicyDisabled, domain.HealthDown, domain.StateDisabled, 0},
-		{"disabled+up", domain.PolicyDisabled, domain.HealthUp, domain.StateDisabled, 0},
+		{"auto+up", domain.PolicyAuto, domain.HealthUp, domain.StateUP, 4, 4},
+		{"auto+recovering", domain.PolicyAuto, domain.HealthRecovering, domain.StateRecovering, 3, 3},
+		{"auto+degraded", domain.PolicyAuto, domain.HealthDegraded, domain.StateDegrading, 2, 2},
+		{"auto+down", domain.PolicyAuto, domain.HealthDown, domain.StateDown, 1, 1},
+		// manual: DISPLAY shows live health (4-state), but the alert gauge is 0
+		// (parked out of auto-failover).
+		{"manual+up", domain.PolicyManual, domain.HealthUp, domain.StateUP, 4, 0},
+		{"manual+degraded", domain.PolicyManual, domain.HealthDegraded, domain.StateDegrading, 2, 0},
+		{"manual+down", domain.PolicyManual, domain.HealthDown, domain.StateDown, 1, 0},
+		{"manual+recovering", domain.PolicyManual, domain.HealthRecovering, domain.StateRecovering, 3, 0},
+		// disabled: Disabled on both axes.
+		{"disabled+down", domain.PolicyDisabled, domain.HealthDown, domain.StateDisabled, 0, 0},
+		{"disabled+up", domain.PolicyDisabled, domain.HealthUp, domain.StateDisabled, 0, 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			p := domain.ScraperProvider{Policy: c.policy, Health: c.health}
-			if got := p.DerivedState(); got != c.want {
-				t.Fatalf("DerivedState()=%q want %q", got, c.want)
+			if got := p.DerivedState(); got != c.wantState {
+				t.Fatalf("DerivedState()=%q want %q", got, c.wantState)
 			}
-			if got := p.StateCode(); got != c.code {
-				t.Fatalf("StateCode()=%v want %v", got, c.code)
+			if got := p.DerivedStateCode(); got != c.wantHealth {
+				t.Fatalf("DerivedStateCode()=%v want %v", got, c.wantHealth)
+			}
+			if got := p.StateCode(); got != c.wantFailover {
+				t.Fatalf("StateCode()=%v want %v", got, c.wantFailover)
 			}
 		})
 	}

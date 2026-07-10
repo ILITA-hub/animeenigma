@@ -737,7 +737,7 @@ function stateVariant(state: ScraperProviderWire['derived_state']): NonNullable<
     case 'UP':
       return 'success'
     case 'Recovering':
-    case 'Degraded':
+    case 'Degrading':
       return 'warning'
     case 'Down':
       return 'destructive'

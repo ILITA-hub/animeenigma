@@ -117,10 +117,12 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Reflect the post-transition derived state into the provider_state gauge so
-	// the "Provider State History" timeline records this transition live (the
-	// gauge holds between probes; Prometheus scraping fills the continuous band).
+	// Reflect the post-transition state into both provider gauges live (they
+	// hold between probes; Prometheus scraping fills the continuous band):
+	// provider_state drives the failover-participation fleet alerts,
+	// provider_health_state drives the "Provider State History" timeline.
 	metrics.ProviderState.WithLabelValues(p.Name, p.Group).Set(p.StateCode())
+	metrics.ProviderHealthState.WithLabelValues(p.Name, p.Group).Set(p.DerivedStateCode())
 
 	httputil.OK(w, map[string]any{
 		"provider": p.Name,
