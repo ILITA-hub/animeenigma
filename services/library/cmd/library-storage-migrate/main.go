@@ -25,11 +25,13 @@
 //  5. UpdateStorage(row, 's3')            → flip the DB row (s3 now authoritative)
 //  6. DeletePrefix(minio, prefix)         → reclaim local disk
 //
-// A crash between (2) and (5) leaves the row on minio → re-run recopies (a safe
-// same-key overwrite) and re-verifies. A crash between (5) and (6) leaves a
-// benign dual-presence state (row=s3, stale minio objects) — the RECONCILE pass
-// (below) heals it on the next run by re-verifying s3 then deleting the minio
-// leftovers.
+// A crash between (2) and (5) leaves the row on minio with a populated s3
+// prefix → on re-run the pre-flight sibling guard (step 0) sees the non-empty s3
+// prefix and SKIPS loudly (non-zero exit) rather than recopying; the operator
+// deletes the orphaned s3 prefix, then re-runs to migrate the row cleanly. A
+// crash between (5) and (6) leaves a benign dual-presence state (row=s3, stale
+// minio objects) — the RECONCILE pass (below) heals it on the next run by
+// re-verifying s3 then deleting the minio leftovers.
 //
 // Flip-failure matrix (step 5 outcomes; the evictor selects from the same
 // storage='minio' pool with NO coordination, so the row can vanish or change
