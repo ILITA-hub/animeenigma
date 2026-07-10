@@ -49,6 +49,12 @@ type FeaturedData struct {
 	ReasonI18nKey string       `json:"reason_i18n_key,omitempty"`
 }
 
+// CuratedData is the payload for Card{Type: "curated"} — a single
+// hand-picked anime surfaced ONLY while it is currently airing.
+type CuratedData struct {
+	Anime domain.Anime `json:"anime"`
+}
+
 // RandomTailData is the payload for `Card{Type: "random_tail"}`.
 type RandomTailData struct {
 	Anime domain.Anime `json:"anime"`

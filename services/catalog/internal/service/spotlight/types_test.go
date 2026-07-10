@@ -465,6 +465,21 @@ func TestStatsHero_UptimePercentOmittedWhenNil(t *testing.T) {
 // TestNewAggregator_ConstructsEmpty confirms the constructor never leaves
 // the unexported resolvers slice as nil — a nil slice would NPE when the
 // Plan 03 fan-out loop ranges over it.
+func TestCuratedData_RoundTrip(t *testing.T) {
+	t.Parallel()
+	in := Card{Type: "curated", Priority: 1.5, Data: CuratedData{Anime: domain.Anime{Name: "Yani Neko"}}}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"priority":1.5`) {
+		t.Errorf("expected priority in JSON, got %s", b)
+	}
+	if !strings.Contains(string(b), `"anime"`) {
+		t.Errorf("expected anime key in JSON, got %s", b)
+	}
+}
+
 func TestNewAggregator_ConstructsEmpty(t *testing.T) {
 	t.Parallel()
 	a := NewAggregator(nil, nil, nil)
