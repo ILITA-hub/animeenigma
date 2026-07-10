@@ -647,7 +647,8 @@ async function loadProviders(): Promise<void> {
 // from what we guessed) or reverts on failure.
 async function applyProviderPolicy(row: ProviderRow, nextPolicy: ScraperProviderPolicy): Promise<void> {
   const previousPolicy = row.policy
-  const name = row.description || row.name
+  // row.name, not description — description is multi-line operator prose (44398d73).
+  const name = row.name
   row.saving = true
   row.policy = nextPolicy
   try {
@@ -672,7 +673,7 @@ async function onSelectProviderPolicy(row: ProviderRow, next: ScraperProviderPol
     await applyProviderPolicy(row, next)
     return
   }
-  const name = row.description || row.name
+  const name = row.name
   const confirmed = await confirm({
     title: t('admin.policy.providers.confirmDisableTitle', { name }),
     description: t('admin.policy.providers.confirmDisableBody', { name }),
