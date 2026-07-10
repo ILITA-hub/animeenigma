@@ -231,6 +231,15 @@ func main() {
 	if err := db.DB.Exec(migrations.EpisodeAudioLangSQL).Error; err != nil {
 		log.Fatalw("failed to apply episode audio_lang migration", "error", err)
 	}
+	// 017 (storage-service milestone): adds `storage` to library_episodes
+	// (default 'minio') and library_jobs (default '', requested override) and
+	// swaps the library_episodes unique key to (shikimori_id, episode_number,
+	// storage) so the same episode can live on both local MinIO and external
+	// S3. Idempotent; must follow 001 (library_jobs) and 002 (library_episodes),
+	// both applied above.
+	if err := db.DB.Exec(migrations.EpisodeStorageSQL).Error; err != nil {
+		log.Fatalw("failed to apply episode storage migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {

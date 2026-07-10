@@ -352,3 +352,32 @@ func TestEpisodeRepository_BumpFetch_AtomicIncrementTripwire(t *testing.T) {
 		t.Fatal("episode.go BumpFetch must bump last_fetch_at")
 	}
 }
+
+// TestEpisodeRepository_EvictorQueries_ScopedToMinioStorage is the
+// storage-service Task-3 regression: the Evictor frees LOCAL disk, so every
+// query it composes its budget/candidate/gauge view from — SumPoolBytes,
+// ListStaleEvictionCandidates, ListPool — must scope to storage='minio' and
+// never select an s3 row. DB-backed exclusion behavior lives behind
+// `integration`; this is the no-DB source tripwire so a refactor can't
+// quietly drop the scope on any of the three.
+func TestEpisodeRepository_EvictorQueries_ScopedToMinioStorage(t *testing.T) {
+	src := readEpisodeSource(t)
+	// Crude per-function isolation: split on "func (r *EpisodeRepository)" so
+	// each check only looks at its own function body, not a sibling's.
+	funcs := strings.Split(src, "func (r *EpisodeRepository)")
+	find := func(name string) string {
+		for _, f := range funcs {
+			if strings.HasPrefix(strings.TrimSpace(f), name+"(") {
+				return f
+			}
+		}
+		t.Fatalf("function %s not found in episode.go", name)
+		return ""
+	}
+	for _, name := range []string{"SumPoolBytes", "ListStaleEvictionCandidates", "ListPool"} {
+		body := find(name)
+		if !strings.Contains(body, `storage = 'minio'`) {
+			t.Fatalf("%s must scope its query to storage = 'minio' (evictor frees local disk, must never select s3 rows)", name)
+		}
+	}
+}

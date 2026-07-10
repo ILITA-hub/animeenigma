@@ -4,11 +4,13 @@ package repo
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
+	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/migrations"
 	"gorm.io/driver/postgres"
@@ -239,6 +241,154 @@ func TestEpisodeRepository_ListAdminLegacyPath_FiltersAndRepoints(t *testing.T) 
 	}
 	if reread.MinioPath != newPrefix {
 		t.Fatalf("repointed minio_path = %q, want %q", reread.MinioPath, newPrefix)
+	}
+}
+
+// openFullEpisodeTestDB is like openEpisodeTestDB but additionally applies
+// every migration that adds a column the domain.Episode struct maps (005,
+// 015, 016, 017) BEFORE the new 017 dual-storage tests run — GORM's Create
+// inserts every mapped struct field regardless of zero value, so a DB
+// missing any of those columns 42703s on the very first insert. Also asserts
+// re-applying 017 is idempotent (mirrors the 002/003 idempotence check in
+// openEpisodeTestDB).
+func openFullEpisodeTestDB(t *testing.T) (*gorm.DB, func()) {
+	t.Helper()
+	db, cleanup := openEpisodeTestDB(t)
+	for _, sql := range []struct {
+		name string
+		stmt string
+	}{
+		{"005", migrations.AutocachePoolSQL},
+		{"015", migrations.StoryboardSQL},
+		{"016", migrations.EpisodeAudioLangSQL},
+		{"017", migrations.EpisodeStorageSQL},
+	} {
+		if err := db.Exec(sql.stmt).Error; err != nil {
+			cleanup()
+			t.Fatalf("apply %s: %v", sql.name, err)
+		}
+	}
+	// Re-apply 017 to prove idempotence (ADD COLUMN IF NOT EXISTS + DROP
+	// CONSTRAINT IF EXISTS + the DO $$ ... EXCEPTION-guarded constraint add).
+	if err := db.Exec(migrations.EpisodeStorageSQL).Error; err != nil {
+		cleanup()
+		t.Fatalf("re-apply 017 must be idempotent: %v", err)
+	}
+	return db, cleanup
+}
+
+// TestEpisodeRepository_DualStorageUniqueConstraint is the storage-service
+// Task-3 TDD anchor: two rows sharing (shikimori_id, episode_number) but
+// differing storage ('minio' vs 's3') must BOTH succeed — the whole point of
+// migration 017's dual-presence key — while a third row that repeats an
+// already-used (shikimori_id, episode_number, storage) triple must be
+// rejected AlreadyExists, exactly like the pre-017 (shikimori_id,
+// episode_number)-only constraint used to reject any duplicate episode.
+func TestEpisodeRepository_DualStorageUniqueConstraint(t *testing.T) {
+	db, cleanup := openFullEpisodeTestDB(t)
+	defer cleanup()
+	r := NewEpisodeRepository(db)
+	ctx := context.Background()
+
+	minioEp := &domain.Episode{
+		ShikimoriID: "9001", EpisodeNumber: 1,
+		MinioPath: "aeProvider/9001/RAW/1/", Storage: "minio",
+	}
+	if err := r.Create(ctx, minioEp); err != nil {
+		t.Fatalf("create minio row: %v", err)
+	}
+
+	s3Ep := &domain.Episode{
+		ShikimoriID: "9001", EpisodeNumber: 1,
+		MinioPath: "aeProvider/9001/RAW/1/", Storage: "s3",
+	}
+	if err := r.Create(ctx, s3Ep); err != nil {
+		t.Fatalf("create s3 row for the SAME (shikimori_id, episode_number) as the minio row must succeed: %v", err)
+	}
+
+	dupEp := &domain.Episode{
+		ShikimoriID: "9001", EpisodeNumber: 1,
+		MinioPath: "aeProvider/9001/RAW/1/dup/", Storage: "minio",
+	}
+	err := r.Create(ctx, dupEp)
+	if err == nil {
+		t.Fatal("expected AlreadyExists on duplicate (shikimori_id, episode_number, storage), got nil")
+	}
+	var appErr *liberrors.AppError
+	if !stderrors.As(err, &appErr) || appErr.Code != liberrors.CodeAlreadyExists {
+		t.Fatalf("Create dup-storage error = %v, want CodeAlreadyExists", err)
+	}
+
+	got, err := r.List(ctx, "9001")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("list len = %d, want 2 (minio + s3 rows, dup rejected)", len(got))
+	}
+}
+
+// TestEpisodeRepository_EvictorQueries_ExcludeS3Rows is the DB-backed half of
+// the source tripwire in episode_test.go: an s3-storage row must never
+// surface from SumPoolBytes, ListStaleEvictionCandidates, or ListPool — the
+// Evictor frees LOCAL disk and must never touch/count a row it can't delete
+// local bytes for.
+func TestEpisodeRepository_EvictorQueries_ExcludeS3Rows(t *testing.T) {
+	db, cleanup := openFullEpisodeTestDB(t)
+	defer cleanup()
+	r := NewEpisodeRepository(db)
+	ctx := context.Background()
+
+	oldTime := time.Now().AddDate(0, -2, 0) // well outside any Fresh window
+	size := int64(1000)
+	minioEp := &domain.Episode{
+		ShikimoriID: "9100", EpisodeNumber: 1,
+		MinioPath: "aeProvider/9100/RAW/1/", Storage: "minio",
+		Source: domain.EpisodeSourceAdmin, SizeBytes: &size,
+		DownloadedAt: &oldTime,
+	}
+	s3Ep := &domain.Episode{
+		ShikimoriID: "9100", EpisodeNumber: 2,
+		MinioPath: "aeProvider/9100/RAW/2/", Storage: "s3",
+		Source: domain.EpisodeSourceAdmin, SizeBytes: &size,
+		DownloadedAt: &oldTime,
+	}
+	for _, ep := range []*domain.Episode{minioEp, s3Ep} {
+		if err := r.Create(ctx, ep); err != nil {
+			t.Fatalf("create %+v: %v", ep, err)
+		}
+	}
+
+	// SumPoolBytes: only the minio row's 1000 bytes should count.
+	total, err := r.SumPoolBytes(ctx)
+	if err != nil {
+		t.Fatalf("SumPoolBytes: %v", err)
+	}
+	if total != 1000 {
+		t.Fatalf("SumPoolBytes = %d, want 1000 (s3 row must be excluded)", total)
+	}
+
+	// ListPool: only the minio row.
+	pool, err := r.ListPool(ctx)
+	if err != nil {
+		t.Fatalf("ListPool: %v", err)
+	}
+	if len(pool) != 1 || pool[0].ID != minioEp.ID {
+		t.Fatalf("ListPool = %v, want only the minio row (%s)", ids(pool), minioEp.ID)
+	}
+
+	// ListStaleEvictionCandidates: both rows are Stale (2 months old, well past
+	// any default Fresh window), but only the minio row may be a candidate.
+	cfg := &domain.AutocacheConfig{
+		AutoFreshDownloadDays: 1, AutoFreshFetchDays: 1, AdminFreshDays: 1,
+		BudgetBytes: 1,
+	}
+	cands, err := r.ListStaleEvictionCandidates(ctx, cfg, time.Now())
+	if err != nil {
+		t.Fatalf("ListStaleEvictionCandidates: %v", err)
+	}
+	if len(cands) != 1 || cands[0].ID != minioEp.ID {
+		t.Fatalf("ListStaleEvictionCandidates = %v, want only the minio row (%s)", ids(cands), minioEp.ID)
 	}
 }
 

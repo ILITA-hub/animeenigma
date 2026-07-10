@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS library_episodes (
 	episode_number INTEGER NOT NULL,
 	job_id TEXT,
 	minio_path TEXT NOT NULL,
+	storage TEXT NOT NULL DEFAULT 'minio',
 	duration_sec INTEGER,
 	size_bytes INTEGER,
 	source TEXT NOT NULL DEFAULT 'admin',

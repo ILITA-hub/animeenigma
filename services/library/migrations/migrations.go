@@ -174,3 +174,16 @@ var StoryboardSQL string
 //
 //go:embed 016_episode_audio_lang.sql
 var EpisodeAudioLangSQL string
+
+// EpisodeStorageSQL is migrations/017_episode_storage.sql embedded as a
+// string. Adds `storage TEXT` to both library_episodes (default 'minio') and
+// library_jobs (default empty string) and swaps library_episodes' unique key
+// from (shikimori_id, episode_number) to (shikimori_id, episode_number, storage)
+// so the same episode can live on both local MinIO and external S3
+// simultaneously. main.go applies this via db.Exec(EpisodeStorageSQL).
+// Idempotent ADD COLUMN IF NOT EXISTS + DROP CONSTRAINT IF EXISTS + a DO $$
+// ... EXCEPTION-guarded constraint add; must follow 001 (library_jobs) and
+// 002 (library_episodes).
+//
+//go:embed 017_episode_storage.sql
+var EpisodeStorageSQL string

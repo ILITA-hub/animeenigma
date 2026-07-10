@@ -67,27 +67,34 @@ func (s JobStatus) IsTerminal() bool {
 // keep the GORM `default:gen_random_uuid()` tag in sync so AutoMigrate
 // stays a safe no-op alongside the SQL migration.
 type Job struct {
-	ID           string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid();column:id" json:"id"`
-	Source       JobSource  `gorm:"type:job_source;not null;column:source" json:"source"`
-	Magnet       string     `gorm:"type:text;not null;column:magnet" json:"magnet"`
-	Title        string     `gorm:"type:text;not null;column:title" json:"title"`
-	Uploader     string     `gorm:"type:text;column:uploader" json:"uploader,omitempty"`
-	Quality      string     `gorm:"type:text;column:quality" json:"quality,omitempty"`
-	SizeBytes    int64      `gorm:"type:bigint;not null;default:0;column:size_bytes" json:"size_bytes"`
-	ShikimoriID  string     `gorm:"type:text;column:shikimori_id" json:"shikimori_id,omitempty"`
+	ID       string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid();column:id" json:"id"`
+	Source   JobSource `gorm:"type:job_source;not null;column:source" json:"source"`
+	Magnet   string    `gorm:"type:text;not null;column:magnet" json:"magnet"`
+	Title    string    `gorm:"type:text;not null;column:title" json:"title"`
+	Uploader string    `gorm:"type:text;column:uploader" json:"uploader,omitempty"`
+	Quality  string    `gorm:"type:text;column:quality" json:"quality,omitempty"`
+	// Storage is the requested storage-backend OVERRIDE at job creation
+	// (''|'minio'|'s3' — '' = the class default). The handler validates the
+	// enum in Create; the (not-yet-built) upload path writes the RESOLVED
+	// actual value back onto this same column once it picks a concrete
+	// backend, mirroring how library_episodes.AudioLang/Quality (016) record
+	// the encoder's actual output rather than the request.
+	Storage     string `gorm:"type:text;not null;default:'';column:storage" json:"storage"`
+	SizeBytes   int64  `gorm:"type:bigint;not null;default:0;column:size_bytes" json:"size_bytes"`
+	ShikimoriID string `gorm:"type:text;column:shikimori_id" json:"shikimori_id,omitempty"`
 	// Episode is the INTENDED episode persisted at enqueue (migration 009,
 	// Phase 09). Nullable pointer: absent (NULL) for admin/manual rows whose
 	// episode is only known after detector.DetectEpisode runs post-download;
 	// set by the Planner for autocache rows so single-flight dedup on
 	// (shikimori_id, episode) + the per-trigger download metric work before
 	// filename detection.
-	Episode      *int       `gorm:"type:int;column:episode" json:"episode,omitempty"`
-	Status       JobStatus  `gorm:"type:job_status;not null;default:queued;column:status" json:"status"`
-	ProgressPct  int        `gorm:"type:int;not null;default:0;column:progress_pct" json:"progress_pct"`
-	ErrorText    string     `gorm:"type:text;column:error_text" json:"error_text,omitempty"`
-	CreatedAt    time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt    time.Time  `gorm:"column:updated_at" json:"updated_at"`
-	CompletedAt  *time.Time `gorm:"column:completed_at" json:"completed_at,omitempty"`
+	Episode     *int       `gorm:"type:int;column:episode" json:"episode,omitempty"`
+	Status      JobStatus  `gorm:"type:job_status;not null;default:queued;column:status" json:"status"`
+	ProgressPct int        `gorm:"type:int;not null;default:0;column:progress_pct" json:"progress_pct"`
+	ErrorText   string     `gorm:"type:text;column:error_text" json:"error_text,omitempty"`
+	CreatedAt   time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	CompletedAt *time.Time `gorm:"column:completed_at" json:"completed_at,omitempty"`
 }
 
 // TableName pins the table name (GORM would otherwise pluralize to

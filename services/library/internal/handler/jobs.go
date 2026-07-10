@@ -142,6 +142,9 @@ type createJobRequest struct {
 	Quality     string `json:"quality,omitempty"`
 	SizeBytes   int64  `json:"size_bytes,omitempty"`
 	ShikimoriID string `json:"shikimori_id,omitempty"`
+	// Storage is the requested storage-backend override (''|'minio'|'s3');
+	// '' means "use the class default". Validated against allowedStorages.
+	Storage string `json:"storage,omitempty"`
 }
 
 var allowedSources = map[domain.JobSource]bool{
@@ -150,6 +153,15 @@ var allowedSources = map[domain.JobSource]bool{
 	domain.JobSourceManual:     true,
 	domain.JobSourceJackett:    true,
 	domain.JobSourceAutocache:  true,
+}
+
+// allowedStorages is the storage-service Task-3 validation set for the job
+// create payload's storage override: empty string (class default), 'minio'
+// (local self-hosted), 's3' (external). Storage ids are exactly two strings.
+var allowedStorages = map[string]bool{
+	"":      true,
+	"minio": true,
+	"s3":    true,
 }
 
 var allowedStatuses = map[domain.JobStatus]bool{
@@ -176,6 +188,7 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	body.Magnet = strings.TrimSpace(body.Magnet)
 	body.Title = strings.TrimSpace(body.Title)
 	body.Source = strings.TrimSpace(body.Source)
+	body.Storage = strings.TrimSpace(body.Storage)
 
 	if body.Title == "" {
 		httputil.BadRequest(w, "title is required")
@@ -188,6 +201,10 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	src := domain.JobSource(body.Source)
 	if !allowedSources[src] {
 		httputil.BadRequest(w, "source must be one of: nyaa, animetosho, manual")
+		return
+	}
+	if !allowedStorages[body.Storage] {
+		httputil.BadRequest(w, "storage must be one of: minio, s3")
 		return
 	}
 	if _, err := metainfo.ParseMagnetUri(body.Magnet); err != nil {
@@ -261,6 +278,7 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Title:       body.Title,
 		Uploader:    body.Uploader,
 		Quality:     body.Quality,
+		Storage:     body.Storage,
 		SizeBytes:   body.SizeBytes,
 		ShikimoriID: body.ShikimoriID,
 		Status:      domain.JobStatusQueued,

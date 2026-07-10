@@ -169,6 +169,8 @@ func (r *EpisodeRepository) ListAdminLegacyPath(ctx context.Context) ([]domain.E
 // SumPoolBytes returns Σ size_bytes over the unified first-party aeProvider/
 // pool (admin + autocache, since both live under the same prefix). This is the
 // numerator of the EVICT-01 budget check (Σ ≤ autocache_config.budget_bytes).
+// Scoped to storage='minio' — the Evictor's budget frees LOCAL disk, so an s3
+// row (which consumes no local disk) must never inflate this total.
 //
 // An empty pool — or a pool whose rows all have NULL size_bytes — returns 0
 // (not an error): SUM over zero rows is SQL NULL, which COALESCE folds to 0 so
@@ -179,6 +181,7 @@ func (r *EpisodeRepository) SumPoolBytes(ctx context.Context) (int64, error) {
 	if err := r.db.WithContext(ctx).
 		Model(&domain.Episode{}).
 		Where("minio_path LIKE 'aeProvider/%'").
+		Where("storage = 'minio'").
 		Select("COALESCE(SUM(size_bytes), 0)").
 		Scan(&total).Error; err != nil {
 		return 0, liberrors.Wrap(err, liberrors.CodeInternal, "sum pool bytes")
@@ -212,6 +215,10 @@ func (r *EpisodeRepository) SumPoolBytes(ctx context.Context) (int64, error) {
 //
 // within a tier: COALESCE(last_fetch_at, downloaded_at, created_at) ASC
 // (oldest-touched first; created_at is the always-present final fallback).
+//
+// Scoped to storage='minio': the Evictor deletes MinIO objects then the row
+// (evictOne), which is only correct for a row that actually lives on local
+// disk — an s3 row must never surface here.
 func (r *EpisodeRepository) ListStaleEvictionCandidates(ctx context.Context, cfg *domain.AutocacheConfig, now time.Time) ([]domain.Episode, error) {
 	if cfg == nil {
 		return nil, liberrors.InvalidInput("autocache config is nil")
@@ -246,6 +253,7 @@ func (r *EpisodeRepository) ListStaleEvictionCandidates(ctx context.Context, cfg
 	var eps []domain.Episode
 	if err := r.db.WithContext(ctx).
 		Where("minio_path LIKE 'aeProvider/%'").
+		Where("storage = 'minio'").
 		Where(notFresh, autoDownloadCutoff, autoFetchCutoff, adminCutoff, adminCutoff).
 		Order(tierOrder).
 		Order("COALESCE(last_fetch_at, downloaded_at, created_at) ASC").
@@ -318,11 +326,13 @@ func (r *EpisodeRepository) SetHasStoryboard(ctx context.Context, id string) err
 // bytes_used / episodes gauges — so the freshness math stays in ONE pure Go helper
 // (Classify) rather than being duplicated in SQL. The LIKE pattern is a fixed literal
 // (no user input), so it is GORM-safe inline. Ordered by created_at ASC for
-// deterministic processing.
+// deterministic processing. Scoped to storage='minio' — these gauges report LOCAL
+// disk usage, so an s3 row must never be counted.
 func (r *EpisodeRepository) ListPool(ctx context.Context) ([]domain.Episode, error) {
 	var eps []domain.Episode
 	if err := r.db.WithContext(ctx).
 		Where("minio_path LIKE 'aeProvider/%'").
+		Where("storage = 'minio'").
 		Order("created_at ASC").
 		Find(&eps).Error; err != nil {
 		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "list pool episodes")

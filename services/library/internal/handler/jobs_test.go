@@ -22,12 +22,12 @@ import (
 // fakeJobStore is the handler test stub. Thread-safe to support the
 // concurrent path the underlying JobsHandler hits via r.Context().
 type fakeStoreH struct {
-	mu       sync.Mutex
-	created  []*domain.Job
-	byID     map[string]*domain.Job
-	listResp []domain.Job
-	getErr   error
-	createErr error
+	mu         sync.Mutex
+	created    []*domain.Job
+	byID       map[string]*domain.Job
+	listResp   []domain.Job
+	getErr     error
+	createErr  error
 	listFilter repo.JobFilter
 	listCalls  int
 }
@@ -460,6 +460,70 @@ func TestJobsHandler_Create_UnknownSource(t *testing.T) {
 	h.Create(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+// TestJobsHandler_Create_InvalidStorage is the storage-service Task-3
+// validation regression: a storage value outside empty|'minio'|'s3' must be
+// rejected 400 and must never reach jobRepo.Create.
+func TestJobsHandler_Create_InvalidStorage(t *testing.T) {
+	h, store, _, _, _, _ := newTestHandler(t)
+	body := map[string]any{
+		"magnet":  validMagnet(),
+		"title":   "x",
+		"source":  "manual",
+		"storage": "tape",
+	}
+	b, _ := json.Marshal(body)
+	r := httptest.NewRequest(http.MethodPost, "/api/library/jobs", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+	h.Create(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+	if len(store.created) != 0 {
+		t.Fatalf("expected 0 created on invalid storage, got %d", len(store.created))
+	}
+}
+
+// TestJobsHandler_Create_StorageOverride_Persisted proves a valid explicit
+// override ('minio' or 's3') is trimmed, validated, and persisted onto the
+// created job; omitting it defaults to the empty string (class default).
+func TestJobsHandler_Create_StorageOverride_Persisted(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload map[string]any
+		want    string
+	}{
+		{"omitted", map[string]any{}, ""},
+		{"minio", map[string]any{"storage": "minio"}, "minio"},
+		{"s3", map[string]any{"storage": "s3"}, "s3"},
+		{"padded", map[string]any{"storage": "  s3  "}, "s3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, store, _, _, _, _ := newTestHandler(t)
+			body := map[string]any{
+				"magnet": validMagnet(),
+				"title":  "x",
+				"source": "manual",
+			}
+			for k, v := range tc.payload {
+				body[k] = v
+			}
+			b, _ := json.Marshal(body)
+			r := httptest.NewRequest(http.MethodPost, "/api/library/jobs", bytes.NewReader(b))
+			w := httptest.NewRecorder()
+			h.Create(w, r)
+			if w.Code != http.StatusCreated {
+				t.Fatalf("status = %d, want 201; body=%s", w.Code, w.Body.String())
+			}
+			if len(store.created) != 1 {
+				t.Fatalf("expected 1 created, got %d", len(store.created))
+			}
+			if got := store.created[0].Storage; got != tc.want {
+				t.Fatalf("created storage = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -46,27 +46,36 @@ const (
 // FetchCount) mirror migration 005 1:1 and feed the (future) Accountant and
 // evictor; size_bytes already existed (POOL-03).
 type Episode struct {
-	ID            string        `gorm:"type:uuid;primaryKey;default:gen_random_uuid();column:id" json:"id"`
-	ShikimoriID   string        `gorm:"type:text;not null;column:shikimori_id" json:"shikimori_id"`
-	EpisodeNumber int           `gorm:"type:int;not null;column:episode_number" json:"episode_number"`
-	JobID         *string       `gorm:"type:uuid;column:job_id" json:"job_id,omitempty"`
-	MinioPath     string        `gorm:"type:text;not null;column:minio_path" json:"minio_path"`
-	DurationSec   *int          `gorm:"type:int;column:duration_sec" json:"duration_sec,omitempty"`
-	SizeBytes     *int64        `gorm:"type:bigint;column:size_bytes" json:"size_bytes,omitempty"`
-	Source        EpisodeSource `gorm:"type:episode_source;not null;default:admin;column:source" json:"source"`
-	Track         EpisodeTrack  `gorm:"type:episode_track;not null;default:raw;column:track" json:"track"`
+	ID            string  `gorm:"type:uuid;primaryKey;default:gen_random_uuid();column:id" json:"id"`
+	ShikimoriID   string  `gorm:"type:text;not null;column:shikimori_id" json:"shikimori_id"`
+	EpisodeNumber int     `gorm:"type:int;not null;column:episode_number" json:"episode_number"`
+	JobID         *string `gorm:"type:uuid;column:job_id" json:"job_id,omitempty"`
+	MinioPath     string  `gorm:"type:text;not null;column:minio_path" json:"minio_path"`
+	// Storage is the backend this row's MinioPath prefix actually lives on:
+	// "minio" (local self-hosted MinIO — the default, and the only value every
+	// pre-storage-service row has) or "s3" (external S3). Part of the
+	// migration-017 dual-presence key (shikimori_id, episode_number, storage)
+	// — the SAME episode may have one row per backend. The evictor frees LOCAL
+	// disk, so its candidate/budget/gauge queries (SumPoolBytes,
+	// ListStaleEvictionCandidates, ListPool) scope to storage='minio' and must
+	// never select an s3 row.
+	Storage     string        `gorm:"type:text;not null;default:minio;column:storage" json:"storage"`
+	DurationSec *int          `gorm:"type:int;column:duration_sec" json:"duration_sec,omitempty"`
+	SizeBytes   *int64        `gorm:"type:bigint;column:size_bytes" json:"size_bytes,omitempty"`
+	Source      EpisodeSource `gorm:"type:episode_source;not null;default:admin;column:source" json:"source"`
+	Track       EpisodeTrack  `gorm:"type:episode_track;not null;default:raw;column:track" json:"track"`
 	// AudioLang and Quality surface the encoder's ACTUAL output (ISO-639 audio
 	// language + e.g. "720p") for the Phase C source-panel truth work. Empty
 	// string (not NULL) for pre-existing rows and any path that hasn't started
 	// populating them yet — `not null;default:''` so AutoMigrate backfills
 	// existing rows safely and callers can compare against "" without a nil
 	// check.
-	AudioLang     string        `gorm:"type:text;not null;default:'';column:audio_lang" json:"audio_lang,omitempty"`
-	Quality       string        `gorm:"type:text;not null;default:'';column:quality" json:"quality,omitempty"`
-	DownloadedAt  *time.Time    `gorm:"column:downloaded_at" json:"downloaded_at,omitempty"`
-	LastFetchAt   *time.Time    `gorm:"column:last_fetch_at" json:"last_fetch_at,omitempty"`
-	FetchCount    int64         `gorm:"type:bigint;not null;default:0;column:fetch_count" json:"fetch_count"`
-	CreatedAt     time.Time     `gorm:"column:created_at" json:"created_at"`
+	AudioLang    string     `gorm:"type:text;not null;default:'';column:audio_lang" json:"audio_lang,omitempty"`
+	Quality      string     `gorm:"type:text;not null;default:'';column:quality" json:"quality,omitempty"`
+	DownloadedAt *time.Time `gorm:"column:downloaded_at" json:"downloaded_at,omitempty"`
+	LastFetchAt  *time.Time `gorm:"column:last_fetch_at" json:"last_fetch_at,omitempty"`
+	FetchCount   int64      `gorm:"type:bigint;not null;default:0;column:fetch_count" json:"fetch_count"`
+	CreatedAt    time.Time  `gorm:"column:created_at" json:"created_at"`
 	// HasStoryboard marks that storyboard_NNN.jpg + storyboard.vtt exist
 	// under MinioPath (scrub-preview sprite track).
 	HasStoryboard bool `gorm:"not null;default:false;column:has_storyboard" json:"has_storyboard"`

@@ -392,6 +392,7 @@ func retryRowFrom(old *domain.Job, oldID string) *domain.Job {
 		Title:       old.Title,
 		Uploader:    old.Uploader,
 		Quality:     old.Quality,
+		Storage:     old.Storage,
 		SizeBytes:   old.SizeBytes,
 		ShikimoriID: old.ShikimoriID,
 		Episode:     old.Episode,
