@@ -165,3 +165,68 @@ tail /var/log/animeenigma-walpurgis-watch.log      # one line per fired signal
 cat /var/lib/animeenigma/walpurgis-watch.state     # which signals already notified
 /usr/local/bin/animeenigma-walpurgis-watch.sh      # run once, by hand (idempotent)
 ```
+
+---
+
+## 4. maintenance-gate helper (shared)
+
+A sourceable bash helper so host automations (git auto-sync, provider-recovery,
+docker prune, and future routines) can check policy-service's per-routine
+maintenance gate without each re-implementing the `curl`+`jq` read. Same
+`(policy,health)`-style gate that backs `libs/maintenancegate` on the Go side,
+reached at its host-published address (`127.0.0.1:8098`).
+
+**FAIL-OPEN by design:** any error — policy-service unreachable, non-200,
+unparseable body — is treated as "enabled", so a policy-service outage can
+never silently pause a host routine. The gate can only *stop* a routine when
+it explicitly answers `enabled:false`.
+
+### Interface
+
+```bash
+# shellcheck source=infra/host/animeenigma-maint-gate.sh
+source /usr/local/lib/animeenigma/maint-gate.sh
+
+maint_gate_enabled <routine_id>        # return 0 = run, 1 = gate says stop
+maint_gate_setting <routine_id> <key>  # prints a settings value (empty on any miss)
+maint_status <routine_id> <ok:0|1> <summary>  # fire-and-forget status POST; never fails the caller
+```
+
+`MAINT_POLICY_BASE` (default `http://localhost:8098`) overrides the policy-service
+address, e.g. for local testing.
+
+### Files
+
+| Repo (source of truth)                    | Installed to                                       |
+|--------------------------------------------|-----------------------------------------------------|
+| `infra/host/animeenigma-maint-gate.sh`     | `/usr/local/lib/animeenigma/maint-gate.sh` (mode 644) |
+
+### Install / update
+
+```bash
+install -d -m 755 /usr/local/lib/animeenigma
+install -m 644 infra/host/animeenigma-maint-gate.sh /usr/local/lib/animeenigma/maint-gate.sh
+```
+
+### Use from a script
+
+```bash
+# shellcheck source=/dev/null
+source /usr/local/lib/animeenigma/maint-gate.sh
+
+if ! maint_gate_enabled git_autosync; then
+  echo "skip: gated by policy-service"; exit 0
+fi
+
+# ... do the work ...
+
+maint_status git_autosync 0 "fast-forwarded to abc1234"
+```
+
+### Manual smoke (host-access only)
+
+```bash
+source /usr/local/lib/animeenigma/maint-gate.sh
+maint_gate_enabled git_autosync && echo RUN
+maint_gate_setting disk_prune high_water_pct     # -> 80
+```
