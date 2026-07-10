@@ -180,6 +180,12 @@ class CamoufoxEngine:
         # caller reuses the first's session instead of racing it — see
         # _fetch_lock() for why an unlocked get-or-create leaks a profile.
         self._fetch_locks: dict[str, asyncio.Lock] = {}
+        # Per-sid lazy-rehydrate lock (Layer B): serializes concurrent
+        # proxy_fetch callers racing to rebuild the SAME dead sid so only one
+        # relaunches the profile/page. Entries are intentionally never popped
+        # (see _rehydrate) — the dict only grows by the rare sid that actually
+        # gets rehydrated, which is bounded and small.
+        self._rehydrate_locks: dict[str, asyncio.Lock] = {}
         self._recipes: dict[str, Recipe] = {
             "gogoanime": GogoanimeRecipe(),
             "nineanime": NineAnimeRecipe(),
@@ -759,6 +765,86 @@ class CamoufoxEngine:
             "resolved_via": "camoufox",
         }
 
+    async def _rehydrate(self, sid: str) -> Session | None:
+        """Rebuild a session that died with a previous process (Layer B of the
+        playback self-healing design): same sid, recorded profile preferred,
+        warming skipped (the on-disk profile is already warm), master playlist
+        re-fetched once as the go/no-go check. Refuses across Camoufox builds.
+
+        Lock lifecycle: the per-sid lock in ``self._rehydrate_locks`` is
+        deliberately never removed. Popping it inside the ``finally`` while
+        still under ``async with lock:`` would let a late-arriving concurrent
+        caller ``setdefault`` a brand-new, unlocked ``asyncio.Lock`` for the
+        same sid and start a second rehydrate before the first one's ``async
+        with`` actually releases the original lock — two coroutines rebuilding
+        the same sid at once. Leaving the entry in place means every future
+        call for this sid contends on the SAME lock object, which is correct;
+        the dict only grows by the (rare) distinct sids that ever needed
+        rehydrating, which is small and bounded over a process lifetime."""
+        rec = self.store.load(sid)
+        if rec is None:
+            metrics.REHYDRATE_TOTAL.labels(result="no_record").inc()
+            return None
+        if rec.get("camoufox_build") != camoufox_build():
+            metrics.REHYDRATE_TOTAL.labels(result="build_mismatch").inc()
+            self.store.delete(sid)
+            return None
+        if rec.get("expires_at", 0) <= time.time():
+            metrics.REHYDRATE_TOTAL.labels(result="expired").inc()
+            self.store.delete(sid)
+            return None
+
+        lock = self._rehydrate_locks.setdefault(sid, asyncio.Lock())
+        async with lock:
+            existing = self._sessions.get(sid)
+            if existing is not None:  # lost the race — another fetch rebuilt it
+                return existing
+            self._admit_launch()
+            profile = self.profiles.lease(preferred=rec.get("profile_id"))
+            if profile is None:
+                metrics.REHYDRATE_TOTAL.labels(result="no_profile").inc()
+                return None
+            page = None
+            try:
+                context = await self._ensure_browser(profile, rec["proxy_id"])
+                page = await context.new_page()
+                await page.goto(rec["player_url"], wait_until="domcontentloaded")
+                session = Session(
+                    id=sid,
+                    profile=profile,
+                    proxy_id=rec["proxy_id"],
+                    referer=rec.get("referer", ""),
+                    user_agent=profile.user_agent,
+                    cdn_host=rec.get("cdn_host"),
+                    master_url=rec["master_url"],
+                    expires_at=time.time() + self.cfg.session_ttl_seconds,
+                    page=page,
+                    player_url=rec.get("player_url", ""),
+                    user_key=rec.get("user_key"),
+                )
+                status, _ctype, _final, _hdrs, _body = await self._in_page_fetch(
+                    session, rec["master_url"]
+                )
+                if status != 200:
+                    raise RecipeError(f"rehydrate verify: master fetch {status}")
+                self._sessions[sid] = session
+                session.last_persist = time.time()
+                self.store.save(self._session_record(session))
+                metrics.ACTIVE_SESSIONS.set(len(self._sessions))
+                metrics.REHYDRATE_TOTAL.labels(result="ok").inc()
+                if self._log:
+                    self._log.info("session rehydrated", extra={"sid": sid[:8]})
+                return session
+            except Exception as exc:  # noqa: BLE001 — any failure ⇒ clean 410
+                metrics.REHYDRATE_TOTAL.labels(
+                    result="verify_failed" if isinstance(exc, RecipeError) else "error"
+                ).inc()
+                if page is not None:
+                    await _safe_close_page(page)
+                self.profiles.release(profile, ok=True)
+                self.store.delete(sid)
+                return None
+
     # -- stream proxy (mandatory: Cloudflare-fingerprint-gated CDNs) -------- #
     async def proxy_fetch(self, sid: str, url: str) -> dict:
         """Fetch ``url`` through the session page's IN-PAGE ``fetch()`` — i.e. the
@@ -773,6 +859,8 @@ class CamoufoxEngine:
         {status, content_type, body(bytes)}."""
         self._evict_expired()
         session = self._sessions.get(sid)
+        if session is None:
+            session = await self._rehydrate(sid)
         if session is None:
             raise SessionGone(sid)
         if not await host_allowed_for_session(url, session, self._resolve_host):

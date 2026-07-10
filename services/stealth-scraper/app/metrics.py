@@ -129,3 +129,9 @@ DEGRADATION_LEVEL_SEEN = Gauge(
     "stealth_degradation_level_seen",
     "Last governor degradation level observed by the sidecar poller.",
 )
+
+REHYDRATE_TOTAL = Counter(
+    "stealth_rehydrate_total",
+    "Lazy session-rehydrate attempts by result",
+    ["result"],  # ok|no_record|expired|build_mismatch|no_profile|verify_failed|error
+)

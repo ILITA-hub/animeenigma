@@ -59,13 +59,21 @@ class ProfileManager:
     def all(self) -> list[Profile]:
         return list(self._profiles)
 
-    def lease(self) -> Profile | None:
+    def lease(self, preferred: str | None = None) -> Profile | None:
         """Lease a free healthy profile, preferring already-launched ones (warm)
         with the fewest uses. Crashed slots are excluded — the reaper resurrects
-        them; they must not be handed to a live request path."""
+        them; they must not be handed to a live request path. ``preferred`` (a
+        profile id) wins when it is free and healthy — the rehydrate path asks
+        for the session's original identity so its cookies/clearance still
+        apply."""
         free = [p for p in self._profiles if not p.leased and p.status == "healthy"]
         if not free:
             return None
+        if preferred:
+            for p in free:
+                if p.id == preferred:
+                    p.leased = True
+                    return p
         free.sort(key=lambda p: (not p.launched, p.uses))
         p = free[0]
         p.leased = True
