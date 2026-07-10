@@ -11,11 +11,8 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/storage/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/storage/internal/service"
 )
-
-// ingestExpirySeconds mirrors the 1h presigned-URL expiry used for every
-// PUT/GET the backends hand out (service.Backends).
-const ingestExpirySeconds = 3600
 
 // Backends is the narrow surface StorageHandler depends on. The production
 // implementation is service.Backends (real MinIO/S3 clients); unit tests
@@ -73,9 +70,11 @@ func (h *StorageHandler) IngestURLs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.OK(w, domain.IngestURLsResponse{
-		Storage:   storage,
-		URLs:      urls,
-		ExpiresIn: ingestExpirySeconds,
+		Storage: storage,
+		URLs:    urls,
+		// Derived from the same constant the backends presign with, so the
+		// reported lifetime can never drift from the real one.
+		ExpiresIn: int(service.PresignExpiry.Seconds()),
 	})
 }
 
@@ -106,6 +105,12 @@ func (h *StorageHandler) Move(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
+	// Empty-prefix guard: "" matches EVERY object, so a malformed request
+	// would silently relocate the whole bucket.
+	if req.FromPrefix == "" || req.ToPrefix == "" {
+		httputil.Error(w, errors.InvalidInput("from_prefix and to_prefix are required"))
+		return
+	}
 
 	moved, err := h.backends.Move(r.Context(), req.Storage, req.FromPrefix, req.ToPrefix)
 	if err != nil {
@@ -126,6 +131,12 @@ func (h *StorageHandler) Copy(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
+	// Empty-prefix guard: "" matches EVERY object, so a malformed request
+	// would stream the entire source bucket cross-backend.
+	if req.Prefix == "" {
+		httputil.Error(w, errors.InvalidInput("prefix is required"))
+		return
+	}
 
 	copied, bytes, err := h.backends.Copy(r.Context(), req.FromStorage, req.ToStorage, req.Prefix)
 	if err != nil {
@@ -142,6 +153,12 @@ func (h *StorageHandler) DeletePrefix(w http.ResponseWriter, r *http.Request) {
 	var req domain.DeletePrefixRequest
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
+		return
+	}
+	// Empty-prefix guard: "" matches EVERY object, so a malformed request
+	// would silently wipe the whole bucket with a 200.
+	if req.Prefix == "" {
+		httputil.Error(w, errors.InvalidInput("prefix is required"))
 		return
 	}
 

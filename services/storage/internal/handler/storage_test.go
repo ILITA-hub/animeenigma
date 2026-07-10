@@ -15,9 +15,13 @@ import (
 
 // fakeBackends is the Backends test double — no real MinIO/S3 in unit
 // tests. It records every storage id it was asked to act on so tests can
-// assert placement routed correctly.
+// assert placement routed correctly, and counts destructive-op invocations
+// so tests can assert that rejected requests never reach the backend.
 type fakeBackends struct {
 	ingestCalls []string
+	moveCalls   int
+	copyCalls   int
+	deleteCalls int
 }
 
 func (f *fakeBackends) IngestURLs(_ context.Context, storage, prefix string, files []string) ([]domain.PutURL, error) {
@@ -33,13 +37,20 @@ func (f *fakeBackends) DownloadURLs(context.Context, string, string) ([]domain.G
 	return nil, nil
 }
 
-func (f *fakeBackends) Move(context.Context, string, string, string) (int, error) { return 0, nil }
+func (f *fakeBackends) Move(context.Context, string, string, string) (int, error) {
+	f.moveCalls++
+	return 0, nil
+}
 
 func (f *fakeBackends) Copy(context.Context, string, string, string) (int, int64, error) {
+	f.copyCalls++
 	return 0, 0, nil
 }
 
-func (f *fakeBackends) DeletePrefix(context.Context, string, string) (int, error) { return 0, nil }
+func (f *fakeBackends) DeletePrefix(context.Context, string, string) (int, error) {
+	f.deleteCalls++
+	return 0, nil
+}
 
 func (f *fakeBackends) List(context.Context, string, string) ([]domain.Object, error) {
 	return nil, nil
@@ -119,14 +130,86 @@ func TestIngestURLs_Placement(t *testing.T) {
 			if len(resp.URLs) != 1 || resp.URLs[0].Name != "a.txt" {
 				t.Fatalf("unexpected urls: %+v", resp.URLs)
 			}
-			if resp.ExpiresIn != 3600 {
-				t.Fatalf("expires_in = %d, want 3600", resp.ExpiresIn)
+			// Assert against the exported constant, not an independent
+			// literal — the wire-reported lifetime must always match the
+			// duration the backends actually presign with.
+			if want := int(service.PresignExpiry.Seconds()); resp.ExpiresIn != want {
+				t.Fatalf("expires_in = %d, want %d (service.PresignExpiry)", resp.ExpiresIn, want)
 			}
 			if len(fb.ingestCalls) != 1 || fb.ingestCalls[0] != tc.wantStorage {
 				t.Fatalf("backend called with storage=%v, want [%s]", fb.ingestCalls, tc.wantStorage)
 			}
 		})
 	}
+}
+
+// TestEmptyPrefix_Rejected guards against the bucket-wipe hazard: an empty
+// prefix matches EVERY object, so DeletePrefix/Move/Copy with an empty
+// prefix must 400 without the backend ever being invoked.
+func TestEmptyPrefix_Rejected(t *testing.T) {
+	t.Run("delete-prefix empty prefix is 400 and backend untouched", func(t *testing.T) {
+		h, fb := newTestHandler()
+		body, _ := json.Marshal(domain.DeletePrefixRequest{Storage: domain.BackendMinio, Prefix: ""})
+		req := httptest.NewRequest(http.MethodDelete, "/internal/storage/prefix", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.DeletePrefix(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400, body=%s", rec.Code, rec.Body.String())
+		}
+		if fb.deleteCalls != 0 {
+			t.Fatalf("DeletePrefix backend called %d times on a rejected request, want 0", fb.deleteCalls)
+		}
+	})
+
+	t.Run("move empty from_prefix is 400 and backend untouched", func(t *testing.T) {
+		h, fb := newTestHandler()
+		body, _ := json.Marshal(domain.MoveRequest{Storage: domain.BackendMinio, FromPrefix: "", ToPrefix: "dst/"})
+		req := httptest.NewRequest(http.MethodPost, "/internal/storage/move", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.Move(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400, body=%s", rec.Code, rec.Body.String())
+		}
+		if fb.moveCalls != 0 {
+			t.Fatalf("Move backend called %d times on a rejected request, want 0", fb.moveCalls)
+		}
+	})
+
+	t.Run("move empty to_prefix is 400 and backend untouched", func(t *testing.T) {
+		h, fb := newTestHandler()
+		body, _ := json.Marshal(domain.MoveRequest{Storage: domain.BackendMinio, FromPrefix: "src/", ToPrefix: ""})
+		req := httptest.NewRequest(http.MethodPost, "/internal/storage/move", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.Move(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400, body=%s", rec.Code, rec.Body.String())
+		}
+		if fb.moveCalls != 0 {
+			t.Fatalf("Move backend called %d times on a rejected request, want 0", fb.moveCalls)
+		}
+	})
+
+	t.Run("copy empty prefix is 400 and backend untouched", func(t *testing.T) {
+		h, fb := newTestHandler()
+		body, _ := json.Marshal(domain.CopyPrefixRequest{FromStorage: domain.BackendS3, ToStorage: domain.BackendMinio, Prefix: ""})
+		req := httptest.NewRequest(http.MethodPost, "/internal/storage/copy", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.Copy(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400, body=%s", rec.Code, rec.Body.String())
+		}
+		if fb.copyCalls != 0 {
+			t.Fatalf("Copy backend called %d times on a rejected request, want 0", fb.copyCalls)
+		}
+	})
 }
 
 func TestHealth_JSONShape(t *testing.T) {

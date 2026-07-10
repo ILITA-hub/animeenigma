@@ -15,9 +15,11 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/storage/internal/domain"
 )
 
-// presignExpiry is the lifetime of every presigned PUT/GET this service
-// hands out.
-const presignExpiry = time.Hour
+// PresignExpiry is the lifetime of every presigned PUT/GET this service
+// hands out. Exported so the handler derives the wire-level `expires_in`
+// from this same constant — a single source of truth, so the reported
+// value can never drift from the real URL lifetime.
+const PresignExpiry = time.Hour
 
 // backend wraps one *minio.Client with its bucket + endpoint metadata
 // needed to build canonical URLs (BaseURLs).
@@ -133,7 +135,7 @@ func (b *Backends) IngestURLs(ctx context.Context, storage, prefix string, files
 
 	urls := make([]domain.PutURL, 0, len(files))
 	for _, name := range files {
-		u, err := be.client.PresignedPutObject(ctx, be.bucket, prefix+name, presignExpiry)
+		u, err := be.client.PresignedPutObject(ctx, be.bucket, prefix+name, PresignExpiry)
 		if err != nil {
 			return nil, fmt.Errorf("presign put %s: %w", name, err)
 		}
@@ -155,7 +157,7 @@ func (b *Backends) DownloadURLs(ctx context.Context, storage, prefix string) ([]
 		if obj.Err != nil {
 			return nil, obj.Err
 		}
-		u, err := be.client.PresignedGetObject(ctx, be.bucket, obj.Key, presignExpiry, nil)
+		u, err := be.client.PresignedGetObject(ctx, be.bucket, obj.Key, PresignExpiry, nil)
 		if err != nil {
 			return nil, fmt.Errorf("presign get %s: %w", obj.Key, err)
 		}
