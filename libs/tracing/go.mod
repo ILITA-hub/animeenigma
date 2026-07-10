@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/ILITA-hub/animeenigma/libs/authz v0.0.0-20260605053210-7d61fcc7b6d6
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/prometheus/client_golang v1.23.2
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0
 	go.opentelemetry.io/otel v1.40.0
@@ -13,7 +13,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
 	gorm.io/driver/sqlite v1.6.0
-	gorm.io/gorm v1.31.2
+	gorm.io/gorm v1.30.0
 	gorm.io/plugin/opentelemetry v0.1.12
 )
 

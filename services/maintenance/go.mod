@@ -4,9 +4,10 @@ go 1.25.0
 
 require (
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0-00010101000000-000000000000
+	github.com/ILITA-hub/animeenigma/libs/maintenancegate v0.0.0-00010101000000-000000000000
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/streamprobe v0.0.0
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/prometheus/client_golang v1.23.2
 )
 

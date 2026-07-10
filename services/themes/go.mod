@@ -10,8 +10,8 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/tracing v0.0.0
-	github.com/go-chi/chi/v5 v5.3.0
-	gorm.io/gorm v1.31.2
+	github.com/go-chi/chi/v5 v5.2.5
+	gorm.io/gorm v1.30.0
 )
 
 require (
