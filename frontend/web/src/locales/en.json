@@ -1815,6 +1815,13 @@
       "episodesLabel": "{n} ep.",
       "airedLabel": "ep. {n} aired"
     },
+    "curated": {
+      "title": "Curator Recommends",
+      "watchEpisode": "Watch · ep. {n}",
+      "addCta": "Add to list",
+      "airedLabel": "ep. {n} aired",
+      "episodesLabel": "{n} ep."
+    },
     "randomTail": {
       "title": "Random pick",
       "subtitle": "Discover something new",

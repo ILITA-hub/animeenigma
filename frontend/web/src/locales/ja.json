@@ -1769,6 +1769,13 @@
       "episodesLabel": "{n}話",
       "airedLabel": "第{n}話配信中"
     },
+    "curated": {
+      "title": "キュレーターのおすすめ",
+      "watchEpisode": "視聴 · 第{n}話",
+      "addCta": "リストに追加",
+      "airedLabel": "第{n}話配信中",
+      "episodesLabel": "{n}話"
+    },
     "randomTail": {
       "title": "ランダムピック",
       "subtitle": "新しい発見を",
