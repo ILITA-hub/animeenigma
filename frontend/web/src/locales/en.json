@@ -1537,6 +1537,7 @@
         "title": "Maintenance routines",
         "intro": "Pause or resume background routines and tune their safe knobs. Pausing a host routine skips its next run — the schedule stays intact.",
         "loadError": "Failed to load maintenance routines.",
+        "noRoutines": "No maintenance routines are registered.",
         "groups": { "host": "Host routines", "cluster": "In-cluster routines" },
         "enabled": "Enabled",
         "paused": "Paused",

@@ -297,8 +297,8 @@
               <p class="text-white/60 text-sm mt-1">{{ $t('admin.policy.maintenance.intro') }}</p>
             </div>
 
-            <EmptyState v-if="maintRows.length === 0" class="mb-8">
-              {{ $t('admin.policy.maintenance.loadError') }}
+            <EmptyState v-if="maintRows.length === 0 && !maintError" class="mb-8">
+              {{ $t('admin.policy.maintenance.noRoutines') }}
             </EmptyState>
 
             <div v-for="group in maintGroups" :key="group.key" class="mb-8">
