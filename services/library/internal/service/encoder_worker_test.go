@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
@@ -238,6 +239,7 @@ type stubMetrics struct {
 	encodeDur      []float64
 	uploadBytes    int64
 	encodeFailures []string
+	activeWorkers  int // last SetEncodeActiveWorkers value
 }
 
 func (s *stubMetrics) IncJobsTotal(status string) {
@@ -262,6 +264,12 @@ func (s *stubMetrics) IncEncodeFailures(reason string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.encodeFailures = append(s.encodeFailures, reason)
+}
+
+func (s *stubMetrics) SetEncodeActiveWorkers(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.activeWorkers = n
 }
 
 // stubInvalidator records every Invalidate call so Phase-06 tests
@@ -848,6 +856,111 @@ func TestEncoder_NilInvalidator_Safe(t *testing.T) {
 	pool.processJob(context.Background(), job)
 	if js.statusHistory[len(js.statusHistory)-1].status != domain.JobStatusDone {
 		t.Fatalf("status did not reach done with nil invalidator: %+v", js.statusHistory)
+	}
+}
+
+// ---- AUTO-575: degradation-aware graded concurrency limiter ----
+
+// fakeLevel is a mutable ShedChecker for encodeLimiter tests.
+type fakeLevel struct{ lvl atomic.Int32 }
+
+func (f *fakeLevel) set(n int)             { f.lvl.Store(int32(n)) }
+func (f *fakeLevel) Level() int            { return int(f.lvl.Load()) }
+func (f *fakeLevel) ShouldShed(m int) bool { return f.Level() >= m }
+
+// TestEncodeLimiter_GradedCapByLevel proves the cap scales with the degradation
+// level: maxWorkers at level 0, 1 at level 1, 0 at level 2 — and that the
+// injected active-workers gauge tracks acquisitions/releases.
+func TestEncodeLimiter_GradedCapByLevel(t *testing.T) {
+	fl := &fakeLevel{}
+	var active int32
+	lim := newEncodeLimiter(3, func(n int) { atomic.StoreInt32(&active, int32(n)) }, nil)
+	lim.set(fl)
+
+	// Level 0 → full throughput (cap == maxWorkers == 3).
+	fl.set(0)
+	got := 0
+	for lim.tryAcquire() {
+		got++
+	}
+	if got != 3 {
+		t.Fatalf("level 0: acquired %d slots, want 3 (maxWorkers)", got)
+	}
+	if n := atomic.LoadInt32(&active); n != 3 {
+		t.Fatalf("active gauge = %d, want 3 at full cap", n)
+	}
+	for i := 0; i < got; i++ {
+		lim.release()
+	}
+	if n := atomic.LoadInt32(&active); n != 0 {
+		t.Fatalf("active gauge after drain = %d, want 0", n)
+	}
+
+	// Level 1 → serialize (cap == 1).
+	fl.set(1)
+	got = 0
+	for lim.tryAcquire() {
+		got++
+	}
+	if got != 1 {
+		t.Fatalf("level 1: acquired %d slots, want 1 (serialized)", got)
+	}
+	for i := 0; i < got; i++ {
+		lim.release()
+	}
+
+	// Level 2 → pause (cap == 0).
+	fl.set(2)
+	if lim.tryAcquire() {
+		t.Fatalf("level 2: acquire succeeded, want 0 (paused)")
+	}
+	if n := atomic.LoadInt32(&active); n != 0 {
+		t.Fatalf("active gauge at level 2 = %d, want 0", n)
+	}
+}
+
+// TestEncodeLimiter_ReleaseFreesSlot proves a released slot is reusable — the
+// job "waiting" at a saturated cap is admitted once the running one completes,
+// rather than being dropped.
+func TestEncodeLimiter_ReleaseFreesSlot(t *testing.T) {
+	fl := &fakeLevel{}
+	fl.set(1) // cap 1
+	lim := newEncodeLimiter(2, nil, nil)
+	lim.set(fl)
+
+	if !lim.tryAcquire() {
+		t.Fatal("first acquire at cap 1 should succeed")
+	}
+	if lim.tryAcquire() {
+		t.Fatal("second acquire at cap 1 should fail (saturated)")
+	}
+	lim.release()
+	if !lim.tryAcquire() {
+		t.Fatal("acquire after release should succeed (job un-queues once slot frees)")
+	}
+}
+
+// TestEncodeLimiter_NilCheckerRunsFull proves the fail-open contract: with no
+// degradation watcher wired, the limiter never sheds and admits maxWorkers.
+func TestEncodeLimiter_NilCheckerRunsFull(t *testing.T) {
+	lim := newEncodeLimiter(2, nil, nil) // no checker wired
+	got := 0
+	for lim.tryAcquire() {
+		got++
+	}
+	if got != 2 {
+		t.Fatalf("nil checker: acquired %d, want 2 (maxWorkers — fail-open, never sheds)", got)
+	}
+}
+
+// TestEncodeLimiter_ReleaseFloorsAtZero proves a stray double-release can't
+// drive the active count (and thus the gauge) negative.
+func TestEncodeLimiter_ReleaseFloorsAtZero(t *testing.T) {
+	var active int32
+	lim := newEncodeLimiter(2, func(n int) { atomic.StoreInt32(&active, int32(n)) }, nil)
+	lim.release() // no prior acquire
+	if n := atomic.LoadInt32(&active); n != 0 {
+		t.Fatalf("active gauge after stray release = %d, want 0 (floored)", n)
 	}
 }
 

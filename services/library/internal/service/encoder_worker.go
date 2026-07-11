@@ -84,6 +84,9 @@ type EncodeMetrics interface {
 	ObserveEncodeDuration(seconds float64)
 	AddUploadBytes(n int64)
 	IncEncodeFailures(reason string)
+	// SetEncodeActiveWorkers publishes the live concurrent-transcode count the
+	// degradation-aware graded limiter admits (AUTO-575).
+	SetEncodeActiveWorkers(n int)
 }
 
 // EncoderPool is N goroutines that race for status='encoding' jobs
@@ -119,10 +122,14 @@ type EncoderPool struct {
 
 	pollInterval time.Duration
 
-	// shed gates NEW encode claims while the platform degradation level is
-	// Elevated+ (graceful-degradation Phase 3). A running ffmpeg always
-	// finishes — only admission pauses.
-	shed *shedGate
+	// limiter is the degradation-aware GRADED concurrency limiter (AUTO-575).
+	// It caps the number of concurrent transcodes by the live platform
+	// degradation level — full at level 0, 1 at level 1, 0 at level 2+ — so
+	// heavy ffmpeg work backs off under host pressure instead of stacking CPU
+	// (the pattern that tripped the host-pressure governor). A running transcode
+	// always finishes; only admission of NEW work is gated, and gated jobs stay
+	// queued in the DB (status='encoding', unclaimed) rather than being dropped.
+	limiter *encodeLimiter
 
 	wg sync.WaitGroup
 }
@@ -150,6 +157,14 @@ func NewEncoderPool(
 	if workers < 1 {
 		workers = 1
 	}
+	// The limiter's max cap (level-0 throughput) is the goroutine count itself,
+	// so at level 0 all workers may transcode concurrently. The active-workers
+	// gauge setter is bound from metrics when present (nil-guarded inside the
+	// limiter), keeping the single-emitter gauge in the library metrics package.
+	var setActive func(int)
+	if metrics != nil {
+		setActive = metrics.SetEncodeActiveWorkers
+	}
 	return &EncoderPool{
 		workers:      workers,
 		jobRepo:      jobRepo,
@@ -162,12 +177,14 @@ func NewEncoderPool(
 		log:          log,
 		invalidator:  invalidator,
 		pollInterval: 2 * time.Second,
-		shed:         newShedGate("library_encode", log),
+		limiter:      newEncodeLimiter(workers, setActive, log),
 	}
 }
 
-// SetShedChecker wires the degradation watcher (nil-safe; call before Start).
-func (p *EncoderPool) SetShedChecker(c ShedChecker) { p.shed.set(c) }
+// SetShedChecker wires the degradation watcher into the graded limiter
+// (nil-safe; call before Start). Name kept for parity with the download +
+// storyboard pools' wiring in main.go.
+func (p *EncoderPool) SetShedChecker(c ShedChecker) { p.limiter.set(c) }
 
 // Start launches worker goroutines; returns immediately. Goroutines
 // exit on <-ctx.Done().
@@ -205,7 +222,12 @@ func (p *EncoderPool) runWorker(ctx context.Context, idx int) {
 		if ctx.Err() != nil {
 			return
 		}
-		if p.shed.shed() {
+		// Degradation-aware graded admission (AUTO-575): reserve a transcode slot
+		// at the current cap BEFORE claiming, so the cap actually bounds how many
+		// ffmpeg runs stack concurrently. A cap of 0 (Critical) or an already-
+		// saturated cap (this goroutine is a surplus worker beyond the graded
+		// limit) → wait; the job stays queued in the DB, nothing is dropped.
+		if !p.limiter.tryAcquire() {
 			if !p.sleep(ctx, p.pollInterval) {
 				return
 			}
@@ -213,6 +235,7 @@ func (p *EncoderPool) runWorker(ctx context.Context, idx int) {
 		}
 		job, err := p.jobRepo.ClaimForEncoding(ctx)
 		if err != nil {
+			p.limiter.release()
 			if p.log != nil {
 				p.log.Warnw("encoder claim failed", "worker", idx, "error", err)
 			}
@@ -222,12 +245,16 @@ func (p *EncoderPool) runWorker(ctx context.Context, idx int) {
 			continue
 		}
 		if job == nil {
+			// Empty queue — free the slot immediately so it doesn't count
+			// against the cap while we idle.
+			p.limiter.release()
 			if !p.sleep(ctx, p.pollInterval) {
 				return
 			}
 			continue
 		}
 		p.processJob(ctx, job)
+		p.limiter.release()
 	}
 }
 

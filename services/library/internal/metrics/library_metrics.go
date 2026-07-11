@@ -40,6 +40,15 @@ type LibraryMetrics struct {
 	filenameDetectFallback *prometheus.CounterVec
 	encodeFailuresTotal    *prometheus.CounterVec
 
+	// AUTO-575 (graceful-degradation follow-up): live count of encoder workers
+	// currently transcoding under the degradation-aware graded concurrency cap
+	// (service.encodeLimiter). A single-emitter gauge, so it lives here in the
+	// library metrics package — a plain gauge in libs/metrics would auto-register
+	// as an impostor 0-series in every importing binary (the auto-registration
+	// trap). Reads: 0 idle, up to LIBRARY_ENCODE_WORKERS at level 0, ≤1 at
+	// level 1, 0 at level 2+.
+	encodeActiveWorkers prometheus.Gauge
+
 	// Phase 06 (workstream raw-jp / v0.2) addition:
 	//   cacheInvalidationTotal{result="ok"|"fail"} — incremented
 	//   once per webhook fire from the library encoder to the
@@ -156,6 +165,14 @@ func NewLibraryMetricsWithRegisterer(reg prometheus.Registerer) *LibraryMetrics 
 				Help: "Encoder-worker failures, labeled by reason (source_missing, episode_detect_failed, ffmpeg_error, upload_error, episode_insert_failed).",
 			},
 			[]string{"reason"},
+		),
+
+		// AUTO-575 (graceful-degradation follow-up).
+		encodeActiveWorkers: factory.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "library_encode_active_workers",
+				Help: "Encoder workers currently transcoding, bounded by the degradation-aware graded cap (level 0 → LIBRARY_ENCODE_WORKERS, level 1 → 1, level 2+ → 0).",
+			},
 		),
 
 		// Phase 06 (workstream raw-jp / v0.2).
@@ -332,6 +349,23 @@ func (m *LibraryMetrics) IncEncodeFailures(reason string) {
 // library_encode_failures_total.
 func (m *LibraryMetrics) GetEncodeFailuresForTest(reason string) prometheus.Counter {
 	return m.encodeFailuresTotal.WithLabelValues(reason)
+}
+
+// SetEncodeActiveWorkers publishes the live count of encoder workers currently
+// holding a transcode slot under the degradation-aware graded cap
+// (service.encodeLimiter). Nil-guarded so a pool built without metrics never
+// panics. AUTO-575.
+func (m *LibraryMetrics) SetEncodeActiveWorkers(n int) {
+	if m == nil {
+		return
+	}
+	m.encodeActiveWorkers.Set(float64(n))
+}
+
+// GetEncodeActiveWorkersForTest is the test-seam analogue for
+// library_encode_active_workers.
+func (m *LibraryMetrics) GetEncodeActiveWorkersForTest() prometheus.Gauge {
+	return m.encodeActiveWorkers
 }
 
 // GetFilenameDetectFallbackForTest is the test-seam analogue for
