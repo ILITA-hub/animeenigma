@@ -15,6 +15,17 @@ var adCDNHostSuffixes = []string{
 	"p16-ad-sg",    // matches p16-ad-sg.* (TikTok ad CDN region tag)
 	"ad-site-i18n", // matches *.ad-site-i18n.* (TikTok i18n ad CDN)
 	"tiktokcdn.com",
+	// nekostream.site — gogoanime's megaplay wrapper resolves some anime/
+	// episode combos to this host, which serves a valid-HTTP-200 1x1 PNG
+	// (dressed up with a video/mp2t Content-Type and megabytes of trailing
+	// padding) instead of real video. Confirmed independently 3x across
+	// 2026-07-06 / 2026-07-09 / 2026-07-11 (see
+	// docs/issues/provider-recovery-log.md) on multiple anime/episodes each
+	// time — a stable dead mirror, not a transient blip. Probe never decodes
+	// segment bytes (a fake CDN answering 200 is otherwise indistinguishable
+	// from a real one to this cheap primitive), so blocklisting the host is
+	// the only lever available here.
+	"nekostream.site",
 }
 
 // isAdCDNHost reports whether host matches any blocklisted suffix.
