@@ -12,16 +12,24 @@ export const SEG_MAX_ENTRIES = 150 // ~2MB/segment → ≤ ~300MB disk
 export const SEG_TTL_MS = 3 * 60 * 60 * 1000
 export const SCRUB_PARAM = 'aescrub'
 const PROXY_PATH = '/api/streaming/hls-proxy'
+const MASKED_PREFIX = '/api/streaming/m/'
 const MIN_HEADROOM_BYTES = 1_000_000_000
 const CACHED_AT = 'x-ae-cached-at'
 const SEG_EXT = /\.(ts|m4s)$/i
 
-/** Cache identity of a proxied segment request: the upstream `url` param only.
- *  exp/sig/sess rotate per playlist-rewrite and must not fragment the cache.
+/** Cache identity of a proxied segment request: the upstream `url` param for
+ *  the legacy form; the full token path for the Track A masked form (the
+ *  token is opaque — it IS the identity; it stays stable for the lifetime of
+ *  one manifest fetch, which covers a VOD watch session).
  *  Returns null for anything that is not a cacheable HLS segment request. */
 export function segmentCacheKey(requestUrl: string): string | null {
   try {
     const u = new URL(requestUrl)
+    if (u.pathname.includes(MASKED_PREFIX)) {
+      // Masked form: /api/streaming/m/<token>/<leaf> — leaf keeps the ext.
+      if (!SEG_EXT.test(u.pathname)) return null
+      return '/__segcache/?m=' + encodeURIComponent(u.pathname)
+    }
     if (!u.pathname.endsWith(PROXY_PATH)) return null
     if (u.searchParams.get('type') === 'mp4') return null
     const upstream = u.searchParams.get('url')
@@ -45,7 +53,7 @@ export function isScrubRequest(requestUrl: string): boolean {
 export function markScrubUrl(url: string): string {
   try {
     const u = new URL(url, self.location?.href ?? 'https://x.invalid')
-    if (!u.pathname.endsWith(PROXY_PATH)) return url
+    if (!u.pathname.endsWith(PROXY_PATH) && !u.pathname.includes(MASKED_PREFIX)) return url
     if (u.searchParams.get(SCRUB_PARAM) === '1') return url
     u.searchParams.set(SCRUB_PARAM, '1')
     return u.href

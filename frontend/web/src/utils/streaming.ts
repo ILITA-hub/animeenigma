@@ -18,3 +18,14 @@ export function hlsProxyUrl(query: string): string {
   const base = ladder.currentBase().replace(/\/+$/, '')
   return `${base}/api/streaming/hls-proxy?${query}`
 }
+
+/**
+ * Roots a backend-minted masked proxy path (`/api/streaming/m/<token>/<leaf>`,
+ * Track A opaque stream tokens) at the same HLS host as hlsProxyUrl, so
+ * masked traffic rides the dedicated stream subdomain when
+ * VITE_HLS_PROXY_BASE is set.
+ */
+export function maskedStreamUrl(path: string): string {
+  const base = (import.meta.env.VITE_HLS_PROXY_BASE || '').replace(/\/+$/, '')
+  return `${base}${path}`
+}

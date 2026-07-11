@@ -34,7 +34,7 @@
 import { scraperApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
-import { hlsProxyUrl } from '@/utils/streaming'
+import { hlsProxyUrl, maskedStreamUrl } from '@/utils/streaming'
 import { buildSubtitleProxyUrl, detectSubFormat, langFromTrack } from '@/utils/subtitleProxy'
 import { pickKodikTranslation } from './pickKodikTranslation'
 
@@ -71,6 +71,8 @@ interface ScraperSource {
   // to the proxy url or the proxy 502s.
   exp?: string
   sig?: string
+  // Track A opaque path-token form; preferred over url+exp/sig when present.
+  masked_url?: string
 }
 
 interface ScraperTrack {
@@ -79,6 +81,7 @@ interface ScraperTrack {
   kind?: string   // 'captions' | 'subtitles' | 'thumbnails'
   exp?: string
   sig?: string
+  masked_url?: string
 }
 
 interface ScraperEnvelope {
@@ -107,9 +110,10 @@ interface LibraryStream {
   // First-party (ae) / library URLs carry the HLS-proxy provenance signature.
   exp?: string
   sig?: string
+  masked_url?: string
   // Optional WebVTT thumbnail track (best-effort ffmpeg pass; absent for older
   // encodes). Signed for the HLS proxy on the same trust path as the playlist.
-  storyboard?: { url: string; exp?: string; sig?: string }
+  storyboard?: { url: string; exp?: string; sig?: string; masked_url?: string }
   // Present ONLY when this episode exists in BOTH storages (e.g. [{id:'minio',
   // label:'Local'},{id:'s3',label:'Cloud'}]); absent for a single-copy episode.
   servers?: { id: string; label: string }[]
@@ -178,6 +182,7 @@ interface AnimejoyStreamResp {
   referer?: string
   exp?: string
   sig?: string
+  masked_url?: string
 }
 
 // Shared with KodikAdFreePlayer — both surfaces play the same Kodik source, so
@@ -295,7 +300,7 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
       const subtitles: SubtitleTrack[] = (stream.tracks ?? [])
         .filter((t) => t.kind === 'captions' || t.kind === 'subtitles' || t.kind === undefined)
         .map((t) => ({
-          url: buildSubtitleProxyUrl(t.file, t.exp, t.sig),
+          url: buildSubtitleProxyUrl(t.file, t.exp, t.sig, t.masked_url),
           provider: resolvedPrefer || prefer || 'scraper',
           lang: langFromTrack(t.label, t.file),
           label: t.label || 'subtitle',
@@ -303,7 +308,7 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
         }))
 
       return {
-        url: buildProxyUrl(source.url, referer, type, { exp: source.exp, sig: source.sig }),
+        url: buildProxyUrl(source.url, referer, type, { exp: source.exp, sig: source.sig, masked: source.masked_url }),
         type,
         headers: stream.headers,
         servers: srvs.map((s) => ({ id: s.id, label: s.name })),
@@ -336,7 +341,7 @@ function makeAeAdapter(api: typeof aeApi): ProviderAdapter {
       const type: 'hls' | 'mp4' = stream.type ?? 'hls'
       // Self-hosted MinIO needs no Referer; it DOES need the proxy signature.
       return {
-        url: buildProxyUrl(stream.url, '', type, { exp: stream.exp, sig: stream.sig }),
+        url: buildProxyUrl(stream.url, '', type, { exp: stream.exp, sig: stream.sig, masked: stream.masked_url }),
         type,
         // Present ONLY when the episode exists in both storages (Local + Cloud);
         // absent for a single-copy episode, matching the scraper adapter's
@@ -349,6 +354,7 @@ function makeAeAdapter(api: typeof aeApi): ProviderAdapter {
           ? buildProxyUrl(stream.storyboard.url, '', undefined, {
               exp: stream.storyboard.exp,
               sig: stream.storyboard.sig,
+              masked: stream.storyboard.masked_url,
             })
           : undefined,
       }
@@ -439,8 +445,11 @@ function buildProxyUrl(
   url: string,
   referer: string,
   streamType?: 'hls' | 'mp4',
-  sign?: { exp?: string; sig?: string },
+  sign?: { exp?: string; sig?: string; masked?: string },
 ): string {
+  // Track A: a backend-minted masked path already seals url+referer+type
+  // inside an opaque token — use it as-is (no url= query shape).
+  if (sign?.masked) return maskedStreamUrl(sign.masked)
   const params = new URLSearchParams()
   params.set('url', url)
   if (referer) params.set('referer', referer)
@@ -544,7 +553,7 @@ function makeAnimejoyAdapter(api: typeof animejoyApi, leg: 'sibnet' | 'allvideo'
       // animejoy is a progressive MP4 + Referer-gated CDN. type MUST be 'mp4' so
       // the proxy uses its range-passthrough path instead of m3u8 rewriting.
       return {
-        url: buildProxyUrl(s.url, s.referer ?? '', 'mp4', { exp: s.exp, sig: s.sig }),
+        url: buildProxyUrl(s.url, s.referer ?? '', 'mp4', { exp: s.exp, sig: s.sig, masked: s.masked_url }),
         type: 'mp4',
         qualityLabel: s.quality || undefined,
       }

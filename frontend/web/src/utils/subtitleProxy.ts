@@ -1,9 +1,12 @@
-import { hlsProxyUrl } from '@/utils/streaming'
+import { hlsProxyUrl, maskedStreamUrl } from '@/utils/streaming'
 
 /** Wrap a subtitle file URL in the signed HLS proxy (CORS + provenance).
  *  SubtitleOverlay fetches any `/`-prefixed url directly, so a pre-signed
- *  proxy url loads an un-allowlisted scraper subtitle CDN without a 502. */
-export function buildSubtitleProxyUrl(file: string, exp?: string, sig?: string): string {
+ *  proxy url loads an un-allowlisted scraper subtitle CDN without a 502.
+ *  When the backend minted a Track A masked path (opaque token — no url=
+ *  shape for filter lists), prefer it outright. */
+export function buildSubtitleProxyUrl(file: string, exp?: string, sig?: string, masked?: string): string {
+  if (masked) return maskedStreamUrl(masked)
   const params = new URLSearchParams()
   params.set('url', file)
   if (exp && sig) {

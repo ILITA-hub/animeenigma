@@ -131,3 +131,22 @@ describe('handleSegmentRequest', () => {
     expect(fakeCache.put).not.toHaveBeenCalled()
   })
 })
+
+describe('masked (Track A) proxy form', () => {
+  const seg = 'https://x.io/api/streaming/m/AbCd123token/seg-5-v1-a1.ts?sess=ff00'
+  const manifest = 'https://x.io/api/streaming/m/AbCd123token/manifest.m3u8'
+
+  it('caches masked segments keyed by token path', () => {
+    const key = segmentCacheKey(seg)
+    expect(key).toBe('/__segcache/?m=' + encodeURIComponent('/api/streaming/m/AbCd123token/seg-5-v1-a1.ts'))
+  })
+
+  it('does not cache masked manifests', () => {
+    expect(segmentCacheKey(manifest)).toBeNull()
+  })
+
+  it('markScrubUrl tags masked URLs', () => {
+    const marked = markScrubUrl(seg)
+    expect(marked).toContain('aescrub=1')
+  })
+})
