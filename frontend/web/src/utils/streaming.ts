@@ -34,3 +34,15 @@ export function hlsProxyUrl(query: string): string {
 export function maskedStreamUrl(path: string): string {
   return `${hlsProxyBase()}${path}`
 }
+
+/**
+ * True if `url` is already a first-party proxy/masked URL — a same-origin
+ * relative path, or absolute at one of the protocol ladder's tier origins
+ * (`maskedStreamUrl()`/`hlsProxyUrl()` output). Callers use this to avoid
+ * re-wrapping an already-authorized URL through `hlsProxyUrl()`, which the
+ * backend's third-party allowlist gate rejects (our own tier hosts are
+ * intentionally not on it — see `HLSProxyAllowedDomains`).
+ */
+export function isFirstPartyProxyUrl(url: string): boolean {
+  return ladder.ownsUrl(url)
+}

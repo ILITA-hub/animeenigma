@@ -458,6 +458,25 @@ describe('ProtocolLadder — Task 5 probe accessors', () => {
     expect(h2Only.tierBase('h3')).toBeNull()
   })
 
+  it('ownsUrl() recognizes relative paths and ANY configured tier origin, not just the active one', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    expect(ladderInstance.currentTierId()).toBe('h2') // active tier is h2 (https://b)
+
+    // Same-origin relative path — always ours.
+    expect(ladderInstance.ownsUrl('/api/streaming/m/TOKEN/track_0_eng.vtt')).toBe(true)
+    // Absolute at the CURRENTLY active tier.
+    expect(ladderInstance.ownsUrl('https://b/api/streaming/m/TOKEN/track_0_eng.vtt')).toBe(true)
+    // Absolute at a DIFFERENT configured tier (e.g. built just before a
+    // downshift) — still first-party, must not be treated as external.
+    expect(ladderInstance.ownsUrl('https://a/api/streaming/m/TOKEN/track_0_eng.vtt')).toBe(true)
+    expect(ladderInstance.ownsUrl('https://c/api/streaming/m/TOKEN/track_0_eng.vtt')).toBe(true)
+    // Genuine third-party provider URL — not ours.
+    expect(ladderInstance.ownsUrl('https://jimaku.cc/subs/track_0_eng.vtt')).toBe(false)
+  })
+
   it('currentEwmaMbps() reflects the measured-throughput EWMA in Mbps', () => {
     const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
       now: () => 0,

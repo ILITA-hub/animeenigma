@@ -208,6 +208,19 @@ export class ProtocolLadder {
   }
 
   /**
+   * True if `url` is a same-origin relative path, or an absolute URL rooted
+   * at ANY of this ladder's configured tier origins — not just the
+   * currently active one, since a URL built moments before a downshift is
+   * still a first-party proxy URL. Callers use this to tell an
+   * already-proxied/masked backend URL apart from a genuine third-party
+   * provider URL that still needs the CORS-proxy wrap.
+   */
+  ownsUrl(url: string): boolean {
+    if (url.startsWith('/')) return true
+    return this.tiers.some((t) => t.base !== '' && url.startsWith(t.base))
+  }
+
+  /**
    * Read-only accessor for Task 5's h3 probe: the running measured-throughput
    * EWMA (see `reportFragment`), in Mbps. Not tier-scoped — it's whatever the
    * currently-active tier has been delivering, which is exactly what the
