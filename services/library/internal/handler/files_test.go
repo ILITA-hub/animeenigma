@@ -289,4 +289,62 @@ func TestDelete_WorkDirActiveTorrentRefused(t *testing.T) {
 	if rw.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for active torrent, got %d", rw.Code)
 	}
+	var parsed struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, rw.Body.String())
+	}
+	if parsed.Data["reason"] != "torrent_active" {
+		t.Errorf("reason = %q, want torrent_active", parsed.Data["reason"])
+	}
+}
+
+// TestDelete_ObjectUnderEpisodePrefixRefused confirms that deleting an
+// individual object key that lives UNDER an episode's MinioPath (but isn't
+// the prefix itself — e.g. a .ts segment inside the episode folder) is
+// refused with 409 rather than falling through to a raw orphan delete, which
+// would silently break the episode's HLS with no DB reconcile.
+func TestDelete_ObjectUnderEpisodePrefixRefused(t *testing.T) {
+	store := &fakeStore{}
+	n := 1
+	eps := &fakeEpisodes{pool: []domain.Episode{{ID: "ep-1", Storage: "minio", MinioPath: "frieren/s1/e01/", EpisodeNumber: n}}}
+	ev := &fakeEvictor{}
+	h := newTestFiles(t, store, eps, ev, &fakeActive{})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/library/files?domain=minio&key=frieren/s1/e01/e01_1080p.ts", nil)
+	rw := httptest.NewRecorder()
+	h.Delete(rw, req)
+
+	if rw.Code != http.StatusConflict {
+		t.Fatalf("status %d, body=%s", rw.Code, rw.Body.String())
+	}
+	var parsed struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, rw.Body.String())
+	}
+	if parsed.Data["reason"] != "episode_member" {
+		t.Errorf("reason = %q, want episode_member", parsed.Data["reason"])
+	}
+	if ev.deletedID != "" {
+		t.Errorf("must not call evictor.DeleteEpisodeByID, got %q", ev.deletedID)
+	}
+	if store.deleted != "" {
+		t.Errorf("must not raw-delete an object under an episode prefix, got %q", store.deleted)
+	}
+}
+
+// TestDelete_RootKeyRejected confirms key="/" (which would otherwise trim to
+// "" and reach store.DeletePrefix(dom, "/") — a bucket-wide delete) is
+// rejected with 400 alongside the existing key=="" guard.
+func TestDelete_RootKeyRejected(t *testing.T) {
+	h := newTestFiles(t, &fakeStore{}, &fakeEpisodes{}, &fakeEvictor{}, &fakeActive{})
+	req := httptest.NewRequest(http.MethodDelete, "/api/library/files?domain=minio&key=%2F", nil)
+	rw := httptest.NewRecorder()
+	h.Delete(rw, req)
+	if rw.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, body=%s", rw.Code, rw.Body.String())
+	}
 }

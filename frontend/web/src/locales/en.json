@@ -426,7 +426,11 @@
           "orphan": "Delete orphan object {name}? This is a raw delete with no library record.",
           "work": "Delete {name} from the torrent working dir?"
         },
-        "error": { "active": "Torrent still active — cancel its job first." }
+        "error": {
+          "active": "Torrent still active — cancel its job first.",
+          "episodeMember": "This file belongs to an episode — delete the whole episode instead.",
+          "deleteFailed": "Delete failed. Please try again."
+        }
       }
     },
     "aePlayer": {

@@ -147,4 +147,53 @@ describe('RawLibrary — Files section', () => {
     const filesSection = w.get('[aria-label="files"]')
     expect(filesSection.text()).toContain('player.adminLibrary.files.empty')
   })
+
+  it('sets the errorBanner to the episode-member message on a 409 with reason=episode_member', async () => {
+    vi.mocked(adminLibraryApi.browseFiles).mockResolvedValue(browseResponse() as never)
+    confirmMock.mockResolvedValue(true)
+    vi.mocked(adminLibraryApi.deleteFile).mockRejectedValue({
+      response: { status: 409, data: { reason: 'episode_member' } },
+    })
+
+    const w = await mountView()
+    const filesSection = w.get('[aria-label="files"]')
+    const deleteButtons = filesSection.findAll('button').filter((b) => b.text() === 'player.adminLibrary.files.delete')
+    await deleteButtons[deleteButtons.length - 1].trigger('click')
+    await flushPromises()
+
+    expect(w.text()).toContain('player.adminLibrary.files.error.episodeMember')
+  })
+
+  it('sets the errorBanner to the active-torrent message on a 409 with reason=torrent_active', async () => {
+    vi.mocked(adminLibraryApi.browseFiles).mockResolvedValue(browseResponse() as never)
+    confirmMock.mockResolvedValue(true)
+    vi.mocked(adminLibraryApi.deleteFile).mockRejectedValue({
+      response: { status: 409, data: { reason: 'torrent_active' } },
+    })
+
+    const w = await mountView()
+    const filesSection = w.get('[aria-label="files"]')
+    const deleteButtons = filesSection.findAll('button').filter((b) => b.text() === 'player.adminLibrary.files.delete')
+    await deleteButtons[deleteButtons.length - 1].trigger('click')
+    await flushPromises()
+
+    expect(w.text()).toContain('player.adminLibrary.files.error.active')
+  })
+
+  it('sets the errorBanner to a generic delete-failed message on a 500/network error, without throwing', async () => {
+    vi.mocked(adminLibraryApi.browseFiles).mockResolvedValue(browseResponse() as never)
+    confirmMock.mockResolvedValue(true)
+    vi.mocked(adminLibraryApi.deleteFile).mockRejectedValue(new Error('network down'))
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const w = await mountView()
+    const filesSection = w.get('[aria-label="files"]')
+    const deleteButtons = filesSection.findAll('button').filter((b) => b.text() === 'player.adminLibrary.files.delete')
+    await deleteButtons[deleteButtons.length - 1].trigger('click')
+    await flushPromises()
+
+    expect(w.text()).toContain('player.adminLibrary.files.error.deleteFailed')
+    expect(warnSpy).toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
 })

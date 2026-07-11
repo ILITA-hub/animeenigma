@@ -299,13 +299,18 @@ func (h *FilesHandler) Download(w http.ResponseWriter, r *http.Request) {
 // infohash) is still owned by an in-flight job, else removes it from the
 // working dir directly. domain=minio|s3 routes an episode-mapped prefix
 // through the reconciled evictor.DeleteEpisodeByID path — never a raw object
-// delete for an episode; an orphan prefix (no matching library_episodes row)
-// requires an explicit ?confirm=1 before a raw store.DeletePrefix.
+// delete for an episode; a key that lives UNDER an episode prefix (e.g. an
+// individual .ts segment inside an episode folder) is refused outright (409)
+// rather than raw-deleted, since that would silently break the episode's HLS
+// with no DB reconcile — the library is the file authority for anything an
+// episode row owns. An orphan prefix (no matching library_episodes row, and
+// not nested under one) requires an explicit ?confirm=1 before a raw
+// store.DeletePrefix.
 func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	dom := r.URL.Query().Get("domain")
 	key := r.URL.Query().Get("key")
 	confirm := r.URL.Query().Get("confirm") == "1"
-	if !validDomain(dom) || key == "" {
+	if !validDomain(dom) || key == "" || strings.Trim(key, "/") == "" {
 		httputil.BadRequest(w, "domain (work|minio|s3) and key are required")
 		return
 	}
@@ -319,7 +324,10 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, busy := active[ih]; busy {
-			httputil.JSON(w, http.StatusConflict, map[string]string{"error": "torrent still active — cancel its job first"})
+			httputil.JSON(w, http.StatusConflict, map[string]string{
+				"error":  "torrent still active — cancel its job first",
+				"reason": "torrent_active",
+			})
 			return
 		}
 		if err := h.work.Delete(key); err != nil {
@@ -339,6 +347,18 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.OK(w, map[string]bool{"deleted": true})
 		return
+	}
+	// A key nested under an episode's MinioPath (but not the prefix itself) is
+	// an individual file belonging to that episode — e.g. a .ts segment. Refuse
+	// rather than raw-delete: the episode folder is the deletable unit.
+	for mp := range epByPath {
+		if strings.HasPrefix(key, mp) {
+			httputil.JSON(w, http.StatusConflict, map[string]string{
+				"error":  "file belongs to an episode — delete the whole episode folder instead",
+				"reason": "episode_member",
+			})
+			return
+		}
 	}
 	// Orphan object/prefix → raw delete, guarded by explicit confirm.
 	if !confirm {

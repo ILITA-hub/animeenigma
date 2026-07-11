@@ -782,7 +782,19 @@ async function deleteEntry(e: FileEntry) {
     await loadFiles(filePrefix.value)
   } catch (err) {
     const status = (err as { response?: { status?: number } })?.response?.status
-    if (status === 409) window.alert(t('player.adminLibrary.files.error.active'))
+    if (status === 409) {
+      const reason = (err as { response?: { data?: { reason?: string } } })?.response?.data?.reason
+      if (reason === 'torrent_active') {
+        errorBanner.value = t('player.adminLibrary.files.error.active')
+      } else if (reason === 'episode_member') {
+        errorBanner.value = t('player.adminLibrary.files.error.episodeMember')
+      } else {
+        errorBanner.value = t('player.adminLibrary.files.error.deleteFailed')
+      }
+    } else {
+      console.warn('file delete failed', err)
+      errorBanner.value = t('player.adminLibrary.files.error.deleteFailed')
+    }
   }
 }
 
