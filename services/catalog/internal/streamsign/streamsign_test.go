@@ -3,8 +3,17 @@ package streamsign
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	if os.Getenv("STREAM_TOKEN_SECRET") == "" {
+		os.Setenv("STREAM_TOKEN_SECRET", "test-streamsign-secret-0123456789")
+	}
+	os.Exit(m.Run())
+}
 
 func TestIsExternal(t *testing.T) {
 	cases := map[string]bool{
@@ -75,5 +84,46 @@ func TestSignScraperStreamBody_LeavesNon200AndErrorBodies(t *testing.T) {
 	bad := []byte(`not json`)
 	if got := SignScraperStreamBody(http.StatusOK, bad); string(got) != string(bad) {
 		t.Error("malformed body was modified")
+	}
+}
+
+func TestSignScraperStreamBody_StampsMaskedURL(t *testing.T) {
+	body := []byte(`{"success":true,"data":{"stream":{` +
+		`"sources":[{"url":"https://cdn.example.com/master.m3u8","type":"hls"},` +
+		`{"url":"https://mp4.example.com/ep.mp4","type":"mp4"}],` +
+		`"tracks":[{"file":"https://subs.example.com/en.vtt","kind":"subtitles"}],` +
+		`"headers":{"Referer":"https://allmanga.to"}},` +
+		`"meta":{"provider":"allanime"}}}`)
+
+	out := SignScraperStreamBody(http.StatusOK, body)
+
+	var env map[string]any
+	if err := json.Unmarshal(out, &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	stream := env["data"].(map[string]any)["stream"].(map[string]any)
+	sources := stream["sources"].([]any)
+
+	hls := sources[0].(map[string]any)
+	masked, _ := hls["masked_url"].(string)
+	if !strings.HasPrefix(masked, "/api/streaming/m/") {
+		t.Fatalf("hls source masked_url = %q", masked)
+	}
+	if strings.Contains(masked, "cdn.example.com") {
+		t.Fatal("masked_url leaks upstream hostname")
+	}
+
+	mp4 := sources[1].(map[string]any)
+	if m, _ := mp4["masked_url"].(string); !strings.HasPrefix(m, "/api/streaming/m/") {
+		t.Fatalf("mp4 source masked_url = %q", m)
+	}
+
+	track := stream["tracks"].([]any)[0].(map[string]any)
+	if m, _ := track["masked_url"].(string); !strings.HasPrefix(m, "/api/streaming/m/") {
+		t.Fatalf("track masked_url = %q", m)
+	}
+	// exp/sig legacy pair still stamped (dual-accept).
+	if hls["exp"] == nil || hls["sig"] == nil {
+		t.Fatal("legacy exp/sig missing — dual-accept broken")
 	}
 }

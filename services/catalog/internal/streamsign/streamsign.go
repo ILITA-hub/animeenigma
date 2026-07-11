@@ -31,6 +31,18 @@ func Sign(u string) (exp, sig string) {
 	return videoutils.SignStreamURL(u)
 }
 
+// MaskedURL returns the Track A opaque path-token proxy URL
+// (/api/streaming/m/<token>/<leaf>) for an external stream/subtitle URL, or
+// "" for same-origin URLs or when the token mechanism is unconfigured.
+// streamType is "mp4" for progressive MP4 (selects the proxy's
+// range-passthrough path), "" for HLS/sniffed content.
+func MaskedURL(u, referer, streamType string) string {
+	if !IsExternal(u) {
+		return ""
+	}
+	return videoutils.MaskedStreamURL(u, referer, streamType)
+}
+
 // SignScraperStreamBody rewrites a scraper stream JSON envelope in place,
 // adding "exp"/"sig" to data.stream.sources[].url and external
 // data.stream.tracks[].file. It operates on map[string]any (NOT a typed
@@ -57,8 +69,20 @@ func SignScraperStreamBody(status int, body []byte) []byte {
 		return body
 	}
 
-	changed := signArrayField(stream["sources"], "url")
-	changed = signArrayField(stream["tracks"], "file") || changed
+	// The upstream Referer applies to every source fetch; subtitle tracks are
+	// fetched WITHOUT a referer today (buildSubtitleProxyUrl passes none), so
+	// their masked tokens keep referer "" for behavior parity.
+	referer := ""
+	if h, ok := stream["headers"].(map[string]any); ok {
+		if v, ok := h["Referer"].(string); ok {
+			referer = v
+		} else if v, ok := h["referer"].(string); ok {
+			referer = v
+		}
+	}
+
+	changed := signArrayField(stream["sources"], "url", referer, true)
+	changed = signArrayField(stream["tracks"], "file", "", false) || changed
 
 	if !changed {
 		return body
@@ -71,8 +95,11 @@ func SignScraperStreamBody(status int, body []byte) []byte {
 }
 
 // signArrayField signs the `urlKey` field of each object in a JSON array,
-// stamping "exp"/"sig" siblings. Returns whether anything was signed.
-func signArrayField(raw any, urlKey string) bool {
+// stamping "exp"/"sig" siblings (legacy dual-accept) plus the Track A
+// "masked_url" opaque path form. withType propagates the item's own
+// "type" ("mp4"/"webm") into the token so the proxy picks its
+// range-passthrough path. Returns whether anything was signed.
+func signArrayField(raw any, urlKey, referer string, withType bool) bool {
 	arr, ok := raw.([]any)
 	if !ok {
 		return false
@@ -90,6 +117,15 @@ func signArrayField(raw any, urlKey string) bool {
 		exp, sig := videoutils.SignStreamURL(u)
 		m["exp"] = exp
 		m["sig"] = sig
+		streamType := ""
+		if withType {
+			if tv, ok := m["type"].(string); ok && (tv == "mp4" || tv == "webm") {
+				streamType = tv
+			}
+		}
+		if masked := videoutils.MaskedStreamURL(u, referer, streamType); masked != "" {
+			m["masked_url"] = masked
+		}
 		changed = true
 	}
 	return changed
