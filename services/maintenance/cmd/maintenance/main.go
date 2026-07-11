@@ -623,18 +623,6 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 			}
 		}
 
-		// Provider-policy suppress gate: skip escalation if provider is already
-		// under manual management (policy != "auto"). Fail-open on catalog errors.
-		if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
-			if s.shouldSuppressForProvider(msg.Alerts[0].Service) {
-				log.Infow("suppressing escalation: provider already managed (policy!=auto)",
-					"provider", msg.Alerts[0].Service,
-					"alert", msg.Alerts[0].Name,
-				)
-				continue
-			}
-		}
-
 		// For webhook-sourced alerts (MessageID == 0), post 🔴 Firing notification
 		if msg.Type == domain.MessageAlertFiring && msg.MessageID == 0 && len(msg.Alerts) > 0 {
 			alert := msg.Alerts[0]
@@ -1086,47 +1074,6 @@ func isCapturedTodo(issueStatus string) bool {
 	for _, m := range captureMarkers {
 		if strings.Contains(norm, m) {
 			return true
-		}
-	}
-	return false
-}
-
-// shouldSuppressForProvider returns true when the provider is already under
-// manual management (policy != "" && policy != "auto"). On any error or
-// timeout the function returns false (fail-open) so a catalog blip never
-// silences a real escalation.
-func (s *service) shouldSuppressForProvider(provider string) bool {
-	if provider == "" {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.CatalogURL+"/internal/scraper/providers", nil)
-	if err != nil {
-		return false
-	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return false // fail-open: catalog blip must not block real escalations
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return false // fail-open: catalog unhealthy must never block escalation
-	}
-	var body struct {
-		Data struct {
-			Providers []struct {
-				Name   string `json:"name"`
-				Policy string `json:"policy"`
-			} `json:"providers"`
-		} `json:"data"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&body) != nil {
-		return false
-	}
-	for _, p := range body.Data.Providers {
-		if strings.EqualFold(p.Name, provider) {
-			return p.Policy != "" && p.Policy != "auto"
 		}
 	}
 	return false
