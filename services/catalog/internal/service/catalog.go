@@ -1941,6 +1941,7 @@ func (s *CatalogService) GetAnimejoyStream(ctx context.Context, animeID, leg str
 		Source:    "animejoy",
 		Exp:       exp,
 		Sig:       sig,
+		MaskedURL: streamsign.MaskedURL(resolved.URL, resolved.Referer, "mp4"),
 	}, nil
 }
 

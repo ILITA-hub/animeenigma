@@ -149,6 +149,9 @@ type RawStream struct {
 	Source     string         `json:"source"`
 	Exp        string         `json:"exp,omitempty"`
 	Sig        string         `json:"sig,omitempty"`
+	// Track A opaque path-token form of URL (spec 2026-07-10 §3); preferred
+	// by the FE over URL+exp/sig when present.
+	MaskedURL  string         `json:"masked_url,omitempty"`
 	Storyboard *RawStoryboard `json:"storyboard,omitempty"`
 	// Servers lists the storage backends this episode is available on, ONLY
 	// when it exists on BOTH (dual-storage). Absent (nil) for the common
@@ -172,6 +175,9 @@ type RawStoryboard struct {
 	URL string `json:"url"`
 	Exp string `json:"exp,omitempty"`
 	Sig string `json:"sig,omitempty"`
+	// Track A opaque path-token form of URL (spec 2026-07-10 §3); preferred
+	// by the FE over URL+exp/sig when present.
+	MaskedURL string `json:"masked_url,omitempty"`
 }
 
 // RawSubtitle is an embedded subtitle track.
@@ -205,10 +211,16 @@ func newLibraryStream(minioURL, quality, storyboardURL string) *RawStream {
 		Source:    "library",
 		Exp:       exp,
 		Sig:       sig,
+		MaskedURL: streamsign.MaskedURL(minioURL, "", ""),
 	}
 	if storyboardURL != "" {
 		sbExp, sbSig := streamsign.Sign(storyboardURL)
-		s.Storyboard = &RawStoryboard{URL: storyboardURL, Exp: sbExp, Sig: sbSig}
+		s.Storyboard = &RawStoryboard{
+			URL:       storyboardURL,
+			Exp:       sbExp,
+			Sig:       sbSig,
+			MaskedURL: streamsign.MaskedURL(storyboardURL, "", ""),
+		}
 	}
 	return s
 }

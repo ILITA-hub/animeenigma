@@ -306,6 +306,8 @@ type AnimejoyStream struct {
 	Source    string    `json:"source"`
 	Exp       string    `json:"exp,omitempty"`
 	Sig       string    `json:"sig,omitempty"`
+	// Track A opaque path-token form of URL; preferred by the FE when present.
+	MaskedURL string `json:"masked_url,omitempty"`
 }
 
 // AnimejoyLegInfo is the per-leg (Sibnet OR AllVideo) episode + team inventory
