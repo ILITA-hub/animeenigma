@@ -292,3 +292,62 @@ func (h *FilesHandler) Download(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
+
+// Delete handles DELETE /api/library/files?domain=&key=[&confirm=1].
+//
+// domain=work refuses (409) if the key's top-level segment (the torrent's
+// infohash) is still owned by an in-flight job, else removes it from the
+// working dir directly. domain=minio|s3 routes an episode-mapped prefix
+// through the reconciled evictor.DeleteEpisodeByID path — never a raw object
+// delete for an episode; an orphan prefix (no matching library_episodes row)
+// requires an explicit ?confirm=1 before a raw store.DeletePrefix.
+func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	dom := r.URL.Query().Get("domain")
+	key := r.URL.Query().Get("key")
+	confirm := r.URL.Query().Get("confirm") == "1"
+	if !validDomain(dom) || key == "" {
+		httputil.BadRequest(w, "domain (work|minio|s3) and key are required")
+		return
+	}
+
+	if dom == "work" {
+		// Refuse if the top-level infohash segment is still an in-flight job.
+		ih := strings.ToLower(strings.SplitN(strings.Trim(key, "/"), "/", 2)[0])
+		active, err := h.active.Infohashes(r.Context())
+		if err != nil {
+			httputil.Error(w, err)
+			return
+		}
+		if _, busy := active[ih]; busy {
+			httputil.JSON(w, http.StatusConflict, map[string]string{"error": "torrent still active — cancel its job first"})
+			return
+		}
+		if err := h.work.Delete(key); err != nil {
+			httputil.Error(w, err)
+			return
+		}
+		httputil.OK(w, map[string]bool{"deleted": true})
+		return
+	}
+
+	// Object store: episode-mapped prefix → reconciled evictor delete.
+	epByPath := h.episodeIndexForStorage(r.Context(), dom)
+	if ep, ok := epByPath[strings.TrimSuffix(key, "/")+"/"]; ok {
+		if err := h.evictor.DeleteEpisodeByID(r.Context(), ep.ID); err != nil {
+			httputil.Error(w, err)
+			return
+		}
+		httputil.OK(w, map[string]bool{"deleted": true})
+		return
+	}
+	// Orphan object/prefix → raw delete, guarded by explicit confirm.
+	if !confirm {
+		httputil.JSON(w, http.StatusConflict, map[string]string{"error": "orphan object (no episode row) — retry with confirm=1"})
+		return
+	}
+	if err := h.store.DeletePrefix(r.Context(), dom, key); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]bool{"deleted": true})
+}

@@ -532,6 +532,16 @@ func main() {
 	evictor.Start(rootCtx)
 	log.Infow("autocache evictor started")
 
+	// Task 5/6: admin file-manager over the torrent working dir + object
+	// stores. workDir is constructed here (after the torrent client above,
+	// which already MkdirAll'd cfg.Torrent.DownloadDir) so NewWorkDir's
+	// EvalSymlinks root-canonicalization resolves the real directory rather
+	// than freezing a lexical path. activeTorrents reuses jobRepo (jobLister)
+	// to refuse deleting a working-dir prefix a job is still reading/writing.
+	workDir := service.NewWorkDir(cfg.Torrent.DownloadDir)
+	activeTorrents := service.NewActiveTorrents(jobRepo)
+	filesHandler := handler.NewFilesHandler(workDir, storageGW, episodeRepo, autocacheConfigRepo, evictor, activeTorrents, log)
+
 	// Phase 5 (LIB-09): jobs handler now drives Link + Retry as well as
 	// the Phase-3 CRUD. Needs the minio writer (Move + ListObjectsByPrefix)
 	// + the EpisodeRepository. Phase 10: + the Evictor (second pre-admit gate).
@@ -606,6 +616,7 @@ func main() {
 		episodesHandler,
 		autocacheConfigHandler,
 		autocacheInternalHandler,
+		filesHandler,
 		cfg.JWT,
 		log,
 		metricsCollector,

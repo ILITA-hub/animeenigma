@@ -230,3 +230,63 @@ func TestDownload_ObjectUsesPresignedFetch(t *testing.T) {
 		t.Errorf("Content-Type = %q, want video/mp2t", ct)
 	}
 }
+
+// TestDelete_EpisodeRoutesToEvictor confirms that deleting an object key which
+// maps to a library_episodes row (via MinioPath) goes through the reconciled
+// evictor.DeleteEpisodeByID path, never a raw store.DeletePrefix.
+func TestDelete_EpisodeRoutesToEvictor(t *testing.T) {
+	store := &fakeStore{}
+	n := 1
+	eps := &fakeEpisodes{pool: []domain.Episode{{ID: "ep-1", Storage: "minio", MinioPath: "frieren/s1/e01/", EpisodeNumber: n}}}
+	ev := &fakeEvictor{}
+	h := newTestFiles(t, store, eps, ev, &fakeActive{})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/library/files?domain=minio&key=frieren/s1/e01/", nil)
+	rw := httptest.NewRecorder()
+	h.Delete(rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status %d", rw.Code)
+	}
+	if ev.deletedID != "ep-1" {
+		t.Fatalf("expected evictor delete ep-1, got %q", ev.deletedID)
+	}
+	if store.deleted != "" {
+		t.Fatal("must not raw-delete an episode prefix")
+	}
+}
+
+// TestDelete_OrphanNeedsConfirm confirms an object key with no matching
+// episode row is refused with 409 unless ?confirm=1 is present, in which case
+// it falls through to a raw store.DeletePrefix.
+func TestDelete_OrphanNeedsConfirm(t *testing.T) {
+	store := &fakeStore{}
+	h := newTestFiles(t, store, &fakeEpisodes{}, &fakeEvictor{}, &fakeActive{})
+	// no confirm → 409
+	req := httptest.NewRequest(http.MethodDelete, "/api/library/files?domain=minio&key=stray/file.bin", nil)
+	rw := httptest.NewRecorder()
+	h.Delete(rw, req)
+	if rw.Code != http.StatusConflict {
+		t.Fatalf("status %d", rw.Code)
+	}
+	// with confirm → deletes prefix
+	req2 := httptest.NewRequest(http.MethodDelete, "/api/library/files?domain=minio&key=stray/file.bin&confirm=1", nil)
+	rw2 := httptest.NewRecorder()
+	h.Delete(rw2, req2)
+	if rw2.Code != http.StatusOK || store.deleted != "stray/file.bin" {
+		t.Fatalf("status %d deleted %q", rw2.Code, store.deleted)
+	}
+}
+
+// TestDelete_WorkDirActiveTorrentRefused confirms a domain=work delete is
+// refused with 409 when the top-level infohash segment of the key is still an
+// in-flight job (per ActiveTorrents.Infohashes).
+func TestDelete_WorkDirActiveTorrentRefused(t *testing.T) {
+	const ih = "abcd"
+	h := newTestFiles(t, &fakeStore{}, &fakeEpisodes{}, &fakeEvictor{}, &fakeActive{set: map[string]struct{}{ih: {}}})
+	req := httptest.NewRequest(http.MethodDelete, "/api/library/files?domain=work&key=abcd", nil)
+	rw := httptest.NewRecorder()
+	h.Delete(rw, req)
+	if rw.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for active torrent, got %d", rw.Code)
+	}
+}

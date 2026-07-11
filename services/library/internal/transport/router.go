@@ -29,6 +29,7 @@ func NewRouter(
 	episodesHandler *handler.EpisodesHandler,
 	autocacheConfigHandler *handler.AutocacheConfigHandler,
 	autocacheInternalHandler *handler.AutocacheInternalHandler,
+	filesHandler *handler.FilesHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -111,6 +112,14 @@ func NewRouter(
 		if autocacheConfigHandler != nil {
 			r.Get("/autocache/config", autocacheConfigHandler.Get)
 			r.Patch("/autocache/config", autocacheConfigHandler.Patch)
+		}
+		// Task 5/6: admin file-manager browse/download/delete over the torrent
+		// working dir and the object stores. Admin-gated via the gateway
+		// /api/library/* prefix; no additional server-side enforcement needed.
+		if filesHandler != nil {
+			r.Get("/files", filesHandler.Browse)
+			r.Get("/files/download", filesHandler.Download)
+			r.Delete("/files", filesHandler.Delete)
 		}
 	})
 
