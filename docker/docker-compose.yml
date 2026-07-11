@@ -579,7 +579,9 @@ services:
       S3_BUCKET: ${S3_BUCKET:-animeenigma}
       S3_REGION: ${S3_REGION:-default}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      # Alerts bot (same as player reports) — the auth bot isn't a member of the
+      # maintenance chat, so TELEGRAM_BOT_TOKEN would fail with "chat not found".
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_ALERTS_BOT_TOKEN:-}
       TELEGRAM_BACKUP_CHAT_ID: ${TELEGRAM_BACKUP_CHAT_ID:-}
     restart: unless-stopped
 
