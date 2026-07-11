@@ -79,3 +79,40 @@ func TestWorkDir_SymlinkEscapeRejected(t *testing.T) {
 		t.Fatalf("target outside root must be untouched: %v", err)
 	}
 }
+
+// TestWorkDir_SymlinkEscapeNonExistentLeaf guards the EvalSymlinks-ENOENT bypass:
+// a not-yet-existing leaf under a symlinked ancestor that escapes root must still be
+// rejected, since a later Download/Delete would otherwise act OUTSIDE root.
+func TestWorkDir_SymlinkEscapeNonExistentLeaf(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+		t.Fatal(err)
+	}
+
+	wd := NewWorkDir(root)
+	if _, err := wd.Resolve("escape/newleaf.mkv"); err == nil {
+		t.Fatal("Resolve of a non-existent leaf under an escaping symlink should be rejected")
+	}
+	if err := wd.Delete("escape/newleaf.mkv"); err == nil {
+		t.Fatal("Delete of a non-existent leaf under an escaping symlink should be rejected")
+	}
+}
+
+// TestWorkDir_NewLeafUnderRealDirAllowed is the positive counterpart: a not-yet-
+// existing leaf under a genuine (non-symlink) subdirectory of root must resolve, so
+// the walk-up guard doesn't over-reject legitimate new paths (e.g. Download targets).
+func TestWorkDir_NewLeafUnderRealDirAllowed(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "abcd1234"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wd := NewWorkDir(root)
+	got, err := wd.Resolve("abcd1234/newfile.mkv")
+	if err != nil {
+		t.Fatalf("new leaf under a real dir should resolve: %v", err)
+	}
+	if want := filepath.Join(wd.root, "abcd1234", "newfile.mkv"); got != want {
+		t.Fatalf("Resolve = %q, want %q", got, want)
+	}
+}

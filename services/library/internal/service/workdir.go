@@ -21,7 +21,16 @@ type WorkDirEntry struct {
 // the torrent working dir.
 type WorkDir struct{ root string }
 
-func NewWorkDir(root string) *WorkDir { return &WorkDir{root: filepath.Clean(root)} }
+// NewWorkDir stores the canonicalized (symlink-resolved) root so the symlink-escape
+// checks in Resolve compare real paths against a real root. If root doesn't exist on
+// disk yet, it falls back to the lexically-cleaned path.
+func NewWorkDir(root string) *WorkDir {
+	clean := filepath.Clean(root)
+	if real, err := filepath.EvalSymlinks(clean); err == nil {
+		clean = real
+	}
+	return &WorkDir{root: clean}
+}
 
 // Resolve returns the jailed absolute path for rel, or an error if it escapes root.
 //
@@ -42,13 +51,49 @@ func (wd *WorkDir) Resolve(rel string) (string, error) {
 	if abs != wd.root && !strings.HasPrefix(abs, wd.root+string(os.PathSeparator)) {
 		return "", errors.InvalidInput("path escapes working dir")
 	}
-	// Reject symlink escape: if the path exists, its real path must still be inside root.
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		if real != wd.root && !strings.HasPrefix(real, wd.root+string(os.PathSeparator)) {
-			return "", errors.InvalidInput("path escapes working dir")
-		}
+	// Symlink-escape guard. EvalSymlinks only works on a fully-existing path, so a
+	// non-existing leaf under an existing symlinked ancestor (e.g. root/escape ->
+	// /outside, then "escape/newfile.mkv") would otherwise slip through with err!=nil
+	// and be returned as the un-resolved lexical path — a real escape at read/serve/
+	// delete time. Instead, canonicalize the deepest ANCESTOR that actually exists and
+	// require it to stay inside root; the not-yet-existing tail is purely lexical and
+	// cannot introduce a new symlink.
+	if err := wd.assertJailedRealpath(abs); err != nil {
+		return "", err
 	}
 	return abs, nil
+}
+
+// assertJailedRealpath walks up from abs to the deepest existing ancestor, resolves
+// its symlinks, and confirms the real path is still inside root. Fails safe: if not
+// even root exists (nothing resolves inside the jail) or the deepest ancestor can't be
+// canonicalized (e.g. a dangling symlink), it rejects.
+func (wd *WorkDir) assertJailedRealpath(abs string) error {
+	probe := abs
+	for {
+		// Lstat (not Stat) so a symlink is detected AT itself and gets canonicalized,
+		// rather than transparently followed outside the jail.
+		if _, err := os.Lstat(probe); err == nil {
+			break
+		}
+		if probe == wd.root {
+			// Root itself isn't on disk yet — nothing can resolve inside the jail.
+			return errors.InvalidInput("path escapes working dir")
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return errors.InvalidInput("path escapes working dir")
+		}
+		probe = parent
+	}
+	real, err := filepath.EvalSymlinks(probe)
+	if err != nil {
+		return errors.InvalidInput("path escapes working dir")
+	}
+	if real != wd.root && !strings.HasPrefix(real, wd.root+string(os.PathSeparator)) {
+		return errors.InvalidInput("path escapes working dir")
+	}
+	return nil
 }
 
 // List returns the entries directly under rel (one level, not recursive).
