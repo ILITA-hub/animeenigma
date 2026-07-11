@@ -348,13 +348,23 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		httputil.OK(w, map[string]bool{"deleted": true})
 		return
 	}
-	// A key nested under an episode's MinioPath (but not the prefix itself) is
-	// an individual file belonging to that episode — e.g. a .ts segment. Refuse
-	// rather than raw-delete: the episode folder is the deletable unit.
+	// A key that OVERLAPS an episode's MinioPath in EITHER direction is refused
+	// rather than raw-deleted (the exact-prefix match is already handled by the
+	// evictor path above and returned before here):
+	//   - key UNDER an episode prefix → an individual member file (e.g. a .ts
+	//     segment); raw-deleting it silently breaks the episode's HLS.
+	//   - key that CONTAINS one or more episode prefixes → a parent/season
+	//     folder; a raw DeletePrefix would wipe every episode beneath it and
+	//     orphan all their library_episodes rows.
+	// The episode folder is the deletable unit; delete episodes individually.
+	// Normalize the key to a trailing slash so the ancestor check can't
+	// false-positive on a sibling that merely shares a name prefix (e.g. key
+	// "frieren/s1" vs episode "frieren/s10/e01/").
+	keySlash := strings.TrimSuffix(key, "/") + "/"
 	for mp := range epByPath {
-		if strings.HasPrefix(key, mp) {
+		if strings.HasPrefix(keySlash, mp) || strings.HasPrefix(mp, keySlash) {
 			httputil.JSON(w, http.StatusConflict, map[string]string{
-				"error":  "file belongs to an episode — delete the whole episode folder instead",
+				"error":  "path contains or belongs to a managed episode — delete episodes individually",
 				"reason": "episode_member",
 			})
 			return

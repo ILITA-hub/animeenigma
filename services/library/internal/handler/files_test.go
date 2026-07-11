@@ -336,6 +336,44 @@ func TestDelete_ObjectUnderEpisodePrefixRefused(t *testing.T) {
 	}
 }
 
+// TestDelete_ObjectContainingEpisodesRefused confirms that deleting a folder
+// that CONTAINS one or more episodes (e.g. a season folder above the episode
+// dirs) is refused with 409 rather than falling through to a raw DeletePrefix,
+// which would wipe every episode beneath it and orphan all their
+// library_episodes rows. This is the ancestor direction of the overlap check.
+func TestDelete_ObjectContainingEpisodesRefused(t *testing.T) {
+	store := &fakeStore{}
+	n := 1
+	eps := &fakeEpisodes{pool: []domain.Episode{{ID: "ep-1", Storage: "minio", MinioPath: "frieren/s1/e01/", EpisodeNumber: n}}}
+	ev := &fakeEvictor{}
+	h := newTestFiles(t, store, eps, ev, &fakeActive{})
+
+	// confirm=1 present: even an explicit raw-delete confirm must not wipe a
+	// folder that contains episodes.
+	req := httptest.NewRequest(http.MethodDelete, "/api/library/files?domain=minio&key=frieren/s1/&confirm=1", nil)
+	rw := httptest.NewRecorder()
+	h.Delete(rw, req)
+
+	if rw.Code != http.StatusConflict {
+		t.Fatalf("status %d, body=%s", rw.Code, rw.Body.String())
+	}
+	var parsed struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, rw.Body.String())
+	}
+	if parsed.Data["reason"] != "episode_member" {
+		t.Errorf("reason = %q, want episode_member", parsed.Data["reason"])
+	}
+	if store.deleted != "" {
+		t.Errorf("must not raw-delete a folder containing episodes, got %q", store.deleted)
+	}
+	if ev.deletedID != "" {
+		t.Errorf("must not route a containing folder through the evictor, got %q", ev.deletedID)
+	}
+}
+
 // TestDelete_RootKeyRejected confirms key="/" (which would otherwise trim to
 // "" and reach store.DeletePrefix(dom, "/") — a bucket-wide delete) is
 // rejected with 400 alongside the existing key=="" guard.

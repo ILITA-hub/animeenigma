@@ -428,7 +428,7 @@
         },
         "error": {
           "active": "Torrent still active — cancel its job first.",
-          "episodeMember": "This file belongs to an episode — delete the whole episode instead.",
+          "episodeMember": "This path contains or belongs to a managed episode — delete episodes individually.",
           "deleteFailed": "Delete failed. Please try again."
         }
       }
