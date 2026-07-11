@@ -30,6 +30,8 @@ type fakeAccountant struct {
 	deleteErr    map[string]error // id → error (e.g. row-delete fails)
 	pool         []domain.Episode // returned by ListPool (the Accountant sweep)
 	poolErr      error
+	getByID      map[string]domain.Episode // GetByID lookup (Task 1: manual delete)
+	getByIDErr   error
 }
 
 // SumPoolBytes returns the CURRENT materialized pool total: the initial sumBytes minus
@@ -83,20 +85,36 @@ func (f *fakeAccountant) ListPool(_ context.Context) ([]domain.Episode, error) {
 	return f.pool, nil
 }
 
-// fakeDeleter is an in-memory objectDeleter. prefixes records each DeletePrefix(prefix);
+// GetByID satisfies the poolAccountant GetByID seam (Task 1: manual delete lookup).
+// getByID is a scripted id → row map, mirroring the candidates/pool fields above.
+func (f *fakeAccountant) GetByID(_ context.Context, id string) (*domain.Episode, error) {
+	if f.getByIDErr != nil {
+		return nil, f.getByIDErr
+	}
+	ep, ok := f.getByID[id]
+	if !ok {
+		return nil, errors.New("episode not found")
+	}
+	return &ep, nil
+}
+
+// fakeDeleter is an in-memory objectDeleter. prefixes records each DeletePrefix(prefix)
+// (storages the parallel storage arg — Task 1 asserts the backend is forwarded);
 // failPrefix maps a prefix → error so a test can fail the object-delete of one candidate.
 type fakeDeleter struct {
 	prefixes   []string
+	storages   []string
 	failPrefix map[string]error
 }
 
-func (f *fakeDeleter) DeletePrefix(_ context.Context, _, prefix string) error {
+func (f *fakeDeleter) DeletePrefix(_ context.Context, storage, prefix string) error {
 	if f.failPrefix != nil {
 		if err := f.failPrefix[prefix]; err != nil {
 			return err // record nothing — the object delete did not complete
 		}
 	}
 	f.prefixes = append(f.prefixes, prefix)
+	f.storages = append(f.storages, storage)
 	return nil
 }
 
@@ -629,6 +647,46 @@ func TestSweepWithinBudgetNoEvictStillPublishesGauges(t *testing.T) {
 	}
 	if got := gaugeValue(t, m.GetBytesUsedForTest("autocache", "fresh")); got != 400 {
 		t.Fatalf("bytes_used{autocache,fresh} = %v, want 400", got)
+	}
+}
+
+// --- DeleteEpisodeByID (Task 1) ---
+
+func TestDeleteEpisodeByID_ReusesEvictOne(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	c := &fakeConfig{cfg: evictCfg()}
+	ep := domain.Episode{ID: "ep-1", Storage: "minio", MinioPath: "frieren/s1/e01/"}
+	a := &fakeAccountant{getByID: map[string]domain.Episode{"ep-1": ep}}
+	d := &fakeDeleter{}
+
+	ev := newEvictorForTest(c, a, d, m)
+	if err := ev.DeleteEpisodeByID(context.Background(), "ep-1"); err != nil {
+		t.Fatalf("DeleteEpisodeByID: %v", err)
+	}
+	if len(d.prefixes) != 1 || d.prefixes[0] != "frieren/s1/e01/" || d.storages[0] != "minio" {
+		t.Fatalf("expected object prefix delete, got prefixes=%v storages=%v", d.prefixes, d.storages)
+	}
+	if len(a.deleted) != 1 || a.deleted[0] != "ep-1" {
+		t.Fatalf("expected row delete for ep-1, got %v", a.deleted)
+	}
+}
+
+// objects-first ordering: row must not be deleted if object delete fails.
+func TestDeleteEpisodeByID_ObjectFailLeavesRow(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	c := &fakeConfig{cfg: evictCfg()}
+	ep := domain.Episode{ID: "ep-1", Storage: "minio", MinioPath: "x/"}
+	a := &fakeAccountant{getByID: map[string]domain.Episode{"ep-1": ep}}
+	d := &fakeDeleter{failPrefix: map[string]error{"x/": errors.New("boom")}}
+
+	ev := newEvictorForTest(c, a, d, m)
+	if err := ev.DeleteEpisodeByID(context.Background(), "ep-1"); err == nil {
+		t.Fatal("expected error when object delete fails")
+	}
+	if len(a.deleted) != 0 {
+		t.Fatalf("row must survive when object delete fails, got deleted %v", a.deleted)
 	}
 }
 

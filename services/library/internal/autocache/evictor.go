@@ -35,6 +35,8 @@ type poolAccountant interface {
 	// ListPool returns every aeProvider/ pool row so the Accountant sweep can bucket
 	// bytes_used + episode count per (source, freshness) via Classify (Plan 02).
 	ListPool(ctx context.Context) ([]domain.Episode, error)
+	// GetByID returns the single row identified by id (Task 1: manual delete lookup).
+	GetByID(ctx context.Context, id string) (*domain.Episode, error)
 }
 
 // jobAccountant reads the in-flight admitted-but-not-yet-materialized autocache job
@@ -263,6 +265,20 @@ func (e *Evictor) evictOne(ctx context.Context, ep domain.Episode) error {
 		return err
 	}
 	return nil
+}
+
+// DeleteEpisodeByID evicts a single episode by id through the SAME objects-first,
+// DB-reconciled path the freshness sweep uses (evictOne). It takes the Evictor mutex
+// so a manual delete can't race the sweep / pre-admit budget accounting. This is the
+// ONLY delete path the admin file manager calls for object-store episodes.
+func (e *Evictor) DeleteEpisodeByID(ctx context.Context, id string) error {
+	ep, err := e.pool.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.evictOne(ctx, *ep)
 }
 
 // --- ticker lifecycle (mirrors planner.go:138-215, 394-407) ---
