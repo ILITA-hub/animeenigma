@@ -67,6 +67,7 @@
       :offset="effectiveOffset"
       :size-scale="state.subSize.value"
       :bg-opacity="state.subBg.value"
+      @error="onSubtitleError"
     />
 
     <!-- Source error overlay -->
@@ -2298,6 +2299,15 @@ function onVideoError() {
   if (!v?.error || isResolving.value || switchingSource) return
   setBuffering(false)
   sourceError.value = t('player.aePlayer.streamUnavailable')
+}
+
+// SubtitleOverlay failed to fetch/parse the chosen track (e.g. a dead upstream
+// link). Turn the selection off rather than leaving it silently stuck — the
+// video keeps playing, but the subtitle button should reflect reality so the
+// user knows to pick a different track from the Subtitles menu.
+function onSubtitleError() {
+  toast.push(t('player.aePlayer.subtitleLoadFailed'), 'error', 5000)
+  state.subLang.value = 'off'
 }
 
 // hls.js fatal (dead playlist / unrecoverable). Dynamic BEST: try the next

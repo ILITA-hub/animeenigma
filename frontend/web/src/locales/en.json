@@ -472,6 +472,7 @@
       "switchNotPlaying": "That source won't play — switching to the next best…",
       "switchNotAvailable": "That source isn't available — switching to the next best…",
       "switchFailed": "That source failed — switching to the next best…",
+      "subtitleLoadFailed": "This subtitle track failed to load — try a different one from the Subtitles menu",
       "selected": "Selected",
       "seek": "Seek",
       "retry": "Retry",
