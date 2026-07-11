@@ -56,9 +56,12 @@ All additions live **in the `library` service** + its admin UI. Nothing new in `
    reconciliation the sweep uses; adds mutex discipline so a manual delete can't
    double-spend budget vs. a concurrent sweep/admit.
 2. **Torrent-working-dir file ops** — local-FS list + delete under
-   `LIBRARY_TORRENT_DOWNLOAD_DIR`, path-jailed to that root. Delete first **stops/drops the
-   torrent** if it is still active (torrent client `Drop`), then removes the dir/file.
-   These files are pre-encode and have **no** `library_episodes` row, so no DB reconcile.
+   `LIBRARY_TORRENT_DOWNLOAD_DIR`, path-jailed to that root. Delete **refuses (409) if an
+   in-flight job still owns that infohash** — the operator cancels the job (existing
+   `DELETE /jobs/{id}`, which owns torrent lifecycle) to stop it — otherwise it removes the
+   dir/file. These files are pre-encode and have **no** `library_episodes` row, so no DB
+   reconcile. (The torrent client exposes no drop-by-infohash API, so the file manager
+   never reaches into torrent internals; it defers to the jobs path that owns them.)
 3. **Library HTTP handlers** exposing the browser (`/api/library/files/*`, admin-gated) —
    see §5.
 4. **Frontend "Files" section** inside `/admin/raw-library` (`RawLibrary.vue`) — tree +
@@ -70,7 +73,7 @@ All additions live **in the `library` service** + its admin UI. Nothing new in `
 
 | Domain | Backing store | List via | Delete via | Download via |
 |---|---|---|---|---|
-| **Torrent work dir** `/data/torrents/{infohash}/` | local disk (library container) | new library FS-list | new library FS-delete (drop torrent first) | stream through library endpoint |
+| **Torrent work dir** `/data/torrents/{infohash}/` | local disk (library container) | new library FS-list | new library FS-delete (refuse if infohash's job is in-flight) | stream through library endpoint |
 | **MinIO** (`raw-library` bucket) | object store (local) | `storagegw.List("minio", prefix)` | episode → `DeleteEpisodeByID`; orphan → `storagegw.DeletePrefix` (guarded) | `storagegw.URLFor` presigned redirect |
 | **S3 cloud** (`s3.firstvds.ru`) | object store (offloaded) | `storagegw.List("s3", prefix)` | same as MinIO | same as MinIO |
 
@@ -94,7 +97,7 @@ GET    /api/library/files/download?domain=work|minio|s3&key=<k>
          → 302 to presigned URL (minio/s3) | streamed bytes (work)
 
 DELETE /api/library/files?domain=work|minio|s3&key=<k>
-         → work: FS delete (+ torrent drop if active)
+         → work: FS delete (409 if the infohash's job is still in-flight)
            minio/s3: if key maps to an episode → Evictor.DeleteEpisodeByID
                      else (orphan) → storagegw.DeletePrefix   [requires ?confirm=1]
 ```
