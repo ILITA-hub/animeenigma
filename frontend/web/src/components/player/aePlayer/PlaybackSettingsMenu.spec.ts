@@ -76,3 +76,37 @@ describe('PlaybackSettingsMenu — hacker-mode edge telemetry', () => {
     expect(wrapper.get('[data-test="debug-stats"]').text()).not.toContain('EDGE')
   })
 })
+
+describe('PlaybackSettingsMenu — hacker-mode protocol ladder telemetry', () => {
+  const stats = { bw: '5.0 Mbit/s', buffer: '+1s / −0s', level: '720p', frag: '400 KB · 200 ms' }
+  const ladderStats = {
+    proto: 'h2 · tier 2/3',
+    net: '4.1 Mbps ewma / need 5.4 ×1.2',
+    laddr: 'h3→h2 (first-frag projected 17s)',
+    probe: 'h3 2.1 Mbps @03:24 — rejected (<1.1× h2)',
+  }
+
+  it('renders PROTO/NET/LADDR/PROBE rows when ladder telemetry is present', () => {
+    const wrapper = mount(PlaybackSettingsMenu, {
+      props: { ...baseProps, hackerMode: true, debugStats: { ...stats, ...ladderStats } },
+      global,
+    })
+    const panel = wrapper.get('[data-test="debug-stats"]').text()
+    expect(wrapper.get('[data-test="debug-proto"]').text()).toContain('PROTO h2 · tier 2/3')
+    expect(panel).toContain('NET')
+    expect(panel).toContain('4.1 Mbps ewma / need 5.4 ×1.2')
+    expect(panel).toContain('LADDR')
+    expect(panel).toContain('h3→h2 (first-frag projected 17s)')
+    expect(panel).toContain('PROBE')
+    expect(panel).toContain('h3 2.1 Mbps @03:24 — rejected (<1.1× h2)')
+  })
+
+  it('omits ladder rows when telemetry fields are absent (single-tier/dev)', () => {
+    const wrapper = mount(PlaybackSettingsMenu, {
+      props: { ...baseProps, hackerMode: true, debugStats: { ...stats } },
+      global,
+    })
+    expect(wrapper.find('[data-test="debug-proto"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="debug-stats"]').text()).not.toContain('PROTO')
+  })
+})

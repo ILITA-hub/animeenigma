@@ -2388,6 +2388,7 @@ const debugStats = computed(() => {
   const last = frs[frs.length - 1]
   const edge = engine.servedEdge.value
   const trail = engine.edgeTrail.value
+  const ladderSnap = ladder.debugSnapshot()
   return {
     bw: bwv > 0 ? `${(bwv / 1_000_000).toFixed(1)} Mbit/s` : '—',
     buffer: `+${playbackStats.value.bufferAheadSec.toFixed(1)}s / −${playbackStats.value.bufferBehindSec.toFixed(1)}s`,
@@ -2400,6 +2401,13 @@ const debugStats = computed(() => {
     edge,
     edgeTrail: edge ? formatEdgeTrail(trail) : '',
     edgeRot: edge && trail ? trail.split(',').length - 1 : 0,
+    // Protocol-ladder telemetry (multi-tier prod only; null snapshot in dev).
+    ...(ladderSnap ? {
+      proto: `${ladderSnap.protocol} · tier ${ladderSnap.tierIndex}/${ladderSnap.tierCount}`,
+      net: `${ladderSnap.measuredMbps.toFixed(1)} Mbps ewma / need ${ladderSnap.neededMbps.toFixed(1)} ×1.2`,
+      laddr: ladderSnap.trail,
+      probe: ladderSnap.probe,
+    } : {}),
   }
 })
 

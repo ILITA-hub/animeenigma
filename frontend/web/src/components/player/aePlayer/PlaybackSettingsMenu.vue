@@ -156,6 +156,14 @@
             <div v-if="debugStats.edgeTrail">TRY  {{ debugStats.edgeTrail }}</div>
             <div v-if="debugStats.edgeRot">ROT  ×{{ debugStats.edgeRot }}</div>
           </template>
+          <!-- Protocol-ladder telemetry — multi-tier prod only; absent (null
+               snapshot) on single-tier/dev builds. -->
+          <template v-if="debugStats.proto">
+            <div data-test="debug-proto">PROTO {{ debugStats.proto }}</div>
+            <div v-if="debugStats.net">NET&nbsp;&nbsp; {{ debugStats.net }}</div>
+            <div v-if="debugStats.laddr">LADDR {{ debugStats.laddr }}</div>
+            <div v-if="debugStats.probe">PROBE {{ debugStats.probe }}</div>
+          </template>
         </div>
       </template>
     </template>
@@ -187,6 +195,12 @@ defineProps<{
     edge?: string
     edgeTrail?: string
     edgeRot?: number
+    /** Protocol-ladder telemetry (Task 6) — multi-tier prod only, absent in
+     *  single-tier/dev builds (null ladder snapshot). */
+    proto?: string
+    net?: string
+    laddr?: string
+    probe?: string
   } | null
 }>()
 
