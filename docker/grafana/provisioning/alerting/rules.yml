@@ -160,7 +160,7 @@ groups:
               expression: B
         for: 30m
         labels:
-          severity: warning
+          severity: diagnostic
         annotations:
           summary: "High parser failure rate for {{ $labels.provider }}"
           description: "Parser {{ $labels.provider }} has >50% error rate for 30 minutes."
@@ -552,7 +552,7 @@ groups:
               type: threshold
               expression: B
         labels:
-          severity: critical
+          severity: diagnostic
         annotations:
           summary: "Scraper provider {{ $labels.provider }} stream_segment + stream DOWN"
           description: "Provider {{ $labels.provider }} has BOTH the stream and stream_segment stages DOWN for 4+ hours — likely real upstream outage or selector drift (orchestrator fallback can no longer mask). Check /api/admin/scraper/health and parser_zero_match_total/parser_ad_decoy_total."
@@ -678,7 +678,7 @@ groups:
               expression: B
         for: 0s
         labels:
-          severity: warning
+          severity: diagnostic
           component: scraper
         annotations:
           summary: 'Scraper canary fail: {{ $labels.provider }} / {{ $labels.server }} ({{ $labels.reason }})'
@@ -729,7 +729,7 @@ groups:
               expression: B
         for: 5m
         labels:
-          severity: warning
+          severity: diagnostic
           component: scraper
           reason: ad_decoy
         annotations:
@@ -784,7 +784,7 @@ groups:
               expression: B
         for: 5m
         labels:
-          severity: critical
+          severity: diagnostic
           component: scraper
         annotations:
           summary: 'Scraper unplayable spike: {{ $labels.provider }} / {{ $labels.server }} ({{ $labels.reason }}) >5%'

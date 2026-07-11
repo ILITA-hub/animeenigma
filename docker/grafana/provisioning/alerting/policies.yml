@@ -9,3 +9,17 @@ policies:
     group_wait: 30s
     group_interval: 5m
     repeat_interval: 4h
+    routes:
+      # Per-provider scraper/parser pagers are demoted to dashboard-only
+      # (severity=diagnostic): they keep evaluating (panels + state history)
+      # but route through the always-on mute timing so they never notify.
+      # The roster-centric fleet rules (ProviderFleet*) cover the actionable
+      # aggregate — and disabled providers are excluded from those by
+      # construction (provider_state lifecycle gauge). See
+      # docs/superpowers/plans/2026-06-30-roster-centric-alerting.md Task 6.
+      - receiver: maintenance-webhook
+        object_matchers:
+          - ["severity", "=", "diagnostic"]
+        mute_time_intervals:
+          - always
+        continue: false

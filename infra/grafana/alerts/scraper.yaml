@@ -78,7 +78,7 @@ groups:
               expression: B
         for: 0s
         labels:
-          severity: warning
+          severity: diagnostic
           component: scraper
         annotations:
           summary: 'Scraper canary fail: {{ $labels.provider }} / {{ $labels.server }} ({{ $labels.reason }})'
@@ -138,7 +138,7 @@ groups:
               expression: B
         for: 5m
         labels:
-          severity: warning
+          severity: diagnostic
           component: scraper
           reason: ad_decoy
         annotations:
@@ -208,7 +208,7 @@ groups:
               expression: B
         for: 5m
         labels:
-          severity: critical
+          severity: diagnostic
           component: scraper
         annotations:
           summary: 'Scraper unplayable spike: {{ $labels.provider }} / {{ $labels.server }} ({{ $labels.reason }}) >5%'
