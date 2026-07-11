@@ -251,6 +251,6 @@ groups:
           component: aeplayer
           reason: playback_failed
         annotations:
-          summary: 'aePlayer playback failures: {{ $values.B }} viewers could not watch in the last hour'
+          summary: 'aePlayer terminal playback-failure events: {{ $values.B }} in the last hour (all-providers-exhausted or ae-source failures)'
           description: 'More than one terminal aePlayer playback failure in the last hour (all providers exhausted, or the first-party `ae` source failed). Drill down in ClickHouse: SELECT properties FROM analytics.events WHERE effect_kind = ''player_failed'' AND timestamp >= now() - INTERVAL 1 HOUR ORDER BY timestamp DESC.'
           reason: playback_failed

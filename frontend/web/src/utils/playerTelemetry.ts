@@ -107,7 +107,7 @@ function armLifecycle(): void {
 
 /**
  * Records a player telemetry event. Validates that provider is non-empty and
- * kind is one of the two allowed values, then rate-caps and buffers.
+ * kind is one of the allowed kinds, then rate-caps and buffers.
  * Never throws.
  */
 export function recordPlayerEvent(e: PlayerEvent): void {

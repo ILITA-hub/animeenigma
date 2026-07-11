@@ -902,6 +902,7 @@ function reportIfTerminal(inputs: FailureInputs) {
     lang: state.combo.value.lang,
     error_kind: mapErrorKind(inputs.reason),
     detail: {
+      schema_version: 1,
       ...buildDiagnosticBundle(),
       reason: d.tag,
       all_exhausted: d.exhausted ?? false,
