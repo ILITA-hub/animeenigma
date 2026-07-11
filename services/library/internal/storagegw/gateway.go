@@ -13,7 +13,9 @@ package storagegw
 
 import (
 	"context"
+	"strings"
 
+	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/storageclient"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 )
@@ -79,6 +81,31 @@ func (g *Gateway) Move(ctx context.Context, storage, srcPrefix, dstPrefix string
 // first key.
 func (g *Gateway) List(ctx context.Context, storage, prefix string) ([]storageclient.Object, error) {
 	return g.client.List(ctx, storage, prefix)
+}
+
+// DownloadURL returns a presigned GET URL for exactly `key` on backend
+// `storage` — the file manager's download handler (Task 5) fetches this
+// server-side and streams the bytes to the admin (MinIO's presigned host is
+// internal-only, so the browser can't fetch it directly). Reuses the
+// storage service's existing /download-urls endpoint via DownloadURLs.
+func (g *Gateway) DownloadURL(ctx context.Context, storage, key string) (string, error) {
+	urls, err := g.client.DownloadURLs(ctx, storage, key)
+	if err != nil {
+		return "", err
+	}
+	for _, u := range urls {
+		// download-urls returns Name relative to the requested prefix. For a
+		// single-key prefix this is either "" (Name == prefix, i.e. an exact
+		// object match — "" is trivially a suffix of key) or a basename-style
+		// tail, so a suffix match covers both shapes.
+		if key == u.Name || strings.HasSuffix(key, u.Name) {
+			return u.URL, nil
+		}
+	}
+	if len(urls) == 1 {
+		return urls[0].URL, nil
+	}
+	return "", errors.NotFound("object")
 }
 
 // URLFor returns the public-facing playlist/segment URL the streaming proxy

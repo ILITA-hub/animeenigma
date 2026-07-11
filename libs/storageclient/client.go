@@ -423,18 +423,31 @@ func keysOf(m map[string]string) []string {
 	return out
 }
 
-// DownloadPrefix calls POST /internal/storage/download-urls for every
-// object under prefix, then GETs each one into destDir/<name> (name is the
-// key relative to prefix, per DownloadURLsResponse — nested names create
-// subdirectories under destDir as needed).
-func (c *Client) DownloadPrefix(ctx context.Context, storage, prefix, destDir string) error {
+// DownloadURLs calls POST /internal/storage/download-urls and returns one
+// presigned GET entry per object found under prefix (name relative to
+// prefix, per the storage service's contract). DownloadPrefix is the
+// download-every-entry-to-disk convenience built on top of this; callers
+// that need the raw presigned URL for a single object (e.g. streaming it
+// through server-side rather than writing to disk) call this directly.
+func (c *Client) DownloadURLs(ctx context.Context, storage, prefix string) ([]GetURL, error) {
 	req := downloadURLsRequest{Storage: storage, Prefix: prefix}
 	var resp downloadURLsResponse
 	if err := c.doJSON(ctx, http.MethodPost, "/internal/storage/download-urls", req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.URLs, nil
+}
+
+// DownloadPrefix fetches presigned GET URLs for every object under prefix,
+// then GETs each one into destDir/<name> (nested names create
+// subdirectories under destDir as needed).
+func (c *Client) DownloadPrefix(ctx context.Context, storage, prefix, destDir string) error {
+	urls, err := c.DownloadURLs(ctx, storage, prefix)
+	if err != nil {
 		return err
 	}
 
-	for _, u := range resp.URLs {
+	for _, u := range urls {
 		if err := c.downloadOne(ctx, u, destDir); err != nil {
 			return err
 		}
