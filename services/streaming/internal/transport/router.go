@@ -52,6 +52,11 @@ func NewRouter(
 		r.Options("/hls-proxy", streamHandler.HLSProxy) // CORS preflight
 		r.Get("/proxy-status", streamHandler.GetProxyStatus)
 
+		// Track A opaque path-token proxy (spec 2026-07-10 §3). Public like
+		// hls-proxy; the sealed token is the authorization.
+		r.Get("/m/{token}/{leaf}", streamHandler.MaskedProxy)
+		r.Options("/m/{token}/{leaf}", streamHandler.MaskedProxy) // CORS preflight
+
 		// Image proxy (public, no auth)
 		r.Get("/image-proxy", imageProxyHandler.ProxyImage)
 

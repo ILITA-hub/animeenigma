@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -18,6 +19,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/service"
+	"github.com/go-chi/chi/v5"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -268,7 +270,6 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get query parameters
 	sourceURL := r.URL.Query().Get("url")
 	referer := r.URL.Query().Get("referer")
 
@@ -277,6 +278,53 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.serveProxy(w, r, sourceURL, referer, false)
+}
+
+// MaskedProxy serves the Track A opaque path-token form
+// /api/v1/m/<token>/<leaf> (public: /api/streaming/m/...). The sealed AES-GCM
+// token carries {url, referer, exp, type} and IS the authorization — no
+// allowlist or exp/sig query pair on this path (spec 2026-07-10 §3).
+func (h *StreamHandler) MaskedProxy(w http.ResponseWriter, r *http.Request) {
+	// Handle CORS preflight (same policy as HLSProxy)
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Range")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	payload, err := videoutils.DecodeStreamToken(chi.URLParam(r, "token"), time.Now())
+	if err != nil {
+		h.log.Warnw("masked proxy: rejected token", "error", err)
+		http.Error(w, "invalid stream token", http.StatusForbidden)
+		return
+	}
+
+	// Metrics/log hygiene: the raw path embeds a high-cardinality token and
+	// libs/metrics normalizePath labels r.URL.Path AFTER the handler runs —
+	// collapse it to a stable value.
+	r.URL.Path = "/api/v1/m"
+
+	// The mp4/webm content-type override rides inside the token on this path;
+	// surface it as the query param the shared pipeline already reads
+	// (proxy.go's `type` switch).
+	if payload.Type != "" {
+		q := r.URL.Query()
+		q.Set("type", payload.Type)
+		r.URL.RawQuery = q.Encode()
+	}
+
+	h.serveProxy(w, r, payload.URL, payload.Referer, true)
+}
+
+// serveProxy is the shared body of HLSProxy and MaskedProxy: connection
+// semaphore, metrics, byte counting, egress folding, and error mapping around
+// one videoProxy call. preauth=true selects ProxyPreauthCounted — the caller
+// already authorized sourceURL by opening a sealed stream token, so the
+// allowlist/provenance gate is skipped.
+func (h *StreamHandler) serveProxy(w http.ResponseWriter, r *http.Request, sourceURL, referer string, preauth bool) {
 	// Try to acquire semaphore (limit concurrent connections)
 	if !hlsProxySemaphore.TryAcquire(1) {
 		h.log.Warnw("HLS proxy at capacity", "active_connections", hlsActiveConnections.Load())
@@ -323,7 +371,11 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 	// aggregated egress row (AR-EGRESS-04 / AR-EGRESS-05). The ?sess= token was
 	// injected into this segment URL when its parent manifest was rewritten;
 	// the upstream host is derived from the proxied URL.
-	bytesIn, bytesOut, err := h.videoProxy.ProxyWithRefererCounted(r.Context(), sourceURL, referer, cw, r)
+	proxyCall := h.videoProxy.ProxyWithRefererCounted
+	if preauth {
+		proxyCall = h.videoProxy.ProxyPreauthCounted
+	}
+	bytesIn, bytesOut, err := proxyCall(r.Context(), sourceURL, referer, cw, r)
 	if err == nil {
 		h.observeEgress(r, sourceURL, bytesIn, bytesOut)
 	}
