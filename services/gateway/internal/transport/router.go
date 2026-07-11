@@ -371,6 +371,10 @@ func NewRouterWithCleanup(
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
+		// Track B5: advertise the rotating masked analytics base on every
+		// /api response (see handler/masked_analytics.go).
+		r.Use(handler.MaskedPathHintMiddleware([]byte(cfg.JWT.Secret)))
+
 		// Auth service routes (public)
 		r.HandleFunc("/auth/*", proxyHandler.ProxyToAuth)
 
@@ -391,6 +395,13 @@ func NewRouterWithCleanup(
 		// Player telemetry beacon (resolve/stall outcomes). PUBLIC — anonymous,
 		// same trust model as /collect; per-IP rate limiting already applies.
 		r.Post("/analytics/player-events", proxyHandler.ProxyToAnalytics)
+
+		// Track B5: rotating masked ingestion alias. Param route — chi
+		// prefers static siblings, so every existing /api/<service> route
+		// wins; only otherwise-unmatched two-segment POSTs land here, and the
+		// handler 404s anything without a valid HMAC bucket segment.
+		maskedAnalytics := handler.NewMaskedAnalyticsHandler(proxyHandler, []byte(cfg.JWT.Secret))
+		r.Post("/{maskedSeg}/{maskedEp}", maskedAnalytics.Handle)
 
 		// Player service routes - reviews (must be before /anime/* catch-all)
 		r.Post("/anime/ratings/batch", proxyHandler.ProxyToPlayer)
