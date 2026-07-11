@@ -796,7 +796,21 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 // (AR-EGRESS-04/05). bytes_in is counted via a countReader wrapping resp.Body
 // before io.Copy/rateLimitedCopy; bytes_out is the copy's write total. For an
 // M3U8 rewrite (the manifest path) the counts reflect the rewritten payload.
-func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) (bytesIn, bytesOut uint64, _ error) {
+func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) (uint64, uint64, error) {
+	return p.proxyRefererCounted(ctx, sourceURL, referer, false, w, r)
+}
+
+// ProxyPreauthCounted is ProxyWithRefererCounted for an upstream URL that was
+// already authorized by decoding a sealed stream token (streamtoken.go). The
+// static-allowlist / provenance-signature gate is skipped — the AES-GCM token
+// WAS the authorization. Everything else (SSRF dial guard, edge failover,
+// m3u8 rewriting, byte counting) is identical.
+func (p *VideoProxy) ProxyPreauthCounted(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) (uint64, uint64, error) {
+	return p.proxyRefererCounted(ctx, sourceURL, referer, true, w, r)
+}
+
+// proxyRefererCounted is the shared pipeline behind ProxyWithRefererCounted and ProxyPreauthCounted.
+func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer string, preauth bool, w http.ResponseWriter, r *http.Request) (bytesIn, bytesOut uint64, _ error) {
 	// Validate URL
 	parsed, err := url.Parse(sourceURL)
 	if err != nil {
@@ -807,7 +821,10 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 	// (minted when the proxy rewrote a playlist from an allowlisted origin)
 	// authorizes an otherwise-unlisted host — this is how rotating segment
 	// CDNs (megaplay/mewstream) are served without a static per-domain entry.
-	if !isHLSDomainAllowed(parsed.Host) &&
+	// preauth=true skips the gate entirely: the caller already authorized the
+	// URL by opening a sealed AES-GCM stream token (streamtoken.go), which can
+	// only be minted server-side for SSRF-vetted URLs.
+	if !preauth && !isHLSDomainAllowed(parsed.Host) &&
 		!validProvenanceToken(sourceURL, r.URL.Query().Get("exp"), r.URL.Query().Get("sig"), time.Now()) {
 		return 0, 0, &DomainNotAllowedError{Domain: parsed.Host}
 	}
