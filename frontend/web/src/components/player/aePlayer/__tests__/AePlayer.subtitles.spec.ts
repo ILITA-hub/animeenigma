@@ -185,7 +185,7 @@ const stubs = {
   BufferingOverlay: true,
   DebugHud: true,
   SkipIntroChip: true,
-  NextEpisodeCard: true,
+  NextEpisodeCard: true, NextEpisodeChip: true,
   WatchTogetherButton: true,
   SubtitleOverlay: true,
   ResumePill: true,

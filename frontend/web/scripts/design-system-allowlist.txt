@@ -36,6 +36,8 @@ src/components/player/aePlayer/overlays/SkipIntroChip.vue:#fff:skip-intro chip f
 src/components/player/aePlayer/overlays/SkipIntroChip.vue:#08080f:skip-intro chip hover text-on-white fallback in var(--color-base,#08080f) — canonical-fine fallback
 src/components/player/aePlayer/overlays/NextEpisodeCard.vue:#fff:next-episode card fg color on dark glass — player chrome, always-dark backdrop
 src/components/player/aePlayer/overlays/NextEpisodeCard.vue:#08080f:next-ep play-btn text-on-cyan fallback in var(--color-base,#08080f) — canonical-fine fallback
+src/components/player/aePlayer/overlays/NextEpisodeChip.vue:#fff:next-episode chip fg and hover bg (player chrome on dark video, mirrors SkipIntroChip) — functional, non-theme surface
+src/components/player/aePlayer/overlays/NextEpisodeChip.vue:#08080f:next-episode chip hover text-on-white fallback in var(--color-base,#08080f) — canonical-fine fallback
 src/components/player/aePlayer/overlays/WatchTogetherButton.vue:#fff:icon color on player chrome (dark video bg) — functional non-theme surface
 
 # --- Brand / near-base chrome hex (BrandMark, Navbar) --------------------------

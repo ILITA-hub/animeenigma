@@ -20,6 +20,10 @@ export type HotkeyAction =
   | { type: 'fullscreen' }
   | { type: 'subs' }
   | { type: 'pip' }
+  // Jump to the next episode. `anytime` (Shift+N) advances whenever a next
+  // episode exists; bare `n` is prompt-scoped — the dispatcher only acts on it
+  // while an Up-Next prompt (countdown card or end-of-episode chip) is visible.
+  | { type: 'next-episode'; anytime: boolean }
 
 const SEEK_STEP = 5
 const VOL_STEP = 5
@@ -88,6 +92,10 @@ export function mapKeyToAction(e: KeyboardEvent): HotkeyAction | null {
     case 'x':
       // Nudge subtitles later (show further behind).
       return { type: 'sub-offset', value: SUB_OFFSET_STEP }
+    case 'n':
+      // Next episode. Shift+N advances any time; bare `n` only while an
+      // Up-Next prompt is showing (the dispatcher enforces the scope).
+      return { type: 'next-episode', anytime: e.shiftKey }
     default:
       return null
   }

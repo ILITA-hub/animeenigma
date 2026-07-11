@@ -90,4 +90,19 @@ describe('mapKeyToAction', () => {
     expect(mapKeyToAction(ev('C', {}, { shiftKey: true }))).toEqual({ type: 'subs' })
     expect(mapKeyToAction(ev('Z', {}, { shiftKey: true }))).toEqual({ type: 'sub-offset', value: -0.1 })
   })
+
+  it('maps n to a prompt-scoped next-episode (only acts while an Up-Next prompt is visible)', () => {
+    expect(mapKeyToAction(ev('n'))).toEqual({ type: 'next-episode', anytime: false })
+    expect(mapKeyToAction(ev('N'))).toEqual({ type: 'next-episode', anytime: false })
+  })
+
+  it('maps Shift+N to an always-on next-episode jump', () => {
+    expect(mapKeyToAction(ev('N', {}, { shiftKey: true }))).toEqual({ type: 'next-episode', anytime: true })
+    expect(mapKeyToAction(ev('n', {}, { shiftKey: true }))).toEqual({ type: 'next-episode', anytime: true })
+  })
+
+  it('never hijacks Ctrl/Cmd+N (new window) — the browser command must pass through', () => {
+    expect(mapKeyToAction(ev('n', {}, { ctrlKey: true }))).toBeNull()
+    expect(mapKeyToAction(ev('n', {}, { metaKey: true }))).toBeNull()
+  })
 })

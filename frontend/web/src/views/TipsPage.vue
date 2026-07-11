@@ -105,6 +105,8 @@ const playerGroups = [
       { keys: ['→', 'L'], descKey: 'tips.keys.seekFwd' },
       { keys: ['0–9'], descKey: 'tips.keys.seekPct' },
       { keys: ['Home', 'End'], descKey: 'tips.keys.homeEnd' },
+      { keys: ['Shift+N'], descKey: 'tips.keys.nextEpisode' },
+      { keys: ['N'], descKey: 'tips.keys.nextEpisodeCard' },
     ],
   },
   {

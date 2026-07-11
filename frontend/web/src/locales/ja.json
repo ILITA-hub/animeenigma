@@ -492,6 +492,7 @@
       "upNext": "次のエピソード",
       "playingIn": "{n}秒後に再生",
       "playNow": "今すぐ再生",
+      "nextEpisode": "次のエピソード",
       "subs": {
         "loading": "字幕を読み込み中…",
         "loadError": "字幕を読み込めませんでした。",
@@ -1638,6 +1639,8 @@
       "seekFwd": "5秒進む",
       "seekPct": "エピソードの0–90%へジャンプ",
       "homeEnd": "先頭 / 末尾へ（シークバーにフォーカス時）",
+      "nextEpisode": "次のエピソード",
+      "nextEpisodeCard": "次のエピソード（「次へ」表示中のみ）",
       "volUp": "音量 +5%",
       "volDown": "音量 −5%",
       "mute": "ミュート切り替え",

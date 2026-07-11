@@ -492,6 +492,7 @@
       "upNext": "Up Next",
       "playingIn": "Playing in {n}s",
       "playNow": "Play now",
+      "nextEpisode": "Next episode",
       "subs": {
         "loading": "Loading subtitles…",
         "loadError": "Couldn't load subtitles.",
@@ -1638,6 +1639,8 @@
       "seekFwd": "Forward 5 seconds",
       "seekPct": "Jump to 0–90% of the episode",
       "homeEnd": "To the start / end (progress bar focused)",
+      "nextEpisode": "Next episode",
+      "nextEpisodeCard": "Next episode (while the Up-Next prompt is up)",
       "volUp": "Volume up 5%",
       "volDown": "Volume down 5%",
       "mute": "Mute / unmute",

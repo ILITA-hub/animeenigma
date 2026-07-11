@@ -89,7 +89,7 @@ import AePlayer from '../AePlayer.vue'
 const stubs = {
   PlayerControlBar: true, SourcePanel: true, EpisodesPanel: true, PlaybackSettingsMenu: true,
   SubtitlesMenu: true, BrowseSubsModal: true, BigPlayButton: true, BufferingOverlay: true,
-  DebugHud: true, NextEpisodeCard: true, WatchTogetherButton: true, SubtitleOverlay: true,
+  DebugHud: true, NextEpisodeCard: true, NextEpisodeChip: true, WatchTogetherButton: true, SubtitleOverlay: true,
   ResumePill: true,
 }
 

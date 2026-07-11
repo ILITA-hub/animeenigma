@@ -240,6 +240,14 @@
       @cancel="showNextEpisode = false"
     />
 
+    <!-- Manual "Next episode" chip — end-of-episode affordance when autoplay is
+         off. Styled like (and stacked above) the Skip-Ending chip. -->
+    <NextEpisodeChip
+      :visible="showNextEpChip"
+      :label="$t('player.aePlayer.nextEpisode')"
+      @next="goToNextEpisode"
+    />
+
     <!-- Control bar -->
     <PlayerControlBar
       :playing="state.playing.value"
@@ -493,6 +501,7 @@ import BufferingOverlay from './overlays/BufferingOverlay.vue'
 import DebugHud, { type SeekTrace, type SourceDecision } from './overlays/DebugHud.vue'
 import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
+import NextEpisodeChip from './overlays/NextEpisodeChip.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
 import DownloadDialog from './DownloadDialog.vue'
 
@@ -754,12 +763,6 @@ if (props.room) {
     },
   )
 }
-
-// Test seam: expose the live combo ref + a setter so WT room-sync specs can
-// assert the applied/pinned combo and simulate a genuine local source change
-// without mocking usePlayerState (which hands every caller an independent
-// instance). No production consumer reads these.
-defineExpose({ __combo: state.combo, __setProvider: state.setProvider, onSelectEpisode })
 
 // ─── Provider health filter ───────────────────────────────────────────────────
 
@@ -1150,6 +1153,19 @@ function onSelectAudio(a: AudioKind) {
 
 const episodes = ref<EpisodeOption[]>([])
 const selectedEpisode = ref<EpisodeOption | null>(null)
+
+// Test seam (see AePlayer.*.spec.ts): expose the live combo ref + a setter so WT
+// room-sync specs can assert the applied/pinned combo and simulate a genuine
+// local source change without mocking usePlayerState (which hands every caller an
+// independent instance), plus the selected episode for next-episode specs. Placed
+// here so selectedEpisode is in scope; defineExpose runs once. __-prefixed keys
+// are never read in prod.
+defineExpose({
+  __combo: state.combo,
+  __setProvider: state.setProvider,
+  __selectedEpisode: selectedEpisode,
+  onSelectEpisode,
+})
 // True once the user manually switches episodes — freezes the reactive
 // initialEpisode re-pick so resume resolving late never yanks a deliberate pick.
 const userPickedEpisode = ref(false)
@@ -1933,6 +1949,10 @@ function resetPlaybackClock() {
   duration.value = 0
   bufferedPct.value = 0
   state.progress.value = 0
+  // The incoming source hasn't reached its own end — drop any lingering
+  // end-of-episode flag so the next-episode chip doesn't leak across the swap
+  // (same stale-state class as the Skip-Ending chip above).
+  reachedEpisodeEnd.value = false
 }
 
 /** rAF-path snap rates (see writeProgress) — mirrors SubtitleOverlay's
@@ -1997,6 +2017,7 @@ function stopRaf() {
 
 function onVideoPlay() {
   state.playing.value = true
+  reachedEpisodeEnd.value = false // playback resumed — the end chip is stale
   startRaf()
   armUiIdleTimer()
 }
@@ -2377,12 +2398,19 @@ const debugStats = computed(() => {
 const showNextEpisode = ref(false)
 const nextEpCountdown = ref(5)
 let nextEpTimer: ReturnType<typeof setInterval> | null = null
+// True once the playhead reaches the episode end. Drives the manual next-episode
+// chip on the autoplay-OFF path; reset when playback resumes (onVideoPlay) or at
+// any source swap (resetPlaybackClock — covers manual episode/server switches too).
+const reachedEpisodeEnd = ref(false)
 
 function onEnded() {
   state.playing.value = false
   // Reaching the end IS a completed watch — mark even if the 90% tick raced.
   tracking.saveNow()
   void tracking.markWatched()
+  // Playhead hit the end. Autoplay-ON opens the countdown card; autoplay-OFF
+  // surfaces the manual "Next episode" chip (via reachedEpisodeEnd → showNextEpChip).
+  reachedEpisodeEnd.value = true
   if (anime_hasNextEp.value && state.autoNext.value) {
     startNextEpCountdown()
   }
@@ -2418,6 +2446,17 @@ const nextEpisodeNumber = computed(() => {
   return currentEpNumber.value + 1
 })
 
+// Manual "Next episode" chip — the autoplay-OFF affordance. The countdown card
+// owns the autoplay-ON path, so the two never show together. Visible from the
+// ending/outro segment through the episode end, whenever a next episode exists.
+const showNextEpChip = computed(
+  () =>
+    anime_hasNextEp.value &&
+    !state.autoNext.value &&
+    !showNextEpisode.value &&
+    (reachedEpisodeEnd.value || skipTarget.value?.kind === 'outro'),
+)
+
 function startNextEpCountdown() {
   showNextEpisode.value = true
   nextEpCountdown.value = 5
@@ -2439,6 +2478,7 @@ function clearNextEpTimer() {
 
 function goToNextEpisode() {
   showNextEpisode.value = false
+  reachedEpisodeEnd.value = false // episode is changing — drop the end-of-ep chip
   clearNextEpTimer()
   // Find next episode in list
   const current = selectedEpisode.value
@@ -3204,6 +3244,16 @@ function onKeydown(e: KeyboardEvent) {
       break
     case 'pip':
       onTogglePip()
+      break
+    case 'next-episode':
+      // Shift+N (anytime) advances whenever a next episode exists; bare `n` is
+      // prompt-scoped — only acts while the countdown card or the end chip is up.
+      if (
+        anime_hasNextEp.value &&
+        (action.anytime || showNextEpisode.value || showNextEpChip.value)
+      ) {
+        goToNextEpisode()
+      }
       break
   }
 }
