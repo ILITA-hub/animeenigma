@@ -91,3 +91,38 @@ export interface CreateJobPayload {
   /** Destination storage backend; '' (or omitted) = default (minio). */
   storage?: '' | StorageBackend
 }
+
+/**
+ * File manager (Task 7+) — admin browse/delete/download over the torrent
+ * working dir (domain=work) and the two object-store backends (domain=minio|s3).
+ * Mirrors `browseResponseDTO`/`fileEntryDTO`/`fileEpisodeDTO` in
+ * `services/library/internal/handler/files.go`.
+ */
+export type FileDomain = 'work' | 'minio' | 's3'
+
+/** Annotates a synthesized object-store folder with the library_episodes row
+ *  that owns it. */
+export interface FileEpisode {
+  episode_id: string
+  shikimori_id: string
+  episode?: number
+  source: string
+  freshness: 'fresh' | 'stale'
+}
+
+/** One row in a Browse listing: a directory or a file/object. */
+export interface FileEntry {
+  name: string
+  kind: 'dir' | 'file'
+  size: number
+  key?: string
+  episode?: FileEpisode
+}
+
+/** Browse response body. */
+export interface BrowseResponse {
+  domain: FileDomain
+  prefix: string
+  breadcrumb: string[]
+  entries: FileEntry[]
+}

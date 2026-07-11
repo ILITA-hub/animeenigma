@@ -828,6 +828,12 @@ export const adminLibraryApi = {
     apiClient.patch(`/library/jobs/${id}`, { shikimori_id: shikimoriId }),
   retryJob: (id: string) => apiClient.post(`/library/jobs/${id}/retry`),
   healthExtended: () => apiClient.get('/library/health/extended'),
+  browseFiles: (domain: string, prefix = '') =>
+    apiClient.get('/library/files', { params: { domain, ...(prefix ? { prefix } : {}) } }),
+  deleteFile: (domain: string, key: string, confirm = false) =>
+    apiClient.delete('/library/files', { params: { domain, key, ...(confirm ? { confirm: 1 } : {}) } }),
+  downloadFile: (domain: string, key: string) =>
+    apiClient.get('/library/files/download', { params: { domain, key }, responseType: 'blob' }),
 }
 
 export const reviewApi = {
