@@ -44,7 +44,8 @@ func MaskedURL(u, referer, streamType string) string {
 }
 
 // SignScraperStreamBody rewrites a scraper stream JSON envelope in place,
-// adding "exp"/"sig" to data.stream.sources[].url and external
+// adding "exp"/"sig" (legacy dual-accept) plus the Track A "masked_url"
+// opaque path-token form to data.stream.sources[].url and external
 // data.stream.tracks[].file. It operates on map[string]any (NOT a typed
 // struct) so meta/intro/outro/headers and any future fields are preserved
 // byte-for-byte, and only rewrites successful (200 + success:true) bodies —

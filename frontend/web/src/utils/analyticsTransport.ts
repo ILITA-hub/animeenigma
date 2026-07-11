@@ -27,6 +27,11 @@ let maskedBase: string | null = null
 let blocked = false
 let probeFired = false
 
+/** The configured (or default `/api`) analytics API base. */
+function apiBase(): string {
+  return (import.meta.env.VITE_API_URL || '/api') as string
+}
+
 /** Store the masked base learned from an X-AE-Cfg response header.
  *  Strictly validated — never trust an arbitrary header value as a URL. */
 export function noteMaskedAnalyticsPath(value: string | undefined | null): void {
@@ -44,17 +49,15 @@ export function isMaskedAnalyticsUrl(url: string): boolean {
  *  their primary endpoint). */
 export function maskedOverrideFor(leaf: AnalyticsLeaf): string | null {
   if (!blocked || !maskedBase) return null
-  const base = (import.meta.env.VITE_API_URL || '/api') as string
   // maskedBase is an absolute /api/<seg> path; keep any non-default origin.
-  return `${base.replace(/\/api$/, '')}${maskedBase}/${LEAF_CODE[leaf]}`
+  return `${apiBase().replace(/\/api$/, '')}${maskedBase}/${LEAF_CODE[leaf]}`
 }
 
 /** Resolve the endpoint for a leaf: masked when blocked, primary otherwise. */
 export function analyticsEndpoint(leaf: AnalyticsLeaf): string {
   const override = maskedOverrideFor(leaf)
   if (override) return override
-  const base = (import.meta.env.VITE_API_URL || '/api') as string
-  return `${base}/analytics/${leaf}`
+  return `${apiBase()}/analytics/${leaf}`
 }
 
 /** Mark the session blocked from a fetch rejection. TypeError = the request
@@ -76,9 +79,8 @@ export function markBlockedFromError(err: unknown): boolean {
 export function probeAnalyticsReachability(): void {
   if (probeFired || maskedBase === null || typeof fetch === 'undefined') return
   probeFired = true
-  const base = (import.meta.env.VITE_API_URL || '/api') as string
   try {
-    void fetch(`${base}/analytics/collect`, {
+    void fetch(`${apiBase()}/analytics/collect`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: '{"events":[]}',

@@ -25,7 +25,7 @@ const SEG_EXT = /\.(ts|m4s)$/i
 export function segmentCacheKey(requestUrl: string): string | null {
   try {
     const u = new URL(requestUrl)
-    if (u.pathname.includes(MASKED_PREFIX)) {
+    if (u.pathname.startsWith(MASKED_PREFIX)) {
       // Masked form: /api/streaming/m/<token>/<leaf> — leaf keeps the ext.
       if (!SEG_EXT.test(u.pathname)) return null
       return '/__segcache/?m=' + encodeURIComponent(u.pathname)
@@ -53,7 +53,7 @@ export function isScrubRequest(requestUrl: string): boolean {
 export function markScrubUrl(url: string): string {
   try {
     const u = new URL(url, self.location?.href ?? 'https://x.invalid')
-    if (!u.pathname.endsWith(PROXY_PATH) && !u.pathname.includes(MASKED_PREFIX)) return url
+    if (!u.pathname.endsWith(PROXY_PATH) && !u.pathname.startsWith(MASKED_PREFIX)) return url
     if (u.searchParams.get(SCRUB_PARAM) === '1') return url
     u.searchParams.set(SCRUB_PARAM, '1')
     return u.href
