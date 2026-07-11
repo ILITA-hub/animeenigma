@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   parseTiers,
   ProtocolLadder,
@@ -266,6 +266,121 @@ describe('ProtocolLadder — switch cooldown', () => {
     expect(ladderInstance.currentBase()).toBe('https://b') // blocked by cooldown
 
     expect(events).toHaveLength(2) // the setup switch + the one allowed downshift
+  })
+})
+
+describe('ProtocolLadder — cooldown-blocked triggers keep their accumulated state', () => {
+  // Regression guard (review finding): a degradation signal that trips while
+  // the switch cooldown is active must NOT be discarded — once the cooldown
+  // expires, a SINGLE additional trigger evaluation must fire the switch
+  // promptly, without re-accumulating the whole threshold from zero.
+
+  it('timeout trigger blocked by cooldown fires on the very next timeout after cooldown', () => {
+    let t = 0
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => t,
+      storage: makeStorage(),
+    })
+    ladderInstance.switchTo('h3', 'setup')
+
+    t = 100_000 // clear of the setup switch's cooldown
+    for (let i = 0; i < TIMEOUTS_TO_DOWNSHIFT; i++) ladderInstance.reportTimeout()
+    expect(ladderInstance.currentBase()).toBe('https://b') // h3 -> h2 at t=100_000
+
+    t = 110_000 // inside the 30s cooldown
+    for (let i = 0; i < TIMEOUTS_TO_DOWNSHIFT; i++) ladderInstance.reportTimeout()
+    expect(ladderInstance.currentBase()).toBe('https://b') // trigger tripped, switch blocked
+
+    t = 100_000 + SWITCH_COOLDOWN_MS + 1_000
+    ladderInstance.reportTimeout() // ONE more — accumulated count must still be armed
+    expect(ladderInstance.currentBase()).toBe('https://c')
+  })
+
+  it('slow-EWMA trigger blocked by cooldown fires on the very next slow fragment after cooldown', () => {
+    let t = 0
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => t,
+      storage: makeStorage(),
+    })
+    ladderInstance.switchTo('h3', 'setup')
+    const slow = { bytes: 4_000_000, ms: 16_000, mediaDurationS: 6 }
+
+    t = 100_000
+    for (let i = 0; i < 4; i++) ladderInstance.reportFragment(slow) // seed + 3 slow evals
+    expect(ladderInstance.currentBase()).toBe('https://b') // h3 -> h2 at t=100_000
+
+    t = 110_000 // inside cooldown
+    for (let i = 0; i < 4; i++) ladderInstance.reportFragment(slow) // re-seed + 3 slow evals
+    expect(ladderInstance.currentBase()).toBe('https://b') // trigger tripped, switch blocked
+
+    t = 100_000 + SWITCH_COOLDOWN_MS + 1_000
+    ladderInstance.reportFragment(slow) // ONE more slow evaluation
+    expect(ladderInstance.currentBase()).toBe('https://c')
+  })
+
+  it('first-frag projection blocked by cooldown retries and fires after cooldown', () => {
+    let t = 0
+    const events: string[] = []
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => t,
+      storage: makeStorage(),
+    })
+    ladderInstance.switchTo('h3', 'setup')
+
+    t = 100_000
+    ladderInstance.onXhrOpen('f1')
+    t = 104_000
+    ladderInstance.onXhrProgress('f1', 1_000_000, 4_700_000) // projected 18.8s
+    expect(ladderInstance.currentBase()).toBe('https://b') // h3 -> h2 at t=104_000
+
+    ladderInstance.onChange((_tier, reason) => events.push(reason))
+    t = 105_000
+    ladderInstance.onXhrOpen('f2')
+    t = 110_000
+    // elapsed 5s, projected 23.5s — trigger trips, but the switch is blocked
+    // (only 6s since the last switch).
+    ladderInstance.onXhrProgress('f2', 1_000_000, 4_700_000)
+    expect(ladderInstance.currentBase()).toBe('https://b')
+
+    t = 104_000 + SWITCH_COOLDOWN_MS + 1_000
+    // A single later progress re-evaluation must fire (the fired-once flag
+    // must not have latched on the blocked attempt).
+    ladderInstance.onXhrProgress('f2', 1_200_000, 4_700_000)
+    expect(ladderInstance.currentBase()).toBe('https://c')
+    expect(events).toHaveLength(1)
+    expect(events[0]).toContain('first-frag')
+  })
+})
+
+describe('ProtocolLadder — network-change reset', () => {
+  it('clears persisted state and resets to the entry tier on connection change', () => {
+    let saved: (() => void) | undefined
+    vi.stubGlobal('navigator', {
+      connection: {
+        addEventListener: (_type: string, cb: () => void) => {
+          saved = cb
+        },
+      },
+    })
+    try {
+      const storage = makeStorage()
+      const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+        now: () => 0,
+        storage,
+      })
+      expect(saved).toBeTypeOf('function')
+
+      for (let i = 0; i < TIMEOUTS_TO_DOWNSHIFT; i++) ladderInstance.reportTimeout() // h2 -> h1
+      expect(ladderInstance.currentBase()).toBe('https://c')
+      expect(storage.getItem(LS_KEY)).toBeTruthy()
+
+      saved?.() // simulate navigator.connection 'change'
+
+      expect(storage.getItem(LS_KEY)).toBeNull() // persisted state invalidated
+      expect(ladderInstance.currentBase()).toBe('https://b') // back at the h2 entry tier
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

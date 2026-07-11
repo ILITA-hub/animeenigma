@@ -151,7 +151,6 @@ export class ProtocolLadder {
   private consecSlow = 0
   private timeoutCount = 0
   private hasCompletedFragOnTier = false
-  private firstFragDownshiftFired = false
 
   // Inflight fragment tracking (single active fragment at a time).
   private inflightUrl: string | null = null
@@ -202,7 +201,9 @@ export class ProtocolLadder {
     if (this.measuredEwmaBps < this.neededEwmaBps * SAFETY_FACTOR) {
       this.consecSlow += 1
       if (this.consecSlow >= CONSEC_SLOW_FRAGS) {
-        this.consecSlow = 0
+        // On success resetTierCounters() zeroes consecSlow; a blocked attempt
+        // (cooldown / h1 floor) keeps the count armed so the very next slow
+        // evaluation retries promptly instead of re-accumulating from zero.
         this.downshift('ewma <need×1.2 ×3')
       }
     } else {
@@ -214,7 +215,8 @@ export class ProtocolLadder {
     if (!this.isMultiTier()) return
     this.timeoutCount += 1
     if (this.timeoutCount >= TIMEOUTS_TO_DOWNSHIFT) {
-      this.timeoutCount = 0
+      // On success resetTierCounters() zeroes timeoutCount; a cooldown-blocked
+      // attempt keeps it armed (see reportFragment).
       this.downshift('frag timeouts ×2')
     }
   }
@@ -238,7 +240,7 @@ export class ProtocolLadder {
     this.inflightReceivedBytes = loaded
     this.inflightTotalBytes = total
 
-    if (this.hasCompletedFragOnTier || this.firstFragDownshiftFired) return
+    if (this.hasCompletedFragOnTier) return
     if (total <= 0 || loaded <= 0) return
 
     const elapsedMs = this.now() - this.inflightOpenTs
@@ -246,8 +248,13 @@ export class ProtocolLadder {
 
     const projectedMs = elapsedMs * (total / loaded)
     if (projectedMs > FIRSTFRAG_PROJECTED_MS) {
-      this.firstFragDownshiftFired = true
       const projectedS = Math.round(projectedMs / 1000)
+      // "Downshift once" is structural, no latch flag needed: a successful
+      // switch ends this tier-residency (resetTierCounters clears the
+      // inflight slot, so projection timing restarts on the new tier), while
+      // a cooldown-blocked attempt intentionally stays armed so a later
+      // progress event retries once the cooldown expires (review finding:
+      // blocked degradation signals must not be discarded).
       this.downshift(`first-frag projected ${projectedS}s`)
     }
   }
@@ -358,15 +365,24 @@ export class ProtocolLadder {
     this.consecSlow = 0
     this.timeoutCount = 0
     this.hasCompletedFragOnTier = false
-    this.firstFragDownshiftFired = false
     this.inflightUrl = null
   }
 
-  private downshift(reason: string): void {
+  /**
+   * Attempts a one-tier-down switch. Returns true when the switch actually
+   * happened; false when blocked (cooldown still active, or already at the h1
+   * floor). On success applySwitch() -> resetTierCounters() clears all
+   * per-tier trigger state; on failure the caller's accumulated trigger state
+   * (consecSlow / timeoutCount / inflight timing) is intentionally left
+   * intact, so the next trigger evaluation retries promptly once the cooldown
+   * expires instead of re-accumulating a full threshold's worth of signal.
+   */
+  private downshift(reason: string): boolean {
     const now = this.now()
-    if (now - this.lastSwitchTs < SWITCH_COOLDOWN_MS) return
-    if (this.tierIndex >= this.tiers.length - 1) return // already at the h1 floor
+    if (now - this.lastSwitchTs < SWITCH_COOLDOWN_MS) return false
+    if (this.tierIndex >= this.tiers.length - 1) return false // already at the h1 floor
     this.applySwitch(this.tierIndex + 1, reason, now)
+    return true
   }
 
   private applySwitch(newIndex: number, reason: string, now: number): void {
