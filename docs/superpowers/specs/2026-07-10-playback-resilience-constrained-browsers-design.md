@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-10
 **Branch:** `worktree-autoplay-blocked-fix` (single branch: the already-built autoplay-overlay fix + this bundle ship together)
-**Status:** design approved (forks resolved 2026-07-10), pending spec review → implementation plan
+**Status:** **Track A + Track B5 SHIPPED 2026-07-11** (opaque AES-GCM stream tokens + rotating HMAC-masked analytics fallback; plan `docs/superpowers/plans/2026-07-11-privacy-core-stream-tokens-masked-analytics.md`). Tracks B1–B4 (capability probe, graceful-disable gates, `PlayerDegradeNotice`, reactive `crossorigin`) remain **deferred** by owner decision. The already-built autoplay-overlay fix (§7) shipped earlier (2026-07-10, AUTO-571).
 
 ## 1. Context & problem
 
