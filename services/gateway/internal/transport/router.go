@@ -845,6 +845,12 @@ func NewRouterWithCleanup(
 			// proxy-status return small JSON and stay on the API client.
 			r.Get("/hls-proxy", proxyHandler.ProxyToStreamingBody)
 			r.Options("/hls-proxy", proxyHandler.ProxyToStreaming) // CORS preflight
+			// Track A opaque path tokens: /api/streaming/m/<token>/<leaf> →
+			// streaming's /api/v1/m/... masked proxy (no url= query shape for
+			// filter lists to match; spec 2026-07-10 §3). Body-streaming
+			// client, same as hls-proxy.
+			r.Get("/m/*", proxyHandler.ProxyToStreamingBody)
+			r.Options("/m/*", proxyHandler.ProxyToStreaming)
 			r.Get("/proxy-status", proxyHandler.ProxyToStreaming)
 			r.Get("/image-proxy", proxyHandler.ProxyToStreamingBody)
 			r.HandleFunc("/stream/*", proxyHandler.ProxyToStreamingBody)
