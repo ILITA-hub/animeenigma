@@ -43,6 +43,18 @@ Host-side work (NOT in git — host nginx configs are host-only; see
 Only one `quic reuseport` listener may exist per address — bare `stream.` keeps
 it; `stream3` attaches with plain `listen 443 quic`.
 
+**streamX origins provisioned 2026-07-11:** cert lineage
+`/etc/letsencrypt/live/stream1.animeenigma.org/` (3 SANs, expires 2026-10-09);
+`.pre-ladder-20260711-*.bak` backups beside every touched vhost. The legacy
+socket-wide `listen 443 ssl http2` flags (animeenigma.ru, stream.animeenigma.ru)
+were converted to per-server `http2 on;` — REQUIRED so stream1 can be
+h1.1-only — and every other 443 vhost (animeenigma.org, stream.animeenigma.org,
+bidberry, ext) got an explicit `http2 on;` so nothing lost h2 (gotcha: two
+vhosts contain a certbot comment matching "listen 443 ssl", which silently
+defeated a naive first-match sed — verify with curl per origin, not by echo).
+Verified matrix: stream1 200/h1.1 · stream2 200/h2 · stream3 200/h2 TCP +
+200/h3 QUIC + Alt-Svc · bare stream 200/h2, Alt-Svc gone · main domains h2.
+
 ## 3. Ladder module (`frontend/web/src/utils/protocolLadder.ts`)
 
 Singleton store, no framework deps, unit-testable.
