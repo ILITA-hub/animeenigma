@@ -539,6 +539,11 @@ import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTog
 import { useToast } from '@/composables/useToast'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
+import {
+  classifyPlaybackFailure,
+  mapErrorKind,
+  type FailureInputs,
+} from './playbackFailure'
 
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import { offlineDownloadsEnabled, offlineRuntimeReady } from '@/offline/flag'
@@ -820,11 +825,92 @@ const MAX_SOURCE_SWITCHES = 5
 // onVideoError must NOT mistake that for a dead destination and strand the
 // recovering source behind "Stream unavailable".
 let switchingSource = false
+
+// Terminal playback-failure telemetry state. `attemptTrail` is the cross-source
+// failover history (the engine's edgeTrail only covers per-CDN edges within one
+// source); `emittedFailureKeys` de-dups so a retry streak on one broken episode
+// records at most one row per (tag, episode).
+const attemptTrail: Array<{ provider: string; server: string; reason: string }> = []
+const emittedFailureKeys = new Set<string>()
+
 function resetSourceSwitching() {
   triedSources.clear()
   sourceSwitchAttempts = 0
   switchingSource = false
+  attemptTrail.length = 0
+  emittedFailureKeys.clear()
 }
+
+// Full diagnostic bundle ("all logs"), assembled regardless of hacker mode
+// (debugStats stays hacker-gated for the HUD; this is the always-on copy).
+function buildDiagnosticBundle() {
+  const frs = engine.fragStats.value
+  const last = frs[frs.length - 1]
+  // Optional chaining: servedEdge/edgeTrail are only populated for
+  // Kodik/solodcdn sources (the real useVideoEngine() always defines the
+  // refs — empty string for non-Kodik sources); the `?.` here is purely a
+  // safety net against a degenerate/partial engine object.
+  const edge = engine.servedEdge?.value ?? ''
+  const trail = engine.edgeTrail?.value ?? ''
+  return {
+    combo: { ...state.combo.value },
+    engine: {
+      bw_bps: engine.bandwidthEstimate.value,
+      level:
+        engine.currentLevelLabel.value ||
+        (currentStream.value?.type === 'mp4' ? 'mp4' : ''),
+      frag_size_kb: last ? Math.round(last.size / 1024) : 0,
+      frag_load_ms: last ? Math.round(last.loadMs) : 0,
+      served_edge: edge,
+      edge_trail: edge ? formatEdgeTrail(trail) : '',
+      edge_rotations: edge && trail ? trail.split(',').length - 1 : 0,
+      buffer_ahead_s: playbackStats.value?.bufferAheadSec ?? 0,
+      buffer_behind_s: playbackStats.value?.bufferBehindSec ?? 0,
+      video_ready_state: videoRef.value?.readyState ?? 0,
+    },
+    attempt_trail: attemptTrail.slice(-30),
+    capability_snapshot: rows.value
+      .slice(0, 40)
+      .map((r) => ({ provider: r.id, group: r.group, state: r.state })),
+    client: {
+      ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+      viewport:
+        typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : '',
+      connection:
+        (typeof navigator !== 'undefined' &&
+          (navigator as { connection?: { effectiveType?: string } }).connection
+            ?.effectiveType) ||
+        '',
+    },
+  }
+}
+
+// Classify the current failure; on a positive, de-duped decision, emit one
+// playback_failed telemetry event with the diagnostic bundle.
+function reportIfTerminal(inputs: FailureInputs) {
+  const d = classifyPlaybackFailure(inputs)
+  if (!d.emit || !d.tag) return
+  const key = `${d.tag}:${props.animeId}:${selectedEpisode.value?.number ?? ''}`
+  if (emittedFailureKeys.has(key)) return
+  emittedFailureKeys.add(key)
+  recordPlayerEvent({
+    kind: 'playback_failed',
+    provider: inputs.failingProvider,
+    anime_id: props.animeId,
+    episode: selectedEpisode.value?.number,
+    audio: state.combo.value.audio,
+    lang: state.combo.value.lang,
+    error_kind: mapErrorKind(inputs.reason),
+    detail: {
+      ...buildDiagnosticBundle(),
+      reason: d.tag,
+      all_exhausted: d.exhausted ?? false,
+      is_first_party: inputs.failingProvider === 'ae',
+      fail_reason: inputs.reason,
+    },
+  })
+}
+
 watch(() => props.animeId, () => {
   providerAutoSelected.value = false
   resetSourceSwitching()
@@ -845,6 +931,42 @@ watch(() => props.animeId, () => {
 // instead of thrashing away from a source that may be working. With hacker mode
 // off the switch is performed and the same ledger records it with `acted: true`.
 async function advanceToNextSource(reason: string): Promise<boolean> {
+  const failingProvider = state.combo.value.provider
+  const server = state.combo.value.server || resolvedServers.value[0]?.id || ''
+  const curKey = `${failingProvider}:${server}`
+
+  // Compute the next candidate WITHOUT committing — hacker mode only records the
+  // intent, and the failure classifier needs to know if any candidate remains.
+  const triedWithCurrent = new Set(triedSources)
+  triedWithCurrent.add(curKey)
+  const nextServer = resolvedServers.value.find(
+    (s) => !triedWithCurrent.has(`${failingProvider}:${s.id}`),
+  )
+  let toProvider: string | null = null
+  let switchServerId: string | null = null
+  if (nextServer) {
+    toProvider = failingProvider
+    switchServerId = nextServer.id
+  } else {
+    const triedProviders = new Set([...triedWithCurrent].map((k) => k.split(':')[0]))
+    toProvider = pickSmartDefault(rows.value.filter((r) => !triedProviders.has(r.id)))?.id ?? null
+  }
+  const candidateExists = Boolean(switchServerId) || Boolean(toProvider)
+
+  // Record the cross-source failover history, then decide (from pre-mutation
+  // state) whether this is a terminal, alert-worthy playback failure.
+  attemptTrail.push({ provider: failingProvider, server, reason })
+  reportIfTerminal({
+    reason,
+    failingProvider,
+    hackerMode: state.hackerMode.value,
+    roomPinned: roomPinned.value,
+    providerAutoSelected: providerAutoSelected.value,
+    candidateExists,
+    attemptsExceeded: sourceSwitchAttempts >= MAX_SOURCE_SWITCHES,
+  })
+
+  // ── Original control flow (unchanged) ──────────────────────────────────────
   // In a Watch-Together room the source is pinned to the shared room combo:
   // per-member auto-failover would diverge members onto different streams
   // (different encodes/intros → drift sync meaningless). Today this is also
@@ -853,33 +975,8 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
   if (roomPinned.value) return false
   if (!providerAutoSelected.value) return false
   if (sourceSwitchAttempts >= MAX_SOURCE_SWITCHES) return false
-  const provider = state.combo.value.provider
-  const server = state.combo.value.server || resolvedServers.value[0]?.id || ''
-  const curKey = `${provider}:${server}`
 
-  // Compute the next candidate WITHOUT committing to it — hacker mode only
-  // records the intent, so it must not mutate the tried-set or actually switch.
-  const triedWithCurrent = new Set(triedSources)
-  triedWithCurrent.add(curKey)
-
-  // 1) An untried server of the SAME provider — different CDN host, cheapest dodge.
-  const nextServer = resolvedServers.value.find(
-    (s) => !triedWithCurrent.has(`${provider}:${s.id}`),
-  )
-  // 2) else the next-ranked provider not yet tried. We give every remaining
-  //    provider a shot rather than pre-filtering on a server-side liveness
-  //    guess: live playback in the user's browser is the real test. (The old
-  //    per-provider `playable` capability flag was retired for this reason.)
-  let toProvider: string | null = null
-  let switchServerId: string | null = null
-  if (nextServer) {
-    toProvider = provider
-    switchServerId = nextServer.id
-  } else {
-    const triedProviders = new Set([...triedWithCurrent].map((k) => k.split(':')[0]))
-    toProvider = pickSmartDefault(rows.value.filter((r) => !triedProviders.has(r.id)))?.id ?? null
-  }
-
+  const provider = failingProvider
   if (state.hackerMode.value) {
     recordFallbackIntent({ from: provider, to: toProvider, reason, acted: false })
     const target = switchServerId ? `${provider} · server ${switchServerId}` : toProvider
