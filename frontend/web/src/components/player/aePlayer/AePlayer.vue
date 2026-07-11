@@ -548,6 +548,8 @@ import { seasonTargets, enqueueSeason } from '@/offline/seasonDownload'
 import { listDownloads } from '@/offline/registry'
 import { makeOfflineResolver, offlineCapabilityReport, pickOfflineAutoSub } from '@/offline/offlineAdapter'
 import { makeExternalSubResolver, externalSubOptions } from '@/offline/externalSubs'
+import { ladder, shouldDeferStallToLadder } from '@/utils/protocolLadder'
+import { probeH3 } from '@/utils/probeH3'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, ProviderRow, AudioKind, TrackLang, Combo } from '@/types/aePlayer'
@@ -935,6 +937,14 @@ function armPlaybackWatchdog() {
     // "stalled" — especially on native MP4 sources where fragLoadedCount stays
     // 0 — and churns through every provider pulling gigabytes for nothing.
     if (playbackBlocked.value) return
+    // A first fragment that is downloading (bytes flowing) is SLOW, not dead —
+    // aborting it re-resolves the same source forever (the 2026-07-11 tNeymik
+    // "stale" loop: seg0 restarted 3×, video never possible). Let the ladder's
+    // projected-too-slow rule downshift the tier instead; just re-arm.
+    if (shouldDeferStallToLadder(ladder.inflight())) {
+      armPlaybackWatchdog()
+      return
+    }
     if (engine.fragLoadedCount.value > 0) return // fragments flowing — just slow
     void (async () => {
       if (await advanceToNextSource('silent stall')) {
@@ -3287,6 +3297,28 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   document.addEventListener('fullscreenchange', onFullscreenChange)
 })
+
+// Protocol ladder tier-change subscription: a downshift/upshift means the
+// active stream's base origin changed, so re-resolve at the current position
+// to pick up the new tier via hlsProxyUrl (the source itself hasn't changed).
+const unsubLadder = ladder.onChange((tier, reason) => {
+  recordDecision(`protocol ladder → ${tier.id} (${reason})`)
+  const ep = selectedEpisode.value
+  if (ep) void resolveStreamForEpisode(ep, true) // position-preserving swap; new base flows via hlsProxyUrl
+})
+onUnmounted(unsubLadder)
+
+// h3 upshift probe: sampled once, 30s after playback actually starts (not on
+// mount — no point probing a stream that hasn't begun loading fragments).
+let h3ProbeTimer: ReturnType<typeof setTimeout> | null = null
+watch(hasStarted, (started) => {
+  if (!started || h3ProbeTimer) return
+  h3ProbeTimer = setTimeout(() => {
+    if (!state.playing.value) return
+    void probeH3(ladder, engine.lastFragUrl.value, currentStream.value?.url ?? '')
+  }, 30_000)
+})
+onUnmounted(() => { if (h3ProbeTimer) clearTimeout(h3ProbeTimer) })
 
 onUnmounted(() => {
   stopRaf()

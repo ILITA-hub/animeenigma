@@ -179,6 +179,35 @@ export class ProtocolLadder {
     return this.tiers[this.tierIndex].base
   }
 
+  /**
+   * Read-only accessor for Task 5's h3 probe: a tier's configured base URL,
+   * or null when that tier isn't present in the ladder (single-tier config,
+   * or a multi-tier config that simply omits h3).
+   */
+  tierBase(id: TierId): string | null {
+    const tier = this.tiers.find((t) => t.id === id)
+    return tier ? tier.base : null
+  }
+
+  /**
+   * Read-only accessor for Task 5's h3 probe: the running measured-throughput
+   * EWMA (see `reportFragment`), in Mbps. Not tier-scoped — it's whatever the
+   * currently-active tier has been delivering, which is exactly what the
+   * probe wants to beat by `PROBE_ACCEPT_FACTOR`.
+   */
+  currentEwmaMbps(): number {
+    return this.measuredEwmaBps / 1_000_000
+  }
+
+  /**
+   * Read-only accessor for Task 5's h3 probe: whether an h3 probe has already
+   * run this session (persisted alongside the tier, see `recordProbe` /
+   * `PersistedState.probedH3`) — the probe is a once-per-session affair.
+   */
+  hasProbedH3(): boolean {
+    return this.probedH3
+  }
+
   reportFragment(r: FragReport): void {
     if (!this.isMultiTier()) return
     this.lastProtocol = r.protocol ?? '?'

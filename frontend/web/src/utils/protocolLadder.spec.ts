@@ -423,6 +423,46 @@ describe('ProtocolLadder — probe upshift', () => {
   })
 })
 
+describe('ProtocolLadder — Task 5 probe accessors', () => {
+  it('tierBase() returns a configured tier base, or null when the tier is absent', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    expect(ladderInstance.tierBase('h3')).toBe('https://a')
+    expect(ladderInstance.tierBase('h2')).toBe('https://b')
+    expect(ladderInstance.tierBase('h1')).toBe('https://c')
+
+    const h2Only = new ProtocolLadder(parseTiers(undefined, 'https://stream.example'), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    expect(h2Only.tierBase('h3')).toBeNull()
+  })
+
+  it('currentEwmaMbps() reflects the measured-throughput EWMA in Mbps', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    expect(ladderInstance.currentEwmaMbps()).toBe(0)
+
+    // 32,000,000 bits / 2s = 16 Mbps.
+    ladderInstance.reportFragment({ bytes: 4_000_000, ms: 2_000, mediaDurationS: 6 })
+    expect(ladderInstance.currentEwmaMbps()).toBeCloseTo(16, 5)
+  })
+
+  it('hasProbedH3() flips true after the first recordProbe() call, false before', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    expect(ladderInstance.hasProbedH3()).toBe(false)
+    ladderInstance.recordProbe(2.1, false, '<1.1× h2')
+    expect(ladderInstance.hasProbedH3()).toBe(true)
+  })
+})
+
 describe('ProtocolLadder — single-tier no-op', () => {
   it('treats every report as a no-op and exposes no debug info', () => {
     const storage = makeStorage()
