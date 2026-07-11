@@ -14,6 +14,19 @@ import {
 // created via vi.hoisted rather than a plain module-scope `let`.
 const hlsMockState = vi.hoisted(() => ({ instances: [] as any[] }))
 
+// Protocol ladder (Task 2) is a singleton import; stub its methods so the
+// engine wiring (Task 4) can be asserted without a real ProtocolLadder.
+const ladderMock = vi.hoisted(() => ({
+  onXhrOpen: vi.fn(),
+  onXhrProgress: vi.fn(),
+  reportFragment: vi.fn(),
+  reportTimeout: vi.fn(),
+}))
+
+vi.mock('@/utils/protocolLadder', () => ({
+  ladder: ladderMock,
+}))
+
 vi.mock('hls.js', () => {
   class MockHls {
     static isSupported() {
@@ -21,10 +34,14 @@ vi.mock('hls.js', () => {
     }
     static Events = { MANIFEST_PARSED: 'hlsManifestParsed', LEVEL_SWITCHED: 'hlsLevelSwitched', FRAG_LOADED: 'hlsFragLoaded', ERROR: 'hlsError' }
     static ErrorTypes = { NETWORK_ERROR: 'networkError', MEDIA_ERROR: 'mediaError', OTHER_ERROR: 'otherError' }
-    static ErrorDetails = { MANIFEST_LOAD_ERROR: 'manifestLoadError', MANIFEST_LOAD_TIMEOUT: 'manifestLoadTimeOut', MANIFEST_PARSING_ERROR: 'manifestParsingError', LEVEL_LOAD_ERROR: 'levelLoadError', LEVEL_LOAD_TIMEOUT: 'levelLoadTimeOut' }
+    static ErrorDetails = { MANIFEST_LOAD_ERROR: 'manifestLoadError', MANIFEST_LOAD_TIMEOUT: 'manifestLoadTimeOut', MANIFEST_PARSING_ERROR: 'manifestParsingError', LEVEL_LOAD_ERROR: 'levelLoadError', LEVEL_LOAD_TIMEOUT: 'levelLoadTimeOut', FRAG_LOAD_TIMEOUT: 'fragLoadTimeOut' }
     handlers: Record<string, ((...args: unknown[]) => void)[]> = {}
     media: any = null
-    constructor() {
+    // Captures the config object passed to `new Hls(config)` so tests can
+    // reach into it (e.g. `instance.config.xhrSetup(xhr, url)`).
+    config: any
+    constructor(config?: any) {
+      this.config = config
       hlsMockState.instances.push(this)
     }
     loadSource() {}
@@ -193,5 +210,102 @@ describe('useVideoEngine — solodcdn edge telemetry from FRAG_LOADED headers', 
     await engine.load({ url: 'https://example.test/b.m3u8', type: 'hls' })
     expect(engine.servedEdge.value).toBe('')
     expect(engine.edgeTrail.value).toBe('')
+  })
+})
+
+describe('useVideoEngine — feeds the protocol ladder', () => {
+  beforeEach(() => {
+    hlsMockState.instances.length = 0
+    ladderMock.onXhrOpen.mockClear()
+    ladderMock.onXhrProgress.mockClear()
+    ladderMock.reportFragment.mockClear()
+    ladderMock.reportTimeout.mockClear()
+  })
+
+  it('wires xhrSetup to forward xhr open + progress to the ladder', async () => {
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/master.m3u8', type: 'hls' })
+
+    const hlsInstance = hlsMockState.instances[0]
+    const listeners: Record<string, (e: unknown) => void> = {}
+    const fakeXhr: any = {
+      addEventListener: (event: string, cb: (e: unknown) => void) => {
+        listeners[event] = cb
+      },
+    }
+
+    hlsInstance.config.xhrSetup(fakeXhr, 'https://example.test/frag1.ts')
+    expect(ladderMock.onXhrOpen).toHaveBeenCalledWith('https://example.test/frag1.ts')
+
+    listeners.progress({ loaded: 500, total: 1000 })
+    expect(ladderMock.onXhrProgress).toHaveBeenCalledWith('https://example.test/frag1.ts', 500, 1000)
+  })
+
+  it('always reports fragment stats (bytes/ms/duration/protocol) to the ladder, even with collectStats=false', async () => {
+    const getEntriesSpy = vi
+      .spyOn(performance, 'getEntriesByName')
+      .mockReturnValue([{ nextHopProtocol: 'h2' } as unknown as PerformanceResourceTiming])
+    const collectStats = ref(false)
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }), collectStats)
+    await engine.load({ url: 'https://example.test/master.m3u8', type: 'hls' })
+
+    hlsMockState.instances[0].trigger('hlsFragLoaded', {
+      frag: {
+        url: 'https://example.test/frag1.ts',
+        start: 0,
+        duration: 6,
+        stats: { loading: { start: 0, end: 120 }, total: 2048 },
+      },
+      networkDetails: { responseURL: 'https://example.test/frag1.ts' },
+    })
+
+    expect(ladderMock.reportFragment).toHaveBeenCalledWith({
+      bytes: 2048,
+      ms: 120,
+      mediaDurationS: 6,
+      protocol: 'h2',
+    })
+    expect(getEntriesSpy).toHaveBeenCalledWith('https://example.test/frag1.ts')
+    // collectStats=false still skips the hacker-mode-only rolling window —
+    // the ladder report above is the always-on half, unaffected by the gate.
+    expect(engine.fragStats.value).toEqual([])
+
+    getEntriesSpy.mockRestore()
+  })
+
+  it('sets lastFragUrl from the loaded fragment and resets it on the next load', async () => {
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/a.m3u8', type: 'hls' })
+    expect(engine.lastFragUrl.value).toBe('')
+
+    hlsMockState.instances[0].trigger('hlsFragLoaded', {
+      frag: {
+        url: 'https://example.test/frag1.ts',
+        start: 0,
+        duration: 6,
+        stats: { loading: { start: 0, end: 50 }, total: 1000 },
+      },
+      networkDetails: undefined,
+    })
+    expect(engine.lastFragUrl.value).toBe('https://example.test/frag1.ts')
+
+    await engine.load({ url: 'https://example.test/b.m3u8', type: 'hls' })
+    expect(engine.lastFragUrl.value).toBe('')
+  })
+
+  it('reports a fragment load timeout to the ladder, even when the error is non-fatal', async () => {
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/master.m3u8', type: 'hls' })
+
+    hlsMockState.instances[0].trigger('hlsError', { fatal: false, details: 'fragLoadTimeOut' })
+    expect(ladderMock.reportTimeout).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not report a timeout for unrelated error details', async () => {
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/master.m3u8', type: 'hls' })
+
+    hlsMockState.instances[0].trigger('hlsError', { fatal: true, type: 'networkError', details: 'manifestLoadError' })
+    expect(ladderMock.reportTimeout).not.toHaveBeenCalled()
   })
 })

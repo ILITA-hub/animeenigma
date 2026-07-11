@@ -1,5 +1,6 @@
 import { ref, onUnmounted, type Ref } from 'vue'
 import type { StreamResult } from '@/types/aePlayer'
+import { ladder } from '@/utils/protocolLadder'
 
 export type LoadStrategy = 'native' | 'hlsjs'
 
@@ -121,6 +122,9 @@ export function useVideoEngine(
   // stream. The silent-stall watchdog needs "are fragments flowing?" even when
   // the detailed fragStats array isn't being built (hacker mode off).
   const fragLoadedCount = ref(0)
+  // URL of the most recently loaded fragment — a sample segment URL for the
+  // protocol-ladder probe (Task 5) to test the tier above the current one.
+  const lastFragUrl = ref('')
   let hls: any = null
   // Monotonic load generation. `load()` awaits a dynamic import of hls.js, so two
   // calls in quick succession (e.g. a provider change immediately followed by an
@@ -143,6 +147,7 @@ export function useVideoEngine(
     servedEdge.value = ''
     edgeTrail.value = ''
     fragLoadedCount.value = 0
+    lastFragUrl.value = ''
     destroy()
 
     // Progressive MP4 — native playback. The backend proxy injects Referer and
@@ -184,6 +189,13 @@ export function useVideoEngine(
       // ±5s arrow-key seeks land inside the buffer and resolve instantly.
       maxBufferLength: 60,
       maxMaxBufferLength: 120,
+      // Feed the protocol ladder (Task 2) so it can track per-fragment XHR
+      // throughput and react to a stalled/slow-starting fragment before
+      // FRAG_LOADED (or a timeout) ever fires.
+      xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+        ladder.onXhrOpen(url)
+        xhr.addEventListener('progress', (e: ProgressEvent) => ladder.onXhrProgress(url, e.loaded, e.total))
+      },
     })
     hls.loadSource(stream.url)
     hls.attachMedia(v)
@@ -205,11 +217,31 @@ export function useVideoEngine(
       const st = f?.stats
       if (!f || !st) return
       fragLoadedCount.value++ // cheap always-on signal for the stall watchdog
+      lastFragUrl.value = f.url ?? ''
+      // loadMs is hoisted above the collectStats gate below: the protocol-ladder
+      // report (always-on, feeds the QoE tier state machine) needs it whether
+      // or not the hacker-mode HUD is collecting the detailed fragStats window.
+      const loadMs = Math.max(0, (st.loading?.end ?? 0) - (st.loading?.start ?? 0))
+      const xhrNd = data?.networkDetails
+      let rt: PerformanceResourceTiming | undefined
+      try {
+        rt = xhrNd?.responseURL
+          ? (performance?.getEntriesByName?.(xhrNd.responseURL)?.pop() as PerformanceResourceTiming | undefined)
+          : undefined
+      } catch {
+        // getEntriesByName unsupported/throwing in this environment -> protocol stays unknown
+        rt = undefined
+      }
+      ladder.reportFragment({
+        bytes: st.total ?? 0,
+        ms: loadMs,
+        mediaDurationS: f.duration ?? 0,
+        protocol: rt?.nextHopProtocol,
+      })
       // The detailed rolling window + bandwidth read are consumed ONLY by the
       // hacker-mode HUD / scrub heatmap. Skip the per-fragment array
       // reallocation (and the reactivity it triggers) when nobody's looking.
       if (collectStats && !collectStats.value) return
-      const loadMs = Math.max(0, (st.loading?.end ?? 0) - (st.loading?.start ?? 0))
       // Rolling window of the last 30 fragments — enough for the hacker-mode
       // HUD + scrub-bar heatmap without unbounded growth on long episodes.
       fragStats.value = [
@@ -243,6 +275,9 @@ export function useVideoEngine(
       destroy()
     }
     hls.on(Hls.Events.ERROR, (_e: unknown, data: any) => {
+      // Ladder timeout signal is always-on — report it even for a non-fatal
+      // fragLoadTimeOut (hls.js usually just retries), before the fatal gate.
+      if (data?.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT) ladder.reportTimeout()
       if (!data?.fatal) return
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
         const d = data.details
@@ -285,5 +320,5 @@ export function useVideoEngine(
 
   onUnmounted(destroy)
 
-  return { fatal, lastKnownPlayback, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, servedEdge, edgeTrail, fragLoadedCount }
+  return { fatal, lastKnownPlayback, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, servedEdge, edgeTrail, fragLoadedCount, lastFragUrl }
 }
