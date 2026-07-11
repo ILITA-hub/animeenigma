@@ -186,6 +186,20 @@ EN special-case. The same two rules cover every group (`en`, `ru`, `jp`,
   not on slow one-at-a-time aging. The empty-set vanish behaviour is *correct*
   here: a group with zero `Down` providers produces no series → no fire.
 
+  > **⚠ Correction (2026-07-11, AUTO-577).** The premise above — that gradual
+  > attrition demotes to `Degraded(2)` so `Down(1)` implies *recently* failing —
+  > **does not hold** for providers that keep actively failing probes: they stay
+  > pinned at `Down(1)` indefinitely (allanime-okru since 07-07, animepahe CF,
+  > gogoanime fake-content all sat at `Down(1)` for days). `count(==1) >= 2` then
+  > fired on three *independent, long-standing* EN outages that merely overlapped,
+  > wrongly paging "correlated outage (shared cause)." The rule is now
+  > **edge-triggered** — it counts only providers that transitioned INTO `Down`
+  > within the last 15m (`(provider_state == 1) unless (provider_state offset 15m
+  > == 1)`), with `for: 5m` sitting inside that pulse. So simultaneity is now
+  > detected from the transition *edge*, not inferred from the state encoding, and
+  > gradual one-at-a-time decay can never reach the threshold. See the live rule
+  > in `docker/grafana/provisioning/alerting/rules.yml`.
+
 Both rules carry a `group` label and `severity: page-fleet` so the bot can
 route them (§4.3). `for: 30m` is the persistence hold (skip transient blips),
 consistent with the existing error-rate rules. (Grafana condition wiring —

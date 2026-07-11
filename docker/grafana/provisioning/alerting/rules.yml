@@ -1068,19 +1068,39 @@ groups:
         condition: C
         noDataState: OK
         execErrState: Error
-        for: 30m
+        # `for: 5m` (was 30m) — the co-incidence signal below is only a ~15m
+        # pulse (see expr), so the persistence hold MUST sit inside that window.
+        # 5m debounces a single-scrape blip yet still fires well within the
+        # burst. Do NOT raise this back toward 30m: it would land outside the
+        # pulse and silently disable the rule. Ongoing/steady outages are the
+        # job of ProviderFleetNoAutoPlayable, not this event detector.
+        for: 5m
         data:
           - refId: A
             relativeTimeRange:
-              from: 600
+              # 20m window so the 15m `offset` lookback below is fully covered.
+              from: 1200
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
-              # Count of providers per group confirmed Down IN the auto chain
-              # (state==1: two consecutive failed probes). One-fail blips sit at
-              # Degraded=2 and never count here, so >=2 means a correlated
-              # simultaneous failure (shared cause), not independent flapping.
-              expr: count by (group) (provider_state == 1)
+              # EDGE-TRIGGERED co-incidence detector (AUTO-577 fix, 2026-07-11).
+              # Per group, count providers that transitioned INTO confirmed Down
+              # within the last 15m: `Down now` MINUS `already Down 15m ago`. A
+              # provider that has been Down for hours/days (an independent,
+              # already-diagnosed outage — e.g. the EN group's allanime-okru /
+              # animepahe / gogoanime each broken for its own reason at a
+              # different time) is NOT "newly down" and does not count, so
+              # gradual one-at-a-time attrition can never reach the >=2
+              # threshold. Only 2+ providers dropping together inside one 15m
+              # window — the signature of a genuine shared-cause burst (e.g. a
+              # Camoufox pool crash taking several browser providers at once) —
+              # fires. The former `count(provider_state==1) >= 2` fired on ANY
+              # two concurrently-broken providers regardless of when they broke,
+              # which is exactly the gradual-decay false positive this replaces:
+              # the design's "gradual attrition auto-demotes to Degraded(2)"
+              # premise does not hold for providers that keep actively failing
+              # probes (they stay pinned at Down(1) indefinitely).
+              expr: count by (group) ((provider_state == 1) unless (provider_state offset 15m == 1))
               instant: true
               refId: A
           - refId: B
@@ -1111,8 +1131,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Provider group {{ $labels.group }}: multiple sources failed together"
-          description: "2+ providers in the {{ $labels.group }} group are actively Down in the auto chain for 30m — a correlated outage (shared cause), not gradual degrade. Check the Camoufox pool / shared dependency and /api/admin/scraper/health."
+          summary: "Provider group {{ $labels.group }}: {{ $values.B }} sources dropped to Down together (~15m window)"
+          description: "{{ $values.B }} providers in the {{ $labels.group }} group transitioned to confirmed Down within ~15 minutes of each other — a co-incident failure burst. This MAY share a root cause (Camoufox pool crash, shared upstream/dependency), but may also be independent provider outages that happened to overlap — verify before assuming a shared dependency. Check /api/admin/scraper/health and the playback-health roster. Note: long-standing, one-at-a-time provider outages do NOT trigger this alert (that is what ProviderFleetNoAutoPlayable covers when a group is left with no auto-playable source)."
 
   # Host Pressure (graceful-degradation Phase 1,
   # docs/superpowers/specs/2026-07-10-graceful-degradation-design.md).
