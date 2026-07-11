@@ -12,7 +12,7 @@
  */
 
 export interface PlayerEvent {
-  kind: 'resolve' | 'stall' | 'playback_start_rejected'
+  kind: 'resolve' | 'stall' | 'playback_start_rejected' | 'playback_failed'
   provider: string
   anime_id: string
   episode?: number
@@ -23,6 +23,8 @@ export interface PlayerEvent {
   stall_ms?: number
   audio?: string
   lang?: string
+  /** Rich diagnostic bundle for kind:'playback_failed' — serialized verbatim. */
+  detail?: Record<string, unknown>
   ts?: string
 }
 
@@ -112,7 +114,13 @@ export function recordPlayerEvent(e: PlayerEvent): void {
   try {
     if (!e) return
     if (!e.provider || !e.provider.trim()) return
-    if (e.kind !== 'resolve' && e.kind !== 'stall' && e.kind !== 'playback_start_rejected') return
+    if (
+      e.kind !== 'resolve' &&
+      e.kind !== 'stall' &&
+      e.kind !== 'playback_start_rejected' &&
+      e.kind !== 'playback_failed'
+    )
+      return
 
     const event: PlayerEvent = {
       ...e,

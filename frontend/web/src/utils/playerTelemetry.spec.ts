@@ -145,4 +145,26 @@ describe('playerTelemetry', () => {
     const body = JSON.parse((opts as RequestInit).body as string)
     expect(body.events[0]).toMatchObject({ kind: 'resolve', provider: 'miruro' })
   })
+
+  it('accepts playback_failed and serializes its detail bundle', async () => {
+    vi.stubGlobal('navigator', {}) // no sendBeacon → fetch keepalive path
+    const fetchSpy = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('fetch', fetchSpy)
+
+    recordPlayerEvent({
+      kind: 'playback_failed',
+      provider: 'ae',
+      anime_id: 'abc',
+      episode: 3,
+      error_kind: 'stream_error',
+      detail: { reason: 'ae_failed', all_exhausted: false, engine: { bw_bps: 1234 } },
+    })
+    flushPlayerTelemetry('manual')
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string)
+    expect(body.events[0].kind).toBe('playback_failed')
+    expect(body.events[0].detail.reason).toBe('ae_failed')
+    expect(body.events[0].detail.engine.bw_bps).toBe(1234)
+  })
 })
