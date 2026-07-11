@@ -186,3 +186,71 @@ groups:
           summary: 'Scraper stream cascade: {{ $values.B }} resolutions over 12s in the last hour'
           description: 'At least 3 `scraper GET /scraper/stream` resolutions exceeded 12 s in the last hour — a multi-provider failover cascade (normal is sub-second warm / 8 s single-gate). Check provider health (/api/anime/_/scraper/health), the Scraper dashboards, and recent parser_fallback_total.'
           reason: stream_cascade_latency
+
+      # --------------------------------------------------------------------
+      # AePlayerPlaybackFailures (warning) — >1 terminal aePlayer failure in 1 h
+      # --------------------------------------------------------------------
+      # Counts analytics.events rows with effect_kind = 'player_failed' (aePlayer
+      # telemetry: all providers exhausted, or the first-party `ae` source
+      # failed) in the trailing 1 h. Fires when > 1 (threshold gt 1, i.e. >= 2
+      # failures), consistent with the low-volume anti-flap pattern used by
+      # the cascade rule above.
+      - uid: aeplayer-playback-failures
+        title: AePlayerPlaybackFailures
+        noDataState: OK
+        execErrState: Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: aenigma-clickhouse
+            model:
+              refId: A
+              datasource:
+                type: grafana-clickhouse-datasource
+                uid: aenigma-clickhouse
+              queryType: sql
+              format: 1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              rawSql: |
+                SELECT count() AS value
+                FROM analytics.events
+                WHERE effect_kind = 'player_failed'
+                  AND timestamp >= now() - INTERVAL 1 HOUR
+          - refId: B
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: gt
+                  operator:
+                    type: and
+        for: 0s
+        labels:
+          severity: warning
+          component: aeplayer
+          reason: playback_failed
+        annotations:
+          summary: 'aePlayer playback failures: {{ $values.B }} viewers could not watch in the last hour'
+          description: 'More than one terminal aePlayer playback failure in the last hour (all providers exhausted, or the first-party `ae` source failed). Drill down in ClickHouse: SELECT properties FROM analytics.events WHERE effect_kind = ''player_failed'' AND timestamp >= now() - INTERVAL 1 HOUR ORDER BY timestamp DESC.'
+          reason: playback_failed
