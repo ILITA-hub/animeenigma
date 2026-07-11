@@ -11,11 +11,7 @@ export const AUTO_MARK_FALLBACK = 20 * 60 // legacy threshold when no duration i
 export const COMPLETE_RATIO = 0.9
 
 export function computeAutoMarkThreshold(catalogDurationMin: number, kodikDurationSec: number): number {
-  if (kodikDurationSec > 0) {
-    return Math.min(AUTO_MARK_FALLBACK, Math.round(COMPLETE_RATIO * kodikDurationSec))
-  }
-  if (catalogDurationMin > 0) {
-    return Math.min(AUTO_MARK_FALLBACK, Math.round(COMPLETE_RATIO * catalogDurationMin * 60))
-  }
-  return AUTO_MARK_FALLBACK
+  const durationSec = kodikDurationSec > 0 ? kodikDurationSec : catalogDurationMin > 0 ? catalogDurationMin * 60 : 0
+  if (durationSec <= 0) return AUTO_MARK_FALLBACK
+  return Math.min(AUTO_MARK_FALLBACK, Math.round(COMPLETE_RATIO * durationSec))
 }
