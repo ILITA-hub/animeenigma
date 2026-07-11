@@ -148,6 +148,9 @@ export function useVideoEngine(
     edgeTrail.value = ''
     fragLoadedCount.value = 0
     lastFragUrl.value = ''
+    // C1: a stale inflight record from the PREVIOUS source (a different XHR
+    // URL entirely) must never leak into this source's watchdog checks.
+    ladder.clearInflight()
     destroy()
 
     // Progressive MP4 — native playback. The backend proxy injects Referer and
@@ -195,6 +198,13 @@ export function useVideoEngine(
       xhrSetup: (xhr: XMLHttpRequest, url: string) => {
         ladder.onXhrOpen(url)
         xhr.addEventListener('progress', (e: ProgressEvent) => ladder.onXhrProgress(url, e.loaded, e.total))
+        // C1: 'loadend' fires on load/abort/error/timeout alike — every hls.js
+        // XHR (including playlist/level loads that never reach FRAG_LOADED)
+        // clears its own inflight slot here once it's done, so a completed or
+        // aborted request can't leave a stale bytes>0 record poisoning
+        // shouldDeferStallToLadder forever. Harmless if reportFragment's own
+        // clear already ran first (double-clear is a no-op).
+        xhr.addEventListener('loadend', () => ladder.onXhrLoadEnd(url))
       },
     })
     hls.loadSource(stream.url)

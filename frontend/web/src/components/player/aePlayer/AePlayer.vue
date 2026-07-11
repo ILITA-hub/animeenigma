@@ -548,7 +548,7 @@ import { seasonTargets, enqueueSeason } from '@/offline/seasonDownload'
 import { listDownloads } from '@/offline/registry'
 import { makeOfflineResolver, offlineCapabilityReport, pickOfflineAutoSub } from '@/offline/offlineAdapter'
 import { makeExternalSubResolver, externalSubOptions } from '@/offline/externalSubs'
-import { ladder, shouldDeferStallToLadder } from '@/utils/protocolLadder'
+import { ladder, shouldDeferStallToLadder, formatLadderRows } from '@/utils/protocolLadder'
 import { probeH3 } from '@/utils/probeH3'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
@@ -2402,12 +2402,9 @@ const debugStats = computed(() => {
     edgeTrail: edge ? formatEdgeTrail(trail) : '',
     edgeRot: edge && trail ? trail.split(',').length - 1 : 0,
     // Protocol-ladder telemetry (multi-tier prod only; null snapshot in dev).
-    ...(ladderSnap ? {
-      proto: `${ladderSnap.protocol} · tier ${ladderSnap.tierIndex}/${ladderSnap.tierCount}`,
-      net: `${ladderSnap.measuredMbps.toFixed(1)} Mbps ewma / need ${ladderSnap.neededMbps.toFixed(1)} ×1.2`,
-      laddr: ladderSnap.trail,
-      probe: ladderSnap.probe,
-    } : {}),
+    // I4: tier display is 1-based ("tier 2/3") via formatLadderRows — the
+    // underlying debugSnapshot().tierIndex contract stays 0-based.
+    ...(ladderSnap ? formatLadderRows(ladderSnap) : {}),
   }
 })
 
@@ -3323,6 +3320,12 @@ watch(hasStarted, (started) => {
   if (!started || h3ProbeTimer) return
   h3ProbeTimer = setTimeout(() => {
     if (!state.playing.value) return
+    // C2: no fragment sample URL means an MP4/native-HLS session (no hls.js
+    // XHR fragments ever populate lastFragUrl) — probing with '' resolves to
+    // the h3 origin's root, and there's no EWMA baseline to sanity-check the
+    // result against either. Leave the timer's one-shot semantics as-is
+    // (never re-armed) and just skip this probe entirely.
+    if (!engine.lastFragUrl.value) return
     void probeH3(ladder, engine.lastFragUrl.value, currentStream.value?.url ?? '')
   }, 30_000)
 })

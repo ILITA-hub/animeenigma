@@ -47,6 +47,24 @@ export interface LadderDebug {
   probe: string // "h3 2.1 Mbps @03:24 — rejected (<1.1× h2)" | '' when unset
 }
 
+/**
+ * I4 fix: formats a `LadderDebug` snapshot into the exact hacker-mode HUD row
+ * strings, as a pure function so the 1-based tier display ("tier 2/3" for
+ * the middle tier of a 3-tier ladder) is unit-testable without going through
+ * AePlayer.vue. `debugSnapshot()`'s own `tierIndex` stays 0-based (its
+ * established contract) — the `+1` lives ONLY here, at render time.
+ */
+export function formatLadderRows(
+  snap: LadderDebug,
+): { proto: string; net: string; laddr: string; probe: string } {
+  return {
+    proto: `${snap.protocol} · tier ${snap.tierIndex + 1}/${snap.tierCount}`,
+    net: `${snap.measuredMbps.toFixed(1)} Mbps ewma / need ${snap.neededMbps.toFixed(1)} ×1.2`,
+    laddr: snap.trail,
+    probe: snap.probe,
+  }
+}
+
 // Policy constants (exported for tests + Task 5's probe).
 export const SAFETY_FACTOR = 1.2
 export const CONSEC_SLOW_FRAGS = 3
@@ -208,10 +226,25 @@ export class ProtocolLadder {
     return this.probedH3
   }
 
+  /**
+   * Read-only accessor for Task 5's h3 probe (M5 fix): the currently active
+   * tier id, so the probe can label its rejection/acceptance notes against
+   * the tier it's actually comparing against instead of a hardcoded 'h2'.
+   */
+  currentTierId(): TierId {
+    return this.tiers[this.tierIndex].id
+  }
+
   reportFragment(r: FragReport): void {
     if (!this.isMultiTier()) return
     this.lastProtocol = r.protocol ?? '?'
     this.inflightUrl = null // fragment completed -> clear the inflight slot
+
+    // I3: a non-positive bytes/ms/mediaDurationS sample (e.g. an aborted or
+    // degenerate load somehow routed here) would divide-by-zero into
+    // Infinity/NaN and poison the EWMA forever. The inflight clear above
+    // still runs unconditionally so loadend/report ordering keeps working.
+    if (!(r.bytes > 0) || !(r.ms > 0) || !(r.mediaDurationS > 0)) return
 
     const measuredSample = (r.bytes * 8) / (r.ms / 1000)
     const neededSample = (r.bytes * 8) / r.mediaDurationS
@@ -298,6 +331,34 @@ export class ProtocolLadder {
     }
   }
 
+  /**
+   * C1 fix: clears the inflight record when a tracked XHR finishes for ANY
+   * reason — meant to be wired to the XHR `loadend` event (fires on
+   * load/abort/error/timeout alike). Before this, only `reportFragment` (a
+   * successful FRAG_LOADED) or a tier switch ever cleared the slot, so a
+   * completed playlist/level XHR (which never calls reportFragment) or an
+   * aborted fragment XHR left a stale `bytes>0` record in place forever —
+   * which made `shouldDeferStallToLadder` defer the AePlayer silent-stall
+   * watchdog indefinitely. No-op if `url` doesn't match the currently
+   * tracked slot (already superseded by a newer `onXhrOpen`), and harmless
+   * to call after `reportFragment` already cleared it (double-clear is a
+   * no-op either way).
+   */
+  onXhrLoadEnd(url: string): void {
+    if (!this.isMultiTier()) return
+    if (this.inflightUrl === url) this.inflightUrl = null
+  }
+
+  /**
+   * Unconditionally clears the inflight slot. Called from engine.load() at
+   * the start of a new source so a stale inflight record from the PREVIOUS
+   * source (a different XHR URL entirely) can never leak into the new
+   * source's watchdog checks.
+   */
+  clearInflight(): void {
+    this.inflightUrl = null
+  }
+
   onChange(cb: (tier: Tier, reason: string) => void): () => void {
     this.listeners.add(cb)
     return () => {
@@ -305,15 +366,20 @@ export class ProtocolLadder {
     }
   }
 
-  /** Used by Task 5's probe to record a measurement of the tier above the current one. */
-  recordProbe(mbps: number, accepted: boolean, note: string): void {
+  /**
+   * Used by Task 5's probe to record a measurement of `tier` (the tier that
+   * was ACTUALLY probed — e.g. always 'h3' for probeH3). M5 fix: this used
+   * to derive the label from "whatever tier is one above the current
+   * index," which mislabeled the probed tier whenever the ladder wasn't
+   * sitting on h2 (e.g. probing h3 while already parked on h1 logged the
+   * measurement as an "h2" probe).
+   */
+  recordProbe(tier: TierId, mbps: number, accepted: boolean, note: string): void {
     if (!this.isMultiTier()) return
     this.probedH3 = true
-    const aboveIdx = Math.max(this.tierIndex - 1, 0)
-    const probedTier = this.tiers[aboveIdx]?.id ?? this.tiers[0].id
     const ts = formatClockUTC(this.now())
     const verdict = accepted ? 'accepted' : 'rejected'
-    this.lastProbe = `${probedTier} ${mbps.toFixed(1)} Mbps @${ts} — ${verdict} (${note})`
+    this.lastProbe = `${tier} ${mbps.toFixed(1)} Mbps @${ts} — ${verdict} (${note})`
   }
 
   /** Probe upshift entry — jumps directly to the given tier (e.g. a probe-accepted h3). */

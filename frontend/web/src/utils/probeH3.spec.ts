@@ -6,15 +6,18 @@ function makeLadder(overrides: Partial<ProbeLadder> = {}): ProbeLadder {
     tierBase: (id) => (id === 'h3' ? 'https://stream3.example' : null),
     currentEwmaMbps: () => 5, // baseline h2 EWMA -> accept threshold = 5.5 Mbps
     hasProbedH3: () => false,
+    currentTierId: () => 'h2',
     recordProbe: vi.fn(),
     switchTo: vi.fn(),
     ...overrides,
   }
 }
 
-function fakeResponse(bytes: number, url = ''): Response {
+function fakeResponse(bytes: number, url = '', ok = true, status = 200): Response {
   return {
     url,
+    ok,
+    status,
     arrayBuffer: async () => new ArrayBuffer(bytes),
   } as unknown as Response
 }
@@ -49,6 +52,26 @@ describe('probeH3()', () => {
     expect(calls[1][1]).toMatchObject({ cache: 'no-store' })
   })
 
+  it('cancels the prime response body instead of leaking it, and tolerates a null body (M8)', async () => {
+    const ladder = makeLadder()
+    vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(1000)
+    vi.spyOn(performance, 'getEntriesByName').mockReturnValue([{ nextHopProtocol: 'h3' }] as unknown as PerformanceEntryList)
+
+    const cancel = vi.fn(async () => {})
+    let call = 0
+    const fetchMock = vi.fn(async () => {
+      call += 1
+      if (call === 1) return { ...fakeResponse(0), body: { cancel } } as unknown as Response
+      return fakeResponse(1_000_000) // measure response has no `body` field — must not throw
+    })
+
+    await expect(
+      probeH3(ladder, 'seg.ts', 'master.m3u8', fetchMock as unknown as typeof fetch),
+    ).resolves.toBeUndefined()
+
+    expect(cancel).toHaveBeenCalledTimes(1)
+  })
+
   it('accepts the upshift and calls switchTo when measured throughput clears 1.1x the current EWMA', async () => {
     const ladder = makeLadder({ currentEwmaMbps: () => 5 }) // accept threshold = 5.5 Mbps
     vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(2000) // 2s elapsed
@@ -58,7 +81,7 @@ describe('probeH3()', () => {
 
     await probeH3(ladder, 'seg.ts', 'master.m3u8', fetchMock as unknown as typeof fetch)
 
-    expect(ladder.recordProbe).toHaveBeenCalledWith(8, true, expect.any(String))
+    expect(ladder.recordProbe).toHaveBeenCalledWith('h3', 8, true, expect.any(String))
     expect(ladder.switchTo).toHaveBeenCalledWith('h3', expect.stringContaining('probe'))
   })
 
@@ -71,7 +94,7 @@ describe('probeH3()', () => {
 
     await probeH3(ladder, 'seg.ts', 'master.m3u8', fetchMock as unknown as typeof fetch)
 
-    expect(ladder.recordProbe).toHaveBeenCalledWith(4, false, expect.any(String))
+    expect(ladder.recordProbe).toHaveBeenCalledWith('h3', 4, false, expect.any(String))
     expect(ladder.switchTo).not.toHaveBeenCalled()
   })
 
@@ -83,7 +106,37 @@ describe('probeH3()', () => {
 
     await probeH3(ladder, 'seg.ts', 'master.m3u8', fetchMock as unknown as typeof fetch)
 
-    expect(ladder.recordProbe).toHaveBeenCalledWith(expect.any(Number), false, 'h3-unavailable')
+    expect(ladder.recordProbe).toHaveBeenCalledWith('h3', expect.any(Number), false, 'h3-unavailable')
+    expect(ladder.switchTo).not.toHaveBeenCalled()
+  })
+
+  it('records rejected no-baseline and skips the network entirely when the EWMA is zero (C2)', async () => {
+    // A zero baseline (fresh session, or an MP4/native-HLS source that never
+    // feeds reportFragment) makes PROBE_ACCEPT_FACTOR × 0 = 0 — any measured
+    // throughput would spuriously clear that threshold, so this must bail
+    // before even fetching.
+    const ladder = makeLadder({ currentEwmaMbps: () => 0 })
+    const fetchMock = vi.fn()
+
+    await probeH3(ladder, 'seg.ts', 'master.m3u8', fetchMock as unknown as typeof fetch)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(ladder.recordProbe).toHaveBeenCalledWith('h3', 0, false, 'no-baseline')
+    expect(ladder.switchTo).not.toHaveBeenCalled()
+  })
+
+  it('records rejected http-<status> and does not switch when the measure response is not ok (C2)', async () => {
+    const ladder = makeLadder()
+    let call = 0
+    const fetchMock = vi.fn(async () => {
+      call += 1
+      return call === 1 ? fakeResponse(0) : fakeResponse(0, '', false, 503) // prime ok, measure 503
+    })
+
+    await probeH3(ladder, 'seg.ts', 'master.m3u8', fetchMock as unknown as typeof fetch)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2) // prime + measure, no retry
+    expect(ladder.recordProbe).toHaveBeenCalledWith('h3', 0, false, 'http-503')
     expect(ladder.switchTo).not.toHaveBeenCalled()
   })
 
@@ -97,7 +150,7 @@ describe('probeH3()', () => {
       probeH3(ladder, 'seg.ts', 'master.m3u8', fetchMock as unknown as typeof fetch),
     ).resolves.toBeUndefined()
 
-    expect(ladder.recordProbe).toHaveBeenCalledWith(expect.any(Number), false, expect.any(String))
+    expect(ladder.recordProbe).toHaveBeenCalledWith('h3', expect.any(Number), false, expect.any(String))
     expect(ladder.switchTo).not.toHaveBeenCalled()
   })
 
@@ -117,7 +170,7 @@ describe('probeH3()', () => {
     await expect(pending).resolves.toBeUndefined()
 
     expect(hangingFetch).toHaveBeenCalledTimes(1) // only the prime fetch was reached
-    expect(ladder.recordProbe).toHaveBeenCalledWith(expect.any(Number), false, expect.any(String))
+    expect(ladder.recordProbe).toHaveBeenCalledWith('h3', expect.any(Number), false, expect.any(String))
     expect(ladder.switchTo).not.toHaveBeenCalled()
   })
 

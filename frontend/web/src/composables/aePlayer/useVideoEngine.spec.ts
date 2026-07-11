@@ -19,6 +19,8 @@ const hlsMockState = vi.hoisted(() => ({ instances: [] as any[] }))
 const ladderMock = vi.hoisted(() => ({
   onXhrOpen: vi.fn(),
   onXhrProgress: vi.fn(),
+  onXhrLoadEnd: vi.fn(),
+  clearInflight: vi.fn(),
   reportFragment: vi.fn(),
   reportTimeout: vi.fn(),
 }))
@@ -218,6 +220,8 @@ describe('useVideoEngine — feeds the protocol ladder', () => {
     hlsMockState.instances.length = 0
     ladderMock.onXhrOpen.mockClear()
     ladderMock.onXhrProgress.mockClear()
+    ladderMock.onXhrLoadEnd.mockClear()
+    ladderMock.clearInflight.mockClear()
     ladderMock.reportFragment.mockClear()
     ladderMock.reportTimeout.mockClear()
   })
@@ -239,6 +243,37 @@ describe('useVideoEngine — feeds the protocol ladder', () => {
 
     listeners.progress({ loaded: 500, total: 1000 })
     expect(ladderMock.onXhrProgress).toHaveBeenCalledWith('https://example.test/frag1.ts', 500, 1000)
+  })
+
+  it('wires xhrSetup to attach a loadend listener that forwards to ladder.onXhrLoadEnd (C1)', async () => {
+    // loadend fires on load/abort/error/timeout alike — this is what actually
+    // clears a completed/aborted XHR's inflight slot so it can't poison
+    // shouldDeferStallToLadder forever.
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/master.m3u8', type: 'hls' })
+
+    const hlsInstance = hlsMockState.instances[0]
+    const listeners: Record<string, (e: unknown) => void> = {}
+    const fakeXhr: any = {
+      addEventListener: (event: string, cb: (e: unknown) => void) => {
+        listeners[event] = cb
+      },
+    }
+
+    hlsInstance.config.xhrSetup(fakeXhr, 'https://example.test/playlist.m3u8')
+    expect(listeners.loadend).toBeTypeOf('function')
+
+    listeners.loadend({})
+    expect(ladderMock.onXhrLoadEnd).toHaveBeenCalledWith('https://example.test/playlist.m3u8')
+  })
+
+  it('load() clears the ladder inflight slot at the start of a new source (C1)', async () => {
+    const engine = useVideoEngine(ref<any>({ currentTime: 0, paused: true }))
+    await engine.load({ url: 'https://example.test/a.m3u8', type: 'hls' })
+    expect(ladderMock.clearInflight).toHaveBeenCalledTimes(1)
+
+    await engine.load({ url: 'https://example.test/b.m3u8', type: 'hls' })
+    expect(ladderMock.clearInflight).toHaveBeenCalledTimes(2)
   })
 
   it('always reports fragment stats (bytes/ms/duration/protocol) to the ladder, even with collectStats=false', async () => {

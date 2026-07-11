@@ -3,6 +3,7 @@ import {
   parseTiers,
   ProtocolLadder,
   shouldDeferStallToLadder,
+  formatLadderRows,
   ladder,
   LS_KEY,
   PERSIST_TTL_MS,
@@ -10,6 +11,7 @@ import {
   SWITCH_COOLDOWN_MS,
   type Tier,
   type TierId,
+  type LadderDebug,
 } from './protocolLadder'
 
 // Raw 3-tier config used across most ProtocolLadder tests: descending
@@ -406,12 +408,12 @@ describe('ProtocolLadder — probe upshift', () => {
     const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), { now: () => 0, storage })
     expect(ladderInstance.debugSnapshot()?.probe).toBe('') // nothing probed yet
 
-    ladderInstance.recordProbe(2.1, false, '<1.1× h2')
+    ladderInstance.recordProbe('h3', 2.1, false, '<1.1× h2')
     const rejectedProbe = ladderInstance.debugSnapshot()?.probe ?? ''
     expect(rejectedProbe).toContain('2.1')
     expect(rejectedProbe).toContain('rejected')
 
-    ladderInstance.recordProbe(6.5, true, '≥1.1× h2')
+    ladderInstance.recordProbe('h3', 6.5, true, '≥1.1× h2')
     const acceptedProbe = ladderInstance.debugSnapshot()?.probe ?? ''
     expect(acceptedProbe).toContain('accepted')
 
@@ -420,6 +422,22 @@ describe('ProtocolLadder — probe upshift', () => {
 
     const persisted = JSON.parse(storage.getItem(LS_KEY) as string)
     expect(persisted.tier).toBe('h3')
+  })
+
+  it('labels the probe with the tier actually passed in, not "one above current" (M5)', () => {
+    // Regression: the ladder is parked on h1 (the floor) here, so the old
+    // "aboveIdx = tierIndex - 1" derivation would have mislabeled this h3
+    // probe measurement as an "h2" probe.
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    for (let i = 0; i < TIMEOUTS_TO_DOWNSHIFT; i++) ladderInstance.reportTimeout() // h2 -> h1
+    expect(ladderInstance.currentBase()).toBe('https://c') // confirm parked on h1
+
+    ladderInstance.recordProbe('h3', 9.9, false, '<1.1× h1')
+    const probe = ladderInstance.debugSnapshot()?.probe ?? ''
+    expect(probe.startsWith('h3 ')).toBe(true)
   })
 })
 
@@ -458,8 +476,139 @@ describe('ProtocolLadder — Task 5 probe accessors', () => {
       storage: makeStorage(),
     })
     expect(ladderInstance.hasProbedH3()).toBe(false)
-    ladderInstance.recordProbe(2.1, false, '<1.1× h2')
+    ladderInstance.recordProbe('h3', 2.1, false, '<1.1× h2')
     expect(ladderInstance.hasProbedH3()).toBe(true)
+  })
+
+  it('currentTierId() reflects the currently active tier id', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    expect(ladderInstance.currentTierId()).toBe('h2') // default entry tier
+    for (let i = 0; i < TIMEOUTS_TO_DOWNSHIFT; i++) ladderInstance.reportTimeout() // h2 -> h1
+    expect(ladderInstance.currentTierId()).toBe('h1')
+  })
+})
+
+describe('ProtocolLadder — onXhrLoadEnd / clearInflight (C1)', () => {
+  it('a completed playlist-XHR (no reportFragment ever fires) clears its own inflight slot on loadend', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    ladderInstance.onXhrOpen('https://b/master.m3u8')
+    ladderInstance.onXhrProgress('https://b/master.m3u8', 500, 500) // completed, bytes>0
+
+    // Before the fix nothing ever clears this — inflight() stays non-null
+    // forever and shouldDeferStallToLadder defers the watchdog indefinitely.
+    expect(ladderInstance.inflight()).not.toBeNull()
+
+    ladderInstance.onXhrLoadEnd('https://b/master.m3u8')
+
+    expect(ladderInstance.inflight()).toBeNull()
+    expect(shouldDeferStallToLadder(ladderInstance.inflight())).toBe(false)
+  })
+
+  it('is a no-op when the url does not match the tracked inflight slot', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    ladderInstance.onXhrOpen('frag-current')
+    ladderInstance.onXhrProgress('frag-current', 10, 100)
+
+    ladderInstance.onXhrLoadEnd('frag-stale') // a different (already-superseded) XHR
+
+    expect(ladderInstance.inflight()?.url).toBe('frag-current') // untouched
+  })
+
+  it('is a no-op on a single-tier (no-op) ladder', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(undefined, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    expect(() => ladderInstance.onXhrLoadEnd('u')).not.toThrow()
+    expect(ladderInstance.inflight()).toBeNull()
+  })
+
+  it('clearInflight() unconditionally clears the slot regardless of url', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    ladderInstance.onXhrOpen('https://a/seg-001.ts')
+    ladderInstance.onXhrProgress('https://a/seg-001.ts', 10, 100)
+    expect(ladderInstance.inflight()).not.toBeNull()
+
+    ladderInstance.clearInflight()
+
+    expect(ladderInstance.inflight()).toBeNull()
+  })
+})
+
+describe('ProtocolLadder — reportFragment ignores non-positive samples (I3)', () => {
+  it('a ms=0 sample does not poison the EWMA to Infinity; a later valid sample stays finite', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+
+    // Degenerate sample: bytes flowed but ms=0 — dividing by (ms/1000) would
+    // produce Infinity and poison every EWMA update from here on.
+    ladderInstance.reportFragment({ bytes: 1_000_000, ms: 0, mediaDurationS: 6, protocol: 'h2' })
+    expect(ladderInstance.currentEwmaMbps()).toBe(0) // guard skipped it entirely — no seed happened
+
+    // A normal, slow-but-valid sample.
+    ladderInstance.reportFragment({ bytes: 4_000_000, ms: 16_000, mediaDurationS: 6, protocol: 'h2' })
+
+    const snap = ladderInstance.debugSnapshot()
+    expect(Number.isFinite(ladderInstance.currentEwmaMbps())).toBe(true)
+    expect(Number.isFinite(snap?.measuredMbps ?? Infinity)).toBe(true)
+  })
+
+  it('ignores non-positive bytes and non-positive mediaDurationS the same way', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 0,
+      storage: makeStorage(),
+    })
+    ladderInstance.reportFragment({ bytes: 0, ms: 100, mediaDurationS: 6 })
+    ladderInstance.reportFragment({ bytes: 1_000, ms: 100, mediaDurationS: 0 })
+    expect(ladderInstance.currentEwmaMbps()).toBe(0)
+  })
+})
+
+describe('formatLadderRows() (I4)', () => {
+  it('formats the tier display as 1-based ("tier 2/3" for h2 of [h3,h2,h1])', () => {
+    const snap: LadderDebug = {
+      tierId: 'h2',
+      tierIndex: 1,
+      tierCount: 3,
+      protocol: 'h2',
+      measuredMbps: 5.678,
+      neededMbps: 3.21,
+      trail: 'h3→h2 (first-frag projected 17s)',
+      probe: 'h3 2.1 Mbps @03:24 — rejected (<1.1× h2)',
+    }
+    const rows = formatLadderRows(snap)
+    expect(rows.proto).toBe('h2 · tier 2/3')
+    expect(rows.net).toBe('5.7 Mbps ewma / need 3.2 ×1.2')
+    expect(rows.laddr).toBe('h3→h2 (first-frag projected 17s)')
+    expect(rows.probe).toBe('h3 2.1 Mbps @03:24 — rejected (<1.1× h2)')
+  })
+
+  it('formats the entry tier (h2, index 0 of a 1-tier or leading position) as tier 1/N', () => {
+    const snap: LadderDebug = {
+      tierId: 'h3',
+      tierIndex: 0,
+      tierCount: 3,
+      protocol: '?',
+      measuredMbps: 0,
+      neededMbps: 0,
+      trail: '',
+      probe: '',
+    }
+    expect(formatLadderRows(snap).proto).toBe('? · tier 1/3')
   })
 })
 
@@ -477,7 +626,8 @@ describe('ProtocolLadder — single-tier no-op', () => {
     ladderInstance.reportTimeout()
     ladderInstance.onXhrOpen('u')
     ladderInstance.onXhrProgress('u', 1, 100)
-    ladderInstance.recordProbe(1, true, 'n/a')
+    ladderInstance.onXhrLoadEnd('u')
+    ladderInstance.recordProbe('h2', 1, true, 'n/a')
     ladderInstance.switchTo('h1', 'noop')
 
     expect(ladderInstance.currentBase()).toBe('')
