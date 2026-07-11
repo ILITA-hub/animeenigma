@@ -56,6 +56,10 @@ type wirePlayerEvent struct {
 	Episode int    `json:"episode,omitempty"`
 	Audio   string `json:"audio,omitempty"`
 	Lang    string `json:"lang,omitempty"`
+
+	// Rich diagnostic bundle for kind "playback_failed" — merged verbatim into
+	// Properties. Bounded by the handler's 256 KB body limit.
+	Detail json.RawMessage `json:"detail,omitempty"`
 }
 
 // wirePlayerBatch is the top-level wire payload for /api/analytics/player-events.
@@ -110,6 +114,10 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			// Browser vetoed video.play() (e.g. NotAllowedError from an
 			// autoplay policy). The DOMException name arrives in error_kind.
 			effectKind = "player_playback_start_rejected"
+		case "playback_failed":
+			// Terminal aePlayer failure (all providers exhausted, or the
+			// first-party `ae` source failed). Duration is not meaningful here.
+			effectKind = "player_failed"
 		default:
 			continue // skip unknown kinds
 		}
@@ -144,6 +152,14 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		}
 		if we.ErrorKind != "" {
 			propMap["error_kind"] = we.ErrorKind
+		}
+		if len(we.Detail) > 0 {
+			var detail map[string]any
+			if err := json.Unmarshal(we.Detail, &detail); err == nil {
+				for k, v := range detail {
+					propMap[k] = v
+				}
+			}
 		}
 		propsBytes, _ := json.Marshal(propMap)
 

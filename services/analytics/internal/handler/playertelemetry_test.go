@@ -267,6 +267,41 @@ func TestPlayerTelemetry_RejectsMalformed(t *testing.T) {
 	}
 }
 
+// TestPlayerTelemetry_PlaybackFailed verifies "playback_failed" events map to
+// effect_kind="player_failed" and every key of the "detail" diagnostic bundle
+// is merged into Properties.
+func TestPlayerTelemetry_PlaybackFailed(t *testing.T) {
+	sink := &effectSink{}
+	h := NewPlayerTelemetryHandler(sink)
+
+	body := `{"events":[{
+		"kind":"playback_failed","provider":"ae","anime_id":"a1","episode":3,
+		"audio":"dub","lang":"en","error_kind":"stream_error",
+		"detail":{"reason":"ae_failed","all_exhausted":false,"engine":{"bw_bps":1234}}
+	}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if sink.count() != 1 {
+		t.Fatalf("got %d events, want 1", sink.count())
+	}
+	ev := sink.at(0)
+	if ev.EffectKind != "player_failed" {
+		t.Errorf("effect_kind = %q, want player_failed", ev.EffectKind)
+	}
+	if ev.Target != "ae" {
+		t.Errorf("target = %q, want ae", ev.Target)
+	}
+	if !strings.Contains(ev.Properties, `"reason":"ae_failed"`) ||
+		!strings.Contains(ev.Properties, `"bw_bps":1234`) {
+		t.Errorf("properties missing merged detail: %s", ev.Properties)
+	}
+}
+
 // TestPlayerTelemetry_CapsAtHundred: arrays over 100 entries are capped.
 func TestPlayerTelemetry_CapsAtHundred(t *testing.T) {
 	sink := &effectSink{}
