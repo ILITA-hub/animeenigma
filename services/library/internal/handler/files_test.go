@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -116,6 +117,47 @@ func TestBrowse_ObjectFolderSynthesisAndEpisodeAnnotation(t *testing.T) {
 	}
 	if e02.Episode != nil {
 		t.Errorf("entries[1].Episode = %+v, want nil (no matching pool row)", e02.Episode)
+	}
+}
+
+type errConfig struct{}
+
+func (errConfig) Get(context.Context) (*domain.AutocacheConfig, error) {
+	return nil, errors.New("config unavailable")
+}
+
+// TestBrowse_ConfigFetchErrorDoesNotPanic guards the nil-*AutocacheConfig
+// panic in autocache.Classify: if filesConfig.Get fails, Browse must fall back
+// to a zero-value config instead of passing nil through, and still return 200
+// with the annotated (maximally-stale) entry.
+func TestBrowse_ConfigFetchErrorDoesNotPanic(t *testing.T) {
+	store := &fakeStore{objs: []storageclient.Object{
+		{Key: "frieren/s1/e01/e01.m3u8", Size: 2000},
+	}}
+	n := 1
+	eps := &fakeEpisodes{pool: []domain.Episode{
+		{ID: "ep-1", Storage: "minio", MinioPath: "frieren/s1/e01/", ShikimoriID: "1", EpisodeNumber: n, Source: domain.EpisodeSourceAdmin},
+	}}
+	h := NewFilesHandler(service.NewWorkDir(t.TempDir()), store, eps, errConfig{}, &fakeEvictor{}, &fakeActive{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/library/files?domain=minio&prefix=frieren/s1/", nil)
+	rw := httptest.NewRecorder()
+	h.Browse(rw, req) // must not panic even though config.Get errors
+
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status %d, body=%s", rw.Code, rw.Body.String())
+	}
+	var parsed struct {
+		Data browseResponseDTO `json:"data"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, rw.Body.String())
+	}
+	if len(parsed.Data.Entries) != 1 || parsed.Data.Entries[0].Episode == nil {
+		t.Fatalf("entries = %+v, want one annotated dir", parsed.Data.Entries)
+	}
+	if parsed.Data.Entries[0].Episode.Freshness != "stale" {
+		t.Errorf("Freshness = %q, want stale (fallback zero-value config)", parsed.Data.Entries[0].Episode.Freshness)
 	}
 }
 

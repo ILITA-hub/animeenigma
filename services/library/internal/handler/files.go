@@ -176,7 +176,14 @@ func (h *FilesHandler) Browse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	epByPath := h.episodeIndexForStorage(r.Context(), dom)
-	cfg, _ := h.config.Get(r.Context())
+	// A Get failure must not panic the listing: autocache.Classify dereferences
+	// cfg, so fall back to a zero-value config (all windows 0 days) rather than
+	// passing a nil *domain.AutocacheConfig through to it. Annotated episodes
+	// just read as maximally stale in that (rare, already-degraded) case.
+	cfg, err := h.config.Get(r.Context())
+	if err != nil || cfg == nil {
+		cfg = &domain.AutocacheConfig{}
+	}
 	now := time.Now()
 
 	dirSizes := map[string]int64{}
