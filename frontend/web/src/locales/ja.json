@@ -409,6 +409,24 @@
           "linkButton": "リンク",
           "searchPlaceholder": "アニメを検索..."
         }
+      },
+      "files": {
+        "title": "ファイル",
+        "domain": { "work": "トレント作業ディレクトリ", "minio": "MinIO", "s3": "S3クラウド" },
+        "root": "ルート",
+        "col": { "name": "名前", "size": "サイズ", "actions": "操作" },
+        "empty": "空です",
+        "download": "ダウンロード",
+        "delete": "削除",
+        "fresh": "最新",
+        "stale": "古い",
+        "add": { "title": "トレントを手動で追加", "magnet": "マグネットリンクを貼り付け", "name": "タイトル", "storage": "ストレージ", "submit": "キュー追加" },
+        "confirm": {
+          "episode": "エピソード {name} を削除しますか? ファイルとライブラリのレコードが削除されます。",
+          "orphan": "孤立オブジェクト {name} を削除しますか? ライブラリのレコードがない直接削除です。",
+          "work": "{name} をトレント作業ディレクトリから削除しますか?"
+        },
+        "error": { "active": "トレントはまだアクティブです。先にジョブをキャンセルしてください。" }
       }
     },
     "aePlayer": {

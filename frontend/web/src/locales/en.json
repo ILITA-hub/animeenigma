@@ -409,6 +409,24 @@
           "linkButton": "Link",
           "searchPlaceholder": "Search anime..."
         }
+      },
+      "files": {
+        "title": "Files",
+        "domain": { "work": "Torrent work dir", "minio": "MinIO", "s3": "S3 cloud" },
+        "root": "root",
+        "col": { "name": "Name", "size": "Size", "actions": "Actions" },
+        "empty": "Empty",
+        "download": "Download",
+        "delete": "Delete",
+        "fresh": "Fresh",
+        "stale": "Stale",
+        "add": { "title": "Add torrent by hand", "magnet": "Paste magnet link", "name": "Title", "storage": "Storage", "submit": "Enqueue" },
+        "confirm": {
+          "episode": "Delete episode {name}? Its files and library record are removed.",
+          "orphan": "Delete orphan object {name}? This is a raw delete with no library record.",
+          "work": "Delete {name} from the torrent working dir?"
+        },
+        "error": { "active": "Torrent still active — cancel its job first." }
       }
     },
     "aePlayer": {

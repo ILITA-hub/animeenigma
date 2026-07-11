@@ -279,6 +279,114 @@
           </ul>
         </div>
       </section>
+
+      <!-- 4. Files panel -->
+      <section class="mb-8" aria-label="files">
+        <h2 class="text-xl font-semibold text-white mb-3">
+          {{ $t('player.adminLibrary.files.title') }}
+        </h2>
+
+        <!-- Domain switch -->
+        <div class="flex gap-2 mb-3">
+          <Button
+            v-for="o in fileDomainOptions"
+            :key="o.value"
+            :variant="fileDomain === o.value ? 'default' : 'outline'"
+            size="sm"
+            @click="changeDomain(o.value as FileDomain)"
+          >
+            {{ o.label }}
+          </Button>
+        </div>
+
+        <!-- Add torrent by hand -->
+        <form class="glass-card p-4 mb-4 flex flex-wrap gap-3 items-end" @submit.prevent="addMagnet">
+          <h3 class="w-full text-xs font-semibold text-white/60 uppercase tracking-wide">
+            {{ $t('player.adminLibrary.files.add.title') }}
+          </h3>
+          <div class="flex-1 min-w-[260px]">
+            <Input
+              v-model="magnet"
+              type="text"
+              size="sm"
+              :placeholder="$t('player.adminLibrary.files.add.magnet')"
+              :aria-label="$t('player.adminLibrary.files.add.magnet')"
+            />
+          </div>
+          <div class="w-56">
+            <Input
+              v-model="magnetTitle"
+              type="text"
+              size="sm"
+              :placeholder="$t('player.adminLibrary.files.add.name')"
+              :aria-label="$t('player.adminLibrary.files.add.name')"
+            />
+          </div>
+          <div class="w-44">
+            <Select
+              v-model="magnetStorage"
+              :options="storageOptions"
+              size="sm"
+              :label="$t('player.adminLibrary.files.add.storage')"
+            />
+          </div>
+          <Button
+            type="submit"
+            variant="default"
+            size="sm"
+            :disabled="!magnet.trim() || !magnetTitle.trim()"
+            :aria-label="$t('player.adminLibrary.files.add.submit')"
+          >
+            {{ $t('player.adminLibrary.files.add.submit') }}
+          </Button>
+        </form>
+
+        <!-- Breadcrumb -->
+        <nav class="flex items-center flex-wrap gap-1 text-sm text-white/60 mb-2">
+          <button type="button" class="hover:text-white transition" @click="loadFiles('')">
+            {{ $t('player.adminLibrary.files.root') }}
+          </button>
+          <template v-for="(c, i) in fileBreadcrumb" :key="i">
+            <span>/</span>
+            <button type="button" class="hover:text-white transition" @click="crumbTo(i)">{{ c }}</button>
+          </template>
+        </nav>
+
+        <div v-if="filesLoading" class="flex justify-center py-6">
+          <Spinner size="md" />
+        </div>
+        <ul v-else class="glass-card divide-y divide-white/10 overflow-hidden">
+          <li v-if="fileEntries.length === 0" class="p-4 text-sm text-white/60">
+            {{ $t('player.adminLibrary.files.empty') }}
+          </li>
+          <li
+            v-for="e in fileEntries"
+            :key="e.name"
+            class="flex items-center justify-between gap-2 p-3"
+          >
+            <button
+              type="button"
+              class="flex items-center gap-2 min-w-0 text-left"
+              :class="e.kind === 'dir' ? 'text-white' : 'text-white/70'"
+              @click="openEntry(e)"
+            >
+              <span class="truncate">{{ e.kind === 'dir' ? '📁' : '📄' }} {{ e.name }}</span>
+              <Badge v-if="e.episode" size="sm" :variant="e.episode.freshness === 'fresh' ? 'default' : 'secondary'">
+                {{ e.episode.freshness === 'fresh' ? $t('player.adminLibrary.files.fresh') : $t('player.adminLibrary.files.stale') }}
+              </Badge>
+            </button>
+            <div class="flex items-center gap-2 flex-shrink-0" :aria-label="$t('player.adminLibrary.files.col.actions')">
+              <span class="text-xs text-white/50 font-mono">{{ formatBytes(e.size) }}</span>
+              <Button v-if="e.kind === 'file'" variant="ghost" size="xs" @click="downloadEntry(e)">
+                {{ $t('player.adminLibrary.files.download') }}
+              </Button>
+              <Button variant="ghost" size="xs" @click="deleteEntry(e)">
+                {{ $t('player.adminLibrary.files.delete') }}
+              </Button>
+            </div>
+          </li>
+        </ul>
+      </section>
     </div>
   </div>
 </template>
@@ -287,7 +395,10 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminLibraryApi, animeApi } from '@/api/client'
-import type { Job, JobStatus, Release, LibraryHealth, CreateJobPayload, StorageBackend } from '@/types/library'
+import type {
+  Job, JobStatus, Release, LibraryHealth, CreateJobPayload, StorageBackend,
+  FileDomain, FileEntry, BrowseResponse,
+} from '@/types/library'
 import Badge from '@/components/ui/Badge.vue'
 import Button from '@/components/ui/Button.vue'
 import { Spinner } from '@/components/ui'
@@ -333,6 +444,17 @@ const pendingLinkJobs = ref<Job[]>([])
 const pendingLinkSearchQueries = ref<Record<string, string>>({})
 const pendingLinkResults = ref<Record<string, AnimeSearchResult[]>>({})
 
+// Files panel (Task 8): browse the torrent work dir + object stores, add a
+// torrent by hand, download/delete entries.
+const fileDomain = ref<FileDomain>('minio')
+const filePrefix = ref('')
+const fileEntries = ref<FileEntry[]>([])
+const fileBreadcrumb = ref<string[]>([])
+const filesLoading = ref(false)
+const magnet = ref('')
+const magnetTitle = ref('')
+const magnetStorage = ref<StorageBackend>('minio')
+
 // Interval handles for cleanup.
 let healthInterval: ReturnType<typeof setInterval> | null = null
 let activeJobsInterval: ReturnType<typeof setInterval> | null = null
@@ -350,6 +472,12 @@ const totalActiveJobs = computed(() => {
 const storageOptions = computed<SelectOption[]>(() => [
   { value: 'minio', label: t('player.adminLibrary.storage.minio') },
   { value: 's3', label: t('player.adminLibrary.storage.s3') },
+])
+
+const fileDomainOptions = computed<SelectOption[]>(() => [
+  { value: 'work', label: t('player.adminLibrary.files.domain.work') },
+  { value: 'minio', label: t('player.adminLibrary.files.domain.minio') },
+  { value: 's3', label: t('player.adminLibrary.files.domain.s3') },
 ])
 
 // ---- Helpers ----
@@ -598,12 +726,91 @@ async function linkJob(job: Job, anime: AnimeSearchResult) {
   }
 }
 
+// ---- Files ----
+async function loadFiles(prefix = '') {
+  filesLoading.value = true
+  try {
+    const resp = await adminLibraryApi.browseFiles(fileDomain.value, prefix)
+    const body = unwrap<BrowseResponse>(resp)
+    if (body) {
+      fileEntries.value = body.entries
+      fileBreadcrumb.value = body.breadcrumb
+      filePrefix.value = body.prefix
+    }
+  } catch (err) {
+    console.warn('loadFiles failed', err)
+  } finally {
+    filesLoading.value = false
+  }
+}
+
+function openEntry(e: FileEntry) {
+  if (e.kind === 'dir') void loadFiles(filePrefix.value + e.name + '/')
+}
+
+function crumbTo(idx: number) {
+  void loadFiles(fileBreadcrumb.value.slice(0, idx + 1).join('/') + '/')
+}
+
+function changeDomain(d: FileDomain) {
+  fileDomain.value = d
+  void loadFiles('')
+}
+
+async function downloadEntry(e: FileEntry) {
+  const key = e.key ?? (filePrefix.value + e.name)
+  const { data } = await adminLibraryApi.downloadFile(fileDomain.value, key)
+  const url = URL.createObjectURL(data as Blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = e.name
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function deleteEntry(e: FileEntry) {
+  const key = e.key ?? (filePrefix.value + e.name)
+  const msgKey = fileDomain.value === 'work'
+    ? 'player.adminLibrary.files.confirm.work'
+    : e.episode ? 'player.adminLibrary.files.confirm.episode'
+      : 'player.adminLibrary.files.confirm.orphan'
+  if (!(await confirm({ description: t(msgKey, { name: e.name }), variant: 'destructive' }))) return
+  try {
+    // confirm=1 (raw delete) only applies to an orphan object/prefix — an
+    // episode-mapped one always routes through the reconciled evictor.
+    await adminLibraryApi.deleteFile(fileDomain.value, key, !e.episode)
+    await loadFiles(filePrefix.value)
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status === 409) window.alert(t('player.adminLibrary.files.error.active'))
+  }
+}
+
+async function addMagnet() {
+  if (!magnet.value.trim() || !magnetTitle.value.trim()) return
+  try {
+    const resp = await adminLibraryApi.createJob({
+      magnet: magnet.value.trim(),
+      title: magnetTitle.value.trim(),
+      source: 'manual',
+      storage: magnetStorage.value,
+    })
+    const created = unwrap<Job>(resp)
+    if (created) activeJobs.value = [created, ...activeJobs.value]
+    magnet.value = ''
+    magnetTitle.value = ''
+  } catch (err) {
+    errorBanner.value = 'Enqueue failed: ' + ((err as { message?: string })?.message ?? 'unknown')
+  }
+}
+
 // ---- Lifecycle ----
 onMounted(() => {
   void fetchHealth()
   void fetchActiveJobs()
   void fetchFailedJobs()
   void fetchPendingLinkJobs()
+  void loadFiles('')
 
   healthInterval = setInterval(fetchHealth, 30000)
   activeJobsInterval = setInterval(fetchActiveJobs, 5000)
