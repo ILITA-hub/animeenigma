@@ -339,8 +339,14 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Object store: episode-mapped prefix → reconciled evictor delete.
+	// Normalize the key to a trailing slash once so both the exact-prefix
+	// lookup below and the ancestor-overlap check further down compare
+	// against the same directory-shaped form (and so the latter can't
+	// false-positive on a sibling that merely shares a name prefix, e.g. key
+	// "frieren/s1" vs episode "frieren/s10/e01/").
 	epByPath := h.episodeIndexForStorage(r.Context(), dom)
-	if ep, ok := epByPath[strings.TrimSuffix(key, "/")+"/"]; ok {
+	keySlash := strings.TrimSuffix(key, "/") + "/"
+	if ep, ok := epByPath[keySlash]; ok {
 		if err := h.evictor.DeleteEpisodeByID(r.Context(), ep.ID); err != nil {
 			httputil.Error(w, err)
 			return
@@ -357,10 +363,6 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	//     folder; a raw DeletePrefix would wipe every episode beneath it and
 	//     orphan all their library_episodes rows.
 	// The episode folder is the deletable unit; delete episodes individually.
-	// Normalize the key to a trailing slash so the ancestor check can't
-	// false-positive on a sibling that merely shares a name prefix (e.g. key
-	// "frieren/s1" vs episode "frieren/s10/e01/").
-	keySlash := strings.TrimSuffix(key, "/") + "/"
 	for mp := range epByPath {
 		if strings.HasPrefix(keySlash, mp) || strings.HasPrefix(mp, keySlash) {
 			httputil.JSON(w, http.StatusConflict, map[string]string{

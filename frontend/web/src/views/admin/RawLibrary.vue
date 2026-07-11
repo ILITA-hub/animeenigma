@@ -293,7 +293,7 @@
             :key="o.value"
             :variant="fileDomain === o.value ? 'default' : 'outline'"
             size="sm"
-            @click="changeDomain(o.value as FileDomain)"
+            @click="changeDomain(o.value)"
           >
             {{ o.label }}
           </Button>
@@ -371,8 +371,8 @@
               @click="openEntry(e)"
             >
               <span class="truncate">{{ e.kind === 'dir' ? '📁' : '📄' }} {{ e.name }}</span>
-              <Badge v-if="e.episode" size="sm" :variant="e.episode.freshness === 'fresh' ? 'default' : 'secondary'">
-                {{ e.episode.freshness === 'fresh' ? $t('player.adminLibrary.files.fresh') : $t('player.adminLibrary.files.stale') }}
+              <Badge v-if="e.episode" size="sm" :variant="freshnessVariant(e.episode.freshness)">
+                {{ freshnessLabel(e.episode.freshness) }}
               </Badge>
             </button>
             <div class="flex items-center gap-2 flex-shrink-0" :aria-label="$t('player.adminLibrary.files.col.actions')">
@@ -397,7 +397,7 @@ import { useI18n } from 'vue-i18n'
 import { adminLibraryApi, animeApi } from '@/api/client'
 import type {
   Job, JobStatus, Release, LibraryHealth, CreateJobPayload, StorageBackend,
-  FileDomain, FileEntry, BrowseResponse,
+  FileDomain, FileEntry, FileEpisode, BrowseResponse,
 } from '@/types/library'
 import Badge from '@/components/ui/Badge.vue'
 import Button from '@/components/ui/Button.vue'
@@ -474,7 +474,10 @@ const storageOptions = computed<SelectOption[]>(() => [
   { value: 's3', label: t('player.adminLibrary.storage.s3') },
 ])
 
-const fileDomainOptions = computed<SelectOption[]>(() => [
+// Not a SelectOption[] — this drives the Button-group domain switch (not a
+// <Select>), so it's typed to FileDomain directly rather than SelectOption's
+// broader `string | number`, avoiding an `as FileDomain` cast at the call site.
+const fileDomainOptions = computed<{ value: FileDomain; label: string }[]>(() => [
   { value: 'work', label: t('player.adminLibrary.files.domain.work') },
   { value: 'minio', label: t('player.adminLibrary.files.domain.minio') },
   { value: 's3', label: t('player.adminLibrary.files.domain.s3') },
@@ -550,6 +553,14 @@ function statusVariant(status: JobStatus): 'default' | 'primary' | 'secondary' |
     default:
       return 'default'
   }
+}
+
+function freshnessVariant(freshness: FileEpisode['freshness']): 'default' | 'secondary' {
+  return freshness === 'fresh' ? 'default' : 'secondary'
+}
+
+function freshnessLabel(freshness: FileEpisode['freshness']): string {
+  return freshness === 'fresh' ? t('player.adminLibrary.files.fresh') : t('player.adminLibrary.files.stale')
 }
 
 // Unwrap the httputil envelope: { success, data }.
@@ -757,8 +768,15 @@ function changeDomain(d: FileDomain) {
   void loadFiles('')
 }
 
+// The work domain never sets FileEntry.key (see files.go Browse), so
+// downloadEntry/deleteEntry both fall back to reconstructing it from the
+// current prefix + name.
+function keyFor(e: FileEntry): string {
+  return e.key ?? (filePrefix.value + e.name)
+}
+
 async function downloadEntry(e: FileEntry) {
-  const key = e.key ?? (filePrefix.value + e.name)
+  const key = keyFor(e)
   const { data } = await adminLibraryApi.downloadFile(fileDomain.value, key)
   const url = URL.createObjectURL(data as Blob)
   const a = document.createElement('a')
@@ -769,7 +787,7 @@ async function downloadEntry(e: FileEntry) {
 }
 
 async function deleteEntry(e: FileEntry) {
-  const key = e.key ?? (filePrefix.value + e.name)
+  const key = keyFor(e)
   const msgKey = fileDomain.value === 'work'
     ? 'player.adminLibrary.files.confirm.work'
     : e.episode ? 'player.adminLibrary.files.confirm.episode'
