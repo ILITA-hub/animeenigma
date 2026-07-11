@@ -1514,6 +1514,11 @@ services:
         # to today). Set VITE_HLS_PROXY_BASE in docker/.env to the stream subdomain
         # origin (e.g. https://stream.animeenigma.org) to route HLS off-domain.
         VITE_HLS_PROXY_BASE: "${VITE_HLS_PROXY_BASE:-}"
+        # Protocol ladder tier origins (h3/h2/h1), e.g.
+        # "h3=https://stream3.animeenigma.org,h2=https://stream2.animeenigma.org,h1=https://stream1.animeenigma.org".
+        # Empty/unset ⇒ ladder falls back to a single tier rooted at VITE_HLS_PROXY_BASE
+        # (or same-origin). See utils/protocolLadder.ts.
+        VITE_HLS_PROXY_TIERS: "${VITE_HLS_PROXY_TIERS:-}"
         # Short git commit hash of the deployed build (shown in the footer).
         # `make redeploy-web` exports it from `git rev-parse --short HEAD`.
         VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"

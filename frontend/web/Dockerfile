@@ -10,6 +10,7 @@ ARG VITE_API_URL="http://localhost:8000/api"
 ARG VITE_GACHA_ADMIN_ONLY="true"
 ARG VITE_MSK_ASSET_HOST=""
 ARG VITE_HLS_PROXY_BASE=""
+ARG VITE_HLS_PROXY_TIERS=""
 # Short git commit hash of the deployed build, surfaced in the site footer so we
 # can tell at a glance which commit is live. Empty when built outside a checkout.
 ARG VITE_GIT_COMMIT=""
@@ -19,6 +20,7 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_GACHA_ADMIN_ONLY=$VITE_GACHA_ADMIN_ONLY
 ENV VITE_MSK_ASSET_HOST=$VITE_MSK_ASSET_HOST
 ENV VITE_HLS_PROXY_BASE=$VITE_HLS_PROXY_BASE
+ENV VITE_HLS_PROXY_TIERS=$VITE_HLS_PROXY_TIERS
 ENV VITE_GIT_COMMIT=$VITE_GIT_COMMIT
 
 # Copy package files
