@@ -3,6 +3,7 @@
 import type { AnalyticsConfig, AnalyticsEnvelope, AnalyticsEvent } from './types'
 import { getAnonId, getUserId } from './identity'
 import { getSessionId } from './session'
+import { maskedOverrideFor, markBlockedFromError } from '../utils/analyticsTransport'
 
 const BEACON_LIMIT = 60 * 1024 // stay under the ~64 KB sendBeacon cap
 
@@ -65,19 +66,33 @@ export class Transport {
     }
     // text/plain keeps it a CORS "simple" request (no preflight); the backend
     // reads the raw body regardless of content-type.
+    const endpoint = maskedOverrideFor('collect') ?? this.endpoint
     try {
       const blob = new Blob([payload], { type: 'text/plain' })
-      const ok = navigator.sendBeacon(this.endpoint, blob)
+      const ok = navigator.sendBeacon(endpoint, blob)
       if (ok) return
     } catch {
       // fall through to fetch
     }
-    void fetch(this.endpoint, {
+    void fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: payload,
       keepalive: true,
       credentials: 'include',
-    }).catch(() => undefined)
+    }).catch((err) => {
+      if (markBlockedFromError(err)) {
+        const retry = maskedOverrideFor('collect')
+        if (retry) {
+          void fetch(retry, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: payload,
+            keepalive: true,
+            credentials: 'include',
+          }).catch(() => undefined)
+        }
+      }
+    })
   }
 }

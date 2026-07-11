@@ -10,6 +10,7 @@ import { consumePrefetch } from '@/utils/pagePrefetch'
 import { newTraceparent } from '@/analytics/traceparent'
 import { stampTrace } from '@/analytics/traceContext'
 import { analytics } from '@/analytics'
+import { noteMaskedAnalyticsPath, probeAnalyticsReachability } from '@/utils/analyticsTransport'
 import router from '@/router'
 
 const TRACING_ON = import.meta.env.VITE_ANALYTICS_ENABLED !== 'false'
@@ -251,6 +252,10 @@ apiClient.interceptors.response.use(
   async (response: AxiosResponse) => {
     // Cross-device prefs freshness signal (Phase 7 D-03)
     maybeBustPrefsCache(response.headers['x-prefs-version'] as string | undefined)
+
+    // Track B5: learn the rotating masked analytics base + probe once.
+    noteMaskedAnalyticsPath(response.headers['x-ae-cfg'] as string | undefined)
+    probeAnalyticsReachability()
 
     // Fallback: backend signals token was present but expired on optional-auth endpoints
     if (response.headers['x-token-expired'] === 'true') {

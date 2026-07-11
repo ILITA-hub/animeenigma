@@ -13,6 +13,8 @@
  * per-session volume.
  */
 
+import { analyticsEndpoint, isMaskedAnalyticsUrl, markBlockedFromError } from './analyticsTransport'
+
 export type FeErrorKind =
   | 'js'
   | 'unhandledrejection'
@@ -38,7 +40,6 @@ export interface FeErrorEvent {
 }
 
 const ENABLED = import.meta.env.VITE_FE_ERROR_LOG_ENABLED !== 'false'
-const ENDPOINT = `${import.meta.env.VITE_API_URL || '/api'}/analytics/client-errors`
 
 const MAX_BATCH = 20
 const FLUSH_MS = 5000
@@ -80,7 +81,11 @@ function signature(e: FeErrorEvent): string {
 // the clickstream collector) must never itself be reported as an FE error.
 function isOwnTraffic(url?: string): boolean {
   if (!url) return false
-  return url.includes('/analytics/client-errors') || url.includes('/analytics/collect')
+  return (
+    url.includes('/analytics/client-errors') ||
+    url.includes('/analytics/collect') ||
+    isMaskedAnalyticsUrl(url)
+  )
 }
 
 function nowMs(): number {
@@ -220,22 +225,39 @@ export function flushFeErrors(_reason = 'manual'): void {
     errors,
     ctx: { user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '' },
   })
+  const endpoint = analyticsEndpoint('client-errors')
   try {
     const blob = new Blob([payload], { type: 'text/plain' })
-    if (typeof navigator !== 'undefined' && navigator.sendBeacon && navigator.sendBeacon(ENDPOINT, blob)) {
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon && navigator.sendBeacon(endpoint, blob)) {
       return
     }
   } catch {
     // fall through to fetch
   }
   try {
-    void fetch(ENDPOINT, {
+    void fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: payload,
       keepalive: true,
       credentials: 'include',
-    }).catch(() => undefined)
+    }).catch((err) => {
+      // Adblock signature → flip this session to the masked alias and
+      // retry this batch once there (Track B5).
+      if (markBlockedFromError(err)) {
+        try {
+          void fetch(analyticsEndpoint('client-errors'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: payload,
+            keepalive: true,
+            credentials: 'include',
+          }).catch(() => undefined)
+        } catch {
+          // give up silently
+        }
+      }
+    })
   } catch {
     // give up silently — telemetry must never break the app
   }
