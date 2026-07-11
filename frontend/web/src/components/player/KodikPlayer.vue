@@ -211,21 +211,24 @@ import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom
 import EpisodeSelector from './EpisodeSelector.vue'
 import type { EpisodeOption } from './EpisodeSelector.types'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
+import { computeAutoMarkThreshold } from './kodikAutoMark'
 
 // Watch progress tracking
 const currentTime = ref(0)
 const maxTime = ref(0) // Track max reached time as approximate duration
 const lastSaveTime = ref(0)
 const SAVE_INTERVAL = 30 // Save every 30 seconds of playback
-const AUTO_MARK_FALLBACK = 20 * 60 // Auto-mark after 20 minutes when episode duration is unknown
-// Duration-aware auto-complete threshold (seconds). With known episode
-// duration: 90% of it — so a 6-minute short completes at ~5:24 instead of
-// never reaching the 20-minute fallback. Without it: the legacy 20-min rule.
-const autoMarkThreshold = computed(() => {
-  const durMin = props.episodeDurationMin ?? 0
-  if (durMin > 0) return Math.min(AUTO_MARK_FALLBACK, Math.round(0.9 * durMin * 60))
-  return AUTO_MARK_FALLBACK
-})
+// Real per-episode duration (seconds) reported by Kodik's own
+// kodik_player_duration_update event — ground truth for THIS video, unlike
+// the catalog's nominal episode_duration which can run longer than the
+// actual streamed cut for some (esp. short-form) anime. 0 = not received yet.
+const kodikRealDurationSec = ref(0)
+// Duration-aware auto-complete threshold (seconds): prefers Kodik's live
+// duration signal, falls back to the catalog's episode_duration, then the
+// legacy 20-minute rule when neither is known. See kodikAutoMark.ts.
+const autoMarkThreshold = computed(() =>
+  computeAutoMarkThreshold(props.episodeDurationMin ?? 0, kodikRealDurationSec.value),
+)
 const authStore = useAuthStore()
 const { t } = useI18n()
 
@@ -372,6 +375,14 @@ const handleKodikMessage = (event: MessageEvent) => {
       if (props.room && kodikSyncAvailable.value === true && !applyingRemote) {
         props.room.emitTimeTick(data.value)
       }
+    }
+
+    // Handle real duration report: { key: "kodik_player_duration_update", value: 1115 }
+    // Ground-truth per-episode length for THIS video — see kodikRealDurationSec
+    // above. Guarded to positive numbers only; a stray 0/negative must not
+    // clobber an already-known good value.
+    if (data.key === 'kodik_player_duration_update' && typeof data.value === 'number' && data.value > 0) {
+      kodikRealDurationSec.value = data.value
     }
 
     // Handle pause event (save immediately)
@@ -775,6 +786,7 @@ const selectEpisode = (episode: number) => {
   currentTime.value = 0
   maxTime.value = 0
   lastSaveTime.value = 0
+  kodikRealDurationSec.value = 0
   // Check if new episode is already watched
   episodeMarkedWatched.value = episode <= watchedUpTo.value
 
@@ -867,6 +879,7 @@ watch(() => props.animeId, () => {
   currentTime.value = 0
   maxTime.value = 0
   lastSaveTime.value = 0
+  kodikRealDurationSec.value = 0
   episodeMarkedWatched.value = false
   userHasOverridden.value = false
   usedPreferredCombo.value = false
