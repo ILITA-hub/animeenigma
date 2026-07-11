@@ -1142,10 +1142,12 @@ func rewriteM3U8URLs(content, baseURL, referer string) string {
 // row (AR-EGRESS-04). Already-proxied URLs are returned untouched (the existing
 // skip rule), so the token is only added to freshly-rewritten URLs.
 func rewriteHLSURL(urlStr, basePath, referer, sess string) string {
-	// Skip if already a proxy URL (check both encoded and decoded)
+	// Skip if already a proxy URL (check both encoded and decoded, and the
+	// Track A masked path form)
 	if strings.Contains(urlStr, "/api/streaming/hls-proxy") ||
 		strings.Contains(urlStr, "%2Fapi%2Fstreaming%2Fhls-proxy") ||
-		strings.Contains(urlStr, "hls-proxy") {
+		strings.Contains(urlStr, "hls-proxy") ||
+		strings.Contains(urlStr, "/api/streaming/m/") {
 		return urlStr
 	}
 
@@ -1154,8 +1156,9 @@ func rewriteHLSURL(urlStr, basePath, referer, sess string) string {
 	if strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://") {
 		absoluteURL = urlStr
 	} else if strings.HasPrefix(urlStr, "/") {
-		// Root-relative URL - but skip if it's our proxy path
-		if strings.HasPrefix(urlStr, "/api/streaming/hls-proxy") {
+		// Root-relative URL - but skip if it's our proxy path (legacy or masked)
+		if strings.HasPrefix(urlStr, "/api/streaming/hls-proxy") ||
+			strings.HasPrefix(urlStr, "/api/streaming/m/") {
 			return urlStr
 		}
 		parsedBase, _ := url.Parse(basePath)
@@ -1163,6 +1166,20 @@ func rewriteHLSURL(urlStr, basePath, referer, sess string) string {
 	} else {
 		// Relative URL
 		absoluteURL = basePath + urlStr
+	}
+
+	// Track A: prefer the opaque path-token form — no hostname, no `url=`
+	// query shape for a static filter list to match (spec §3). Falls back to
+	// the legacy signed query form below when token minting is disabled
+	// (no secret / AE_MASKED_STREAM_DISABLED).
+	if tok := EncodeStreamToken(absoluteURL, referer, "", time.Now()); tok != "" {
+		masked := "/api/streaming/m/" + tok + "/" + maskedLeaf(absoluteURL)
+		if sess != "" {
+			// Same per-manifest correlation token as the legacy form
+			// (AR-EGRESS-04) — observeEgress reads ?sess= regardless of path.
+			masked += "?sess=" + sess
+		}
+		return masked
 	}
 
 	// Build proxy URL

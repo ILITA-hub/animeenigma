@@ -3,10 +3,10 @@ package videoutils
 import (
 	"bytes"
 	"io"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -26,7 +26,18 @@ func TestSessTokenInjection(t *testing.T) {
 	// rewriteHLSURL on a relative segment URL appends &sess=<token>.
 	out := rewriteHLSURL("seg-1.ts", "https://cdn.example.com/path/", "https://ref.example/", tok1)
 	assert.Contains(t, out, "sess="+tok1, "rewritten segment URL must carry &sess=<token>")
-	assert.Contains(t, out, "/api/streaming/hls-proxy", "must still be a proxy URL")
+	// "must still be a proxy URL" now means the opaque masked path form
+	// (Track A) — decode its token and confirm it resolves to the absolute
+	// upstream segment URL, same proxied+signed invariant as the legacy
+	// hls-proxy?url=&exp=&sig= shape it replaces.
+	if assert.True(t, strings.HasPrefix(out, "/api/streaming/m/"), "must still be a proxy URL") {
+		tok := strings.TrimPrefix(out, "/api/streaming/m/")
+		tok = tok[:strings.Index(tok, "/")]
+		p, err := DecodeStreamToken(tok, time.Now())
+		if assert.NoError(t, err, "rewritten segment URL's token must decode") {
+			assert.Equal(t, "https://cdn.example.com/path/seg-1.ts", p.URL, "token must resolve to the absolute upstream URL")
+		}
+	}
 
 	// All segments of the same manifest carry the SAME token.
 	out2 := rewriteHLSURL("seg-2.ts", "https://cdn.example.com/path/", "https://ref.example/", tok1)
@@ -328,14 +339,35 @@ func TestIsHLSDomainAllowed_AnchoredPrefixWildcards(t *testing.T) {
 func TestRewriteVTTURLs_StoryboardCues(t *testing.T) {
 	in := "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nstoryboard_001.jpg#xywh=0,0,160,90\n\n00:00:05.000 --> 00:00:10.000\nstoryboard_001.jpg#xywh=160,0,160,90\n"
 	out := rewriteVTTURLs(in, "http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard.vtt", "")
-	if !strings.Contains(out, "/api/streaming/hls-proxy?url="+url.QueryEscape("http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard_001.jpg")) {
+	if !strings.Contains(out, "/api/streaming/m/") {
 		t.Fatalf("cue URL not proxied:\n%s", out)
 	}
 	if !strings.Contains(out, "#xywh=160,0,160,90") {
 		t.Fatalf("xywh fragment must be preserved:\n%s", out)
 	}
-	if !strings.Contains(out, "&exp=") || !strings.Contains(out, "&sig=") {
-		t.Fatalf("sheet URLs must carry provenance:\n%s", out)
+	// Provenance now rides sealed inside the masked token's AEAD payload
+	// (expiry is part of the sealed StreamTokenPayload) rather than as
+	// separate &exp=/&sig= query params — decode the token from the first
+	// rewritten cue line and confirm it resolves to the expected absolute
+	// upstream sheet URL (same "proxied and signed" invariant, masked shape).
+	var cueLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "/api/streaming/m/") {
+			cueLine = line
+			break
+		}
+	}
+	if cueLine == "" {
+		t.Fatalf("no rewritten cue line in:\n%s", out)
+	}
+	tok := strings.TrimPrefix(cueLine, "/api/streaming/m/")
+	tok = tok[:strings.Index(tok, "/")]
+	p, err := DecodeStreamToken(tok, time.Now())
+	if err != nil {
+		t.Fatalf("sheet URL token does not decode: %v", err)
+	}
+	if p.URL != "http://minio:9000/raw-library/aeProvider/1/RAW/1/storyboard_001.jpg" {
+		t.Fatalf("token URL = %q", p.URL)
 	}
 	if !strings.Contains(out, "00:00:00.000 --> 00:00:05.000") {
 		t.Fatalf("timing lines must be untouched:\n%s", out)

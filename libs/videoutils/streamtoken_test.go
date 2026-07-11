@@ -105,3 +105,57 @@ func TestMaskedLeaf(t *testing.T) {
 		}
 	}
 }
+
+func TestRewriteHLSURL_EmitsMaskedForm(t *testing.T) {
+	out := rewriteHLSURL("seg-1.ts", "https://cdn.example.com/ep1/", "https://kodikplayer.com/", "abc123")
+	if !strings.HasPrefix(out, "/api/streaming/m/") {
+		t.Fatalf("expected masked form, got %q", out)
+	}
+	if strings.Contains(out, "url=") || strings.Contains(out, "cdn.example.com") || strings.Contains(out, "hls-proxy") {
+		t.Fatalf("masked child URL leaks legacy shape: %q", out)
+	}
+	if !strings.HasSuffix(out, "?sess=abc123") {
+		t.Fatalf("sess correlation param missing: %q", out)
+	}
+	// The token must round-trip to the absolute segment URL + referer.
+	tok := strings.TrimPrefix(out, "/api/streaming/m/")
+	tok = tok[:strings.Index(tok, "/")]
+	p, err := DecodeStreamToken(tok, time.Now())
+	if err != nil {
+		t.Fatalf("emitted token does not decode: %v", err)
+	}
+	if p.URL != "https://cdn.example.com/ep1/seg-1.ts" {
+		t.Fatalf("token URL = %q", p.URL)
+	}
+	if p.Referer != "https://kodikplayer.com/" {
+		t.Fatalf("token referer = %q", p.Referer)
+	}
+	// Leaf keeps the extension for player heuristics.
+	if !strings.Contains(out, "/seg-1.ts?") {
+		t.Fatalf("leaf lost: %q", out)
+	}
+}
+
+func TestRewriteHLSURL_SkipsAlreadyMasked(t *testing.T) {
+	in := "/api/streaming/m/sometoken/seg-1.ts?sess=x"
+	if out := rewriteHLSURL(in, "https://cdn.example.com/", "", "y"); out != in {
+		t.Fatalf("already-masked URL must pass through, got %q", out)
+	}
+}
+
+func TestRewriteHLSURL_LegacyFallbackWhenDisabled(t *testing.T) {
+	savedSecret, savedConfigured := provenanceSecret, provenanceConfigured
+	defer func() {
+		provenanceSecret, provenanceConfigured = savedSecret, savedConfigured
+		streamTokenAEAD = nil
+		streamTokenAEADOnce = sync.Once{}
+	}()
+	provenanceSecret, provenanceConfigured = nil, false
+	streamTokenAEAD = nil
+	streamTokenAEADOnce = sync.Once{}
+
+	out := rewriteHLSURL("seg-1.ts", "https://cdn.example.com/ep1/", "", "abc")
+	if !strings.HasPrefix(out, "/api/streaming/hls-proxy?url=") {
+		t.Fatalf("expected legacy fallback when tokens disabled, got %q", out)
+	}
+}

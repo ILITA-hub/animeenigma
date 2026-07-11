@@ -84,34 +84,34 @@ func TestProvenance_FailsClosedWhenUnconfigured(t *testing.T) {
 }
 
 // TestRewriteM3U8URLs_MintsValidToken verifies that rewriting a playlist
-// stamps every rewritten URL with an &exp=&sig= that authenticates the
-// absolute target URL — the property the segment-host bypass relies on.
+// stamps every rewritten URL with provenance that authenticates the absolute
+// target URL — the property the segment-host bypass relies on. Track A
+// (masked path token) seals that provenance inside the token's AEAD payload
+// rather than exposing it as separate &exp=/&sig= query params, so this
+// decodes the token instead of parsing query values.
 func TestRewriteM3U8URLs_MintsValidToken(t *testing.T) {
 	master := "https://cdn.mewstream.buzz/anime/abc/master.m3u8"
 	playlist := "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttps://oh7s.lookaround.click/anime/abc/index.m3u8\n"
 	out := rewriteM3U8URLs(playlist, master, "https://megaplay.buzz/")
 
-	// Find the rewritten proxy line and pull its url/exp/sig.
+	// Find the rewritten masked-token line.
 	var proxyLine string
 	for _, l := range strings.Split(out, "\n") {
-		if strings.Contains(l, "hls-proxy") {
+		if strings.Contains(l, "/api/streaming/m/") {
 			proxyLine = strings.TrimSpace(l)
 		}
 	}
 	if proxyLine == "" {
 		t.Fatalf("no rewritten proxy line in:\n%s", out)
 	}
-	q, err := url.Parse(proxyLine)
+	tok := strings.TrimPrefix(proxyLine, "/api/streaming/m/")
+	tok = tok[:strings.Index(tok, "/")]
+	p, err := DecodeStreamToken(tok, time.Now())
 	if err != nil {
-		t.Fatalf("parse proxy line: %v", err)
+		t.Fatalf("minted token does not decode for %q: %v", proxyLine, err)
 	}
-	vals := q.Query()
-	target := vals.Get("url")
-	if target != "https://oh7s.lookaround.click/anime/abc/index.m3u8" {
-		t.Fatalf("rewritten url = %q; want the absolute segment URL", target)
-	}
-	if !validProvenanceToken(target, vals.Get("exp"), vals.Get("sig"), time.Now()) {
-		t.Errorf("minted token does not validate for %q (exp=%q sig=%q)", target, vals.Get("exp"), vals.Get("sig"))
+	if p.URL != "https://oh7s.lookaround.click/anime/abc/index.m3u8" {
+		t.Fatalf("token URL = %q; want the absolute segment URL", p.URL)
 	}
 }
 

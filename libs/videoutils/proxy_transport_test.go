@@ -145,7 +145,27 @@ func TestProxyStream_MixedCaseMpegURLContentTypeIsRewritten(t *testing.T) {
 	if strings.HasSuffix(strings.TrimSpace(body), "\nseg-0.ts") || strings.TrimSpace(body) == "#EXTM3U\n#EXTINF:6.0,\nseg-0.ts" {
 		t.Fatalf("segment URI was not rewritten through the proxy (case-sensitive Content-Type check regression): %q", body)
 	}
-	if !strings.Contains(body, "/api/streaming/hls-proxy?url=") {
+	// "routed through the proxy" now means the opaque masked path form
+	// (Track A, /api/streaming/m/<token>/<leaf>) rather than the legacy
+	// hls-proxy?url= shape — decode the token and confirm it resolves to the
+	// expected absolute upstream segment URL.
+	var proxyLine string
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "/api/streaming/m/") {
+			proxyLine = line
+			break
+		}
+	}
+	if proxyLine == "" {
 		t.Fatalf("expected rewritten segment to route through the proxy, got: %q", body)
+	}
+	tok := strings.TrimPrefix(proxyLine, "/api/streaming/m/")
+	tok = tok[:strings.Index(tok, "/")]
+	p, err := DecodeStreamToken(tok, time.Now())
+	if err != nil {
+		t.Fatalf("rewritten segment token does not decode: %v", err)
+	}
+	if p.URL != sourceURL+"seg-0.ts" {
+		t.Fatalf("token URL = %q; want %q", p.URL, sourceURL+"seg-0.ts")
 	}
 }
