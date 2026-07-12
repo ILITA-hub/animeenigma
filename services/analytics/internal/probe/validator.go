@@ -42,15 +42,34 @@ func NewHTTPValidator(streamingBaseURL string, hc *http.Client, vp VideoProber) 
 // stream. See services/streaming/internal/transport/router.go.
 const hlsProxyPath = "/api/v1/hls-proxy"
 
+// maskedProxyPath is the streaming service's NATIVE Track A opaque-token proxy
+// route (/api/v1/m/<token>/<leaf>, live since 2026-07-11) — same
+// direct-to-streaming rationale as hlsProxyPath.
+const maskedProxyPath = "/api/v1/m"
+
 // proxyURL builds the streaming hls-proxy URL for a raw upstream URL. A manifest
 // child the proxy already rewrote is a root-absolute PUBLIC path
-// (/api/streaming/hls-proxy?url=...&exp=...&sig=...) — the probe maps that public
-// prefix to the streaming-native route, preserving the proxy-minted query, so
-// the variant/segment hops also reach the service directly.
+// (/api/streaming/hls-proxy?url=...&exp=...&sig=... OR, for a Track A masked
+// child, /api/streaming/m/<token>/<leaf>) — the probe maps either public prefix
+// to its streaming-native route, preserving the rest of the path/query, so the
+// variant/segment hops also reach the service directly.
+//
+// The masked case is NOT optional: a masked child is a root-relative path with
+// no host, so skipping it here falls through to the generic `url=` branch
+// below and double-proxies it — the legacy endpoint parses the bare path as
+// sourceURL, gets an empty Host, and its domain allowlist rejects it every
+// time. Since masked children are always-on, that silently misreports EVERY
+// HLS provider as down on EVERY probe tick (found 2026-07-12 recovering
+// miruro; the same class of bug the FE fixed for masked subtitle URLs).
 func (v *HTTPValidator) proxyURL(rs ResolvedStream, raw string) string {
 	for _, pfx := range []string{"/api/streaming/hls-proxy", hlsProxyPath} {
 		if strings.HasPrefix(raw, pfx) {
 			return v.streaming + hlsProxyPath + strings.TrimPrefix(raw, pfx)
+		}
+	}
+	for _, pfx := range []string{"/api/streaming/m", maskedProxyPath} {
+		if strings.HasPrefix(raw, pfx+"/") {
+			return v.streaming + maskedProxyPath + strings.TrimPrefix(raw, pfx)
 		}
 	}
 	q := url.Values{"url": {raw}}

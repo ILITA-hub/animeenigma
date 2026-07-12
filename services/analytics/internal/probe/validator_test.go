@@ -202,6 +202,52 @@ func TestValidator_UsesNativeProxyPath(t *testing.T) {
 	}
 }
 
+// TestValidator_RemapsMaskedChildToNativeRoute is the regression test for the
+// masked-token double-proxy bug (found 2026-07-12 while recovering miruro):
+// proxyURL only remapped the LEGACY /api/streaming/hls-proxy child prefix to
+// the native route — it never learned about the Track A opaque masked-token
+// prefix (/api/streaming/m/<token>/<leaf>), live since 2026-07-11. A masked
+// child fell through to the generic `url=` wrapper and got double-proxied: a
+// bare relative path (no host) passed as sourceURL to the legacy endpoint,
+// which is deterministically rejected by the domain allowlist. Since masked
+// children are always-on, this hit the variant/segment hop of EVERY HLS
+// provider's health probe on EVERY tick, misreported as ReasonEmptyResponse
+// regardless of real CDN health — the root cause behind several providers'
+// (miruro, animepahe, nineanime, gogoanime) false "down" flips since 07-11.
+func TestValidator_RemapsMaskedChildToNativeRoute(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/hls-proxy":
+			u := r.URL.Query().Get("url")
+			if strings.Contains(u, "master") {
+				w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+				_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:4,\n/api/streaming/m/FAKETOKEN/segment-1.ts?sess=abc\n"))
+				return
+			}
+			// A double-proxied masked child lands here pre-fix — mirror the real
+			// proxy's DomainNotAllowedError (502) for a bare relative sourceURL.
+			w.WriteHeader(http.StatusBadGateway)
+		case strings.HasPrefix(r.URL.Path, "/api/v1/m/"):
+			if r.URL.Path != "/api/v1/m/FAKETOKEN/segment-1.ts" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write([]byte("BINARYSEGMENTDATA"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer s.Close()
+
+	v := NewHTTPValidator(s.URL, s.Client(), fakeProber{})
+	got := v.Validate(context.Background(), ResolvedStream{
+		MasterURL: "http://minio:9000/raw-library/x/master.m3u8", Provider: "miruro", Server: "kiwi",
+	})
+	if got.Reason != streamprobe.ReasonPlayable {
+		t.Fatalf("want playable via native masked route /api/v1/m/...; got %s", got.Reason)
+	}
+}
+
 // okProber is a VideoProber that always accepts (decode gate off for the test).
 type okProber struct{}
 
