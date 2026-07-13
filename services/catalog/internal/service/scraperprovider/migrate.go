@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/providerpolicy"
 	"gorm.io/gorm"
 )
 
@@ -944,47 +945,23 @@ func ReconcilePolicyFromHealthV1(db *gorm.DB) error {
 	}
 
 	now := time.Now().UTC()
-	// down (non-disabled) → manual / status degraded.
-	if err := db.Model(&domain.ScraperProvider{}).
-		Where("policy <> ? AND health = ?", domain.PolicyDisabled, domain.HealthDown).
-		Updates(map[string]any{
-			"policy":       string(domain.PolicyManual),
-			"policy_since": now,
-			"status":       string(domain.StatusDegraded),
-		}).Error; err != nil {
-		return fmt.Errorf("reconcile down → manual: %w", err)
-	}
-	// up (non-disabled) → auto / status enabled.
-	if err := db.Model(&domain.ScraperProvider{}).
-		Where("policy <> ? AND health = ?", domain.PolicyDisabled, domain.HealthUp).
-		Updates(map[string]any{
-			"policy":       string(domain.PolicyAuto),
-			"policy_since": now,
-			"status":       string(domain.StatusEnabled),
-		}).Error; err != nil {
-		return fmt.Errorf("reconcile up → auto: %w", err)
-	}
-	// degraded / recovering (non-disabled) → auto, but WireStatus keeps them out
-	// of the failover chain (degraded stays enabled per the one-blip buffer;
-	// recovering soaks as degraded). status: auto+degraded=enabled,
-	// auto+recovering=degraded — set per health.
-	if err := db.Model(&domain.ScraperProvider{}).
-		Where("policy <> ? AND health = ?", domain.PolicyDisabled, domain.HealthDegraded).
-		Updates(map[string]any{
-			"policy":       string(domain.PolicyAuto),
-			"policy_since": now,
-			"status":       string(domain.StatusEnabled),
-		}).Error; err != nil {
-		return fmt.Errorf("reconcile degraded → auto: %w", err)
-	}
-	if err := db.Model(&domain.ScraperProvider{}).
-		Where("policy <> ? AND health = ?", domain.PolicyDisabled, domain.HealthRecovering).
-		Updates(map[string]any{
-			"policy":       string(domain.PolicyAuto),
-			"policy_since": now,
-			"status":       string(domain.StatusDegraded),
-		}).Error; err != nil {
-		return fmt.Errorf("reconcile recovering → auto: %w", err)
+	// Derive (policy, status) per health from the SAME source of truth the live
+	// probe path uses — providerpolicy.ReconcilePolicyFromHealth + WireStatus() —
+	// rather than hand-coding the mapping in SQL (down⇒manual/degraded,
+	// up⇒auto/enabled, degraded⇒auto/enabled [one-blip buffer, stays in chain],
+	// recovering⇒auto/degraded [soaks out]). One set-based UPDATE per health value.
+	for _, hlth := range []domain.ProviderHealth{domain.HealthDown, domain.HealthUp, domain.HealthDegraded, domain.HealthRecovering} {
+		p := domain.ScraperProvider{Policy: domain.PolicyAuto, Health: hlth}
+		providerpolicy.ReconcilePolicyFromHealth(&p, now)
+		if err := db.Model(&domain.ScraperProvider{}).
+			Where("policy <> ? AND health = ?", domain.PolicyDisabled, hlth).
+			Updates(map[string]any{
+				"policy":       string(p.Policy),
+				"policy_since": now,
+				"status":       string(p.WireStatus()),
+			}).Error; err != nil {
+			return fmt.Errorf("reconcile %s: %w", hlth, err)
+		}
 	}
 
 	if err := db.Create(&migrationGuard{Key: reconcilePolicyFromHealthGuardKey}).Error; err != nil {

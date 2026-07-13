@@ -127,13 +127,12 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 	// "disabled" locks; "auto" re-enables and hands the auto/manual axis back to
 	// the machine — resolve it from CURRENT health via the same rule the probe
 	// uses (ReconcilePolicyFromHealth), so a still-down provider re-enables as
-	// manual (parked) rather than a false "auto".
+	// manual (parked) rather than a false "auto". Assigning the requested value
+	// first also clears any prior disabled before the reconcile.
 	now := time.Now()
-	policy := domain.ProviderPolicy(req.Policy)
-	if policy != domain.PolicyDisabled {
-		provider.Policy = domain.PolicyAuto // clear any prior disabled before reconcile
+	provider.Policy = domain.ProviderPolicy(req.Policy)
+	if provider.Policy != domain.PolicyDisabled {
 		providerpolicy.ReconcilePolicyFromHealth(&provider, now)
-		policy = provider.Policy
 	}
 
 	// Derive the new stored status from the new policy + the provider's current
@@ -141,18 +140,17 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 	// the roster migrations use (disabled → disabled, manual → degraded) — so
 	// the persisted column never lags behind policy for the cases the
 	// capability feed's query relies on.
-	provider.Policy = policy
 	newStatus := provider.WireStatus()
 
 	if err := h.db.WithContext(r.Context()).Model(&domain.ScraperProvider{}).
 		Where("name = ?", name).
-		Updates(map[string]any{"policy": policy, "policy_since": now, "status": newStatus}).Error; err != nil {
+		Updates(map[string]any{"policy": provider.Policy, "policy_since": now, "status": newStatus}).Error; err != nil {
 		h.log.Errorw("failed to update scraper provider policy", "name", name, "error", err)
 		httputil.Error(w, liberrors.Internal("failed to update scraper provider policy"))
 		return
 	}
 
-	h.log.Infow("scraper provider policy updated", "name", name, "policy", policy, "status", newStatus)
+	h.log.Infow("scraper provider policy updated", "name", name, "policy", provider.Policy, "status", newStatus)
 	provider.PolicySince = now
 	provider.Status = newStatus
 	httputil.OK(w, toAdminWire(provider))

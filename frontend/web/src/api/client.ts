@@ -763,15 +763,15 @@ export const adminApi = {
       { enabled },
     ),
   // RBAC-and-roulette P5 Task 2 — the Providers tab's facade over catalog's
-  // stream_providers table (Task 1: services/catalog/internal/handler/
-  // admin_scraper_providers.go). All three policy values are admin levers —
-  // nothing is machine-set (probe auto demote/promote retired 2026-07-08);
-  // manual parks a provider out of auto-failover, still manually selectable.
+  // stream_providers table (services/catalog/internal/handler/
+  // admin_scraper_providers.go). As of 2026-07-13 the admin sends only the probe
+  // status 'auto'|'disabled'; the auto↔manual failover axis is machine-set from
+  // health server-side (the wire's `policy` field can still read 'manual').
   listScraperProviders: () =>
     apiClient.get<{ data: ScraperProvidersResponse } | ScraperProvidersResponse>(
       '/admin/scraper-providers',
     ),
-  setScraperProviderPolicy: (name: string, policy: ScraperProviderPolicy) =>
+  setScraperProviderPolicy: (name: string, policy: 'auto' | 'disabled') =>
     apiClient.put<{ data: ScraperProviderWire } | ScraperProviderWire>(
       `/admin/scraper-providers/${encodeURIComponent(name)}/policy`,
       { policy },

@@ -1,5 +1,5 @@
 import { adminApi } from '@/api/client'
-import type { ScraperProviderPolicy, ScraperProviderWire, ScraperProvidersResponse } from '@/api/client'
+import type { ScraperProviderWire, ScraperProvidersResponse } from '@/api/client'
 
 // RBAC-and-roulette P5 (Task 2) — admin composable for the Providers tab,
 // mirroring useAdminPolicy.ts's shape.
@@ -13,7 +13,7 @@ import type { ScraperProviderPolicy, ScraperProviderWire, ScraperProvidersRespon
 // Mirrors useAdminRecs.ts / useAdminFeedback.ts: responses are wrapped in
 // {success,data} via httputil.OK, so we unwrap `res.data?.data ?? res.data`.
 
-export type { ScraperProviderPolicy, ScraperProviderWire, ScraperProvidersResponse }
+export type { ScraperProviderWire, ScraperProvidersResponse }
 
 function unwrap<T>(data: unknown): T {
   const d = data as { data?: T }

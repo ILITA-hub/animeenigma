@@ -751,7 +751,6 @@ function probeStatusValue(row: ProviderRow): ProbeStatus {
   return row.policy === 'disabled' ? 'disabled' : 'auto'
 }
 
-
 function stateVariant(state: ScraperProviderWire['derived_state']): NonNullable<BadgeVariants['variant']> {
   switch (state) {
     case 'UP':
