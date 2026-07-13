@@ -1094,6 +1094,234 @@
       "type": "table"
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "id": 17,
+      "panels": [],
+      "title": "Storage backends \u2014 MinIO (Local) \u00b7 S3 (Cloud) \u00b7 Combined",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "aenigma-postgres-library"
+      },
+      "description": "Total bytes of first-party library episodes stored on local self-hosted MinIO (library_episodes.size_bytes WHERE storage='minio'). This is the on-disk footprint the evictor manages.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 57
+      },
+      "id": 18,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "aenigma-postgres-library"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(SUM(size_bytes),0) AS \"MinIO\" FROM library_episodes WHERE storage='minio'",
+          "refId": "A"
+        }
+      ],
+      "title": "MinIO used (Local)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "aenigma-postgres-library"
+      },
+      "description": "Total bytes of first-party library episodes offloaded to external S3 (s3.firstvds.ru) \u2014 library_episodes.size_bytes WHERE storage='s3'. Was previously invisible on this dashboard (all pool panels are minio-scoped).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 57
+      },
+      "id": 19,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "aenigma-postgres-library"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(SUM(size_bytes),0) AS \"S3\" FROM library_episodes WHERE storage='s3'",
+          "refId": "A"
+        }
+      ],
+      "title": "S3 used (Cloud)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "aenigma-postgres-library"
+      },
+      "description": "Total object-storage footprint of the first-party library across BOTH backends (library_episodes.size_bytes, all storage values).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 57
+      },
+      "id": 20,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "aenigma-postgres-library"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(SUM(size_bytes),0) AS \"Combined\" FROM library_episodes",
+          "refId": "A"
+        }
+      ],
+      "title": "Combined used (MinIO + S3)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "aenigma-postgres-library"
+      },
+      "description": "Per-backend storage breakdown from library_episodes: episode-copies stored and total bytes on each backend, plus the combined total (GROUP BY ROLLUP). MinIO = local self-hosted (bucket raw-library); S3 = external s3.firstvds.ru cloud tier. 'Distinct episodes' dedupes dual-presence (the same episode copied to both backends).",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Size"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
+      "id": 21,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "aenigma-postgres-library"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN storage IS NULL THEN 'COMBINED' ELSE storage END AS \"Backend\",\n  COUNT(*) AS \"Episode copies\",\n  COALESCE(SUM(size_bytes),0) AS \"Size\",\n  COUNT(DISTINCT (shikimori_id, episode_number)) AS \"Distinct episodes\"\nFROM library_episodes\nGROUP BY ROLLUP(storage)\nORDER BY storage NULLS LAST",
+          "refId": "A"
+        }
+      ],
+      "title": "Storage by backend (episodes + bytes, with combined total)",
+      "type": "table"
+    },
+    {
       "datasource": {
         "type": "postgres",
         "uid": "aenigma-postgres-library"
@@ -1120,7 +1348,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 70
       },
       "id": 14,
       "options": {
@@ -1160,7 +1388,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 78
       },
       "id": 15,
       "options": {
@@ -1200,7 +1428,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 86
       },
       "id": 16,
       "options": {
@@ -1258,7 +1486,7 @@
   "timezone": "browser",
   "title": "Library Service \u2014 Self-Hosted Torrent Pipeline",
   "uid": "library",
-  "version": 1,
+  "version": 2,
   "weekStart": "",
   "__inputs": [
     {
