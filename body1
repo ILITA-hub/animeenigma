@@ -1,8 +1,0 @@
-#EXTM3U
-#EXT-X-VERSION:6
-#EXT-X-STREAM-INF:BANDWIDTH=1205600,RESOLUTION=1920x1080,CODECS="avc1.640032,mp4a.40.2"
-https://g276.turbosplayer.com/file/644f3cbf-a11c-4ad5-a736-fd2ac9cbc847/master.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=52800,RESOLUTION=854x480,CODECS="avc1.64001e,mp4a.40.2"
-https://g243.turbosplayer.com/file/ef65aad9-fa50-4ad2-9a12-753a7a4d2e58/master.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=105600,RESOLUTION=1280x720,CODECS="avc1.64001f,mp4a.40.2"
-https://g260.turbosplayer.com/file/35a53698-012b-4446-b2c3-91231b6b22ec/master.m3u8
