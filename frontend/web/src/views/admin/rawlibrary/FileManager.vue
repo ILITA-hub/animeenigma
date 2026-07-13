@@ -128,18 +128,19 @@ function freshnessLabel(freshness: 'fresh' | 'stale'): string {
   return freshness === 'fresh' ? t('player.adminLibrary.files.fresh') : t('player.adminLibrary.files.stale')
 }
 
+// Only aeProvider/<id> folders carry an anime id (RawPrefix layout); gate
+// both the cache read and the resolver on it so an entry name that happens
+// to collide with a cached numeric id elsewhere (e.g. the work domain, or a
+// different prefix) doesn't pick up an unrelated title.
+const isAeProviderRoot = computed(() => props.backend !== 'work' && props.prefix === 'aeProvider/')
+
 function titleFor(name: string): string | undefined {
-  // Titles are only resolved (and only meaningful) for aeProvider/<id> dirs;
-  // gate the read so an entry name that happens to collide with a cached
-  // numeric id elsewhere (e.g. the work domain, or a different prefix)
-  // doesn't pick up an unrelated title.
-  if (props.backend === 'work' || props.prefix !== 'aeProvider/') return undefined
+  if (!isAeProviderRoot.value) return undefined
   return titleCache[name] || undefined
 }
 
 async function resolveTranscripts() {
-  // Only aeProvider/<id> folders carry an anime id (RawPrefix layout).
-  if (props.backend === 'work' || props.prefix !== 'aeProvider/') return
+  if (!isAeProviderRoot.value) return
   const ids = fileEntries.value
     .filter((e) => e.kind === 'dir' && /^\d+$/.test(e.name) && !(e.name in titleCache))
     .map((e) => e.name)
