@@ -127,6 +127,7 @@
             type="button"
             class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
             @click="openSecretFeature"
+            @auxclick="openSecretFeature"
           >
             <Sparkles class="size-4" aria-hidden="true" />
             {{ $t('nav.secretFeature') }}
@@ -184,7 +185,7 @@ import { useStandaloneDisplay } from '@/pwa/standalone'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { reportFeError } from '@/utils/feErrorLog'
-import { pickSecretFeature, roulettePoolAvailable } from '@/utils/secretFeatures'
+import { pickSecretFeature, roulettePoolAvailable, wantsNewTab } from '@/utils/secretFeatures'
 import { isHelpHotkey } from '@/utils/globalHotkeys'
 import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
 
@@ -253,9 +254,21 @@ async function loadSecretFeatureState(): Promise<void> {
   }
 }
 
-function openSecretFeature(): void {
+function openSecretFeature(e: MouseEvent): void {
+  const newTab = wantsNewTab(e)
+  // Ignore non-primary presses that aren't a new-tab gesture (e.g. a
+  // right-button auxclick) — don't roll or navigate for those.
+  if (!newTab && e.button !== 0) return
   const pick = pickSecretFeature(route.path)
-  if (pick) void router.push(pick.to)
+  if (!pick) return
+  if (newTab) {
+    // New-tab gesture (see wantsNewTab): open the freshly-rolled feature in a
+    // new tab. router.resolve serializes object targets incl. query (e.g.
+    // showcase-editor) — window.open idiom shared with AnimeContextMenu.vue.
+    window.open(router.resolve(pick.to).href, '_blank', 'noopener,noreferrer')
+  } else {
+    void router.push(pick.to)
+  }
 }
 
 // Global `?` → secret tips & hotkeys page. The `<video>` guard keeps a

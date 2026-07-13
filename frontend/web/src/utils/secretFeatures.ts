@@ -114,6 +114,20 @@ export function roulettePoolAvailable(): boolean {
   return SECRET_FEATURES.some((f) => store.roulette.includes(f.key))
 }
 
+/**
+ * Whether a click on the footer roulette button is an "open in a new tab"
+ * gesture — Cmd (macOS) / Ctrl (Windows/Linux) + primary click, or a middle
+ * click (`button === 1`). These are exactly the gestures the browser applies
+ * to a real `<a href>`; the roulette is a `<button>` (its target is random per
+ * click, so there's no static href), so App.vue's handler replays the gesture
+ * itself via `window.open`. A modifier on a non-primary button (e.g. Ctrl +
+ * right-click) is not a new-tab gesture and stays false.
+ */
+export function wantsNewTab(e: MouseEvent): boolean {
+  if (e.button === 1) return true
+  return e.button === 0 && (e.metaKey || e.ctrlKey)
+}
+
 let lastKey: SecretFeature['key'] | null = null
 
 /**

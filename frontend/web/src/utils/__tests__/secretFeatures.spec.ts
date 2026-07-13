@@ -12,6 +12,7 @@ vi.mock('@/api/client', () => ({
 import {
   pickSecretFeature,
   roulettePoolAvailable,
+  wantsNewTab,
   _resetSecretFeatureForTests,
 } from '../secretFeatures'
 import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
@@ -114,5 +115,34 @@ describe('roulettePoolAvailable — footer button dead-affordance guard (P4 Task
     store.rouletteEnabled = true
     store.roulette = ['anidle']
     expect(store.rouletteEnabled && roulettePoolAvailable()).toBe(true)
+  })
+})
+
+describe('wantsNewTab — the roulette button honours open-in-new-tab gestures', () => {
+  const ev = (init: Partial<MouseEvent>): MouseEvent =>
+    ({ button: 0, metaKey: false, ctrlKey: false, ...init }) as MouseEvent
+
+  it('plain left click → false (navigate in place)', () => {
+    expect(wantsNewTab(ev({ button: 0 }))).toBe(false)
+  })
+
+  it('Cmd (meta) + left click → true (macOS new-tab gesture)', () => {
+    expect(wantsNewTab(ev({ button: 0, metaKey: true }))).toBe(true)
+  })
+
+  it('Ctrl + left click → true (Windows/Linux new-tab gesture)', () => {
+    expect(wantsNewTab(ev({ button: 0, ctrlKey: true }))).toBe(true)
+  })
+
+  it('middle click (button 1) → true', () => {
+    expect(wantsNewTab(ev({ button: 1 }))).toBe(true)
+  })
+
+  it('right click (button 2) → false (no new tab, not even with a modifier)', () => {
+    expect(wantsNewTab(ev({ button: 2, ctrlKey: true }))).toBe(false)
+  })
+
+  it('keyboard activation (button 0, no modifiers) → false', () => {
+    expect(wantsNewTab(ev({ button: 0 }))).toBe(false)
   })
 })
