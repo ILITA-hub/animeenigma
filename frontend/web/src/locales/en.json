@@ -1525,15 +1525,18 @@
       },
       "providers": {
         "title": "Scraper providers",
-        "intro": "Set each provider's policy: auto (in the failover chain), manual (parked out of auto-failover but still hand-selectable), or disabled (dropped from playback entirely). Health is probe-owned and updates on its own.",
+        "intro": "Turn each provider's probing on (Auto) or off (Disabled). While Auto, the machine moves it in and out of the auto-failover chain by health on its own — down providers are parked to hand-selectable, healthy ones rejoin automatically.",
         "loadError": "Couldn't load providers — try again",
         "groupLabel": "Group",
         "engineLabel": "Engine",
-        "toggleLabel": "Set {name} policy: auto, manual or disabled",
-        "policy": {
+        "probeToggleLabel": "Set {name} probe status: Auto or Disabled",
+        "probeStatus": {
           "auto": "Auto",
-          "manual": "Manual",
           "disabled": "Disabled"
+        },
+        "chain": {
+          "auto": "In auto-failover",
+          "manual": "Parked (hand-selectable)"
         },
         "state": {
           "UP": "Up",
@@ -1543,16 +1546,12 @@
           "Disabled": "Disabled"
         },
         "confirmDisableTitle": "Disable {name}?",
-        "confirmDisableBody": "Disabling removes {name} from the auto-failover chain immediately — playback falls over to the next provider instead.",
+        "confirmDisableBody": "Disabling removes {name} from playback entirely — it won't be probed or hand-selectable. (A down provider is already auto-parked out of the failover chain without disabling.)",
         "disableAction": "Disable",
         "toasts": {
           "auto": {
-            "success": "{name} set to auto",
-            "error": "Couldn't re-enable {name} — try again"
-          },
-          "manual": {
-            "success": "{name} parked to manual — out of auto-failover, still hand-selectable",
-            "error": "Couldn't set {name} to manual — try again"
+            "success": "{name} probing enabled — the machine now manages its failover state",
+            "error": "Couldn't enable {name} — try again"
           },
           "disabled": {
             "success": "{name} disabled",

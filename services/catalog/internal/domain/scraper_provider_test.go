@@ -49,11 +49,15 @@ func TestProbeCadenceAndSample(t *testing.T) {
 		wantSize    int
 		wantFF      bool
 	}{
+		// Recovery is anchor-gated now (2026-07-13): no branch fail-fasts on a
+		// non-anchor miss, so per-title providers can climb back on the anchor.
 		{"up", domain.PolicyAuto, domain.HealthUp, 6 * time.Hour, 5, false},
 		{"degraded re-probes next cycle", domain.PolicyAuto, domain.HealthDegraded, 6 * time.Hour, 5, false},
-		{"recovering", domain.PolicyManual, domain.HealthRecovering, 12 * time.Hour, 3, true},
-		{"manual-down", domain.PolicyManual, domain.HealthDown, 24 * time.Hour, 1, true},
-		{"failing auto-down", domain.PolicyAuto, domain.HealthDown, 6 * time.Hour, 5, true},
+		{"recovering", domain.PolicyManual, domain.HealthRecovering, 12 * time.Hour, 3, false},
+		{"manual-down", domain.PolicyManual, domain.HealthDown, 24 * time.Hour, 1, false},
+		// down is always manual under the health-driven policy; if a stale auto+down
+		// row exists it still samples just the anchor (1, no fail-fast).
+		{"down samples anchor", domain.PolicyAuto, domain.HealthDown, 6 * time.Hour, 1, false},
 		{"disabled never", domain.PolicyDisabled, domain.HealthDown, 0, 0, false},
 	}
 	for _, c := range cases {

@@ -210,6 +210,12 @@ const allanimeOkruCryptoBlockGuardKey = "allanime_okru_crypto_block_2026_07_07"
 // bumpKodikNoadsPriorityGuardKey marks BumpKodikNoadsPriority as applied.
 const bumpKodikNoadsPriorityGuardKey = "bump_kodik_noads_priority_90_2026_07_07"
 
+// reconcilePolicyFromHealthGuardKey marks ReconcilePolicyFromHealthV1 as applied.
+const reconcilePolicyFromHealthGuardKey = "reconcile_policy_from_health_v1_2026_07_13"
+
+// allanimeOkruCryptoLiftedGuardKey marks AllanimeOkruCryptoGateLifted as applied.
+const allanimeOkruCryptoLiftedGuardKey = "allanime_okru_crypto_lifted_2026_07_13"
+
 // RemoveRawProvider hard-deletes the legacy standalone "raw" JP provider row
 // (removed 2026-06-30 — AllAnime + ok.ru cover JP-original audio). The seed no
 // longer creates it, but insert-if-absent seeding never deletes an existing
@@ -911,6 +917,119 @@ func BumpKodikNoadsPriority(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: bumpKodikNoadsPriorityGuardKey}).Error; err != nil {
 		return fmt.Errorf("write bump-kodik-noads-priority guard: %w", err)
+	}
+	return nil
+}
+
+// ReconcilePolicyFromHealthV1 aligns existing rows to the 2026-07-13
+// health-driven policy rule exactly once: for every non-disabled row, policy =
+// (health==down ? manual : auto), with policy_since stamped and status derived
+// via WireStatus(policy, health). This is the one-shot backfill of what
+// providerpolicy.ReconcilePolicyFromHealth now maintains on every probe tick —
+// it flips already-down auto providers (animepahe / allanime-okru / gogoanime)
+// to manual (parked, hacker-selectable) and leaves up/degraded/recovering as
+// auto. disabled rows are untouched (admin hard-lock). Guarded so it never
+// clobbers later machine writes on reboot; runs AFTER BackfillPolicyHealth.
+func ReconcilePolicyFromHealthV1(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", reconcilePolicyFromHealthGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check reconcile-policy-from-health guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber later machine writes
+	}
+
+	now := time.Now().UTC()
+	// down (non-disabled) → manual / status degraded.
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("policy <> ? AND health = ?", domain.PolicyDisabled, domain.HealthDown).
+		Updates(map[string]any{
+			"policy":       string(domain.PolicyManual),
+			"policy_since": now,
+			"status":       string(domain.StatusDegraded),
+		}).Error; err != nil {
+		return fmt.Errorf("reconcile down → manual: %w", err)
+	}
+	// up (non-disabled) → auto / status enabled.
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("policy <> ? AND health = ?", domain.PolicyDisabled, domain.HealthUp).
+		Updates(map[string]any{
+			"policy":       string(domain.PolicyAuto),
+			"policy_since": now,
+			"status":       string(domain.StatusEnabled),
+		}).Error; err != nil {
+		return fmt.Errorf("reconcile up → auto: %w", err)
+	}
+	// degraded / recovering (non-disabled) → auto, but WireStatus keeps them out
+	// of the failover chain (degraded stays enabled per the one-blip buffer;
+	// recovering soaks as degraded). status: auto+degraded=enabled,
+	// auto+recovering=degraded — set per health.
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("policy <> ? AND health = ?", domain.PolicyDisabled, domain.HealthDegraded).
+		Updates(map[string]any{
+			"policy":       string(domain.PolicyAuto),
+			"policy_since": now,
+			"status":       string(domain.StatusEnabled),
+		}).Error; err != nil {
+		return fmt.Errorf("reconcile degraded → auto: %w", err)
+	}
+	if err := db.Model(&domain.ScraperProvider{}).
+		Where("policy <> ? AND health = ?", domain.PolicyDisabled, domain.HealthRecovering).
+		Updates(map[string]any{
+			"policy":       string(domain.PolicyAuto),
+			"policy_since": now,
+			"status":       string(domain.StatusDegraded),
+		}).Error; err != nil {
+		return fmt.Errorf("reconcile recovering → auto: %w", err)
+	}
+
+	if err := db.Create(&migrationGuard{Key: reconcilePolicyFromHealthGuardKey}).Error; err != nil {
+		return fmt.Errorf("write reconcile-policy-from-health guard: %w", err)
+	}
+	return nil
+}
+
+// AllanimeOkruCryptoGateLifted refreshes ONLY allanime-okru's description once,
+// superseding the stale 2026-07-07 AllanimeOkruCryptoBlock tombstone: as of
+// 2026-07-13 the upstream AA_CRYPTO_MISSING gate has LIFTED — api.allanime.day's
+// `episode` (sourceUrls) resolver decrypts again (verified from clean egress),
+// and the provider serves real content per-title (Re:Zero S4 / Steel Ball Run:
+// real 1080p MPEG-TS via ok.ru/okcdn.ru). Its "down" state is a per-title
+// artifact: ok.ru copyright-blocks some high-profile titles (e.g. the probe
+// anchor Frieren), so the anchor-gated probe can't self-recover it, but users
+// can hand-select it and get real streams for the many titles ok.ru does carry.
+// Mirrors MiruroCloudflareBlock/AllanimeOkruCryptoBlock exactly — touches only
+// `description` (never reason/status/policy/health, which are machine/admin
+// owned). A NEW guard key so it applies once on top of the earlier tombstone.
+func AllanimeOkruCryptoGateLifted(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", allanimeOkruCryptoLiftedGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check allanime-okru-crypto-lifted guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator edit
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "allanime-okru").
+		Update("description", "AllAnime GraphQL discovery + ok.ru ('Ok') CDN streams (clock-free). As of 2026-07-13 the 2026-07-07 AA_CRYPTO_MISSING gate has LIFTED — api.allanime.day's `episode`/sourceUrls resolver decrypts again (verified from clean egress). The provider serves REAL content per-title (e.g. Re:Zero S4, Steel Ball Run: real 1080p MPEG-TS via ok.ru/okcdn.ru). It is ok.ru-only, so availability is per-title: titles whose ok.ru copy is copyright-blocked (e.g. the probe anchor Frieren) fail with 'no data-options', which is why the anchor-gated probe can't auto-recover it — but it is hacker-selectable and serves real streams for the many titles ok.ru carries. Supersedes the stale AA_CRYPTO_MISSING tombstone.")
+	if result.Error != nil {
+		return fmt.Errorf("allanime-okru crypto-lifted: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No allanime-okru row to update. Do NOT write the guard, so a later boot
+		// (after the row exists) retries.
+		return fmt.Errorf("allanime-okru crypto-lifted: no row found for name=allanime-okru")
+	}
+	if err := db.Create(&migrationGuard{Key: allanimeOkruCryptoLiftedGuardKey}).Error; err != nil {
+		return fmt.Errorf("write allanime-okru-crypto-lifted guard: %w", err)
 	}
 	return nil
 }

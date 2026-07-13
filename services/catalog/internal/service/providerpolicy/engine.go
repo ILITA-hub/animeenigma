@@ -43,10 +43,34 @@ func ApplyHealth(p *domain.ScraperProvider, pass bool, now time.Time, promoteAft
 	}
 }
 
-// ApplyVerdict is the full per-probe transition: health, then stamp. Policy
-// is admin-only and never mutated here (the 24h auto→manual demotion and
-// manual→auto promotion were retired 2026-07-08 with the hysteresis redesign).
+// ReconcilePolicyFromHealth drives the failover-participation policy from the
+// (already-advanced) health, health-first: a confirmed-down provider is parked
+// to manual (out of auto-failover, still hacker-selectable); anything else
+// (up/degraded/recovering) is auto. disabled is the admin hard-lock and is
+// NEVER touched here — only the admin Auto/Disabled toggle sets it. PolicySince
+// is stamped only on a real change. This is the 2026-07-13 reversal of the
+// 2026-07-08 "policy admin-only" decision: the owner asked that degraded/down
+// providers auto-park (owner refined it to "down only") so the /admin/policy
+// panel is machine-controlled and the admin toggles only probe on/off.
+func ReconcilePolicyFromHealth(p *domain.ScraperProvider, now time.Time) {
+	if p.Policy == domain.PolicyDisabled {
+		return
+	}
+	want := domain.PolicyAuto
+	if p.Health == domain.HealthDown {
+		want = domain.PolicyManual
+	}
+	if p.Policy != want {
+		p.Policy = want
+		p.PolicySince = now
+	}
+}
+
+// ApplyVerdict is the full per-probe transition: health, then health-driven
+// policy reconciliation, then stamp. Unlike the 2026-07-08→2026-07-13 window,
+// policy IS advanced here now (down⇒manual, else auto; disabled untouched).
 func ApplyVerdict(p *domain.ScraperProvider, pass bool, now time.Time, promoteAfter time.Duration) {
 	ApplyHealth(p, pass, now, promoteAfter)
+	ReconcilePolicyFromHealth(p, now)
 	p.LastProbedAt = now
 }

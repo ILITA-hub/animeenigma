@@ -70,8 +70,11 @@ func TestProbeResult_FlipsRow(t *testing.T) {
 	if p.Health != domain.HealthDown {
 		t.Fatalf("health=%s want down", p.Health)
 	}
-	if p.Policy != domain.PolicyAuto { // sustained down never demotes — policy is admin-only
-		t.Fatalf("policy=%s want auto", p.Policy)
+	if p.Policy != domain.PolicyManual { // down is health-parked to manual (2026-07-13)
+		t.Fatalf("policy=%s want manual", p.Policy)
+	}
+	if p.Status != domain.StatusDegraded { // WireStatus(manual,down) co-written
+		t.Fatalf("status=%s want degraded", p.Status)
 	}
 	if p.LastProbedAt.IsZero() {
 		t.Fatal("last_probed_at not stamped")
@@ -268,7 +271,7 @@ func TestProbePlan_DueSet(t *testing.T) {
 	db.Create(&[]domain.ScraperProvider{
 		{Name: "gogoanime", Policy: domain.PolicyAuto, Health: domain.HealthUp, LastProbedAt: now.Add(-7 * time.Hour), ScraperOperated: true},    // due (6h cadence for Up)
 		{Name: "miruro", Policy: domain.PolicyAuto, Health: domain.HealthUp, LastProbedAt: now.Add(-1 * time.Hour), ScraperOperated: true},        // not due
-		{Name: "allanime", Policy: domain.PolicyManual, Health: domain.HealthDown, LastProbedAt: now.Add(-25 * time.Hour), ScraperOperated: true}, // due (24h manual cadence), size=1, ff=true
+		{Name: "allanime", Policy: domain.PolicyManual, Health: domain.HealthDown, LastProbedAt: now.Add(-25 * time.Hour), ScraperOperated: true}, // due (24h manual cadence), size=1, ff=false (anchor-gated)
 		{Name: "deadguy", Policy: domain.PolicyDisabled, Health: domain.HealthDown, LastProbedAt: now.Add(-99 * time.Hour), ScraperOperated: true}, // excluded
 	})
 	h := handler.NewInternalProviderPolicyHandler(db, testProviderPolicyCfg(), testNopLogger())
@@ -310,8 +313,8 @@ func TestProbePlan_DueSet(t *testing.T) {
 	if got["allanime"] != (struct {
 		size int
 		ff   bool
-	}{1, true}) {
-		t.Fatalf("allanime plan=%+v want {1,true}", got["allanime"])
+	}{1, false}) {
+		t.Fatalf("allanime plan=%+v want {1,false}", got["allanime"])
 	}
 }
 

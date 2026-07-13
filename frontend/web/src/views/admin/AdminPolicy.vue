@@ -257,16 +257,30 @@
                     <p v-if="row.description" class="mt-1 text-xs text-white/50">{{ row.description }}</p>
                   </div>
                   <div class="flex items-center gap-3">
-                    <Badge :variant="stateVariant(row.derived_state)" :data-testid="`provider-state-${row.name}`">
-                      {{ $t(`admin.policy.providers.state.${row.derived_state}`) }}
-                    </Badge>
+                    <div class="flex flex-col items-end gap-1">
+                      <Badge :variant="stateVariant(row.derived_state)" :data-testid="`provider-state-${row.name}`">
+                        {{ $t(`admin.policy.providers.state.${row.derived_state}`) }}
+                      </Badge>
+                      <!-- Machine-set auto/manual (health-driven), read-only: the
+                           admin no longer picks it, so surface WHY a provider is
+                           parked. Hidden when disabled (the toggle already says so). -->
+                      <span
+                        v-if="row.policy !== 'disabled'"
+                        class="text-xs text-white/40"
+                        :data-testid="`provider-chain-${row.name}`"
+                      >
+                        {{ row.policy === 'auto'
+                          ? $t('admin.policy.providers.chain.auto')
+                          : $t('admin.policy.providers.chain.manual') }}
+                      </span>
+                    </div>
                     <SegmentedControl
-                      :model-value="row.policy"
-                      :options="providerPolicyOptions"
-                      :aria-label="$t('admin.policy.providers.toggleLabel', { name: row.name })"
+                      :model-value="probeStatusValue(row)"
+                      :options="probeStatusOptions"
+                      :aria-label="$t('admin.policy.providers.probeToggleLabel', { name: row.name })"
                       :class="row.saving ? 'opacity-40 pointer-events-none' : ''"
-                      :data-testid="`provider-policy-${row.name}`"
-                      @update:model-value="(v: string) => onSelectProviderPolicy(row, v as ScraperProviderPolicy)"
+                      :data-testid="`provider-probe-${row.name}`"
+                      @update:model-value="(v: string) => onSelectProbeStatus(row, v as ProbeStatus)"
                     />
                   </div>
                 </CardHeader>
@@ -423,7 +437,7 @@ import UserResolveInput from '@/components/admin/UserResolveInput.vue'
 import { useAdminPolicy } from '@/composables/useAdminPolicy'
 import type { FeatureFlag, FailSafe } from '@/composables/useAdminPolicy'
 import { useAdminProviders } from '@/composables/useAdminProviders'
-import type { ScraperProviderPolicy, ScraperProviderWire } from '@/composables/useAdminProviders'
+import type { ScraperProviderWire } from '@/composables/useAdminProviders'
 import { useAdminMaintenance } from '@/composables/useAdminMaintenance'
 import type { MaintenanceRoutineWire } from '@/composables/useAdminMaintenance'
 import { MAINTENANCE_ROUTINES, routineDescriptor } from '@/config/maintenanceRoutines'
@@ -721,15 +735,21 @@ const isProvidersLoading = ref(true)
 const providersError = ref<string | null>(null)
 const providerRows = ref<ProviderRow[]>([])
 
-// All three policy values are admin levers (probe auto demote/promote retired
-// 2026-07-08 — nothing machine-sets policy): auto = in the failover chain,
-// manual = parked out of auto-failover but still manually selectable,
-// disabled = dropped entirely.
-const PROVIDER_POLICIES: ScraperProviderPolicy[] = ['auto', 'manual', 'disabled']
+// The admin controls only a 2-state PROBE STATUS now (2026-07-13): Auto (probed
+// + machine-managed) or Disabled (off the roster). The auto↔manual failover
+// distinction is health-driven and machine-set — shown read-only, not picked.
+type ProbeStatus = 'auto' | 'disabled'
+const PROBE_STATUSES: ProbeStatus[] = ['auto', 'disabled']
 
-const providerPolicyOptions = computed(() =>
-  PROVIDER_POLICIES.map((p) => ({ value: p, label: t(`admin.policy.providers.policy.${p}`) })),
+const probeStatusOptions = computed(() =>
+  PROBE_STATUSES.map((s) => ({ value: s, label: t(`admin.policy.providers.probeStatus.${s}`) })),
 )
+
+// Disabled ⟺ policy 'disabled'; anything else (auto OR machine-parked manual)
+// reads as the Auto probe status.
+function probeStatusValue(row: ProviderRow): ProbeStatus {
+  return row.policy === 'disabled' ? 'disabled' : 'auto'
+}
 
 
 function stateVariant(state: ScraperProviderWire['derived_state']): NonNullable<BadgeVariants['variant']> {
@@ -767,11 +787,12 @@ async function loadProviders(): Promise<void> {
   }
 }
 
-// Applies the actual policy change: optimistic flip of `policy` (so the
-// segmented control reflects the new state immediately), then reconciles with
-// the authoritative wire on success (derived_state/reason/health may differ
-// from what we guessed) or reverts on failure.
-async function applyProviderPolicy(row: ProviderRow, nextPolicy: ScraperProviderPolicy): Promise<void> {
+// Applies the probe-status change: optimistic flip of `policy` (so the toggle
+// reflects the new state immediately), then reconciles with the authoritative
+// wire on success (the server may resolve 'auto' to a machine-parked 'manual',
+// and derived_state/reason/health may differ) or reverts on failure. The input
+// is the 2-state probe status the admin can set; 'manual' is machine-only.
+async function applyProviderPolicy(row: ProviderRow, nextPolicy: ProbeStatus): Promise<void> {
   const previousPolicy = row.policy
   // row.name, not description — description is multi-line operator prose (44398d73).
   const name = row.name
@@ -789,14 +810,14 @@ async function applyProviderPolicy(row: ProviderRow, nextPolicy: ScraperProvider
   }
 }
 
-// auto/manual apply directly; disabled is gated behind a destructive confirm
-// (disabling drops the provider from playback entirely — manual only parks it
-// out of auto-failover, it stays manually selectable). Re-selecting the
-// current policy is a no-op.
-async function onSelectProviderPolicy(row: ProviderRow, next: ScraperProviderPolicy): Promise<void> {
-  if (next === row.policy) return
+// Auto re-enables (the backend resolves auto-vs-parked-manual from live health);
+// Disabled is gated behind a destructive confirm (it drops the provider from
+// playback entirely, whereas a machine-parked manual still serves hacker-mode).
+// Re-selecting the current status is a no-op.
+async function onSelectProbeStatus(row: ProviderRow, next: ProbeStatus): Promise<void> {
+  if (next === probeStatusValue(row)) return
   if (next !== 'disabled') {
-    await applyProviderPolicy(row, next)
+    await applyProviderPolicy(row, 'auto')
     return
   }
   const name = row.name

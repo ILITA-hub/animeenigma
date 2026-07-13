@@ -1022,14 +1022,18 @@ groups:
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
-              # Per group, fires when the HEALTHIEST provider is registered
-              # (>=1, so all-Disabled/manual steady-state groups are excluded)
-              # but below serving-or-imminent (<2 => best is Down; Degraded=2 is
-              # a one-fail warning still IN auto-failover, Recovering=3 is
-              # passing probes and climbing back). `max by (group)` never
-              # yields an empty result, so a fully-Down group still produces a
-              # value to threshold (the naive count(...>=2)==0 would vanish).
-              expr: (max by (group) (provider_state) < 2) and (max by (group) (provider_state) >= 1)
+              # Keyed on provider_health_state (health lifecycle), NOT
+              # provider_state: since 2026-07-13 down⇒manual⇒provider_state=0, so
+              # the failover-participation gauge can no longer distinguish "best
+              # is Down" (0) from "disabled/parked" (0). provider_health_state
+              # keeps Down=1 regardless of policy. Per group, fires when the
+              # HEALTHIEST provider is registered (>=1, so admin-Disabled-only
+              # groups — health_state 0 — are excluded) but below
+              # serving-or-imminent (<2 => best is Down; Degrading=2 is a one-fail
+              # warning still IN auto-failover, Recovering=3 is climbing back).
+              # `max by (group)` never yields an empty result, so a fully-Down
+              # group still produces a value to threshold.
+              expr: (max by (group) (provider_health_state) < 2) and (max by (group) (provider_health_state) >= 1)
               instant: true
               refId: A
           - refId: B
@@ -1100,7 +1104,10 @@ groups:
               # the design's "gradual attrition auto-demotes to Degraded(2)"
               # premise does not hold for providers that keep actively failing
               # probes (they stay pinned at Down(1) indefinitely).
-              expr: count by (group) ((provider_state == 1) unless (provider_state offset 15m == 1))
+              # Keyed on provider_health_state (Down=1) not provider_state: since
+              # 2026-07-13 down⇒manual⇒provider_state=0, so the Down signal moved
+              # to the health gauge (unaffected by the policy automation).
+              expr: count by (group) ((provider_health_state == 1) unless (provider_health_state offset 15m == 1))
               instant: true
               refId: A
           - refId: B

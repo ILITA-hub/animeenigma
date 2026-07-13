@@ -26,10 +26,12 @@ export function useAdminProviders() {
     return unwrap<ScraperProvidersResponse>(res.data).providers
   }
 
-  // All three policy values are admin levers — nothing is machine-set
-  // (probe auto demote/promote retired 2026-07-08). `manual` parks the
-  // provider out of auto-failover while keeping it manually selectable.
-  async function setPolicy(name: string, policy: ScraperProviderPolicy): Promise<ScraperProviderWire> {
+  // As of 2026-07-13 the admin sends only the probe status: 'auto' (re-enable +
+  // hand back to the machine) or 'disabled' (hard lock). The auto↔manual
+  // failover axis is machine-set from health server-side, so the returned wire
+  // may read policy 'manual' even when 'auto' was sent (a still-down provider
+  // re-enables as parked). 'manual' is never a valid admin input.
+  async function setPolicy(name: string, policy: 'auto' | 'disabled'): Promise<ScraperProviderWire> {
     const res = await adminApi.setScraperProviderPolicy(name, policy)
     return unwrap<ScraperProviderWire>(res.data)
   }

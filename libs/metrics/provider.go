@@ -117,20 +117,17 @@ var (
 		[]string{"provider", "status", "reason", "description"},
 	)
 
-	// ProviderState is the FAILOVER-PARTICIPATION lifecycle gauge the Grafana
-	// fleet alert rules aggregate `by (group)` (ProviderFleetNoAutoPlayable /
-	// ProviderFleetCorrelatedDown). Value is domain.ScraperProvider.StateCode —
-	// 4=UP, 3=Recovering, 2=Degraded (one failed probe), 1=Down, 0=not in
-	// auto-failover (manual OR disabled). Manual/disabled collapse to 0 so a
-	// parked-but-healthy provider never masks the "no auto-playable source"
-	// alert math (see StateCode's decoupling from DerivedState). The health
-	// DISPLAY timeline uses provider_health_state instead. Unlike provider_info
-	// (boot-only snapshot), catalog re-sets this on every probe-result
-	// transition, so the gauge holds the current state between probes. Catalog
-	// is the SOLE emitter (covers the full roster), so there is no
-	// duplicate-series-across-targets concern. Carries a `group` label
-	// (domain.ScraperProvider.Group) alongside `provider` for the `by (group)`
-	// alert aggregation.
+	// ProviderState is the FAILOVER-PARTICIPATION lifecycle gauge. Value is
+	// domain.ScraperProvider.StateCode — 4=UP, 3=Recovering, 2=Degraded, 1=Down,
+	// 0=not in auto-failover (manual OR disabled). NOTE (2026-07-13): since policy
+	// is now health-driven (down⇒manual), a Down provider collapses to 0 here, so
+	// this gauge can no longer distinguish "best is Down" from "parked/disabled".
+	// The two fleet alert rules (ProviderFleetNoAutoPlayable /
+	// ProviderFleetCorrelatedDown) were therefore REPOINTED to
+	// provider_health_state, which keeps Down=1 regardless of policy. This gauge
+	// remains a truthful "is it in the auto-failover chain" signal (only auto+up
+	// ⇒ 4) and is still emitted, just no longer alerted on. Catalog is the SOLE
+	// emitter and re-sets it on every probe-result transition + boot seed.
 	ProviderState = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "provider_state",

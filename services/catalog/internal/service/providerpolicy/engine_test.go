@@ -16,17 +16,17 @@ func TestApplyVerdict_HysteresisThenRecover(t *testing.T) {
 	if p.Health != domain.HealthDegraded || p.Policy != domain.PolicyAuto || !p.Eligible() {
 		t.Fatalf("after first fail: %+v", p)
 	}
-	ApplyVerdict(p, false, t0.Add(2*time.Hour), day) // second consecutive fail -> down, still auto
-	if p.Health != domain.HealthDown || p.Policy != domain.PolicyAuto || p.Eligible() {
+	ApplyVerdict(p, false, t0.Add(2*time.Hour), day) // second consecutive fail -> down, health-parked to manual
+	if p.Health != domain.HealthDown || p.Policy != domain.PolicyManual || p.Eligible() {
 		t.Fatalf("after second fail: %+v", p)
 	}
-	ApplyVerdict(p, false, t0.Add(2*day), day) // sustained fails never demote policy
-	if p.Policy != domain.PolicyAuto {
-		t.Fatalf("policy=%s want auto (auto demotion is retired)", p.Policy)
+	ApplyVerdict(p, false, t0.Add(2*day), day) // sustained down stays parked manual
+	if p.Policy != domain.PolicyManual {
+		t.Fatalf("policy=%s want manual (down is health-parked)", p.Policy)
 	}
-	ApplyVerdict(p, true, t0.Add(3*day), day) // down probe passes -> recovering
-	if p.Health != domain.HealthRecovering {
-		t.Fatalf("expected recovering, got %s", p.Health)
+	ApplyVerdict(p, true, t0.Add(3*day), day) // down probe passes -> recovering, un-parks to auto
+	if p.Health != domain.HealthRecovering || p.Policy != domain.PolicyAuto {
+		t.Fatalf("expected recovering+auto, got %+v", p)
 	}
 	ApplyVerdict(p, true, t0.Add(4*day+time.Minute), day) // recovering >1d -> up
 	if p.Health != domain.HealthUp || p.Policy != domain.PolicyAuto || !p.Eligible() {
@@ -47,27 +47,38 @@ func TestApplyVerdict_DegradedClearsOnPass(t *testing.T) {
 	}
 }
 
-func TestApplyVerdict_PolicyNeverMutated(t *testing.T) {
+// TestApplyVerdict_ReconcilesPolicy covers the 2026-07-13 health-driven policy:
+// down⇒manual, everything else⇒auto, disabled immune.
+func TestApplyVerdict_ReconcilesPolicy(t *testing.T) {
 	t0 := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
 	day := 24 * time.Hour
-	t.Run("manual stays manual through sustained passes", func(t *testing.T) {
+	t.Run("parked manual un-parks to auto on recovery", func(t *testing.T) {
 		p := &domain.ScraperProvider{Policy: domain.PolicyManual, Health: domain.HealthDown, HealthSince: t0}
-		ApplyVerdict(p, true, t0.Add(day), day)   // down -> recovering
-		ApplyVerdict(p, true, t0.Add(3*day), day) // recovering >1d -> up
-		if p.Health != domain.HealthUp {
-			t.Fatalf("health=%s want up", p.Health)
+		ApplyVerdict(p, true, t0.Add(day), day) // down -> recovering, un-park
+		if p.Health != domain.HealthRecovering || p.Policy != domain.PolicyAuto {
+			t.Fatalf("after first pass: %+v", p)
 		}
-		if p.Policy != domain.PolicyManual {
-			t.Fatalf("policy=%s want manual (auto promotion is retired)", p.Policy)
+		ApplyVerdict(p, true, t0.Add(3*day), day) // recovering >1d -> up, stays auto
+		if p.Health != domain.HealthUp || p.Policy != domain.PolicyAuto {
+			t.Fatalf("after promote: %+v", p)
 		}
 	})
-	t.Run("auto stays auto through fail-fail-fail", func(t *testing.T) {
+	t.Run("auto parks to manual on confirmed down", func(t *testing.T) {
 		p := &domain.ScraperProvider{Policy: domain.PolicyAuto, Health: domain.HealthUp, HealthSince: t0}
-		for i := 1; i <= 3; i++ {
-			ApplyVerdict(p, false, t0.Add(time.Duration(i)*day), day)
+		ApplyVerdict(p, false, t0.Add(day), day) // up -> degraded, STAYS auto (one-blip buffer)
+		if p.Health != domain.HealthDegraded || p.Policy != domain.PolicyAuto {
+			t.Fatalf("after first fail (degraded): %+v", p)
 		}
-		if p.Health != domain.HealthDown || p.Policy != domain.PolicyAuto {
-			t.Fatalf("after fail x3: %+v", p)
+		ApplyVerdict(p, false, t0.Add(2*day), day) // degraded -> down, park manual
+		if p.Health != domain.HealthDown || p.Policy != domain.PolicyManual {
+			t.Fatalf("after second fail (down): %+v", p)
+		}
+	})
+	t.Run("disabled is immune to health reconcile", func(t *testing.T) {
+		p := &domain.ScraperProvider{Policy: domain.PolicyDisabled, Health: domain.HealthDown, HealthSince: t0}
+		ApplyVerdict(p, true, t0.Add(day), day) // health advances but policy stays disabled
+		if p.Policy != domain.PolicyDisabled {
+			t.Fatalf("policy=%s want disabled (admin hard-lock)", p.Policy)
 		}
 	})
 }

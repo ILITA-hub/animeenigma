@@ -393,7 +393,7 @@ describe('AdminPolicy', () => {
     it('selecting "disabled" opens the confirm dialog and, on confirm, calls setPolicy(name, "disabled")', async () => {
       const w = await mountAndOpenProvidersTab()
 
-      await w.find('[data-testid="provider-policy-gogoanime"] [data-value="disabled"]').trigger('click')
+      await w.find('[data-testid="provider-probe-gogoanime"] [data-value="disabled"]').trigger('click')
       await flushPromises()
 
       expect(confirmMock).toHaveBeenCalledTimes(1)
@@ -404,7 +404,7 @@ describe('AdminPolicy', () => {
       confirmMock.mockResolvedValueOnce(false)
       const w = await mountAndOpenProvidersTab()
 
-      await w.find('[data-testid="provider-policy-gogoanime"] [data-value="disabled"]').trigger('click')
+      await w.find('[data-testid="provider-probe-gogoanime"] [data-value="disabled"]').trigger('click')
       await flushPromises()
 
       expect(confirmMock).toHaveBeenCalledTimes(1)
@@ -424,56 +424,51 @@ describe('AdminPolicy', () => {
 
       const w = await mountAndOpenProvidersTab()
 
-      await w.find('[data-testid="provider-policy-nineanime"] [data-value="auto"]').trigger('click')
+      await w.find('[data-testid="provider-probe-nineanime"] [data-value="auto"]').trigger('click')
       await flushPromises()
 
       expect(confirmMock).not.toHaveBeenCalled()
       expect(mockSetPolicy).toHaveBeenCalledWith('nineanime', 'auto')
     })
 
-    // The old binary facade rendered `policy !== 'disabled'` as "Auto", so a
-    // manual (admin-parked) provider FALSELY read Auto — the segmented control
-    // must mark the manual segment active, not auto.
-    it('a policy="manual" row renders with the Manual segment active (NOT Auto)', async () => {
+    // The admin control is a 2-state probe status now: a machine-parked manual
+    // provider reads "Auto" on the toggle (it's still probed, just parked), and
+    // the read-only chain indicator surfaces that it's Parked, not in-chain.
+    it('a policy="manual" row shows the Auto probe segment active + a "Parked" chain indicator', async () => {
       const manualProvider: ScraperProviderWire = {
         ...providerUp,
         name: 'miruro',
         description: 'Miruro',
         policy: 'manual',
         status: 'degraded',
-        derived_state: 'Disabled',
+        derived_state: 'Down',
       }
       mockProvidersList.mockResolvedValue([manualProvider])
 
       const w = await mountAndOpenProvidersTab()
 
-      const control = w.find('[data-testid="provider-policy-miruro"]')
-      expect(control.find('[data-value="manual"]').attributes('aria-checked')).toBe('true')
-      expect(control.find('[data-value="auto"]').attributes('aria-checked')).toBe('false')
+      const control = w.find('[data-testid="provider-probe-miruro"]')
+      expect(control.find('[data-value="auto"]').attributes('aria-checked')).toBe('true')
+      expect(control.find('[data-value="disabled"]').attributes('aria-checked')).toBe('false')
+      // Read-only machine-state indicator: manual ⇒ "Parked".
+      const chain = w.find('[data-testid="provider-chain-miruro"]')
+      expect(chain.exists()).toBe(true)
+      expect(chain.text()).toContain('Parked')
     })
 
-    it('selecting "manual" calls setPolicy(name, "manual") directly — no confirm', async () => {
-      mockSetPolicy.mockResolvedValue({
-        ...providerUp,
-        policy: 'manual',
-        status: 'degraded',
-        derived_state: 'Disabled',
-      })
-
+    it('an "auto" (in-chain) row shows the In-auto-failover chain indicator', async () => {
       const w = await mountAndOpenProvidersTab()
-
-      await w.find('[data-testid="provider-policy-gogoanime"] [data-value="manual"]').trigger('click')
-      await flushPromises()
-
-      expect(confirmMock).not.toHaveBeenCalled()
-      expect(mockSetPolicy).toHaveBeenCalledWith('gogoanime', 'manual')
+      // gogoanime seeds policy:'auto'.
+      const chain = w.find('[data-testid="provider-chain-gogoanime"]')
+      expect(chain.exists()).toBe(true)
+      expect(chain.text()).toContain('auto-failover')
     })
 
-    it('re-selecting the current policy is a no-op (no setPolicy call)', async () => {
+    it('re-selecting the current probe status is a no-op (no setPolicy call)', async () => {
       const w = await mountAndOpenProvidersTab()
 
-      // gogoanime seeds policy:'auto' — clicking Auto again does nothing.
-      await w.find('[data-testid="provider-policy-gogoanime"] [data-value="auto"]').trigger('click')
+      // gogoanime seeds policy:'auto' ⇒ probe status Auto — clicking Auto again does nothing.
+      await w.find('[data-testid="provider-probe-gogoanime"] [data-value="auto"]').trigger('click')
       await flushPromises()
 
       expect(confirmMock).not.toHaveBeenCalled()

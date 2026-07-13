@@ -9,6 +9,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/providerpolicy"
 	"github.com/go-chi/chi/v5"
 	"gorm.io/gorm"
 )
@@ -67,12 +68,16 @@ type setPolicyRequest struct {
 	Policy string `json:"policy"`
 }
 
-// SetPolicy handles PUT /api/admin/scraper-providers/{name}/policy. All three
-// policy values are admin levers: auto (in the failover chain), manual (parked
-// out of auto-failover but still manually selectable), and disabled (dropped
-// entirely). Policy is admin-only — the probe machine never sets it (auto
-// demotion retired 2026-07-08), so this endpoint is also the park lever;
-// manual no longer requires SQL. Any other value is rejected with 400.
+// SetPolicy handles PUT /api/admin/scraper-providers/{name}/policy. As of
+// 2026-07-13 the admin controls only a two-state PROBE STATUS (Auto / Disabled):
+//   - "disabled" → policy=disabled, the hard-lock: dropped from playback + not
+//     probed. The machine never lifts this.
+//   - "auto"     → re-enable + hand back to the machine. Policy is set from the
+//     provider's CURRENT health via the same rule the probe uses
+//     (ReconcilePolicyFromHealth: health==down ⇒ manual, else auto), so
+//     enabling a still-down provider reads back as manual (parked, hacker-
+//     selectable) not a false "auto". The probe reconciles it on every tick.
+// "manual" is no longer an admin input (it's machine-set) → rejected with 400.
 // Health/HealthSince are left untouched; Policy + PolicySince change, and the
 // derived Status is written alongside them (see below).
 //
@@ -97,16 +102,14 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var policy domain.ProviderPolicy
+	// Only the two probe-status values are admin inputs. "manual" is machine-set
+	// (health-driven) and rejected — the admin parks a provider by disabling it,
+	// not by hand-picking manual.
 	switch req.Policy {
-	case string(domain.PolicyAuto):
-		policy = domain.PolicyAuto
-	case string(domain.PolicyManual):
-		policy = domain.PolicyManual
-	case string(domain.PolicyDisabled):
-		policy = domain.PolicyDisabled
+	case string(domain.PolicyAuto), string(domain.PolicyDisabled):
+		// ok
 	default:
-		httputil.BadRequest(w, `policy must be "auto", "manual" or "disabled"`)
+		httputil.BadRequest(w, `policy must be "auto" or "disabled"`)
 		return
 	}
 
@@ -121,6 +124,18 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// "disabled" locks; "auto" re-enables and hands the auto/manual axis back to
+	// the machine — resolve it from CURRENT health via the same rule the probe
+	// uses (ReconcilePolicyFromHealth), so a still-down provider re-enables as
+	// manual (parked) rather than a false "auto".
+	now := time.Now()
+	policy := domain.ProviderPolicy(req.Policy)
+	if policy != domain.PolicyDisabled {
+		provider.Policy = domain.PolicyAuto // clear any prior disabled before reconcile
+		providerpolicy.ReconcilePolicyFromHealth(&provider, now)
+		policy = provider.Policy
+	}
+
 	// Derive the new stored status from the new policy + the provider's current
 	// (probe-owned, untouched) health — exactly the mapping BackfillPolicyHealth/
 	// the roster migrations use (disabled → disabled, manual → degraded) — so
@@ -129,7 +144,6 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 	provider.Policy = policy
 	newStatus := provider.WireStatus()
 
-	now := time.Now()
 	if err := h.db.WithContext(r.Context()).Model(&domain.ScraperProvider{}).
 		Where("name = ?", name).
 		Updates(map[string]any{"policy": policy, "policy_since": now, "status": newStatus}).Error; err != nil {

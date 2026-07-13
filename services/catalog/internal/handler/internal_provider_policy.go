@@ -43,8 +43,9 @@ type probeResultReq struct {
 // Response on skip (disabled or !scraper_operated): {"success":true,"data":{..., "skipped":true}}
 //
 // Repeated calls with the same verdict converge (fail walks up→degraded→down,
-// then down is absorbing; pass climbs back to up). Policy is admin-only and
-// never mutated here — ApplyVerdict advances health alone.
+// then down is absorbing; pass climbs back to up). ApplyVerdict advances health
+// AND health-reconciles policy (down⇒manual, else auto); disabled is the admin
+// hard-lock and is never re-enabled here.
 func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *http.Request) {
 	var req probeResultReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Provider == "" {
@@ -78,13 +79,20 @@ func (h *InternalProviderPolicyHandler) ProbeResult(w http.ResponseWriter, r *ht
 	}
 	providerpolicy.ApplyVerdict(&p, req.Pass, now, h.cfg.PromoteAfter)
 
-	// policy/policy_since are NOT written: ApplyVerdict never mutates policy
-	// (admin-only), and omitting them also closes the write-back window where
-	// an admin's auto→manual park racing this handler would be clobbered by
-	// the stale value read above.
+	// policy IS written now (2026-07-13): ApplyVerdict health-reconciles it
+	// (down⇒manual, else auto — ReconcilePolicyFromHealth), so persist policy +
+	// policy_since alongside health. status is co-written from WireStatus so the
+	// stored column — read by the capability feed's disabled filter — stays in
+	// lock-step (same invariant the admin SetPolicy handler maintains). The
+	// disabled hard-lock is preserved twice over: ReconcilePolicyFromHealth is a
+	// no-op on disabled, AND the `policy <> disabled` write guard below means a
+	// probe verdict racing an admin SetPolicy(disabled) can never re-enable it.
 	updates := map[string]any{
 		"health":         p.Health,
 		"health_since":   p.HealthSince,
+		"policy":         p.Policy,
+		"policy_since":   p.PolicySince,
+		"status":         p.WireStatus(),
 		"last_probed_at": p.LastProbedAt,
 		"reason":         p.Reason,
 	}

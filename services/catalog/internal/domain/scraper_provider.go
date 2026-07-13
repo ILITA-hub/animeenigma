@@ -2,11 +2,13 @@ package domain
 
 import "time"
 
-// ProviderPolicy is the admin intent dimension. All three values are
-// admin-only (SQL/admin endpoint) — the probe state machine never mutates
-// policy (auto→manual demotion retired 2026-07-08). disabled is the hard
-// lock (not registered); manual parks a provider out of auto-failover while
-// keeping it hacker-selectable.
+// ProviderPolicy is the failover-participation dimension. As of 2026-07-13 it
+// is HEALTH-DRIVEN, not admin-set: the probe state machine reconciles auto↔manual
+// from health on every verdict (ReconcilePolicyFromHealth — health==down ⇒ manual,
+// otherwise auto), reversing the 2026-07-08 "policy admin-only" decision. The admin
+// controls only the disabled hard-lock (the Auto/Disabled probe-status toggle);
+// disabled is never auto-changed by the machine. disabled = not registered; manual
+// parks a provider out of auto-failover while keeping it hacker-selectable.
 type ProviderPolicy string
 
 const (
@@ -66,8 +68,10 @@ type ScraperProvider struct {
 	// only StatusEnabled providers join the auto-failover chain.
 	Status ProviderStatus `gorm:"size:16;default:'enabled'" json:"status"`
 	// Health is machine-managed by the probe state machine (spec 2026-06-23,
-	// hysteresis 2026-07-08); Policy is admin-only. Status above is DERIVED
-	// for the wire via WireStatus().
+	// hysteresis 2026-07-08). Policy is ALSO machine-managed as of 2026-07-13
+	// (health-driven auto↔manual via ReconcilePolicyFromHealth); the admin sets
+	// only the disabled hard-lock. Status above is DERIVED for the wire via
+	// WireStatus().
 	Policy       ProviderPolicy `gorm:"size:16;default:'auto'" json:"policy"`
 	Health       ProviderHealth `gorm:"size:16;default:'up'" json:"health"`
 	HealthSince  time.Time      `json:"health_since"`
@@ -257,6 +261,14 @@ func (p ScraperProvider) ProbeCadence(c CadenceConfig) time.Duration {
 }
 
 // ProbeSample returns the title sample size + fail-fast flag for a run.
+//
+// Recovery is ANCHOR-GATED, symmetric with how up-providers are judged: no
+// branch fail-fasts on a non-anchor miss. The old fail_fast=true recovery gate
+// (2026-07-13) demanded 100% of a random sample play, which per-title providers
+// (ok.ru-only allanime-okru, animepahe, gogoanime — each legitimately lacks some
+// titles) could never clear, so a provider serving the anchor + majority stayed
+// pinned "down" while Rollup scored it "Up". fail_fast=false makes `pass` fall to
+// topPlayed (the anchor), so a provider that serves the anchor climbs back.
 func (p ScraperProvider) ProbeSample(c CadenceConfig) (int, bool) {
 	if p.Policy == PolicyDisabled {
 		return 0, false
@@ -265,10 +277,8 @@ func (p ScraperProvider) ProbeSample(c CadenceConfig) (int, bool) {
 	case p.Health == HealthUp, p.Health == HealthDegraded:
 		return c.FullSample, false // full picture, no abort (degraded: honest confirm/clear)
 	case p.Health == HealthRecovering:
-		return c.RecoveringSample, true
-	case p.Policy == PolicyManual: // manual+down
-		return 1, true // cheapest "is it back?"
-	default: // auto+down (Failing)
-		return c.FullSample, true
+		return c.RecoveringSample, false // anchor-gated climb-back, not all-sample
+	default: // down — always manual now (health-driven policy); cheapest "is it back?"
+		return 1, false // probe the anchor only; fail_fast is moot at size 1
 	}
 }

@@ -1148,3 +1148,112 @@ func TestBumpKodikNoadsPriority_NoRow_ErrorsAndDoesNotWriteGuard(t *testing.T) {
 		t.Errorf("guard written despite no row found (count=%d); a later boot must retry", guards)
 	}
 }
+
+func TestReconcilePolicyFromHealthV1_AlignsRows(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// Seed a mix: auto+down (should park), manual+up (should un-park), an
+	// up/degraded/recovering set, and a disabled row (must be immune).
+	rows := []domain.ScraperProvider{
+		{Name: "animepahe", Policy: domain.PolicyAuto, Health: domain.HealthDown, Status: domain.StatusDegraded},
+		{Name: "miruro", Policy: domain.PolicyManual, Health: domain.HealthUp, Status: domain.StatusDegraded},
+		{Name: "nineanime", Policy: domain.PolicyAuto, Health: domain.HealthRecovering, Status: domain.StatusDegraded},
+		{Name: "gogoanime", Policy: domain.PolicyAuto, Health: domain.HealthDegraded, Status: domain.StatusEnabled},
+		{Name: "animefever", Policy: domain.PolicyDisabled, Health: domain.HealthDown, Status: domain.StatusDisabled},
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := scraperprovider.ReconcilePolicyFromHealthV1(db); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	want := map[string]struct {
+		policy domain.ProviderPolicy
+		status domain.ProviderStatus
+	}{
+		"animepahe":  {domain.PolicyManual, domain.StatusDegraded}, // down -> manual
+		"miruro":     {domain.PolicyAuto, domain.StatusEnabled},    // up -> auto (rejoins chain)
+		"nineanime":  {domain.PolicyAuto, domain.StatusDegraded},   // recovering -> auto, soaks (WireStatus degraded)
+		"gogoanime":  {domain.PolicyAuto, domain.StatusEnabled},    // degraded -> auto, one-blip buffer keeps it enabled
+		"animefever": {domain.PolicyDisabled, domain.StatusDisabled}, // disabled untouched
+	}
+	for name, w := range want {
+		var got domain.ScraperProvider
+		if err := db.First(&got, "name = ?", name).Error; err != nil {
+			t.Fatalf("load %s: %v", name, err)
+		}
+		if got.Policy != w.policy || got.Status != w.status {
+			t.Errorf("%s: (policy,status)=(%s,%s) want (%s,%s)", name, got.Policy, got.Status, w.policy, w.status)
+		}
+	}
+
+	// Idempotent: a second run is a guarded no-op even if a later machine write
+	// changed a row (we mutate animepahe to auto and confirm it is NOT clobbered).
+	if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", "animepahe").Update("policy", domain.PolicyAuto).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := scraperprovider.ReconcilePolicyFromHealthV1(db); err != nil {
+		t.Fatalf("reconcile 2nd: %v", err)
+	}
+	var again domain.ScraperProvider
+	db.First(&again, "name = ?", "animepahe")
+	if again.Policy != domain.PolicyAuto {
+		t.Errorf("guarded re-run clobbered a later write: animepahe policy=%s want auto", again.Policy)
+	}
+}
+
+func TestAllanimeOkruCryptoGateLifted_RefreshesDescriptionOnce(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Create(&domain.ScraperProvider{
+		Name:        "allanime-okru",
+		Policy:      domain.PolicyManual,
+		Health:      domain.HealthDown,
+		Status:      domain.StatusDegraded,
+		Reason:      "cdn_unreachable on ",
+		Description: "stale AA_CRYPTO_MISSING tombstone",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraperprovider.AllanimeOkruCryptoGateLifted(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	var got domain.ScraperProvider
+	db.First(&got, "name = ?", "allanime-okru")
+	if !strings.Contains(got.Description, "LIFTED") {
+		t.Errorf("description not refreshed: %q", got.Description)
+	}
+	// reason/status/policy/health untouched (machine/admin-owned).
+	if got.Reason != "cdn_unreachable on " || got.Policy != domain.PolicyManual || got.Health != domain.HealthDown {
+		t.Errorf("touched a machine/admin field: %+v", got)
+	}
+
+	// Idempotent: a later operator edit is not clobbered on a second run.
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "allanime-okru").Update("description", "operator note")
+	if err := scraperprovider.AllanimeOkruCryptoGateLifted(db); err != nil {
+		t.Fatalf("2nd run: %v", err)
+	}
+	db.First(&got, "name = ?", "allanime-okru")
+	if got.Description != "operator note" {
+		t.Errorf("guarded re-run clobbered operator edit: %q", got.Description)
+	}
+}
+
+func TestAllanimeOkruCryptoGateLifted_NoRowNoGuard(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// No allanime-okru row → migration must error and NOT write its guard, so a
+	// later boot (after the row exists) retries.
+	if err := scraperprovider.AllanimeOkruCryptoGateLifted(db); err == nil {
+		t.Fatal("expected error when row absent")
+	}
+}

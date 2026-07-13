@@ -350,6 +350,23 @@ func main() {
 		log.Errorw("policy/health backfill failed (continuing)", "error", err)
 	}
 
+	// One-time (guarded) alignment to the 2026-07-13 health-driven policy rule:
+	// non-disabled rows get policy = (health==down ? manual : auto) + derived
+	// status. Runs AFTER BackfillPolicyHealth (which maps status→policy/health),
+	// so it re-parks already-down providers to manual and un-parks any that are
+	// up. From here on providerpolicy.ReconcilePolicyFromHealth maintains it live.
+	if err := scraperprovider.ReconcilePolicyFromHealthV1(db.DB); err != nil {
+		log.Errorw("reconcile-policy-from-health backfill failed (continuing)", "error", err)
+	}
+
+	// Refresh allanime-okru's description: the 2026-07-07 AA_CRYPTO_MISSING gate
+	// has lifted (verified 2026-07-13); it serves real content per-title, down
+	// only because its anchor (Frieren) is copyright-blocked on ok.ru.
+	// Description-only; supersedes the stale AllanimeOkruCryptoBlock tombstone.
+	if err := scraperprovider.AllanimeOkruCryptoGateLifted(db.DB); err != nil {
+		log.Errorw("allanime-okru crypto-lifted migration failed (continuing)", "error", err)
+	}
+
 	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
 	// provider_info/provider_enabled management metrics. Runs after the roster is
 	// fully migrated/seeded/backfilled so names + flags are authoritative. The

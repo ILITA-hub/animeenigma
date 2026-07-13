@@ -165,9 +165,10 @@ func TestAdminScraperProviders_SetPolicy_Disabled(t *testing.T) {
 	}
 }
 
-// TestAdminScraperProviders_SetPolicy_Auto verifies flipping back to auto, and
-// that the stored status is re-derived from (policy=auto, current health) —
-// health=down here so WireStatus() yields degraded, not enabled.
+// TestAdminScraperProviders_SetPolicy_Auto verifies re-enabling a DOWN provider:
+// "auto" hands the failover axis back to the machine, which health-resolves it
+// (health==down ⇒ manual/parked), and the stored status is re-derived to
+// degraded — not a false auto/enabled.
 func TestAdminScraperProviders_SetPolicy_Auto(t *testing.T) {
 	db := newAdminScraperProvidersTestDB(t)
 	if err := db.Create(&domain.ScraperProvider{
@@ -192,11 +193,11 @@ func TestAdminScraperProviders_SetPolicy_Auto(t *testing.T) {
 	if err := db.Where("name = ?", "gogoanime").First(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	if row.Policy != domain.PolicyAuto {
-		t.Fatalf("Policy = %q, want auto", row.Policy)
+	if row.Policy != domain.PolicyManual {
+		t.Fatalf("Policy = %q, want manual (down re-enables as machine-parked, not a false auto)", row.Policy)
 	}
 	if row.Status != domain.StatusDegraded {
-		t.Fatalf("Status = %q, want degraded (auto+down derives to degraded, not the stale disabled)", row.Status)
+		t.Fatalf("Status = %q, want degraded (manual+down)", row.Status)
 	}
 }
 
@@ -247,13 +248,11 @@ func TestAdminScraperProviders_SetPolicy_UnknownName(t *testing.T) {
 	}
 }
 
-// TestAdminScraperProviders_SetPolicy_Manual verifies manual is an admin lever
-// of this endpoint (nothing machine-sets policy since auto demote/promote was
-// retired 2026-07-08 — this endpoint is the park lever, no SQL required):
-// parking an auto provider returns 200, persists policy=manual, re-derives the
-// stored status to degraded (out of auto-failover but still manually
-// selectable), and reports the Disabled dashboard band.
-func TestAdminScraperProviders_SetPolicy_Manual(t *testing.T) {
+// TestAdminScraperProviders_SetPolicy_ManualRejected verifies "manual" is no
+// longer an admin input (2026-07-13): the auto↔manual axis is machine-set from
+// health, so the admin can only send auto/disabled. Sending manual is a 400 and
+// leaves the row untouched.
+func TestAdminScraperProviders_SetPolicy_ManualRejected(t *testing.T) {
 	db := newAdminScraperProvidersTestDB(t)
 	if err := db.Create(&domain.ScraperProvider{
 		Name:   "gogoanime",
@@ -269,35 +268,15 @@ func TestAdminScraperProviders_SetPolicy_Manual(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.SetPolicy(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
 	}
-
 	var row domain.ScraperProvider
 	if err := db.Where("name = ?", "gogoanime").First(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	if row.Policy != domain.PolicyManual {
-		t.Fatalf("Policy = %q, want manual", row.Policy)
-	}
-	if row.Status != domain.StatusDegraded {
-		t.Fatalf("Status = %q, want degraded (manual+up derives to degraded: parked but still selectable)", row.Status)
-	}
-
-	var respBody struct {
-		Data map[string]any `json:"data"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("decode: %v (body=%s)", err, rr.Body.String())
-	}
-	if respBody.Data["policy"] != "manual" {
-		t.Fatalf("response policy = %v, want manual", respBody.Data["policy"])
-	}
-	// Parking an auto+up provider to manual keeps its LIVE health on the pill
-	// (UP) — only an explicit policy=disabled reads as Disabled. The manual
-	// distinction surfaces via Status=degraded / the "In auto-failover" column.
-	if respBody.Data["derived_state"] != domain.StateUP {
-		t.Fatalf("response derived_state = %v, want %v", respBody.Data["derived_state"], domain.StateUP)
+	if row.Policy != domain.PolicyAuto {
+		t.Fatalf("Policy = %q, want auto (unchanged — rejected input must not mutate)", row.Policy)
 	}
 }
 

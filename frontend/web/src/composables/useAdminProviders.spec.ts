@@ -85,18 +85,20 @@ describe('useAdminProviders', () => {
     expect(result).toEqual(disabled)
   })
 
-  it("setPolicy('gogoanime','manual') PUTs the admin park lever (manual is admin-set now, not machine-set)", async () => {
-    const manual: ScraperProviderWire = { ...gogoanime, policy: 'manual', status: 'degraded', derived_state: 'Recovering' }
-    setPolicySpy.mockResolvedValue({ data: { success: true, data: manual } })
+  it("setPolicy('gogoanime','auto') hands back to the machine — the wire may return policy 'manual' when still down", async () => {
+    // 'auto' is the enable input; a still-down provider re-enables machine-parked
+    // (policy 'manual'). The composable just relays whatever the server resolved.
+    const parked: ScraperProviderWire = { ...gogoanime, policy: 'manual', status: 'degraded', derived_state: 'Down' }
+    setPolicySpy.mockResolvedValue({ data: { success: true, data: parked } })
 
     const { setPolicy } = useAdminProviders()
-    const result = await setPolicy('gogoanime', 'manual')
+    const result = await setPolicy('gogoanime', 'auto')
 
-    expect(setPolicySpy).toHaveBeenCalledWith('gogoanime', 'manual')
-    expect(result).toEqual(manual)
+    expect(setPolicySpy).toHaveBeenCalledWith('gogoanime', 'auto')
+    expect(result).toEqual(parked)
   })
 
-  it("setPolicy('gogoanime','auto') calls through with 'auto' and unwraps a bare response", async () => {
+  it("setPolicy('gogoanime','auto') unwraps a bare response", async () => {
     const auto: ScraperProviderWire = { ...gogoanime, policy: 'auto', derived_state: 'UP' }
     setPolicySpy.mockResolvedValue({ data: auto })
 
