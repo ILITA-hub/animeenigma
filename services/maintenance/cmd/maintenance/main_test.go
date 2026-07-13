@@ -86,7 +86,9 @@ func TestFormatProviderFaultLine(t *testing.T) {
 		{Name: "kodik-noads", Group: "ru", Status: "enabled", Health: "down", Reason: "ru thing"},
 	}
 	got := formatProviderFaultLine(rows)
-	want := "⚠️ Unhealthy: allanime (cdn_unreachable), animefever (empty_response)"
+	// Underscores are backslash-escaped by escTelegram — legacy Telegram
+	// Markdown treats a bare "_" as a potential italic delimiter.
+	want := "⚠️ Unhealthy: allanime (cdn\\_unreachable), animefever (empty\\_response)"
 	if got != want {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}
@@ -98,7 +100,7 @@ func TestFormatProviderFaultLine_EnabledButDown(t *testing.T) {
 	rows := []scraperProviderRow{
 		{Name: "gogoanime", Group: "en", Status: "enabled", Health: "down", Reason: "browser provider_down"},
 	}
-	if got := formatProviderFaultLine(rows); got != "⚠️ Unhealthy: gogoanime (browser provider_down)" {
+	if got := formatProviderFaultLine(rows); got != "⚠️ Unhealthy: gogoanime (browser provider\\_down)" {
 		t.Fatalf("enabled-but-down provider must surface, got %q", got)
 	}
 }
@@ -123,7 +125,7 @@ func TestScraperProviderFaultLine(t *testing.T) {
 	defer srv.Close()
 
 	s := newTestServiceWithHTTP(t, srv.URL, srv.Client())
-	if got := s.scraperProviderFaultLine(); got != "⚠️ Unhealthy: okru (cdn_unreachable)" {
+	if got := s.scraperProviderFaultLine(); got != "⚠️ Unhealthy: okru (cdn\\_unreachable)" {
 		t.Fatalf("unexpected fault line: %q", got)
 	}
 }

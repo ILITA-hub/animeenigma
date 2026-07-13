@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
@@ -302,15 +303,25 @@ func (c *Client) SetReaction(messageID int, emoji string) bool {
 	return err == nil
 }
 
-func (c *Client) SendReply(replyToMsgID int, html string) (int, error) {
-	if len(html) > 4090 {
-		html = html[:4087] + "..."
+// truncateRunes cuts s to at most limit runes, appending "...". A plain
+// byte-slice cut can split a multi-byte UTF-8 rune (e.g. Cyrillic) mid-sequence,
+// corrupting the JSON payload and getting the whole message rejected by the
+// Bot API.
+func truncateRunes(s string, limit int) string {
+	if utf8.RuneCountInString(s) <= limit {
+		return s
 	}
+	runes := []rune(s)
+	return string(runes[:limit-3]) + "..."
+}
+
+func (c *Client) SendReply(replyToMsgID int, text string) (int, error) {
+	text = truncateRunes(text, 4090)
 	body := map[string]interface{}{
 		"chat_id":             c.chatID,
 		"reply_to_message_id": replyToMsgID,
-		"text":                html,
-		"parse_mode":          "HTML",
+		"text":                text,
+		"parse_mode":          "Markdown",
 	}
 	resp, err := c.post("sendMessage", body)
 	if err != nil {
@@ -323,10 +334,8 @@ func (c *Client) SendReply(replyToMsgID int, html string) (int, error) {
 	return msg.MessageID, nil
 }
 
-func (c *Client) SendReplyWithButtons(replyToMsgID int, html string, buttons []InlineButton) (int, error) {
-	if len(html) > 4090 {
-		html = html[:4087] + "..."
-	}
+func (c *Client) SendReplyWithButtons(replyToMsgID int, text string, buttons []InlineButton) (int, error) {
+	text = truncateRunes(text, 4090)
 	var keyboardRow []map[string]string
 	for _, btn := range buttons {
 		keyboardRow = append(keyboardRow, map[string]string{
@@ -336,8 +345,8 @@ func (c *Client) SendReplyWithButtons(replyToMsgID int, html string, buttons []I
 	}
 	body := map[string]interface{}{
 		"chat_id":    c.chatID,
-		"text":       html,
-		"parse_mode": "HTML",
+		"text":       text,
+		"parse_mode": "Markdown",
 		"reply_markup": map[string]interface{}{
 			"inline_keyboard": []interface{}{keyboardRow},
 		},
@@ -356,14 +365,12 @@ func (c *Client) SendReplyWithButtons(replyToMsgID int, html string, buttons []I
 	return msg.MessageID, nil
 }
 
-func (c *Client) SendMessage(html string) (int, error) {
-	if len(html) > 4090 {
-		html = html[:4087] + "..."
-	}
+func (c *Client) SendMessage(text string) (int, error) {
+	text = truncateRunes(text, 4090)
 	body := map[string]interface{}{
 		"chat_id":    c.chatID,
-		"text":       html,
-		"parse_mode": "HTML",
+		"text":       text,
+		"parse_mode": "Markdown",
 	}
 	resp, err := c.post("sendMessage", body)
 	if err != nil {

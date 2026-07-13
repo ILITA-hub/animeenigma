@@ -142,13 +142,13 @@ type ClassifiedBatch struct {
 
 // AnalysisResult is what Claude returns (structured JSON).
 type AnalysisResult struct {
-	Tier         FixTier       `json:"tier"`
-	Risk         FixRisk       `json:"risk,omitempty"`
-	Diagnosis    Diagnosis     `json:"diagnosis"`
-	ActionsTaken []Action      `json:"actions_taken"`
-	FixPlan      *FixPlan      `json:"fix_plan,omitempty"`
-	ReplyHTML    string        `json:"reply_html"`
-	Issue        IssueInfo     `json:"issue"`
+	Tier          FixTier   `json:"tier"`
+	Risk          FixRisk   `json:"risk,omitempty"`
+	Diagnosis     Diagnosis `json:"diagnosis"`
+	ActionsTaken  []Action  `json:"actions_taken"`
+	FixPlan       *FixPlan  `json:"fix_plan,omitempty"`
+	ReplyMarkdown string    `json:"reply_markdown"`
+	Issue         IssueInfo `json:"issue"`
 }
 
 type Diagnosis struct {
