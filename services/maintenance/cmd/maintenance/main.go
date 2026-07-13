@@ -1754,22 +1754,25 @@ func (s *service) dropSuppressedAlerts(msgs []domain.ClassifiedMessage) []domain
 	return out
 }
 
-// escTelegram neutralises Telegram Markdown control characters in dynamic
-// content. Backticks are swapped for apostrophes (a backslash escape is not
-// honoured inside code spans), the rest are backslash-escaped.
+// telegramEscaper neutralises Telegram Markdown control characters in dynamic
+// content in one pass. Backticks are swapped for apostrophes (a backslash
+// escape is not honoured inside code spans), the rest are backslash-escaped.
+var telegramEscaper = strings.NewReplacer(
+	"`", "'",
+	"*", "\\*",
+	"_", "\\_",
+	"[", "\\[",
+)
+
 func escTelegram(s string) string {
-	s = strings.ReplaceAll(s, "`", "'")
-	s = strings.ReplaceAll(s, "*", "\\*")
-	s = strings.ReplaceAll(s, "_", "\\_")
-	s = strings.ReplaceAll(s, "[", "\\[")
-	return s
+	return telegramEscaper.Replace(s)
 }
 
+// truncateForTelegram caps s at 500 runes, delegating to telegram.TruncateRunes
+// so this reply pipeline shares one rune-safe cut instead of risking a second,
+// unsafe byte-slice truncation on the same Cyrillic-heavy error text.
 func truncateForTelegram(s string) string {
-	if len(s) > 500 {
-		return s[:497] + "..."
-	}
-	return s
+	return telegram.TruncateRunes(s, 500)
 }
 
 // --- Emoji interrupt protocol (AUTO-456) ---

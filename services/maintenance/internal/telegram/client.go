@@ -303,11 +303,15 @@ func (c *Client) SetReaction(messageID int, emoji string) bool {
 	return err == nil
 }
 
-// truncateRunes cuts s to at most limit runes, appending "...". A plain
+// maxTelegramMessageLen is the Bot API's sendMessage text limit (4096 runes),
+// with headroom for the "..." suffix a truncation appends.
+const maxTelegramMessageLen = 4090
+
+// TruncateRunes cuts s to at most limit runes, appending "...". A plain
 // byte-slice cut can split a multi-byte UTF-8 rune (e.g. Cyrillic) mid-sequence,
 // corrupting the JSON payload and getting the whole message rejected by the
 // Bot API.
-func truncateRunes(s string, limit int) string {
+func TruncateRunes(s string, limit int) string {
 	if utf8.RuneCountInString(s) <= limit {
 		return s
 	}
@@ -316,7 +320,7 @@ func truncateRunes(s string, limit int) string {
 }
 
 func (c *Client) SendReply(replyToMsgID int, text string) (int, error) {
-	text = truncateRunes(text, 4090)
+	text = TruncateRunes(text, maxTelegramMessageLen)
 	body := map[string]interface{}{
 		"chat_id":             c.chatID,
 		"reply_to_message_id": replyToMsgID,
@@ -335,7 +339,7 @@ func (c *Client) SendReply(replyToMsgID int, text string) (int, error) {
 }
 
 func (c *Client) SendReplyWithButtons(replyToMsgID int, text string, buttons []InlineButton) (int, error) {
-	text = truncateRunes(text, 4090)
+	text = TruncateRunes(text, maxTelegramMessageLen)
 	var keyboardRow []map[string]string
 	for _, btn := range buttons {
 		keyboardRow = append(keyboardRow, map[string]string{
@@ -366,7 +370,7 @@ func (c *Client) SendReplyWithButtons(replyToMsgID int, text string, buttons []I
 }
 
 func (c *Client) SendMessage(text string) (int, error) {
-	text = truncateRunes(text, 4090)
+	text = TruncateRunes(text, maxTelegramMessageLen)
 	body := map[string]interface{}{
 		"chat_id":    c.chatID,
 		"text":       text,
