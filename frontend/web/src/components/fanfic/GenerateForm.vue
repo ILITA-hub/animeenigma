@@ -219,10 +219,26 @@ function onLanguageChange(value: string | number): void {
   language.value = String(value) as FanficLang
 }
 
-/** Explicit is gated behind an 18+ confirm; any other pick applies immediately. */
+/**
+ * Explicit is gated behind an 18+ confirm; any other pick applies immediately.
+ *
+ * The confirm() dialog MUST NOT open synchronously inside this reka `Select`
+ * `update:model-value` handler. The Select is still closing when this fires, and
+ * on close reka returns focus to its trigger. Our ConfirmDialog is a NON-modal
+ * reka Dialog (Modal.vue, `modal=false`) that dismisses on any outside
+ * interaction — and reka treats that focus-return as a focus-outside, so a
+ * synchronously-opened dialog auto-dismisses before the user can answer and
+ * confirm() resolves false (→ "18+ is not settable"). Yielding one macrotask
+ * lets the Select fully close and settle focus first; the dialog then opens
+ * cleanly and traps focus onto itself.
+ */
 async function onRatingChange(value: string | number): Promise<void> {
   const next = String(value) as FanficRating
   if (next === 'explicit' && rating.value !== 'explicit') {
+    // Defer past the closing Select's focus-return (see note above).
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0)
+    })
     const ok = await confirm({
       title: t('fanfic.rating.explicit'),
       description: t('fanfic.rating.explicitConfirm'),
