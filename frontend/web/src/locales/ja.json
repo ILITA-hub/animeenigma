@@ -363,6 +363,7 @@
     "skipOutro": "エンディングをスキップ",
     "adminLibrary": {
       "title": "生ライブラリ",
+      "tabs": { "torrentClient": "トレントクライアント", "fileManager": "ファイルマネージャー" },
       "stats": {
         "diskFree": "ディスク空き容量",
         "activeTorrents": "アクティブなトレント",
@@ -412,15 +413,15 @@
       },
       "files": {
         "title": "ファイル",
-        "domain": { "work": "トレント作業ディレクトリ", "minio": "MinIO", "s3": "S3クラウド" },
+        "domain": { "work": "トレント作業ディレクトリ", "minio": "MinIO", "s3": "S3 · firstvds" },
         "root": "ルート",
+        "parent": "..",
         "col": { "name": "名前", "size": "サイズ", "actions": "操作" },
         "empty": "空です",
         "download": "ダウンロード",
         "delete": "削除",
         "fresh": "最新",
         "stale": "古い",
-        "add": { "title": "トレントを手動で追加", "magnet": "マグネットリンクを貼り付け", "name": "タイトル", "storage": "ストレージ", "submit": "キュー追加" },
         "confirm": {
           "episode": "エピソード {name} を削除しますか? ファイルとライブラリのレコードが削除されます。",
           "orphan": "孤立オブジェクト {name} を削除しますか? ライブラリのレコードがない直接削除です。",

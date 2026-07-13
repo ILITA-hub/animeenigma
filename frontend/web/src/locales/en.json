@@ -363,6 +363,7 @@
     "skipOutro": "Skip Ending",
     "adminLibrary": {
       "title": "Raw Library",
+      "tabs": { "torrentClient": "Torrent Client", "fileManager": "File Manager" },
       "stats": {
         "diskFree": "Disk free",
         "activeTorrents": "Active torrents",
@@ -412,15 +413,15 @@
       },
       "files": {
         "title": "Files",
-        "domain": { "work": "Torrent work dir", "minio": "MinIO", "s3": "S3 cloud" },
+        "domain": { "work": "Torrent work dir", "minio": "MinIO", "s3": "S3 · firstvds" },
         "root": "root",
+        "parent": "..",
         "col": { "name": "Name", "size": "Size", "actions": "Actions" },
         "empty": "Empty",
         "download": "Download",
         "delete": "Delete",
         "fresh": "Fresh",
         "stale": "Stale",
-        "add": { "title": "Add torrent by hand", "magnet": "Paste magnet link", "name": "Title", "storage": "Storage", "submit": "Enqueue" },
         "confirm": {
           "episode": "Delete episode {name}? Its files and library record are removed.",
           "orphan": "Delete orphan object {name}? This is a raw delete with no library record.",

@@ -381,6 +381,7 @@ export const animeApi = {
   getById: (id: string) =>
     consumePrefetch<AxiosResponse>(`anime:${id}`) ?? apiClient.get(`/anime/${id}`),
   search: (query: string, source?: string, pageSize?: number, signal?: AbortSignal) => apiClient.get('/anime/search', { params: { q: query, ...(source && { source }), ...(pageSize && { page_size: pageSize }) }, signal }),
+  resolveShikimori: (shikimoriId: string) => apiClient.get(`/anime/shikimori/${shikimoriId}`),
   getTrending: () => apiClient.get('/anime/trending'),
   getPopular: () => apiClient.get('/anime/popular'),
   getRecent: () => apiClient.get('/anime/recent'),

@@ -264,6 +264,15 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // ① File Manager deep-link: backend (work|minio|s3) + catch-all folder path.
+    // Same component as admin-raw-library; the host derives the active tab from
+    // route.name. Vue Router 4 catch-all `(.*)*` → filepath arrives as string[].
+    path: '/admin/raw-library/file-manager/:backend/:filepath(.*)*',
+    name: 'admin-raw-library-files',
+    component: () => import('@/views/admin/RawLibrary.vue'),
+    meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresAdmin: true },
+  },
+  {
     // User-facing "my feedback" page — own messages + triage status.
     path: '/my-feedback',
     name: 'my-feedback',
