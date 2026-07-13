@@ -118,7 +118,26 @@ func (e *Engine) probeProvider(ctx context.Context, t ProbeTarget, refs []AnimeR
 					Provider: t.Provider, AnimeUUID: ref.UUID, AnimeName: ref.Name, Slot: ref.Slot,
 					Stage: StageSearch, Reason: streamprobe.ReasonZeroMatch,
 				})
-				verdicts = append(verdicts, e.reroll(ctx, t, ref)...)
+				rerollVerdicts := e.reroll(ctx, t, ref)
+				verdicts = append(verdicts, rerollVerdicts...)
+				rerollPlayed := false
+				for _, rv := range rerollVerdicts {
+					if rv.Playable() {
+						rerollPlayed = true
+						break
+					}
+				}
+				if i == 0 {
+					topPlayed = rerollPlayed
+				}
+				if rerollPlayed {
+					// The substitute title proves the provider itself is up — the
+					// anchor's catalogue miss just means this one title isn't on
+					// it, not that the provider is down. Count this slot as played
+					// so a sparse-catalogue provider (e.g. nineanime) isn't pinned
+					// down forever by a discarded re-roll success.
+					continue
+				}
 			} else {
 				verdicts = append(verdicts, Verdict{
 					Provider: t.Provider, AnimeUUID: ref.UUID, AnimeName: ref.Name, Slot: ref.Slot, Stage: stage,

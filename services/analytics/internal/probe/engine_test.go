@@ -324,6 +324,40 @@ func TestEngine_NotFound_RerollsOnce_Pass(t *testing.T) {
 	}
 }
 
+// TestEngine_NotFound_RerollSucceeds_PostsPassTrue verifies that when the
+// anchor (index-0, the only ref under today's sample_size=1/fail_fast=false
+// "down"-state plan config — see ProbeSample) misses with ErrProbeNotFound
+// but the one-shot re-roll resolves+validates to a playable stream, the
+// engine posts pass=true to the catalog state machine — not just a healthy
+// Rollup status. Rollup and PostVerdict must agree: a niche/sparse-catalog
+// provider (e.g. nineanime) whose anchor title happens to be missing, but
+// which serves real content for other titles, must not be pinned "down"
+// forever by a discarded re-roll success.
+func TestEngine_NotFound_RerollSucceeds_PostsPassTrue(t *testing.T) {
+	const anchorUUID = "anchor-uuid"
+	const poolUUID = "pool-uuid"
+
+	pool := fakePool{items: []PopularAnime{{UUID: poolUUID, Name: "Pool Anime"}}}
+	res := notFoundThenPlayRes{anchorUUID: anchorUUID}
+	as := singleRefAS{ref: AnimeRef{UUID: anchorUUID, Name: "Anchor Title", Slot: SlotAnchor}}
+
+	rep := &capRep{}
+	// Mirrors ProbeSample's real "down" config: sample_size=1, fail_fast=false.
+	plan := &fakePlan{entries: []PlanEntry{{Provider: "nineanime", SampleSize: 1, FailFast: false}}}
+	e := newEngine([]ProbeTarget{target("nineanime", as, res)}, fakeVal{}, rep, pool, plan)
+
+	if err := e.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(plan.posted) != 1 {
+		t.Fatalf("posted verdicts = %+v, want exactly 1", plan.posted)
+	}
+	if !plan.posted[0].pass {
+		t.Fatalf("posted pass = false, want true (re-roll produced a playable stream): %+v", plan.posted[0])
+	}
+}
+
 // singleRefAS is an AnimeSetResolver returning exactly one ref.
 type singleRefAS struct{ ref AnimeRef }
 
