@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
-import FileManager, { resetTitleCache } from '@/views/admin/rawlibrary/FileManager.vue'
+import FileManager from '@/views/admin/rawlibrary/FileManager.vue'
+import { resetTitleCache } from '@/views/admin/rawlibrary/titleCache'
 import { adminLibraryApi } from '@/api/client'
 import type { BrowseResponse } from '@/types/library'
 

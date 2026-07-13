@@ -77,22 +77,6 @@
   </div>
 </template>
 
-<script lang="ts">
-import { reactive } from 'vue'
-
-// Module-level Shikimori-id → display title cache, shared across FileManager
-// remounts within the session. Value '' = resolved-but-untitled/404 (don't refetch).
-// Declared in a plain (non-setup) <script> block so it lives at true ES-module
-// scope — a `<script setup>` top-level const would be re-created every mount.
-export const titleCache = reactive<Record<string, string>>({})
-
-// Test-only helper: clear the module-scoped cache so specs don't bleed
-// resolved titles across cases (the cache otherwise survives remounts).
-export function resetTitleCache() {
-  for (const k of Object.keys(titleCache)) delete titleCache[k]
-}
-</script>
-
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -103,6 +87,7 @@ import Button from '@/components/ui/Button.vue'
 import { Spinner } from '@/components/ui'
 import { useConfirm } from '@/composables/useConfirm'
 import { formatBytes, unwrap } from '@/views/admin/rawlibrary/lib'
+import { titleCache } from '@/views/admin/rawlibrary/titleCache'
 
 const props = defineProps<{ backend: FileDomain; prefix: string }>()
 const emit = defineEmits<{ navigate: [payload: { backend: FileDomain; prefix: string }] }>()
