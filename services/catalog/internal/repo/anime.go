@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 	"unicode"
@@ -72,6 +73,9 @@ func (r *AnimeRepository) GetByMALID(ctx context.Context, malID string) (*domain
 // methods. Previously Update used Save, a full-row overwrite that silently
 // zeroed every one of those columns on each refresh cycle, because the refresh
 // paths hand Update a freshly mapped anime with all of them at zero values.
+//
+// KEEP IN SYNC with AnimeMetadataEqual, which compares exactly these columns to
+// let BatchRefreshAnime skip a no-op Update when the fetch was unchanged.
 var animeMetadataColumns = []string{
 	"name", "name_en", "name_ru", "name_jp", "description",
 	"year", "season", "status", "kind", "rating", "material_source",
@@ -93,6 +97,73 @@ func (r *AnimeRepository) Update(ctx context.Context, anime *domain.Anime) error
 	}
 	if result.RowsAffected == 0 {
 		return liberrors.NotFound("anime")
+	}
+	return nil
+}
+
+// AnimeMetadataEqual reports whether every Shikimori-sourced metadata column in
+// animeMetadataColumns is identical between a and b. BatchRefreshAnime uses it to
+// skip a no-op full-row Update (and the secondary-index churn it triggers) when
+// Shikimori returned unchanged data for a stale anime.
+//
+// KEEP IN SYNC with animeMetadataColumns: exactly one comparison here per column
+// listed there. Score is compared at the decimal(4,2) storage precision so a
+// higher-precision Shikimori value that rounds to the already-stored value is not
+// mistaken for a perpetual change (which would defeat the skip on every run).
+func AnimeMetadataEqual(a, b *domain.Anime) bool {
+	return a.Name == b.Name &&
+		a.NameEN == b.NameEN &&
+		a.NameRU == b.NameRU &&
+		a.NameJP == b.NameJP &&
+		a.Description == b.Description &&
+		a.Year == b.Year &&
+		a.Season == b.Season &&
+		a.Status == b.Status &&
+		a.Kind == b.Kind &&
+		a.Rating == b.Rating &&
+		a.MaterialSource == b.MaterialSource &&
+		a.EpisodesCount == b.EpisodesCount &&
+		a.EpisodesAired == b.EpisodesAired &&
+		a.EpisodeDuration == b.EpisodeDuration &&
+		scoreEqual(a.Score, b.Score) &&
+		a.PosterURL == b.PosterURL &&
+		timePtrEqual(a.NextEpisodeAt, b.NextEpisodeAt) &&
+		timePtrEqual(a.AiredOn, b.AiredOn)
+}
+
+// scoreEqual compares two scores at the decimal(4,2) precision the score column
+// stores, so e.g. 8.523 (fresh from Shikimori) and 8.52 (already stored) match.
+func scoreEqual(a, b float64) bool {
+	return math.Round(a*100) == math.Round(b*100)
+}
+
+// timePtrEqual treats two *time.Time as equal when both are nil or both point to
+// the same instant. Compares by instant (time.Equal), so a DB-round-tripped UTC
+// value and a freshly parsed value for the same moment match regardless of
+// location or monotonic-clock reading.
+func timePtrEqual(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(*b)
+}
+
+// TouchUpdatedAt advances only the updated_at column for the given anime IDs in a
+// single statement, without rewriting any metadata column. BatchRefreshAnime calls
+// it for anime whose Shikimori metadata came back unchanged, so the row still
+// leaves the stale-refresh window (GetStaleAnime filters on updated_at) on the
+// normal cadence without a full-row update and its secondary-index churn. No-op on
+// empty input.
+func (r *AnimeRepository) TouchUpdatedAt(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	result := r.db.WithContext(ctx).
+		Model(&domain.Anime{}).
+		Where("id IN ?", ids).
+		UpdateColumn("updated_at", time.Now())
+	if result.Error != nil {
+		return fmt.Errorf("touch anime updated_at: %w", result.Error)
 	}
 	return nil
 }

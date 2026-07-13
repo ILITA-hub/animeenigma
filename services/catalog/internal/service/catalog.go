@@ -624,6 +624,23 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 	// genre once instead of once per anime (~15k redundant writes → ~80).
 	seenGenres := make(map[string]struct{})
 
+	// Snapshot the stored genres once so we can also skip upserting a genre whose
+	// name/name_ru already match — the steady state, since the taxonomy is
+	// static, so without this every run still rewrites all ~80 rows. Best-effort:
+	// on error we fall back to upserting every distinct genre as before.
+	storedGenres := make(map[string]domain.Genre)
+	if all, gerr := s.genreRepo.GetAll(ctx); gerr != nil {
+		s.log.Warnw("failed to preload genres for change detection; will upsert all", "error", gerr)
+	} else {
+		for _, g := range all {
+			storedGenres[g.ID] = g
+		}
+	}
+
+	// Run-wide counters for observability: how many stale anime were actually
+	// rewritten vs verified-unchanged (updated_at bulk-touched, no metadata write).
+	var changedCount, unchangedCount int
+
 	// Process in chunks of 50
 	const batchSize = 50
 	for i := 0; i < len(shikimoriIDs); i += batchSize {
@@ -655,6 +672,9 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 		// the join table in one bulk DELETE+INSERT below instead of four
 		// statements per anime.
 		chunkLinks := make(map[string][]string, len(freshAnime))
+		// IDs of anime whose metadata was unchanged this chunk — updated_at is
+		// bulk-advanced for them after the loop (no per-row rewrite).
+		var unchangedIDs []string
 
 		for _, fresh := range freshAnime {
 			existing, ok := existingMap[fresh.ShikimoriID]
@@ -662,10 +682,15 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 				continue
 			}
 
-			// Upsert genres we haven't seen yet this run (best-effort; a failed
-			// upsert is left unmarked so a later anime retries it).
+			// Upsert genres we haven't seen yet this run, and only when the stored
+			// row actually differs (best-effort; a failed upsert is left unmarked
+			// so a later anime retries it).
 			for _, g := range fresh.Genres {
 				if _, done := seenGenres[g.ID]; done {
+					continue
+				}
+				if cur, ok := storedGenres[g.ID]; ok && cur.Name == g.Name && cur.NameRU == g.NameRU {
+					seenGenres[g.ID] = struct{}{} // already current — no write
 					continue
 				}
 				if err := s.genreRepo.Upsert(ctx, &g); err != nil {
@@ -673,11 +698,21 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 					continue
 				}
 				seenGenres[g.ID] = struct{}{}
+				storedGenres[g.ID] = g // remember for the rest of the run
 			}
 
-			if err := s.refreshStaleAnime(ctx, fresh, existing); err != nil {
+			changed, err := s.refreshStaleAnime(ctx, fresh, existing)
+			if err != nil {
 				failed++
 				continue
+			}
+			if changed {
+				changedCount++
+			} else {
+				// Metadata unchanged: no row write. Collect for the bulk
+				// updated_at touch below so it still leaves the stale window.
+				unchangedCount++
+				unchangedIDs = append(unchangedIDs, existing.ID)
 			}
 
 			// Record links only when Shikimori returned genres — an empty fetch
@@ -695,11 +730,43 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 			refreshed++
 		}
 
-		// Bulk-rewrite this chunk's genre join rows (best-effort: the anime
+		// Drop anime whose stored genre set already equals the freshly fetched
+		// one, so the bulk DELETE+INSERT only runs for genuinely changed links
+		// (the steady state changes nothing). Best-effort: on a read error we keep
+		// the full set and rewrite as before.
+		if len(chunkLinks) > 0 {
+			ids := make([]string, 0, len(chunkLinks))
+			for id := range chunkLinks {
+				ids = append(ids, id)
+			}
+			if existingSets, gerr := s.genreRepo.GetForAnimes(ctx, ids); gerr != nil {
+				s.log.Warnw("failed to load existing genre links; rewriting all", "error", gerr, "batch_start", i)
+			} else {
+				for id, want := range chunkLinks {
+					have := make([]string, 0, len(existingSets[id]))
+					for _, g := range existingSets[id] {
+						have = append(have, g.ID)
+					}
+					if sameStringSet(have, want) {
+						delete(chunkLinks, id)
+					}
+				}
+			}
+		}
+
+		// Bulk-rewrite only the changed genre join rows (best-effort: the anime
 		// metadata rows are already updated).
 		if len(chunkLinks) > 0 {
 			if err := s.genreRepo.ReplaceAnimeGenresBatch(ctx, chunkLinks); err != nil {
 				s.log.Warnw("failed to bulk relink anime genres", "error", err, "batch_start", i)
+			}
+		}
+
+		// Advance updated_at for the unchanged rows in one statement so they leave
+		// the stale-refresh window without a full-row rewrite + index churn.
+		if len(unchangedIDs) > 0 {
+			if err := s.animeRepo.TouchUpdatedAt(ctx, unchangedIDs); err != nil {
+				s.log.Warnw("failed to touch updated_at for unchanged anime", "error", err, "count", len(unchangedIDs), "batch_start", i)
 			}
 		}
 
@@ -712,18 +779,45 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 	s.log.Infow("batch refresh completed",
 		"status", status,
 		"refreshed", refreshed,
+		"changed", changedCount,
+		"unchanged", unchangedCount,
 		"failed", failed,
 	)
 	return refreshed, failed, nil
 }
 
-// refreshStaleAnime updates a single stale anime in place with fresh Shikimori
-// data, preserving local-only fields (ID, HasVideo, CreatedAt) and the existing
-// MAL poster, and invalidates the per-anime cache. Genre upserts and join-table
-// relinking are done in bulk by the BatchRefreshAnime caller (deduped across the
-// run, one bulk join rewrite per chunk), not per anime here. Returns an error
-// only when the primary anime row update fails.
-func (s *CatalogService) refreshStaleAnime(ctx context.Context, fresh, existing *domain.Anime) error {
+// sameStringSet reports whether a and b contain the same set of strings,
+// ignoring order and duplicates. Used to detect an unchanged genre-ID set so the
+// batch refresh can skip rewriting a join row that would be identical.
+func sameStringSet(a, b []string) bool {
+	sa := make(map[string]struct{}, len(a))
+	for _, s := range a {
+		sa[s] = struct{}{}
+	}
+	sb := make(map[string]struct{}, len(b))
+	for _, s := range b {
+		sb[s] = struct{}{}
+	}
+	if len(sa) != len(sb) {
+		return false
+	}
+	for s := range sa {
+		if _, ok := sb[s]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// refreshStaleAnime reconciles a single stale anime against fresh Shikimori data,
+// preserving local-only fields (ID, HasVideo, CreatedAt) and the existing MAL
+// poster. It writes (and busts the per-anime cache) ONLY when a metadata column
+// actually changed; when the fetch was identical it writes nothing and reports
+// changed=false, leaving the caller to bulk-advance updated_at instead of doing a
+// full-row rewrite + secondary-index churn per unchanged anime. Genre upserts and
+// join-table relinking are done in bulk by the BatchRefreshAnime caller. Returns
+// an error only when the primary anime row update fails.
+func (s *CatalogService) refreshStaleAnime(ctx context.Context, fresh, existing *domain.Anime) (changed bool, err error) {
 	// Preserve local fields
 	fresh.ID = existing.ID
 	fresh.HasVideo = existing.HasVideo
@@ -742,18 +836,26 @@ func (s *CatalogService) refreshStaleAnime(ctx context.Context, fresh, existing 
 		}
 	}
 
+	// Skip the write entirely when Shikimori returned unchanged metadata — the
+	// common case for released/announced titles. Comparison runs AFTER the
+	// preserve/defend/poster fixups above so it reflects exactly what Update
+	// would persist. The caller advances updated_at in bulk for these rows.
+	if repo.AnimeMetadataEqual(fresh, existing) {
+		return false, nil
+	}
+
 	if err := s.animeRepo.Update(ctx, fresh); err != nil {
 		s.log.Warnw("failed to update anime", "id", existing.ID, "error", err)
-		return err
+		return false, err
 	}
 
 	// Genre upserts and join relinking are handled in bulk by the
 	// BatchRefreshAnime caller (one upsert per distinct genre across the whole
 	// run, one bulk join rewrite per chunk) — not per anime here.
 
-	// Invalidate cache
+	// Invalidate cache (only when something actually changed)
 	_ = s.cache.Delete(ctx, cache.KeyAnime(existing.ID))
-	return nil
+	return true, nil
 }
 
 // GetSeasonalAnime gets anime for a specific season
