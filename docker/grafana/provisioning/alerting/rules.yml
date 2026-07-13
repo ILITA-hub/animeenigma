@@ -948,7 +948,9 @@ groups:
           description: 'At least 3 `scraper GET /scraper/stream` resolutions exceeded 12 s in the last hour — a multi-provider failover cascade (normal is sub-second warm / 8 s single-gate). Check provider health (/api/anime/_/scraper/health), the Scraper dashboards, and recent parser_fallback_total.'
           reason: stream_cascade_latency
 
-      # AePlayerPlaybackFailures (warning) — >1 terminal aePlayer failure in 1h
+      # AePlayerPlaybackFailures (warning) — >1 viewer-facing aePlayer failure
+      # (auto-failover chain exhausted, viewer hit the error overlay) in 1h.
+      # Non-terminal first-party `ae` hiccups the chain recovered from are excluded.
       - uid: aeplayer-playback-failures
         title: AePlayerPlaybackFailures
         noDataState: OK
@@ -973,6 +975,7 @@ groups:
                 SELECT count() AS value
                 FROM analytics.events
                 WHERE effect_kind = 'player_failed'
+                  AND JSONExtractBool(properties, 'all_exhausted') = 1
                   AND timestamp >= now() - INTERVAL 1 HOUR
           - refId: B
             relativeTimeRange:
@@ -1005,8 +1008,8 @@ groups:
           component: aeplayer
           reason: playback_failed
         annotations:
-          summary: 'aePlayer terminal playback-failure events: {{ $values.B }} in the last hour (all-providers-exhausted or ae-source failures)'
-          description: 'More than one terminal aePlayer playback failure in the last hour (all providers exhausted, or the first-party `ae` source failed). Drill down in ClickHouse: SELECT properties FROM analytics.events WHERE effect_kind = ''player_failed'' AND timestamp >= now() - INTERVAL 1 HOUR ORDER BY timestamp DESC.'
+          summary: 'aePlayer viewer-facing playback failures: {{ $values.B }} in the last hour (auto-failover chain exhausted — the viewer hit the error overlay)'
+          description: 'More than one viewer-facing aePlayer playback failure in the last hour: the auto-failover chain ran out of sources and the viewer saw the error overlay (all_exhausted=true). Non-terminal first-party `ae` hiccups the chain recovered from are deliberately excluded. Drill down in ClickHouse: SELECT properties FROM analytics.events WHERE effect_kind = ''player_failed'' AND JSONExtractBool(properties, ''all_exhausted'') = 1 AND timestamp >= now() - INTERVAL 1 HOUR ORDER BY timestamp DESC.'
           reason: playback_failed
 
       - uid: provider-fleet-no-auto-playable
