@@ -45,8 +45,6 @@ spec:
             # S6 combo-pin Shikimori /similar fallback.
             - name: CATALOG_URL
               value: "http://catalog:8081"
-            - name: TRACING_ENABLED
-              value: "true"
           livenessProbe:
             httpGet:
               path: /health

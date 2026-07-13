@@ -42,8 +42,6 @@ spec:
                 secretKeyRef:
                   name: animeenigma-secrets
                   key: jwt-secret
-            - name: TRACING_ENABLED
-              value: "true"
           livenessProbe:
             httpGet:
               path: /health

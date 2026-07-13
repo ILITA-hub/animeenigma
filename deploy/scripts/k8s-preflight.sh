@@ -1,6 +1,9 @@
-#!/usr/bin/env bash
-# k8s-preflight — refuse to deploy the prod overlay with missing or placeholder secrets.
+#!/bin/bash
+# k8s-preflight.sh — refuse to deploy the prod overlay with missing or placeholder secrets.
 # (audit 2026-06-21 #10: the old committed secrets.yaml shipped 'change-this-in-production')
+#
+# Usage:   deploy/scripts/k8s-preflight.sh   (run by `make k8s-apply-prod`)
+# Exit:    0 = clean ("k8s-preflight: OK"), 1 = missing/placeholder/weak secrets
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"

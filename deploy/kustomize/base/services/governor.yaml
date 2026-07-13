@@ -35,8 +35,6 @@ spec:
               value: "http://prometheus.monitoring.svc:9090/prometheus"
             - name: GOVERNOR_ANALYTICS_URL
               value: "http://analytics:8092"
-            - name: TRACING_ENABLED
-              value: "true"
           livenessProbe:
             httpGet:
               path: /health

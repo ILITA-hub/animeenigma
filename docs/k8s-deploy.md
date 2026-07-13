@@ -75,8 +75,11 @@ Requirements the manifests assume:
 | `node-exporter`, `vnstat-exporter` | host/NIC metrics — would become a DaemonSet, meaningless until multi-node |
 | `web` dev-mounts etc. | compose dev conveniences have no k8s meaning |
 
-These are the exact exclusions encoded in `k8s-compose-parity.sh` — if you add a
-compose service, CI fails until you either add a manifest or justify an exclusion there.
+`k8s-compose-parity.sh` only compares compose services with a `build:` key, so
+image-only infra (`clickhouse-backup`, `node-exporter`) falls outside the check
+automatically; `backup` and `vnstat-exporter` are its explicit `EXCLUSIONS`. If you
+add a compose service, CI fails until you either add a manifest or justify an
+exclusion there.
 
 > `infra/helm/` (a gateway-only chart depending on a nonexistent `common` chart) was
 > **deleted 2026-07-13** — it was an abandoned POC; kustomize is the single k8s source

@@ -54,8 +54,6 @@ spec:
             # implicitly.
             - name: WATCH_TOGETHER_ALLOWED_ORIGINS
               value: "http://localhost:3003,http://localhost:8000"
-            - name: TRACING_ENABLED
-              value: "true"
           livenessProbe:
             httpGet:
               path: /health

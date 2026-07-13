@@ -80,8 +80,6 @@ spec:
               value: "minio"
             - name: STORAGE_CLASS_UPSCALED
               value: "s3"
-            - name: TRACING_ENABLED
-              value: "true"
           livenessProbe:
             httpGet:
               path: /health

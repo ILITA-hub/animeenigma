@@ -46,24 +46,18 @@ jobs:
           "$RUNNER_TEMP/bin/kubeconform" -v
 
       - name: kustomize build (base)
-        run: kustomize build deploy/kustomize/base -o /dev/null
+        run: kustomize build deploy/kustomize/base -o "$RUNNER_TEMP/base.yaml"
 
-      - name: kustomize build (prod overlay, if present)
+      - name: kustomize build (prod overlay)
         run: |
-          if [ -d deploy/kustomize/overlays/prod ]; then
-            # secretGenerators reference git-ignored files (*.env, auth.htpasswd);
-            # materialize dummies from the committed *.example templates so the build resolves.
-            find deploy/kustomize/overlays/prod -name '*.example' -print | while read -r tmpl; do
-              cp -v "$tmpl" "${tmpl%.example}"
-            done
-            kustomize build deploy/kustomize/overlays/prod -o /dev/null
-          else
-            echo "deploy/kustomize/overlays/prod not present — skipping"
-          fi
+          # secretGenerators reference git-ignored files (*.env, auth.htpasswd);
+          # materialize dummies from the committed *.example templates so the build resolves.
+          find deploy/kustomize/overlays/prod -name '*.example' -print | while read -r tmpl; do
+            cp -v "$tmpl" "${tmpl%.example}"
+          done
+          kustomize build deploy/kustomize/overlays/prod -o "$RUNNER_TEMP/prod.yaml"
 
       - name: kubeconform (schema validation)
         run: |
-          kustomize build deploy/kustomize/base | kubeconform -strict -ignore-missing-schemas -summary
-          if [ -d deploy/kustomize/overlays/prod ]; then
-            kustomize build deploy/kustomize/overlays/prod | kubeconform -strict -ignore-missing-schemas -summary
-          fi
+          kubeconform -strict -ignore-missing-schemas -summary "$RUNNER_TEMP/base.yaml"
+          kubeconform -strict -ignore-missing-schemas -summary "$RUNNER_TEMP/prod.yaml"
