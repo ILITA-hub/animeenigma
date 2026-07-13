@@ -261,36 +261,41 @@ func (r *JobRepository) ClaimForEncoding(ctx context.Context) (*domain.Job, erro
 	return claimed, nil
 }
 
-// UpdateProgress writes a new progress_pct (and bumps updated_at).
-// pct = clamp(downloadedBytes * 100 / totalBytes, 0, 100). When
-// totalBytes <= 0 (anacrolix hasn't received metadata yet) we leave
-// the column unchanged — the previous value is the best we have.
-//
-// peers is accepted for symmetry with the SPEC signature but not
-// currently persisted; the metric collector consumes it directly.
-func (r *JobRepository) UpdateProgress(ctx context.Context, id string, downloadedBytes, totalBytes int64, peers int) error {
-	_ = peers
-	if totalBytes <= 0 {
-		// Just bump updated_at so stall detection can read fresh tx.
-		return r.db.WithContext(ctx).
-			Model(&domain.Job{}).
-			Where("id = ?", id).
-			Update("updated_at", time.Now()).Error
-	}
-	pct := int(downloadedBytes * 100 / totalBytes)
+// SetProgressAndStatus transitions a job to newStatus AND persists a final
+// progress_pct in the same UPDATE. In-flight progress now lives only in the
+// live-progress cache (service.ProgressStore), so the DB row is written only at
+// a job's terminal transitions: the download worker calls this on →encoding
+// (pct=100) and on →failed (the last observed pct, deliberately non-100 so the
+// stored row shows where a failed download died). pct is clamped to [0,100].
+// Terminal statuses also stamp completed_at, matching UpdateStatus.
+func (r *JobRepository) SetProgressAndStatus(ctx context.Context, id string, newStatus domain.JobStatus, pct int, errorText string) error {
 	if pct < 0 {
 		pct = 0
 	}
 	if pct > 100 {
 		pct = 100
 	}
-	return r.db.WithContext(ctx).
+	now := time.Now()
+	updates := map[string]any{
+		"status":       newStatus,
+		"progress_pct": pct,
+		"error_text":   errorText,
+		"updated_at":   now,
+	}
+	if newStatus.IsTerminal() {
+		updates["completed_at"] = now
+	}
+	res := r.db.WithContext(ctx).
 		Model(&domain.Job{}).
 		Where("id = ?", id).
-		Updates(map[string]any{
-			"progress_pct": pct,
-			"updated_at":   time.Now(),
-		}).Error
+		Updates(updates)
+	if res.Error != nil {
+		return liberrors.Wrap(res.Error, liberrors.CodeInternal, "set job progress+status")
+	}
+	if res.RowsAffected == 0 {
+		return liberrors.NotFound("job")
+	}
+	return nil
 }
 
 // UpdateStatus transitions a job to newStatus. errorText is written

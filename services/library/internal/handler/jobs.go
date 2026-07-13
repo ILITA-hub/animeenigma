@@ -75,6 +75,13 @@ type JobCanceller interface {
 // Phase 5: mover + episodeStore are nil in the legacy constructor
 // `NewJobsHandler` (no Link/Retry handlers wired). Use
 // `NewJobsHandlerWithLink` to opt into the Phase-5 Link + Retry paths.
+// progressReader surfaces live download progress (kept in Redis, not the DB) so
+// the admin API can overlay it onto persisted job rows, whose progress_pct is
+// now written only at start/end transitions. Satisfied by *service.RedisProgressCache.
+type progressReader interface {
+	GetProgressMany(ctx context.Context, jobIDs []string) (map[string]int, error)
+}
+
 type JobsHandler struct {
 	jobRepo      JobStoreAPI
 	diskGuard    DiskGuardAPI
@@ -82,9 +89,46 @@ type JobsHandler struct {
 	canceller    JobCanceller
 	mover        StorageMover
 	episodeStore EpisodeStore
+	progress     progressReader // nil → rows served with persisted progress_pct only.
 	metrics      *metrics.LibraryMetrics
 	minFreePct   int
 	log          *logger.Logger
+}
+
+// SetProgressReader wires the live-progress cache so List/Get overlay in-flight
+// download percentages onto the persisted rows. Optional; when unset, rows carry
+// only their persisted progress_pct (0 for an in-flight download).
+func (h *JobsHandler) SetProgressReader(pr progressReader) { h.progress = pr }
+
+// overlayLiveProgress replaces progress_pct with the live cached value for any
+// job still downloading (its persisted progress_pct is stale by design). No-op
+// when no reader is wired or no job is downloading; a cache error is logged and
+// the persisted values are served unchanged.
+func (h *JobsHandler) overlayLiveProgress(ctx context.Context, jobs []domain.Job) {
+	if h.progress == nil {
+		return
+	}
+	ids := make([]string, 0, len(jobs))
+	for i := range jobs {
+		if jobs[i].Status == domain.JobStatusDownloading {
+			ids = append(ids, jobs[i].ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	live, err := h.progress.GetProgressMany(ctx, ids)
+	if err != nil {
+		if h.log != nil {
+			h.log.Warnw("overlay live job progress failed", "error", err)
+		}
+		return
+	}
+	for i := range jobs {
+		if pct, ok := live[jobs[i].ID]; ok {
+			jobs[i].ProgressPct = pct
+		}
+	}
 }
 
 // NewJobsHandler constructs a JobsHandler.
@@ -318,6 +362,7 @@ func (h *JobsHandler) List(w http.ResponseWriter, r *http.Request) {
 	if jobs == nil {
 		jobs = []domain.Job{}
 	}
+	h.overlayLiveProgress(r.Context(), jobs)
 	httputil.OK(w, map[string]any{"jobs": jobs})
 }
 
@@ -332,6 +377,11 @@ func (h *JobsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httputil.Error(w, err)
 		return
+	}
+	if job != nil {
+		jobs := []domain.Job{*job}
+		h.overlayLiveProgress(r.Context(), jobs)
+		job = &jobs[0]
 	}
 	httputil.OK(w, job)
 }

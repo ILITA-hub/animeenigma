@@ -240,44 +240,48 @@ func TestJobRepository_ConcurrentClaim(t *testing.T) {
 	}
 }
 
-// TestJobRepository_UpdateProgress_Clamps — pct clamps to [0,100] and
-// is computed as downloaded * 100 / total.
-func TestJobRepository_UpdateProgress_Clamps(t *testing.T) {
+// TestJobRepository_SetProgressAndStatus — persists a final progress_pct
+// alongside a status transition (clamped to [0,100]); terminal statuses stamp
+// completed_at. This is the download worker's only progress write to the DB;
+// in-flight samples live in the ProgressStore cache, not here.
+func TestJobRepository_SetProgressAndStatus(t *testing.T) {
 	db, cleanup := openTestDB(t)
 	defer cleanup()
 	r := NewJobRepository(db)
 	j := mustInsertJob(t, r, domain.JobSourceManual, "p", "magnet:?xt=urn:btih:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee&dn=p")
 
-	// 50% case
-	if err := r.UpdateProgress(context.Background(), j.ID, 50, 100, 5); err != nil {
+	// →encoding at 100% (successful download hand-off). Non-terminal: no completed_at.
+	if err := r.SetProgressAndStatus(context.Background(), j.ID, domain.JobStatusEncoding, 100, ""); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := r.GetByID(context.Background(), j.ID)
-	if got.ProgressPct != 50 {
-		t.Fatalf("pct = %d, want 50", got.ProgressPct)
+	if got.Status != domain.JobStatusEncoding || got.ProgressPct != 100 {
+		t.Fatalf("status/pct = %q/%d, want encoding/100", got.Status, got.ProgressPct)
+	}
+	if got.CompletedAt != nil {
+		t.Fatalf("completed_at must stay nil for a non-terminal status")
 	}
 
-	// Overshoot → clamp to 100.
-	if err := r.UpdateProgress(context.Background(), j.ID, 200, 100, 5); err != nil {
+	// Overshoot clamps to 100, undershoot clamps to 0.
+	if err := r.SetProgressAndStatus(context.Background(), j.ID, domain.JobStatusEncoding, 250, ""); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = r.GetByID(context.Background(), j.ID)
 	if got.ProgressPct != 100 {
-		t.Fatalf("pct overshoot = %d, want 100", got.ProgressPct)
+		t.Fatalf("pct overshoot = %d, want clamp 100", got.ProgressPct)
 	}
 
-	// Zero total → no-op on pct but updated_at bumped.
-	previousUpdated := got.UpdatedAt
-	time.Sleep(2 * time.Millisecond)
-	if err := r.UpdateProgress(context.Background(), j.ID, 0, 0, 0); err != nil {
+	// →failed at a non-100 pct (where the download died) stamps completed_at
+	// and records the error text.
+	if err := r.SetProgressAndStatus(context.Background(), j.ID, domain.JobStatusFailed, 42, "stalled"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = r.GetByID(context.Background(), j.ID)
-	if got.ProgressPct != 100 {
-		t.Fatalf("pct should not change on zero total; got %d", got.ProgressPct)
+	if got.Status != domain.JobStatusFailed || got.ProgressPct != 42 || got.ErrorText != "stalled" {
+		t.Fatalf("failed row = %q/%d/%q, want failed/42/stalled", got.Status, got.ProgressPct, got.ErrorText)
 	}
-	if !got.UpdatedAt.After(previousUpdated) {
-		t.Fatalf("updated_at must bump on zero-total tick")
+	if got.CompletedAt == nil {
+		t.Fatalf("completed_at must be stamped for a terminal status")
 	}
 }
 

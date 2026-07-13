@@ -86,25 +86,28 @@ func (s *fakeJobStore) GetByID(ctx context.Context, id string) (*domain.Job, err
 	return &cp, nil
 }
 
-func (s *fakeJobStore) UpdateProgress(ctx context.Context, id string, downloadedBytes, totalBytes int64, peers int) error {
+func (s *fakeJobStore) SetProgressAndStatus(ctx context.Context, id string, newStatus domain.JobStatus, pct int, errorText string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.calls = append(s.calls, "UpdateProgress")
+	s.calls = append(s.calls, fmt.Sprintf("SetProgressAndStatus(%s,%d)", newStatus, pct))
 	j, ok := s.jobs[id]
 	if !ok {
 		return errors.New("not found")
 	}
-	if totalBytes > 0 {
-		pct := int(downloadedBytes * 100 / totalBytes)
-		if pct > 100 {
-			pct = 100
-		}
-		if pct < 0 {
-			pct = 0
-		}
-		j.ProgressPct = pct
+	if pct < 0 {
+		pct = 0
 	}
+	if pct > 100 {
+		pct = 100
+	}
+	j.ProgressPct = pct
+	j.Status = newStatus
+	j.ErrorText = errorText
 	j.UpdatedAt = time.Now()
+	if newStatus.IsTerminal() {
+		now := time.Now()
+		j.CompletedAt = &now
+	}
 	return nil
 }
 

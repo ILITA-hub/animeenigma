@@ -21,7 +21,7 @@ import (
 // EncoderJobStore is the slice of *repo.JobRepository the encoder
 // worker needs. Phase 03's WorkerPool uses a similar pattern; we
 // declare a distinct interface here so the worker's tests don't have
-// to provide UpdateProgress / Cancel methods.
+// to provide the download-only methods (progress cache, Cancel).
 type EncoderJobStore interface {
 	// ClaimForEncoding atomically claims the oldest status='encoding' row
 	// and flips it to the non-claimable 'transcoding' state, returning it

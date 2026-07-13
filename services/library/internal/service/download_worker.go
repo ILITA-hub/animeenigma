@@ -25,8 +25,12 @@ type TorrentAdder interface {
 type JobStore interface {
 	Claim(ctx context.Context, statuses ...domain.JobStatus) (*domain.Job, error)
 	GetByID(ctx context.Context, id string) (*domain.Job, error)
-	UpdateProgress(ctx context.Context, id string, downloadedBytes, totalBytes int64, peers int) error
 	UpdateStatus(ctx context.Context, id string, newStatus domain.JobStatus, errorText string) error
+	// SetProgressAndStatus persists the final progress_pct alongside a terminal
+	// transition (→encoding at 100, →failed at the last observed pct). In-flight
+	// progress is written to the ProgressStore cache instead, never per-tick to
+	// the DB.
+	SetProgressAndStatus(ctx context.Context, id string, newStatus domain.JobStatus, pct int, errorText string) error
 	Cancel(ctx context.Context, id string) error
 }
 
@@ -48,6 +52,7 @@ type WorkerPool struct {
 	workers      int
 	jobRepo      JobStore
 	tc           TorrentAdder
+	progress     ProgressStore
 	metrics      *metrics.LibraryMetrics
 	stallTimeout time.Duration
 	progressTick time.Duration
@@ -103,6 +108,49 @@ func NewWorkerPool(
 
 // SetShedChecker wires the degradation watcher (nil-safe; call before Start).
 func (p *WorkerPool) SetShedChecker(c ShedChecker) { p.shed.set(c) }
+
+// SetProgressCache injects the live-progress side channel. When set, the worker
+// writes each progress tick here (cheap Redis SET) instead of to the DB; the DB
+// row is touched only at start/end transitions. Nil is tolerated (progress is
+// then simply not surfaced live) so tests can omit it.
+func (p *WorkerPool) SetProgressCache(c ProgressStore) { p.progress = c }
+
+// computePct clamps a download's byte progress to an integer percentage [0,100].
+// Returns 0 while total is unknown (metadata not yet received).
+func computePct(downloaded, total int64) int {
+	if total <= 0 {
+		return 0
+	}
+	pct := int(downloaded * 100 / total)
+	if pct < 0 {
+		return 0
+	}
+	if pct > 100 {
+		return 100
+	}
+	return pct
+}
+
+// cacheProgress records the latest pct in the live cache (no-op when unset).
+func (p *WorkerPool) cacheProgress(ctx context.Context, jobID string, pct int) {
+	if p.progress == nil {
+		return
+	}
+	if err := p.progress.SetProgress(ctx, jobID, pct); err != nil && p.log != nil {
+		p.log.Warnw("cache job progress failed", "job_id", jobID, "error", err)
+	}
+}
+
+// clearProgress drops a job's live cache entry at a terminal transition (no-op
+// when unset). Best-effort — a leftover key self-expires via its TTL.
+func (p *WorkerPool) clearProgress(ctx context.Context, jobID string) {
+	if p.progress == nil {
+		return
+	}
+	if err := p.progress.DeleteProgress(ctx, jobID); err != nil && p.log != nil {
+		p.log.Warnw("clear job progress failed", "job_id", jobID, "error", err)
+	}
+}
 
 // Start launches the worker goroutines + a 5s active-count publisher.
 // Returns immediately; goroutines exit on <-ctx.Done().
@@ -219,7 +267,8 @@ func (p *WorkerPool) processJob(ctx context.Context, job *domain.Job) {
 				success = p.transitionToEncoding(ctx, job.ID)
 				return
 			}
-			_ = p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusFailed, "download ended before completion")
+			_ = p.jobRepo.SetProgressAndStatus(ctx, job.ID, domain.JobStatusFailed, computePct(downloaded, total), "download ended before completion")
+			p.clearProgress(ctx, job.ID)
 			if p.metrics != nil {
 				p.metrics.IncJobsTotal(string(domain.JobStatusFailed))
 			}
@@ -249,7 +298,8 @@ func (p *WorkerPool) processJob(ctx context.Context, job *domain.Job) {
 				lastNonZeroPeerAt = time.Now()
 			}
 			if time.Since(lastNonZeroPeerAt) >= p.stallTimeout {
-				_ = p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusFailed, stallErrorText)
+				_ = p.jobRepo.SetProgressAndStatus(ctx, job.ID, domain.JobStatusFailed, computePct(downloaded, total), stallErrorText)
+				p.clearProgress(ctx, job.ID)
 				if p.metrics != nil {
 					p.metrics.IncJobsTotal(string(domain.JobStatusFailed))
 				}
@@ -259,12 +309,8 @@ func (p *WorkerPool) processJob(ctx context.Context, job *domain.Job) {
 				return
 			}
 
-			// Update progress + emit bytes delta.
-			if err := p.jobRepo.UpdateProgress(ctx, job.ID, downloaded, total, peers); err != nil {
-				if p.log != nil {
-					p.log.Warnw("update progress failed", "job_id", job.ID, "error", err)
-				}
-			}
+			// Record live progress in the cache (not the DB) + emit bytes delta.
+			p.cacheProgress(ctx, job.ID, computePct(downloaded, total))
 			if p.metrics != nil && downloaded > lastReportedBytes {
 				p.metrics.AddDownloadBytes(downloaded - lastReportedBytes)
 			}
@@ -288,6 +334,7 @@ func (p *WorkerPool) processJob(ctx context.Context, job *domain.Job) {
 func (p *WorkerPool) observeCancelled(ctx context.Context, jobID string) bool {
 	fresh, err := p.jobRepo.GetByID(ctx, jobID)
 	if err == nil && fresh != nil && fresh.Status == domain.JobStatusCancelled {
+		p.clearProgress(ctx, jobID)
 		if p.metrics != nil {
 			p.metrics.IncJobsTotal(string(domain.JobStatusCancelled))
 		}
@@ -300,12 +347,16 @@ func (p *WorkerPool) observeCancelled(ctx context.Context, jobID string) bool {
 // encoder pool claims it. Returns true on a successful flip — the caller uses
 // that to skip the defensive handle.Cancel(), letting the torrent keep seeding.
 func (p *WorkerPool) transitionToEncoding(ctx context.Context, jobID string) bool {
-	if err := p.jobRepo.UpdateStatus(ctx, jobID, domain.JobStatusEncoding, ""); err != nil {
+	// The download is complete → persist progress_pct=100 alongside the status
+	// flip (the DB row's only progress write for a successful download) and drop
+	// the live cache entry.
+	if err := p.jobRepo.SetProgressAndStatus(ctx, jobID, domain.JobStatusEncoding, 100, ""); err != nil {
 		if p.log != nil {
 			p.log.Errorw("update status encoding", "job_id", jobID, "error", err)
 		}
 		return false
 	}
+	p.clearProgress(ctx, jobID)
 	if p.metrics != nil {
 		p.metrics.IncJobsTotal(string(domain.JobStatusEncoding))
 	}

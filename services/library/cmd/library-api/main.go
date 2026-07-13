@@ -340,6 +340,11 @@ func main() {
 		log,
 	)
 	pool.SetShedChecker(shedWatcher)
+	// Live download progress goes to Redis every tick (cheap SET) instead of the
+	// DB, so library_jobs is written only at start/end transitions. The admin API
+	// reads it back to render in-flight progress bars.
+	progressCache := service.NewRedisProgressCache(redisCache)
+	pool.SetProgressCache(progressCache)
 	pool.Start(rootCtx)
 	log.Infow("worker pool started",
 		"workers", cfg.Worker.Count,
@@ -556,6 +561,8 @@ func main() {
 		cfg.Disk.MinFreePct,
 		log,
 	)
+	// Overlay live (cached) download progress onto persisted job rows in List/Get.
+	jobsHandler.SetProgressReader(progressCache)
 
 	// Phase 4: episodes handler (read-only).
 	episodesHandler := handler.NewEpisodesHandler(episodeRepo, storageGW, log)
