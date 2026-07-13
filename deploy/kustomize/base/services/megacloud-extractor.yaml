@@ -1,0 +1,68 @@
+# megacloud-extractor — node-based stream extractor sidecar on port 3200.
+# INTERNAL-ONLY: no gateway route; the scraper is the only caller
+# (MEGACLOUD_EXTRACTOR_URL). No /metrics endpoint (server.js exposes only
+# /health), so no prometheus scrape annotations. The node:20-alpine image
+# runs as root by default (no USER directive) and the server is stateless
+# (in-memory cache only) — securityContext deliberately omitted to mirror
+# compose; runAsNonRoot is a candidate hardening follow-up.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: megacloud-extractor
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: megacloud-extractor
+  template:
+    metadata:
+      labels:
+        app: megacloud-extractor
+    spec:
+      containers:
+        - name: megacloud-extractor
+          image: ghcr.io/ilita-hub/animeenigma/megacloud-extractor:latest
+          ports:
+            - containerPort: 3200
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: PORT
+              value: "3200"
+            - name: BROWSER_TIMEOUT
+              value: "15000"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3200
+            # compose start_period: 30s
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3200
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: megacloud-extractor
+  namespace: animeenigma
+spec:
+  selector:
+    app: megacloud-extractor
+  ports:
+    - port: 3200
+      targetPort: 3200

@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: animeenigma
+generatorOptions:
+  # Stable name: deployments reference `animeenigma-secrets` verbatim.
+  # Trade-off: changing a secret needs `make k8s-restart` (no hash-triggered rollout).
+  disableNameSuffixHash: true
+secretGenerator:
+  - name: animeenigma-secrets
+    envs:
+      - animeenigma.env

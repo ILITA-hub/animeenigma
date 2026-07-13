@@ -16,7 +16,7 @@ rules:
       - pods/log
       - services
       - configmaps
-      - secrets
+      # secrets deliberately excluded — dashboard must not read credential bodies (audit 2026-06-21 #11)
       - persistentvolumeclaims
       - events
     verbs: ["get", "list", "watch"]

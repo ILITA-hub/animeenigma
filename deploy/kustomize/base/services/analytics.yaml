@@ -1,0 +1,97 @@
+# Clickstream analytics ingestion — Postgres-backed events + identity
+# stitching, dual-written to ClickHouse (ANALYTICS_STORE_BACKEND=dualwrite;
+# Postgres stays source of truth). Port 8092. Also receives the BE egress
+# recorder rows on /internal/effects from scraper/catalog/streaming/upscaler.
+# CLICKHOUSE_HOST/PORT/DB/USER come from animeenigma-config via envFrom.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics
+  template:
+    metadata:
+      labels:
+        app: analytics
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8092"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: analytics
+          image: ghcr.io/ilita-hub/animeenigma/analytics:latest
+          ports:
+            - containerPort: 8092
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: SERVER_PORT
+              value: "8092"
+            - name: DB_NAME
+              value: "animeenigma"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: db-password
+            # IP-hashing salt. Optional: when absent the service falls back to
+            # its internal default and logs a loud warning (main.go) — set a
+            # strong value in the overlay secret env, never a committed literal
+            # (k8s-secret-guard model).
+            - name: ANALYTICS_IP_SALT
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: analytics-ip-salt
+                  optional: true
+            - name: ANALYTICS_RETENTION_DAYS
+              value: "90"
+            - name: ANALYTICS_PURGE_CRON
+              value: "17 3 * * *"
+            - name: ANALYTICS_STORE_BACKEND
+              value: "dualwrite"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: clickhouse-password
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8092
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8092
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics
+  namespace: animeenigma
+spec:
+  selector:
+    app: analytics
+  ports:
+    - port: 8092
+      targetPort: 8092

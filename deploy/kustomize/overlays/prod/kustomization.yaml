@@ -1,0 +1,10 @@
+# Production overlay — the ONLY deployable entrypoint.
+# `base` deliberately contains no Secret objects (audit 2026-06-21 #10):
+# secrets are generated here from git-ignored env files (same model as docker/.env).
+# Deploy via `make k8s-apply-prod` (runs placeholder preflight first).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - app-secrets
+  - admin-secrets

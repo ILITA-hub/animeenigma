@@ -1,0 +1,100 @@
+# PostgreSQL — primary relational store for every Go service.
+# Mirrors docker-compose.yml service `postgres` (postgres:16-alpine,
+# max_connections=200, pg_isready healthcheck, postgres_data volume).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: animeenigma
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+# Headless governing Service for the StatefulSet (stable pod DNS identity).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: animeenigma
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: animeenigma
+spec:
+  serviceName: postgres-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          # compose `command` overrides the image CMD (entrypoint kept) —
+          # in Kubernetes that is `args`. M725: max_connections 100 → 200.
+          args: ["postgres", "-c", "max_connections=200"]
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: db-password
+            - name: POSTGRES_DB
+              value: "animeenigma"
+            # PVC root contains lost+found; initdb refuses a non-empty data
+            # dir, so point PGDATA at a subdirectory of the mount.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

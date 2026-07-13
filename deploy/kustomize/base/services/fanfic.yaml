@@ -1,33 +1,36 @@
+# Fanfic engine (spec 2026-07-06) — admin-only AI fanfiction generator on
+# port 8097. Groq-backed; dark-shipped via FANFIC_ADMIN_ONLY at the gateway
+# + VITE_FANFIC_ADMIN_ONLY on the web.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth
+  name: fanfic
   namespace: animeenigma
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: auth
+      app: fanfic
   template:
     metadata:
       labels:
-        app: auth
+        app: fanfic
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8097"
         prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: auth
-          image: ghcr.io/ilita-hub/animeenigma/auth:latest
+        - name: fanfic
+          image: ghcr.io/ilita-hub/animeenigma/fanfic:latest
           ports:
-            - containerPort: 8080
+            - containerPort: 8097
           envFrom:
             - configMapRef:
                 name: animeenigma-config
           env:
             - name: SERVER_PORT
-              value: "8080"
+              value: "8097"
             - name: DB_NAME
               value: "animeenigma"
             - name: DB_USER
@@ -42,15 +45,32 @@ spec:
                 secretKeyRef:
                   name: animeenigma-secrets
                   key: jwt-secret
+            # REQUIRED — the service refuses to boot without it (config.go).
+            # Deliberately not optional: a missing key should fail loudly here.
+            - name: FANFIC_GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: fanfic-groq-api-key
+            - name: FANFIC_GROQ_MODEL
+              value: "llama-3.1-8b-instant"
+            - name: FANFIC_DAILY_CAP
+              value: "100"
+            - name: CATALOG_URL
+              value: "http://catalog:8081"
+            - name: FANFIC_CATALOG_TIMEOUT
+              value: "5s"
+            - name: FANFIC_CONTINUE_CONTEXT_RUNES
+              value: "24000"
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8097
             initialDelaySeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8097
             initialDelaySeconds: 5
           resources:
             requests:
@@ -66,11 +86,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: auth
+  name: fanfic
   namespace: animeenigma
 spec:
   selector:
-    app: auth
+    app: fanfic
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 8097
+      targetPort: 8097

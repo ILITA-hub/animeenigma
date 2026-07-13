@@ -2,13 +2,31 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: animeenigma-config
+  namespace: animeenigma
 data:
-  # Service URLs
+  # Gateway upstream service URLs (k8s Service DNS — names match compose)
   AUTH_SERVICE_URL: "http://auth:8080"
   CATALOG_SERVICE_URL: "http://catalog:8081"
   STREAMING_SERVICE_URL: "http://streaming:8082"
   PLAYER_SERVICE_URL: "http://player:8083"
   ROOMS_SERVICE_URL: "http://rooms:8084"
+  SCHEDULER_SERVICE_URL: "http://scheduler:8085"
+  THEMES_SERVICE_URL: "http://themes:8086"
+  SCRAPER_SERVICE_URL: "http://scraper:8088"
+  LIBRARY_SERVICE_URL: "http://library:8089"
+  NOTIFICATIONS_SERVICE_URL: "http://notifications:8090"
+  WATCH_TOGETHER_SERVICE_URL: "http://watch-together:8091"
+  ANALYTICS_SERVICE_URL: "http://analytics:8092"
+  GACHA_SERVICE_URL: "http://gacha:8093"
+  RECS_SERVICE_URL: "http://recs:8094"
+  ANIDLE_SERVICE_URL: "http://anidle:8095"
+  UPSCALER_SERVICE_URL: "http://upscaler:8096"
+  FANFIC_SERVICE_URL: "http://fanfic:8097"
+  POLICY_SERVICE_URL: "http://policy:8098"
+  WEB_SERVICE_URL: "http://web:80"
+  # Admin upstreams live in the monitoring namespace — cross-namespace DNS
+  GRAFANA_SERVICE_URL: "http://grafana.monitoring.svc:3000"
+  PROMETHEUS_SERVICE_URL: "http://prometheus.monitoring.svc:9090"
 
   # Database
   DB_HOST: "postgres"
@@ -23,6 +41,21 @@ data:
   MINIO_ENDPOINT: "minio:9000"
   MINIO_BUCKET: "animeenigma"
   MINIO_USE_SSL: "false"
+
+  # NATS
+  NATS_ADDR: "nats:4222"
+
+  # ClickHouse (analytics pipeline; password comes from animeenigma-secrets)
+  CLICKHOUSE_HOST: "clickhouse"
+  CLICKHOUSE_PORT: "9000"
+  CLICKHOUSE_DB: "analytics"
+  CLICKHOUSE_USER: "analytics"
+
+  # Meilisearch
+  MEILI_HOST: "http://meilisearch:7700"
+
+  # Tracing
+  TRACING_ENABLED: "true"
 
   # Site
   SITE_URL: "https://animeenigma.org"

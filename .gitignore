@@ -146,3 +146,7 @@ docs/issues/issues.json
 
 # Python .venv/ for internal repo management
 .venv/
+
+# k8s prod overlay secrets (real values live only on the deploy host)
+deploy/kustomize/overlays/**/*.env
+deploy/kustomize/overlays/**/auth.htpasswd

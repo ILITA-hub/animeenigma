@@ -1,0 +1,150 @@
+# Camoufox stealth-scraper sidecar — anti-detect Firefox in Xvfb resolving
+# providers whose DB `engine` column is "browser" (JS-runtime stream id +
+# Referer-gated rotating CDN), restreaming playlists/segments through the
+# same browser context via /hls. INTERNAL-ONLY: no gateway route; the Go
+# scraper is the only caller (ClusterIP service, port 3000).
+#
+# Compose parity notes:
+#   - shm_size: 1g            → memory-backed emptyDir at /dev/shm (Firefox
+#                                wants shm for tabs/contexts). Counts against
+#                                the container memory limit.
+#   - security_opt seccomp:unconfined → seccompProfile type: Unconfined
+#                                (Firefox sandbox needs userns).
+#   - init: true               → no direct k8s equivalent; uvicorn runs as
+#                                PID 1. Firefox subprocess reaping is handled
+#                                by the app's pool manager.
+#   - The image runs as root (Dockerfile sets no USER; Xvfb + Camoufox
+#     profile writes) — deliberately NO runAsNonRoot here.
+#   - Compose gives mem_limit 3500m with a 3GiB STEALTH_RAM_HARD_BYTES
+#     budget; the 4Gi limit below leaves headroom above that budget plus the
+#     1Gi /dev/shm emptyDir (which counts against the container limit).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stealth-scraper
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stealth-scraper
+  template:
+    metadata:
+      labels:
+        app: stealth-scraper
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: stealth-scraper
+          image: ghcr.io/ilita-hub/animeenigma/stealth-scraper:latest
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            # Headful-in-Xvfb — far less bot-detectable than true headless.
+            - name: STEALTH_HEADLESS
+              value: "virtual"
+            # Fail-safe ceiling only; the live cap is the RAM budget below.
+            - name: STEALTH_POOL_SIZE
+              value: "4"
+            - name: STEALTH_RAM_SOFT_BYTES
+              value: "2147483648"
+            - name: STEALTH_RAM_HARD_BYTES
+              value: "3221225472"
+            - name: STEALTH_RAM_SAMPLE_SECONDS
+              value: "5"
+            - name: STEALTH_USER_QUOTA
+              value: "2"
+            # Graceful-degradation Phase 3: shed under host pressure.
+            - name: STEALTH_GOVERNOR_URL
+              value: "http://governor:8100"
+            - name: STEALTH_SESSION_TTL_SECONDS
+              value: "600"
+            - name: STEALTH_GEOIP
+              value: "true"
+            - name: STEALTH_HUMANIZE
+              value: "true"
+            # Optional residential/mobile exits (JSON array of
+            # {id,type,url,geo}) — SECRET (proxy URLs embed credentials).
+            # Absent ⇒ direct exit only, mirroring the compose default.
+            - name: STEALTH_PROXIES
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: stealth-proxies
+                  optional: true
+            - name: STEALTH_WARP_PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: stealth-warp-proxy-url
+                  optional: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            # /healthz needs no browser, but pool warmup is slow (compose
+            # start_period: 40s).
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            # Firefox sandbox needs user namespaces (compose: seccomp:unconfined).
+            seccompProfile:
+              type: Unconfined
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: stealth-profiles
+              mountPath: /data/profiles
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+        - name: stealth-profiles
+          persistentVolumeClaim:
+            claimName: stealth-profiles
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stealth-scraper
+  namespace: animeenigma
+spec:
+  selector:
+    app: stealth-scraper
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+# Persistent Camoufox browser profiles (cookies/history → aged sessions).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stealth-profiles
+  namespace: animeenigma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi

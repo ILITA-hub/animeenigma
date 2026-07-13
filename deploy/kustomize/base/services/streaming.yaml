@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: streaming
+  namespace: animeenigma
 spec:
   replicas: 2
   selector:
@@ -72,6 +73,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: streaming
+  namespace: animeenigma
 spec:
   selector:
     app: streaming

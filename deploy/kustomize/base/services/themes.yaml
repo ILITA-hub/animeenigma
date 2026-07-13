@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: themes
+  namespace: animeenigma
 spec:
   replicas: 2
   selector:
@@ -66,6 +67,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: themes
+  namespace: animeenigma
 spec:
   selector:
     app: themes

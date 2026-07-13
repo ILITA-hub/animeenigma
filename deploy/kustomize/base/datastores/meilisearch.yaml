@@ -1,0 +1,96 @@
+# Meilisearch — full-text search index. Mirrors docker-compose.yml service
+# `meilisearch` (getmeili/meilisearch:v1.6, meilisearch_data volume,
+# /health check probed via 127.0.0.1 in compose because the server binds
+# IPv4-only — kubelet httpGet probes use the pod IP, so no workaround needed).
+apiVersion: v1
+kind: Service
+metadata:
+  name: meilisearch
+  namespace: animeenigma
+spec:
+  selector:
+    app: meilisearch
+  ports:
+    - name: http
+      port: 7700
+      targetPort: 7700
+---
+# Headless governing Service for the StatefulSet (stable pod DNS identity).
+apiVersion: v1
+kind: Service
+metadata:
+  name: meilisearch-headless
+  namespace: animeenigma
+spec:
+  clusterIP: None
+  selector:
+    app: meilisearch
+  ports:
+    - name: http
+      port: 7700
+      targetPort: 7700
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: meilisearch
+  namespace: animeenigma
+spec:
+  serviceName: meilisearch-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meilisearch
+  template:
+    metadata:
+      labels:
+        app: meilisearch
+    spec:
+      containers:
+        - name: meilisearch
+          image: getmeili/meilisearch:v1.6
+          ports:
+            - name: http
+              containerPort: 7700
+          env:
+            - name: MEILI_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: meili-master-key
+            # compose default (MEILI_ENV: ${MEILI_ENV:-development});
+            # overlays can patch this to "production".
+            - name: MEILI_ENV
+              value: "development"
+          volumeMounts:
+            - name: data
+              mountPath: /meili_data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 7700
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 7700
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

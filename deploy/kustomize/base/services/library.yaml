@@ -1,0 +1,159 @@
+# Library service (admin-only) — BitTorrent ingest → ffmpeg HLS transcode →
+# object storage via the internal storage service (:8099). Port 8089. Heavy:
+# encode workers + torrent payloads, hence the raised resource envelope and
+# two PVCs (compose volumes library_torrents + library_minio_staging).
+# NOTE: both PVCs are ReadWriteOnce; library-torrents is also mounted
+# read-only by the upscaler Deployment, so with RWO storage those pods must
+# co-schedule on the same node (or the PVCs need an RWX storage class).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: library
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: library
+  template:
+    metadata:
+      labels:
+        app: library
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8089"
+        prometheus.io/path: "/metrics"
+    spec:
+      # PVC mounts must be writable by the non-root runtime user.
+      securityContext:
+        fsGroup: 65534
+      containers:
+        - name: library
+          image: ghcr.io/ilita-hub/animeenigma/library:latest
+          ports:
+            - containerPort: 8089
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: SERVER_PORT
+              value: "8089"
+            # Library owns its own database (compose LIBRARY_DB_NAME default).
+            - name: DB_NAME
+              value: "library"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: db-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: jwt-secret
+            # All object I/O flows through the internal storage service — the
+            # embedded MinIO writer was deleted.
+            - name: LIBRARY_STORAGE_URL
+              value: "http://storage:8099"
+            - name: LIBRARY_ENCODE_WORKERS
+              value: "2"
+            - name: LIBRARY_ENCODE_TMPDIR
+              value: "/tmp/encode"
+            - name: LIBRARY_FFMPEG_BIN
+              value: "/usr/bin/ffmpeg"
+            - name: LIBRARY_FFPROBE_BIN
+              value: "/usr/bin/ffprobe"
+            - name: LIBRARY_ENCODE_MAX_BITRATE_KBPS
+              value: "5000"
+            - name: LIBRARY_ENCODE_THREADS
+              value: "3"
+            - name: LIBRARY_ENCODE_NICE
+              value: "15"
+            # Jackett primary search tier — an absent/empty key disables the
+            # tier and search falls back to Nyaa+AnimeTosho (dark-ship safe).
+            - name: JACKETT_BASE_URL
+              value: "http://jackett:9117"
+            - name: JACKETT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: jackett-api-key
+                  optional: true
+            - name: JACKETT_CATEGORIES
+              value: ""
+            - name: JACKETT_INDEXER_FILTER
+              value: "!status:failing"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8089
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8089
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+          volumeMounts:
+            - name: library-torrents
+              mountPath: /data/torrents
+            - name: library-minio-staging
+              mountPath: /tmp/encode
+      volumes:
+        - name: library-torrents
+          persistentVolumeClaim:
+            claimName: library-torrents
+        - name: library-minio-staging
+          persistentVolumeClaim:
+            claimName: library-minio-staging
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: library
+  namespace: animeenigma
+spec:
+  selector:
+    app: library
+  ports:
+    - port: 8089
+      targetPort: 8089
+---
+# In-progress + completed torrent payloads (compose volume library_torrents).
+# Also mounted read-only by the upscaler Deployment.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: library-torrents
+  namespace: animeenigma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+# ffmpeg encode scratch dir before HLS segments land in object storage
+# (compose volume library_minio_staging).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: library-minio-staging
+  namespace: animeenigma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi

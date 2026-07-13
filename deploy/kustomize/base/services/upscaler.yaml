@@ -1,0 +1,159 @@
+# Upscaler control plane — job orchestration for anime upscaling on port
+# 8096. The GPU compute itself runs on EXTERNAL enrolled workers (edge
+# ext.animeenigma.org, WORKER_SELF_ENROLL / JOB_CAPABILITY_SECRET chain);
+# docker-compose declares no GPU devices for this container, so this
+# Deployment carries no nodeSelector / nvidia.com/gpu resources either.
+# If in-cluster GPU workers ever land, gate them like:
+#   nodeSelector: {kubernetes.io/arch: amd64, gpu: "true"}
+#   resources.limits: {nvidia.com/gpu: 1}
+# HLS output goes through the storage service (class "upscaled"); local
+# MinIO keeps only internal artifacts (model weights, per-job log dumps).
+# NOTE: library-torrents is library's ReadWriteOnce PVC mounted read-only
+# here — with RWO storage this pod must co-schedule with the library pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upscaler
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: upscaler
+  template:
+    metadata:
+      labels:
+        app: upscaler
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8096"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Staging PVC must be writable by the non-root runtime user.
+      securityContext:
+        fsGroup: 65534
+      containers:
+        - name: upscaler
+          image: ghcr.io/ilita-hub/animeenigma/upscaler:latest
+          ports:
+            - containerPort: 8096
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: SERVER_PORT
+              value: "8096"
+            # Upscaler owns its own database (compose UPSCALER_DB_NAME default).
+            - name: DB_NAME
+              value: "upscaler"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: db-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: jwt-secret
+            - name: LIBRARY_URL
+              value: "http://library:8089"
+            - name: UPSCALER_STORAGE_URL
+              value: "http://storage:8099"
+            # MINIO_* is for INTERNAL artifacts only (model-weight tars +
+            # per-job log dumps) in the local upscaler-output bucket.
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: minio-secret-key
+            # Overrides the shared MINIO_BUCKET=animeenigma from the configmap.
+            - name: MINIO_BUCKET
+              value: "upscaler-output"
+            # Worker job-capability HMAC. Optional: compose defaults it empty
+            # (worker auth chain dark-shipped until a value is set).
+            - name: JOB_CAPABILITY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: job-capability-secret
+                  optional: true
+            - name: WORKER_SELF_ENROLL
+              value: "false"
+            - name: SEGMENT_SECONDS
+              value: "30"
+            - name: DEFAULT_SCALE
+              value: "2"
+            - name: REMOTE_SHELL_ENABLED
+              value: "false"
+            - name: ANALYTICS_INTERNAL_URL
+              value: "http://analytics:8092"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8096
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8096
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+          volumeMounts:
+            - name: library-torrents
+              mountPath: /data/torrents
+              readOnly: true
+            - name: upscale-staging
+              mountPath: /data/upscale-staging
+      volumes:
+        # Defined in services/library.yaml (library owns the torrent payloads).
+        - name: library-torrents
+          persistentVolumeClaim:
+            claimName: library-torrents
+            readOnly: true
+        - name: upscale-staging
+          persistentVolumeClaim:
+            claimName: upscale-staging
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: upscaler
+  namespace: animeenigma
+spec:
+  selector:
+    app: upscaler
+  ports:
+    - port: 8096
+      targetPort: 8096
+---
+# ffmpeg/realesrgan scratch dir for in-progress upscale segments (compose
+# volume upscale_staging). Size is a judgment call — compose declares no
+# bound; 20Gi covers several concurrent segment batches.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: upscale-staging
+  namespace: animeenigma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi

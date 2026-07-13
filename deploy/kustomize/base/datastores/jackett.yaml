@@ -1,0 +1,90 @@
+# Jackett — torrent indexer aggregator consumed by the library service
+# (JACKETT_BASE_URL=http://jackett:9117). Mirrors docker-compose.yml service
+# `jackett` (lscr.io/linuxserver/jackett:latest — compose does not pin a tag;
+# PUID/PGID/TZ/AUTO_UPDATE env, jackett_config volume, HTTP / healthcheck).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jackett-config
+  namespace: animeenigma
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jackett
+  namespace: animeenigma
+spec:
+  selector:
+    app: jackett
+  ports:
+    - name: http
+      port: 9117
+      targetPort: 9117
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jackett
+  namespace: animeenigma
+spec:
+  replicas: 1
+  # /config is RWO and jackett is stateful-ish: never run two pods against
+  # the same config volume during a rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jackett
+  template:
+    metadata:
+      labels:
+        app: jackett
+    spec:
+      containers:
+        - name: jackett
+          image: lscr.io/linuxserver/jackett:latest
+          ports:
+            - name: http
+              containerPort: 9117
+          env:
+            - name: PUID
+              value: "911"
+            - name: PGID
+              value: "911"
+            - name: TZ
+              value: "Europe/Berlin"
+            - name: AUTO_UPDATE
+              value: "true"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9117
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9117
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: jackett-config

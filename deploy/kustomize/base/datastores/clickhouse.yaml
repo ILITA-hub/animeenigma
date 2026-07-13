@@ -1,0 +1,156 @@
+# ClickHouse — unified event plane / analytics store (v4.0 Activity
+# Register, AR-STORE-01). Mirrors docker-compose.yml service `clickhouse`
+# (clickhouse/clickhouse-server:26.3.12.3 pinned CalVer patch — never
+# latest/lts, T-01-03; clickhouse_data volume; docker/clickhouse/config.d
+# XML overrides converted to the ConfigMap below; /ping healthcheck).
+# Note: the compose nofile ulimit (262144) has no pod-spec equivalent —
+# it is inherited from the container runtime's default limits.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-config
+  namespace: animeenigma
+data:
+  # Bind to all container interfaces (stock image binds loopback only, so
+  # in-cluster peers — analytics on :8123, otel-collector on :9000,
+  # Prometheus on :9363 — would get connection resets). Mounting the
+  # ConfigMap over /etc/clickhouse-server/config.d replaces the image's
+  # docker_related_config.xml, exactly like the compose bind mount did.
+  listen.xml: |
+    <?xml version="1.0"?>
+    <clickhouse>
+        <listen_host>0.0.0.0</listen_host>
+        <listen_host>::</listen_host>
+        <listen_try>1</listen_try>
+    </clickhouse>
+  # Native Prometheus self-metrics endpoint on :9363 at /metrics.
+  prometheus.xml: |
+    <?xml version="1.0"?>
+    <clickhouse>
+        <prometheus>
+            <endpoint>/metrics</endpoint>
+            <port>9363</port>
+            <metrics>true</metrics>
+            <events>true</events>
+            <asynchronous_metrics>true</asynchronous_metrics>
+        </prometheus>
+    </clickhouse>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: animeenigma
+spec:
+  selector:
+    app: clickhouse
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+    - name: native
+      port: 9000
+      targetPort: 9000
+    - name: metrics
+      port: 9363
+      targetPort: 9363
+---
+# Headless governing Service for the StatefulSet (stable pod DNS identity).
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-headless
+  namespace: animeenigma
+spec:
+  clusterIP: None
+  selector:
+    app: clickhouse
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: animeenigma
+spec:
+  serviceName: clickhouse-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9363"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:26.3.12.3
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: native
+              containerPort: 9000
+            - name: metrics
+              containerPort: 9363
+          env:
+            - name: CLICKHOUSE_DB
+              value: "analytics"
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: clickhouse-user
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: clickhouse-password
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: config
+              mountPath: /etc/clickhouse-server/config.d
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+      volumes:
+        - name: config
+          configMap:
+            name: clickhouse-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi

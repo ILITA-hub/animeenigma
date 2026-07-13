@@ -1,0 +1,90 @@
+# Watch Together co-watch service — port 8091. Redis-only state (no
+# Postgres). REST for room lifecycle, WebSocket /ws for sync/chat.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: watch-together
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: watch-together
+  template:
+    metadata:
+      labels:
+        app: watch-together
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8091"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: watch-together
+          image: ghcr.io/ilita-hub/animeenigma/watch-together:latest
+          ports:
+            - containerPort: 8091
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: SERVER_PORT
+              value: "8091"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: jwt-secret
+            # WT-FOUND-02 — sliding TTL on Redis keys + 5min grace.
+            - name: WATCH_TOGETHER_ROOM_TTL
+              value: "15m"
+            - name: WATCH_TOGETHER_GRACE_PERIOD
+              value: "5m"
+            # WT-NF-02 — capacity per room.
+            - name: WATCH_TOGETHER_MAX_MEMBERS
+              value: "10"
+            # Invite URLs in POST /rooms response (compose default; override
+            # per-environment via an overlay patch if needed).
+            - name: WATCH_TOGETHER_PUBLIC_BASE_URL
+              value: "https://animeenigma.org"
+            # CORS / Origin allowlist gate. Production leaves this false.
+            - name: WATCH_TOGETHER_ALLOW_ALL_ORIGINS
+              value: "false"
+            # Additional WS Origin allowlist (CSV). PublicBaseURL is allowed
+            # implicitly.
+            - name: WATCH_TOGETHER_ALLOWED_ORIGINS
+              value: "http://localhost:3003,http://localhost:8000"
+            - name: TRACING_ENABLED
+              value: "true"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8091
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8091
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: watch-together
+  namespace: animeenigma
+spec:
+  selector:
+    app: watch-together
+  ports:
+    - port: 8091
+      targetPort: 8091

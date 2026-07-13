@@ -1,13 +1,26 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# NOTE: base contains NO Secret objects (audit 2026-06-21 #10).
+# Deploy through overlays/prod, which generates secrets from git-ignored env files.
+
 resources:
-  # Main application namespace and resources
+  # Main application namespace and shared config
   - namespace.yaml
-  - secrets.yaml
   - configmap.yaml
 
-  # Service deployments (in animeenigma namespace)
+  # Datastores (StatefulSets + Services) and supporting infra
+  - datastores/postgres.yaml
+  - datastores/redis.yaml
+  - datastores/minio.yaml
+  - datastores/nats.yaml
+  - datastores/clickhouse.yaml
+  - datastores/meilisearch.yaml
+  - datastores/otel-collector.yaml
+  - datastores/jackett.yaml
+
+  # First-party services (one file per compose service; parity enforced by
+  # deploy/scripts/k8s-compose-parity.sh)
   - services/gateway.yaml
   - services/auth.yaml
   - services/catalog.yaml
@@ -15,8 +28,23 @@ resources:
   - services/player.yaml
   - services/rooms.yaml
   - services/scheduler.yaml
-  - services/web.yaml
   - services/themes.yaml
+  - services/scraper.yaml
+  - services/library.yaml
+  - services/notifications.yaml
+  - services/watch-together.yaml
+  - services/analytics.yaml
+  - services/gacha.yaml
+  - services/recs.yaml
+  - services/anidle.yaml
+  - services/upscaler.yaml
+  - services/fanfic.yaml
+  - services/policy.yaml
+  - services/storage.yaml
+  - services/governor.yaml
+  - services/stealth-scraper.yaml
+  - services/megacloud-extractor.yaml
+  - services/web.yaml
 
   # Monitoring stack (in monitoring namespace - has its own namespace spec)
   - monitoring/namespace.yaml
@@ -25,7 +53,6 @@ resources:
   - monitoring/prometheus/pvc.yaml
   - monitoring/prometheus/deployment.yaml
   - monitoring/prometheus/service.yaml
-  - monitoring/grafana/secret.yaml
   - monitoring/grafana/pvc.yaml
   - monitoring/grafana/configmap-datasources.yaml
   - monitoring/grafana/configmap-dashboards.yaml
@@ -33,14 +60,12 @@ resources:
   - monitoring/grafana/service.yaml
 
   # Admin tools (in monitoring namespace)
-  - admin/pgadmin/secret.yaml
   - admin/pgadmin/configmap.yaml
   - admin/pgadmin/deployment.yaml
   - admin/pgadmin/service.yaml
   - admin/kubernetes-dashboard/rbac.yaml
   - admin/kubernetes-dashboard/deployment.yaml
   - admin/kubernetes-dashboard/service.yaml
-  - admin/basic-auth-secret.yaml
   - admin/ingress.yaml
 
 labels:

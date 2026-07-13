@@ -1,5 +1,5 @@
 .PHONY: all build test lint clean generate dev help \
-	k8s-apply k8s-delete k8s-diff k8s-wait k8s-status k8s-restart k8s-logs k8s-port-forward \
+	k8s-apply k8s-apply-prod k8s-validate k8s-preflight k8s-delete k8s-diff k8s-wait k8s-status k8s-restart k8s-logs k8s-port-forward \
 	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod \
 	migrate migrate-down migrate-force migrate-version migrate-auth migrate-catalog migrate-player migrate-rooms migrate-all migrate-create migrate-status db-shell \
 	redeploy-all redeploy-web type-check lint-design \
@@ -335,12 +335,26 @@ restart-watch-together: ## Restart watch-together (no rebuild)
 # ============================================================================
 
 KUSTOMIZE_BASE := deploy/kustomize/base
+KUSTOMIZE_PROD := deploy/kustomize/overlays/prod
 NAMESPACE := animeenigma
 
-k8s-apply: ## Apply Kustomize manifests to current cluster
+k8s-apply: ## Apply BASE manifests (no secrets — dev/experiments only; prod uses k8s-apply-prod)
 	kubectl apply -k $(KUSTOMIZE_BASE)
 	@echo "Waiting for deployments to be ready..."
 	@$(MAKE) k8s-wait
+
+k8s-preflight: ## Verify prod overlay secrets exist and contain no placeholders
+	./deploy/scripts/k8s-preflight.sh
+
+k8s-apply-prod: k8s-preflight ## Apply prod overlay (base + generated secrets) to current cluster
+	kubectl apply -k $(KUSTOMIZE_PROD)
+	@echo "Waiting for deployments to be ready..."
+	@$(MAKE) k8s-wait
+
+k8s-validate: ## Static validation: secret guard, compose parity, kustomize build
+	./deploy/scripts/k8s-secret-guard.sh
+	./deploy/scripts/k8s-compose-parity.sh
+	kustomize build $(KUSTOMIZE_BASE) -o /dev/null && echo "kustomize build base: OK"
 
 k8s-delete: ## Delete all resources from cluster
 	kubectl delete -k $(KUSTOMIZE_BASE) --ignore-not-found
@@ -349,9 +363,9 @@ k8s-diff: ## Show diff between local and cluster state
 	kubectl diff -k $(KUSTOMIZE_BASE) || true
 
 k8s-wait: ## Wait for all deployments to be ready
-	@for deploy in gateway auth catalog streaming player rooms scheduler themes web; do \
+	@for deploy in $$(kubectl get deployments -n $(NAMESPACE) -o name); do \
 		echo "Waiting for $$deploy..."; \
-		kubectl rollout status deployment/$$deploy -n $(NAMESPACE) --timeout=120s || true; \
+		kubectl rollout status $$deploy -n $(NAMESPACE) --timeout=120s || true; \
 	done
 
 k8s-status: ## Show status of all deployments

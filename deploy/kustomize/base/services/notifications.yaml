@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notifications
+  template:
+    metadata:
+      labels:
+        app: notifications
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notifications
+          image: ghcr.io/ilita-hub/animeenigma/notifications:latest
+          ports:
+            - containerPort: 8090
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: SERVER_PORT
+              value: "8090"
+            - name: DB_NAME
+              value: "animeenigma"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: db-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: jwt-secret
+            # Phase 2 detector reads catalog's /internal/anime/{id}/episodes.
+            - name: CATALOG_URL
+              value: "http://catalog:8081"
+            # Phase 2 detector cron + cleanup + worker pool settings.
+            # NOTIFICATIONS_DETECTOR_ENABLED=false disables the scheduler at
+            # boot (D-RB-01 rollback toggle) — CRUD + producer endpoint still
+            # work, just no cron-driven creates / cleanup.
+            - name: NOTIFICATIONS_DETECTOR_ENABLED
+              value: "true"
+            - name: NOTIFICATIONS_DETECTOR_CRON
+              value: "0 * * * *"
+            - name: NOTIFICATIONS_CLEANUP_CRON
+              value: "30 3 * * *"
+            - name: NOTIFICATIONS_RETENTION_DAYS
+              value: "30"
+            - name: NOTIFICATIONS_DETECTOR_WORKER_LIMIT
+              value: "5"
+            - name: NOTIFICATIONS_PARSER_TIMEOUT
+              value: "10s"
+            - name: NOTIFICATIONS_UNREAD_GAUGE_INTERVAL
+              value: "5m"
+            - name: TRACING_ENABLED
+              value: "true"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifications
+  namespace: animeenigma
+spec:
+  selector:
+    app: notifications
+  ports:
+    - port: 8090
+      targetPort: 8090

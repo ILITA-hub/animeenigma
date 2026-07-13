@@ -2,8 +2,13 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: player
+  namespace: animeenigma
 spec:
-  replicas: 2
+  # replicas pinned to 1 + Recreate: player-reports PVC is RWO and report
+  # files assume a single writer
+  replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: player
@@ -16,6 +21,9 @@ spec:
         prometheus.io/port: "8083"
         prometheus.io/path: "/metrics"
     spec:
+      # player-reports PVC must be writable by the non-root runtime user.
+      securityContext:
+        fsGroup: 65534
       containers:
         - name: player
           image: ghcr.io/ilita-hub/animeenigma/player:latest
@@ -61,14 +69,39 @@ spec:
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
+          volumeMounts:
+            # User feedback / error reports (compose volume player_reports).
+            # REPORTS_DIR defaults to /data/reports in the player config.
+            - name: player-reports
+              mountPath: /data/reports
+      volumes:
+        - name: player-reports
+          persistentVolumeClaim:
+            claimName: player-reports
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: player
+  namespace: animeenigma
 spec:
   selector:
     app: player
   ports:
     - port: 8083
       targetPort: 8083
+---
+# User feedback / error reports + triage sidecar _status.json files
+# (compose volume player_reports). ReadWriteOnce: with replicas > 1 the
+# player pods must co-schedule on one node (or use an RWX storage class).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: player-reports
+  namespace: animeenigma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,105 @@
+# EN scraper orchestrator — provider failover chain (gogoanime → animepahe →
+# allanime-okru → miruro → nineanime → optional animekai) on port 8088.
+# Provider enable/degrade/disable truth lives in the catalog Postgres
+# `scraper_providers` table, fetched via CATALOG_URL at boot + every
+# SCRAPER_PROVIDERS_REFRESH. Fails open to provider failover if the
+# stealth-scraper sidecar is briefly unavailable (no hard dependency).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scraper
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scraper
+  template:
+    metadata:
+      labels:
+        app: scraper
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8088"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: scraper
+          image: ghcr.io/ilita-hub/animeenigma/scraper:latest
+          ports:
+            - containerPort: 8088
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: SERVER_PORT
+              value: "8088"
+            - name: SERVER_HOST
+              value: "0.0.0.0"
+            - name: MEGACLOUD_EXTRACTOR_URL
+              value: "http://megacloud-extractor:3200"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: redis-password
+            - name: REDIS_DB
+              value: "0"
+            # Camoufox stealth-scraper sidecar — providers whose DB engine
+            # column is "browser" (gogoanime, nineanime, miruro, …).
+            - name: STEALTH_SCRAPER_URL
+              value: "http://stealth-scraper:3000"
+            # AnimeKai is gated and default-off in production.
+            - name: SCRAPER_ANIMEKAI_ENABLED
+              value: "false"
+            - name: SCRAPER_ANIMEKAI_BASE_URL
+              value: "https://anikai.to"
+            - name: SCRAPER_GOGOANIME_BASE_URL
+              value: "https://anitaku.to"
+            # ISS-022: per-provider failover budget; browser-engine providers
+            # get the longer budget for cold Cloudflare solves. Catalog's
+            # SCRAPER_TIMEOUT must stay ABOVE 35s or the browser budget is
+            # defeated one layer up (found 2026-07-08).
+            - name: SCRAPER_PROVIDER_TIMEOUT
+              value: "8s"
+            - name: SCRAPER_BROWSER_PROVIDER_TIMEOUT
+              value: "35s"
+            # BE egress recorder → analytics /internal/effects (cluster-only).
+            - name: ANALYTICS_INTERNAL_URL
+              value: "http://analytics:8092"
+            - name: CATALOG_URL
+              value: "http://catalog:8081"
+            - name: SCRAPER_PROVIDERS_REFRESH
+              value: "60s"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8088
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8088
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scraper
+  namespace: animeenigma
+spec:
+  selector:
+    app: scraper
+  ports:
+    - port: 8088
+      targetPort: 8088

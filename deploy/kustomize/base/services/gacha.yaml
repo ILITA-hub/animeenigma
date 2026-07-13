@@ -1,33 +1,36 @@
+# gacha (Лудка) — «Энигмы» economy substrate on port 8093. Wallet +
+# idempotent ledger; card art lives in the gacha-cards MinIO bucket.
+# GACHA_ENABLED=false dark-ships the backend (credit endpoint no-ops).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth
+  name: gacha
   namespace: animeenigma
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: auth
+      app: gacha
   template:
     metadata:
       labels:
-        app: auth
+        app: gacha
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8093"
         prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: auth
-          image: ghcr.io/ilita-hub/animeenigma/auth:latest
+        - name: gacha
+          image: ghcr.io/ilita-hub/animeenigma/gacha:latest
           ports:
-            - containerPort: 8080
+            - containerPort: 8093
           envFrom:
             - configMapRef:
                 name: animeenigma-config
           env:
             - name: SERVER_PORT
-              value: "8080"
+              value: "8093"
             - name: DB_NAME
               value: "animeenigma"
             - name: DB_USER
@@ -42,15 +45,32 @@ spec:
                 secretKeyRef:
                   name: animeenigma-secrets
                   key: jwt-secret
+            - name: GACHA_ENABLED
+              value: "true"
+            - name: GACHA_STARTER_BONUS
+              value: "300"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: minio-secret-key
+            # Card-art bucket (distinct from the shared MINIO_BUCKET in the configmap).
+            - name: GACHA_MINIO_BUCKET
+              value: "gacha-cards"
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8093
             initialDelaySeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8093
             initialDelaySeconds: 5
           resources:
             requests:
@@ -66,11 +86,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: auth
+  name: gacha
   namespace: animeenigma
 spec:
   selector:
-    app: auth
+    app: gacha
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 8093
+      targetPort: 8093

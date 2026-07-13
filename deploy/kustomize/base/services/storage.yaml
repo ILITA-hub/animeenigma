@@ -1,0 +1,116 @@
+# storage-service (spec 2026-07-10) — single authority for user-content
+# object storage across local MinIO + external s3.firstvds.ru. Internal
+# only: no gateway route; every real caller is in-cluster.
+# The S3_* secret keys are optional — an absent/empty STORAGE_S3_ENDPOINT
+# just leaves the s3 backend absent (dev-safe fallback to minio in
+# service.Placement), mirroring docker-compose behavior.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage
+  template:
+    metadata:
+      labels:
+        app: storage
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8099"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: storage
+          image: ghcr.io/ilita-hub/animeenigma/storage:latest
+          ports:
+            - containerPort: 8099
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: STORAGE_PORT
+              value: "8099"
+            - name: STORAGE_MINIO_ENDPOINT
+              value: "minio:9000"
+            - name: STORAGE_MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: minio-access-key
+            - name: STORAGE_MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: minio-secret-key
+            - name: STORAGE_MINIO_BUCKET
+              value: "raw-library"
+            - name: STORAGE_MINIO_USE_SSL
+              value: "false"
+            # External S3 (s3.firstvds.ru) — same account as the `backup`
+            # service, separate bucket (raw-library, created 2026-07-10).
+            - name: STORAGE_S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: s3-endpoint
+                  optional: true
+            - name: STORAGE_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: s3-access-key
+                  optional: true
+            - name: STORAGE_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: s3-secret-key
+                  optional: true
+            - name: STORAGE_S3_BUCKET
+              value: "raw-library"
+            - name: STORAGE_S3_USE_SSL
+              value: "true"
+            - name: STORAGE_CLASS_LIBRARY_AUTO
+              value: "s3"
+            - name: STORAGE_CLASS_LIBRARY_MANUAL
+              value: "minio"
+            - name: STORAGE_CLASS_UPSCALED
+              value: "s3"
+            - name: TRACING_ENABLED
+              value: "true"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8099
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8099
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage
+  namespace: animeenigma
+spec:
+  selector:
+    app: storage
+  ports:
+    - port: 8099
+      targetPort: 8099

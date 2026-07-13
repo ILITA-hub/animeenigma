@@ -1,56 +1,51 @@
+# Degradation governor (graceful-degradation Phase 2) — port 8100.
+# Storage-free by design (no Postgres, no JWT): polls Prometheus recording
+# rules, applies hysteresis, publishes Redis ae:degradation:level.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth
+  name: governor
   namespace: animeenigma
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: auth
+      app: governor
   template:
     metadata:
       labels:
-        app: auth
+        app: governor
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8100"
         prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: auth
-          image: ghcr.io/ilita-hub/animeenigma/auth:latest
+        - name: governor
+          image: ghcr.io/ilita-hub/animeenigma/governor:latest
           ports:
-            - containerPort: 8080
+            - containerPort: 8100
           envFrom:
             - configMapRef:
                 name: animeenigma-config
           env:
             - name: SERVER_PORT
-              value: "8080"
-            - name: DB_NAME
-              value: "animeenigma"
-            - name: DB_USER
-              value: "postgres"
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: animeenigma-secrets
-                  key: db-password
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: animeenigma-secrets
-                  key: jwt-secret
+              value: "8100"
+            - name: GOVERNOR_PROMETHEUS_URL
+              value: "http://prometheus.monitoring.svc:9090/prometheus"
+            - name: GOVERNOR_ANALYTICS_URL
+              value: "http://analytics:8092"
+            - name: TRACING_ENABLED
+              value: "true"
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8100
             initialDelaySeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8100
             initialDelaySeconds: 5
           resources:
             requests:
@@ -66,11 +61,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: auth
+  name: governor
   namespace: animeenigma
 spec:
   selector:
-    app: auth
+    app: governor
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 8100
+      targetPort: 8100

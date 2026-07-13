@@ -1,33 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth
+  name: recs
   namespace: animeenigma
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: auth
+      app: recs
   template:
     metadata:
       labels:
-        app: auth
+        app: recs
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8094"
         prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: auth
-          image: ghcr.io/ilita-hub/animeenigma/auth:latest
+        - name: recs
+          image: ghcr.io/ilita-hub/animeenigma/recs:latest
           ports:
-            - containerPort: 8080
+            - containerPort: 8094
           envFrom:
             - configMapRef:
                 name: animeenigma-config
           env:
             - name: SERVER_PORT
-              value: "8080"
+              value: "8094"
             - name: DB_NAME
               value: "animeenigma"
             - name: DB_USER
@@ -42,15 +42,20 @@ spec:
                 secretKeyRef:
                   name: animeenigma-secrets
                   key: jwt-secret
+            # S6 combo-pin Shikimori /similar fallback.
+            - name: CATALOG_URL
+              value: "http://catalog:8081"
+            - name: TRACING_ENABLED
+              value: "true"
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8094
             initialDelaySeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8094
             initialDelaySeconds: 5
           resources:
             requests:
@@ -66,11 +71,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: auth
+  name: recs
   namespace: animeenigma
 spec:
   selector:
-    app: auth
+    app: recs
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 8094
+      targetPort: 8094

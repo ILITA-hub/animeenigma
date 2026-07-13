@@ -295,4 +295,4 @@ Metrics: `http_requests_total` (labels: service/method/path/status), `http_reque
 Admin is **path-based** at `animeenigma.org/admin` (no `admin.*` subdomain). Grafana/Prometheus/pgAdmin via gateway `/admin/*`: `https://animeenigma.org/admin/{grafana | prometheus | pgadmin | k8s}` (Grafana dashboards / Prometheus raw metrics / PostgreSQL admin / Kubernetes dashboard).
 
 ## File Locations
-Shared libs `/libs/` · API contracts `/api/` · Services `/services/{name}/` · Frontend `/frontend/web/` · Infra `/docker/`, `/deploy/`, `/infra/` · K8s manifests `/deploy/kustomize/`.
+Shared libs `/libs/` · API contracts `/api/` · Services `/services/{name}/` · Frontend `/frontend/web/` · Infra `/docker/`, `/deploy/`, `/infra/` · K8s manifests `/deploy/kustomize/` (real deploy target — layout, secrets model, runbook: [`docs/k8s-deploy.md`](docs/k8s-deploy.md); deploy via `make k8s-apply-prod`, never plain base).

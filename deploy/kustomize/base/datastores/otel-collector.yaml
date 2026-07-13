@@ -1,0 +1,248 @@
+# OpenTelemetry Collector — OTLP trace intake (tail sampling) + docker
+# json-file log tailing, both exported to ClickHouse. Mirrors
+# docker-compose.yml service `otel-collector`
+# (otel/opentelemetry-collector-contrib:0.103.1, user "0",
+# infra/otel/collector-config.yaml bind mount → the ConfigMap below,
+# /var/lib/docker/containers read-only log mount → hostPath).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: animeenigma
+data:
+  # Verbatim copy of infra/otel/collector-config.yaml (compose bind mount).
+  collector-config.yaml: |
+    # OTLP in (from services) → tail sampling → traces fan-out (ClickHouse + connectors).
+    # Tail sampling keeps 100% of error and slow (>1s) traces and ~20% of the rest,
+    # so the trace store stays small while every interesting trace is retained.
+    #
+    # Phase 6 (06-03) — CUTOVER COMPLETE (Topology A). Tempo/Loki/Promtail are GONE:
+    #   - traces export ONLY to ClickHouse (analytics.otel_traces) — the sole trace store
+    #   - container logs ship to ClickHouse (analytics.otel_logs) via the filelog receiver
+    #     (Promtail→Loki retired)
+    #   - span-metrics + service-graph: REMOVED 2026-06-22 (audit M550/M557). The
+    #     spanmetrics/servicegraph connectors + prometheusremotewrite exporter were
+    #     deleted — nothing consumed the generated series, the connectors ran AFTER
+    #     tail_sampling (so RED metrics were sampling-biased), and remote-write was an
+    #     unused ingestion surface. Traces export ONLY to ClickHouse.
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      # Docker json-file logs (mirrors Promtail's source; host dir mounted ro in compose).
+      # The json-file driver wraps each line as {"log":..,"stream":..,"time":..}; the
+      # json_parser + move(attributes.log -> body) unwraps the envelope so Body is the
+      # raw message, not the JSON wrapper (RESEARCH Pitfall 2). start_at: end avoids
+      # replaying the entire historical log backlog on first start.
+      # A regex_parser + trace_parser then promote the app line's trace_id/span_id
+      # (emitted by libs/logger when a span is in context) into the record's
+      # TraceId/SpanId so otel_logs.TraceId is populated and Grafana's native
+      # logs↔traces correlation (06-02) resolves.
+      filelog:
+        include: [ /var/lib/docker/containers/*/*-json.log ]
+        start_at: end
+        operators:
+          - type: json_parser
+            # The docker json-file driver writes RFC3339Nano in the "time" field. Parse it
+            # into the record timestamp — WITHOUT this, Timestamp defaults to epoch 0
+            # (1970), and the exporter's 168h TTL on toDateTime(Timestamp) instantly
+            # expires every row (total_rows climbs but count()=0). [Rule 1 bug, caught live]
+            timestamp:
+              parse_from: attributes.time
+              layout: '%Y-%m-%dT%H:%M:%S.%fZ'
+          - type: move
+            from: attributes.log
+            to: body
+          # 06 trace↔log correlation fix: the app line is zap CONSOLE format
+          # (TS \t LEVEL \t caller \t message \t {json fields}), NOT a JSON object,
+          # so a json_parser on the inner line won't work. The trace_id (32 hex) and
+          # span_id (16 hex) live inside the trailing {...} when libs/logger ran with a
+          # span-bearing context (logger.go:92-93). Extract them with a regex_parser —
+          # gated by `if` so it ONLY runs on lines that actually carry a trace_id
+          # (otherwise regex_parser logs a no-match error on every metrics/health line,
+          # and untraced lines correctly keep an empty TraceId). parse_to attributes so
+          # the raw human-readable Body is preserved untouched.
+          - type: regex_parser
+            if: 'body matches "\"trace_id\""'
+            parse_from: body
+            parse_to: attributes
+            # WR-03: allow intervening JSON fields between trace_id and span_id
+            # (`.*` instead of requiring them adjacent) so correlation survives any
+            # service that injects extra With() fields between the two — the prior
+            # adjacency-only pattern would silently drop SpanId for those lines.
+            regex: '"trace_id":\s*"(?P<trace_id>[0-9a-f]{32})".*"span_id":\s*"(?P<span_id>[0-9a-f]{16})"'
+          # Promote the extracted hex IDs into the OTel log record's TraceId/SpanId
+          # fields, which the clickhouseexporter writes into otel_logs.TraceId/SpanId.
+          # This is what makes Grafana's native logs↔traces click-through (06-02) resolve.
+          - type: trace_parser
+            if: 'attributes.trace_id != nil'
+            trace_id:
+              parse_from: attributes.trace_id
+            span_id:
+              parse_from: attributes.span_id
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+      tail_sampling:
+        decision_wait: 10s
+        num_traces: 50000
+        expected_new_traces_per_sec: 100
+        policies:
+          - name: errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: slow
+            type: latency
+            latency:
+              threshold_ms: 1000
+          - name: sample-rest
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 20
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+
+    exporters:
+      # Two named ClickHouse exporter instances so traces (14d) and logs (7d) can carry
+      # distinct TTLs (RESEARCH Pitfall 3 — a single exporter has one ttl for all signals).
+      # ${env:VAR} is the collector's own env-var syntax; the CH creds are injected into
+      # the otel-collector container env.
+      clickhouse/traces:
+        endpoint: tcp://clickhouse:9000?dial_timeout=10s
+        database: analytics
+        username: ${env:CLICKHOUSE_USER}
+        password: ${env:CLICKHOUSE_PASSWORD}
+        create_schema: true
+        traces_table_name: otel_traces
+        ttl: 336h
+      clickhouse/logs:
+        endpoint: tcp://clickhouse:9000?dial_timeout=10s
+        database: analytics
+        username: ${env:CLICKHOUSE_USER}
+        password: ${env:CLICKHOUSE_PASSWORD}
+        create_schema: true
+        logs_table_name: otel_logs
+        ttl: 168h
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, tail_sampling, batch]
+          # 06-03 cutover: ClickHouse (analytics.otel_traces) is the SOLE trace store.
+          # 2026-06-22 (M550/M557): the spanmetrics/servicegraph connectors were removed
+          # (no consumers + sampling-biased), so traces export ONLY to ClickHouse.
+          exporters: [clickhouse/traces]
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, batch]
+          exporters: [clickhouse/logs]
+      telemetry:
+        logs:
+          level: warn
+        # M571: expose the collector's own pipeline-health metrics (otelcol_*) so
+        # Prometheus can scrape :8888 and the `up` series covers collector liveness.
+        metrics:
+          level: normal
+          address: 0.0.0.0:8888
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: animeenigma
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: metrics
+      port: 8888
+      targetPort: 8888
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.103.1
+          args: ["--config=/etc/otel/collector-config.yaml"]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: metrics
+              containerPort: 8888
+          env:
+            # The collector config reads ${env:CLICKHOUSE_USER}/${env:CLICKHOUSE_PASSWORD};
+            # must match the clickhouse StatefulSet creds (same Secret keys).
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: clickhouse-user
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: clickhouse-password
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+              readOnly: true
+            # filelog receiver tails docker json-file logs. On nodes whose
+            # container runtime is not dockerd (e.g. containerd) this dir is
+            # empty and the logs pipeline simply produces nothing — traces
+            # via OTLP are unaffected.
+            - name: docker-containers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            # compose runs `user: "0"` — the contrib image defaults to uid 10001,
+            # which cannot traverse the 0710 root:root per-container log dirs.
+            runAsUser: 0
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+        - name: docker-containers
+          hostPath:
+            path: /var/lib/docker/containers
+            type: DirectoryOrCreate
