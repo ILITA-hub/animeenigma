@@ -33,6 +33,13 @@ type ProgressStore interface {
 
 // RedisProgressCache implements ProgressStore over the shared Redis handle the
 // library service already holds (added v4.0 Phase 3 for the read-gate).
+//
+// The write paths deliberately drop to the raw client (rc.Client().Set/Del/MGet)
+// rather than the instrumented RedisCache.Set/Delete wrappers: this cache exists
+// precisely to keep the ~5s-per-download progress writes OUT of the analytics
+// effect pipeline. Routing them through the wrapper would emit a cache-effect
+// event every tick and re-create the exact write churn this side channel removes.
+// Do NOT "fix" these to use the wrapper methods.
 type RedisProgressCache struct {
 	rc  *cache.RedisCache
 	ttl time.Duration
