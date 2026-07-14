@@ -120,7 +120,7 @@ function resolveCta(a: {
   })
   // Nothing new is out yet — re-open the last completed episode instead of
   // dangling a "Continue ep. N+1" button on an episode with no source.
-  const reopenLast: WatchCta = { action: 'watch', startEpisode: last, labelKey: 'anime.watchNow' }
+  const reopenLast: WatchCta = { ...watch, startEpisode: last }
 
   // Anonymous: no list, so the list-aware terminals never apply.
   if (!isAuthenticated) {
@@ -147,19 +147,17 @@ function resolveCta(a: {
 function resolveBanner(a: {
   last: number
   total: number
-  episodesAired: number
-  loadedEpisodes: number
-  status: string
+  nextAvailable: boolean
   nextEpisodeAt?: string
   formatEta?: (iso: string) => string
   nowMs: number
 }): ResumeBanner {
-  const { last, total, episodesAired, loadedEpisodes, status, nextEpisodeAt, formatEta, nowMs } = a
+  const { last, total, nextAvailable, nextEpisodeAt, formatEta, nowMs } = a
 
   if (last <= 0) return { kind: 'none' } // first-time
   if (total > 0 && last >= total) return { kind: 'none' } // finished — no surface
 
-  if (isNextEpisodeAvailable({ last, status, episodesAired, loadedEpisodes })) {
+  if (nextAvailable) {
     return { kind: 'just-finished', episode: last } // 'watching' breadcrumb
   }
 
@@ -197,9 +195,7 @@ export function resolveResumeState(input: ResumeStateInput): ResumeState {
   const banner = resolveBanner({
     last,
     total,
-    episodesAired: input.episodesAired,
-    loadedEpisodes: input.loadedEpisodes,
-    status: input.status,
+    nextAvailable,
     nextEpisodeAt: input.nextEpisodeAt,
     formatEta: input.formatEta,
     nowMs: input.nowMs ?? Date.now(),
