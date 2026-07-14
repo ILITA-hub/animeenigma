@@ -41,6 +41,12 @@ func TestInternalEpisodes_AnimeLevelPlayersNoTranslationID(t *testing.T) {
 	if c := doReq(t, h, "/internal/anime/57466/episodes?player=animelib"); c != 200 {
 		t.Errorf("animelib no-id = %d, want 200 (Phase 3 any-team)", c)
 	}
+	if c := doReq(t, h, "/internal/anime/57466/episodes?player=animejoy-sibnet"); c != 200 {
+		t.Errorf("animejoy-sibnet no-id = %d, want 200 (anime-level)", c)
+	}
+	if c := doReq(t, h, "/internal/anime/57466/episodes?player=animejoy-allvideo"); c != 200 {
+		t.Errorf("animejoy-allvideo no-id = %d, want 200 (anime-level)", c)
+	}
 	if c := doReq(t, h, "/internal/anime/57466/episodes?player=hanime&translation_id=x"); c != 400 {
 		t.Errorf("hanime = %d, want 400", c)
 	}

@@ -33,6 +33,12 @@ func TestHotCombos_AdmitsAnimeLevelPlayers(t *testing.T) {
 	seedWatch(t, db, "u1", "a-ke", "kodik", "ru", "sub", "", 4)     // aePlayer kodik, empty id → admitted
 	seedWatch(t, db, "u1", "a-ale", "animelib", "ru", "sub", "", 2) // aePlayer animelib, empty id → admitted
 
+	// animejoy-sibnet/animejoy-allvideo with empty translation_id (anime-level) — must be admitted
+	mustExec(t, db, `INSERT INTO animes (id, shikimori_id, status) VALUES ('a-ajs','888','ongoing'),('a-ajav','999','ongoing')`)
+	mustExec(t, db, `INSERT INTO anime_list (user_id, anime_id, status) VALUES ('u1','a-ajs','watching'),('u1','a-ajav','watching')`)
+	seedWatch(t, db, "u1", "a-ajs", "animejoy-sibnet", "ru", "sub", "", 1)    // anime-level, empty id → admitted
+	seedWatch(t, db, "u1", "a-ajav", "animejoy-allvideo", "ru", "sub", "", 1) // anime-level, empty id → admitted
+
 	combos, err := NewHotCombosCollector(db, logger.Default()).Collect(context.Background())
 	if err != nil {
 		t.Fatalf("collect: %v", err)
@@ -41,7 +47,7 @@ func TestHotCombos_AdmitsAnimeLevelPlayers(t *testing.T) {
 	for _, c := range combos {
 		got[c.Player] = true
 	}
-	for _, p := range []string{"english", "ae", "kodik"} {
+	for _, p := range []string{"english", "ae", "kodik", "animejoy-sibnet", "animejoy-allvideo"} {
 		if !got[p] {
 			t.Errorf("expected player %q in hot combos, missing", p)
 		}
@@ -60,6 +66,12 @@ func TestHotCombos_AdmitsAnimeLevelPlayers(t *testing.T) {
 	}
 	if !seen["animelib|"] {
 		t.Errorf("empty-id animelib combo not admitted")
+	}
+	if !seen["animejoy-sibnet|"] {
+		t.Errorf("empty-id animejoy-sibnet combo not admitted")
+	}
+	if !seen["animejoy-allvideo|"] {
+		t.Errorf("empty-id animejoy-allvideo combo not admitted")
 	}
 	if seen["hanime|"] {
 		t.Errorf("empty-id hanime combo must NOT be admitted")

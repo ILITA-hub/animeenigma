@@ -72,7 +72,7 @@ func NewEpisodesLookupService(
 		animelibClient: animelibClient,
 		animeRepo:      animeRepo,
 		catalogService: catalogService,
-		animeLevel:     &animeLevelResolver{finder: animeRepo, scraper: catalogService, raw: rawResolver},
+		animeLevel:     &animeLevelResolver{finder: animeRepo, scraper: catalogService, raw: rawResolver, animejoy: catalogService},
 		log:            log,
 	}
 }

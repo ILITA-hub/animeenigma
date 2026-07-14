@@ -13,7 +13,7 @@ import (
 // translation/team id. See spec 2026-06-18-aeplayer-notification-coverage.
 func isAnimeLevelPlayer(player string) bool {
 	switch player {
-	case "english", "ae":
+	case "english", "ae", "animejoy-sibnet", "animejoy-allvideo":
 		return true
 	default:
 		return false
@@ -33,12 +33,19 @@ type rawEpisodeLister interface {
 	GetLibraryEpisodes(ctx context.Context, animeID string) (*EpisodesResponse, error)
 }
 
+// animejoyLegLister answers the per-leg (Sibnet/AllVideo) episode inventory
+// for a title. *CatalogService satisfies this via GetAnimejoyLegInfo.
+type animejoyLegLister interface {
+	GetAnimejoyLegInfo(ctx context.Context, animeID, leg string) (*domain.AnimejoyLegInfo, error)
+}
+
 // animeLevelResolver answers "latest available episode" for an empty-
 // translation_id combo, dispatched by player family.
 type animeLevelResolver struct {
-	finder  animeFinder
-	scraper scraperEpisodeLister
-	raw     rawEpisodeLister
+	finder   animeFinder
+	scraper  scraperEpisodeLister
+	raw      rawEpisodeLister
+	animejoy animejoyLegLister
 }
 
 // Latest returns (latest episode number, translation title "", error). NotFound-
@@ -58,9 +65,35 @@ func (r *animeLevelResolver) Latest(ctx context.Context, shikimoriID, player, wa
 		return r.latestEnglish(ctx, anime.ID, watchType)
 	case "ae":
 		return maxRawEpisode(r.raw.GetLibraryEpisodes(ctx, anime.ID))
+	case "animejoy-sibnet":
+		return r.latestAnimejoy(ctx, anime.ID, "sibnet")
+	case "animejoy-allvideo":
+		return r.latestAnimejoy(ctx, anime.ID, "allvideo")
 	default:
 		return 0, "", apperrors.InvalidInput("player is not anime-level")
 	}
+}
+
+// latestAnimejoy resolves the anime-level latest episode for an AnimeJoy leg
+// (Sibnet or AllVideo) combo — the max episode number across any team on
+// that leg (RU-sub only; teams are interchangeable for "did a new episode
+// air" purposes, matching the kodik/animelib any-team model).
+func (r *animeLevelResolver) latestAnimejoy(ctx context.Context, animeID, leg string) (int, string, error) {
+	if r.animejoy == nil {
+		return 0, "", apperrors.NotFound("animejoy " + leg + ": no episode available for anime")
+	}
+	info, err := r.animejoy.GetAnimejoyLegInfo(ctx, animeID, leg)
+	if err != nil {
+		return 0, "", err
+	}
+	max := 0
+	if info != nil {
+		max = maxEpisodeNum(len(info.Episodes), func(i int) int { return info.Episodes[i] })
+	}
+	if max == 0 {
+		return 0, "", apperrors.NotFound("animejoy " + leg + ": no episode available for anime")
+	}
+	return max, "", nil
 }
 
 // latestEnglish resolves the latest episode for the english (EN-scraper) family.

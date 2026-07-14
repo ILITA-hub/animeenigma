@@ -36,12 +36,21 @@ func (f fakeRaw) GetLibraryEpisodes(_ context.Context, _ string) (*EpisodesRespo
 	return f.lib, f.err
 }
 
-func newResolver(fnd animeFinder, scr scraperEpisodeLister, raw rawEpisodeLister) *animeLevelResolver {
-	return &animeLevelResolver{finder: fnd, scraper: scr, raw: raw}
+type fakeAnimejoy struct {
+	info *domain.AnimejoyLegInfo
+	err  error
+}
+
+func (f fakeAnimejoy) GetAnimejoyLegInfo(_ context.Context, _, _ string) (*domain.AnimejoyLegInfo, error) {
+	return f.info, f.err
+}
+
+func newResolver(fnd animeFinder, scr scraperEpisodeLister, raw rawEpisodeLister, aj animejoyLegLister) *animeLevelResolver {
+	return &animeLevelResolver{finder: fnd, scraper: scr, raw: raw, animejoy: aj}
 }
 
 func TestIsAnimeLevelPlayer(t *testing.T) {
-	for _, p := range []string{"english", "ae"} {
+	for _, p := range []string{"english", "ae", "animejoy-sibnet", "animejoy-allvideo"} {
 		if !isAnimeLevelPlayer(p) {
 			t.Errorf("isAnimeLevelPlayer(%q) = false, want true", p)
 		}
@@ -58,6 +67,7 @@ func TestAnimeLevel_EnglishSub_MaxEpisode(t *testing.T) {
 		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
 		fakeScraper{status: 200, body: []byte(`{"data":{"episodes":[{"number":1},{"number":12},{"number":7}]}}`)},
 		fakeRaw{},
+		nil,
 	)
 	latest, _, err := r.Latest(context.Background(), "57466", "english", "sub")
 	if err != nil {
@@ -73,6 +83,7 @@ func TestAnimeLevel_EnglishDub_MaxWhereHasDub(t *testing.T) {
 		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
 		fakeScraper{status: 200, body: []byte(`{"data":{"episodes":[{"number":1,"has_dub":true},{"number":2,"has_dub":true},{"number":3,"has_dub":false}]}}`)},
 		fakeRaw{},
+		nil,
 	)
 	latest, _, err := r.Latest(context.Background(), "57466", "english", "dub")
 	if err != nil || latest != 2 {
@@ -85,6 +96,7 @@ func TestAnimeLevel_EnglishDub_NoneIsNotFound(t *testing.T) {
 		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
 		fakeScraper{status: 200, body: []byte(`{"data":{"episodes":[{"number":1,"has_dub":false},{"number":2}]}}`)},
 		fakeRaw{},
+		nil,
 	)
 	_, _, err := r.Latest(context.Background(), "57466", "english", "dub")
 	if err == nil || !isNotFoundLike(err) {
@@ -93,7 +105,7 @@ func TestAnimeLevel_EnglishDub_NoneIsNotFound(t *testing.T) {
 }
 
 func TestAnimeLevel_EnglishSub_EmptyIsNotFound(t *testing.T) {
-	r := newResolver(fakeFinder{anime: &domain.Anime{ID: "uuid-1"}}, fakeScraper{status: 200, body: []byte(`{"data":{"episodes":[]}}`)}, fakeRaw{})
+	r := newResolver(fakeFinder{anime: &domain.Anime{ID: "uuid-1"}}, fakeScraper{status: 200, body: []byte(`{"data":{"episodes":[]}}`)}, fakeRaw{}, nil)
 	_, _, err := r.Latest(context.Background(), "57466", "english", "sub")
 	if err == nil || !isNotFoundLike(err) {
 		t.Fatalf("empty english err = %v, want NotFound-like", err)
@@ -105,6 +117,7 @@ func TestAnimeLevel_AE_MaxFromLibrary(t *testing.T) {
 		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
 		fakeScraper{},
 		fakeRaw{lib: &EpisodesResponse{Available: true, Episodes: []RawEpisode{{Number: 3}, {Number: 9}, {Number: 5}}}},
+		nil,
 	)
 	latest, _, err := r.Latest(context.Background(), "57466", "ae", "sub")
 	if err != nil || latest != 9 {
@@ -112,8 +125,55 @@ func TestAnimeLevel_AE_MaxFromLibrary(t *testing.T) {
 	}
 }
 
+func TestAnimeLevel_AnimejoySibnet_MaxEpisode(t *testing.T) {
+	r := newResolver(
+		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
+		fakeScraper{},
+		fakeRaw{},
+		fakeAnimejoy{info: &domain.AnimejoyLegInfo{Episodes: []int{1, 3, 2}}},
+	)
+	latest, _, err := r.Latest(context.Background(), "57466", "animejoy-sibnet", "sub")
+	if err != nil || latest != 3 {
+		t.Fatalf("animejoy-sibnet latest = %d, err = %v, want 3, nil", latest, err)
+	}
+}
+
+func TestAnimeLevel_AnimejoyAllVideo_MaxEpisode(t *testing.T) {
+	r := newResolver(
+		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
+		fakeScraper{},
+		fakeRaw{},
+		fakeAnimejoy{info: &domain.AnimejoyLegInfo{Episodes: []int{1, 2, 5}}},
+	)
+	latest, _, err := r.Latest(context.Background(), "57466", "animejoy-allvideo", "sub")
+	if err != nil || latest != 5 {
+		t.Fatalf("animejoy-allvideo latest = %d, err = %v, want 5, nil", latest, err)
+	}
+}
+
+func TestAnimeLevel_Animejoy_EmptyIsNotFound(t *testing.T) {
+	r := newResolver(
+		fakeFinder{anime: &domain.Anime{ID: "uuid-1"}},
+		fakeScraper{},
+		fakeRaw{},
+		fakeAnimejoy{info: &domain.AnimejoyLegInfo{Episodes: []int{}}},
+	)
+	_, _, err := r.Latest(context.Background(), "57466", "animejoy-sibnet", "sub")
+	if err == nil || !isNotFoundLike(err) {
+		t.Fatalf("empty animejoy-sibnet err = %v, want NotFound-like", err)
+	}
+}
+
+func TestAnimeLevel_Animejoy_NilListerIsNotFound(t *testing.T) {
+	r := newResolver(fakeFinder{anime: &domain.Anime{ID: "uuid-1"}}, fakeScraper{}, fakeRaw{}, nil)
+	_, _, err := r.Latest(context.Background(), "57466", "animejoy-allvideo", "sub")
+	if err == nil || !isNotFoundLike(err) {
+		t.Fatalf("nil animejoy lister err = %v, want NotFound-like", err)
+	}
+}
+
 func TestAnimeLevel_ScraperError_Propagates(t *testing.T) {
-	r := newResolver(fakeFinder{anime: &domain.Anime{ID: "uuid-1"}}, fakeScraper{err: errors.New("connection refused")}, fakeRaw{})
+	r := newResolver(fakeFinder{anime: &domain.Anime{ID: "uuid-1"}}, fakeScraper{err: errors.New("connection refused")}, fakeRaw{}, nil)
 	_, _, err := r.Latest(context.Background(), "57466", "english", "sub")
 	if err == nil || isNotFoundLike(err) {
 		t.Fatalf("scraper-down err = %v, want a non-NotFound (infra) error", err)

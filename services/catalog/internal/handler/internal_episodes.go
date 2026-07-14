@@ -3,7 +3,7 @@ package handler
 // Phase 2 v1.0 Notifications Engine — NOTIF-DET-01.
 //
 // GET /internal/anime/{shikimoriId}/episodes
-//   ?player=kodik|animelib|english|ae|raw
+//   ?player=kodik|animelib|english|ae|animejoy-sibnet|animejoy-allvideo
 //   &translation_id=<provider-specific>   (optional for kodik|animelib; omit
 //                                           to get the max across any team;
 //                                           anime-level players always omit it)
@@ -20,8 +20,9 @@ package handler
 //     "checked_at": "2026-05-21T03:00:00Z"
 //   }
 //
-// Response 400 — player not in the allowlist {kodik, animelib, english, ae, raw}
-// or a required query param missing (kodik/animelib need translation_id).
+// Response 400 — player not in the allowlist {kodik, animelib, english, ae,
+// animejoy-sibnet, animejoy-allvideo} or a required query param missing
+// (kodik/animelib need translation_id).
 // Response 404 — combo has no matching upstream episode (parser-level
 // not-found).
 // Response 500 — parser/HTTP/cache infrastructure failure.
@@ -82,10 +83,11 @@ func (h *InternalEpisodesHandler) GetLatestEpisode(w http.ResponseWriter, r *htt
 	watchType := q.Get("watch_type")
 	language := q.Get("language")
 
-	// Anime-level players (aePlayer, empty translation_id): english/ae.
-	// Legacy translation-specific players: kodik/animelib (accept with OR
-	// without translation_id; empty → any-team max, present → legacy path).
-	animeLevel := player == "english" || player == "ae"
+	// Anime-level players (aePlayer, empty translation_id): english/ae/
+	// animejoy-sibnet/animejoy-allvideo. Legacy translation-specific players:
+	// kodik/animelib (accept with OR without translation_id; empty →
+	// any-team max, present → legacy path).
+	animeLevel := player == "english" || player == "ae" || player == "animejoy-sibnet" || player == "animejoy-allvideo"
 	legacy := player == "kodik" || player == "animelib"
 	if !animeLevel && !legacy {
 		httputil.BadRequest(w, "player not supported by detector")
