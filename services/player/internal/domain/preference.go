@@ -15,6 +15,7 @@ type WatchCombo struct {
 var ValidPlayers = map[string]bool{
 	"kodik": true, "animelib": true, "raw": true, "ae": true,
 	"english": true, "hanime": true,
+	"animejoy-sibnet": true, "animejoy-allvideo": true,
 }
 
 // ValidLanguages is the set of allowed language values

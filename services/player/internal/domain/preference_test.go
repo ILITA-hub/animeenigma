@@ -19,6 +19,9 @@ func TestValidateCombo_NewEnumValues(t *testing.T) {
 		{"english", "en", "dub", true},
 		// 18+ / adult player
 		{"hanime", "ru", "dub", true},
+		// AnimeJoy RU-sub legs (Sibnet/AllVideo)
+		{"animejoy-sibnet", "ru", "sub", true},
+		{"animejoy-allvideo", "ru", "sub", true},
 	}
 	for _, c := range cases {
 		if got := ValidateCombo(c.player, c.language, c.watchType); got != c.want {
