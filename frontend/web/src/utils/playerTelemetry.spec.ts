@@ -168,3 +168,30 @@ describe('playerTelemetry', () => {
     expect(body.events[0].detail.engine.bw_bps).toBe(1234)
   })
 })
+
+describe('recordPlayerEvent — protocol_usage kind', () => {
+  it('accepts and buffers a protocol_usage event', () => {
+    __resetPlayerTelemetryForTest()
+    const beacon = vi.fn().mockReturnValue(true)
+    vi.stubGlobal('navigator', { sendBeacon: beacon })
+
+    recordPlayerEvent({
+      kind: 'protocol_usage',
+      provider: 'gogoanime',
+      anime_id: 'a1',
+      episode: 1,
+      audio: 'sub',
+      lang: 'en',
+      detail: { protocol: 'h2', tier: 'h2', segments: 214 },
+    })
+    flushPlayerTelemetry('test')
+
+    expect(beacon).toHaveBeenCalledTimes(1)
+    const blob = beacon.mock.calls[0][1] as Blob
+    // sendBeacon receives a Blob; assert the JSON payload carries our event kind.
+    return blob.text().then((body) => {
+      expect(body).toContain('"kind":"protocol_usage"')
+      expect(body).toContain('"protocol":"h2"')
+    })
+  })
+})

@@ -14,7 +14,7 @@
 import { analyticsEndpoint, markBlockedFromError } from './analyticsTransport'
 
 export interface PlayerEvent {
-  kind: 'resolve' | 'stall' | 'playback_start_rejected' | 'playback_failed'
+  kind: 'resolve' | 'stall' | 'playback_start_rejected' | 'playback_failed' | 'protocol_usage'
   provider: string
   anime_id: string
   episode?: number
@@ -118,7 +118,8 @@ export function recordPlayerEvent(e: PlayerEvent): void {
       e.kind !== 'resolve' &&
       e.kind !== 'stall' &&
       e.kind !== 'playback_start_rejected' &&
-      e.kind !== 'playback_failed'
+      e.kind !== 'playback_failed' &&
+      e.kind !== 'protocol_usage'
     )
       return
 
