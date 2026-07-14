@@ -3280,8 +3280,17 @@ function onToggleFullscreen() {
     return
   }
   if (el.requestFullscreen) {
-    void el.requestFullscreen()
-    if (isCoarse.value) lockLandscape()
+    el
+      .requestFullscreen()
+      .then(() => {
+        if (isCoarse.value) lockLandscape()
+      })
+      .catch(() => {
+        // Some WebKit builds (notably iPhone Safari) expose requestFullscreen
+        // as a function but reject it at call time for non-<video> elements —
+        // the feature-detect above lies. Fall back to the CSS takeover.
+        enterPseudoFs()
+      })
     return
   }
   enterPseudoFs()
