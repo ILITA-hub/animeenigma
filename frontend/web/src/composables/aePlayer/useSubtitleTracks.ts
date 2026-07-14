@@ -1,5 +1,6 @@
 import { ref, computed, unref, watch, type Ref, type ComputedRef } from 'vue'
 import { subtitlesApi } from '@/api/client'
+import { signedSubtitleUrl } from '@/utils/subtitleProxy'
 import type { SubtitleTrack } from '@/types/aePlayer'
 // SubTrack (the modal's prop shape) is field-identical to SubtitleTrack. Alias to
 // the .ts type rather than importing a named type from a .vue file — the ambient
@@ -9,6 +10,9 @@ type SubTrack = SubtitleTrack
 
 export interface BackendSubTrack {
   url: string; lang: string; label: string; format?: string; provider: string; release?: string
+  // Provenance signature (streamsign) — present only on external track URLs
+  // (jimaku.cc); forwarded to the HLS proxy as top-level exp/sig params.
+  exp?: string; sig?: string
 }
 export interface AggregateSubsResponse {
   languages: Record<string, BackendSubTrack[]>
@@ -23,7 +27,10 @@ export function flattenAggregateSubs(data: AggregateSubsResponse | null | undefi
   for (const [lang, list] of Object.entries(data?.languages ?? {})) {
     for (const t of list) {
       flat.push({
-        url: t.url,
+        // Catalog-signed external tracks (jimaku.cc) are pre-wrapped in the
+        // signed proxy URL so the un-allowlisted host loads without a 502;
+        // same-origin tracks pass through raw.
+        url: signedSubtitleUrl(t),
         provider: t.provider,
         lang: t.lang || lang,
         label: t.label || t.release || t.provider,

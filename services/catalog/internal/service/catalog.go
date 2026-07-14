@@ -2129,6 +2129,7 @@ func (s *CatalogService) GetKodikStreamSource(ctx context.Context, animeID strin
 	cacheKey := fmt.Sprintf("kodik:stream:%s:%d:%d:%d", animeID, episode, translationID, quality)
 	var cached domain.KodikStreamSource
 	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		signKodikStreamSource(&cached)
 		return &cached, nil
 	}
 
@@ -2179,9 +2180,23 @@ func (s *CatalogService) GetKodikStreamSource(ctx context.Context, animeID strin
 		Translation:   translationName,
 	}
 
-	// Cache <1h — the CDN URL carries an expiry token.
+	// Cache <1h — the CDN URL carries an expiry token. Cached BEFORE signing so
+	// the Redis body never persists a signature; signatures are minted at
+	// response time on both this path and the cache-hit path above.
 	_ = s.cache.Set(ctx, cacheKey, source, 30*time.Minute)
+	signKodikStreamSource(source)
 	return source, nil
+}
+
+// signKodikStreamSource mints the provenance signature + Track A masked form
+// for the Kodik CDN (.m3u8 on solodcdn.com) stream URL, authorizing it through
+// the HLS proxy without a static allowlist entry. Called at RESPONSE time on
+// both the fresh and cache-hit paths — never persisted in the cache — so a
+// cached entry can never outlive (or lack) its signature. Copies the animejoy
+// pattern (GetAnimejoyStream).
+func signKodikStreamSource(src *domain.KodikStreamSource) {
+	src.Exp, src.Sig = streamsign.Sign(src.StreamURL)
+	src.MaskedURL = streamsign.MaskedURL(src.StreamURL, src.Referer, "")
 }
 
 // SearchKodik searches for anime on Kodik by title
@@ -2485,6 +2500,7 @@ func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, 
 	cacheKey := fmt.Sprintf("animelib:stream:%s:%d:%d", animeID, episodeID, translationID)
 	var cached domain.AnimeLibStream
 	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		signAnimeLibStream(&cached)
 		return &cached, nil
 	}
 
@@ -2541,10 +2557,30 @@ func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, 
 		return nil, errors.NotFound("no native AniLib video available")
 	}
 
-	// Cache for 30 minutes (stream URLs may expire)
+	// Cache for 30 minutes (stream URLs may expire). Cached BEFORE signing so
+	// the Redis body never persists a signature; signatures are minted at
+	// response time (here and on the cache-hit path).
 	_ = s.cache.Set(ctx, cacheKey, result, 30*time.Minute)
-
+	signAnimeLibStream(result)
 	return result, nil
+}
+
+// signAnimeLibStream mints provenance signatures + Track A masked forms for
+// every AniLib CDN source (progressive MP4 on cdnlibs.org/hentaicdn.org) and
+// signatures for its external subtitle files, authorizing them through the
+// HLS proxy without static allowlist entries. Dormant path (no FE adapter),
+// signed anyway so the S3 gate flip cannot strand it. Called at RESPONSE time
+// only — never persisted in the cache.
+func signAnimeLibStream(st *domain.AnimeLibStream) {
+	for i := range st.Sources {
+		src := &st.Sources[i]
+		src.Exp, src.Sig = streamsign.Sign(src.URL)
+		src.MaskedURL = streamsign.MaskedURL(src.URL, "", "mp4")
+	}
+	for i := range st.Subtitles {
+		sub := &st.Subtitles[i]
+		sub.Exp, sub.Sig = streamsign.Sign(sub.URL)
+	}
 }
 
 // SearchAnimeLib searches for anime on AnimeLib by title
@@ -2737,6 +2773,7 @@ func (s *CatalogService) GetJimakuSubtitles(ctx context.Context, animeID string,
 	cacheKey := fmt.Sprintf("jimaku:subs:%s:%d", animeID, episode)
 	var cached domain.JimakuSubtitleResponse
 	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		signJimakuSubtitles(&cached)
 		return &cached, nil
 	}
 
@@ -2793,10 +2830,22 @@ func (s *CatalogService) GetJimakuSubtitles(ctx context.Context, animeID string,
 		EntryName: entryName,
 	}
 
-	// Cache for 1 hour
+	// Cache for 1 hour. Cached BEFORE signing so the Redis body never persists
+	// a signature; signatures are minted at response time (here and on the
+	// cache-hit path).
 	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
-
+	signJimakuSubtitles(result)
 	return result, nil
+}
+
+// signJimakuSubtitles mints provenance signatures for the external jimaku.cc
+// download URLs, authorizing them through the HLS proxy without a static
+// allowlist entry. Called at RESPONSE time only — never persisted in the cache.
+func signJimakuSubtitles(resp *domain.JimakuSubtitleResponse) {
+	for i := range resp.Subtitles {
+		sub := &resp.Subtitles[i]
+		sub.Exp, sub.Sig = streamsign.Sign(sub.URL)
+	}
 }
 
 // GetHanimeEpisodes searches Hanime for an anime and returns its franchise episodes.
@@ -2875,6 +2924,7 @@ func (s *CatalogService) GetHanimeStream(ctx context.Context, animeID string, sl
 	cacheKey := fmt.Sprintf("hanime:stream:%s:%s", animeID, slug)
 	var cached domain.HanimeStream
 	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		signHanimeSources(cached.Sources)
 		return &cached, nil
 	}
 
@@ -2906,6 +2956,29 @@ func (s *CatalogService) GetHanimeStream(ctx context.Context, animeID string, sl
 		Sources: sources,
 	}
 
+	// Cached BEFORE signing so the Redis body never persists a signature;
+	// signatures are minted at response time (here and on the cache-hit path).
 	_ = s.cache.Set(ctx, cacheKey, result, 30*time.Minute)
+	signHanimeSources(result.Sources)
 	return result, nil
+}
+
+// signHanimeSources mints provenance signatures + Track A masked forms for
+// every Hanime CDN source URL (hanime.tv / htv-* / hydaelyn-* / zodiark-*
+// families), authorizing them through the HLS proxy without static allowlist
+// entries. Hanime needs no Referer (verified at smoke time). Called at
+// RESPONSE time only — never persisted in the cache.
+func signHanimeSources(sources []domain.HanimeSource) {
+	for i := range sources {
+		src := &sources[i]
+		src.Exp, src.Sig = streamsign.Sign(src.URL)
+		// Progressive MP4 unless the URL is an HLS manifest — mirrors the FE
+		// adapter's ".m3u8 ⇒ hls" rule so the masked token selects the proxy's
+		// range-passthrough path only for MP4s.
+		streamType := "mp4"
+		if strings.Contains(src.URL, ".m3u8") {
+			streamType = ""
+		}
+		src.MaskedURL = streamsign.MaskedURL(src.URL, "", streamType)
+	}
 }

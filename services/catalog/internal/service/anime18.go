@@ -9,6 +9,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
 )
 
 // 18anime (18+) is served by the scraper microservice's SEPARATE adult
@@ -121,6 +122,7 @@ func (s *CatalogService) Get18AnimeStream(ctx context.Context, animeID, episodeS
 	cacheKey := fmt.Sprintf("anime18:stream:%s:%s", animeID, episodeSlug)
 	var cached domain.Anime18Stream
 	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		signAnime18Stream(&cached)
 		return &cached, nil
 	}
 
@@ -158,6 +160,22 @@ func (s *CatalogService) Get18AnimeStream(ctx context.Context, animeID, episodeS
 		Quality: quality,
 	}
 
+	// Cached BEFORE signing so the Redis body never persists a signature;
+	// signatures are minted at response time (here and on the cache-hit path).
 	_ = s.cache.Set(ctx, cacheKey, result, 5*time.Minute)
+	signAnime18Stream(result)
 	return result, nil
+}
+
+// signAnime18Stream mints the provenance signature + Track A masked form for
+// the 18anime mirror URL (mp4upload / turboviplay / turbosplayer), authorizing
+// it through the HLS proxy without static allowlist entries. Called at
+// RESPONSE time only — never persisted in the cache.
+func signAnime18Stream(st *domain.Anime18Stream) {
+	st.Exp, st.Sig = streamsign.Sign(st.URL)
+	streamType := "mp4"
+	if st.IsHLS {
+		streamType = ""
+	}
+	st.MaskedURL = streamsign.MaskedURL(st.URL, st.Referer, streamType)
 }

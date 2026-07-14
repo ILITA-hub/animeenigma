@@ -15,6 +15,11 @@ export interface SubtitleTrack {
   format?: string
   provider: 'jimaku' | 'opensubtitles' | string
   release?: string
+  // Provenance signature stamped by the catalog (streamsign) on EXTERNAL track
+  // URLs (today only jimaku.cc) so the HLS proxy trusts the host without a
+  // static allowlist entry. Same-origin /api/... tracks carry no signature.
+  exp?: string
+  sig?: string
 }
 
 export interface ProviderHealth {

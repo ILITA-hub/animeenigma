@@ -20,6 +20,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/subprobe"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
 )
 
 // animeRepoForSubs is a narrow interface for the repo methods used by SubsAggregator.
@@ -99,6 +100,12 @@ type SubtitleTrack struct {
 	Format   string `json:"format,omitempty"`
 	Provider string `json:"provider"` // "jimaku", "opensubtitles", or "anime365"
 	Release  string `json:"release,omitempty"`
+	// Provenance signature (streamsign) for EXTERNAL track URLs (today only
+	// jimaku.cc), authorizing them through the HLS proxy without a static
+	// allowlist entry. Same-origin (/api/...) tracks stay unsigned. Minted at
+	// response time (never persisted in the Redis cache).
+	Exp string `json:"exp,omitempty"`
+	Sig string `json:"sig,omitempty"`
 }
 
 // AggregateResponse is the handler payload.
@@ -106,7 +113,7 @@ type AggregateResponse struct {
 	Languages      map[string][]SubtitleTrack `json:"languages"`
 	Episode        int                        `json:"episode"`
 	ProvidersDown  []string                   `json:"providers_down,omitempty"`
-	ProviderHealth []ProviderHealth            `json:"provider_health,omitempty"`
+	ProviderHealth []ProviderHealth           `json:"provider_health,omitempty"`
 }
 
 // overlayHealth injects the active probe's verdict (merged with this request's
@@ -161,6 +168,7 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 	cacheKey := s.cacheKey(animeID, episode, langs)
 	var cached AggregateResponse
 	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		signExternalTracks(&cached)
 		s.overlayHealth(&cached)
 		return &cached, nil
 	}
@@ -263,8 +271,24 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 
 	dedupe(resp.Languages)
 	_ = s.cache.Set(ctx, cacheKey, resp, subsCacheTTL(resp))
+	signExternalTracks(resp)
 	s.overlayHealth(resp)
 	return resp, nil
+}
+
+// signExternalTracks stamps provenance signatures on EXTERNAL (absolute
+// http(s)) track URLs — today only jimaku.cc emits those; OpenSubtitles and
+// anime365 return same-origin /api/... routes, which streamsign.Sign no-ops
+// on. Called AFTER the Redis cache get/set (like overlayHealth) so signatures
+// are minted at response time and never frozen into a cached body — the full
+// cache TTL (6h) could otherwise eat half the 12h provenance window.
+func signExternalTracks(resp *AggregateResponse) {
+	for _, tracks := range resp.Languages {
+		for i := range tracks {
+			t := &tracks[i]
+			t.Exp, t.Sig = streamsign.Sign(t.URL)
+		}
+	}
 }
 
 const (

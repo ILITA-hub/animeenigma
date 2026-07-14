@@ -133,6 +133,12 @@ interface Anime18Source {
   referer?: string
   is_hls: boolean
   quality: string
+  // Provenance signature stamped by the catalog (streamsign) so the HLS proxy
+  // trusts the 18anime mirror CDNs without a static allowlist entry.
+  exp?: string
+  sig?: string
+  // Track A opaque path-token form; preferred over url+exp/sig when present.
+  masked_url?: string
 }
 
 // ─── Hanime types (mirrored from domain.HanimeEpisode / HanimeStream) ────────
@@ -147,6 +153,12 @@ interface HanimeSource {
   height: string
   width: number
   size_mb: number
+  // Provenance signature stamped by the catalog (streamsign) so the HLS proxy
+  // trusts the Hanime CDN families without static allowlist entries.
+  exp?: string
+  sig?: string
+  // Track A opaque path-token form; preferred over url+exp/sig when present.
+  masked_url?: string
 }
 
 interface HanimeStream {
@@ -167,6 +179,12 @@ interface KodikStream {
   referer: string
   quality?: number
   qualities?: number[]
+  // Provenance signature stamped by the catalog (streamsign) so the HLS proxy
+  // trusts the Kodik CDN (solodcdn.com) without a static allowlist entry.
+  exp?: string
+  sig?: string
+  // Track A opaque path-token form; preferred over url+exp/sig when present.
+  masked_url?: string
 }
 
 // ─── Animejoy types ──────────────────────────────────────────────────────────
@@ -383,9 +401,15 @@ function makeAnime18Adapter(api: typeof anime18Api): ProviderAdapter {
         throw new NotAvailableError('18anime', 'returned no stream URL')
       }
       const type: 'hls' | 'mp4' = data.is_hls ? 'hls' : 'mp4'
-      // mp4upload (and other 18anime CDNs) require the source-carried Referer.
+      // mp4upload (and other 18anime CDNs) require the source-carried Referer;
+      // the catalog-stamped exp/sig (or masked form) authorizes the mirror
+      // host through the proxy without a static allowlist entry.
       return {
-        url: buildProxyUrl(data.url, data.referer ?? '', type),
+        url: buildProxyUrl(data.url, data.referer ?? '', type, {
+          exp: data.exp,
+          sig: data.sig,
+          masked: data.masked_url,
+        }),
         type,
       }
     },
@@ -419,10 +443,16 @@ function makeHanimeAdapter(api: typeof hanimeApi): ProviderAdapter {
         throw new NotAvailableError('hanime', 'returned no stream URL')
       }
       const type: 'hls' | 'mp4' = best.url.includes('.m3u8') ? 'hls' : 'mp4'
-      // Hanime CDN hosts are allowlisted in the HLS proxy and the stream URLs are
-      // token-signed, so no source Referer is required (verified at smoke time).
+      // Hanime needs no source Referer (verified at smoke time). The catalog
+      // stamps a streamsign provenance signature (exp/sig, plus the Track A
+      // masked form) on every source, which authorizes the Hanime CDN host
+      // through the proxy without a static allowlist entry.
       return {
-        url: buildProxyUrl(best.url, '', type),
+        url: buildProxyUrl(best.url, '', type, {
+          exp: best.exp,
+          sig: best.sig,
+          masked: best.masked_url,
+        }),
         type,
       }
     },
@@ -455,9 +485,10 @@ function buildProxyUrl(
   params.set('url', url)
   if (referer) params.set('referer', referer)
   if (streamType === 'mp4') params.set('type', 'mp4')
-  // Provenance signature for self-hosted MinIO (first-party / library) URLs:
-  // the minio host is NOT in the proxy allowlist, so the master-playlist
-  // request must carry exp/sig; the proxy then mints child segment tokens.
+  // Provenance signature (streamsign) — first-party MinIO/library URLs and
+  // every catalog-signed external CDN (kodik/hanime/18anime/animejoy/scraper):
+  // the master request carries exp/sig so the proxy trusts the host without a
+  // static allowlist entry, then mints child segment tokens itself.
   if (sign?.exp && sign?.sig) {
     params.set('exp', sign.exp)
     params.set('sig', sign.sig)
@@ -509,7 +540,13 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
         ? [...stream.qualities].sort((a, b) => b - a).map((q) => ({ label: `${q}p`, value: q }))
         : undefined
       return {
-        url: buildProxyUrl(stream.stream_url, stream.referer),
+        // The catalog-stamped exp/sig (or masked form) authorizes the Kodik
+        // CDN through the proxy without a static allowlist entry.
+        url: buildProxyUrl(stream.stream_url, stream.referer, undefined, {
+          exp: stream.exp,
+          sig: stream.sig,
+          masked: stream.masked_url,
+        }),
         type: 'hls',
         qualities,
         qualityLabel: stream.quality ? `${stream.quality}p` : undefined,

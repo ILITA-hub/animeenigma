@@ -130,6 +130,7 @@ import Modal from '@/components/ui/Modal.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { Spinner } from '@/components/ui'
 import { subtitlesApi } from '@/api/client'
+import { signedSubtitleUrl } from '@/utils/subtitleProxy'
 import type { GroupedSubs, SubtitleTrack, ProviderHealth } from '@/types/subtitles'
 
 const props = defineProps<{
@@ -282,7 +283,14 @@ const fetchAll = async () => {
   error.value = null
   try {
     const resp = await subtitlesApi.all(props.animeId, props.episode)
-    data.value = resp.data?.data ?? resp.data
+    const grouped: GroupedSubs = resp.data?.data ?? resp.data
+    // Pre-wrap catalog-signed external tracks (jimaku.cc) in the signed proxy
+    // URL — same normalization as flattenAggregateSubs, so a selected track's
+    // url matches currentTrackUrl and loads without an allowlist entry.
+    for (const list of Object.values(grouped?.languages ?? {})) {
+      for (const track of list) track.url = signedSubtitleUrl(track)
+    }
+    data.value = grouped
     providerFilter.value = 'all'
     langFilter.value = 'all'
   } catch (e) {

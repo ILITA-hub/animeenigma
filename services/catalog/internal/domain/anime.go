@@ -356,6 +356,14 @@ type KodikStreamSource struct {
 	Episode       int    `json:"episode"`
 	TranslationID int    `json:"translation_id"`
 	Translation   string `json:"translation"`
+	// Provenance signature (streamsign) authorizing the Kodik CDN host
+	// (solodcdn.com) through the HLS proxy without a static allowlist entry.
+	// Minted at response time (never persisted in the Redis cache) so a cached
+	// entry can never outlive its signature.
+	Exp string `json:"exp,omitempty"`
+	Sig string `json:"sig,omitempty"`
+	// Track A opaque path-token form of StreamURL; preferred by the FE when present.
+	MaskedURL string `json:"masked_url,omitempty"`
 }
 
 // KodikSearchResult represents a search result from Kodik
@@ -449,6 +457,11 @@ type JimakuSubtitle struct {
 	FileName string `json:"file_name"` // Original filename (e.g. "EP01.ass")
 	Lang     string `json:"lang"`      // Always "Japanese"
 	Format   string `json:"format"`    // "ass", "srt", etc.
+	// Provenance signature (streamsign) authorizing the jimaku.cc download host
+	// through the HLS proxy without a static allowlist entry. Minted at response
+	// time (never persisted in the Redis cache).
+	Exp string `json:"exp,omitempty"`
+	Sig string `json:"sig,omitempty"`
 }
 
 // JimakuSubtitleResponse represents the response for Jimaku subtitle lookup
@@ -477,6 +490,13 @@ type HanimeSource struct {
 	Height string  `json:"height"`
 	Width  int     `json:"width"`
 	SizeMB float64 `json:"size_mb"`
+	// Provenance signature (streamsign) authorizing the Hanime CDN families
+	// through the HLS proxy without static allowlist entries. Minted at
+	// response time (never persisted in the Redis cache).
+	Exp string `json:"exp,omitempty"`
+	Sig string `json:"sig,omitempty"`
+	// Track A opaque path-token form of URL; preferred by the FE when present.
+	MaskedURL string `json:"masked_url,omitempty"`
 }
 
 // HanimeStream represents stream data from Hanime.
@@ -497,6 +517,13 @@ type Anime18Stream struct {
 	Referer string `json:"referer,omitempty"` // Referer the HLS proxy must inject ("" if none)
 	IsHLS   bool   `json:"is_hls"`            // true => m3u8 (turbovid), false => progressive mp4 (mp4upload)
 	Quality string `json:"quality"`           // e.g. "FullHD"
+	// Provenance signature (streamsign) authorizing the 18anime mirror CDNs
+	// (mp4upload/turboviplay/turbosplayer) through the HLS proxy without static
+	// allowlist entries. Minted at response time (never persisted in the cache).
+	Exp string `json:"exp,omitempty"`
+	Sig string `json:"sig,omitempty"`
+	// Track A opaque path-token form of URL; preferred by the FE when present.
+	MaskedURL string `json:"masked_url,omitempty"`
 }
 
 // AnimeLib types
@@ -521,12 +548,23 @@ type AnimeLibTranslation struct {
 type AnimeLibSource struct {
 	URL     string `json:"url"`
 	Quality int    `json:"quality"` // 360, 720, 1080, 2160
+	// Provenance signature (streamsign) authorizing the AniLib CDNs
+	// (cdnlibs.org/hentaicdn.org) through the HLS proxy without static
+	// allowlist entries. Minted at response time (never persisted in the cache).
+	Exp string `json:"exp,omitempty"`
+	Sig string `json:"sig,omitempty"`
+	// Track A opaque path-token form of URL; preferred by the FE when present.
+	MaskedURL string `json:"masked_url,omitempty"`
 }
 
 // AnimeLibSubtitle represents an external subtitle file from AnimeLib
 type AnimeLibSubtitle struct {
 	Format string `json:"format"` // "ass", "vtt"
 	URL    string `json:"url"`
+	// Provenance signature for the external subtitle host (same trust path as
+	// AnimeLibSource). Minted at response time.
+	Exp string `json:"exp,omitempty"`
+	Sig string `json:"sig,omitempty"`
 }
 
 // AnimeLibStream represents stream source data from AnimeLib

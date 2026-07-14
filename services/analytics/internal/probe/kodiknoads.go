@@ -14,10 +14,11 @@ import (
 // catalog's kodik routes:
 //
 //	GET /api/anime/{uuid}/kodik/translations        → pick pinned, else first
-//	GET /api/anime/{uuid}/kodik/stream?episode=1&translation=ID → {stream_url, referer}
+//	GET /api/anime/{uuid}/kodik/stream?episode=1&translation=ID → {stream_url, referer, exp, sig}
 //
-// The returned CDN (solodcdn.com) is allowlisted in the HLS proxy, so the
-// validator fetches it with the Referer and no signing.
+// The catalog signs the CDN URL (solodcdn.com) with the proxy's provenance
+// HMAC (streamsign, Track S), so the validator replays exp/sig + Referer
+// through the hls-proxy like animejoy — no static allowlist entry required.
 type KodikNoadsResolver struct {
 	base string
 	hc   *http.Client
@@ -82,6 +83,8 @@ func (r *KodikNoadsResolver) Resolve(ctx context.Context, animeUUID, animeName s
 		Data struct {
 			StreamURL string `json:"stream_url"`
 			Referer   string `json:"referer"`
+			Exp       string `json:"exp"`
+			Sig       string `json:"sig"`
 		} `json:"data"`
 	}
 	streamURL := fmt.Sprintf("%s%s/stream?episode=%d&translation=%d", r.base, base, ep, chosen)
@@ -95,7 +98,7 @@ func (r *KodikNoadsResolver) Resolve(ctx context.Context, animeUUID, animeName s
 	return []ResolvedStream{{
 		Provider: provider, AnimeUUID: animeUUID, AnimeName: animeName, Slot: slot,
 		Server: "kodik-" + strconv.Itoa(chosen), MasterURL: sEnv.Data.StreamURL,
-		Referer: sEnv.Data.Referer, Stage: StageStream,
+		Exp: sEnv.Data.Exp, Sig: sEnv.Data.Sig, Referer: sEnv.Data.Referer, Stage: StageStream,
 	}}, StageStream, nil
 }
 

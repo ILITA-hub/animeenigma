@@ -918,6 +918,23 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		}
 	}
 
+	// Manifest/VTT children must resolve against the POST-redirect final URL
+	// (RFC 8216 §6.3.2 / RFC 3986 base URI = the URL the content was actually
+	// retrieved from). Rewriting against the pre-redirect sourceURL re-bases a
+	// 302 target's relative children onto the WRONG host, and — worse — those
+	// bare children then reach the gate with neither a masked token nor
+	// exp/sig (AUTO-517: signed ultracloud.cc master 302s to mt.nekostream.site
+	// and its children were re-gated unsigned). rewriteBase feeds ONLY the
+	// rewrite below; sourceURL stays authoritative for the (already-passed)
+	// gate, Referer, and logging. resp.Request.Response is non-nil exactly when
+	// the client followed a redirect, so a non-redirected fetch keeps the
+	// original sourceURL base even when fetchURLFor presigned it or solodcdn
+	// edge failover rotated hosts.
+	rewriteBase := sourceURL
+	if resp.Request != nil && resp.Request.Response != nil && resp.Request.URL != nil {
+		rewriteBase = resp.Request.URL.String()
+	}
+
 	if isM3U8 && resp.StatusCode == http.StatusOK {
 		// Read and rewrite M3U8 content. This is a small manifest (not a
 		// segment stream) so a bounded ReadAll is acceptable here — the D-05
@@ -929,8 +946,9 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		}
 		bytesIn = uint64(len(body))
 
-		// Rewrite URLs in the M3U8
-		rewritten := rewriteM3U8URLs(string(body), sourceURL, referer)
+		// Rewrite URLs in the M3U8 against the post-redirect base — the proxy
+		// mints masked/provenance tokens for the redirect target's children.
+		rewritten := rewriteM3U8URLs(string(body), rewriteBase, referer)
 
 		bytesOut = writeRewrittenText(w, resp, rewritten)
 		return bytesIn, bytesOut, nil
@@ -946,12 +964,13 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		}
 		bytesIn = uint64(len(body))
 
-		// Rewrite storyboard image cue URLs in the VTT. rewriteVTTURLs mints
-		// its own per-manifest correlation token (AR-EGRESS-04) internally,
-		// same as rewriteM3U8URLs does for playlist children — every sheet
-		// image fetched from this storyboard track groups into one
-		// aggregated egress row.
-		rewritten := rewriteVTTURLs(string(body), sourceURL, referer)
+		// Rewrite storyboard image cue URLs in the VTT (against the same
+		// post-redirect base as the M3U8 branch). rewriteVTTURLs mints its own
+		// per-manifest correlation token (AR-EGRESS-04) internally, same as
+		// rewriteM3U8URLs does for playlist children — every sheet image
+		// fetched from this storyboard track groups into one aggregated
+		// egress row.
+		rewritten := rewriteVTTURLs(string(body), rewriteBase, referer)
 
 		bytesOut = writeRewrittenText(w, resp, rewritten)
 		return bytesIn, bytesOut, nil
