@@ -34,8 +34,9 @@ func NewPlayerTelemetryHandler(sink Sink) *PlayerTelemetryHandler {
 
 // wirePlayerEvent is one player telemetry event in the wire batch.
 type wirePlayerEvent struct {
-	// Kind must be "resolve", "stall", "playback_start_rejected", or
-	// "playback_failed"; other values are silently dropped.
+	// Kind must be "resolve", "stall", "playback_start_rejected",
+	// "playback_failed", or "protocol_usage"; other values are silently
+	// dropped.
 	Kind     string `json:"kind"`
 	Provider string `json:"provider"`
 
@@ -57,8 +58,9 @@ type wirePlayerEvent struct {
 	Audio   string `json:"audio,omitempty"`
 	Lang    string `json:"lang,omitempty"`
 
-	// Rich diagnostic bundle for kind "playback_failed" — merged verbatim into
-	// Properties. Bounded by the handler's 256 KB body limit.
+	// Rich diagnostic bundle for kind "playback_failed" or "protocol_usage" —
+	// merged verbatim into Properties. Bounded by the handler's 256 KB body
+	// limit.
 	Detail json.RawMessage `json:"detail,omitempty"`
 }
 
