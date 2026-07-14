@@ -58,21 +58,47 @@ export function clampLastWatched(lastWatched: number, totalEpisodes: number): nu
 }
 
 /**
+ * Shared "is last+1 actually available" gate. Released/completed catalogs are
+ * always available — `episodes_aired` can lag the true finale count, so never
+ * gate those on it. Ongoing catalogs gate on aired vs. provider-loaded count.
+ * Used by both the CTA and the banner so they can't drift out of sync.
+ */
+function isNextEpisodeAvailable(a: {
+  last: number
+  status: string
+  episodesAired: number
+  loadedEpisodes: number
+}): boolean {
+  const aired = Math.max(a.episodesAired, a.loadedEpisodes)
+  const isReleased = a.status === 'released' || a.status === 'completed'
+  return isReleased || (aired > 0 && aired > a.last)
+}
+
+/**
  * The episode the player should mount on. The ONLY start-episode authority.
  *   first-time (0)            → 1
  *   fully watched (last >= total) → 1   (re-open from the start, a fresh rewatch)
+ *   next episode not out yet  → last   (re-open what's already there)
  *   otherwise                 → last + 1
  * Always returns a number >= 1.
  *
  * A fully-watched anime re-opens on episode 1, matching the "rewatch" CTA — the
  * old "re-load the final episode" behaviour stranded finished viewers on the
  * last episode instead of letting them start over.
+ *
+ * `availability` is optional so existing callers that don't have air-date data
+ * keep their old (ungated) behaviour.
  */
-export function resolveStartEpisode(lastWatched: number, totalEpisodes: number): number {
+export function resolveStartEpisode(
+  lastWatched: number,
+  totalEpisodes: number,
+  availability?: { status: string; episodesAired: number; loadedEpisodes: number },
+): number {
   const last = clampLastWatched(lastWatched, totalEpisodes)
   if (last <= 0) return 1
   const total = totalEpisodes > 0 ? totalEpisodes : 0
   if (total > 0 && last >= total) return 1
+  if (availability && !isNextEpisodeAvailable({ last, ...availability })) return last
   return last + 1
 }
 
@@ -81,8 +107,10 @@ function resolveCta(a: {
   last: number
   isFull: boolean
   isCompleted: boolean
+  /** Whether episode last+1 is actually out (mirrors the banner's check). */
+  nextAvailable: boolean
 }): WatchCta {
-  const { isAuthenticated, last, isFull, isCompleted } = a
+  const { isAuthenticated, last, isFull, isCompleted, nextAvailable } = a
   const watch: WatchCta = { action: 'watch', startEpisode: 1, labelKey: 'anime.watchNow' }
   const continueFrom = (ep: number): WatchCta => ({
     action: 'continue',
@@ -90,10 +118,14 @@ function resolveCta(a: {
     labelKey: 'anime.continueEp',
     labelParams: { n: ep },
   })
+  // Nothing new is out yet — re-open the last completed episode instead of
+  // dangling a "Continue ep. N+1" button on an episode with no source.
+  const reopenLast: WatchCta = { action: 'watch', startEpisode: last, labelKey: 'anime.watchNow' }
 
   // Anonymous: no list, so the list-aware terminals never apply.
   if (!isAuthenticated) {
-    return last > 0 && !isFull ? continueFrom(last + 1) : watch
+    if (last <= 0 || isFull) return watch
+    return nextAvailable ? continueFrom(last + 1) : reopenLast
   }
   // Nothing watched yet.
   if (last === 0) {
@@ -107,8 +139,9 @@ function resolveCta(a: {
       ? { action: 'rewatch', startEpisode: 1, labelKey: 'anime.resume.rewatch' }
       : { action: 'mark-watched', startEpisode: 1, labelKey: 'anime.markAsWatched' }
   }
-  // Partial progress (also the unknown-total path) — real progress wins.
-  return continueFrom(last + 1)
+  // Partial progress (also the unknown-total path) — real progress wins,
+  // but only offer "continue" to an episode that's actually out.
+  return nextAvailable ? continueFrom(last + 1) : reopenLast
 }
 
 function resolveBanner(a: {
@@ -126,12 +159,7 @@ function resolveBanner(a: {
   if (last <= 0) return { kind: 'none' } // first-time
   if (total > 0 && last >= total) return { kind: 'none' } // finished — no surface
 
-  // Is episode last+1 available? Released/completed → yes. Otherwise compare
-  // against the effective aired count (max of Shikimori + what our sources hold).
-  const aired = Math.max(episodesAired, loadedEpisodes)
-  const isReleased = status === 'released' || status === 'completed'
-  const nextIsAired = aired > 0 && aired > last
-  if (isReleased || nextIsAired) {
+  if (isNextEpisodeAvailable({ last, status, episodesAired, loadedEpisodes })) {
     return { kind: 'just-finished', episode: last } // 'watching' breadcrumb
   }
 
@@ -152,8 +180,20 @@ export function resolveResumeState(input: ResumeStateInput): ResumeState {
   const total = input.totalEpisodes > 0 ? input.totalEpisodes : 0
   const isFull = total > 0 && last >= total
   const isCompleted = input.listStatus === 'completed'
+  const nextAvailable = isNextEpisodeAvailable({
+    last,
+    status: input.status,
+    episodesAired: input.episodesAired,
+    loadedEpisodes: input.loadedEpisodes,
+  })
 
-  const cta = resolveCta({ isAuthenticated: input.isAuthenticated, last, isFull, isCompleted })
+  const cta = resolveCta({
+    isAuthenticated: input.isAuthenticated,
+    last,
+    isFull,
+    isCompleted,
+    nextAvailable,
+  })
   const banner = resolveBanner({
     last,
     total,

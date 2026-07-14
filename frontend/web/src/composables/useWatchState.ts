@@ -73,7 +73,13 @@ export function useWatchState(options: UseWatchStateOptions): WatchState {
     return clampLastWatched(completed, total)
   })
 
-  const startEpisode = computed(() => resolveStartEpisode(lastWatched.value, options.totalEpisodes.value))
+  const startEpisode = computed(() =>
+    resolveStartEpisode(lastWatched.value, options.totalEpisodes.value, {
+      status: options.status.value,
+      episodesAired: options.episodesAired.value,
+      loadedEpisodes: options.loadedEpisodes.value,
+    }),
+  )
 
   const state = computed(() =>
     resolveResumeState({

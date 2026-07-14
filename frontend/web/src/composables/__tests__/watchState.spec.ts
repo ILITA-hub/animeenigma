@@ -25,6 +25,33 @@ describe('resolveStartEpisode', () => {
   it('never returns < 1', () => {
     expect(resolveStartEpisode(-3, 12)).toBe(1)
   })
+
+  // AUTO — reported 2026-07-14: "Continue ep. 3" button/mount offered on an
+  // ongoing anime whose episode 3 hadn't aired yet (episodesAired=2, next
+  // airs in 2 days). resolveStartEpisode used to ignore availability entirely.
+  it('ongoing, next episode not aired, no availability arg (legacy caller) → last + 1 (ungated)', () => {
+    expect(resolveStartEpisode(2, 0)).toBe(3)
+  })
+  it('ongoing, next episode not aired, with availability → re-opens last (no dead-end mount)', () => {
+    expect(
+      resolveStartEpisode(2, 0, { status: 'ongoing', episodesAired: 2, loadedEpisodes: 0 }),
+    ).toBe(2)
+  })
+  it('ongoing, next episode aired per Shikimori → last + 1', () => {
+    expect(
+      resolveStartEpisode(2, 0, { status: 'ongoing', episodesAired: 3, loadedEpisodes: 0 }),
+    ).toBe(3)
+  })
+  it('ongoing, Shikimori lagging but a provider already loaded it → last + 1', () => {
+    expect(
+      resolveStartEpisode(2, 0, { status: 'ongoing', episodesAired: 2, loadedEpisodes: 3 }),
+    ).toBe(3)
+  })
+  it('released status always allows next, regardless of stale episodesAired', () => {
+    expect(
+      resolveStartEpisode(2, 0, { status: 'released', episodesAired: 2, loadedEpisodes: 0 }),
+    ).toBe(3)
+  })
 })
 
 // ── resolveResumeState — CTA verb (ported from computeWatchCta, all 16) ──────
@@ -100,6 +127,54 @@ describe('resolveResumeState.cta — unknown total', () => {
   })
   it('#11 unknown total, nothing watched, completed → start-from-1', () => {
     expect(resolveResumeState(rs({ listStatus: 'completed', lastWatched: 0, totalEpisodes: 0, episodesAired: 0 })).cta.action).toBe('start-from-1')
+  })
+})
+
+// AUTO — reported 2026-07-14 (tNeymik/da49e513…): the primary CTA button said
+// "Continue ep. 3" on an ongoing anime whose episode 3 hadn't aired yet, while
+// the (separately-rendered) ResumePill banner correctly said "not available".
+// The CTA must consult the same aired/loaded gate as the banner.
+describe('resolveResumeState.cta — next episode not yet available', () => {
+  it('#17 ongoing, aired stuck at last, unknown total → watch (re-open last), not continue', () => {
+    const { cta } = resolveResumeState(rs({
+      listStatus: 'watching', lastWatched: 2, totalEpisodes: 0,
+      status: 'ongoing', episodesAired: 2, loadedEpisodes: 0,
+    }))
+    expect(cta.action).toBe('watch')
+    expect(cta.startEpisode).toBe(2)
+    expect(cta.labelKey).toBe('anime.watchNow')
+  })
+  it('#18 ongoing, aired catches up to last+1 → continue', () => {
+    const { cta } = resolveResumeState(rs({
+      listStatus: 'watching', lastWatched: 2, totalEpisodes: 0,
+      status: 'ongoing', episodesAired: 3, loadedEpisodes: 0,
+    }))
+    expect(cta.action).toBe('continue')
+    expect(cta.startEpisode).toBe(3)
+  })
+  it('#19 ongoing, Shikimori lagging but a provider already loaded next → continue', () => {
+    const { cta } = resolveResumeState(rs({
+      listStatus: 'watching', lastWatched: 2, totalEpisodes: 0,
+      status: 'ongoing', episodesAired: 2, loadedEpisodes: 3,
+    }))
+    expect(cta.action).toBe('continue')
+    expect(cta.startEpisode).toBe(3)
+  })
+  it('#20 anon, ongoing, next not aired → watch (re-open last), not continue', () => {
+    const { cta } = resolveResumeState(rs({
+      isAuthenticated: false, listStatus: null, lastWatched: 2, totalEpisodes: 0,
+      status: 'ongoing', episodesAired: 2, loadedEpisodes: 0,
+    }))
+    expect(cta.action).toBe('watch')
+    expect(cta.startEpisode).toBe(2)
+  })
+  it('#21 released status still allows continue despite stale episodesAired (Frieren-style)', () => {
+    const { cta } = resolveResumeState(rs({
+      listStatus: 'watching', lastWatched: 27, totalEpisodes: 0,
+      status: 'released', episodesAired: 27, loadedEpisodes: 0,
+    }))
+    expect(cta.action).toBe('continue')
+    expect(cta.startEpisode).toBe(28)
   })
 })
 
