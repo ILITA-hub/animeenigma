@@ -88,6 +88,7 @@ describe('spotlight i18n parity', () => {
     'nowWatching',
     'notTimeYet',
     'continueWatchingNew',
+    'dailyFanfic',
   ] as const
 
   it.each(expectedSubNamespaces)('en.json has spotlight.%s sub-namespace', (ns) => {
