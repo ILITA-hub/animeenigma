@@ -74,11 +74,12 @@ func (s *Service) noContentFamily(ctx context.Context, family, providerID, rowNa
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: providerID, DisplayName: displayName, Variants: variantsFromTraits(row)}
+	resolved := displayOf(row, displayName)
+	cap := domain.ProviderCap{Provider: providerID, DisplayName: resolved, Variants: variantsFromTraits(row)}
 	if !applyFeedFields(ctx, &cap, row, false) { // hasContent=false → no_content
 		return domain.SourceFamily{}, false
 	}
-	cap.Reason = noContentReason(displayName)
+	cap.Reason = noContentReason(resolved)
 	return domain.SourceFamily{Family: family, Providers: []domain.ProviderCap{cap}}, true
 }
 
@@ -158,7 +159,7 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: "kodik", DisplayName: "Kodik", Variants: variants}
+	cap := domain.ProviderCap{Provider: "kodik", DisplayName: displayOf(row, "Kodik"), Variants: variants}
 	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
@@ -197,7 +198,7 @@ func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.So
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: "animelib", DisplayName: "AniLib", Variants: variants}
+	cap := domain.ProviderCap{Provider: "animelib", DisplayName: displayOf(row, "AniLib"), Variants: variants}
 	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
@@ -254,7 +255,7 @@ func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.Sour
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: "hanime", DisplayName: "Hanime", Variants: []domain.Variant{variant}}
+	cap := domain.ProviderCap{Provider: "hanime", DisplayName: displayOf(row, "Hanime"), Variants: []domain.Variant{variant}}
 	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}

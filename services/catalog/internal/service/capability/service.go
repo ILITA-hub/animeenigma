@@ -71,16 +71,21 @@ func (s *Service) Report(ctx context.Context, animeID string) (domain.Capability
 	return report, nil
 }
 
-// buildFamilies assembles every family concurrently. The EN family is required
-// (its error fails the report); the first-party (ae/adult) and RU/Hanime
-// families are best-effort — omitted on a fetch error, an absent/disabled DB
-// row, or (AnimeJoy only) a discovery error. When the anime simply has no
-// content on a per-title provider (kodik/animelib/hanime/animejoy legs), that
-// family still surfaces tinted as no_content (see noContentFamily) rather than
-// being omitted, so the hacker-mode selector is a full diagnostic view. Order is
-// stable: ae, ourenglish, adult, kodik, animelib, hanime, animejoy-sibnet,
-// animejoy-allvideo — first-party leads. The ae/adult families are DB-row-driven
-// (no CatalogSource needed) so they run regardless of whether catalog is wired.
+// familyBuilder builds one roster row's family. ok=false omits it (best-effort).
+type familyBuilder func(ctx context.Context, animeID string, row domain.ScraperProvider) (domain.SourceFamily, bool)
+
+// buildFamilies assembles the EN family (DB-driven, required) plus one family
+// per registered non-EN stream_providers row (best-effort). AUTO-608: the
+// per-row dispatch is a name-keyed registry with a GENERIC default
+// (rowFamily), so a brand-new DB row surfaces in /capabilities without a code
+// change. kodik-iframe maps to nil = intentionally no capability (it is the
+// Classic-Kodik iframe surface, not an aePlayer source). Builders that need
+// the per-title catalog parsers guard on s.catalog == nil themselves. When the
+// anime simply has no content on a per-title provider (kodik/animelib/hanime/
+// animejoy legs), that family still surfaces tinted as no_content (see
+// noContentFamily) rather than being omitted, so the hacker-mode selector is a
+// full diagnostic view. Order: ae leads (first-party first), then EN, then the
+// rest in the roster's weight order.
 func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.SourceFamily, error) {
 	// Fetch playability scores ONCE per report (best-effort) and seed them into
 	// ctx before the fan-out below, so every family goroutine that closes over
@@ -92,64 +97,121 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 	}
 	ctx = withBlend(ctx, newBlendData(raw))
 
+	// Non-EN registered rows, best-first (weight desc mirrors the FE sort).
+	var rows []domain.ScraperProvider
+	if err := s.db.WithContext(ctx).
+		Where(`status <> ? AND "group" <> ?`, domain.StatusDisabled, "en").
+		Order("preference_weight desc, name asc").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("load non-EN providers: %w", err)
+	}
+
+	// AnimeJoy legs share ONE discovery call (title→news_id→playlist); resolve
+	// it lazily at most once per report, from whichever leg runs first.
+	var (
+		ajOnce  sync.Once
+		ajTeams []domain.AnimejoyTeam
+		ajErr   error
+	)
+	animejoyLeg := func(display, leg string) familyBuilder {
+		return func(ctx context.Context, animeID string, row domain.ScraperProvider) (domain.SourceFamily, bool) {
+			if s.catalog == nil {
+				return domain.SourceFamily{}, false
+			}
+			ajOnce.Do(func() { ajTeams, ajErr = s.catalog.GetAnimejoyTeams(ctx, animeID) })
+			if ajErr != nil {
+				return domain.SourceFamily{}, false // discovery error → leg absent, not no_content
+			}
+			return s.animejoyLegFamily(ctx, ajTeams, row.Name, displayOf(row, display), leg)
+		}
+	}
+
+	builders := map[string]familyBuilder{
+		"ae": func(ctx context.Context, animeID string, _ domain.ScraperProvider) (domain.SourceFamily, bool) {
+			return s.aeFamily(ctx, animeID)
+		},
+		"kodik-noads": func(ctx context.Context, animeID string, _ domain.ScraperProvider) (domain.SourceFamily, bool) {
+			if s.catalog == nil {
+				return domain.SourceFamily{}, false
+			}
+			return s.kodikFamily(ctx, animeID)
+		},
+		"kodik-iframe": nil, // Classic-Kodik iframe surface — no aePlayer capability
+		"animelib": func(ctx context.Context, animeID string, _ domain.ScraperProvider) (domain.SourceFamily, bool) {
+			if s.catalog == nil {
+				return domain.SourceFamily{}, false
+			}
+			return s.animelibFamily(ctx, animeID)
+		},
+		"hanime": func(ctx context.Context, animeID string, _ domain.ScraperProvider) (domain.SourceFamily, bool) {
+			if s.catalog == nil {
+				return domain.SourceFamily{}, false
+			}
+			return s.hanimeFamily(ctx, animeID)
+		},
+		"animejoy-sibnet":   animejoyLeg("Sibnet", "sibnet"),
+		"animejoy-allvideo": animejoyLeg("AllVideo", "allvideo"),
+		// default (absent key): generic rowFamily — see loop below.
+	}
+
 	type slot struct {
 		fam domain.SourceFamily
 		ok  bool
 	}
+	slots := make([]slot, len(rows))
 	var (
-		en                      domain.SourceFamily
-		enErr                   error
-		ae, adult               slot
-		kodik, animelib, hanime slot
-		ajSibnet, ajAllVideo    slot
-		wg                      sync.WaitGroup
+		en    domain.SourceFamily
+		enErr error
+		wg    sync.WaitGroup
 	)
-
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
-		en, enErr = s.BuildENFamily(ctx)
-	}()
-	go func() { defer wg.Done(); ae.fam, ae.ok = s.aeFamily(ctx, animeID) }()
-	go func() { defer wg.Done(); adult.fam, adult.ok = s.dbRowFamily(ctx, "18anime", "18anime", "adult") }()
-
-	if s.catalog != nil {
-		wg.Add(4)
-		go func() { defer wg.Done(); kodik.fam, kodik.ok = s.kodikFamily(ctx, animeID) }()
-		go func() { defer wg.Done(); animelib.fam, animelib.ok = s.animelibFamily(ctx, animeID) }()
-		go func() { defer wg.Done(); hanime.fam, hanime.ok = s.hanimeFamily(ctx, animeID) }()
-		// AnimeJoy: resolve discovery ONCE, then build BOTH leg families from the
-		// shared teams (no second network call). A discovery ERROR keeps both legs
-		// absent (a transient failure must never surface a misleading no_content);
-		// only a successful-but-empty discovery lets animejoyLegFamily surface
-		// no_content.
-		go func() {
-			defer wg.Done()
-			teams, ajErr := s.catalog.GetAnimejoyTeams(ctx, animeID)
-			if ajErr != nil {
-				return // discovery error → both legs absent (not a misleading no_content)
+	wg.Add(1)
+	go func() { defer wg.Done(); en, enErr = s.BuildENFamily(ctx) }()
+	for i, row := range rows {
+		b, has := builders[row.Name]
+		if has && b == nil {
+			continue // explicit skip (kodik-iframe)
+		}
+		if !has {
+			b = func(ctx context.Context, _ string, row domain.ScraperProvider) (domain.SourceFamily, bool) {
+				return s.rowFamily(ctx, row) // generic default — ANY new row is wired
 			}
-			ajSibnet.fam, ajSibnet.ok = s.animejoyLegFamily(ctx, teams, "animejoy-sibnet", "Sibnet", "sibnet")
-			ajAllVideo.fam, ajAllVideo.ok = s.animejoyLegFamily(ctx, teams, "animejoy-allvideo", "AllVideo", "allvideo")
-		}()
+		}
+		wg.Add(1)
+		go func(i int, row domain.ScraperProvider, b familyBuilder) {
+			defer wg.Done()
+			slots[i].fam, slots[i].ok = b(ctx, animeID, row)
+		}(i, row, b)
 	}
 	wg.Wait()
-
 	if enErr != nil {
 		return nil, enErr
 	}
-	// ae leads (first-party first), then EN, then the rest in stable order.
-	families := make([]domain.SourceFamily, 0, 9)
-	if ae.ok {
-		families = append(families, ae.fam)
+
+	// Assembly: ae leads (first-party first), then EN, then the rest in the
+	// roster's weight order (slots is already weight-sorted via the query).
+	families := make([]domain.SourceFamily, 0, len(rows)+1)
+	var rest []domain.SourceFamily
+	for i, sl := range slots {
+		if !sl.ok {
+			continue
+		}
+		if rows[i].Name == "ae" {
+			families = append(families, sl.fam)
+			continue
+		}
+		rest = append(rest, sl.fam)
 	}
 	families = append(families, en)
-	for _, sl := range []slot{adult, kodik, animelib, hanime, ajSibnet, ajAllVideo} {
-		if sl.ok {
-			families = append(families, sl.fam)
-		}
-	}
+	families = append(families, rest...)
 	return regroupFamilies(families), nil
+}
+
+// displayOf prefers the row's operator-editable DisplayName, falling back to
+// the compiled default label.
+func displayOf(row domain.ScraperProvider, fallback string) string {
+	if row.DisplayName != "" {
+		return row.DisplayName
+	}
+	return fallback
 }
 
 // BuildENFamily reads registered EN providers (enabled + degraded; disabled are
@@ -191,7 +253,7 @@ func (s *Service) BuildENFamily(ctx context.Context) (domain.SourceFamily, error
 		}
 		cap := domain.ProviderCap{
 			Provider:    row.Name,
-			DisplayName: displayName(row.Name),
+			DisplayName: displayOf(row, displayName(row.Name)),
 			Rank:        rankEN(row, hstatus, playable),
 			Variants:    variantsFromTraits(row),
 		}

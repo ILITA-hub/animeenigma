@@ -487,3 +487,52 @@ func TestBuildFamilies_NilCatalogENOnly(t *testing.T) {
 		t.Fatalf("nil catalog should yield EN-only, got %+v", fams)
 	}
 }
+
+// AUTO-608: a brand-new non-EN provider row with NO dedicated family builder
+// must still surface in /capabilities via the generic rowFamily default —
+// the whole point of the roster-driven registry (no code change needed to
+// wire up a new DB row).
+func TestBuildFamilies_UnknownRosterRowGetsGenericFamily(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "newru", Status: domain.StatusEnabled, Group: "ru",
+		DisplayName: "NewRU", SupportsDub: true, PreferenceWeight: 10,
+	})
+	s := NewService(db, nil, nil, nil, nil, nil, nil)
+	report, err := s.Report(context.Background(), "some-anime-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *domain.ProviderCap
+	for _, fam := range report.Families {
+		for i := range fam.Providers {
+			if fam.Providers[i].Provider == "newru" {
+				found = &fam.Providers[i]
+			}
+		}
+	}
+	if found == nil {
+		t.Fatal("new roster row must surface in /capabilities via the generic rowFamily default")
+	}
+	if found.DisplayName != "NewRU" {
+		t.Fatalf("display_name not read from row: %q", found.DisplayName)
+	}
+}
+
+// kodik-iframe is the legacy Classic-Kodik iframe fallback surface, not an
+// aePlayer capability — buildFamilies must explicitly skip it (registry maps
+// it to a nil builder) rather than let the generic default pick it up.
+func TestBuildFamilies_KodikIframeSkipped(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{Name: "kodik-iframe", Status: domain.StatusEnabled, Group: "ru"})
+	s := NewService(db, nil, nil, nil, nil, nil, nil)
+	report, err := s.Report(context.Background(), "some-anime-id-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fam := range report.Families {
+		for _, cap := range fam.Providers {
+			if cap.Provider == "kodik-iframe" {
+				t.Fatal("kodik-iframe is the Classic-Kodik iframe surface, not an aePlayer capability — must be skipped")
+			}
+		}
+	}
+}

@@ -274,41 +274,42 @@ func TestAeFamilyOmittedWhenRowAbsentOrDisabled(t *testing.T) {
 	}
 }
 
-// dbRowFamily is the generic DB-row→family builder shared by the catalog-side
-// providers (18anime/adult here; the JP "raw" provider it also fronted was
-// removed 2026-06-30). Exercise its present / absent / disabled branches.
-func TestDBRowFamilyPresentAndOmitted(t *testing.T) {
-	db := newDB(t, domain.ScraperProvider{
+// rowFamily is the generic DB-row→family builder AUTO-608 generalized from the
+// old name/family-string dbRowFamily: it now takes the row directly (no DB
+// lookup by name) and is both the 18anime builder and buildFamilies' fallback
+// for any brand-new roster row without a dedicated builder. Exercise its
+// present / disabled branches — "absent from roster" is no longer a rowFamily
+// concern now that buildFamilies' roster query is what decides which rows get
+// dispatched at all (see TestBuildFamilies_UnknownRosterRowGetsGenericFamily /
+// TestBuildFamilies_KodikIframeSkipped in families_ru_test.go).
+func TestRowFamilyPresentAndOmitted(t *testing.T) {
+	row := domain.ScraperProvider{
 		Name: "18anime", Status: domain.StatusEnabled, Health: domain.HealthUp,
 		Group: "adult", PreferenceWeight: 70,
-	})
-	s := &Service{db: db}
-	fam, ok := s.dbRowFamily(context.Background(), "18anime", "18anime", "adult")
+	}
+	s := &Service{}
+	fam, ok := s.rowFamily(context.Background(), row)
 	if !ok || fam.Family != "adult" {
 		t.Fatalf("adult family wrong: ok=%v fam=%+v", ok, fam)
 	}
 	p := fam.Providers[0]
-	if p.State != "active" || !p.Selectable || p.Group != "adult" || p.Order != 70 {
+	if p.Provider != "18anime" || p.DisplayName != "18anime" || p.State != "active" || !p.Selectable || p.Group != "adult" || p.Order != 70 {
 		t.Fatalf("adult feed fields wrong: %+v", p)
 	}
-	// absent row → omitted
-	if _, ok := (&Service{db: newDB(t)}).dbRowFamily(context.Background(), "18anime", "18anime", "adult"); ok {
-		t.Error("adult family must be omitted when DB row is absent")
-	}
 	// disabled row → omitted
-	dbd := newDB(t, domain.ScraperProvider{Name: "18anime", Status: domain.StatusDisabled, Group: "adult"})
-	if _, ok := (&Service{db: dbd}).dbRowFamily(context.Background(), "18anime", "18anime", "adult"); ok {
-		t.Error("adult family must be omitted when DB row is disabled")
+	disabled := domain.ScraperProvider{Name: "18anime", Status: domain.StatusDisabled, Group: "adult"}
+	if _, ok := (&Service{}).rowFamily(context.Background(), disabled); ok {
+		t.Error("adult family must be omitted when the row is disabled")
 	}
 }
 
 func TestAdult18animeFamilyPresentAndOmitted(t *testing.T) {
-	db := newDB(t, domain.ScraperProvider{
+	row := domain.ScraperProvider{
 		Name: "18anime", Status: domain.StatusEnabled, Health: domain.HealthUp,
 		Group: "adult", PreferenceWeight: 20, SupportsRaw: true,
-	})
-	s := &Service{db: db}
-	fam, ok := s.dbRowFamily(context.Background(), "18anime", "18anime", "adult")
+	}
+	s := &Service{}
+	fam, ok := s.rowFamily(context.Background(), row)
 	if !ok || fam.Family != "adult" {
 		t.Fatalf("adult family wrong: ok=%v fam=%+v", ok, fam)
 	}
@@ -316,13 +317,25 @@ func TestAdult18animeFamilyPresentAndOmitted(t *testing.T) {
 	if p.Provider != "18anime" || p.State != "active" || !p.Selectable || p.Group != "adult" || p.Order != 20 {
 		t.Fatalf("18anime feed fields wrong: %+v", p)
 	}
-	// absent row → omitted
-	if _, ok := (&Service{db: newDB(t)}).dbRowFamily(context.Background(), "18anime", "18anime", "adult"); ok {
-		t.Error("adult family must be omitted when DB row is absent")
-	}
 	// disabled row → omitted
-	dbd := newDB(t, domain.ScraperProvider{Name: "18anime", Status: domain.StatusDisabled, Group: "adult"})
-	if _, ok := (&Service{db: dbd}).dbRowFamily(context.Background(), "18anime", "18anime", "adult"); ok {
-		t.Error("adult family must be omitted when DB row is disabled")
+	disabled := domain.ScraperProvider{Name: "18anime", Status: domain.StatusDisabled, Group: "adult"}
+	if _, ok := (&Service{}).rowFamily(context.Background(), disabled); ok {
+		t.Error("adult family must be omitted when the row is disabled")
+	}
+}
+
+// A row-level DisplayName override (operator-set in admin) wins over the
+// compiled fallback ("18anime") — the whole point of AUTO-608's displayOf.
+func TestRowFamilyDisplayNameOverride(t *testing.T) {
+	row := domain.ScraperProvider{
+		Name: "18anime", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Group: "adult", DisplayName: "18Anime HD",
+	}
+	fam, ok := (&Service{}).rowFamily(context.Background(), row)
+	if !ok {
+		t.Fatal("adult family expected")
+	}
+	if got := fam.Providers[0].DisplayName; got != "18Anime HD" {
+		t.Fatalf("display_name = %q, want row override %q", got, "18Anime HD")
 	}
 }

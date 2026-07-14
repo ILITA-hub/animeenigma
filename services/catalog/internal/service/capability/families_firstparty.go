@@ -109,19 +109,25 @@ func (s *Service) aeFamily(ctx context.Context, animeID string) (domain.SourceFa
 	return domain.SourceFamily{Family: "ae", Providers: []domain.ProviderCap{pc}}, true
 }
 
-// dbRowFamily builds a single-provider family straight from its stream_providers
-// row — for the trait-only sources (raw JP original-audio, 18anime) that need no
-// live catalog lookup. Phase 1 hasContent=true (always shown when the row is
-// enabled — parity with the old registry, where non-scraper providers always
-// rendered selectable). Omitted when the row is absent or disabled.
-func (s *Service) dbRowFamily(ctx context.Context, providerName, displayName, family string) (domain.SourceFamily, bool) {
-	row, ok := s.providerRow(ctx, providerName)
-	if !ok {
-		return domain.SourceFamily{}, false
+// rowFamily builds a single-provider family straight from a stream_providers
+// row — the generic default for ANY roster row without a dedicated builder
+// (AUTO-608), and the trait-only sources (18anime). hasContent=true (trait-only
+// rows always render selectable; per-title truth needs a dedicated builder).
+// The wire family name is the row name; group adult collapses to "18+" via
+// familyLabel/regroupFamilies as usual (mirrors the old dbRowFamily("18anime",
+// "18anime", "adult") call this replaces — same wire family/label for 18anime).
+func (s *Service) rowFamily(ctx context.Context, row domain.ScraperProvider) (domain.SourceFamily, bool) {
+	pc := domain.ProviderCap{
+		Provider:    row.Name,
+		DisplayName: displayOf(row, displayName(row.Name)),
+		Variants:    variantsFromTraits(row),
 	}
-	pc := domain.ProviderCap{Provider: providerName, DisplayName: displayName, Variants: variantsFromTraits(row)}
 	if !applyFeedFields(ctx, &pc, row, true) {
 		return domain.SourceFamily{}, false
+	}
+	family := row.Name
+	if row.Group == "adult" {
+		family = "adult" // collapses to the "18+" wire label (see familyLabel)
 	}
 	return domain.SourceFamily{Family: family, Providers: []domain.ProviderCap{pc}}, true
 }
