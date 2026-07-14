@@ -116,6 +116,7 @@ func applyFeedFields(ctx context.Context, cap *domain.ProviderCap, row domain.Sc
 	cap.State, cap.Selectable, cap.HackerOnly = state, selectable, hackerOnly
 	cap.Order = row.PreferenceWeight
 	cap.Group = wireGroup(row.Group)
+	cap.PlayerKey = row.PlayerKey
 	cap.Audios = audiosFromTraits(row)
 	cap.Reason = row.Reason
 	cap.PlayabilityIndex = blend.indexFor(cap.Provider, row.Health)

@@ -35,6 +35,10 @@ export interface ProviderCap {
   audios: ('sub' | 'dub')[]
   /** Human-readable explanation for a non-active state (tooltip text). */
   reason?: string
+  /** Legacy watch_history.player namespace key for persistence
+   *  ('english' | 'kodik' | 'ae' | …) — from the roster row (AUTO-608).
+   *  Absent when the provider has no legacy-player identity. */
+  player_key?: string
   /** Real per-title dub language (Phase C source-panel truth) — set ONLY for
    *  the first-party `ae` provider's probed dub variant. Overrides the
    *  group's default language set so an ae English dub routes under EN

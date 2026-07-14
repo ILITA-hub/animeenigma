@@ -518,6 +518,29 @@ func TestBuildFamilies_UnknownRosterRowGetsGenericFamily(t *testing.T) {
 	}
 }
 
+// AUTO-608: the roster row's player_key must reach the wire so the FE can
+// persist watch combos without a hardcoded provider→player switch. Uses the
+// real hanime row/builder (zero-value fakeCatalog → empty episodes →
+// no_content branch) since applyFeedFields runs on that path too.
+func TestFeed_ExposesPlayerKey(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "hanime", Status: domain.StatusEnabled, Group: "adult",
+		PlayerKey: "hanime", DisplayName: "Hanime",
+	})
+	s := NewService(db, nil, fakeCatalog{}, nil, nil, nil, nil)
+	report, err := s.Report(context.Background(), "anime-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fam := range report.Families {
+		for _, cap := range fam.Providers {
+			if cap.Provider == "hanime" && cap.PlayerKey != "hanime" {
+				t.Fatalf("player_key not on the wire: %+v", cap)
+			}
+		}
+	}
+}
+
 // kodik-iframe is the legacy Classic-Kodik iframe fallback surface, not an
 // aePlayer capability — buildFamilies must explicitly skip it (registry maps
 // it to a nil builder) rather than let the generic default pick it up.

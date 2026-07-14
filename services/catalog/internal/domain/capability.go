@@ -32,6 +32,12 @@ type ProviderCap struct {
 	Audios     []string `json:"audios"`      // ["sub","dub"] from supports_* (binary audio model)
 	Reason     string   `json:"reason,omitempty"`
 
+	// PlayerKey is the legacy watch_history.player namespace key for this
+	// provider ('english', 'kodik', 'ae', …) from the roster row. The FE uses
+	// it to persist watch combos without a hardcoded provider→player switch
+	// (AUTO-608). Empty when the row has none.
+	PlayerKey string `json:"player_key,omitempty"`
+
 	// Lang overrides the group's default language set (GROUP_LANGS on the FE)
 	// with the real per-title language a dub was probed in. Set ONLY for the
 	// first-party `ae` provider's real dub variant ("en" | "ru") — every other
