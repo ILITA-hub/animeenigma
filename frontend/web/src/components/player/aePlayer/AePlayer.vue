@@ -3408,7 +3408,7 @@ onMounted(() => {
   void loadEpisodeProgress()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('pagehide', onPageHide)
-  window.addEventListener('pagehide', flushProtocolUsage)
+  window.addEventListener('pagehide', onProtocolUsagePageHide)
   document.addEventListener('visibilitychange', onVisibilityChange)
   document.addEventListener('fullscreenchange', onFullscreenChange)
 })
@@ -3466,6 +3466,15 @@ function flushProtocolUsage(): void {
   }
 }
 
+// pagehide with persisted=true means the page is entering the bfcache
+// (backgrounding, may be restored) — NOT terminal. Emitting+consuming the
+// residency here would double-count this tier's segments if playback resumes
+// and the tier later switches. Only flush on a real unload (persisted=false).
+function onProtocolUsagePageHide(e: PageTransitionEvent): void {
+  if (e.persisted) return
+  flushProtocolUsage()
+}
+
 const unsubResidency = ladder.onResidencyEnd(emitProtocolUsage)
 onUnmounted(unsubResidency)
 
@@ -3501,7 +3510,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pagehide', onPageHide)
   flushProtocolUsage()
-  window.removeEventListener('pagehide', flushProtocolUsage)
+  window.removeEventListener('pagehide', onProtocolUsagePageHide)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   teardownPseudoFs()
