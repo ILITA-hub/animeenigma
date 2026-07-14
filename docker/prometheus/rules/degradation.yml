@@ -70,14 +70,29 @@ groups:
       #
       # Per-signal breach bools keep their identity via the `signal` label so the
       # dashboard can show WHY a level was raised, not just that it was.
+      #
+      # ELEVATED RECALIBRATION 2026-07-14: the original io_full 0.15 / mem_full
+      # 0.05 elevated thresholds sat AT this box's healthy busy baseline, not
+      # above it. 24h live readings: io_full avg 0.104 / p90 0.202 (over 0.15 for
+      # 34% of the day); mem_full avg 0.044 / p90 0.082 (over 0.05 for 51%). The
+      # consequences were both cosmetic and real: HostPressureSustained (L>=1 for
+      # 15m) re-fired ~hourly on the baseline flap, AND the Phase-3 governor sat
+      # at L1 65% of the day, throttling library encode/storyboard/heavy crons
+      # on a box that was otherwise fine (CPU ~22%, MemAvailable ~37%). Raised to
+      # sit ABOVE the p90 so "Elevated" means genuinely elevated again: io_full
+      # 0.15->0.25, mem_full 0.05->0.12. Critical thresholds below are UNCHANGED
+      # (still strictly tighter than these, so the critical=1 => elevated=1
+      # invariant holds) and still catch the real spikes (io_full max 0.452,
+      # mem_full max 0.190). cpu_some (0.25) and mem_available (0.10) never trip
+      # on baseline, so they are left as-is.
       - record: ae:pressure_breach:elevated
         expr: ae:host_psi_cpu_some:ratio > bool 0.25
         labels: {signal: psi_cpu_some}
       - record: ae:pressure_breach:elevated
-        expr: ae:host_psi_io_full:ratio > bool 0.15
+        expr: ae:host_psi_io_full:ratio > bool 0.25
         labels: {signal: psi_io_full}
       - record: ae:pressure_breach:elevated
-        expr: ae:host_psi_mem_full:ratio > bool 0.05
+        expr: ae:host_psi_mem_full:ratio > bool 0.12
         labels: {signal: psi_mem_full}
       - record: ae:pressure_breach:elevated
         expr: ae:host_mem_available:ratio < bool 0.10
