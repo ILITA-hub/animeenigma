@@ -39,7 +39,9 @@ type Config struct {
 	ProbeAnchorUUID string
 	// FFprobePath is the filesystem path (or bare name) of the ffprobe binary.
 	FFprobePath string
-	// ProbeProviders is a comma-separated ordered list of EN providers to probe.
+	// ProbeProviders is an OPTIONAL comma-separated filter over the DB roster's
+	// wirable rows (AUTO-608); empty (the default) means every wirable roster
+	// row is probed.
 	ProbeProviders string
 }
 
@@ -110,11 +112,8 @@ func Load() (*Config, error) {
 		StreamingURL:    getEnv("STREAMING_URL", "http://streaming:8082"),
 		ProbeAnchorUUID: getEnv("PROBE_ANCHOR_UUID", "f0b40660-6627-4a59-8dcf-7ec8596b3623"),
 		FFprobePath:     getEnv("FFPROBE_PATH", "ffprobe"),
-		// ae + kodik-noads carry custom probing rules (library uploads / scraped
-		// ad-free Kodik); animepahe is browser-engine (Camoufox) so it carries a
-		// custom long-timeout resolver; the rest are EN scraper-chain providers.
-		// Order is the dashboard tie-break order.
-		ProbeProviders: getEnv("PROBE_PROVIDERS", "gogoanime,miruro,allanime-okru,nineanime,animepahe,animefever,ae,kodik-noads,animejoy-sibnet,animejoy-allvideo"),
+		// AUTO-608: optional filter; empty = all wirable roster rows.
+		ProbeProviders: getEnv("PROBE_PROVIDERS", ""),
 	}, nil
 }
 

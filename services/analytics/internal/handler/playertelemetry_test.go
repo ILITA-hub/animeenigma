@@ -15,7 +15,7 @@ import (
 // - row 2 (stall): EffectKind, DurationMS
 func TestPlayerTelemetry(t *testing.T) {
 	sink := &effectSink{} // reuse from effects_test.go (same package)
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	body := `{
 		"anime_id": "a1",
@@ -113,7 +113,7 @@ func TestPlayerTelemetry(t *testing.T) {
 // episode=0) because the handler only read the (never-sent) envelope fields.
 func TestPlayerTelemetry_PerEventAnimeID(t *testing.T) {
 	sink := &effectSink{}
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	// No envelope-level anime_id/episode — exactly what the FE sends. A single
 	// batch can also span two different episodes (buffered across a switch).
@@ -164,7 +164,7 @@ func TestPlayerTelemetry_PerEventAnimeID(t *testing.T) {
 // event omits anime_id/episode (smoke-test / older-sender compatibility).
 func TestPlayerTelemetry_EnvelopeFallback(t *testing.T) {
 	sink := &effectSink{}
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	body := `{"anime_id":"env-anime","episode":5,"audio":"dub","lang":"en","events":[
 		{"kind":"resolve","provider":"miruro","latency_ms":800,"outcome":"ok","reached_playback":true}
@@ -190,7 +190,7 @@ func TestPlayerTelemetry_EnvelopeFallback(t *testing.T) {
 // TestPlayerTelemetry_SkipsEmptyProvider: events with empty provider are dropped.
 func TestPlayerTelemetry_SkipsEmptyProvider(t *testing.T) {
 	sink := &effectSink{}
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	body := `{"anime_id":"a1","events":[{"kind":"resolve","provider":"","latency_ms":100}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
@@ -209,7 +209,7 @@ func TestPlayerTelemetry_SkipsEmptyProvider(t *testing.T) {
 // own effect_kind and carries the DOMException name in properties.error_kind.
 func TestPlayerTelemetry_PlaybackStartRejected(t *testing.T) {
 	sink := &effectSink{}
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	body := `{"events":[{"kind":"playback_start_rejected","provider":"kodik","anime_id":"a1","episode":6,"error_kind":"NotAllowedError","audio":"sub","lang":"ru"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
@@ -241,7 +241,7 @@ func TestPlayerTelemetry_PlaybackStartRejected(t *testing.T) {
 // TestPlayerTelemetry_SkipsUnknownKind: events with kind not in {resolve,stall} are dropped.
 func TestPlayerTelemetry_SkipsUnknownKind(t *testing.T) {
 	sink := &effectSink{}
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	body := `{"anime_id":"a1","events":[{"kind":"unknown","provider":"kodik","latency_ms":100}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
@@ -258,7 +258,7 @@ func TestPlayerTelemetry_SkipsUnknownKind(t *testing.T) {
 
 // TestPlayerTelemetry_RejectsMalformed: bad JSON → 400.
 func TestPlayerTelemetry_RejectsMalformed(t *testing.T) {
-	h := NewPlayerTelemetryHandler(&effectSink{})
+	h := NewPlayerTelemetryHandler(&effectSink{}, oldStaticRoster())
 	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader("not json"))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -272,7 +272,7 @@ func TestPlayerTelemetry_RejectsMalformed(t *testing.T) {
 // is merged into Properties.
 func TestPlayerTelemetry_PlaybackFailed(t *testing.T) {
 	sink := &effectSink{}
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	body := `{"events":[{
 		"kind":"playback_failed","provider":"ae","anime_id":"a1","episode":3,
@@ -307,7 +307,7 @@ func TestPlayerTelemetry_PlaybackFailed(t *testing.T) {
 // Properties (provider must be whitelisted — gogoanime is).
 func TestPlayerTelemetry_ProtocolUsage(t *testing.T) {
 	sink := &effectSink{}
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	body := `{"events":[{
 		"kind":"protocol_usage","provider":"gogoanime","anime_id":"a1","episode":1,
@@ -341,7 +341,7 @@ func TestPlayerTelemetry_ProtocolUsage(t *testing.T) {
 // TestPlayerTelemetry_CapsAtHundred: arrays over 100 entries are capped.
 func TestPlayerTelemetry_CapsAtHundred(t *testing.T) {
 	sink := &effectSink{}
-	h := NewPlayerTelemetryHandler(sink)
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
 
 	var b strings.Builder
 	b.WriteString(`{"anime_id":"a1","events":[`)
@@ -362,5 +362,34 @@ func TestPlayerTelemetry_CapsAtHundred(t *testing.T) {
 	}
 	if sink.count() > 100 {
 		t.Fatalf("batch not capped: enqueued %d > 100", sink.count())
+	}
+}
+
+// TestPlayerTelemetry_RosterDrivenWhitelist is the AUTO-608 regression test at
+// the handler level: a provider newly added to the DB roster (but absent from
+// the frozen old static set) is accepted, while one absent from the roster
+// entirely is dropped — proving whitelisting now flows through the injected
+// roster.Client, not a compile-time map.
+func TestPlayerTelemetry_RosterDrivenWhitelist(t *testing.T) {
+	sink := &effectSink{}
+	roster := rosterStub{names: map[string]struct{}{"animejoy-new": {}}}
+	h := NewPlayerTelemetryHandler(sink, roster)
+
+	body := `{"anime_id":"a1","events":[
+		{"kind":"resolve","provider":"animejoy-new","latency_ms":500,"outcome":"ok","reached_playback":true},
+		{"kind":"resolve","provider":"gogoanime","latency_ms":500,"outcome":"ok","reached_playback":true}
+	]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sink.count() != 1 {
+		t.Fatalf("expected 1 event enqueued (roster-known passes, unknown drops), got %d", sink.count())
+	}
+	if got := sink.at(0).Target; got != "animejoy-new" {
+		t.Errorf("Target = %q, want animejoy-new (roster-known provider)", got)
 	}
 }

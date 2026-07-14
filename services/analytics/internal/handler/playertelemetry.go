@@ -23,13 +23,15 @@ const maxPlayerTelemetryBatch = 100
 // It shares the same Sink as CollectHandler and EffectsHandler so all rows
 // flow through the identical InsertBatch write path.
 type PlayerTelemetryHandler struct {
-	sink Sink
+	sink   Sink
+	roster providerRoster
 }
 
 // NewPlayerTelemetryHandler builds a PlayerTelemetryHandler over the shared
-// batcher Sink.
-func NewPlayerTelemetryHandler(sink Sink) *PlayerTelemetryHandler {
-	return &PlayerTelemetryHandler{sink: sink}
+// batcher Sink. roster is the AUTO-608 DB-roster membership check consulted
+// by whitelistProvider; nil is accepted (only synthetic providers pass then).
+func NewPlayerTelemetryHandler(sink Sink, roster providerRoster) *PlayerTelemetryHandler {
+	return &PlayerTelemetryHandler{sink: sink, roster: roster}
 }
 
 // wirePlayerEvent is one player telemetry event in the wire batch.
@@ -99,7 +101,7 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		if we.Provider == "" {
 			continue
 		}
-		provider := whitelistProvider(we.Provider)
+		provider := whitelistProvider(we.Provider, h.roster)
 		if provider == "" {
 			continue
 		}

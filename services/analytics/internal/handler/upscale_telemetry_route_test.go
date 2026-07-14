@@ -73,7 +73,7 @@ func TestUpscaleTelemetryHandler_RouteIsolation(t *testing.T) {
 	router := transport.NewRouter(
 		handler.NewCollectHandler(sink, ""),
 		handler.NewClientErrorHandler(noopClientErrorSink{}, ""),
-		handler.NewPlayerTelemetryHandler(sink),
+		handler.NewPlayerTelemetryHandler(sink, nil), // roster nil ok — route isolation doesn't exercise whitelisting
 		handler.NewEffectsHandler(sink),
 		handler.NewAdminHandler(noopEraser{}),
 		nil, // readThresholds — optional, guarded by NewRouter's nil-check

@@ -15,12 +15,16 @@ import (
 // PlayabilityHandler serves GET /internal/playability?anime_id=<id> with
 // per-provider decayed watch/probe weights. Docker-network-only.
 type PlayabilityHandler struct {
-	conn chdriver.Conn
+	conn   chdriver.Conn
+	roster providerRoster
 }
 
 // NewPlayabilityHandler builds the handler over the shared CH connection.
-func NewPlayabilityHandler(conn chdriver.Conn) *PlayabilityHandler {
-	return &PlayabilityHandler{conn: conn}
+// roster is the AUTO-608 DB-roster membership check used to filter the
+// scores query's provider roster; nil is accepted (roster filter then rejects
+// everything, matching whitelistProvider's nil-safe behavior).
+func NewPlayabilityHandler(conn chdriver.Conn, roster providerRoster) *PlayabilityHandler {
+	return &PlayabilityHandler{conn: conn, roster: roster}
 }
 
 type playabilityResponse struct {
@@ -45,8 +49,7 @@ func (h *PlayabilityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scores := service.BuildPlayabilityScores(watch, probe, func(p string) bool {
-		_, ok := knownProviders[p]
-		return ok
+		return whitelistProvider(p, h.roster) != ""
 	})
 
 	w.Header().Set("Content-Type", "application/json")

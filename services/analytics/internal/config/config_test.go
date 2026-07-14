@@ -21,7 +21,9 @@ func TestLoad_ProbeDefaults(t *testing.T) {
 	if cfg.FFprobePath != "ffprobe" {
 		t.Errorf("FFprobePath = %q, want ffprobe", cfg.FFprobePath)
 	}
-	if cfg.ProbeProviders != "gogoanime,miruro,allanime-okru,nineanime,animepahe,animefever,ae,kodik-noads,animejoy-sibnet,animejoy-allvideo" {
-		t.Errorf("ProbeProviders = %q, want gogoanime,miruro,allanime-okru,...,animejoy-allvideo", cfg.ProbeProviders)
+	// AUTO-608: PROBE_PROVIDERS is now an optional filter over the DB roster's
+	// wirable rows; the default is empty (= no filter, every wirable row probed).
+	if cfg.ProbeProviders != "" {
+		t.Errorf("ProbeProviders = %q, want \"\" (optional filter, default = all wirable roster rows)", cfg.ProbeProviders)
 	}
 }

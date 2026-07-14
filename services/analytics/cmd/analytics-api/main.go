@@ -28,6 +28,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/observ"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/probe"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/analytics/internal/roster"
 	svc "github.com/ILITA-hub/animeenigma/services/analytics/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/transport"
 	"github.com/robfig/cron/v3"
@@ -112,6 +113,14 @@ func main() {
 	}).WithLogger(log).WithDropHook(func() { observ.EventsDropped.Inc() })
 	batcher.Start()
 
+	// AUTO-608: the DB stream_providers roster (catalog /internal/scraper/providers)
+	// is the single source of truth for provider EXISTENCE — it feeds the
+	// player-telemetry whitelist, the playability roster filter, and (below,
+	// when ClickHouse is wired) probe-target membership. 60s TTL, last-good
+	// fallback, embedded cold-start snapshot; safe to construct before catalog
+	// is reachable.
+	rosterClient := roster.New(cfg.CatalogURL, time.Minute)
+
 	collectHandler := handler.NewCollectHandler(countingSink{batcher}, cfg.IPSalt)
 	// Log-only FE error sink — one structured Warnw line per accepted frontend
 	// error (→ ClickHouse otel_logs via the OTel filelog receiver) + a
@@ -120,7 +129,7 @@ func main() {
 	// Player telemetry handler shares the same batcher Sink — player resolve/stall
 	// rows flow through the identical InsertBatch write path as clickstream rows,
 	// stored under effect_kind "player_resolve" / "player_stall".
-	playerTelemetryHandler := handler.NewPlayerTelemetryHandler(countingSink{batcher})
+	playerTelemetryHandler := handler.NewPlayerTelemetryHandler(countingSink{batcher}, rosterClient)
 	// The effects handler shares the same batcher Sink — effect rows flow
 	// through the identical InsertBatch write path as clickstream rows.
 	effectsHandler := handler.NewEffectsHandler(countingSink{batcher})
@@ -195,18 +204,37 @@ func main() {
 				},
 			}
 
+			// AUTO-608: probe-target membership comes from the DB roster (the
+			// catalog probe-plan already gates WHEN each row is probed; this
+			// gates WHAT this binary can probe). PROBE_PROVIDERS is now an
+			// OPTIONAL comma-separated filter (unset ⇒ every wirable row).
+			var filter map[string]bool
+			if cfg.ProbeProviders != "" {
+				filter = map[string]bool{}
+				for _, n := range strings.Split(cfg.ProbeProviders, ",") {
+					if n = strings.TrimSpace(n); n != "" {
+						filter[n] = true
+					}
+				}
+			}
 			var targets []probe.ProbeTarget
-			for _, name := range strings.Split(cfg.ProbeProviders, ",") {
-				name = strings.TrimSpace(name)
-				if name == "" {
+			for _, row := range rosterClient.Rows(context.Background()) {
+				if filter != nil && !filter[row.Name] {
 					continue
 				}
-				if b, ok := build[name]; ok {
+				if b, ok := build[row.Name]; ok {
 					targets = append(targets, b())
 					continue
 				}
-				// Default: an EN scraper provider — shared spotlight set + scraper resolver.
-				targets = append(targets, probe.ProbeTarget{Provider: name, AnimeSet: spotlight, Resolver: scraperRes})
+				if row.ScraperOperated && row.Group == "en" {
+					// Default: EN scraper provider — shared spotlight set + scraper resolver.
+					targets = append(targets, probe.ProbeTarget{Provider: row.Name, AnimeSet: spotlight, Resolver: scraperRes})
+					continue
+				}
+				// Intentionally unprobeable (kodik-iframe: no direct stream; hanime/
+				// animelib/18anime: no probe resolver built). Logged, not gauged —
+				// see plan deviation #2.
+				log.Infow("probe target skipped — no resolver for roster row", "provider", row.Name, "group", row.Group)
 			}
 
 			pool := probe.NewHTTPPopularPool(cfg.CatalogURL, nil)
@@ -246,7 +274,7 @@ func main() {
 	// probe-up decay) read from CH tables.
 	var playabilityHandler *handler.PlayabilityHandler
 	if chConn != nil {
-		playabilityHandler = handler.NewPlayabilityHandler(chConn)
+		playabilityHandler = handler.NewPlayabilityHandler(chConn, rosterClient)
 	}
 
 	// Degradation-transition handler (graceful-degradation Phase 2): only wired
