@@ -51,27 +51,27 @@ export function rowsFromReport(report: CapabilityReport | null, filter: RowFilte
   return rows.sort((a, b) => b.order - a.order)
 }
 
-/** Provider id → its backend `group` ('en' | 'ru' | 'adult' | 'firstparty'), read
- *  straight from the capability feed. Single source of truth for "which language
- *  facet / backend serves this provider" — the FE no longer reads the coarse
- *  `family` label. */
-export function groupOfProvider(report: CapabilityReport | null, providerId: string): string | undefined {
+/** Find a provider's cap anywhere in the report (shared scan for the
+ *  per-field getters below). */
+function capOfProvider(report: CapabilityReport | null, providerId: string): ProviderCap | undefined {
   if (!report || !Array.isArray(report.families)) return undefined
   for (const fam of report.families) {
     for (const cap of fam.providers ?? []) {
-      if (cap.provider === providerId) return cap.group
+      if (cap.provider === providerId) return cap
     }
   }
   return undefined
 }
 
+/** Provider id → its backend `group` ('en' | 'ru' | 'adult' | 'firstparty'), read
+ *  straight from the capability feed. Single source of truth for "which language
+ *  facet / backend serves this provider" — the FE no longer reads the coarse
+ *  `family` label. */
+export function groupOfProvider(report: CapabilityReport | null, providerId: string): string | undefined {
+  return capOfProvider(report, providerId)?.group
+}
+
 /** The roster player_key for a provider id, from the capability report (AUTO-608). */
 export function playerKeyOfProvider(report: CapabilityReport | null, providerId: string): string | undefined {
-  if (!report || !Array.isArray(report.families)) return undefined
-  for (const fam of report.families) {
-    for (const cap of fam.providers ?? []) {
-      if (cap.provider === providerId) return cap.player_key
-    }
-  }
-  return undefined
+  return capOfProvider(report, providerId)?.player_key
 }

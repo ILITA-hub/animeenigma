@@ -44,14 +44,13 @@ export function classifyPlaybackFailure(i: FailureInputs): FailureDecision {
   // effect_kind='player_failed' rows and doesn't parse the tag value, so
   // renaming it would be a no-op for the alert but a needless wire-format
   // break for anything else consuming the telemetry.
-  const isFirstParty = i.firstParty
   // Will the auto chain actually switch to another source?
   const willSwitch =
     i.candidateExists && i.providerAutoSelected && !i.roomPinned && !i.attemptsExceeded
   // The auto chain ran out → the viewer sees the error overlay.
   const exhausted = !willSwitch && i.providerAutoSelected && !i.roomPinned
 
-  if (isFirstParty) return { emit: true, tag: 'ae_failed', exhausted }
+  if (i.firstParty) return { emit: true, tag: 'ae_failed', exhausted }
   if (exhausted) return { emit: true, tag: 'all_exhausted', exhausted: true }
   return { emit: false }
 }

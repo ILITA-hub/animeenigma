@@ -1017,7 +1017,8 @@ func AllanimeOkruCryptoGateLifted(db *gorm.DB) error {
 // BackfillProviderIdentityV1 stamps display_name/player_key/anime_level onto
 // pre-existing prod rows exactly once (AUTO-608). The seed is insert-if-absent
 // and never updates prod rows; this run-once guarded migration is what carries
-// the new identity columns to live DBs. Values mirror the seed table one-for-one.
+// the new identity columns to live DBs. It reads the values straight off
+// defaultProviders (the seed table), so the two can never drift.
 func BackfillProviderIdentityV1(db *gorm.DB) error {
 	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
 		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
@@ -1030,37 +1031,14 @@ func BackfillProviderIdentityV1(db *gorm.DB) error {
 	if guards > 0 {
 		return nil // applied — never clobber later operator edits
 	}
-	type identity struct {
-		display   string
-		playerKey string
-		animeLvl  bool
-	}
-	identities := map[string]identity{
-		"gogoanime":         {"GogoAnime", "english", true},
-		"animepahe":         {"AnimePahe", "english", true},
-		"allanime":          {"AllAnime", "english", true},
-		"allanime-okru":     {"AllAnime (OK.ru)", "english", true},
-		"animefever":        {"AnimeFever", "english", true},
-		"miruro":            {"Miruro", "english", true},
-		"nineanime":         {"9anime", "english", true},
-		"animekai":          {"AnimeKai", "english", true},
-		"18anime":           {"18anime", "hanime", false},
-		"ae":                {"AnimeEnigma", "ae", true},
-		"kodik-noads":       {"Kodik", "kodik", true},
-		"kodik-iframe":      {"Kodik (iframe)", "kodik", true},
-		"animelib":          {"AniLib", "animelib", true},
-		"hanime":            {"Hanime", "hanime", false},
-		"animejoy-sibnet":   {"Sibnet", "animejoy-sibnet", true},
-		"animejoy-allvideo": {"AllVideo", "animejoy-allvideo", true},
-	}
-	for name, id := range identities {
-		if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", name).
+	for _, p := range defaultProviders {
+		if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", p.Name).
 			Updates(map[string]any{
-				"display_name": id.display,
-				"player_key":   id.playerKey,
-				"anime_level":  id.animeLvl,
+				"display_name": p.DisplayName,
+				"player_key":   p.PlayerKey,
+				"anime_level":  p.AnimeLevel,
 			}).Error; err != nil {
-			return fmt.Errorf("backfill provider identity %q: %w", name, err)
+			return fmt.Errorf("backfill provider identity %q: %w", p.Name, err)
 		}
 		// RowsAffected 0 is fine — absent rows are created complete by the seed.
 	}
