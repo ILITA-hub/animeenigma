@@ -51,7 +51,7 @@ func (t *Telegram) Send(ctx context.Context, text string) error {
 		// net/http returns a *url.Error whose Error() embeds the full request
 		// URL (token included) — redact before wrapping so the token can
 		// never end up in a log line via err.Error().
-		return fmt.Errorf("telegram send: %s", t.redact(err.Error()))
+		return fmt.Errorf("telegram send: do request: %s", t.redact(err.Error()))
 	}
 	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

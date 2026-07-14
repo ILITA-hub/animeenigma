@@ -32,3 +32,21 @@ func TestNoop_Send_NoError(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A transport failure surfaces a *url.Error whose Error() embeds the full
+// request URL — token included. Send must redact the token before wrapping so
+// it can never reach a log line via err.Error(). Port 1 on loopback is
+// guaranteed-refused, keeping this hermetic and fast (no real network).
+func TestTelegram_Send_RedactsTokenOnTransportError(t *testing.T) {
+	tg := NewTelegram("SECRETTOKEN", "-100123", "http://127.0.0.1:1", nil)
+	err := tg.Send(context.Background(), "boom")
+	if err == nil {
+		t.Fatal("expected transport error, got nil")
+	}
+	if strings.Contains(err.Error(), "SECRETTOKEN") {
+		t.Fatalf("token leaked in error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "REDACTED") {
+		t.Fatalf("expected REDACTED placeholder in error, got: %v", err)
+	}
+}
