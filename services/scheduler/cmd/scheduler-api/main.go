@@ -71,6 +71,7 @@ func main() {
 		&domain.ExportJob{},
 		&domain.AnimeLoadTask{},
 		&domain.MALShikimoriMapping{},
+		&domain.JobSuccess{},
 	); err != nil {
 		log.Warnw("failed to auto-migrate tables", "error", err)
 	}
@@ -174,6 +175,19 @@ func main() {
 	// subtitle_probe, and playability_canary against policy-service's
 	// /admin/policy routines. Fail-open (unreachable ⇒ jobs still run).
 	jobService.SetMaintenanceGate(maintenancegate.New(cfg.Jobs.PolicyServiceURL, 3*time.Second))
+
+	// Persist + re-seed per-job last-success timestamps so the freshness gauge
+	// survives restarts (a redeploy used to wipe it and false-page the
+	// scheduler-sync-stale no-data alert — AUTO-610/611).
+	jobSuccessRepo := repo.NewJobSuccessRepository(db.DB)
+	jobService.SetSuccessStore(jobSuccessRepo)
+	if rows, err := jobSuccessRepo.All(context.Background()); err != nil {
+		log.Warnw("failed to load persisted job last-success timestamps", "error", err)
+	} else {
+		seeded := service.SeedLastSuccess(rows, log)
+		log.Infow("seeded job last-success gauge", "series", seeded, "rows", len(rows))
+	}
+
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler

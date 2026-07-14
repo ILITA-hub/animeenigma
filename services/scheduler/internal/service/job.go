@@ -26,6 +26,7 @@ type JobService struct {
 	fanficDailyJob             *jobs.FanficDailyJob
 	shed                       shedChecker
 	maint                      *maintenancegate.Client
+	successStore               successStore
 	log                        *logger.Logger
 	lastShikimoriRun           time.Time
 	lastCleanupRun             time.Time
@@ -145,7 +146,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		} else {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("shikimori_sync", "success").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("shikimori_sync").Observe(time.Since(start).Seconds())
-			metrics.SchedulerJobLastSuccess.WithLabelValues("shikimori_sync").SetToCurrentTime()
+			s.recordSuccess(ctx, "shikimori_sync")
 			s.lastShikimoriRun = time.Now()
 			s.log.Info("Shikimori sync completed successfully")
 			s.postStatus(ctx, "shikimori_sync", true, "sync ok")
@@ -167,7 +168,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		} else {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("cleanup", "success").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("cleanup").Observe(time.Since(start).Seconds())
-			metrics.SchedulerJobLastSuccess.WithLabelValues("cleanup").SetToCurrentTime()
+			s.recordSuccess(ctx, "cleanup")
 			s.lastCleanupRun = time.Now()
 			s.log.Info("cleanup completed successfully")
 		}
@@ -191,7 +192,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		} else {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("top_anime_sync", "success").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("top_anime_sync").Observe(time.Since(start).Seconds())
-			metrics.SchedulerJobLastSuccess.WithLabelValues("top_anime_sync").SetToCurrentTime()
+			s.recordSuccess(ctx, "top_anime_sync")
 			s.lastTopAnimeRun = time.Now()
 			s.log.Info("top anime sync completed successfully")
 		}
@@ -215,7 +216,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		} else {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("calendar_sync", "success").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("calendar_sync").Observe(time.Since(start).Seconds())
-			metrics.SchedulerJobLastSuccess.WithLabelValues("calendar_sync").SetToCurrentTime()
+			s.recordSuccess(ctx, "calendar_sync")
 			s.lastCalendarRun = time.Now()
 			s.log.Info("calendar sync completed successfully")
 		}
@@ -249,7 +250,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("playback_probe", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("playback_probe").Observe(time.Since(start).Seconds())
-				metrics.SchedulerJobLastSuccess.WithLabelValues("playback_probe").SetToCurrentTime()
+				s.recordSuccess(ctx, "playback_probe")
 				s.lastProbeRun = time.Now()
 				s.log.Info("playback-health probe completed successfully")
 				s.postStatus(ctx, "playability_canary", true, "probe ok")
@@ -282,7 +283,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("read_threshold_recompute", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("read_threshold_recompute").Observe(time.Since(start).Seconds())
-				metrics.SchedulerJobLastSuccess.WithLabelValues("read_threshold_recompute").SetToCurrentTime()
+				s.recordSuccess(ctx, "read_threshold_recompute")
 				s.lastReadThresholdRun = time.Now()
 				s.log.Info("read-threshold recompute completed successfully")
 			}
@@ -313,7 +314,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("provider_ranking_recompute", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("provider_ranking_recompute").Observe(time.Since(start).Seconds())
-				metrics.SchedulerJobLastSuccess.WithLabelValues("provider_ranking_recompute").SetToCurrentTime()
+				s.recordSuccess(ctx, "provider_ranking_recompute")
 				s.lastProviderRankingRun = time.Now()
 				s.log.Info("provider-ranking recompute completed successfully")
 			}
@@ -343,7 +344,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("subtitle_probe", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("subtitle_probe").Observe(time.Since(start).Seconds())
-				metrics.SchedulerJobLastSuccess.WithLabelValues("subtitle_probe").SetToCurrentTime()
+				s.recordSuccess(ctx, "subtitle_probe")
 				s.lastSubtitleProbeRun = time.Now()
 				s.log.Info("subtitle-health probe completed successfully")
 				s.postStatus(ctx, "subtitle_probe", true, "probe ok")
@@ -375,7 +376,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("autocache_logic_a", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("autocache_logic_a").Observe(time.Since(start).Seconds())
-				metrics.SchedulerJobLastSuccess.WithLabelValues("autocache_logic_a").SetToCurrentTime()
+				s.recordSuccess(ctx, "autocache_logic_a")
 				s.lastAutocacheLogicARun = time.Now()
 				s.log.Info("autocache Logic A sweep completed successfully")
 			}
@@ -405,7 +406,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("autocache_prediction", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("autocache_prediction").Observe(time.Since(start).Seconds())
-				metrics.SchedulerJobLastSuccess.WithLabelValues("autocache_prediction").SetToCurrentTime()
+				s.recordSuccess(ctx, "autocache_prediction")
 				s.lastAutocachePredictionRun = time.Now()
 				s.log.Info("autocache prediction sweep completed successfully")
 			}
@@ -437,7 +438,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 			} else {
 				metrics.SchedulerJobExecutionsTotal.WithLabelValues("fanfic_daily", "success").Inc()
 				metrics.SchedulerJobDuration.WithLabelValues("fanfic_daily").Observe(time.Since(start).Seconds())
-				metrics.SchedulerJobLastSuccess.WithLabelValues("fanfic_daily").SetToCurrentTime()
+				s.recordSuccess(ctx, "fanfic_daily")
 				s.lastFanficDailyRun = time.Now()
 				s.log.Info("fanfic daily ensure-daily trigger completed successfully")
 			}
@@ -465,7 +466,7 @@ func (s *JobService) TriggerShikimoriSync(ctx context.Context) {
 	if err := s.shikimoriJob.Run(ctx); err != nil {
 		s.log.Errorw("Shikimori sync failed", "error", err)
 	} else {
-		metrics.SchedulerJobLastSuccess.WithLabelValues("shikimori_sync").SetToCurrentTime()
+		s.recordSuccess(ctx, "shikimori_sync")
 		s.lastShikimoriRun = time.Now()
 		s.log.Info("Shikimori sync completed successfully")
 	}
@@ -477,7 +478,7 @@ func (s *JobService) TriggerCleanup(ctx context.Context) {
 	if err := s.cleanupJob.Run(ctx); err != nil {
 		s.log.Errorw("cleanup failed", "error", err)
 	} else {
-		metrics.SchedulerJobLastSuccess.WithLabelValues("cleanup").SetToCurrentTime()
+		s.recordSuccess(ctx, "cleanup")
 		s.lastCleanupRun = time.Now()
 		s.log.Info("cleanup completed successfully")
 	}
@@ -489,7 +490,7 @@ func (s *JobService) TriggerTopAnimeSync(ctx context.Context) {
 	if err := s.topAnimeJob.Run(ctx); err != nil {
 		s.log.Errorw("top anime sync failed", "error", err)
 	} else {
-		metrics.SchedulerJobLastSuccess.WithLabelValues("top_anime_sync").SetToCurrentTime()
+		s.recordSuccess(ctx, "top_anime_sync")
 		s.lastTopAnimeRun = time.Now()
 		s.log.Info("top anime sync completed successfully")
 	}
@@ -501,7 +502,7 @@ func (s *JobService) TriggerCalendarSync(ctx context.Context) {
 	if err := s.calendarJob.Run(ctx); err != nil {
 		s.log.Errorw("calendar sync failed", "error", err)
 	} else {
-		metrics.SchedulerJobLastSuccess.WithLabelValues("calendar_sync").SetToCurrentTime()
+		s.recordSuccess(ctx, "calendar_sync")
 		s.lastCalendarRun = time.Now()
 		s.log.Info("calendar sync completed successfully")
 	}
@@ -518,7 +519,7 @@ func (s *JobService) TriggerPlaybackProbe(ctx context.Context) {
 	if err := s.probeTriggerJob.Run(ctx); err != nil {
 		s.log.Errorw("playback-health probe failed", "error", err)
 	} else {
-		metrics.SchedulerJobLastSuccess.WithLabelValues("playback_probe").SetToCurrentTime()
+		s.recordSuccess(ctx, "playback_probe")
 		s.lastProbeRun = time.Now()
 		s.log.Info("playback-health probe completed successfully")
 	}
