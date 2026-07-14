@@ -16,6 +16,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
+	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/alert"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/catalog"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/domain"
@@ -74,8 +75,14 @@ func main() {
 	generator := service.NewGenerator(groqClient, fanficRepo, quota, catalogClient, cfg.Groq.Model, cfg.ContinueContextRunes, log)
 	h := handler.NewHandler(generator, fanficRepo, log)
 
+	// TODO(task-9): finalize the alerter (real Telegram, not Noop) and the
+	// animePool/lang config knobs (FANFIC_DAILY_ANIME_POOL / FANFIC_DAILY_LANG
+	// or similar) once the scheduler wiring for the daily pick lands.
+	dailyService := service.NewDailyService(groqClient, fanficRepo, catalogClient, alert.NewNoop(), cfg.Groq.Model, nil, "ru", nil, log)
+	dh := handler.NewDailyHandler(dailyService)
+
 	mc := metrics.NewCollector("fanfic")
-	router := transport.NewRouter(h, cfg.JWT, log, mc)
+	router := transport.NewRouter(h, dh, cfg.JWT, log, mc)
 
 	srv := &http.Server{
 		Addr:        cfg.Server.Address(),

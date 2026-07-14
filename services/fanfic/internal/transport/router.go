@@ -14,15 +14,22 @@ import (
 
 // NewRouter builds the chi router for the fanfic service.
 //
-//	GET    /health                  (public, GET+HEAD)
-//	GET    /metrics                (public, prom)
-//	POST   /api/fanfic/generate    (JWT) — SSE
-//	POST   /api/fanfic/{id}/continue (JWT) — SSE, appends next part
-//	GET    /api/fanfic             (JWT) — list
-//	GET    /api/fanfic/tags        (JWT) — curated tags (registered before /{id})
-//	GET    /api/fanfic/{id}        (JWT)
-//	DELETE /api/fanfic/{id}        (JWT)
-func NewRouter(h *handler.Handler, jwtConfig authz.JWTConfig, log *logger.Logger, mc *metrics.Collector) http.Handler {
+//	GET    /health                     (public, GET+HEAD)
+//	GET    /metrics                    (public, prom)
+//	GET    /api/fanfic/daily           (optional-JWT) — "Фанфик дня" public reader
+//	POST   /api/fanfic/generate        (JWT) — SSE
+//	POST   /api/fanfic/{id}/continue   (JWT) — SSE, appends next part
+//	GET    /api/fanfic                 (JWT) — list
+//	GET    /api/fanfic/tags            (JWT) — curated tags (registered before /{id})
+//	GET    /api/fanfic/{id}            (JWT)
+//	DELETE /api/fanfic/{id}            (JWT)
+//	GET    /internal/fanfic/daily          (docker-network only, no JWT) — compact spotlight DTO
+//	POST   /internal/fanfic/ensure-daily   (docker-network only, no JWT) — scheduler cron hook
+//
+// dh may be nil (e.g. a caller that hasn't wired DailyService yet); the three
+// daily/internal routes are only registered when it's non-nil, so a nil dh
+// degrades to those routes 404ing instead of panicking.
+func NewRouter(h *handler.Handler, dh *handler.DailyHandler, jwtConfig authz.JWTConfig, log *logger.Logger, mc *metrics.Collector) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -41,6 +48,20 @@ func NewRouter(h *handler.Handler, jwtConfig authz.JWTConfig, log *logger.Logger
 	r.Get("/metrics", func(w http.ResponseWriter, req *http.Request) {
 		metrics.Handler().ServeHTTP(w, req)
 	})
+
+	if dh != nil {
+		// Public daily reader — optional-JWT (NOT the mandatory AuthMiddleware
+		// below, which 401s anon). Registered OUTSIDE the "/api/fanfic" JWT
+		// group so anon readers get a 200, while OptionalAuth still attaches
+		// claims to the context when a bearer IS present (Public needs to
+		// distinguish anon vs logged-in for explicit-content gating).
+		r.With(OptionalAuth(jwtConfig)).Get("/api/fanfic/daily", dh.Public)
+
+		// Internal — docker-network only, gateway does not proxy /internal/*,
+		// so these carry no auth middleware at all.
+		r.Get("/internal/fanfic/daily", dh.Internal)
+		r.Post("/internal/fanfic/ensure-daily", dh.Ensure)
+	}
 
 	r.Route("/api/fanfic", func(r chi.Router) {
 		r.Use(AuthMiddleware(jwtConfig))
@@ -74,6 +95,25 @@ func AuthMiddleware(jwtConfig authz.JWTConfig) func(http.Handler) http.Handler {
 			}
 			ctx := authz.ContextWithClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// OptionalAuth attaches JWT claims to the context when a bearer token is
+// present and valid, but — unlike AuthMiddleware — never 401s: an absent or
+// invalid token just falls through anonymously. Used ONLY for the public
+// daily-fanfic reader, which must serve anon readers but still needs to tell
+// anon apart from logged-in for explicit-content gating.
+func OptionalAuth(jwtConfig authz.JWTConfig) func(http.Handler) http.Handler {
+	jwtManager := authz.NewJWTManager(jwtConfig)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if token := httputil.BearerToken(r); token != "" {
+				if claims, err := jwtManager.ValidateAccessToken(token); err == nil {
+					r = r.WithContext(authz.ContextWithClaims(r.Context(), claims))
+				}
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }
