@@ -59,3 +59,36 @@ func TestFetchSynopsis_ErrorIsGraceful(t *testing.T) {
 		t.Fatalf("synopsis should be empty on error, got %q", synopsis)
 	}
 }
+
+// TestFetchMeta uses the real domain.Anime JSON tags (verified against
+// services/catalog/internal/domain/anime.go): japanese title is "name_jp"
+// (NOT "japanese" — the catalog Anime struct has no bare "japanese" field),
+// poster is "poster_url".
+func TestFetchMeta(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"data":{"name":"Naruto","name_jp":"ナルト","poster_url":"http://p/x.jpg","description":"d"}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, time.Second, nil)
+	m, err := c.FetchMeta(context.Background(), "abc", "")
+	if err != nil || m.Poster != "http://p/x.jpg" || m.Japanese != "ナルト" || m.Title != "Naruto" || m.Synopsis != "d" {
+		t.Fatalf("meta=%+v err=%v", m, err)
+	}
+}
+
+func TestFetchMeta_ErrorIsGraceful(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, 2*time.Second, nil)
+	m, err := c.FetchMeta(context.Background(), "abc", "")
+	if err == nil {
+		t.Fatal("expected error on 500")
+	}
+	if m != (AnimeMeta{}) {
+		t.Fatalf("expected zero-value AnimeMeta on error, got %+v", m)
+	}
+}
