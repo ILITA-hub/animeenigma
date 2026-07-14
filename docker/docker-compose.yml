@@ -910,6 +910,9 @@ services:
       PLAYBACK_PROBE_CRON: "0 */6 * * *"
       SUBTITLE_PROBE_CRON: "${SUBTITLE_PROBE_CRON:-*/5 * * * *}"
       SCRAPER_BASE_URL: http://scraper:8088
+      # Daily Fanfic spotlight — nightly ensure-daily trigger (04:30 UTC)
+      FANFIC_SERVICE_URL: http://fanfic:8097
+      FANFIC_DAILY_CRON: "${FANFIC_DAILY_CRON:-30 4 * * *}"
       CANARY_REPORT_DIR: /data/reports/canary-runs
       TRACING_ENABLED: "true"
     volumes:
@@ -1308,6 +1311,11 @@ services:
       CATALOG_URL: http://catalog:8081
       FANFIC_CATALOG_TIMEOUT: 5s
       FANFIC_CONTINUE_CONTEXT_RUNES: "24000"
+      # Daily Fanfic spotlight — bot fallback generation + Groq key-probe alert
+      FANFIC_DAILY_ANIME_POOL: "${FANFIC_DAILY_ANIME_POOL:-20,21,1735,52991,16498,5114}"
+      FANFIC_BOT_LANGUAGE: ${FANFIC_BOT_LANGUAGE:-ru}
+      TELEGRAM_ALERTS_BOT_TOKEN: ${TELEGRAM_ALERTS_BOT_TOKEN:-}
+      TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8097:8097"
