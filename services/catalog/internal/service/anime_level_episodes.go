@@ -8,10 +8,13 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
-// Anime-level (team-agnostic) players: aePlayer persists translation_id='' for
-// these, so "latest available episode" is resolved at the anime level — no
-// translation/team id. See spec 2026-06-18-aeplayer-notification-coverage.
-func isAnimeLevelPlayer(player string) bool {
+// IsAnimeLevelPlayer reports whether player is anime-level (team-agnostic):
+// aePlayer persists translation_id='' for these, so "latest available
+// episode" is resolved at the anime level — no translation/team id. See spec
+// 2026-06-18-aeplayer-notification-coverage. Exported so the internal
+// episodes HTTP handler's own request-validation gate shares this single
+// allowlist instead of hand-rolling a second copy.
+func IsAnimeLevelPlayer(player string) bool {
 	switch player {
 	case "english", "ae", "animejoy-sibnet", "animejoy-allvideo":
 		return true

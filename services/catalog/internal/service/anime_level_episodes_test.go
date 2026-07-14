@@ -51,13 +51,13 @@ func newResolver(fnd animeFinder, scr scraperEpisodeLister, raw rawEpisodeLister
 
 func TestIsAnimeLevelPlayer(t *testing.T) {
 	for _, p := range []string{"english", "ae", "animejoy-sibnet", "animejoy-allvideo"} {
-		if !isAnimeLevelPlayer(p) {
-			t.Errorf("isAnimeLevelPlayer(%q) = false, want true", p)
+		if !IsAnimeLevelPlayer(p) {
+			t.Errorf("IsAnimeLevelPlayer(%q) = false, want true", p)
 		}
 	}
 	for _, p := range []string{"kodik", "animelib", "hanime", ""} {
-		if isAnimeLevelPlayer(p) {
-			t.Errorf("isAnimeLevelPlayer(%q) = true, want false", p)
+		if IsAnimeLevelPlayer(p) {
+			t.Errorf("IsAnimeLevelPlayer(%q) = true, want false", p)
 		}
 	}
 }

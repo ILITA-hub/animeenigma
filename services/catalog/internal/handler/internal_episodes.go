@@ -84,10 +84,11 @@ func (h *InternalEpisodesHandler) GetLatestEpisode(w http.ResponseWriter, r *htt
 	language := q.Get("language")
 
 	// Anime-level players (aePlayer, empty translation_id): english/ae/
-	// animejoy-sibnet/animejoy-allvideo. Legacy translation-specific players:
-	// kodik/animelib (accept with OR without translation_id; empty →
-	// any-team max, present → legacy path).
-	animeLevel := player == "english" || player == "ae" || player == "animejoy-sibnet" || player == "animejoy-allvideo"
+	// animejoy-sibnet/animejoy-allvideo — single source of truth shared with
+	// the service layer's own dispatch (service.IsAnimeLevelPlayer). Legacy
+	// translation-specific players: kodik/animelib (accept with OR without
+	// translation_id; empty → any-team max, present → legacy path).
+	animeLevel := service.IsAnimeLevelPlayer(player)
 	legacy := player == "kodik" || player == "animelib"
 	if !animeLevel && !legacy {
 		httputil.BadRequest(w, "player not supported by detector")

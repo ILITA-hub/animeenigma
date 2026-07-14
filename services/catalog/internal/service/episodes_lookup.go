@@ -97,7 +97,7 @@ func (s *EpisodesLookupService) LatestAvailable(
 	if shikimoriID == "" {
 		return EpisodesLookupResult{}, apperrors.InvalidInput("shikimori_id required")
 	}
-	animeLevel := isAnimeLevelPlayer(player)
+	animeLevel := IsAnimeLevelPlayer(player)
 
 	cacheKey := fmt.Sprintf("notifications:episodes:%s:%s:%s:%s",
 		shikimoriID, player, translationID, watchType)
