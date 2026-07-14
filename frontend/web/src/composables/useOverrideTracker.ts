@@ -25,7 +25,7 @@ import type { WatchCombo, ResolvedCombo } from '@/types/preference'
 
 export type OverrideDimension = 'language' | 'player' | 'team' | 'episode'
 
-export type PlayerName = 'kodik' | 'animelib' | 'english'
+export type PlayerName = WatchCombo['player']
 
 // We accept WatchCombo (the prop shape players hold) rather than the stricter
 // ResolvedCombo. The tier/tier_number fields are optional — the composable
@@ -96,7 +96,7 @@ export function useOverrideTracker(opts: OverrideTrackerOptions) {
         // localStorage last-used combo so the next visit can pick client-side.
         if (!auth.isAuthenticated) {
           const merged: WatchCombo = {
-            player: (newCombo.player ?? opts.resolvedCombo.value?.player ?? 'kodik') as WatchCombo['player'],
+            player: (newCombo.player ?? opts.resolvedCombo.value?.player ?? opts.player) as WatchCombo['player'],
             language: (newCombo.language ?? opts.resolvedCombo.value?.language ?? '') as WatchCombo['language'],
             watch_type: (newCombo.watch_type ?? opts.resolvedCombo.value?.watch_type ?? '') as WatchCombo['watch_type'],
             translation_id: newCombo.translation_id ?? opts.resolvedCombo.value?.translation_id ?? '',
@@ -128,7 +128,7 @@ export function useOverrideTracker(opts: OverrideTrackerOptions) {
         ms_since_load: Math.round(msSinceLoad),
         tier: resolved?.tier ?? null,
         tier_number: resolved?.tier_number ?? null,
-        player: opts.player,
+        player: opts.player as 'kodik' | 'animelib' | 'english',
       })
     } catch {
       // Best-effort instrumentation: never throw, never block UX. Counter loss
