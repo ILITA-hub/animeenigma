@@ -524,7 +524,7 @@ import { mapKeyToAction } from '@/composables/aePlayer/playerHotkeys'
 import { pickSmartDefault, pickRawBiased, pickSelectableFallback, defaultPool } from '@/composables/aePlayer/smartDefault'
 import { resolveDeepLinkProvider } from '@/composables/aePlayer/deepLinkProvider'
 import { useCapabilities, flattenCapabilities } from '@/composables/aePlayer/useCapabilities'
-import { rowsFromReport, groupOfProvider } from '@/composables/aePlayer/useProviderFeed'
+import { rowsFromReport, groupOfProvider, playerKeyOfProvider } from '@/composables/aePlayer/useProviderFeed'
 import { langsForCap, langForProviderUnderRaw } from '@/composables/aePlayer/providerGroups'
 import { pickEpisodeForProvider, providerMissesTargetEpisode, shouldReselectEpisode } from '@/composables/aePlayer/episodeSelection'
 import { progressRowsToMap, fmtResume, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
@@ -1132,7 +1132,7 @@ const buildAvailable = (): WatchCombo[] => {
   for (const fam of rep.families) {
     for (const cap of fam.providers ?? []) {
       if (cap.state === 'no_content') continue
-      const player = providerToLegacyPlayer(cap.provider, cap.group)
+      const player = providerToLegacyPlayer(cap.provider, cap.group, cap.player_key)
       if (!player) continue
       // A cap's real per-title `lang` (Phase C source-panel truth — set only
       // for ae's probed dub) overrides the group's default language set, so
@@ -1328,7 +1328,11 @@ const tracking = useWatchTracking(
       void loadEpisodeProgress()
     },
   },
-  () => comboToWatchCombo(state.combo.value, groupOfProvider(report.value, state.combo.value.provider)),
+  () => comboToWatchCombo(
+    state.combo.value,
+    groupOfProvider(report.value, state.combo.value.provider),
+    playerKeyOfProvider(report.value, state.combo.value.provider),
+  ),
 )
 
 // ─── Watch-Together create seed ──────────────────────────────────────────────

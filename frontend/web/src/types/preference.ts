@@ -1,5 +1,11 @@
+/** Known legacy player keys. The union documents the historical set; the
+ *  `(string & {})` arm keeps any roster-supplied player_key assignable while
+ *  preserving autocomplete (AUTO-608 — the roster, not this type, is the
+ *  authority for which players exist). */
+export type LegacyPlayerKey = 'kodik' | 'animelib' | 'hanime' | 'english' | 'ae'
+
 export interface WatchCombo {
-  player: 'kodik' | 'animelib' | 'hanime' | 'english' | 'ae'
+  player: LegacyPlayerKey | (string & {})
   language: 'ru' | 'en' | '18+' | 'ja'
   watch_type: 'dub' | 'sub'
   translation_id: string

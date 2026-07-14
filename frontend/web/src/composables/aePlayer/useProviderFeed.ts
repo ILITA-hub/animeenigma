@@ -64,3 +64,14 @@ export function groupOfProvider(report: CapabilityReport | null, providerId: str
   }
   return undefined
 }
+
+/** The roster player_key for a provider id, from the capability report (AUTO-608). */
+export function playerKeyOfProvider(report: CapabilityReport | null, providerId: string): string | undefined {
+  if (!report || !Array.isArray(report.families)) return undefined
+  for (const fam of report.families) {
+    for (const cap of fam.providers ?? []) {
+      if (cap.provider === providerId) return cap.player_key
+    }
+  }
+  return undefined
+}

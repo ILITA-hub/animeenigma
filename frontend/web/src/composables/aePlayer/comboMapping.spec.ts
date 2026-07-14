@@ -16,6 +16,14 @@ describe('providerToLegacyPlayer', () => {
   it('returns null for an unknown provider', () => {
     expect(providerToLegacyPlayer('nope')).toBeNull()
   })
+  it('prefers the feed player_key over the hardcoded switch', () => {
+    expect(providerToLegacyPlayer('brand-new-prov', 'ru', 'newkey')).toBe('newkey')
+  })
+  it('falls back to the switch when player_key is absent (offline/feed-less)', () => {
+    expect(providerToLegacyPlayer('18anime', 'adult')).toBe('hanime')
+    expect(providerToLegacyPlayer('someprov', 'en')).toBe('english')
+    expect(providerToLegacyPlayer('unknown', 'ru')).toBeNull()
+  })
 })
 
 describe('comboToWatchCombo', () => {
