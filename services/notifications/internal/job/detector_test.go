@@ -96,6 +96,16 @@ func testDB(t *testing.T) *gorm.DB {
 			watch_type TEXT,
 			translation_id TEXT
 		)`,
+		// stream_providers mirrors the catalog-owned roster (AUTO-608): the
+		// hot-combos collector subselects player_key/anime_level/status from
+		// it instead of a literal player-name list. Minimal columns only —
+		// just what the collector's WHERE clause reads.
+		`CREATE TABLE stream_providers (
+			name TEXT PRIMARY KEY,
+			player_key TEXT NOT NULL DEFAULT '',
+			anime_level INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT 'enabled'
+		)`,
 	}
 	for _, s := range stmts {
 		if err := db.Exec(s).Error; err != nil {
@@ -133,6 +143,23 @@ func seedWatch(t *testing.T, db *gorm.DB, userID, animeID, player, language, wat
 		userID, animeID, ep, player, language, watchType, translationID,
 	).Error; err != nil {
 		t.Fatalf("seed watch: %v", err)
+	}
+}
+
+// seedProvider inserts a stream_providers roster row (AUTO-608). animeLevel
+// mirrors domain.ScraperProvider.AnimeLevel; status is the tri-state
+// enabled|degraded|disabled string.
+func seedProvider(t *testing.T, db *gorm.DB, name, playerKey string, animeLevel bool, status string) {
+	t.Helper()
+	al := 0
+	if animeLevel {
+		al = 1
+	}
+	if err := db.Exec(
+		`INSERT INTO stream_providers (name, player_key, anime_level, status) VALUES (?,?,?,?)`,
+		name, playerKey, al, status,
+	).Error; err != nil {
+		t.Fatalf("seed provider: %v", err)
 	}
 }
 

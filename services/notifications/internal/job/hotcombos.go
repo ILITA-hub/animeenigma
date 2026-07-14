@@ -13,7 +13,7 @@ import (
 // (watch_history × anime_list × animes) trust surface into the set of combos
 // the detector actually needs to ask the catalog about.
 //
-// NOTIF-DET-02 mandate (literal SQL):
+// NOTIF-DET-02 mandate (literal SQL), AUTO-608-updated:
 //
 //	SELECT DISTINCT
 //	    wh.anime_id, a.shikimori_id, wh.player, wh.language,
@@ -23,7 +23,9 @@ import (
 //	JOIN animes a ON a.id = wh.anime_id
 //	WHERE al.status = 'watching'
 //	  AND a.status = 'ongoing'
-//	  AND (wh.translation_id != '' OR wh.player IN ('english', 'ae', 'kodik', 'animelib', 'animejoy-sibnet', 'animejoy-allvideo'));
+//	  AND (wh.translation_id != '' OR wh.player IN (
+//	    SELECT DISTINCT player_key FROM stream_providers
+//	    WHERE anime_level AND status <> 'disabled' AND player_key <> ''));
 //
 // Filtering on status='watching' (user-side) AND 'ongoing' (catalog-side)
 // keeps the result set bounded to "combos that could legitimately produce a
@@ -33,8 +35,12 @@ import (
 // translation_id and resolved at the anime level. kodik/animelib are also
 // admitted with an empty translation_id (any-team aePlayer mode — resolved
 // at the anime level, D-DET-03 extended).
-// Only hanime/18anime rows with an empty translation_id stay excluded — no
-// anime-level resolver exists for them.
+// AUTO-608: which player_keys count as anime-level is no longer a literal
+// list here — it derives from the stream_providers roster (player_key +
+// anime_level columns), so a disabled row's player_key drops out of the set
+// automatically. Only hanime/18anime rows with an empty translation_id stay
+// excluded — no anime-level resolver exists for them (their roster rows
+// carry anime_level=false).
 type HotCombosCollector struct {
 	db  *gorm.DB
 	log *logger.Logger
@@ -60,7 +66,9 @@ func (c *HotCombosCollector) Collect(ctx context.Context) ([]domain.Combo, error
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
 		  AND a.status = 'ongoing'
-		  AND (wh.translation_id != '' OR wh.player IN ('english', 'ae', 'kodik', 'animelib', 'animejoy-sibnet', 'animejoy-allvideo'))
+		  AND (wh.translation_id != '' OR wh.player IN (
+		    SELECT DISTINCT player_key FROM stream_providers
+		    WHERE anime_level AND status <> 'disabled' AND player_key <> ''))
 	`
 
 	var rows []domain.Combo
