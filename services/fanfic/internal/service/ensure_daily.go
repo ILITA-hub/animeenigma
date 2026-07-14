@@ -22,7 +22,6 @@ const (
 
 type dailyRepo interface {
 	ListEligibleSince(ctx context.Context, since time.Time) ([]domain.Fanfic, error)
-	DailyBotExists(ctx context.Context, since time.Time) (bool, error)
 	Create(ctx context.Context, f *domain.Fanfic) error
 }
 
@@ -83,7 +82,11 @@ func (s *DailyService) EnsureDaily(ctx context.Context) (EnsureResult, error) {
 			return EnsureResult{Generated: false, Reason: "user_exists"}, nil
 		}
 	}
-	if exists, err := s.repo.DailyBotExists(ctx, since); err == nil && exists {
+	// Past the loop, every eligible entry is AI-generated (the loop returns on
+	// any user fanfic), so a non-empty slice means a bot fanfic already exists
+	// today. Deriving this from the slice in hand avoids a redundant query whose
+	// swallowed error could otherwise let a second bot fanfic be generated.
+	if len(eligible) > 0 {
 		return EnsureResult{Generated: false, Reason: "bot_exists"}, nil
 	}
 

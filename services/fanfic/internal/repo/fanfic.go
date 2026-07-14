@@ -119,16 +119,6 @@ func (r *Repository) ListEligibleSince(ctx context.Context, since time.Time) ([]
 	return out, err
 }
 
-// DailyBotExists reports whether an AI-generated fanfic already exists since `since`
-// (idempotency guard for ensure-daily).
-func (r *Repository) DailyBotExists(ctx context.Context, since time.Time) (bool, error) {
-	var n int64
-	err := r.db.WithContext(ctx).Model(&domain.Fanfic{}).
-		Where("ai_generated = ? AND status = ? AND created_at > ?", true, domain.StatusComplete, since).
-		Count(&n).Error
-	return n > 0, err
-}
-
 // SoftDelete soft-deletes a fanfic scoped to its owner (GORM DeletedAt). A
 // non-owner delete affects zero rows and returns NotFound.
 func (r *Repository) SoftDelete(ctx context.Context, userID, id string) error {
