@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const { apiGetMock } = vi.hoisted(() => ({ apiGetMock: vi.fn() }))
 vi.mock('@/api/client', () => ({
-  apiClient: { defaults: { baseURL: '/api' } },
+  apiClient: { defaults: { baseURL: '/api' }, get: apiGetMock },
 }))
 
 let currentToken: string | null = 'token-1'
@@ -244,5 +245,110 @@ describe('fanficApi.generate', () => {
     await fanficApi.generate(TEST_INPUT, { onError })
 
     expect(onError).toHaveBeenCalledWith('network drop')
+  })
+})
+
+describe('fanficApi.getDaily', () => {
+  beforeEach(() => {
+    apiGetMock.mockReset()
+  })
+
+  it('GETs /fanfic/daily, unwraps the envelope, and maps the DTO onto the Fanfic shape', async () => {
+    apiGetMock.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: {
+          id: 'f1',
+          fanfic_title: 'The Title',
+          anime_title: 'Frieren',
+          anime_japanese: '葬送のフリーレン',
+          anime_poster: 'https://example.com/poster.jpg',
+          excerpt: 'Once upon a time…',
+          rating: 'teen',
+          language: 'ru',
+          explicit: false,
+          author_username: 'neo',
+          credited: true,
+          ai_generated: true,
+          part_count: 2,
+          created_at: '2026-07-14T00:00:00Z',
+          content: 'Full story text.',
+          gated: false,
+        },
+      },
+    })
+
+    const result = await fanficApi.getDaily()
+
+    expect(apiGetMock).toHaveBeenCalledWith('/fanfic/daily')
+    // fanfic_title -> title (wire-shape mismatch the api client bridges)
+    expect(result.title).toBe('The Title')
+    expect(result.id).toBe('f1')
+    expect(result.content).toBe('Full story text.')
+    expect(result.anime_title).toBe('Frieren')
+    expect(result.rating).toBe('teen')
+    expect(result.language).toBe('ru')
+    expect(result.part_count).toBe(2)
+    expect(result.status).toBe('complete')
+    expect(result.gated).toBe(false)
+    expect(result.gate_reason).toBeUndefined()
+  })
+
+  it('surfaces gated:true and gate_reason for an explicit pick, with content left empty', async () => {
+    apiGetMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          id: 'f2',
+          fanfic_title: 'Explicit Story',
+          anime_title: 'Some Anime',
+          anime_japanese: '',
+          anime_poster: '',
+          excerpt: '',
+          rating: 'explicit',
+          language: 'en',
+          explicit: true,
+          author_username: '',
+          credited: false,
+          ai_generated: false,
+          part_count: 1,
+          created_at: '2026-07-14T00:00:00Z',
+          content: '',
+          gated: true,
+          gate_reason: 'adult_setting',
+        },
+      },
+    })
+
+    const result = await fanficApi.getDaily()
+
+    expect(result.gated).toBe(true)
+    expect(result.gate_reason).toBe('adult_setting')
+    expect(result.content).toBe('')
+  })
+
+  it('tolerates a bare (non-enveloped) payload, matching unwrap()\'s fallback', async () => {
+    apiGetMock.mockResolvedValueOnce({
+      data: {
+        id: 'f3',
+        fanfic_title: 'Bare',
+        anime_title: 'A',
+        anime_japanese: '',
+        anime_poster: '',
+        excerpt: '',
+        rating: 'teen',
+        language: 'ru',
+        explicit: false,
+        author_username: '',
+        credited: false,
+        ai_generated: false,
+        part_count: 1,
+        created_at: '2026-07-14T00:00:00Z',
+        content: 'x',
+        gated: false,
+      },
+    })
+
+    const result = await fanficApi.getDaily()
+    expect(result.title).toBe('Bare')
   })
 })

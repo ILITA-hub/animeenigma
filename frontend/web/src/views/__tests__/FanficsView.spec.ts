@@ -19,7 +19,7 @@
  * *while a generation is still streaming* — a DOM-only test can't reach that
  * window without reproducing real SSE timing, so we drive it directly.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import en from '@/locales/en.json'
@@ -30,7 +30,7 @@ import type { GenerateInput, StreamHandlers } from '@/types/fanfic'
 
 // vi.mock factories are hoisted above imports — anything they close over
 // must itself be created via vi.hoisted() (see GenerateForm.spec.ts).
-const { generateMock, releaseGenerate } = vi.hoisted(() => {
+const { generateMock, releaseGenerate, getDailyMock } = vi.hoisted(() => {
   let release: (() => void) | null = null
   const generateMock = vi.fn(
     async (_input: unknown, handlers: StreamHandlers) => {
@@ -47,7 +47,8 @@ const { generateMock, releaseGenerate } = vi.hoisted(() => {
       handlers.onDone?.('fic-1', 'T', 10)
     },
   )
-  return { generateMock, releaseGenerate: () => release?.() }
+  const getDailyMock = vi.fn()
+  return { generateMock, releaseGenerate: () => release?.(), getDailyMock }
 })
 
 vi.mock('@/api/fanfic', () => ({
@@ -57,7 +58,26 @@ vi.mock('@/api/fanfic', () => ({
     get: vi.fn(),
     remove: vi.fn(),
     tags: vi.fn().mockResolvedValue([]),
+    getDaily: getDailyMock,
   },
+}))
+
+// route.query is mutated per-test via routeQueryRef.value before mounting —
+// FanficsView only reads route.query.daily once, in onMounted.
+const { routeQueryRef } = vi.hoisted(() => ({
+  routeQueryRef: { value: {} as Record<string, string> },
+}))
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-router')>()
+  return {
+    ...actual,
+    useRoute: () => ({ query: routeQueryRef.value }),
+  }
+})
+
+const pushToastMock = vi.fn()
+vi.mock('@/composables/useToast', () => ({
+  useToast: () => ({ push: pushToastMock, toasts: { value: [] }, dismiss: vi.fn() }),
 }))
 
 // GenerateForm has its own heavy deps (anime search, characters, tags) fully
@@ -93,6 +113,9 @@ interface FanficsViewVm {
   genError: string
   libraryGridRef: { refresh: () => void } | null
   onGenerate: (input: GenerateInput) => Promise<void>
+  readerOpen: boolean
+  readerFanfic: { id: string; title: string; content: string } | null
+  readerIsDaily: boolean
 }
 
 function mountView() {
@@ -151,5 +174,134 @@ describe('FanficsView streaming', () => {
     expect(vm.generating).toBe(false)
     expect(vm.genError).toBe('boom')
     expect(refreshSpy).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * "Читать" CTA wiring (Task 18): DailyFanficCard links to /fanfics?daily=1,
+ * and FanficsView opens the daily fanfic in the same reader Modal used by
+ * the library grid — unless the pick is gated (explicit + not readable
+ * here), in which case it surfaces a toast instead of an empty reader.
+ * `readerOpen`/`readerFanfic`/`readerIsDaily` are exposed via defineExpose
+ * specifically for these tests, same rationale as the streaming state above
+ * (Modal/DialogPortal render through a Teleport, so DOM-level assertions
+ * would need `attachTo: document.body`; asserting the underlying reactive
+ * state is the more direct and equally faithful check).
+ */
+describe('FanficsView daily-fanfic deep link (?daily=1)', () => {
+  beforeEach(() => {
+    routeQueryRef.value = {}
+    getDailyMock.mockReset()
+    pushToastMock.mockReset()
+  })
+
+  const dailyFanfic = {
+    id: 'daily-1',
+    anime_id: '',
+    anime_shikimori_id: '',
+    anime_title: 'Frieren',
+    anime_japanese: '',
+    anime_poster: '',
+    characters: [],
+    tags: [],
+    length: 'oneshot' as const,
+    pov: 'third' as const,
+    rating: 'teen' as const,
+    language: 'ru' as const,
+    prompt: '',
+    title: 'Daily Title',
+    content: 'Daily content body.',
+    model: '',
+    token_usage: 0,
+    status: 'complete' as const,
+    created_at: '2026-07-14T00:00:00Z',
+    canon: false,
+    part_count: 1,
+  }
+
+  it('does not call getDaily when the query has no daily=1', () => {
+    mountView()
+    expect(getDailyMock).not.toHaveBeenCalled()
+  })
+
+  it('opens the reader with the daily fanfic and marks it readerIsDaily, without a toast', async () => {
+    routeQueryRef.value = { daily: '1' }
+    getDailyMock.mockResolvedValueOnce({ ...dailyFanfic, gated: false })
+
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as FanficsViewVm
+
+    expect(getDailyMock).toHaveBeenCalledTimes(1)
+    expect(vm.readerOpen).toBe(true)
+    expect(vm.readerFanfic?.title).toBe('Daily Title')
+    expect(vm.readerFanfic?.content).toBe('Daily content body.')
+    expect(vm.readerIsDaily).toBe(true)
+    expect(pushToastMock).not.toHaveBeenCalled()
+  })
+
+  it('an anonymous-gated pick (gate_reason:"login") surfaces a login toast and never opens the reader', async () => {
+    routeQueryRef.value = { daily: '1' }
+    getDailyMock.mockResolvedValueOnce({
+      ...dailyFanfic,
+      content: '',
+      gated: true,
+      gate_reason: 'login',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as FanficsViewVm
+
+    expect(vm.readerOpen).toBe(false)
+    expect(vm.readerFanfic).toBeNull()
+    expect(pushToastMock).toHaveBeenCalledWith('Log in to read today\'s fanfic.', 'info')
+  })
+
+  it('a logged-in-gated pick (gate_reason:"adult_setting") surfaces the explicit-gate toast, not the login one', async () => {
+    routeQueryRef.value = { daily: '1' }
+    getDailyMock.mockResolvedValueOnce({
+      ...dailyFanfic,
+      content: '',
+      gated: true,
+      gate_reason: 'adult_setting',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as FanficsViewVm
+
+    expect(vm.readerOpen).toBe(false)
+    expect(pushToastMock).toHaveBeenCalledWith(
+      'This pick is explicit (18+) and can\'t be opened here.',
+      'info',
+    )
+  })
+
+  it('a getDaily() rejection is caught and surfaced as an error toast, never throwing', async () => {
+    routeQueryRef.value = { daily: '1' }
+    getDailyMock.mockRejectedValueOnce(new Error('network down'))
+
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as FanficsViewVm
+
+    expect(vm.readerOpen).toBe(false)
+    expect(pushToastMock).toHaveBeenCalledWith('Couldn\'t load today\'s fanfic.', 'error')
+  })
+
+  it('the library-grid open path (onOpenFanfic) leaves readerIsDaily false, so the Continue footer stays eligible', async () => {
+    const { fanficApi } = await import('@/api/fanfic')
+    vi.mocked(fanficApi.get).mockResolvedValueOnce({ ...dailyFanfic, id: 'lib-1' })
+
+    const wrapper = mountView()
+    const vm = wrapper.vm as unknown as FanficsViewVm & {
+      onOpenFanfic: (id: string) => Promise<void>
+    }
+    await vm.onOpenFanfic('lib-1')
+
+    expect(vm.readerOpen).toBe(true)
+    expect(vm.readerFanfic?.id).toBe('lib-1')
+    expect(vm.readerIsDaily).toBe(false)
   })
 })

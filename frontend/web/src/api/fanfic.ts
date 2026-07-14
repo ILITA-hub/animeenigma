@@ -24,7 +24,14 @@
  */
 import { apiClient } from './client'
 import { useAuthStore } from '@/stores/auth'
-import type { Fanfic, FanficTag, GenerateInput, StreamHandlers } from '@/types/fanfic'
+import type {
+  Fanfic,
+  FanficLang,
+  FanficRating,
+  FanficTag,
+  GenerateInput,
+  StreamHandlers,
+} from '@/types/fanfic'
 
 export interface SSEEvent {
   event: string
@@ -172,6 +179,37 @@ async function streamSSE(
   }
 }
 
+/**
+ * Wire shape of `GET /api/fanfic/daily` (the `publicDaily` struct in
+ * services/fanfic/internal/handler/daily.go): the compact spotlight DTO
+ * (snake_case, `fanfic_title` not `title`, no anime/user UUIDs, no
+ * length/pov/tags/characters/prompt/model/token_usage/canon) plus the full
+ * `content` and explicit-gating metadata. An explicit pick always comes back
+ * with `content:""` and `gated:true` — `gate_reason` is `"login"` for an
+ * anonymous reader or `"adult_setting"` for a logged-in one (the backend
+ * gates every explicit daily pick unconditionally today; there is no
+ * opt-in "show adult content" setting yet to unlock it).
+ */
+interface DailyFanficResponse {
+  id: string
+  fanfic_title: string
+  anime_title: string
+  anime_japanese: string
+  anime_poster: string
+  excerpt: string
+  rating: FanficRating
+  language: FanficLang
+  explicit: boolean
+  author_username: string
+  credited: boolean
+  ai_generated: boolean
+  part_count: number
+  created_at: string
+  content: string
+  gated: boolean
+  gate_reason?: string
+}
+
 export const fanficApi = {
   /** Stream a generation. Uses fetch + ReadableStream to consume SSE. */
   async generate(input: GenerateInput, handlers: StreamHandlers, signal?: AbortSignal): Promise<void> {
@@ -193,6 +231,53 @@ export const fanficApi = {
   async get(id: string): Promise<Fanfic> {
     const res = await apiClient.get(`/fanfic/${encodeURIComponent(id)}`)
     return unwrap<Fanfic>(res.data)
+  },
+
+  /**
+   * GET /api/fanfic/daily — the public "Фанфик дня" reader (wires
+   * DailyFanficCard's "Читать" CTA at /fanfics?daily=1). Public route (no
+   * mandatory JWT at the fanfic service); the shared apiClient still attaches
+   * the bearer token when one is present, so a logged-in reader's identity
+   * reaches the backend's explicit-gating check.
+   *
+   * The daily DTO isn't a Fanfic (see DailyFanficResponse above) — this maps
+   * it onto the shape the existing reader Modal in FanficsView.vue already
+   * knows how to render (mirrors onOpenFanfic's `fanficApi.get(id)` path),
+   * filling fields the daily DTO doesn't carry with UI-inert placeholders.
+   * `status:'complete'` is honest (the daily pool is `WHERE status =
+   * complete`, see repo/fanfic.go) — FanficsView additionally guards its
+   * owner-scoped "Продолжить" footer button off a separate `readerIsDaily`
+   * flag rather than lying about status here, since /continue 404s for
+   * anyone but the fanfic's own author.
+   */
+  async getDaily(): Promise<Fanfic & { gated?: boolean; gate_reason?: string }> {
+    const res = await apiClient.get('/fanfic/daily')
+    const raw = unwrap<DailyFanficResponse>(res.data)
+    return {
+      id: raw.id,
+      anime_id: '',
+      anime_shikimori_id: '',
+      anime_title: raw.anime_title,
+      anime_japanese: raw.anime_japanese,
+      anime_poster: raw.anime_poster,
+      characters: [],
+      tags: [],
+      length: 'oneshot',
+      pov: 'third',
+      rating: raw.rating,
+      language: raw.language,
+      prompt: '',
+      title: raw.fanfic_title,
+      content: raw.content,
+      model: '',
+      token_usage: 0,
+      status: 'complete',
+      created_at: raw.created_at,
+      canon: false,
+      part_count: raw.part_count,
+      gated: raw.gated,
+      gate_reason: raw.gate_reason,
+    }
   },
 
   /** DELETE /api/fanfic/{id} — 204 No Content, nothing to unwrap. */

@@ -2363,6 +2363,11 @@
     "status": {
       "generating": "Generating…",
       "failed": "Generation failed"
+    },
+    "daily": {
+      "gated": "This pick is explicit (18+) and can't be opened here.",
+      "loginRequired": "Log in to read today's fanfic.",
+      "loadError": "Couldn't load today's fanfic."
     }
   }
 }

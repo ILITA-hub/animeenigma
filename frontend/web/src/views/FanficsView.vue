@@ -11,8 +11,9 @@
       Fanfic and opens it in a FanficReader dialog.
 -->
 <script setup lang="ts">
-import { ref, onBeforeUnmount } from 'vue'
+import { ref, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { fanficApi } from '@/api/fanfic'
 import { useToast } from '@/composables/useToast'
 import { Tabs, Modal, Button, Alert } from '@/components/ui'
@@ -23,6 +24,7 @@ import type { GenerateInput, Fanfic } from '@/types/fanfic'
 
 const { t } = useI18n()
 const { push: pushToast } = useToast()
+const route = useRoute()
 
 const activeTab = ref<'generate' | 'library'>('generate')
 
@@ -95,15 +97,50 @@ onBeforeUnmount(() => {
 
 const readerOpen = ref(false)
 const readerFanfic = ref<Fanfic | null>(null)
+// True only when the reader was opened via the daily-spotlight deep link
+// (openDailyFanfic below) — gates the Modal footer's owner-scoped
+// "Продолжить" button off, since fanficApi.getDaily()'s fanfic is very
+// rarely the current user's own (see its doc comment in src/api/fanfic.ts).
+const readerIsDaily = ref(false)
 
 async function onOpenFanfic(id: string): Promise<void> {
   try {
     readerFanfic.value = await fanficApi.get(id)
+    readerIsDaily.value = false
     readerOpen.value = true
   } catch {
     // Fetch failed — stay on the grid, nothing to show.
   }
 }
+
+// Deep-link entry point for DailyFanficCard's "Читать" CTA
+// (`/fanfics?daily=1`, see DailyFanficCard.vue). Never opens the reader with
+// empty/gated content — an explicit pick surfaces a toast instead (login nudge
+// for anon readers, an explicit-content notice for logged-in ones the backend
+// still gates). Fired once from onMounted below, not from a query watcher.
+async function openDailyFanfic(): Promise<void> {
+  try {
+    const daily = await fanficApi.getDaily()
+    if (daily.gated || !daily.content) {
+      pushToast(
+        daily.gate_reason === 'login' ? t('fanfic.daily.loginRequired') : t('fanfic.daily.gated'),
+        'info',
+      )
+      return
+    }
+    readerFanfic.value = daily
+    readerIsDaily.value = true
+    readerOpen.value = true
+  } catch {
+    pushToast(t('fanfic.daily.loadError'), 'error')
+  }
+}
+
+onMounted(() => {
+  if (route.query.daily === '1') {
+    void openDailyFanfic()
+  }
+})
 
 function onRemoveFanfic(id: string): void {
   if (readerFanfic.value?.id === id) {
@@ -155,6 +192,11 @@ defineExpose({
   onGenerate,
   continuing,
   onContinueFanfic,
+  readerOpen,
+  readerFanfic,
+  readerIsDaily,
+  openDailyFanfic,
+  onOpenFanfic,
 })
 </script>
 
@@ -199,7 +241,7 @@ defineExpose({
 
     <Modal v-model="readerOpen" :title="readerFanfic?.title" size="xl">
       <FanficReader v-if="readerFanfic" :title="readerFanfic.title" :content="readerFanfic.content" :streaming="continuing" />
-      <template v-if="readerFanfic && readerFanfic.status === 'complete'" #footer>
+      <template v-if="readerFanfic && readerFanfic.status === 'complete' && !readerIsDaily" #footer>
         <Button :loading="continuing" @click="onContinueFanfic">{{ t('fanfic.reader.continue') }}</Button>
       </template>
     </Modal>

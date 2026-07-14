@@ -2363,6 +2363,11 @@
     "status": {
       "generating": "Generating…",
       "failed": "Generation failed"
+    },
+    "daily": {
+      "gated": "この作品は18+指定のため、ここでは表示できません。",
+      "loginRequired": "今日のファンフィックを読むにはログインしてください。",
+      "loadError": "本日のファンフィックを読み込めませんでした。"
     }
   }
 }
