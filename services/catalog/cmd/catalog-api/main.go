@@ -638,6 +638,7 @@ func main() {
 	// non-deterministic across reboots without being predictable.
 	spotlightWebClient := client.NewWebClient("", nil)
 	spotlightPlayerClient := client.NewPlayerClient("", nil, log)
+	spotlightFanficClient := client.NewFanficClient("", nil, log)
 	spotlightRng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	prometheusClient := prometheus.NewClient(cfg.Prometheus.URL)
 	// random_tail kept in a named var — the handler's reroll route
@@ -657,6 +658,8 @@ func main() {
 		cards.NewContinueWatchingNewResolver(spotlightPlayerClient, redisCache, spotlightRng, log),
 		// Curated «Куратор рекомендует» — one env-pinned, airing-gated anime.
 		cards.NewCuratedResolver(animeRepo, redisCache, log, cfg.SpotlightCuratedShikimoriID),
+		// Daily fanfic spotlight — bot-authored fanfic teaser via fanfic-engine.
+		cards.NewDailyFanficResolver(spotlightFanficClient, redisCache, log),
 	}
 	spotlightAggregator := spotlight.NewAggregator(redisCache, log, spotlightResolvers)
 	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)
