@@ -295,7 +295,7 @@ describe('EpisodesPanel', () => {
       expect(w.find('[data-test="ep-downloaded-1"]').exists()).toBe(true)
     })
     it('hides the done indicator outside ready mode', () => {
-      const w = mountPanel({ downloadMode: 'install', downloadStates: { 1: 'done' } })
+      const w = mountPanel({ downloadMode: 'off', downloadStates: { 1: 'done' } })
       expect(w.find('[data-test="ep-downloaded-1"]').exists()).toBe(false)
     })
 
@@ -305,12 +305,9 @@ describe('EpisodesPanel', () => {
       expect(w.emitted('download-season')).toHaveLength(1)
     })
 
-    it('shows the "in the app" chip label in install mode and still emits', async () => {
-      const w = mountPanel({ downloadMode: 'install' })
-      const chip = w.find('[data-test="season-download"]')
-      expect(chip.text()).toContain('Download in the app')
-      await chip.trigger('click')
-      expect(w.emitted('download-season')).toHaveLength(1)
+    it('hides the season chip outside ready mode (browser tab → downloads app-only)', () => {
+      const w = mountPanel({ downloadMode: 'off' })
+      expect(w.find('[data-test="season-download"]').exists()).toBe(false)
     })
 
     it('hides the season chip when downloads are off', () => {

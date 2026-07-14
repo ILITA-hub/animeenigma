@@ -274,14 +274,10 @@ describe('AnimeContextMenu.vue (Reka DropdownMenu rebuild)', () => {
     expect(typeof lang).toBe('string')
   })
 
-  it('in a browser tab the item points at the app: install hint toast, no flow', () => {
+  it('hides the download item entirely in a browser tab (downloads are app-only)', () => {
     sharedState.standalone = false
     const w = mountMenu({ listStatus: null })
-    const dl = actions(w).find((x) => x.kind === 'download-season')!
-    expect((dl as unknown as { label: string }).label).toBe('downloads.inAppOnly')
-    ;(dl as unknown as { onActivate: () => void }).onActivate()
-    expect(w.emitted('update:visible')!.at(-1)).toEqual([false])
+    expect(actions(w).some((x) => x.kind === 'download-season')).toBe(false)
     expect(sharedState.openSeasonDownload).not.toHaveBeenCalled()
-    expect(sharedState.pushToast).toHaveBeenCalledWith('downloads.installHint', 'info', 6000)
   })
 })

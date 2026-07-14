@@ -163,7 +163,7 @@ const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const toast = useToast()
-const { appOnly, showInstallHint } = useDownloadGate()
+const { appOnly } = useDownloadGate()
 
 // Close the anchored DropdownMenu after an action (replaces the old
 // ContextMenu `closeWithReason('item')` provide/inject contract).
@@ -193,12 +193,12 @@ const actions = computed<MenuAction[]>(() => {
   // C-top: open-in-new-tab pinned first, its own navigation group.
   out.push({ key: 'newtab', kind: 'newtab', label: t('contextMenu.openInNewTab'), onActivate: openInNewTab })
   out.push({ key: 'goto', kind: 'goto', label: t('contextMenu.goToPage'), onActivate: goToPage })
-  if (offlineDownloadsEnabled) {
+  // Downloads are app-only: the item is hidden entirely in a plain browser tab.
+  if (offlineDownloadsEnabled && !appOnly.value) {
     out.push({
       key: 'download-season',
       kind: 'download-season',
-      // Downloads are app-only: from a browser tab the item points at the app.
-      label: appOnly.value ? t('downloads.inAppOnly') : t('contextMenu.downloadSeason'),
+      label: t('contextMenu.downloadSeason'),
       onActivate: downloadSeason,
     })
   }
@@ -317,7 +317,6 @@ function openInNewTab() {
 function downloadSeason() {
   if (!props.anime) return
   closeMenu()
-  if (appOnly.value) return showInstallHint()
   const req = {
     animeId: String(props.anime.id),
     title: localizedTitle.value,

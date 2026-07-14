@@ -1,7 +1,5 @@
 import { computed, type ComputedRef } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useToast } from '@/composables/useToast'
-import { useStandaloneDisplay, installHintKey } from '@/pwa/standalone'
+import { useStandaloneDisplay } from '@/pwa/standalone'
 import { offlineDownloadsEnabled } from './flag'
 
 /** Setup-free view of the browser-tab-vs-installed-app decision: downloads
@@ -17,21 +15,14 @@ export function downloadsNavVisible(): boolean {
   return offlineDownloadsEnabled && useStandaloneDisplay().value
 }
 
-/** Downloads are app-only (owner call 2026-07-04). Single owner of the
- *  browser-tab-vs-installed-app decision and of the "get the app" hint, so
- *  every download surface (player action row, episodes panel, card context
- *  menu) behaves identically. Call during setup(). */
+/** Downloads are app-only (owner call 2026-07-04; browser-tab surfaces fully
+ *  hidden 2026-07-14). Single owner of the browser-tab-vs-installed-app
+ *  decision, so every download surface (player action row, episodes panel,
+ *  card context menu) behaves identically: a plain browser tab shows no
+ *  download affordance at all. Call during setup(). */
 export function useDownloadGate(): {
-  /** True when download surfaces must point at the app instead of downloading. */
+  /** True in a plain browser tab — download surfaces hide themselves entirely. */
   appOnly: ComputedRef<boolean>
-  showInstallHint: () => void
 } {
-  const toast = useToast()
-  const { t } = useI18n()
-  return {
-    appOnly: computed(downloadsAppOnly),
-    showInstallHint() {
-      toast.push(t(installHintKey()), 'info', 6000)
-    },
-  }
+  return { appOnly: computed(downloadsAppOnly) }
 }

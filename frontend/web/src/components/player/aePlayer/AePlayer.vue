@@ -462,9 +462,9 @@
         <span class="pl-action-srcname">{{ activeProviderName || $t('player.aePlayer.source') }}</span>
         <ChevronDown class="size-3.5 opacity-70" aria-hidden="true" />
       </Button>
-      <Button v-if="downloadMode !== 'off'" variant="soft" size="sm" class="pl-action" data-test="action-download" @click="onDownloadSeason">
+      <Button v-if="downloadMode === 'ready'" variant="soft" size="sm" class="pl-action" data-test="action-download" @click="onDownloadSeason">
         <Download class="size-4" aria-hidden="true" />
-        {{ downloadMode === 'install' ? $t('downloads.inAppOnly') : $t('player.aePlayer.offline.download') }}
+        {{ $t('player.aePlayer.offline.download') }}
       </Button>
     </div>
   </div>
@@ -2747,13 +2747,13 @@ const seasonCount = computed(() => seasonTargets(episodes.value, downloadStates.
 // a plain check in the template would never appear after the SW's first claim.
 // Track it in a ref, refreshed when the SW becomes ready.
 const canDownload = ref(false)
-// Downloads are app-only: in a plain browser tab every download surface
-// becomes a "download in the app" hint instead (useDownloadGate owns that
-// policy for all surfaces).
-const { appOnly, showInstallHint } = useDownloadGate()
-const downloadMode = computed<'off' | 'install' | 'ready'>(() => {
+// Downloads are app-only: in a plain browser tab every download surface is
+// hidden entirely (owner call 2026-07-14) — useDownloadGate owns that policy
+// for all surfaces.
+const { appOnly } = useDownloadGate()
+const downloadMode = computed<'off' | 'ready'>(() => {
   if (props.offline || !offlineDownloadsEnabled) return 'off'
-  if (appOnly.value) return 'install'
+  if (appOnly.value) return 'off'
   return canDownload.value ? 'ready' : 'off'
 })
 
@@ -2806,7 +2806,6 @@ function dlLoadTeams(provider: string, audio: AudioKind): Promise<string[]> {
 }
 
 function onDownloadSeason() {
-  if (downloadMode.value === 'install') return showInstallHint()
   downloadDialogOpen.value = true
   void ensureSubsLoaded() // aggregated tracks feed the dialog's subtitle picker
 }

@@ -31,7 +31,7 @@
       <span class="flex-1" />
 
       <button
-        v-if="downloadMode !== 'off'"
+        v-if="downloadMode === 'ready'"
         type="button"
         class="ep-chip ep-chip-season"
         data-test="season-download"
@@ -237,9 +237,9 @@ const props = withDefaults(
     marked?: boolean
     /** Disabled placeholder for the not-yet-aired next episode (from the resume banner). */
     upcoming?: { number: number; etaLabel?: string } | null
-    /** Season-download chip mode: 'ready' = real download, 'install' = the
-     *  "get the app" hint (browser tab — downloads are app-only), 'off' = hidden. */
-    downloadMode?: 'off' | 'install' | 'ready'
+    /** Season-download chip mode: 'ready' = real download (installed app),
+     *  'off' = hidden (browser tab — downloads are app-only — or unavailable). */
+    downloadMode?: 'off' | 'ready'
     /** Download state per episode number, for the per-episode status icons. */
     downloadStates?: Record<number, DownloadState>
   }>(),
@@ -261,13 +261,9 @@ const emit = defineEmits<{
   (e: 'download-season'): void
 }>()
 
-// In install mode (browser tab) the season chip points at the app instead.
-const seasonChipLabel = computed(() =>
-  props.downloadMode === 'install' ? t('downloads.inAppOnly') : t('player.aePlayer.offline.season'),
-)
-const seasonChipTitle = computed(() =>
-  props.downloadMode === 'install' ? t('downloads.inAppOnly') : t('player.aePlayer.offline.scopeSeasonTitle'),
-)
+// The season chip only renders in 'ready' mode (installed app).
+const seasonChipLabel = computed(() => t('player.aePlayer.offline.season'))
+const seasonChipTitle = computed(() => t('player.aePlayer.offline.scopeSeasonTitle'))
 
 // ── V2b adaptive rules ───────────────────────────────────────────────────────
 // ≤15 eps: strip only. 16+: jump input appears. 100+: grid toggle appears.
