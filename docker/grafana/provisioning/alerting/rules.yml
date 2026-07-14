@@ -311,6 +311,15 @@ groups:
           summary: "Scheduler job {{ $labels.exported_job }} failed"
           description: "Scheduler job {{ $labels.exported_job }} has had errors in the last 25 hours."
 
+      # Restart hardening (AUTO-610/611): the last-success gauge is process
+      # memory, so a scheduler redeploy used to open a no-data window that this
+      # rule (noDataState: Alerting, for: 0s) paged P0 on within one eval. Two
+      # layers close it: the scheduler now persists per-job timestamps and
+      # re-seeds the gauge at startup (services/scheduler internal/service
+      # SeedLastSuccess), and max_over_time[1h] below rides the remaining
+      # scrape-gap during the restart itself. Genuine staleness is unaffected —
+      # the gauge VALUE keeps aging regardless of the window — and sustained
+      # no-data (scheduler exporting nothing for >1h) still alerts.
       - uid: scheduler-sync-stale
         title: Scheduler Sync Stale
         noDataState: Alerting
@@ -318,11 +327,11 @@ groups:
         data:
           - refId: A
             relativeTimeRange:
-              from: 300
+              from: 3600
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
-              expr: time() - scheduler_job_last_success_timestamp{exported_job!~"calendar_sync|cleanup"}
+              expr: time() - max_over_time(scheduler_job_last_success_timestamp{exported_job!~"calendar_sync|cleanup"}[1h])
               instant: true
               refId: A
           - refId: B
@@ -948,9 +957,20 @@ groups:
           description: 'At least 3 `scraper GET /scraper/stream` resolutions exceeded 12 s in the last hour — a multi-provider failover cascade (normal is sub-second warm / 8 s single-gate). Check provider health (/api/anime/_/scraper/health), the Scraper dashboards, and recent parser_fallback_total.'
           reason: stream_cascade_latency
 
-      # AePlayerPlaybackFailures (warning) — >1 viewer-facing aePlayer failure
-      # (auto-failover chain exhausted, viewer hit the error overlay) in 1h.
-      # Non-terminal first-party `ae` hiccups the chain recovered from are excluded.
+      # AePlayerPlaybackFailures (warning) — ≥2 DISTINCT clients hit a
+      # viewer-facing aePlayer failure (auto-failover chain exhausted, viewer
+      # hit the error overlay) in 1h. Non-terminal first-party `ae` hiccups the
+      # chain recovered from are excluded.
+      #
+      # Distinctness (AUTO-579/585): both historical firings were one client's
+      # retry burst — backend healthy, no regression. Player-pipeline events
+      # carry NO identity columns (anonymous_id/session_id/ip_hash all empty —
+      # deliberate playback-privacy posture), so the ua|viewport|connection
+      # fingerprint from properties.client is the discriminator. Trade-off:
+      # two real viewers with identical fingerprints in the same hour would
+      # count as one (no page) — accepted for a warning-tier rule; single-user
+      # breakage still surfaces via error reports and the playback-health
+      # dashboard.
       - uid: aeplayer-playback-failures
         title: AePlayerPlaybackFailures
         noDataState: OK
@@ -972,7 +992,11 @@ groups:
               intervalMs: 1000
               maxDataPoints: 43200
               rawSql: |
-                SELECT count() AS value
+                SELECT uniqExact(concat(
+                    JSONExtractString(properties, 'client', 'ua'), '|',
+                    JSONExtractString(properties, 'client', 'viewport'), '|',
+                    JSONExtractString(properties, 'client', 'connection')
+                  )) AS value
                 FROM analytics.events
                 WHERE effect_kind = 'player_failed'
                   AND JSONExtractBool(properties, 'all_exhausted') = 1
@@ -1008,8 +1032,8 @@ groups:
           component: aeplayer
           reason: playback_failed
         annotations:
-          summary: 'aePlayer viewer-facing playback failures: {{ $values.B }} in the last hour (auto-failover chain exhausted — the viewer hit the error overlay)'
-          description: 'More than one viewer-facing aePlayer playback failure in the last hour: the auto-failover chain ran out of sources and the viewer saw the error overlay (all_exhausted=true). Non-terminal first-party `ae` hiccups the chain recovered from are deliberately excluded. Drill down in ClickHouse: SELECT properties FROM analytics.events WHERE effect_kind = ''player_failed'' AND JSONExtractBool(properties, ''all_exhausted'') = 1 AND timestamp >= now() - INTERVAL 1 HOUR ORDER BY timestamp DESC.'
+          summary: 'aePlayer viewer-facing playback failures across {{ $values.B }} distinct clients in the last hour (auto-failover chain exhausted — viewers hit the error overlay)'
+          description: 'Two or more DISTINCT clients (ua|viewport|connection fingerprint) hit a viewer-facing aePlayer playback failure in the last hour: the auto-failover chain ran out of sources and the viewer saw the error overlay (all_exhausted=true). Single-client retry bursts no longer fire this (AUTO-579/585 false positives). Non-terminal first-party `ae` hiccups the chain recovered from are deliberately excluded. Drill down in ClickHouse: SELECT timestamp, properties FROM analytics.events WHERE effect_kind = ''player_failed'' AND JSONExtractBool(properties, ''all_exhausted'') = 1 AND timestamp >= now() - INTERVAL 1 HOUR ORDER BY timestamp DESC.'
           reason: playback_failed
 
       - uid: provider-fleet-no-auto-playable

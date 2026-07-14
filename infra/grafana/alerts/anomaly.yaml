@@ -188,13 +188,19 @@ groups:
           reason: stream_cascade_latency
 
       # --------------------------------------------------------------------
-      # AePlayerPlaybackFailures (warning) — >1 terminal aePlayer failure in 1 h
+      # AePlayerPlaybackFailures (warning) — ≥2 DISTINCT clients with a
+      # viewer-facing aePlayer failure in 1 h
       # --------------------------------------------------------------------
-      # Counts analytics.events rows with effect_kind = 'player_failed' (aePlayer
-      # telemetry: all providers exhausted, or the first-party `ae` source
-      # failed) in the trailing 1 h. Fires when > 1 (threshold gt 1, i.e. >= 2
-      # failures), consistent with the low-volume anti-flap pattern used by
-      # the cascade rule above.
+      # Counts DISTINCT client fingerprints (ua|viewport|connection from
+      # properties.client) over analytics.events rows with effect_kind =
+      # 'player_failed' AND all_exhausted=true (the viewer actually hit the
+      # error overlay) in the trailing 1 h. Fires when > 1 (>= 2 distinct
+      # clients). Distinctness added after AUTO-579/585: both historical
+      # firings were one client's retry burst with a healthy backend.
+      # Player-pipeline events carry NO identity columns (anonymous_id/
+      # session_id/ip_hash all empty — playback-privacy posture), so the
+      # coarse fingerprint is the discriminator; identical-fingerprint
+      # collisions under-count, accepted for a warning-tier rule.
       - uid: aeplayer-playback-failures
         title: AePlayerPlaybackFailures
         noDataState: OK
@@ -216,9 +222,14 @@ groups:
               intervalMs: 1000
               maxDataPoints: 43200
               rawSql: |
-                SELECT count() AS value
+                SELECT uniqExact(concat(
+                    JSONExtractString(properties, 'client', 'ua'), '|',
+                    JSONExtractString(properties, 'client', 'viewport'), '|',
+                    JSONExtractString(properties, 'client', 'connection')
+                  )) AS value
                 FROM analytics.events
                 WHERE effect_kind = 'player_failed'
+                  AND JSONExtractBool(properties, 'all_exhausted') = 1
                   AND timestamp >= now() - INTERVAL 1 HOUR
           - refId: B
             relativeTimeRange:
@@ -251,6 +262,6 @@ groups:
           component: aeplayer
           reason: playback_failed
         annotations:
-          summary: 'aePlayer terminal playback-failure events: {{ $values.B }} in the last hour (all-providers-exhausted or ae-source failures)'
-          description: 'More than one terminal aePlayer playback failure in the last hour (all providers exhausted, or the first-party `ae` source failed). Drill down in ClickHouse: SELECT properties FROM analytics.events WHERE effect_kind = ''player_failed'' AND timestamp >= now() - INTERVAL 1 HOUR ORDER BY timestamp DESC.'
+          summary: 'aePlayer viewer-facing playback failures across {{ $values.B }} distinct clients in the last hour (auto-failover chain exhausted — viewers hit the error overlay)'
+          description: 'Two or more DISTINCT clients (ua|viewport|connection fingerprint) hit a viewer-facing aePlayer playback failure in the last hour: the auto-failover chain ran out of sources and the viewer saw the error overlay (all_exhausted=true). Single-client retry bursts no longer fire this (AUTO-579/585 false positives). Non-terminal first-party `ae` hiccups the chain recovered from are deliberately excluded. Drill down in ClickHouse: SELECT timestamp, properties FROM analytics.events WHERE effect_kind = ''player_failed'' AND JSONExtractBool(properties, ''all_exhausted'') = 1 AND timestamp >= now() - INTERVAL 1 HOUR ORDER BY timestamp DESC.'
           reason: playback_failed
