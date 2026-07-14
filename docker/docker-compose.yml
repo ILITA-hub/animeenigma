@@ -622,7 +622,7 @@ services:
       GRAFANA_SERVICE_URL: http://grafana:3000
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       # Access-token lifetime for gateway-minted (API-key) JWTs. Mirror the auth
       # service so all access tokens share one TTL. See
       # docs/superpowers/specs/2026-06-05-simplify-auth-sessions-design.md
@@ -680,7 +680,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
       REDIS_HOST: redis
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       # Access-token lifetime. 1h: sessions are non-rotating + revoke-only, so a
       # short access token only bounds revoke latency (<=1h). See
       # docs/superpowers/specs/2026-06-05-simplify-auth-sessions-design.md
@@ -720,13 +720,13 @@ services:
       DB_NAME: ${DB_NAME:-animeenigma}
       REDIS_HOST: redis
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       # Catalog signs stream/subtitle URLs with the HLS provenance HMAC; the
       # streaming proxy verifies them. Both MUST resolve the SAME key, so this
       # mirrors streaming's STREAM_TOKEN_SECRET (same default literal) — without
       # it, loadProvenanceSecret falls back to JWT_SECRET here while streaming
       # uses STREAM_TOKEN_SECRET, and every token is rejected.
-      STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:-stream-secret-change-in-production}
+      STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:?STREAM_TOKEN_SECRET must be set (see docker/.env)}
       SCRAPER_API_URL: http://scraper:8088
       # Must stay ABOVE the scraper's SCRAPER_BROWSER_PROVIDER_TIMEOUT (35s,
       # scraper service block below) — otherwise catalog closes the request
@@ -790,8 +790,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       S3_LIBRARY_BUCKET: ${S3_LIBRARY_BUCKET:-raw-library}
       S3_USE_SSL: "true"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
-      STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:-stream-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
+      STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:?STREAM_TOKEN_SECRET must be set (see docker/.env)}
       TRACING_ENABLED: "true"
       # AR-EGRESS-01/04/05 — BE egress recorder. Streaming ships ONE aggregated
       # HLS egress row per (watch-session, host) to analytics /internal/effects
@@ -822,7 +822,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
       REDIS_HOST: redis
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_ALERTS_BOT_TOKEN:-}
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
       REPORTS_DIR: /data/reports
@@ -870,7 +870,7 @@ services:
     environment:
       SERVER_PORT: 8084
       REDIS_HOST: redis
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8084:8084"
@@ -944,7 +944,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8086:8086"
@@ -978,7 +978,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       REDIS_HOST: redis
       # Phase 2 detector reads catalog's /internal/anime/{id}/episodes.
       CATALOG_URL: http://catalog:8081
@@ -1029,7 +1029,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       REDIS_HOST: redis
       # S6 combo-pin Shikimori /similar fallback.
       CATALOG_URL: http://catalog:8081
@@ -1064,7 +1064,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       REDIS_HOST: redis
       TRACING_ENABLED: "true"
     ports:
@@ -1178,7 +1178,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       REDIS_HOST: redis
       CATALOG_URL: http://catalog:8081
       TRACING_ENABLED: "true"
@@ -1213,7 +1213,7 @@ services:
       SERVER_PORT: 8091
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       # WT-FOUND-02 — sliding TTL on Redis keys + 5min grace.
       WATCH_TOGETHER_ROOM_TTL: ${WATCH_TOGETHER_ROOM_TTL:-15m}
       WATCH_TOGETHER_GRACE_PERIOD: ${WATCH_TOGETHER_GRACE_PERIOD:-5m}
@@ -1260,7 +1260,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       REDIS_HOST: redis
       GACHA_ENABLED: "true"
       GACHA_STARTER_BONUS: "300"
@@ -1303,7 +1303,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-animeenigma}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       REDIS_HOST: redis
       FANFIC_GROQ_API_KEY: ${FANFIC_GROQ_API_KEY}
       FANFIC_GROQ_MODEL: ${FANFIC_GROQ_MODEL:-llama-3.1-8b-instant}
@@ -1399,7 +1399,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${LIBRARY_DB_NAME:-library}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       # All object I/O flows through the internal storage service (services/storage,
       # port 8099, Docker-network-only) — the embedded MinIO writer was deleted.
       LIBRARY_STORAGE_URL: http://storage:8099
@@ -1454,7 +1454,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${UPSCALER_DB_NAME:-upscaler}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see docker/.env)}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       LIBRARY_URL: http://library:8089

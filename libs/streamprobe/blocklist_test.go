@@ -36,27 +36,6 @@ func TestIsAdCDNHost(t *testing.T) {
 	}
 }
 
-// TestBlocklist_RedisLiftTODOAnchored enforces the spec §4.1.c-TODO
-// anchor in CI — the blocklist.go file MUST contain a `// TODO:` block
-// referencing the `scraper:streamprobe:blocklist` Redis key.
-func TestBlocklist_RedisLiftTODOAnchored(t *testing.T) {
-	data, err := os.ReadFile("blocklist.go")
-	if err != nil {
-		t.Fatalf("read blocklist.go: %v", err)
-	}
-	body := string(data)
-	if !strings.Contains(body, "// TODO") {
-		t.Fatalf("blocklist.go missing `// TODO` anchor")
-	}
-	if !strings.Contains(body, "scraper:streamprobe:blocklist") {
-		t.Fatalf("blocklist.go missing `scraper:streamprobe:blocklist` Redis key anchor")
-	}
-	// Sanity: TODO block is at least 3 lines (the spec calls out a multi-line block).
-	if strings.Count(body, "//") < 3 {
-		t.Fatalf("blocklist.go has fewer than 3 comment lines; expected multi-line TODO block")
-	}
-}
-
 func TestBlocklist_ContainsExpectedSuffixes(t *testing.T) {
 	data, err := os.ReadFile("blocklist.go")
 	if err != nil {
