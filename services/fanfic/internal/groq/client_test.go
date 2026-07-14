@@ -2,6 +2,7 @@ package groq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -51,5 +52,19 @@ func TestStream_UpstreamError(t *testing.T) {
 	c := New("k", srv.URL, "m", time.Second)
 	if _, _, err := c.Stream(context.Background(), "s", "u", 10, 0.5, func(string) {}); err == nil {
 		t.Fatal("expected error on 429, got nil")
+	}
+}
+
+func TestStream_401_ReturnsStatusError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_api_key"}}`))
+	}))
+	defer srv.Close()
+	c := New("bad", srv.URL, "m", 5*time.Second)
+	_, _, err := c.Stream(context.Background(), "s", "u", 10, 0.9, func(string) {})
+	var se *StatusError
+	if !errors.As(err, &se) || se.Code != http.StatusUnauthorized {
+		t.Fatalf("want *StatusError{401}, got %v", err)
 	}
 }

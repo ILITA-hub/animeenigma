@@ -20,6 +20,18 @@ type Client struct {
 	http    *http.Client
 }
 
+// StatusError is a non-200 response from Groq. It preserves the HTTP status so
+// callers (ensure-daily) can distinguish auth failures (401/403) from transient
+// errors without string-matching.
+type StatusError struct {
+	Code int
+	Body string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("groq status %d: %s", e.Code, e.Body)
+}
+
 func New(apiKey, baseURL, model string, timeout time.Duration) *Client {
 	return &Client{
 		apiKey:  apiKey,
@@ -92,7 +104,7 @@ func (c *Client) Stream(ctx context.Context, system, user string, maxTokens int,
 
 	if resp.StatusCode != http.StatusOK {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", 0, fmt.Errorf("groq status %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+		return "", 0, &StatusError{Code: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
 	}
 
 	var sb strings.Builder
