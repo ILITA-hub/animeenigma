@@ -781,12 +781,95 @@
       ]
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Empty is healthy. AUTO-608: rows here exist in stream_providers but no service registered code for them.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 141,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (provider, seam) (provider_unwired == 1)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Unwired roster rows (DB row, no code)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "provider": 0,
+              "seam": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "provider": "Provider",
+              "seam": "Seam",
+              "Value": "Unwired"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 33
       },
       "id": 103,
       "panels": [],
@@ -872,7 +955,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 34
       },
       "id": 26,
       "options": {
@@ -907,7 +990,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 42
       },
       "id": 104,
       "panels": [],
@@ -945,7 +1028,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 37
+        "y": 43
       },
       "id": 12,
       "options": {
@@ -1006,7 +1089,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 37
+        "y": 43
       },
       "id": 13,
       "options": {
@@ -1059,7 +1142,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 44
+        "y": 50
       },
       "id": 23,
       "options": {
@@ -1113,7 +1196,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 44
+        "y": 50
       },
       "id": 24,
       "options": {
@@ -1202,7 +1285,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 44
+        "y": 50
       },
       "id": 31,
       "options": {
@@ -1267,7 +1350,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 57
       },
       "id": 105,
       "panels": [],
@@ -1287,7 +1370,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 52
+        "y": 58
       },
       "id": 46,
       "options": {
@@ -1325,7 +1408,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 52
+        "y": 58
       },
       "id": 47,
       "options": {
@@ -1363,7 +1446,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 60
+        "y": 66
       },
       "id": 48,
       "options": {
@@ -1401,7 +1484,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 60
+        "y": 66
       },
       "id": 49,
       "options": {
@@ -1439,7 +1522,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 60
+        "y": 66
       },
       "id": 50,
       "options": {
@@ -1470,7 +1553,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 74
       },
       "id": 106,
       "panels": [],
@@ -1507,7 +1590,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 69
+        "y": 75
       },
       "id": 42,
       "options": {
@@ -1578,7 +1661,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 69
+        "y": 75
       },
       "id": 43,
       "options": {
@@ -1649,7 +1732,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 69
+        "y": 75
       },
       "id": 44,
       "options": {
@@ -1696,7 +1779,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 82
       },
       "id": 107,
       "panels": [],
@@ -1775,7 +1858,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 77
+        "y": 83
       },
       "id": 60,
       "options": {
@@ -1810,7 +1893,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 86 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 92 },
       "id": 108,
       "panels": [],
       "title": "Protocol Ladder (h1/h2/h3)",
@@ -1820,7 +1903,7 @@
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "description": "Segment-volume-weighted share of each negotiated protocol over the selected window.",
       "fieldConfig": { "defaults": { "custom": { "hideFrom": { "legend": false, "tooltip": false, "viz": false } }, "mappings": [] }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 87 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 93 },
       "id": 61,
       "options": {
         "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
@@ -1864,7 +1947,7 @@
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 95 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 101 },
       "id": 62,
       "options": { "cellHeight": "sm", "footer": { "show": false }, "showHeader": true },
       "pluginVersion": "10.3.3",
