@@ -1161,13 +1161,14 @@ groups:
         condition: C
         noDataState: OK
         execErrState: Error
+        # for:15m is itself the anti-flap re-arm: after resolving, the condition
+        # must hold true a full 15m again before re-firing, so back-to-back pages
+        # are structurally >=15m apart. Combined with the recalibrated thresholds
+        # (baseline no longer trips Elevated) and the 12h repeat_interval route in
+        # policies.yml, this holds the warning to ~one page per 12h. NOTE: Grafana
+        # 10.3.3 file provisioning does NOT support keep_firing_for (silently
+        # ignored) — do not add it here expecting an effect; revisit on Grafana 11.
         for: 15m
-        # Anti-flap: once firing, stay firing across dips under threshold for up
-        # to 30m so a brief recover-then-reelevate is ONE episode, not two pages.
-        # Paired with the alertname=HostPressureSustained route in policies.yml
-        # (repeat_interval 12h) to hold this warning to at most one notification
-        # per 12h. A genuine sustained clear still resolves within 30m.
-        keep_firing_for: 30m
         data:
           - refId: A
             relativeTimeRange:

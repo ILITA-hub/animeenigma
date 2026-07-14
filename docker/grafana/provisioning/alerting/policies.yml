@@ -16,10 +16,13 @@ policies:
       # alert does not need the default 4h nag — one heads-up per half-day is
       # plenty. Scoped to THIS alert only via alertname match; HostPressureCritical
       # (L=2, genuine UX distress) deliberately keeps the default fast cadence.
-      # Paired with keep_firing_for on the rule (rules.yml / infra mirror) so a
-      # brief dip-and-recover can't resolve->refire and slip extra pages inside
-      # the 12h window. Same maintenance-webhook receiver; continue:false stops
-      # further matching (this alert is never diagnostic-severity anyway).
+      # Resolve->refire churn is held down at the source: the recalibrated
+      # thresholds (9c3e7d00) keep baseline out of Elevated, and the rule's
+      # for:15m means any re-fire needs another full 15m of genuine elevation.
+      # (keep_firing_for would be the belt-and-suspenders anti-flap but Grafana
+      # 10.3.3 file provisioning does not support it — revisit on Grafana 11.)
+      # Same maintenance-webhook receiver; continue:false stops further matching
+      # (this alert is never diagnostic-severity anyway).
       - receiver: maintenance-webhook
         object_matchers:
           - ["alertname", "=", "HostPressureSustained"]
