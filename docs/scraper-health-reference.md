@@ -66,12 +66,11 @@ wrong twice, and both fixes are load-bearing:
   unwrapped back to the upstream URL before the next hop.
 - **AUTO-125 — probe must take the user's path.** Most provider CDNs reject a
   direct GET from the scraper (signed URLs, Referer gates, geo-fences), which
-  made `stream_segment` flap DOWN while real users streamed fine. When the
-  target host matches the shared HLS allowlist, the fetch is rewritten through
-  the local streaming service's proxy:
-  `http://streaming:8082/api/v1/hls-proxy?url=…&referer=…`
-  (override base via `SCRAPER_PROBE_PROXY_BASE_URL`; host-match logic mirrors
-  `libs/videoutils.isHLSDomainAllowed`).
+  made `stream_segment` flap DOWN while real users streamed fine. Probe fetches
+  that go through the local streaming service's proxy
+  (`http://streaming:8082/api/v1/hls-proxy?url=…&referer=…`) must replay the
+  stream's provenance signature (`exp`/`sig`) — the proxy's trust gate is
+  `first-party OR signed` since the static allowlist was retired (2026-07-14).
 
 Guard rails on this stage:
 

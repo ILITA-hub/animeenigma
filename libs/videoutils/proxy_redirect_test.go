@@ -45,11 +45,11 @@ func extractProxiedChildTargets(t *testing.T, manifest string) []string {
 
 // TestManifestRewrite_RedirectedMasterBasesChildrenOnFinalURL is the S1
 // regression test for AUTO-517: when the master playlist request 302s to a
-// DIFFERENT host (signed ultracloud.cc master → mt.nekostream.site), the
-// manifest's relative children must be rebased onto the POST-redirect final
-// URL (the RFC-correct HLS base URI) and carry a freshly-minted masked token /
-// provenance signature for that host — not resolve against the pre-redirect
-// source host, which re-gates them bare.
+// DIFFERENT host (e.g. a signed ultracloud.cc master redirecting to its
+// inner-embed CDN), the manifest's relative children must be rebased onto the
+// POST-redirect final URL (the RFC-correct HLS base URI) and carry a
+// freshly-minted masked token / provenance signature for that host — not
+// resolve against the pre-redirect source host, which re-gates them bare.
 func TestManifestRewrite_RedirectedMasterBasesChildrenOnFinalURL(t *testing.T) {
 	// Final host: serves the real master with a relative child.
 	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

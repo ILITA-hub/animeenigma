@@ -17,9 +17,9 @@ import (
 //	GET /api/anime/{uuid}/{provider}/episodes         → {episodes:[]int, teams:[…]}
 //	GET /api/anime/{uuid}/{provider}/stream?episode=N → {url, referer, exp, sig, type:"mp4"}
 //
-// The returned URL is a signed progressive MP4 (video.sibnet.ru / incvideo1.online),
-// NOT in the proxy allowlist, so the validator replays exp/sig + Referer through
-// the hls-proxy. AnimeJoy serves no HLS manifest, so the validator's
+// The returned URL is a signed progressive MP4 (video.sibnet.ru / incvideo1.online);
+// the validator replays exp/sig + Referer through the hls-proxy (signing is the
+// trust gate). AnimeJoy serves no HLS manifest, so the validator's
 // progressive-media path ffprobes the mp4 head directly (no segment chain).
 type AnimejoyResolver struct {
 	base string

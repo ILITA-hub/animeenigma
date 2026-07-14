@@ -498,8 +498,10 @@ Backend failover order and provider mechanics:
 > switch providers manually in the Source panel.
 
 Stream URLs are wrapped through the backend **HLS proxy** and **signed**
-(`videoutils.SignStreamURL`); scraper CDN hosts are auto-trusted via signing and
-do **not** need an allowlist entry (see CLAUDE.md proxy section).
+(`videoutils.SignStreamURL`); the proxy's trust gate is `first-party OR signed`
+(+ masked-token preauth) — the static host allowlist was retired 2026-07-14, so
+signing at the source (`streamsign.Stamp`) is mandatory for every external
+stream/subtitle URL (see CLAUDE.md proxy section).
 
 **Known issue — HLS codec stall (D-07):** for some HLS sources hls.js loads the
 master + level playlist but never requests `.ts` fragments (readyState stays 0).
@@ -609,7 +611,7 @@ player CSS breakpoint) and `isCoarse` (`pointer: coarse`, gates gestures).
 10. **`hls.js` pinned `~1.5.20`** — do not bump to 1.6.x.
 11. **All combo mutations go through the `usePlayerState` setters** — never mutate
     `combo.value` fields directly.
-12. **Don't add scraper CDNs to the proxy allowlist** — signing auto-trusts them.
+12. **There is no proxy allowlist** (retired 2026-07-14) — every external stream/subtitle URL must be provenance-signed at the source (`streamsign.Stamp`).
 
 ---
 

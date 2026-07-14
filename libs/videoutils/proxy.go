@@ -52,7 +52,7 @@ type ProxyConfig struct {
 	// is the seam used to presign self-hosted MinIO reads (private bucket)
 	// without making the proxy MinIO-aware: only URLs the signer claims are
 	// rewritten, so every external-CDN path is untouched. The ORIGINAL URL
-	// is still used for allow-list checks, M3U8 rewriting, and provenance —
+	// is still used for trust-gate checks, M3U8 rewriting, and provenance —
 	// the signer only affects the actual outbound GET. Not serialized.
 	UpstreamSigner func(rawURL string) (string, bool) `json:"-" yaml:"-"`
 
@@ -96,7 +96,7 @@ type ProxyConfig struct {
 
 // fetchURLFor returns the URL the proxy should actually GET for sourceURL:
 // the UpstreamSigner's rewrite when it claims the URL, otherwise sourceURL
-// unchanged. Allow-list / rewrite / provenance logic always uses the
+// unchanged. Trust-gate / rewrite / provenance logic always uses the
 // original sourceURL — only the outbound request target changes.
 func (p *VideoProxy) fetchURLFor(sourceURL string) string {
 	if p.config.UpstreamSigner != nil {
@@ -396,7 +396,10 @@ func (p *VideoProxy) GetStreamInfo(ctx context.Context, sourceURL string) (*Vide
 	}, nil
 }
 
-// matchHLSDomain reports whether host matches a single allow-list pattern.
+// matchDomainPattern reports whether host matches a single allow-list pattern.
+// Used ONLY by the legacy signed-token path's isDomainAllowed (ProxyConfig.
+// AllowedDomains / PROXY_ALLOWED_DOMAINS) — the HLS trust gate's static
+// allowlist was retired 2026-07-14 in favor of provenance signing.
 // host MUST already be lower-cased (and port-stripped if the caller strips
 // ports). Supported pattern forms:
 //
@@ -410,13 +413,7 @@ func (p *VideoProxy) GetStreamInfo(ctx context.Context, sourceURL string) (*Vide
 //     family's real TLD rejects every off-TLD lookalike.
 //   - "htv-*"         bare prefix wildcard (no suffix anchor) — legacy form,
 //     still honored for backward compatibility but discouraged; prefer a suffix.
-//
-// NOTE (residual, tracked): a prefix wildcard anchored to a registrable TLD
-// (.com/.top) still admits an attacker-registered same-TLD lookalike
-// (htv-evil.com). Fully closing that needs a dial-time private-IP SSRF guard
-// (block loopback/private/link-local/metadata targets) that is allow-list-aware
-// so it does not break the internal MinIO fetch path — see the audit follow-up.
-func matchHLSDomain(host, pattern string) bool {
+func matchDomainPattern(host, pattern string) bool {
 	pattern = strings.ToLower(pattern)
 	switch {
 	case strings.HasPrefix(pattern, "*."):
@@ -436,6 +433,8 @@ func matchHLSDomain(host, pattern string) bool {
 
 // isDomainAllowed checks if a domain is in the allowed list.
 // Returns false when AllowedDomains is empty (fail-closed).
+// This gates ONLY the legacy signed-token path (ProxyStreamCounted); the HLS
+// trust gate (proxyRefererCounted) uses first-party + provenance instead.
 func (p *VideoProxy) isDomainAllowed(host string) bool {
 	if len(p.config.AllowedDomains) == 0 {
 		return false
@@ -443,7 +442,7 @@ func (p *VideoProxy) isDomainAllowed(host string) bool {
 
 	host = strings.ToLower(host)
 	for _, allowed := range p.config.AllowedDomains {
-		if matchHLSDomain(host, allowed) {
+		if matchDomainPattern(host, allowed) {
 			return true
 		}
 	}
@@ -466,71 +465,6 @@ type VideoResolver interface {
 	ResolveExternal(ctx context.Context, externalURL string) (*StreamResult, error)
 }
 
-// HLSProxyAllowedDomains is the static host allow-list for the HLS proxy's
-// third-party-domain gate. It is the FALLBACK trust path — the primary
-// mechanism is signed-URL provenance (see provenance.go): catalog signs every
-// scraper-resolved stream/subtitle URL (services/catalog/internal/streamsign),
-// and the proxy mints fresh HMAC tokens for child playlist/segment URLs it
-// rewrites, so scraper CDNs — including unbounded rotating segment hosts —
-// need NO entry here.
-//
-// Only two kinds of hosts belong on this list:
-//
-//  1. First-party infrastructure reached by hostname over the docker network
-//     (stealth-scraper sidecar, MinIO).
-//  2. Hosts emitted by catalog endpoints that do NOT sign their URLs yet
-//     (Kodik ad-free, Hanime, AnimeLib, 18anime, subtitle files).
-//
-// Before adding an entry, sign at the source instead (streamsign.Sign — see
-// the animejoy endpoints for the pattern).
-var HLSProxyAllowedDomains = []string{
-	// First-party docker-network hosts. stealth-scraper's /hls restreams the
-	// real rotating CDN inside its Camoufox context for engine=browser
-	// providers (the upstream CDN itself stays unlisted); MinIO holds the
-	// library/raw-provider HLS segments (port-stripped "minio" matches
-	// minio:9000). Both also appear in FirstPartyHosts for the SSRF dial
-	// guard — this gate runs BEFORE presigning/dialing, so they must be
-	// listed here too.
-	"stealth-scraper",
-	"minio",
-
-	// Kodik ad-free HLS (kodikextract; GetKodikStreamSource returns the URL
-	// unsigned). Manifest on cloud.solodcdn.com 302-redirects to node hosts
-	// (draco.cloud.solodcdn.com, ...); the eTLD+1 entry covers those via the
-	// HasSuffix(host, "."+allowed) match.
-	"solodcdn.com",
-	"cloud.solodcdn.com",
-
-	// Hanime video CDN family (GetHanimeStream returns URLs unsigned).
-	// Wildcards are anchored to the family's real TLD to block off-TLD
-	// lookalikes — see matchHLSDomain.
-	"hanime.tv",
-	"highwinds-cdn.com",
-	"htv-*.com",      // htv-belias.com, htv-hydaelyn.com, ...
-	"hydaelyn-*.top", // hydaelyn-25x-00.top through 19.top
-	"zodiark-*.top",  // zodiark-25x-00.top through 09.top
-
-	// AnimeLib video CDNs (GetAnimeLibStream returns URLs unsigned).
-	"cdnlibs.org",
-	"hentaicdn.org",
-
-	// 18anime resolved stream hosts (catalog's Get18AnimeStream re-packages
-	// the scraper body WITHOUT the provenance signature, so these stay until
-	// that path signs). NOT 18anime.me itself — these are the embed mirrors.
-	"mp4upload.com",    // progressive MP4 (aN.mp4upload.com:183), requires Referer https://www.mp4upload.com/
-	"turboviplay.com",  // turbovid master m3u8 host (cdnN.turboviplay.com)
-	"turbosplayer.com", // turbovid nested variant/segment host
-
-	// Japanese subtitle files (subtitle endpoints return URLs unsigned).
-	"jimaku.cc",
-
-	// AUTO-517 stop-gap: Miruro vidtube inner-embed CDN. The (signed)
-	// ultracloud.cc master/variant playlists 302-redirect here, and the
-	// redirect target is re-gated without a token. Remove once the proxy
-	// mints provenance across the redirect chain.
-	"mt.nekostream.site",
-}
-
 // UpstreamError represents an error from the upstream CDN.
 type UpstreamError struct {
 	StatusCode int
@@ -546,10 +480,11 @@ func (e *UpstreamError) Error() string {
 }
 
 // DomainNotAllowedError is returned by ProxyWithReferer (and any future
-// HLS-proxy entry point) when the parsed URL's host is not in
-// HLSProxyAllowedDomains. Streaming handlers should catch this with
+// HLS-proxy entry point) when the parsed URL's host fails the trust gate:
+// not a first-party internal host, no valid provenance signature, and no
+// preauth (sealed stream token). Streaming handlers should catch this with
 // errors.As and emit HTTP 502 — the upstream URL is structurally
-// unreachable through our allowlist gate, not a transient/caller error.
+// unreachable through our trust gate, not a transient/caller error.
 type DomainNotAllowedError struct {
 	Domain string
 }
@@ -802,9 +737,9 @@ func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, ref
 
 // ProxyPreauthCounted is ProxyWithRefererCounted for an upstream URL that was
 // already authorized by decoding a sealed stream token (streamtoken.go). The
-// static-allowlist / provenance-signature gate is skipped — the AES-GCM token
-// WAS the authorization. Everything else (SSRF dial guard, edge failover,
-// m3u8 rewriting, byte counting) is identical.
+// first-party / provenance-signature trust gate is skipped — the AES-GCM
+// token WAS the authorization. Everything else (SSRF dial guard, edge
+// failover, m3u8 rewriting, byte counting) is identical.
 func (p *VideoProxy) ProxyPreauthCounted(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) (uint64, uint64, error) {
 	return p.proxyRefererCounted(ctx, sourceURL, referer, true, w, r)
 }
@@ -817,14 +752,25 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		return 0, 0, fmt.Errorf("invalid source url: %w", err)
 	}
 
-	// Check if domain is allowed for HLS proxy. A valid provenance token
-	// (minted when the proxy rewrote a playlist from an allowlisted origin)
-	// authorizes an otherwise-unlisted host — this is how rotating segment
-	// CDNs (megaplay/mewstream) are served without a static per-domain entry.
-	// preauth=true skips the gate entirely: the caller already authorized the
-	// URL by opening a sealed AES-GCM stream token (streamtoken.go), which can
-	// only be minted server-side for SSRF-vetted URLs.
-	if !preauth && !isHLSDomainAllowed(parsed.Host) &&
+	// Trust gate: preauth (sealed token) OR first-party internal host OR
+	// provenance-signed. The static external-domain allowlist was retired
+	// 2026-07-14 — every catalog emitter now signs its URLs at the source
+	// (streamsign.Stamp; see docs/plans/2026-07-14-retire-allowlist-blocklist.md,
+	// Track S).
+	//
+	//   - preauth=true skips the gate entirely: the caller already authorized
+	//     the URL by opening a sealed AES-GCM stream token (streamtoken.go),
+	//     which can only be minted server-side for SSRF-vetted URLs.
+	//   - First-party hosts (stealth-scraper, MinIO — the configured
+	//     FirstPartyHosts set) resolve to Docker-private IPs, so
+	//     netguard.ValidatePublicURL inside SignStreamURL rejects them by
+	//     design and they can never be publicly signed; the exact-match host
+	//     check admits them instead.
+	//   - Everything else must carry a valid provenance token — either signed
+	//     at the source by catalog (streamsign) or minted by this proxy when
+	//     it rewrote a playlist child. This is how rotating segment CDNs
+	//     (megaplay/mewstream) are served without any static per-domain entry.
+	if !preauth && !firstPartyAddr(parsed.Host, p.config.FirstPartyHosts) &&
 		!validProvenanceToken(sourceURL, r.URL.Query().Get("exp"), r.URL.Query().Get("sig"), time.Now()) {
 		return 0, 0, &DomainNotAllowedError{Domain: parsed.Host}
 	}
@@ -923,8 +869,8 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 	// retrieved from). Rewriting against the pre-redirect sourceURL re-bases a
 	// 302 target's relative children onto the WRONG host, and — worse — those
 	// bare children then reach the gate with neither a masked token nor
-	// exp/sig (AUTO-517: signed ultracloud.cc master 302s to mt.nekostream.site
-	// and its children were re-gated unsigned). rewriteBase feeds ONLY the
+	// exp/sig (AUTO-517: a signed ultracloud.cc master 302s to its inner-embed
+	// CDN and its children were re-gated unsigned). rewriteBase feeds ONLY the
 	// rewrite below; sourceURL stays authoritative for the (already-passed)
 	// gate, Referer, and logging. resp.Request.Response is non-nil exactly when
 	// the client followed a redirect, so a non-redirected fetch keeps the
@@ -1208,11 +1154,10 @@ func rewriteHLSURL(urlStr, basePath, referer, sess string) string {
 	}
 
 	// Mint a provenance token. This URL was extracted from a playlist the
-	// proxy fetched from an allowlisted origin, so it inherits that trust:
-	// the segment/variant request may bypass the static host allowlist (see
-	// provenance.go) — essential for players whose segment CDN rotates across
-	// an unbounded pool of throwaway domains. Harmless for already-allowlisted
-	// hosts, which pass the static check regardless.
+	// proxy fetched from a trusted (signed or first-party) origin, so it
+	// inherits that trust: the segment/variant request passes the trust gate
+	// on its token (see provenance.go) — essential for players whose segment
+	// CDN rotates across an unbounded pool of throwaway domains.
 	exp, sig := signProvenance(absoluteURL, time.Now())
 	proxyURL += "&exp=" + exp + "&sig=" + sig
 
@@ -1360,24 +1305,6 @@ func getCorrectHLSContentType(path, upstreamContentType string, trustedUpstream 
 func hasImageExt(pathLower string) bool {
 	return strings.HasSuffix(pathLower, ".jpg") || strings.HasSuffix(pathLower, ".jpeg") ||
 		strings.HasSuffix(pathLower, ".png") || strings.HasSuffix(pathLower, ".webp")
-}
-
-// isHLSDomainAllowed checks if a domain is allowed for HLS proxying
-func isHLSDomainAllowed(host string) bool {
-	host = strings.ToLower(host)
-
-	// Strip port number if present
-	if colonIdx := strings.LastIndex(host, ":"); colonIdx != -1 {
-		host = host[:colonIdx]
-	}
-
-	for _, allowed := range HLSProxyAllowedDomains {
-		if matchHLSDomain(host, allowed) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // rateLimitedCopy copies data with a rate limit

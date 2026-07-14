@@ -294,9 +294,9 @@ type AnimejoyTeam struct {
 // the stream on the embed/shell page's Referer (video.sibnet.ru / fsst.online),
 // so the proxy must send it. Type is always "mp4" (progressive, not HLS). The
 // resolved URL is an absolute https URL whose provenance token (Exp/Sig)
-// authorizes the un-allowlisted CDN host — the proxy follows the 302 to the
-// real CDN (dvNN.sibnet.ru / filevideo1.com) within the same fetch, so NO
-// HLSProxyAllowedDomains entry is required. RU-sub only.
+// authorizes the external CDN host through the proxy's trust gate — the
+// proxy follows the 302 to the real CDN (dvNN.sibnet.ru / filevideo1.com)
+// within the same fetch. RU-sub only.
 type AnimejoyStream struct {
 	URL       string    `json:"url"`
 	Type      string    `json:"type"`

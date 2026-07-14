@@ -1,25 +1,26 @@
 // provenance.go — HMAC provenance tokens for the HLS proxy.
 //
 // Problem: some upstream players (megaplay.buzz / mewstream, 2026-06) serve
-// their master + variant playlists from a STABLE, allowlistable origin
-// (cdn.mewstream.buzz) but place the actual .ts segments on an UNBOUNDED,
-// continuously-rotating pool of throwaway .click/.buzz/.club domains. A
-// static host allowlist cannot keep up — every new episode draws a fresh
-// segment domain.
+// their master + variant playlists from a STABLE origin (cdn.mewstream.buzz)
+// but place the actual .ts segments on an UNBOUNDED, continuously-rotating
+// pool of throwaway .click/.buzz/.club domains. No static host list can keep
+// up — every new episode draws a fresh segment domain.
 //
-// Solution: when the proxy rewrites a playlist it fetched from an
-// already-allowlisted origin, it signs each rewritten child/segment URL with
-// a short-TTL HMAC (the "provenance token"). A later segment request bearing
-// a valid token bypasses the static host allowlist — its provenance is the
-// trusted playlist, not its own domain. This is purely ADDITIVE: tokens only
-// ever GRANT access, and they can only be minted for URLs that appeared
-// inside a playlist served from an allowlisted host, so the blast radius is
-// exactly "hosts a trusted CDN's playlist points at". Non-token requests are
-// unaffected and still go through the static allowlist.
+// Solution: when the proxy rewrites a playlist it fetched from a trusted
+// origin (provenance-signed by catalog, or a first-party internal host), it
+// signs each rewritten child/segment URL with a short-TTL HMAC (the
+// "provenance token"). A later segment request bearing a valid token passes
+// the proxy's trust gate — its provenance is the trusted playlist, not its
+// own domain. Tokens only ever GRANT access, and they can only be minted for
+// URLs that appeared inside a playlist served through the gate, so the blast
+// radius is exactly "hosts a trusted CDN's playlist points at".
 //
-// The token is a provenance marker, NOT an auth boundary: a weak/absent
-// secret degrades gracefully (segments simply fall back to failing the
-// static allowlist), so this never blocks a legitimately-allowlisted host.
+// Since 2026-07-14 signing IS the trust model (the static external-domain
+// allowlist was retired — docs/plans/2026-07-14-retire-allowlist-blocklist.md):
+// the HLS gate is `preauth (sealed token) OR first-party internal host OR
+// provenance-signed`. Catalog signs every externally-hosted stream/subtitle
+// URL at the source (streamsign.Stamp), and this file's minting covers the
+// playlist children.
 package videoutils
 
 import (
@@ -56,14 +57,12 @@ var (
 // FAIL CLOSED when neither is set: previously this fell back to a public,
 // hardcoded default ("animeenigma-hls-provenance-default"). Because that value
 // lives in the source tree, anyone could compute a valid provenance MAC for an
-// ARBITRARY url and have the HLS proxy fetch it, bypassing the static host
-// allow-list entirely (SSRF / open-proxy — the provenance token is the
-// allow-list's "OR signed" half). With no real secret we now disable the token
-// mechanism instead: signing is a no-op and validation always fails, so the
-// proxy falls back to the static allow-list only. Legitimately-allow-listed
-// hosts are unaffected (they never carried a token); only the rotating-CDN
-// segment bypass stops working until STREAM_TOKEN_SECRET (or JWT_SECRET) is set
-// — which production always sets.
+// ARBITRARY url and have the HLS proxy fetch it (SSRF / open-proxy — the
+// provenance token is the trust gate's "OR signed" arm). With no real secret
+// we disable the token mechanism instead: signing is a no-op and validation
+// always fails, so the gate admits only preauth (sealed) requests and
+// first-party internal hosts. Every external stream stops working until
+// STREAM_TOKEN_SECRET (or JWT_SECRET) is set — which production always sets.
 func loadProvenanceSecret() []byte {
 	provenanceSecretOnce.Do(func() {
 		for _, env := range []string{"STREAM_TOKEN_SECRET", "JWT_SECRET"} {
@@ -104,13 +103,13 @@ func signProvenance(rawURL string, now time.Time) (exp, sig string) {
 	if !provenanceEnabled() {
 		// No secret configured → mint nothing. Callers append &exp=&sig= with
 		// empty values, which validProvenanceToken rejects, so the segment
-		// simply falls back to the static allow-list.
+		// is refused by the trust gate (fail closed).
 		return "", ""
 	}
 	// SSRF guard (finding #65): never mint a token for a URL whose scheme is
 	// not http/https or whose IP-literal host is private/loopback/link-local.
-	// A token bypasses the static host allow-list, so a compromised allow-listed
-	// CDN must not be able to self-mint authorization for http://169.254.169.254
+	// A token IS the trust gate's authorization, so a compromised trusted CDN
+	// must not be able to self-mint authorization for http://169.254.169.254
 	// or http://10.x. Hostnames pass this cheap check; the dial-time guard in
 	// newIPv4Transport blocks any that resolve to a private address.
 	if !allowLoopbackForTest && netguard.ValidatePublicURL(rawURL) != nil {
@@ -122,7 +121,7 @@ func signProvenance(rawURL string, now time.Time) (exp, sig string) {
 
 // SignStreamURL signs an entry-point stream/subtitle URL that the backend
 // resolved, returning the (exp, sig) pair the frontend appends as &exp=&sig= so
-// the HLS proxy trusts it WITHOUT a host allowlist. It is the public
+// the HLS proxy's trust gate admits it. It is the public
 // counterpart of the internal segment-rewrite minting and verifies against the
 // same validProvenanceToken the proxy uses.
 //
@@ -137,7 +136,8 @@ func SignStreamURL(rawURL string) (exp, sig string) {
 
 // validProvenanceToken reports whether (expStr, sig) authenticate rawURL and
 // the token is unexpired. Constant-time over the signature. Missing/garbled
-// tokens return false (caller then falls back to the static allowlist).
+// tokens return false (the trust gate then rejects the request unless the
+// host is first-party or the call is preauth).
 func validProvenanceToken(rawURL, expStr, sig string, now time.Time) bool {
 	if !provenanceEnabled() {
 		// Fail closed: with no configured secret, accept no tokens (a forged

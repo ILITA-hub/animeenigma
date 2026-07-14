@@ -86,9 +86,12 @@ func storageHost(endpoint string) string {
 // A nil s3Storage degrades to MinIO-only presigning, unchanged from before
 // this parameter existed.
 func NewStreamHandlerWithSessions(streamingService *service.StreamingService, s3Storage *videoutils.Storage, hlsSessions *service.HLSSessions, log *logger.Logger) *StreamHandler {
-	// Create video proxy with default config for HLS proxying
+	// Create video proxy with default config for HLS proxying. No
+	// AllowedDomains override: the HLS trust gate is `preauth OR first-party
+	// OR provenance-signed` (the static allowlist was retired 2026-07-14);
+	// AllowedDomains only gates the separate legacy token path, which this
+	// handler's proxy never routes through.
 	proxyCfg := videoutils.DefaultProxyConfig()
-	proxyCfg.AllowedDomains = videoutils.HLSProxyAllowedDomains
 
 	var minioStorage *videoutils.Storage
 	if streamingService != nil {

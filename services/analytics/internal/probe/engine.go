@@ -18,8 +18,9 @@ const EngineBrowser = "browser"
 // ProbeTarget binds a provider to its anime-set selection rule and its stream
 // resolver. The EN scraper providers share one spotlight AnimeSet + one HTTP
 // scraper Resolver; ae and kodik-noads get custom ones. The Validator is shared
-// across all targets (the HLS proxy handles signed-scraper, allowlisted-kodik
-// CDN, and signed+presigned-MinIO uniformly).
+// across all targets (the HLS proxy handles signed-scraper, signed-kodik
+// CDN, and signed+presigned-MinIO uniformly — everything rides provenance
+// signatures since the allowlist retirement, 2026-07-14).
 type ProbeTarget struct {
 	Provider string
 	AnimeSet AnimeSetResolver

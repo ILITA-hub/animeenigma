@@ -162,171 +162,38 @@ func TestIsDomainAllowed_CaseInsensitive(t *testing.T) {
 	assert.True(t, proxy.isDomainAllowed("cdn.Example.Com"))
 }
 
-func TestIsHLSDomainAllowed_KnownDomains(t *testing.T) {
-	knownDomains := []string{
-		"hanime.tv",
-		"jimaku.cc",
-		"cdnlibs.org",
-		"solodcdn.com",
-		"mp4upload.com",
-		"turboviplay.com",
-	}
-
-	for _, domain := range knownDomains {
-		assert.True(t, isHLSDomainAllowed(domain), "known domain %q should be allowed", domain)
-	}
-}
-
-func TestIsHLSDomainAllowed_KnownSubdomains(t *testing.T) {
-	assert.True(t, isHLSDomainAllowed("cdn.hanime.tv"))
-	assert.True(t, isHLSDomainAllowed("a1.mp4upload.com"))
-	assert.True(t, isHLSDomainAllowed("files.jimaku.cc"))
-}
-
-func TestIsHLSDomainAllowed_UnknownDomain(t *testing.T) {
-	unknownDomains := []string{
-		"evil.live",
-		"random.pro",
-		"hacker.xyz",
-		"malware.com",
-		"phishing.net",
-	}
-
-	for _, domain := range unknownDomains {
-		assert.False(t, isHLSDomainAllowed(domain), "unknown domain %q should not be allowed", domain)
-	}
-}
-
-func TestIsHLSDomainAllowed_PortStripping(t *testing.T) {
-	assert.True(t, isHLSDomainAllowed("hanime.tv:443"), "should strip port and match domain")
-	assert.True(t, isHLSDomainAllowed("jimaku.cc:8080"), "should strip port and match domain")
-	assert.True(t, isHLSDomainAllowed("minio:9000"), "should strip port and match first-party host")
-	assert.False(t, isHLSDomainAllowed("evil.com:443"), "should strip port but still reject unknown domain")
-}
-
-// TestHLSProxyAllowedDomains_UnsignedPathHostsLocked is the regression lock
-// for the post-phase-out allow-list. Every entry here backs a path that
-// CANNOT ride signed-URL provenance yet: first-party docker-network hosts
-// plus catalog endpoints that return URLs unsigned (Kodik ad-free, Hanime,
-// AnimeLib, 18anime, subtitles). Removing one of these 403s that source;
-// a signed scraper CDN showing up here means the phase-out regressed —
-// scraper CDNs must NOT be re-added (they ride streamsign provenance).
-func TestHLSProxyAllowedDomains_UnsignedPathHostsLocked(t *testing.T) {
-	want := []string{
-		// first-party
-		"stealth-scraper", "minio",
-		// Kodik ad-free HLS (unsigned catalog path)
-		"solodcdn.com", "cloud.solodcdn.com",
-		// Hanime CDN family (unsigned catalog path)
-		"hanime.tv", "highwinds-cdn.com", "htv-*.com", "hydaelyn-*.top", "zodiark-*.top",
-		// AnimeLib CDNs (unsigned catalog path)
-		"cdnlibs.org", "hentaicdn.org",
-		// 18anime embed mirrors (Get18AnimeStream strips provenance)
-		"mp4upload.com", "turboviplay.com", "turbosplayer.com",
-		// Japanese subtitle files (unsigned subtitle endpoints)
-		"jimaku.cc",
-		// AUTO-517 stop-gap (redirect target re-gated without a token)
-		"mt.nekostream.site",
-	}
-	present := make(map[string]bool, len(HLSProxyAllowedDomains))
-	for _, d := range HLSProxyAllowedDomains {
-		present[d] = true
-	}
-	for _, d := range want {
-		if !present[d] {
-			t.Errorf("HLSProxyAllowedDomains missing unsigned-path host %q — that source would 403", d)
-		}
-	}
-	// Set-equality tripwire: any entry not in want fails BY NAME. Adding a
-	// host for a new unsigned serving path is legitimate — extend want in
-	// the same commit (deliberate). A scraper CDN must never be re-added;
-	// those ride streamsign provenance.
-	expected := make(map[string]bool, len(want))
-	for _, d := range want {
-		expected[d] = true
-	}
-	for _, d := range HLSProxyAllowedDomains {
-		if !expected[d] {
-			t.Errorf("HLSProxyAllowedDomains has unexpected entry %q — scraper CDNs ride provenance "+
-				"signing; a new unsigned catalog path must extend this test's want list deliberately", d)
-		}
-	}
-}
-
-// TestIsHLSDomainAllowed_ImpostorRejection pins the SSRF contract of the
-// gate: the leading dot in the HasSuffix rule rejects prefix impostors
-// (evilhanime.tv), and eTLD+1 entries never match a host that merely
-// EMBEDS the allowed domain (hanime.tv.attacker.com).
-func TestIsHLSDomainAllowed_ImpostorRejection(t *testing.T) {
+// TestMatchDomainPattern keeps SSRF-contract coverage for the pattern matcher
+// that still gates the legacy signed-token path (ProxyConfig.AllowedDomains /
+// PROXY_ALLOWED_DOMAINS): the leading dot in the HasSuffix rule rejects prefix
+// impostors (evilexample.com), eTLD+1 patterns never match a host that merely
+// EMBEDS the allowed domain (example.com.attacker.com), and prefix wildcards
+// stay anchored to their suffix TLD (cdn-evil.attacker.io is rejected).
+// The HLS trust gate itself no longer consults any static list — see
+// TestTrustGate_* — this matcher survives only for the legacy path.
+func TestMatchDomainPattern(t *testing.T) {
 	cases := []struct {
-		host string
-		want bool
+		host    string
+		pattern string
+		want    bool
+		label   string
 	}{
-		{"hanime.tv", true},
-		{"cdn.hanime.tv", true},
-		{"a.b.hanime.tv", true},
-		{"cdn.hanime.tv:443", true},
-		{"hanime.com", false},
-		{"evilhanime.tv", false},
-		{"hanime.tv.attacker.com", false},
-		{"solodcdn.com", true},
-		{"draco.cloud.solodcdn.com", true},
-		{"solodcdn.org", false},
-		{"evilsolodcdn.com", false},
-	}
-	for _, c := range cases {
-		if got := isHLSDomainAllowed(c.host); got != c.want {
-			t.Errorf("isHLSDomainAllowed(%q) = %v; want %v", c.host, got, c.want)
-		}
-	}
-}
-
-// TestSolodcdnAllowed locks in the two solodcdn.com entries required by the
-// Kodik ad-free HLS player (kodikextract). The manifest lives on
-// cloud.solodcdn.com and 302-redirects to node subdomains such as
-// draco.cloud.solodcdn.com — the eTLD+1 entry "solodcdn.com" covers those via
-// the strings.HasSuffix(host, "."+allowed) gate in isHLSDomainAllowed.
-// Hosts are extracted from the target URLs (isHLSDomainAllowed receives Host,
-// not the full URL, matching how ProxyWithReferer calls it):
-//   - https://cloud.solodcdn.com/useruploads/x/y:1/720.mp4:hls:manifest.m3u8
-//   - https://draco.cloud.solodcdn.com/useruploads/x/y:1/720.mp4:hls:seg-1-v1-a1.ts
-func TestSolodcdnAllowed(t *testing.T) {
-	cases := []string{
-		"cloud.solodcdn.com",       // manifest host (from .m3u8 URL above)
-		"draco.cloud.solodcdn.com", // node subdomain (from .ts segment URL above)
-	}
-	for _, u := range cases {
-		if !isHLSDomainAllowed(u) {
-			t.Errorf("expected %s to be allowed", u)
-		}
-	}
-}
-
-// TestIsHLSDomainAllowed_AnchoredPrefixWildcards exercises the anchored
-// prefix-wildcard patterns carried by the Hanime CDN family (htv-*.com,
-// hydaelyn-*.top, zodiark-*.top). The suffix anchor is the SSRF defense:
-// a matching prefix on the wrong TLD (htv-evil.attacker.io) must be
-// rejected — see matchHLSDomain.
-func TestIsHLSDomainAllowed_AnchoredPrefixWildcards(t *testing.T) {
-	cases := []struct {
-		host  string
-		want  bool
-		label string
-	}{
-		{"htv-belias.com", true, "htv wildcard — leftmost label"},
-		{"edge.htv-hydaelyn.com", true, "htv wildcard — inner label"},
-		{"hydaelyn-25x-07.top", true, "hydaelyn wildcard exact"},
-		{"zodiark-25x-03.top", true, "zodiark wildcard exact"},
-		{"htv-evil.attacker.io", false, "wildcard prefix on wrong TLD"},
-		{"nothtv-belias.com", false, "prefix must begin a DNS label"},
-		{"hydaelyn-25x-07.com", false, "hydaelyn wildcard anchored to .top"},
-		{"jimaku.cc", true, "subtitle host exact"},
+		{"example.com", "example.com", true, "exact match"},
+		{"cdn.example.com", "example.com", true, "subdomain match"},
+		{"a.b.example.com", "example.com", true, "deep subdomain match"},
+		{"evilexample.com", "example.com", false, "prefix impostor rejected"},
+		{"example.com.attacker.com", "example.com", false, "embedded-domain impostor rejected"},
+		{"example.org", "example.com", false, "different TLD rejected"},
+		{"sub.example.com", "*.example.com", true, "star-dot wildcard subdomain"},
+		{"cdn-belias.com", "cdn-*.com", true, "anchored prefix wildcard — leftmost label"},
+		{"edge.cdn-hydaelyn.com", "cdn-*.com", true, "anchored prefix wildcard — inner label"},
+		{"cdn-evil.attacker.io", "cdn-*.com", false, "wildcard prefix on wrong TLD rejected"},
+		{"notcdn-belias.com", "cdn-*.com", false, "prefix must begin a DNS label"},
 	}
 	for _, c := range cases {
 		c := c
 		t.Run(c.label, func(t *testing.T) {
-			if got := isHLSDomainAllowed(c.host); got != c.want {
-				t.Errorf("isHLSDomainAllowed(%q) = %v, want %v", c.host, got, c.want)
+			if got := matchDomainPattern(c.host, c.pattern); got != c.want {
+				t.Errorf("matchDomainPattern(%q, %q) = %v, want %v", c.host, c.pattern, got, c.want)
 			}
 		})
 	}

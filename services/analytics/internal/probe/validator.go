@@ -57,7 +57,7 @@ const maskedProxyPath = "/api/v1/m"
 // The masked case is NOT optional: a masked child is a root-relative path with
 // no host, so skipping it here falls through to the generic `url=` branch
 // below and double-proxies it — the legacy endpoint parses the bare path as
-// sourceURL, gets an empty Host, and its domain allowlist rejects it every
+// sourceURL, gets an empty Host, and its trust gate rejects it every
 // time. Since masked children are always-on, that silently misreports EVERY
 // HLS provider as down on EVERY probe tick (found 2026-07-12 recovering
 // miruro; the same class of bug the FE fixed for masked subtitle URLs).

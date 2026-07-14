@@ -22,8 +22,10 @@ func TestHLSProxy_DomainNotAllowed_Returns502(t *testing.T) {
 		t.Fatalf("logger.New: %v", err)
 	}
 
+	// No AllowedDomains wiring: the HLS trust gate is `preauth OR first-party
+	// OR provenance-signed` (allowlist retired 2026-07-14), so an unsigned
+	// external URL fails the gate with no further config.
 	proxyCfg := videoutils.DefaultProxyConfig()
-	proxyCfg.AllowedDomains = videoutils.HLSProxyAllowedDomains
 
 	h := &StreamHandler{
 		streamingService: nil, // HLSProxy path does not use streamingService
