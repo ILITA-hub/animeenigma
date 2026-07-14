@@ -118,6 +118,10 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			// Terminal aePlayer failure (all providers exhausted, or the
 			// first-party `ae` source failed). Duration is not meaningful here.
 			effectKind = "player_failed"
+		case "protocol_usage":
+			// Per-(session×tier) protocol-ladder usage summary. No duration
+			// dimension; all metrics ride in Detail → Properties.
+			effectKind = "player_protocol"
 		default:
 			continue // skip unknown kinds
 		}

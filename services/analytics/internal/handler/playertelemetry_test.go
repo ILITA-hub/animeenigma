@@ -302,6 +302,42 @@ func TestPlayerTelemetry_PlaybackFailed(t *testing.T) {
 	}
 }
 
+// TestPlayerTelemetry_ProtocolUsage verifies "protocol_usage" events map to
+// effect_kind="player_protocol" and the protocol detail bundle is merged into
+// Properties (provider must be whitelisted — gogoanime is).
+func TestPlayerTelemetry_ProtocolUsage(t *testing.T) {
+	sink := &effectSink{}
+	h := NewPlayerTelemetryHandler(sink)
+
+	body := `{"events":[{
+		"kind":"protocol_usage","provider":"gogoanime","anime_id":"a1","episode":1,
+		"audio":"sub","lang":"en",
+		"detail":{"protocol":"h2","tier":"h2","segments":214,"avg_mbps":3.2,"dropped_frames_pct":0.4,"seg_timeouts":0,"anime_name":"Naruto","combo":"sub·en·gogoanime","sess":"s_abc"}
+	}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if sink.count() != 1 {
+		t.Fatalf("got %d events, want 1", sink.count())
+	}
+	ev := sink.at(0)
+	if ev.EffectKind != "player_protocol" {
+		t.Errorf("effect_kind = %q, want player_protocol", ev.EffectKind)
+	}
+	if ev.Target != "gogoanime" {
+		t.Errorf("target = %q, want gogoanime", ev.Target)
+	}
+	if !strings.Contains(ev.Properties, `"protocol":"h2"`) ||
+		!strings.Contains(ev.Properties, `"segments":214`) ||
+		!strings.Contains(ev.Properties, `"anime_name":"Naruto"`) {
+		t.Errorf("properties missing merged protocol detail: %s", ev.Properties)
+	}
+}
+
 // TestPlayerTelemetry_CapsAtHundred: arrays over 100 entries are capped.
 func TestPlayerTelemetry_CapsAtHundred(t *testing.T) {
 	sink := &effectSink{}
