@@ -41,8 +41,9 @@ type fakeProbe struct {
 }
 
 type fakeProbeOutcome struct {
-	reason streamprobe.Reason
-	sleep  time.Duration
+	reason    streamprobe.Reason
+	sleep     time.Duration
+	decoyHost string // surfaced as Result.DecoyHost (ad-decoy verdicts only)
 }
 
 func newFakeProbe() *fakeProbe {
@@ -73,7 +74,15 @@ func (f *fakeProbe) probe(ctx context.Context, masterURL string, headers http.He
 		}
 	}
 	playable := out.reason == streamprobe.ReasonPlayable
-	return streamprobe.Result{Playable: playable, Reason: out.reason}
+	return streamprobe.Result{Playable: playable, Reason: out.reason, DecoyHost: out.decoyHost}
+}
+
+// setDecoy is set() plus a DecoyHost on the returned Result — used by the
+// poison-verdict-cache test to simulate a byte-sniffed segment CDN host.
+func (f *fakeProbe) setDecoy(masterURL string, decoyHost string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.results[masterURL] = fakeProbeOutcome{reason: streamprobe.ReasonAdDecoy, decoyHost: decoyHost}
 }
 
 func (f *fakeProbe) callCount() int {
@@ -672,6 +681,61 @@ func TestGetStreamWithGate_MultiSource_AllFail(t *testing.T) {
 	if v := testutil.ToFloat64(metrics.ParserUnplayableTotal.WithLabelValues(
 		"gogoanime", "streamhg", string(streamprobe.ReasonSignedURLExpired))); v != 1 {
 		t.Errorf("parser_unplayable_total{streamhg,signed_url_expired} = %v; want 1 (per-source hls3)", v)
+	}
+}
+
+// TestGetStreamWithGate_PoisonVerdictCached — locks the Track B contract
+// (docs/plans/2026-07-14-retire-allowlist-blocklist.md): a byte-sniffed
+// ReasonAdDecoy verdict is cached 24h in Redis for BOTH the stream host and
+// the offending segment host, and the pre-check skips a poisoned host on
+// subsequent attempts WITHOUT re-probing the network (while still counting
+// the skip in parser_unplayable_total + parser_ad_decoy_total).
+func TestGetStreamWithGate_PoisonVerdictCached(t *testing.T) {
+	resetGateMetrics()
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	p, fc, fp, fk := gatedTestProvider(t, srv)
+	// Single server so both attempts route through the same host.
+	servers := gatedTestServers()[2:3] // vibeplayer.site
+	fk.streams[servers[0].ID] = extractStreamFor(servers[0].ID)
+	fp.setDecoy(servers[0].ID+"/master.m3u8", "cdn-decoy.example.net")
+
+	// Attempt 1: probe runs, convicts, caches BOTH hosts.
+	_, _, err := p.GetStreamWithGate(context.Background(),
+		"frieren", "frieren-episode-1", "", domain.CategorySub, servers)
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Fatalf("attempt 1 err = %v; want ErrProviderDown chain", err)
+	}
+	if got := fp.callCount(); got != 1 {
+		t.Fatalf("probe calls after attempt 1 = %d; want 1", got)
+	}
+	ctx := context.Background()
+	for _, host := range []string{"vibeplayer.site", "cdn-decoy.example.net"} {
+		var v string
+		if err := fc.Get(ctx, "scraper:streamprobe:poison:"+host, &v); err != nil {
+			t.Errorf("poison key for %q not cached: %v", host, err)
+		} else if v != string(streamprobe.ReasonAdDecoy) {
+			t.Errorf("poison value for %q = %q; want %q", host, v, streamprobe.ReasonAdDecoy)
+		}
+	}
+
+	// Attempt 2: pre-check hits the cached verdict — the probe must NOT run
+	// again, and the skip still shows up in both counters.
+	_, _, err = p.GetStreamWithGate(context.Background(),
+		"frieren", "frieren-episode-1", "", domain.CategorySub, servers)
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Fatalf("attempt 2 err = %v; want ErrProviderDown chain", err)
+	}
+	if got := fp.callCount(); got != 1 {
+		t.Errorf("probe calls after attempt 2 = %d; want 1 (poisoned host skipped from cache)", got)
+	}
+	if v := testutil.ToFloat64(metrics.ParserAdDecoyTotal.WithLabelValues(
+		"gogoanime", "vibeplayer")); v != 2 {
+		t.Errorf("parser_ad_decoy_total{vibeplayer} = %v; want 2 (probe conviction + cached skip)", v)
+	}
+	if v := testutil.ToFloat64(metrics.ParserUnplayableTotal.WithLabelValues(
+		"gogoanime", "vibeplayer", string(streamprobe.ReasonAdDecoy))); v != 2 {
+		t.Errorf("parser_unplayable_total{vibeplayer,ad_decoy} = %v; want 2", v)
 	}
 }
 

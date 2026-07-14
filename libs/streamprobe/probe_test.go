@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,9 +31,18 @@ func readFixture(t *testing.T, name string) []byte {
 	return b
 }
 
+// tsSegmentBytes is a minimal MPEG-TS-looking payload: sync byte 0x47
+// followed by filler. Enough for sniffSegmentBytes to classify as media.
+func tsSegmentBytes() []byte {
+	b := make([]byte, 188)
+	b[0] = 0x47
+	return b
+}
+
 // TestProbe_Playable: master returns a master playlist whose first
 // variant points at /variant_720.m3u8 (served by the same test server),
-// which lists relative segments. HEAD on /seg/001.ts returns 200.
+// which lists relative segments. Ranged GET on /seg/001.ts returns 206
+// with MPEG-TS bytes.
 func TestProbe_Playable(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
@@ -45,11 +54,12 @@ func TestProbe_Playable(t *testing.T) {
 		_, _ = w.Write(readFixture(t, "playable_variant.m3u8"))
 	})
 	mux.HandleFunc("/seg/001.ts", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodHead {
-			http.Error(w, "expected HEAD", 405)
+		if r.Method != http.MethodGet {
+			http.Error(w, "expected ranged GET", 405)
 			return
 		}
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(tsSegmentBytes())
 	})
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
@@ -66,30 +76,25 @@ func TestProbe_Playable(t *testing.T) {
 	}
 }
 
-// TestProbe_AdDecoy: master is itself a media playlist whose first
-// segment URI is the production-poison TikTok ad CDN
-// (p16-ad-sg.ibyteimg.com). The blocklist check MUST short-circuit
-// BEFORE any HEAD is attempted — we verify by registering a counter
-// handler on a separate mock server pointing at the ad-CDN host (which
-// would receive zero requests because the blocklist hits first).
+// TestProbe_AdDecoy: the segment host answers the ranged GET with 200 +
+// PNG magic bytes dressed up with a video/mp2t Content-Type — the exact
+// nekostream production poison. The byte sniff (which replaced the retired
+// static ad-CDN blocklist) must convict it as ReasonAdDecoy and surface
+// the offending host in DecoyHost so callers can cache the verdict, and
+// must cost exactly ONE ranged GET on the segment.
 func TestProbe_AdDecoy(t *testing.T) {
-	var adCDNHits int32
-
-	// Mock server simulating the ad-CDN — registered but should NEVER hit.
-	// We never actually point Probe at this server's URL; the segment URL
-	// inside the fixture is an absolute https://p16-ad-sg.ibyteimg.com/...
-	// reference, which Probe resolves to that hostname and short-circuits.
-	adCDN := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&adCDNHits, 1)
-		w.WriteHeader(200)
-	}))
-	defer adCDN.Close()
-
+	var segHits int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
-		// The fixture is a MEDIA playlist (no #EXT-X-STREAM-INF) whose
-		// first #EXTINF segment is the absolute ad-CDN URL.
-		_, _ = w.Write(readFixture(t, "ad_decoy_variant.m3u8"))
+		// A MEDIA playlist (no #EXT-X-STREAM-INF) with one relative segment.
+		_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\n/seg/001.ts\n#EXT-X-ENDLIST\n"))
+	})
+	mux.HandleFunc("/seg/001.ts", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&segHits, 1)
+		// Content-Type lies (video/mp2t) — only the bytes are trusted.
+		w.Header().Set("Content-Type", "video/mp2t")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}) // PNG magic
 	})
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
@@ -101,18 +106,99 @@ func TestProbe_AdDecoy(t *testing.T) {
 	if got.Reason != ReasonAdDecoy {
 		t.Fatalf("Reason=%q; want %q. Result=%+v", got.Reason, ReasonAdDecoy, got)
 	}
-	if atomic.LoadInt32(&adCDNHits) != 0 {
-		t.Fatalf("ad-CDN mock received %d hits; want 0 (blocklist must short-circuit)", adCDNHits)
+	tsu, _ := url.Parse(ts.URL)
+	if got.DecoyHost != tsu.Hostname() {
+		t.Fatalf("DecoyHost=%q; want %q (the poisoned segment host)", got.DecoyHost, tsu.Hostname())
 	}
-	// Sampled must include the ad-CDN host for diagnostics.
+	if atomic.LoadInt32(&segHits) != 1 {
+		t.Fatalf("segment received %d hits; want exactly 1 ranged GET", segHits)
+	}
+	// Sampled must include the poisoned host for diagnostics.
 	found := false
 	for _, h := range got.Sampled {
-		if strings.Contains(h, "ibyteimg.com") {
+		if h == tsu.Hostname() {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("Sampled=%v; want at least one entry containing ibyteimg.com", got.Sampled)
+		t.Fatalf("Sampled=%v; want at least one entry equal to %q", got.Sampled, tsu.Hostname())
+	}
+}
+
+// TestProbe_AdDecoy_HTML: the segment serves an HTML page (ad landing /
+// dead-mirror placeholder) — convicted as ReasonAdDecoy by the byte sniff.
+func TestProbe_AdDecoy_HTML(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\n/seg/001.ts\n#EXT-X-ENDLIST\n"))
+	})
+	mux.HandleFunc("/seg/001.ts", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("\n  <!DOCTYPE html><html><body>ads</body></html>"))
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	got := Probe(context.Background(), ts.URL+"/master.m3u8", nil)
+	if got.Reason != ReasonAdDecoy {
+		t.Fatalf("Reason=%q; want %q. Result=%+v", got.Reason, ReasonAdDecoy, got)
+	}
+	if got.DecoyHost == "" {
+		t.Fatalf("DecoyHost empty; want the segment host. Result=%+v", got)
+	}
+}
+
+// TestProbe_UnknownMagic_FailOpen: the segment answers 200 with bytes that
+// match neither media nor poison magic. The probe must FAIL OPEN (playable)
+// — never brick a weird-but-real CDN on an incomplete magic table.
+func TestProbe_UnknownMagic_FailOpen(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\n/seg/001.ts\n#EXT-X-ENDLIST\n"))
+	})
+	mux.HandleFunc("/seg/001.ts", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	got := Probe(context.Background(), ts.URL+"/master.m3u8", nil)
+	if !got.Playable {
+		t.Fatalf("Playable=false; want true (unknown magic fails open). Result=%+v", got)
+	}
+	if got.Reason != ReasonPlayable {
+		t.Fatalf("Reason=%q; want %q", got.Reason, ReasonPlayable)
+	}
+}
+
+// TestSniffSegmentBytes: table-driven contract for the magic-byte sniffer.
+func TestSniffSegmentBytes(t *testing.T) {
+	ftyp := append([]byte{0x00, 0x00, 0x00, 0x20}, []byte("ftypisom")...)
+	moof := append([]byte{0x00, 0x00, 0x00, 0x18}, []byte("moof")...)
+	cases := []struct {
+		name string
+		in   []byte
+		want segmentVerdict
+	}{
+		{"mpeg-ts sync", tsSegmentBytes(), segmentMedia},
+		{"fmp4 ftyp", ftyp, segmentMedia},
+		{"fmp4 moof", moof, segmentMedia},
+		{"ebml webm", []byte{0x1A, 0x45, 0xDF, 0xA3, 0x01}, segmentMedia},
+		{"id3-prefixed", []byte("ID3\x04\x00"), segmentMedia},
+		{"aac adts", []byte{0xFF, 0xF1, 0x50, 0x80}, segmentMedia},
+		{"png", []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A}, segmentPoison},
+		{"jpeg", []byte{0xFF, 0xD8, 0xFF, 0xE0}, segmentPoison},
+		{"gif", []byte("GIF89a"), segmentPoison},
+		{"html doctype", []byte("<!DOCTYPE html><html>"), segmentPoison},
+		{"html tag after whitespace+bom", append(append([]byte{}, utf8BOM...), []byte("  \n<HTML>")...), segmentPoison},
+		{"empty", nil, segmentUnknown},
+		{"unknown magic", []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}, segmentUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sniffSegmentBytes(tc.in); got != tc.want {
+				t.Fatalf("sniffSegmentBytes(%q) = %v; want %v", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -258,9 +344,9 @@ func TestProbe_SSRF_LinkLocal(t *testing.T) {
 	}
 }
 
-// TestProbe_SegmentHEAD_403: master + variant 200 m3u8, but HEAD on the
-// first segment returns 403 → status_403.
-func TestProbe_SegmentHEAD_403(t *testing.T) {
+// TestProbe_Segment_403: master + variant 200 m3u8, but the ranged GET on
+// the first segment returns 403 → status_403.
+func TestProbe_Segment_403(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(readFixture(t, "playable_master.m3u8"))
@@ -280,11 +366,11 @@ func TestProbe_SegmentHEAD_403(t *testing.T) {
 	}
 }
 
-// TestProbe_SegmentHEADHostile_RangedGET: the segment CDN is HEAD-hostile —
-// it returns 405 Method Not Allowed to HEAD but serves a 206 to a ranged GET
-// (finding L718). The probe must fall back to a ranged GET and classify the
-// segment Playable, rather than false-negatively dropping a working stream.
-func TestProbe_SegmentHEADHostile_RangedGET(t *testing.T) {
+// TestProbe_SegmentRangedGETFirst: the first-segment check must issue a
+// ranged GET as its PRIMARY probe (HEAD produced false negatives on
+// HEAD-hostile CDNs — finding L718) and must NOT send any HEAD when the
+// GET succeeds.
+func TestProbe_SegmentRangedGETFirst(t *testing.T) {
 	var headHits, getHits int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
@@ -297,13 +383,14 @@ func TestProbe_SegmentHEADHostile_RangedGET(t *testing.T) {
 		switch r.Method {
 		case http.MethodHead:
 			atomic.AddInt32(&headHits, 1)
-			w.WriteHeader(http.StatusMethodNotAllowed) // 405 — HEAD-hostile CDN
+			w.WriteHeader(200)
 		case http.MethodGet:
 			atomic.AddInt32(&getHits, 1)
 			if r.Header.Get("Range") == "" {
-				t.Errorf("fallback GET must carry a Range header")
+				t.Errorf("primary GET must carry a Range header")
 			}
-			w.WriteHeader(http.StatusPartialContent) // 206 — ranged GET works
+			w.WriteHeader(http.StatusPartialContent) // 206
+			_, _ = w.Write(tsSegmentBytes())
 		default:
 			http.Error(w, "unexpected", 400)
 		}
@@ -313,24 +400,53 @@ func TestProbe_SegmentHEADHostile_RangedGET(t *testing.T) {
 
 	got := Probe(context.Background(), ts.URL+"/master.m3u8", nil)
 	if !got.Playable {
-		t.Fatalf("Playable=false; want true (405-on-HEAD must fall back to ranged GET). Result=%+v", got)
-	}
-	if got.Reason != ReasonPlayable {
-		t.Fatalf("Reason=%q; want %q", got.Reason, ReasonPlayable)
-	}
-	if atomic.LoadInt32(&headHits) != 1 {
-		t.Fatalf("HEAD hits=%d; want 1 (cheap HEAD attempted first)", headHits)
+		t.Fatalf("Playable=false; want true. Result=%+v", got)
 	}
 	if atomic.LoadInt32(&getHits) != 1 {
-		t.Fatalf("GET hits=%d; want 1 (ranged GET fallback)", getHits)
+		t.Fatalf("GET hits=%d; want 1 (ranged GET is the primary probe)", getHits)
+	}
+	if atomic.LoadInt32(&headHits) != 0 {
+		t.Fatalf("HEAD hits=%d; want 0 (no HEAD when the ranged GET succeeds)", headHits)
 	}
 }
 
-// TestProbe_SegmentHEAD403_FallbackGET_SignedExpired: the segment returns 403 to
-// HEAD; the ranged-GET fallback URL carries an expired `?e=<epoch>` so the GET's
-// 403 routes through classify403 → signed_url_expired (finding L718 — the
-// fallback path must still distinguish expired signed URLs from generic 403s).
-func TestProbe_SegmentHEAD403_FallbackGET_SignedExpired(t *testing.T) {
+// TestProbe_SegmentGETHostile_HEADFallback: a GET-hostile segment host
+// answers the ranged GET with 405 but a bare HEAD with 200 — the probe
+// must fall back to HEAD and classify Playable (fail-open, no bytes).
+func TestProbe_SegmentGETHostile_HEADFallback(t *testing.T) {
+	var headHits, getHits int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\n/seg/001.ts\n#EXT-X-ENDLIST\n"))
+	})
+	mux.HandleFunc("/seg/001.ts", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			atomic.AddInt32(&getHits, 1)
+			w.WriteHeader(http.StatusMethodNotAllowed) // 405 — GET-hostile
+		case http.MethodHead:
+			atomic.AddInt32(&headHits, 1)
+			w.WriteHeader(200)
+		default:
+			http.Error(w, "unexpected", 400)
+		}
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	got := Probe(context.Background(), ts.URL+"/master.m3u8", nil)
+	if !got.Playable {
+		t.Fatalf("Playable=false; want true (405-on-GET must fall back to HEAD). Result=%+v", got)
+	}
+	if atomic.LoadInt32(&getHits) != 1 || atomic.LoadInt32(&headHits) != 1 {
+		t.Fatalf("GET hits=%d HEAD hits=%d; want 1 and 1", getHits, headHits)
+	}
+}
+
+// TestProbe_SegmentGET_SignedExpired: the segment's ranged GET returns 403
+// and the URL carries an expired `?e=<epoch>` — routed through classify403
+// → signed_url_expired (must still be distinguished from generic 403s).
+func TestProbe_SegmentGET_SignedExpired(t *testing.T) {
 	var srv *httptest.Server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
@@ -347,7 +463,7 @@ func TestProbe_SegmentHEAD403_FallbackGET_SignedExpired(t *testing.T) {
 
 	got := Probe(context.Background(), srv.URL+"/master.m3u8", nil)
 	if got.Reason != ReasonSignedURLExpired {
-		t.Fatalf("Reason=%q; want %q (HEAD-403 fallback GET must still classify signed-url-expired). Result=%+v", got.Reason, ReasonSignedURLExpired, got)
+		t.Fatalf("Reason=%q; want %q (segment GET 403 must still classify signed-url-expired). Result=%+v", got.Reason, ReasonSignedURLExpired, got)
 	}
 }
 

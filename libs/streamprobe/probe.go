@@ -18,6 +18,11 @@ type Result struct {
 	Playable bool     // true only when Reason == ReasonPlayable
 	Reason   Reason   // classification token (see reason.go)
 	Sampled  []string // hostnames observed during the walk (for diagnostics)
+	// DecoyHost is the hostname of the segment that sniffed as poison
+	// (image/HTML bytes dressed up as video). Set ONLY when Reason ==
+	// ReasonAdDecoy, so callers can cache a per-host poison verdict and
+	// avoid re-contacting the host (see the T-21-03 note on Probe).
+	DecoyHost string
 }
 
 const (
@@ -32,16 +37,23 @@ const (
 // headers are merged into the outbound request (Referer is the most
 // common caller-supplied header).
 //
-// The first-segment check tries a cheap HEAD first; HEAD-hostile CDNs that
-// reject HEAD with 403/405 fall back to a tiny ranged GET so a genuinely
-// playable stream is not false-negatively dropped (finding L718).
+// The first-segment check issues a tiny ranged GET (bytes=0-1023) FIRST —
+// HEAD produced false negatives on HEAD-hostile CDNs (finding L718), and
+// the ranged GET's body bytes feed sniffSegmentBytes, which convicts poison
+// segments (image/HTML magic dressed up as video) as ReasonAdDecoy. A bare
+// HEAD survives only as the fallback for 405/416 GET responses.
 //
-// Per-step timeout: 4s (master GET, variant GET, segment HEAD/ranged-GET each).
+// Per-step timeout: 4s (master GET, variant GET, segment ranged-GET/HEAD each).
 // Total budget: ≤ 10s via ctx with timeout.
 //
 // SSRF defense: rejects RFC1918 + loopback + link-local destinations
-// BEFORE dialling. Ad-CDN host-suffix blocklist short-circuits BEFORE
-// the segment probe (so we never leak our IP to TikTok's ad CDN).
+// BEFORE dialling.
+//
+// T-21-03 trade-off: the retired static ad-CDN blocklist never contacted a
+// known-bad host (zero IP leak); byte-level detection touches it — but at
+// most once per 24h per host (callers cache the ReasonAdDecoy verdict via
+// Result.DecoyHost) and only with a 1 KiB ranged GET. Accepted price of
+// self-maintaining detection over a hand-curated host list.
 func Probe(ctx context.Context, masterURL string, headers http.Header) Result {
 	ctx, cancel := context.WithTimeout(ctx, totalBudget)
 	defer cancel()
@@ -118,42 +130,106 @@ func checkSegments(ctx context.Context, client *http.Client, body []byte, base *
 	}
 	segHost := fu.Hostname()
 	sampled = append(sampled, segHost)
-	// Ad-CDN check short-circuits BEFORE any HEAD probe — defense against
-	// leaking our IP to TikTok's ad CDN (T-21-03).
-	if isAdCDNHost(segHost) {
-		return Result{Reason: ReasonAdDecoy, Sampled: sampled}
-	}
 	if !isPublicHost(segHost) {
 		return Result{Reason: ReasonCDNUnreachable, Sampled: sampled}
 	}
-	status, herr := doHead(ctx, client, first, headers)
-	if herr != nil {
-		return Result{Reason: ReasonCDNUnreachable, Sampled: sampled}
-	}
-	if status >= 200 && status < 300 {
-		// Cheap path: HEAD-friendly CDN confirmed the segment is fetchable.
-		return Result{Playable: true, Reason: ReasonPlayable, Sampled: sampled}
-	}
-	// HEAD-hostile CDNs reject HEAD with 403 (some WAFs) or 405 (Method Not
-	// Allowed) even though a real ranged GET succeeds. Fall back to a tiny
-	// ranged GET for exactly those two statuses so we don't false-negatively
-	// drop a genuinely-playable stream (finding L718). All other non-2xx HEAD
-	// statuses keep the original status_403 verdict (no extra round-trip).
-	if status != http.StatusForbidden && status != http.StatusMethodNotAllowed {
-		return Result{Reason: ReasonStatus403, Sampled: sampled}
-	}
-	gstatus, gerr := doRangeGet(ctx, client, first, headers)
+	// Ranged GET FIRST (bytes=0-1023): HEAD gave false negatives on
+	// HEAD-hostile CDNs (finding L718), and the body bytes let us convict
+	// poison segments (fake CDNs answering 200 with an image/HTML payload)
+	// that a status-only check can never distinguish from real video.
+	gstatus, body, gerr := doRangeGet(ctx, client, first, headers)
 	if gerr != nil {
 		return Result{Reason: ReasonCDNUnreachable, Sampled: sampled}
 	}
-	if gstatus >= 200 && gstatus < 300 {
-		// 200 (Range ignored) or 206 (Partial Content) — the segment is fetchable.
+	switch {
+	case gstatus >= 200 && gstatus < 300:
+		// 200 (Range ignored) or 206 (Partial Content) — the segment is
+		// fetchable; sniff the bytes to catch poison dressed up as video.
+		if sniffSegmentBytes(body) == segmentPoison {
+			return Result{Reason: ReasonAdDecoy, DecoyHost: segHost, Sampled: sampled}
+		}
 		return Result{Playable: true, Reason: ReasonPlayable, Sampled: sampled}
-	}
-	if gstatus == http.StatusForbidden {
+	case gstatus == http.StatusMethodNotAllowed || gstatus == http.StatusRequestedRangeNotSatisfiable:
+		// GET-hostile (405) or range-unsatisfiable (416) edge: fall back to
+		// a bare HEAD so a real-but-quirky CDN isn't false-negatively
+		// dropped. No body to sniff — fail-open like unknown magic.
+		hstatus, herr := doHead(ctx, client, first, headers)
+		if herr != nil {
+			return Result{Reason: ReasonCDNUnreachable, Sampled: sampled}
+		}
+		if hstatus >= 200 && hstatus < 300 {
+			return Result{Playable: true, Reason: ReasonPlayable, Sampled: sampled}
+		}
+		if hstatus == http.StatusForbidden {
+			return classify403(first, sampled)
+		}
+		return Result{Reason: ReasonStatus403, Sampled: sampled}
+	case gstatus == http.StatusForbidden:
 		return classify403(first, sampled)
+	default:
+		return Result{Reason: ReasonStatus403, Sampled: sampled}
 	}
-	return Result{Reason: ReasonStatus403, Sampled: sampled}
+}
+
+// segmentVerdict is sniffSegmentBytes' three-way classification.
+type segmentVerdict int
+
+const (
+	// segmentUnknown — empty body or unrecognized magic. Callers FAIL OPEN
+	// (treat as playable, mirroring the old 2xx ⇒ playable behavior) so a
+	// weird-but-real CDN is never bricked by an incomplete magic table.
+	segmentUnknown segmentVerdict = iota
+	// segmentMedia — recognized video/audio container magic.
+	segmentMedia
+	// segmentPoison — image or HTML bytes where video should be: an ad
+	// decoy / dead-mirror placeholder (e.g. nekostream's 1x1 PNG dressed
+	// up with a video/mp2t Content-Type). Content-Type headers prove
+	// nothing here — the HLS proxy itself forces image/* → video/mp2t —
+	// so only the bytes are trusted.
+	segmentPoison
+)
+
+// sniffSegmentBytes classifies the first bytes of an HLS segment.
+func sniffSegmentBytes(b []byte) segmentVerdict {
+	if len(b) == 0 {
+		return segmentUnknown
+	}
+	// GIF87a/GIF89a must be checked BEFORE the MPEG-TS sync byte: 'G' is
+	// 0x47, so a GIF prefix would otherwise sniff as a TS packet.
+	if bytes.HasPrefix(b, []byte("GIF8")) {
+		return segmentPoison
+	}
+	// Playable container magic.
+	if b[0] == 0x47 { // MPEG-TS sync byte
+		return segmentMedia
+	}
+	if len(b) >= 8 { // fMP4: box name at bytes 4-8
+		switch string(b[4:8]) {
+		case "ftyp", "styp", "moof", "moov", "sidx":
+			return segmentMedia
+		}
+	}
+	if bytes.HasPrefix(b, []byte{0x1A, 0x45, 0xDF, 0xA3}) { // EBML (WebM/MKV)
+		return segmentMedia
+	}
+	if bytes.HasPrefix(b, []byte("ID3")) { // timed-metadata-prefixed TS/AAC
+		return segmentMedia
+	}
+	if len(b) >= 2 && b[0] == 0xFF && b[1]&0xF0 == 0xF0 { // AAC ADTS sync
+		return segmentMedia
+	}
+	// Poison magic — images and HTML pages have no business being segments.
+	if bytes.HasPrefix(b, []byte{0x89, 0x50, 0x4E, 0x47}) { // PNG
+		return segmentPoison
+	}
+	if bytes.HasPrefix(b, []byte{0xFF, 0xD8, 0xFF}) { // JPEG
+		return segmentPoison
+	}
+	s := strings.ToLower(strings.TrimLeft(string(bytes.TrimPrefix(b, utf8BOM)), " \t\r\n"))
+	if strings.HasPrefix(s, "<!doctype") || strings.HasPrefix(s, "<html") {
+		return segmentPoison
+	}
+	return segmentUnknown
 }
 
 // newHTTPClient builds a client with per-step timeout 4s.
@@ -213,16 +289,16 @@ func doHead(ctx context.Context, client *http.Client, raw string, headers http.H
 	return resp.StatusCode, nil
 }
 
-// doRangeGet issues a tiny ranged GET (bytes 0-1023) and returns the status,
-// discarding the (capped) body. It is the HEAD-hostile-CDN fallback for the
-// first-segment check (finding L718): some CDNs/WAFs 403 or 405 a HEAD but
-// serve a ranged GET with 200/206. Cost stays low — at most 1 KiB is read.
-func doRangeGet(ctx context.Context, client *http.Client, raw string, headers http.Header) (int, error) {
+// doRangeGet issues a tiny ranged GET (bytes 0-1023) and returns the status
+// plus the (capped, ≤ 1 KiB) body for magic-byte sniffing. It is the PRIMARY
+// first-segment check (finding L718: some CDNs/WAFs 403 or 405 a HEAD but
+// serve a ranged GET with 200/206). Cost stays low — at most 1 KiB is read.
+func doRangeGet(ctx context.Context, client *http.Client, raw string, headers http.Header) (int, []byte, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, perStepTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, raw, nil)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Range", "bytes=0-1023")
@@ -233,11 +309,18 @@ func doRangeGet(ctx context.Context, client *http.Client, raw string, headers ht
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-	return resp.StatusCode, nil
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	if err != nil {
+		// Partial body is still sniffable; only fail on a zero-byte read
+		// error (connection died before any bytes arrived).
+		if len(body) == 0 {
+			return resp.StatusCode, nil, err
+		}
+	}
+	return resp.StatusCode, body, nil
 }
 
 // utf8BOM is the UTF-8 byte order mark (\xEF\xBB\xBF). Some upstream

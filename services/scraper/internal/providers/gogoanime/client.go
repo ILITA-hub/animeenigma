@@ -75,6 +75,16 @@ const streamGateBudget = 8 * time.Second
 // winning serverID mapping. 5 min per CONTEXT.md D4 + SCRAPER-HEAL-05.
 const winningServerTTL = 5 * time.Minute
 
+// poisonVerdictTTL is the Redis TTL for a byte-derived poison-host verdict
+// (streamprobe sniffed image/HTML magic where video should be). 24h — the
+// replacement for the retired static ad-CDN blocklist: a poisoned host is
+// contacted at most once per day (1 KiB ranged GET), then skipped from
+// cache. See docs/plans/2026-07-14-retire-allowlist-blocklist.md Track B.
+const poisonVerdictTTL = 24 * time.Hour
+
+// poisonKeyPrefix namespaces the poison-verdict keys in Redis.
+const poisonKeyPrefix = "scraper:streamprobe:poison:"
+
 // providerName is the stable identifier returned by Name() and used as the
 // orchestrator's registry key. STABLE across mirror rebrands — even though
 // the visible brand on the current mirror is "Anitaku" (anitaku.to),
@@ -1192,6 +1202,15 @@ func (p *Provider) coldPathGated(
 			if attemptCtx.Err() != nil {
 				return gateAttempt{serverID: srv.ID, err: attemptCtx.Err(), reason: streamprobe.ReasonCDNUnreachable}
 			}
+			// Poison pre-check: a host convicted by byte-sniff in the last
+			// 24h is skipped without touching the network — exactly as an
+			// unplayable ad-decoy probe result would be (same counters).
+			if p.poisonCached(attemptCtx, urlHost(src.URL)) {
+				metrics.ParserUnplayableTotal.WithLabelValues(providerName, extName, string(streamprobe.ReasonAdDecoy)).Inc()
+				metrics.ParserAdDecoyTotal.WithLabelValues(providerName, extName).Inc()
+				lastReason = streamprobe.ReasonAdDecoy
+				continue
+			}
 			res := probe(attemptCtx, src.URL, hdrs)
 			if res.Playable {
 				// Return a trimmed Stream containing ONLY the playable
@@ -1209,6 +1228,10 @@ func (p *Provider) coldPathGated(
 			metrics.ParserUnplayableTotal.WithLabelValues(providerName, extName, string(res.Reason)).Inc()
 			if res.Reason == streamprobe.ReasonAdDecoy {
 				metrics.ParserAdDecoyTotal.WithLabelValues(providerName, extName).Inc()
+				// Cache the byte-derived verdict 24h for BOTH the stream
+				// host and the offending segment host (may differ when the
+				// playlist points at a separate segment CDN).
+				p.cachePoisonVerdict(attemptCtx, urlHost(src.URL), res.DecoyHost)
 			}
 			lastReason = res.Reason
 		}
@@ -1263,6 +1286,47 @@ func (p *Provider) coldPathGated(
 		fmt.Errorf("all %d servers gate-failed; last reason=%s", len(servers), lastReason),
 		"gogoanime: no playable server",
 	)
+}
+
+// urlHost extracts the lowercased hostname of raw, or "" when unparseable.
+func urlHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// poisonKey derives the Redis key holding a 24h poison verdict for host.
+func poisonKey(host string) string {
+	return poisonKeyPrefix + strings.ToLower(host)
+}
+
+// poisonCached reports whether host carries an unexpired poison verdict.
+func (p *Provider) poisonCached(ctx context.Context, host string) bool {
+	if p.cache == nil || host == "" {
+		return false
+	}
+	var v string
+	return p.cache.Get(ctx, poisonKey(host), &v) == nil
+}
+
+// cachePoisonVerdict stores a 24h poison verdict for every distinct
+// non-empty host. SetNX so a concurrent probe doesn't extend the TTL —
+// the verdict window stays anchored to the FIRST conviction.
+func (p *Provider) cachePoisonVerdict(ctx context.Context, hosts ...string) {
+	if p.cache == nil {
+		return
+	}
+	seen := make(map[string]bool, len(hosts))
+	for _, h := range hosts {
+		h = strings.ToLower(h)
+		if h == "" || seen[h] {
+			continue
+		}
+		seen[h] = true
+		_, _ = p.cache.SetNX(ctx, poisonKey(h), string(streamprobe.ReasonAdDecoy), poisonVerdictTTL)
+	}
 }
 
 // serverLabel resolves a server URL to the extractor-name label used by the
