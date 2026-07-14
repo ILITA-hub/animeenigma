@@ -81,8 +81,8 @@ func TestGenerate_StreamsPersistsAndSplitsTitle(t *testing.T) {
 	var events []string
 	emit := func(event string, _ any) error { events = append(events, event); return nil }
 
-	req := domain.GenerateRequest{Anime: domain.AnimeRef{Title: "Frieren"}, Length: "oneshot", POV: "third", Rating: "mature", Language: "ru"}
-	if err := g.Generate(context.Background(), "user-1", req, emit); err != nil {
+	req := domain.GenerateRequest{Anime: domain.AnimeRef{Title: "Frieren"}, Length: "oneshot", POV: "third", Rating: "mature", Language: "ru", SpotlightCredit: true}
+	if err := g.Generate(context.Background(), "user-1", "arisu42", req, emit); err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 	// Persisted with parsed title + body + usage.
@@ -94,6 +94,19 @@ func TestGenerate_StreamsPersistsAndSplitsTitle(t *testing.T) {
 	}
 	if store.created.UserID != "user-1" || store.created.AnimeTitle != "Frieren" {
 		t.Errorf("snapshot wrong: %+v", store.created)
+	}
+	// The author username (from JWT claims, threaded through by the handler)
+	// and the user's spotlight opt-in must land on the persisted row.
+	if store.created.AuthorUsername != "arisu42" {
+		t.Errorf("AuthorUsername = %q, want arisu42", store.created.AuthorUsername)
+	}
+	if !store.created.SpotlightCredit {
+		t.Error("expected SpotlightCredit = true")
+	}
+	// Explicitly false for user-generated fanfics, mirroring bot rows setting
+	// it true (Task 6) — this is the user-path counterpart.
+	if store.created.AIGenerated {
+		t.Error("expected AIGenerated = false for a user-generated fanfic")
 	}
 	// Event order: meta, delta..., done.
 	if events[0] != "meta" || events[len(events)-1] != "done" {
@@ -114,7 +127,7 @@ func TestGenerate_SnapshotsCharactersAndTags(t *testing.T) {
 		Tags:       []string{"angst", "slow-burn"},
 		Length:     "drabble", POV: "first", Rating: "teen", Language: "en",
 	}
-	if err := g.Generate(context.Background(), "user-2", req, nil); err != nil {
+	if err := g.Generate(context.Background(), "user-2", "somebody", req, nil); err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 	if store.created == nil {
@@ -154,7 +167,7 @@ func TestGenerate_StreamerErrorMarksFailedAndEmitsError(t *testing.T) {
 	emit := func(event string, _ any) error { events = append(events, event); return nil }
 
 	req := domain.GenerateRequest{Anime: domain.AnimeRef{Title: "Frieren"}, Length: "oneshot", POV: "third", Rating: "mature", Language: "ru"}
-	err := g.Generate(context.Background(), "user-1", req, emit)
+	err := g.Generate(context.Background(), "user-1", "arisu42", req, emit)
 	if !errors.Is(err, streamErr) {
 		t.Fatalf("expected streamer error to propagate, got %v", err)
 	}
@@ -189,7 +202,7 @@ func TestGenerate_EmitErrorDoesNotAbortPersistence(t *testing.T) {
 	}
 
 	req := domain.GenerateRequest{Anime: domain.AnimeRef{Title: "Frieren"}, Length: "oneshot", POV: "third", Rating: "mature", Language: "ru"}
-	if err := g.Generate(context.Background(), "user-1", req, emit); err != nil {
+	if err := g.Generate(context.Background(), "user-1", "arisu42", req, emit); err != nil {
 		t.Fatalf("Generate should not fail on emit error, got %v", err)
 	}
 	if store.title != "Title" || store.body != "Body text" {
@@ -213,7 +226,7 @@ func TestGenerate_QuotaErrorAbortsBeforePersistence(t *testing.T) {
 	g := NewGenerator(&fakeStreamer{out: "# T\n\nbody"}, store, q, nil, "llama-3.1-8b-instant", 24000, nil)
 
 	req := domain.GenerateRequest{Anime: domain.AnimeRef{Title: "Frieren"}, Length: "oneshot", POV: "third", Rating: "mature", Language: "ru"}
-	if err := g.Generate(context.Background(), "user-1", req, nil); !errors.Is(err, ErrBusy) {
+	if err := g.Generate(context.Background(), "user-1", "arisu42", req, nil); !errors.Is(err, ErrBusy) {
 		t.Fatalf("expected ErrBusy, got %v", err)
 	}
 	if !q.acquired {
@@ -244,7 +257,7 @@ func TestGenerate_QuotaErrorEmitsErrorEvent(t *testing.T) {
 	}
 
 	req := domain.GenerateRequest{Anime: domain.AnimeRef{Title: "Frieren"}, Length: "oneshot", POV: "third", Rating: "mature", Language: "ru"}
-	err := g.Generate(context.Background(), "user-1", req, emit)
+	err := g.Generate(context.Background(), "user-1", "arisu42", req, emit)
 	if !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("expected ErrQuotaExceeded, got %v", err)
 	}

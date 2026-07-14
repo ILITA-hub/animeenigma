@@ -23,7 +23,7 @@ import (
 // unnamed type with the same underlying signature, so *service.Generator
 // would fail to satisfy this interface if the literal type were used here.
 type generator interface {
-	Generate(ctx context.Context, userID string, req domain.GenerateRequest, emit service.Emit) error
+	Generate(ctx context.Context, userID, username string, req domain.GenerateRequest, emit service.Emit) error
 	Continue(ctx context.Context, userID, id string, emit service.Emit) error
 }
 
@@ -50,6 +50,11 @@ func (h *Handler) Generate(w http.ResponseWriter, r *http.Request) {
 	if userID == "" {
 		httputil.Unauthorized(w)
 		return
+	}
+	claims, _ := authz.ClaimsFromContext(r.Context())
+	username := ""
+	if claims != nil {
+		username = claims.Username
 	}
 	var req domain.GenerateRequest
 	if err := httputil.BindAndValidate(r, &req); err != nil {
@@ -78,7 +83,7 @@ func (h *Handler) Generate(w http.ResponseWriter, r *http.Request) {
 	// Detach from the request context so a client disconnect does NOT abort
 	// server-side accumulation + persistence (spec §4).
 	ctx := context.WithoutCancel(r.Context())
-	if err := h.gen.Generate(ctx, userID, req, emit); err != nil && h.log != nil {
+	if err := h.gen.Generate(ctx, userID, username, req, emit); err != nil && h.log != nil {
 		h.log.Warnw("fanfic generation ended with error", "user_id", userID, "error", err)
 	}
 }

@@ -32,6 +32,10 @@ type GenerateRequest struct {
 	Language   string         `json:"language"`
 	Prompt     string         `json:"prompt"`
 	Canon      bool           `json:"canon"`
+	// SpotlightCredit is the user's opt-in to have this fanfic considered for
+	// the "Фанфик дня" (daily spotlight) rotation, credited under their
+	// username. Defaults to false (opt-in, not opt-out).
+	SpotlightCredit bool `json:"spotlight_credit"`
 }
 
 var (

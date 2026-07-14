@@ -29,8 +29,8 @@ type fakeGen struct {
 // satisfy the same interface as the real *service.Generator (Go interface
 // satisfaction requires identical parameter types; a defined type is never
 // identical to an unnamed type with the same underlying signature).
-func (f *fakeGen) Generate(_ context.Context, userID string, _ domain.GenerateRequest, emit service.Emit) error {
-	_ = emit("meta", map[string]any{"id": "x", "user": userID})
+func (f *fakeGen) Generate(_ context.Context, userID, username string, _ domain.GenerateRequest, emit service.Emit) error {
+	_ = emit("meta", map[string]any{"id": "x", "user": userID, "username": username})
 	_ = emit("delta", map[string]any{"text": "# T\n\nhi"})
 	_ = emit("done", map[string]any{"id": "x"})
 	return nil
@@ -72,7 +72,7 @@ func (f *fakeLib) Get(_ context.Context, _, id string) (*domain.Fanfic, error) {
 func (f *fakeLib) SoftDelete(_ context.Context, _, _ string) error { f.deleted = true; return nil }
 
 func withUser(r *http.Request) *http.Request {
-	claims := &authz.Claims{UserID: "u-1"}
+	claims := &authz.Claims{UserID: "u-1", Username: "trueflame"}
 	return r.WithContext(authz.ContextWithClaims(r.Context(), claims))
 }
 
@@ -101,6 +101,11 @@ func TestGenerate_SSE(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("SSE body missing %q; got:\n%s", want, body)
 		}
+	}
+	// The handler must forward the username from JWT claims (not just
+	// userID) down into gen.Generate.
+	if !strings.Contains(body, `"username":"trueflame"`) {
+		t.Errorf("SSE body missing forwarded username from claims; got:\n%s", body)
 	}
 }
 

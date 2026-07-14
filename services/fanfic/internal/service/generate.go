@@ -52,7 +52,7 @@ func NewGenerator(groq streamer, store fanficStore, quota quota, catalog synopsi
 	return &Generator{groq: groq, store: store, quota: quota, catalog: catalog, model: model, contextRunes: contextRunes, log: log}
 }
 
-func (g *Generator) Generate(ctx context.Context, userID string, req domain.GenerateRequest, emit Emit) error {
+func (g *Generator) Generate(ctx context.Context, userID, username string, req domain.GenerateRequest, emit Emit) error {
 	release, err := g.quota.Acquire(ctx, userID)
 	if err != nil {
 		g.safeEmit(emit, "error", map[string]any{"message": err.Error()})
@@ -75,6 +75,9 @@ func (g *Generator) Generate(ctx context.Context, userID string, req domain.Gene
 		POV:              req.POV,
 		Rating:           req.Rating,
 		Language:         req.Language,
+		AuthorUsername:   username,
+		SpotlightCredit:  req.SpotlightCredit,
+		AIGenerated:      false, // explicit: this is the user path, mirrors bot rows setting it true
 		Prompt:           req.Prompt,
 		Canon:            req.Canon,
 		PartCount:        1,
