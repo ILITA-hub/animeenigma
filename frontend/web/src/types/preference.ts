@@ -1,11 +1,12 @@
 /** Known legacy player keys. The union documents the historical set; the
- *  `(string & {})` arm keeps any roster-supplied player_key assignable while
- *  preserving autocomplete (AUTO-608 — the roster, not this type, is the
- *  authority for which players exist). */
+ *  `(string & Record<never, never>)` arm (the eslint-safe spelling of the
+ *  `string & {}` autocomplete trick) keeps any roster-supplied player_key
+ *  assignable while preserving autocomplete (AUTO-608 — the roster, not this
+ *  type, is the authority for which players exist). */
 export type LegacyPlayerKey = 'kodik' | 'animelib' | 'hanime' | 'english' | 'ae'
 
 export interface WatchCombo {
-  player: LegacyPlayerKey | (string & {})
+  player: LegacyPlayerKey | (string & Record<never, never>)
   language: 'ru' | 'en' | '18+' | 'ja'
   watch_type: 'dub' | 'sub'
   translation_id: string
