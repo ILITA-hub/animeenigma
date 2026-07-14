@@ -157,9 +157,11 @@ func main() {
 	// the shared animeenigma DB only (no external URL), so it is constructed
 	// UNCONDITIONALLY (always on, unlike Logic A's nil-on-empty-URL guard).
 	autocachePredictionJob := jobs.NewAutocachePredictionJob(db.DB, cfg.Jobs.AutocacheActiveWatcherDays, cfg.Jobs.AutocacheAvgRawEpBytes, log)
+	// Daily Fanfic Spotlight — ensure-daily generation trigger.
+	fanficDailyJob := jobs.NewFanficDailyJob(&cfg.Jobs, log)
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, probeTriggerJob, readThresholdJob, providerRankingJob, subtitleProbeJob, autocacheLogicAJob, autocachePredictionJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, probeTriggerJob, readThresholdJob, providerRankingJob, subtitleProbeJob, autocacheLogicAJob, autocachePredictionJob, fanficDailyJob, log)
 
 	// Graceful-degradation Phase 3: heavy crons skip their tick while the
 	// governor-published level is Elevated+ (Redis ae:degradation:level;
@@ -186,6 +188,7 @@ func main() {
 		cfg.Jobs.SubtitleProbeCron,
 		cfg.Jobs.AutocacheLogicACron,
 		cfg.Jobs.AutocachePredictionCron,
+		cfg.Jobs.FanficDailyCron,
 	); err != nil {
 		log.Fatalw("failed to start job scheduler", "error", err)
 	}

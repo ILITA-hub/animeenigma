@@ -23,6 +23,7 @@ type JobService struct {
 	subtitleProbeJob           *jobs.SubtitleProbeTriggerJob
 	autocacheLogicAJob         *jobs.AutocacheLogicAJob
 	autocachePredictionJob     *jobs.AutocachePredictionJob
+	fanficDailyJob             *jobs.FanficDailyJob
 	shed                       shedChecker
 	maint                      *maintenancegate.Client
 	log                        *logger.Logger
@@ -36,6 +37,7 @@ type JobService struct {
 	lastSubtitleProbeRun       time.Time
 	lastAutocacheLogicARun     time.Time
 	lastAutocachePredictionRun time.Time
+	lastFanficDailyRun         time.Time
 }
 
 func NewJobService(
@@ -49,6 +51,7 @@ func NewJobService(
 	subtitleProbeJob *jobs.SubtitleProbeTriggerJob,
 	autocacheLogicAJob *jobs.AutocacheLogicAJob,
 	autocachePredictionJob *jobs.AutocachePredictionJob,
+	fanficDailyJob *jobs.FanficDailyJob,
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
@@ -67,6 +70,7 @@ func NewJobService(
 		subtitleProbeJob:       subtitleProbeJob,
 		autocacheLogicAJob:     autocacheLogicAJob,
 		autocachePredictionJob: autocachePredictionJob,
+		fanficDailyJob:         fanficDailyJob,
 		log:                    log,
 	}
 }
@@ -124,7 +128,7 @@ func (s *JobService) postStatus(ctx context.Context, id string, ok bool, summary
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, playbackProbeCron, readThresholdCron, providerRankingCron, subtitleProbeCron, autocacheLogicACron, autocachePredictionCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, playbackProbeCron, readThresholdCron, providerRankingCron, subtitleProbeCron, autocacheLogicACron, autocachePredictionCron, fanficDailyCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -412,6 +416,38 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		s.log.Info("registered job: autocache_prediction")
 	}
 
+	// Schedule the daily Fanfic Spotlight ensure-daily trigger. The fanfic
+	// service (port 8097) owns the Groq generation + idempotency check, so this
+	// job just POSTs its /internal/fanfic/ensure-daily endpoint. A daily
+	// best-effort generation, so it skips its tick while the platform is
+	// degraded (like the other analytics/recompute triggers above) rather than
+	// contending for resources during a pressure event.
+	if s.fanficDailyJob != nil {
+		_, err = s.cron.AddFunc(fanficDailyCron, func() {
+			if s.skipIfDegraded("fanfic_daily") {
+				return
+			}
+			ctx := context.Background()
+			s.log.Info("starting scheduled fanfic daily ensure-daily trigger")
+			start := time.Now()
+			if err := s.fanficDailyJob.Run(ctx); err != nil {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("fanfic_daily", "error").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("fanfic_daily").Observe(time.Since(start).Seconds())
+				s.log.Errorw("fanfic daily ensure-daily trigger failed", "error", err)
+			} else {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("fanfic_daily", "success").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("fanfic_daily").Observe(time.Since(start).Seconds())
+				metrics.SchedulerJobLastSuccess.WithLabelValues("fanfic_daily").SetToCurrentTime()
+				s.lastFanficDailyRun = time.Now()
+				s.log.Info("fanfic daily ensure-daily trigger completed successfully")
+			}
+		})
+		if err != nil {
+			return err
+		}
+		s.log.Info("registered job: fanfic_daily")
+	}
+
 	s.cron.Start()
 	s.log.Info("job scheduler started")
 	return nil
@@ -521,6 +557,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"autocache_prediction": map[string]interface{}{
 			"last_run": s.lastAutocachePredictionRun,
+		},
+		"fanfic_daily": map[string]interface{}{
+			"last_run": s.lastFanficDailyRun,
 		},
 	}
 }

@@ -109,6 +109,15 @@ type JobsConfig struct {
 	//   sync if the library value is retuned.
 	AutocachePredictionCron string
 	AutocacheAvgRawEpBytes  int64
+
+	// Daily Fanfic Spotlight — ensure-daily generation trigger. FanficDailyCron:
+	// cron for the daily trigger (default `30 4 * * *`, 04:30 — ahead of the
+	// morning traffic ramp, clear of the other 01:00-05:30 jobs). FanficServiceURL:
+	// base URL of the in-cluster fanfic service (port 8097) whose
+	// /internal/fanfic/ensure-daily endpoint this job POSTs; the fanfic service
+	// owns the Groq generation + idempotency check for "already generated today".
+	FanficDailyCron  string
+	FanficServiceURL string
 }
 
 func Load() (*Config, error) {
@@ -159,6 +168,9 @@ func Load() (*Config, error) {
 			// Phase 11 (OBS-05) — daily storage-need prediction job.
 			AutocachePredictionCron: getEnv("AUTOCACHE_PREDICTION_CRON", "0 4 * * *"),      // Daily 04:00
 			AutocacheAvgRawEpBytes:  getEnvInt64("AUTOCACHE_AVG_RAW_EP_BYTES", 1288490188), // ~1.2 GiB (spec §7 avg_raw_ep_size)
+			// Daily Fanfic Spotlight — ensure-daily generation trigger.
+			FanficDailyCron:  getEnv("FANFIC_DAILY_CRON", "30 4 * * *"), // Daily 04:30
+			FanficServiceURL: getEnv("FANFIC_SERVICE_URL", "http://fanfic:8097"),
 		},
 	}, nil
 }

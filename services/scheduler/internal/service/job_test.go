@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/jobs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ func TestJobService_RegistersAutocacheLogicA(t *testing.T) {
 	logicA := jobs.NewAutocacheLogicAJob(db, "http://library:8089", 30, logger.Default())
 	prediction := jobs.NewAutocachePredictionJob(db, 30, 1288490188, logger.Default())
 
-	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, logicA, prediction, logger.Default())
+	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, logicA, prediction, nil, logger.Default())
 
 	err = svc.Start(
 		farFutureCron, // shikimori
@@ -40,6 +41,7 @@ func TestJobService_RegistersAutocacheLogicA(t *testing.T) {
 		farFutureCron, // subtitleProbe (nil job → skipped)
 		farFutureCron, // autocacheLogicA
 		farFutureCron, // autocachePrediction
+		farFutureCron, // fanficDaily (nil job → skipped)
 	)
 	require.NoError(t, err)
 	defer svc.Stop()
@@ -58,12 +60,13 @@ func TestJobService_RegistersAutocachePrediction(t *testing.T) {
 
 	prediction := jobs.NewAutocachePredictionJob(db, 30, 1288490188, logger.Default())
 
-	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, nil, prediction, logger.Default())
+	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, nil, prediction, nil, logger.Default())
 
 	err = svc.Start(
 		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
 		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
 		farFutureCron, farFutureCron, // autocachePrediction
+		farFutureCron, // fanficDaily (nil job → skipped)
 	)
 	require.NoError(t, err)
 	defer svc.Stop()
@@ -77,12 +80,13 @@ func TestJobService_RegistersAutocachePrediction(t *testing.T) {
 // URL configured) is skipped cleanly — Start succeeds and GetStatus still exposes
 // the key (zero last_run) without panicking.
 func TestJobService_NilAutocacheLogicASkipped(t *testing.T) {
-	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger.Default())
+	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger.Default())
 
 	err := svc.Start(
 		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
 		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
 		farFutureCron, farFutureCron, // autocachePrediction (nil job → skipped)
+		farFutureCron, // fanficDaily (nil job → skipped)
 	)
 	require.NoError(t, err)
 	defer svc.Stop()
@@ -90,4 +94,26 @@ func TestJobService_NilAutocacheLogicASkipped(t *testing.T) {
 	status := svc.GetStatus()
 	_, ok := status["autocache_logic_a"]
 	assert.True(t, ok, "GetStatus exposes autocache_logic_a even when the job is nil")
+}
+
+// TestJobService_RegistersFanficDaily verifies the Daily Fanfic Spotlight
+// ensure-daily trigger is wired into the cron harness via the new
+// NewJobService/Start arity and surfaces in GetStatus.
+func TestJobService_RegistersFanficDaily(t *testing.T) {
+	fanficDaily := jobs.NewFanficDailyJob(&config.JobsConfig{FanficServiceURL: "http://fanfic:8097"}, logger.Default())
+
+	svc := NewJobService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fanficDaily, logger.Default())
+
+	err := svc.Start(
+		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
+		farFutureCron, farFutureCron, farFutureCron, farFutureCron,
+		farFutureCron, farFutureCron,
+		farFutureCron, // fanficDaily
+	)
+	require.NoError(t, err)
+	defer svc.Stop()
+
+	status := svc.GetStatus()
+	_, ok := status["fanfic_daily"]
+	assert.True(t, ok, "GetStatus must expose fanfic_daily")
 }
