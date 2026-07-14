@@ -10,6 +10,22 @@ policies:
     group_interval: 5m
     repeat_interval: 4h
     routes:
+      # HostPressureSustained (warning tier, L>=1) re-notification cap: at most
+      # once per 12h. Host pressure is a slow, self-actuated condition (the
+      # Phase-3 governor sheds load autonomously), so a still-firing sustained
+      # alert does not need the default 4h nag — one heads-up per half-day is
+      # plenty. Scoped to THIS alert only via alertname match; HostPressureCritical
+      # (L=2, genuine UX distress) deliberately keeps the default fast cadence.
+      # Paired with keep_firing_for on the rule (rules.yml / infra mirror) so a
+      # brief dip-and-recover can't resolve->refire and slip extra pages inside
+      # the 12h window. Same maintenance-webhook receiver; continue:false stops
+      # further matching (this alert is never diagnostic-severity anyway).
+      - receiver: maintenance-webhook
+        object_matchers:
+          - ["alertname", "=", "HostPressureSustained"]
+        group_interval: 5m
+        repeat_interval: 12h
+        continue: false
       # Per-provider scraper/parser pagers are demoted to dashboard-only
       # (severity=diagnostic): they keep evaluating (panels + state history)
       # but route through the always-on mute timing so they never notify.

@@ -36,6 +36,12 @@ groups:
         noDataState: OK
         execErrState: Error
         for: 15m
+        # Anti-flap: once firing, stay firing across dips under threshold for up
+        # to 30m so a brief recover-then-reelevate is ONE episode, not two pages.
+        # Paired with the alertname=HostPressureSustained route in policies.yml
+        # (repeat_interval 12h) to hold this warning to at most one notification
+        # per 12h. A genuine sustained clear still resolves within 30m.
+        keep_firing_for: 30m
         data:
           - refId: A
             relativeTimeRange:
