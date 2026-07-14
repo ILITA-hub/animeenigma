@@ -12,6 +12,7 @@ import {
   type Tier,
   type TierId,
   type LadderDebug,
+  type TierResidency,
 } from './protocolLadder'
 
 // Raw 3-tier config used across most ProtocolLadder tests: descending
@@ -682,5 +683,57 @@ describe('ladder singleton', () => {
   it('constructs without throwing under jsdom / import.meta.env', () => {
     expect(ladder).toBeDefined()
     expect(typeof ladder.currentBase()).toBe('string')
+  })
+})
+
+describe('ProtocolLadder — residency accounting', () => {
+  // A "slow" fragment: measured 8 Mbps, needed 8 Mbps → 8 < 8*1.2, counts as slow.
+  const SLOW = { bytes: 1_000_000, ms: 1000, mediaDurationS: 1, protocol: 'h2' }
+  // A "fast" fragment: measured 8 Mbps, needed 2 Mbps → not slow, no downshift.
+  const FAST = { bytes: 500_000, ms: 500, mediaDurationS: 2, protocol: 'h2' }
+
+  it('emits a tier residency summary just before a downshift', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 1_000_000,
+      storage: makeStorage(),
+    })
+    const seen: TierResidency[] = []
+    ladderInstance.onResidencyEnd((r) => seen.push(r))
+    // entry tier is h2 (index 1); 3 consecutive slow judgements → downshift to h1
+    ladderInstance.reportFragment(SLOW) // sample 1 (no judge)
+    ladderInstance.reportFragment(SLOW) // sample 2 → consecSlow 1
+    ladderInstance.reportFragment(SLOW) // sample 3 → consecSlow 2
+    ladderInstance.reportFragment(SLOW) // sample 4 → consecSlow 3 → downshift
+    expect(seen).toHaveLength(1)
+    expect(seen[0].tierId).toBe('h2') // the tier being LEFT
+    expect(seen[0].segments).toBe(4)
+    expect(seen[0].protocol).toBe('h2')
+    expect(seen[0].timeouts).toBe(0)
+    expect(seen[0].avgMbps).toBeCloseTo(8, 1)
+  })
+
+  it('consumeResidency returns the summary once, then null until new fragments', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 1_000_000,
+      storage: makeStorage(),
+    })
+    ladderInstance.reportFragment(FAST)
+    ladderInstance.reportFragment(FAST)
+    expect(ladderInstance.consumeResidency()?.segments).toBe(2)
+    expect(ladderInstance.consumeResidency()).toBeNull() // already consumed
+    ladderInstance.reportFragment(FAST) // new activity re-arms
+    expect(ladderInstance.consumeResidency()?.segments).toBe(3)
+  })
+
+  it('does not track residency on a single-tier ladder', () => {
+    const single = new ProtocolLadder([{ id: 'h2', base: '' }], {
+      now: () => 1,
+      storage: makeStorage(),
+    })
+    const seen: TierResidency[] = []
+    single.onResidencyEnd((r) => seen.push(r))
+    single.reportFragment(FAST) // reportFragment early-returns when !isMultiTier
+    expect(single.consumeResidency()).toBeNull()
+    expect(seen).toHaveLength(0)
   })
 })

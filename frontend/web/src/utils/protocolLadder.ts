@@ -47,6 +47,22 @@ export interface LadderDebug {
   probe: string // "h3 2.1 Mbps @03:24 — rejected (<1.1× h2)" | '' when unset
 }
 
+/** Summary of one continuous stay on a tier ("residency"). Emitted just
+ *  before each tier switch (onResidencyEnd) and on session end
+ *  (consumeResidency). All fields are tier-scoped except neededMbps (the
+ *  running required-bitrate EWMA, which is content- not tier-dependent). */
+export interface TierResidency {
+  tierId: TierId
+  protocol: string
+  segments: number
+  avgMbps: number
+  neededMbps: number
+  timeouts: number
+  tierMs: number
+  trail: string
+  probe: string
+}
+
 /**
  * I4 fix: formats a `LadderDebug` snapshot into the exact hacker-mode HUD row
  * strings, as a pure function so the 1-based tier display ("tier 2/3" for
@@ -181,11 +197,21 @@ export class ProtocolLadder {
   private lastProbe = ''
   private probedH3 = false
 
+  // Per-tier residency accounting. A "residency" = one continuous stay on a
+  // tier; summarized + emitted just before a switch, flushed on session end.
+  // Reset on every switch so each summary is tier-scoped (unlike the EWMA).
+  private residencyBytes = 0
+  private residencyMs = 0
+  private residencyStartTs = 0
+  private residencyConsumed = false
+  private readonly residencyListeners = new Set<(r: TierResidency) => void>()
+
   constructor(tiers: Tier[], deps?: { now?: () => number; storage?: StorageLike }) {
     this.tiers = tiers.length > 0 ? tiers : [{ id: 'h2', base: '' }]
     this.now = deps?.now ?? (() => Date.now())
     this.storage = deps?.storage !== undefined ? deps.storage : safeLocalStorage()
     this.tierIndex = this.computeEntryIndex()
+    this.residencyStartTs = this.now()
     this.attachConnectionListener()
   }
 
@@ -258,6 +284,12 @@ export class ProtocolLadder {
     // Infinity/NaN and poison the EWMA forever. The inflight clear above
     // still runs unconditionally so loadend/report ordering keeps working.
     if (!(r.bytes > 0) || !(r.ms > 0) || !(r.mediaDurationS > 0)) return
+
+    // Tier-scoped residency accumulation (a true mean speed, distinct from the
+    // EWMA below). A fresh fragment also re-arms consumeResidency.
+    this.residencyBytes += r.bytes
+    this.residencyMs += r.ms
+    this.residencyConsumed = false
 
     const measuredSample = (r.bytes * 8) / (r.ms / 1000)
     const neededSample = (r.bytes * 8) / r.mediaDurationS
@@ -405,6 +437,55 @@ export class ProtocolLadder {
     this.applySwitch(idx, reason, now)
   }
 
+  /** Summary of the current tier residency, or null if nothing played on it. */
+  private buildResidency(): TierResidency | null {
+    if (this.fragSamples === 0) return null
+    const avgMbps =
+      this.residencyMs > 0
+        ? (this.residencyBytes * 8) / (this.residencyMs / 1000) / 1_000_000
+        : 0
+    return {
+      tierId: this.tiers[this.tierIndex].id,
+      protocol: this.lastProtocol,
+      segments: this.fragSamples,
+      avgMbps,
+      neededMbps: this.neededEwmaBps / 1_000_000,
+      timeouts: this.timeoutCount,
+      tierMs: this.now() - this.residencyStartTs,
+      trail: this.trail,
+      probe: this.lastProbe,
+    }
+  }
+
+  private emitResidency(r: TierResidency): void {
+    for (const cb of this.residencyListeners) {
+      try {
+        cb(r)
+      } catch {
+        // one bad subscriber must not break the ladder
+      }
+    }
+  }
+
+  /** Subscribe to per-tier residency summaries, emitted just before each tier
+   *  switch (down- or up-shift). Returns an unsubscribe fn. */
+  onResidencyEnd(cb: (r: TierResidency) => void): () => void {
+    this.residencyListeners.add(cb)
+    return () => {
+      this.residencyListeners.delete(cb)
+    }
+  }
+
+  /** Session-end flush: returns the current residency summary (or null) and
+   *  marks it consumed, so a second call (pagehide THEN unmount) is a no-op
+   *  until new fragments arrive. */
+  consumeResidency(): TierResidency | null {
+    if (this.residencyConsumed) return null
+    const r = this.buildResidency()
+    this.residencyConsumed = true
+    return r
+  }
+
   debugSnapshot(): LadderDebug | null {
     if (!this.isMultiTier()) return null
     return {
@@ -474,6 +555,10 @@ export class ProtocolLadder {
     this.timeoutCount = 0
     this.hasCompletedFragOnTier = false
     this.inflightUrl = null
+    this.residencyBytes = 0
+    this.residencyMs = 0
+    this.residencyStartTs = this.now()
+    this.residencyConsumed = false
   }
 
   /**
@@ -495,6 +580,8 @@ export class ProtocolLadder {
 
   private applySwitch(newIndex: number, reason: string, now: number): void {
     const from = this.tiers[this.tierIndex]
+    const leaving = this.buildResidency()
+    if (leaving) this.emitResidency(leaving)
     this.tierIndex = newIndex
     const to = this.tiers[newIndex]
     this.resetTierCounters()
