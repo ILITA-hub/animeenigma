@@ -23,6 +23,9 @@ type Fanfic struct {
 	POV              string         `gorm:"size:16" json:"pov"`
 	Rating           string         `gorm:"size:16" json:"rating"`
 	Language         string         `gorm:"size:8" json:"language"`
+	AuthorUsername   string         `gorm:"size:64" json:"author_username,omitempty"`
+	SpotlightCredit  bool           `gorm:"default:false" json:"spotlight_credit"`
+	AIGenerated      bool           `gorm:"default:false;index" json:"ai_generated"`
 	Prompt           string         `gorm:"type:text" json:"prompt"`
 	Canon            bool           `gorm:"default:false" json:"canon"`
 	PartCount        int            `gorm:"default:1" json:"part_count"`

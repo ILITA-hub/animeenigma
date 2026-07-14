@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"time"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/domain"
@@ -104,6 +105,28 @@ func (r *Repository) Get(ctx context.Context, userID, id string) (*domain.Fanfic
 		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "get fanfic")
 	}
 	return &f, nil
+}
+
+// ListEligibleSince returns completed fanfics (any user) created after `since`,
+// oldest-first for a stable daily pick. Not user-scoped — this feeds the public
+// «Фанфик дня» pick.
+func (r *Repository) ListEligibleSince(ctx context.Context, since time.Time) ([]domain.Fanfic, error) {
+	var out []domain.Fanfic
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND created_at > ?", domain.StatusComplete, since).
+		Order("created_at ASC, id ASC").
+		Find(&out).Error
+	return out, err
+}
+
+// DailyBotExists reports whether an AI-generated fanfic already exists since `since`
+// (idempotency guard for ensure-daily).
+func (r *Repository) DailyBotExists(ctx context.Context, since time.Time) (bool, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&domain.Fanfic{}).
+		Where("ai_generated = ? AND status = ? AND created_at > ?", true, domain.StatusComplete, since).
+		Count(&n).Error
+	return n > 0, err
 }
 
 // SoftDelete soft-deletes a fanfic scoped to its owner (GORM DeletedAt). A

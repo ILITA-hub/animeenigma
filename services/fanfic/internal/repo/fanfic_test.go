@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/domain"
 	"gorm.io/datatypes"
@@ -187,6 +188,28 @@ func TestAppendPart(t *testing.T) {
 	// Non-owner append affects zero rows -> NotFound.
 	if err := repo.AppendPart(ctx, "someone-else", f.ID, "x", 1, 3); err == nil {
 		t.Error("expected NotFound for non-owner append")
+	}
+}
+
+func TestListEligibleSince(t *testing.T) {
+	r := newTestRepo(t) // existing sqlite in-mem helper in this file
+	ctx := context.Background()
+	old := &domain.Fanfic{UserID: "u1", AnimeTitle: "A", Status: domain.StatusComplete, Content: "x", CreatedAt: time.Now().Add(-48 * time.Hour)}
+	recent := &domain.Fanfic{UserID: "u1", AnimeTitle: "B", Status: domain.StatusComplete, Content: "y"}
+	failed := &domain.Fanfic{UserID: "u1", AnimeTitle: "C", Status: domain.StatusFailed}
+	for _, f := range []*domain.Fanfic{old, recent, failed} {
+		if err := r.Create(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// force old CreatedAt (Create stamps now)
+	r.db.Model(&domain.Fanfic{}).Where("id = ?", old.ID).Update("created_at", time.Now().Add(-48*time.Hour))
+	got, err := r.ListEligibleSince(ctx, time.Now().Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].AnimeTitle != "B" {
+		t.Fatalf("want only recent complete B, got %+v", got)
 	}
 }
 
