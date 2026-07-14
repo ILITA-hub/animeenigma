@@ -126,9 +126,19 @@ describe('useProviderResolver', () => {
     expect(params.get('type')).toBe('mp4')
   })
 
-  it('throws a typed error for a disabled/unwired provider', async () => {
+  it('throws a typed error for an unwired provider', async () => {
+    // AUTO-608: no FE denylist — feed omission is the truth for disabled
+    // providers. Only a provider with NO adapter code throws.
     const resolver = makeResolver({} as any)
-    await expect(resolver.listEpisodes('animelib', 'x')).rejects.toThrow(/not available/i)
+    await expect(resolver.listEpisodes('no-such-provider', 'x')).rejects.toThrow(NotAvailableError)
+  })
+
+  it('animelib falls through to NotAvailableError (no adapter, no FE denylist)', async () => {
+    // 'animelib' has no adapter in makeResolver — it lands on the generic
+    // fall-through, NOT a special-cased denylist. Feed omission (not FE code)
+    // is what actually hides it from users when disabled upstream.
+    const resolver = makeResolver({} as any)
+    await expect(resolver.listEpisodes('animelib', 'x')).rejects.toThrow(/not available/)
   })
 
   it('wires the first-party ae provider: library episodes + signed minio stream', async () => {

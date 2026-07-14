@@ -28,7 +28,8 @@
  *
  * NOT wired (throw NotAvailableError)
  * ─────────────────────────────────────
- * • 'animelib'  — upstream went Kodik-only (see MEMORY.md); hidden by default.
+ * • 'animelib'  — has no adapter yet (falls through to NotAvailableError); the
+ *   FEED decides availability — there is no FE denylist (AUTO-608).
  */
 
 import { scraperApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi } from '@/api/client'
@@ -598,15 +599,7 @@ export interface ProviderResolver {
  * - anything else            → NotAvailableError
  */
 export function makeResolver(deps: ResolverDeps): ProviderResolver {
-  const UNAVAILABLE_PROVIDERS = new Set<string>([
-    'animelib', // upstream went Kodik-only
-  ])
-
   function getAdapter(provider: string): ProviderAdapter {
-    if (UNAVAILABLE_PROVIDERS.has(provider)) {
-      throw new NotAvailableError(provider)
-    }
-
     if (provider === 'kodik') {
       if (!deps.kodikApi) {
         throw new NotAvailableError(provider, 'not available (kodikApi dep missing)')
@@ -649,6 +642,7 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
       return makeAnimejoyAdapter(deps.animejoyApi, provider === 'animejoy-sibnet' ? 'sibnet' : 'allvideo')
     }
 
+    if (import.meta.env.DEV) console.warn(`[resolver] no adapter for provider "${provider}" — roster row without FE code?`)
     throw new NotAvailableError(provider)
   }
 
