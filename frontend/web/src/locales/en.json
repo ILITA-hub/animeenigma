@@ -1855,6 +1855,9 @@
       "airedLabel": "ep. {n} aired",
       "episodesLabel": "{n} ep."
     },
+    "dailyFanfic": {
+      "title": "Daily Fanfic"
+    },
     "randomTail": {
       "title": "Random pick",
       "subtitle": "Discover something new",

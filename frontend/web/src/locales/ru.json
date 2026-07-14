@@ -1855,6 +1855,9 @@
       "airedLabel": "эп. {n} вышел",
       "episodesLabel": "{n} эп."
     },
+    "dailyFanfic": {
+      "title": "Фанфик дня"
+    },
     "randomTail": {
       "title": "Случайная находка",
       "subtitle": "Откройте что-то новое",

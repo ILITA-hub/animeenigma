@@ -1809,6 +1809,9 @@
       "airedLabel": "第{n}話配信中",
       "episodesLabel": "{n}話"
     },
+    "dailyFanfic": {
+      "title": "今日のファンフィック"
+    },
     "randomTail": {
       "title": "ランダムピック",
       "subtitle": "新しい発見を",

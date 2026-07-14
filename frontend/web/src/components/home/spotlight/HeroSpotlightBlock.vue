@@ -139,6 +139,11 @@
             :key="`curated:${currentIndex}`"
             :data="active.data"
           />
+          <DailyFanficCard
+            v-else-if="active.type === 'daily_fanfic'"
+            :key="`daily_fanfic:${currentIndex}`"
+            :data="active.data"
+          />
         </transition>
       </div>
       <!-- SR-only pause announcement (UI-SPEC §A11y; F1.3/F6.1 resolution).
@@ -179,6 +184,7 @@ import NowWatchingCard from './cards/NowWatchingCard.vue'
 import NotTimeYetCard from './cards/NotTimeYetCard.vue'
 import ContinueWatchingNewCard from './cards/ContinueWatchingNewCard.vue'
 import CuratedCard from './cards/CuratedCard.vue'
+import DailyFanficCard from './cards/DailyFanficCard.vue'
 import { getLocalizedTitle } from '@/utils/title'
 import { preloadImage } from '@/utils/preload-image'
 import { cardPosterUrl } from '@/composables/useImageProxy'
@@ -398,6 +404,8 @@ function cardImageUrls(card: SpotlightCard): string[] {
       return card.data.anime.poster_url
         ? [cardPosterUrl(card.data.anime.poster_url, 640)]
         : []
+    case 'daily_fanfic':
+      return card.data.anime_poster ? [cardPosterUrl(card.data.anime_poster, 640)] : []
     default:
       return []
   }
@@ -511,6 +519,8 @@ function cardTitle(card: SpotlightCard): string {
         card.data.anime.name_ru,
         card.data.anime.name_jp,
       )
+    case 'daily_fanfic':
+      return t('spotlight.dailyFanfic.title')
   }
 }
 </script>

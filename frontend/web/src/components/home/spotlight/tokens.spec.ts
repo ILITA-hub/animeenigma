@@ -33,6 +33,7 @@ const EXPECTED_TYPES: readonly SpotlightCardType[] = [
   'not_time_yet',
   'continue_watching_new',
   'curated',
+  'daily_fanfic',
 ] as const
 
 // Brand triad only (DS alignment A-1, 2026-06-10, user-approved).
@@ -56,8 +57,8 @@ const VALID_ICONS: readonly SpotlightIconName[] = [
 ] as const
 
 describe('cardTokens', () => {
-  it('has exactly 10 entries — one per SpotlightCard variant', () => {
-    expect(Object.keys(cardTokens)).toHaveLength(10)
+  it('has exactly 11 entries — one per SpotlightCard variant', () => {
+    expect(Object.keys(cardTokens)).toHaveLength(11)
   })
 
   it.each(EXPECTED_TYPES)('has a token for %s', (type) => {

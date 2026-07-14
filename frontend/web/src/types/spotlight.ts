@@ -238,6 +238,28 @@ export interface ContinueWatchingNewData {
   new_episode_number: number
 }
 
+/**
+ * DailyFanficCard — a single AI-authored/user-submitted fanfic excerpt for
+ * the daily "Fanfic Spotlight". Mirrors the fanfic-engine wire DTO
+ * (services/fanfic, port 8097) — snake_case end-to-end per Pitfall 8.
+ */
+export interface DailyFanficData {
+  id: string
+  fanfic_title: string
+  anime_title: string
+  anime_japanese: string
+  anime_poster: string
+  excerpt: string
+  rating: string
+  language: string
+  explicit: boolean
+  author_username: string
+  credited: boolean
+  ai_generated: boolean
+  part_count: number
+  created_at: string
+}
+
 /* ──────────────────────────────────────────────────────────────────────── */
 /*  Discriminated union — narrows correctly in the v-if/v-else-if dispatch  */
 /*  chain inside HeroSpotlightBlock.vue.                                    */
@@ -254,6 +276,7 @@ export type SpotlightCard = (
   | { type: 'not_time_yet'; data: NotTimeYetData }
   | { type: 'continue_watching_new'; data: ContinueWatchingNewData }
   | { type: 'curated'; data: CuratedData }
+  | { type: 'daily_fanfic'; data: DailyFanficData }
 ) & { priority?: number }
 
 /* ──────────────────────────────────────────────────────────────────────── */
