@@ -90,7 +90,7 @@ func (s *Service) aeFamily(ctx context.Context, animeID string) (domain.SourceFa
 			s.log.Warnw("ae title info lookup failed; tinting", "anime_id", animeID, "error", err)
 		}
 	}
-	pc := domain.ProviderCap{Provider: "ae", DisplayName: "AnimeEnigma"}
+	pc := domain.ProviderCap{Provider: "ae", DisplayName: displayOf(row, "AnimeEnigma")}
 	variants, audios, lang, usable := aeVariantsFromInfo(info, row)
 	if !usable {
 		variants = variantsFromTraits(row)

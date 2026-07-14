@@ -274,6 +274,24 @@ func TestAeFamilyOmittedWhenRowAbsentOrDisabled(t *testing.T) {
 	}
 }
 
+// A row-level DisplayName override (operator-set in admin) wins over the
+// compiled fallback ("AnimeEnigma") — aeFamily honors displayOf like every
+// other family builder (AUTO-608 review fix).
+func TestAeFamilyDisplayNameOverride(t *testing.T) {
+	db := newDB(t, domain.ScraperProvider{
+		Name: "ae", Status: domain.StatusEnabled, Health: domain.HealthUp,
+		Group: "firstparty", DisplayName: "Custom AE",
+	})
+	s := &Service{db: db, library: fakeLibrary{aeInfo: service.AeInfo{Present: true, Track: "raw", AudioLang: "jpn"}}}
+	fam, ok := s.aeFamily(context.Background(), "uuid")
+	if !ok {
+		t.Fatal("ae family expected")
+	}
+	if got := fam.Providers[0].DisplayName; got != "Custom AE" {
+		t.Fatalf("display_name = %q, want row override %q", got, "Custom AE")
+	}
+}
+
 // rowFamily is the generic DB-row→family builder AUTO-608 generalized from the
 // old name/family-string dbRowFamily: it now takes the row directly (no DB
 // lookup by name) and is both the 18anime builder and buildFamilies' fallback
