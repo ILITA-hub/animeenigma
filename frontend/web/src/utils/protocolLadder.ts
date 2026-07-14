@@ -202,6 +202,8 @@ export class ProtocolLadder {
   // Reset on every switch so each summary is tier-scoped (unlike the EWMA).
   private residencyBytes = 0
   private residencyMs = 0
+  private residencySegments = 0
+  private residencyTimeouts = 0
   private residencyStartTs = 0
   private residencyConsumed = false
   private readonly residencyListeners = new Set<(r: TierResidency) => void>()
@@ -289,6 +291,7 @@ export class ProtocolLadder {
     // EWMA below). A fresh fragment also re-arms consumeResidency.
     this.residencyBytes += r.bytes
     this.residencyMs += r.ms
+    this.residencySegments += 1
     this.residencyConsumed = false
 
     const measuredSample = (r.bytes * 8) / (r.ms / 1000)
@@ -321,6 +324,7 @@ export class ProtocolLadder {
   reportTimeout(): void {
     if (!this.isMultiTier()) return
     this.timeoutCount += 1
+    this.residencyTimeouts += 1
     if (this.timeoutCount >= TIMEOUTS_TO_DOWNSHIFT) {
       // On success resetTierCounters() zeroes timeoutCount; a cooldown-blocked
       // attempt keeps it armed (see reportFragment).
@@ -439,7 +443,7 @@ export class ProtocolLadder {
 
   /** Summary of the current tier residency, or null if nothing played on it. */
   private buildResidency(): TierResidency | null {
-    if (this.fragSamples === 0) return null
+    if (this.residencySegments === 0) return null
     const avgMbps =
       this.residencyMs > 0
         ? (this.residencyBytes * 8) / (this.residencyMs / 1000) / 1_000_000
@@ -447,10 +451,10 @@ export class ProtocolLadder {
     return {
       tierId: this.tiers[this.tierIndex].id,
       protocol: this.lastProtocol,
-      segments: this.fragSamples,
+      segments: this.residencySegments,
       avgMbps,
       neededMbps: this.neededEwmaBps / 1_000_000,
-      timeouts: this.timeoutCount,
+      timeouts: this.residencyTimeouts,
       tierMs: this.now() - this.residencyStartTs,
       trail: this.trail,
       probe: this.lastProbe,
@@ -483,6 +487,7 @@ export class ProtocolLadder {
     if (this.residencyConsumed) return null
     const r = this.buildResidency()
     this.residencyConsumed = true
+    this.resetResidencyOnly()
     return r
   }
 
@@ -549,15 +554,21 @@ export class ProtocolLadder {
     }
   }
 
+  private resetResidencyOnly(): void {
+    this.residencyBytes = 0
+    this.residencyMs = 0
+    this.residencySegments = 0
+    this.residencyTimeouts = 0
+    this.residencyStartTs = this.now()
+  }
+
   private resetTierCounters(): void {
     this.fragSamples = 0
     this.consecSlow = 0
     this.timeoutCount = 0
     this.hasCompletedFragOnTier = false
     this.inflightUrl = null
-    this.residencyBytes = 0
-    this.residencyMs = 0
-    this.residencyStartTs = this.now()
+    this.resetResidencyOnly()
     this.residencyConsumed = false
   }
 

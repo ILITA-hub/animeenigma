@@ -712,7 +712,7 @@ describe('ProtocolLadder — residency accounting', () => {
     expect(seen[0].avgMbps).toBeCloseTo(8, 1)
   })
 
-  it('consumeResidency returns the summary once, then null until new fragments', () => {
+  it('consumeResidency returns the summary once, then null, and RESETS so the next residency is independent', () => {
     const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
       now: () => 1_000_000,
       storage: makeStorage(),
@@ -720,9 +720,24 @@ describe('ProtocolLadder — residency accounting', () => {
     ladderInstance.reportFragment(FAST)
     ladderInstance.reportFragment(FAST)
     expect(ladderInstance.consumeResidency()?.segments).toBe(2)
-    expect(ladderInstance.consumeResidency()).toBeNull() // already consumed
-    ladderInstance.reportFragment(FAST) // new activity re-arms
+    expect(ladderInstance.consumeResidency()).toBeNull() // consumed
+    ladderInstance.reportFragment(FAST) // starts a NEW residency from zero
+    expect(ladderInstance.consumeResidency()?.segments).toBe(1)
+  })
+
+  it('does not leak segments across sessions on the singleton (single-tier stay, no switch)', () => {
+    const ladderInstance = new ProtocolLadder(parseTiers(RAW3, undefined), {
+      now: () => 1_000_000,
+      storage: makeStorage(),
+    })
+    // Mount 1: 3 fragments, then session-end flush.
+    ladderInstance.reportFragment(FAST)
+    ladderInstance.reportFragment(FAST)
+    ladderInstance.reportFragment(FAST)
     expect(ladderInstance.consumeResidency()?.segments).toBe(3)
+    // Mount 2 on the SAME singleton: 1 fragment, then flush — must NOT include mount 1's 3.
+    ladderInstance.reportFragment(FAST)
+    expect(ladderInstance.consumeResidency()?.segments).toBe(1)
   })
 
   it('does not track residency on a single-tier ladder', () => {
