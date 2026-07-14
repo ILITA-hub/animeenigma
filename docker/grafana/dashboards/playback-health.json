@@ -1807,6 +1807,79 @@
       ],
       "title": "Provider Usage — times requested & restream seconds",
       "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 86 },
+      "id": 108,
+      "panels": [],
+      "title": "Protocol Ladder (h1/h2/h3)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+      "description": "Segment-volume-weighted share of each negotiated protocol over the selected window.",
+      "fieldConfig": { "defaults": { "custom": { "hideFrom": { "legend": false, "tooltip": false, "viz": false } }, "mappings": [] }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 87 },
+      "id": 61,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "pieType": "donut",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "rawQuery": true,
+          "queryType": "sql",
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT JSONExtractString(properties,'protocol') AS protocol, sum(JSONExtractUInt(properties,'segments')) AS segments FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_protocol' GROUP BY protocol ORDER BY segments DESC"
+        }
+      ],
+      "title": "Protocol usage share",
+      "type": "piechart"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+      "description": "One row per (session × protocol tier): what the ladder delivered on each tier a viewer used. Anonymous.",
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left", "cellOptions": { "type": "auto" }, "filterable": true }, "mappings": [] },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Dropped frames %" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 2 }, { "color": "red", "value": 5 } ] } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Seg timeouts" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 95 },
+      "id": 62,
+      "options": { "cellHeight": "sm", "footer": { "show": false }, "showHeader": true },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "rawQuery": true,
+          "queryType": "sql",
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT timestamp AS \"Time\", JSONExtractString(properties,'protocol') AS \"Protocol\", coalesce(nullIf(JSONExtractString(properties,'anime_name'),''), anime_id) AS \"Anime\", JSONExtractString(properties,'combo') AS \"Combo\", JSONExtractUInt(properties,'segments') AS \"Segments\", round(JSONExtractFloat(properties,'avg_mbps'),2) AS \"Avg Mbps\", round(JSONExtractFloat(properties,'dropped_frames_pct'),2) AS \"Dropped frames %\", JSONExtractUInt(properties,'seg_timeouts') AS \"Seg timeouts\", round(JSONExtractFloat(properties,'needed_mbps'),2) AS \"Needed Mbps\", JSONExtractString(properties,'trail') AS \"Ladder trail\", JSONExtractString(properties,'probe') AS \"h3 probe\", target AS \"Provider\" FROM events WHERE $__timeFilter(timestamp) AND effect_kind='player_protocol' ORDER BY timestamp DESC LIMIT 500"
+        }
+      ],
+      "title": "Protocol usage (per session × tier)",
+      "type": "table"
     }
   ],
   "schemaVersion": 39,
