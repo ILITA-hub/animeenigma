@@ -255,6 +255,7 @@ async function onRatingChange(value: string | number): Promise<void> {
 
 const prompt = ref('')
 const canon = ref(false)
+const spotlightCredit = ref(false)
 
 // Rune-ish count (spread iterates by code point) to track the backend's
 // utf8.RuneCountInString(r.Prompt) > 2000 cap (services/fanfic/internal/
@@ -284,6 +285,7 @@ function buildInput(): GenerateInput {
     language: language.value,
     prompt: prompt.value.trim(),
     canon: canon.value,
+    spotlight_credit: spotlightCredit.value,
   }
 }
 
@@ -317,6 +319,7 @@ defineExpose({
   onLanguageChange,
   prompt,
   canon,
+  spotlightCredit,
   MAX_PROMPT,
   promptLength,
   promptOverLimit,
@@ -469,6 +472,15 @@ defineExpose({
         <p class="text-xs text-muted-foreground">{{ t('fanfic.canon.hint') }}</p>
       </div>
       <Switch v-model="canon" :aria-label="t('fanfic.canon.label')" />
+    </div>
+
+    <!-- Spotlight credit opt-in -->
+    <div class="flex items-center justify-between rounded-xl border border-border bg-card p-3">
+      <div>
+        <p class="text-sm font-medium text-white/80">{{ t('fanfic.spotlightCredit.label') }}</p>
+        <p class="text-xs text-muted-foreground">{{ t('fanfic.spotlightCredit.desc') }}</p>
+      </div>
+      <Switch v-model="spotlightCredit" :aria-label="t('fanfic.spotlightCredit.label')" />
     </div>
 
     <!-- Prompt -->

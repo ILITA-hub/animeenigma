@@ -2341,6 +2341,10 @@
       "directionLabel": "物語をどう進める？（任意）",
       "directionPlaceholder": "例：フリーレンがヒンメルの古い手紙を見つける…"
     },
+    "spotlightCredit": {
+      "label": "「今日のファンフィック」に名前を表示",
+      "desc": "この作品が「今日のファンフィック」に選ばれた場合、ユーザー名がトップページに表示されることがあります。"
+    },
     "library": {
       "empty": "No fanfics yet. Generate your first one in the Generate tab.",
       "delete": "Delete",

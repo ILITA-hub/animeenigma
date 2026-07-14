@@ -2341,6 +2341,10 @@
       "directionLabel": "Where should the plot go? (optional)",
       "directionPlaceholder": "e.g. Frieren finds an old letter from Himmel…"
     },
+    "spotlightCredit": {
+      "label": "Show my name in Daily Fanfic",
+      "desc": "Your username may appear on the homepage if this fanfic is picked for Daily Fanfic."
+    },
     "library": {
       "empty": "No fanfics yet. Generate your first one in the Generate tab.",
       "delete": "Delete",

@@ -35,6 +35,8 @@ export interface GenerateInput {
   language: FanficLang
   prompt: string
   canon?: boolean
+  /** Opt-in: show the author's name if this fanfic is picked for "Фанфик дня" (Daily Fanfic spotlight). */
+  spotlight_credit?: boolean
 }
 
 /** One generated fanfic, as returned by list()/get(). */

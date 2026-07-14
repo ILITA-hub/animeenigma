@@ -174,4 +174,16 @@ describe('GenerateForm', () => {
     expect(vm.canGenerate).toBe(true) // empty prompt is OK in canon mode
     expect(vm.buildInput().canon).toBe(true)
   })
+
+  it('spotlight_credit defaults to false and flows through buildInput when toggled on', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(vm.buildInput().spotlight_credit).toBe(false)
+
+    vm.spotlightCredit = true
+    await wrapper.vm.$nextTick()
+    expect(vm.buildInput().spotlight_credit).toBe(true)
+  })
 })
