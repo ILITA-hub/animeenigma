@@ -14,6 +14,7 @@ const base: FailureInputs = {
   providerAutoSelected: true,
   candidateExists: true,
   attemptsExceeded: false,
+  firstParty: false,
 }
 
 describe('classifyPlaybackFailure', () => {
@@ -32,23 +33,23 @@ describe('classifyPlaybackFailure', () => {
   })
 
   it('emits ae_failed when the first-party source fails, even with a candidate', () => {
-    const d = classifyPlaybackFailure({ ...base, failingProvider: 'ae' })
+    const d = classifyPlaybackFailure({ ...base, failingProvider: 'ae', firstParty: true })
     expect(d).toEqual({ emit: true, tag: 'ae_failed', exhausted: false })
   })
 
   it('emits ae_failed (exhausted) when ae was the last candidate', () => {
-    const d = classifyPlaybackFailure({ ...base, failingProvider: 'ae', candidateExists: false })
+    const d = classifyPlaybackFailure({ ...base, failingProvider: 'ae', firstParty: true, candidateExists: false })
     expect(d).toEqual({ emit: true, tag: 'ae_failed', exhausted: true })
   })
 
   it('never emits in hacker mode', () => {
     expect(classifyPlaybackFailure({ ...base, candidateExists: false, hackerMode: true }).emit).toBe(false)
-    expect(classifyPlaybackFailure({ ...base, failingProvider: 'ae', hackerMode: true }).emit).toBe(false)
+    expect(classifyPlaybackFailure({ ...base, failingProvider: 'ae', firstParty: true, hackerMode: true }).emit).toBe(false)
   })
 
   it('never emits for the content-gap reason', () => {
     expect(classifyPlaybackFailure({ ...base, candidateExists: false, reason: EPISODE_GAP_REASON }).emit).toBe(false)
-    expect(classifyPlaybackFailure({ ...base, failingProvider: 'ae', reason: EPISODE_GAP_REASON }).emit).toBe(false)
+    expect(classifyPlaybackFailure({ ...base, failingProvider: 'ae', firstParty: true, reason: EPISODE_GAP_REASON }).emit).toBe(false)
   })
 
   it('does not emit for a manual non-ae pick failure', () => {
@@ -56,8 +57,18 @@ describe('classifyPlaybackFailure', () => {
   })
 
   it('emits ae_failed for a manual ae pick failure', () => {
-    const d = classifyPlaybackFailure({ ...base, failingProvider: 'ae', providerAutoSelected: false })
+    const d = classifyPlaybackFailure({ ...base, failingProvider: 'ae', firstParty: true, providerAutoSelected: false })
     expect(d).toEqual({ emit: true, tag: 'ae_failed', exhausted: false })
+  })
+
+  it('tags ae_failed for ANY first-party provider (group, not id)', () => {
+    const d = classifyPlaybackFailure({ ...base, failingProvider: 'ae2', firstParty: true, candidateExists: true })
+    expect(d).toEqual({ emit: true, tag: 'ae_failed', exhausted: false })
+  })
+
+  it('does not treat a non-firstparty provider named ae-like as first-party', () => {
+    const d = classifyPlaybackFailure({ ...base, failingProvider: 'aegis', firstParty: false, candidateExists: true })
+    expect(d.emit).toBe(false)
   })
 })
 

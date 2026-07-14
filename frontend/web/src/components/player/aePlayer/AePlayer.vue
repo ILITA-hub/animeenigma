@@ -908,7 +908,7 @@ function reportIfTerminal(inputs: FailureInputs) {
       ...buildDiagnosticBundle(),
       reason: d.tag,
       all_exhausted: d.exhausted ?? false,
-      is_first_party: inputs.failingProvider === 'ae',
+      is_first_party: inputs.firstParty,
       fail_reason: inputs.reason,
     },
   })
@@ -967,6 +967,22 @@ async function advanceToNextSource(reason: string): Promise<boolean> {
     providerAutoSelected: providerAutoSelected.value,
     candidateExists,
     attemptsExceeded: sourceSwitchAttempts >= MAX_SOURCE_SWITCHES,
+    // AUTO-608: group-derived, not a literal 'ae' id check, so a second
+    // first-party provider trips the same alert. The `|| failingProvider ===
+    // 'ae'` safety net is NOT redundant: report.value (useCapabilities) can
+    // be null/stale mid-failure — props.animeId is reactive (no :key remount
+    // on route param change, see Anime.vue), so navigating to a new anime
+    // while the old stream is still erroring can race the capability refetch
+    // through a null report (fetch-error branch) or a stale one that doesn't
+    // list the old provider. resolveStreamForEpisode's `if (!provider) return`
+    // guard rules this out for the FIRST resolve of a given combo — but not
+    // for a later failure (silent stall / playback fatal) on an
+    // already-resolved stream once the anime id has since changed underneath
+    // it. Keeping the literal check preserves today's guarantee for 'ae'
+    // itself in that window; only a genuinely-new first-party id would miss
+    // the net there, and it'd still resolve correctly once the new report
+    // loads.
+    firstParty: groupOfProvider(report.value, failingProvider) === 'firstparty' || failingProvider === 'ae',
   })
 
   // ── Original control flow (unchanged) ──────────────────────────────────────

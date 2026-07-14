@@ -21,6 +21,9 @@ export interface FailureInputs {
   candidateExists: boolean
   /** Whether the per-attempt switch cap has been reached. */
   attemptsExceeded: boolean
+  /** Whether failingProvider's capability group is 'firstparty' (AUTO-608 —
+   *  a second first-party provider must trip the same alert as 'ae'). */
+  firstParty: boolean
 }
 
 export interface FailureDecision {
@@ -35,14 +38,20 @@ export function classifyPlaybackFailure(i: FailureInputs): FailureDecision {
   if (i.hackerMode) return { emit: false }
   if (i.reason === EPISODE_GAP_REASON) return { emit: false }
 
-  const isAe = i.failingProvider === 'ae'
+  // AUTO-608: keyed on the capability-feed group, not the literal provider id
+  // — any first-party source (not just 'ae') trips this. The emitted `tag`
+  // stays the wire-compatible string 'ae_failed': the Grafana alert counts
+  // effect_kind='player_failed' rows and doesn't parse the tag value, so
+  // renaming it would be a no-op for the alert but a needless wire-format
+  // break for anything else consuming the telemetry.
+  const isFirstParty = i.firstParty
   // Will the auto chain actually switch to another source?
   const willSwitch =
     i.candidateExists && i.providerAutoSelected && !i.roomPinned && !i.attemptsExceeded
   // The auto chain ran out → the viewer sees the error overlay.
   const exhausted = !willSwitch && i.providerAutoSelected && !i.roomPinned
 
-  if (isAe) return { emit: true, tag: 'ae_failed', exhausted }
+  if (isFirstParty) return { emit: true, tag: 'ae_failed', exhausted }
   if (exhausted) return { emit: true, tag: 'all_exhausted', exhausted: true }
   return { emit: false }
 }
