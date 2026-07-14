@@ -199,6 +199,25 @@ type ContinueWatchingNewData struct {
 	NewEpisodeNumber   int          `json:"new_episode_number"`
 }
 
+// DailyFanficData is the «Фанфик дня» card payload (snake_case, no transform).
+// Mirrors services/fanfic DailyDTO. Explicit picks carry an empty excerpt.
+type DailyFanficData struct {
+	ID             string `json:"id"`
+	FanficTitle    string `json:"fanfic_title"`
+	AnimeTitle     string `json:"anime_title"`
+	AnimeJapanese  string `json:"anime_japanese"`
+	AnimePoster    string `json:"anime_poster"`
+	Excerpt        string `json:"excerpt"`
+	Rating         string `json:"rating"`
+	Language       string `json:"language"`
+	Explicit       bool   `json:"explicit"`
+	AuthorUsername string `json:"author_username"`
+	Credited       bool   `json:"credited"`
+	AIGenerated    bool   `json:"ai_generated"`
+	PartCount      int    `json:"part_count"`
+	CreatedAt      string `json:"created_at"`
+}
+
 // Response is the top-level envelope returned by `GET /api/home/spotlight`.
 //
 // CRITICAL: Cards MUST marshal as `[]` (empty array) and NOT `null` when

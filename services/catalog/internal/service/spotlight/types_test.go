@@ -261,6 +261,48 @@ func TestNewCardDataShapes_RoundTrip(t *testing.T) {
 			t.Errorf("episode fields lost: %+v", out)
 		}
 	})
+
+	t.Run("DailyFanficData", func(t *testing.T) {
+		t.Parallel()
+		in := DailyFanficData{
+			ID:             "x",
+			FanficTitle:    "T",
+			AnimeTitle:     "A",
+			Rating:         "teen",
+			Explicit:       false,
+			AuthorUsername: "neo",
+			Credited:       true,
+		}
+		raw, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var out DailyFanficData
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if out.ID != "x" {
+			t.Errorf("ID lost: %q", out.ID)
+		}
+		if out.FanficTitle != "T" {
+			t.Errorf("FanficTitle lost: %q", out.FanficTitle)
+		}
+		if out.AnimeTitle != "A" {
+			t.Errorf("AnimeTitle lost: %q", out.AnimeTitle)
+		}
+		if out.Rating != "teen" {
+			t.Errorf("Rating lost: %q", out.Rating)
+		}
+		if out.Explicit != false {
+			t.Errorf("Explicit lost: %v", out.Explicit)
+		}
+		if out.AuthorUsername != "neo" {
+			t.Errorf("AuthorUsername lost: %q", out.AuthorUsername)
+		}
+		if out.Credited != true {
+			t.Errorf("Credited lost: %v", out.Credited)
+		}
+	})
 }
 
 // TestPersonalPickData_ItemsMarshalAsArray ensures an empty Items slice
