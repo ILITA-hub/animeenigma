@@ -1856,7 +1856,14 @@
       "episodesLabel": "{n} эп."
     },
     "dailyFanfic": {
-      "title": "Фанфик дня"
+      "title": "Фанфик дня",
+      "aiBadge": "✨ ИИ",
+      "anonAuthor": "Анонимный автор",
+      "explicitReader": "18+ контент — читайте полностью в разделе Фанфики.",
+      "explicitLogin": "18+ контент — войдите, чтобы прочитать эту часть.",
+      "read": "Читать",
+      "writeOwn": "Написать свою",
+      "partsLabel": "{n} частей"
     },
     "randomTail": {
       "title": "Случайная находка",

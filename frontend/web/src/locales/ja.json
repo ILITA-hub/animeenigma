@@ -1810,7 +1810,14 @@
       "episodesLabel": "{n}話"
     },
     "dailyFanfic": {
-      "title": "今日のファンフィック"
+      "title": "今日のファンフィック",
+      "aiBadge": "✨ AI",
+      "anonAuthor": "匿名の作者",
+      "explicitReader": "18+コンテンツ — ファンフィックで全文を読む。",
+      "explicitLogin": "18+コンテンツ — ログインしてこのパートを読む。",
+      "read": "読む",
+      "writeOwn": "自分の作品を書く",
+      "partsLabel": "全{n}話"
     },
     "randomTail": {
       "title": "ランダムピック",

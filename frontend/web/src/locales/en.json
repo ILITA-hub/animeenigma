@@ -1856,7 +1856,14 @@
       "episodesLabel": "{n} ep."
     },
     "dailyFanfic": {
-      "title": "Daily Fanfic"
+      "title": "Daily Fanfic",
+      "aiBadge": "✨ AI",
+      "anonAuthor": "Anonymous author",
+      "explicitReader": "18+ content — read the full part in Fanfics.",
+      "explicitLogin": "18+ content — log in to read this part.",
+      "read": "Read",
+      "writeOwn": "Write your own",
+      "partsLabel": "{n} parts"
     },
     "randomTail": {
       "title": "Random pick",
