@@ -539,7 +539,7 @@ import { wtCreateSeed, type WtCreateSeed } from '@/composables/aePlayer/wtCreate
 import { useWatchTogetherLaunch } from '@/composables/watch-together/useWatchTogetherLaunch'
 import { useToast } from '@/composables/useToast'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
-import { recordPlayerEvent } from '@/utils/playerTelemetry'
+import { recordPlayerEvent, flushPlayerTelemetry } from '@/utils/playerTelemetry'
 import {
   classifyPlaybackFailure,
   mapErrorKind,
@@ -554,7 +554,8 @@ import { seasonTargets, enqueueSeason } from '@/offline/seasonDownload'
 import { listDownloads } from '@/offline/registry'
 import { makeOfflineResolver, offlineCapabilityReport, pickOfflineAutoSub } from '@/offline/offlineAdapter'
 import { makeExternalSubResolver, externalSubOptions } from '@/offline/externalSubs'
-import { ladder, shouldDeferStallToLadder, formatLadderRows } from '@/utils/protocolLadder'
+import { ladder, shouldDeferStallToLadder, formatLadderRows, type TierResidency } from '@/utils/protocolLadder'
+import { buildProtocolUsageDetail, readVideoQuality, droppedFramesPct } from '@/composables/aePlayer/protocolUsage'
 import { probeH3 } from '@/utils/probeH3'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
@@ -3407,6 +3408,7 @@ onMounted(() => {
   void loadEpisodeProgress()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('pagehide', onPageHide)
+  window.addEventListener('pagehide', flushProtocolUsage)
   document.addEventListener('visibilitychange', onVisibilityChange)
   document.addEventListener('fullscreenchange', onFullscreenChange)
 })
@@ -3420,6 +3422,52 @@ const unsubLadder = ladder.onChange((tier, reason) => {
   if (ep) void resolveStreamForEpisode(ep, true) // position-preserving swap; new base flows via hlsProxyUrl
 })
 onUnmounted(unsubLadder)
+
+// ── Protocol (h1/h2/h3) usage telemetry ───────────────────────────────────────
+// One anonymous event per (session × tier): a residency summary from the ladder
+// + the dropped-video-frame delta over that residency. Emitted on every tier
+// switch (onResidencyEnd) and once at session end (pagehide / unmount).
+const telemetrySess =
+  's_' +
+  (typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10))
+// Cumulative video-quality counters snapshotted at the current tier's start.
+let tierStartQuality = readVideoQuality(null) // { dropped: 0, total: 0 }
+
+function emitProtocolUsage(r: TierResidency): void {
+  const q = readVideoQuality(videoRef.value)
+  const pct = droppedFramesPct(tierStartQuality, q)
+  tierStartQuality = q // the next tier's residency measures from here
+  const c = state.combo.value
+  recordPlayerEvent({
+    kind: 'protocol_usage',
+    provider: c.provider,
+    anime_id: props.animeId,
+    episode: selectedEpisode.value?.number,
+    audio: c.audio,
+    lang: c.lang,
+    detail: buildProtocolUsageDetail(r, pct, {
+      animeName: props.anime.title,
+      combo: `${c.audio}·${c.lang}·${c.provider}`,
+      sess: telemetrySess,
+    }),
+  })
+}
+
+// Session-end flush of the final (never-switched-away) tier. consumeResidency
+// dedups a pagehide-then-unmount double call; the explicit flush guarantees the
+// last row ships even if this pagehide listener runs after telemetry's own.
+function flushProtocolUsage(): void {
+  const r = ladder.consumeResidency()
+  if (r) {
+    emitProtocolUsage(r)
+    flushPlayerTelemetry('protocol-usage-final')
+  }
+}
+
+const unsubResidency = ladder.onResidencyEnd(emitProtocolUsage)
+onUnmounted(unsubResidency)
 
 // h3 upshift probe: sampled once, 30s after playback actually starts (not on
 // mount — no point probing a stream that hasn't begun loading fragments).
@@ -3452,6 +3500,8 @@ onUnmounted(() => {
   if (seekFlashTimer) clearTimeout(seekFlashTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pagehide', onPageHide)
+  flushProtocolUsage()
+  window.removeEventListener('pagehide', flushProtocolUsage)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   teardownPseudoFs()
