@@ -1257,3 +1257,50 @@ func TestAllanimeOkruCryptoGateLifted_NoRowNoGuard(t *testing.T) {
 		t.Fatal("expected error when row absent")
 	}
 }
+
+func TestBackfillProviderIdentityV1(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	// A pre-existing prod row without the new fields.
+	if err := db.Create(&domain.ScraperProvider{Name: "gogoanime", Status: domain.StatusEnabled}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := scraperprovider.BackfillProviderIdentityV1(db); err != nil {
+		t.Fatal(err)
+	}
+	var row domain.ScraperProvider
+	db.Where("name = ?", "gogoanime").First(&row)
+	if row.DisplayName != "GogoAnime" || row.PlayerKey != "english" || !row.AnimeLevel {
+		t.Fatalf("backfill missed: %+v", row)
+	}
+	// Idempotent + operator-respecting: re-run must not clobber a manual edit.
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "gogoanime").Update("display_name", "Custom")
+	if err := scraperprovider.BackfillProviderIdentityV1(db); err != nil {
+		t.Fatal(err)
+	}
+	db.Where("name = ?", "gogoanime").First(&row)
+	if row.DisplayName != "Custom" {
+		t.Fatalf("guarded migration re-ran and clobbered operator edit: %q", row.DisplayName)
+	}
+}
+
+func TestBackfillProviderIdentityV1_AbsentRowsAreFine(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	// No provider rows at all — RowsAffected==0 per row is fine (absent rows are
+	// created complete by the seed); the migration must still succeed and write
+	// its guard.
+	if err := scraperprovider.BackfillProviderIdentityV1(db); err != nil {
+		t.Fatalf("unexpected error with no rows present: %v", err)
+	}
+	var guards int64
+	db.Table("catalog_migration_guards").
+		Where("key = ?", "backfill_provider_identity_v1_2026_07_14").Count(&guards)
+	if guards != 1 {
+		t.Errorf("guard not written (count=%d)", guards)
+	}
+}

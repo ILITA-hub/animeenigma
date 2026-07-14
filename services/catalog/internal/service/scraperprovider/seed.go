@@ -27,6 +27,7 @@ var defaultProviders = []domain.ScraperProvider{
 			"AllanimeOkruMerge.",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 90,
+		DisplayName: "AllAnime", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
 		Name: "allanime-okru", Status: domain.StatusEnabled,
@@ -37,6 +38,7 @@ var defaultProviders = []domain.ScraperProvider{
 			"endpoint. EN sub/dub, hardsubbed (ok.ru has no soft-sub track).",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 35,
+		DisplayName: "AllAnime (OK.ru)", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
 		Name: "gogoanime", Status: domain.StatusEnabled,
@@ -58,6 +60,7 @@ var defaultProviders = []domain.ScraperProvider{
 		// video + multi-language soft .vtt tracks (EN/RU/+7), NOT burned-in.
 		SupportsSub: true, SupportsDub: true, SubDelivery: "soft",
 		QualityCeiling: "1080p", PreferenceWeight: 85,
+		DisplayName: "GogoAnime", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
 		// REVIVED 2026-07-02 via Camoufox after a Cloudflare block: www.miruro.tv
@@ -82,6 +85,7 @@ var defaultProviders = []domain.ScraperProvider{
 			"chain pending live soak.",
 		SupportsSub: false, SupportsDub: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 70,
+		DisplayName: "Miruro", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
 		Name: "animefever", Status: domain.StatusDisabled,
@@ -98,6 +102,7 @@ var defaultProviders = []domain.ScraperProvider{
 		// still validates; the provider CODE is gone.
 		SupportsSub: false, SupportsDub: false, SubDelivery: "none",
 		QualityCeiling: "1080p", PreferenceWeight: 60,
+		DisplayName: "AnimeFever", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
 		Name: "nineanime", Status: domain.StatusEnabled,
@@ -115,6 +120,7 @@ var defaultProviders = []domain.ScraperProvider{
 			"browser for both discovery and the .m3u8 interception (engine=browser).",
 		SupportsSub: true, SupportsDub: false, SubDelivery: "hard",
 		QualityCeiling: "720p", PreferenceWeight: 40,
+		DisplayName: "9anime", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
 		// REVIVED 2026-06-26 via Camoufox: animepahe.pw's Cloudflare managed
@@ -137,6 +143,7 @@ var defaultProviders = []domain.ScraperProvider{
 			"pending live soak.",
 		SupportsSub: true, SupportsDub: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 30,
+		DisplayName: "AnimePahe", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
 		Name: "animekai", Status: domain.StatusDisabled,
@@ -147,6 +154,7 @@ var defaultProviders = []domain.ScraperProvider{
 		// (ListServers unimplemented) — never probed, so don't assert burned-in.
 		SupportsSub: true, SupportsDub: false, SubDelivery: "unknown",
 		QualityCeiling: "1080p", PreferenceWeight: 0,
+		DisplayName: "AnimeKai", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
 		Name: "18anime", Status: domain.StatusEnabled,
@@ -155,6 +163,7 @@ var defaultProviders = []domain.ScraperProvider{
 			"on /anime18/* — NEVER part of the EN (OurEnglish) failover chain.",
 		SupportsSub: true, SupportsDub: false, SupportsRaw: true, SubDelivery: "hard",
 		QualityCeiling: "1080p", PreferenceWeight: 0,
+		DisplayName: "18anime", PlayerKey: "hanime", AnimeLevel: false,
 	},
 	{
 		Name: "ae", Status: domain.StatusEnabled,
@@ -163,6 +172,7 @@ var defaultProviders = []domain.ScraperProvider{
 			"long-term user-facing player; all other players are being retired (2026-06-17).",
 		SupportsSub: true, SupportsRaw: true, SubDelivery: "soft",
 		QualityCeiling: "1080p", PreferenceWeight: 100,
+		DisplayName: "AnimeEnigma", PlayerKey: "ae", AnimeLevel: true,
 	},
 	{
 		Name: "kodik-iframe", Status: domain.StatusEnabled,
@@ -170,6 +180,7 @@ var defaultProviders = []domain.ScraperProvider{
 		Description: "Kodik iframe embed. The player has no direct video control, so the " +
 			"playback probe cannot validate it (it reads '— not probed').",
 		SupportsDub: true, SubDelivery: "none", PreferenceWeight: 0,
+		DisplayName: "Kodik (iframe)", PlayerKey: "kodik", AnimeLevel: true,
 	},
 	{
 		Name: "kodik-noads", Status: domain.StatusEnabled,
@@ -184,6 +195,7 @@ var defaultProviders = []domain.ScraperProvider{
 		// this is the sole lever for Kodik's Source-panel rank. Live DBs are carried
 		// by BumpKodikNoadsPriority (seed is insert-if-absent, never updates prod).
 		QualityCeiling: "1080p", PreferenceWeight: 90,
+		DisplayName: "Kodik", PlayerKey: "kodik", AnimeLevel: true,
 	},
 	{
 		Name: "animelib", Status: domain.StatusDisabled,
@@ -192,6 +204,7 @@ var defaultProviders = []domain.ScraperProvider{
 			"content dropped (2026-06-18, Plan B).",
 		SupportsDub: true, SubDelivery: "none",
 		QualityCeiling: "1080p", PreferenceWeight: 0,
+		DisplayName: "AniLib", PlayerKey: "animelib", AnimeLevel: true,
 	},
 	{
 		Name: "hanime", Status: domain.StatusEnabled,
@@ -199,6 +212,7 @@ var defaultProviders = []domain.ScraperProvider{
 		Description: "Hanime HLS. Selectable 18+ source inside aePlayer (hentai titles); " +
 			"catalog-operated parser via /hanime/* routes.",
 		SubDelivery: "none", QualityCeiling: "1080p", PreferenceWeight: 0,
+		DisplayName: "Hanime", PlayerKey: "hanime", AnimeLevel: false,
 	},
 	{
 		// animejoy itself is NOT a row — it is the shared discovery/reference base
@@ -222,6 +236,7 @@ var defaultProviders = []domain.ScraperProvider{
 		SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 25,
 		Reason:      "AnimeJoy RU-sub via Sibnet",
 		Description: "Sibnet (AnimeJoy, RU-sub)",
+		DisplayName: "Sibnet", PlayerKey: "animejoy-sibnet", AnimeLevel: true,
 	},
 	{
 		Name: "animejoy-allvideo", Status: domain.StatusEnabled,
@@ -229,6 +244,7 @@ var defaultProviders = []domain.ScraperProvider{
 		SubDelivery: "hard", QualityCeiling: "1080p", PreferenceWeight: 20,
 		Reason:      "AnimeJoy RU-sub via AllVideo",
 		Description: "AllVideo (AnimeJoy, RU-sub)",
+		DisplayName: "AllVideo", PlayerKey: "animejoy-allvideo", AnimeLevel: true,
 	},
 }
 

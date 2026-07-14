@@ -193,6 +193,16 @@ func main() {
 		log.Infow("scraper provider defaults seeded")
 	}
 
+	// One-time (guarded) stamp of display_name/player_key/anime_level onto
+	// pre-existing prod rows (AUTO-608): the seed above is insert-if-absent and
+	// never updates prod rows, so this run-once migration is what carries the
+	// new identity columns to live DBs. MUST run AFTER SeedDefaults (fresh DBs
+	// create complete rows there). Run-once via the ledger; a later operator
+	// edit is never clobbered.
+	if err := scraperprovider.BackfillProviderIdentityV1(db.DB); err != nil {
+		log.Errorw("backfill-provider-identity migration failed (continuing)", "error", err)
+	}
+
 	// One-time enablement: route the EXISTING gogoanime row through the Camoufox
 	// stealth-scraper sidecar (engine=browser + gogoanimes.fi base). AutoMigrate
 	// added `engine` with default 'http', so a pre-existing gogoanime row needs

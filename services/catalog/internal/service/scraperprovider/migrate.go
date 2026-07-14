@@ -217,6 +217,9 @@ const reconcilePolicyFromHealthGuardKey = "reconcile_policy_from_health_v1_2026_
 // allanimeOkruCryptoLiftedGuardKey marks AllanimeOkruCryptoGateLifted as applied.
 const allanimeOkruCryptoLiftedGuardKey = "allanime_okru_crypto_lifted_2026_07_13"
 
+// backfillProviderIdentityGuardKey marks BackfillProviderIdentityV1 as applied.
+const backfillProviderIdentityGuardKey = "backfill_provider_identity_v1_2026_07_14"
+
 // RemoveRawProvider hard-deletes the legacy standalone "raw" JP provider row
 // (removed 2026-06-30 — AllAnime + ok.ru cover JP-original audio). The seed no
 // longer creates it, but insert-if-absent seeding never deletes an existing
@@ -1007,6 +1010,62 @@ func AllanimeOkruCryptoGateLifted(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: allanimeOkruCryptoLiftedGuardKey}).Error; err != nil {
 		return fmt.Errorf("write allanime-okru-crypto-lifted guard: %w", err)
+	}
+	return nil
+}
+
+// BackfillProviderIdentityV1 stamps display_name/player_key/anime_level onto
+// pre-existing prod rows exactly once (AUTO-608). The seed is insert-if-absent
+// and never updates prod rows; this run-once guarded migration is what carries
+// the new identity columns to live DBs. Values mirror the seed table one-for-one.
+func BackfillProviderIdentityV1(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", backfillProviderIdentityGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check backfill-provider-identity guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // applied — never clobber later operator edits
+	}
+	type identity struct {
+		display   string
+		playerKey string
+		animeLvl  bool
+	}
+	identities := map[string]identity{
+		"gogoanime":         {"GogoAnime", "english", true},
+		"animepahe":         {"AnimePahe", "english", true},
+		"allanime":          {"AllAnime", "english", true},
+		"allanime-okru":     {"AllAnime (OK.ru)", "english", true},
+		"animefever":        {"AnimeFever", "english", true},
+		"miruro":            {"Miruro", "english", true},
+		"nineanime":         {"9anime", "english", true},
+		"animekai":          {"AnimeKai", "english", true},
+		"18anime":           {"18anime", "hanime", false},
+		"ae":                {"AnimeEnigma", "ae", true},
+		"kodik-noads":       {"Kodik", "kodik", true},
+		"kodik-iframe":      {"Kodik (iframe)", "kodik", true},
+		"animelib":          {"AniLib", "animelib", true},
+		"hanime":            {"Hanime", "hanime", false},
+		"animejoy-sibnet":   {"Sibnet", "animejoy-sibnet", true},
+		"animejoy-allvideo": {"AllVideo", "animejoy-allvideo", true},
+	}
+	for name, id := range identities {
+		if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", name).
+			Updates(map[string]any{
+				"display_name": id.display,
+				"player_key":   id.playerKey,
+				"anime_level":  id.animeLvl,
+			}).Error; err != nil {
+			return fmt.Errorf("backfill provider identity %q: %w", name, err)
+		}
+		// RowsAffected 0 is fine — absent rows are created complete by the seed.
+	}
+	if err := db.Create(&migrationGuard{Key: backfillProviderIdentityGuardKey}).Error; err != nil {
+		return fmt.Errorf("write backfill-provider-identity guard: %w", err)
 	}
 	return nil
 }

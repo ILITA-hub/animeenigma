@@ -103,6 +103,20 @@ type ScraperProvider struct {
 	SubDelivery      string `gorm:"size:8;default:'hard'" json:"sub_delivery"` // soft|hard|none
 	QualityCeiling   string `gorm:"size:8" json:"quality_ceiling"`
 	PreferenceWeight int    `json:"preference_weight"`
+	// DisplayName is the operator-editable pretty label for player/dashboard
+	// surfaces (capability DisplayName, Grafana). Empty ⇒ callers fall back to
+	// a title-cased Name. Seeded; backfilled once by BackfillProviderIdentityV1.
+	DisplayName string `gorm:"size:64" json:"display_name"`
+	// PlayerKey maps this row into the legacy watch_history.player namespace
+	// ('english', 'kodik', 'ae', 'hanime', …) consumed by watch preferences,
+	// notifications hot-combos and episode validation. Multiple rows may share
+	// one key (the whole EN chain is 'english'; both kodik rows are 'kodik').
+	// Empty ⇒ the provider has no legacy-player identity.
+	PlayerKey string `gorm:"size:32" json:"player_key"`
+	// AnimeLevel marks providers whose new-episode lookup works without a
+	// translation_id (any-team/anime-level: english, ae, kodik, animelib,
+	// animejoy legs). Drives the notifications hot-combos eligibility subselect.
+	AnimeLevel bool `json:"anime_level"`
 	// Engine selects HOW this provider is scraped (DB-driven; there is NO
 	// SCRAPER_*_ENGINE env):
 	//   - "http"    — legacy in-process Go net/http scraper (default).
