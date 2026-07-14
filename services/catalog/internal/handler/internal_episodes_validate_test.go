@@ -50,6 +50,19 @@ func (f *fakeValidator) ValidateEpisode(
 	return f.result, f.err
 }
 
+// ValidPlayer mirrors the pre-AUTO-608 static validPlayers set (this
+// handler suite doesn't exercise roster/DB behavior — that's covered in
+// services/catalog/internal/service). "bogus" (used by the unknown-player
+// test) and anything else not listed here stays invalid.
+func (f *fakeValidator) ValidPlayer(_ context.Context, player string) bool {
+	switch player {
+	case "kodik", "animelib", "ourenglish", "hanime", "aeplayer":
+		return true
+	default:
+		return false
+	}
+}
+
 func newValidateRouter(h *InternalEpisodesValidateHandler) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/internal/anime/{shikimoriId}/episodes/validate", h.Validate)

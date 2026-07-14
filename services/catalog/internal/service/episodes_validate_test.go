@@ -80,6 +80,15 @@ func returnErr(err error) func(string, string, string, string, string) (Episodes
 	}
 }
 
+// defaultTestPlayerKeys mirrors the pre-AUTO-608 static validPlayers roster
+// members (kodik/animelib/hanime) so the bulk of the existing table below
+// keeps exercising those players without each test having to inject its
+// own playerKeys closure. Tests that care about roster-driven behavior
+// itself (TestValidPlayer_RosterDriven) override svc.playerKeys directly.
+func defaultTestPlayerKeys(context.Context) map[string]struct{} {
+	return map[string]struct{}{"kodik": {}, "animelib": {}, "hanime": {}}
+}
+
 // -----------------------------------------------------------------
 // Happy paths
 // -----------------------------------------------------------------
@@ -88,7 +97,7 @@ func TestValidateEpisode_Kodik_Happy(t *testing.T) {
 	lookup := &fakeLookup{t: t, script: []func(string, string, string, string, string) (EpisodesLookupResult, error){
 		returnLatest(12),
 	}}
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "kodik", "5", "42", "")
 	if err != nil {
@@ -106,7 +115,7 @@ func TestValidateEpisode_AnimeLib_Happy(t *testing.T) {
 	lookup := &fakeLookup{t: t, script: []func(string, string, string, string, string) (EpisodesLookupResult, error){
 		returnLatest(24),
 	}}
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "animelib", "10", "100", "sub")
 	if err != nil {
@@ -119,7 +128,7 @@ func TestValidateEpisode_AnimeLib_Happy(t *testing.T) {
 
 func TestValidateEpisode_OurEnglish_Permissive_Happy(t *testing.T) {
 	lookup := &fakeLookup{t: t} // must not be called
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "ourenglish", "3", "", "")
 	if err != nil {
@@ -134,7 +143,7 @@ func TestValidateEpisode_OurEnglish_Permissive_Happy(t *testing.T) {
 }
 
 func TestValidateEpisode_Hanime_Permissive_Happy(t *testing.T) {
-	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 	got, err := svc.ValidateEpisode(context.Background(), "111", "hanime", "1", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -150,7 +159,7 @@ func TestValidateEpisode_AePlayer_Permissive_Happy(t *testing.T) {
 	// the driving member's selection — exactly like ourenglish/hanime/raw.
 	// Must NOT consult the episode lookup.
 	lookup := &fakeLookup{t: t} // must not be called
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "aeplayer", "3", "", "")
 	if err != nil {
@@ -172,7 +181,7 @@ func TestValidateEpisode_Kodik_EpisodeOverMax(t *testing.T) {
 	lookup := &fakeLookup{t: t, script: []func(string, string, string, string, string) (EpisodesLookupResult, error){
 		returnLatest(5),
 	}}
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "kodik", "9999", "42", "")
 	if err != nil {
@@ -187,7 +196,7 @@ func TestValidateEpisode_Kodik_NonNumericEpisode(t *testing.T) {
 	lookup := &fakeLookup{t: t, script: []func(string, string, string, string, string) (EpisodesLookupResult, error){
 		returnLatest(12),
 	}}
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "kodik", "abc", "42", "")
 	if err != nil {
@@ -203,7 +212,7 @@ func TestValidateEpisode_Kodik_ZeroOrNegativeEpisode(t *testing.T) {
 		returnLatest(12),
 		returnLatest(12),
 	}}
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	for _, ep := range []string{"0", "-3"} {
 		got, err := svc.ValidateEpisode(context.Background(), "57466", "kodik", ep, "42", "")
@@ -220,7 +229,7 @@ func TestValidateEpisode_Kodik_EmptyEpisode_FullMode(t *testing.T) {
 	lookup := &fakeLookup{t: t, script: []func(string, string, string, string, string) (EpisodesLookupResult, error){
 		returnLatest(12),
 	}}
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "kodik", "", "42", "")
 	if err != nil {
@@ -238,7 +247,7 @@ func TestValidateEpisode_PlayerChange_Permissive_Valid(t *testing.T) {
 	// (ISS-025) — the frontend resolves the first episode on mount.
 	// Previously this wrongly returned EPISODE_UNAVAILABLE, so switching to
 	// OurEnglish/Hanime/Raw in a Watch Together room always failed.
-	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 	for _, p := range []string{"ourenglish", "hanime"} {
 		got, err := svc.ValidateEpisode(context.Background(), "111", p, "", "", "")
 		if err != nil {
@@ -254,7 +263,7 @@ func TestValidateEpisode_Permissive_FullMode_EmptyEpisode_Invalid(t *testing.T) 
 	// Full mode (translation set, episode empty) still rejects — defensive;
 	// real callers never send this shape (change_episode guards a non-empty
 	// episode; change_translation passes the room's current episode).
-	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 	got, err := svc.ValidateEpisode(context.Background(), "111", "hanime", "", "x", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -271,7 +280,7 @@ func TestValidateEpisode_AnimeLib_TranslationNotFound(t *testing.T) {
 	lookup := &fakeLookup{t: t, script: []func(string, string, string, string, string) (EpisodesLookupResult, error){
 		returnErr(apperrors.NotFound("no episode available for combo")),
 	}}
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "animelib", "1", "999", "sub")
 	if err != nil {
@@ -301,7 +310,7 @@ func TestValidateEpisode_Kodik_ResolvesUUIDToShikimori(t *testing.T) {
 	repo := &fakeAnimeRepoValidate{
 		byID: map[string]*domain.Anime{uuid: {ID: uuid, ShikimoriID: "57466"}},
 	}
-	svc := NewEpisodesValidateService(lookup, repo, nil)
+	svc := NewEpisodesValidateService(lookup, repo, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), uuid, "kodik", "5", "42", "")
 	if err != nil {
@@ -323,7 +332,7 @@ func TestValidateEpisode_PlayerChange_Kodik_ResolvesUUID(t *testing.T) {
 	}
 	// LatestAvailable MUST NOT be called in translation-omitted mode.
 	lookup := &fakeLookup{t: t}
-	svc := NewEpisodesValidateService(lookup, repo, nil)
+	svc := NewEpisodesValidateService(lookup, repo, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), uuid, "kodik", "1", "", "")
 	if err != nil {
@@ -339,7 +348,7 @@ func TestValidateEpisode_UnknownUUID(t *testing.T) {
 	// parser would never match it, so short-circuit to PlayerUnavailable
 	// rather than emit a misleading TRANSLATION_UNAVAILABLE.
 	lookup := &fakeLookup{t: t} // must not be called
-	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(),
 		"deadbeef-0000-0000-0000-000000000000", "kodik", "1", "42", "")
@@ -366,7 +375,7 @@ func TestValidateEpisode_PlayerChange_Kodik_AnimeExists(t *testing.T) {
 	}
 	// LatestAvailable MUST NOT be called in translation-omitted mode.
 	lookup := &fakeLookup{t: t}
-	svc := NewEpisodesValidateService(lookup, repo, nil)
+	svc := NewEpisodesValidateService(lookup, repo, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "57466", "kodik", "1", "", "")
 	if err != nil {
@@ -384,7 +393,7 @@ func TestValidateEpisode_PlayerChange_AnimeLib_AnimeMissing(t *testing.T) {
 	repo := &fakeAnimeRepoValidate{
 		byShikimori: map[string]*domain.Anime{}, // empty
 	}
-	svc := NewEpisodesValidateService(&fakeLookup{t: t}, repo, nil)
+	svc := NewEpisodesValidateService(&fakeLookup{t: t}, repo, nil, defaultTestPlayerKeys)
 
 	got, err := svc.ValidateEpisode(context.Background(), "999999", "animelib", "1", "", "")
 	if err != nil {
@@ -398,7 +407,7 @@ func TestValidateEpisode_PlayerChange_AnimeLib_AnimeMissing(t *testing.T) {
 
 func TestValidateEpisode_PlayerChange_RepoError(t *testing.T) {
 	repo := &fakeAnimeRepoValidate{err: errors.New("db blew up")}
-	svc := NewEpisodesValidateService(&fakeLookup{t: t}, repo, nil)
+	svc := NewEpisodesValidateService(&fakeLookup{t: t}, repo, nil, defaultTestPlayerKeys)
 
 	_, err := svc.ValidateEpisode(context.Background(), "57466", "kodik", "1", "", "")
 	if err == nil {
@@ -415,7 +424,7 @@ func TestValidateEpisode_PlayerChange_RepoError(t *testing.T) {
 // -----------------------------------------------------------------
 
 func TestValidateEpisode_UnknownPlayer(t *testing.T) {
-	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 	_, err := svc.ValidateEpisode(context.Background(), "57466", "bogus", "1", "42", "")
 	if err == nil {
 		t.Fatalf("want error for unknown player, got nil")
@@ -427,7 +436,7 @@ func TestValidateEpisode_UnknownPlayer(t *testing.T) {
 }
 
 func TestValidateEpisode_EmptyShikimoriID(t *testing.T) {
-	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
+	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil, defaultTestPlayerKeys)
 	_, err := svc.ValidateEpisode(context.Background(), "", "kodik", "1", "42", "")
 	if err == nil {
 		t.Fatalf("want error for empty shikimori_id, got nil")
@@ -439,18 +448,39 @@ func TestValidateEpisode_EmptyShikimoriID(t *testing.T) {
 }
 
 // -----------------------------------------------------------------
-// IsValidPlayer (small helper, but exercised by handler tests too)
+// ValidPlayer (AUTO-608: roster-derived, replaces the closed v1.0
+// validPlayers set) — exercised by handler tests too via EpisodesValidator.
 // -----------------------------------------------------------------
 
-func TestIsValidPlayer(t *testing.T) {
-	for _, p := range []string{"kodik", "animelib", "ourenglish", "hanime", "aeplayer"} {
-		if !IsValidPlayer(p) {
-			t.Errorf("IsValidPlayer(%q) = false, want true", p)
+// TestValidPlayer_RosterDriven asserts a new roster player_key (never a
+// static constant anywhere in this codebase) becomes valid purely by
+// appearing in the injected playerKeys set, alongside the two static
+// protocol aliases, while an unknown name stays invalid.
+func TestValidPlayer_RosterDriven(t *testing.T) {
+	svc := NewEpisodesValidateService(nil, nil, nil, nil)
+	svc.playerKeys = func(context.Context) map[string]struct{} {
+		return map[string]struct{}{"english": {}, "kodik": {}, "newplayer": {}}
+	}
+	for _, p := range []string{"english", "kodik", "newplayer", "ourenglish", "aeplayer"} {
+		if !svc.ValidPlayer(context.Background(), p) {
+			t.Fatalf("player %q must be valid (roster or protocol alias)", p)
 		}
 	}
-	for _, p := range []string{"", "bogus", "Kodik", " kodik"} {
-		if IsValidPlayer(p) {
-			t.Errorf("IsValidPlayer(%q) = true, want false", p)
-		}
+	if svc.ValidPlayer(context.Background(), "bogus") {
+		t.Fatal("unknown player must stay invalid")
+	}
+}
+
+// TestValidPlayer_NilPlayerKeys covers the cold-DB-error degradation: when
+// playerKeys is unset (e.g. CachedPlayerKeys returned nil on a cold DB
+// failure), only the static protocol aliases pass — roster keys are
+// rejected rather than panicking.
+func TestValidPlayer_NilPlayerKeys(t *testing.T) {
+	svc := NewEpisodesValidateService(nil, nil, nil, nil)
+	if !svc.ValidPlayer(context.Background(), "ourenglish") || !svc.ValidPlayer(context.Background(), "aeplayer") {
+		t.Fatal("protocol aliases must stay valid even with nil playerKeys")
+	}
+	if svc.ValidPlayer(context.Background(), "kodik") {
+		t.Fatal("roster player must be invalid when playerKeys is unset")
 	}
 }

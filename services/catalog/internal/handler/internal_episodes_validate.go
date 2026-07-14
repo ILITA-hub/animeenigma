@@ -50,6 +50,10 @@ type EpisodesValidator interface {
 		ctx context.Context,
 		shikimoriID, player, episodeID, translationID, watchType string,
 	) (service.ValidateResult, error)
+	// ValidPlayer reports whether player is a roster player_key or a
+	// protocol surface name (AUTO-608). Used for the fast-400 pre-check
+	// below before hitting ValidateEpisode.
+	ValidPlayer(ctx context.Context, player string) bool
 }
 
 // InternalEpisodesValidateHandler implements GET /internal/anime/
@@ -93,7 +97,7 @@ func (h *InternalEpisodesValidateHandler) Validate(w http.ResponseWriter, r *htt
 	// unknown-player case (service would also return InvalidInput, but
 	// this saves a service hop and keeps the handler symmetric with
 	// the sibling internal_episodes.go).
-	if !service.IsValidPlayer(player) {
+	if !h.svc.ValidPlayer(r.Context(), player) {
 		httputil.BadRequest(w, "player not supported")
 		return
 	}

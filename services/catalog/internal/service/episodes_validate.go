@@ -31,10 +31,13 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"gorm.io/gorm"
 )
 
 // ValidateResult is the JSON payload returned by /episodes/validate.
@@ -55,21 +58,51 @@ const (
 	ReasonTranslationUnavailable = "TRANSLATION_UNAVAILABLE"
 )
 
-// validPlayers is the closed set of v1.0 players. Mirrors CLAUDE.md
-// §Video Player Architecture. Unknown player → 400 InvalidInput.
-var validPlayers = map[string]struct{}{
-	"kodik":      {},
-	"animelib":   {},
-	"ourenglish": {},
-	"hanime":     {},
-	"aeplayer":   {},
-}
+// protocolPlayers are Watch-Together protocol surface names that are NOT
+// watch_history player_keys ('ourenglish' = the EN scraper surface name in
+// the WT protocol, 'aeplayer' = the unified player surface). Static by
+// design — they are wire-protocol constants, not roster rows.
+var protocolPlayers = map[string]struct{}{"ourenglish": {}, "aeplayer": {}}
 
-// IsValidPlayer reports whether p is one of the known players.
-// Exported for handler-side input validation symmetry.
-func IsValidPlayer(p string) bool {
-	_, ok := validPlayers[p]
-	return ok
+// playerKeysFn returns the roster-derived player_key set (DISTINCT
+// player_key FROM stream_providers WHERE player_key <> ''). Injected; a
+// 60s in-process TTL cache lives at the wiring site (CachedPlayerKeys
+// below). AUTO-608: a new roster row's player_key becomes a valid player
+// with no code change here.
+type playerKeysFn func(ctx context.Context) map[string]struct{}
+
+// CachedPlayerKeys returns a playerKeysFn backed by a ttl-TTL DISTINCT
+// query over stream_providers.player_key. Deliberately does NOT filter
+// status <> 'disabled' (unlike the notifications hot-combos eligibility
+// query) — validating an episode for a currently-disabled provider's
+// player is harmless and keeps historical Watch-Together rooms working.
+// On a cold DB error (set still nil) it returns nil, so ValidPlayer falls
+// back to false for roster keys while protocol aliases keep working —
+// the designed degradation, not a bug.
+func CachedPlayerKeys(db *gorm.DB, ttl time.Duration) playerKeysFn {
+	var (
+		mu   sync.Mutex
+		set  map[string]struct{}
+		when time.Time
+	)
+	return func(ctx context.Context) map[string]struct{} {
+		mu.Lock()
+		defer mu.Unlock()
+		if set != nil && time.Since(when) < ttl {
+			return set
+		}
+		var keys []string
+		if err := db.WithContext(ctx).Model(&domain.ScraperProvider{}).
+			Where("player_key <> ''").Distinct().Pluck("player_key", &keys).Error; err != nil {
+			return set // stale-but-usable on a warm DB error; nil on cold error → invalid
+		}
+		next := make(map[string]struct{}, len(keys))
+		for _, k := range keys {
+			next[k] = struct{}{}
+		}
+		set, when = next, time.Now()
+		return set
+	}
 }
 
 // episodesLookupAdapter is the narrow surface EpisodesValidateService
@@ -94,24 +127,43 @@ type animeRepoAdapter interface {
 // EpisodesValidateService is a pure-Go validation engine. No HTTP, no
 // JSON — that lives in the handler.
 type EpisodesValidateService struct {
-	lookup    episodesLookupAdapter
-	animeRepo animeRepoAdapter
-	log       *logger.Logger
+	lookup     episodesLookupAdapter
+	animeRepo  animeRepoAdapter
+	log        *logger.Logger
+	playerKeys playerKeysFn
 }
 
 // NewEpisodesValidateService constructs the service. lookup may be a
 // real *EpisodesLookupService; animeRepo a real *repo.AnimeRepository.
-// Both are taken as narrow interfaces to keep tests light.
+// Both are taken as narrow interfaces to keep tests light. playerKeys is
+// the roster-derived player_key source (AUTO-608) — production wiring
+// passes CachedPlayerKeys(db.DB, time.Minute); tests may pass nil and
+// assign svc.playerKeys directly (same package).
 func NewEpisodesValidateService(
 	lookup episodesLookupAdapter,
 	animeRepo animeRepoAdapter,
 	log *logger.Logger,
+	playerKeys playerKeysFn,
 ) *EpisodesValidateService {
 	return &EpisodesValidateService{
-		lookup:    lookup,
-		animeRepo: animeRepo,
-		log:       log,
+		lookup:     lookup,
+		animeRepo:  animeRepo,
+		log:        log,
+		playerKeys: playerKeys,
 	}
+}
+
+// ValidPlayer reports whether p is a roster player_key or a protocol
+// surface name. Replaces the closed v1.0 validPlayers set (AUTO-608).
+func (s *EpisodesValidateService) ValidPlayer(ctx context.Context, p string) bool {
+	if _, ok := protocolPlayers[p]; ok {
+		return true
+	}
+	if s.playerKeys == nil {
+		return false
+	}
+	_, ok := s.playerKeys(ctx)[p]
+	return ok
 }
 
 // ValidateEpisode returns whether the given (shikimoriID, player,
@@ -146,7 +198,7 @@ func (s *EpisodesValidateService) ValidateEpisode(
 	if shikimoriID == "" {
 		return ValidateResult{}, apperrors.InvalidInput("shikimori_id required")
 	}
-	if !IsValidPlayer(player) {
+	if !s.ValidPlayer(ctx, player) {
 		return ValidateResult{}, apperrors.InvalidInput("player not supported")
 	}
 

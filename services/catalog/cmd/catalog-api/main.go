@@ -551,7 +551,12 @@ func main() {
 	// state:change_{episode,player,translation} inbound handlers. The
 	// kodik/animelib path reuses episodesLookupService (D-04 "smallest
 	// change"); ourenglish/hanime/raw/aeplayer ship permissive v1.0 validation.
-	episodesValidateService := service.NewEpisodesValidateService(episodesLookupService, animeRepo, log)
+	// AUTO-608: the valid-player set is roster-derived (DISTINCT
+	// stream_providers.player_key, 60s TTL cache) + the static
+	// ourenglish/aeplayer protocol aliases — see ValidPlayer.
+	episodesValidateService := service.NewEpisodesValidateService(
+		episodesLookupService, animeRepo, log, service.CachedPlayerKeys(db.DB, time.Minute),
+	)
 	internalEpisodesValidateHandler := handler.NewInternalEpisodesValidateHandler(episodesValidateService, log)
 
 	// Scraper provider config + capability traits (spec 2026-06-15).
