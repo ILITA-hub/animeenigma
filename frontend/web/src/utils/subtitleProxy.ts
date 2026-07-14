@@ -27,6 +27,20 @@ export function signedSubtitleUrl(t: { url: string; exp?: string; sig?: string }
   return t.exp && t.sig ? buildSubtitleProxyUrl(t.url, t.exp, t.sig) : t.url
 }
 
+/** Rewrite every track url in a /subtitles/all languages map (in place) to
+ *  its signed form — catalog-signed external tracks (jimaku.cc) get
+ *  pre-wrapped in the signed proxy URL so the un-allowlisted host loads
+ *  without a 502; same-origin tracks pass through raw. Shared by
+ *  OtherSubsPanel and flattenAggregateSubs so a selected track's url always
+ *  matches the player's currentTrackUrl. */
+export function signAggregateLanguages(
+  languages: Record<string, Array<{ url: string; exp?: string; sig?: string }>> | null | undefined,
+): void {
+  for (const list of Object.values(languages ?? {})) {
+    for (const t of list) t.url = signedSubtitleUrl(t)
+  }
+}
+
 export function detectSubFormat(
   format: string | undefined,
   url: string,

@@ -74,11 +74,8 @@ func Probe(ctx context.Context, masterURL string, headers http.Header) Result {
 	if err != nil {
 		return Result{Reason: ReasonCDNUnreachable, Sampled: []string{u.Hostname()}}
 	}
-	if status == http.StatusForbidden {
-		return classify403(masterURL, []string{u.Hostname()})
-	}
 	if status != http.StatusOK {
-		return Result{Reason: ReasonStatus403, Sampled: []string{u.Hostname()}}
+		return classifyBadStatus(status, masterURL, []string{u.Hostname()})
 	}
 	if !bytesIsM3U8(masterBody) {
 		return Result{Reason: ReasonZeroMatch, Sampled: []string{u.Hostname()}}
@@ -105,11 +102,8 @@ func Probe(ctx context.Context, masterURL string, headers http.Header) Result {
 	if verr != nil {
 		return Result{Reason: ReasonCDNUnreachable, Sampled: sampled}
 	}
-	if vstatus == http.StatusForbidden {
-		return classify403(variantURL, sampled)
-	}
 	if vstatus != http.StatusOK {
-		return Result{Reason: ReasonStatus403, Sampled: sampled}
+		return classifyBadStatus(vstatus, variantURL, sampled)
 	}
 	if !bytesIsM3U8(variantBody) {
 		return Result{Reason: ReasonZeroMatch, Sampled: sampled}
@@ -160,14 +154,9 @@ func checkSegments(ctx context.Context, client *http.Client, body []byte, base *
 		if hstatus >= 200 && hstatus < 300 {
 			return Result{Playable: true, Reason: ReasonPlayable, Sampled: sampled}
 		}
-		if hstatus == http.StatusForbidden {
-			return classify403(first, sampled)
-		}
-		return Result{Reason: ReasonStatus403, Sampled: sampled}
-	case gstatus == http.StatusForbidden:
-		return classify403(first, sampled)
+		return classifyBadStatus(hstatus, first, sampled)
 	default:
-		return Result{Reason: ReasonStatus403, Sampled: sampled}
+		return classifyBadStatus(gstatus, first, sampled)
 	}
 }
 
@@ -430,6 +419,16 @@ func isPublicHost(host string) bool {
 // signedURLEpochRe captures a numeric `e=<unix-seconds>` or
 // `expires=<unix-seconds>` query param.
 var signedURLEpochRe = regexp.MustCompile(`(?:^|[?&])(?:e|expires)=(\d{8,12})(?:&|$)`)
+
+// classifyBadStatus maps a non-2xx response to its Result: 403s go through
+// classify403 (expired-signature detection), everything else is the generic
+// bad-status reason.
+func classifyBadStatus(status int, rawURL string, sampled []string) Result {
+	if status == http.StatusForbidden {
+		return classify403(rawURL, sampled)
+	}
+	return Result{Reason: ReasonStatus403, Sampled: sampled}
+}
 
 // classify403 distinguishes a generic 403 from an EXPIRED signed URL
 // (the latter is recoverable by re-fetching upstream).

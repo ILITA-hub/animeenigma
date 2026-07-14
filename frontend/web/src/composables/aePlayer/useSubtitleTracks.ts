@@ -1,19 +1,17 @@
 import { ref, computed, unref, watch, type Ref, type ComputedRef } from 'vue'
 import { subtitlesApi } from '@/api/client'
-import { signedSubtitleUrl } from '@/utils/subtitleProxy'
+import { signAggregateLanguages } from '@/utils/subtitleProxy'
 import type { SubtitleTrack } from '@/types/aePlayer'
+// The backend track shape of the /subtitles/all response IS the aggregated
+// SubtitleTrack contract (url/lang/label/format/provider/release + the
+// streamsign exp/sig provenance pair) — alias rather than redeclare.
+import type { SubtitleTrack as BackendSubTrack } from '@/types/subtitles'
 // SubTrack (the modal's prop shape) is field-identical to SubtitleTrack. Alias to
 // the .ts type rather than importing a named type from a .vue file — the ambient
 // `declare module '*.vue'` (default-export-only) shadows named exports under some
 // vue-tsc versions (TS2614), which breaks the production build.
 type SubTrack = SubtitleTrack
 
-export interface BackendSubTrack {
-  url: string; lang: string; label: string; format?: string; provider: string; release?: string
-  // Provenance signature (streamsign) — present only on external track URLs
-  // (jimaku.cc); forwarded to the HLS proxy as top-level exp/sig params.
-  exp?: string; sig?: string
-}
 export interface AggregateSubsResponse {
   languages: Record<string, BackendSubTrack[]>
   episode: number
@@ -23,18 +21,24 @@ export interface AggregateSubsResponse {
 /** Flatten the /subtitles/all languages map into SubtitleTrack[] — shared
  *  with the offline download engine (external subtitle capture). */
 export function flattenAggregateSubs(data: AggregateSubsResponse | null | undefined): SubtitleTrack[] {
+  const languages = data?.languages ?? {}
+  // Stamp each track's format from its RAW url first — signAggregateLanguages
+  // rewrites external urls to the proxy form, which has no useful extension.
+  for (const list of Object.values(languages)) {
+    for (const t of list) {
+      t.format = (t.format || t.url.split('?')[0].split('.').pop() || 'srt').toLowerCase()
+    }
+  }
+  signAggregateLanguages(languages)
   const flat: SubtitleTrack[] = []
-  for (const [lang, list] of Object.entries(data?.languages ?? {})) {
+  for (const [lang, list] of Object.entries(languages)) {
     for (const t of list) {
       flat.push({
-        // Catalog-signed external tracks (jimaku.cc) are pre-wrapped in the
-        // signed proxy URL so the un-allowlisted host loads without a 502;
-        // same-origin tracks pass through raw.
-        url: signedSubtitleUrl(t),
+        url: t.url,
         provider: t.provider,
         lang: t.lang || lang,
         label: t.label || t.release || t.provider,
-        format: (t.format || t.url.split('?')[0].split('.').pop() || 'srt').toLowerCase(),
+        format: t.format ?? 'srt',
       })
     }
   }

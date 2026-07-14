@@ -2033,7 +2033,7 @@ func (s *CatalogService) GetAnimejoyStream(ctx context.Context, animeID, leg str
 		return nil, errors.Wrap(err, errors.CodeUnavailable, fmt.Sprintf("animejoy %s leg resolution failed", leg))
 	}
 
-	exp, sig := streamsign.Sign(resolved.URL)
+	exp, sig, masked := streamsign.Stamp(resolved.URL, resolved.Referer, "mp4")
 	return &domain.AnimejoyStream{
 		URL:       resolved.URL,
 		Type:      "mp4",
@@ -2043,7 +2043,7 @@ func (s *CatalogService) GetAnimejoyStream(ctx context.Context, animeID, leg str
 		Source:    "animejoy",
 		Exp:       exp,
 		Sig:       sig,
-		MaskedURL: streamsign.MaskedURL(resolved.URL, resolved.Referer, "mp4"),
+		MaskedURL: masked,
 	}, nil
 }
 
@@ -2195,8 +2195,7 @@ func (s *CatalogService) GetKodikStreamSource(ctx context.Context, animeID strin
 // cached entry can never outlive (or lack) its signature. Copies the animejoy
 // pattern (GetAnimejoyStream).
 func signKodikStreamSource(src *domain.KodikStreamSource) {
-	src.Exp, src.Sig = streamsign.Sign(src.StreamURL)
-	src.MaskedURL = streamsign.MaskedURL(src.StreamURL, src.Referer, "")
+	src.Exp, src.Sig, src.MaskedURL = streamsign.Stamp(src.StreamURL, src.Referer, "")
 }
 
 // SearchKodik searches for anime on Kodik by title
@@ -2574,8 +2573,7 @@ func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, 
 func signAnimeLibStream(st *domain.AnimeLibStream) {
 	for i := range st.Sources {
 		src := &st.Sources[i]
-		src.Exp, src.Sig = streamsign.Sign(src.URL)
-		src.MaskedURL = streamsign.MaskedURL(src.URL, "", "mp4")
+		src.Exp, src.Sig, src.MaskedURL = streamsign.Stamp(src.URL, "", "mp4")
 	}
 	for i := range st.Subtitles {
 		sub := &st.Subtitles[i]
@@ -2971,7 +2969,6 @@ func (s *CatalogService) GetHanimeStream(ctx context.Context, animeID string, sl
 func signHanimeSources(sources []domain.HanimeSource) {
 	for i := range sources {
 		src := &sources[i]
-		src.Exp, src.Sig = streamsign.Sign(src.URL)
 		// Progressive MP4 unless the URL is an HLS manifest — mirrors the FE
 		// adapter's ".m3u8 ⇒ hls" rule so the masked token selects the proxy's
 		// range-passthrough path only for MP4s.
@@ -2979,6 +2976,6 @@ func signHanimeSources(sources []domain.HanimeSource) {
 		if strings.Contains(src.URL, ".m3u8") {
 			streamType = ""
 		}
-		src.MaskedURL = streamsign.MaskedURL(src.URL, "", streamType)
+		src.Exp, src.Sig, src.MaskedURL = streamsign.Stamp(src.URL, "", streamType)
 	}
 }

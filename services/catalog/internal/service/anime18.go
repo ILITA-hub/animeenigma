@@ -172,10 +172,9 @@ func (s *CatalogService) Get18AnimeStream(ctx context.Context, animeID, episodeS
 // it through the HLS proxy without static allowlist entries. Called at
 // RESPONSE time only — never persisted in the cache.
 func signAnime18Stream(st *domain.Anime18Stream) {
-	st.Exp, st.Sig = streamsign.Sign(st.URL)
 	streamType := "mp4"
 	if st.IsHLS {
 		streamType = ""
 	}
-	st.MaskedURL = streamsign.MaskedURL(st.URL, st.Referer, streamType)
+	st.Exp, st.Sig, st.MaskedURL = streamsign.Stamp(st.URL, st.Referer, streamType)
 }

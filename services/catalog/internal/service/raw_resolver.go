@@ -141,14 +141,14 @@ type AeInfo struct {
 // the proxy allowlist, so a library master-playlist request must arrive
 // pre-signed; the proxy then mints child segment tokens during m3u8 rewrite.
 type RawStream struct {
-	URL        string         `json:"url"`
-	Type       string         `json:"type"`
-	Quality    string         `json:"quality,omitempty"`
-	Subtitles  []RawSubtitle  `json:"subtitles,omitempty"`
-	ExpiresAt  time.Time      `json:"expires_at"`
-	Source     string         `json:"source"`
-	Exp        string         `json:"exp,omitempty"`
-	Sig        string         `json:"sig,omitempty"`
+	URL       string        `json:"url"`
+	Type      string        `json:"type"`
+	Quality   string        `json:"quality,omitempty"`
+	Subtitles []RawSubtitle `json:"subtitles,omitempty"`
+	ExpiresAt time.Time     `json:"expires_at"`
+	Source    string        `json:"source"`
+	Exp       string        `json:"exp,omitempty"`
+	Sig       string        `json:"sig,omitempty"`
 	// Track A opaque path-token form of URL (spec 2026-07-10 §3); preferred
 	// by the FE over URL+exp/sig when present.
 	MaskedURL  string         `json:"masked_url,omitempty"`
@@ -201,7 +201,7 @@ type EpisodesResponse struct {
 // storyboard yet); when present it is signed the same way and attached as
 // RawStream.Storyboard.
 func newLibraryStream(minioURL, quality, storyboardURL string) *RawStream {
-	exp, sig := streamsign.Sign(minioURL)
+	exp, sig, masked := streamsign.Stamp(minioURL, "", "")
 	s := &RawStream{
 		URL:       minioURL,
 		Type:      "hls",
@@ -211,15 +211,15 @@ func newLibraryStream(minioURL, quality, storyboardURL string) *RawStream {
 		Source:    "library",
 		Exp:       exp,
 		Sig:       sig,
-		MaskedURL: streamsign.MaskedURL(minioURL, "", ""),
+		MaskedURL: masked,
 	}
 	if storyboardURL != "" {
-		sbExp, sbSig := streamsign.Sign(storyboardURL)
+		sbExp, sbSig, sbMasked := streamsign.Stamp(storyboardURL, "", "")
 		s.Storyboard = &RawStoryboard{
 			URL:       storyboardURL,
 			Exp:       sbExp,
 			Sig:       sbSig,
-			MaskedURL: streamsign.MaskedURL(storyboardURL, "", ""),
+			MaskedURL: sbMasked,
 		}
 	}
 	return s

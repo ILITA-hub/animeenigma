@@ -43,6 +43,14 @@ func MaskedURL(u, referer, streamType string) string {
 	return videoutils.MaskedStreamURL(u, referer, streamType)
 }
 
+// Stamp returns the provenance (exp, sig) plus the Track A masked proxy URL
+// for an external stream/subtitle URL — the common Sign+MaskedURL pair. All
+// three are empty for non-external (same-origin) URLs.
+func Stamp(u, referer, streamType string) (exp, sig, masked string) {
+	exp, sig = Sign(u)
+	return exp, sig, MaskedURL(u, referer, streamType)
+}
+
 // SignScraperStreamBody rewrites a scraper stream JSON envelope in place,
 // adding "exp"/"sig" (legacy dual-accept) plus the Track A "masked_url"
 // opaque path-token form to data.stream.sources[].url and external

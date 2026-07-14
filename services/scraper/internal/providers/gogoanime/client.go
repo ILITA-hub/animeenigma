@@ -1202,10 +1202,11 @@ func (p *Provider) coldPathGated(
 			if attemptCtx.Err() != nil {
 				return gateAttempt{serverID: srv.ID, err: attemptCtx.Err(), reason: streamprobe.ReasonCDNUnreachable}
 			}
+			host := urlHost(src.URL)
 			// Poison pre-check: a host convicted by byte-sniff in the last
 			// 24h is skipped without touching the network — exactly as an
 			// unplayable ad-decoy probe result would be (same counters).
-			if p.poisonCached(attemptCtx, urlHost(src.URL)) {
+			if p.poisonCached(attemptCtx, host) {
 				metrics.ParserUnplayableTotal.WithLabelValues(providerName, extName, string(streamprobe.ReasonAdDecoy)).Inc()
 				metrics.ParserAdDecoyTotal.WithLabelValues(providerName, extName).Inc()
 				lastReason = streamprobe.ReasonAdDecoy
@@ -1231,7 +1232,7 @@ func (p *Provider) coldPathGated(
 				// Cache the byte-derived verdict 24h for BOTH the stream
 				// host and the offending segment host (may differ when the
 				// playlist points at a separate segment CDN).
-				p.cachePoisonVerdict(attemptCtx, urlHost(src.URL), res.DecoyHost)
+				p.cachePoisonVerdict(attemptCtx, host, res.DecoyHost)
 			}
 			lastReason = res.Reason
 		}
@@ -1288,13 +1289,14 @@ func (p *Provider) coldPathGated(
 	)
 }
 
-// urlHost extracts the lowercased hostname of raw, or "" when unparseable.
+// urlHost extracts the hostname of raw, or "" when unparseable. Case
+// normalization happens in exactly one place — poisonKey.
 func urlHost(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return ""
 	}
-	return strings.ToLower(u.Hostname())
+	return u.Hostname()
 }
 
 // poisonKey derives the Redis key holding a 24h poison verdict for host.
@@ -1320,7 +1322,6 @@ func (p *Provider) cachePoisonVerdict(ctx context.Context, hosts ...string) {
 	}
 	seen := make(map[string]bool, len(hosts))
 	for _, h := range hosts {
-		h = strings.ToLower(h)
 		if h == "" || seen[h] {
 			continue
 		}
