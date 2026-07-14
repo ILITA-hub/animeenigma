@@ -75,10 +75,13 @@ func main() {
 	generator := service.NewGenerator(groqClient, fanficRepo, quota, catalogClient, cfg.Groq.Model, cfg.ContinueContextRunes, log)
 	h := handler.NewHandler(generator, fanficRepo, log)
 
-	// TODO(task-9): finalize the alerter (real Telegram, not Noop) and the
-	// animePool/lang config knobs (FANFIC_DAILY_ANIME_POOL / FANFIC_DAILY_LANG
-	// or similar) once the scheduler wiring for the daily pick lands.
-	dailyService := service.NewDailyService(groqClient, fanficRepo, catalogClient, alert.NewNoop(), cfg.Groq.Model, nil, "ru", nil, log)
+	// Alerter fails open to Noop unless BOTH the ALERTS bot token and admin
+	// chat ID are configured (docker-compose wiring lands in Task 19).
+	var alerter alert.Alerter = alert.NewNoop()
+	if cfg.AlertsBotToken != "" && cfg.AlertsChatID != "" {
+		alerter = alert.NewTelegram(cfg.AlertsBotToken, cfg.AlertsChatID, "", nil)
+	}
+	dailyService := service.NewDailyService(groqClient, fanficRepo, catalogClient, alerter, cfg.Groq.Model, cfg.DailyAnimePool, cfg.BotLanguage, time.Now, log)
 	dh := handler.NewDailyHandler(dailyService)
 
 	mc := metrics.NewCollector("fanfic")

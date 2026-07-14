@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -22,6 +23,12 @@ type Config struct {
 	CatalogURL           string
 	CatalogTimeout       time.Duration
 	ContinueContextRunes int
+
+	// Daily "Фанфик дня" bot generation — see internal/service/ensure_daily.go.
+	AlertsBotToken string   // TELEGRAM_ALERTS_BOT_TOKEN — empty ⇒ alerter falls back to Noop (fail-open)
+	AlertsChatID   string   // TELEGRAM_ADMIN_CHAT_ID — empty ⇒ alerter falls back to Noop (fail-open)
+	DailyAnimePool []string // FANFIC_DAILY_ANIME_POOL — CSV of shikimori IDs the daily picker draws from
+	BotLanguage    string   // FANFIC_BOT_LANGUAGE — language the bot generates the daily fanfic in
 }
 
 type ServerConfig struct {
@@ -81,6 +88,11 @@ func Load() (*Config, error) {
 		CatalogURL:           getEnv("CATALOG_URL", "http://catalog:8081"),
 		CatalogTimeout:       getEnvDuration("FANFIC_CATALOG_TIMEOUT", 5*time.Second),
 		ContinueContextRunes: getEnvInt("FANFIC_CONTINUE_CONTEXT_RUNES", 24000),
+
+		AlertsBotToken: getEnv("TELEGRAM_ALERTS_BOT_TOKEN", ""),
+		AlertsChatID:   getEnv("TELEGRAM_ADMIN_CHAT_ID", ""),
+		DailyAnimePool: getEnvCSV("FANFIC_DAILY_ANIME_POOL", "20,21,1735,52991,16498,5114"),
+		BotLanguage:    getEnv("FANFIC_BOT_LANGUAGE", "ru"),
 	}, nil
 }
 
@@ -107,4 +119,18 @@ func getEnvDuration(key string, def time.Duration) time.Duration {
 		}
 	}
 	return def
+}
+
+// getEnvCSV splits a comma-separated env var into a trimmed, non-empty-entry
+// slice, falling back to a (also CSV) default when the env var is unset.
+func getEnvCSV(key, def string) []string {
+	raw := getEnv(key, def)
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
