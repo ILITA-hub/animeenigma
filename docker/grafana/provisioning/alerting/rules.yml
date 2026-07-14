@@ -992,11 +992,11 @@ groups:
               intervalMs: 1000
               maxDataPoints: 43200
               rawSql: |
-                SELECT uniqExact(concat(
-                    JSONExtractString(properties, 'client', 'ua'), '|',
-                    JSONExtractString(properties, 'client', 'viewport'), '|',
+                SELECT uniqExact(
+                    JSONExtractString(properties, 'client', 'ua'),
+                    JSONExtractString(properties, 'client', 'viewport'),
                     JSONExtractString(properties, 'client', 'connection')
-                  )) AS value
+                  ) AS value
                 FROM analytics.events
                 WHERE effect_kind = 'player_failed'
                   AND JSONExtractBool(properties, 'all_exhausted') = 1

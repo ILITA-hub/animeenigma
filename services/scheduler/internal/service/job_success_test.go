@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -10,15 +12,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/domain"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
-
-func testLogger(t *testing.T) *logger.Logger {
-	t.Helper()
-	log, err := logger.New(logger.Config{Level: "error"})
-	if err != nil {
-		t.Fatalf("logger.New: %v", err)
-	}
-	return log
-}
 
 // SeedLastSuccess must prime the gauge from persisted rows (so the series
 // survive a container restart instead of false-paging scheduler-sync-stale,
@@ -32,7 +25,7 @@ func TestSeedLastSuccessFiltersUnknownJobs(t *testing.T) {
 	n := SeedLastSuccess([]domain.JobSuccess{
 		{Job: "shikimori_sync", LastSuccessAt: at},
 		{Job: "job_removed_from_binary", LastSuccessAt: at},
-	}, testLogger(t))
+	}, logger.Default())
 
 	if n != 1 {
 		t.Fatalf("SeedLastSuccess seeded %d series, want 1", n)
@@ -55,7 +48,7 @@ func TestRecordSuccessSetsGaugeAndPersists(t *testing.T) {
 	t.Cleanup(metrics.SchedulerJobLastSuccess.Reset)
 
 	st := &fakeSuccessStore{}
-	s := &JobService{log: testLogger(t)}
+	s := &JobService{log: logger.Default()}
 	s.SetSuccessStore(st)
 
 	before := time.Now()
@@ -68,33 +61,37 @@ func TestRecordSuccessSetsGaugeAndPersists(t *testing.T) {
 		t.Errorf("persisted timestamp %v is before test start %v", st.at, before)
 	}
 	got := testutil.ToFloat64(metrics.SchedulerJobLastSuccess.WithLabelValues("cleanup"))
-	if got < float64(before.Unix()) {
-		t.Errorf("gauge = %v, want >= %v", got, before.Unix())
+	if got != float64(st.at.Unix()) {
+		t.Errorf("gauge = %v, want %v (must agree with the persisted timestamp)", got, st.at.Unix())
 	}
 
 	// nil store: gauge still updates, no panic.
-	s2 := &JobService{log: testLogger(t)}
+	s2 := &JobService{log: logger.Default()}
 	s2.recordSuccess(context.Background(), "top_anime_sync")
 	if testutil.ToFloat64(metrics.SchedulerJobLastSuccess.WithLabelValues("top_anime_sync")) == 0 {
 		t.Error("nil-store recordSuccess did not set gauge")
 	}
 }
 
-// Every job name recorded anywhere in the service must be in KnownJobs, or a
-// restart would silently drop its persisted seed.
+// Every job name passed to recordSuccess in job.go must be in KnownJobs, or a
+// restart would silently drop that job's persisted seed. Scans the source so
+// a new recordSuccess call site cannot drift past the list.
 func TestKnownJobsCoversAllRecordedJobs(t *testing.T) {
-	want := []string{
-		"shikimori_sync", "cleanup", "top_anime_sync", "calendar_sync",
-		"playback_probe", "read_threshold_recompute", "provider_ranking_recompute",
-		"subtitle_probe", "autocache_logic_a", "autocache_prediction", "fanfic_daily",
+	src, err := os.ReadFile("job.go")
+	if err != nil {
+		t.Fatalf("read job.go: %v", err)
 	}
-	known := map[string]bool{}
+	calls := regexp.MustCompile(`recordSuccess\(ctx, "([a-z_]+)"\)`).FindAllStringSubmatch(string(src), -1)
+	if len(calls) == 0 {
+		t.Fatal("no recordSuccess call sites found in job.go — regex or refactor drift")
+	}
+	known := make(map[string]bool, len(KnownJobs))
 	for _, j := range KnownJobs {
 		known[j] = true
 	}
-	for _, j := range want {
-		if !known[j] {
-			t.Errorf("KnownJobs is missing %q", j)
+	for _, m := range calls {
+		if !known[m[1]] {
+			t.Errorf("job.go records success for %q but KnownJobs is missing it (its persisted seed would be dropped on restart)", m[1])
 		}
 	}
 }

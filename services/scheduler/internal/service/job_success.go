@@ -39,15 +39,17 @@ func (s *JobService) SetSuccessStore(st successStore) {
 }
 
 // recordSuccess refreshes the last-success freshness gauge and persists the
-// timestamp so SeedLastSuccess can restore the series after a restart.
-// Persistence failure is non-fatal: the gauge (the alerting signal) is
-// already set; only restart continuity degrades.
+// timestamp so SeedLastSuccess can restore the series after a restart. One
+// clock read feeds both, so the gauge, the DB row, and a post-restart seed
+// all agree. Persistence failure is non-fatal: the gauge (the alerting
+// signal) is already set; only restart continuity degrades.
 func (s *JobService) recordSuccess(ctx context.Context, job string) {
-	metrics.SchedulerJobLastSuccess.WithLabelValues(job).SetToCurrentTime()
+	now := time.Now()
+	metrics.SchedulerJobLastSuccess.WithLabelValues(job).Set(float64(now.Unix()))
 	if s.successStore == nil {
 		return
 	}
-	if err := s.successStore.Upsert(ctx, job, time.Now()); err != nil {
+	if err := s.successStore.Upsert(ctx, job, now); err != nil {
 		s.log.Warnw("failed to persist job success timestamp", "job", job, "error", err)
 	}
 }
