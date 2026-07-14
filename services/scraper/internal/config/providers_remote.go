@@ -54,10 +54,12 @@ type remoteResponse struct {
 }
 
 // LoadProvidersRemote fetches provider config from catalog's internal endpoint
-// and builds a ProvidersConfig (Source="remote"). Unknown provider names are
-// rejected (same fail-fast invariant as LoadProviders) so a bad DB row falls
-// back to YAML at the call site rather than silently mis-registering. Group is
-// derived from the intrinsic GroupOf(name), never trusting the remote value.
+// and builds a ProvidersConfig (Source="remote"). AUTO-608: unlike LoadProviders,
+// unknown provider names are ACCEPTED (fail-open) — a new DB row must never
+// void the entire remote config and force a fallback. Rows without a Go
+// constructor in this binary simply never register (main.go reflects them as
+// provider_unwired{seam="scraper"}). Group is derived from the intrinsic
+// GroupOf(name), never trusting the remote value.
 func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Client, timeout time.Duration) (ProvidersConfig, error) {
 	if client == nil {
 		client = &http.Client{}
@@ -83,25 +85,23 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 		return ProvidersConfig{}, fmt.Errorf("decode provider config: %w", err)
 	}
 
-	known := make(map[string]bool, len(KnownProviders))
-	for _, n := range KnownProviders {
-		known[n] = true
-	}
 	metas := make(map[string]ProviderMeta, len(rr.Data.Providers))
 	for _, p := range rr.Data.Providers {
 		// The stream_providers roster holds EVERY stream source (ae + legacy
 		// players + EN chain). The scraper operates ONLY scraper_operated rows;
 		// first-party/legacy rows are skipped here so they never enter EN
-		// failover and never trip the KnownProviders fail-fast below.
+		// failover.
 		if !p.ScraperOperated {
 			continue
 		}
 		if p.Name == "" {
 			return ProvidersConfig{}, fmt.Errorf("provider config: entry with empty name")
 		}
-		if !known[p.Name] {
-			return ProvidersConfig{}, fmt.Errorf("provider config: unknown provider %q", p.Name)
-		}
+		// AUTO-608 fail-open: names outside the compiled constructor set are
+		// ACCEPTED (a new DB row must never make the scraper discard the whole
+		// DB config and fall back to the offline default). Rows without a Go
+		// constructor simply never register; main.go reflects them as
+		// provider_unwired{seam="scraper"}.
 		if _, dup := metas[p.Name]; dup {
 			return ProvidersConfig{}, fmt.Errorf("provider config: duplicate provider %q", p.Name)
 		}

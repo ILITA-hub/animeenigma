@@ -258,16 +258,27 @@ func main() {
 	// name but skips the orchestrator registration), so it appears here. A CODELESS
 	// tombstone like animefever (disabled DB row, no provider code) is NOT
 	// constructed, so it is absent here — the Prometheus reflection keys off
-	// config.KnownProviders instead so the tombstone still shows on the dashboard.
+	// cfg.Providers.AllNames() instead so the tombstone still shows on the
+	// dashboard (AUTO-608).
 	var candidateProviders []string
+
+	// constructedProviders is the set of provider names THIS BINARY has a Go
+	// constructor for, across BOTH the EN chain (registerByStatus, below) and
+	// the adult group (18anime, registered separately near adultOrch). AUTO-608:
+	// main.go diffs cfg.Providers.AllNames() (every DB row) against this set to
+	// flag provider_unwired{seam="scraper"} — a DB row with no matching entry
+	// here has no code in this binary.
+	var constructedProviders []string
 
 	// registerByStatus registers p into the EN orchestrator according to its DB
 	// status (AUTO-484): enabled → auto-failover chain; degraded → registered but
 	// EXCLUDED from auto-failover (reachable only via an explicit `prefer` /
 	// hacker-mode pin, sorted last in the player); disabled → not registered. In
-	// every case p's name joins candidateProviders (the derived EN roster above).
+	// every case p's name joins candidateProviders (the derived EN roster above)
+	// and constructedProviders (the AUTO-608 wiring set).
 	registerByStatus := func(p domain.Provider) {
 		candidateProviders = append(candidateProviders, p.Name())
+		constructedProviders = append(constructedProviders, p.Name())
 		meta := cfg.Providers.Meta(p.Name())
 		switch cfg.Providers.Status(p.Name()) {
 		case config.StatusDisabled:
@@ -588,6 +599,7 @@ func main() {
 		domain.WithTransport(egressTransport),
 	)
 	anime18Provider := eighteenanime.New(eighteenanime.Deps{HTTP: anime18BaseHTTP, Cache: redisCache, Log: log})
+	constructedProviders = append(constructedProviders, anime18Provider.Name())
 	if cfg.Providers.IsEnabled(anime18Provider.Name()) {
 		adultOrch.Register(anime18Provider)
 		log.Infow("registered provider (adult group)", "name", anime18Provider.Name())
@@ -707,13 +719,15 @@ func main() {
 
 	// ISS-023: reflect the provider-management config into Prometheus so the
 	// Grafana dashboard shows EVERY provider (enabled and disabled) with its
-	// reason/description. Reflect the full KNOWN roster (config.KnownProviders =
-	// every scraper_operated name, incl. the adult group), NOT candidateProviders
-	// (which is derived from what this binary actually constructs). That gap
-	// matters for a codeless tombstone like animefever: it has a disabled DB row
-	// but no provider code, so it never joins candidateProviders — keying the
-	// reflection off KnownProviders keeps its row on the dashboard as intended.
-	for _, row := range cfg.Providers.Rows(config.KnownProviders) {
+	// reason/description. Reflect the full LIVE roster (cfg.Providers.AllNames()
+	// = every scraper_operated DB row, incl. the adult group), NOT
+	// candidateProviders (which is derived from what this binary actually
+	// constructs) and NOT the compile-time config.KnownProviders (AUTO-608: a
+	// new DB row must show up here without a code change). That gap matters for
+	// a codeless tombstone like animefever: it has a disabled DB row but no
+	// provider code, so it never joins candidateProviders — keying the
+	// reflection off AllNames() keeps its row on the dashboard as intended.
+	for _, row := range cfg.Providers.Rows(cfg.Providers.AllNames()) {
 		enabled := 0.0
 		if row.Enabled {
 			enabled = 1.0
@@ -725,6 +739,23 @@ func main() {
 		"source", cfg.Providers.Source,
 		"disabled", cfg.Providers.DisabledNames(),
 	)
+
+	// AUTO-608: reflect DB rows this binary has no constructor for. A row that
+	// is disabled (tombstone: animefever, allanime) is expected to be codeless
+	// and reads 0; anything else without code is a real wiring gap.
+	constructed := make(map[string]bool, len(constructedProviders))
+	for _, n := range constructedProviders {
+		constructed[n] = true
+	}
+	for _, name := range cfg.Providers.AllNames() {
+		unwired := 0.0
+		if !constructed[name] && cfg.Providers.Status(name) != config.StatusDisabled {
+			unwired = 1.0
+			log.Warnw("provider row UNWIRED — DB roster row has no provider code in this binary",
+				"name", name, "status", cfg.Providers.Status(name))
+		}
+		metrics.ProviderUnwired.WithLabelValues(name, "scraper").Set(unwired)
+	}
 
 	go func() {
 		log.Infow("scraper service ready",

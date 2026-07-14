@@ -9,16 +9,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// KnownProviders is the canonical set of scraper provider names that may appear
-// in scraper-providers.yaml / the catalog stream_providers roster. Anything else
-// is a typo and fails validation (LoadProviders + the remote loader).
+// KnownProviders is the canonical set of scraper provider names recognized at
+// compile time. AUTO-608: it no longer gates the remote loader (LoadProvidersRemote
+// is fail-open — see its doc comment) — DB rows are the source of truth, and
+// main.go keys roster-reflection metrics + the wiring-invariant checks off
+// cfg.Providers.AllNames() instead. KnownProviders now only (1) seeds the
+// offline/fallback config (allProvidersEnabled, used at boot until the catalog
+// DB answers) and (2) drives the intrinsic EN-vs-adult candidate split
+// (KnownProvidersInGroup) for that fallback path. LoadProviders (the dormant
+// YAML loader, retired 2026-06-17) still validates entries against this list.
 //
 // These are the registration names in cmd/scraper-api/main.go, PLUS "animefever":
 // its provider code was removed from the binary 2026-07-05 (dead upstream —
 // tombstone), but the catalog keeps a disabled `scraper_operated` animefever row
-// as the historical record, and the remote loader hard-fails on any
-// scraper_operated name it doesn't recognize — so the name must stay listed here
-// even though nothing registers it.
+// as the historical record.
 var KnownProviders = []string{
 	"gogoanime", "animepahe", "allanime", "allanime-okru", "animefever", "miruro", "nineanime", "animekai",
 	"18anime",
@@ -238,6 +242,21 @@ func (p ProvidersConfig) IsSoftDegraded(name string) bool {
 
 // Meta returns the metadata for a provider (zero value if absent).
 func (p ProvidersConfig) Meta(name string) ProviderMeta { return p.load()[name] }
+
+// AllNames returns every loaded provider name, sorted. Under the remote
+// loader all entries are scraper_operated rows; under the offline fallback
+// it equals KnownProviders. AUTO-608: main.go keys roster-reflection metrics
+// and the unwired check off this (NOT off compile-time KnownProviders), so a
+// new DB row surfaces on the dashboard without a code change.
+func (p ProvidersConfig) AllNames() []string {
+	m := p.load()
+	names := make([]string, 0, len(m))
+	for n := range m {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // NewProvidersConfigForTest constructs a ProvidersConfig from a slice of
 // ProviderMeta entries. Intended only for unit tests that need to drive the

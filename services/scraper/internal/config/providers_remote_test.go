@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -39,14 +40,27 @@ func TestLoadProvidersRemote_ParsesAndBuilds(t *testing.T) {
 	}
 }
 
-func TestLoadProvidersRemote_RejectsUnknownProvider(t *testing.T) {
+func TestLoadProvidersRemote_UnknownProviderAccepted(t *testing.T) {
+	// Serve one known + one brand-new provider; the loader must accept both
+	// (AUTO-608 fail-open: one new DB row must never void the whole DB config).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"success":true,"data":{"providers":[{"name":"bogus","status":"enabled","scraper_operated":true}]}}`))
+		w.Write([]byte(`{"success":true,"data":{"providers":[
+			{"name":"gogoanime","status":"enabled","scraper_operated":true},
+			{"name":"newprov","status":"enabled","scraper_operated":true}
+		]}}`))
 	}))
 	defer srv.Close()
-	_, err := LoadProvidersRemote(context.Background(), srv.URL, srv.Client(), 2*time.Second)
-	if err == nil {
-		t.Fatal("expected error for unknown provider name, got nil")
+	pc, err := LoadProvidersRemote(context.Background(), srv.URL, srv.Client(), time.Second)
+	if err != nil {
+		t.Fatalf("unknown provider must not fail the load: %v", err)
+	}
+	if pc.Status("newprov") != StatusEnabled {
+		t.Fatalf("newprov status = %q, want enabled", pc.Status("newprov"))
+	}
+	names := pc.AllNames()
+	want := []string{"gogoanime", "newprov"}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("AllNames() = %v, want %v", names, want)
 	}
 }
 
