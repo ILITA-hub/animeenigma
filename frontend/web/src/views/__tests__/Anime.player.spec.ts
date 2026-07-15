@@ -11,7 +11,7 @@
  * localStorage-normalization logic itself is unit-tested separately in
  * animePlayerPrefs.spec.ts.
  */
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest'
 import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
@@ -35,6 +35,10 @@ const ANIME = {
   nextEpisodeAt: null,
 }
 const animeRef = ref<Record<string, unknown> | null>(null)
+// Per-test override for fetchAnime's resolved payload (defaults to ANIME).
+// Lets a single test simulate an announced/upcoming title (notReleasedYet)
+// without disturbing every other test's RELEASED baseline.
+let animeOverride: Record<string, unknown> | null = null
 
 // The view's loadAnimeData() resets anime.value = null then awaits
 // fetchAnime(), so the mock must REPOPULATE the ref (mirrors real behavior).
@@ -44,7 +48,7 @@ vi.mock('@/composables/useAnime', () => ({
     loading: ref(false),
     error: ref(null),
     fetchAnime: vi.fn(async () => {
-      animeRef.value = { ...ANIME }
+      animeRef.value = { ...(animeOverride ?? ANIME) }
       return animeRef.value
     }),
   }),
@@ -167,12 +171,19 @@ describe('Anime.vue player surface (Plan B)', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     animeRef.value = null
+    animeOverride = null
     mockReducedMotion.value = false
     vi.stubGlobal('IntersectionObserver', class {
       observe() {}
       unobserve() {}
       disconnect() {}
     })
+  })
+
+  // Only the aePlayerEnabled=false test stubs this; unstub unconditionally so
+  // a failed assertion there can't leak the override into later tests.
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('mounts AePlayer by default (no localStorage preference)', async () => {
@@ -216,6 +227,39 @@ describe('Anime.vue player surface (Plan B)', () => {
     localStorage.setItem('classic_kodik_selected', 'true')
     localStorage.setItem('theaterMode', '1')
     const wrapper = await mountView()
+    expect(document.body.classList.contains('theater-mode')).toBe(false)
+    wrapper.unmount()
+  })
+
+  // Finding 1 (pre-merge review) — the theater-off guard must key off
+  // AePlayer's REAL mount condition (`!classicKodik && aePlayerEnabled &&
+  // !notReleasedYet`), not `classicKodik` alone. An announced/upcoming title
+  // (notReleasedYet===true) swaps AePlayer for the premiere notice, removing
+  // the only theater-exit control, while classicKodik never changes — so the
+  // old classicKodik-only guard could never fire here. notReleasedYet only
+  // resolves after the async fetchAnime() completes, which mountView()'s
+  // trailing flushPromises() waits out.
+  it('forces theater off once the fetched anime resolves to notReleasedYet (announced title)', async () => {
+    animeOverride = { ...ANIME, status: 'announced', hasVideo: false }
+    localStorage.setItem('theaterMode', '1')
+    const wrapper = await mountView()
+    expect(document.body.classList.contains('theater-mode')).toBe(false)
+    wrapper.unmount()
+  })
+
+  // Finding 1, second hole — VITE_AE_PLAYER_ENABLED=false makes Classic Kodik
+  // the ONLY surface (the aePlayerEnabled=false template branch), and also
+  // hides the Classic-Kodik toggle button itself (`v-if="aePlayerEnabled"`),
+  // so there is no way back from a stale theaterMode=1 on such a deploy.
+  // aePlayerEnabled is read synchronously at setup from import.meta.env, so
+  // (unlike the notReleasedYet case above) this must be caught by the
+  // guard's `immediate: true` firing before the first paint, without waiting
+  // on any fetch.
+  it('forces theater off on mount when VITE_AE_PLAYER_ENABLED=false and theaterMode is persisted true', async () => {
+    vi.stubEnv('VITE_AE_PLAYER_ENABLED', 'false')
+    localStorage.setItem('theaterMode', '1')
+    const wrapper = await mountView()
+    expect(wrapper.find('[data-test="kodik-player"]').exists()).toBe(true)
     expect(document.body.classList.contains('theater-mode')).toBe(false)
     wrapper.unmount()
   })

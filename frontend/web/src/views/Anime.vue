@@ -893,7 +893,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, defineAsyncComponent } from 'vue'
+import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { Star, Clock, Play, Check, Plus, ChevronDown, Trash2, RefreshCw, Eye, EyeOff, Pencil, Calendar, MessageSquare, EllipsisVertical } from 'lucide-vue-next'
 import { useAnime } from '@/composables/useAnime'
@@ -1051,21 +1051,36 @@ const {
 })
 
 // Theater is an aePlayer-only feature — AePlayer's :can-theater is hardcoded
-// true only inside the `!classicKodik` branch below, so theater state must
-// honour that same condition. Without this, a user who enters theater and
-// then flips to Classic Kodik (or loads with both already persisted true —
-// reachable pre-June and on VITE_AE_PLAYER_ENABLED=false deploys, where
-// Kodik is the only surface) gets the Kodik iframe full-bleed with
-// `.player-head` (heading + "back to AePlayer" toggle) hidden by the
-// theater CSS: a dead end with no visible way out.
-watch(classicKodik, (on) => {
-  if (on && theaterMode.value) setTheater(false)
-})
-// The watcher above only fires on a CHANGE, so it never runs for a
-// classicKodik=true + theaterMode=1 combo that's already true at load
-// (both refs are initialized synchronously from localStorage before this
-// line runs) — this guard covers exactly that case.
-if (classicKodik.value && theaterMode.value) setTheater(false)
+// true only while AePlayer is actually the mounted surface. That mount
+// condition is `!classicKodik && aePlayerEnabled && !notReleasedYet`
+// (template above: the outer `v-if` plus the premiere-notice `v-else`
+// inside it) — three independent ways for AePlayer (and therefore the only
+// visible theater-exit control) to be absent, not just `classicKodik`:
+//   1. classicKodik === true — user flipped to (or persisted into) the
+//      Classic Kodik iframe fallback.
+//   2. aePlayerEnabled === false (VITE_AE_PLAYER_ENABLED=false) — Classic
+//      Kodik is the ONLY surface regardless of classicKodik's value, and the
+//      toggle button itself is also gated out (`v-if="aePlayerEnabled"`).
+//   3. notReleasedYet === true — an announced/upcoming title with no
+//      resolved sources; AePlayer is replaced by the premiere notice.
+// Any one of these leaves theaterMode CSS applied to a surface with no
+// visible way out (no heading, no toggle, no Esc on touch). aePlayerMounted
+// mirrors the template's real mount condition so the guard actually covers
+// every hole, not just the classicKodik one.
+const aePlayerMounted = computed(() =>
+  !classicKodik.value && aePlayerEnabled && !notReleasedYet.value
+)
+// `immediate: true` (replacing the old two-part watch-plus-setup-time-`if`)
+// is required for case 3: notReleasedYet only resolves after the async
+// anime fetch completes, so a setup-time `if` runs too early to see it — it
+// would only ever observe the pre-fetch `anime.value === null` state. A
+// reactive watch instead re-fires once `anime` loads and notReleasedYet
+// flips, while `immediate: true` still covers cases 1 and 2, which ARE
+// known synchronously at setup (classicKodik/aePlayerEnabled from
+// localStorage/env, no fetch needed).
+watch(aePlayerMounted, (mounted) => {
+  if (!mounted && theaterMode.value) setTheater(false)
+}, { immediate: true })
 
 // Related rail + characters rail.
 const related = useRelatedAnime(anime)

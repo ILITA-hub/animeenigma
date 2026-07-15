@@ -1476,11 +1476,20 @@ onUnmounted(() => {
    fullscreen — which is why the button was pulled in June.
    --header-offset is the navbar clearance token: subtracting it keeps the
    control bar (the player's bottom edge) on screen once the player is scrolled
-   under the fixed navbar. Plain 100vh pushes it 80px below the fold. */
-.pl--theater {
-  border-radius: 0;
-  border: 0;
-  max-height: calc(100vh - var(--header-offset));
+   under the fixed navbar. Plain 100vh pushes it 80px below the fold.
+   Gated to the SAME 1024px breakpoint as the theater button itself
+   (PlayerControlBar.vue: `@media (max-width: 1023px) { .pl-theater-btn {
+   display: none } }`) and as Anime.vue's body.theater-mode rules. This class
+   binds to the `theater` PROP directly, not to body.theater-mode, so without
+   this gate a persisted theaterMode=1 still caps the player's height below
+   1024px (e.g. landscape phone) even though the exit control is hidden there
+   — shrinking the player with no way to undo it. */
+@media (min-width: 1024px) {
+  .pl--theater {
+    border-radius: 0;
+    border: 0;
+    max-height: calc(100vh - var(--header-offset));
+  }
 }
 
 /* iPhone pseudo-fullscreen — fixed takeover (no usable element FS API on iOS).
