@@ -491,6 +491,8 @@
                back is moot (Classic Kodik is the only surface). When AePlayer
                is enabled the toggle above flips back. -->
         </div>
+
+        <PlayerDiscoveryTip v-if="!notReleasedYet" :key="anime.id" />
       </section>
 
       <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
@@ -944,6 +946,7 @@ import type { WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { resolveInitialPlayerPref, CLASSIC_KODIK_KEY } from './animePlayerPrefs'
 import { nextWatchQuery, watchQueryChanged, type WatchUrlState } from './watchUrlSync'
 import ResumePill from '@/components/player/ResumePill.vue'
+import PlayerDiscoveryTip from '@/components/player/PlayerDiscoveryTip.vue'
 import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'

@@ -278,6 +278,20 @@
       "switch": "Classic Kodik",
       "back": "Back to AnimeEnigma player"
     },
+    "discoveryTips": {
+      "label": "Did you know?",
+      "another": "Show another tip",
+      "items": {
+        "downloads": "Install AnimeEnigma as an app to download episodes and watch them offline.",
+        "feedback": "Have an idea or found a bug? Use the Feedback button in the page footer.",
+        "subtitleTiming": "Subtitles early or late? Z shifts them 0.1 s earlier; X shifts them later.",
+        "secretFeature": "What's your favorite secret feature? The footer button picks another one at random.",
+        "rawDub": "RAW keeps the original Japanese audio; DUB uses a localized voice track.",
+        "watchTogether": "Create a private Watch Together room to keep playback and chat in sync for everyone.",
+        "streamReport": "Stream broken? The report button in the player sends the admins useful logs automatically.",
+        "help": "Press ? almost anywhere to open the full list of secret tips and hotkeys."
+      }
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",

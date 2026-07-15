@@ -278,6 +278,20 @@
       "switch": "クラシック Kodik",
       "back": "AnimeEnigma プレーヤーに戻る"
     },
+    "discoveryTips": {
+      "label": "ご存じですか？",
+      "another": "別のヒントを表示",
+      "items": {
+        "downloads": "AnimeEnigmaをアプリとしてインストールすると、エピソードをダウンロードしてオフラインで視聴できます。",
+        "feedback": "アイデアやバグを見つけたら、ページ下部の「フィードバック」ボタンから送れます。",
+        "subtitleTiming": "字幕が早い・遅いときは、Zで0.1秒早め、Xで遅らせられます。",
+        "secretFeature": "お気に入りの秘密機能は？ページ下部のボタンが次の機能をランダムに選びます。",
+        "rawDub": "RAWは日本語のオリジナル音声、DUBはローカライズされた吹替です。",
+        "watchTogether": "プライベートな同時視聴ルームを作ると、全員の再生とチャットが同期します。",
+        "streamReport": "配信が壊れているときは、プレイヤーの報告ボタンから有用なログを管理者へ自動送信できます。",
+        "help": "サイトのほぼどこでも ? を押すと、秘密のヒントとショートカットの一覧が開きます。"
+      }
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",
