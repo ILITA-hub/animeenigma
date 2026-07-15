@@ -890,10 +890,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onUnmounted, defineAsyncComponent, nextTick } from 'vue'
+import { ref, watch, defineAsyncComponent } from 'vue'
 import { Star, Clock, Play, Check, Plus, ChevronDown, Trash2, RefreshCw, Eye, EyeOff, Pencil, Calendar, MessageSquare, EllipsisVertical } from 'lucide-vue-next'
-import { useRoute, useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Avatar, Badge, Button, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
@@ -901,18 +899,30 @@ import { GenreChip, PosterCard, PosterImage, AnimeContextMenu } from '@/componen
 import ReviewReactions from '@/components/anime/ReviewReactions.vue'
 import CharacterCard from '@/components/anime/CharacterCard.vue'
 import Carousel from '@/components/carousel/Carousel.vue'
-import { useWatchPreferences } from '@/composables/useWatchPreferences'
-import { useWatchState } from '@/composables/useWatchState'
-import type { WatchCta } from '@/composables/watchState'
 import { useContextMenu } from '@/composables/useContextMenu'
-import { useSiteRatings } from '@/composables/useSiteRatings'
-import { useUserTimezone } from '@/composables/useUserTimezone'
-import { wallClockDate, formatUtcOffset } from '@/composables/schedule/timezone'
-import { fromCatalogAnime } from '@/utils/toCardModel'
 import { useCharacters } from '@/composables/useCharacters'
-import type { AnimeCardModel } from '@/types/card'
 import type { CharacterCardModel } from '@/types/character'
-import type { WatchCombo } from '@/types/preference'
+import ResumePill from '@/components/player/ResumePill.vue'
+import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
+import Tabs from '@/components/ui/Tabs.vue'
+import { getImageUrl } from '@/composables/useImageProxy'
+import { runeLen } from '@/composables/anime/animeFormatters'
+// Page-scoped composables — the <script setup> concerns of this view live in
+// src/composables/animePage/* (one file per concern); this component keeps the
+// template, the styles, and the composition wiring.
+import type { AnimeWithExtras, RelatedAnime } from '@/composables/animePage/types'
+import { useTheaterMode } from '@/composables/animePage/useTheaterMode'
+import { useAnimeDisplay } from '@/composables/animePage/useAnimeDisplay'
+import { useAnimeListStatus } from '@/composables/animePage/useAnimeListStatus'
+import { useAnimeAdmin } from '@/composables/animePage/useAnimeAdmin'
+import { useAnimeDeepLinks } from '@/composables/animePage/useAnimeDeepLinks'
+import { useAnimeSocial } from '@/composables/animePage/useAnimeSocial'
+import { useAnimeWatchFlow } from '@/composables/animePage/useAnimeWatchFlow'
+import { usePlayerSurface } from '@/composables/animePage/usePlayerSurface'
+import { useRelatedAnime } from '@/composables/animePage/useRelatedAnime'
+import { useLazyAnimeSections } from '@/composables/animePage/useLazyAnimeSections'
+import { useAnimeComments } from '@/composables/animePage/useAnimeComments'
+import { useAnimeDataLoader } from '@/composables/animePage/useAnimeDataLoader'
 
 // Plan B survivors: KodikPlayer (the iframe "Classic Kodik" fallback) and
 // AePlayer (the default). The other six players (KodikAdFree / AnimeLib /
@@ -939,109 +949,12 @@ const aePlayerEnabled = import.meta.env.VITE_AE_PLAYER_ENABLED !== 'false'
 // the watch-together api client + types + toast composable transitively, paid
 // only on first render (i.e. when a logged-in user has activated the player).
 const InviteButton = defineAsyncComponent(() => import('@/components/watch-together/InviteButton.vue'))
-import type { PlayerKind } from '@/types/watch-together'
-import type { WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
-import { resolveInitialPlayerPref, CLASSIC_KODIK_KEY } from './animePlayerPrefs'
-import { nextWatchQuery, watchQueryChanged, type WatchUrlState } from './watchUrlSync'
-import ResumePill from '@/components/player/ResumePill.vue'
-import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
-import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
-import Tabs from '@/components/ui/Tabs.vue'
-import { useWatchlistStore } from '@/stores/watchlist'
-import { useViewerContextStore, type ViewerContextData } from '@/stores/viewerContext'
-import { useToast } from '@/composables/useToast'
-import { useConfirm } from '@/composables/useConfirm'
-import { parseDescription } from '@/utils/description-parser'
-import { getImageUrl } from '@/composables/useImageProxy'
-import {
-  runeLen,
-  formatReviewStats as formatReviewStatsPure,
-  isReviewFlagged as isReviewFlaggedPure,
-  formatEpisodeCount as formatEpisodeCountPure,
-  formatCount as formatCountPure,
-} from '@/composables/anime/animeFormatters'
 
-interface AnimeWithExtras {
-  japaneseTitle?: string
-  type?: string
-  hidden?: boolean
-  shikimoriId?: string
-}
-
-interface RelatedAnime {
-  id: string
-  title: string
-  name?: string
-  nameRu?: string
-  coverImage: string
-  rating?: number
-  releaseYear?: number
-  episodes?: number
-  genres?: string[]
-  relationLabel?: string
-}
-
-interface Review {
-  id: string
-  user_id: string
-  anime_id: string
-  username: string
-  // Author's CURRENT avatar (read-time join in the player service, not
-  // snapshotted). Absent → Avatar primitive falls back to initials.
-  user_avatar?: string
-  score: number
-  review_text: string
-  created_at: string
-  // Steam-style review context (2026-05-21). Live values from anime_list
-  // row — NOT snapshotted at review time. `anime` carries episodes_count
-  // for the "watched / total" rendering; backend preloads it.
-  status?: string
-  episodes?: number
-  // True when the reviewer is on a rewatch — renders a "🔁 On rewatch"
-  // segment after the watch stats (repo-todo 19:00:01).
-  is_rewatching?: boolean
-  anime?: {
-    episodes_count?: number
-  }
-  // Emoji reactions (AUTO-408). `reactions` carries per-emoji counts +
-  // reacted_by_me; `my_reactions` is the viewer's reacted-emoji subset.
-  reactions?: { emoji: string; count: number; reacted_by_me: boolean; users?: string[] }[]
-  my_reactions?: string[]
-}
-
-interface Comment {
-  id: string
-  user_id: string
-  anime_id: string
-  username: string
-  // Author's CURRENT avatar — same read-time join as reviews/activity feed.
-  user_avatar?: string
-  body: string
-  created_at: string
-  updated_at: string
-}
-
-const UGC_ALLOWED = ['reviews', 'comments'] as const
-type UgcTab = typeof UGC_ALLOWED[number]
-
-interface AnimeRating {
-  anime_id: string
-  average_score: number
-  total_reviews: number
-}
-
-const route = useRoute()
-const router = useRouter()
-const { t, locale } = useI18n()
 const authStore = useAuthStore()
-const watchlistStore = useWatchlistStore()
-const viewerCtxStore = useViewerContextStore()
-const toast = useToast()
-const { confirm } = useConfirm()
 const { anime, loading, error, fetchAnime } = useAnime()
 const { contextMenu, openAtElement: openContextMenuAt } = useContextMenu()
 
-let loadGeneration = 0
+// --- Page-local UI state ----------------------------------------------------
 const synopsisExpanded = ref(false)
 const posterZoomOpen = ref(false)
 // Latch (never unset): keeps the lightbox mounted after first use so the
@@ -1051,1238 +964,143 @@ function openPosterZoom() {
   posterZoomEverOpened.value = true
   posterZoomOpen.value = true
 }
-const currentListStatus = ref<string | null>(null)
-const showStatusDropdown = ref(false)
-const dropdownRef = ref<HTMLElement | null>(null)
-const playerSectionRef = ref<HTMLElement | null>(null)
-const playerActivated = ref(false)
 
-async function activatePlayer() {
-  playerActivated.value = true
-  await nextTick()
-  playerSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
+// Phase 11 / UX-23 — Theater Mode (body class + ESC + localStorage persistence).
+const { theaterMode, setTheater } = useTheaterMode()
 
-// --- Watched-aware play button + tracked rewatch (design 2026-06-05) -------
-// The verb comes from actual episode progress; list status only disambiguates
-// the fully-watched terminal: not-completed → mark-watched, completed → rewatch.
-const currentRewatchCount = ref(0)
-const rewatchPending = ref(false)
+// Locale-bound formatters + derived metadata computeds.
+const {
+  statusVariant, parsedDescription, isHentai, notReleasedYet, premiereDate,
+  formatDate, formatNextEpisode, formatEpisodeCount, formatCount,
+  formatReviewStats, isReviewFlagged,
+} = useAnimeDisplay(anime)
 
-const watchCta = computed(() => watchState.cta.value)
+// Watchlist status dropdown + rewatch-count stepper (click-outside inside).
+const listStatus = useAnimeListStatus(anime)
+const {
+  currentListStatus, currentRewatchCount, showStatusDropdown, dropdownRef,
+  statusLabels, setRewatchCount, setListStatus, removeFromList,
+} = listStatus
 
-const watchCtaLabel = computed(() => t(watchCta.value.labelKey, watchCta.value.labelParams ?? {}))
+// Admin kebab (Refresh / Hide / Shikimori ID).
+const {
+  refreshing, isHidden, showShikimoriEdit, showAdminMenu, editShikimoriId,
+  savingShikimoriId, fetchHiddenStatus, toggleHidden, saveShikimoriId, refreshAnimeData,
+} = useAnimeAdmin(anime, fetchAnime)
 
-// Plan B — the click-to-load placeholder (and its degraded `placeholderCta`)
-// is retired with the legacy player chain; AePlayer mounts directly with its
-// own loading skeleton, so the page-level placeholder is no longer needed.
+// Deep-link query-param hints (?episode/?provider/?team/?audio/?lang/?t).
+const { queryEpisode, queryProvider, queryTeam, queryAudio, queryLang, queryTimestamp } =
+  useAnimeDeepLinks(anime)
 
-// startRewatchFlow — server-side cycle reset (status→watching, episodes=0,
-// watch_progress reset, is_rewatching=true; the count bumps on the new finale),
-// then re-init the resume machine and mount the player at ep. 1.
-async function startRewatchFlow() {
-  if (!anime.value || rewatchPending.value) return
-  rewatchPending.value = true
-  const animeId = anime.value.id
-  try {
-    await userApi.startRewatch(animeId)
-    currentListStatus.value = 'watching'
-    resumeOverrideEpisode.value = 1
-    await watchState.init()
-    void viewerCtxStore.load(animeId, true).then((ctx) => { if (ctx) applyViewerContext(ctx) })
-    void activatePlayer()
-  } catch (err) {
-    console.error('Failed to start rewatch:', err)
-    toast.push(t('watchlist.errors.updateFailed'))
-  } finally {
-    rewatchPending.value = false
-  }
-}
+// Reviews feed + own review + site rating + watchers count + viewer-context apply.
+const social = useAnimeSocial(anime, currentListStatus, currentRewatchCount)
+const {
+  reviews, myReview, siteRating, watchersCount, reviewSubmitting, reviewForm,
+  reviewsFetched, fetchReviewsList, submitReview, deleteMyReview,
+} = social
 
-async function dispatchWatchCta(cta: WatchCta) {
-  if (cta.action === 'mark-watched') {
-    await setListStatus('completed')
-    return
-  }
-  if (cta.action === 'rewatch') {
-    await startRewatchFlow()
-    return
-  }
-  if (cta.action === 'start-from-1') {
-    resumeOverrideEpisode.value = cta.startEpisode
-  }
-  void activatePlayer()
-}
-
-const onWatchCtaClick = () => dispatchWatchCta(watchCta.value)
-
-// Manual rewatch-count stepper (row inside the status dropdown menu).
-// Optimistic; the PUT carries the current status so the entry isn't moved.
-async function setRewatchCount(n: number) {
-  if (!anime.value || !currentListStatus.value) return
-  const prior = currentRewatchCount.value
-  currentRewatchCount.value = n
-  try {
-    await userApi.updateWatchlistEntry({
-      anime_id: anime.value.id,
-      status: currentListStatus.value,
-      rewatch_count: n,
-    })
-  } catch (err) {
-    console.error('Failed to update rewatch count:', err)
-    currentRewatchCount.value = prior
-    toast.push(t('watchlist.errors.updateFailed'))
-  }
-}
-
-
-// Phase 11 / UX-23 — Theater Mode.
-// State persists via localStorage so a reload keeps the user's choice.
-// `body.theater-mode` drives the CSS rules at the bottom of this file that
-// hide .navbar-root + .non-player-content and widen the player wrapper.
-// MANDATORY cleanup: onBeforeUnmount removes the body class so leaving
-// /anime/:id never strands the rest of the app with a hidden navbar.
-const theaterMode = ref<boolean>(
-  typeof localStorage !== 'undefined' && localStorage.getItem('theaterMode') === '1',
-)
-
-function setTheater(on: boolean) {
-  theaterMode.value = on
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('theaterMode', on ? '1' : '0')
-  }
-}
-
-function applyBodyTheaterClass(on: boolean) {
-  if (typeof document === 'undefined') return
-  document.body.classList.toggle('theater-mode', on)
-}
-
-function onTheaterEscape(e: KeyboardEvent) {
-  if (e.key === 'Escape' && theaterMode.value) {
-    setTheater(false)
-  }
-}
-const relatedAnime = ref<RelatedAnime[]>([])
-const refreshing = ref(false)
-const isHidden = ref(false)
-const showShikimoriEdit = ref(false)
-// Admin kebab (Refresh / Hide / Shikimori ID) — admin-only, grouped out of the
-// user action row. Controlled open state for the DropdownMenu #trigger.
-const showAdminMenu = ref(false)
-const editShikimoriId = ref('')
-const savingShikimoriId = ref(false)
-// Plan B — AePlayer is the DEFAULT mounted player; "Classic Kodik" (the iframe
-// KodikPlayer) is the opt-in fallback. The legacy per-language tabs + provider
-// sub-tabs are retired (AePlayer's own SourcePanel serves every surviving
-// source: ae / kodik-HLS / EN scraper chain / raw / 18anime). One boolean now
-// chooses the surface, normalized from the old localStorage shape on mount.
-const _playerPref = resolveInitialPlayerPref({
-  [CLASSIC_KODIK_KEY]: localStorage.getItem(CLASSIC_KODIK_KEY),
-  unified_player_selected: localStorage.getItem('unified_player_selected'),
-  preferred_video_provider: localStorage.getItem('preferred_video_provider'),
+// Unified watch state + CTA + player activation + rewatch flow.
+const watchFlow = useAnimeWatchFlow({
+  anime,
+  currentListStatus,
+  formatNextEpisode,
+  queryEpisode,
+  setListStatus,
+  applyViewerContext: social.applyViewerContext,
 })
-const classicKodik = ref(_playerPref.classicKodik)
-watch(classicKodik, (on) => {
-  localStorage.setItem(CLASSIC_KODIK_KEY, on ? 'true' : 'false')
+const {
+  playerSectionRef, resumeStartEpisode, resumeBanner, watchCta, watchCtaLabel,
+  onWatchCtaClick,
+} = watchFlow
+
+// Player surface: Classic Kodik toggle, preference resolution, WT seed, URL sync.
+const {
+  classicKodik, resolvedCombo, aeWtSeed, wtInvitePayload, onUrlSync,
+  initPreferences, handleAvailableTranslations,
+} = usePlayerSurface({
+  queryProvider,
+  resumeStartEpisode,
+  resumeLoadedEpisodes: watchFlow.resumeLoadedEpisodes,
 })
 
-// Unified watch state — single source of truth for last-watched, start
-// episode, resume banner, and CTA verb (authed server watch_progress + anon
-// localStorage, resolved inside the composable). Inputs are reactive refs that
-// it re-evaluates as anime data + watch_progress arrives; Anime.vue only renders.
-const resumeAnimeId = computed(() => anime.value?.id ?? '')
-const resumeTotal = computed(() => anime.value?.totalEpisodes ?? 0)
-const resumeAired = computed(() => anime.value?.episodesAired ?? 0)
-const resumeStatus = computed(() => anime.value?.status ?? '')
-const resumeNextAt = computed(() => anime.value?.nextEpisodeAt ?? undefined)
-const resumeAuth = computed(() => authStore.isAuthenticated)
-// Highest episode actually loaded into our sources, surfaced by the active
-// player via `available-translations` (max episodes_count across teams). This
-// is the ground truth for availability and overrides Shikimori's lagging
-// `episodesAired` in the resume state — so a freshly-uploaded episode is never
-// mislabeled "not available yet". 0 until the player emits.
-const resumeLoadedEpisodes = ref(0)
-const watchState = useWatchState({
-  animeId: resumeAnimeId,
-  totalEpisodes: resumeTotal,
-  episodesAired: resumeAired,
-  status: resumeStatus,
-  nextEpisodeAt: resumeNextAt,
-  loadedEpisodes: resumeLoadedEpisodes,
-  listStatus: currentListStatus,
-  isAuthenticated: resumeAuth,
-  formatEta: (iso: string) => formatNextEpisode(iso),
-})
+// Related rail + characters rail.
+const related = useRelatedAnime(anime)
+const { relatedAnime, relatedCardModel } = related
+const { characters, fetchCharacters } = useCharacters()
+const charactersFetched = ref(false)
 
-// User-driven override of the state machine's start episode. Set when the
-// user clicks "Rewatch from ep. 1" on the finished banner; otherwise null.
-const resumeOverrideEpisode = ref<number | null>(null)
-
-// Phase 8 (CR-01) — explicit deep-link hint from the Continue-Watching row.
-// `/anime/{id}?episode=N` is the contract used by ContinueWatchingRow.vue;
-// without this read, the link silently falls back to the resume-state-machine
-// startEpisode (which usually matches, but diverges whenever the server-side
-// resume state has advanced past the row's episode_number — e.g. when the
-// user just finished E5 but is being shown an older "in-progress" E4 row).
-//
-// The query is a HINT, not a hard override: the manual "Rewatch from ep. 1"
-// button (resumeOverrideEpisode) still wins above this. The episode is
-// clamped to [1, totalEpisodes] when totalEpisodes is known; otherwise the
-// raw value is accepted (the player components defend their own bounds).
-const queryEpisode = computed<number | undefined>(() => {
-  const v = route.query.episode
-  const s = Array.isArray(v) ? v[0] : v
-  if (typeof s !== 'string' || s === '') return undefined
-  const n = parseInt(s, 10)
-  if (!Number.isFinite(n) || n <= 0) return undefined
-  const total = anime.value?.totalEpisodes ?? 0
-  if (total > 0 && n > total) return total
-  return n
-})
-
-// Notification deep-link — `?provider=` is an aePlayer source id, `?team=` is a
-// team TITLE. Both are HINTS preselected on aePlayer (see AePlayer initialProvider).
-// Single non-empty string query param (first value if repeated), else undefined.
-function queryString(key: string): string | undefined {
-  const v = route.query[key]
-  const s = Array.isArray(v) ? v[0] : v
-  return typeof s === 'string' && s !== '' ? s : undefined
-}
-const queryProvider = computed(() => queryString('provider'))
-const queryTeam = computed(() => queryString('team'))
-const queryAudio = computed(() => queryString('audio'))
-const queryLang = computed(() => queryString('lang'))
-
-// Shared-link playback position (`?t=` seconds) — the Share button in the player
-// encodes the exact combo + episode + timestamp. Non-negative integer only.
-const queryTimestamp = computed<number | undefined>(() => {
-  const s = queryString('t')
-  if (s === undefined) return undefined
-  const n = parseInt(s, 10)
-  return Number.isFinite(n) && n > 0 ? n : undefined
-})
-
-// A `?provider=` deep-link always opens aePlayer (the param speaks aePlayer's
-// source vocabulary), so make sure we're not on the Classic Kodik fallback.
-if (queryProvider.value) classicKodik.value = false
-
-// Single start-episode authority: explicit overrides win, else the unified
-// watchState. Manual override (rewatch click) > deep-link query param >
-// watchState.startEpisode. Always a number >= 1 — never episodesAired.
-const resumeStartEpisode = computed<number>(() => {
-  if (resumeOverrideEpisode.value && resumeOverrideEpisode.value > 0) {
-    return resumeOverrideEpisode.value
-  }
-  if (queryEpisode.value !== undefined) {
-    return queryEpisode.value
-  }
-  return watchState.startEpisode.value
-})
-
-// Phase 8 (CR-01) — auto-activate the player when arriving with ?episode=N.
-// The deep link's intent is "land me on episode N ready to watch", so we
-// expand the click-to-load placeholder automatically. Also re-mount when the
-// query flips between values without a full route change (e.g. user clicks
-// two different Continue-Watching cards for the same anime in succession).
-watch(
-  () => queryEpisode.value,
-  (n) => {
-    if (n !== undefined && !playerActivated.value) {
-      // Defer to onMounted's anime-load path so the player has its data.
-      // activatePlayer() is idempotent; calling it here is safe even before
-      // the anime resolves because the template gates on `v-if="anime"`.
-      activatePlayer()
-    }
-  },
-  { immediate: true },
-)
-
-// Resume banner passthrough — the unified watchState owns banner kind /
-// episode / ETA. Player slots bind it directly; ResumePill decides per-kind
-// visibility, AePlayer overlays only the next-unavailable family.
-const resumeBanner = computed(() => watchState.banner.value)
-
-// Watch preference resolution
-const preferenceState = ref<{
-  resolvedCombo: WatchCombo | null
-  resolve: (available: WatchCombo[]) => Promise<void>
-} | null>(null)
-
-const resolvedCombo = computed(() => preferenceState.value?.resolvedCombo ?? null)
-
-// Watch-Together create seed surfaced by AePlayer (live combo + episode). When
-// the aePlayer surface is the active one at room-create time, this drives the
-// Invite button to create the room AS aeplayer seeded with that exact combo.
-// Null until AePlayer has a resolved source (or when aePlayer isn't selected).
-const aeWtSeed = ref<WtCreateSeed | null>(null)
-
-// Two-way URL sync — DONE RIGHT (reintroduced after the 2026-06-21 revert).
-// AePlayer emits `url-sync` with the live source/team/episode; provider/team are
-// EMPTY for an auto/smart-default selection and populated only for a user-pinned
-// source (manual pick or `?provider=` deep-link). We mirror exactly that into
-// `?provider/?team/?episode` so the address bar is shareable + bookmarkable —
-// WITHOUT the old bug: because the smart default emits no provider, a plain
-// reload writes no `?provider` and re-runs the deterministic BEST default (the
-// product rule a previously-watched source must not override). The read path
-// (queryProvider/queryTeam/queryEpisode → :initial-* props) is one-shot at
-// mount, so writing here never re-triggers it. router.replace (not push) keeps
-// history clean; we only write on a real diff. AePlayer suppresses the emit
-// inside WT rooms, and Anime.vue is never a room — so no churn there.
-function onUrlSync(s: WatchUrlState) {
-  const next = nextWatchQuery(route.query, s)
-  if (watchQueryChanged(route.query, next)) {
-    void router.replace({ query: next }).catch(() => {})
-  }
-}
-
-// The Invite button's create-room payload. WatchTogether is aePlayer-only
-// (Kodik retired from WT 2026-06-19 — aePlayer plays Kodik content internally).
-// When the player has resolved a combo, seed the room with it; otherwise create
-// a token-less aeplayer room (the room's player resolves a BEST source in-room
-// and broadcasts it to joiners), so the invite works before the player resolves.
-const wtInvitePayload = computed<{ player: PlayerKind; translationId: string; episodeId: string }>(() => {
-  if (aeWtSeed.value) {
-    return {
-      player: aeWtSeed.value.player,
-      translationId: aeWtSeed.value.translation_id,
-      episodeId: aeWtSeed.value.episode_id,
-    }
-  }
-  return {
-    player: 'aeplayer' as PlayerKind,
-    translationId: '',
-    episodeId: String(resumeStartEpisode.value),
-  }
-})
-
-// Plan B — the per-provider override tracker (useOverrideTracker) is retired
-// along with the provider sub-tabs: there is no longer a user-facing player
-// switch on this page (AePlayer owns source selection inside its own
-// SourcePanel; the only page-level toggle is the binary Classic Kodik
-// fallback). The resolved coarse combo is still resolved below purely to feed
-// KodikPlayer's :preferred-combo (the WT invite payload now uses the aePlayer seed).
-
-const initPreferences = (animeId: string, tier1Combo?: ViewerContextData['combo']) => {
-  const pref = useWatchPreferences(animeId, { tier1Combo })
-  preferenceState.value = {
-    resolvedCombo: pref.resolvedCombo.value,
-    resolve: async (available: WatchCombo[]) => {
-      await pref.resolve(available)
-      if (preferenceState.value) {
-        preferenceState.value.resolvedCombo = pref.resolvedCombo.value
-      }
-    }
-  }
-}
-
-const handleAvailableTranslations = (combos: WatchCombo[]) => {
-  if (preferenceState.value) {
-    preferenceState.value.resolve(combos)
-  }
-  // Feed the real provider episode count into the resume state machine so a
-  // freshly-aired-but-already-uploaded episode is classified 'watching', not a
-  // false "not loaded yet" (Shikimori episodesAired lags reality by hours).
-  // Take the max across teams — if ANY team has ep N, it's watchable.
-  const maxLoaded = combos.reduce((m, c) => Math.max(m, c.episodes_count ?? 0), 0)
-  if (maxLoaded > resumeLoadedEpisodes.value) resumeLoadedEpisodes.value = maxLoaded
-}
-
-// Reviews
-const reviews = ref<Review[]>([])
-const myReview = ref<Review | null>(null)
-const siteRating = ref<AnimeRating | null>(null)
-// Phase 14 / UX-28 — soft social-proof watchers count. Public endpoint,
-// no auth. Render badge only when count >= 5 (avoids embarrassingly empty
-// signals on niche or fresh titles).
-const watchersCount = ref(0)
-const reviewSubmitting = ref(false)
-const reviewForm = reactive({
-  score: 0,
-  text: '',
-})
-
-// Comments (Plan 1-6, SOCIAL-06)
-// UGC tab state, URL-persisted via ?ugc=reviews|comments via two watchers.
-// Default = 'reviews'. Unknown values fall back to 'reviews' synchronously
-// (initial state set BEFORE first render, no flicker on deep links).
-const _initialUgc = (route.query.ugc as string | undefined)
-const ugcTab = ref<UgcTab>(
-  _initialUgc && (UGC_ALLOWED as readonly string[]).includes(_initialUgc)
-    ? (_initialUgc as UgcTab)
-    : 'reviews'
-)
-const comments = ref<Comment[]>([])
-const commentsHasMore = ref(false)
-const commentsNextCursor = ref<string>('')
-const commentsLoading = ref(false)
-const commentsLoadingMore = ref(false)
-const commentsError = ref('')
-const commentsFetched = ref(false)
-
-const newCommentBody = ref('')
-const posting = ref(false)
-const postError = ref('')
-
-const editingCommentId = ref<string | null>(null)
-const editingBody = ref('')
-const editError = ref('')
-const editSaving = ref(false)
-const deleteError = ref('')
-
-const statusLabels = computed((): Record<string, string> => ({
-  watching: t('profile.watchlist.watching'),
-  plan_to_watch: t('profile.watchlist.planToWatch'),
-  completed: t('profile.watchlist.completed'),
-  on_hold: t('profile.watchlist.onHold'),
-  dropped: t('profile.watchlist.dropped'),
-}))
-
-const statusVariant = computed(() => {
-  const status = anime.value?.status?.toLowerCase()
-  if (status === 'completed' || status === 'released') return 'success'
-  if (status === 'upcoming' || status === 'announced') return 'warning'
-  return 'primary' // ongoing
-})
-
-const parsedDescription = computed(() =>
-  anime.value?.description ? parseDescription(anime.value.description) : ''
-)
-
-const isHentai = computed(() =>
-  anime.value?.rawGenres?.some(g => g.name === 'Hentai') ?? false
-)
-
-const formatDate = (dateStr: string) => {
-  const date = new Date(dateStr)
-  // REVIEW.md WR-05: respect the i18n locale instead of hardcoding ru-RU.
-  // English / Japanese users previously saw review and comment dates
-  // formatted as Russian (e.g. "13 мая 2026 г."). Map the active vue-i18n
-  // locale to a BCP-47 tag accepted by Intl. The pattern mirrors the
-  // existing formatNextEpisode helper a few lines below.
-  const loc = locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US'
-  return date.toLocaleDateString(loc, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
-// An announced/upcoming title with no resolved sources hasn't aired yet —
-// so "no available videos" is misleading. Show a premiere notice instead.
-// hasVideo guards the rare case of an announced title with an early leak.
-const notReleasedYet = computed(() => {
-  const s = anime.value?.status?.toLowerCase()
-  return (s === 'announced' || s === 'upcoming') && !anime.value?.hasVideo
-})
-const premiereDate = computed(() =>
-  anime.value?.airedOn ? formatDate(anime.value.airedOn) : ''
-)
-
-const formatReviewStats = (review: Review): string => formatReviewStatsPure(review, t)
-
-const isReviewFlagged = (review: Review): boolean => isReviewFlaggedPure(review)
-
-const { timezone: userTimezone } = useUserTimezone()
-
-const formatNextEpisode = (dateStr: string) => {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = date.getTime() - now.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-  const tz = userTimezone.value
-
-  const timeStr = date.toLocaleTimeString('ru-RU', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: tz
-  })
-
-  if (diffDays === 0) return t('anime.todayAt', { time: timeStr })
-  if (diffDays === 1) return t('anime.tomorrowAt', { time: timeStr })
-  if (diffDays > 1 && diffDays < 7) {
-    const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-    return t('anime.dayAtTime', { day: t(`schedule.daysWhen.${dayKeys[wallClockDate(date, tz).getDay()]}`), time: timeStr })
-  }
-  return t('anime.timeAt', { time: date.toLocaleDateString(locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: tz }), tz: formatUtcOffset(tz) })
-}
-
-const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: number; status?: string }) =>
-  formatEpisodeCountPure(anime, t)
-
-// Phase 14 / UX-28 — render compact watchers count ("1.2K", "12K") via the
-// platform's Intl.NumberFormat. Locale-aware: passes the active i18n locale
-// so the grouping/notation matches the user's language settings.
-const formatCount = (n: number): string => formatCountPure(n, locale.value)
-
-// Phase 14 / UX-28 — soft social-proof fetch. Public endpoint, no auth.
-// Errors are swallowed: missing badge is preferable to a noisy console for
-// a non-critical UI signal. Endpoint returns { count: number } (or wrapped
-// in { data: ... } depending on httputil response shape).
-const fetchWatchersCount = async () => {
-  if (!anime.value) return
-  try {
-    const response = await animeApi.getWatchersCount(anime.value.id)
-    const payload = (response.data as { data?: { count?: number }; count?: number } | undefined) ?? {}
-    const raw = payload.data ? payload.data.count : payload.count
-    watchersCount.value = typeof raw === 'number' && raw >= 0 ? raw : 0
-  } catch {
-    watchersCount.value = 0
-  }
-}
-
-const fetchWatchlistStatus = async () => {
-  if (!authStore.isAuthenticated || !anime.value) return
-
-  try {
-    await watchlistStore.fetchWatchlist()
-    const entries = watchlistStore.entries
-
-    // Direct UUID match
-    let entry = entries.find((e) => e.anime_id === anime.value?.id)
-
-    // If not found, check for mal_XXXXX entries that match this anime's MAL ID
-    if (!entry && anime.value.malId) {
-      const malAnimeId = `mal_${anime.value.malId}`
-      entry = entries.find((e) => e.anime_id === malAnimeId)
-
-      if (entry) {
-        // Auto-migrate from mal_XXXXX to real UUID
-        try {
-          await userApi.migrateListEntry(
-            malAnimeId,
-            anime.value.id
-          )
-        } catch (e) {
-          console.warn('Auto-migration of MAL entry failed:', e)
-        }
-      }
-    }
-
-    if (entry) {
-      currentListStatus.value = entry.status
-      currentRewatchCount.value = (entry as { rewatch_count?: number }).rewatch_count ?? 0
-    } else {
-      currentListStatus.value = null
-      currentRewatchCount.value = 0
-    }
-  } catch (err) {
-    console.error('Failed to fetch watchlist status:', err)
-  }
-}
-
-const fetchHiddenStatus = () => {
-  // Hidden status comes from the anime object itself
-  if (anime.value) {
-    isHidden.value = (anime.value as AnimeWithExtras).hidden || false
-    editShikimoriId.value = (anime.value as AnimeWithExtras).shikimoriId || ''
-  }
-}
-
-const toggleHidden = async () => {
-  if (!anime.value || !authStore.isAdmin) return
-
-  try {
-    if (isHidden.value) {
-      await adminApi.unhideAnime(anime.value.id)
-      isHidden.value = false
-    } else {
-      await adminApi.hideAnime(anime.value.id)
-      isHidden.value = true
-    }
-  } catch (err) {
-    console.error('Failed to toggle hidden status:', err)
-  }
-}
-
-const saveShikimoriId = async () => {
-  if (!anime.value || !authStore.isAdmin || savingShikimoriId.value) return
-
-  savingShikimoriId.value = true
-  try {
-    await adminApi.updateShikimoriId(anime.value.id, editShikimoriId.value)
-    showShikimoriEdit.value = false
-    // Refresh anime data to get updated translations
-    await fetchAnime(anime.value.id)
-  } catch (err) {
-    console.error('Failed to update Shikimori ID:', err)
-  } finally {
-    savingShikimoriId.value = false
-  }
-}
-
-// applyViewerContext — populate the page's social/user state from the
-// aggregate viewer-context payload (page-fetch optimization 2026-06-11).
-// Replaces the separate rating / watchers-count / my-review / watchlist-status
-// fetches on page load and after review/list mutations.
-const applyViewerContext = (ctx: ViewerContextData) => {
-  watchersCount.value = typeof ctx.watchers_count === 'number' && ctx.watchers_count >= 0
-    ? ctx.watchers_count
-    : 0
-  siteRating.value = (ctx.rating as AnimeRating | null) ?? null
-  if (authStore.isAuthenticated) {
-    const review = ctx.my_review as Review | null
-    if (review && review.id) {
-      myReview.value = review
-      reviewForm.score = review.score
-      reviewForm.text = review.review_text || ''
-    } else {
-      myReview.value = null
-    }
-    currentListStatus.value = ctx.watchlist_entry?.status ?? null
-    currentRewatchCount.value = ctx.watchlist_entry?.rewatch_count ?? 0
-  }
-}
-
-// fetchReviewsList — the reviews FEED only. Rating / my-review come from the
-// viewer-context aggregate; this stays a separate (heavier) request, fetched
-// lazily when the UGC section scrolls near the viewport.
-const reviewsFetched = ref(false)
-const fetchReviewsList = async () => {
-  if (!anime.value) return
-  reviewsFetched.value = true
-  try {
-    const reviewsResponse = await reviewApi.getAnimeReviews(anime.value.id)
-    reviews.value = reviewsResponse.data?.data || reviewsResponse.data || []
-  } catch (err) {
-    console.error('Failed to fetch reviews:', err)
-  }
-}
-
-// ── Lazy below-the-fold loaders (page-fetch optimization 2026-06-11) ─────────
-// The reviews feed and the related rail render far below the player; fetching
-// them on mount put two requests (plus a ~500ms Shikimori upstream call) on
-// the critical path. One IntersectionObserver with a generous rootMargin
-// fetches each once as the user approaches.
+// Lazy below-the-fold sentinels (template refs) + one IntersectionObserver.
 const ugcSectionEl = ref<HTMLElement | null>(null)
 const relatedSentinelEl = ref<HTMLElement | null>(null)
-const relatedFetched = ref(false)
-const { characters, fetchCharacters } = useCharacters()
 const characterSentinelEl = ref<HTMLElement | null>(null)
-const charactersFetched = ref(false)
-let lazySectionObserver: IntersectionObserver | null = null
-
-function disarmLazySections() {
-  lazySectionObserver?.disconnect()
-  lazySectionObserver = null
-}
-
-function armLazySections() {
-  disarmLazySections()
-  if (typeof IntersectionObserver === 'undefined') {
-    // jsdom / ancient browser — keep the eager behavior.
-    if (!reviewsFetched.value) void fetchReviewsList()
-    if (!relatedFetched.value) {
-      relatedFetched.value = true
-      void fetchRelatedAnime()
-    }
-    if (!charactersFetched.value) {
-      charactersFetched.value = true
-      void fetchCharacters(String(anime.value?.id))
-    }
-    return
-  }
-  lazySectionObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue
-        if (entry.target === ugcSectionEl.value) {
-          if (!reviewsFetched.value) void fetchReviewsList()
-          lazySectionObserver?.unobserve(entry.target)
-        } else if (entry.target === relatedSentinelEl.value) {
-          if (!relatedFetched.value) {
-            relatedFetched.value = true
-            void fetchRelatedAnime()
-          }
-          lazySectionObserver?.unobserve(entry.target)
-        } else if (entry.target === characterSentinelEl.value) {
-          if (!charactersFetched.value) {
-            charactersFetched.value = true
-            void fetchCharacters(String(anime.value?.id))
-          }
-          lazySectionObserver?.unobserve(entry.target)
-        }
+const { armLazySections, disarmLazySections } = useLazyAnimeSections([
+  {
+    el: ugcSectionEl,
+    trigger: () => {
+      if (!reviewsFetched.value) void fetchReviewsList()
+    },
+  },
+  {
+    el: relatedSentinelEl,
+    trigger: () => {
+      if (!related.relatedFetched.value) {
+        related.relatedFetched.value = true
+        void related.fetchRelatedAnime()
       }
     },
-    // Prefetch well before the section enters the viewport so the content is
-    // there by the time the user arrives (and the QuickNav anchor exists).
-    { rootMargin: '1200px 0px' },
-  )
-  if (ugcSectionEl.value) lazySectionObserver.observe(ugcSectionEl.value)
-  if (relatedSentinelEl.value) lazySectionObserver.observe(relatedSentinelEl.value)
-  if (characterSentinelEl.value) lazySectionObserver.observe(characterSentinelEl.value)
-}
-
-onBeforeUnmount(disarmLazySections)
-
-// Legacy full path — used only when the viewer-context aggregate failed
-// (older backend / transient error): falls back to the historical
-// per-endpoint fetches.
-const fetchReviews = async () => {
-  if (!anime.value) return
-
-  reviewsFetched.value = true
-  try {
-    // Fetch reviews
-    const reviewsResponse = await reviewApi.getAnimeReviews(anime.value.id)
-    reviews.value = reviewsResponse.data?.data || reviewsResponse.data || []
-
-    // Fetch rating
-    const ratingResponse = await reviewApi.getAnimeRating(anime.value.id)
-    siteRating.value = ratingResponse.data?.data || ratingResponse.data
-
-    // Fetch user's review if authenticated
-    if (authStore.isAuthenticated) {
-      try {
-        const myReviewResponse = await reviewApi.getMyReview(anime.value.id)
-        const review = myReviewResponse.data?.data || myReviewResponse.data
-        if (review && review.id) {
-          myReview.value = review
-          reviewForm.score = review.score
-          reviewForm.text = review.review_text || ''
-        }
-      } catch {
-        // No review from this user
+  },
+  {
+    el: characterSentinelEl,
+    trigger: () => {
+      if (!charactersFetched.value) {
+        charactersFetched.value = true
+        void fetchCharacters(String(anime.value?.id))
       }
-    }
-  } catch (err) {
-    console.error('Failed to fetch reviews:', err)
-  }
-}
+    },
+  },
+])
 
-// refreshSocial — post-mutation refresh: one forced viewer-context reload
-// (rating + my-review + watchlist status + watchers) plus the reviews feed.
-const refreshSocial = async () => {
-  if (!anime.value) return
-  const [ctx] = await Promise.all([
-    viewerCtxStore.load(anime.value.id, true),
-    fetchReviewsList(),
-  ])
-  if (ctx) applyViewerContext(ctx)
-}
+// Comments + UGC tab (URL-persisted via ?ugc=).
+const commentsUgc = useAnimeComments(anime)
+const {
+  ugcTab, comments, commentsHasMore, commentsLoading, commentsLoadingMore,
+  commentsError, commentsFetched, newCommentBody, posting, postError,
+  editingCommentId, editingBody, editError, editSaving, deleteError,
+  fetchComments, loadMoreComments, postComment, startEditComment,
+  cancelEditComment, saveEditComment, deleteCommentItem,
+} = commentsUgc
 
-const submitReview = async () => {
-  if (!anime.value || reviewForm.score === 0) return
-
-  reviewSubmitting.value = true
-  try {
-    await reviewApi.createReview(
-      anime.value.id,
-      reviewForm.score,
-      reviewForm.text
-    )
-    await refreshSocial()
-  } catch (err) {
-    console.error('Failed to submit review:', err)
-  } finally {
-    reviewSubmitting.value = false
-  }
-}
-
-const deleteMyReview = async () => {
-  if (!anime.value) return
-
-  try {
-    await reviewApi.deleteReview(anime.value.id)
-    myReview.value = null
-    reviewForm.score = 0
-    reviewForm.text = ''
-    await refreshSocial()
-  } catch (err) {
-    console.error('Failed to delete review:', err)
-  }
-}
-
-// --- Comments (SOCIAL-06) ---
-
-const fetchComments = async () => {
-  if (!anime.value) return
-  commentsLoading.value = true
-  commentsError.value = ''
-  try {
-    const resp = await commentApi.getAnimeComments(anime.value.id, { limit: 50 })
-    const data = resp.data?.data || resp.data || {}
-    comments.value = data.comments || []
-    commentsHasMore.value = !!data.has_more
-    commentsNextCursor.value = data.next_cursor || ''
-    commentsFetched.value = true
-  } catch (err) {
-    console.error('Failed to fetch comments:', err)
-    commentsError.value = t('anime.ugc.loadFailed')
-  } finally {
-    commentsLoading.value = false
-  }
-}
-
-const loadMoreComments = async () => {
-  if (!anime.value || !commentsHasMore.value || commentsLoadingMore.value) return
-  commentsLoadingMore.value = true
-  commentsError.value = ''
-  try {
-    const resp = await commentApi.getAnimeComments(anime.value.id, {
-      limit: 50,
-      cursor: commentsNextCursor.value,
-    })
-    const data = resp.data?.data || resp.data || {}
-    const newPage: Comment[] = data.comments || []
-    // Dedup by id in case the cursor reaches an already-loaded boundary.
-    const known = new Set(comments.value.map((c) => c.id))
-    for (const c of newPage) {
-      if (!known.has(c.id)) comments.value.push(c)
-    }
-    commentsHasMore.value = !!data.has_more
-    commentsNextCursor.value = data.next_cursor || ''
-  } catch (err) {
-    console.error('Failed to load more comments:', err)
-    commentsError.value = t('anime.ugc.loadMoreFailed')
-  } finally {
-    commentsLoadingMore.value = false
-  }
-}
-
-interface ApiError {
-  response?: { status?: number; data?: { error?: string; message?: string } }
-}
-
-const postComment = async () => {
-  if (!anime.value) return
-  const trimmed = newCommentBody.value.trim()
-  if (!trimmed) {
-    postError.value = t('anime.ugc.bodyEmpty')
-    return
-  }
-  if (runeLen(trimmed) > 2000) {
-    postError.value = t('anime.ugc.bodyTooLong')
-    return
-  }
-  posting.value = true
-  postError.value = ''
-  try {
-    const resp = await commentApi.createComment(anime.value.id, trimmed)
-    // REVIEW.md WR-03: prepend the newly-created comment to the list
-    // instead of refetching page 1. Refetching destroys commentsNextCursor /
-    // commentsHasMore and snaps users who had paginated through several
-    // pages of comments back to the top. Prepending preserves cursor
-    // state and lets infinite scroll continue working below the newly
-    // posted card.
-    const created: Comment | undefined = resp.data?.data || resp.data
-    if (created?.id) {
-      comments.value.unshift(created)
-      commentsFetched.value = true
-    }
-    newCommentBody.value = ''
-  } catch (err) {
-    const e = err as ApiError
-    const status = e.response?.status
-    if (status === 429) {
-      postError.value = t('anime.ugc.rateLimitError')
-    } else if (status === 400) {
-      const body = (e.response?.data?.error || e.response?.data?.message || '').toString().toLowerCase()
-      if (body.includes('long') || body.includes('2000')) {
-        postError.value = t('anime.ugc.bodyTooLong')
-      } else {
-        postError.value = t('anime.ugc.bodyEmpty')
-      }
-    } else {
-      postError.value = t('anime.ugc.loadFailed')
-    }
-    console.error('Failed to post comment:', err)
-  } finally {
-    posting.value = false
-  }
-}
-
-const startEditComment = (c: Comment) => {
-  editingCommentId.value = c.id
-  editingBody.value = c.body
-  editError.value = ''
-}
-
-const cancelEditComment = () => {
-  editingCommentId.value = null
-  editingBody.value = ''
-  editError.value = ''
-}
-
-const saveEditComment = async () => {
-  if (!anime.value || !editingCommentId.value) return
-  const trimmed = editingBody.value.trim()
-  if (!trimmed) {
-    editError.value = t('anime.ugc.bodyEmpty')
-    return
-  }
-  if (runeLen(trimmed) > 2000) {
-    editError.value = t('anime.ugc.bodyTooLong')
-    return
-  }
-  const id = editingCommentId.value
-  editSaving.value = true
-  editError.value = ''
-  try {
-    const resp = await commentApi.updateComment(anime.value.id, id, trimmed)
-    const updated: Comment = resp.data?.data || resp.data
-    const idx = comments.value.findIndex((c) => c.id === id)
-    if (idx !== -1 && updated && updated.id) {
-      comments.value.splice(idx, 1, updated)
-    } else if (idx !== -1) {
-      // Server returned no body — patch the local copy with the new text.
-      comments.value[idx] = { ...comments.value[idx], body: trimmed, updated_at: new Date().toISOString() }
-    }
-    cancelEditComment()
-  } catch (err) {
-    console.error('Failed to update comment:', err)
-    editError.value = t('anime.ugc.editFailed')
-  } finally {
-    editSaving.value = false
-  }
-}
-
-const deleteCommentItem = async (c: Comment) => {
-  if (!anime.value) return
-  if (!(await confirm({
-    title: t('common.confirmTitle'),
-    description: t('anime.ugc.deleteCommentConfirm'),
-    confirmText: t('common.delete'),
-    cancelText: t('common.cancel'),
-    variant: 'destructive',
-  }))) return
-  const originalIdx = comments.value.findIndex((x) => x.id === c.id)
-  if (originalIdx === -1) return
-  const snapshot = comments.value[originalIdx]
-  // Optimistic remove.
-  comments.value.splice(originalIdx, 1)
-  deleteError.value = ''
-  try {
-    await commentApi.deleteComment(anime.value.id, c.id)
-  } catch (err) {
-    console.error('Failed to delete comment:', err)
-    // REVIEW.md WR-04: restore via id-keyed re-insertion rather than
-    // splicing at the captured originalIdx. Between the optimistic
-    // removal and the error path, the user may have triggered
-    // loadMoreComments() (appends new entries) or saveEditComment()
-    // (mutates in place), which would make originalIdx stale and put
-    // the restored card at the wrong position. Find a stable anchor by
-    // walking the current array and inserting before the first comment
-    // strictly older than the snapshot, falling back to the front if
-    // it's the newest or the array is empty. Newest-first ordering is
-    // preserved without depending on a captured index.
-    const insertAt = comments.value.findIndex((x) => {
-      const a = new Date(snapshot.created_at).getTime()
-      const b = new Date(x.created_at).getTime()
-      return a > b || (a === b && snapshot.id > x.id)
-    })
-    if (insertAt === -1) {
-      comments.value.push(snapshot)
-    } else {
-      comments.value.splice(insertAt, 0, snapshot)
-    }
-    deleteError.value = t('anime.ugc.deleteFailed')
-    // Auto-clear after 5 seconds (mirrors the SPEC's "auto-dismiss 5s").
-    setTimeout(() => {
-      if (deleteError.value === t('anime.ugc.deleteFailed')) deleteError.value = ''
-    }, 5000)
-  }
-}
-
-// Watchers — Vue+Router URL-persistence pattern (RESEARCH.md Pattern 6).
-// Two-way: route.query.ugc → ugcTab handles deep links + back/forward;
-// ugcTab → router.replace + lazy fetch on first activation.
-watch(
-  () => route.query.ugc,
-  (v) => {
-    const val = (typeof v === 'string' ? v : 'reviews') as UgcTab
-    const normalized: UgcTab = (UGC_ALLOWED as readonly string[]).includes(val) ? val : 'reviews'
-    if (normalized !== ugcTab.value) ugcTab.value = normalized
-  }
-)
-
-watch(ugcTab, (v) => {
-  if (route.query.ugc !== v) {
-    router.replace({ query: { ...route.query, ugc: v } })
-  }
-  if (v === 'comments' && !commentsFetched.value && !commentsLoading.value) {
-    void fetchComments()
-  }
-})
-
-const setListStatus = async (status: string) => {
-  if (!anime.value) return
-  const animeId = anime.value.id
-  const prior = currentListStatus.value
-  // Optimistic: flip the visible status + close the dropdown immediately.
-  currentListStatus.value = status
-  showStatusDropdown.value = false
-  try {
-    await watchlistStore.setStatusOptimistic(animeId, status)
-  } catch (err) {
-    console.error('Failed to update list status:', err)
-    // Rollback the view-local mirror (store action already rolled back its map).
-    currentListStatus.value = prior
-    toast.push(t('watchlist.errors.updateFailed'))
-  }
-}
-
-const removeFromList = async () => {
-  if (!anime.value) return
-  const animeId = anime.value.id
-  const prior = currentListStatus.value
-  const priorCount = currentRewatchCount.value
-  // Optimistic: clear the visible status + close the dropdown immediately.
-  currentListStatus.value = null
-  currentRewatchCount.value = 0
-  showStatusDropdown.value = false
-  try {
-    await watchlistStore.removeEntryOptimistic(animeId)
-  } catch (err) {
-    console.error('Failed to remove from list:', err)
-    currentListStatus.value = prior
-    currentRewatchCount.value = priorCount
-    toast.push(t('watchlist.errors.removeFailed'))
-  }
-}
-
-// Close dropdown on click outside
-const handleClickOutside = (event: MouseEvent) => {
-  if (dropdownRef.value && !dropdownRef.value.contains(event.target as Node)) {
-    showStatusDropdown.value = false
-  }
-}
-
-const refreshAnimeData = async () => {
-  if (!anime.value || refreshing.value) return
-
-  refreshing.value = true
-  try {
-    await animeApi.refresh(anime.value.id)
-    // Refetch anime data to show updated info
-    await fetchAnime(anime.value.id)
-  } catch (err) {
-    console.error('Failed to refresh anime data:', err)
-  } finally {
-    refreshing.value = false
-  }
-}
-
-const retry = () => {
-  const animeId = route.params.id as string
-  fetchAnime(animeId)
-}
-
-// Plan B — `switchLanguage` / per-provider persistence watchers are retired
-// with the language + provider tabs. The page no longer routes a legacy player
-// chain; AePlayer selects sources internally and the only page-level surface
-// toggle is the binary Classic Kodik fallback (persisted via the classicKodik
-// watcher above). The obsolete preferred_video_* / preferred_*_provider keys
-// are no longer written.
-
-// Shared data-loading function — called on mount and on route param change
-const loadAnimeData = async (animeId: string) => {
-  // Increment generation so previous in-flight calls become stale
-  const gen = ++loadGeneration
-
-  // Reset state so stale data doesn't flash
-  anime.value = null
-  watchState.reset()
-  resumeLoadedEpisodes.value = 0
-  resumeOverrideEpisode.value = null
-  currentListStatus.value = null
-  currentRewatchCount.value = 0
-  reviews.value = []
-  myReview.value = null
-  siteRating.value = null
-  watchersCount.value = 0
-  relatedAnime.value = []
+// Synchronous per-concern reset so stale data doesn't flash on a route-param
+// change — same writes, in the same order, as the historical inline block.
+function resetForAnime() {
+  watchFlow.reset()
+  listStatus.reset()
+  social.reset()
+  related.reset()
   characters.value = []
-  reviewsFetched.value = false
-  relatedFetched.value = false
   charactersFetched.value = false
   disarmLazySections()
-  // Comments — reset cache for new anime so a stale list doesn't leak across
-  // navigations. Per-anime fetch is gated on tab activation (or deep-link
-  // ugc=comments path below).
-  comments.value = []
-  commentsHasMore.value = false
-  commentsNextCursor.value = ''
-  commentsError.value = ''
-  commentsFetched.value = false
-  newCommentBody.value = ''
-  postError.value = ''
-  editingCommentId.value = null
-  editingBody.value = ''
-  editError.value = ''
-  deleteError.value = ''
+  commentsUgc.reset()
   synopsisExpanded.value = false
-  showStatusDropdown.value = false
-  reviewForm.score = 0
-  reviewForm.text = ''
-
-  // Handle MAL-prefixed IDs: resolve via backend
-  if (animeId.startsWith('mal_')) {
-    const malId = animeId.replace('mal_', '')
-    try {
-      const response = await animeApi.resolveMAL(malId)
-      if (gen !== loadGeneration) return
-      const result = response.data?.data || response.data
-      if (result?.status === 'resolved' && result.anime) {
-        // Migrate list entry if user is authenticated
-        if (authStore.isAuthenticated) {
-          try {
-            await userApi.migrateListEntry(
-              animeId,
-              result.anime.id
-            )
-          } catch (e) {
-            console.warn('List migration failed:', e)
-          }
-        }
-        router.replace(`/anime/${result.anime.id}`)
-        return
-      } else if (result?.status === 'ambiguous') {
-        const searchQuery = result.mal_title || ''
-        router.replace({ path: '/browse', query: { q: searchQuery, bind_mal: animeId } })
-        return
-      }
-    } catch (e) {
-      console.error('MAL resolution failed:', e)
-    }
-  }
-
-  const fetched = await fetchAnime(animeId)
-  if (gen !== loadGeneration) return
-
-  // Plan B — the 18+ language tab is retired; AePlayer gates its own 18+
-  // sources by `is-hentai`, so there is no page-level tab to reset here.
-
-  // Pull the viewer-context aggregate — ONE request carrying rating,
-  // watchers-count, watch progress, watchlist entry, my review and the saved
-  // combo (page-fetch optimization 2026-06-11). The legacy per-endpoint fetches
-  // remain as the fallback when the aggregate is unavailable. (watchState reads
-  // the anon localStorage last-watched lazily — no explicit load needed.)
-  let viewerCtx: ViewerContextData | null = null
-  if (fetched) {
-    viewerCtx = await viewerCtxStore.load(fetched.id, false, fetched.malId || undefined)
-    if (gen !== loadGeneration) return
-    if (viewerCtx) {
-      applyViewerContext(viewerCtx)
-      void watchState.init(viewerCtx.progress ?? [])
-      // Legacy MAL-import entry surfaced under anime_id="mal_{malId}" —
-      // auto-migrate it to the real UUID (same behavior the statuses-scan
-      // path had), fire-and-forget.
-      const entryAnimeId = viewerCtx.watchlist_entry?.anime_id
-      if (authStore.isAuthenticated && entryAnimeId && entryAnimeId.startsWith('mal_')) {
-        userApi.migrateListEntry(entryAnimeId, fetched.id).catch((e) => {
-          console.warn('Auto-migration of MAL entry failed:', e)
-        })
-      }
-    } else {
-      void watchState.init()
-    }
-  }
-
-  // Initialize watch preferences for this anime — anon users included so the
-  // combo_resolve_total denominator increments alongside combo_override_total
-  // (CONTEXT D-12: per-anon-user override rate). The composable + axios
-  // interceptor handle the X-Anon-ID header for unauthenticated callers.
-  // The viewer-context Tier-1 combo lets resolve() short-circuit client-side.
-  if (fetched) {
-    initPreferences(fetched.id, viewerCtx?.combo)
-  }
-
-  // Check for pending MAL bind from Browse page
-  const pendingBind = sessionStorage.getItem('pending_mal_bind')
-  if (pendingBind && fetched && authStore.isAuthenticated) {
-    sessionStorage.removeItem('pending_mal_bind')
-    try {
-      await userApi.migrateListEntry(
-        pendingBind,
-        fetched.id
-      )
-    } catch (e) {
-      console.warn('Pending MAL bind migration failed:', e)
-    }
-  }
-
-  // Viewer-context already delivered watchlist status / rating / my-review /
-  // watchers-count; the legacy fetches below only run as fallback. In the
-  // fallback the rating rides on fetchReviews, so it stays eager there; in
-  // the normal path the reviews feed is lazy (IntersectionObserver below).
-  if (!viewerCtx) {
-    await fetchWatchlistStatus()
-    if (gen !== loadGeneration) return
-  }
-  await fetchHiddenStatus()
-  if (gen !== loadGeneration) return
-  if (!viewerCtx) {
-    await fetchReviews()
-    // Phase 14 / UX-28 — non-blocking; failure leaves the badge hidden.
-    void fetchWatchersCount()
-  }
-
-  // Deep-link path: if the URL already has ?ugc=comments on first paint,
-  // kick off the initial comments fetch (the watch(ugcTab) lazy-fetch only
-  // fires on subsequent changes, not on initial value).
-  if (ugcTab.value === 'comments' && !commentsFetched.value) {
-    void fetchComments()
-  }
-
-  // Reviews feed + related rail load lazily as the user scrolls toward them
-  // (page-fetch optimization 2026-06-11). Arm after the DOM has rendered the
-  // observed elements (they're v-if'd on `anime`).
-  await nextTick()
-  if (gen !== loadGeneration) return
-  armLazySections()
 }
 
-const { ratings: relatedSiteRatings, fetchRatings: fetchRelatedSiteRatings } = useSiteRatings()
-
-function relatedCardModel(item: RelatedAnime): AnimeCardModel {
-  const sr = relatedSiteRatings.value[String(item.id)]
-  return fromCatalogAnime(
-    { ...item, totalEpisodes: item.episodes },
-    { siteScore: sr && sr.total_reviews > 0 ? sr.average_score : undefined },
-  )
-}
-
-async function fetchRelatedAnime() {
-  if (!anime.value?.id) return
-  try {
-    const resp = await animeApi.getRelated(anime.value.id as string)
-    const data = (resp.data?.data || resp.data) as Array<{
-      shikimori_id: string
-      local_id?: string
-      name: string
-      name_ru: string
-      relation_ru: string
-      relation_en: string
-      score: number
-      status: string
-      poster_url: string
-      year?: number
-      episodes?: number
-    }>
-    relatedAnime.value = data.map(r => ({
-      id: r.local_id || `shiki_${r.shikimori_id}`,
-      title: r.name,
-      nameRu: r.name_ru,
-      name: r.name,
-      coverImage: getImageUrl(r.poster_url),
-      rating: r.score || undefined,
-      releaseYear: r.year || undefined,
-      episodes: r.episodes || undefined,
-      relationLabel: locale.value === 'ru' ? r.relation_ru : r.relation_en,
-    }))
-    // Site ratings exist only for anime already in the local catalog (UUID ids)
-    void fetchRelatedSiteRatings(data.filter(r => r.local_id).map(r => String(r.local_id)))
-  } catch (e) {
-    console.warn('Failed to fetch related anime:', e)
-  }
-}
-
-// Re-load when route param changes (Vue Router reuses the component for /anime/:id)
-watch(() => route.params.id, (newId) => {
-  if (newId) {
-    loadAnimeData(newId as string)
-  }
+// Data-loading orchestration: mount + route-param change + retry, with
+// generation-based cancellation of in-flight loads.
+const { retry } = useAnimeDataLoader({
+  anime,
+  fetchAnime,
+  resetForAnime,
+  watchState: watchFlow.watchState,
+  applyViewerContext: social.applyViewerContext,
+  initPreferences,
+  fetchWatchlistStatus: listStatus.fetchWatchlistStatus,
+  fetchReviews: social.fetchReviews,
+  fetchWatchersCount: social.fetchWatchersCount,
+  fetchHiddenStatus,
+  ugcTab,
+  commentsFetched,
+  fetchComments,
+  armLazySections,
 })
 
 // UA-051 (UX-04 Phase 2): inject the anime title into <title> once data has
@@ -2293,30 +1111,6 @@ watch(() => anime.value?.title, (newTitle) => {
   if (newTitle) {
     document.title = `${newTitle} — AnimeEnigma`
   }
-})
-
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-  loadAnimeData(route.params.id as string)
-  // Phase 11 / UX-23 — apply persisted theater-mode state + bind ESC.
-  applyBodyTheaterClass(theaterMode.value)
-  document.addEventListener('keydown', onTheaterEscape)
-})
-
-// Phase 11 / UX-23 — MANDATORY theater-mode cleanup. onBeforeUnmount
-// strips the body class so navigating away from /anime/:id never leaves
-// the global navbar / non-player sections hidden everywhere else.
-onBeforeUnmount(() => {
-  applyBodyTheaterClass(false)
-  document.removeEventListener('keydown', onTheaterEscape)
-})
-
-// React to programmatic state changes (toggle button click, ESC).
-watch(theaterMode, (on) => applyBodyTheaterClass(on))
-
-onUnmounted(() => {
-  loadGeneration++ // cancel any in-flight loadAnimeData
-  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
