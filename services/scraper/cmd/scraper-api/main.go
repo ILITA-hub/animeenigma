@@ -20,7 +20,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/allanimeokru"
-	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animekai"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/eighteenanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
@@ -72,7 +71,7 @@ func main() {
 	registry.Register(kwikExtractor)
 	log.Infow("registered embed extractor", "name", kwikExtractor.Name())
 
-	// Megacloud — kept registered for Phase 18+ providers (9anime, AnimeKai).
+	// Megacloud — kept registered for providers that use MegaCloud embeds.
 	mcClient := embeds.NewMegacloudClient(cfg.MegacloudExtractor.URL, cfg.MegacloudExtractor.Timeout)
 	registry.Register(mcClient)
 	log.Infow("registered embed extractor", "name", mcClient.Name())
@@ -547,42 +546,6 @@ func main() {
 	}
 	registerByStatus(nineAnimeProvider)
 
-	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
-	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns
-	// ErrProviderDown so failover lands on the previous two providers.
-	// The provider's Go methods are stubs (escape-hatch); the sidecar route
-	// POST /animekai-token returns HTTP 501. SCRAPER-KAI-01..04 + KAI-07 are
-	// carried to v3.1 — see .planning/REQUIREMENTS.md and
-	// .planning/phases/19-animekai-gated/19-RESEARCH.md for rationale.
-	if cfg.AnimeKai.Enabled {
-		animeKaiBaseHTTP := domain.NewBaseHTTPClient(log,
-			domain.WithPerHostRPS("anikai.to", 1.0, 2),
-			domain.WithPerHostRPS("megaup.cc", 1.0, 2),
-			domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
-			domain.WithProvider("animekai"),
-			domain.WithTransport(egressTransport),
-		)
-		animeKaiProvider, err := animekai.New(animekai.Deps{
-			BaseURL: cfg.AnimeKai.BaseURL,
-			HTTP:    animeKaiBaseHTTP,
-			Embeds:  registry,
-			// WR-01: a non-nil malsync client is REQUIRED by animekai.New().
-			// The stub never calls Lookup on the success path; the noop here
-			// closes the v3.1 fill-in nil-pointer footgun. Replace with
-			// animekai.NewMalSyncClient(redisCache) when the fill-in lands.
-			MalSync: animekai.NewNoopMalSync(),
-			Cache:   redisCache,
-			Log:     log,
-		})
-		if err != nil {
-			log.Fatalw("failed to construct AnimeKai provider", "error", err)
-		}
-		registerByStatus(animeKaiProvider)
-	} else {
-		log.Infow("AnimeKai provider SKIPPED (flag off)",
-			"flag", "SCRAPER_ANIMEKAI_ENABLED=false")
-	}
-
 	// 18+ group — a SEPARATE orchestrator (adultOrch) that is NEVER given any
 	// EN provider, so 18+ content cannot leak into the OurEnglish failover.
 	// Served on the /anime18/* route family. The 18anime provider needs no
@@ -632,7 +595,7 @@ func main() {
 
 	// candidateProviders is now fully populated: registerByStatus appended every
 	// constructed EN provider's name in failover order above (gogoanime → animepahe
-	// → allanime-okru → miruro → nineanime → animekai-if-enabled). It drives the
+	// → allanime-okru → miruro → nineanime). It drives the
 	// Phase-3 runtime re-gate, the wiring-invariant fatal, and the Prometheus
 	// reflection below. No hand-maintained literal → it cannot drift from the
 	// actual registrations. (animefever removed from the binary 2026-07-05.)
@@ -697,9 +660,8 @@ func main() {
 		for _, p := range registered {
 			names = append(names, p.Name())
 		}
-		log.Fatalw("Phase 19 wiring invariant broken",
+		log.Fatalw("provider wiring invariant broken",
 			"got", got, "want", expectedProviders,
-			"flag", cfg.AnimeKai.Enabled,
 			"disabled", cfg.Providers.DisabledNames(),
 			"registered", names)
 	}
@@ -767,8 +729,6 @@ func main() {
 			"animepahe_base_url", cfg.Providers.BaseURLOf("animepahe"),
 			"animepahe_engine", cfg.Providers.EngineOf("animepahe"),
 			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
-			"animekai_enabled", cfg.AnimeKai.Enabled,
-			"animekai_base_url", cfg.AnimeKai.BaseURL,
 			"nineanime_base_url", cfg.NineAnime.BaseURL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

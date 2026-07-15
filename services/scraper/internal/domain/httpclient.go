@@ -101,7 +101,7 @@ func WithHeaders(h http.Header) Option {
 // REAL gogoanime.Provider against an offline httptest.Server through this seam
 // without hand-rolling a separate http.Client (which would defeat the
 // SCRAPER-FOUND-06 "no hand-rolled clients" invariant) or exposing the
-// internal client field (breaks encapsulation). Phase 19 (AnimeKai) reuses it.
+// internal client field (breaks encapsulation).
 func WithTransport(rt http.RoundTripper) Option {
 	return func(c *BaseHTTPClient) { c.client.HTTPClient.Transport = rt }
 }

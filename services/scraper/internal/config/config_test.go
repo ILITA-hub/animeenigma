@@ -1,8 +1,6 @@
 package config
 
 import (
-	"bytes"
-	"log"
 	"os"
 	"strings"
 	"testing"
@@ -155,7 +153,6 @@ func TestLoad_ServerPriorityDefault(t *testing.T) {
 		"REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_DB",
 		"SCRAPER_ANIMEPAHE_RESOLVER_URL",
 		"SCRAPER_GOGOANIME_BASE_URL",
-		"SCRAPER_ANIMEKAI_BASE_URL",
 	)
 	cfg, err := Load()
 	if err != nil {
@@ -235,147 +232,6 @@ func equalStringSlices(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-// TestLoad_AnimeKaiDefaults — with NO env vars set, AnimeKai is disabled
-// and BaseURL defaults to https://anikai.to (the canonical mirror as of
-// 2026-05-12; animekai.to 301s here).
-func TestLoad_AnimeKaiDefaults(t *testing.T) {
-	unsetEnv(t,
-		"SCRAPER_ANIMEKAI_ENABLED", "SCRAPER_ANIMEKAI_BASE_URL",
-		"REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_DB",
-		"SCRAPER_ANIMEPAHE_RESOLVER_URL",
-	)
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.AnimeKai.Enabled {
-		t.Fatalf("AnimeKai.Enabled = true; want false (default-off in production)")
-	}
-	if cfg.AnimeKai.BaseURL != "https://anikai.to" {
-		t.Fatalf("AnimeKai.BaseURL = %q; want https://anikai.to", cfg.AnimeKai.BaseURL)
-	}
-}
-
-// TestLoad_AnimeKaiEnabledTrue — SCRAPER_ANIMEKAI_ENABLED=true flips the flag.
-func TestLoad_AnimeKaiEnabledTrue(t *testing.T) {
-	unsetEnv(t, "SCRAPER_ANIMEKAI_BASE_URL")
-	setEnv(t, "SCRAPER_ANIMEKAI_ENABLED", "true")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if !cfg.AnimeKai.Enabled {
-		t.Fatalf("AnimeKai.Enabled = false; want true")
-	}
-}
-
-// TestLoad_AnimeKaiEnabledFalseExplicit — explicit "false" keeps the flag off.
-func TestLoad_AnimeKaiEnabledFalseExplicit(t *testing.T) {
-	unsetEnv(t, "SCRAPER_ANIMEKAI_BASE_URL")
-	setEnv(t, "SCRAPER_ANIMEKAI_ENABLED", "false")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.AnimeKai.Enabled {
-		t.Fatalf("AnimeKai.Enabled = true; want false")
-	}
-}
-
-// TestLoad_AnimeKaiEnabledInvalid — unparseable value falls back to default.
-// Matches the lenient getEnv* convention. Adversary cannot enable the
-// provider via SCRAPER_ANIMEKAI_ENABLED=yes-please-enable.
-func TestLoad_AnimeKaiEnabledInvalid(t *testing.T) {
-	unsetEnv(t, "SCRAPER_ANIMEKAI_BASE_URL")
-	setEnv(t, "SCRAPER_ANIMEKAI_ENABLED", "garbage")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v (must not error on garbage value)", err)
-	}
-	if cfg.AnimeKai.Enabled {
-		t.Fatalf("AnimeKai.Enabled = true; want default false on unparseable value")
-	}
-}
-
-// TestLoad_AnimeKaiBaseURLOverride — SCRAPER_ANIMEKAI_BASE_URL takes precedence.
-func TestLoad_AnimeKaiBaseURLOverride(t *testing.T) {
-	setEnv(t, "SCRAPER_ANIMEKAI_BASE_URL", "https://anikai.cc")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.AnimeKai.BaseURL != "https://anikai.cc" {
-		t.Fatalf("AnimeKai.BaseURL = %q; want https://anikai.cc", cfg.AnimeKai.BaseURL)
-	}
-}
-
-// TestLoad_AnimeKaiInvalidBaseURL — malformed URL fails Load() at boot with
-// an error that names the env var verbatim.
-func TestLoad_AnimeKaiInvalidBaseURL(t *testing.T) {
-	setEnv(t, "SCRAPER_ANIMEKAI_BASE_URL", "not-a-url")
-	_, err := Load()
-	if err == nil {
-		t.Fatal("Load: nil error; want non-nil for malformed SCRAPER_ANIMEKAI_BASE_URL")
-	}
-	if !strings.Contains(err.Error(), "SCRAPER_ANIMEKAI_BASE_URL") {
-		t.Fatalf("error %q must mention SCRAPER_ANIMEKAI_BASE_URL", err.Error())
-	}
-}
-
-// TestGetEnvBool_LogsOnUnparseable — WR-03. Unparseable values fall back to
-// the default (lenient convention preserved) BUT the helper MUST emit a
-// WARN log line naming the env-var key and the rejected value so an
-// operator who typo'd "yes-please" sees their value was rejected. The fix
-// matters because SCRAPER_ANIMEKAI_ENABLED is the only gate between the
-// escape-hatch stub being registered or not — silent fall-through means
-// operators can think the flag is on when it isn't.
-func TestGetEnvBool_LogsOnUnparseable(t *testing.T) {
-	const probeKey = "SCRAPER_TEST_WARN_ANIMEKAI_BOOL"
-	setEnv(t, probeKey, "yes-please")
-
-	var buf bytes.Buffer
-	prevOut := log.Writer()
-	prevFlags := log.Flags()
-	log.SetOutput(&buf)
-	// Drop the timestamp prefix so the substring match below is stable.
-	log.SetFlags(0)
-	t.Cleanup(func() {
-		log.SetOutput(prevOut)
-		log.SetFlags(prevFlags)
-	})
-
-	got := getEnvBool(probeKey, false)
-	if got {
-		t.Fatalf("getEnvBool(%q, default=false) = true; want false (unparseable must fall back)", "yes-please")
-	}
-	logged := buf.String()
-	if !strings.Contains(logged, "WARN") {
-		t.Errorf("log output %q must contain WARN level (operator-visible diagnostic)", logged)
-	}
-	if !strings.Contains(logged, probeKey) {
-		t.Errorf("log output %q must name the env-var key %q so operators can grep", logged, probeKey)
-	}
-	if !strings.Contains(logged, "yes-please") {
-		t.Errorf("log output %q must include the rejected value so operators see their typo", logged)
-	}
-}
-
-// TestGetEnvBool_Truthy — strconv.ParseBool semantics: "1", "true", "True",
-// "TRUE", "t" all return true.
-func TestGetEnvBool_Truthy(t *testing.T) {
-	cases := []string{"1", "true", "True", "TRUE", "t"}
-	const probeKey = "SCRAPER_TEST_ANIMEKAI_BOOL"
-	for _, c := range cases {
-		c := c
-		t.Run(c, func(t *testing.T) {
-			setEnv(t, probeKey, c)
-			if got := getEnvBool(probeKey, false); !got {
-				t.Errorf("getEnvBool(%q) = false; want true", c)
-			}
-		})
-	}
 }
 
 // TestLoad_MiruroDefaults — Phase 28 SCRAPER-HEAL-37. With no env vars
@@ -459,29 +315,6 @@ func TestLoad_MiruroInvalidProxyB(t *testing.T) {
 	}
 }
 
-// TestGetEnvBool_Falsy — "0", "false", "f", "False" all return false; AND
-// unparseable values fall back to the default (also false here).
-func TestGetEnvBool_Falsy(t *testing.T) {
-	cases := []string{"0", "false", "f", "False", "garbage", "yes-please"}
-	const probeKey = "SCRAPER_TEST_ANIMEKAI_BOOL"
-	for _, c := range cases {
-		c := c
-		t.Run(c, func(t *testing.T) {
-			setEnv(t, probeKey, c)
-			// Default = true to prove unparseable falls back to default;
-			// valid falsy values still return false.
-			got := getEnvBool(probeKey, true)
-			isCanonicalFalse := c == "0" || c == "false" || c == "f" || c == "False"
-			if isCanonicalFalse && got {
-				t.Errorf("getEnvBool(%q, default=true) = true; want false for canonical falsy value", c)
-			}
-			if !isCanonicalFalse && !got {
-				t.Errorf("getEnvBool(%q, default=true) = false; want true (unparseable should fall back to default=true)", c)
-			}
-		})
-	}
-}
-
 // TestLoad_NineAnimeDefaults — Phase 28 SCRAPER-HEAL-39. With no env var
 // set, NineAnime.BaseURL defaults to https://9anime.me.uk (the brand-jack
 // upstream confirmed via 2026-05-20 live recon).
@@ -526,32 +359,7 @@ func TestLoad_NineAnimeInvalidBaseURL(t *testing.T) {
 	}
 }
 
-func TestLoad_ProvidersFile_Loads(t *testing.T) {
-	path := writeTempYAML(t, `
-providers:
-  - { name: animepahe, enabled: false, reason: "CF", description: "d" }
-  - { name: allanime, enabled: true }
-`)
-	t.Setenv("SCRAPER_PROVIDERS_FILE", path)
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load err = %v; want nil", err)
-	}
-	if cfg.Providers.Source != "file" {
-		t.Errorf("Providers.Source = %q; want file", cfg.Providers.Source)
-	}
-	if cfg.Providers.IsRegistered("animepahe") {
-		t.Errorf("animepahe (enabled:false) must be unregistered (disabled, from file)")
-	}
-	if !cfg.Providers.IsRegistered("allanime") {
-		t.Errorf("allanime (enabled:true) must be registered (from file)")
-	}
-}
-
 func TestLoad_NoProvidersFile_AllProvidersEnabled(t *testing.T) {
-	t.Setenv("SCRAPER_PROVIDERS_FILE", "")
-
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load err = %v; want nil", err)
@@ -562,23 +370,6 @@ func TestLoad_NoProvidersFile_AllProvidersEnabled(t *testing.T) {
 	for _, name := range KnownProviders {
 		if !cfg.Providers.IsEnabled(name) {
 			t.Errorf("offline default: provider %q must be enabled", name)
-		}
-	}
-}
-
-func TestLoad_ProvidersFileMissing_FallsBackWithSource(t *testing.T) {
-	t.Setenv("SCRAPER_PROVIDERS_FILE", "/no/such/providers.yaml")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load err = %v; want nil (missing file must fall back, not fail)", err)
-	}
-	if cfg.Providers.Source != "default-fallback" {
-		t.Errorf("Providers.Source = %q; want default-fallback", cfg.Providers.Source)
-	}
-	for _, name := range KnownProviders {
-		if !cfg.Providers.IsEnabled(name) {
-			t.Errorf("offline fallback: provider %q must be enabled", name)
 		}
 	}
 }

@@ -1,6 +1,5 @@
-// Third subtitle-pref persistence model in the player, by design: the dead global-sticky
-// useSubtitleTimingOffset and the live ephemeral usePlayerState.subOffset are the others.
-// Per-episode + 24h TTL = a "decaying opt-out": a local disable (auto-sync misfired on one
+// This preference is separate from the live, ephemeral usePlayerState.subOffset value.
+// Per-episode + 24h TTL makes it a "decaying opt-out": a local disable (auto-sync misfired on one
 // episode) self-heals after a day rather than permanently killing a default-good feature.
 // Expiry is read-time only (expired keys aren't evicted — they're tiny).
 import { ref, watch, type Ref } from 'vue'

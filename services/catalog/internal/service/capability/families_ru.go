@@ -14,7 +14,6 @@ import (
 // May be nil on the Service — then only the EN family is assembled.
 type CatalogSource interface {
 	GetKodikTranslations(ctx context.Context, animeID string) ([]domain.KodikTranslation, error)
-	GetAnimeLibTranslations(ctx context.Context, animeID string, episodeID int) ([]domain.AnimeLibTranslation, error)
 	GetHanimeEpisodes(ctx context.Context, animeID string) ([]domain.HanimeEpisode, error)
 	GetHanimeStream(ctx context.Context, animeID string, slug string) (*domain.HanimeStream, error)
 	// GetAnimejoyTeams resolves AnimeJoy discovery ONCE for the title and reports
@@ -98,7 +97,7 @@ func (s *Service) providerRow(ctx context.Context, name string) (domain.ScraperP
 // applyFeedFields fills the feed presentation on a built provider cap from its
 // DB row. Returns ok=false when the row is disabled (caller omits the family).
 // hasContent reports whether this title has content on the provider: the
-// catalog-backed families (kodik/animelib/hanime) and the trait-only raw/adult
+// catalog-backed families (kodik/hanime) and the trait-only raw/adult
 // rows pass true; first-party `ae` passes its live library-presence lookup.
 // Phase B: pulls the per-request blendData from ctx (seeded once in
 // buildFamilies), attaches the blended PlayabilityIndex (health-only when
@@ -165,45 +164,6 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 		return domain.SourceFamily{}, false
 	}
 	return domain.SourceFamily{Family: "kodik", Providers: []domain.ProviderCap{cap}}, true
-}
-
-// animelibFamily builds the "animelib" family from translation teams of the
-// first episode: real team names, soft/hard subs from HasSubtitles. Best effort —
-// omitted on error or when the `animelib` DB row is absent or disabled. When the
-// anime isn't on AniLib (empty translations), the family still surfaces tinted as
-// no_content (see noContentFamily) rather than being dropped.
-func (s *Service) animelibFamily(ctx context.Context, animeID string) (domain.SourceFamily, bool) {
-	const firstEpisode = 1
-	trs, err := s.catalog.GetAnimeLibTranslations(ctx, animeID, firstEpisode)
-	if err != nil {
-		if s.log != nil {
-			s.log.Warnw("capability animelib family skipped", "anime_id", animeID, "error", err)
-		}
-		return domain.SourceFamily{}, false
-	}
-	if len(trs) == 0 {
-		return s.noContentFamily(ctx, "animelib", "animelib", "animelib", "AniLib")
-	}
-	variants := make([]domain.Variant, 0, len(trs))
-	for _, tr := range trs {
-		cat := categoryFromTranslationType(tr.Type)
-		variants = append(variants, domain.Variant{
-			Category:      cat,
-			Team:          &domain.Team{ID: strconv.Itoa(tr.ID), Name: tr.TeamName},
-			SubDelivery:   subDeliveryFor(cat, tr.HasSubtitles),
-			QualitySource: "unknown", // quality ladder needs a per-team stream call; omitted
-			Source:        "discovered",
-		})
-	}
-	row, ok := s.providerRow(ctx, "animelib")
-	if !ok {
-		return domain.SourceFamily{}, false
-	}
-	cap := domain.ProviderCap{Provider: "animelib", DisplayName: displayOf(row, "AniLib"), Variants: variants}
-	if !applyFeedFields(ctx, &cap, row, true) {
-		return domain.SourceFamily{}, false
-	}
-	return domain.SourceFamily{Family: "animelib", Providers: []domain.ProviderCap{cap}}, true
 }
 
 // hanimeFamily builds the "hanime" family: a single raw variant with the quality

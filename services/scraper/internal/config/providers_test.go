@@ -1,101 +1,6 @@
 package config
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
-
-func writeTempYAML(t *testing.T, body string) string {
-	t.Helper()
-	dir := t.TempDir()
-	p := filepath.Join(dir, "providers.yaml")
-	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-		t.Fatalf("write temp yaml: %v", err)
-	}
-	return p
-}
-
-func TestLoadProviders_ValidFile(t *testing.T) {
-	path := writeTempYAML(t, `
-providers:
-  - { name: allanime, enabled: true }
-  - name: animepahe
-    enabled: false
-    reason: "Cloudflare challenge"
-    description: "moved to Cloudflare; sidecar can't solve it"
-`)
-	pc, err := LoadProviders(path)
-	if err != nil {
-		t.Fatalf("LoadProviders err = %v; want nil", err)
-	}
-	if pc.Source != "file" {
-		t.Errorf("Source = %q; want file", pc.Source)
-	}
-	if !pc.IsEnabled("allanime") {
-		t.Errorf("allanime should be enabled")
-	}
-	if pc.IsEnabled("animepahe") {
-		t.Errorf("animepahe should be disabled")
-	}
-	if !pc.IsEnabled("miruro") {
-		t.Errorf("absent provider miruro should default enabled")
-	}
-	if m := pc.Meta("animepahe"); m.Reason != "Cloudflare challenge" {
-		t.Errorf("animepahe reason = %q; want Cloudflare challenge", m.Reason)
-	}
-	if pc.IsRegistered("animepahe") {
-		t.Errorf("animepahe (enabled:false) must be unregistered (disabled)")
-	}
-	if !pc.IsRegistered("allanime") {
-		t.Errorf("allanime (enabled:true) must be registered")
-	}
-}
-
-func TestLoadProviders_UnknownName(t *testing.T) {
-	path := writeTempYAML(t, "providers:\n  - { name: nope, enabled: false }\n")
-	if _, err := LoadProviders(path); err == nil {
-		t.Fatal("LoadProviders err = nil; want error on unknown provider")
-	}
-}
-
-func TestLoadProviders_DuplicateName(t *testing.T) {
-	path := writeTempYAML(t, "providers:\n  - { name: allanime, enabled: true }\n  - { name: allanime, enabled: false }\n")
-	if _, err := LoadProviders(path); err == nil {
-		t.Fatal("LoadProviders err = nil; want error on duplicate provider")
-	}
-}
-
-func TestLoadProviders_MalformedYAML(t *testing.T) {
-	path := writeTempYAML(t, "providers: [unclosed flow sequence\n")
-	if _, err := LoadProviders(path); err == nil {
-		t.Fatal("LoadProviders err = nil; want error on malformed yaml")
-	}
-}
-
-// TestLoad_InvalidFile_FailsFast: a present-but-invalid providers file must
-// fail the scraper at boot, NOT silently fall back to the env (spec: missing
-// file = fallback; invalid file = fail-fast).
-func TestLoad_InvalidFile_FailsFast(t *testing.T) {
-	path := writeTempYAML(t, "providers:\n  - { name: bogus_provider, enabled: false }\n")
-	t.Setenv("SCRAPER_PROVIDERS_FILE", path)
-	if _, err := Load(); err == nil {
-		t.Fatal("Load err = nil; want fail-fast on an invalid providers file")
-	}
-}
-
-func TestLoadProviders_EnabledRequired(t *testing.T) {
-	path := writeTempYAML(t, "providers:\n  - { name: allanime }\n")
-	if _, err := LoadProviders(path); err == nil {
-		t.Fatal("LoadProviders err = nil; want error when 'enabled' omitted")
-	}
-}
-
-func TestLoadProviders_MissingFile(t *testing.T) {
-	if _, err := LoadProviders("/no/such/file.yaml"); err == nil {
-		t.Fatal("LoadProviders err = nil; want error on missing file")
-	}
-}
+import "testing"
 
 func TestAllProvidersEnabled_OfflineFallback(t *testing.T) {
 	pc := allProvidersEnabled("default")
@@ -110,17 +15,10 @@ func TestAllProvidersEnabled_OfflineFallback(t *testing.T) {
 }
 
 func TestRows_OrderAndFields(t *testing.T) {
-	path := writeTempYAML(t, `
-providers:
-  - name: animepahe
-    enabled: false
-    reason: "CF"
-    description: "d"
-`)
-	pc, err := LoadProviders(path)
-	if err != nil {
-		t.Fatalf("LoadProviders: %v", err)
-	}
+	pc := NewProvidersConfigForTest([]ProviderMeta{
+		{Name: "allanime", Status: StatusEnabled},
+		{Name: "animepahe", Status: StatusDisabled, Reason: "CF", Description: "d"},
+	})
 	rows := pc.Rows([]string{"allanime", "animepahe"})
 	if len(rows) != 2 || rows[0].Name != "allanime" || rows[1].Name != "animepahe" {
 		t.Fatalf("Rows order wrong: %+v", rows)
@@ -152,27 +50,6 @@ func TestKnownProvidersInGroup(t *testing.T) {
 		if n == "18anime" {
 			t.Fatal("18anime must NOT be in the EN group")
 		}
-	}
-}
-
-func TestLoadProviders_GroupIntrinsic(t *testing.T) {
-	// Correct explicit group is accepted and reflected.
-	path := writeTempYAML(t, "providers:\n  - {name: 18anime, enabled: true, group: adult}\n  - {name: allanime, enabled: true}\n")
-	pc, err := LoadProviders(path)
-	if err != nil {
-		t.Fatalf("LoadProviders err = %v", err)
-	}
-	if pc.Meta("18anime").Group != GroupAdult {
-		t.Fatalf("18anime meta group = %q", pc.Meta("18anime").Group)
-	}
-	if pc.Meta("allanime").Group != GroupEN {
-		t.Fatalf("allanime meta group = %q", pc.Meta("allanime").Group)
-	}
-
-	// A typo'd group (trying to move 18anime into EN) MUST fail at load.
-	bad := writeTempYAML(t, "providers:\n  - {name: 18anime, enabled: true, group: en}\n")
-	if _, err := LoadProviders(bad); err == nil {
-		t.Fatal("expected error when explicit group != intrinsic group")
 	}
 }
 

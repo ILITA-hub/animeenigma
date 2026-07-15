@@ -5,7 +5,7 @@ through a real (anti-detect Firefox / Camoufox) browser, so we can pass the
 JS/fingerprint/clearance challenges that a plain Go ``net/http`` client (curl-
 class) cannot. Phase 1 target: gogoanime → megaplay (``cdn.mewstream.buzz``).
 
-See ``docs/superpowers/plans/2026-06-20-stealth-browser-scraper-framework.md``.
+See ``services/stealth-scraper/README.md`` and ``docs/scraper-framework.md``.
 """
 
 __version__ = "0.1.0"

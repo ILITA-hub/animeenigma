@@ -81,7 +81,7 @@ type familyBuilder func(ctx context.Context, animeID string, row domain.ScraperP
 // change. kodik-iframe maps to nil = intentionally no capability (it is the
 // Classic-Kodik iframe surface, not an aePlayer source). Builders that need
 // the per-title catalog parsers guard on s.catalog == nil themselves. When the
-// anime simply has no content on a per-title provider (kodik/animelib/hanime/
+// anime simply has no content on a per-title provider (kodik/hanime/
 // animejoy legs), that family still surfaces tinted as no_content (see
 // noContentFamily) rather than being omitted, so the hacker-mode selector is a
 // full diagnostic view. Order: ae leads (first-party first), then EN, then the
@@ -136,12 +136,6 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 			return s.kodikFamily(ctx, animeID)
 		},
 		"kodik-iframe": nil, // Classic-Kodik iframe surface — no aePlayer capability
-		"animelib": func(ctx context.Context, animeID string, _ domain.ScraperProvider) (domain.SourceFamily, bool) {
-			if s.catalog == nil {
-				return domain.SourceFamily{}, false
-			}
-			return s.animelibFamily(ctx, animeID)
-		},
 		"hanime": func(ctx context.Context, animeID string, _ domain.ScraperProvider) (domain.SourceFamily, bool) {
 			if s.catalog == nil {
 				return domain.SourceFamily{}, false

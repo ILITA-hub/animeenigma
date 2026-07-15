@@ -20,8 +20,6 @@ var dbSeq atomic.Int64
 type fakeCatalog struct {
 	kodik      []domain.KodikTranslation
 	kodikErr   error
-	anilib     []domain.AnimeLibTranslation
-	anilibErr  error
 	heps       []domain.HanimeEpisode
 	hepsErr    error
 	hstream    *domain.HanimeStream
@@ -32,9 +30,6 @@ type fakeCatalog struct {
 
 func (f fakeCatalog) GetKodikTranslations(_ context.Context, _ string) ([]domain.KodikTranslation, error) {
 	return f.kodik, f.kodikErr
-}
-func (f fakeCatalog) GetAnimeLibTranslations(_ context.Context, _ string, _ int) ([]domain.AnimeLibTranslation, error) {
-	return f.anilib, f.anilibErr
 }
 func (f fakeCatalog) GetHanimeEpisodes(_ context.Context, _ string) ([]domain.HanimeEpisode, error) {
 	return f.heps, f.hepsErr
@@ -50,7 +45,7 @@ func (f fakeCatalog) GetAnimejoyTeams(_ context.Context, _ string) ([]domain.Ani
 // the internal-package twin of the package-external helper in service_test.go,
 // usable from the RU/Hanime family tests which run in `package capability`.
 //
-// buildFamilies resolves the kodik/animelib/hanime families concurrently, and
+// buildFamilies resolves the Kodik/Hanime families concurrently, and
 // each now reads its DB row. A plain `:memory:` DSN gives every pooled
 // connection its OWN empty database, so a concurrent reader can land on an
 // unmigrated connection ("no such table"). A shared-cache DSN pinned to a single
@@ -137,49 +132,6 @@ func TestKodikFamily_ErrorOmitted(t *testing.T) {
 	}
 }
 
-func TestAnimelibFamily_SoftHardFromHasSubtitles(t *testing.T) {
-	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "animelib", Status: domain.StatusEnabled, Group: "ru", SupportsSub: true, SupportsDub: true}),
-		catalog: fakeCatalog{anilib: []domain.AnimeLibTranslation{
-			{ID: 1, TeamName: "Crunchyroll", Type: "subtitles", HasSubtitles: true},
-			{ID: 2, TeamName: "AniRise", Type: "subtitles", HasSubtitles: false},
-			{ID: 3, TeamName: "AniDUB", Type: "voice", HasSubtitles: false},
-		}}}
-	fam, ok := s.animelibFamily(context.Background(), "uuid")
-	if !ok || fam.Family != "animelib" {
-		t.Fatalf("animelib family wrong: ok=%v fam=%+v", ok, fam)
-	}
-	vs := fam.Providers[0].Variants
-	if len(vs) != 3 {
-		t.Fatalf("want 3 variants, got %d", len(vs))
-	}
-	soft, hard, dub := vs[0], vs[1], vs[2]
-	if soft.SubDelivery != "soft" || soft.Team.Name != "Crunchyroll" {
-		t.Errorf("soft sub wrong: %+v", soft)
-	}
-	if hard.SubDelivery != "hard" {
-		t.Errorf("hard sub wrong: %+v", hard)
-	}
-	if dub.Category != "dub" || dub.SubDelivery != "none" {
-		t.Errorf("dub wrong: %+v", dub)
-	}
-}
-
-func TestAnimelibFamily_EmptyNoContent(t *testing.T) {
-	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "animelib", Status: domain.StatusEnabled, Group: "ru", SupportsSub: true, SupportsDub: true}),
-		catalog: fakeCatalog{anilib: nil}}
-	fam, ok := s.animelibFamily(context.Background(), "uuid")
-	if !ok || fam.Family != "animelib" || len(fam.Providers) != 1 {
-		t.Fatalf("empty animelib should surface a present no_content family: ok=%v fam=%+v", ok, fam)
-	}
-	p := fam.Providers[0]
-	if p.State != "no_content" || p.Selectable {
-		t.Errorf("animelib no_content feed wrong: %+v", p)
-	}
-	if p.Reason != "No content for this title on AniLib" {
-		t.Errorf("animelib no_content reason = %q", p.Reason)
-	}
-}
-
 func TestHanimeFamily_QualitiesFromStream(t *testing.T) {
 	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "hanime", Status: domain.StatusEnabled, Group: "adult", SupportsRaw: true}),
 		catalog: fakeCatalog{
@@ -240,13 +192,12 @@ func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
 		domain.ScraperProvider{Name: "hanime", Status: domain.StatusEnabled, Group: "adult", SupportsRaw: true},
 	)
 
-	// kodik present, animelib errors (omitted), hanime present → regrouped into
+	// Kodik and Hanime present → regrouped into
 	// wire families ["others" (en+kodik), "18+" (hanime)]
 	s := NewService(db, nil, fakeCatalog{
-		kodik:     []domain.KodikTranslation{{ID: 1, Title: "T", Type: "voice"}},
-		anilibErr: errors.New("not on animelib"),
-		heps:      []domain.HanimeEpisode{{Slug: "ep-1"}},
-		hstream:   &domain.HanimeStream{Sources: []domain.HanimeSource{{Height: "1080"}}},
+		kodik:   []domain.KodikTranslation{{ID: 1, Title: "T", Type: "voice"}},
+		heps:    []domain.HanimeEpisode{{Slug: "ep-1"}},
+		hstream: &domain.HanimeStream{Sources: []domain.HanimeSource{{Height: "1080"}}},
 	}, nil, nil, nil, nil)
 
 	fams, err := s.buildFamilies(context.Background(), "uuid")

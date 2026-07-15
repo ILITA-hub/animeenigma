@@ -1,9 +1,7 @@
 package config
 
 import (
-	"errors"
 	"fmt"
-	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -23,7 +21,6 @@ type Config struct {
 	MegacloudExtractor MegacloudExtractorConfig
 	Redis              RedisConfig
 	Gogoanime          GogoanimeConfig
-	AnimeKai           AnimeKaiConfig
 	AllAnime           AllAnimeConfig
 	Miruro             MiruroConfig
 	NineAnime          NineAnimeConfig
@@ -58,8 +55,8 @@ type Config struct {
 	// (30s solve budget + margin). Set 0 to fall back to the global ProviderTimeout.
 	BrowserProviderTimeout time.Duration
 
-	// Providers is the resolved provider-management config (scraper-providers.yaml,
-	// or env fallback). Source of truth for enable/disable + reason/description.
+	// Providers is the resolved provider-management config. The catalog database
+	// is the runtime source of truth; this field starts with an offline fallback.
 	Providers ProvidersConfig
 
 	// CatalogURL is the base URL of the catalog service, used to fetch provider
@@ -123,22 +120,9 @@ type GogoanimeConfig struct {
 	ServerPriority []string
 }
 
-// AnimeKaiConfig is the per-provider override surface for animekai.Provider
-// (Phase 19 — gated, ESCAPE-HATCH path). Enabled defaults to FALSE in
-// production. Toggle via SCRAPER_ANIMEKAI_ENABLED=true. BaseURL defaults to
-// https://anikai.to (animekai.to 301-redirects here as of 2026-05-12).
-// Override via SCRAPER_ANIMEKAI_BASE_URL when the mirror rotates.
-// SCRAPER-KAI-05: flag is read at orchestrator startup; restart-not-rebuild
-// is achieved via `docker compose restart scraper`.
-type AnimeKaiConfig struct {
-	Enabled bool
-	BaseURL string
-}
-
 // AllAnimeConfig is the per-provider override surface for the merged
 // allanimeokru.Provider (Phase 26 — SCRAPER-HEAL-25; folded 2026-07-06 from
-// the former standalone allanime + okru providers). Unlike AnimeKai, it ships
-// always-on — there is no SCRAPER_ALLANIME_ENABLED gate. Operator can
+// the former standalone allanime + okru providers). It ships always-on; operators can
 // disable/degrade it via the catalog `scraper_providers` DB table if the
 // upstream goes hard down. BaseURL defaults to https://api.allanime.day
 // (AllAnime's GraphQL discovery, still reused for ok.ru stream resolution);
@@ -199,10 +183,6 @@ func Load() (*Config, error) {
 			BaseURL:        getEnv("SCRAPER_GOGOANIME_BASE_URL", "https://anitaku.to"),
 			ServerPriority: parseServerPriority(getEnv("SCRAPER_SERVER_PRIORITY", "streamhg,earnvids,vibeplayer")),
 		},
-		AnimeKai: AnimeKaiConfig{
-			Enabled: getEnvBool("SCRAPER_ANIMEKAI_ENABLED", false),
-			BaseURL: getEnv("SCRAPER_ANIMEKAI_BASE_URL", "https://anikai.to"),
-		},
 		AllAnime: AllAnimeConfig{
 			BaseURL: getEnv("SCRAPER_ALLANIME_BASE_URL", "https://api.allanime.day"),
 		},
@@ -222,35 +202,10 @@ func Load() (*Config, error) {
 	if d, err := time.ParseDuration(getEnv("SCRAPER_PROVIDERS_REFRESH", "60s")); err == nil {
 		cfg.ProvidersRefresh = d
 	}
-	// Provider management config (BOOT-LOCAL ONLY): the runtime source of truth is
-	// the catalog Postgres `scraper_providers` table, fetched in main.go via
-	// LoadProvidersRemote and hot-reloaded every SCRAPER_PROVIDERS_REFRESH. This
-	// block only builds the offline fallback used until/if catalog answers at boot:
-	// every known provider enabled (the DB then re-gates registration at boot). The
-	// legacy SCRAPER_PROVIDERS_FILE (scraper-providers.yaml) is retired (AUTO-484)
-	// and normally unset; the dormant file branch is kept only as a defensive
-	// override. (SCRAPER_DEGRADED_PROVIDERS env removed AUTO-503 — Postgres is the
-	// single source of truth, so the env kill-switch is obsolete.)
-	if providersPath := getEnv("SCRAPER_PROVIDERS_FILE", ""); providersPath != "" {
-		_, statErr := os.Stat(providersPath)
-		switch {
-		case statErr == nil:
-			pc, err := LoadProviders(providersPath)
-			if err != nil {
-				return nil, fmt.Errorf("scraper providers file: %w", err)
-			}
-			cfg.Providers = pc
-		case errors.Is(statErr, os.ErrNotExist):
-			// Missing file → all-enabled offline default (DB re-gates at boot).
-			cfg.Providers = allProvidersEnabled("default-fallback")
-		default:
-			// Path set but unreadable (permission/IO/is-a-directory) — fail fast
-			// rather than silently abandon the operator's explicit source of truth.
-			return nil, fmt.Errorf("scraper providers file %q: %w", providersPath, statErr)
-		}
-	} else {
-		cfg.Providers = allProvidersEnabled("default")
-	}
+	// The catalog Postgres `scraper_providers` table is fetched in main.go via
+	// LoadProvidersRemote and hot-reloaded every SCRAPER_PROVIDERS_REFRESH. Until
+	// catalog answers, start from the compile-time all-enabled fallback.
+	cfg.Providers = allProvidersEnabled("default")
 	if u := cfg.MegacloudExtractor.URL; u != "" {
 		parsed, err := url.Parse(u)
 		if err != nil {
@@ -267,15 +222,6 @@ func Load() (*Config, error) {
 		}
 		if parsed.Scheme == "" || parsed.Host == "" {
 			return nil, fmt.Errorf("invalid SCRAPER_GOGOANIME_BASE_URL %q: missing scheme or host", u)
-		}
-	}
-	if u := cfg.AnimeKai.BaseURL; u != "" {
-		parsed, err := url.Parse(u)
-		if err != nil {
-			return nil, fmt.Errorf("invalid SCRAPER_ANIMEKAI_BASE_URL %q: %w", u, err)
-		}
-		if parsed.Scheme == "" || parsed.Host == "" {
-			return nil, fmt.Errorf("invalid SCRAPER_ANIMEKAI_BASE_URL %q: missing scheme or host", u)
 		}
 	}
 	// Phase 28 — NineAnime URL validation. SCRAPER_NINEANIME_BASE_URL fails
@@ -366,30 +312,5 @@ func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
 			return d
 		}
 	}
-	return defaultVal
-}
-
-// getEnvBool reads a boolean env var using strconv.ParseBool semantics.
-// Accepts "1", "t", "T", "TRUE", "true", "True" → true; "0", "f", "F",
-// "FALSE", "false", "False" → false. Unparseable values fall back to the
-// default (matching the lenient getEnv / getEnvInt / getEnvDuration pattern),
-// but the helper ALSO logs a WARN-level line on parse failure (WR-03) so
-// an operator who typo'd the value (e.g. "yes-please" or "on") sees their
-// value was rejected instead of silently shipping the default. Phase 19
-// introduced this helper for SCRAPER_ANIMEKAI_ENABLED.
-func getEnvBool(key string, defaultVal bool) bool {
-	val := os.Getenv(key)
-	if val == "" {
-		return defaultVal
-	}
-	b, err := strconv.ParseBool(val)
-	if err == nil {
-		return b
-	}
-	// WR-03: unparseable value — log a warning so the operator notices
-	// their intent did not take effect. We do not return an error here
-	// because callers (and downstream tests like TestLoad_AnimeKaiEnabledInvalid)
-	// rely on the lenient fall-back-to-default convention.
-	log.Printf("WARN config: %s=%q is not a valid boolean; falling back to default=%v (accepted values: 1/0, t/f, true/false, T/F, TRUE/FALSE, True/False)", key, val, defaultVal)
 	return defaultVal
 }

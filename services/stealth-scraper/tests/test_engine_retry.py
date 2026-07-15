@@ -5,6 +5,7 @@ These stub out the actual Camoufox launch so no browser/runtime is needed.
 """
 
 import asyncio
+import tempfile
 import unittest
 
 from app.config import Config
@@ -44,8 +45,15 @@ class _CrashThenOkRecipe(Recipe):
 
 
 def _engine(recipe) -> CamoufoxEngine:
-    cfg = Config(pool_size=1, max_proxy_retries=2, warming_enabled=False)
+    profile_tmp = tempfile.TemporaryDirectory()
+    cfg = Config(
+        pool_size=1,
+        max_proxy_retries=2,
+        warming_enabled=False,
+        profile_dir=profile_tmp.name,
+    )
     eng = CamoufoxEngine(cfg)
+    eng._test_profile_tmp = profile_tmp
     eng._recipes = {"fake": recipe}
 
     async def _fake_ensure(profile, proxy_id):
@@ -73,6 +81,7 @@ class TestEngineSelfHeal(unittest.TestCase):
             2, RuntimeError("Connection closed while reading from the driver")
         )
         eng = _engine(recipe)
+        self.addCleanup(eng._test_profile_tmp.cleanup)
         payload = run(eng.resolve("fake", {}))
         self.assertEqual(payload["master_url"], "https://s2.cinewave2.site/a/b/master.m3u8")
         self.assertEqual(recipe.calls, 3)  # crash, crash, success — same exit
@@ -82,6 +91,7 @@ class TestEngineSelfHeal(unittest.TestCase):
         # bogus ChallengeError, since no challenge ever occurred).
         recipe = _CrashThenOkRecipe(99, RuntimeError("driver dead"))
         eng = _engine(recipe)
+        self.addCleanup(eng._test_profile_tmp.cleanup)
         with self.assertRaises(RecipeError):
             run(eng.resolve("fake", {}))
         self.assertEqual(recipe.calls, 3)  # max_proxy_retries + 1 attempts
@@ -91,6 +101,7 @@ class TestEngineSelfHeal(unittest.TestCase):
         # exhausts after the first challenge.
         recipe = _CrashThenOkRecipe(99, ChallengeError("blocked", host="cdn", kind="player"))
         eng = _engine(recipe)
+        self.addCleanup(eng._test_profile_tmp.cleanup)
         with self.assertRaises(ChallengeError):
             run(eng.resolve("fake", {}))
         self.assertEqual(recipe.calls, 1)  # exit excluded after 1st challenge

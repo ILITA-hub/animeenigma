@@ -755,7 +755,7 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 	// Trust gate: preauth (sealed token) OR first-party internal host OR
 	// provenance-signed. The static external-domain allowlist was retired
 	// 2026-07-14 — every catalog emitter now signs its URLs at the source
-	// (streamsign.Stamp; see docs/plans/2026-07-14-retire-allowlist-blocklist.md,
+	// (streamsign.Stamp; see docs/stream-security.md,
 	// Track S).
 	//
 	//   - preauth=true skips the gate entirely: the caller already authorized

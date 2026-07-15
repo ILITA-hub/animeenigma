@@ -98,6 +98,11 @@ docker-compose.local.yml
 .worktrees/
 
 # Compiled Go binaries
+/bin/backfill-attributes
+/bin/maintenance
+/bin/*-api
+/bin/migrator
+/bin/sync-cli
 **/catalog-api
 **/auth-api
 **/gateway-api

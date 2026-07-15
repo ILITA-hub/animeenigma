@@ -130,7 +130,7 @@ type sidecarError struct {
 }
 
 // Extract fetches the playable Stream for embedURL via the sidecar.
-// Caller-supplied headers (e.g. Referer for AnimeKai Phase 19) are forwarded
+// Caller-supplied headers (for example Referer) are forwarded
 // on the request TO the sidecar; the sidecar manages its own headers to the
 // upstream embed page.
 //

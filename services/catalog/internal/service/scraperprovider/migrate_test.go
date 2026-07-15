@@ -63,6 +63,10 @@ func TestRetireHanimeAnimelib_DisablesExactlyThoseTwo(t *testing.T) {
 	if err := scraperprovider.SeedDefaults(db); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	// Legacy live databases had an AniLib row; fresh databases no longer seed it.
+	if err := db.Create(&domain.ScraperProvider{Name: "animelib", Status: domain.StatusEnabled}).Error; err != nil {
+		t.Fatalf("seed legacy animelib: %v", err)
+	}
 
 	if err := scraperprovider.RetireHanimeAnimelib(db); err != nil {
 		t.Fatalf("retire: %v", err)
@@ -118,6 +122,10 @@ func TestReEnableHanime_EnablesHanimeOnly(t *testing.T) {
 	}
 	if err := scraperprovider.SeedDefaults(db); err != nil {
 		t.Fatalf("seed: %v", err)
+	}
+	// Legacy live databases had an AniLib row; fresh databases no longer seed it.
+	if err := db.Create(&domain.ScraperProvider{Name: "animelib", Status: domain.StatusEnabled}).Error; err != nil {
+		t.Fatalf("seed legacy animelib: %v", err)
 	}
 	// Simulate the live-DB state: Plan B retired hanime + animelib.
 	if err := scraperprovider.RetireHanimeAnimelib(db); err != nil {
@@ -1175,10 +1183,10 @@ func TestReconcilePolicyFromHealthV1_AlignsRows(t *testing.T) {
 		policy domain.ProviderPolicy
 		status domain.ProviderStatus
 	}{
-		"animepahe":  {domain.PolicyManual, domain.StatusDegraded}, // down -> manual
-		"miruro":     {domain.PolicyAuto, domain.StatusEnabled},    // up -> auto (rejoins chain)
-		"nineanime":  {domain.PolicyAuto, domain.StatusDegraded},   // recovering -> auto, soaks (WireStatus degraded)
-		"gogoanime":  {domain.PolicyAuto, domain.StatusEnabled},    // degraded -> auto, one-blip buffer keeps it enabled
+		"animepahe":  {domain.PolicyManual, domain.StatusDegraded},   // down -> manual
+		"miruro":     {domain.PolicyAuto, domain.StatusEnabled},      // up -> auto (rejoins chain)
+		"nineanime":  {domain.PolicyAuto, domain.StatusDegraded},     // recovering -> auto, soaks (WireStatus degraded)
+		"gogoanime":  {domain.PolicyAuto, domain.StatusEnabled},      // degraded -> auto, one-blip buffer keeps it enabled
 		"animefever": {domain.PolicyDisabled, domain.StatusDisabled}, // disabled untouched
 	}
 	for name, w := range want {

@@ -307,12 +307,6 @@
       "label": "字幕",
       "none": "オフ"
     },
-    "subtitleSettings": {
-      "label": "字幕タイミング",
-      "title": "字幕タイミング",
-      "offsetHint": "音声に合わせて字幕を早めたり遅らせたりします。",
-      "reset": "リセット"
-    },
     "otherSubs": {
       "title": "その他の字幕",
       "openButton": "他の字幕",

@@ -13,7 +13,7 @@ import (
 )
 
 // capabilitiesCtxTimeout bounds the capability fan-out (service/capability
-// buildFamilies spins up 4 goroutines: BuildENFamily + kodik/animelib/hanime).
+// buildFamilies resolves the EN, Kodik, and Hanime families concurrently.
 // Without it, a stuck upstream leg — notably the Kodik parser, whose
 // GetTranslations relies only on its 30s http.Client timeout — would hang the
 // request up to the server WriteTimeout. Mirrors spotlight.go's

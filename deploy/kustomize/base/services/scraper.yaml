@@ -1,5 +1,5 @@
 # EN scraper orchestrator — provider failover chain (gogoanime → animepahe →
-# allanime-okru → miruro → nineanime → optional animekai) on port 8088.
+# allanime-okru → miruro → nineanime) on port 8088.
 # Provider enable/degrade/disable truth lives in the catalog Postgres
 # `scraper_providers` table, fetched via CATALOG_URL at boot + every
 # SCRAPER_PROVIDERS_REFRESH. Fails open to provider failover if the
@@ -49,11 +49,6 @@ spec:
             # column is "browser" (gogoanime, nineanime, miruro, …).
             - name: STEALTH_SCRAPER_URL
               value: "http://stealth-scraper:3000"
-            # AnimeKai is gated and default-off in production.
-            - name: SCRAPER_ANIMEKAI_ENABLED
-              value: "false"
-            - name: SCRAPER_ANIMEKAI_BASE_URL
-              value: "https://anikai.to"
             - name: SCRAPER_GOGOANIME_BASE_URL
               value: "https://anitaku.to"
             # ISS-022: per-provider failover budget; browser-engine providers

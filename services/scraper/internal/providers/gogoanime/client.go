@@ -79,7 +79,7 @@ const winningServerTTL = 5 * time.Minute
 // (streamprobe sniffed image/HTML magic where video should be). 24h — the
 // replacement for the retired static ad-CDN blocklist: a poisoned host is
 // contacted at most once per day (1 KiB ranged GET), then skipped from
-// cache. See docs/plans/2026-07-14-retire-allowlist-blocklist.md Track B.
+// cache. See docs/stream-security.md.
 const poisonVerdictTTL = 24 * time.Hour
 
 // poisonKeyPrefix namespaces the poison-verdict keys in Redis.

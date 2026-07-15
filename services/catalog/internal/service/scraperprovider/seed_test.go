@@ -28,8 +28,8 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 16 {
-		t.Fatalf("want 16 default rows, got %d", count)
+	if count != 14 {
+		t.Fatalf("want 14 default rows, got %d", count)
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")
@@ -109,9 +109,8 @@ func TestSeedDefaults_AnimeFeverDisabledTombstone(t *testing.T) {
 	if af.Reason == "" || af.Description == "" {
 		t.Errorf("animefever must carry a reason/description in the DB: %+v", af)
 	}
-	// It MUST stay scraper_operated so the scraper's remote-config loader
-	// (which requires every scraper_operated name to be in KnownProviders)
-	// still validates — else the whole provider load hard-fails.
+	// Historical tombstones remain scraper-operated so existing dashboards can
+	// distinguish them from catalog-owned sources.
 	if !af.ScraperOperated {
 		t.Error("animefever tombstone must stay scraper_operated=true (remote-loader validation)")
 	}
@@ -144,7 +143,7 @@ func TestSeedDefaults_IdempotentDoesNotOverwrite(t *testing.T) {
 	}
 	var count int64
 	db.Model(&domain.ScraperProvider{}).Count(&count)
-	if count != 16 {
+	if count != 14 {
 		t.Fatalf("re-seed created duplicates: %d rows", count)
 	}
 	var all domain.ScraperProvider

@@ -52,7 +52,7 @@ policies:
       # The roster-centric fleet rules (ProviderFleet*) cover the actionable
       # aggregate — and disabled providers are excluded from those by
       # construction (provider_state lifecycle gauge). See
-      # docs/superpowers/plans/2026-06-30-roster-centric-alerting.md Task 6.
+      # docs/scraper-health-reference.md.
       #
       # This mute stops the notification; the bot ALSO refuses to page on
       # severity=diagnostic (internal/grafana/severity.go). Both read the same

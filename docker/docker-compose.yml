@@ -220,11 +220,6 @@ services:
       # Camoufox stealth-scraper sidecar — used for providers whose DB engine
       # column is "browser" (e.g. gogoanime). Non-secret service-discovery URL.
       STEALTH_SCRAPER_URL: ${STEALTH_SCRAPER_URL:-http://stealth-scraper:3000}
-      # Phase 19 — AnimeKai (gated). Flag is default-off in production.
-      # See docker/.env.example and .planning/REQUIREMENTS.md SCRAPER-KAI-05.
-      # Toggle live with: SCRAPER_ANIMEKAI_ENABLED=true docker compose up -d scraper
-      SCRAPER_ANIMEKAI_ENABLED: ${SCRAPER_ANIMEKAI_ENABLED:-false}
-      SCRAPER_ANIMEKAI_BASE_URL: ${SCRAPER_ANIMEKAI_BASE_URL:-https://anikai.to}
       # gogoanime mirror — default anitaku.to migrated to anineko.to; override to
       # the live classic-structure mirror gogoanimes.fi (set in docker/.env). 2026-06-05.
       SCRAPER_GOGOANIME_BASE_URL: ${SCRAPER_GOGOANIME_BASE_URL:-https://anitaku.to}
