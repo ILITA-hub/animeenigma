@@ -390,7 +390,7 @@
         class="mt-8"
         ref="playerSectionRef"
       >
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div class="player-head flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div class="flex items-center justify-between gap-3 sm:gap-4">
             <h2 class="text-xl font-semibold text-white">
               <span class="flex items-center gap-2">
@@ -445,6 +445,7 @@
             :anime-id="anime.id"
             :anime="{ title: anime.title, eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage, durationMin: anime.episodeDuration }"
             :theater="theaterMode"
+            :can-theater="true"
             :is-hentai="isHentai"
             :initial-episode="resumeStartEpisode"
             :resume-banner="resumeBanner"
@@ -454,7 +455,7 @@
             :initial-lang="queryLang"
             :initial-timestamp="queryTimestamp"
             :mal-id="anime.shikimoriId"
-            @toggle-theater="setTheater(!theaterMode)"
+            @toggle-theater="onToggleTheater"
             @combo-change="aeWtSeed = $event"
             @url-sync="onUrlSync"
           />
@@ -892,7 +893,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineAsyncComponent } from 'vue'
+import { ref, watch, nextTick, defineAsyncComponent } from 'vue'
 import { Star, Clock, Play, Check, Plus, ChevronDown, Trash2, RefreshCw, Eye, EyeOff, Pencil, Calendar, MessageSquare, EllipsisVertical } from 'lucide-vue-next'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
@@ -968,6 +969,18 @@ function openPosterZoom() {
 
 // Phase 11 / UX-23 — Theater Mode (body class + ESC + localStorage persistence).
 const { theaterMode, setTheater } = useTheaterMode()
+
+// The player sits below the hero + description, so entering theater must bring
+// it up to the navbar line — that is the position the capped height is framed
+// for. scroll-margin-top on the section (see the global style block) supplies
+// the offset, so this stays free of hardcoded pixels.
+async function onToggleTheater() {
+  const on = !theaterMode.value
+  setTheater(on)
+  if (!on) return
+  await nextTick()
+  playerSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 // Locale-bound formatters + derived metadata computeds.
 const {
@@ -1176,17 +1189,33 @@ html.pl-noscroll .player-card {
      could not reach. Anime.vue is the only mount site for theater mode
      so co-locating the CSS here keeps it discoverable. -->
 <style>
-body.theater-mode .navbar-root {
-  display: none !important;
-}
-body.theater-mode .non-player-content {
-  display: none;
-}
+/* Theater = full-bleed player, page INTACT. The navbar and .non-player-content
+   used to be display:none here, which made this a fullscreen clone with no
+   reason to exist; both rules are deliberately gone. */
 body.theater-mode [data-anime-player-wrapper="true"] {
   max-width: none !important;
   margin-left: 0 !important;
   margin-right: 0 !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
+  /* mt-8 would push the player below the navbar line the cap is framed for. */
+  margin-top: 0 !important;
+  /* Offset for scrollIntoView in onToggleTheater — same token as the cap. */
+  scroll-margin-top: var(--header-offset);
+}
+
+/* The section's own title row + Classic-Kodik toggle step aside so the section
+   top IS the player top; otherwise they eat into the capped height and push the
+   control bar back under the fold. Leaving theater brings them straight back. */
+body.theater-mode .player-head {
+  display: none;
+}
+
+/* The glass card's padding and side border would frame a full-bleed player. */
+body.theater-mode [data-anime-player-wrapper="true"] .player-card {
+  padding: 0;
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
 }
 </style>
