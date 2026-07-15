@@ -5,8 +5,7 @@ import { formatEdgeTrail } from '@/composables/aePlayer/edgeTrail'
 import { ladder, formatLadderRows } from '@/utils/protocolLadder'
 import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
-import type { SeekTrace } from '@/components/player/aePlayer/overlays/DebugHud.vue'
-import type { StreamResult } from '@/types/aePlayer'
+import type { SeekTrace, StreamResult } from '@/types/aePlayer'
 
 // ── Hacker mode (debug HUD) ───────────────────────────────────────────────────
 // Per-fragment playback stats, the seek pipeline trace, HUD visibility

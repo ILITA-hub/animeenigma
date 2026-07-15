@@ -79,3 +79,28 @@ export interface StreamResult {
    *  scrub preview uses sprite sheets and never starts a shadow engine. */
   storyboardUrl?: string
 }
+
+/** One user seek, traced through the pipeline. Mutated in place as events land.
+ *  Lives here (not in DebugHud.vue) so .ts modules can import it — named type
+ *  imports from .vue files throw TS2614 in a clean vue-tsc build. */
+export interface SeekTrace {
+  /** target position, seconds */
+  target: number
+  /** target was inside a buffered range at seek time (instant, no network) */
+  bufferHit: boolean
+  /** performance.now() at seek start */
+  t0: number
+  /** ms until the buffered ranges covered the target (network fetch done) */
+  fetchMs: number | null
+  /** buffered range [start,end] that covered the target when fetch completed */
+  fetchedRange: [number, number] | null
+  /** ms until the `seeked` event (decoder positioned on the target frame) */
+  seekedMs: number | null
+  /** ms until readyState ≥ 3 (safety buffer refilled, playback resumes) */
+  resumeMs: number | null
+  /** fragments fetched while the seek was in flight (hls only) */
+  frags: number
+  /** bytes fetched while the seek was in flight (hls only) */
+  bytes: number
+  done: boolean
+}
