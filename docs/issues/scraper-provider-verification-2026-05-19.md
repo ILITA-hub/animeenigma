@@ -3,7 +3,7 @@
 **Date:** 2026-05-19
 **Target anime:** Frieren: Beyond Journey's End — MAL 52991 (Shikimori 52991)
 **Internal anime UUID:** `f0b40660-6627-4a59-8dcf-7ec8596b3623`
-**Requirement:** [SCRAPER-HEAL-20](../../.planning/phases/24-en-reconnect/24-CONTEXT.md) — Phase 24 Wave 0 hard gate
+**Requirement:** SCRAPER-HEAL-20 — retired Phase 24 Wave 0 context (available in Git history)
 **Operator:** Claude Code (autonomous GSD execute-phase 24)
 **Verdict (TL;DR):** **HARD GATE BLOCKED** — both P0 providers (gogoanime, animepahe) FAIL end-to-end; animekai is `escape-hatch-stub` (intentionally inert per SCRAPER-KAI-01..04). The default `SCRAPER_DEGRADED_PROVIDERS=gogoanime,animepahe` baked into docker-compose.yml is the correct operating posture for the current upstream state. Phase 24 frontend work pauses per D2 until at least one EN provider is recovered or Phase 26 (AllAnime lift, SCRAPER-HEAL-25) lands.
 
@@ -325,4 +325,3 @@ The `docker/.env` mutation from this verification is reverted to the pre-Phase-2
 ### Co-authors
 
 (Standard per `MEMORY.md` / CLAUDE.md.)
-

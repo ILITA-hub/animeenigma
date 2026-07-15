@@ -21,7 +21,7 @@ setup and product context.
 - [Secret rotation](runbooks/secret-rotation.md)
 - [ClickHouse backup and restore](../docker/clickhouse/BACKUP-RESTORE.md)
 - [Host automation](../infra/host/README.md)
-- [Grafana alerts](../infra/grafana/alerts/README.md) and [dashboards](../infra/grafana/dashboards/README.md)
+- [Grafana alert rules](../docker/grafana/provisioning/alerting/) and [dashboards](../infra/grafana/dashboards/README.md)
 
 ## Plans, specs, and incident evidence
 
