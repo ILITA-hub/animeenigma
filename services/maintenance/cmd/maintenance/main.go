@@ -370,7 +370,7 @@ func (s *service) run(ctx context.Context) {
 				}
 			}
 
-			// Process Grafana alerts (poller + webhook-converted) — coalesced through processWork
+			// Process the webhook-converted Grafana alerts — coalesced through processWork
 			if len(grafanaAlerts) > 0 {
 				s.processWork(ctx, workItem{grafanaAlerts: grafanaAlerts})
 			}
@@ -416,8 +416,9 @@ func (s *service) run(ctx context.Context) {
 }
 
 // resolveAlertFromWebhook handles a resolve event pushed by the Grafana webhook.
-// Invariant: state.RemoveActiveAlert MUST happen before tg.SendMessage so the
-// reconciliation poller cannot re-emit the same resolve.
+// Grafana retries deliveries, so this must be idempotent: s.mu serialises
+// concurrent deliveries and the nil GetActiveAlert check makes every repeat
+// after the first a no-op, with no duplicate Telegram notification.
 func (s *service) resolveAlertFromWebhook(key string, wa domain.GrafanaWebhookAlert) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1467,8 +1468,10 @@ func ceilingRank(c string) int {
 }
 
 // isGrafanaAlert reports whether the message originated from our own Grafana
-// alerting (API poller or webhook) — a trusted internal source. Both paths set
-// From to the grafana/grafana-webhook bot identity; end-user reports never do.
+// alerting webhook — a trusted internal source, which sets From to the
+// grafana-webhook bot identity; end-user reports never do. The bare "grafana"
+// identity is the retired API poller's; it is still accepted so an alert
+// replayed from pre-2026-07-15 persisted state is not mistaken for user input.
 func isGrafanaAlert(msg domain.ClassifiedMessage) bool {
 	if !msg.From.IsBot {
 		return false

@@ -19,6 +19,7 @@ type Config struct {
 	// 555/565) for the whole time it was believed to be deferring them. Which
 	// alerts page is now decided in exactly one place: the `severity` label +
 	// notification policy in docker/grafana/provisioning/alerting/.
+
 	StatePath string
 	IssuePath string
 	// ReportsAuthToken, when set, is the shared secret required on the
