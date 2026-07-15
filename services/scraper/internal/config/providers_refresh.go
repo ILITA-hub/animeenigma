@@ -18,10 +18,10 @@ type Logger interface {
 // catalogURL is empty or interval <= 0.
 //
 // onRefresh (nil-safe) is invoked AFTER each successful Replace, on the
-// refresher goroutine. The scraper wires it to Orchestrator.ApplyStatuses so a
-// catalog status change re-gates the failover roster without a restart. It is
-// called every poll (idempotent) — ApplyStatuses is a cheap map walk.
-func StartProvidersRefresher(ctx context.Context, target *ProvidersConfig, catalogURL string, interval time.Duration, log Logger, onRefresh func()) {
+// refresher goroutine. Returning an error rejects the candidate and restores
+// the complete last-good metadata; callers can therefore validate constructors
+// and atomically replace runtime providers without leaving config half-applied.
+func StartProvidersRefresher(ctx context.Context, target *ProvidersConfig, catalogURL string, interval time.Duration, log Logger, onRefresh func() error) {
 	if catalogURL == "" || interval <= 0 || target == nil {
 		return
 	}
@@ -40,16 +40,26 @@ func StartProvidersRefresher(ctx context.Context, target *ProvidersConfig, catal
 					}
 					continue
 				}
-				entries := make([]ProviderMeta, 0)
+				entries := make([]ProviderMeta, 0, len(pc.load()))
 				for _, m := range pc.load() {
 					entries = append(entries, m)
 				}
+				previous := make([]ProviderMeta, 0, len(target.load()))
+				for _, m := range target.load() {
+					previous = append(previous, m)
+				}
 				target.Replace(entries)
+				if onRefresh != nil {
+					if err := onRefresh(); err != nil {
+						target.Replace(previous)
+						if log != nil {
+							log.Warnw("provider config refresh rejected; keeping last-good", "error", err)
+						}
+						continue
+					}
+				}
 				if log != nil {
 					log.Infow("provider config refreshed", "disabled", target.DisabledNames())
-				}
-				if onRefresh != nil {
-					onRefresh()
 				}
 			}
 		}

@@ -5,8 +5,10 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -16,8 +18,8 @@ import (
 type Collector struct {
 	serviceName string
 
-	requestsTotal    *prometheus.CounterVec
-	requestDuration  *prometheus.HistogramVec
+	requestsTotal     *prometheus.CounterVec
+	requestDuration   *prometheus.HistogramVec
 	responseSizeBytes *prometheus.HistogramVec
 }
 
@@ -135,7 +137,7 @@ func (c *Collector) Middleware(next http.Handler) http.Handler {
 
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(rw.statusCode)
-		path := normalizePath(r.URL.Path)
+		path := metricPath(r)
 
 		c.requestsTotal.WithLabelValues(c.serviceName, r.Method, path, status).Inc()
 		c.requestDuration.WithLabelValues(c.serviceName, r.Method, path, status).Observe(duration)
@@ -148,39 +150,59 @@ func Handler() http.Handler {
 	return promhttp.Handler()
 }
 
-// normalizePath normalizes URL paths to reduce cardinality
-// Replaces dynamic segments (UUIDs, numbers) with placeholders
-func normalizePath(path string) string {
-	if len(path) == 0 {
-		return "/"
+// metricPath returns a bounded-cardinality label after chi has completed route
+// matching. For 404s and non-chi handlers, it keeps only a small operational
+// namespace instead of retaining attacker-controlled path segments.
+func metricPath(r *http.Request) string {
+	if routeContext := chi.RouteContext(r.Context()); routeContext != nil {
+		if pattern := routeContext.RoutePattern(); pattern != "" {
+			return canonicalRoutePattern(pattern)
+		}
 	}
+	return unmatchedPathCategory(r.URL.Path)
+}
 
-	// Common patterns to normalize
-	// We'll keep paths simple and group by first two segments
-	segments := splitPath(path)
+func canonicalRoutePattern(pattern string) string {
+	segments := splitPath(pattern)
 	if len(segments) == 0 {
 		return "/"
 	}
-
-	// Keep first two segments, replace rest with placeholder
-	normalized := ""
-	for i, seg := range segments {
-		if i >= 2 {
-			// Check if segment looks like an ID (UUID or numeric)
-			if isID(seg) {
-				normalized += "/:id"
-			} else {
-				normalized += "/" + seg
+	for i, segment := range segments {
+		switch {
+		case segment == "*":
+			segments[i] = ":wildcard"
+		case strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}"):
+			name := strings.TrimSuffix(strings.TrimPrefix(segment, "{"), "}")
+			if colon := strings.IndexByte(name, ':'); colon >= 0 {
+				name = name[:colon]
 			}
-		} else {
-			normalized += "/" + seg
-		}
-		if i >= 3 {
-			break
+			if name == "" {
+				name = "param"
+			}
+			segments[i] = ":" + name
 		}
 	}
+	return "/" + strings.Join(segments, "/")
+}
 
-	return normalized
+func unmatchedPathCategory(path string) string {
+	segments := splitPath(path)
+	if len(segments) == 0 {
+		return "/other"
+	}
+
+	switch segments[0] {
+	case "api", "internal", "admin", "worker":
+		return "/" + segments[0] + "/:other"
+	case ".well-known":
+		return "/.well-known/:other"
+	case "assets", "static", "favicon.ico", "robots.txt", "sitemap.xml":
+		return "/static/:other"
+	case "health", "healthz", "ready", "readyz", "live", "livez", "status":
+		return "/health/:other"
+	default:
+		return "/other"
+	}
 }
 
 func splitPath(path string) []string {
@@ -200,21 +222,4 @@ func splitPath(path string) []string {
 		segments = append(segments, current)
 	}
 	return segments
-}
-
-func isID(s string) bool {
-	if len(s) == 0 {
-		return false
-	}
-	// Check if it's a UUID (36 chars with dashes)
-	if len(s) == 36 {
-		return true
-	}
-	// Check if it's numeric
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return len(s) > 0
 }

@@ -1,7 +1,7 @@
 <template>
   <div class="max-w-4xl mx-auto px-4 py-12">
     <!-- Secret tips & hotkeys page (feedback 2026-07-08T15-21-31) — nav-less;
-         reached via the footer roulette or the global `?` hotkey. -->
+         reached via the footer roulette or the global F1 hotkey. -->
     <header class="mb-10">
       <div class="flex items-center gap-3 mb-2">
         <Sparkles class="size-8 text-primary" aria-hidden="true" />
@@ -136,7 +136,7 @@ const playerGroups = [
 ]
 
 const globalRows = [
-  { keys: ['?'], descKey: 'tips.keys.help' },
+  { keys: ['F1'], descKey: 'tips.keys.help' },
   { keys: ['Esc'], descKey: 'tips.keys.escape' },
   { keys: ['Enter', 'Shift+Enter'], descKey: 'tips.keys.chat' },
   { keys: ['←', '→'], descKey: 'tips.keys.spotlight' },

@@ -77,6 +77,7 @@ type setPolicyRequest struct {
 //     (ReconcilePolicyFromHealth: health==down ⇒ manual, else auto), so
 //     enabling a still-down provider reads back as manual (parked, hacker-
 //     selectable) not a false "auto". The probe reconciles it on every tick.
+//
 // "manual" is no longer an admin input (it's machine-set) → rejected with 400.
 // Health/HealthSince are left untouched; Policy + PolicySince change, and the
 // derived Status is written alongside them (see below).
@@ -122,6 +123,30 @@ func (h *AdminScraperProvidersHandler) SetPolicy(w http.ResponseWriter, r *http.
 		h.log.Errorw("failed to load scraper provider", "name", name, "error", err)
 		httputil.Error(w, liberrors.Internal("failed to load scraper provider"))
 		return
+	}
+
+	// Activation is DB-self-contained: a scraper-operated row may become live
+	// only when its engine_kind references the DB allowlist seeded alongside the
+	// roster. No scraper RPC/runtime-registry lookup is involved.
+	if req.Policy == string(domain.PolicyAuto) && provider.ScraperOperated {
+		if provider.EngineKind == "" {
+			httputil.BadRequest(w, "scraper provider cannot be enabled without engine_kind")
+			return
+		}
+		var engineKind domain.ProviderEngineKind
+		if err := h.db.WithContext(r.Context()).Where("kind = ?", provider.EngineKind).
+			First(&engineKind).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			h.log.Errorw("failed to validate provider engine kind", "name", name, "engine_kind", provider.EngineKind, "error", err)
+			httputil.Error(w, liberrors.Internal("failed to validate provider engine kind"))
+			return
+		} else if errors.Is(err, gorm.ErrRecordNotFound) {
+			httputil.BadRequest(w, "scraper provider engine_kind is not registered")
+			return
+		}
+		if engineKind.ProviderName != "" && engineKind.ProviderName != provider.Name {
+			httputil.BadRequest(w, "scraper provider engine_kind is bound to a different provider")
+			return
+		}
 	}
 
 	// "disabled" locks; "auto" re-enables and hands the auto/manual axis back to

@@ -350,7 +350,8 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=15d"
+      - "--storage.tsdb.retention.time=14d"
+      - "--storage.tsdb.retention.size=4GB"
       - "--web.enable-lifecycle"
       # M557: --web.enable-remote-write-receiver removed 2026-06-22. Its sole writer
       # was the OTel spanmetrics/servicegraph remote-write path, now deleted (no

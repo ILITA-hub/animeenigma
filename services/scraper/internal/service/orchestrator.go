@@ -102,45 +102,18 @@ func (o *Orchestrator) RegisterDegraded(p domain.Provider) {
 	o.degraded[p.Name()] = true
 }
 
-// ApplyStatuses re-gates the auto-failover membership of ALREADY-REGISTERED
-// providers at runtime, so a catalog status change (from the Phase 5 probe or a
-// manual catalog status-write) takes effect WITHOUT a scraper restart. Each
-// map value MUST be "enabled" or "degraded":
-//
-//   - "enabled"  -> remove from the degraded set (rejoins auto-failover)
-//   - "degraded" -> add to the degraded set (excluded from auto-failover, still
-//     reachable via an explicit `prefer`)
-//
-// Providers NOT registered in this orchestrator are ignored (a provider the DB
-// marks `disabled` was never registered at boot — ApplyStatuses never ADDS a
-// provider, only flips the degraded flag of one already present). Any status
-// value other than "enabled"/"degraded" (including "disabled") is ignored for
-// that provider, leaving its current membership unchanged. This honours the
-// "disabled is human-only / restart-gated" invariant (D5).
-//
-// Registered providers absent from `statuses` keep their current state.
-func (o *Orchestrator) ApplyStatuses(statuses map[string]string) {
+// ReplaceProviders atomically replaces the runtime provider set and its
+// degraded gate. It is the roster-refresh path: providers enabled after boot
+// can be added from the constructor registry, while newly-disabled providers
+// are removed immediately. Order is the caller's DB-derived failover order.
+func (o *Orchestrator) ReplaceProviders(providers []domain.Provider, degraded map[string]bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	if o.degraded == nil {
-		o.degraded = make(map[string]bool)
-	}
-	// Build the set of currently-registered names so we never add an unknown.
-	registered := make(map[string]bool, len(o.providers))
-	for _, p := range o.providers {
-		registered[p.Name()] = true
-	}
-	for name, status := range statuses {
-		if !registered[name] {
-			continue // never add an unregistered (e.g. boot-disabled) provider
-		}
-		switch status {
-		case "enabled":
-			delete(o.degraded, name)
-		case "degraded":
+	o.providers = append(o.providers[:0], providers...)
+	o.degraded = make(map[string]bool, len(degraded))
+	for name, value := range degraded {
+		if value {
 			o.degraded[name] = true
-		default:
-			// "disabled" or garbage: leave membership unchanged (human/restart-gated).
 		}
 	}
 }

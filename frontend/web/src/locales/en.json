@@ -289,7 +289,7 @@
         "rawDub": "RAW keeps the original Japanese audio; DUB uses a localized voice track.",
         "watchTogether": "Create a private Watch Together room to keep playback and chat in sync for everyone.",
         "streamReport": "Stream broken? The report button in the player sends the admins useful logs automatically.",
-        "help": "Press ? almost anywhere to open the full list of secret tips and hotkeys."
+        "help": "Press F1 almost anywhere to open the full list of secret tips and hotkeys in a new tab."
       }
     },
     "scraperProviders": {

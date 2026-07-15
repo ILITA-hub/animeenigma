@@ -70,6 +70,8 @@ const (
 // ProviderMeta is one resolved provider entry.
 type ProviderMeta struct {
 	Name             string
+	EngineKind       string         // constructor-registry key; DB-owned
+	FailoverPriority int            // higher first inside the provider group
 	Status           ProviderStatus // enabled | degraded | disabled (replaces the former Enabled bool)
 	Reason           string
 	Description      string
@@ -109,15 +111,15 @@ func (p ProvidersConfig) EngineOf(name string) string {
 	return EngineHTTP
 }
 
-// BrowserEngineNames returns the KnownProviders whose resolved engine is
-// EngineBrowser, in KnownProviders order. main.go uses it to grant every
+// BrowserEngineNames returns live DB roster rows whose resolved engine is
+// EngineBrowser. main.go uses it to grant every
 // Camoufox/stealth-sidecar provider the longer shared browser failover budget
 // (their cold Cloudflare solve overruns the short HTTP chain budget) without
 // hardcoding a per-name list — a new browser provider added to the DB roster is
 // picked up automatically, so none can be silently forgotten.
 func (p ProvidersConfig) BrowserEngineNames() []string {
 	out := []string{}
-	for _, name := range KnownProviders {
+	for _, name := range p.AllNames() {
 		if p.EngineOf(name) == EngineBrowser {
 			out = append(out, name)
 		}
@@ -228,6 +230,21 @@ func (p ProvidersConfig) AllNames() []string {
 	return names
 }
 
+// RuntimeNames returns every loaded row ordered by the DB-owned failover
+// priority (higher first), with name as a deterministic tie-breaker.
+func (p ProvidersConfig) RuntimeNames() []string {
+	names := p.AllNames()
+	metas := p.load()
+	sort.SliceStable(names, func(i, j int) bool {
+		left, right := metas[names[i]], metas[names[j]]
+		if left.FailoverPriority == right.FailoverPriority {
+			return names[i] < names[j]
+		}
+		return left.FailoverPriority > right.FailoverPriority
+	})
+	return names
+}
+
 // NewProvidersConfigForTest constructs a ProvidersConfig from a slice of
 // ProviderMeta entries. Intended only for unit tests that need to drive the
 // handler without a catalog response.
@@ -275,9 +292,34 @@ func (p ProvidersConfig) Rows(candidates []string) []ProviderRow {
 func allProvidersEnabled(source string) ProvidersConfig {
 	metas := make(map[string]ProviderMeta, len(KnownProviders))
 	for _, name := range KnownProviders {
-		metas[name] = ProviderMeta{Name: name, Status: StatusEnabled, Group: GroupOf(name)}
+		metas[name] = ProviderMeta{
+			Name:             name,
+			EngineKind:       name,
+			FailoverPriority: fallbackFailoverPriority(name),
+			Status:           StatusEnabled,
+			Group:            GroupOf(name),
+		}
 	}
 	return newProvidersConfig(metas, source)
+}
+
+func fallbackFailoverPriority(name string) int {
+	switch name {
+	case "gogoanime":
+		return 100
+	case "animepahe":
+		return 90
+	case "allanime-okru":
+		return 80
+	case "miruro":
+		return 70
+	case "nineanime":
+		return 60
+	case "18anime":
+		return 100
+	default:
+		return 0
+	}
 }
 
 // DisabledNames returns the sorted names of disabled (not-registered) providers

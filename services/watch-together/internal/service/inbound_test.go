@@ -698,7 +698,7 @@ func TestRouter_StateChangeEpisode_UpdatesAndBroadcastsAll(t *testing.T) {
 // Test matrix per CONTEXT §Inbound message handlers + 04.3-PLAN.md:
 //   - change_episode: Valid=true / Valid=false / transport error / room TTL'd /
 //     bad payload
-//   - change_player:  Valid=true / Valid=false / bogus player value
+//   - change_player:  Valid=true / Valid=false / roster-supplied player key
 //   - change_translation: Valid=true / Valid=false / transport error
 // ----------------------------------------------------------------------------
 
@@ -870,27 +870,28 @@ func TestStateChange_Episode_BadPayload_RejectsBeforeCatalog(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Test StateChange.6 — change_player with invalid player value (not in the
-// 5-member set) → BAD_PAYLOAD sender-only, no catalog call, no broadcast.
+// Test StateChange.6 — a future roster-supplied player key reaches catalog
+// validation instead of being rejected by a stale local allowlist.
 // ----------------------------------------------------------------------------
 
-func TestStateChange_Player_BogusValue_BadPayload(t *testing.T) {
+func TestStateChange_Player_RosterKey_ReachesCatalog(t *testing.T) {
 	fx := newRouterFixture(t)
-	roomID := "sc-pl-bogus"
+	roomID := "sc-pl-roster-key"
 	fx.seedRoom(t, fx.defaultRoom(roomID))
 
 	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangePlayer,
-		map[string]interface{}{"player": "youtube"})
+		map[string]interface{}{"player": "future-roster-player"})
 
 	calls := fx.hub.snapshot()
-	if !findErrorCode(t, calls, errCodeBadPayload) {
-		t.Fatalf("expected BAD_PAYLOAD for bogus player; calls=%v", calls)
+	if findErrorCode(t, calls, errCodeBadPayload) {
+		t.Fatalf("roster-supplied player must not be rejected locally; calls=%v", calls)
 	}
-	if findBroadcast(calls, domain.MsgRoomStateChanged) {
-		t.Fatal("bogus player must NOT broadcast")
+	if !findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatalf("expected room:state_changed after catalog accepts player; calls=%v", calls)
 	}
-	if cc := fx.catalog.snapshot(); len(cc) != 0 {
-		t.Fatalf("bogus player must short-circuit before catalog; got %d calls", len(cc))
+	cc := fx.catalog.snapshot()
+	if len(cc) != 1 || cc[0].Player != "future-roster-player" {
+		t.Fatalf("expected 1 catalog call with roster player; got %+v", cc)
 	}
 }
 
@@ -898,9 +899,8 @@ func TestStateChange_Player_BogusValue_BadPayload(t *testing.T) {
 // Test StateChange.6b — aeplayer follows the permissive path: an aeplayer
 // room with an unknown catalog episode id is NOT short-circuited — it
 // round-trips to the catalog (whose permissive contract decides), exactly
-// like ourenglish/hanime. Mechanism: aeplayer ∈ validPlayers so a
-// change_player to it reaches catalog rather than BAD_PAYLOAD; and an
-// aeplayer-room change_episode reaches catalog with the unknown id (no
+// like ourenglish/hanime. The catalog is authoritative for player support;
+// an aeplayer-room change_episode reaches it with the unknown id (no
 // per-player short-circuit in this service).
 // ----------------------------------------------------------------------------
 
@@ -941,8 +941,8 @@ func TestStateChange_AePlayer_PermissivePath(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Test StateChange.6c — changing TO aeplayer reaches the catalog round-trip
-// (is in validPlayers), not short-circuited as BAD_PAYLOAD.
+// Test StateChange.6c — changing TO aeplayer reaches the catalog round-trip,
+// not short-circuited by local validation.
 // ----------------------------------------------------------------------------
 
 func TestStateChange_Player_AePlayer_ReachesCatalog(t *testing.T) {
@@ -955,7 +955,7 @@ func TestStateChange_Player_AePlayer_ReachesCatalog(t *testing.T) {
 
 	calls := fx.hub.snapshot()
 	if findErrorCode(t, calls, errCodeBadPayload) {
-		t.Fatal("aeplayer must be accepted by validPlayers, not BAD_PAYLOAD")
+		t.Fatal("aeplayer must reach catalog, not BAD_PAYLOAD")
 	}
 	if !findBroadcast(calls, domain.MsgRoomStateChanged) {
 		t.Fatalf("expected room:state_changed broadcast; calls=%v", calls)

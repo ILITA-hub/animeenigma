@@ -12,7 +12,9 @@ import (
 // remoteProvider mirrors the JSON shape of catalog's
 // GET /internal/scraper/providers response items.
 type remoteProvider struct {
-	Name string `json:"name"`
+	Name             string `json:"name"`
+	EngineKind       string `json:"engine_kind"`
+	FailoverPriority int    `json:"failover_priority"`
 	// Status is the DB's tri-state (enabled|degraded|disabled). Enabled is the
 	// legacy bool kept ONLY to decode an older catalog mid-rolling-deploy; once
 	// status is present it wins (see statusOf).
@@ -56,10 +58,10 @@ type remoteResponse struct {
 // LoadProvidersRemote fetches provider config from catalog's internal endpoint
 // and builds a ProvidersConfig (Source="remote"). AUTO-608: unlike LoadProviders,
 // unknown provider names are ACCEPTED (fail-open) — a new DB row must never
-// void the entire remote config and force a fallback. Rows without a Go
-// constructor in this binary simply never register (main.go reflects them as
-// provider_unwired{seam="scraper"}). Group is derived from the intrinsic
-// GroupOf(name), never trusting the remote value.
+// void the entire remote config and force a fallback. Activation is protected
+// by the catalog's DB-contained engine_kind validation; main.go resolves that
+// kind through the sole constructor registry. Group is derived from the
+// intrinsic GroupOf(name), never trusting the remote value.
 func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Client, timeout time.Duration) (ProvidersConfig, error) {
 	if client == nil {
 		client = &http.Client{}
@@ -99,9 +101,8 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 		}
 		// AUTO-608 fail-open: names outside the compiled constructor set are
 		// ACCEPTED (a new DB row must never make the scraper discard the whole
-		// DB config and fall back to the offline default). Rows without a Go
-		// constructor simply never register; main.go reflects them as
-		// provider_unwired{seam="scraper"}.
+		// DB config and fall back to the offline default). Enabled rows carry a
+		// DB-validated engine_kind resolved by main.go's constructor registry.
 		if _, dup := metas[p.Name]; dup {
 			return ProvidersConfig{}, fmt.Errorf("provider config: duplicate provider %q", p.Name)
 		}
@@ -111,6 +112,8 @@ func LoadProvidersRemote(ctx context.Context, baseURL string, client *http.Clien
 		}
 		metas[p.Name] = ProviderMeta{
 			Name:             p.Name,
+			EngineKind:       p.EngineKind,
+			FailoverPriority: p.FailoverPriority,
 			Status:           p.statusOf(),
 			Reason:           p.Reason,
 			Description:      p.Description,

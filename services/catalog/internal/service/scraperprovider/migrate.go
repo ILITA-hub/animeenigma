@@ -40,6 +40,7 @@ func (migrationGuard) TableName() string { return "catalog_migration_guards" }
 
 // retireHanimeAnimelibGuardKey marks RetireHanimeAnimelib as applied.
 const retireHanimeAnimelibGuardKey = "retire_hanime_animelib"
+const backfillProviderRuntimeGuardKey = "backfill_provider_runtime_v1"
 
 // RetireHanimeAnimelib disables the hanime + animelib roster rows exactly once
 // (Plan B: those player surfaces are retired and their content dropped). RUN-ONCE
@@ -1044,6 +1045,39 @@ func BackfillProviderIdentityV1(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: backfillProviderIdentityGuardKey}).Error; err != nil {
 		return fmt.Errorf("write backfill-provider-identity guard: %w", err)
+	}
+	return nil
+}
+
+// BackfillProviderRuntimeV1 stamps engine_kind and failover_priority onto
+// pre-existing scraper-operated rows exactly once. The DB then contains all
+// runtime selection/order data needed by the scraper constructor registry.
+func BackfillProviderRuntimeV1(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", backfillProviderRuntimeGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check backfill-provider-runtime guard: %w", err)
+	}
+	if guards > 0 {
+		return nil
+	}
+	for _, p := range defaultProviders {
+		if !isScraperOperated(p.Name) {
+			continue
+		}
+		if err := db.Model(&domain.ScraperProvider{}).Where("name = ?", p.Name).
+			Updates(map[string]any{
+				"engine_kind":       p.EngineKind,
+				"failover_priority": p.FailoverPriority,
+			}).Error; err != nil {
+			return fmt.Errorf("backfill provider runtime %q: %w", p.Name, err)
+		}
+	}
+	if err := db.Create(&migrationGuard{Key: backfillProviderRuntimeGuardKey}).Error; err != nil {
+		return fmt.Errorf("write backfill-provider-runtime guard: %w", err)
 	}
 	return nil
 }

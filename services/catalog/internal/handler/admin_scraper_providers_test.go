@@ -22,10 +22,59 @@ func newAdminScraperProvidersTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+	if err := db.AutoMigrate(&domain.ProviderEngineKind{}, &domain.ScraperProvider{}); err != nil {
 		t.Fatal(err)
 	}
 	return db
+}
+
+func TestAdminScraperProviders_SetPolicy_AutoValidatesEngineKindFromDB(t *testing.T) {
+	db := newAdminScraperProvidersTestDB(t)
+	row := domain.ScraperProvider{
+		Name: "new-provider", Policy: domain.PolicyDisabled, Health: domain.HealthUp,
+		Status: domain.StatusDisabled, ScraperOperated: true, EngineKind: "generic-http",
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	h := handler.NewAdminScraperProvidersHandler(db, testNopLogger())
+	body, _ := json.Marshal(map[string]string{"policy": "auto"})
+	req := reqWithNameParam(http.MethodPut, "/api/admin/scraper-providers/new-provider/policy", "new-provider", body)
+	rr := httptest.NewRecorder()
+	h.SetPolicy(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("unregistered engine kind status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+
+	if err := db.Create(&domain.ProviderEngineKind{Kind: "generic-http"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	h.SetPolicy(rr, reqWithNameParam(http.MethodPut, "/api/admin/scraper-providers/new-provider/policy", "new-provider", body))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("DB-registered engine kind status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestAdminScraperProviders_SetPolicy_AutoRejectsNativeKindBoundToAnotherRow(t *testing.T) {
+	db := newAdminScraperProvidersTestDB(t)
+	if err := db.Create(&domain.ProviderEngineKind{Kind: "native", ProviderName: "canonical"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{
+		Name: "alias", Policy: domain.PolicyDisabled, Health: domain.HealthUp,
+		Status: domain.StatusDisabled, ScraperOperated: true, EngineKind: "native",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	h := handler.NewAdminScraperProvidersHandler(db, testNopLogger())
+	body, _ := json.Marshal(map[string]string{"policy": "auto"})
+	rr := httptest.NewRecorder()
+	h.SetPolicy(rr, reqWithNameParam(http.MethodPut, "/api/admin/scraper-providers/alias/policy", "alias", body))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched native engine kind status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
 }
 
 // reqWithNameParam builds a request carrying a chi URLParam "name" (mirrors the

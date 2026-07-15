@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -60,8 +61,9 @@ func TestStartProvidersRefresher_FiresCallbackEachPoll(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	StartProvidersRefresher(ctx, &pc, srv.URL, 20*time.Millisecond, nil, func() {
+	StartProvidersRefresher(ctx, &pc, srv.URL, 20*time.Millisecond, nil, func() error {
 		atomic.AddInt32(&calls, 1)
+		return nil
 	})
 
 	// Wait for at least 2 polls.
@@ -88,11 +90,42 @@ func TestStartProvidersRefresher_CallbackNotFiredOnFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	StartProvidersRefresher(ctx, &pc, srv.URL, 20*time.Millisecond, nil, func() {
+	StartProvidersRefresher(ctx, &pc, srv.URL, 20*time.Millisecond, nil, func() error {
 		atomic.AddInt32(&calls, 1)
+		return nil
 	})
 	time.Sleep(200 * time.Millisecond)
 	if got := atomic.LoadInt32(&calls); got != 0 {
 		t.Errorf("callback fired %d times on failing refresh; want 0", got)
+	}
+}
+
+func TestStartProvidersRefresher_CallbackRejectionRestoresLastGood(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"providers":[
+			{"name":"gogoanime","status":"disabled","scraper_operated":true}
+		]}}`))
+	}))
+	defer srv.Close()
+
+	pc := NewProvidersConfigForTest([]ProviderMeta{{Name: "gogoanime", Status: StatusEnabled}})
+	var calls int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	StartProvidersRefresher(ctx, &pc, srv.URL, 20*time.Millisecond, nil, func() error {
+		atomic.AddInt32(&calls, 1)
+		return errors.New("unsupported engine kind")
+	})
+
+	deadline := time.After(2 * time.Second)
+	for atomic.LoadInt32(&calls) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("rejection callback did not fire")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if !pc.IsEnabled("gogoanime") {
+		t.Fatal("rejected refresh replaced the last-good provider metadata")
 	}
 }

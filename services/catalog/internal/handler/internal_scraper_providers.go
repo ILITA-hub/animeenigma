@@ -50,6 +50,8 @@ type providerWire struct {
 	SubDelivery      string    `json:"sub_delivery"`
 	QualityCeiling   string    `json:"quality_ceiling"`
 	PreferenceWeight int       `json:"preference_weight"`
+	EngineKind       string    `json:"engine_kind"`
+	FailoverPriority int       `json:"failover_priority"`
 	Engine           string    `json:"engine"`
 	BaseURL          string    `json:"base_url"`
 	LastTickMetrics  string    `json:"last_tick_metrics"`
@@ -78,6 +80,8 @@ func toWire(p domain.ScraperProvider) providerWire {
 		SubDelivery:      p.SubDelivery,
 		QualityCeiling:   p.QualityCeiling,
 		PreferenceWeight: p.PreferenceWeight,
+		EngineKind:       p.EngineKind,
+		FailoverPriority: p.FailoverPriority,
 		Engine:           p.Engine,
 		BaseURL:          p.BaseURL,
 		LastTickMetrics:  p.LastTickMetrics,

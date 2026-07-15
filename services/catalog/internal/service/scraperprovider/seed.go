@@ -31,6 +31,7 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "allanime-okru", Status: domain.StatusEnabled,
+		EngineKind: "allanime-okru", FailoverPriority: 80,
 		Reason: "AllAnime discovery + ok.ru ('Ok') CDN streams (clock-free)",
 		Description: "Folded okru+allanime (2026-07-06). Reuses AllAnime's GraphQL discovery " +
 			"(api.allanime.day) and resolves ONLY its ok.ru ('Ok') sources via ok.ru data-options " +
@@ -42,6 +43,7 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "gogoanime", Status: domain.StatusEnabled,
+		EngineKind: "gogoanime", FailoverPriority: 100,
 		// gogoanime → megaplay player resolves its stream id + (rotating) CDN
 		// host at RUNTIME in JS, and the player only serves with the embedding
 		// wrapper Referer — a curl-class scraper can't follow it. Resolved via
@@ -73,6 +75,7 @@ var defaultProviders = []domain.ScraperProvider{
 		// DEGRADED (owner pref — manually selectable, out of the auto-failover chain)
 		// pending live soak. Existing DBs carried by MiruroBrowserRevival.
 		Name: "miruro", Status: domain.StatusDegraded,
+		EngineKind: "miruro", FailoverPriority: 70,
 		Engine: "browser", BaseURL: "https://www.miruro.tv",
 		Reason: "Browser-scraped via Camoufox sidecar (www.miruro.tv Cloudflare Turnstile solved)",
 		Description: "Miruro aggregator (AnimePahe/kwik.cx HLS via the kiwi server, 1080p AES-128, " +
@@ -106,6 +109,7 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "nineanime", Status: domain.StatusEnabled,
+		EngineKind: "nineanime", FailoverPriority: 60,
 		// 9anime.me.uk's whole site is DDoS-Guard/JS-gated (discovery times out
 		// for a curl-class client) and its popular catalog migrated to the
 		// megaplay.buzz JS player (runtime stream id + rotating Referer-gated CDN).
@@ -133,6 +137,7 @@ var defaultProviders = []domain.ScraperProvider{
 		// chain) pending live soak; promote to enabled later. Existing DBs are
 		// carried by AnimepaheBrowserRevival.
 		Name: "animepahe", Status: domain.StatusDegraded,
+		EngineKind: "animepahe", FailoverPriority: 90,
 		Engine: "browser", BaseURL: "https://animepahe.pw",
 		Reason: "Browser-scraped via Camoufox sidecar (animepahe.pw Cloudflare managed challenge solved)",
 		Description: "animepahe.pw sits behind a Cloudflare managed (interactive Turnstile) challenge. " +
@@ -147,6 +152,7 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 	{
 		Name: "18anime", Status: domain.StatusEnabled,
+		EngineKind: "18anime", FailoverPriority: 100,
 		Reason: "18+ provider (separate group)",
 		Description: "18anime.me hentai source for the 18+ player. Runs in its own orchestrator " +
 			"on /anime18/* — NEVER part of the EN (OurEnglish) failover chain.",
@@ -228,6 +234,15 @@ var defaultProviders = []domain.ScraperProvider{
 	},
 }
 
+var defaultEngineKinds = []domain.ProviderEngineKind{
+	{Kind: "gogoanime", ProviderName: "gogoanime", Description: "GogoAnime/Anitaku native scraper"},
+	{Kind: "animepahe", ProviderName: "animepahe", Description: "AnimePahe native scraper"},
+	{Kind: "allanime-okru", ProviderName: "allanime-okru", Description: "AllAnime discovery plus OK.ru native scraper"},
+	{Kind: "miruro", ProviderName: "miruro", Description: "Miruro native scraper"},
+	{Kind: "nineanime", ProviderName: "nineanime", Description: "9anime native scraper"},
+	{Kind: "18anime", ProviderName: "18anime", Description: "18anime native scraper"},
+}
+
 // intrinsicGroups mirrors services/scraper/internal/config/providers.go's
 // providerGroups: group is INTRINSIC to a provider (a hentai source is always
 // "adult"), so the seed can never move 18anime into the EN failover chain.
@@ -272,6 +287,14 @@ func scraperOperatedNameList() []string {
 // SeedDefaults inserts any default provider row not already present (insert-if-
 // absent: existing rows / operator edits are never overwritten). Idempotent.
 func SeedDefaults(db *gorm.DB) error {
+	if err := db.AutoMigrate(&domain.ProviderEngineKind{}); err != nil {
+		return fmt.Errorf("migrate provider engine kinds: %w", err)
+	}
+	for _, kind := range defaultEngineKinds {
+		if err := db.Where("kind = ?", kind.Kind).FirstOrCreate(&kind).Error; err != nil {
+			return fmt.Errorf("seed engine kind %q: %w", kind.Kind, err)
+		}
+	}
 	for _, p := range defaultProviders {
 		if p.Name == "" {
 			continue
@@ -287,6 +310,16 @@ func SeedDefaults(db *gorm.DB) error {
 		// Group + scraper_operated are intrinsic — always derive from the name.
 		row.Group = intrinsicGroup(p.Name)
 		row.ScraperOperated = isScraperOperated(p.Name)
+		// The physical table defaults new/operator-created rows to disabled. Seed
+		// rows opt into their declared lifecycle explicitly.
+		switch row.Status {
+		case domain.StatusEnabled:
+			row.Policy, row.Health = domain.PolicyAuto, domain.HealthUp
+		case domain.StatusDegraded:
+			row.Policy, row.Health = domain.PolicyManual, domain.HealthDown
+		default:
+			row.Policy, row.Health = domain.PolicyDisabled, domain.HealthDown
+		}
 		if row.SubDelivery == "" {
 			row.SubDelivery = "hard"
 		}

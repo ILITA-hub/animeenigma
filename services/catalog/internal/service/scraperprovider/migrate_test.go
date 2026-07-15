@@ -55,6 +55,38 @@ func TestRenameScraperProvidersTable_IdempotentOnFreshDB(t *testing.T) {
 	}
 }
 
+func TestBackfillProviderRuntimeV1StampsExistingRowsOnce(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&domain.ScraperProvider{Name: "gogoanime", ScraperOperated: true}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := scraperprovider.BackfillProviderRuntimeV1(db); err != nil {
+		t.Fatal(err)
+	}
+	var row domain.ScraperProvider
+	db.First(&row, "name = ?", "gogoanime")
+	if row.EngineKind != "gogoanime" || row.FailoverPriority != 100 {
+		t.Fatalf("runtime metadata = kind %q priority %d", row.EngineKind, row.FailoverPriority)
+	}
+
+	if err := db.Model(&row).Updates(map[string]any{"engine_kind": "operator-kind", "failover_priority": 7}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := scraperprovider.BackfillProviderRuntimeV1(db); err != nil {
+		t.Fatal(err)
+	}
+	db.First(&row, "name = ?", "gogoanime")
+	if row.EngineKind != "operator-kind" || row.FailoverPriority != 7 {
+		t.Fatalf("guard clobbered operator values: kind %q priority %d", row.EngineKind, row.FailoverPriority)
+	}
+}
+
 func TestRetireHanimeAnimelib_DisablesExactlyThoseTwo(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

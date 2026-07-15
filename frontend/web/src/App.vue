@@ -271,14 +271,14 @@ function openSecretFeature(e: MouseEvent): void {
   }
 }
 
-// Global `?` → secret tips & hotkeys page. The `<video>` guard keeps a
-// stray keystroke from yanking the user off an active watch surface (the
-// player owns its own window-level hotkeys while mounted).
+// Global F1 → secret tips & hotkeys page in a new browser tab. Deliberately
+// keep the new window as an auxiliary browsing context: adding `noopener`
+// makes current Chromium consider this in-scope URL eligible for PWA link
+// capture, which can launch the installed app instead of opening a tab.
 function onGlobalKeydown(e: KeyboardEvent): void {
   if (!isHelpHotkey(e)) return
-  if (document.querySelector('video')) return
-  if (route.path === '/tips') return
-  void router.push('/tips')
+  e.preventDefault()
+  window.open(router.resolve('/tips').href, '_blank')
 }
 
 // Auth-driven lifecycle: start polling on login, stop + clear state on

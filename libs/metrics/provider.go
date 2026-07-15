@@ -101,19 +101,6 @@ var (
 		[]string{"provider"},
 	)
 
-	// ProviderUnwired flags a stream_providers roster row that a service cannot
-	// serve because its per-provider code registry has no implementation for the
-	// name (seam: "scraper" = no Go constructor in scraper-api). 1 = row exists,
-	// is not disabled, but nothing registered. 0/absent = wired or disabled.
-	// AUTO-608: rows-without-code must be observable, never silent.
-	ProviderUnwired = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "provider_unwired",
-			Help: "1 when a non-disabled stream_providers row has no code implementation at the labeled seam",
-		},
-		[]string{"provider", "seam"},
-	)
-
 	// ProviderInfo is an info-style gauge (always 1) carrying per-provider
 	// management metadata (status, reason, description) for the Grafana table.
 	// `status` is the tri-state from the catalog scraper_providers table

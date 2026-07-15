@@ -104,6 +104,7 @@ func main() {
 		&domain.Collection{},
 		&domain.CollectionItem{},
 		// Scraper provider config + capability traits (spec 2026-06-15).
+		&domain.ProviderEngineKind{},
 		&domain.ScraperProvider{},
 		&domain.Character{},
 		&domain.AnimeCharacter{},
@@ -201,6 +202,9 @@ func main() {
 	// edit is never clobbered.
 	if err := scraperprovider.BackfillProviderIdentityV1(db.DB); err != nil {
 		log.Errorw("backfill-provider-identity migration failed (continuing)", "error", err)
+	}
+	if err := scraperprovider.BackfillProviderRuntimeV1(db.DB); err != nil {
+		log.Errorw("backfill-provider-runtime migration failed (continuing)", "error", err)
 	}
 
 	// One-time enablement: route the EXISTING gogoanime row through the Camoufox

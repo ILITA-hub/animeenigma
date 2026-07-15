@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -206,12 +207,9 @@ func main() {
 	// none of them the browser budget.
 
 	// Prefer DB-backed provider config from catalog (the runtime source of truth);
-	// fall back to the all-enabled offline default already in cfg if catalog is
-	// unreachable at boot. cfg.Providers (which gates provider registration below)
-	// is authoritative at boot.
-	// NOTE: this only re-gates registration at BOOT. Runtime hot enable/disable of the
-	// failover roster would require orchestrator re-registration (future work); the
-	// periodic refresher currently hot-updates the /health display only.
+	// Fall back to the all-enabled offline default already in cfg if catalog is
+	// unreachable at boot. Successful periodic refreshes atomically reconcile the
+	// complete runtime roster below.
 	if cfg.CatalogURL != "" {
 		if pc, err := config.LoadProvidersRemote(context.Background(), cfg.CatalogURL, nil, 5*time.Second); err != nil {
 			log.Warnw("remote provider config unavailable; using all-enabled offline fallback", "error", err, "catalog_url", cfg.CatalogURL)
@@ -222,73 +220,13 @@ func main() {
 		}
 	}
 
-	// Grant EVERY engine=browser provider the longer shared browser failover
-	// budget (BrowserProviderTimeout). A browser provider's stealth-scraper warm
-	// session cold-solves a Cloudflare Turnstile challenge (up to 30s) and idle-
-	// expires every 600s — far shorter than the 6h health-probe cadence — so it
-	// is ALWAYS cold at probe time, and the shared 8s ProviderTimeout kills that
-	// cold solve before it finishes, marking the provider perpetually down
-	// regardless of real health (animepahe 2026-07-04; miruro hit the identical
-	// trap 2026-07-06). The browser set is DERIVED from the DB roster (not a
-	// hardcoded per-name list), so a new browser provider inherits it and none
-	// can be silently forgotten. Fast HTTP providers keep the short 8s chain
-	// budget (ISS-022). Boot-time, matching the registration model above: an
-	// engine flip in the DB takes effect on the next restart.
-	if cfg.BrowserProviderTimeout > 0 {
-		for _, name := range cfg.Providers.BrowserEngineNames() {
-			orchestrator.SetProviderTimeoutOverride(name, cfg.BrowserProviderTimeout)
-			log.Infow("browser-engine per-provider timeout override configured",
-				"provider", name, "timeout", cfg.BrowserProviderTimeout.String())
-		}
-	}
-
-	// registerByStatus registers p into the EN orchestrator according to its DB
-	// status (AUTO-484): enabled → auto-failover chain; degraded → registered but
-	// EXCLUDED from auto-failover (reachable only via an explicit `prefer` /
-	// hacker-mode pin, sorted last in the player); disabled → not registered.
-	// candidateProviders is the ordered EN roster of providers THIS BINARY
-	// constructs. It is NOT a hand-maintained literal — registerByStatus appends
-	// each provider's name as it is constructed+registered below, so the slice is
-	// DERIVED from the actual wiring and can never drift from it. It drives the
-	// runtime re-gate and the wiring-invariant fatal further down (both run AFTER
-	// every registerByStatus call, so the slice is fully populated by then).
-	// Registration order == failover order (CONTEXT.md D5). A provider the DB marks
-	// disabled is still constructed + passed to registerByStatus (which records the
-	// name but skips the orchestrator registration), so it appears here. A CODELESS
-	// tombstone like animefever (disabled DB row, no provider code) is NOT
-	// constructed, so it is absent here — the Prometheus reflection keys off
-	// cfg.Providers.AllNames() instead so the tombstone still shows on the
-	// dashboard (AUTO-608).
-	var candidateProviders []string
-
-	// constructedProviders is the set of provider names THIS BINARY has a Go
-	// constructor for, across BOTH the EN chain (registerByStatus, below) and
-	// the adult group (18anime, registered separately near adultOrch). AUTO-608:
-	// main.go diffs cfg.Providers.AllNames() (every DB row) against this set to
-	// flag provider_unwired{seam="scraper"} — a DB row with no matching entry
-	// here has no code in this binary.
-	var constructedProviders []string
-
-	// registerByStatus registers p into the EN orchestrator according to its DB
-	// status (AUTO-484): enabled → auto-failover chain; degraded → registered but
-	// EXCLUDED from auto-failover (reachable only via an explicit `prefer` /
-	// hacker-mode pin, sorted last in the player); disabled → not registered. In
-	// every case p's name joins candidateProviders (the derived EN roster above)
-	// and constructedProviders (the AUTO-608 wiring set).
-	registerByStatus := func(p domain.Provider) {
-		candidateProviders = append(candidateProviders, p.Name())
-		constructedProviders = append(constructedProviders, p.Name())
-		meta := cfg.Providers.Meta(p.Name())
-		switch cfg.Providers.Status(p.Name()) {
-		case config.StatusDisabled:
-			log.Warnw("provider SKIPPED (disabled in DB)", "name", p.Name(), "reason", meta.Reason)
-		case config.StatusDegraded:
-			orchestrator.RegisterDegraded(p)
-			log.Infow("registered provider (DEGRADED — manual-only, excluded from auto-failover)",
-				"name", p.Name(), "reason", meta.Reason)
-		default:
-			orchestrator.Register(p)
-			log.Infow("registered provider", "name", p.Name())
+	// The DB owns provider existence through engine_kind; this is the sole code
+	// registry that maps a supported kind to executable construction. Rows drive
+	// membership and order later, after every constructor is registered.
+	providerConstructors := service.NewProviderConstructorRegistry()
+	mustRegisterConstructor := func(kind string, constructor service.ProviderConstructor) {
+		if err := providerConstructors.Register(kind, constructor); err != nil {
+			log.Fatalw("failed to register provider constructor", "engine_kind", kind, "error", err)
 		}
 	}
 
@@ -355,25 +293,22 @@ func main() {
 		return st, err
 	}
 
-	gogoanimeProvider, err := gogoanime.New(gogoanime.Deps{
-		BaseURL:        cfg.Gogoanime.BaseURL,
-		HTTP:           gogoanimeBaseHTTP,
-		Embeds:         registry,
-		MalSync:        gogoanimeMalsync,
-		Cache:          redisCache,
-		Log:            log,
-		ServerPriority: cfg.Gogoanime.ServerPriority,
-		HostExtractor:  hostExtractor,
-		// Probe nil → New() defaults to libs/streamprobe.Probe.
-		Probe:          nil,
-		UseBrowser:     gogoUseBrowser,
-		BrowserResolve: gogoBrowserResolve,
-		SessionAlive:   stealthClient.SessionAlive,
+	mustRegisterConstructor("gogoanime", func(runtime service.ProviderRuntimeConfig) (domain.Provider, error) {
+		return gogoanime.New(gogoanime.Deps{
+			BaseURL:        runtime.BaseURL,
+			HTTP:           gogoanimeBaseHTTP,
+			Embeds:         registry,
+			MalSync:        gogoanimeMalsync,
+			Cache:          redisCache,
+			Log:            log,
+			ServerPriority: cfg.Gogoanime.ServerPriority,
+			HostExtractor:  hostExtractor,
+			Probe:          nil,
+			UseBrowser:     gogoUseBrowser,
+			BrowserResolve: gogoBrowserResolve,
+			SessionAlive:   stealthClient.SessionAlive,
+		})
 	})
-	if err != nil {
-		log.Fatalw("failed to construct Gogoanime provider", "error", err)
-	}
-	registerByStatus(gogoanimeProvider)
 
 	// AnimePahe — SECOND-CHANCE EN provider. Demoted from primary on
 	// 2026-05-13 after gogoanime/Anitaku proved more reliable in real traffic
@@ -396,20 +331,18 @@ func main() {
 		breaker.Record(provider, wedged)
 		return status, body, err
 	}
-	animePaheProvider, err := animepahe.New(animepahe.Deps{
-		BaseURL:      cfg.Providers.BaseURLOf("animepahe"),
-		HTTP:         animePaheBaseHTTP,
-		Embeds:       registry,
-		MalSync:      malSyncClient,
-		Cache:        redisCache,
-		Log:          log,
-		UseBrowser:   paheUseBrowser,
-		BrowserFetch: paheBrowserFetch,
+	mustRegisterConstructor("animepahe", func(runtime service.ProviderRuntimeConfig) (domain.Provider, error) {
+		return animepahe.New(animepahe.Deps{
+			BaseURL:      runtime.BaseURL,
+			HTTP:         animePaheBaseHTTP,
+			Embeds:       registry,
+			MalSync:      malSyncClient,
+			Cache:        redisCache,
+			Log:          log,
+			UseBrowser:   paheUseBrowser,
+			BrowserFetch: paheBrowserFetch,
+		})
 	})
-	if err != nil {
-		log.Fatalw("failed to construct AnimePahe provider", "error", err)
-	}
-	registerByStatus(animePaheProvider)
 
 	// allanime-okru — AllAnime GraphQL discovery + ok.ru ("Ok") stream resolution,
 	// clock-free (no api.allanime.day /apivtwo/clock). Folded 2026-07-06 from the
@@ -420,16 +353,14 @@ func main() {
 		domain.WithProvider("allanime-okru"),
 		domain.WithTransport(egressTransport),
 	)
-	allanimeOkruProvider, err := allanimeokru.New(allanimeokru.Deps{
-		BaseURL: cfg.AllAnime.BaseURL,
-		HTTP:    allanimeOkruBaseHTTP,
-		Cache:   redisCache,
-		Log:     log,
+	mustRegisterConstructor("allanime-okru", func(runtime service.ProviderRuntimeConfig) (domain.Provider, error) {
+		return allanimeokru.New(allanimeokru.Deps{
+			BaseURL: runtime.BaseURL,
+			HTTP:    allanimeOkruBaseHTTP,
+			Cache:   redisCache,
+			Log:     log,
+		})
 	})
-	if err != nil {
-		log.Fatalw("failed to construct allanime-okru provider", "error", err)
-	}
-	registerByStatus(allanimeOkruProvider)
 
 	// animefever (was EN failover slot 4) was REMOVED from the binary 2026-07-05:
 	// its upstream is dead for EVERYONE — 100% of HLS segments 302 to a ByteDance
@@ -478,21 +409,19 @@ func main() {
 		breaker.Record(provider, wedged)
 		return status, headers, body, err
 	}
-	miruroProvider, err := miruro.New(miruro.Deps{
-		BaseURL:      cfg.Miruro.BaseURL,
-		ProxyURL:     cfg.Miruro.ProxyURL,
-		ProxyURLAlt:  cfg.Miruro.ProxyURLAlt,
-		HTTP:         miruroBaseHTTP,
-		Cache:        redisCache,
-		IDMapping:    armClient,
-		Log:          log,
-		UseBrowser:   miruroUseBrowser,
-		BrowserFetch: miruroBrowserFetch,
+	mustRegisterConstructor("miruro", func(runtime service.ProviderRuntimeConfig) (domain.Provider, error) {
+		return miruro.New(miruro.Deps{
+			BaseURL:      runtime.BaseURL,
+			ProxyURL:     cfg.Miruro.ProxyURL,
+			ProxyURLAlt:  cfg.Miruro.ProxyURLAlt,
+			HTTP:         miruroBaseHTTP,
+			Cache:        redisCache,
+			IDMapping:    armClient,
+			Log:          log,
+			UseBrowser:   miruroUseBrowser,
+			BrowserFetch: miruroBrowserFetch,
+		})
 	})
-	if err != nil {
-		log.Fatalw("failed to construct Miruro provider", "error", err)
-	}
-	registerByStatus(miruroProvider)
 
 	// Phase 28 Plan 28-05 (SCRAPER-HEAL-39) — 9anime.me.uk as the LAST-RESORT
 	// EN provider (failover slot 6 per CONTEXT.md D5).
@@ -531,20 +460,18 @@ func main() {
 		breaker.Record(provider, wedged)
 		return status, body, err
 	}
-	nineAnimeProvider, err := nineanime.New(nineanime.Deps{
-		BaseURL:        cfg.NineAnime.BaseURL,
-		HTTP:           nineAnimeBaseHTTP,
-		Cache:          redisCache,
-		Log:            log,
-		Megaplay:       embeds.NewRecordingMegaplayExtractor(megaplayWrap), // WR-07: record megaplay egress; nineanime tags provider via ctx
-		UseBrowser:     nineUseBrowser,
-		BrowserResolve: nineBrowserResolve,
-		BrowserFetch:   nineBrowserFetch,
+	mustRegisterConstructor("nineanime", func(runtime service.ProviderRuntimeConfig) (domain.Provider, error) {
+		return nineanime.New(nineanime.Deps{
+			BaseURL:        runtime.BaseURL,
+			HTTP:           nineAnimeBaseHTTP,
+			Cache:          redisCache,
+			Log:            log,
+			Megaplay:       embeds.NewRecordingMegaplayExtractor(megaplayWrap),
+			UseBrowser:     nineUseBrowser,
+			BrowserResolve: nineBrowserResolve,
+			BrowserFetch:   nineBrowserFetch,
+		})
 	})
-	if err != nil {
-		log.Fatalw("failed to construct NineAnime provider", "error", err)
-	}
-	registerByStatus(nineAnimeProvider)
 
 	// 18+ group — a SEPARATE orchestrator (adultOrch) that is NEVER given any
 	// EN provider, so 18+ content cannot leak into the OurEnglish failover.
@@ -561,14 +488,54 @@ func main() {
 		domain.WithProvider("18anime"),
 		domain.WithTransport(egressTransport),
 	)
-	anime18Provider := eighteenanime.New(eighteenanime.Deps{HTTP: anime18BaseHTTP, Cache: redisCache, Log: log})
-	constructedProviders = append(constructedProviders, anime18Provider.Name())
-	if cfg.Providers.IsEnabled(anime18Provider.Name()) {
-		adultOrch.Register(anime18Provider)
-		log.Infow("registered provider (adult group)", "name", anime18Provider.Name())
-	} else {
-		log.Warnw("provider SKIPPED (disabled in scraper-providers.yaml)",
-			"name", anime18Provider.Name(), "group", config.GroupAdult)
+	mustRegisterConstructor("18anime", func(service.ProviderRuntimeConfig) (domain.Provider, error) {
+		return eighteenanime.New(eighteenanime.Deps{HTTP: anime18BaseHTTP, Cache: redisCache, Log: log}), nil
+	})
+
+	// Rebuild both runtime groups from the DB roster. Constructor instances are
+	// cached, so refreshes only atomically re-order/re-gate the orchestrators.
+	reconcileProviders := func() error {
+		var enProviders, adultProviders []domain.Provider
+		enDegraded, adultDegraded := map[string]bool{}, map[string]bool{}
+		for _, name := range cfg.Providers.RuntimeNames() {
+			meta := cfg.Providers.Meta(name)
+			timeout := time.Duration(0)
+			if meta.Engine == config.EngineBrowser {
+				timeout = cfg.BrowserProviderTimeout
+			}
+			orchestrator.SetProviderTimeoutOverride(name, timeout)
+			adultOrch.SetProviderTimeoutOverride(name, timeout)
+			if meta.Status == config.StatusDisabled {
+				continue
+			}
+			provider, ok, err := providerConstructors.Resolve(meta.EngineKind, service.ProviderRuntimeConfig{
+				Name: name, BaseURL: meta.BaseURL,
+			})
+			if err != nil {
+				return fmt.Errorf("construct provider %q (engine_kind=%q): %w", name, meta.EngineKind, err)
+			}
+			if !ok {
+				return fmt.Errorf("provider %q references unsupported engine_kind %q", name, meta.EngineKind)
+			}
+			if provider.Name() != name {
+				return fmt.Errorf("provider row %q selected engine_kind %q which constructs %q", name, meta.EngineKind, provider.Name())
+			}
+			degraded := meta.Status == config.StatusDegraded
+			switch meta.Group {
+			case config.GroupAdult:
+				adultProviders = append(adultProviders, provider)
+				adultDegraded[name] = degraded
+			default:
+				enProviders = append(enProviders, provider)
+				enDegraded[name] = degraded
+			}
+		}
+		orchestrator.ReplaceProviders(enProviders, enDegraded)
+		adultOrch.ReplaceProviders(adultProviders, adultDegraded)
+		return nil
+	}
+	if err := reconcileProviders(); err != nil {
+		log.Fatalw("failed to reconcile DB provider roster", "error", err)
 	}
 
 	// Seed parser_zero_match_total with a no-op Add(0) for every registered
@@ -593,39 +560,17 @@ func main() {
 	anime18Handler := handler.NewScraperHandler(adultOrch, cache, log)
 	anime18Handler.WithProvidersConfig(&cfg.Providers)
 
-	// candidateProviders is now fully populated: registerByStatus appended every
-	// constructed EN provider's name in failover order above (gogoanime → animepahe
-	// → allanime-okru → miruro → nineanime). It drives the
-	// Phase-3 runtime re-gate, the wiring-invariant fatal, and the Prometheus
-	// reflection below. No hand-maintained literal → it cannot drift from the
-	// actual registrations. (animefever removed from the binary 2026-07-05.)
-
-	// Phase 3 — runtime re-gate: each catalog refresh moves providers in/out of
-	// the orchestrator's degraded failover map without a restart. Only EN-group
-	// candidate providers that are REGISTERED (enabled or degraded at boot) are
-	// re-gated; disabled providers were never registered and stay restart-gated
-	// (D5). The adult orchestrator is intentionally NOT re-gated (single fixed
-	// 18+ provider).
-	regate := func() {
-		statuses := make(map[string]string, len(candidateProviders))
-		for _, name := range candidateProviders {
-			switch cfg.Providers.Status(name) {
-			case config.StatusEnabled:
-				statuses[name] = "enabled"
-			case config.StatusDegraded:
-				statuses[name] = "degraded"
-				// StatusDisabled: omitted — never re-gated at runtime (D5).
-			}
+	// Hot-reload the complete DB-owned runtime roster. Both enable and disable
+	// transitions replace the live orchestrator sets without a process restart.
+	config.StartProvidersRefresher(context.Background(), &cfg.Providers, cfg.CatalogURL, cfg.ProvidersRefresh, log, func() error {
+		if err := reconcileProviders(); err != nil {
+			return err
 		}
-		orchestrator.ApplyStatuses(statuses)
-		log.Infow("orchestrator re-gated from catalog status",
+		log.Infow("provider roster reconciled",
 			"degraded", cfg.Providers.DegradedNames(),
 			"disabled", cfg.Providers.DisabledNames())
-	}
-
-	// Hot-reload provider config from catalog (enable/disable without restart) and
-	// re-gate the failover roster after each successful refresh.
-	config.StartProvidersRefresher(context.Background(), &cfg.Providers, cfg.CatalogURL, cfg.ProvidersRefresh, log, regate)
+		return nil
+	})
 
 	router := transport.NewRouter(scraperHandler, anime18Handler, cfg, log, metricsCollector)
 
@@ -638,57 +583,12 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Phase 19 wiring invariant (narrowed by the accumulator refactor). Since
-	// candidateProviders is now derived from the registerByStatus calls, the old
-	// literal-vs-registration drift is structurally impossible; this residual check
-	// only fires if a provider reached the orchestrator WITHOUT going through
-	// registerByStatus (a direct orchestrator.Register bypass → got > want). Cheap
-	// boot-time defense-in-depth; kept, not load-bearing.
-	expectedProviders := 0
-	for _, name := range candidateProviders {
-		if cfg.Providers.IsRegistered(name) {
-			expectedProviders++
-		}
-	}
-	registered := orchestrator.RegisteredProviders()
-	if got := len(registered); got != expectedProviders {
-		// WR-05: include the actual registered provider names so an on-call
-		// hitting this fatal sees WHICH providers landed in the orchestrator
-		// without having to read source. Mirrors the "error" + context shape
-		// of the other Fatalw call sites in this file (e.g. line 116).
-		names := make([]string, 0, len(registered))
-		for _, p := range registered {
-			names = append(names, p.Name())
-		}
-		log.Fatalw("provider wiring invariant broken",
-			"got", got, "want", expectedProviders,
-			"disabled", cfg.Providers.DisabledNames(),
-			"registered", names)
-	}
-
-	// Adult-group wiring invariant — the adult orchestrator holds exactly the
-	// enabled adult providers (1 when 18anime is enabled, 0 when disabled).
-	adultCandidates := config.KnownProvidersInGroup(config.GroupAdult)
-	expectedAdult := 0
-	for _, name := range adultCandidates {
-		if cfg.Providers.IsEnabled(name) {
-			expectedAdult++
-		}
-	}
-	if got := len(adultOrch.RegisteredProviders()); got != expectedAdult {
-		log.Fatalw("adult-group wiring invariant broken", "got", got, "want", expectedAdult)
-	}
-
 	// ISS-023: reflect the provider-management config into Prometheus so the
 	// Grafana dashboard shows EVERY provider (enabled and disabled) with its
 	// reason/description. Reflect the full LIVE roster (cfg.Providers.AllNames()
 	// = every scraper_operated DB row, incl. the adult group), NOT
-	// candidateProviders (which is derived from what this binary actually
-	// constructs) and NOT the compile-time config.KnownProviders (AUTO-608: a
-	// new DB row must show up here without a code change). That gap matters for
-	// a codeless tombstone like animefever: it has a disabled DB row but no
-	// provider code, so it never joins candidateProviders — keying the
-	// reflection off AllNames() keeps its row on the dashboard as intended.
+	// the compile-time config.KnownProviders. A new DB row must show up here
+	// without a code change, including disabled historical tombstones.
 	for _, row := range cfg.Providers.Rows(cfg.Providers.AllNames()) {
 		enabled := 0.0
 		if row.Enabled {
@@ -702,23 +602,6 @@ func main() {
 		"disabled", cfg.Providers.DisabledNames(),
 	)
 
-	// AUTO-608: reflect DB rows this binary has no constructor for. A row that
-	// is disabled (tombstone: animefever, allanime) is expected to be codeless
-	// and reads 0; anything else without code is a real wiring gap.
-	constructed := make(map[string]bool, len(constructedProviders))
-	for _, n := range constructedProviders {
-		constructed[n] = true
-	}
-	for _, name := range cfg.Providers.AllNames() {
-		unwired := 0.0
-		if !constructed[name] && cfg.Providers.Status(name) != config.StatusDisabled {
-			unwired = 1.0
-			log.Warnw("provider row UNWIRED — DB roster row has no provider code in this binary",
-				"name", name, "status", cfg.Providers.Status(name))
-		}
-		metrics.ProviderUnwired.WithLabelValues(name, "scraper").Set(unwired)
-	}
-
 	go func() {
 		log.Infow("scraper service ready",
 			"port", cfg.Server.Port,
@@ -728,8 +611,8 @@ func main() {
 			"megacloud_url", cfg.MegacloudExtractor.URL,
 			"animepahe_base_url", cfg.Providers.BaseURLOf("animepahe"),
 			"animepahe_engine", cfg.Providers.EngineOf("animepahe"),
-			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
-			"nineanime_base_url", cfg.NineAnime.BaseURL,
+			"gogoanime_base_url", cfg.Providers.BaseURLOf("gogoanime"),
+			"nineanime_base_url", cfg.Providers.BaseURLOf("nineanime"),
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalw("failed to start server", "error", err)

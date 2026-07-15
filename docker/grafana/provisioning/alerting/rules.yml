@@ -13,6 +13,10 @@ deleteRules:
   # its block used to live, further down this file.
   - orgId: 1
     uid: player-unavailable
+  # Constructor registry + DB engine_kind activation validation make the
+  # former roster/code mismatch state structurally invalid.
+  - orgId: 1
+    uid: provider-row-unwired
 
 groups:
   - orgId: 1
@@ -1210,62 +1214,6 @@ groups:
         annotations:
           summary: "Provider {{ $labels.provider }} ({{ $labels.group }}) has been Down for 36h+"
           description: "provider_health_state{provider=\"{{ $labels.provider }}\"} has been pinned at Down(1) for at least 36 hours — every probe in that window failed. The {{ $labels.group }} group is still being served by its other providers, so this is not an outage; it is a rotted roster row that keeps consuming a failover slot. Either fix it, or park it (set policy=disabled) so the roster reflects reality and this alert goes quiet. Check /api/admin/scraper/health and the playback-health roster."
-
-      # AUTO-608: roster/code integrity — provider_unwired{provider,seam} (scraper,
-      # seam="scraper") is 1 when a non-disabled stream_providers DB row has no
-      # matching code implementation registered for that seam (a row was
-      # added/enabled without shipping the implementation, or the implementing
-      # deploy hasn't landed yet). `for: 30m` so a row created moments before its
-      # code deploys mid-rollout doesn't page instantly. severity: warning (not
-      # critical like the ProviderFleet* rules above) — this is a roster/deploy
-      # hygiene signal, not a live playback outage; mirrors the AePlayerPlaybackFailures
-      # (2026-07-11) precedent for reaching maintenance-webhook via the default route.
-      - uid: provider-row-unwired
-        title: ProviderRowUnwired
-        condition: C
-        noDataState: OK
-        execErrState: Error
-        for: 30m
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: PBFA97CFB590B2093
-            model:
-              expr: max by (provider, seam) (provider_unwired == 1)
-              instant: true
-              refId: A
-          - refId: B
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: __expr__
-            model:
-              refId: B
-              type: reduce
-              expression: A
-              reducer: last
-          - refId: C
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: gt
-                  operator:
-                    type: and
-              refId: C
-              type: threshold
-              expression: B
-        labels:
-          severity: warning
-        annotations:
-          summary: "Provider roster row {{ $labels.provider }} has no code at seam {{ $labels.seam }} — a DB row was added/enabled without a matching implementation, or a deploy is missing."
-          description: "provider_unwired{provider=\"{{ $labels.provider }}\", seam=\"{{ $labels.seam }}\"} has been 1 for 30+ minutes. Check the \"Unwired roster rows\" panel on the Playback Health dashboard, and confirm the stream_providers DB row against the seam's code registry (e.g. scraper KnownProviders)."
 
   # Host Pressure (graceful-degradation Phase 1,
   # docs/superpowers/specs/2026-07-10-graceful-degradation-design.md).

@@ -15,7 +15,7 @@ func newDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+	if err := db.AutoMigrate(&domain.ProviderEngineKind{}, &domain.ScraperProvider{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
@@ -30,6 +30,18 @@ func TestSeedDefaults_InsertsRoster(t *testing.T) {
 	db.Model(&domain.ScraperProvider{}).Count(&count)
 	if count != 14 {
 		t.Fatalf("want 14 default rows, got %d", count)
+	}
+	var engineKinds int64
+	if err := db.Model(&domain.ProviderEngineKind{}).Count(&engineKinds).Error; err != nil {
+		t.Fatal(err)
+	}
+	if engineKinds != 6 {
+		t.Fatalf("want 6 engine kinds, got %d", engineKinds)
+	}
+	var gogo domain.ScraperProvider
+	db.First(&gogo, "name = ?", "gogoanime")
+	if gogo.EngineKind != "gogoanime" || gogo.FailoverPriority != 100 {
+		t.Fatalf("gogoanime runtime metadata = kind %q priority %d", gogo.EngineKind, gogo.FailoverPriority)
 	}
 	var all domain.ScraperProvider
 	db.First(&all, "name = ?", "allanime")

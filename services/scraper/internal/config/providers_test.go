@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestAllProvidersEnabled_OfflineFallback(t *testing.T) {
 	pc := allProvidersEnabled("default")
@@ -53,6 +56,17 @@ func TestKnownProvidersInGroup(t *testing.T) {
 	}
 }
 
+func TestProvidersConfigRuntimeNamesUsesDBPriority(t *testing.T) {
+	pc := NewProvidersConfigForTest([]ProviderMeta{
+		{Name: "low", FailoverPriority: 10},
+		{Name: "high-b", FailoverPriority: 20},
+		{Name: "high-a", FailoverPriority: 20},
+	})
+	want := []string{"high-a", "high-b", "low"}
+	if got := pc.RuntimeNames(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("RuntimeNames() = %v, want %v", got, want)
+	}
+}
 func TestBrowserEngineNames(t *testing.T) {
 	// Mixed roster: two browser-engine providers (out of KnownProviders order in
 	// the map), the rest HTTP or engine-unset. Expect only the browser ones,

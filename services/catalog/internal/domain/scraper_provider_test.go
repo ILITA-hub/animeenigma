@@ -103,6 +103,26 @@ func TestScraperProviderSchema_AutoMigrate(t *testing.T) {
 	}
 }
 
+func TestScraperProviderDatabaseDefaultsAreDisabled(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO stream_providers (name) VALUES (?)`, "new-provider").Error; err != nil {
+		t.Fatal(err)
+	}
+	var row domain.ScraperProvider
+	if err := db.First(&row, "name = ?", "new-provider").Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != domain.StatusDisabled || row.Policy != domain.PolicyDisabled || row.Health != domain.HealthDown {
+		t.Fatalf("DB defaults = status %q policy %q health %q; want disabled/disabled/down", row.Status, row.Policy, row.Health)
+	}
+}
+
 // TestDerivedStateAndCode covers the deliberate axis split (see
 // scraper_provider.go): DerivedState/DerivedStateCode are the HEALTH display
 // (a parked manual provider shows its live health; only policy=disabled reads

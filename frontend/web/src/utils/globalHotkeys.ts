@@ -7,16 +7,14 @@
  */
 
 /**
- * `?` opens the secret tips & hotkeys page (/tips).
+ * `F1` opens the secret tips & hotkeys page (/tips) in a new tab.
  *
- * True only for a bare `?` press (Shift is inherent — `?` is a shifted glyph
- * on most layouts; `e.key` is layout-resolved so RU Shift+7 works too) with
- * focus outside any text-entry element. Ctrl/Cmd/Alt chords are browser/OS
- * commands and never match.
+ * True only for a bare `F1` press with focus outside any text-entry element.
+ * Modified chords are browser/OS commands and never match.
  */
 export function isHelpHotkey(e: KeyboardEvent): boolean {
-  if (e.key !== '?') return false
-  if (e.ctrlKey || e.metaKey || e.altKey) return false
+  if (e.key !== 'F1') return false
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false
 
   const target = e.target as HTMLElement | null
   if (target) {

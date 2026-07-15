@@ -66,14 +66,14 @@ type ScraperProvider struct {
 	// Status is the tri-state lifecycle (enabled|degraded|disabled). Replaces the
 	// former Enabled bool (migrated 2026-06-17). Controls failover participation:
 	// only StatusEnabled providers join the auto-failover chain.
-	Status ProviderStatus `gorm:"size:16;default:'enabled'" json:"status"`
+	Status ProviderStatus `gorm:"size:16;default:'disabled'" json:"status"`
 	// Health is machine-managed by the probe state machine (spec 2026-06-23,
 	// hysteresis 2026-07-08). Policy is ALSO machine-managed as of 2026-07-13
 	// (health-driven auto↔manual via ReconcilePolicyFromHealth); the admin sets
 	// only the disabled hard-lock. Status above is DERIVED for the wire via
 	// WireStatus().
-	Policy       ProviderPolicy `gorm:"size:16;default:'auto'" json:"policy"`
-	Health       ProviderHealth `gorm:"size:16;default:'up'" json:"health"`
+	Policy       ProviderPolicy `gorm:"size:16;default:'disabled'" json:"policy"`
+	Health       ProviderHealth `gorm:"size:16;default:'down'" json:"health"`
 	HealthSince  time.Time      `json:"health_since"`
 	PolicySince  time.Time      `json:"policy_since"`
 	LastProbedAt time.Time      `json:"last_probed_at"`
@@ -103,6 +103,14 @@ type ScraperProvider struct {
 	SubDelivery      string `gorm:"size:8;default:'hard'" json:"sub_delivery"` // soft|hard|none
 	QualityCeiling   string `gorm:"size:8" json:"quality_ceiling"`
 	PreferenceWeight int    `json:"preference_weight"`
+	// EngineKind selects the executable constructor from the scraper's sole
+	// constructor registry. It is DB-owned and validated against the
+	// stream_provider_engine_kinds table before a scraper-operated row can be
+	// enabled. Empty is allowed only for disabled historical tombstones.
+	EngineKind string `gorm:"size:32" json:"engine_kind"`
+	// FailoverPriority is the DB-owned scraper runtime order within a group.
+	// Higher values are attempted first; Name is the deterministic tie-breaker.
+	FailoverPriority int `json:"failover_priority"`
 	// DisplayName is the operator-editable pretty label for player/dashboard
 	// surfaces (capability DisplayName, Grafana). Empty ⇒ callers fall back to
 	// a title-cased Name. Seeded; backfilled once by BackfillProviderIdentityV1.
@@ -143,6 +151,19 @@ type ScraperProvider struct {
 // + adult + legacy players), not just scraper EN-providers. The Go type keeps its
 // ScraperProvider name (table rename only) to limit blast radius.
 func (ScraperProvider) TableName() string { return "stream_providers" }
+
+// ProviderEngineKind is the DB-contained allowlist of executable provider
+// implementation kinds. Activation validates only against this table; it does
+// not call the scraper service or depend on a transient runtime registry.
+type ProviderEngineKind struct {
+	Kind string `gorm:"primaryKey;size:32" json:"kind"`
+	// ProviderName binds native constructors whose implementation reports a
+	// fixed provider id. Empty is reserved for genuinely generic/reusable kinds.
+	ProviderName string `gorm:"size:32" json:"provider_name,omitempty"`
+	Description  string `json:"description"`
+}
+
+func (ProviderEngineKind) TableName() string { return "stream_provider_engine_kinds" }
 
 // IsEnabled reports whether the provider is in the normal auto-failover chain.
 func (p ScraperProvider) IsEnabled() bool { return p.Status == StatusEnabled }

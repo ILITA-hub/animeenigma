@@ -1,6 +1,6 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 30s
+  evaluation_interval: 30s
 
 # Degradation-awareness recording rules (ae:* pressure signals + level preview).
 # Mounted as a DIRECTORY (./prometheus/rules) so future rule edits only need a
@@ -21,6 +21,13 @@ scrape_configs:
     static_configs:
       - targets: ['gateway:8000']
     metrics_path: /metrics
+    # Temporary compatibility guard while every gateway instance rolls onto
+    # route-pattern labels. Never retain opaque signed stream tokens in TSDB.
+    metric_relabel_configs:
+      - source_labels: [path]
+        regex: '/api/streaming/m/.+'
+        target_label: path
+        replacement: '/api/streaming/m/:wildcard'
 
   - job_name: 'auth'
     static_configs:

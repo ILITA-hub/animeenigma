@@ -128,7 +128,7 @@ export function useOverrideTracker(opts: OverrideTrackerOptions) {
         ms_since_load: Math.round(msSinceLoad),
         tier: resolved?.tier ?? null,
         tier_number: resolved?.tier_number ?? null,
-        player: opts.player as 'kodik' | 'animelib' | 'english',
+        player: opts.player,
       })
     } catch {
       // Best-effort instrumentation: never throw, never block UX. Counter loss

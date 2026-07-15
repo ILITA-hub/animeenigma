@@ -122,7 +122,7 @@ type GogoanimeConfig struct {
 
 // AllAnimeConfig is the per-provider override surface for the merged
 // allanimeokru.Provider (Phase 26 — SCRAPER-HEAL-25; folded 2026-07-06 from
-// the former standalone allanime + okru providers). It ships always-on; operators can
+// the former standalone allanime + okru providers). Operator can
 // disable/degrade it via the catalog `scraper_providers` DB table if the
 // upstream goes hard down. BaseURL defaults to https://api.allanime.day
 // (AllAnime's GraphQL discovery, still reused for ok.ru stream resolution);

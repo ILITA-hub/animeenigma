@@ -36,14 +36,3 @@ func TestEmitProviderRoster_SetsInfoAndEnabled(t *testing.T) {
 func TestEmitProviderRoster_EmptyIsNoop(t *testing.T) {
 	EmitProviderRoster(nil) // must not panic
 }
-
-func TestProviderUnwiredGauge(t *testing.T) {
-	ProviderUnwired.WithLabelValues("newprov", "scraper").Set(1)
-	if v := testutil.ToFloat64(ProviderUnwired.WithLabelValues("newprov", "scraper")); v != 1 {
-		t.Fatalf("provider_unwired = %v, want 1", v)
-	}
-	ProviderUnwired.WithLabelValues("newprov", "scraper").Set(0)
-	if v := testutil.ToFloat64(ProviderUnwired.WithLabelValues("newprov", "scraper")); v != 0 {
-		t.Fatalf("provider_unwired = %v, want 0", v)
-	}
-}

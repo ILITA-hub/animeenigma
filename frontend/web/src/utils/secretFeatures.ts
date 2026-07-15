@@ -82,7 +82,7 @@ export const SECRET_FEATURES: SecretFeature[] = [
   },
   {
     // Secret tips & hotkeys page — deliberately nav-less; discovered via the
-    // roulette or the global `?` hotkey (App.vue + utils/globalHotkeys.ts).
+    // roulette or the global F1 hotkey (App.vue + utils/globalHotkeys.ts).
     key: 'tips',
     to: '/tips',
     labelKey: 'admin.secretFeatures.feature.tips',
