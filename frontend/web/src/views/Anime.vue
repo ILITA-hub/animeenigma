@@ -894,6 +894,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick, defineAsyncComponent } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { Star, Clock, Play, Check, Plus, ChevronDown, Trash2, RefreshCw, Eye, EyeOff, Pencil, Calendar, MessageSquare, EllipsisVertical } from 'lucide-vue-next'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
@@ -970,6 +971,11 @@ function openPosterZoom() {
 // Phase 11 / UX-23 — Theater Mode (body class + ESC + localStorage persistence).
 const { theaterMode, setTheater } = useTheaterMode()
 
+// Codebase-standard reduced-motion check (see HeroSpotlightBlock.vue,
+// Carousel.vue, RandomTailCard.vue, Gacha.vue) — replaces a hand-rolled
+// matchMedia check.
+const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
+
 // The player sits below the hero + description, so entering theater must bring
 // it up to the navbar line — that is the position the capped height is framed
 // for. scroll-margin-top on the section (see the global style block) supplies
@@ -980,11 +986,11 @@ async function onToggleTheater() {
   if (!on) return
   await nextTick()
   // Respect prefers-reduced-motion: jump instead of animating the scroll.
-  // Guarded for matchMedia being unavailable (jsdom/SSR).
-  const prefersReducedMotion = typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  // 'instant' is the standardized value that actually skips the animation —
+  // 'auto' defers to the element's computed scroll-behavior, which this
+  // codebase sets to 'smooth' globally, so 'auto' would silently animate.
   playerSectionRef.value?.scrollIntoView({
-    behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    behavior: prefersReducedMotion.value ? 'instant' : 'smooth',
     block: 'start',
   })
 }

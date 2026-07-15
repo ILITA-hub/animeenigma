@@ -80,6 +80,22 @@ vi.mock('@/composables/useImageProxy', () => ({
 vi.mock('@/composables/useToast', () => ({ useToast: () => ({ push: vi.fn(), show: vi.fn() }) }))
 vi.mock('@/composables/useConfirm', () => ({ useConfirm: () => ({ confirm: vi.fn() }) }))
 
+// Theater-mode reduced-motion check (Anime.vue's onToggleTheater). Partial-mock
+// with importOriginal + spread — a bare replacement of @vueuse/core would drop
+// unrelated exports other parts of the dependency graph rely on (established
+// pattern: HeroSpotlightBlock.spec.ts, RandomTailCard.spec.ts).
+const mockReducedMotion = ref(false)
+vi.mock('@vueuse/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@vueuse/core')>()
+  return {
+    ...actual,
+    useMediaQuery: (q: string) => {
+      if (q.includes('prefers-reduced-motion')) return mockReducedMotion
+      return ref(false)
+    },
+  }
+})
+
 // Viewer-context store (player reads the aggregate on load).
 vi.mock('@/stores/viewerContext', () => ({
   useViewerContextStore: () => ({ load: vi.fn().mockResolvedValue(null) }),
@@ -151,6 +167,7 @@ describe('Anime.vue player surface (Plan B)', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     animeRef.value = null
+    mockReducedMotion.value = false
     vi.stubGlobal('IntersectionObserver', class {
       observe() {}
       unobserve() {}
@@ -201,5 +218,33 @@ describe('Anime.vue player surface (Plan B)', () => {
     for (const retired of ['AnimeLibPlayer', 'OurEnglishPlayer', 'HanimePlayer', 'Anime18Player', 'RawPlayer', 'KodikAdFreePlayer']) {
       expect(html).not.toContain(retired)
     }
+  })
+
+  // Theater mode — onToggleTheater() scrolls the player section into view.
+  // jsdom does not implement scrollIntoView, so it's stubbed on the element
+  // prototype and asserted on directly.
+  describe('theater-mode scroll behavior', () => {
+    let scrollIntoViewMock: ReturnType<typeof vi.fn<(arg?: boolean | ScrollIntoViewOptions) => void>>
+
+    beforeEach(() => {
+      scrollIntoViewMock = vi.fn()
+      Element.prototype.scrollIntoView = scrollIntoViewMock
+    })
+
+    it("jumps instantly (behavior: 'instant') when prefers-reduced-motion is set", async () => {
+      mockReducedMotion.value = true
+      const wrapper = await mountView()
+      await wrapper.findComponent({ name: 'AePlayer' }).vm.$emit('toggle-theater')
+      await flushPromises()
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'instant', block: 'start' })
+    })
+
+    it("smooth-scrolls (behavior: 'smooth') when reduced motion is not preferred", async () => {
+      mockReducedMotion.value = false
+      const wrapper = await mountView()
+      await wrapper.findComponent({ name: 'AePlayer' }).vm.$emit('toggle-theater')
+      await flushPromises()
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+    })
   })
 })
