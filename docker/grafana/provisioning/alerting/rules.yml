@@ -1,5 +1,19 @@
 apiVersion: 1
 
+# Grafana file provisioning only ADDS and UPDATES rules — removing a rule from
+# this file leaves it live in the DB (provenance=file) forever. Retiring a rule
+# therefore takes two steps: delete its block below, AND list its uid here.
+# Entries are idempotent: deleting an absent uid is a no-op, so they are safe to
+# keep after the rule is gone.
+deleteRules:
+  # "Kodik Player Unavailable" — retired 2026-07-15. Queried
+  # provider_health_up{provider="kodik"} after the roster row was renamed to
+  # kodik-iframe, so it matched nothing and (noDataState: OK) could never fire.
+  # RU is covered generically by the ProviderFleet* rules. See the note where
+  # its block used to live, further down this file.
+  - orgId: 1
+    uid: player-unavailable
+
 groups:
   - orgId: 1
     name: AnimeEnigma Alerts
