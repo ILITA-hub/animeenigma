@@ -14,8 +14,8 @@ import (
 )
 
 // TestMain initializes the package-level `log` var (normally set in main()
-// before any handler runs) so tests exercising log-calling code paths (e.g.
-// dropSuppressedAlerts) don't panic on a nil *logger.Logger.
+// before any handler runs) so tests exercising log-calling code paths don't
+// panic on a nil *logger.Logger.
 func TestMain(m *testing.M) {
 	log = logger.Default()
 	os.Exit(m.Run())
@@ -139,68 +139,11 @@ func TestScraperProviderFaultLine_FailOpen(t *testing.T) {
 	}
 }
 
-func TestIsSuppressed_StreamingGatewayKeys(t *testing.T) {
-	s := newTestServiceWithHTTP(t, "http://127.0.0.1:0", &http.Client{})
-	s.cfg.SuppressedAlerts = []string{"High Error Rate:streaming", "High Error Rate:gateway"}
-
-	cases := []struct {
-		key  string
-		want bool
-	}{
-		{"High Error Rate:streaming", true},
-		{"High Error Rate:gateway", true},
-		{"high error rate:STREAMING", true}, // EqualFold is case-insensitive
-		{"High Error Rate:catalog", false},  // catalog still pages
-		{"Parser Failure Rate:gogoanime", false},
-	}
-	for _, c := range cases {
-		if got := s.isSuppressed(c.key); got != c.want {
-			t.Errorf("isSuppressed(%q) = %v, want %v", c.key, got, c.want)
-		}
-	}
-}
-
-// TestDropSuppressedAlerts verifies the early filter — called immediately
-// after batch.Relevant is assembled in processWork, before the
-// multi-service-outage triage — removes suppressed firing alerts so they can
-// never inflate the escalation count or reach escalateBatch/dedup/analysis,
-// while non-suppressed alerts and non-alert messages pass through unchanged
-// and in order.
-func TestDropSuppressedAlerts(t *testing.T) {
-	s := newTestServiceWithHTTP(t, "http://127.0.0.1:0", &http.Client{})
-	s.cfg.SuppressedAlerts = []string{"High Error Rate:streaming", "High Error Rate:gateway"}
-
-	suppressedStreaming := domain.ClassifiedMessage{
-		MessageID: 1,
-		Type:      domain.MessageAlertFiring,
-		Alerts:    []domain.AlertInfo{{Name: "High Error Rate", Service: "streaming"}},
-	}
-	suppressedGateway := domain.ClassifiedMessage{
-		MessageID: 2,
-		Type:      domain.MessageAlertFiring,
-		Alerts:    []domain.AlertInfo{{Name: "High Error Rate", Service: "gateway"}},
-	}
-	nonSuppressedAlert := domain.ClassifiedMessage{
-		MessageID: 3,
-		Type:      domain.MessageAlertFiring,
-		Alerts:    []domain.AlertInfo{{Name: "High Error Rate", Service: "catalog"}},
-	}
-	adminMessage := domain.ClassifiedMessage{
-		MessageID: 4,
-		Type:      domain.MessageAdminMessage,
-		Text:      "restart streaming please",
-	}
-
-	in := []domain.ClassifiedMessage{suppressedStreaming, suppressedGateway, nonSuppressedAlert, adminMessage}
-	got := s.dropSuppressedAlerts(in)
-
-	want := []domain.ClassifiedMessage{nonSuppressedAlert, adminMessage}
-	if len(got) != len(want) {
-		t.Fatalf("dropSuppressedAlerts() returned %d messages, want %d: %+v", len(got), len(want), got)
-	}
-	for i := range want {
-		if got[i].MessageID != want[i].MessageID {
-			t.Errorf("index %d: got MessageID %d, want %d (order/content mismatch)", i, got[i].MessageID, want[i].MessageID)
-		}
-	}
-}
+// NOTE: TestIsSuppressed_StreamingGatewayKeys / TestDropSuppressedAlerts were
+// removed 2026-07-15 with the SUPPRESSED_ALERTS mechanism they covered. Both
+// passed while the feature was broken in production: they assigned an
+// already-split []string to cfg.SuppressedAlerts and so never exercised
+// parseSuppressed, which split on ";" while the deployed env used ",". Whether
+// an alert pages is now decided by its `severity` label — see
+// TestSeverity_* in internal/grafana/severity_test.go and the muted routes in
+// docker/grafana/provisioning/alerting/policies.yml.

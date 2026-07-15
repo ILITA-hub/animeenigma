@@ -8,14 +8,19 @@ import (
 )
 
 type Config struct {
-	Server           ServerConfig
-	Telegram         TelegramConfig
-	Grafana          GrafanaConfig
-	Claude           ClaudeConfig
-	Admins           []string
-	SuppressedAlerts []string // alert keys to ignore (e.g., "Parser Failure Rate:kodik")
-	StatePath        string
-	IssuePath        string
+	Server   ServerConfig
+	Telegram TelegramConfig
+	Grafana  GrafanaConfig
+	Claude   ClaudeConfig
+	Admins   []string
+	// NOTE: SuppressedAlerts/SUPPRESSED_ALERTS was removed 2026-07-15. It never
+	// worked — parseSuppressed split on ";" while the deployed env used "," —
+	// so streaming/gateway High Error Rate kept paging (AUTO-546/547/549/551/
+	// 555/565) for the whole time it was believed to be deferring them. Which
+	// alerts page is now decided in exactly one place: the `severity` label +
+	// notification policy in docker/grafana/provisioning/alerting/.
+	StatePath string
+	IssuePath string
 	// ReportsAuthToken, when set, is the shared secret required on the
 	// /api/reports endpoint (X-Maintenance-Token header). The player service
 	// is the sole legitimate caller. When empty the endpoint stays open and
@@ -46,17 +51,16 @@ type Config struct {
 	PolicyURL string
 }
 
+// GrafanaConfig secures the INBOUND alert webhook (POST /api/grafana-webhook),
+// which is the only way alerts reach this daemon.
+//
+// The outbound alertmanager poll (URL/PollInterval/APIUser/APIPass) was removed
+// 2026-07-15: it read /api/alertmanager/.../v2/alerts directly, where mute
+// timings are invisible (they apply at notification dispatch), so it paged for
+// alerts the notification policy had deliberately muted — AUTO-616/618.
 type GrafanaConfig struct {
-	URL          string
-	PollInterval int // seconds between Grafana alert checks
-	WebhookUser  string
-	WebhookPass  string
-	// APIUser/APIPass authenticate the OUTBOUND alertmanager poll (the
-	// safety-net reconcile). Distinct from WebhookUser/Pass (which secure the
-	// INBOUND webhook). When APIPass is empty the poll is skipped — webhook
-	// delivery still works.
-	APIUser string
-	APIPass string
+	WebhookUser string
+	WebhookPass string
 }
 
 type ServerConfig struct {
@@ -113,12 +117,8 @@ func Load() (*Config, error) {
 			ChatID:   chatID,
 		},
 		Grafana: GrafanaConfig{
-			URL:          getEnv("GRAFANA_URL", "http://localhost:3004"),
-			PollInterval: getEnvInt("GRAFANA_POLL_INTERVAL", 600),
-			WebhookUser:  getEnv("GRAFANA_WEBHOOK_USER", "grafana"),
-			WebhookPass:  getEnv("GRAFANA_WEBHOOK_PASS", ""),
-			APIUser:      getEnv("GRAFANA_API_USER", "admin"),
-			APIPass:      getEnv("GRAFANA_API_PASS", ""),
+			WebhookUser: getEnv("GRAFANA_WEBHOOK_USER", "grafana"),
+			WebhookPass: getEnv("GRAFANA_WEBHOOK_PASS", ""),
 		},
 		Claude: ClaudeConfig{
 			Path:        getEnv("CLAUDE_PATH", "/root/.local/bin/claude"),
@@ -129,7 +129,6 @@ func Load() (*Config, error) {
 			TimeoutSec:  getEnvInt("CLAUDE_TIMEOUT_SEC", 300),
 		},
 		Admins:            admins,
-		SuppressedAlerts:  parseSuppressed(getEnv("SUPPRESSED_ALERTS", "")),
 		StatePath:         getEnv("STATE_PATH", ".claude/maintenance-state.json"),
 		IssuePath:         getEnv("ISSUES_PATH", "docs/issues/issues.json"),
 		ReportsAuthToken:  getEnv("REPORTS_AUTH_TOKEN", ""),
@@ -158,21 +157,6 @@ func getEnvBool(key string, defaultVal bool) bool {
 		return true
 	}
 	return false
-}
-
-func parseSuppressed(s string) []string {
-	if s == "" {
-		return nil
-	}
-	parts := strings.Split(s, ";")
-	var result []string
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			result = append(result, p)
-		}
-	}
-	return result
 }
 
 func getEnv(key, defaultVal string) string {

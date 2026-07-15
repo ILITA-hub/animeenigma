@@ -140,21 +140,8 @@ func main() {
 		}
 	}()
 
-	// Initialize Grafana client
-	gf := grafana.NewClient(cfg.Grafana.URL, cfg.Grafana.APIUser, cfg.Grafana.APIPass)
-	grafanaPollEnabled := cfg.Grafana.APIPass != ""
-	// Preflight: verify Grafana connectivity (only when the poll is configured;
-	// the alertmanager API needs auth, so without GRAFANA_API_PASS it just 401s).
-	if !grafanaPollEnabled {
-		log.Infow("grafana reconcile poll disabled — set GRAFANA_API_PASS to enable the safety-net poll (primary alert delivery is via webhook)")
-	} else if alerts, err := gf.GetFiringAlerts(); err != nil {
-		log.Warnw("grafana check failed (will retry)", "error", err)
-	} else {
-		log.Infow("grafana connected", "active_alerts", len(alerts))
-	}
-
 	// Send startup message
-	tg.SendMessage("🤖 *Maintenance service started*\nMonitoring alerts (Grafana API) + user messages (Telegram).")
+	tg.SendMessage("🤖 *Maintenance service started*\nMonitoring alerts (Grafana webhook) + user messages (Telegram).")
 	log.Infow("startup message sent")
 
 	// Set up graceful shutdown
@@ -165,7 +152,6 @@ func main() {
 	// Start polling loop
 	svc := &service{
 		tg:       tg,
-		gf:       gf,
 		disp:     disp,
 		state:    stateMgr,
 		cfg:      cfg,
@@ -194,7 +180,6 @@ func main() {
 
 type service struct {
 	tg       *telegram.Client
-	gf       *grafana.Client
 	disp     *dispatcher.Dispatcher
 	state    *state.Manager
 	cfg      *config.Config
@@ -301,55 +286,6 @@ func (s *service) run(ctx context.Context) {
 		}
 	}()
 
-	// Goroutine 2: Grafana reconciliation poller.
-	// Primary alert delivery is now via webhook (POST /api/grafana-webhook).
-	// This poller is a safety net that catches missed webhook deliveries
-	// (e.g. network blip, maintenance restart during burst, Grafana entrypoint failure).
-	// Do NOT remove — without it, a missed webhook silently drops an alert.
-	go func() {
-		if s.cfg.Grafana.APIPass == "" {
-			return // no GRAFANA_API_PASS: poll cannot authenticate; webhook still delivers.
-		}
-		interval := time.Duration(s.cfg.Grafana.PollInterval) * time.Second
-		if interval < 300*time.Second {
-			interval = 300 * time.Second
-		}
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				alerts, err := s.gf.GetFiringAlerts()
-				if err != nil {
-					log.Warnw("grafana reconcile poll error", "error", err)
-					continue
-				}
-
-				s.checkResolvedAlerts(alerts)
-
-				var newAlerts []domain.ClassifiedMessage
-				for _, a := range alerts {
-					if len(a.Alerts) > 0 {
-						key := a.Alerts[0].Name + ":" + a.Alerts[0].Service
-						if s.isSuppressed(key) {
-							continue
-						}
-						if existing := s.state.GetActiveAlert(key); existing == nil {
-							newAlerts = append(newAlerts, a)
-						}
-					}
-				}
-				if len(newAlerts) > 0 {
-					log.Infow("grafana reconcile detected missed alerts", "count", len(newAlerts))
-					workChan <- workItem{grafanaAlerts: newAlerts}
-				}
-			}
-		}
-	}()
-
 	// Goroutine 2b: interrupt-registry TTL sweeper (AUTO-456 safety net).
 	go func() {
 		ticker := time.NewTicker(2 * time.Minute)
@@ -410,16 +346,17 @@ func (s *service) run(ctx context.Context) {
 						s.resolveAlertFromWebhook(key, wa)
 						continue
 					}
-					// firing: build ClassifiedMessage for processWork pipeline
-					severity := "warning"
-					priority := domain.P1
-					if grafana.CriticalAlerts[alertName] {
-						severity = "critical"
-						priority = domain.P0
+					// firing: build ClassifiedMessage for processWork pipeline.
+					// The rule's own `severity` label decides both loudness and
+					// whether this pages at all — see internal/grafana/severity.go.
+					severity := grafana.Severity(wa.Labels)
+					if !grafana.Pages(severity) {
+						log.Infow("diagnostic alert not paged (dashboard-only)", "alert", alertName, "service", service)
+						continue
 					}
 					grafanaAlerts = append(grafanaAlerts, domain.ClassifiedMessage{
 						Type:     domain.MessageAlertFiring,
-						Priority: priority,
+						Priority: grafana.PriorityFor(severity),
 						Text:     fmt.Sprintf("%s: %s", alertName, wa.Annotations["summary"]),
 						From:     domain.User{Username: "grafana-webhook", IsBot: true},
 						Alerts: []domain.AlertInfo{{
@@ -478,43 +415,6 @@ func (s *service) run(ctx context.Context) {
 	}
 }
 
-// checkResolvedAlerts detects alerts that were active but are no longer firing.
-func (s *service) checkResolvedAlerts(currentAlerts []domain.ClassifiedMessage) {
-	// Build set of currently firing alert keys
-	currentKeys := make(map[string]bool)
-	for _, a := range currentAlerts {
-		if len(a.Alerts) > 0 {
-			key := a.Alerts[0].Name + ":" + a.Alerts[0].Service
-			currentKeys[key] = true
-		}
-	}
-
-	// Check each active alert — if no longer in Grafana, it resolved
-	st := s.state.State()
-	for key, active := range st.ActiveAlerts {
-		if !currentKeys[key] {
-			log.Infow("grafana alert resolved", "alert_key", key)
-			s.state.UpdateIssue(active.IssueID, func(issue *domain.Issue) {
-				issue.Status = domain.StatusResolved
-				issue.ResolvedAt = time.Now().UTC().Format(time.RFC3339)
-				issue.Resolution = "Alert resolved (no longer firing in Grafana)"
-			})
-			s.state.RemoveActiveAlert(key)
-
-			// Notify in Telegram
-			duration := "unknown"
-			if firstSeen, err := time.Parse(time.RFC3339, active.FirstSeen); err == nil {
-				duration = time.Since(firstSeen).Truncate(time.Second).String()
-			}
-			s.tg.SendMessage(fmt.Sprintf(
-				"*✅ Alert Resolved*\n*Alert:* %s (%s)\n*Duration:* %s\n*Issue:* %s",
-				active.AlertUID, active.Service, duration, active.IssueID,
-			))
-		}
-	}
-	s.state.Save()
-}
-
 // resolveAlertFromWebhook handles a resolve event pushed by the Grafana webhook.
 // Invariant: state.RemoveActiveAlert MUST happen before tg.SendMessage so the
 // reconciliation poller cannot re-emit the same resolve.
@@ -557,16 +457,12 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 		batch = classifier.ClassifyBatch(work.telegramUpdates, s.cfg.Admins)
 	}
 
-	// Add Grafana alerts to the relevant queue
+	// Add Grafana alerts to the relevant queue. Anything that should not page
+	// (diagnostic severity, or a muted route like the transient
+	// streaming/gateway HLS-proxy 5xx bursts) was already dropped in Grafana's
+	// notification policy or at the webhook — nothing suppressed reaches here,
+	// so it can never inflate the outage escalation count below.
 	batch.Relevant = append(batch.Relevant, work.grafanaAlerts...)
-
-	// Defer suppressed alerts (e.g. transient streaming/gateway HLS-proxy
-	// 5xx bursts): drop silently here, before the multi-service triage below,
-	// so a suppressed alert can never inflate the outage escalation count nor
-	// be named in escalateBatch's Telegram page. Data is preserved in
-	// Prometheus + ClickHouse events; this only stops the Telegram page +
-	// Claude run. Keyed alertName:service.
-	batch.Relevant = s.dropSuppressedAlerts(batch.Relevant)
 
 	// Triage: check for multi-service outage
 	activeAlertCount := s.state.CountActiveAlerts()
@@ -1727,31 +1623,6 @@ func memberStatus(m *telegram.ChatMember) string {
 		return "unknown"
 	}
 	return m.Status
-}
-
-func (s *service) isSuppressed(alertKey string) bool {
-	for _, suppressed := range s.cfg.SuppressedAlerts {
-		if strings.EqualFold(alertKey, suppressed) {
-			return true
-		}
-	}
-	return false
-}
-
-// dropSuppressedAlerts removes firing alerts whose alertName:service key is in
-// SUPPRESSED_ALERTS, so deferred alerts never reach the multi-service triage,
-// escalateBatch, dedup, or analysis. Non-alert messages pass through unchanged.
-func (s *service) dropSuppressedAlerts(msgs []domain.ClassifiedMessage) []domain.ClassifiedMessage {
-	out := msgs[:0:0] // new backing array; do not alias
-	for _, m := range msgs {
-		if m.Type == domain.MessageAlertFiring && len(m.Alerts) > 0 &&
-			s.isSuppressed(m.Alerts[0].Name+":"+m.Alerts[0].Service) {
-			log.Infow("deferred alert (suppressed)", "alert", m.Alerts[0].Name, "service", m.Alerts[0].Service)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out
 }
 
 // telegramEscaper neutralises Telegram Markdown control characters in dynamic

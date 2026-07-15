@@ -551,12 +551,13 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning-tpl:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ../infra/grafana/dashboards:/var/lib/grafana/dashboards-infra:ro
-      # v3.1 Phase 23 Plan 23-03 — alert rule source-of-truth (read-only).
-      # The same rules are also inlined into ./grafana/provisioning/
-      # alerting/rules.yml (Option A wiring); this mount lets future plans
-      # switch to a second alerting provisioning provider that points at
-      # /var/lib/grafana/alerts/infra/ without a docker-compose change.
-      - ../infra/grafana/alerts:/var/lib/grafana/alerts/infra:ro
+      # NOTE: the ../infra/grafana/alerts mount was removed 2026-07-15 along
+      # with the directory. Grafana only provisions from
+      # /etc/grafana/provisioning/alerting/, so that tree was inert data —
+      # a second, hand-synced copy of rules.yml that Grafana never read and
+      # that drifted (backend-infra-audit-2026-06-21 flagged it; the anomaly
+      # copy was found missing an all_exhausted filter on 2026-07-14).
+      # rules.yml is now the single copy.
       - grafana_data:/var/lib/grafana
     depends_on:
       # 06-03 cutover: the loki dep was removed (Loki retired) — a dangling
