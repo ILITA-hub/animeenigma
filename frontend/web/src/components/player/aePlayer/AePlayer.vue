@@ -271,6 +271,8 @@
       :preview-type="currentStream?.type ?? null"
       :preview-storyboard-url="currentStream?.storyboardUrl ?? null"
       :fullscreen-active="fullscreenActive"
+      :theater-active="theater"
+      :can-theater="canTheater"
       @toggle-play="togglePlay"
       @seek-rel="onSeekRel"
       @seek="onSeek"
@@ -282,6 +284,7 @@
       @toggle-settings="toggleMenu('settings')"
       @toggle-pip="onTogglePip"
       @toggle-fullscreen="onToggleFullscreen"
+      @toggle-theater="emit('toggle-theater')"
     />
 
     <!-- Source panel (floating card on desktop, bottom sheet on mobile) -->
@@ -557,6 +560,10 @@ const props = defineProps<{
   animeId: string
   anime: { title: string; eps: number; still?: string; durationMin?: number }
   theater: boolean
+  /** Whether the host view implements theater (a real @toggle-theater handler
+   *  plus the page-level CSS). Forwarded to the control bar; false ⇒ no button.
+   *  Only Anime.vue passes true. */
+  canTheater?: boolean
   isHentai?: boolean
   initialEpisode?: number
   /** Notification deep-link: aePlayer provider id to pin on mount (e.g. 'kodik').
@@ -1462,11 +1469,18 @@ onUnmounted(() => {
   background: var(--line-strong);
 }
 
+/* Theater — full-bleed width, capped height. The base .pl aspect-ratio 16/9 is
+   deliberately KEPT and merely clamped by max-height: on a wide monitor the box
+   ends up wider than 16/9 and the video object-contains into it (side bars), the
+   same shape YouTube's theater has. The old `height: 100vh` made this a second
+   fullscreen — which is why the button was pulled in June.
+   --header-offset is the navbar clearance token: subtracting it keeps the
+   control bar (the player's bottom edge) on screen once the player is scrolled
+   under the fixed navbar. Plain 100vh pushes it 80px below the fold. */
 .pl--theater {
   border-radius: 0;
   border: 0;
-  aspect-ratio: auto;
-  height: 100vh;
+  max-height: calc(100vh - var(--header-offset));
 }
 
 /* iPhone pseudo-fullscreen — fixed takeover (no usable element FS API on iOS).
