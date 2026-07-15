@@ -361,7 +361,7 @@ func (r *AnimeRepository) SetHasRaw(ctx context.Context, animeID string, has boo
 
 // SetHasEnglish flips the animes.has_english column for one anime. Called
 // lazily by the catalog's scraper-episodes resolver whenever any scraper
-// provider (gogoanime, animepahe, allanime, animekai) returns >= 1 episode
+// provider (gogoanime, animepahe, allanime-okru, miruro, nineanime) returns >= 1 episode
 // for the anime — best-effort. Failures are logged at the caller, never
 // propagated. Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5).
 func (r *AnimeRepository) SetHasEnglish(ctx context.Context, animeID string, has bool) error {

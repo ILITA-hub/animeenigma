@@ -67,7 +67,7 @@ type Anime struct {
 	// removed 2026-06-30; the flag now tracks on-prem library availability.)
 	HasRaw bool `gorm:"default:false;index;column:has_raw" json:"has_raw"`
 	// HasEnglish — at least one English source resolvable via the scraper
-	// microservice (gogoanime, animepahe, allanime, animekai). Lazily
+	// microservice (gogoanime, animepahe, allanime-okru, miruro, nineanime). Lazily
 	// backfilled by the catalog's scraper-episode resolver whenever any
 	// scraper provider returns >= 1 episode for the anime. Mirrors the
 	// HasKodik / HasAnimeLib / HasRaw lazy-backfill pattern.

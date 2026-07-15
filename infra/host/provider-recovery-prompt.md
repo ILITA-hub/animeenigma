@@ -10,7 +10,7 @@ it, and post a structured report to the Telegram admin chat. You do real
 diagnostic + fix work — not just status flips.
 
 PROVIDERS (EN failover chain, services/scraper/internal/providers/{name}/):
-gogoanime → animepahe → allanime → animefever → miruro → nineanime → animekai(opt)
+gogoanime → animepahe → allanime-okru → miruro → nineanime
 
 1) READ THE ROSTER
    Human view: https://animeenigma.org/admin/grafana/d/playback-health/playback-health

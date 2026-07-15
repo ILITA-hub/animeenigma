@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -11,14 +12,21 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type malExportService interface {
+	InitiateExport(context.Context, string, string) (*service.ExportJobResponse, error)
+	GetExportStatus(context.Context, string) (*service.ExportJobResponse, error)
+	GetUserExports(context.Context, string) ([]*service.ExportJobResponse, error)
+	CancelExport(context.Context, string, string) error
+}
+
 // MALExportHandler handles MAL export HTTP requests
 type MALExportHandler struct {
-	exportService *service.MALExportService
+	exportService malExportService
 	log           *logger.Logger
 }
 
 // NewMALExportHandler creates a new MAL export handler
-func NewMALExportHandler(exportService *service.MALExportService, log *logger.Logger) *MALExportHandler {
+func NewMALExportHandler(exportService malExportService, log *logger.Logger) *MALExportHandler {
 	return &MALExportHandler{
 		exportService: exportService,
 		log:           log,

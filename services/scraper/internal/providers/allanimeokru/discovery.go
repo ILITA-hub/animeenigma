@@ -64,7 +64,7 @@ type discovery struct {
 
 // newDiscovery constructs a discovery client. Required dependencies validated
 // eagerly so main.go fatals on a misconfiguration instead of a deferred 502 on
-// the first request (SCRAPER-FOUND mirroring gogoanime/animepahe/animekai).
+// the first request (SCRAPER-FOUND mirroring gogoanime/animepahe).
 //
 // Default BaseURL is https://api.allanime.day (the canonical AllAnime API
 // host; allanime.day / allmanga.to / allanime.to are domain aliases).

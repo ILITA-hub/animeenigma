@@ -39,10 +39,10 @@ type Orchestrator struct {
 	// degraded holds the names of soft-degraded providers (AUTO-484): registered
 	// (so an explicit `prefer` can still reach them) but EXCLUDED from the natural
 	// auto-failover order — they are never auto-fallen-back to.
-	degraded  map[string]bool
-	registry  *domain.Registry
-	log       *logger.Logger
-	cache     *health.InMemoryHealthCache
+	degraded map[string]bool
+	registry *domain.Registry
+	log      *logger.Logger
+	cache    *health.InMemoryHealthCache
 
 	// providerTimeout bounds how long the failover loop waits on a SINGLE
 	// provider before moving on. Zero disables the cap (preserving the original
@@ -556,8 +556,8 @@ func (o *Orchestrator) GetStream(ctx context.Context, providerID, episodeID, ser
 
 // gatedProvider is the optional interface a provider implements when it
 // can run a playability gate (Phase 21 SCRAPER-HEAL-04). Only
-// gogoanime.Provider satisfies this today; animepahe + animekai do not
-// (they're treated as gated=false fallback by GetStreamGated).
+// gogoanime.Provider satisfies this today; other providers use the
+// gated=false fallback in GetStreamGated.
 type gatedProvider interface {
 	domain.Provider
 	GetStreamWithGate(
@@ -575,9 +575,8 @@ type gatedProvider interface {
 //   - Providers implementing gatedProvider (gogoanime today): call
 //     ListServers + GetStreamWithGate; surface the gated bool the provider
 //     returned (true on cold path, false on warm-cache hit / caller pin).
-//   - Plain providers (animepahe, animekai): fall back to GetStream with
-//     gated=false. Phase 21 only wires the gate into gogoanime; the other
-//     providers stay unchanged.
+//   - Plain providers fall back to GetStream with gated=false. Phase 21 only
+//     wires the gate into gogoanime; the other providers stay unchanged.
 //
 // Failover semantics mirror Orchestrator.GetStream — health-cache-DOWN
 // providers are skipped with a parser_fallback_total emit; ErrProviderDown
@@ -703,7 +702,7 @@ func (o *Orchestrator) attemptGatedStream(
 		return gp.GetStreamWithGate(pctx, providerID, episodeID, serverID, cat, servers)
 	}
 
-	// Non-gated provider fallback (animepahe / animekai).
+	// Non-gated provider fallback.
 	stream, err := p.GetStream(pctx, providerID, episodeID, serverID, cat)
 	return stream, false, err
 }

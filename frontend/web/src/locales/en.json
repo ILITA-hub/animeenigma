@@ -298,8 +298,7 @@
       "miruro": "Miruro",
       "nineanime": "9anime",
       "animepahe": "AnimePahe",
-      "gogoanime": "Anitaku",
-      "animekai": "AnimeKai"
+      "gogoanime": "Anitaku"
     },
     "sourceLabel": "Source",
     "sourceUnavailable": "This source isn't responding right now. Try another.",
@@ -1628,7 +1627,7 @@
       },
       "q3": {
         "q": "Where do the videos come from?",
-        "a": "AnimeEnigma streams videos from Kodik and AnimeLib (Russian audio/subs). The backend proxies the streams so your IP never hits the external CDN directly. English-source players are being rebuilt — new providers are coming."
+        "a": "AnimeEnigma combines several sources in one player, including Kodik for Russian tracks, English-language providers, and first-party library content. Available sources are selected from the live provider feed, and supported streams are proxied so your IP does not contact the external CDN directly."
       },
       "q4": {
         "q": "How do recommendations work?",

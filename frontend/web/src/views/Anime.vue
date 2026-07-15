@@ -916,10 +916,8 @@ import type { AnimeCardModel } from '@/types/card'
 import type { CharacterCardModel } from '@/types/character'
 import type { WatchCombo } from '@/types/preference'
 
-// Plan B survivors: KodikPlayer (the iframe "Classic Kodik" fallback) and
-// AePlayer (the default). The other six players (KodikAdFree / AnimeLib /
-// Hanime / Anime18 / Raw / OurEnglish) are retired — their imports + template
-// mounts are removed here; the component files are deleted in a later task.
+// The unified aePlayer is the default playback surface. KodikPlayer remains
+// as the deliberately separate "Classic Kodik" iframe fallback.
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
 // Poster tap-to-zoom lightbox — lazy + mounted only after the first tap (the
 // posterZoomEverOpened latch), so ~250 lines of gesture code stay out of the
