@@ -979,7 +979,14 @@ async function onToggleTheater() {
   setTheater(on)
   if (!on) return
   await nextTick()
-  playerSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // Respect prefers-reduced-motion: jump instead of animating the scroll.
+  // Guarded for matchMedia being unavailable (jsdom/SSR).
+  const prefersReducedMotion = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  playerSectionRef.value?.scrollIntoView({
+    behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    block: 'start',
+  })
 }
 
 // Locale-bound formatters + derived metadata computeds.
@@ -1193,11 +1200,22 @@ html.pl-noscroll .player-card {
    used to be display:none here, which made this a fullscreen clone with no
    reason to exist; both rules are deliberately gone. */
 body.theater-mode [data-anime-player-wrapper="true"] {
-  max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  /* The width constraint lives on the ANCESTOR container
+     (`.max-w-7xl mx-auto px-4 lg:px-8`, wrapping the whole page body —
+     see the template) — this section itself carries only `mt-8` and has
+     no width/margin/padding of its own to reset. Negative side margins
+     escape the ancestor's max-width instead (the standard full-bleed
+     technique): 100vw is the true viewport width regardless of the
+     ancestor's max-w-7xl cap, and `calc(50% - 50vw)` walks the box back
+     out to the viewport edges symmetrically. On desktop with a visible
+     scrollbar this overhangs the content area by half a scrollbar width
+     on each side; `#app { overflow-x: clip }` (styles/main.css) exists
+     precisely to absorb exactly this kind of edge overhang without
+     introducing a horizontal scrollbar. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  max-width: none;
   /* mt-8 would push the player below the navbar line the cap is framed for. */
   margin-top: 0 !important;
   /* Offset for scrollIntoView in onToggleTheater — same token as the cap. */

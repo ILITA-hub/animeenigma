@@ -1,9 +1,11 @@
 <template>
-  <!-- Phase 11 / UX-23 — `navbar-root` class hook lets the global CSS rule
-       in Anime.vue (`body.theater-mode .navbar-root { display: none }`)
-       hide this header when Theater Mode is active on the anime detail
-       view. Navbar itself stays stateless w.r.t. theater-mode; the body
-       class is the contract.
+  <!-- Phase 11 / UX-23 — `navbar-root` class hook was added for Theater
+       Mode on the anime detail view. Theater mode deliberately keeps the
+       navbar visible (only the player section goes full-bleed, via
+       `body.theater-mode [data-anime-player-wrapper]` in Anime.vue) — no
+       rule targets `.navbar-root` to hide it. The hook remains mounted in
+       case a future theater treatment needs it; Navbar itself stays
+       stateless w.r.t. theater-mode.
 
        pr-[var(--scrollbar-width,0px)] consumes the CSS var reka-ui sets on
        <html> while a Select/DropdownMenu/Dialog body-locks scroll: the lock

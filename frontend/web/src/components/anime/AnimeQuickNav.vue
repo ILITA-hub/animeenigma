@@ -2,8 +2,10 @@
   <!-- Phase 11 / UX-22 — sticky Quick-Nav for the Anime detail view.
        Desktop (md+): floating right-side sticky pill column.
        Mobile (<md): sticky horizontal pill row below the hero.
-       Hidden when Theater Mode (UX-23) is active via .non-player-content
-       on the host wrapper, so no per-component v-if is needed. -->
+       Theater Mode (UX-23) does NOT hide this: theater keeps the navbar
+       and page content visible and only widens the player section. The
+       .non-player-content class hook remains on the host wrapper, but no
+       theater rule hides elements carrying it. -->
 
   <!-- Desktop: floating right sticky pill column -->
   <nav
