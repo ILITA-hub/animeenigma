@@ -3639,7 +3639,6 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 100;
-  width: 100vw;
   height: 100svh;
   aspect-ratio: auto;
   border-radius: 0;
