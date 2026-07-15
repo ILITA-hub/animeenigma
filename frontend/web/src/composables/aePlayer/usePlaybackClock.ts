@@ -179,7 +179,6 @@ export function usePlaybackClock(deps: PlaybackClockDeps) {
     hasStarted,
     resetPlaybackClock,
     writeProgress,
-    startRaf,
     stopRaf,
     onVideoPlay,
     onVideoPause,

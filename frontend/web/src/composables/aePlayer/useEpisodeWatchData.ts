@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { userApi } from '@/api/client'
 import { useViewerContextStore } from '@/stores/viewerContext'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
-import { progressRowsToMap, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
+import { progressRowsToMap, type EpisodeProgress, type ProgressRow } from '@/composables/aePlayer/episodeProgress'
 import type { useAuthStore } from '@/stores/auth'
 
 // ── User watch data (read-only): watched marks + per-episode progress ────────
@@ -19,7 +19,7 @@ export function useEpisodeWatchData(deps: EpisodeWatchDataDeps) {
 
   const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => deps.getAnimeId())
 
-  const epProgress = ref<Record<number, { pct: number; sec: number; completed: boolean }>>({})
+  const epProgress = ref<Record<number, EpisodeProgress>>({})
 
   // Page-fetch optimization (2026-06-11): the FIRST load per anime consumes the
   // viewer-context aggregate Anime.vue already fetched, killing the duplicate

@@ -11,7 +11,7 @@ import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { ProviderResolver } from '@/composables/aePlayer/useProviderResolver'
 import type { useToast } from '@/composables/useToast'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { AudioKind, Combo } from '@/types/aePlayer'
+import type { AudioKind, Combo, SubtitleTrack } from '@/types/aePlayer'
 
 // ── Offline downloads (season-only, app-only) ────────────────────────────────
 
@@ -26,7 +26,7 @@ export interface OfflineDownloadsDeps {
   toast: ReturnType<typeof useToast>
   t: (key: string) => string
   /** Late-bound: the subtitle cluster composes after this one. */
-  getSubtitleTracks: () => Array<{ url: string; lang: string; label: string; provider: string; format: string }>
+  getSubtitleTracks: () => SubtitleTrack[]
   getBundledTracks: () => Array<{ url: string; lang: string }>
   ensureSubsLoaded: () => Promise<void> | void
 }

@@ -1,4 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
+import type { EpisodeProgress } from '@/composables/aePlayer/episodeProgress'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { useAuthStore } from '@/stores/auth'
 
@@ -14,7 +15,7 @@ export interface ResumeChipDeps {
   /** Shared-link `?t=` initial position (seconds), captured once at setup. */
   initialTimestamp: number | undefined
   selectedEpisode: Ref<EpisodeOption | null>
-  epProgress: Ref<Record<number, { pct: number; sec: number; completed: boolean }>>
+  epProgress: Ref<Record<number, EpisodeProgress>>
   sourceError: Ref<string | null>
   isResolving: Ref<boolean>
   duration: Ref<number>

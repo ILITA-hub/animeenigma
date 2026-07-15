@@ -167,18 +167,12 @@ export function useAnimeWatchFlow(deps: AnimeWatchFlowDeps) {
 
   return {
     playerSectionRef,
-    playerActivated,
-    activatePlayer,
     resumeLoadedEpisodes,
     watchState,
-    resumeOverrideEpisode,
     resumeStartEpisode,
     resumeBanner,
-    rewatchPending,
     watchCta,
     watchCtaLabel,
-    startRewatchFlow,
-    dispatchWatchCta,
     onWatchCtaClick,
     reset,
   }

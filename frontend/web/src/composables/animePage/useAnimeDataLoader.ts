@@ -194,5 +194,5 @@ export function useAnimeDataLoader(deps: AnimeDataLoaderDeps) {
     loadGeneration++ // cancel any in-flight loadAnimeData
   })
 
-  return { loadAnimeData, retry }
+  return { retry }
 }

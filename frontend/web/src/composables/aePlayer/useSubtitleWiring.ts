@@ -7,7 +7,7 @@ import { useSubtitleAutoSync } from '@/composables/aePlayer/useSubtitleAutoSync'
 import { pickOfflineAutoSub, type OfflinePlayback } from '@/offline/offlineAdapter'
 import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { useToast } from '@/composables/useToast'
-import type { StreamResult } from '@/types/aePlayer'
+import type { StreamResult, SubtitleTrack } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 
 // ── Subtitles — OFF by default, on purpose ───────────────────────────────────
@@ -19,13 +19,9 @@ import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 // episode-specific so it's dropped on episode change, but the re-bind watcher
 // re-resolves a track in the chosen language for the new episode.
 
-export interface SubTrack {
-  url: string
-  provider: string
-  lang: string
-  label: string
-  format: string
-}
+/** A selectable subtitle track — the aggregated SubtitleTrack contract
+ *  (url/provider/lang/label/format); alias rather than redeclare. */
+export type SubTrack = SubtitleTrack
 
 export interface SubtitleWiringDeps {
   animeIdRef: Ref<string>

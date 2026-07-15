@@ -73,7 +73,6 @@ export function usePlayerMenus(deps: PlayerMenusDeps) {
     episodesMenuEl,
     settingsMenuEl,
     subsMenuEl,
-    activeMenuEl,
     toggleMenu,
     closeMenus,
     sheetTeleport,

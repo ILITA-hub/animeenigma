@@ -187,7 +187,6 @@ export function useAnimeSocial(
     applyViewerContext,
     fetchReviewsList,
     fetchReviews,
-    refreshSocial,
     submitReview,
     deleteMyReview,
     reset,

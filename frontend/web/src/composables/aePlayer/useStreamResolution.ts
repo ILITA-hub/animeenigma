@@ -478,7 +478,6 @@ export function useStreamResolution(deps: StreamResolutionDeps) {
 
   return {
     initSelectedEpisode,
-    loadEpisodesAndStream,
     resolveStreamForEpisode,
     resolveStreamForCurrentEpisode,
     onSelectProvider,
