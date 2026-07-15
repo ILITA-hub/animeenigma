@@ -5,6 +5,7 @@ profile-retirement bookkeeping."""
 
 import asyncio
 import base64
+import tempfile
 import time
 import unittest
 
@@ -117,15 +118,21 @@ class TestProxyFetchLifecycle(unittest.TestCase):
 
 class TestUnactivatedGrace(unittest.TestCase):
     def test_open_session_starts_on_short_grace(self):
-        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False, unactivated_grace_seconds=45))
-        prof = eng.profiles.lease()
-        page = _Page()
-        sess = run(eng._open_session(
-            {"master_url": "https://cdn.mewstream.buzz/m.m3u8", "referer": "r"},
-            None, "direct", prof, page,
-        ))
-        # Resolved-but-unfetched session expires on the short grace, not the TTL.
-        self.assertLessEqual(sess.expires_at, time.time() + 60)
+        with tempfile.TemporaryDirectory() as profile_dir:
+            eng = CamoufoxEngine(Config(
+                pool_size=1,
+                warming_enabled=False,
+                unactivated_grace_seconds=45,
+                profile_dir=profile_dir,
+            ))
+            prof = eng.profiles.lease()
+            page = _Page()
+            sess = run(eng._open_session(
+                {"master_url": "https://cdn.mewstream.buzz/m.m3u8", "referer": "r"},
+                None, "direct", prof, page,
+            ))
+            # Resolved-but-unfetched session expires on the short grace, not the TTL.
+            self.assertLessEqual(sess.expires_at, time.time() + 60)
 
 
 class TestProfileRetirement(unittest.TestCase):

@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-19
 **Status:** Approved (owner)
-**Related:** [[project_retire_all_players_except_aeplayer]], `2026-06-18-player-surface-retirement-scope-design.md`, [[project_smart_source_selection]], [[project_aeplayer_rename_and_deterministic_best]]
+**Current architecture:** [`docs/aeplayer-reference.md`](../../aeplayer-reference.md)
 
 ## Problem
 

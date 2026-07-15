@@ -750,8 +750,8 @@ const selectTranslation = (translationId: number) => {
 // WT-STATE-04: react to room episode broadcasts (own echo or another
 // member's change). Apply locally WITHOUT re-emitting — selectEpisode's
 // room guard returns early on click, so this watcher is what actually
-// loads the new episode in a Watch Together room. Mirrors the AnimeLib/
-// OurEnglish inbound watchers.
+// loads the new episode in a Watch Together room. This mirrors the unified
+// player's inbound state flow.
 watch(
   () => props.initialEpisode,
   (epNum) => {

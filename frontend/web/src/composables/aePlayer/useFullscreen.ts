@@ -1,11 +1,20 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 
 // ── Fullscreen (capability-based) ────────────────────────────────────────────
-// Android/desktop: native element fullscreen (+ landscape lock on touch).
-// iPhone Safari has NO element fullscreen API — fall back to a fixed-position
-// pseudo-fullscreen takeover. video.webkitEnterFullscreen() (the native iOS
-// player) is deliberately NOT used: it drops SubtitleOverlay, the Source
-// panel and the WT button.
+// Android/desktop/iPad: native element fullscreen (+ landscape lock on touch).
+// iPhone Safari never yields a usable element fullscreen — the API is absent on
+// older builds and present-but-lying on newer ones (it resolves for <video> and
+// fails for everything else). Probing it and reacting to the failure is not
+// reliable: a build that returns undefined instead of a promise makes .then()
+// throw synchronously, which kills the toggle outright. So iPhone treats the CSS
+// takeover as its FIRST-CLASS fullscreen path, not a rescue after a failed bet.
+// video.webkitEnterFullscreen() (the native iOS player) is deliberately NOT
+// used: it drops SubtitleOverlay, the Source panel and the WT button.
+
+/** iPhone/iPod: element fullscreen is unusable, so the CSS takeover IS the path. */
+function prefersPseudoFullscreen(): boolean {
+  return typeof navigator !== 'undefined' && /iP(hone|od)/.test(navigator.userAgent)
+}
 
 export interface FullscreenDeps {
   rootRef: Ref<HTMLElement | null>
@@ -55,21 +64,26 @@ export function useFullscreen(deps: FullscreenDeps) {
       exitPseudoFs()
       return
     }
-    if (el.requestFullscreen) {
-      el
-        .requestFullscreen()
-        .then(() => {
-          if (isCoarse.value) lockLandscape()
-        })
-        .catch(() => {
-          // Some WebKit builds (notably iPhone Safari) expose requestFullscreen
-          // as a function but reject it at call time for non-<video> elements —
-          // the feature-detect above lies. Fall back to the CSS takeover.
-          enterPseudoFs()
-        })
+    if (prefersPseudoFullscreen() || !el.requestFullscreen) {
+      enterPseudoFs()
       return
     }
-    enterPseudoFs()
+    try {
+      const req = el.requestFullscreen()
+      // The spec returns a Promise, but WebKit builds that return undefined would
+      // make .then() throw and leave the toggle dead — only chain when thenable.
+      if (req && typeof req.then === 'function') {
+        req
+          .then(() => {
+            if (isCoarse.value) lockLandscape()
+          })
+          .catch(() => enterPseudoFs())
+      } else if (isCoarse.value) {
+        lockLandscape()
+      }
+    } catch {
+      enterPseudoFs()
+    }
   }
 
   // Pseudo-FS pushes a history entry so the phone's back gesture exits the

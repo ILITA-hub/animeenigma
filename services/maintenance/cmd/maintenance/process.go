@@ -23,16 +23,12 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 		batch = classifier.ClassifyBatch(work.telegramUpdates, s.cfg.Admins)
 	}
 
-	// Add Grafana alerts to the relevant queue
+	// Add Grafana alerts to the relevant queue. Anything that should not page
+	// (diagnostic severity, or a muted route like the transient
+	// streaming/gateway HLS-proxy 5xx bursts) was already dropped in Grafana's
+	// notification policy or at the webhook — nothing suppressed reaches here,
+	// so it can never inflate the outage escalation count below.
 	batch.Relevant = append(batch.Relevant, work.grafanaAlerts...)
-
-	// Defer suppressed alerts (e.g. transient streaming/gateway HLS-proxy
-	// 5xx bursts): drop silently here, before the multi-service triage below,
-	// so a suppressed alert can never inflate the outage escalation count nor
-	// be named in escalateBatch's Telegram page. Data is preserved in
-	// Prometheus + ClickHouse events; this only stops the Telegram page +
-	// Claude run. Keyed alertName:service.
-	batch.Relevant = s.dropSuppressedAlerts(batch.Relevant)
 
 	// Triage: check for multi-service outage
 	activeAlertCount := s.state.CountActiveAlerts()

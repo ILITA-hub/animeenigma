@@ -178,10 +178,6 @@ func NewRouter(
 			r.Get("/{animeId}/kodik/translations", catalogHandler.GetKodikTranslations)
 			r.Get("/{animeId}/kodik/video", catalogHandler.GetKodikVideo)
 			r.Get("/{animeId}/kodik/stream", catalogHandler.GetKodikStream)
-			// AnimeLib video sources
-			r.Get("/{animeId}/animelib/episodes", catalogHandler.GetAnimeLibEpisodes)
-			r.Get("/{animeId}/animelib/translations", catalogHandler.GetAnimeLibTranslations)
-			r.Get("/{animeId}/animelib/stream", catalogHandler.GetAnimeLibStream)
 			// Scraper (Phase 15+ — universal English provider orchestration via
 			// the scraper microservice on :8088. Phase 15: episodes/servers/stream
 			// return 503 not-yet-implemented; health returns the live snapshot.
@@ -242,9 +238,6 @@ func NewRouter(
 
 		// Kodik search (for finding anime not in our DB)
 		r.Get("/kodik/search", catalogHandler.SearchKodik)
-
-		// AnimeLib search
-		r.Get("/animelib/search", catalogHandler.SearchAnimeLib)
 
 		// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTA timestamps.
 		// Public, no auth. Backend proxy of aniskip.com with 7d cache.

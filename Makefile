@@ -6,7 +6,7 @@
 	backfill-attributes build-backfill-attributes favicons
 
 # Variables
-SERVICES := auth catalog streaming player rooms scheduler gateway themes scraper library notifications watch-together gacha recs policy
+SERVICES := $(sort $(notdir $(patsubst %/go.mod,%,$(wildcard services/*/go.mod))))
 GO_BUILD_FLAGS := -ldflags="-s -w"
 DOCKER_REGISTRY ?= ghcr.io/ilita-hub/animeenigma
 # Host-wide deploy lock — serialize image builds so concurrent `make redeploy-*`
@@ -89,23 +89,23 @@ build-tools: ## Build all tools
 
 test: ## Run all tests
 	@echo "Running tests..."
-	@for svc in $(SERVICES); do \
-		echo "Testing $$svc..."; \
-		cd services/$$svc && go test ./... -cover && cd ../..; \
-	done
+	@./scripts/test-go.sh -cover
 
 test-%: ## Run tests for a specific service
 	cd services/$* && go test ./... -cover -v
 
 test-integration: ## Run integration tests
 	@echo "Running integration tests..."
-	@for svc in $(SERVICES); do \
-		echo "Integration testing $$svc..."; \
-		cd services/$$svc && go test ./tests/integration/... -tags=integration && cd ../..; \
-	done
+	@found=0; \
+	for suite in $$(find services -type d -path '*/tests/integration' | sort); do \
+		found=1; module=$${suite%%/tests/integration}; \
+		echo "Integration testing $$module..."; \
+		(cd "$$module" && go test ./tests/integration/... -tags=integration) || exit 1; \
+	done; \
+	if [ $$found -eq 0 ]; then echo "No Go integration suites found"; fi
 
 test-e2e: ## Run end-to-end tests
-	cd frontend/web && pnpm test:e2e
+	cd frontend/web && bun run test:e2e
 
 capture-goldens: ## Refresh golden-file test fixtures for services/scraper (Phase 15: no fixtures yet — runs as no-op)
 	@echo "Capturing scraper goldens..."
@@ -140,13 +140,7 @@ lint: lint-go lint-proto lint-frontend ## Run all linters
 
 lint-go: ## Run Go linter (matches CI)
 	@echo "Linting Go code..."
-	@for mod in libs/* services/auth services/catalog services/gateway services/player services/rooms services/scheduler services/streaming; do \
-		if [ -f "$$mod/go.mod" ]; then \
-			echo "Linting $$mod..."; \
-			(cd "$$mod" && golangci-lint run ./...) || exit 1; \
-		fi; \
-	done
-	@echo "All Go modules passed linting"
+	@./scripts/lint-go.sh
 
 lint-proto: ## Lint protobuf files
 	buf lint api/proto
@@ -159,15 +153,13 @@ lint-design: ## Run design-system color/token lint gate (off-palette classes, no
 
 fmt: ## Format all code
 	@echo "Formatting Go code..."
-	gofmt -s -w .
-	@echo "Formatting frontend code..."
-	cd frontend/web && pnpm format
+	@find libs services worker -name '*.go' -print0 | xargs -0 gofmt -s -w
 
 # ============================================================================
 # Code Generation
 # ============================================================================
 
-generate: generate-proto generate-openapi generate-graphql ## Generate all code
+generate: generate-proto generate-openapi ## Generate all code
 
 generate-proto: ## Generate protobuf code
 	@echo "Generating protobuf code..."
@@ -176,10 +168,6 @@ generate-proto: ## Generate protobuf code
 generate-openapi: ## Generate OpenAPI clients
 	@echo "Generating OpenAPI code..."
 	./scripts/generate-api.sh
-
-generate-graphql: ## Generate GraphQL code
-	@echo "Generating GraphQL code..."
-	cd frontend/web && pnpm graphql-codegen
 
 favicons: ## Render the site favicon set (favicon.ico + PNGs) from frontend/web/public/logo.png
 	@echo "Rendering favicons from logo.png..."

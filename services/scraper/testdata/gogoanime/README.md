@@ -120,8 +120,6 @@ Plan 22-01 does NOT modify the captured HTML — the multi-URL extraction
 tests assert that both URLs come out of the unpacked body via
 `extractAllPlayableURLs` in `packed_common.go`. If a future re-capture
 loses one of the keys, the Plan 22-01 unit tests fail loudly. The
-`hls3` host names differ from those in
-`docs/plans/2026-05-13-scraper-self-healing-spec.md` (which references
-`managementadvisory.sbs` / `exoplanethunting.space`) because the spec was
-written against a different mid-2026 capture and these are the hosts in
-the committed goldens.
+`hls3` host names rotate upstream. These fixtures intentionally assert the
+hosts present in the committed 2026-05-12 goldens rather than treating an old
+provider snapshot as a permanent allowlist.

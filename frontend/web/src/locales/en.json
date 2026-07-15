@@ -278,26 +278,33 @@
       "switch": "Classic Kodik",
       "back": "Back to AnimeEnigma player"
     },
+    "discoveryTips": {
+      "label": "Did you know?",
+      "another": "Show another tip",
+      "items": {
+        "downloads": "Install AnimeEnigma as an app to download episodes and watch them offline.",
+        "feedback": "Have an idea or found a bug? Use the Feedback button in the page footer.",
+        "subtitleTiming": "Subtitles early or late? Z shifts them 0.1 s earlier; X shifts them later.",
+        "secretFeature": "What's your favorite secret feature? The footer button picks another one at random.",
+        "rawDub": "RAW keeps the original Japanese audio; DUB uses a localized voice track.",
+        "watchTogether": "Create a private Watch Together room to keep playback and chat in sync for everyone.",
+        "streamReport": "Stream broken? The report button in the player sends the admins useful logs automatically.",
+        "help": "Press ? almost anywhere to open the full list of secret tips and hotkeys."
+      }
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",
       "miruro": "Miruro",
       "nineanime": "9anime",
       "animepahe": "AnimePahe",
-      "gogoanime": "Anitaku",
-      "animekai": "AnimeKai"
+      "gogoanime": "Anitaku"
     },
     "sourceLabel": "Source",
     "sourceUnavailable": "This source isn't responding right now. Try another.",
     "subtitlePicker": {
       "label": "Subtitles",
       "none": "Off"
-    },
-    "subtitleSettings": {
-      "label": "Subtitle timing",
-      "title": "Subtitle timing",
-      "offsetHint": "Shift subtitles earlier or later to match the audio.",
-      "reset": "Reset"
     },
     "otherSubs": {
       "title": "Other subtitles",
@@ -1620,7 +1627,7 @@
       },
       "q3": {
         "q": "Where do the videos come from?",
-        "a": "AnimeEnigma streams videos from Kodik and AnimeLib (Russian audio/subs). The backend proxies the streams so your IP never hits the external CDN directly. English-source players are being rebuilt — new providers are coming."
+        "a": "AnimeEnigma combines several sources in one player, including Kodik for Russian tracks, English-language providers, and first-party library content. Available sources are selected from the live provider feed, and supported streams are proxied so your IP does not contact the external CDN directly."
       },
       "q4": {
         "q": "How do recommendations work?",

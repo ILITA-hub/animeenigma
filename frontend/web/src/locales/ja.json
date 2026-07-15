@@ -278,26 +278,33 @@
       "switch": "クラシック Kodik",
       "back": "AnimeEnigma プレーヤーに戻る"
     },
+    "discoveryTips": {
+      "label": "ご存じですか？",
+      "another": "別のヒントを表示",
+      "items": {
+        "downloads": "AnimeEnigmaをアプリとしてインストールすると、エピソードをダウンロードしてオフラインで視聴できます。",
+        "feedback": "アイデアやバグを見つけたら、ページ下部の「フィードバック」ボタンから送れます。",
+        "subtitleTiming": "字幕が早い・遅いときは、Zで0.1秒早め、Xで遅らせられます。",
+        "secretFeature": "お気に入りの秘密機能は？ページ下部のボタンが次の機能をランダムに選びます。",
+        "rawDub": "RAWは日本語のオリジナル音声、DUBはローカライズされた吹替です。",
+        "watchTogether": "プライベートな同時視聴ルームを作ると、全員の再生とチャットが同期します。",
+        "streamReport": "配信が壊れているときは、プレイヤーの報告ボタンから有用なログを管理者へ自動送信できます。",
+        "help": "サイトのほぼどこでも ? を押すと、秘密のヒントとショートカットの一覧が開きます。"
+      }
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",
       "miruro": "Miruro",
       "nineanime": "9anime",
       "animepahe": "AnimePahe",
-      "gogoanime": "Anitaku",
-      "animekai": "AnimeKai"
+      "gogoanime": "Anitaku"
     },
     "sourceLabel": "ソース",
     "sourceUnavailable": "このソースは現在応答していません。別のソースを試してください。",
     "subtitlePicker": {
       "label": "字幕",
       "none": "オフ"
-    },
-    "subtitleSettings": {
-      "label": "字幕タイミング",
-      "title": "字幕タイミング",
-      "offsetHint": "音声に合わせて字幕を早めたり遅らせたりします。",
-      "reset": "リセット"
     },
     "otherSubs": {
       "title": "その他の字幕",
@@ -1620,7 +1627,7 @@
       },
       "q3": {
         "q": "動画はどこから来ているのですか？",
-        "a": "AnimeEnigmaはKodikとAnimeLib（ロシア語音声・字幕）から動画をストリーミングします。バックエンドがストリームをプロキシするため、外部CDNにあなたのIPが直接届くことはありません。英語プレーヤーは現在再構築中で、新しいプロバイダーが近日中に追加されます。"
+        "a": "AnimeEnigmaは、ロシア語トラック向けのKodik、英語圏のプロバイダー、ファーストパーティのライブラリなど、複数の配信元を1つのプレーヤーに統合しています。利用可能な配信元は最新のプロバイダーフィードから選ばれ、対応ストリームはプロキシされるため、外部CDNにIPアドレスが直接送られることはありません。"
       },
       "q4": {
         "q": "レコメンデーションはどのように動作しますか？",

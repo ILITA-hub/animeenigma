@@ -8,7 +8,7 @@ A self-hosted anime streaming platform with MAL/Shikimori integration. Built as 
 
 ## Features
 
-- **Multi-Source Streaming** — 5 video players: Kodik (RU iframe), AnimeLib (RU MP4), OurEnglish (EN HLS via a multi-provider scraper failover), Raw (original-audio JP HLS), Hanime (18+ HLS), plus self-hosted MinIO storage
+- **Unified Multi-Source Streaming** — aePlayer selects among first-party, Kodik, English scraper, raw, and age-restricted sources; classic Kodik iframe remains as a fallback
 - **On-Demand Catalog** — Anime data is fetched from Shikimori in real-time when searching
 - **Japanese Subtitles** — Selectable-text JP subtitle overlay (ASS/SRT/VTT) via Jimaku.cc
 - **OP/ED Ratings** — Rate and browse anime openings and endings
@@ -42,29 +42,26 @@ A self-hosted anime streaming platform with MAL/Shikimori integration. Built as 
        │   │  API     │ │         │ └──────┘
        │   └──────────┘ └────┬────┘
        │                     │
-       │    ┌────────┬───────┼────────┐
-       │    ▼        ▼       ▼        ▼
-       │ Kodik  AnimeLib  OurEnglish  Raw
-       │ (iframe) (MP4)    (HLS)     (HLS)
+       │           ┌────────┼────────┐
+       │           ▼        ▼        ▼
+       │        Kodik   Scraper   Library
+       │       (RU)    (EN HLS)  (HLS)
        └────┘
 ```
 
 ### Video Players
 
-The platform has 5 video players, each targeting a different source:
+The frontend has two player surfaces:
 
 | Player | Language | Video Tech | Features |
 |--------|----------|-----------|----------|
-| **Kodik** | RU | Iframe embed | No direct video control |
-| **AnimeLib** | RU | HTML5 MP4 (or Kodik fallback) | Quality selection |
-| **OurEnglish** | EN | HTML5 + hls.js (HLS) | Multi-provider scraper failover, JP subs, quality, progress tracking |
-| **Raw** | JP | HTML5 + hls.js (HLS/MP4) | Original-audio JP, JP subs (Jimaku + others), quality |
-| **Hanime** | 18+ | HTML5 + hls.js (HLS) | Quality selection, progress tracking |
+| **aePlayer** | Multi-language | HTML5 + hls.js | Unified source selection, subtitles, quality, progress tracking |
+| **Classic Kodik** | RU | Iframe embed | Compatibility fallback without direct video control |
 
 Videos are obtained in three ways:
 
 1. **Iframe (Kodik)** — Frontend embeds Kodik player directly
-2. **Proxied Stream (OurEnglish, Raw, AnimeLib, Hanime)** — Backend proxies HLS/MP4 streams for CORS + Referer injection
+2. **Proxied Stream** — Backend resolves and proxies supported external HLS/MP4 sources
 3. **Self-hosted Storage (MinIO)** — Admin-uploaded videos
 
 ### On-Demand Catalog
@@ -75,13 +72,13 @@ The anime database is **NOT pre-populated**. Instead:
 2. Catalog service queries Shikimori GraphQL API
 3. Results are matched by **Japanese name** as the primary key
 4. Anime metadata is stored in PostgreSQL for future queries
-5. Video sources are resolved via parsers (Kodik, AnimeLib) and the OurEnglish scraper service (gogoanime → animepahe → allanime → animefever → miruro → nineanime failover)
+5. Video sources are resolved through the provider roster, catalog adapters, and scraper service
 
 ## Quick Start
 
 ### Requirements
 
-- Go 1.22+
+- Go 1.25+
 - Bun 1.x+
 - Docker & Docker Compose
 - Make
@@ -203,7 +200,7 @@ Services are configured via environment variables. See `internal/config/config.g
 | `JIMAKU_API_KEY`      | Jimaku.cc API key for JP subtitles   | For JP subtitle support   |
 | `TELEGRAM_ADMIN_CHAT_ID` | Telegram chat ID for admin notifications | For error report alerts |
 
-OurEnglish is served by the `scraper` microservice (with the `animepahe-resolver` stealth sidecar) — no API key required. AnimeLib and Raw require no API key.
+English providers are served by the `scraper` microservice, with browser-backed providers using the `stealth-scraper` sidecar.
 
 ### Example `.env`
 

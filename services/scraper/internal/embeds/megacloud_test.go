@@ -247,7 +247,7 @@ func TestMegacloudClient_Name(t *testing.T) {
 }
 
 // TestMegacloudClient_Extract_PassesCallerHeaders verifies that headers
-// passed by the caller (e.g. Referer for AnimeKai Phase 19) reach the
+// passed by the caller (for example Referer) reach the
 // sidecar request. The sidecar's internal Referer to the upstream embed is
 // independent of this — caller headers are headers TO the sidecar.
 func TestMegacloudClient_Extract_PassesCallerHeaders(t *testing.T) {

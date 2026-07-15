@@ -14,7 +14,7 @@ import (
 )
 
 // These tests lock the HLS proxy's trust gate after the 2026-07-14 allowlist
-// retirement (docs/plans/2026-07-14-retire-allowlist-blocklist.md, S3):
+// retirement (docs/stream-security.md):
 //
 //	admit ⇔ preauth (sealed stream token) OR first-party internal host OR
 //	        valid provenance signature

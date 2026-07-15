@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Shared episode grid for every video player (Kodik, AnimeLib, OurEnglish,
- * Hanime, Raw, Anime18) in BOTH solo (Anime.vue) and Watch Together.
+ * Shared episode grid for the unified aePlayer and Classic Kodik fallback in
+ * both solo playback (Anime.vue) and Watch Together.
  * Presentational only — the host player owns episode + watched state and
  * passes a normalized list down.
  *

@@ -1,5 +1,19 @@
 apiVersion: 1
 
+# Grafana file provisioning only ADDS and UPDATES rules — removing a rule from
+# this file leaves it live in the DB (provenance=file) forever. Retiring a rule
+# therefore takes two steps: delete its block below, AND list its uid here.
+# Entries are idempotent: deleting an absent uid is a no-op, so they are safe to
+# keep after the rule is gone.
+deleteRules:
+  # "Kodik Player Unavailable" — retired 2026-07-15. Queried
+  # provider_health_up{provider="kodik"} after the roster row was renamed to
+  # kodik-iframe, so it matched nothing and (noDataState: OK) could never fire.
+  # RU is covered generically by the ProviderFleet* rules. See the note where
+  # its block used to live, further down this file.
+  - orgId: 1
+    uid: player-unavailable
+
 groups:
   - orgId: 1
     name: AnimeEnigma Alerts
@@ -459,51 +473,15 @@ groups:
           summary: "Cleanup hasn't run successfully"
           description: "The cleanup job hasn't succeeded in over 8 days (expected weekly on Sundays)."
 
-      - uid: player-unavailable
-        title: Kodik Player Unavailable
-        noDataState: OK
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: PBFA97CFB590B2093
-            model:
-              expr: provider_health_up{provider="kodik"}
-              instant: true
-              refId: A
-          - refId: B
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: __expr__
-            model:
-              refId: B
-              type: reduce
-              expression: A
-              reducer: last
-          - refId: C
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params: [1]
-                    type: lt
-                  operator:
-                    type: and
-              refId: C
-              type: threshold
-              expression: B
-        for: 30m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Kodik player ({{ $labels.provider }}) is DOWN"
-          description: "Kodik has been unavailable for 30+ minutes. Check Kodik API status."
+      # REMOVED 2026-07-15: `player-unavailable` ("Kodik Player Unavailable").
+      # It queried provider_health_up{provider="kodik"}, but the roster row was
+      # renamed to kodik-iframe — the selector matched nothing, and with
+      # noDataState: OK the rule could never fire. It had been silently dead
+      # since the rename. A hardcoded provider name cannot survive a DB-driven
+      # roster, so it is not replaced: RU is covered generically by the
+      # ProviderFleet* rules below, which read provider_health_state per
+      # `group` and already see all five RU rows (kodik-iframe, kodik-noads,
+      # animejoy-sibnet, animejoy-allvideo, animelib).
 
       - uid: provider-health-stream-segment-down
         title: Scraper Provider Stream-Segment Down
@@ -1167,6 +1145,71 @@ groups:
         annotations:
           summary: "Provider group {{ $labels.group }}: {{ $values.B }} sources dropped to Down together (~15m window)"
           description: "{{ $values.B }} providers in the {{ $labels.group }} group transitioned to confirmed Down within ~15 minutes of each other — a co-incident failure burst. This MAY share a root cause (Camoufox pool crash, shared upstream/dependency), but may also be independent provider outages that happened to overlap — verify before assuming a shared dependency. Check /api/admin/scraper/health and the playback-health roster. Note: long-standing, one-at-a-time provider outages do NOT trigger this alert (that is what ProviderFleetNoAutoPlayable covers when a group is left with no auto-playable source)."
+
+      # ProviderDownProlonged (2026-07-15) — roster rot. The two rules above
+      # cover the acute cases (a group with no auto-playable source; several
+      # providers failing together). Neither ever fires for the slow case: ONE
+      # provider dead for days while its groupmates carry the traffic. That
+      # provider is not an outage, it is a lie in the roster — it still occupies
+      # a failover slot and costs every request a doomed attempt.
+      #
+      # Duration lives in the expr, NOT in `for:`. min_over_time(...[36h]) == 1
+      # means the provider has been pinned at Down for the whole window (any
+      # recovery or park pulls the min off 1), which survives a Grafana restart —
+      # a `for: 36h` pending timer would not. Retention is 14d, well past 36h.
+      #
+      # Group-generic and DB-driven: every provider_health_state series comes
+      # from the stream_providers roster, so a new provider is covered the day it
+      # is added and no provider name appears here. Escape hatch: park it
+      # (policy=disabled ⇒ health_state 0 ⇒ min_over_time != 1 ⇒ silent) — the
+      # roster then tells the truth and the alert stops. severity: warning; this
+      # is hygiene, not a live outage.
+      - uid: provider-down-prolonged
+        title: ProviderDownProlonged
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: min_over_time(provider_health_state[36h]) == 1
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        labels:
+          severity: warning
+        annotations:
+          summary: "Provider {{ $labels.provider }} ({{ $labels.group }}) has been Down for 36h+"
+          description: "provider_health_state{provider=\"{{ $labels.provider }}\"} has been pinned at Down(1) for at least 36 hours — every probe in that window failed. The {{ $labels.group }} group is still being served by its other providers, so this is not an outage; it is a rotted roster row that keeps consuming a failover slot. Either fix it, or park it (set policy=disabled) so the roster reflects reality and this alert goes quiet. Check /api/admin/scraper/health and the playback-health roster."
 
       # AUTO-608: roster/code integrity — provider_unwired{provider,seam} (scraper,
       # seam="scraper") is 1 when a non-disabled stream_providers DB row has no

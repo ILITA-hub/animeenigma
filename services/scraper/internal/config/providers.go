@@ -1,30 +1,22 @@
 package config
 
 import (
-	"fmt"
-	"os"
 	"sort"
 	"sync/atomic"
-
-	"gopkg.in/yaml.v3"
 )
 
 // KnownProviders is the canonical set of scraper provider names recognized at
 // compile time. AUTO-608: it no longer gates the remote loader (LoadProvidersRemote
 // is fail-open — see its doc comment) — DB rows are the source of truth, and
 // main.go keys roster-reflection metrics + the wiring-invariant checks off
-// cfg.Providers.AllNames() instead. KnownProviders now only (1) seeds the
-// offline/fallback config (allProvidersEnabled, used at boot until the catalog
-// DB answers) and (2) drives the intrinsic EN-vs-adult candidate split
-// (KnownProvidersInGroup) for that fallback path. LoadProviders (the dormant
-// YAML loader, retired 2026-06-17) still validates entries against this list.
+// cfg.Providers.AllNames() instead. KnownProviders only (1) seeds the offline
+// fallback used until the catalog answers and (2) drives the intrinsic
+// EN-vs-adult candidate split for that fallback path.
 //
-// These are the registration names in cmd/scraper-api/main.go, PLUS "animefever":
-// its provider code was removed from the binary 2026-07-05 (dead upstream —
-// tombstone), but the catalog keeps a disabled `scraper_operated` animefever row
-// as the historical record.
+// These are the registration names in cmd/scraper-api/main.go. Retired DB
+// tombstones are intentionally excluded from the offline fallback.
 var KnownProviders = []string{
-	"gogoanime", "animepahe", "allanime", "allanime-okru", "animefever", "miruro", "nineanime", "animekai",
+	"gogoanime", "animepahe", "allanime-okru", "miruro", "nineanime",
 	"18anime",
 }
 
@@ -36,9 +28,7 @@ const (
 	GroupAdult = "adult"
 )
 
-// providerGroups assigns each known provider to its group. Group is INTRINSIC
-// to the provider (a hentai source is always adult) — it is NOT operator-
-// editable via YAML, so a typo can't move 18anime into the EN chain. Absent
+// providerGroups assigns each known provider to its intrinsic group. Absent
 // entries default to GroupEN.
 var providerGroups = map[string]string{
 	"18anime": GroupAdult,
@@ -144,28 +134,8 @@ func (p ProvidersConfig) BaseURLOf(name string) string {
 	return ""
 }
 
-// providerEntry is the raw YAML shape. Enabled is a pointer so an omitted
-// `enabled:` is distinguishable from an explicit `false` (we require it).
-type providerEntry struct {
-	Name             string  `yaml:"name"`
-	Enabled          *bool   `yaml:"enabled"`
-	Reason           string  `yaml:"reason"`
-	Description      string  `yaml:"description"`
-	Group            *string `yaml:"group"` // optional; if present MUST equal GroupOf(name)
-	SupportsSub      *bool   `yaml:"supports_sub"`
-	SupportsDub      *bool   `yaml:"supports_dub"`
-	SupportsRaw      *bool   `yaml:"supports_raw"`
-	SubDelivery      string  `yaml:"sub_delivery"`
-	QualityCeiling   string  `yaml:"quality_ceiling"`
-	PreferenceWeight *int    `yaml:"preference_weight"`
-}
-
-type providersFile struct {
-	Providers []providerEntry `yaml:"providers"`
-}
-
 // ProvidersConfig is the resolved provider management config. Source is one of
-// "file", "env-fallback" (file path set but missing), or "env".
+// "default", "remote", or "test".
 //
 // The metas field is a pointer to an atomic.Pointer so ProvidersConfig can be
 // copied by value (e.g. assigned to a struct field) while all copies share the
@@ -260,7 +230,7 @@ func (p ProvidersConfig) AllNames() []string {
 
 // NewProvidersConfigForTest constructs a ProvidersConfig from a slice of
 // ProviderMeta entries. Intended only for unit tests that need to drive the
-// handler without a real YAML file.
+// handler without a catalog response.
 func NewProvidersConfigForTest(entries []ProviderMeta) ProvidersConfig {
 	metas := make(map[string]ProviderMeta, len(entries))
 	for _, m := range entries {
@@ -297,71 +267,6 @@ func (p ProvidersConfig) Rows(candidates []string) []ProviderRow {
 		})
 	}
 	return rows
-}
-
-// LoadProviders reads + validates the YAML provider config at path.
-func LoadProviders(path string) (ProvidersConfig, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return ProvidersConfig{}, fmt.Errorf("read providers file: %w", err)
-	}
-	var pf providersFile
-	if err := yaml.Unmarshal(raw, &pf); err != nil {
-		return ProvidersConfig{}, fmt.Errorf("parse providers yaml: %w", err)
-	}
-	known := make(map[string]bool, len(KnownProviders))
-	for _, n := range KnownProviders {
-		known[n] = true
-	}
-	derefBool := func(p *bool) bool { return p != nil && *p }
-	metas := make(map[string]ProviderMeta, len(pf.Providers))
-	for _, e := range pf.Providers {
-		if e.Name == "" {
-			return ProvidersConfig{}, fmt.Errorf("providers file: entry with empty name")
-		}
-		if !known[e.Name] {
-			return ProvidersConfig{}, fmt.Errorf("providers file: unknown provider %q (known: %v)", e.Name, KnownProviders)
-		}
-		if e.Enabled == nil {
-			return ProvidersConfig{}, fmt.Errorf("providers file: provider %q missing required 'enabled' field", e.Name)
-		}
-		if _, dup := metas[e.Name]; dup {
-			return ProvidersConfig{}, fmt.Errorf("providers file: duplicate provider %q", e.Name)
-		}
-		// Group is intrinsic; an explicit YAML group must match the canonical
-		// assignment (defense against typo-moving 18anime into the EN chain).
-		if e.Group != nil && *e.Group != GroupOf(e.Name) {
-			return ProvidersConfig{}, fmt.Errorf("providers file: provider %q group %q != intrinsic %q", e.Name, *e.Group, GroupOf(e.Name))
-		}
-		subDelivery := e.SubDelivery
-		if subDelivery == "" {
-			subDelivery = "hard"
-		}
-		weight := 0
-		if e.PreferenceWeight != nil {
-			weight = *e.PreferenceWeight
-		}
-		// The YAML shape (retired 2026-06-17 — dormant fallback only) has no
-		// "degraded" concept: bool enabled maps to enabled|disabled.
-		status := StatusEnabled
-		if !*e.Enabled {
-			status = StatusDisabled
-		}
-		metas[e.Name] = ProviderMeta{
-			Name:             e.Name,
-			Status:           status,
-			Reason:           e.Reason,
-			Description:      e.Description,
-			Group:            GroupOf(e.Name),
-			SupportsSub:      derefBool(e.SupportsSub),
-			SupportsDub:      derefBool(e.SupportsDub),
-			SupportsRaw:      derefBool(e.SupportsRaw),
-			SubDelivery:      subDelivery,
-			QualityCeiling:   e.QualityCeiling,
-			PreferenceWeight: weight,
-		}
-	}
-	return newProvidersConfig(metas, "file"), nil
 }
 
 // allProvidersEnabled builds the offline-fallback ProvidersConfig: every known

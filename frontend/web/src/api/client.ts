@@ -1039,20 +1039,6 @@ export const subtitlesApi = {
     }),
 }
 
-export const animeLibApi = {
-  getEpisodes: (animeId: string) =>
-    apiClient.get(`/anime/${animeId}/animelib/episodes`),
-  getTranslations: (animeId: string, episodeId: number) =>
-    apiClient.get(`/anime/${animeId}/animelib/translations`, {
-      params: { episode: episodeId }
-    }),
-  getStream: (animeId: string, episodeId: number, translationId: number) =>
-    apiClient.get(`/anime/${animeId}/animelib/stream`, {
-      params: { episode: episodeId, translation: translationId }
-    }),
-  search: (query: string) => apiClient.get('/animelib/search', { params: { q: query } }),
-}
-
 export const hanimeApi = {
   getEpisodes: (animeId: string) =>
     apiClient.get(`/anime/${animeId}/hanime/episodes`),

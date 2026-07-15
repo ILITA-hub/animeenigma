@@ -5,7 +5,7 @@
 // It is the SIXTH and LAST provider in the EN failover chain:
 //
 //	gogoanime (degraded) → animepahe (degraded) → allanime (★ working) →
-//	  okru → miruro → nineanime (THIS PROVIDER) → animekai (gated stub)
+//	  allanime-okru → miruro → nineanime (THIS PROVIDER)
 //	  (animefever removed from the binary 2026-07-05 — dead upstream)
 //
 // Per CONTEXT.md D2, 9anime.me.uk is EXPLICITLY ACCEPTED as a low-quality,
@@ -34,12 +34,12 @@
 //  1. doc.go        — Package doc + upstream contract notes (this file).
 //  2. dto.go        — JSON DTO for the WP REST search response.
 //  3. cache.go      — Mirror of allanime/cache.go: 4 key families + negative
-//                      cache on WP search misses (CONTEXT.md D2 — operator
-//                      kill assumed) + per-key TTLs from libs/cache.
+//     cache on WP search misses (CONTEXT.md D2 — operator
+//     kill assumed) + per-key TTLs from libs/cache.
 //  4. client.go     — Adapt allanime/client.go's shape to 9anime's WP REST
-//                      + WP-post HTML-scrape + 1anime.site MP4 extraction
-//                      data path. NEVER catalog's HTTP client, NEVER bare
-//                      *http.Client.
+//     + WP-post HTML-scrape + 1anime.site MP4 extraction
+//     data path. NEVER catalog's HTTP client, NEVER bare
+//     *http.Client.
 //  5. HTTP client   — Use *domain.BaseHTTPClient (per SCRAPER-FOUND-06 NF).
 //
 // Upstream data path (per 28-RESEARCH.md 9anime section + live recon

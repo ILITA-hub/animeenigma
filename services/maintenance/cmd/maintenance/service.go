@@ -19,7 +19,6 @@ import (
 
 type service struct {
 	tg       *telegram.Client
-	gf       *grafana.Client
 	disp     *dispatcher.Dispatcher
 	state    *state.Manager
 	cfg      *config.Config
@@ -126,55 +125,6 @@ func (s *service) run(ctx context.Context) {
 		}
 	}()
 
-	// Goroutine 2: Grafana reconciliation poller.
-	// Primary alert delivery is now via webhook (POST /api/grafana-webhook).
-	// This poller is a safety net that catches missed webhook deliveries
-	// (e.g. network blip, maintenance restart during burst, Grafana entrypoint failure).
-	// Do NOT remove — without it, a missed webhook silently drops an alert.
-	go func() {
-		if s.cfg.Grafana.APIPass == "" {
-			return // no GRAFANA_API_PASS: poll cannot authenticate; webhook still delivers.
-		}
-		interval := time.Duration(s.cfg.Grafana.PollInterval) * time.Second
-		if interval < 300*time.Second {
-			interval = 300 * time.Second
-		}
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				alerts, err := s.gf.GetFiringAlerts()
-				if err != nil {
-					log.Warnw("grafana reconcile poll error", "error", err)
-					continue
-				}
-
-				s.checkResolvedAlerts(alerts)
-
-				var newAlerts []domain.ClassifiedMessage
-				for _, a := range alerts {
-					if len(a.Alerts) > 0 {
-						key := a.Alerts[0].Name + ":" + a.Alerts[0].Service
-						if s.isSuppressed(key) {
-							continue
-						}
-						if existing := s.state.GetActiveAlert(key); existing == nil {
-							newAlerts = append(newAlerts, a)
-						}
-					}
-				}
-				if len(newAlerts) > 0 {
-					log.Infow("grafana reconcile detected missed alerts", "count", len(newAlerts))
-					workChan <- workItem{grafanaAlerts: newAlerts}
-				}
-			}
-		}
-	}()
-
 	// Goroutine 2b: interrupt-registry TTL sweeper (AUTO-456 safety net).
 	go func() {
 		ticker := time.NewTicker(2 * time.Minute)
@@ -235,16 +185,17 @@ func (s *service) run(ctx context.Context) {
 						s.resolveAlertFromWebhook(key, wa)
 						continue
 					}
-					// firing: build ClassifiedMessage for processWork pipeline
-					severity := "warning"
-					priority := domain.P1
-					if grafana.CriticalAlerts[alertName] {
-						severity = "critical"
-						priority = domain.P0
+					// firing: build ClassifiedMessage for processWork pipeline.
+					// The rule's own `severity` label decides both loudness and
+					// whether this pages at all — see internal/grafana/severity.go.
+					severity := grafana.Severity(wa.Labels)
+					if !grafana.Pages(severity) {
+						log.Infow("diagnostic alert not paged (dashboard-only)", "alert", alertName, "service", service)
+						continue
 					}
 					grafanaAlerts = append(grafanaAlerts, domain.ClassifiedMessage{
 						Type:     domain.MessageAlertFiring,
-						Priority: priority,
+						Priority: grafana.PriorityFor(severity),
 						Text:     fmt.Sprintf("%s: %s", alertName, wa.Annotations["summary"]),
 						From:     domain.User{Username: "grafana-webhook", IsBot: true},
 						Alerts: []domain.AlertInfo{{
@@ -258,7 +209,7 @@ func (s *service) run(ctx context.Context) {
 				}
 			}
 
-			// Process Grafana alerts (poller + webhook-converted) — coalesced through processWork
+			// Process the webhook-converted Grafana alerts — coalesced through processWork
 			if len(grafanaAlerts) > 0 {
 				s.processWork(ctx, workItem{grafanaAlerts: grafanaAlerts})
 			}

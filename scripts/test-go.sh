@@ -1,35 +1,20 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "=== Running Go tests ==="
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+mapfile -t MODULES < <("$ROOT/scripts/go-modules.sh")
 
-# Run tests for all services
-SERVICES=(
-  "auth"
-  "catalog"
-  "streaming"
-  "player"
-  "rooms"
-  "scheduler"
-  "gateway"
-)
+echo "=== Testing ${#MODULES[@]} Go modules ==="
 
-for service in "${SERVICES[@]}"; do
-  echo "Testing $service..."
-  cd "services/$service"
-  go test ./... -cover -v
-  cd ../..
-done
+for module in "${MODULES[@]}"; do
+  relative=${module#"$ROOT/"}
+  echo "Testing $relative..."
 
-# Run tests for libs
-echo "Testing libs..."
-for lib in libs/*/; do
-  if [ -f "$lib/go.mod" ]; then
-    echo "Testing $lib..."
-    cd "$lib"
-    go test ./... -cover -v 2>/dev/null || true
-    cd ../..
+  if [[ "$relative" == "worker" ]]; then
+    (cd "$module" && GOWORK=off go test ./... "$@")
+  else
+    (cd "$module" && go test ./... "$@")
   fi
 done
 
-echo "=== All tests passed ==="
+echo "=== All Go modules passed ==="

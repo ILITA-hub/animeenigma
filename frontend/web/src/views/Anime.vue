@@ -491,6 +491,8 @@
                back is moot (Classic Kodik is the only surface). When AePlayer
                is enabled the toggle above flips back. -->
         </div>
+
+        <PlayerDiscoveryTip v-if="!notReleasedYet" :key="anime.id" />
       </section>
 
       <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
@@ -903,6 +905,7 @@ import { useContextMenu } from '@/composables/useContextMenu'
 import { useCharacters } from '@/composables/useCharacters'
 import type { CharacterCardModel } from '@/types/character'
 import ResumePill from '@/components/player/ResumePill.vue'
+import PlayerDiscoveryTip from '@/components/player/PlayerDiscoveryTip.vue'
 import AePlayerSkeleton from '@/components/player/aePlayer/AePlayerSkeleton.vue'
 import Tabs from '@/components/ui/Tabs.vue'
 import { getImageUrl } from '@/composables/useImageProxy'
@@ -924,10 +927,8 @@ import { useLazyAnimeSections } from '@/composables/animePage/useLazyAnimeSectio
 import { useAnimeComments } from '@/composables/animePage/useAnimeComments'
 import { useAnimeDataLoader } from '@/composables/animePage/useAnimeDataLoader'
 
-// Plan B survivors: KodikPlayer (the iframe "Classic Kodik" fallback) and
-// AePlayer (the default). The other six players (KodikAdFree / AnimeLib /
-// Hanime / Anime18 / Raw / OurEnglish) are retired — their imports + template
-// mounts are removed here; the component files are deleted in a later task.
+// The unified aePlayer is the default playback surface. KodikPlayer remains
+// as the deliberately separate "Classic Kodik" iframe fallback.
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
 // Poster tap-to-zoom lightbox — lazy + mounted only after the first tap (the
 // posterZoomEverOpened latch), so ~250 lines of gesture code stay out of the

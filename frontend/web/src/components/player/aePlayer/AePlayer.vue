@@ -1469,13 +1469,17 @@ onUnmounted(() => {
   height: 100vh;
 }
 
-/* iPhone pseudo-fullscreen — fixed takeover (no element FS API on iOS).
-   Black behind the notch/status bar is intended (video surface). */
+/* iPhone pseudo-fullscreen — fixed takeover (no usable element FS API on iOS).
+   Black behind the notch/status bar is intended (video surface).
+   svh, not % or vh: both resolve against the LARGE viewport (Safari's chrome
+   collapsed), so with the toolbars actually on screen the takeover overflows the
+   visible area and the control row lands under Safari's bottom bar. svh is the
+   smallest-viewport height — always fully visible, never clipped by chrome. */
 .pl--pseudo-fs {
   position: fixed;
   inset: 0;
   z-index: 100;
-  height: 100%;
+  height: 100svh;
   aspect-ratio: auto;
   border-radius: 0;
   border: 0;

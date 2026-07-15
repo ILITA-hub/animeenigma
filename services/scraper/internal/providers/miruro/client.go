@@ -170,7 +170,7 @@ func New(d Deps) (*Provider, error) {
 		browserFetch: d.BrowserFetch,
 		stages:       make(map[string]domain.StageHealth, len(stageNames)),
 	}
-	// Optimistic seed (Up=true) matching the allanime/animekai convention.
+	// Optimistic seed (Up=true) matching the other scraper-provider convention.
 	for _, s := range stageNames {
 		p.stages[s] = domain.StageHealth{Up: true}
 	}

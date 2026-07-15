@@ -43,16 +43,7 @@ jobs:
           kubectl apply -k deploy/kustomize/overlays/$ENV
 
       - name: Wait for rollout
-        run: |
-          kubectl -n animeenigma rollout status deployment/gateway --timeout=300s
-          kubectl -n animeenigma rollout status deployment/auth --timeout=300s
-          kubectl -n animeenigma rollout status deployment/catalog --timeout=300s
-          kubectl -n animeenigma rollout status deployment/streaming --timeout=300s
-          kubectl -n animeenigma rollout status deployment/player --timeout=300s
-          kubectl -n animeenigma rollout status deployment/rooms --timeout=300s
-          kubectl -n animeenigma rollout status deployment/scheduler --timeout=300s
-          kubectl -n animeenigma rollout status deployment/themes --timeout=300s
-          kubectl -n animeenigma rollout status deployment/web --timeout=300s
+        run: kubectl -n animeenigma rollout status deployment --all --timeout=300s
 
       - name: Verify deployment
         run: |

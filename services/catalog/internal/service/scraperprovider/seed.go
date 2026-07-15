@@ -146,17 +146,6 @@ var defaultProviders = []domain.ScraperProvider{
 		DisplayName: "AnimePahe", PlayerKey: "english", AnimeLevel: true,
 	},
 	{
-		Name: "animekai", Status: domain.StatusDisabled,
-		Reason: "Stub — ListServers unimplemented (SCRAPER-KAI-03)",
-		Description: "animekai provider is a stub; ListServers returns ErrProviderDown. " +
-			"Disabled until implemented so it never wastes a failover slot.",
-		// sub_delivery "unknown": claimed hard, but animekai is a disabled stub
-		// (ListServers unimplemented) — never probed, so don't assert burned-in.
-		SupportsSub: true, SupportsDub: false, SubDelivery: "unknown",
-		QualityCeiling: "1080p", PreferenceWeight: 0,
-		DisplayName: "AnimeKai", PlayerKey: "english", AnimeLevel: true,
-	},
-	{
 		Name: "18anime", Status: domain.StatusEnabled,
 		Reason: "18+ provider (separate group)",
 		Description: "18anime.me hentai source for the 18+ player. Runs in its own orchestrator " +
@@ -196,15 +185,6 @@ var defaultProviders = []domain.ScraperProvider{
 		// by BumpKodikNoadsPriority (seed is insert-if-absent, never updates prod).
 		QualityCeiling: "1080p", PreferenceWeight: 90,
 		DisplayName: "Kodik", PlayerKey: "kodik", AnimeLevel: true,
-	},
-	{
-		Name: "animelib", Status: domain.StatusDisabled,
-		Reason: "RU direct-MP4 player retired (Plan B)",
-		Description: "AniLib direct MP4. Player surface retired in favor of aePlayer; " +
-			"content dropped (2026-06-18, Plan B).",
-		SupportsDub: true, SubDelivery: "none",
-		QualityCeiling: "1080p", PreferenceWeight: 0,
-		DisplayName: "AniLib", PlayerKey: "animelib", AnimeLevel: true,
 	},
 	{
 		Name: "hanime", Status: domain.StatusEnabled,
@@ -258,7 +238,6 @@ var intrinsicGroups = map[string]string{
 	"ae":                "firstparty",
 	"kodik-iframe":      "ru",
 	"kodik-noads":       "ru",
-	"animelib":          "ru",
 	"animejoy-sibnet":   "ru",
 	"animejoy-allvideo": "ru",
 }
@@ -275,7 +254,7 @@ func intrinsicGroup(name string) string {
 // intrinsic — derived from the name, never operator-editable.
 var scraperOperatedNames = map[string]bool{
 	"gogoanime": true, "animepahe": true, "allanime": true, "allanime-okru": true, "animefever": true,
-	"miruro": true, "nineanime": true, "animekai": true, "18anime": true,
+	"miruro": true, "nineanime": true, "18anime": true,
 }
 
 func isScraperOperated(name string) bool { return scraperOperatedNames[name] }

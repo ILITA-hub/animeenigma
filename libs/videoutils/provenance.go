@@ -16,7 +16,7 @@
 // radius is exactly "hosts a trusted CDN's playlist points at".
 //
 // Since 2026-07-14 signing IS the trust model (the static external-domain
-// allowlist was retired — docs/plans/2026-07-14-retire-allowlist-blocklist.md):
+// allowlist was retired — docs/stream-security.md):
 // the HLS gate is `preauth (sealed token) OR first-party internal host OR
 // provenance-signed`. Catalog signs every externally-hosted stream/subtitle
 // URL at the source (streamsign.Stamp), and this file's minting covers the

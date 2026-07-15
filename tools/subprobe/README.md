@@ -1,9 +1,7 @@
 # subprobe — burned-in subtitle detector (standalone)
 
 Detects a stream's **actual** sub delivery (burned-in HARDSUB vs clean/SOFTSUB) instead of
-trusting upstream `has_sub`/`sub_delivery` labels, which go stale. Built for the owner TODO
-`2026-06-20T01-29-59_claude-code_feedback`; verdict + findings in
-[`SPIKE-FINDINGS.md`](SPIKE-FINDINGS.md) and [`VERIFY-RESULTS.md`](VERIFY-RESULTS.md).
+trusting upstream `has_sub`/`sub_delivery` labels, which go stale.
 
 This is a **standalone diagnostic tool**, not wired into any service. Run it by hand to audit /
 re-verify a provider's `sub_delivery`.
@@ -45,8 +43,14 @@ python3 tools/subprobe/verify_verdict.py <frames_dir> <label> <n_soft_tracks>   
 python3 tools/subprobe/make_synthetic.py                        # self-test on synthetic SUB/RAW frames
 ```
 
-## Caveats (see SPIKE-FINDINGS.md for the full set)
-- **It's a hardsub detector, not a SUB detector.** Softsub providers (gogoanime) serve clean
+## Validated scope and caveats
+
+The 2026-06-29 spike separated real hardsub frames from clean video reliably,
+with OCR distinguishing Cyrillic from Latin text. It also established that the
+probe is only one signal: soft-sub track presence and audio language detection
+are still required for a complete SUB/RAW/DUB classification.
+
+- **It's a hardsub detector, not a SUB detector.** Softsub providers can serve clean
   video + separate `.vtt` tracks — those read as "no burned text". Combine with track-list
   presence (softsub) and audio language-ID (dub) for the full SUB/SOFTSUB/RAW/DUB verdict.
 - **Browser-engine providers (gogoanime/nineanime)** stream via ephemeral `stealth-scraper`

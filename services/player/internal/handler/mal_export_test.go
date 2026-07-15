@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,9 +15,27 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type stubMALExportService struct{}
+
+func (stubMALExportService) InitiateExport(context.Context, string, string) (*service.ExportJobResponse, error) {
+	return &service.ExportJobResponse{}, nil
+}
+
+func (stubMALExportService) GetExportStatus(context.Context, string) (*service.ExportJobResponse, error) {
+	return &service.ExportJobResponse{}, nil
+}
+
+func (stubMALExportService) GetUserExports(context.Context, string) ([]*service.ExportJobResponse, error) {
+	return []*service.ExportJobResponse{}, nil
+}
+
+func (stubMALExportService) CancelExport(context.Context, string, string) error {
+	return nil
+}
+
 func TestMALExportHandler_InitiateExport_Unauthorized(t *testing.T) {
 	log := logger.Default()
-	exportService := service.NewMALExportService(log)
+	exportService := stubMALExportService{}
 	handler := NewMALExportHandler(exportService, log)
 
 	// Request without auth context
@@ -32,7 +51,7 @@ func TestMALExportHandler_InitiateExport_Unauthorized(t *testing.T) {
 
 func TestMALExportHandler_InitiateExport_MissingUsername(t *testing.T) {
 	log := logger.Default()
-	exportService := service.NewMALExportService(log)
+	exportService := stubMALExportService{}
 	handler := NewMALExportHandler(exportService, log)
 
 	// Request with empty username
@@ -54,7 +73,7 @@ func TestMALExportHandler_InitiateExport_MissingUsername(t *testing.T) {
 
 func TestMALExportHandler_GetExportStatus_Unauthorized(t *testing.T) {
 	log := logger.Default()
-	exportService := service.NewMALExportService(log)
+	exportService := stubMALExportService{}
 	handler := NewMALExportHandler(exportService, log)
 
 	// Create router with chi context
@@ -71,7 +90,7 @@ func TestMALExportHandler_GetExportStatus_Unauthorized(t *testing.T) {
 
 func TestMALExportHandler_CancelExport_Unauthorized(t *testing.T) {
 	log := logger.Default()
-	exportService := service.NewMALExportService(log)
+	exportService := stubMALExportService{}
 	handler := NewMALExportHandler(exportService, log)
 
 	// Create router with chi context
@@ -88,7 +107,7 @@ func TestMALExportHandler_CancelExport_Unauthorized(t *testing.T) {
 
 func TestMALExportHandler_GetUserExports_Unauthorized(t *testing.T) {
 	log := logger.Default()
-	exportService := service.NewMALExportService(log)
+	exportService := stubMALExportService{}
 	handler := NewMALExportHandler(exportService, log)
 
 	req := httptest.NewRequest("GET", "/api/users/mal-export", nil)
@@ -101,7 +120,7 @@ func TestMALExportHandler_GetUserExports_Unauthorized(t *testing.T) {
 
 func TestMALExportHandler_GetUserExports_Authorized(t *testing.T) {
 	log := logger.Default()
-	exportService := service.NewMALExportService(log)
+	exportService := stubMALExportService{}
 	handler := NewMALExportHandler(exportService, log)
 
 	req := httptest.NewRequest("GET", "/api/users/mal-export", nil)

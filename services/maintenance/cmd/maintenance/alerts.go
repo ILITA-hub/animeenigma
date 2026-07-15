@@ -11,46 +11,10 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/domain"
 )
 
-// checkResolvedAlerts detects alerts that were active but are no longer firing.
-func (s *service) checkResolvedAlerts(currentAlerts []domain.ClassifiedMessage) {
-	// Build set of currently firing alert keys
-	currentKeys := make(map[string]bool)
-	for _, a := range currentAlerts {
-		if len(a.Alerts) > 0 {
-			key := a.Alerts[0].Name + ":" + a.Alerts[0].Service
-			currentKeys[key] = true
-		}
-	}
-
-	// Check each active alert — if no longer in Grafana, it resolved
-	st := s.state.State()
-	for key, active := range st.ActiveAlerts {
-		if !currentKeys[key] {
-			log.Infow("grafana alert resolved", "alert_key", key)
-			s.state.UpdateIssue(active.IssueID, func(issue *domain.Issue) {
-				issue.Status = domain.StatusResolved
-				issue.ResolvedAt = time.Now().UTC().Format(time.RFC3339)
-				issue.Resolution = "Alert resolved (no longer firing in Grafana)"
-			})
-			s.state.RemoveActiveAlert(key)
-
-			// Notify in Telegram
-			duration := "unknown"
-			if firstSeen, err := time.Parse(time.RFC3339, active.FirstSeen); err == nil {
-				duration = time.Since(firstSeen).Truncate(time.Second).String()
-			}
-			s.tg.SendMessage(fmt.Sprintf(
-				"*✅ Alert Resolved*\n*Alert:* %s (%s)\n*Duration:* %s\n*Issue:* %s",
-				active.AlertUID, active.Service, duration, active.IssueID,
-			))
-		}
-	}
-	s.state.Save()
-}
-
 // resolveAlertFromWebhook handles a resolve event pushed by the Grafana webhook.
-// Invariant: state.RemoveActiveAlert MUST happen before tg.SendMessage so the
-// reconciliation poller cannot re-emit the same resolve.
+// Grafana retries deliveries, so this must be idempotent: s.mu serialises
+// concurrent deliveries and the nil GetActiveAlert check makes every repeat
+// after the first a no-op, with no duplicate Telegram notification.
 func (s *service) resolveAlertFromWebhook(key string, wa domain.GrafanaWebhookAlert) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -208,29 +172,4 @@ func (s *service) escalateBatch(batch domain.ClassifiedBatch) {
 	} else {
 		s.tg.SendMessage(text)
 	}
-}
-
-func (s *service) isSuppressed(alertKey string) bool {
-	for _, suppressed := range s.cfg.SuppressedAlerts {
-		if strings.EqualFold(alertKey, suppressed) {
-			return true
-		}
-	}
-	return false
-}
-
-// dropSuppressedAlerts removes firing alerts whose alertName:service key is in
-// SUPPRESSED_ALERTS, so deferred alerts never reach the multi-service triage,
-// escalateBatch, dedup, or analysis. Non-alert messages pass through unchanged.
-func (s *service) dropSuppressedAlerts(msgs []domain.ClassifiedMessage) []domain.ClassifiedMessage {
-	out := msgs[:0:0] // new backing array; do not alias
-	for _, m := range msgs {
-		if m.Type == domain.MessageAlertFiring && len(m.Alerts) > 0 &&
-			s.isSuppressed(m.Alerts[0].Name+":"+m.Alerts[0].Service) {
-			log.Infow("deferred alert (suppressed)", "alert", m.Alerts[0].Name, "service", m.Alerts[0].Service)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out
 }

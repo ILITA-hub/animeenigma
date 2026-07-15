@@ -143,12 +143,13 @@ function currentEp(wrapper: ReturnType<typeof mountPlayer>): number | undefined 
 // episodes.value = [ep1, ep2] — goToNextEpisode walks that list) and reconciles
 // selectedEpisode to episode 1. The harness auto-picks no provider on its own.
 async function readyPlayer(wrapper: ReturnType<typeof mountPlayer>) {
-  ;(wrapper.vm as unknown as { __setProvider: (id: string, server: string) => void })
-    .__setProvider('gogoanime', '')
+  const vm = wrapper.vm as unknown as { __setProvider: (id: string, server: string) => void }
+  vm.__setProvider('gogoanime', '')
   await settle()
   // Focus the player SHELL (the inner rootRef element carrying tabindex/role,
   // not the outer .pl-wrap) so keyboard shortcuts are in scope (playerIsActive).
-  ;(wrapper.get('[role="region"]').element as HTMLElement).focus()
+  const region = wrapper.get('[role="region"]').element as HTMLElement
+  region.focus()
 }
 
 beforeEach(() => vi.clearAllMocks())

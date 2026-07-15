@@ -17,7 +17,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/dispatcher"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/feedback"
-	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/grafana"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/state"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/telegram"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/transport"
@@ -134,21 +133,8 @@ func main() {
 		}
 	}()
 
-	// Initialize Grafana client
-	gf := grafana.NewClient(cfg.Grafana.URL, cfg.Grafana.APIUser, cfg.Grafana.APIPass)
-	grafanaPollEnabled := cfg.Grafana.APIPass != ""
-	// Preflight: verify Grafana connectivity (only when the poll is configured;
-	// the alertmanager API needs auth, so without GRAFANA_API_PASS it just 401s).
-	if !grafanaPollEnabled {
-		log.Infow("grafana reconcile poll disabled — set GRAFANA_API_PASS to enable the safety-net poll (primary alert delivery is via webhook)")
-	} else if alerts, err := gf.GetFiringAlerts(); err != nil {
-		log.Warnw("grafana check failed (will retry)", "error", err)
-	} else {
-		log.Infow("grafana connected", "active_alerts", len(alerts))
-	}
-
 	// Send startup message
-	tg.SendMessage("🤖 *Maintenance service started*\nMonitoring alerts (Grafana API) + user messages (Telegram).")
+	tg.SendMessage("🤖 *Maintenance service started*\nMonitoring alerts (Grafana webhook) + user messages (Telegram).")
 	log.Infow("startup message sent")
 
 	// Set up graceful shutdown
@@ -159,7 +145,6 @@ func main() {
 	// Start polling loop
 	svc := &service{
 		tg:       tg,
-		gf:       gf,
 		disp:     disp,
 		state:    stateMgr,
 		cfg:      cfg,

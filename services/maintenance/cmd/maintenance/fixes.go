@@ -399,8 +399,10 @@ func ceilingRank(c string) int {
 }
 
 // isGrafanaAlert reports whether the message originated from our own Grafana
-// alerting (API poller or webhook) — a trusted internal source. Both paths set
-// From to the grafana/grafana-webhook bot identity; end-user reports never do.
+// alerting webhook — a trusted internal source, which sets From to the
+// grafana-webhook bot identity; end-user reports never do. The bare "grafana"
+// identity is the retired API poller's; it is still accepted so an alert
+// replayed from pre-2026-07-15 persisted state is not mistaken for user input.
 func isGrafanaAlert(msg domain.ClassifiedMessage) bool {
 	if !msg.From.IsBot {
 		return false

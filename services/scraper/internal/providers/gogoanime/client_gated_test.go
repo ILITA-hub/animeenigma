@@ -685,7 +685,7 @@ func TestGetStreamWithGate_MultiSource_AllFail(t *testing.T) {
 }
 
 // TestGetStreamWithGate_PoisonVerdictCached — locks the Track B contract
-// (docs/plans/2026-07-14-retire-allowlist-blocklist.md): a byte-sniffed
+// (docs/stream-security.md): a byte-sniffed
 // ReasonAdDecoy verdict is cached 24h in Redis for BOTH the stream host and
 // the offending segment host, and the pre-check skips a poisoned host on
 // subsequent attempts WITHOUT re-probing the network (while still counting

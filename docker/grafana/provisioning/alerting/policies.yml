@@ -29,13 +29,37 @@ policies:
         group_interval: 5m
         repeat_interval: 12h
         continue: false
+      # Transient streaming/gateway HLS-proxy 5xx bursts (Kodik ad-free CDN
+      # flapping) are self-recovering and were never actionable. They cannot be
+      # demoted via the rule's severity label because `High Error Rate` is ONE
+      # rule whose `service` label comes from the query — catalog and the rest
+      # must keep paging — so the demotion is expressed as a route instead.
+      #
+      # This REPLACES the SUPPRESSED_ALERTS env var (deleted 2026-07-15), which
+      # never actually worked: its parser split on ";" while the deployed value
+      # used ",", so these kept paging (AUTO-546/547/549/551/555/565) for the
+      # entire time they were believed to be deferred.
+      - receiver: maintenance-webhook
+        object_matchers:
+          - ["alertname", "=", "High Error Rate"]
+          - ["service", "=~", "streaming|gateway"]
+        mute_time_intervals:
+          - always
+        continue: false
       # Per-provider scraper/parser pagers are demoted to dashboard-only
       # (severity=diagnostic): they keep evaluating (panels + state history)
       # but route through the always-on mute timing so they never notify.
       # The roster-centric fleet rules (ProviderFleet*) cover the actionable
       # aggregate — and disabled providers are excluded from those by
       # construction (provider_state lifecycle gauge). See
-      # docs/superpowers/plans/2026-06-30-roster-centric-alerting.md Task 6.
+      # docs/scraper-health-reference.md.
+      #
+      # This mute stops the notification; the bot ALSO refuses to page on
+      # severity=diagnostic (internal/grafana/severity.go). Both read the same
+      # label — one contract, enforced either side of the webhook. Until
+      # 2026-07-15 the bot's reconcile poller read the alertmanager API
+      # directly, where mute timings are invisible, and paged for these anyway
+      # (AUTO-616/618); that poller is gone.
       - receiver: maintenance-webhook
         object_matchers:
           - ["severity", "=", "diagnostic"]
