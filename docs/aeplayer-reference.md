@@ -18,7 +18,7 @@
 Every source now plays through **one** component:
 
 ```
-frontend/web/src/components/player/aePlayer/AePlayer.vue   ← THE player (~2800 lines)
+frontend/web/src/components/player/aePlayer/AePlayer.vue   ← THE player (~1900 lines: template + styles + composition root)
 ```
 
 The only other surviving player surface is `KodikPlayer.vue` — the legacy Kodik
@@ -218,6 +218,20 @@ Key invariants:
 | `useWatchTracking.ts` | Emits `watch_history` / `watch_progress`, room sync. |
 | `episodeSelection.ts` / `episodeProgress.ts` | Watching/finished/not-yet-aired episode state. |
 | `playerHotkeys.ts` | Key → action map. |
+
+**2026-07-15 god-file split:** AePlayer.vue's `<script setup>` clusters were
+extracted into ~23 additional single-concern composables in the same directory
+(`useStreamResolution`, `useSourceFailover`, `useSubtitleWiring`,
+`useComboBootstrap`, `useDebugTools`, `usePlaybackClock`, `useGestureControls`,
+`useOfflineDownloads`, `useRoomSync`, `useNextEpisode`, `useQualityControl`,
+`useProtocolTelemetry`, `useFullscreen`, `usePlayerKeyboard`, `useResumeChip`,
+`useWtSeedUrlSync`, `useUiIdle`, `useAutoplayGate`, `usePlayerMenus`,
+`useSkipIntro`, `useCapabilityFeed`, `useEpisodeWatchData`, `edgeTrail.ts`).
+Each takes its dependencies explicitly and is composed in AePlayer.vue, which
+retains the template, styles, shared refs, and the video-event glue where
+failover/clock/autoplay/debug timing intersect. Behavior, public surface
+(props/emits/`defineExpose`), and watcher ordering are unchanged from the
+monolith. The same was done for `views/Anime.vue` → `composables/animePage/`.
 
 ---
 
