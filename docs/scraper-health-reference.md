@@ -1,8 +1,8 @@
 # Scraper Health — Reference
 
-How the EN scraper microservice (`services/scraper/`) knows whether its providers
-(gogoanime → animepahe → allanime → animefever → miruro → nineanime → optional
-animekai) are actually working, and how that knowledge is surfaced and acted on.
+How the EN scraper microservice (`services/scraper/`) evaluates its constructed
+provider chain (gogoanime → animepahe → allanime-okru → miruro → nineanime),
+and how that knowledge is surfaced and acted on.
 
 Three layers:
 
@@ -93,8 +93,7 @@ Guard rails on this stage:
 `internal/health/golden.go` — a hand-curated, 5-entry list of evergreen anime
 (Naruto, One Piece, Attack on Titan, …) with MAL IDs verified against jikan.moe
 (2026-05-12). Each tick picks **one** entry at random. Entries carry romaji
-`AltTitles` because some providers index under romaji (ISS-017 — AnimeFever
-lists "Shingeki no Kyojin"); without them the probe both fails and poisons the
+`AltTitles` because some providers index under romaji; without them the probe both fails and poisons the
 shared per-MAL-ID slug cache. **Maintenance trap:** a wrong MAL ID produces
 permanent `search`-stage false-negatives.
 
@@ -123,9 +122,7 @@ the orchestrator reads it on **every request**. `IsHealthy(provider)` is
 **fail-open** — it returns `false` (skip the provider) only when *all* of:
 
 1. an entry exists,
-2. it is fresh (≤ `cacheStaleTTL = 60 s` old — note this is far shorter than
-   the 15-min probe interval, a known quirk tracked under ISS-021: in practice
-   the gate is only active for ~1 min after each tick),
+2. it is fresh (≤ `cacheStaleTTL = 30 min`, covering two nominal probe intervals),
 3. it contains a `stream_segment` key (i.e. the tick reached stage 5),
 4. that stage is `Up == false`.
 
@@ -142,13 +139,11 @@ checks `cache.IsHealthy(name)`. A skip increments
 `parser_fallback_total{from,to}` and records an `ErrProviderDown`-wrapped error
 (so an all-skipped chain doesn't masquerade as NotFound).
 
-**What the gate does NOT cover:** a provider that is merely *slow* (healthy
-gauge, hung upstream) still burns the chain's time budget — that's ISS-022
-(failover starvation; no per-provider deadline). Operator mitigation: set the
-provider's status to `disabled` (skip registration) or `degraded` (registered
-but excluded from auto-failover) in the catalog `scraper_providers` DB table —
-the single source of truth (AUTO-484; the `SCRAPER_DEGRADED_PROVIDERS` env was
-removed AUTO-503). Hot-reloaded within ~60s.
+Slow providers are bounded by the orchestrator's per-provider deadline
+(`SCRAPER_PROVIDER_TIMEOUT`, or the longer browser-engine override). A timeout
+is classified as a retryable provider failure while the parent request remains
+alive. The catalog `stream_providers` policy/health state is the durable source
+of truth and is hot-reloaded by the scraper.
 
 ---
 
@@ -233,11 +228,11 @@ curl -s 'http://localhost:9090/prometheus/api/v1/query' \
 
 # Take a misbehaving provider out of the chain (catalog DB — single source of
 # truth, hot-reloaded within ~60s, no restart):
-#   UPDATE scraper_providers SET status='degraded' WHERE name='animepahe';
+#   UPDATE stream_providers SET policy='manual' WHERE name='animepahe';
 ```
 
 Known issues touching this system: ISS-017 (probe noise vs real downs,
-romaji titles), ISS-021 (playlist-lies + 60 s gate-TTL quirk), ISS-022
-(failover starvation — health gate can't see "slow"), and the 2026-06-10
+romaji titles), ISS-021 (playlist validation), ISS-022 (the now-bounded
+per-provider timeout), and the 2026-06-10
 bounded-drain fix (probe downloaded whole episodes; see
 `docs/issues/README.md`).

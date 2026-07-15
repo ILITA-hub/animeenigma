@@ -12,7 +12,7 @@ AnimeEnigma: self-hosted anime streaming platform with Shikimori/MAL integration
 
 **There is ONE unified player — `frontend/web/src/components/player/aePlayer/AePlayer.vue`.** The old per-source components (`OurEnglishPlayer.vue`, `RawPlayer.vue`, `AnimeLibPlayer.vue`, `HanimePlayer.vue`) were **deleted** and folded into it. The only separate surface is `KodikPlayer.vue` — the legacy Kodik **iframe**, mounted as a binary "Classic Kodik" fallback toggle on the anime page (and the surface when `VITE_AE_PLAYER_ENABLED=false`).
 
-The "5 players" are now **source families inside one player**, chosen via the in-player **Source** panel. The user selects a **combo** `{audio, lang, provider, server, team}`; the backend **capability feed** (`GET /api/anime/{id}/capabilities`, `(policy,health,content)`-derived, disabled providers omitted) is the single source of truth for what's available.
+The former player surfaces are now **source adapters inside one player**, chosen via the in-player **Source** panel. The user selects a **combo** `{audio, lang, provider, server, team}`; the backend **capability feed** (`GET /api/anime/{id}/capabilities`, `(policy,health,content)`-derived, disabled providers omitted) is the single source of truth for what's available. AniLib is retired from the public runtime; its parser remains only for legacy compatibility paths.
 
 | Source family | Lang | Group | Video tech | JP subs |
 |--------|------|-------|-----------|---------|
@@ -24,7 +24,7 @@ The "5 players" are now **source families inside one player**, chosen via the in
 
 > **RAW vs DUB:** the top slider's **RAW** position = `combo.audio:'sub'` (original audio — EN-sub/RU-sub/pure-JP all surface, language filter dropped); **DUB** = `combo.audio:'dub'` (localized; language slider EN/RU only, no JP dub). Subtitles default **OFF** and never auto-enable. Full model in the reference doc.
 >
-> **EN scraper backend** (`services/scraper/`) fails over **gogoanime → animepahe → allanime-okru → miruro → nineanime** (+ optional `animekai`); see [`docs/scraper-framework.md`](docs/scraper-framework.md). aePlayer is behind `VITE_AE_PLAYER_ENABLED` (defaults on).
+> **EN scraper backend** (`services/scraper/`) constructs **gogoanime → animepahe → allanime-okru → miruro → nineanime** in failover order; DB-derived policy and health decide which are auto-eligible. See [`docs/scraper-framework.md`](docs/scraper-framework.md). aePlayer is behind `VITE_AE_PLAYER_ENABLED` (defaults on).
 
 **Backend route family** (gateway → catalog → scraper microservice):
 - `GET /api/anime/{uuid}/scraper/episodes?prefer=<provider>`
@@ -37,17 +37,17 @@ The "5 players" are now **source families inside one player**, chosen via the in
 - `subtitle-parser.ts` — parses ASS (via `ass-compiler`), SRT, VTT → `SubtitleCue[]`.
 - `OtherSubsPanel.vue` — aggregated subtitle picker (Jimaku, OpenSubtitles, etc.).
 - `ReportButton.vue` — per-stream user-reportable error path; persists to disk + Telegram admin notification.
-- `libs/videoutils/proxy.go` — backend HLS proxy for CORS. **Trust gate = `first-party OR signed`** (plus the masked-token preauth path, which skips the gate — the sealed AES-GCM token WAS the authorization): catalog signs EVERY externally-hosted stream/subtitle URL at the source (`streamsign.Stamp`/`Sign` → `videoutils.SignStreamURL` — Kodik, Hanime, AniLib, 18anime, jimaku, animejoy, scraper bodies all sign), and the proxy mints HMAC provenance tokens for rotating child/segment CDNs and redirect targets. **The static `HLSProxyAllowedDomains` allowlist was RETIRED 2026-07-14** (`docs/plans/2026-07-14-retire-allowlist-blocklist.md`); the only unsigned hosts admitted are the config-derived `FirstPartyHosts` set (`stealth-scraper`, `minio` — Docker-private, unsignable by design since `netguard.ValidatePublicURL` rejects them). There is NO list to add hosts to: any new catalog path MUST sign via `streamsign.Stamp` at the source (animejoy/kodik endpoints = the pattern).
+- `libs/videoutils/proxy.go` — backend HLS proxy for CORS. Trust gate: masked-token preauthorization, a configured first-party host, or a valid provenance signature. There is no external CDN allowlist or static ad-CDN blocklist; every external catalog path signs at the source and streamprobe rejects poison by media bytes. Full contract: [`docs/stream-security.md`](docs/stream-security.md).
 
-**Known issue:** HLS codec stall (D-07) — for some HLS sources hls.js loads the master/level playlist but never requests `.ts` fragments (readyState stays 0). Pre-existing; `hls.js` is pinned to `~1.5.20` (1.6.x regressed codecs). Tracked in `aePlayer/MANUAL-REVIEW.md`. (The retired AniLib MP4 player's soft-sub limitation no longer applies — AniLib is not wired into aePlayer.)
+**Known issue:** Some upstream HLS sources have historically stalled before the first media fragment. `hls.js` remains pinned to `~1.5.20` because 1.6.x regressed codec handling; current incidents and provider evidence belong in `docs/issues/` rather than a player-local review checklist.
 
 ### Video Streaming Model
 
 Four sourcing modes:
 1. **Kodik iframe** — frontend embeds Kodik's player iframe (no direct video control).
-2. **Backend proxy/restream** — `services/streaming` HLS proxy restreams MP4/HLS from AniLib, AnimePahe (Kwik), AllAnime (`fast4speed.rsvp`), AnimeFever, Miruro, 9anime, and Hanime CDNs (CORS + Referer injection).
+2. **Backend proxy/restream** — `services/streaming` proxies signed MP4/HLS from scraper providers, Kodik direct HLS, AnimeJoy, 18anime, Hanime, and subtitle sources (CORS + Referer injection).
 3. **Self-hosted storage** — admin-uploaded videos in MinIO.
-4. **Stealth browser sidecar** — `services/stealth-scraper/` (Camoufox anti-detect Firefox) resolves providers whose DB `engine` is `browser` (gogoanime, nineanime: JS-runtime stream id + Referer-gated rotating CDN); internal-only. _(Earlier `services/animepahe-resolver/` puppeteer sidecar fronting `animepahe.pw` was **retired 2026-06-24** — animepahe disabled, kept in roster for possible revival.)_
+4. **Stealth browser sidecar** — `services/stealth-scraper/` (Camoufox anti-detect Firefox) resolves constructed providers whose DB `engine` is `browser`; current wiring supports gogoanime, animepahe, miruro, and nineanime browser paths. The older dedicated `animepahe-resolver/` sidecar is retired.
 
 ### On-Demand Catalog Population
 
@@ -58,11 +58,11 @@ Catalog is NOT pre-populated: 1) user searches → 2) backend queries Shikimori 
 Primary data sources:
 - **Shikimori** — metadata (titles, descriptions, posters, genres).
 - **Kodik** — RU iframe embed. Parser: `services/catalog/internal/parser/kodik/`.
-- **AniLib** — RU direct MP4. Parser: `services/catalog/internal/parser/animelib/`.
-- **OurEnglish (`services/scraper/`)** — EN via failover orchestrator. Order: `gogoanime` → `animepahe` _(disabled 2026-06-24 — resolver sidecar retired; code kept in roster for revival, so it stays in `candidateProviders` but is never registered while disabled)_ → `allanime-okru` _(AllAnime GraphQL discovery + ok.ru stream resolution, clock-free — folded 2026-07-06 from the former standalone `allanime` + `okru` providers; `allanime` survives only as a disabled tombstone row kept in scraper `KnownProviders`)_ → `miruro` (secure-pipe pure-Go obfuscation) → `nineanime` (MP4-only last-resort) → optional `animekai`. _(`animefever` was REMOVED from the binary 2026-07-05 — dead upstream, ad-swapped segments gone for everyone incl. residential; survives only as a disabled `scraper_operated` tombstone row in the catalog DB, kept in scraper `KnownProviders` so the remote-config loader validates.)_ Provider impls: `services/scraper/internal/providers/{name}/`. Embed extractors: `services/scraper/internal/embeds/`.
+- **AniLib (retired)** — no public routes or player capability; the parser remains only for legacy notification/watch-room compatibility.
+- **EN scraper (`services/scraper/`)** — constructed order: `gogoanime` → `animepahe` → `allanime-okru` → `miruro` → `nineanime`. The catalog `stream_providers` roster is authoritative: `(policy, health)` derives the wire status, so failover participation is not hardcoded. `allanime`, `animefever`, and other historical rows are DB tombstones only; AnimeKai has no runtime package or config. Provider implementations: `services/scraper/internal/providers/{name}/`; embed extractors: `services/scraper/internal/embeds/`.
 - **Hanime** — 18+. Parser: `services/catalog/internal/parser/hanime/`.
-- **AllAnime raw-JP** — original-audio JP (Raw player). `services/catalog/internal/parser/allanime/` (+ `services/scraper/internal/providers/allanime/`).
-- **Jimaku.cc** — JP subtitle files (ASS/SRT/VTT). Consumed by OurEnglish, Raw players via `SubtitleOverlay.vue`.
+- **AllAnime raw-JP** — original-audio JP resolved by the catalog parser (`services/catalog/internal/parser/aniboom/`); distinct from the EN `allanime-okru` provider.
+- **Jimaku.cc** — JP subtitle files (ASS/SRT/VTT), consumed by aePlayer through `SubtitleOverlay.vue`.
 - **ARM** (`arm.haglund.dev`) — anime ID mapping (Shikimori/MAL → AniList). Lib: `libs/idmapping/`.
 - **MAL** (optional) — additional metadata, ratings sync.
 
@@ -147,7 +147,7 @@ Canonical reference: **`frontend/web/src/styles/DESIGN-SYSTEM.md`** (token tiers
 
 - **Search:** User → Frontend → Gateway → Catalog → [check local DB first; if miss, query Shikimori; store results; return].
 - **Kodik playback:** User → Frontend → Catalog (Kodik parser) → Kodik API → embed URL with params → `KodikPlayer.vue` iframe.
-- **AnimeLib playback:** User → Frontend → Catalog (AnimeLib parser) → AnimeLib hapi API → MP4 URLs + qualities (or Kodik iframe URL) → `AnimeLibPlayer.vue` → backend proxy → MP4 stream (OR Kodik iframe fallback).
+- **Unified playback:** User → Frontend → capability feed → aePlayer adapter → catalog/scraper source → signed streaming proxy → HTML5 video. Classic Kodik is the separate iframe fallback.
 - **Anime parser:** Catalog → parser (`services/catalog/internal/parser/{name}/`) → resolve Shikimori ID → provider-specific ID → fetch episodes/translations/qualities → cache video URLs 1h.
 
 ## External APIs
@@ -165,7 +165,7 @@ query SearchAnime($search: String!, $limit: Int) {
 ### Video Source Providers
 Each parser in `services/catalog/internal/parser/{name}/`:
 - **Kodik** — RU iframe embed; returns embed URLs with translation/episode params; no direct video control.
-- **AnimeLib** — RU direct MP4 via hapi API (episode data, multi-quality MP4 URLs, translation info); falls back to Kodik iframe when direct URLs unavailable.
+- **AniLib parser (compatibility only)** — retained for legacy notification and room-validation data; it has no public playback route or aePlayer capability.
 
 ## Testing
 - Unit: `go test ./...` · Integration: `go test -tags=integration ./...`.
@@ -281,7 +281,7 @@ All API requests go through the gateway:
 - `/api/watch-together/*`→watch-together:8091 (JWT for HTTP; WS uses `?token=` query param since browsers can't set custom headers on WS upgrade)
 
 ### Watch Together
-Ephemeral private friend rooms (2-10 members) for synchronized watching across all 5 players. Single Go microservice `services/watch-together/` (port 8091), Redis-only state under `wt:` prefix, 15min sliding TTL + 5min grace. Gateway-routed REST (`/api/watch-together/rooms`) + WS (`/ws?token=&room=`). Full architecture, env vars, locked decisions, dependency audit, daily Kodik-canary runbook: [`docs/watch-together-reference.md`](docs/watch-together-reference.md).
+Ephemeral private friend rooms (2-10 members) synchronize the unified aePlayer; the Classic Kodik iframe retains its RPC fallback bridge. The Go service (`services/watch-together/`, port 8091) keeps Redis-only state under `wt:` with a 15min sliding TTL + 5min grace. Full reference: [`docs/watch-together-reference.md`](docs/watch-together-reference.md).
 
 ### Monitoring Endpoints
 Each service exposes Prometheus `/metrics`:

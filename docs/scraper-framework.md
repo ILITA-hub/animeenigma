@@ -21,19 +21,15 @@ gogoanime → animepahe → allanime-okru → miruro → nineanime
 ```
 (`allanime-okru` folds the former standalone `allanime` + `okru` providers into
 one AllAnime-GraphQL-discovery + ok.ru-stream-resolution provider, 2026-07-06 —
-the dead `api.allanime.day` clock-sync path was dropped in the merge; `allanime`
-survives only as a disabled tombstone row in `stream_providers`, kept in scraper
-`KnownProviders`. `animefever` was removed from the binary 2026-07-05 — dead
-upstream; it survives only as a disabled tombstone row in the catalog
-`stream_providers` DB.)
-
-Optional (flag-gated): `animekai` (appended last when `SCRAPER_ANIMEKAI_ENABLED=true`).
+the dead `api.allanime.day` clock-sync path was dropped in the merge. Historical
+`allanime` and `animefever` rows remain disabled DB tombstones, but neither is
+part of the compile-time fallback roster. AnimeKai has no runtime package or
+configuration.)
 
 **Registration mechanics** (`orchestrator.go:76–94`):
 - `Register(p)` — adds a provider to the auto-failover chain.
 - `RegisterDegraded(p)` — adds a provider that is reachable via an explicit
-  `prefer` pin but is **excluded from automatic failover** (e.g. AnimeFever,
-  currently degraded per AUTO-484). Degraded providers are stored in
+  `prefer` pin but is **excluded from automatic failover**. Degraded providers are stored in
   `Orchestrator.degraded` map and skipped by `orderedProviders` unless the
   caller explicitly requested them via `prefer`.
 
@@ -42,8 +38,9 @@ optionally consults an `InMemoryHealthCache`. If a provider's gauge reads DOWN,
 `runFailover` skips it, emits `parser_fallback_total{from,to}`, and continues to
 the next provider. The cache is fail-open (missing/stale entries return healthy).
 
-**Per-provider timeout** (`SCRAPER_PROVIDER_TIMEOUT`, default configured via
-`SetProviderTimeout`): each provider call runs under a sub-context deadline; a
+**Per-provider timeout** (`SCRAPER_PROVIDER_TIMEOUT`, default 8s, with
+`SCRAPER_BROWSER_PROVIDER_TIMEOUT` default 35s for DB `engine=browser`): each
+provider call runs under a sub-context deadline; a
 budget timeout while the parent context is still alive is reclassified as a
 retryable `"provider_timeout"` fallback rather than a terminal error (ISS-022).
 
@@ -139,10 +136,8 @@ services/scraper/internal/providers/
 ├── allanimeokru/    # 3rd: AllAnime (OK.ru) — AllAnime GraphQL discovery + ok.ru
 │                    # stream resolution (id "allanime-okru"). Folded 2026-07-06
 │                    # from the former allanime + okru providers; clock path dropped.
-│                    # (animefever/ REMOVED 2026-07-05 — dead upstream, tombstone row only)
 ├── miruro/          # Miruro, pure-Go secure-pipe transform (Phase 28)
 ├── nineanime/       # 9anime.me.uk — last-resort MP4 (Phase 28)
-├── animekai/        # Optional escape-hatch, flag-gated, stub methods
 └── eighteenanime/   # 18+ group, separate orchestrator (adultOrch)
 ```
 
@@ -151,18 +146,17 @@ services/scraper/internal/providers/
 ```
 services/scraper/internal/embeds/
 ├── kwik.go            # AnimePahe embed (kwik.cx / kwik.si)
-├── megacloud.go       # 9anime / AnimeKai embed (external sidecar)
+├── megacloud.go       # MegaCloud-compatible embed extraction
 ├── megaplay.go        # Gogoanime / 9anime megaplay.buzz HLS player
 ├── vibeplayer.go      # Gogoanime VibePlayer embed
 ├── streamhg.go        # Gogoanime StreamHG embed
 ├── earnvids.go        # Gogoanime EarnVids embed
-├── vidstream_vip.go   # AnimeFever vidstream.vip embed (Phase 28)
 └── packed_common.go   # Shared Dean-Edwards packer helpers
 ```
 
-Registry order matters: `domain.Registry.Find` returns the **first** match
-(`main.go:69–168`). Registration order: Kwik → Megacloud → VibePlayer →
-StreamHG → EarnVids → VidstreamVip → Megaplay.
+Registry order matters: `domain.Registry.Find` returns the **first** match.
+Registration order is defined in `cmd/scraper-api/main.go`; keep more-specific
+extractors ahead of generic MegaCloud/Megaplay matches.
 
 ### Provider pipeline
 
@@ -244,15 +238,17 @@ DB; the scraper fetches it at boot and on a refresh interval.
 | Column | Type | Notes |
 |---|---|---|
 | `name` | string PK | Canonical ID, e.g. `gogoanime` |
-| `status` | `enabled\|degraded\|disabled` | Controls failover participation |
-| `group` | `en\|adult` | Orchestrator group |
-| `scraper_operated` | bool | True for EN+adult providers; false for ae/kodik/animelib/hanime/raw |
+| `policy` | `auto\|manual\|disabled` | Auto/manual participation; disabled is the admin hard lock |
+| `health` | `up\|degraded\|recovering\|down` | Probe-managed health lifecycle |
+| `status` | `enabled\|degraded\|disabled` | Compatibility wire value derived from policy + health |
+| `group` | `en\|adult\|ru\|firstparty` | Intrinsic provider family |
+| `scraper_operated` | bool | True only for providers constructed by the scraper service |
 | `engine` | `http\|browser` | `browser` → Camoufox sidecar path |
 | `base_url` | string | Provider mirror origin; empty = built-in default |
 | `preference_weight` | int | Ranking input for `/capabilities` |
 | `supports_sub`, `supports_dub` | bool | Capability traits |
 
-**`status` semantics** (`domain/scraper_provider.go:14–19`):
+**Derived wire `status` semantics** (`domain.ScraperProvider.WireStatus`):
 - `enabled` — in the auto-failover chain.
 - `degraded` — registered for explicit `prefer` pin only; excluded from
   auto-failover; sorted last in the player with a "degraded" pill.
@@ -274,9 +270,9 @@ skip accordingly.
 
 `GET /api/anime/{uuid}/capabilities` (handler:
 `services/catalog/internal/handler/capabilities.go`) assembles a ranked
-capability report: the EN family from the `stream_providers` roster (traits +
-live health), plus kodik/animelib real teams and hanime qualities — all
-resolved concurrently. Consumed by the aePlayer source picker.
+capability report from the `stream_providers` roster plus live per-title
+discovery for the surviving catalog and scraper adapters. Disabled rows and
+rows without runtime wiring are omitted. Consumed by the aePlayer source picker.
 
 ---
 

@@ -6,8 +6,9 @@ chain — so we pass the JS / fingerprint / TLS / clearance challenges that a
 curl-class Go `net/http` client cannot.
 
 **Phase 1 target:** `gogoanime → megaplay` (`cdn.mewstream.buzz`, Cloudflare-fronted).
-Internal-only service; the Go `scraper` is the only caller. Engine = **Camoufox**
-(chosen 2026-06-20). Plan: `docs/superpowers/plans/2026-06-20-stealth-browser-scraper-framework.md`.
+Internal-only service; the Go `scraper` is the only caller. Engine = **Camoufox**.
+The current integration contract is documented here and in
+[`docs/scraper-framework.md`](../../docs/scraper-framework.md).
 
 > Why not "just use a residential proxy with curl": the binding constraint is the
 > **client identity** (TLS/JA3 + HTTP/2 fingerprint, no JS engine, no

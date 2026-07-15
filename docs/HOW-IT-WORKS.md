@@ -1,6 +1,6 @@
 # How AnimeEnigma Works
 
-A self-hosted anime streaming platform that pulls catalog and video sources from public APIs (Shikimori, Kodik, AnimeLib, HiAnime, Consumet) and surfaces them through a single Vue frontend with personalized recommendations, Japanese-subtitle support, and a closed-loop watch-progress model.
+A self-hosted anime streaming platform that combines Shikimori catalog data with Kodik, the EN scraper roster, AnimeJoy, adult sources, and first-party storage through one Vue frontend with personalized recommendations, multilingual subtitles, and closed-loop watch progress.
 
 This document is the high-level walkthrough — for architecture deep dives see [`CLAUDE.md`](../CLAUDE.md), and for the v2.0 recommendations engine design spec see [`docs/superpowers/specs/2026-05-03-rec-engine-design.md`](superpowers/specs/2026-05-03-rec-engine-design.md).
 
@@ -63,7 +63,7 @@ The home page has two recommendation rows:
   - **S2 — Item-item metadata overlap.** Jaccard similarity over genres (and tags / studios when AniList tags are populated for that anime) between your top-scored anime and each candidate.
   - **S3 — Population trending.** Same as the anonymous flow.
   - **S4 — Recency boost.** 1.0 for currently-airing anime, 0.7 for anime that aired in the last 90 days, 0 otherwise.
-  - **S5 — TF-IDF attribute affinity.** Time-weighted TF-IDF across six dimensions: tags (0.30), studios+producers (0.25), genres (0.15), demographic (0.10), source (0.10), kind (0.10). Kodik watch history (which doesn't expose video duration) falls back to integer episode count for time-weighting; HiAnime / Consumet / AnimeLib use real `duration_watched` minutes.
+  - **S5 — TF-IDF attribute affinity.** Time-weighted TF-IDF across six dimensions: tags (0.30), studios+producers (0.25), genres (0.15), demographic (0.10), source (0.10), kind (0.10). The Classic Kodik iframe cannot expose reliable duration and falls back to episode count; aePlayer's HTML5 sources record real watched duration.
 
 Each signal goes through a **per-pool min-max normalizer** before the weighted sum, so weights are coherent across signals at very different raw scales.
 
@@ -97,7 +97,7 @@ There's also a "Force recompute" button that busts the user's Redis cache and re
 
 ## 4. Watch Progress Is The Source Of Truth
 
-The platform tracks watch progress across all players (except Kodik, which is iframe-only and offers no event hooks).
+The platform tracks watch progress across aePlayer's HTML5 sources. The separate Classic Kodik iframe has limited event access and uses its compatibility path.
 
 - `watch_progress` table — per-episode position. `completed = true` is the **single source of truth** for "I finished this episode" across all surfaces (the v1.0 milestone refactored away three competing definitions).
 - `watch_history` — append-only log of session starts and ends. Carries player, language, watch type, translation ID, duration watched.
@@ -124,10 +124,10 @@ Anonymous users get a localStorage equivalent so the experience is the same shap
 
 ## 6. Tech Stack
 
-- **Backend:** Go microservices (gateway, auth, catalog, streaming, player, rooms, scheduler, themes, maintenance) with GORM + Postgres + Redis. Each service has its own `go.mod`; shared libraries live in `libs/`.
+- **Backend:** Go microservices under `services/` with GORM, Postgres, Redis, and shared libraries under `libs/`. Each service owns its `go.mod`.
 - **Frontend:** Vue 3 + Vite + Tailwind + Pinia + vue-i18n (EN / RU / JA). Built with `bun`.
 - **Infrastructure:** Docker Compose for local dev, Kubernetes manifests in `deploy/kustomize/` for production. Prometheus metrics on every service's `/metrics`; Grafana dashboards in `infra/grafana/dashboards/`.
-- **External APIs:** Shikimori (catalog), AniList (tags, via ARM mapping), MyAnimeList (optional ratings sync), Kodik / AnimeLib / HiAnime / Consumet (video sources), jimaku.cc (Japanese subtitles).
+- **External APIs:** Shikimori (catalog), AniList (tags via ARM mapping), MyAnimeList (optional sync), Kodik and the DB-backed scraper/catalog provider roster (video), and Jimaku/OpenSubtitles (subtitle files).
 
 ---
 
@@ -136,26 +136,11 @@ Anonymous users get a localStorage equivalent so the experience is the same shap
 | Concern | Path |
 |---------|------|
 | Catalog & Shikimori parser | `services/catalog/` |
-| Recommendations engine | `services/player/internal/service/recs/` |
-| Admin debug page | `frontend/web/src/views/admin/AdminRecs.vue` + `services/player/internal/handler/admin_recs.go` |
+| Recommendations engine | `services/recs/` |
+| Admin debug page | `frontend/web/src/views/admin/AdminRecs.vue` + `services/recs/internal/handler/admin_recs.go` |
 | Subtitle overlay | `frontend/web/src/components/player/SubtitleOverlay.vue` |
 | Watch preference resolver (v1.0) | `services/player/internal/service/preference/` |
 | Design specs | `docs/superpowers/specs/` |
 | Milestone history | `.planning/milestones/` (v1.0 + v2.0 archives) |
 
 ---
-
-## 8. What's Next (v2.1 candidates)
-
-The v2.0 milestone shipped 23 requirements across 6 phases. The roadmap for v2.1 is currently a list of deferred items captured in [`.planning/milestones/v2.0-MILESTONE-AUDIT.md`](../.planning/milestones/v2.0-MILESTONE-AUDIT.md):
-
-- S2 attribute expansion (currently genres-only; tags/studios/etc. land once the AniList backfill finishes)
-- S6 Variant A (weight-shift instead of pin tile) — depends on pin CTR data accumulating
-- Anonymous personalization (X-Anon-ID-based per-anonymous trending)
-- S9-implicit OP/ED affinity (depends on intro_skip / outro_skip events)
-- S12 diversification re-rank (penalize over-representation by studio/genre in the top 20)
-- Editable signal weights in the admin debug page (with a "preview" button)
-- Per-row S1 nearest-neighbor expansion in admin debug
-- Session-based click→watch attribution (replacing the simple anime_id+timestamp match)
-
-Once a week of CTR data accumulates, the v2.1 weight tuning becomes data-driven.

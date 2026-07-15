@@ -26,8 +26,8 @@ The only other surviving player surface is `KodikPlayer.vue` — the legacy Kodi
 (`views/Anime.vue`), and the surface used if `VITE_AE_PLAYER_ENABLED=false`. It
 is NOT part of the aePlayer; it has no shared state with it.
 
-What CLAUDE.md calls "5 players" (Kodik / AniLib / OurEnglish / Hanime / Raw) are
-now **provider families inside one player**, selected via the in-player **Source**
+The former per-source players are now **provider adapters inside one player**,
+selected via the in-player **Source**
 panel. An agent that goes looking for `OurEnglishPlayer.vue` will not find it and
 will conclude the player is broken. It isn't — it's unified.
 
@@ -140,7 +140,7 @@ values:
 | `family` | Members | streaming model |
 |----------|---------|-----------------|
 | `"18+"` | `hanime`, `18anime` | Adult content sources (18+ rating, hentai content type) |
-| `"others"` | EN scraper chain (`gogoanime`, `allanime`, `okru`, `miruro`, `nineanime`, `animepahe`), `kodik` (HLS), `animelib`, `animejoy-sibnet`, `animejoy-allvideo` | General catalog providers; EN/RU/JP subtitled or dubbed sources, backend-driven or iframe-embed |
+| `"others"` | EN scraper chain (`gogoanime`, `animepahe`, `allanime-okru`, `miruro`, `nineanime`), `kodik` (HLS), `animejoy-sibnet`, `animejoy-allvideo` | General EN/RU providers backed by catalog or scraper adapters |
 | `"aeProvider"` | `ae` | First-party self-hosted sources (MinIO storage); audio/language config is per-title, not per-provider |
 
 **Key distinction: `family` vs `group`.** `family` describes *streaming transport*;
@@ -503,10 +503,10 @@ Stream URLs are wrapped through the backend **HLS proxy** and **signed**
 signing at the source (`streamsign.Stamp`) is mandatory for every external
 stream/subtitle URL (see CLAUDE.md proxy section).
 
-**Known issue — HLS codec stall (D-07):** for some HLS sources hls.js loads the
-master + level playlist but never requests `.ts` fragments (readyState stays 0).
-Pre-existing; tracked in `aePlayer/MANUAL-REVIEW.md`. hls.js is pinned to
-`~1.5.20` (NOT caret) because 1.6.x regressed codec handling.
+**Known issue — upstream HLS compatibility:** some sources have historically
+stalled before the first media fragment. hls.js is pinned to `~1.5.20` (NOT
+caret) because 1.6.x regressed codec handling. Current failures and provider
+evidence are tracked in [`docs/issues/`](issues/).
 
 ---
 
@@ -620,6 +620,6 @@ player CSS breakpoint) and `isCoarse` (`pointer: coarse`, gates gestures).
 - [`docs/scraper-framework.md`](scraper-framework.md) — backend EN scraper: failover chain, `prefer`/`exclusive`, provider registration.
 - [`docs/scraper-health-reference.md`](scraper-health-reference.md) — provider policy/health authority that derives the capability feed state.
 - [`docs/watch-together-reference.md`](watch-together-reference.md) — co-watch rooms.
-- `docs/superpowers/specs/2026-06-06-unified-anime-player-design.md` — the original locked design contract (pre-RAW/DUB; superseded by this doc for current behavior).
-- `frontend/web/src/components/player/aePlayer/MANUAL-REVIEW.md` — in-browser verification checklist + known-issue log.
+- [`docs/HOW-IT-WORKS.md`](HOW-IT-WORKS.md) — system-level request and data flow.
+- [`docs/issues/`](issues/) — current incident and provider evidence.
 - CLAUDE.md → *Video Player Architecture* — high-level summary (points here for detail).

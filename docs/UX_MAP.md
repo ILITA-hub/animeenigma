@@ -1,11 +1,13 @@
 # AnimeEnigma — UX Map
 
 > **Last updated:** 2026-04-08
+> **Status:** Historical audit snapshot. Player consolidation and later navigation changes have superseded parts of this map; use current code and reference docs for present behavior.
 > **Method:** Code inventory of `frontend/web/src/router`, `frontend/web/src/views/*.vue`, `frontend/web/src/components/layout/*.vue` + browser verification of every route on production (https://animeenigma.ru) as `ui_audit_bot`.
 > **Scope:** Public-facing routes only. Admin views (`/admin/*`) and player internals are out of scope.
 > **Reference audit:** [docs/issues/ui-audit-2026-04-07.md](issues/ui-audit-2026-04-07.md). Findings tagged `UA-NNN` below correspond to entries in that document.
 
-This map is a living artefact. When the screen graph or a flow changes, update both this file and the audit doc — they reference each other and drift fast.
+This map is retained as evidence for the April 2026 audit. Findings and route
+descriptions below describe that snapshot and are not a current product contract.
 
 ---
 

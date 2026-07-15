@@ -53,8 +53,8 @@ precompute (C) can later feed the same apply path without rework.
   `subtitleTracks` (merged provider-bundled + aggregated). Cues are parsed *inside*
   `SubtitleOverlay.vue` via `subtitle-parser.ts`.
 - Episode identity: `selectedEpisode.number` + `anime` uuid.
-- **Dead code (leave untouched, out of scope):** `useSubtitleTimingOffset.ts` (persisted
-  singleton) and `SubtitleSettingsMenu.vue` — not mounted in the live path.
+- **Retired follow-up:** the unmounted `useSubtitleTimingOffset.ts` singleton and
+  `SubtitleSettingsMenu.vue` were removed in the 2026-07-15 cleanup wave.
 
 ## 3. Units (new + touched)
 
@@ -173,7 +173,7 @@ useSubtitleAutoSyncPref(episodeKey: Ref<string>)
 - Reactive to `episodeKey` (re-read on episode switch).
 - The TTL is **read-time only** (expired keys aren't evicted — they're tiny and harmless).
   This is the **third** subtitle-pref persistence model alongside the dead global-sticky
-  `useSubtitleTimingOffset` and the live ephemeral `usePlayerState.subOffset`; the per-episode
+  the former persisted timing singleton and the live ephemeral `usePlayerState.subOffset`; the per-episode
   + decaying-opt-out shape is deliberate, so add a one-line comment saying so.
 
 ### 3.3 `components/player/aePlayer/SubtitlesMenu.vue` (touched) — the UI
@@ -239,7 +239,7 @@ Turning auto-sync OFF instantly drops `autoOffset` to 0 (manual value preserved)
 - Linear-fps exact solve: **deferred** (approximated by re-anchoring).
 - `SubtitleOverlay.vue`: **only** its fetch/parse is refactored to call the shared
   `fetchAndParseCues` helper (behavior-preserving) — no render/teleport/offset changes.
-- Dead `useSubtitleTimingOffset` / `SubtitleSettingsMenu`: **left alone**.
+- Dead persisted timing singleton/menu: **retired 2026-07-15**.
 - Manual-offset persistence (currently ephemeral): **out of scope** (separate concern).
 - Post-lock dynamic tick downshift / `bestOffset` window-bounding: **deferred** — the fixed
   ~20 Hz throttle + sliding speech window already bound cost; both add cross-layer/dynamic

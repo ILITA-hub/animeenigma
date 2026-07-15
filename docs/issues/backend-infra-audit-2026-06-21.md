@@ -65,7 +65,7 @@ The backend and infra are functionally rich but carry a concentrated set of high
 - **fix:** Stop using Save for refresh. Either (a) explicitly carry the lazily-maintained fields from `existing` before Update (HasDub/HasKodik/HasAnimeLib/HasRaw/HasEnglish/SortPriority/Hidden/Franchise/FranchiseChecked/IMDbID/TMDBID/AniListID/Tags), or (b) change Update to a column-scoped Select(...).Updates(...) / map-based Updates that writes only the Shikimori-sourced metadata columns. Option (b) is robust against future lazy columns.
 - **verifier note:** Confirmed at critical. One minor inaccuracy in the original description: ShikimoriID IS set by the mapper (client.go:448 and 279), so the parenthetical 'in RefreshAnime, also not ShikimoriID' is wrong — RefreshAnime goes through GetAnimeByID→mapAnimeList→mapAnime which sets it. This does not change the verdict or severity; the data-loss on the other ~13 lazy/admin columns is real and periodic.
 
-#### Hardened docker-compose.prod.yml is orphaned; production runs the base file with weak hardcoded secrets
+#### [Resolved 2026-07-15] Hardened docker-compose.prod.yml was orphaned
 - **unit:** infra-compose · **category:** security · **effort (fib):** 8 · **verdict:** confirmed
 - **location:** `docker/docker-compose.prod.yml (entire file); Makefile:30,397; deploy/scripts/redeploy.sh:11`
 - **evidence:** docker-compose.yml:12 `POSTGRES_PASSWORD: postgres`; :45-46 `MINIO_ROOT_USER/PASSWORD: minioadmin`; :28 redis-server has no --requirepass (grep requirepass=0); 11 literal `DB_PASSWORD: postgres` lines (600,637,714,785,821,853,902,936,1014,1054,1103). prod overlay has :?required guards (docker-compose.prod.yml:19,53,54,85,106,130,157,158,161,162) + expose: for backend (111,138,165,194,213,235) but is referenced ONLY by its own comment (line 7). Makefile:30/397 and deploy/scripts/redeploy.sh:11 all use docker-compose.yml; no -f prod / COMPOSE_FILE→prod outside .planning. docker/.env: DB_PASSWORD/MINIO_*/REDIS_PASSWORD all ABSENT.
@@ -1082,12 +1082,12 @@ The backend and infra are functionally rich but carry a concentrated set of high
 - **fix:** Set REDIS_ADDR in the configmap (or change config.go to read REDIS_HOST/REDIS_PORT); reconcile pgadmin DB username with the actual postgres role. The prometheus piece needs no action — annotation-based SD already exists; optionally remove the redundant static_configs list.
 - **verifier note:** Adjusted: 2 of 3 sub-claims real (REDIS_ADDR, pgadmin user); prometheus sub-claim refuted because a kubernetes_sd_configs pod-annotation discovery job already exists (configmap.yaml:55-82). Severity stays low; effort lowered 3→2 since the prometheus rework is unneeded.
 
-#### docker-compose.prod.yml advertises itself as the production stack but has zero observability and is missing ~10 services
+#### [Resolved 2026-07-15] docker-compose.prod.yml advertised an incomplete production stack
 - **unit:** infra-observability · **category:** infra · **effort (fib):** 2 · **verdict:** confirmed
 - **location:** `docker/docker-compose.prod.yml:1-266 (header: 'Production docker-compose for use with host nginx')`
 - **evidence:** docker-compose.prod.yml header lines 3-7 say 'Production docker-compose for use with host nginx' with usage 'docker compose -f docker/docker-compose.prod.yml up -d'. grep of top-level service keys yields exactly 11: postgres, redis, minio, gateway, auth, catalog, streaming, player, rooms, scheduler, web — NO prometheus/grafana/otel-collector/clickhouse/analytics, and missing scraper/notifications/recs/library/watch-together/anidle/gacha/themes. Every active Makefile target (dev :30, logs :37, deploy-docker :397, redeploy-% :272-281, full :402) uses docker/docker-compose.yml. Repo-wide grep finds the file referenced only in .planning/codebase/STRUCTURE.md (a doc), nowhere in bin/, deploy/, or Makefile. Last commit f7e73716 2026-06-10 while main compose changes weekly.
 - **fix:** Either delete docker-compose.prod.yml (canonical prod deploy is docker-compose.yml + host nginx via deploy-docker), fix its header to mark it deprecated/partial, or regenerate it from the main compose. Do not leave a file labeled 'production' that omits the entire observability plane.
-- **verifier note:** Confirmed: stale, observability-less, 10-service-short, and unreferenced by any active tooling.
+- **resolution:** The unused overlay was deleted; `docker/docker-compose.yml` is the single Compose definition.
 
 #### Scraper self-healing alert rules are duplicated in two files with a manual 'keep in sync' contract — drift hazard; the documented source-of-truth is actually inert
 - **unit:** infra-observability · **category:** maintainability · **effort (fib):** 2 · **verdict:** confirmed

@@ -1,7 +1,7 @@
 # Recommendation Engine: Service Extraction + Quality Ride-Alongs
 
 **Date:** 2026-06-11
-**Status:** Implemented 2026-06-11 (all 4 phases live; plan: docs/superpowers/plans/2026-06-11-recs-service-extraction.md)
+**Status:** Implemented 2026-06-11 (all four phases live)
 **Owner decision trail:** extract-first > internal-HTTP trigger seam > re-point existing URLs > ride-alongs: ISS-026 + S7 dropped-penalty + S12 diversification
 
 ## Goal
