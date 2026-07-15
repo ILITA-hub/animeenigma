@@ -1,0 +1,26 @@
+name: Docs CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - '**/*.md'
+      - 'scripts/check-doc-links.py'
+      - '.github/workflows/ci-docs.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '**/*.md'
+      - 'scripts/check-doc-links.py'
+      - '.github/workflows/ci-docs.yml'
+
+jobs:
+  links:
+    name: Check local Markdown links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/check-doc-links.py

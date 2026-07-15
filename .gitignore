@@ -149,8 +149,10 @@ tmp/
 # Host-local runtime state, never commit.
 docs/issues/issues.json
 
-# Python .venv/ for internal repo management
+# Python local environments and bytecode
 .venv/
+__pycache__/
+*.py[cod]
 
 # k8s prod overlay secrets (real values live only on the deploy host)
 deploy/kustomize/overlays/**/*.env

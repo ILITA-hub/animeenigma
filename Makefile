@@ -1,4 +1,4 @@
-.PHONY: all build test lint clean generate dev help \
+.PHONY: all build test lint lint-docs clean generate dev help \
 	k8s-apply k8s-apply-prod k8s-validate k8s-preflight k8s-delete k8s-diff k8s-wait k8s-status k8s-restart k8s-logs k8s-port-forward \
 	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod \
 	migrate migrate-down migrate-force migrate-version migrate-auth migrate-catalog migrate-player migrate-rooms migrate-all migrate-create migrate-status db-shell \
@@ -136,7 +136,10 @@ capture-goldens-gogoanime: ## Recapture services/scraper/testdata/gogoanime/* fi
 # Code Quality
 # ============================================================================
 
-lint: lint-go lint-proto lint-frontend ## Run all linters
+lint: lint-go lint-proto lint-frontend lint-docs ## Run all linters
+
+lint-docs: ## Check local links in Markdown documentation
+	@python3 scripts/check-doc-links.py
 
 lint-go: ## Run Go linter (matches CI)
 	@echo "Linting Go code..."
