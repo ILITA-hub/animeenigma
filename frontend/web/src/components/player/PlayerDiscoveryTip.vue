@@ -1,6 +1,6 @@
 <template>
   <aside
-    class="non-player-content mt-3 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2.5"
+    class="mt-3 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2.5"
     :aria-label="$t('player.discoveryTips.label')"
     data-test="player-discovery-tip"
   >

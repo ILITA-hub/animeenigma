@@ -1494,6 +1494,7 @@ onUnmounted(() => {
   inset: 0;
   z-index: 100;
   height: 100svh;
+  max-height: none; /* neutralizes .pl--theater's max-height cap (wins over height regardless of source order) */
   aspect-ratio: auto;
   border-radius: 0;
   border: 0;

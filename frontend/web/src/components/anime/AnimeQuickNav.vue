@@ -3,9 +3,7 @@
        Desktop (md+): floating right-side sticky pill column.
        Mobile (<md): sticky horizontal pill row below the hero.
        Theater Mode (UX-23) does NOT hide this: theater keeps the navbar
-       and page content visible and only widens the player section. The
-       .non-player-content class hook remains on the host wrapper, but no
-       theater rule hides elements carrying it. -->
+       and page content visible and only widens the player section. -->
 
   <!-- Desktop: floating right sticky pill column -->
   <nav

@@ -362,7 +362,7 @@
 
       <!-- Synopsis -->
       <!-- Phase 11 / UX-22 — section-overview anchor for AnimeQuickNav. -->
-      <section v-if="anime.description" id="section-overview" class="mt-8 non-player-content">
+      <section v-if="anime.description" id="section-overview" class="mt-8">
         <h2 class="text-xl font-semibold text-white mb-3">{{ $t('anime.synopsis') }}</h2>
         <div class="glass-card p-4">
           <p
@@ -498,7 +498,7 @@
 
       <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
       <!-- Phase 11 / UX-22 — section-comments anchor for AnimeQuickNav. -->
-      <section id="section-comments" ref="ugcSectionEl" class="mt-8 non-player-content cv-below-fold">
+      <section id="section-comments" ref="ugcSectionEl" class="mt-8 cv-below-fold">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold text-white">
             <span class="flex items-center gap-2">
@@ -821,7 +821,7 @@
       <section
         v-if="relatedAnime.length > 0"
         id="section-similar"
-        class="mt-8 non-player-content cv-below-fold"
+        class="mt-8 cv-below-fold"
       >
         <Carousel
           :items="relatedAnime"
@@ -847,7 +847,7 @@
       <section
         v-if="characters.length > 0"
         id="section-characters"
-        class="mt-8 non-player-content cv-below-fold"
+        class="mt-8 cv-below-fold"
       >
         <Carousel
           :items="characters"
@@ -1050,6 +1050,23 @@ const {
   resumeLoadedEpisodes: watchFlow.resumeLoadedEpisodes,
 })
 
+// Theater is an aePlayer-only feature — AePlayer's :can-theater is hardcoded
+// true only inside the `!classicKodik` branch below, so theater state must
+// honour that same condition. Without this, a user who enters theater and
+// then flips to Classic Kodik (or loads with both already persisted true —
+// reachable pre-June and on VITE_AE_PLAYER_ENABLED=false deploys, where
+// Kodik is the only surface) gets the Kodik iframe full-bleed with
+// `.player-head` (heading + "back to AePlayer" toggle) hidden by the
+// theater CSS: a dead end with no visible way out.
+watch(classicKodik, (on) => {
+  if (on && theaterMode.value) setTheater(false)
+})
+// The watcher above only fires on a CHANGE, so it never runs for a
+// classicKodik=true + theaterMode=1 combo that's already true at load
+// (both refs are initialized synchronously from localStorage before this
+// line runs) — this guard covers exactly that case.
+if (classicKodik.value && theaterMode.value) setTheater(false)
+
 // Related rail + characters rail.
 const related = useRelatedAnime(anime)
 const { relatedAnime, relatedCardModel } = related
@@ -1205,41 +1222,55 @@ html.pl-noscroll .player-card {
 /* Theater = full-bleed player, page INTACT. The navbar and .non-player-content
    used to be display:none here, which made this a fullscreen clone with no
    reason to exist; both rules are deliberately gone. */
-body.theater-mode [data-anime-player-wrapper="true"] {
-  /* The width constraint lives on the ANCESTOR container
-     (`.max-w-7xl mx-auto px-4 lg:px-8`, wrapping the whole page body —
-     see the template) — this section itself carries only `mt-8` and has
-     no width/margin/padding of its own to reset. Negative side margins
-     escape the ancestor's max-width instead (the standard full-bleed
-     technique): 100vw is the true viewport width regardless of the
-     ancestor's max-w-7xl cap, and `calc(50% - 50vw)` walks the box back
-     out to the viewport edges symmetrically. On desktop with a visible
-     scrollbar this overhangs the content area by half a scrollbar width
-     on each side; `#app { overflow-x: clip }` (styles/main.css) exists
-     precisely to absorb exactly this kind of edge overhang without
-     introducing a horizontal scrollbar. */
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
-  max-width: none;
-  /* mt-8 would push the player below the navbar line the cap is framed for. */
-  margin-top: 0 !important;
-  /* Offset for scrollIntoView in onToggleTheater — same token as the cap. */
-  scroll-margin-top: var(--header-offset);
-}
+/* Gated to the SAME 1024px breakpoint as the theater button itself
+   (PlayerControlBar.vue: `@media (max-width: 1023px) { .pl-theater-btn {
+   display: none } }`). Below that width there is no trigger to turn theater
+   off — not canTheater (the prop stays true), but the button's own media
+   query — yet `theaterMode` persists in localStorage across viewports and
+   sessions (including from before the button existed, June 2026). Without
+   this gate, a stale/cross-device `theaterMode=1` flips `body.theater-mode`
+   on mount regardless of screen size: the heading and Classic Kodik toggle
+   vanish and the section goes full-bleed on a phone or a rotated tablet,
+   with no visible control and no Esc key on touch. Scoping the whole rule
+   block to the button's breakpoint makes persisted state inert everywhere
+   the trigger does not exist. */
+@media (min-width: 1024px) {
+  body.theater-mode [data-anime-player-wrapper="true"] {
+    /* The width constraint lives on the ANCESTOR container
+       (`.max-w-7xl mx-auto px-4 lg:px-8`, wrapping the whole page body —
+       see the template) — this section itself carries only `mt-8` and has
+       no width/margin/padding of its own to reset. Negative side margins
+       escape the ancestor's max-width instead (the standard full-bleed
+       technique): 100vw is the true viewport width regardless of the
+       ancestor's max-w-7xl cap, and `calc(50% - 50vw)` walks the box back
+       out to the viewport edges symmetrically. On desktop with a visible
+       scrollbar this overhangs the content area by half a scrollbar width
+       on each side; `#app { overflow-x: clip }` (styles/main.css) exists
+       precisely to absorb exactly this kind of edge overhang without
+       introducing a horizontal scrollbar. */
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    max-width: none;
+    /* mt-8 would push the player below the navbar line the cap is framed for. */
+    margin-top: 0 !important;
+    /* Offset for scrollIntoView in onToggleTheater — same token as the cap. */
+    scroll-margin-top: var(--header-offset);
+  }
 
-/* The section's own title row + Classic-Kodik toggle step aside so the section
-   top IS the player top; otherwise they eat into the capped height and push the
-   control bar back under the fold. Leaving theater brings them straight back. */
-body.theater-mode .player-head {
-  display: none;
-}
+  /* The section's own title row + Classic-Kodik toggle step aside so the section
+     top IS the player top; otherwise they eat into the capped height and push the
+     control bar back under the fold. Leaving theater brings them straight back. */
+  body.theater-mode .player-head {
+    display: none;
+  }
 
-/* The glass card's padding and side border would frame a full-bleed player. */
-body.theater-mode [data-anime-player-wrapper="true"] .player-card {
-  padding: 0;
-  border-left: 0;
-  border-right: 0;
-  border-radius: 0;
+  /* The glass card's padding and side border would frame a full-bleed player. */
+  body.theater-mode [data-anime-player-wrapper="true"] .player-card {
+    padding: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
 }
 </style>

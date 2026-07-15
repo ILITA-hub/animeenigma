@@ -4,10 +4,12 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
  * Phase 11 / UX-23 — Theater Mode (extracted from Anime.vue).
  *
  * State persists via localStorage so a reload keeps the user's choice.
- * `body.theater-mode` drives the CSS rules at the bottom of Anime.vue that
- * hide .navbar-root + .non-player-content and widen the player wrapper.
- * MANDATORY cleanup: onBeforeUnmount removes the body class so leaving
- * /anime/:id never strands the rest of the app with a hidden navbar.
+ * `body.theater-mode` drives the CSS rules at the bottom of Anime.vue —
+ * the navbar and the rest of the page STAY visible; theater only widens
+ * the player wrapper to full-bleed and caps its height. onBeforeUnmount
+ * removes the body class so leaving /anime/:id never leaves the class
+ * (and its now-inert-elsewhere selectors) stuck on, e.g. on /downloads or
+ * /watch-together.
  */
 export function useTheaterMode() {
   const theaterMode = ref<boolean>(
@@ -38,9 +40,11 @@ export function useTheaterMode() {
     document.addEventListener('keydown', onTheaterEscape)
   })
 
-  // MANDATORY theater-mode cleanup — strips the body class so navigating away
-  // from /anime/:id never leaves the global navbar / non-player sections
-  // hidden everywhere else.
+  // Cleanup — strips the body class so navigating away from /anime/:id never
+  // leaves `body.theater-mode` set on other routes (e.g. /downloads,
+  // /watch-together), where the theater CSS selectors would otherwise still
+  // (harmlessly, since they target Anime.vue-only elements) match nothing
+  // but the stale class itself would remain a footgun for future CSS.
   onBeforeUnmount(() => {
     applyBodyTheaterClass(false)
     document.removeEventListener('keydown', onTheaterEscape)

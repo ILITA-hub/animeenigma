@@ -206,6 +206,20 @@ describe('Anime.vue player surface (Plan B)', () => {
     expect(wrapper.find('[data-test="ae-player"]').exists()).toBe(false)
   })
 
+  // Finding 2 (pre-merge review) — theater is an aePlayer-only feature.
+  // A classicKodik=true + theaterMode=1 combo persisted from before the
+  // guard existed leaves AePlayer unmounted (no theater button anywhere)
+  // while the theater CSS still applies to the heading-less, toggle-less
+  // Kodik iframe — a dead end. Anime.vue must force theater off for this
+  // combo on mount, not just on a later classicKodik change.
+  it('forces theater off on mount when classicKodik + theaterMode are both persisted true', async () => {
+    localStorage.setItem('classic_kodik_selected', 'true')
+    localStorage.setItem('theaterMode', '1')
+    const wrapper = await mountView()
+    expect(document.body.classList.contains('theater-mode')).toBe(false)
+    wrapper.unmount()
+  })
+
   it('migrates a legacy preferred_video_provider=kodik into Classic Kodik', async () => {
     localStorage.setItem('preferred_video_provider', 'kodik')
     const wrapper = await mountView()
