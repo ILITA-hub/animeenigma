@@ -1153,6 +1153,21 @@ watch(() => anime.value?.title, (newTitle) => {
     border-radius: 0;
   }
 }
+
+/* iPhone pseudo-fullscreen (AePlayer.vue enterPseudoFs) takes over via
+   position:fixed on the player root. .glass-card's backdrop-filter makes
+   THIS element the containing block for that fixed descendant instead of
+   the viewport (backdrop-filter/filter/transform/perspective all do this
+   per spec), so the "fullscreen" video only fills this card's box while
+   the site header, page gutters, and the Reviews section below it show
+   through. The >680px width (i.e. most iPhones in LANDSCAPE, the
+   orientation people actually rotate to for fullscreen) falls outside the
+   media-query override above, so it needs its own rule keyed off
+   html.pl-noscroll — the class enterPseudoFs()/exitPseudoFs() toggle in
+   lockstep with pseudo-fs state, independent of viewport width. */
+html.pl-noscroll .player-card {
+  backdrop-filter: none;
+}
 </style>
 
 <!-- Phase 11 / UX-23 — Theater Mode global rules.
