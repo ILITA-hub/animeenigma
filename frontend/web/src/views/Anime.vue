@@ -893,7 +893,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
+import { ref, computed, watch, defineAsyncComponent } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { Star, Clock, Play, Check, Plus, ChevronDown, Trash2, RefreshCw, Eye, EyeOff, Pencil, Calendar, MessageSquare, EllipsisVertical } from 'lucide-vue-next'
 import { useAnime } from '@/composables/useAnime'
@@ -984,15 +984,11 @@ async function onToggleTheater() {
   const on = !theaterMode.value
   setTheater(on)
   if (!on) return
-  await nextTick()
   // Respect prefers-reduced-motion: jump instead of animating the scroll.
   // 'instant' is the standardized value that actually skips the animation —
   // 'auto' defers to the element's computed scroll-behavior, which this
   // codebase sets to 'smooth' globally, so 'auto' would silently animate.
-  playerSectionRef.value?.scrollIntoView({
-    behavior: prefersReducedMotion.value ? 'instant' : 'smooth',
-    block: 'start',
-  })
+  await scrollToPlayerSection(prefersReducedMotion.value ? 'instant' : 'smooth')
 }
 
 // Locale-bound formatters + derived metadata computeds.
@@ -1036,8 +1032,8 @@ const watchFlow = useAnimeWatchFlow({
   applyViewerContext: social.applyViewerContext,
 })
 const {
-  playerSectionRef, resumeStartEpisode, resumeBanner, watchCta, watchCtaLabel,
-  onWatchCtaClick,
+  playerSectionRef, scrollToPlayerSection, resumeStartEpisode, resumeBanner,
+  watchCta, watchCtaLabel, onWatchCtaClick,
 } = watchFlow
 
 // Player surface: Classic Kodik toggle, preference resolution, WT seed, URL sync.

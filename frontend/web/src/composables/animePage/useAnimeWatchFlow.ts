@@ -40,10 +40,19 @@ export function useAnimeWatchFlow(deps: AnimeWatchFlowDeps) {
   const playerSectionRef = ref<HTMLElement | null>(null)
   const playerActivated = ref(false)
 
+  /** Bring the player section to the top of the viewport. The offset below the
+   *  fixed navbar is NOT computed here — it comes from the section's
+   *  `scroll-margin-top: var(--header-offset)`, so every caller lands on the
+   *  same line. Callers pass the behavior because they differ: the watch CTA
+   *  always animates, theater mode honours prefers-reduced-motion. */
+  async function scrollToPlayerSection(behavior: ScrollBehavior = 'smooth') {
+    await nextTick()
+    playerSectionRef.value?.scrollIntoView({ behavior, block: 'start' })
+  }
+
   async function activatePlayer() {
     playerActivated.value = true
-    await nextTick()
-    playerSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    await scrollToPlayerSection()
   }
 
   const resumeAnimeId = computed(() => anime.value?.id ?? '')
@@ -167,6 +176,7 @@ export function useAnimeWatchFlow(deps: AnimeWatchFlowDeps) {
 
   return {
     playerSectionRef,
+    scrollToPlayerSection,
     resumeLoadedEpisodes,
     watchState,
     resumeStartEpisode,
