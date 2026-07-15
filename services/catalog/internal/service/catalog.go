@@ -174,19 +174,24 @@ func (s *CatalogService) AnimeLibClient() *animelib.Client {
 	return s.animelibClient
 }
 
-// ResolveAnimeLibID exposes the otherwise-unexported findAnimeLibID helper so
-// the Phase 2 notifications detector (via services/catalog/internal/service/
-// episodes_lookup.go) can map a catalog *domain.Anime → AnimeLib's internal
-// numeric ID without duplicating the search-then-pick logic. The 24h
-// `animelib:mapping:{anime.ID}` Redis cache inside findAnimeLibID already
-// absorbs the cost of repeated lookups across detector runs.
-func (s *CatalogService) ResolveAnimeLibID(ctx context.Context, anime *domain.Anime) (int, error) {
-	return s.findAnimeLibID(ctx, anime)
-}
-
 // HanimeClient returns the Hanime parser client.
 func (s *CatalogService) HanimeClient() *hanime.Client {
 	return s.hanimeClient
+}
+
+// GetVideosForAnime gets all videos for an anime
+func (s *CatalogService) GetVideosForAnime(ctx context.Context, animeID string, videoType domain.VideoType) ([]*domain.Video, error) {
+	return s.videoRepo.GetForAnime(ctx, animeID, videoType)
+}
+
+// GetVideosForEpisode gets video sources for a specific episode
+func (s *CatalogService) GetVideosForEpisode(ctx context.Context, animeID string, episodeNumber int) ([]*domain.Video, error) {
+	return s.videoRepo.GetForEpisode(ctx, animeID, episodeNumber)
+}
+
+// GetRandomVideos gets random videos for the game
+func (s *CatalogService) GetRandomVideos(ctx context.Context, videoType domain.VideoType, count int, excludeIDs []string) ([]*domain.Video, error) {
+	return s.videoRepo.GetRandomVideos(ctx, videoType, count, excludeIDs)
 }
 
 // upsertAnimeFromExternal stores or updates anime from external source

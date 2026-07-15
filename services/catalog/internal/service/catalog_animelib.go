@@ -14,10 +14,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
 )
 
-// ============================================================================
-// AnimeLib API Methods
-// ============================================================================
-
 // GetAnimeLibEpisodes gets episodes from AnimeLib for an anime
 func (s *CatalogService) GetAnimeLibEpisodes(ctx context.Context, animeID string) (_ []domain.AnimeLibEpisode, retErr error) {
 	start := time.Now()
@@ -270,6 +266,16 @@ func (s *CatalogService) SearchAnimeLib(ctx context.Context, title string) ([]do
 	}
 
 	return searchResults, nil
+}
+
+// ResolveAnimeLibID exposes the otherwise-unexported findAnimeLibID helper so
+// the Phase 2 notifications detector (via services/catalog/internal/service/
+// episodes_lookup.go) can map a catalog *domain.Anime → AnimeLib's internal
+// numeric ID without duplicating the search-then-pick logic. The 24h
+// `animelib:mapping:{anime.ID}` Redis cache inside findAnimeLibID already
+// absorbs the cost of repeated lookups across detector runs.
+func (s *CatalogService) ResolveAnimeLibID(ctx context.Context, anime *domain.Anime) (int, error) {
+	return s.findAnimeLibID(ctx, anime)
 }
 
 // findAnimeLibID finds the AnimeLib integer ID for an anime by searching name variants in parallel
