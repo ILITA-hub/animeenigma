@@ -164,6 +164,21 @@
         <PictureInPicture2 class="size-5" aria-hidden="true" />
       </PlayerIconButton>
 
+      <!-- Theater — the middle ground between windowed and fullscreen. Desktop
+           only (see the media query below) and opt-in via canTheater, so mount
+           sites without a handler never show a dead button. -->
+      <PlayerIconButton
+        v-if="canTheater"
+        class="pl-theater-btn"
+        :active="theaterActive"
+        :aria-label="theaterActive ? $t('player.theaterModeExit') : $t('player.theaterModeEnter')"
+        :aria-pressed="theaterActive"
+        data-test="toggle-theater"
+        @click="emit('toggle-theater')"
+      >
+        <MonitorPlay class="size-5" aria-hidden="true" />
+      </PlayerIconButton>
+
       <!-- Fullscreen — the ONLY comfortable watch surface on phones, so it is
            NOT part of the mobile trim (it used to be — that was the bug). -->
       <PlayerIconButton
@@ -183,7 +198,7 @@
 <script setup lang="ts">
 import PlayerScrubBar from './PlayerScrubBar.vue'
 import PlayerIconButton from './PlayerIconButton.vue'
-import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize, Minimize, ListVideo } from 'lucide-vue-next'
+import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize, Minimize, ListVideo, MonitorPlay } from 'lucide-vue-next'
 
 interface Chapter {
   kind: 'intro' | 'outro'
@@ -223,8 +238,14 @@ withDefaults(
     previewStoryboardUrl?: string | null
     /** fullscreen (native or pseudo) currently active — swaps the FS icon */
     fullscreenActive?: boolean
+    /** theater mode currently active — swaps the button copy + pressed state */
+    theaterActive?: boolean
+    /** whether the HOST view actually implements theater (handler + page CSS).
+     *  Opt-in: Watch Together binds a no-op and /downloads does not listen at
+     *  all, so the button must not exist there. */
+    canTheater?: boolean
   }>(),
-  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null, previewStoryboardUrl: null, episodeLabel: '', fullscreenActive: false },
+  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null, previewStoryboardUrl: null, episodeLabel: '', fullscreenActive: false, theaterActive: false, canTheater: false },
 )
 
 const emit = defineEmits<{
@@ -238,6 +259,7 @@ const emit = defineEmits<{
   (e: 'toggle-subs'): void
   (e: 'toggle-settings'): void
   (e: 'toggle-pip'): void
+  (e: 'toggle-theater'): void
   (e: 'toggle-fullscreen'): void
 }>()
 
@@ -440,6 +462,15 @@ function onVolumeInput(event: Event) {
   }
 
   .pl-srcbtn-text {
+    display: none;
+  }
+}
+
+/* Theater is desktop-only. Below 1024px the player already spans the full
+   column, so there is nothing to widen — and fullscreen is the comfortable
+   watch surface on phones. Separate from the ≤680px trim on purpose. */
+@media (max-width: 1023px) {
+  .pl-theater-btn {
     display: none;
   }
 }

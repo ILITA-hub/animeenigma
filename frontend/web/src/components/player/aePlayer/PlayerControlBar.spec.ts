@@ -114,7 +114,25 @@ describe('PlayerControlBar', () => {
     expect(w.find('[data-test="time-duration"]').text()).toBe('23:41')
   })
 
-  it('does not render a theater-mode button (hidden by request)', () => {
+  it('renders a theater button and emits toggle-theater when canTheater is set', async () => {
+    const w = mount(PlayerControlBar, { props: { ...baseProps, canTheater: true } })
+    const btn = w.find('[data-test="toggle-theater"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.attributes('aria-label')).toBe('Theater mode')
+    await btn.trigger('click')
+    expect(w.emitted('toggle-theater')).toHaveLength(1)
+  })
+
+  it('swaps the theater label to the exit copy when theater is active', () => {
+    const w = mount(PlayerControlBar, {
+      props: { ...baseProps, canTheater: true, theaterActive: true },
+    })
+    const btn = w.find('[data-test="toggle-theater"]')
+    expect(btn.attributes('aria-label')).toBe('Exit theater mode')
+    expect(btn.attributes('aria-pressed')).toBe('true')
+  })
+
+  it('renders no theater button by default — mount sites without a handler stay clean', () => {
     const w = mount(PlayerControlBar, { props: baseProps })
     expect(w.find('[data-test="toggle-theater"]').exists()).toBe(false)
   })
