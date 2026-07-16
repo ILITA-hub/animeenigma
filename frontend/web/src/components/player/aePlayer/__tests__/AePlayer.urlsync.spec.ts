@@ -39,6 +39,14 @@ vi.mock('@/composables/aePlayer/useCapabilities', () => ({
     report: ref(kodikReport),
     capMap: ref(new Map<string, ProviderCap>([['kodik', kodikCap], ['gogoanime', gogoCap]])),
   }),
+  // useCapabilityFeed's offline branch calls this directly (bypassing
+  // useCapabilities entirely) — needed for the offline/PWA gating test below.
+  flattenCapabilities: (report: CapabilityReport | null) => {
+    const capMap = new Map<string, ProviderCap>()
+    if (!report || !Array.isArray(report.families)) return capMap
+    for (const fam of report.families) for (const p of fam.providers ?? []) capMap.set(p.provider, p)
+    return capMap
+  },
 }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({
   useProviderResolver: () => ({
@@ -174,5 +182,17 @@ describe('AePlayer — ?provider deep-link pin (cross-language clamp)', () => {
     expect(last.provider).toBe('kodik')
     expect(last.team).toBe('Studio Band')
     expect(last.episode).toBe(1)
+  })
+})
+
+describe('AePlayer — content-verify poll respects offline/PWA sessions', () => {
+  it('never fires the content-verify fetch when props.offline is set (mirrors getOffline\'s own network skip)', async () => {
+    mountPlayer({ offline: { animeId: 'anime-uuid', title: 'T', downloads: [] } })
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    const { contentVerifyApi } = await import('@/api/client')
+    expect((contentVerifyApi.get as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0)
   })
 })

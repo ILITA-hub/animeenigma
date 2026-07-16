@@ -752,9 +752,13 @@ const { roomPinned, roomHasCombo } = roomSync
 // non-firstparty sources actually carry RAW/DUB/hardsub for THIS title,
 // gating the capability feed (unverified stays RAW-only) and letting the
 // combo bootstrap silently re-pick the smart default when verdicts land.
-// Poll stops (report retained) the instant playback starts.
+// Poll stops (report retained) the instant playback starts. Also OFF for an
+// offline/PWA session (same `props.offline` signal useCapabilityFeed's
+// getOffline already skips its own network fetch on, just below) — a fully
+// offline playback has no network to probe against, so this must not fire a
+// stray fetch either.
 const animeIdRef = computed(() => props.animeId)
-const verifyActive = computed(() => !hasStarted.value)
+const verifyActive = computed(() => !hasStarted.value && !props.offline)
 const contentVerify = useContentVerify(animeIdRef, verifyActive)
 
 // ─── Capability feed (backend single source of truth) ────────────────────────
