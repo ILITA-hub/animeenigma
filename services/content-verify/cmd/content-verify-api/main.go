@@ -14,9 +14,15 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/prober"
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/queue"
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/signals"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/transport"
 )
 
@@ -61,8 +67,24 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Worker + full handler wiring lands in Task 9.
-	var h *handler.VerifyHandler
+	store := repo.NewStore(db.DB)
+	sig := signals.New(redisCache.Client())
+	catClient := catalogclient.New(cfg.CatalogURL, nil)
+	engine := queue.NewEngine(catClient, sig, store, cfg.ReprobeTTL, log)
+	h := handler.NewVerifyHandler(store, sig, engine, log)
+
+	if cfg.WorkerOn {
+		if err := os.MkdirAll(cfg.WorkDir, 0o755); err != nil {
+			log.Fatalw("workdir create failed", "error", err)
+		}
+		shedWatcher := cache.NewDegradationWatcher(redisCache, 5*time.Second)
+		shedWatcher.Start(ctx)
+		runner := prober.NewExecRunner(cfg.PythonPath, cfg.AnalyzersDir)
+		pb := prober.New(catClient, cfg.GatewayURL, cfg.FFmpegPath, cfg.WorkDir, runner, log)
+		worker := service.NewWorker(cfg.Interval, cfg.UnitBudget, shedWatcher, engine, pb, store, log)
+		worker.Start(ctx)
+		log.Infow("content-verify worker started", "interval", cfg.Interval, "budget", cfg.UnitBudget)
+	}
 
 	router := transport.NewRouter(h, log, collector)
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router, ReadHeaderTimeout: 10 * time.Second}
