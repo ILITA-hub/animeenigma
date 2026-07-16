@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { effectiveAudios, isUnverified, verifiedDubLangs, verifyFor } from './verifiedCaps'
+import { effectiveAudios, isUnverified, verifiedDubLangs, verifiedHardsubLangs, verifyFor } from './verifiedCaps'
 import type { ProviderVerify, VerifyReport } from '@/types/contentVerify'
 
 const v = (p: Partial<ProviderVerify>): ProviderVerify => ({
@@ -37,5 +37,17 @@ describe('isUnverified / verifiedDubLangs / verifyFor', () => {
     const rep: VerifyReport = { animeId: 'a', providers: { kodik: v({ raw: true }) } }
     expect(verifyFor(rep, 'kodik')?.raw).toBe(true)
     expect(verifyFor(rep, 'gogoanime')).toBeNull()
+  })
+})
+
+describe('verifiedHardsubLangs', () => {
+  it('extracts only known TrackLang values', () => {
+    expect(verifiedHardsubLangs(v({ hardsub_langs: ['ja', 'ru'] }))).toEqual(['ja', 'ru'])
+  })
+  it('filters out a bogus/unrecognized lang value — no badge for garbage data', () => {
+    expect(verifiedHardsubLangs(v({ hardsub_langs: ['ja', 'xx', 'klingon'] }))).toEqual(['ja'])
+  })
+  it('returns [] for a null verify row', () => {
+    expect(verifiedHardsubLangs(null)).toEqual([])
   })
 })

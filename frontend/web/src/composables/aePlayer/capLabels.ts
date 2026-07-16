@@ -1,7 +1,7 @@
 import type { ProviderCap } from '@/types/capabilities'
 import type { ProviderVerify } from '@/types/contentVerify'
 import type { TrackLang } from '@/types/aePlayer'
-import { isUnverified, verifiedDubLangs } from './verifiedCaps'
+import { isUnverified, verifiedDubLangs, verifiedHardsubLangs } from './verifiedCaps'
 
 export interface CapLabels {
   categories: ('sub' | 'dub')[]
@@ -31,7 +31,11 @@ const Q_ORDER = ['2160p', '1440p', '1080p', '720p', '480p', '360p']
  * `unverified`/`verifiedDub`/`verifiedHardsub`, and — once the probe has an
  * actual verdict (status !== 'unverified') — overrides `categories` with what
  * was proven instead of the variants' asserted claims (owner-approved gate:
- * no claims without verification).
+ * no claims without verification). `firstparty` (ae) is exempt from this
+ * override even though it CAN carry a verify row (the backend worker
+ * synthesizes ae's verdict from library truth, not a probe) — firstparty
+ * always trusts its own variants, per the same exemption `isUnverified`/
+ * `effectiveAudios` apply.
  */
 export function deriveCapLabels(
   cap: ProviderCap | undefined,
@@ -41,10 +45,10 @@ export function deriveCapLabels(
 
   const unverified = isUnverified(cap, verify)
   const verifiedDub = verifiedDubLangs(verify)
-  const verifiedHardsub = (verify?.hardsub_langs ?? []) as TrackLang[]
+  const verifiedHardsub = verifiedHardsubLangs(verify)
 
   let categories: ('sub' | 'dub')[]
-  if (verify && verify.status !== 'unverified') {
+  if (cap.group !== 'firstparty' && verify && verify.status !== 'unverified') {
     categories = []
     if (verify.raw || verify.status === 'partial') categories.push('sub')
     if (verifiedDub.length > 0) categories.push('dub')

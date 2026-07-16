@@ -73,4 +73,22 @@ describe('deriveCapLabels', () => {
     expect(l?.categories).toEqual(['sub', 'dub'])
     expect(l?.verifiedDub).toEqual(['ru'])
   })
+
+  // firstparty (ae) CAN carry a verify row — the backend worker synthesizes
+  // it from library truth rather than probing — but must still trust its own
+  // variants everywhere, per the same exemption effectiveAudios/isUnverified
+  // apply. Without the guard, a dub-only verdict here would wrongly collapse
+  // categories to ['dub'], dropping the sub variant ae actually serves.
+  it('firstparty caps keep variant-derived categories even WITH a verify row (never overridden)', () => {
+    const subDubVariants: ProviderCap['variants'] = [
+      { category: 'sub', sub_delivery: 'soft', qualities: ['1080p'], quality_source: 'trait', source: 'trait' },
+      { category: 'dub', sub_delivery: 'none', qualities: ['1080p'], quality_source: 'trait', source: 'trait' },
+    ]
+    const l = deriveCapLabels(
+      cap(subDubVariants, 'firstparty'),
+      v({ status: 'verified', raw: false, dub_langs: ['en'] }),
+    )
+    expect(l?.unverified).toBe(false)
+    expect(l?.categories).toEqual(['sub', 'dub'])
+  })
 })

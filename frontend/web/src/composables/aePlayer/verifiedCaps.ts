@@ -20,6 +20,10 @@ export function verifiedDubLangs(v: ProviderVerify | null): TrackLang[] {
   return (v?.dub_langs ?? []).filter((l): l is TrackLang => l === 'en' || l === 'ru' || l === 'ja')
 }
 
+export function verifiedHardsubLangs(v: ProviderVerify | null): TrackLang[] {
+  return (v?.hardsub_langs ?? []).filter((l): l is TrackLang => l === 'en' || l === 'ru' || l === 'ja')
+}
+
 export function effectiveAudios(
   cap: { group: string; audios: ('sub' | 'dub')[] },
   v: ProviderVerify | null,
