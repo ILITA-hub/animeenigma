@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 )
@@ -43,7 +44,10 @@ func stateRank(s string) int {
 // EnumerateUnits lists every probeable unit for one anime from live catalog
 // structure. Adult providers are skipped in v1 (no membership source ranks
 // them; a visited hentai title still gets its non-adult providers probed).
-func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string) ([]Unit, error) {
+// log may be nil (e.g. in tests); when set, every best-effort provider skip
+// is recorded so a silently-crumbling provider is visible in logs rather
+// than just quietly shrinking the queue.
+func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string, log *logger.Logger) ([]Unit, error) {
 	caps, err := c.Capabilities(ctx, animeID)
 	if err != nil {
 		return nil, err
@@ -66,6 +70,7 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 		case pc.Provider == "kodik":
 			translations, err := c.KodikTranslations(ctx, animeID)
 			if err != nil {
+				logSkip(log, animeID, pc.Provider, "kodik translations fetch failed", err)
 				continue // enumeration is best-effort per provider
 			}
 			for _, tr := range translations {
@@ -80,7 +85,12 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 
 		case scraperProviders[pc.Provider]:
 			eps, err := c.ScraperEpisodes(ctx, animeID, pc.Provider)
-			if err != nil || len(eps) == 0 {
+			if err != nil {
+				logSkip(log, animeID, pc.Provider, "scraper episodes fetch failed", err)
+				continue
+			}
+			if len(eps) == 0 {
+				logSkip(log, animeID, pc.Provider, "no episodes", nil)
 				continue
 			}
 			latest := eps[0]
@@ -91,6 +101,7 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 			}
 			servers, err := c.ScraperServers(ctx, animeID, latest.ID, pc.Provider)
 			if err != nil {
+				logSkip(log, animeID, pc.Provider, "scraper servers fetch failed", err)
 				continue
 			}
 			for _, s := range servers {
@@ -105,7 +116,12 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 
 		case isAnimejoyLeg(pc.Provider):
 			eps, err := c.AnimejoyEpisodes(ctx, animeID, pc.Provider)
-			if err != nil || len(eps) == 0 {
+			if err != nil {
+				logSkip(log, animeID, pc.Provider, "animejoy episodes fetch failed", err)
+				continue
+			}
+			if len(eps) == 0 {
+				logSkip(log, animeID, pc.Provider, "no episodes", nil)
 				continue
 			}
 			latest := eps[0]
@@ -120,6 +136,20 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 	}
 	sort.SliceStable(units, func(i, j int) bool { return units[i].StateRank < units[j].StateRank })
 	return units, nil
+}
+
+// logSkip records a best-effort provider skip during enumeration. err is nil
+// for the "no episodes" (real-empty, not a failure) case; the message alone
+// carries the reason then.
+func logSkip(log *logger.Logger, animeID, provider, msg string, err error) {
+	if log == nil {
+		return
+	}
+	if err != nil {
+		log.Warnw("verify enumerate: provider skipped", "anime_id", animeID, "provider", provider, "error", err)
+		return
+	}
+	log.Warnw("verify enumerate: provider skipped", "anime_id", animeID, "provider", provider, "reason", msg)
 }
 
 func maxInt(a, b int) int {

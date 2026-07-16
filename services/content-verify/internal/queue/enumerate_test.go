@@ -28,16 +28,32 @@ func buildTestCatalog(t *testing.T) *httptest.Server {
 		w.Write([]byte(`{"success":true,"data":[{"id":610,"title":"AniLibria","type":"voice","episodes_count":28},{"id":734,"title":"Subs","type":"subtitles","episodes_count":28}]}`))
 	})
 	mux.HandleFunc("/api/anime/a1/scraper/episodes", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("exclusive") != "true" {
+			t.Errorf("scraper/episodes: exclusive=true not set: %s", r.URL.RawQuery)
+		}
 		if r.URL.Query().Get("prefer") == "nineanime" {
 			w.WriteHeader(404)
 			return
 		}
 		w.Write([]byte(`{"success":true,"data":{"episodes":[{"id":"ep-1","number":1},{"id":"ep-28","number":28}]}}`))
 	})
-	mux.HandleFunc("/api/anime/a1/scraper/servers", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/anime/a1/scraper/servers", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("exclusive") != "true" {
+			t.Errorf("scraper/servers: exclusive=true not set: %s", r.URL.RawQuery)
+		}
 		w.Write([]byte(`{"success":true,"data":{"servers":[{"id":"hd-1","name":"HD-1","type":"sub"},{"id":"hd-2","name":"HD-2","type":"dub"}]}}`))
 	})
-	mux.HandleFunc("/api/anime/a1/scraper/stream", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/anime/a1/scraper/stream", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("exclusive") != "true" {
+			t.Errorf("scraper/stream: exclusive=true not set: %s", r.URL.RawQuery)
+		}
+		if q.Get("episode") == "" || q.Get("server") == "" {
+			t.Errorf("scraper/stream: episode/server param missing: %s", r.URL.RawQuery)
+		}
+		if cat := q.Get("category"); cat != "sub" && cat != "dub" {
+			t.Errorf("scraper/stream: category not sub|dub: %q", cat)
+		}
 		w.Write([]byte(`{"success":true,"data":{"stream":{"headers":{"Referer":"https://x/"},"sources":[{"url":"https://cdn/x.m3u8","exp":"1","sig":"s","type":"hls"}],"tracks":[{"file":"a.vtt","label":"English","kind":"captions"}],"intro":{"start":90,"end":180}}}}`))
 	})
 	return httptest.NewServer(mux)
@@ -47,7 +63,7 @@ func TestEnumerateUnits(t *testing.T) {
 	srv := buildTestCatalog(t)
 	defer srv.Close()
 	c := catalogclient.New(srv.URL, srv.Client())
-	units, err := EnumerateUnits(context.Background(), c, "a1")
+	units, err := EnumerateUnits(context.Background(), c, "a1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
