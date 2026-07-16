@@ -1,0 +1,81 @@
+package queue
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
+)
+
+// buildTestCatalog mirrors the catalogclient test mux (kept package-local:
+// test helpers aren't exported across packages).
+func buildTestCatalog(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":28}],"top":[{"id":"t1","name":"N","episodes_aired":47}]}}`))
+	})
+	mux.HandleFunc("/api/anime/a1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"anime_id":"a1","families":[{"family":"others","providers":[
+			{"provider":"gogoanime","state":"active","group":"en","audios":["sub","dub"]},
+			{"provider":"kodik","state":"active","group":"ru","audios":["sub","dub"]},
+			{"provider":"hanime","state":"active","group":"adult","audios":["sub"]}]},
+			{"family":"aeProvider","providers":[{"provider":"ae","state":"active","group":"firstparty","audios":["dub"],"lang":"en"}]}]}}`))
+	})
+	mux.HandleFunc("/api/anime/a1/kodik/translations", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":[{"id":610,"title":"AniLibria","type":"voice","episodes_count":28},{"id":734,"title":"Subs","type":"subtitles","episodes_count":28}]}`))
+	})
+	mux.HandleFunc("/api/anime/a1/scraper/episodes", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("prefer") == "nineanime" {
+			w.WriteHeader(404)
+			return
+		}
+		w.Write([]byte(`{"success":true,"data":{"episodes":[{"id":"ep-1","number":1},{"id":"ep-28","number":28}]}}`))
+	})
+	mux.HandleFunc("/api/anime/a1/scraper/servers", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"servers":[{"id":"hd-1","name":"HD-1","type":"sub"},{"id":"hd-2","name":"HD-2","type":"dub"}]}}`))
+	})
+	mux.HandleFunc("/api/anime/a1/scraper/stream", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"stream":{"headers":{"Referer":"https://x/"},"sources":[{"url":"https://cdn/x.m3u8","exp":"1","sig":"s","type":"hls"}],"tracks":[{"file":"a.vtt","label":"English","kind":"captions"}],"intro":{"start":90,"end":180}}}}`))
+	})
+	return httptest.NewServer(mux)
+}
+
+func TestEnumerateUnits(t *testing.T) {
+	srv := buildTestCatalog(t)
+	defer srv.Close()
+	c := catalogclient.New(srv.URL, srv.Client())
+	units, err := EnumerateUnits(context.Background(), c, "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// gogoanime: 2 servers → 2 units (episode = max number 28, EpisodeID ep-28);
+	// kodik: 2 translations → 2 units; ae: 1 synth unit; hanime (adult): skipped.
+	var gogo, kodik, ae, adult int
+	for _, u := range units {
+		switch u.Provider {
+		case "gogoanime":
+			gogo++
+			if u.Episode != 28 || u.EpisodeID != "ep-28" {
+				t.Fatalf("gogo unit episode: %+v", u)
+			}
+		case "kodik":
+			kodik++
+			if u.Key.Team == "" {
+				t.Fatalf("kodik unit needs team key: %+v", u)
+			}
+		case "ae":
+			ae++
+			if u.AeLang != "en" {
+				t.Fatalf("ae synth lang: %+v", u)
+			}
+		case "hanime":
+			adult++
+		}
+	}
+	if gogo != 2 || kodik != 2 || ae != 1 || adult != 0 {
+		t.Fatalf("unit counts gogo=%d kodik=%d ae=%d adult=%d", gogo, kodik, ae, adult)
+	}
+}
