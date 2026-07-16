@@ -81,6 +81,7 @@ var animeMetadataColumns = []string{
 	"year", "season", "status", "kind", "rating", "material_source",
 	"episodes_count", "episodes_aired", "episode_duration",
 	"score", "poster_url", "next_episode_at", "next_episode_source", "aired_on",
+	"released_on",
 }
 
 func (r *AnimeRepository) Update(ctx context.Context, anime *domain.Anime) error {
@@ -128,7 +129,8 @@ func AnimeMetadataEqual(a, b *domain.Anime) bool {
 		scoreEqual(a.Score, b.Score) &&
 		a.PosterURL == b.PosterURL &&
 		timePtrEqual(a.NextEpisodeAt, b.NextEpisodeAt) &&
-		timePtrEqual(a.AiredOn, b.AiredOn)
+		timePtrEqual(a.AiredOn, b.AiredOn) &&
+		timePtrEqual(a.ReleasedOn, b.ReleasedOn)
 }
 
 // scoreEqual compares two scores at the decimal(4,2) precision the score column
