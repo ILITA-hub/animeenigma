@@ -36,6 +36,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
+import { isMmsOnlyDevice } from '@/composables/aePlayer/useVideoEngine'
 import { scrubDebug, slog, srecordCapture, sreset } from '@/composables/aePlayer/scrubPreviewDebug'
 import { markScrubUrl } from '@/pwa/segmentCache'
 import { parseStoryboardVtt, cueAt, type StoryboardCue } from './storyboardVtt'
@@ -465,9 +466,11 @@ async function ensureEngine() {
 
   const Hls = (await import('hls.js')).default
   if (token !== initToken) return // stream changed during import
-  if (!Hls.isSupported()) {
-    // Safari — native HLS handles seeking itself
-    slog('MSE unsupported — native HLS path (Safari)')
+  if (!Hls.isSupported() || isMmsOnlyDevice()) {
+    // Safari — native HLS handles seeking itself. MMS-only (iPhone) also goes
+    // native: hls.js-on-ManagedMediaSource never opens its buffer without
+    // element setup we don't do (see chooseLoadStrategy in useVideoEngine).
+    slog('MSE unsupported / MMS-only — native HLS path (Safari)')
     v.src = streamUrl
     return
   }

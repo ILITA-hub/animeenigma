@@ -99,22 +99,35 @@ export function useFullscreen(deps: FullscreenDeps) {
   // takeover opts into cover for its lifetime so the video runs under the
   // island; the overlay rows pad themselves back inside the safe area
   // (AePlayer.vue — incl. a :deep(.pl-controls) rule for the control bar).
-  // iOS re-evaluates the meta on content change; where it doesn't, env()
-  // stays 0 and nothing regresses.
+  // The swap REPLACES the meta node instead of mutating `content`: on-device
+  // testing (2026-07-16T13-44-25 — side letterbox strips while in the
+  // takeover) showed iOS 26 ignores a setAttribute-only viewport-fit change,
+  // but reprocesses the viewport when a fresh <meta name=viewport> node is
+  // inserted. Where even that is ignored, env() stays 0 and nothing regresses.
   // Restore the exact previous content (standalone PWA already carries cover).
   let viewportBeforeFs: string | null = null
 
+  function swapViewportMeta(content: string) {
+    const old = document.querySelector('meta[name="viewport"]')
+    if (!old) return
+    const fresh = document.createElement('meta')
+    fresh.setAttribute('name', 'viewport')
+    fresh.setAttribute('content', content)
+    old.replaceWith(fresh)
+  }
+
   function coverViewport() {
-    const meta = document.querySelector('meta[name="viewport"]')
-    const content = meta?.getAttribute('content')
-    if (!meta || !content || content.includes('viewport-fit=cover')) return
+    const content = document
+      .querySelector('meta[name="viewport"]')
+      ?.getAttribute('content')
+    if (!content || content.includes('viewport-fit=cover')) return
     viewportBeforeFs = content
-    meta.setAttribute('content', `${content}, viewport-fit=cover`)
+    swapViewportMeta(`${content}, viewport-fit=cover`)
   }
 
   function restoreViewport() {
     if (viewportBeforeFs === null) return
-    document.querySelector('meta[name="viewport"]')?.setAttribute('content', viewportBeforeFs)
+    swapViewportMeta(viewportBeforeFs)
     viewportBeforeFs = null
   }
 

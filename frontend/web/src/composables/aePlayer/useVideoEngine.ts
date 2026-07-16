@@ -10,16 +10,35 @@ export type LoadStrategy = 'native' | 'hlsjs'
  * - mp4 → always native (<video src>).
  * - hls → hls.js whenever it is supported (Chrome/Firefox/Edge via MSE); fall
  *   back to native HLS only when hls.js is unsupported (Safari/iOS, which plays
- *   m3u8 natively).
+ *   m3u8 natively) — or when the device is MMS-only (see below).
  *
  * `hlsJsSupported` MUST come from `Hls.isSupported()`. Do NOT use
  * `video.canPlayType('application/vnd.apple.mpegurl')` to gate this: Chrome
  * returns 'maybe' for that probe yet cannot actually play HLS natively, so
  * trusting it routes every HLS stream down the native path and stalls at 0:00.
+ *
+ * `mmsOnly`: iPhone Safari ≥17.1 ships ManagedMediaSource but NOT full
+ * MediaSource, which flips Hls.isSupported() to true — but hls.js-on-MMS
+ * refuses to stream unless the element opts out of remote playback
+ * (disableRemotePlayback / <source> alternative), which we don't do (it would
+ * kill AirPlay). The buffer never opens and playback sticks at 0:00 while
+ * manifests retry forever (report 2026-07-16T13-44-25, iPhone). iPhone's
+ * native HLS is the canonical Apple path — use it there.
  */
-export function chooseLoadStrategy(stream: StreamResult, hlsJsSupported: boolean): LoadStrategy {
+export function chooseLoadStrategy(
+  stream: StreamResult,
+  hlsJsSupported: boolean,
+  mmsOnly: boolean,
+): LoadStrategy {
   if (stream.type === 'mp4') return 'native'
-  return hlsJsSupported ? 'hlsjs' : 'native'
+  return hlsJsSupported && !mmsOnly ? 'hlsjs' : 'native'
+}
+
+/** ManagedMediaSource without full MediaSource = iPhone/iPod Safari. Capability probe, no UA sniff. */
+export function isMmsOnlyDevice(): boolean {
+  if (typeof window === 'undefined') return false
+  const w = window as typeof window & { ManagedMediaSource?: unknown; MediaSource?: unknown }
+  return w.ManagedMediaSource !== undefined && w.MediaSource === undefined
 }
 
 export interface QualityLevel {
@@ -170,7 +189,7 @@ export function useVideoEngine(
     // A newer load() superseded us during the async import — abort so we don't
     // attach a second hls.js instance / MediaSource over the winning one.
     if (gen !== loadGen) return
-    const strategy = chooseLoadStrategy(stream, Hls.isSupported())
+    const strategy = chooseLoadStrategy(stream, Hls.isSupported(), isMmsOnlyDevice())
     if (strategy === 'native') {
       v.src = stream.url
       return

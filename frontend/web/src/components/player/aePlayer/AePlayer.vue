@@ -1511,17 +1511,22 @@ onUnmounted(() => {
 }
 
 /* iPhone pseudo-fullscreen — fixed takeover (no usable element FS API on iOS).
-   Black behind the notch/status bar is intended (video surface).
-   svh, not % or vh: both resolve against the LARGE viewport (Safari's chrome
-   collapsed), so with the toolbars actually on screen the takeover overflows the
-   visible area and the control row lands under Safari's bottom bar. svh is the
-   smallest-viewport height — always fully visible, never clipped by chrome. */
+   Sizing history (each unit was wrong a different way, report screenshots both
+   times): height:100% resolved against the LARGE viewport, overflowing the
+   visible area while Safari's chrome was on screen (control row under the
+   bottom bar); height:100svh pinned the SMALL viewport, so once the chrome
+   collapsed the page showed through in a strip BELOW the takeover
+   (2026-07-16T13-44-25 photo 2). No explicit height at all is the correct
+   form: a fixed box with top:0 + bottom:0 stretches to the live viewport,
+   which iOS resizes as chrome shows/hides — dvh behavior without dvh's
+   animation-lag artifacts. height:auto (not a deleted line) so it beats
+   .pl--theater's height regardless of source order. */
 .pl--pseudo-fs {
   position: fixed;
   inset: 0;
   z-index: 100;
-  height: 100svh;
-  max-height: none; /* neutralizes .pl--theater's max-height cap (wins over height regardless of source order) */
+  height: auto;
+  max-height: none; /* neutralizes .pl--theater's max-height cap */
   aspect-ratio: auto;
   border-radius: 0;
   border: 0;

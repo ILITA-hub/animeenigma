@@ -209,43 +209,52 @@ describe('AePlayer — fullscreen routing', () => {
 // the exact previous content on exit (report 2026-07-15T12-52-24, iPhone).
 describe('AePlayer — pseudo-FS viewport-fit=cover toggle', () => {
   const BROWSER_CONTENT = 'width=device-width, initial-scale=1.0'
-  let meta: HTMLMetaElement
 
-  beforeEach(() => {
+  /** The toggle REPLACES the meta node (iOS ignores setAttribute-only changes),
+   *  so tests must always re-query instead of holding a node reference. */
+  function viewportContent() {
+    return document.querySelector('meta[name="viewport"]')?.getAttribute('content')
+  }
+
+  function installViewportMeta(content: string) {
     document.querySelector('meta[name="viewport"]')?.remove()
-    meta = document.createElement('meta')
+    const meta = document.createElement('meta')
     meta.setAttribute('name', 'viewport')
-    meta.setAttribute('content', BROWSER_CONTENT)
+    meta.setAttribute('content', content)
     document.head.appendChild(meta)
-  })
+  }
 
-  afterEach(() => meta.remove())
+  beforeEach(() => installViewportMeta(BROWSER_CONTENT))
+  afterEach(() => document.querySelector('meta[name="viewport"]')?.remove())
 
   it('entering the takeover adds viewport-fit=cover, exiting restores the original content', async () => {
     setUserAgent(IPHONE_UA)
     const wrapper = mountPlayer()
     await settle()
 
+    const before = document.querySelector('meta[name="viewport"]')
     await tapFullscreen(wrapper)
-    expect(meta.getAttribute('content')).toBe(`${BROWSER_CONTENT}, viewport-fit=cover`)
+    expect(viewportContent()).toBe(`${BROWSER_CONTENT}, viewport-fit=cover`)
+    // Node swap is the mechanism iOS actually honors — assert it happened.
+    expect(document.querySelector('meta[name="viewport"]')).not.toBe(before)
 
     await tapFullscreen(wrapper)
-    expect(meta.getAttribute('content')).toBe(BROWSER_CONTENT)
+    expect(viewportContent()).toBe(BROWSER_CONTENT)
     wrapper.unmount()
   })
 
   it('leaves an already-covered meta untouched (standalone PWA) and does not mangle it on exit', async () => {
     const PWA_CONTENT = `${BROWSER_CONTENT}, viewport-fit=cover`
-    meta.setAttribute('content', PWA_CONTENT)
+    installViewportMeta(PWA_CONTENT)
     setUserAgent(IPHONE_UA)
     const wrapper = mountPlayer()
     await settle()
 
     await tapFullscreen(wrapper)
-    expect(meta.getAttribute('content')).toBe(PWA_CONTENT)
+    expect(viewportContent()).toBe(PWA_CONTENT)
 
     await tapFullscreen(wrapper)
-    expect(meta.getAttribute('content')).toBe(PWA_CONTENT)
+    expect(viewportContent()).toBe(PWA_CONTENT)
     wrapper.unmount()
   })
 
@@ -255,9 +264,9 @@ describe('AePlayer — pseudo-FS viewport-fit=cover toggle', () => {
     await settle()
 
     await tapFullscreen(wrapper)
-    expect(meta.getAttribute('content')).toContain('viewport-fit=cover')
+    expect(viewportContent()).toContain('viewport-fit=cover')
 
     wrapper.unmount()
-    expect(meta.getAttribute('content')).toBe(BROWSER_CONTENT)
+    expect(viewportContent()).toBe(BROWSER_CONTENT)
   })
 })

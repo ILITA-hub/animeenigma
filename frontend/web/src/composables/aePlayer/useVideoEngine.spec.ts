@@ -86,17 +86,27 @@ describe('shouldFatalOnNetworkError', () => {
 
 describe('chooseLoadStrategy', () => {
   it('uses native src for mp4 regardless of hls.js support', () => {
-    expect(chooseLoadStrategy({ url: 'a.mp4', type: 'mp4' }, true)).toBe('native')
-    expect(chooseLoadStrategy({ url: 'a.mp4', type: 'mp4' }, false)).toBe('native')
+    expect(chooseLoadStrategy({ url: 'a.mp4', type: 'mp4' }, true, false)).toBe('native')
+    expect(chooseLoadStrategy({ url: 'a.mp4', type: 'mp4' }, false, false)).toBe('native')
   })
   it('uses hls.js for hls whenever hls.js is supported (Chrome/Firefox/Edge)', () => {
     // Regression: Chrome reports canPlayType('application/vnd.apple.mpegurl')
     // === 'maybe' but CANNOT play HLS natively. The decision MUST be driven by
     // Hls.isSupported(), not canPlayType, or every HLS stream stalls on Chrome.
-    expect(chooseLoadStrategy({ url: 'a.m3u8', type: 'hls' }, true)).toBe('hlsjs')
+    expect(chooseLoadStrategy({ url: 'a.m3u8', type: 'hls' }, true, false)).toBe('hlsjs')
   })
   it('falls back to native HLS only when hls.js is unsupported (Safari/iOS)', () => {
-    expect(chooseLoadStrategy({ url: 'a.m3u8', type: 'hls' }, false)).toBe('native')
+    expect(chooseLoadStrategy({ url: 'a.m3u8', type: 'hls' }, false, false)).toBe('native')
+  })
+  it('routes MMS-only devices (iPhone) to native HLS even though Hls.isSupported() is true', () => {
+    // iOS 17.1+ iPhone Safari ships ManagedMediaSource but NOT full MediaSource,
+    // which makes Hls.isSupported() true — but hls.js-on-MMS needs element setup
+    // (disableRemotePlayback / <source> alternative) we don't do, so the buffer
+    // never opens and playback sticks at 0:00 (report 2026-07-16T13-44-25).
+    // iPhone plays m3u8 natively; that is the correct path there.
+    expect(chooseLoadStrategy({ url: 'a.m3u8', type: 'hls' }, true, true)).toBe('native')
+    // Full-MSE browsers (desktop/iPad) keep hls.js.
+    expect(chooseLoadStrategy({ url: 'a.m3u8', type: 'hls' }, true, false)).toBe('hlsjs')
   })
 })
 
