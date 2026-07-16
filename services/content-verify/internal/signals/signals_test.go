@@ -54,3 +54,23 @@ func TestCooldown(t *testing.T) {
 		t.Fatal("cooldown must expire")
 	}
 }
+
+// TestFailOpenOnRedisDown pins the "reads fail open" contract: when Redis is
+// unreachable, every read must degrade to a zero signal rather than error out
+// or panic — the queue keeps working through a Redis blip.
+func TestFailOpenOnRedisDown(t *testing.T) {
+	s, mr := testSignals(t)
+	ctx := context.Background()
+	mr.Close()
+
+	if n := s.UniqueVisitors(ctx, "a-1"); n != 0 {
+		t.Fatalf("UniqueVisitors on down Redis = %d, want 0", n)
+	}
+	if v := s.VisitedAnime(ctx); v != nil {
+		t.Fatalf("VisitedAnime on down Redis = %v, want nil", v)
+	}
+	if s.InCooldown(ctx, "a-1") {
+		t.Fatal("InCooldown on down Redis = true, want false")
+	}
+	s.SetCooldown(ctx, "a-1", time.Hour) // must not panic
+}
