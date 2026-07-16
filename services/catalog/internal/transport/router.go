@@ -29,6 +29,7 @@ func NewRouter(
 	internalEpisodesValidateHandler *handler.InternalEpisodesValidateHandler,
 	internalScraperProvidersHandler *handler.InternalScraperProvidersHandler,
 	internalProbeHandler *handler.InternalProbeHandler,
+	internalVerifyHandler *handler.InternalVerifyHandler,
 	internalSubtitleProbeHandler *handler.InternalSubtitleProbeHandler,
 	spotlightHandler *handler.SpotlightHandler,
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
@@ -110,6 +111,13 @@ func NewRouter(
 	// to catalog UUIDs). Same gateway-non-routing model as the endpoints above.
 	if internalProbeHandler != nil {
 		r.Get("/internal/probe/ae-targets", internalProbeHandler.AeTargets)
+	}
+
+	// Content-verify queue membership (all visible ongoings + browse-order
+	// top-100) — consumed by the content-verify service (:8101). Same
+	// gateway-non-routing security model as the endpoints above.
+	if internalVerifyHandler != nil {
+		r.Get("/internal/verify/membership", internalVerifyHandler.Membership)
 	}
 
 	if internalSubtitleProbeHandler != nil {

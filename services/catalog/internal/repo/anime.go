@@ -593,3 +593,30 @@ func (r *AnimeRepository) SetFranchise(ctx context.Context, id, franchise string
 			"franchise_checked": true,
 		}).Error
 }
+
+// VerifyMembershipRow is the minimal projection the content-verify queue
+// needs: identity + the latest-aired counter for sample-episode selection.
+type VerifyMembershipRow struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	EpisodesAired int    `json:"episodes_aired"`
+}
+
+// ListVerifyMembership returns the content-verify queue membership: all
+// visible ongoings plus the browse-order top (sort_priority DESC, score DESC).
+func (r *AnimeRepository) ListVerifyMembership(ctx context.Context, ongoingLimit, topLimit int) (ongoing, top []VerifyMembershipRow, err error) {
+	err = r.db.WithContext(ctx).Model(&domain.Anime{}).
+		Select("id, name, episodes_aired").
+		Where("status = ? AND (hidden = ? OR hidden IS NULL)", "ongoing", false).
+		Order("score DESC").Limit(ongoingLimit).
+		Scan(&ongoing).Error
+	if err != nil {
+		return nil, nil, err
+	}
+	err = r.db.WithContext(ctx).Model(&domain.Anime{}).
+		Select("id, name, episodes_aired").
+		Where("hidden = ? OR hidden IS NULL", false).
+		Order("sort_priority DESC, score DESC").Limit(topLimit).
+		Scan(&top).Error
+	return ongoing, top, err
+}
