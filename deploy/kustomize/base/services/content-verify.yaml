@@ -1,0 +1,80 @@
+# Content probing queue (spec 2026-07-16) — port 8101. Periodic
+# audio-language + burned-in-subtitle verdicts on top-N streams via ffmpeg
+# + faster-whisper + tesseract; blended into catalog capability feed and
+# surfaced as a player hint. Postgres + Redis, no JWT_SECRET
+# (internal-only, no user-facing routes).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-verify
+  namespace: animeenigma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: content-verify
+  template:
+    metadata:
+      labels:
+        app: content-verify
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8101"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: content-verify
+          image: ghcr.io/ilita-hub/animeenigma/content-verify:latest
+          ports:
+            - containerPort: 8101
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: SERVER_PORT
+              value: "8101"
+            - name: DB_NAME
+              value: "animeenigma"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: db-password
+            - name: CV_CATALOG_URL
+              value: "http://catalog:8081"
+            - name: CV_GATEWAY_URL
+              value: "http://gateway:8000"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8101
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8101
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1500m
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: content-verify
+  namespace: animeenigma
+spec:
+  selector:
+    app: content-verify
+  ports:
+    - port: 8101
+      targetPort: 8101

@@ -26,6 +26,7 @@ COPY libs/maintenancegate/go.mod libs/maintenancegate/go.sum* ./libs/maintenance
 COPY services/auth/go.mod services/auth/go.sum* ./services/auth/
 COPY services/upscaler/go.mod services/upscaler/go.sum* ./services/upscaler/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
+COPY services/content-verify/go.mod services/content-verify/go.sum* ./services/content-verify/
 COPY services/streaming/go.mod services/streaming/go.sum* ./services/streaming/
 COPY services/player/go.mod services/player/go.sum* ./services/player/
 COPY services/recs/go.mod services/recs/go.sum* ./services/recs/

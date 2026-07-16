@@ -1111,6 +1111,43 @@ services:
       timeout: 5s
       retries: 3
 
+  # content-verify (content probing queue, spec 2026-07-16) — periodic
+  # audio-language + burned-in-subtitle verdicts on top-N streams via
+  # ffmpeg + faster-whisper + tesseract, blended into catalog capability
+  # feed and surfaced as a player hint. No JWT_SECRET (internal-only,
+  # no user-facing routes).
+  content-verify:
+    logging: *default-logging
+    build:
+      context: ..
+      dockerfile: services/content-verify/Dockerfile
+    container_name: animeenigma-content-verify
+    mem_limit: 1g
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8101
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-animeenigma}
+      REDIS_HOST: redis
+      CV_CATALOG_URL: http://catalog:8081
+      CV_GATEWAY_URL: http://gateway:8000
+      TRACING_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8101:8101"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8101/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # storage-service (spec 2026-07-10) — single authority for user-content
   # object storage across two S3-compatible backends: local MinIO (fast,
   # limited disk) + external s3.firstvds.ru (ample space). Owns placement

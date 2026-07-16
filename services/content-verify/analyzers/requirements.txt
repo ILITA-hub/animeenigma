@@ -1,5 +1,11 @@
 # faster-whisper: audio language ID (tiny int8 on CPU). Version pinned for
 # reproducible ctranslate2 pairing.
 faster-whisper==1.1.1
+# faster_whisper/utils.py does a bare `import requests` but the package's own
+# install_requires only pulls it in transitively via huggingface-hub — and
+# huggingface-hub has since moved to httpx, dropping requests as a hard dep.
+# Pin explicitly or the model-bake RUN step in the Dockerfile fails with
+# ModuleNotFoundError: No module named 'requests'.
+requests>=2.31
 numpy>=1.26
 Pillow>=10.0

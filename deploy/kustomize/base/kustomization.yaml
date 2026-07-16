@@ -42,6 +42,7 @@ resources:
   - services/policy.yaml
   - services/storage.yaml
   - services/governor.yaml
+  - services/content-verify.yaml
   - services/stealth-scraper.yaml
   - services/megacloud-extractor.yaml
   - services/web.yaml
