@@ -1,0 +1,5 @@
+# faster-whisper: audio language ID (tiny int8 on CPU). Version pinned for
+# reproducible ctranslate2 pairing.
+faster-whisper==1.1.1
+numpy>=1.26
+Pillow>=10.0
