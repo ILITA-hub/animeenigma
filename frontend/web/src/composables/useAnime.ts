@@ -9,6 +9,11 @@ interface ApiGenre {
   name?: string
 }
 
+interface ApiStudio {
+  id: string
+  name: string
+}
+
 interface ApiAnime {
   id: string
   name?: string
@@ -29,7 +34,7 @@ interface ApiAnime {
   released_on?: string | null
   material_source?: string
   rating?: string
-  studios?: { id: string; name: string }[]
+  studios?: ApiStudio[]
   has_video?: boolean
   shikimori_id?: string | null
   mal_id?: string | null
@@ -62,7 +67,7 @@ export interface Anime {
   releasedOn?: string
   materialSource?: string
   ageRating?: string
-  studios?: { id: string; name: string }[]
+  studios?: ApiStudio[]
   // Backend aggregate: true if any provider has a playable source.
   hasVideo: boolean
   shikimoriId?: string

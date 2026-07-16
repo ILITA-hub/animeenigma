@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 import { staffApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
-import { getImageUrl } from '@/composables/useImageProxy'
 import type { ApiPersonRole, StaffMember } from '@/types/staff'
 
 // Canonical EN role → i18n key suffix under anime.roles.*.
@@ -30,7 +29,6 @@ function toMember(r: ApiPersonRole): StaffMember {
     roleEn: r.role,
     roleKey: roleKeyFromEn(r.role),
     roleRu: r.role_ru || undefined,
-    image: getImageUrl(r.poster_url),
   }
 }
 

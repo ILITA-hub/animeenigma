@@ -20,5 +20,4 @@ export interface StaffMember {
   roleEn: string      // canonical EN role
   roleKey: string     // i18n key suffix under anime.roles.* (camelCased EN)
   roleRu?: string     // Shikimori RU label, used as fallback if no i18n key
-  image: string       // proxied poster url
 }

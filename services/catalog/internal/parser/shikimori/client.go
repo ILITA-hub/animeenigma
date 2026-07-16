@@ -303,15 +303,10 @@ func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
 		if a.AiredOn != nil {
 			anime.Year = a.AiredOn.Year
 			anime.Season = detectSeason(a.AiredOn.Month)
-			// Parse full aired date
-			if a.AiredOn.Year > 0 && a.AiredOn.Month > 0 && a.AiredOn.Day > 0 {
-				airedDate := time.Date(a.AiredOn.Year, time.Month(a.AiredOn.Month), a.AiredOn.Day, 0, 0, 0, 0, time.UTC)
-				anime.AiredOn = &airedDate
-			}
+			anime.AiredOn = parseShikiDate(a.AiredOn.Year, a.AiredOn.Month, a.AiredOn.Day)
 		}
-		if a.ReleasedOn != nil && a.ReleasedOn.Year > 0 && a.ReleasedOn.Month > 0 && a.ReleasedOn.Day > 0 {
-			relDate := time.Date(a.ReleasedOn.Year, time.Month(a.ReleasedOn.Month), a.ReleasedOn.Day, 0, 0, 0, 0, time.UTC)
-			anime.ReleasedOn = &relDate
+		if a.ReleasedOn != nil {
+			anime.ReleasedOn = parseShikiDate(a.ReleasedOn.Year, a.ReleasedOn.Month, a.ReleasedOn.Day)
 		}
 		if a.NextEpisodeAt != "" {
 			if nextEp, err := time.Parse(time.RFC3339, a.NextEpisodeAt); err == nil {
@@ -481,24 +476,11 @@ func (c *Client) mapAnime(sa shikimoriAnime) *domain.Anime {
 	if sa.AiredOn != nil {
 		anime.Year = int(sa.AiredOn.Year)
 		anime.Season = detectSeason(int(sa.AiredOn.Month))
-		// Parse full aired date
-		year := int(sa.AiredOn.Year)
-		month := int(sa.AiredOn.Month)
-		day := int(sa.AiredOn.Day)
-		if year > 0 && month > 0 && day > 0 {
-			airedDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
-			anime.AiredOn = &airedDate
-		}
+		anime.AiredOn = parseShikiDate(int(sa.AiredOn.Year), int(sa.AiredOn.Month), int(sa.AiredOn.Day))
 	}
 
 	if sa.ReleasedOn != nil {
-		ry := int(sa.ReleasedOn.Year)
-		rm := int(sa.ReleasedOn.Month)
-		rd := int(sa.ReleasedOn.Day)
-		if ry > 0 && rm > 0 && rd > 0 {
-			relDate := time.Date(ry, time.Month(rm), rd, 0, 0, 0, 0, time.UTC)
-			anime.ReleasedOn = &relDate
-		}
+		anime.ReleasedOn = parseShikiDate(int(sa.ReleasedOn.Year), int(sa.ReleasedOn.Month), int(sa.ReleasedOn.Day))
 	}
 
 	if string(sa.NextEpisodeAt) != "" {
@@ -542,6 +524,18 @@ func mapStatus(status string) domain.AnimeStatus {
 	default:
 		return domain.StatusReleased
 	}
+}
+
+// parseShikiDate builds a UTC date from a Shikimori year/month/day triple, or
+// nil if any component is unset (0) — Shikimori omits fields it doesn't know
+// precisely (e.g. "aired sometime in 2024"). Shared by the AiredOn/ReleasedOn
+// parsing in mapRawAnimeList and mapAnime.
+func parseShikiDate(year, month, day int) *time.Time {
+	if year <= 0 || month <= 0 || day <= 0 {
+		return nil
+	}
+	d := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	return &d
 }
 
 func detectSeason(month int) string {
