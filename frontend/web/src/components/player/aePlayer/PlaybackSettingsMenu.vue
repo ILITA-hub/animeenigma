@@ -149,6 +149,7 @@
           <div>BUF  {{ debugStats.buffer }}</div>
           <div>LVL  {{ debugStats.level }}</div>
           <div>FRAG {{ debugStats.frag }}</div>
+          <div v-if="debugStats.conn">CONN {{ debugStats.conn }}</div>
           <!-- Kodik/solodcdn edge telemetry — metrics + logic, not just the
                served edge. Only present for Kodik sources (edge non-empty). -->
           <template v-if="debugStats.edge">
@@ -192,6 +193,8 @@ defineProps<{
     buffer: string
     level: string
     frag: string
+    /** Connection-health datum: 'ok' | 'slow' | 'offline'. */
+    conn?: string
     edge?: string
     edgeTrail?: string
     edgeRot?: number

@@ -192,6 +192,9 @@
 
     <BufferingOverlay :visible="(showBuffering || isResolving) && !sourceError" />
 
+    <!-- Corner indicator: your-side connection problem (offline / slow transport) -->
+    <ConnectionBadge :state="connectionState" />
+
     <DebugHud
       v-if="hudVisible"
       :stats="playbackStats"
@@ -502,6 +505,7 @@ import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import NextEpisodeChip from './overlays/NextEpisodeChip.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
+import ConnectionBadge from './overlays/ConnectionBadge.vue'
 import DownloadDialog from './DownloadDialog.vue'
 
 import { usePlayerState } from '@/composables/aePlayer/usePlayerState'
@@ -516,6 +520,7 @@ import { comboToWatchCombo, clampLangForAudio } from '@/composables/aePlayer/com
 import type { WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import { useToast } from '@/composables/useToast'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
+import { useConnectionHealth } from '@/composables/aePlayer/useConnectionHealth'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
 
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
@@ -1143,9 +1148,22 @@ watch(engine.fatal, async (f) => {
   if (!sourceError.value) sourceError.value = t('player.aePlayer.streamUnavailable')
 })
 
+// ─── Connection health (corner "bad internet" indicator) ─────────────────────
+// Distinguishes a real user-side transport problem (offline / sustained buffer
+// with bytes still flowing) from a dead provider (the failover chain's job).
+const { connectionState } = useConnectionHealth({
+  buffering: showBuffering,
+  hasStarted,
+  sourceError,
+  fragLoadedCount: engine.fragLoadedCount,
+})
+
 // ─── Hacker mode (debug HUD) ──────────────────────────────────────────────────
 
-const debug = useDebugTools({ state, engine, videoRef, currentStream, duration, showBuffering })
+const debug = useDebugTools({
+  state, engine, videoRef, currentStream, duration, showBuffering,
+  getConnectionState: () => connectionState.value,
+})
 const {
   playbackStats,
   lastSeek,

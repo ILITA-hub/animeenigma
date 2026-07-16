@@ -19,6 +19,8 @@ export interface DebugToolsDeps {
   currentStream: Ref<StreamResult | null>
   duration: Ref<number>
   showBuffering: Ref<boolean>
+  /** Live connection-health datum for the HUD ('ok' | 'slow' | 'offline'). */
+  getConnectionState?: () => 'ok' | 'slow' | 'offline'
 }
 
 export function useDebugTools(deps: DebugToolsDeps) {
@@ -171,8 +173,11 @@ export function useDebugTools(deps: DebugToolsDeps) {
     const edge = engine.servedEdge.value
     const trail = engine.edgeTrail.value
     const ladderSnap = ladder.debugSnapshot()
+    const conn = deps.getConnectionState?.() ?? 'ok'
     return {
       bw: bwv > 0 ? `${(bwv / 1_000_000).toFixed(1)} Mbit/s` : '—',
+      conn: conn === 'ok' ? 'ok' : conn,
+
       buffer: `+${playbackStats.value.bufferAheadSec.toFixed(1)}s / −${playbackStats.value.bufferBehindSec.toFixed(1)}s`,
       level:
         engine.currentLevelLabel.value ||

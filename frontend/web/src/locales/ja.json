@@ -474,6 +474,8 @@
       "watchTogether": "一緒に視聴",
       "sourceUnavailable": "このソースはまだ利用できません",
       "streamUnavailable": "ストリームを利用できません",
+      "connectionSlow": "接続速度が低下しています",
+      "connectionOffline": "インターネットに接続していません",
       "autoplayBlocked": "ブラウザが再生をブロックしました — 再生ボタンを押してください",
       "autoplayBlockedHint": "それでも再生できない場合は、ブラウザの設定でこのサイトの自動再生を許可してください（例: Firefox はアドレスバーの権限アイコン → 自動再生 → 音声と動画を許可）。その後もう一度お試しください。",
       "noSourceForFacet": "この言語 / 音声に対応するソースがありません",
