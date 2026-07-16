@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,6 +64,14 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	}
 	if err := db.AutoMigrate(&domain.ContentVerification{}); err != nil {
 		t.Fatal(err)
+	}
+	// sqlite ":memory:" is per-connection: a pooled connection other than
+	// the one AutoMigrate ran on sees an empty database ("no such table").
+	// Pin the pool to one connection so concurrent goroutines (see
+	// TestClaimSnapshotConcurrent) all share the migrated schema. Real
+	// deployments use Postgres via libs/database, which has no such quirk.
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
 	}
 	store := repo.NewStore(db)
 
@@ -153,4 +162,28 @@ func TestSnapshot(t *testing.T) {
 	if entries[0].Cooling {
 		t.Fatal("fresh candidate must not be cooling in snapshot")
 	}
+}
+
+// TestClaimSnapshotConcurrent is a smoke test for the membership cache's
+// mutex: in production, Claim runs on a worker goroutine while Snapshot
+// serves an admin/debug HTTP handler against the same *Engine — both read
+// and write e.memb/e.membAt via membership(). The assertion is simply "no
+// data race, no panic" under `go test -race`.
+func TestClaimSnapshotConcurrent(t *testing.T) {
+	f := newEngineFixture(t, false)
+	ctx := context.Background()
+	const n = 10
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			if i%2 == 0 {
+				_, _, _ = f.engine.Claim(ctx)
+			} else {
+				_ = f.engine.Snapshot(ctx, 5)
+			}
+		}(i)
+	}
+	wg.Wait()
 }

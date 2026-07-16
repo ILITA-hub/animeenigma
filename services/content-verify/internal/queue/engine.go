@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -24,6 +25,9 @@ type Engine struct {
 	reprobeTTL time.Duration
 	log        *logger.Logger
 
+	// mu guards memb/membAt: Claim (worker goroutine) and Snapshot (HTTP
+	// handler) share one Engine and can race on the membership cache.
+	mu     sync.Mutex
 	memb   *catalogclient.Membership
 	membAt time.Time
 	now    func() time.Time
@@ -34,6 +38,8 @@ func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Stor
 }
 
 func (e *Engine) membership(ctx context.Context) *catalogclient.Membership {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if e.memb != nil && e.now().Sub(e.membAt) < membershipTTL {
 		return e.memb
 	}
