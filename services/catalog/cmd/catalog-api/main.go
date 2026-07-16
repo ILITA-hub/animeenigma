@@ -108,6 +108,8 @@ func main() {
 		&domain.ScraperProvider{},
 		&domain.Character{},
 		&domain.AnimeCharacter{},
+		// Flat denormalized staff/crew credits (2026-07-16).
+		&domain.AnimePersonRole{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
