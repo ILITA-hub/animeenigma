@@ -44,6 +44,7 @@ func setupCharacterTestDB(t *testing.T) *gorm.DB {
 			poster_url   TEXT,
 			description  TEXT,
 			url          TEXT,
+			seyu         TEXT,
 			created_at   DATETIME,
 			updated_at   DATETIME,
 			deleted_at   DATETIME

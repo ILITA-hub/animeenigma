@@ -191,5 +191,74 @@ func (c *Client) GetCharacterByID(ctx context.Context, shikimoriID string) (*dom
 	if src.Poster != nil {
 		ch.PosterURL = src.Poster.OriginalURL
 	}
+	ch.Seyu = c.fetchCharacterSeyu(ctx, shikimoriID)
 	return ch, nil
+}
+
+// absImageURL turns a Shikimori-relative image path into an absolute URL.
+// REST /api/characters/{id} returns seyu image paths relative to the site
+// root (e.g. "/system/people/original/1.jpg"); GraphQL poster originalUrls are
+// already absolute. Pure — unit tested.
+func absImageURL(base, path string) string {
+	if path == "" || strings.HasPrefix(path, "http") {
+		return path
+	}
+	return strings.TrimRight(base, "/") + path
+}
+
+// fetchCharacterSeyu pulls a character's voice cast from Shikimori REST
+// (GraphQL's Character type has no seiyu field, and the anime-level /roles
+// endpoint never pairs a character with a person — only this per-character
+// endpoint does). Returns an empty slice (never an error) on failure so the
+// caller can still return the character.
+func (c *Client) fetchCharacterSeyu(ctx context.Context, shikimoriID string) []domain.CharacterSeyu {
+	c.rateLimiter.acquire()
+
+	url := fmt.Sprintf("%s/api/characters/%s", c.config.BaseURL, shikimoriID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("User-Agent", c.config.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.log.Warnw("shikimori seyu fetch failed", "shikimori_id", shikimoriID, "error", err)
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var body struct {
+		Seyu []struct {
+			ID      int    `json:"id"`
+			Name    string `json:"name"`
+			Russian string `json:"russian"`
+			URL     string `json:"url"`
+			Image   *struct {
+				Original string `json:"original"`
+			} `json:"image"`
+		} `json:"seyu"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil
+	}
+
+	out := make([]domain.CharacterSeyu, 0, len(body.Seyu))
+	for _, s := range body.Seyu {
+		img := ""
+		if s.Image != nil {
+			img = absImageURL(c.config.BaseURL, s.Image.Original)
+		}
+		out = append(out, domain.CharacterSeyu{
+			ShikimoriID: fmt.Sprintf("%d", s.ID),
+			Name:        s.Name,
+			NameRU:      s.Russian,
+			ImageURL:    img,
+			URL:         s.URL,
+		})
+	}
+	return out
 }

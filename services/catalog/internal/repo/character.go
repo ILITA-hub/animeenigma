@@ -31,7 +31,7 @@ func (r *CharacterRepository) UpsertCharacter(ctx context.Context, ch *domain.Ch
 	if err := r.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "shikimori_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"mal_id", "name", "name_ru", "name_jp", "synonyms", "poster_url", "description", "url", "updated_at"}),
+			DoUpdates: clause.AssignmentColumns([]string{"mal_id", "name", "name_ru", "name_jp", "synonyms", "poster_url", "description", "url", "seyu", "updated_at"}),
 		}).
 		Create(ch).Error; err != nil {
 		return nil, err
