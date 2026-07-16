@@ -451,21 +451,24 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 
 	action, issueID := parts[0], parts[1]
 
-	// Verify admin
-	isAdmin := false
-	for _, admin := range s.cfg.Admins {
-		if strings.EqualFold(msg.From.Username, admin) {
-			isAdmin = true
-			break
-		}
-	}
-	if !isAdmin {
+	if !s.isAdminMessage(msg) {
+		// Keep this log: silent rejections hid a broken admin list (AUTO-624).
+		log.Warnw("button click rejected: not an admin",
+			"username", msg.From.Username,
+			"action", action,
+			"issue_id", issueID,
+		)
 		s.tg.AnswerCallbackQuery(msg.CallbackID, "Admin only")
 		return
 	}
 
 	fix := s.state.GetPendingFix(issueID)
 	if fix == nil {
+		log.Warnw("button click on expired/handled fix",
+			"admin", msg.From.Username,
+			"action", action,
+			"issue_id", issueID,
+		)
 		s.tg.AnswerCallbackQuery(msg.CallbackID, "Fix expired or already handled")
 		return
 	}

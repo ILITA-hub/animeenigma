@@ -102,7 +102,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("TELEGRAM_ADMIN_CHAT_ID must be an integer: %w", err)
 	}
 
-	adminsStr := getEnv("ADMIN_USERNAMES", "tNeymik,NANDIorg_9")
+	// NANDIorg appears under two identities: `NANDIorg_9` is the SITE username
+	// (player feedback reports), `NANDIorg` is the TELEGRAM username (button
+	// clicks, chat messages). Both must be listed or one surface locks them out.
+	adminsStr := getEnv("ADMIN_USERNAMES", "tNeymik,NANDIorg_9,NANDIorg")
 	admins := strings.Split(adminsStr, ",")
 	for i := range admins {
 		admins[i] = strings.TrimSpace(admins[i])

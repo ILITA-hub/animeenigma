@@ -10,6 +10,7 @@
 package config
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -50,6 +51,24 @@ func TestMaintenanceConfig_TestModeTrue(t *testing.T) {
 	}
 	if !cfg.TestMode {
 		t.Errorf("TestMode = false; want true when MAINTENANCE_TEST_MODE=true")
+	}
+}
+
+// TestMaintenanceConfig_AdminsDefault asserts the default admin list carries
+// both of NANDIorg's identities — see the dual-identity constraint comment in
+// config.go Load().
+func TestMaintenanceConfig_AdminsDefault(t *testing.T) {
+	minimalEnv(t)
+	t.Setenv("ADMIN_USERNAMES", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, want := range []string{"tNeymik", "NANDIorg_9", "NANDIorg"} {
+		if !slices.Contains(cfg.Admins, want) {
+			t.Errorf("default Admins = %v; missing %q", cfg.Admins, want)
+		}
 	}
 }
 
