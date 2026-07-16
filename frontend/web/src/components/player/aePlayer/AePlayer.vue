@@ -434,6 +434,7 @@
         :season-count="seasonCount"
         :duration-min="anime.durationMin"
         :report="report"
+        :verify="contentVerify.report.value"
         :initial-combo="state.combo.value"
         :sub-options="dlSubOptions"
         :load-teams="dlLoadTeams"

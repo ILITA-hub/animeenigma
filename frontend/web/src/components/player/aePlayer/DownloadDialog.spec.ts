@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { CapabilityReport } from '@/types/capabilities'
 import type { Combo, AudioKind } from '@/types/aePlayer'
+import type { VerifyReport } from '@/types/contentVerify'
 import * as network from '@/offline/network'
 import type { SubOption } from '@/offline/types'
 
@@ -29,6 +30,7 @@ function mountDlg(props: Partial<{
   sheet: boolean
   durationMin: number
   report: CapabilityReport | null
+  verify: VerifyReport | null
   initialCombo: Combo | null
   loadTeams: (provider: string, audio: AudioKind) => Promise<string[]>
   subOptions: SubOption[]
@@ -93,16 +95,23 @@ const REPORT = {
     { provider: 'kodik', display_name: 'Kodik', group: 'ru', state: 'active', selectable: true, hacker_only: false, order: 80, audios: ['dub', 'sub'] },
   ] }],
 } as unknown as CapabilityReport
-// NOTE: none of these providers is `firstparty`, and DownloadDialog.vue calls
-// rowsFromReport(props.report, filter) with NO verify report (it's not wired
-// to the content-verify feed — that's out of this dialog's scope). Per the
-// owner-approved hard gate (verifiedCaps.ts), an unverified non-firstparty cap
-// is DUB-blind: effectiveAudios collapses to ['sub'] regardless of the cap's
-// claimed audios, so the DUB facet is permanently empty here and RAW (sub)
-// lists all three providers regardless of group (the language slider is
-// hidden under RAW, so group/lang no longer partitions the row list).
+// NOTE: none of these providers is `firstparty`. `DownloadDialog.vue` now
+// accepts a `verify` prop (Task 15 fix round 2) and threads it into
+// rowsFromReport, mirroring the player's own Source panel gating
+// (verifiedCaps.ts): a provider with no verify entry (or `verify` entirely
+// absent from the mount) is unverified → DUB-blind, RAW-only. Passing a
+// VerifyReport with verified dub_langs unlocks DUB downloads for exactly the
+// providers/langs it names.
 const COMBO: Combo = { audio: 'dub', lang: 'en', provider: 'gogoanime', server: '', team: null }
 const RAW_COMBO: Combo = { audio: 'sub', lang: 'en', provider: 'gogoanime', server: '', team: null }
+const VERIFY: VerifyReport = {
+  animeId: 'a1',
+  providers: {
+    gogoanime: { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: [] },
+    animepahe: { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: [] },
+    kodik: { status: 'verified', raw: true, dub_langs: ['ru'], hardsub_langs: [] },
+  },
+}
 
 describe('source picker', () => {
   it('hidden without report/initialCombo; emits null combo', async () => {
@@ -128,6 +137,27 @@ describe('source picker', () => {
     const combo = w.emitted('confirm')![0][1] as Combo
     expect(combo.provider).toBe('kodik')
     expect(combo.team).toBeNull()
+  })
+
+  it('a content-verify report unlocks DUB downloads for verified providers and emits the edited combo', async () => {
+    const w = mountDlg({ report: REPORT, verify: VERIFY, initialCombo: COMBO })
+    expect(w.find('[data-test="dl-audio-dub"]').attributes('disabled')).toBeUndefined()
+    const sel = w.find('[data-test="dl-provider"]')
+    expect(sel.findAll('option').map((o) => o.attributes('value'))).toEqual(['gogoanime', 'animepahe']) // kodik verified only for ru, not en
+    await sel.setValue('animepahe')
+    await w.find('[data-test="dl-start"]').trigger('click')
+    const combo = w.emitted('confirm')![0][1] as Combo
+    expect(combo.provider).toBe('animepahe')
+    expect(combo.team).toBeNull()
+  })
+
+  it('verified lang switch re-defaults to the provider verified for that language', async () => {
+    const w = mountDlg({ report: REPORT, verify: VERIFY, initialCombo: COMBO })
+    await w.find('[data-test="dl-lang-ru"]').trigger('click')
+    await w.find('[data-test="dl-start"]').trigger('click')
+    const combo = w.emitted('confirm')![0][1] as Combo
+    expect(combo.provider).toBe('kodik') // gogoanime/animepahe verified for en only, not ru
+    expect(combo.lang).toBe('ru')
   })
 
   it('RAW switch drops lang filter and derives lang from provider group', async () => {

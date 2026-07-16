@@ -87,6 +87,7 @@ import { GROUP_PRIMARY_LANG } from '@/composables/aePlayer/providerGroups'
 import type { Combo, AudioKind, TrackLang, ContentKind, ProviderRow } from '@/types/aePlayer'
 import type { CapabilityReport } from '@/types/capabilities'
 import type { SubPref, SubOption } from '@/offline/types'
+import type { VerifyReport } from '@/types/contentVerify'
 import * as network from '@/offline/network'
 
 const QUALITIES = ['480', '720', '1080'] as const
@@ -104,6 +105,12 @@ const props = withDefaults(
     /** Capability report for the source combo picker. When absent the source
      *  section is hidden and `combo` emits as null (backward compatible). */
     report?: CapabilityReport | null
+    /** Content-verify probe report (Task 13/14/15) — gates which audios each
+     *  non-firstparty row may claim, same as the player's own Source panel
+     *  (see `verifiedCaps.ts`). Absent/null: every non-firstparty provider is
+     *  treated as unverified/RAW-only, same as the player before a report
+     *  lands. */
+    verify?: VerifyReport | null
     /** Initial combo selection — if absent the source section is hidden. */
     initialCombo?: Combo | null
     /** Optional async loader for translation teams for a given provider+audio. */
@@ -111,7 +118,7 @@ const props = withDefaults(
     /** Subtitle options to display in the picker. Empty = picker hidden. */
     subOptions?: SubOption[]
   }>(),
-  { sheet: false, durationMin: undefined, report: null, initialCombo: null, loadTeams: undefined, subOptions: () => [] },
+  { sheet: false, durationMin: undefined, report: null, verify: null, initialCombo: null, loadTeams: undefined, subOptions: () => [] },
 )
 
 const emit = defineEmits<{
@@ -150,7 +157,7 @@ const showSource = computed(() => !!props.report && combo.value !== null)
 function rowsFor(audio: AudioKind, lang: TrackLang): ProviderRow[] {
   // Same content fallback as pickDefaultCombo: hentai rows only when common has none.
   for (const content of ['common', 'hentai'] as ContentKind[]) {
-    const rows = rowsFromReport(props.report ?? null, { audio, lang, content })
+    const rows = rowsFromReport(props.report ?? null, { audio, lang, content }, props.verify ?? null)
     if (rows.length > 0) return rows
   }
   return []
