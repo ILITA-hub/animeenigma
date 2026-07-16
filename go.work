@@ -21,6 +21,7 @@ use (
 	./services/anidle
 	./services/auth
 	./services/catalog
+	./services/content-verify
 	./services/fanfic
 	./services/gacha
 	./services/gateway
