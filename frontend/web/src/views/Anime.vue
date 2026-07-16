@@ -387,6 +387,7 @@
           type="button"
           class="flex items-center gap-2 text-xl font-semibold text-white mb-3"
           :aria-expanded="detailsExpanded"
+          :aria-label="detailsExpanded ? t('anime.details.hide') : t('anime.details.show')"
           @click="toggleDetails"
         >
           <Info class="size-6 text-cyan-400" aria-hidden="true" />
@@ -445,6 +446,10 @@
               </template>
             </dl>
           </div>
+
+          <p v-if="!hasAnyDetails && !staffLoading" class="text-sm text-white/50">
+            {{ $t('anime.details.empty') }}
+          </p>
         </div>
       </section>
 
@@ -1159,13 +1164,17 @@ const charactersFetched = ref(false)
 // first expand only.
 const { staff, fetchStaff } = useStaff()
 const staffFetched = ref(false)
+const staffLoading = ref(false)
 const detailsExpanded = ref(false)
 
 function toggleDetails() {
   detailsExpanded.value = !detailsExpanded.value
   if (detailsExpanded.value && !staffFetched.value && anime.value?.id) {
     staffFetched.value = true
-    void fetchStaff(String(anime.value.id))
+    staffLoading.value = true
+    void fetchStaff(String(anime.value.id)).finally(() => {
+      staffLoading.value = false
+    })
   }
 }
 
@@ -1189,6 +1198,15 @@ const airedRange = computed(() => {
   if (start && end) return t('anime.details.airedRange', { start, end })
   return start || end || ''
 })
+
+const hasAnyDetails = computed(() => Boolean(
+  anime.value?.studios?.length
+  || airedRange.value
+  || sourceLabel.value
+  || ratingBadge.value
+  || anime.value?.episodeDuration
+  || staff.value.length,
+))
 
 // Lazy below-the-fold sentinels (template refs) + one IntersectionObserver.
 const ugcSectionEl = ref<HTMLElement | null>(null)
@@ -1242,6 +1260,7 @@ function resetForAnime() {
   charactersFetched.value = false
   staff.value = []
   staffFetched.value = false
+  staffLoading.value = false
   detailsExpanded.value = false
   disarmLazySections()
   commentsUgc.reset()
