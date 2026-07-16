@@ -59,7 +59,18 @@ type ProviderCap struct {
 	// every non-ae provider (they list their full episode range).
 	PartialLibrary bool `json:"partial_library,omitempty"`
 
+	// Verify carries the content-verify probe rollup (nil = never probed).
+	Verify *VerifySummary `json:"verify,omitempty"`
+
 	Variants []Variant `json:"variants"`
+}
+
+// VerifySummary is the content-verify rollup for one provider on one anime.
+type VerifySummary struct {
+	Status       string   `json:"status"` // unverified|partial|verified
+	Raw          bool     `json:"raw"`
+	DubLangs     []string `json:"dub_langs"`
+	HardsubLangs []string `json:"hardsub_langs"`
 }
 
 // Variant is a watchable unit: a category (+ optional translation team for RU),

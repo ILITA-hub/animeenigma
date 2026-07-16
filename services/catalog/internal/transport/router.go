@@ -34,6 +34,7 @@ func NewRouter(
 	spotlightHandler *handler.SpotlightHandler,
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
 	capabilitiesHandler *handler.CapabilitiesHandler,
+	contentVerifyHandler *handler.ContentVerifyHandler,
 	internalProviderPolicyHandler *handler.InternalProviderPolicyHandler,
 	adminScraperProvidersHandler *handler.AdminScraperProvidersHandler,
 	cfg *config.Config,
@@ -205,6 +206,11 @@ func NewRouter(
 			// Public, no auth — same as the scraper routes above.
 			if capabilitiesHandler != nil {
 				r.Get("/{animeId}/capabilities", capabilitiesHandler.Get)
+			}
+			// Public content-verify passthrough + visit hint (Task 11).
+			// Same public/no-auth posture as capabilities above.
+			if contentVerifyHandler != nil {
+				r.Get("/{animeId}/content-verify", contentVerifyHandler.Get)
 			}
 			// First-party ("AnimeEnigma") provider: self-hosted library
 			// (MinIO HLS) only — episodes/stream resolve straight from what's

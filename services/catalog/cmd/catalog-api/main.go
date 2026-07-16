@@ -703,14 +703,28 @@ func main() {
 	// producer above. PLAYABILITY_INDEX_ENABLED=false is the kill switch.
 	playabilityEnabled := os.Getenv("PLAYABILITY_INDEX_ENABLED") != "false" // default true
 	playabilityClient := capability.NewPlayabilityClient(analyticsURL, playabilityEnabled)
-	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: libraryResolver}, playabilityClient)
+
+	// contentVerifyClient (Task 11) reads/writes the content-verify service
+	// (:8101) — per-provider probe rollups blended into the initial capability
+	// report, plus the visitor hint that feeds its verification queue.
+	// CONTENT_VERIFY_ENABLED=false is the kill switch (disables both the
+	// capability blend and the public passthrough handler below).
+	verifyEnabled := os.Getenv("CONTENT_VERIFY_ENABLED") != "false" // default true
+	verifyURL := os.Getenv("CONTENT_VERIFY_URL")
+	if verifyURL == "" {
+		verifyURL = "http://content-verify:8101"
+	}
+	verifyClient := capability.NewVerifyClient(verifyURL, verifyEnabled)
+	contentVerifyHandler := handler.NewContentVerifyHandler(verifyClient, redisCache, log)
+
+	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: libraryResolver}, playabilityClient, verifyClient)
 	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, staffHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalVerifyHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, staffHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalVerifyHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, contentVerifyHandler, internalProviderPolicyHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

@@ -55,7 +55,7 @@ func TestBuildENFamily_RanksAndFiltersDisabled(t *testing.T) {
 	svc := capability.NewService(db, fakeHealth{
 		up:       map[string]bool{"allanime": true, "nineanime": true},
 		playable: map[string]bool{"allanime": true},
-	}, nil, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil, nil)
 
 	fam, err := svc.BuildENFamily(context.Background())
 	if err != nil {
@@ -94,7 +94,7 @@ func TestBuildENFamilyPopulatesFeedFields(t *testing.T) {
 		Group: "en", PreferenceWeight: 60, SupportsSub: true, Reason: "ad-substitution",
 	})
 
-	svc := capability.NewService(db, nil, nil, nil, nil, nil, nil)
+	svc := capability.NewService(db, nil, nil, nil, nil, nil, nil, nil)
 	fam, err := svc.BuildENFamily(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestAdminDisable_ExcludedFromCapabilityFeed(t *testing.T) {
 		Group: "en", ScraperOperated: true, SupportsSub: true, PreferenceWeight: 40,
 	})
 
-	svc := capability.NewService(db, nil, nil, nil, nil, nil, nil)
+	svc := capability.NewService(db, nil, nil, nil, nil, nil, nil, nil)
 
 	// Sanity: both providers are live in the feed before the disable.
 	before, err := svc.BuildENFamily(context.Background())

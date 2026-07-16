@@ -37,12 +37,13 @@ type Service struct {
 	log         *logger.Logger
 	library     LibrarySource     // may be nil (then `ae` is always no_content)
 	playability PlayabilitySource // may be nil (then blend is health-only, no promotion)
+	verify      VerifySource      // may be nil (then Verify fields are never set)
 }
 
-// NewService constructs a capability Service. catalog, cache, log, library and
-// playability may be nil.
-func NewService(db *gorm.DB, health HealthSource, catalog CatalogSource, c cache.Cache, log *logger.Logger, library LibrarySource, playability PlayabilitySource) *Service {
-	return &Service{db: db, health: health, catalog: catalog, cache: c, log: log, library: library, playability: playability}
+// NewService constructs a capability Service. catalog, cache, log, library,
+// playability and verify may be nil.
+func NewService(db *gorm.DB, health HealthSource, catalog CatalogSource, c cache.Cache, log *logger.Logger, library LibrarySource, playability PlayabilitySource, verify VerifySource) *Service {
+	return &Service{db: db, health: health, catalog: catalog, cache: c, log: log, library: library, playability: playability, verify: verify}
 }
 
 // Report assembles the full per-anime capability report, cache-first. The report
@@ -196,7 +197,26 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 	}
 	families = append(families, en)
 	families = append(families, rest...)
-	return regroupFamilies(families), nil
+	families = regroupFamilies(families)
+
+	// Content-verify blend (best-effort). NOTE: the report is cached reportTTL
+	// (10min), so this blended summary is only the INITIAL state — the public
+	// GET /{animeId}/content-verify passthrough (handler/content_verify.go) is
+	// the live channel that keeps the FE fresh between capability rebuilds
+	// (spec §4-5).
+	if s.verify != nil {
+		if sums := s.verify.Summaries(ctx, animeID); len(sums) > 0 {
+			for fi := range families {
+				for pi := range families[fi].Providers {
+					if sum, ok := sums[families[fi].Providers[pi].Provider]; ok {
+						v := sum
+						families[fi].Providers[pi].Verify = &v
+					}
+				}
+			}
+		}
+	}
+	return families, nil
 }
 
 // displayOf prefers the row's operator-editable DisplayName, falling back to

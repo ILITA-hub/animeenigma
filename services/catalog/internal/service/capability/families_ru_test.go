@@ -2,6 +2,7 @@ package capability
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -198,7 +199,7 @@ func TestBuildFamilies_OrderAndBestEffort(t *testing.T) {
 		kodik:   []domain.KodikTranslation{{ID: 1, Title: "T", Type: "voice"}},
 		heps:    []domain.HanimeEpisode{{Slug: "ep-1"}},
 		hstream: &domain.HanimeStream{Sources: []domain.HanimeSource{{Height: "1080"}}},
-	}, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil)
 
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
@@ -368,7 +369,7 @@ func TestBuildFamilies_AnimejoyBothLegsInOrder(t *testing.T) {
 	)
 	s := NewService(db, nil, fakeCatalog{
 		ajTeams: []domain.AnimejoyTeam{{ID: "0", Name: "AnimeJoy", HasSibnet: true, HasAllVideo: true}},
-	}, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil)
 
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
@@ -414,7 +415,7 @@ func TestBuildFamilies_AnimejoyDiscoveryErrorBothAbsent(t *testing.T) {
 	)
 	// Discovery error → GetAnimejoyTeams returns nil teams → both leg families
 	// absent; the feed still builds (EN-only).
-	s := NewService(db, nil, fakeCatalog{ajTeamsErr: errors.New("not on animejoy")}, nil, nil, nil, nil)
+	s := NewService(db, nil, fakeCatalog{ajTeamsErr: errors.New("not on animejoy")}, nil, nil, nil, nil, nil)
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
 		t.Fatal(err)
@@ -429,7 +430,7 @@ func TestBuildFamilies_NilCatalogENOnly(t *testing.T) {
 	// DB-row-driven ae/raw/adult families concurrently, so a plain `:memory:`
 	// DSN would hand a concurrent reader its own unmigrated connection.
 	db := newDB(t)
-	s := NewService(db, nil, nil, nil, nil, nil, nil)
+	s := NewService(db, nil, nil, nil, nil, nil, nil, nil)
 	fams, err := s.buildFamilies(context.Background(), "uuid")
 	if err != nil {
 		t.Fatal(err)
@@ -448,7 +449,7 @@ func TestBuildFamilies_UnknownRosterRowGetsGenericFamily(t *testing.T) {
 		Name: "newru", Status: domain.StatusEnabled, Group: "ru",
 		DisplayName: "NewRU", SupportsDub: true, PreferenceWeight: 10,
 	})
-	s := NewService(db, nil, nil, nil, nil, nil, nil)
+	s := NewService(db, nil, nil, nil, nil, nil, nil, nil)
 	report, err := s.Report(context.Background(), "some-anime-id")
 	if err != nil {
 		t.Fatal(err)
@@ -478,7 +479,7 @@ func TestFeed_ExposesPlayerKey(t *testing.T) {
 		Name: "hanime", Status: domain.StatusEnabled, Group: "adult",
 		PlayerKey: "hanime", DisplayName: "Hanime",
 	})
-	s := NewService(db, nil, fakeCatalog{}, nil, nil, nil, nil)
+	s := NewService(db, nil, fakeCatalog{}, nil, nil, nil, nil, nil)
 	report, err := s.Report(context.Background(), "anime-x")
 	if err != nil {
 		t.Fatal(err)
@@ -497,7 +498,7 @@ func TestFeed_ExposesPlayerKey(t *testing.T) {
 // it to a nil builder) rather than let the generic default pick it up.
 func TestBuildFamilies_KodikIframeSkipped(t *testing.T) {
 	db := newDB(t, domain.ScraperProvider{Name: "kodik-iframe", Status: domain.StatusEnabled, Group: "ru"})
-	s := NewService(db, nil, nil, nil, nil, nil, nil)
+	s := NewService(db, nil, nil, nil, nil, nil, nil, nil)
 	report, err := s.Report(context.Background(), "some-anime-id-2")
 	if err != nil {
 		t.Fatal(err)
@@ -508,5 +509,84 @@ func TestBuildFamilies_KodikIframeSkipped(t *testing.T) {
 				t.Fatal("kodik-iframe is the Classic-Kodik iframe surface, not an aePlayer capability — must be skipped")
 			}
 		}
+	}
+}
+
+// fakeVerify is a stub VerifySource for the content-verify blend tests below.
+type fakeVerify struct {
+	sums map[string]domain.VerifySummary
+}
+
+func (f fakeVerify) Summaries(_ context.Context, _ string) map[string]domain.VerifySummary {
+	return f.sums
+}
+func (f fakeVerify) RawVerdicts(_ context.Context, _ string) (json.RawMessage, error) {
+	return nil, nil
+}
+func (f fakeVerify) Hint(_, _, _ string) {}
+
+// TestBuildFamilies_VerifyBlend asserts ProviderCap.Verify is populated,
+// keyed by provider name, from VerifySource.Summaries — and left nil for
+// providers absent from the summaries map (content-verify blend, appended
+// at the end of buildFamilies after regroupFamilies).
+func TestBuildFamilies_VerifyBlend(t *testing.T) {
+	db := newDB(t,
+		domain.ScraperProvider{Name: "gogoanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 90},
+		domain.ScraperProvider{Name: "nineanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 40},
+	)
+	verify := fakeVerify{sums: map[string]domain.VerifySummary{
+		"gogoanime": {Status: "verified", Raw: true, DubLangs: []string{"en"}, HardsubLangs: []string{"en"}},
+	}}
+	s := NewService(db, nil, nil, nil, nil, nil, nil, verify)
+	report, err := s.Report(context.Background(), "anime-blend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gg, nn *domain.ProviderCap
+	for _, fam := range report.Families {
+		for i := range fam.Providers {
+			switch fam.Providers[i].Provider {
+			case "gogoanime":
+				gg = &fam.Providers[i]
+			case "nineanime":
+				nn = &fam.Providers[i]
+			}
+		}
+	}
+	if gg == nil || gg.Verify == nil || gg.Verify.Status != "verified" || !gg.Verify.Raw || len(gg.Verify.DubLangs) != 1 {
+		t.Fatalf("gogoanime Verify not blended: %+v", gg)
+	}
+	if nn == nil || nn.Verify != nil {
+		t.Fatalf("nineanime (absent from verify summaries) must keep Verify nil: %+v", nn)
+	}
+}
+
+// TestBuildFamilies_VerifyBlend_NilAndEmptySafe asserts the blend is a no-op
+// (report unchanged, no panic) both when VerifySource is nil (default, or
+// the content-verify kill switch) and when it returns an empty map (no
+// verdicts yet / upstream fetch failed).
+func TestBuildFamilies_VerifyBlend_NilAndEmptySafe(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		verify VerifySource
+	}{
+		{"nil VerifySource", nil},
+		{"empty summaries map", fakeVerify{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newDB(t, domain.ScraperProvider{Name: "gogoanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 90})
+			s := NewService(db, nil, nil, nil, nil, nil, nil, tc.verify)
+			report, err := s.Report(context.Background(), "anime-"+tc.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, fam := range report.Families {
+				for _, cap := range fam.Providers {
+					if cap.Verify != nil {
+						t.Fatalf("expected nil Verify (%s), got %+v on %s", tc.name, cap.Verify, cap.Provider)
+					}
+				}
+			}
+		})
 	}
 }
