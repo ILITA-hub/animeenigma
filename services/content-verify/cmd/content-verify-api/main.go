@@ -15,6 +15,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/transport"
 )
@@ -50,6 +51,10 @@ func main() {
 		log.Fatalw("db connect failed", "error", err)
 	}
 	defer db.Close()
+
+	if err := db.AutoMigrate(&domain.ContentVerification{}); err != nil {
+		log.Fatalw("automigrate failed", "error", err)
+	}
 
 	collector := metrics.NewCollector("content-verify")
 
