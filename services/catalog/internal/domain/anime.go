@@ -85,7 +85,11 @@ type Anime struct {
 	// refresh guard to avoid clobbering an AniList correction. Auto-migrated.
 	NextEpisodeSource string     `gorm:"size:16;default:'shikimori';column:next_episode_source" json:"next_episode_source,omitempty"`
 	AiredOn           *time.Time `gorm:"index" json:"aired_on,omitempty"`
-	Genres            []Genre    `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
+	// ReleasedOn is the air END date (Shikimori releasedOn). Nullable — ongoing
+	// and single-cour titles often have none. Surfaced in the anime-page Details
+	// block as the "aired → released" range.
+	ReleasedOn *time.Time `gorm:"index" json:"released_on,omitempty"`
+	Genres     []Genre    `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
 	// Phase 12 Decision §A1/A2 — Studios absorbs the producers role; no
 	// separate Producers field exists in v2.0 (Decision §A2 collapses
 	// the spec-§3.1 producers 0.05 into studios 0.25).

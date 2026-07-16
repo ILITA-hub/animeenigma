@@ -131,6 +131,7 @@ type shikimoriAnime struct {
 	Duration      graphql.Int      `graphql:"duration"`
 	MalId         graphql.String   `graphql:"malId"`
 	AiredOn       *shikimoriDate   `graphql:"airedOn"`
+	ReleasedOn    *shikimoriDate   `graphql:"releasedOn"`
 	NextEpisodeAt graphql.String   `graphql:"nextEpisodeAt"`
 	Poster        *shikimoriPoster `graphql:"poster"`
 	Genres        []shikimoriGenre `graphql:"genres"`
@@ -181,6 +182,7 @@ func (c *Client) SearchAnime(ctx context.Context, query string, page, limit int)
 		animes(search: "%s", limit: %d, page: %d) {
 			id name english russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
+			releasedOn { year month day }
 			nextEpisodeAt
 			malId
 			poster { originalUrl }
@@ -255,6 +257,11 @@ type rawAnime struct {
 		Month int `json:"month"`
 		Day   int `json:"day"`
 	} `json:"airedOn"`
+	ReleasedOn *struct {
+		Year  int `json:"year"`
+		Month int `json:"month"`
+		Day   int `json:"day"`
+	} `json:"releasedOn"`
 	Poster *struct {
 		OriginalURL string `json:"originalUrl"`
 	} `json:"poster"`
@@ -301,6 +308,10 @@ func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
 				airedDate := time.Date(a.AiredOn.Year, time.Month(a.AiredOn.Month), a.AiredOn.Day, 0, 0, 0, 0, time.UTC)
 				anime.AiredOn = &airedDate
 			}
+		}
+		if a.ReleasedOn != nil && a.ReleasedOn.Year > 0 && a.ReleasedOn.Month > 0 && a.ReleasedOn.Day > 0 {
+			relDate := time.Date(a.ReleasedOn.Year, time.Month(a.ReleasedOn.Month), a.ReleasedOn.Day, 0, 0, 0, 0, time.UTC)
+			anime.ReleasedOn = &relDate
 		}
 		if a.NextEpisodeAt != "" {
 			if nextEp, err := time.Parse(time.RFC3339, a.NextEpisodeAt); err == nil {
@@ -363,6 +374,7 @@ func (c *Client) GetAnimeByIDs(ctx context.Context, shikimoriIDs []string) ([]*d
 		animes(ids: "%s", limit: %d) {
 			id name english russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
+			releasedOn { year month day }
 			nextEpisodeAt
 			malId
 			poster { originalUrl }
@@ -382,6 +394,7 @@ func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*doma
 		animes(limit: %d, page: %d, order: ranked) {
 			id name english russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
+			releasedOn { year month day }
 			nextEpisodeAt
 			malId
 			poster { originalUrl }
@@ -401,6 +414,7 @@ func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domai
 		animes(limit: %d, page: %d, order: popularity) {
 			id name english russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
+			releasedOn { year month day }
 			nextEpisodeAt
 			malId
 			poster { originalUrl }
@@ -474,6 +488,16 @@ func (c *Client) mapAnime(sa shikimoriAnime) *domain.Anime {
 		if year > 0 && month > 0 && day > 0 {
 			airedDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 			anime.AiredOn = &airedDate
+		}
+	}
+
+	if sa.ReleasedOn != nil {
+		ry := int(sa.ReleasedOn.Year)
+		rm := int(sa.ReleasedOn.Month)
+		rd := int(sa.ReleasedOn.Day)
+		if ry > 0 && rm > 0 && rd > 0 {
+			relDate := time.Date(ry, time.Month(rm), rd, 0, 0, 0, 0, time.UTC)
+			anime.ReleasedOn = &relDate
 		}
 	}
 
