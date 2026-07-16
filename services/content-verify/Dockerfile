@@ -76,7 +76,15 @@ RUN python3 -c "from faster_whisper import WhisperModel; WhisperModel('tiny', de
 COPY services/content-verify/analyzers/ /app/analyzers/
 COPY --from=builder /content-verify-api /app/
 WORKDIR /app
-RUN groupadd -r app && useradd -r -g app app && mkdir -p /tmp/cv && chown -R app:app /app /tmp/cv /opt/models
-USER app
+# UID/GID pinned to 65534 — debian's built-in nobody:nogroup — to match the
+# repo-wide k8s securityContext.runAsUser: 65534 convention (see every
+# deploy/kustomize/base/services/*.yaml). A freshly useradd'd UID (e.g. 999)
+# builds fine and runs fine under compose, but under the real k8s deploy
+# target the pod is forced to UID 65534 regardless of what USER this image
+# declares — so a mismatched owner on /tmp/cv and /opt/models means every
+# probe gets Permission denied while /health (which touches neither dir)
+# stays green.
+RUN mkdir -p /tmp/cv && chown -R 65534:65534 /app /tmp/cv /opt/models
+USER 65534:65534
 EXPOSE 8101
 CMD ["./content-verify-api"]
