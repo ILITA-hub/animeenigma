@@ -111,23 +111,33 @@ def main() -> int:
         print(json.dumps({"frames": 0, "tier1_hits": 0, "ocr_real": 0, "script": "none", "text_stroke_p75": 0.0}))
         return 0
     strokes, hits = [], []
+    n_ok = 0
     for p in paths:
-        img = Image.open(p).convert("RGB")
-        arr = np.asarray(img)
-        t1 = tier1(arr)
+        try:
+            img = Image.open(p).convert("RGB")
+            arr = np.asarray(img)
+            t1 = tier1(arr)
+        except Exception as exc:  # one corrupt/truncated frame must not kill the batch
+            print(f"hardsub: {p}: {exc}", file=sys.stderr)
+            continue
+        n_ok += 1
         strokes.append(t1["text_stroke"])
         if t1["text_stroke"] >= STROKE_T:
             hits.append((p, img))
     ocr_real = 0
     scripts = {}
     for p, img in hits:
-        t2 = tier2(img)
+        try:
+            t2 = tier2(img)
+        except Exception as exc:  # OCR failure on a hit frame must not kill the batch
+            print(f"hardsub: {p}: {exc}", file=sys.stderr)
+            continue
         if t2["real_text"]:
             ocr_real += 1
             scripts[t2["script"]] = scripts.get(t2["script"], 0) + 1
     top_script = max(scripts, key=scripts.get) if scripts else "none"
     print(json.dumps({
-        "frames": len(paths),
+        "frames": n_ok,
         "tier1_hits": len(hits),
         "ocr_real": ocr_real,
         "script": top_script,
