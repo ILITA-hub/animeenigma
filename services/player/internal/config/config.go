@@ -12,18 +12,19 @@ import (
 )
 
 type Config struct {
-	Server      ServerConfig
-	Database    database.Config
-	Redis       cache.Config
-	JWT         authz.JWTConfig
-	Telegram    TelegramConfig
-	Reports     ReportsConfig
-	Maintenance MaintenanceConfig
-	Tier2       Tier2Config
-	Gacha       GachaConfig
-	Recs        RecsConfig
-	Notify      NotifyConfig
-	Autocache   AutocacheConfig
+	Server        ServerConfig
+	Database      database.Config
+	Redis         cache.Config
+	JWT           authz.JWTConfig
+	Telegram      TelegramConfig
+	Reports       ReportsConfig
+	Maintenance   MaintenanceConfig
+	Tier2         Tier2Config
+	Gacha         GachaConfig
+	Recs          RecsConfig
+	Notify        NotifyConfig
+	Autocache     AutocacheConfig
+	ContentVerify ContentVerifyConfig
 }
 
 // AutocacheConfig controls the fire-and-forget player→library autocache demand
@@ -56,6 +57,22 @@ type RecsConfig struct {
 	// HintEnabled controls whether the hint producer is active. When false the
 	// producer is constructed in disabled mode and all hints are silently
 	// dropped (recs outage / dark-ship scenario). Default: true
+	HintEnabled bool
+}
+
+// ContentVerifyConfig controls the fire-and-forget content-verify watching
+// hint producer. content-verify (:8101) accepts POST /internal/verify/hint
+// {"anime_id","visitor","source"} → 204; catalog already fires visit-hints,
+// this is the player-side counterpart fired once per watched episode.
+type ContentVerifyConfig struct {
+	// InternalURL is the base URL of the content-verify service reachable
+	// inside the Docker network. Only the path /internal/verify/hint is
+	// called. Default: http://content-verify:8101
+	InternalURL string
+	// HintEnabled controls whether the hint producer is active. When false
+	// the producer is constructed in disabled mode and all hints are
+	// silently dropped (content-verify outage / dark-ship scenario).
+	// Default: true
 	HintEnabled bool
 }
 
@@ -193,6 +210,10 @@ func Load() (*Config, error) {
 		Autocache: AutocacheConfig{
 			LibraryURL:    getEnv("LIBRARY_SERVICE_URL", "http://library:8089"),
 			DemandEnabled: getEnvBool("AUTOCACHE_DEMAND_ENABLED", true),
+		},
+		ContentVerify: ContentVerifyConfig{
+			InternalURL: getEnv("CONTENT_VERIFY_INTERNAL_URL", "http://content-verify:8101"),
+			HintEnabled: getEnvBool("CONTENT_VERIFY_HINT_ENABLED", true),
 		},
 	}, nil
 }

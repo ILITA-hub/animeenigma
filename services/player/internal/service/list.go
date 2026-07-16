@@ -18,12 +18,13 @@ type ListService struct {
 	progressRepo *repo.ProgressRepository
 	recsHint     *RecsHintProducer    // Recs extraction Phase 1 — fire-and-forget recompute hint to recs:8094; nil-safe, may be nil in tests
 	gachaCredit  *GachaCreditProducer // Phase 4 — fire-and-forget Энигмы credits; nil-safe, may be nil in tests
+	verifyHint   *VerifyHintProducer  // content-verify watching hint to content-verify:8101; nil-safe, may be nil in tests
 	log          *logger.Logger
 }
 
-// NewListService wires the list service. The recsHint and gachaCredit
-// arguments may be nil in test environments that don't exercise the
-// respective paths; MarkEpisodeWatched and UpdateListEntry nil-guard each
+// NewListService wires the list service. The recsHint, gachaCredit, and
+// verifyHint arguments may be nil in test environments that don't exercise
+// the respective paths; MarkEpisodeWatched and UpdateListEntry nil-guard each
 // before invoking.
 func NewListService(
 	listRepo *repo.ListRepository,
@@ -32,6 +33,7 @@ func NewListService(
 	progressRepo *repo.ProgressRepository,
 	recsHint *RecsHintProducer,
 	gachaCredit *GachaCreditProducer,
+	verifyHint *VerifyHintProducer,
 	log *logger.Logger,
 ) *ListService {
 	return &ListService{
@@ -41,6 +43,7 @@ func NewListService(
 		progressRepo: progressRepo,
 		recsHint:     recsHint,
 		gachaCredit:  gachaCredit,
+		verifyHint:   verifyHint,
 		log:          log,
 	}
 }
@@ -438,6 +441,7 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 	// the broader level) preserves every case in which either old mechanism
 	// fired.
 	s.recsHint.Hint(userID, animeID)
+	s.verifyHint.Hint(userID, animeID)
 
 	// Return updated entry
 	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)

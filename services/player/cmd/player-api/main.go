@@ -381,7 +381,18 @@ func main() {
 	recsHintProducer.Start()
 	defer recsHintProducer.Stop()
 
-	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, recsHintProducer, gachaProducer, log)
+	// content-verify watching hint — player-side counterpart to catalog's
+	// visit-hints. Same drop-on-full / nil-safe contract as the other
+	// fire-and-forget producers above.
+	verifyHintProducer := service.NewVerifyHintProducer(
+		cfg.ContentVerify.InternalURL,
+		cfg.ContentVerify.HintEnabled,
+		log,
+	)
+	verifyHintProducer.Start()
+	defer verifyHintProducer.Stop()
+
+	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, recsHintProducer, gachaProducer, verifyHintProducer, log)
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(listRepo, activityRepo, log)
 
