@@ -381,6 +381,73 @@
         </div>
       </section>
 
+      <!-- Production Details disclosure (feedback 2026-07-13) -->
+      <section id="section-details" class="mt-8">
+        <button
+          type="button"
+          class="flex items-center gap-2 text-xl font-semibold text-white mb-3"
+          :aria-expanded="detailsExpanded"
+          @click="toggleDetails"
+        >
+          <Info class="size-6 text-cyan-400" aria-hidden="true" />
+          {{ $t('anime.details.title') }}
+          <ChevronDown
+            class="size-5 text-white/50 transition-transform"
+            :class="{ 'rotate-180': detailsExpanded }"
+            aria-hidden="true"
+          />
+        </button>
+
+        <div v-show="detailsExpanded" class="glass-card p-4 space-y-5">
+          <!-- Metadata key/value grid -->
+          <dl class="flex flex-col gap-2 text-sm">
+            <template v-if="anime.studios && anime.studios.length">
+              <div class="flex gap-4">
+                <dt class="w-32 shrink-0 text-white/50">{{ $t('anime.details.studio') }}</dt>
+                <dd class="text-white/90">{{ anime.studios.map(s => s.name).join(', ') }}</dd>
+              </div>
+            </template>
+            <template v-if="airedRange">
+              <div class="flex gap-4">
+                <dt class="w-32 shrink-0 text-white/50">{{ $t('anime.details.aired') }}</dt>
+                <dd class="text-white/90">{{ airedRange }}</dd>
+              </div>
+            </template>
+            <template v-if="sourceLabel">
+              <div class="flex gap-4">
+                <dt class="w-32 shrink-0 text-white/50">{{ $t('anime.details.source') }}</dt>
+                <dd class="text-white/90">{{ sourceLabel }}</dd>
+              </div>
+            </template>
+            <template v-if="ratingBadge">
+              <div class="flex gap-4">
+                <dt class="w-32 shrink-0 text-white/50">{{ $t('anime.details.rating') }}</dt>
+                <dd class="text-white/90">{{ ratingBadge }}</dd>
+              </div>
+            </template>
+            <template v-if="anime.episodeDuration">
+              <div class="flex gap-4">
+                <dt class="w-32 shrink-0 text-white/50">{{ $t('anime.details.duration') }}</dt>
+                <dd class="text-white/90">{{ $t('anime.details.durationMin', { n: anime.episodeDuration }) }}</dd>
+              </div>
+            </template>
+          </dl>
+
+          <!-- Staff table grouped by role -->
+          <div v-if="staff.length">
+            <h3 class="text-sm font-semibold text-white/70 mb-2">{{ $t('anime.details.staff') }}</h3>
+            <dl class="flex flex-col gap-1.5 text-sm">
+              <template v-for="row in staff" :key="row.id + row.roleEn">
+                <div class="flex gap-4">
+                  <dt class="w-32 shrink-0 text-white/50">{{ row.roleKey ? $t('anime.roles.' + row.roleKey) : (row.roleRu || row.roleEn) }}</dt>
+                  <dd class="text-white/90">{{ row.name }}</dd>
+                </div>
+              </template>
+            </dl>
+          </div>
+        </div>
+      </section>
+
       <!-- Video Player Section -->
       <!-- Phase 11 / UX-22 — section-episodes anchor. Phase 11 / UX-23 —
            data-anime-player-wrapper hook so theater-mode CSS can widen it. -->
@@ -894,8 +961,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, defineAsyncComponent } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMediaQuery } from '@vueuse/core'
-import { Star, Clock, Play, Check, Plus, ChevronDown, Trash2, RefreshCw, Eye, EyeOff, Pencil, Calendar, MessageSquare, EllipsisVertical } from 'lucide-vue-next'
+import { Star, Clock, Play, Check, Plus, ChevronDown, Trash2, RefreshCw, Eye, EyeOff, Pencil, Calendar, MessageSquare, EllipsisVertical, Info } from 'lucide-vue-next'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Avatar, Badge, Button, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
@@ -905,6 +973,8 @@ import CharacterCard from '@/components/anime/CharacterCard.vue'
 import Carousel from '@/components/carousel/Carousel.vue'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useCharacters } from '@/composables/useCharacters'
+import { useStaff } from '@/composables/useStaff'
+import { ratingLabel, sourceLabelKey } from '@/utils/animeMeta'
 import type { CharacterCardModel } from '@/types/character'
 import ResumePill from '@/components/player/ResumePill.vue'
 import PlayerDiscoveryTip from '@/components/player/PlayerDiscoveryTip.vue'
@@ -956,6 +1026,7 @@ const InviteButton = defineAsyncComponent(() => import('@/components/watch-toget
 const authStore = useAuthStore()
 const { anime, loading, error, fetchAnime } = useAnime()
 const { contextMenu, openAtElement: openContextMenuAt } = useContextMenu()
+const { t, locale } = useI18n()
 
 // --- Page-local UI state ----------------------------------------------------
 const synopsisExpanded = ref(false)
@@ -1084,6 +1155,41 @@ const { relatedAnime, relatedCardModel } = related
 const { characters, fetchCharacters } = useCharacters()
 const charactersFetched = ref(false)
 
+// Production Details disclosure: collapsed by default, staff lazy-fetched on
+// first expand only.
+const { staff, fetchStaff } = useStaff()
+const staffFetched = ref(false)
+const detailsExpanded = ref(false)
+
+function toggleDetails() {
+  detailsExpanded.value = !detailsExpanded.value
+  if (detailsExpanded.value && !staffFetched.value && anime.value?.id) {
+    staffFetched.value = true
+    void fetchStaff(String(anime.value.id))
+  }
+}
+
+const ratingBadge = computed(() => ratingLabel(anime.value?.ageRating))
+
+const sourceLabel = computed(() => {
+  const key = sourceLabelKey(anime.value?.materialSource)
+  return key ? t('anime.sources.' + key) : (anime.value?.materialSource || '')
+})
+
+const airedRange = computed(() => {
+  const a = anime.value?.airedOn
+  const r = anime.value?.releasedOn
+  const fmt = (iso?: string) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(locale.value, { year: 'numeric', month: 'short', day: 'numeric' })
+  }
+  const start = fmt(a)
+  const end = fmt(r)
+  if (start && end) return t('anime.details.airedRange', { start, end })
+  return start || end || ''
+})
+
 // Lazy below-the-fold sentinels (template refs) + one IntersectionObserver.
 const ugcSectionEl = ref<HTMLElement | null>(null)
 const relatedSentinelEl = ref<HTMLElement | null>(null)
@@ -1134,6 +1240,9 @@ function resetForAnime() {
   related.reset()
   characters.value = []
   charactersFetched.value = false
+  staff.value = []
+  staffFetched.value = false
+  detailsExpanded.value = false
   disarmLazySections()
   commentsUgc.reset()
   synopsisExpanded.value = false
