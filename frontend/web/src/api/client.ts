@@ -1009,6 +1009,11 @@ export const charactersApi = {
     apiClient.get(`/characters/${id}`),
 }
 
+export const staffApi = {
+  getAnimeStaff: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/staff`),
+}
+
 /**
  * First-party "AnimeEnigma" provider — self-hosted library (MinIO HLS).
  * Episodes/stream resolve STRICTLY from what's encoded on-prem; the stream
