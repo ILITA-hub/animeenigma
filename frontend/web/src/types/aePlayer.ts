@@ -2,6 +2,8 @@
 // Single source of truth for aePlayer types. Imported by composables,
 // the provider registry, and components — keep names stable across tasks.
 
+import type { ProviderVerify } from './contentVerify'
+
 export type AudioKind = 'sub' | 'dub'
 export type TrackLang = 'en' | 'ru' | 'ja'
 export type ContentKind = 'common' | 'hentai'
@@ -43,6 +45,11 @@ export interface ProviderRow {
    *  such a library out of the fresh-open smart default (see `defaultPool`); ae
    *  stays manually selectable. Absent/false for a complete ae + all others. */
   partialLibrary?: boolean
+  /** Content-verify probe summary for this provider (Task 13/14), or null when
+   *  the probe has no row for it (treated as unverified for non-firstparty
+   *  groups — see `verifiedCaps.ts`). Absent entirely when no verify report
+   *  has loaded yet. */
+  verify?: ProviderVerify | null
 }
 
 /** The user's current source selection. */

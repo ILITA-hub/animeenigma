@@ -309,7 +309,10 @@
       "subBurnedIn": "burned-in",
       "subSelectable": "selectable",
       "providerLacksAnime": "This provider doesn't have this anime",
-      "providerCdnUnreachable": "Provider CDN is unreachable for this anime"
+      "providerCdnUnreachable": "Provider CDN is unreachable for this anime",
+      "unverified": "unverified",
+      "verifiedDub": "DUB {lang} ✓",
+      "verifiedHardsub": "Burned-in ({lang})"
     },
     "pin": "Pin",
     "unpin": "Unpin",

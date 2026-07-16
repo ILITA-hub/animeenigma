@@ -309,7 +309,10 @@
       "subBurnedIn": "焼き込み",
       "subSelectable": "選択可能",
       "providerLacksAnime": "この配信元にこのアニメはありません",
-      "providerCdnUnreachable": "この配信元のCDNにこのアニメで接続できません"
+      "providerCdnUnreachable": "この配信元のCDNにこのアニメで接続できません",
+      "unverified": "未確認",
+      "verifiedDub": "吹替 {lang} ✓",
+      "verifiedHardsub": "焼き込み字幕（{lang}）"
     },
     "pin": "固定",
     "unpin": "固定解除",

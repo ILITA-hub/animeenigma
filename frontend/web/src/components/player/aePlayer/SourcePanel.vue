@@ -132,6 +132,7 @@
           :key="r.id"
           :row="r"
           :cap="capMap.get(r.id)"
+          :verify="r.verify ?? null"
           :best="!hackerMode && !expanded && r.id === topRow?.id"
           :selected="r.id === provider"
           :hacker-mode="hackerMode"

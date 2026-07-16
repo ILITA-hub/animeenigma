@@ -6,6 +6,7 @@ import type { OfflinePlayback } from '@/offline/offlineAdapter'
 import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 import type { ProviderRow } from '@/types/aePlayer'
+import type { VerifyReport } from '@/types/contentVerify'
 
 // ── The capability feed (backend single source of truth) ────────────────────
 // The backend capability feed (/api/anime/{id}/capabilities) is the single
@@ -23,6 +24,11 @@ export interface CapabilityFeedDeps {
   getOffline: () => OfflinePlayback | null | undefined
   isHentai: () => boolean
   state: PlayerState
+  /** Content-verify probe report (Task 13/14) gating which audios each
+   *  non-firstparty row may claim — see `verifiedCaps.ts`. Optional: callers
+   *  that haven't wired the content-verify feed yet get the pre-verify
+   *  behaviour (every row treated as unverified/RAW-only, per `effectiveAudios`). */
+  getVerify?: () => VerifyReport | null
 }
 
 export function useCapabilityFeed(deps: CapabilityFeedDeps) {
@@ -48,7 +54,9 @@ export function useCapabilityFeed(deps: CapabilityFeedDeps) {
   const capMap = computed<Map<string, ProviderCap>>(() =>
     getOffline() ? flattenCapabilities(report.value) : (cap?.capMap.value ?? new Map()),
   )
-  const rows = computed<ProviderRow[]>(() => rowsFromReport(report.value, filter.value))
+  const rows = computed<ProviderRow[]>(() =>
+    rowsFromReport(report.value, filter.value, deps.getVerify?.() ?? null),
+  )
 
   // ── Active provider display info ──────────────────────────────────────────
   // Name from the capability feed (display_name) → row label → raw id. Cosmetics

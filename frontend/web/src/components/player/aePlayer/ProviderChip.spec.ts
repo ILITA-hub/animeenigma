@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import ProviderChip from './ProviderChip.vue'
 import type { ProviderRow } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
+import type { ProviderVerify } from '@/types/contentVerify'
 
 const base: ProviderRow = {
   id: 'gogoanime', label: 'GogoAnime', group: 'en', state: 'active',
@@ -82,10 +83,31 @@ describe('ProviderChip', () => {
     ],
   }
 
-  it('renders category + quality tags when cap is present', () => {
+  // Owner-approved gate (content-verify spec §5): a non-firstparty cap with no
+  // verify data is assumed RAW-only and its asserted SUB/DUB category chips
+  // are suppressed in favour of an "unverified" marker — no claims without
+  // verification.
+  it('suppresses category chips and shows the unverified marker when there is no verify data', () => {
     const w = mount(ProviderChip, { props: { row: row(), cap }, ...stub })
+    expect(w.findAll('[data-test="cap-cat"]').length).toBe(0)
+    expect(w.find('[data-test="cap-unverified"]').exists()).toBe(true)
+    // Quality/best badges are independent of the verify gate.
+    expect(w.find('[data-test="cap-quality"]').text()).toContain('1080p')
+  })
+
+  it('renders category + quality tags once content-verify confirms them', () => {
+    const verify: ProviderVerify = { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: [] }
+    const w = mount(ProviderChip, { props: { row: row(), cap, verify }, ...stub })
     expect(w.findAll('[data-test="cap-cat"]').length).toBe(2)
     expect(w.find('[data-test="cap-quality"]').text()).toContain('1080p')
+    expect(w.find('[data-test="cap-unverified"]').exists()).toBe(false)
+  })
+
+  it('renders verified-dub and verified-hardsub badges from the probe verdict', () => {
+    const verify: ProviderVerify = { status: 'partial', raw: false, dub_langs: ['ru'], hardsub_langs: ['ja'] }
+    const w = mount(ProviderChip, { props: { row: row(), cap, verify }, ...stub })
+    expect(w.find('[data-test="cap-verified-dub"]').exists()).toBe(true)
+    expect(w.find('[data-test="cap-verified-hardsub"]').exists()).toBe(true)
   })
 
   it('renders no label row without cap', () => {

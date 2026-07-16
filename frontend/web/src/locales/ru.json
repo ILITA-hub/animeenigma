@@ -309,7 +309,10 @@
       "subBurnedIn": "вшитые",
       "subSelectable": "отдельные",
       "providerLacksAnime": "У этого источника нет этого аниме",
-      "providerCdnUnreachable": "CDN источника недоступен для этого аниме"
+      "providerCdnUnreachable": "CDN источника недоступен для этого аниме",
+      "unverified": "не проверено",
+      "verifiedDub": "DUB {lang} ✓",
+      "verifiedHardsub": "Вшитые ({lang})"
     },
     "pin": "Закрепить",
     "unpin": "Открепить",
