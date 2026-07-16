@@ -207,10 +207,16 @@ func NewRouter(
 			if capabilitiesHandler != nil {
 				r.Get("/{animeId}/capabilities", capabilitiesHandler.Get)
 			}
-			// Public content-verify passthrough + visit hint (Task 11).
-			// Same public/no-auth posture as capabilities above.
+			// Public content-verify passthrough + visit hint (Task 11). Wrapped
+			// with OptionalAuthMiddleware — same reasoning as the scraper/stream
+			// route above (P2.8): an authed caller's JWT user id lets
+			// scraperUserKey resolve "u:"+uid instead of the anonymous
+			// "ip:"+hash key, so the SAME authenticated user's hints dedupe as
+			// one visitor rather than colliding with the player's watching-hint
+			// (Task 12), which sends "u:"+uid directly. The middleware NEVER
+			// 401s — anonymous callers fall through to the salted-IP key.
 			if contentVerifyHandler != nil {
-				r.Get("/{animeId}/content-verify", contentVerifyHandler.Get)
+				r.With(OptionalAuthMiddleware(cfg.JWT)).Get("/{animeId}/content-verify", contentVerifyHandler.Get)
 			}
 			// First-party ("AnimeEnigma") provider: self-hosted library
 			// (MinIO HLS) only — episodes/stream resolve straight from what's
