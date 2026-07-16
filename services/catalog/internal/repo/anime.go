@@ -80,7 +80,7 @@ var animeMetadataColumns = []string{
 	"name", "name_en", "name_ru", "name_jp", "description",
 	"year", "season", "status", "kind", "rating", "material_source",
 	"episodes_count", "episodes_aired", "episode_duration",
-	"score", "poster_url", "next_episode_at", "aired_on",
+	"score", "poster_url", "next_episode_at", "next_episode_source", "aired_on",
 }
 
 func (r *AnimeRepository) Update(ctx context.Context, anime *domain.Anime) error {
