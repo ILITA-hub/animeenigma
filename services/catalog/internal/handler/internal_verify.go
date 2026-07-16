@@ -69,13 +69,25 @@ func (h *InternalVerifyHandler) Membership(w http.ResponseWriter, r *http.Reques
 	httputil.OK(w, verifyMembershipResponse{Ongoing: ongoing, Top: top})
 }
 
-// queryInt parses an integer query param, clamping to [min, max] and falling
-// back to def when absent, malformed, or out of range.
+// queryInt parses an integer query param, clamping it into [min, max] and
+// falling back to def when the param is absent or malformed. An in-range
+// value passes through unchanged; an out-of-range value is clamped to the
+// nearer bound rather than discarded — e.g. ongoing_limit=5000 with max=2000
+// reaches the caller as 2000, not the default.
 func queryInt(r *http.Request, key string, def, min, max int) int {
-	if v := r.URL.Query().Get(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= min && n <= max {
-			return n
-		}
+	v := r.URL.Query().Get(key)
+	if v == "" {
+		return def
 	}
-	return def
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	if n < min {
+		return min
+	}
+	if n > max {
+		return max
+	}
+	return n
 }
