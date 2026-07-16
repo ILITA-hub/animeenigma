@@ -93,10 +93,16 @@ const REPORT = {
     { provider: 'kodik', display_name: 'Kodik', group: 'ru', state: 'active', selectable: true, hacker_only: false, order: 80, audios: ['dub', 'sub'] },
   ] }],
 } as unknown as CapabilityReport
-// NOTE: a group-'en' provider is NOT in the dub/ru row list (GROUP_LANGS) —
-// provider switching is tested between the two 'en' providers, and the lang
-// switch tests the re-default to kodik.
+// NOTE: none of these providers is `firstparty`, and DownloadDialog.vue calls
+// rowsFromReport(props.report, filter) with NO verify report (it's not wired
+// to the content-verify feed — that's out of this dialog's scope). Per the
+// owner-approved hard gate (verifiedCaps.ts), an unverified non-firstparty cap
+// is DUB-blind: effectiveAudios collapses to ['sub'] regardless of the cap's
+// claimed audios, so the DUB facet is permanently empty here and RAW (sub)
+// lists all three providers regardless of group (the language slider is
+// hidden under RAW, so group/lang no longer partitions the row list).
 const COMBO: Combo = { audio: 'dub', lang: 'en', provider: 'gogoanime', server: '', team: null }
+const RAW_COMBO: Combo = { audio: 'sub', lang: 'en', provider: 'gogoanime', server: '', team: null }
 
 describe('source picker', () => {
   it('hidden without report/initialCombo; emits null combo', async () => {
@@ -106,24 +112,22 @@ describe('source picker', () => {
     expect(w.emitted('confirm')![0][1]).toBeNull()
   })
 
-  it('renders providers for the initial audio/lang and emits the edited combo', async () => {
+  it('DUB is fully gated without a content-verify report (unverified → RAW-only)', async () => {
     const w = mountDlg({ report: REPORT, initialCombo: COMBO })
+    expect(w.find('[data-test="dl-audio-dub"]').attributes('disabled')).toBeDefined()
     const sel = w.find('[data-test="dl-provider"]')
-    expect(sel.findAll('option').map((o) => o.attributes('value'))).toEqual(['gogoanime', 'animepahe'])
-    await sel.setValue('animepahe')
-    await w.find('[data-test="dl-start"]').trigger('click')
-    const combo = w.emitted('confirm')![0][1] as Combo
-    expect(combo.provider).toBe('animepahe')
-    expect(combo.team).toBeNull()
+    expect(sel.findAll('option').map((o) => o.attributes('value'))).toEqual([])
   })
 
-  it('lang switch re-defaults a filtered-out provider', async () => {
-    const w = mountDlg({ report: REPORT, initialCombo: COMBO })
-    await w.find('[data-test="dl-lang-ru"]').trigger('click')
+  it('RAW lists every unverified provider regardless of group; picking one emits the edited combo', async () => {
+    const w = mountDlg({ report: REPORT, initialCombo: RAW_COMBO })
+    const sel = w.find('[data-test="dl-provider"]')
+    expect(sel.findAll('option').map((o) => o.attributes('value'))).toEqual(['gogoanime', 'kodik', 'animepahe'])
+    await sel.setValue('kodik')
     await w.find('[data-test="dl-start"]').trigger('click')
     const combo = w.emitted('confirm')![0][1] as Combo
-    expect(combo.provider).toBe('kodik') // gogoanime has no RU dub rows
-    expect(combo.lang).toBe('ru')
+    expect(combo.provider).toBe('kodik')
+    expect(combo.team).toBeNull()
   })
 
   it('RAW switch drops lang filter and derives lang from provider group', async () => {

@@ -73,6 +73,11 @@ vi.mock('@/composables/useToast', () => ({ useToast: () => ({ push: vi.fn() }) }
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (k: string) => k, locale: { value: 'en' } }) }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isAuthenticated: false, user: null }) }))
 vi.mock('@/stores/viewerContext', () => ({ useViewerContextStore: () => ({ whenLoaded: vi.fn().mockResolvedValue(null) }) }))
+// kodik is proven for DUB/ru by content-verify (Task 15's pre-playback re-pick
+// watcher needs a verified report — under the new gating both kodik and
+// gogoanime are non-firstparty, so an unverified DUB facet is permanently
+// empty; see verifiedCaps.ts). gogoanime is left unverified on purpose so the
+// dub/ja→dub/en clamp test (below) still resolves to no candidate provider.
 vi.mock('@/api/client', () => ({
   userApi: { getProgress: vi.fn().mockResolvedValue({ data: { data: null } }) },
   aeApi: { getEpisodes: vi.fn().mockResolvedValue({ data: { data: { available: false, episodes: [] } } }) },
@@ -80,6 +85,18 @@ vi.mock('@/api/client', () => ({
     getEpisodes: vi.fn().mockResolvedValue({ data: { data: { episodes: [] } } }),
     getServers: vi.fn().mockResolvedValue({ data: { data: { servers: [] } } }),
     getStream: vi.fn().mockResolvedValue({ data: { data: { stream: { sources: [] } } } }),
+  },
+  contentVerifyApi: {
+    get: vi.fn().mockResolvedValue({
+      data: {
+        data: {
+          anime_id: 'anime-uuid',
+          providers: [
+            { provider: 'kodik', summary: { status: 'verified', raw: true, dub_langs: ['ru'], hardsub_langs: [] }, units: [] },
+          ],
+        },
+      },
+    }),
   },
 }))
 vi.mock('@/utils/playerTelemetry', () => ({ recordPlayerEvent: vi.fn() }))

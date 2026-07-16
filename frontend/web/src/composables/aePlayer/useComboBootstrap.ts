@@ -8,6 +8,7 @@ import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { ProviderRow, TrackLang } from '@/types/aePlayer'
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 import type { WatchCombo } from '@/types/preference'
+import type { VerifyReport } from '@/types/contentVerify'
 
 // ── Initial combo resolution: saved prefs, URL facets, deep-link, smart default ─
 // On open, the player resolves a combo in this order (highest wins):
@@ -31,6 +32,16 @@ export interface ComboBootstrapDeps {
   getInitialLang: () => string | undefined
   getInitialEpisode: () => number | undefined
   isHentai: () => boolean
+  /** Content-verify probe report (Task 13/14) — `rows` already reflects verdicts
+   *  reactively, but the smart default only ever runs ONCE at bootstrap. When
+   *  verdicts land later (poll tick, while the user is still on the pre-play
+   *  screen) this re-triggers `pickFacetDefault()` so a source proven better
+   *  (or worse) by content-verify can still win the auto-pick. */
+  verifyReport: Ref<VerifyReport | null>
+  /** Playback-started gate — content-verify may correct the pre-playback pick,
+   *  but NEVER once the user has actually started watching (see the watcher
+   *  below). */
+  getHasStarted: () => boolean
 }
 
 export function useComboBootstrap(deps: ComboBootstrapDeps) {
@@ -172,6 +183,23 @@ export function useComboBootstrap(deps: ComboBootstrapDeps) {
     },
     { immediate: true },
   )
+
+  // Content-verify verdicts landed while the user is still reading the
+  // description (spec §5): silently re-run the smart default. NEVER after
+  // the first frame, NEVER over a manual pick.
+  watch(deps.verifyReport, (rep) => {
+    if (!rep) return
+    if (deps.getHasStarted()) return
+    if (roomHasCombo.value) return
+    if (!preferenceSettled.value) return
+    if (state.combo.value.provider && !providerAutoSelected.value) return
+    const pick = pickFacetDefault()
+    if (pick && pick.id !== state.combo.value.provider) {
+      providerAutoSelected.value = true
+      state.setProvider(pick.id, '')
+      deps.recordDecision('content-verify update — re-picked best source')
+    }
+  })
 
   // Best provider for the current facet: language-biased under RAW (don't cross
   // language when a same-language source exists), plain best under DUB, with a

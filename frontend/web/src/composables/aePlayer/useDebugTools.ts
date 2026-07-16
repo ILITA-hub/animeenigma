@@ -7,6 +7,7 @@ import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
 import type { ConnectionState } from '@/components/player/aePlayer/connectionHealth'
 import type { SeekTrace, StreamResult } from '@/types/aePlayer'
+import type { VerifyReport } from '@/types/contentVerify'
 
 // ── Hacker mode (debug HUD) ───────────────────────────────────────────────────
 // Per-fragment playback stats, the seek pipeline trace, HUD visibility
@@ -22,6 +23,9 @@ export interface DebugToolsDeps {
   showBuffering: Ref<boolean>
   /** Live connection-health datum for the HUD. */
   connectionState?: Ref<ConnectionState>
+  /** Content-verify probe report (Task 13/14) — surfaced as a debugStats line
+   *  for the CURRENT provider only ("new datum → debugStats" rule). */
+  getVerify?: () => VerifyReport | null
 }
 
 export function useDebugTools(deps: DebugToolsDeps) {
@@ -175,6 +179,15 @@ export function useDebugTools(deps: DebugToolsDeps) {
     const trail = engine.edgeTrail.value
     const ladderSnap = ladder.debugSnapshot()
     const conn = deps.connectionState?.value ?? 'ok'
+    // Content-verify verdict for the CURRENT provider only — 'unverified' when
+    // no report has landed yet, or the active provider has no entry in it.
+    const rep = deps.getVerify?.()
+    const prov = deps.state.combo.value.provider
+    let verify = 'unverified'
+    if (rep && prov && rep.providers[prov]) {
+      const v = rep.providers[prov]
+      verify = `${v.status} raw:${v.raw ? '✓' : '–'} dub:[${v.dub_langs.join(',')}] hs:[${v.hardsub_langs.join(',')}] units:${v.units?.length ?? 0}`
+    }
     return {
       bw: bwv > 0 ? `${(bwv / 1_000_000).toFixed(1)} Mbit/s` : '—',
       conn,
@@ -188,6 +201,8 @@ export function useDebugTools(deps: DebugToolsDeps) {
       edge,
       edgeTrail: edge ? formatEdgeTrail(trail) : '',
       edgeRot: edge && trail ? trail.split(',').length - 1 : 0,
+      // Content-verify verdict for the active provider (Task 15).
+      verify,
       // Protocol-ladder telemetry (multi-tier prod only; null snapshot in dev).
       // I4: tier display is 1-based ("tier 2/3") via formatLadderRows — the
       // underlying debugSnapshot().tierIndex contract stays 0-based.

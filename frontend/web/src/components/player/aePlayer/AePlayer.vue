@@ -531,6 +531,7 @@ import { makeOfflineResolver } from '@/offline/offlineAdapter'
 import { useAutoplayGate } from '@/composables/aePlayer/useAutoplayGate'
 import { usePlaybackClock } from '@/composables/aePlayer/usePlaybackClock'
 import { useRoomSync } from '@/composables/aePlayer/useRoomSync'
+import { useContentVerify } from '@/composables/aePlayer/useContentVerify'
 import { useCapabilityFeed } from '@/composables/aePlayer/useCapabilityFeed'
 import { useSourceFailover } from '@/composables/aePlayer/useSourceFailover'
 import { useComboBootstrap } from '@/composables/aePlayer/useComboBootstrap'
@@ -745,14 +746,25 @@ const roomSync = useRoomSync({
 })
 const { roomPinned, roomHasCombo } = roomSync
 
+// ─── Content-verify (dynamic probe polling) ───────────────────────────────────
+// Polls /content-verify while the user hasn't started playback yet (still
+// reading the description / picking a source) — a live report proves which
+// non-firstparty sources actually carry RAW/DUB/hardsub for THIS title,
+// gating the capability feed (unverified stays RAW-only) and letting the
+// combo bootstrap silently re-pick the smart default when verdicts land.
+// Poll stops (report retained) the instant playback starts.
+const animeIdRef = computed(() => props.animeId)
+const verifyActive = computed(() => !hasStarted.value)
+const contentVerify = useContentVerify(animeIdRef, verifyActive)
+
 // ─── Capability feed (backend single source of truth) ────────────────────────
 
-const animeIdRef = computed(() => props.animeId)
 const feed = useCapabilityFeed({
   animeIdRef,
   getOffline: () => props.offline,
   isHentai: () => !!props.isHentai,
   state,
+  getVerify: () => contentVerify.report.value,
 })
 const { report, capMap, rows, activeProviderName, activeProviderHue } = feed
 
@@ -803,6 +815,8 @@ const bootstrap = useComboBootstrap({
   getInitialLang: () => props.initialLang,
   getInitialEpisode: () => props.initialEpisode,
   isHentai: () => !!props.isHentai,
+  verifyReport: contentVerify.report,
+  getHasStarted: () => hasStarted.value,
 })
 const { preferenceSettled, pickFacetDefault } = bootstrap
 
@@ -1163,6 +1177,7 @@ const { connectionState } = useConnectionHealth({
 const debug = useDebugTools({
   state, engine, videoRef, currentStream, duration, showBuffering,
   connectionState,
+  getVerify: () => contentVerify.report.value,
 })
 const {
   playbackStats,
