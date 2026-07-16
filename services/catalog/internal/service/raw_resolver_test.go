@@ -78,6 +78,14 @@ func newTestDBWithAnime(t *testing.T, anime *domain.Anime) (*gorm.DB, *repo.Anim
 			anime_id TEXT,
 			genre_id TEXT
 		)`,
+		`CREATE TABLE studios (
+			id TEXT PRIMARY KEY,
+			name TEXT
+		)`,
+		`CREATE TABLE anime_studios (
+			anime_id TEXT,
+			studio_id TEXT
+		)`,
 		`CREATE TABLE animes (
 			id TEXT PRIMARY KEY,
 			name TEXT,

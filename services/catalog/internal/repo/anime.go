@@ -31,7 +31,7 @@ func (r *AnimeRepository) Create(ctx context.Context, anime *domain.Anime) error
 
 func (r *AnimeRepository) GetByID(ctx context.Context, id string) (*domain.Anime, error) {
 	var anime domain.Anime
-	if err := r.db.WithContext(ctx).Preload("Genres").First(&anime, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Genres").Preload("Studios").First(&anime, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, liberrors.NotFound("anime")
 		}
