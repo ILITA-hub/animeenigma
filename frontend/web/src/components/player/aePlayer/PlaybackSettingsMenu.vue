@@ -175,6 +175,7 @@
 import { ref } from 'vue'
 import Switch from '@/components/ui/Switch.vue'
 import { ChevronLeft, ChevronDown, Check, MonitorPlay, Gauge, SkipForward, FastForward, Terminal, Link } from 'lucide-vue-next'
+import type { ConnectionState } from './connectionHealth'
 
 defineProps<{
   quality: string
@@ -193,8 +194,8 @@ defineProps<{
     buffer: string
     level: string
     frag: string
-    /** Connection-health datum: 'ok' | 'slow' | 'offline'. */
-    conn?: string
+    /** Connection-health datum. */
+    conn?: ConnectionState
     edge?: string
     edgeTrail?: string
     edgeRot?: number

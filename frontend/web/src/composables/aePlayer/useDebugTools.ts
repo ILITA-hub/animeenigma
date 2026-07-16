@@ -5,6 +5,7 @@ import { formatEdgeTrail } from '@/composables/aePlayer/edgeTrail'
 import { ladder, formatLadderRows } from '@/utils/protocolLadder'
 import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
+import type { ConnectionState } from '@/components/player/aePlayer/connectionHealth'
 import type { SeekTrace, StreamResult } from '@/types/aePlayer'
 
 // ── Hacker mode (debug HUD) ───────────────────────────────────────────────────
@@ -19,8 +20,8 @@ export interface DebugToolsDeps {
   currentStream: Ref<StreamResult | null>
   duration: Ref<number>
   showBuffering: Ref<boolean>
-  /** Live connection-health datum for the HUD ('ok' | 'slow' | 'offline'). */
-  getConnectionState?: () => 'ok' | 'slow' | 'offline'
+  /** Live connection-health datum for the HUD. */
+  connectionState?: Ref<ConnectionState>
 }
 
 export function useDebugTools(deps: DebugToolsDeps) {
@@ -173,11 +174,10 @@ export function useDebugTools(deps: DebugToolsDeps) {
     const edge = engine.servedEdge.value
     const trail = engine.edgeTrail.value
     const ladderSnap = ladder.debugSnapshot()
-    const conn = deps.getConnectionState?.() ?? 'ok'
+    const conn = deps.connectionState?.value ?? 'ok'
     return {
       bw: bwv > 0 ? `${(bwv / 1_000_000).toFixed(1)} Mbit/s` : '—',
-      conn: conn === 'ok' ? 'ok' : conn,
-
+      conn,
       buffer: `+${playbackStats.value.bufferAheadSec.toFixed(1)}s / −${playbackStats.value.bufferBehindSec.toFixed(1)}s`,
       level:
         engine.currentLevelLabel.value ||

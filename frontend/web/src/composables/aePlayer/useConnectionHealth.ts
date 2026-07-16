@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
+import { useOnline } from '@vueuse/core'
 import {
   classifyConnection,
   SLOW_SUSTAINED_MS,
@@ -25,14 +26,9 @@ export interface ConnectionHealthDeps {
 export function useConnectionHealth(deps: ConnectionHealthDeps): {
   connectionState: Ref<ConnectionState>
 } {
-  const hasWindow = typeof window !== 'undefined'
-  const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
-  const setOnline = () => { online.value = true }
-  const setOffline = () => { online.value = false }
-  if (hasWindow) {
-    window.addEventListener('online', setOnline)
-    window.addEventListener('offline', setOffline)
-  }
+  // navigator.onLine as a reactive ref — listeners, teardown, and SSR guards are
+  // all handled by @vueuse/core.
+  const online = useOnline()
 
   // `sustained`: buffering has stayed true past the grace threshold. The timer
   // arms when buffering flips true and clears the instant it flips false, so a
@@ -62,13 +58,7 @@ export function useConnectionHealth(deps: ConnectionHealthDeps): {
     }),
   )
 
-  onScopeDispose(() => {
-    clearTimer()
-    if (hasWindow) {
-      window.removeEventListener('online', setOnline)
-      window.removeEventListener('offline', setOffline)
-    }
-  })
+  onScopeDispose(clearTimer)
 
   return { connectionState }
 }

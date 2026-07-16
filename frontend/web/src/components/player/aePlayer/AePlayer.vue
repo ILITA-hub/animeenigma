@@ -1162,7 +1162,7 @@ const { connectionState } = useConnectionHealth({
 
 const debug = useDebugTools({
   state, engine, videoRef, currentStream, duration, showBuffering,
-  getConnectionState: () => connectionState.value,
+  connectionState,
 })
 const {
   playbackStats,
