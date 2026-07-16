@@ -17,6 +17,7 @@ import (
 func NewRouter(
 	catalogHandler *handler.CatalogHandler,
 	characterHandler *handler.CharacterHandler,
+	staffHandler *handler.StaffHandler,
 	adminHandler *handler.AdminHandler,
 	newsHandler *handler.NewsHandler,
 	collectionHandler *handler.CollectionHandler,
@@ -155,6 +156,7 @@ func NewRouter(
 			r.Post("/{animeId}/refresh", catalogHandler.RefreshAnime)
 			r.Get("/{animeId}/episodes", catalogHandler.GetAnimeEpisodes)
 			r.Get("/{animeId}/related", catalogHandler.GetRelatedAnime)
+			r.Get("/{animeId}/staff", staffHandler.GetAnimeStaff)
 			// Phase 13 (REC-SIG-06): Shikimori /similar endpoint feed for the
 			// player service's S6 pin cascade. Public read, no auth required.
 			r.Get("/{animeId}/similar", catalogHandler.GetSimilarAnime)

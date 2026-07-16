@@ -132,3 +132,9 @@ func KeyAnimeCharacters(animeID string) string {
 func KeyCharacter(shikimoriID string) string {
 	return PrefixCharacter + shikimoriID
 }
+
+// KeyAnimeStaff is the cache key for an anime's staff/crew list.
+// TTL = TTLAnimeDetails (6h). Mirrors KeyAnimeCharacters.
+func KeyAnimeStaff(animeID string) string {
+	return PrefixAnime + "staff:" + animeID
+}

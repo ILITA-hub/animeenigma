@@ -458,6 +458,7 @@ func main() {
 	genreRepo := repo.NewGenreRepository(db.DB)
 	videoRepo := repo.NewVideoRepository(db.DB)
 	characterRepo := repo.NewCharacterRepository(db.DB)
+	personRoleRepo := repo.NewPersonRoleRepository(db.DB)
 	// Phase 17 (UX-33) — editorial collections repo.
 	collectionRepo := repo.NewCollectionRepository(db.DB)
 
@@ -483,6 +484,7 @@ func main() {
 	)
 
 	characterService := service.NewCharacterService(animeRepo, characterRepo, shikimoriClient, redisCache, log)
+	staffService := service.NewStaffService(animeRepo, personRoleRepo, shikimoriClient, redisCache, log)
 
 	// Initialize external clients
 	telegramClient := telegram.NewClient(cfg.Telegram.NewsChannel)
@@ -490,6 +492,7 @@ func main() {
 	// Initialize handlers
 	catalogHandler := handler.NewCatalogHandler(catalogService, log)
 	characterHandler := handler.NewCharacterHandler(characterService, log)
+	staffHandler := handler.NewStaffHandler(staffService, log)
 	adminHandler := handler.NewAdminHandler(catalogService, log)
 	newsHandler := handler.NewNewsHandler(telegramClient, redisCache, log)
 	// Phase 17 (UX-33) — editorial collections service + handler.
@@ -703,7 +706,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, staffHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, internalProviderPolicyHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
