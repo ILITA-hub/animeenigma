@@ -36,6 +36,21 @@
           {{ character.description }}
         </p>
         <p v-else class="text-white/40">{{ $t('characters.noDescription') }}</p>
+
+        <template v-if="character.seyu.length">
+          <h2 class="text-sm font-semibold text-white/70 mt-6 mb-2">{{ $t('characters.seyu') }}</h2>
+          <ul class="flex flex-col gap-2">
+            <li v-for="va in character.seyu" :key="va.id" class="flex items-center gap-3">
+              <img
+                :src="va.image || '/placeholder.svg'"
+                :alt="va.name"
+                loading="lazy"
+                class="size-10 shrink-0 rounded-full object-cover border border-white/10"
+              />
+              <span class="text-white/85 text-sm">{{ va.name }}</span>
+            </li>
+          </ul>
+        </template>
       </div>
     </div>
   </div>

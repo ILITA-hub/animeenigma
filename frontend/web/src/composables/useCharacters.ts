@@ -28,6 +28,11 @@ function toDetail(c: ApiCharacter): CharacterDetail {
     synonyms: c.synonyms || undefined,
     image: getImageUrl(c.poster_url),
     description: c.description || undefined,
+    seyu: (c.seyu || []).map((s) => ({
+      id: s.shikimori_id,
+      name: getLocalizedTitle(s.name, s.name_ru, undefined),
+      image: getImageUrl(s.image_url),
+    })),
   }
 }
 
