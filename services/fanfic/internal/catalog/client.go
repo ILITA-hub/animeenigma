@@ -40,6 +40,7 @@ func NewClient(baseURL string, timeout time.Duration, log *logger.Logger) *Clien
 type animeEnvelope struct {
 	Success bool `json:"success"`
 	Data    struct {
+		ID          string `json:"id"`
 		Name        string `json:"name"`
 		NameRU      string `json:"name_ru"`
 		NameJP      string `json:"name_jp"`
@@ -104,14 +105,16 @@ func (c *Client) FetchSynopsis(ctx context.Context, animeID, shikimoriID string)
 	return title, env.Data.Description, nil
 }
 
-// AnimeMeta is title/japanese/poster/synopsis metadata for bot fanfic
+// AnimeMeta is id/title/japanese/poster/synopsis metadata for bot fanfic
 // generation (the daily spotlight generator needs the poster, which
-// FetchSynopsis doesn't return).
+// FetchSynopsis doesn't return). ID is the catalog uuid — callers that only
+// have a shikimori id (e.g. the daily bot generator) need it back to
+// populate domain.Fanfic.AnimeID, which is a uuid-typed column.
 type AnimeMeta struct {
-	Title, Japanese, Poster, Synopsis string
+	ID, Title, Japanese, Poster, Synopsis string
 }
 
-// FetchMeta returns title/japanese/poster/synopsis for bot fanfic generation.
+// FetchMeta returns id/title/japanese/poster/synopsis for bot fanfic generation.
 // Fail-soft: transport/decode errors return a zero AnimeMeta + error.
 func (c *Client) FetchMeta(ctx context.Context, animeID, shikimoriID string) (AnimeMeta, error) {
 	env, err := c.fetchEnvelope(ctx, animeID, shikimoriID)
@@ -122,5 +125,5 @@ func (c *Client) FetchMeta(ctx context.Context, animeID, shikimoriID string) (An
 	if title == "" {
 		title = env.Data.NameRU
 	}
-	return AnimeMeta{Title: title, Japanese: env.Data.NameJP, Poster: env.Data.PosterURL, Synopsis: env.Data.Description}, nil
+	return AnimeMeta{ID: env.Data.ID, Title: title, Japanese: env.Data.NameJP, Poster: env.Data.PosterURL, Synopsis: env.Data.Description}, nil
 }

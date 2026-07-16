@@ -20,9 +20,16 @@ type Repository struct {
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 
 // Create inserts a new fanfic row. BeforeCreate (domain/fanfic.go) fills ID
-// when empty, so f.ID is populated on return.
+// when empty, so f.ID is populated on return. AnimeID is uuid-typed and
+// nullable; an empty AnimeID (e.g. the daily bot generator degrading to a
+// generic title when catalog lookup fails) must be omitted from the insert
+// rather than sent as "", which Postgres rejects with 22P02.
 func (r *Repository) Create(ctx context.Context, f *domain.Fanfic) error {
-	if err := r.db.WithContext(ctx).Create(f).Error; err != nil {
+	db := r.db.WithContext(ctx)
+	if f.AnimeID == "" {
+		db = db.Omit("anime_id")
+	}
+	if err := db.Create(f).Error; err != nil {
 		return liberrors.Wrap(err, liberrors.CodeInternal, "create fanfic")
 	}
 	return nil

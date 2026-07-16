@@ -29,7 +29,7 @@ func (f *fakeRepo) Create(_ context.Context, ff *domain.Fanfic) error {
 type fakeMeta struct{}
 
 func (fakeMeta) FetchMeta(context.Context, string, string) (catalog.AnimeMeta, error) {
-	return catalog.AnimeMeta{Title: "Naruto", Poster: "http://p/x.jpg"}, nil
+	return catalog.AnimeMeta{ID: "anime-uuid-1", Title: "Naruto", Poster: "http://p/x.jpg"}, nil
 }
 
 type fakeStream struct {
@@ -97,6 +97,12 @@ func TestEnsureDaily_GeneratesBotFanfic(t *testing.T) {
 		repo.created.AuthorUsername != FanficBotUsername || !repo.created.SpotlightCredit ||
 		repo.created.Status != domain.StatusComplete || repo.created.Title != "Тайна" {
 		t.Fatalf("bad bot row: %+v", repo.created)
+	}
+	// AnimeID (uuid-typed column) must be populated from the catalog lookup —
+	// regression test for the fanfic_daily job's Postgres 22P02 failure
+	// ("invalid input syntax for type uuid: \"\"") when it was left unset.
+	if repo.created.AnimeID != "anime-uuid-1" {
+		t.Fatalf("AnimeID = %q; want catalog uuid to flow through from FetchMeta", repo.created.AnimeID)
 	}
 }
 

@@ -145,7 +145,7 @@ func (s *DailyService) randomRequest(ctx context.Context) domain.GenerateRequest
 	}
 	anime := domain.AnimeRef{ShikimoriID: shiki, Title: "аниме"}
 	if m, err := s.meta.FetchMeta(ctx, "", shiki); err == nil && m.Title != "" {
-		anime.Title, anime.Japanese, anime.Poster = m.Title, m.Japanese, m.Poster
+		anime.ID, anime.Title, anime.Japanese, anime.Poster = m.ID, m.Title, m.Japanese, m.Poster
 	}
 	tags := domain.CuratedTags
 	t1 := tags[seed%len(tags)].Slug

@@ -66,13 +66,13 @@ func TestFetchSynopsis_ErrorIsGraceful(t *testing.T) {
 // poster is "poster_url".
 func TestFetchMeta(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"success":true,"data":{"name":"Naruto","name_jp":"ナルト","poster_url":"http://p/x.jpg","description":"d"}}`))
+		_, _ = w.Write([]byte(`{"success":true,"data":{"id":"anime-uuid-1","name":"Naruto","name_jp":"ナルト","poster_url":"http://p/x.jpg","description":"d"}}`))
 	}))
 	defer srv.Close()
 
 	c := NewClient(srv.URL, time.Second, nil)
 	m, err := c.FetchMeta(context.Background(), "abc", "")
-	if err != nil || m.Poster != "http://p/x.jpg" || m.Japanese != "ナルト" || m.Title != "Naruto" || m.Synopsis != "d" {
+	if err != nil || m.ID != "anime-uuid-1" || m.Poster != "http://p/x.jpg" || m.Japanese != "ナルト" || m.Title != "Naruto" || m.Synopsis != "d" {
 		t.Fatalf("meta=%+v err=%v", m, err)
 	}
 }

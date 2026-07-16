@@ -62,6 +62,40 @@ func TestCreateAndGet(t *testing.T) {
 	}
 }
 
+// TestCreate_EmptyAnimeIDOmitted guards the fanfic_daily bot-generation path:
+// AnimeID is a uuid-typed column, and Postgres rejects an empty string with
+// 22P02 ("invalid input syntax for type uuid"). SQLite doesn't enforce column
+// types so this can't reproduce the Postgres failure directly, but it locks
+// in that Create succeeds (and doesn't silently coerce "" into the column)
+// when AnimeID is unset, and that a populated AnimeID still round-trips.
+func TestCreate_EmptyAnimeIDOmitted(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+	f := &domain.Fanfic{UserID: "u1", AnimeTitle: "A", Status: domain.StatusComplete}
+	if err := r.Create(ctx, f); err != nil {
+		t.Fatalf("Create with empty AnimeID: %v", err)
+	}
+	got, err := r.Get(ctx, "u1", f.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.AnimeID != "" {
+		t.Errorf("AnimeID = %q; want empty", got.AnimeID)
+	}
+
+	f2 := &domain.Fanfic{UserID: "u1", AnimeID: "22222222-2222-2222-2222-222222222222", AnimeTitle: "B", Status: domain.StatusComplete}
+	if err := r.Create(ctx, f2); err != nil {
+		t.Fatalf("Create with populated AnimeID: %v", err)
+	}
+	got2, err := r.Get(ctx, "u1", f2.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got2.AnimeID != "22222222-2222-2222-2222-222222222222" {
+		t.Errorf("AnimeID = %q; want populated uuid preserved", got2.AnimeID)
+	}
+}
+
 func TestGet_WrongOwnerNotFound(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()
