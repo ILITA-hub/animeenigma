@@ -26,6 +26,10 @@ interface ApiAnime {
   episode_duration?: number
   next_episode_at?: string | null
   aired_on?: string | null
+  released_on?: string | null
+  material_source?: string
+  rating?: string
+  studios?: { id: string; name: string }[]
   has_video?: boolean
   shikimori_id?: string | null
   mal_id?: string | null
@@ -55,6 +59,10 @@ export interface Anime {
   // Premiere date (aired_on) — used to tell users an announced title
   // hasn't been released yet, instead of a misleading "no sources" error.
   airedOn?: string
+  releasedOn?: string
+  materialSource?: string
+  ageRating?: string
+  studios?: { id: string; name: string }[]
   // Backend aggregate: true if any provider has a playable source.
   hasVideo: boolean
   shikimoriId?: string
@@ -91,6 +99,10 @@ function transformAnime(apiAnime: ApiAnime): Anime {
     episodeDuration: apiAnime.episode_duration || undefined,
     nextEpisodeAt: apiAnime.next_episode_at || undefined,
     airedOn: apiAnime.aired_on || undefined,
+    releasedOn: apiAnime.released_on || undefined,
+    materialSource: apiAnime.material_source || undefined,
+    ageRating: apiAnime.rating || undefined,
+    studios: apiAnime.studios || undefined,
     hasVideo: apiAnime.has_video ?? false,
     shikimoriId: apiAnime.shikimori_id || undefined,
     malId: apiAnime.mal_id || undefined
