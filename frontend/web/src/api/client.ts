@@ -980,6 +980,10 @@ export const capabilitiesApi = {
   get: (animeId: string) => apiClient.get(`/anime/${animeId}/capabilities`),
 }
 
+export const contentVerifyApi = {
+  get: (animeId: string) => apiClient.get(`/anime/${animeId}/content-verify`),
+}
+
 /**
  * Smart Source Selection — learned-reliability ranking + same-day override.
  * `getSourceRanking` feeds rankingToOrder → pickSmartDefault; `postSourceFix`
