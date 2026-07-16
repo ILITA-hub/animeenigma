@@ -13,7 +13,7 @@
     </div>
 
     <!-- Main Content -->
-    <div class="relative z-10 max-w-7xl mx-auto px-4 lg:px-8 -mt-64 md:-mt-72">
+    <div class="anime-main relative z-10 max-w-7xl mx-auto px-4 lg:px-8 -mt-64 md:-mt-72">
       <div class="flex flex-col md:flex-row gap-6 md:gap-8">
         <!-- Poster -->
         <div class="flex-shrink-0">
@@ -1221,6 +1221,18 @@ watch(() => anime.value?.title, (newTitle) => {
    lockstep with pseudo-fs state, independent of viewport width. */
 html.pl-noscroll .player-card {
   backdrop-filter: none;
+}
+
+/* Second half of the same takeover bug (report 2026-07-15T12-52-24): the
+   content wrapper's `relative z-10` (needed to sit above the hero banner)
+   makes it a stacking context, so the takeover's z-index:100 only competes
+   INSIDE a z-10 box — every root-context fixed element above z-10 (navbar
+   z-50, toaster z-50, mobile tab bar z-40) still paints over the
+   "fullscreen" video and eats its taps. While the takeover is active, lift
+   the whole wrapper to the takeover's own level; the player covers the
+   viewport, so nothing inside or below it shows anyway. */
+html.pl-noscroll .anime-main {
+  z-index: 100;
 }
 </style>
 

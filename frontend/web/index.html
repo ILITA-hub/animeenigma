@@ -39,7 +39,9 @@
          default canvas dark; the inline bg pins the exact base color (#08080f =
          --color-base) so there is no white flash. -->
     <meta name="color-scheme" content="dark">
-    <style>html{background-color:#08080f}</style>
+    <!-- body margin: main.css (with the preflight reset) hasn't loaded at
+         boot, so the UA's default 8px margin would offset the app-shell. -->
+    <style>html{background-color:#08080f}body{margin:0}</style>
     <!-- Instant app-shell (2026-07-06 first-load trace): on a ~1Mbps self-hosted
          link the entry bundle takes ~3s to arrive, and #app was empty until Vue
          mounted — so first paint was a 3.2s dark blank. This inline shell (no
@@ -50,8 +52,17 @@
          dual counter-rotating arcs — cyan (--brand-cyan) top/bottom, pink
          (--brand-pink) left/right. Hexes hardcoded because main.css hasn't
          loaded yet at boot; keep in sync with the tokens if they change. -->
+    <!-- #ae-boot MUST stay in normal flow — NEVER position:fixed. iOS 26
+         Safari samples every fixed element touching the viewport's top edge
+         to pick its status-bar treatment (docs/issues + on-device bisection
+         2026-07-03): one fixed inset-0 element at load — even this spinner,
+         removed at Vue mount — flips the zone to permanent opaque bands
+         above AND below the page ("полосы за динамическим островком",
+         report 2026-07-15T13-09-27). A static 100svh block renders
+         identically here (#app is empty at boot) without touching the
+         heuristic. -->
     <style>
-      #ae-boot{position:fixed;inset:0;z-index:0;display:flex;
+      #ae-boot{min-height:100vh;min-height:100svh;display:flex;
         align-items:center;justify-content:center;background:#08080f}
       #ae-boot .ae-boot-spinner{position:relative;width:52px;height:52px}
       #ae-boot .ae-boot-spinner::before,

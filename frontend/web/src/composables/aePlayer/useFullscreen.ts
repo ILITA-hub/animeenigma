@@ -93,9 +93,35 @@ export function useFullscreen(deps: FullscreenDeps) {
     exitPseudoFs(true)
   }
 
+  // Browser mode deliberately ships WITHOUT viewport-fit=cover (index.html —
+  // iOS 26 status-bar treatment), which zeroes env(safe-area-inset-*) and
+  // letterboxes the takeover away from the Dynamic Island in landscape. The
+  // takeover opts into cover for its lifetime so the video runs under the
+  // island; the overlay rows pad themselves back inside the safe area
+  // (AePlayer.vue — incl. a :deep(.pl-controls) rule for the control bar).
+  // iOS re-evaluates the meta on content change; where it doesn't, env()
+  // stays 0 and nothing regresses.
+  // Restore the exact previous content (standalone PWA already carries cover).
+  let viewportBeforeFs: string | null = null
+
+  function coverViewport() {
+    const meta = document.querySelector('meta[name="viewport"]')
+    const content = meta?.getAttribute('content')
+    if (!meta || !content || content.includes('viewport-fit=cover')) return
+    viewportBeforeFs = content
+    meta.setAttribute('content', `${content}, viewport-fit=cover`)
+  }
+
+  function restoreViewport() {
+    if (viewportBeforeFs === null) return
+    document.querySelector('meta[name="viewport"]')?.setAttribute('content', viewportBeforeFs)
+    viewportBeforeFs = null
+  }
+
   function enterPseudoFs() {
     pseudoFs.value = true
     document.documentElement.classList.add('pl-noscroll')
+    coverViewport()
     // Merge with the existing state so vue-router's own bookkeeping
     // ({position, back, current…}) survives alongside our marker.
     history.pushState({ ...history.state, plPseudoFs: true }, '')
@@ -103,11 +129,18 @@ export function useFullscreen(deps: FullscreenDeps) {
     window.addEventListener('popstate', onPseudoFsPop)
   }
 
-  function exitPseudoFs(viaPop = false) {
-    if (!pseudoFs.value) return
+  /** Shared takeover teardown; callers handle history themselves. */
+  function releasePseudoFs(): boolean {
+    if (!pseudoFs.value) return false
     pseudoFs.value = false
     document.documentElement.classList.remove('pl-noscroll')
+    restoreViewport()
     window.removeEventListener('popstate', onPseudoFsPop)
+    return true
+  }
+
+  function exitPseudoFs(viaPop = false) {
+    if (!releasePseudoFs()) return
     if (!viaPop && pseudoFsEntryPushed) {
       pseudoFsEntryPushed = false
       history.back()
@@ -116,10 +149,7 @@ export function useFullscreen(deps: FullscreenDeps) {
 
   /** Unmount-safe teardown: never touches history (a route change already moved it). */
   function teardownPseudoFs() {
-    if (!pseudoFs.value) return
-    pseudoFs.value = false
-    document.documentElement.classList.remove('pl-noscroll')
-    window.removeEventListener('popstate', onPseudoFsPop)
+    if (!releasePseudoFs()) return
     pseudoFsEntryPushed = false
   }
 

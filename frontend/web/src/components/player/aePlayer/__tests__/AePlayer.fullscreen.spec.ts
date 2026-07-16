@@ -201,3 +201,63 @@ describe('AePlayer — fullscreen routing', () => {
     wrapper.unmount()
   })
 })
+
+// The pseudo-FS takeover extends the video under the Dynamic Island / notch:
+// env(safe-area-inset-*) is all zeros unless viewport-fit=cover is active, and
+// browser mode deliberately ships WITHOUT cover (index.html), so enterPseudoFs
+// opts into cover on the viewport meta for the takeover's lifetime and restores
+// the exact previous content on exit (report 2026-07-15T12-52-24, iPhone).
+describe('AePlayer — pseudo-FS viewport-fit=cover toggle', () => {
+  const BROWSER_CONTENT = 'width=device-width, initial-scale=1.0'
+  let meta: HTMLMetaElement
+
+  beforeEach(() => {
+    document.querySelector('meta[name="viewport"]')?.remove()
+    meta = document.createElement('meta')
+    meta.setAttribute('name', 'viewport')
+    meta.setAttribute('content', BROWSER_CONTENT)
+    document.head.appendChild(meta)
+  })
+
+  afterEach(() => meta.remove())
+
+  it('entering the takeover adds viewport-fit=cover, exiting restores the original content', async () => {
+    setUserAgent(IPHONE_UA)
+    const wrapper = mountPlayer()
+    await settle()
+
+    await tapFullscreen(wrapper)
+    expect(meta.getAttribute('content')).toBe(`${BROWSER_CONTENT}, viewport-fit=cover`)
+
+    await tapFullscreen(wrapper)
+    expect(meta.getAttribute('content')).toBe(BROWSER_CONTENT)
+    wrapper.unmount()
+  })
+
+  it('leaves an already-covered meta untouched (standalone PWA) and does not mangle it on exit', async () => {
+    const PWA_CONTENT = `${BROWSER_CONTENT}, viewport-fit=cover`
+    meta.setAttribute('content', PWA_CONTENT)
+    setUserAgent(IPHONE_UA)
+    const wrapper = mountPlayer()
+    await settle()
+
+    await tapFullscreen(wrapper)
+    expect(meta.getAttribute('content')).toBe(PWA_CONTENT)
+
+    await tapFullscreen(wrapper)
+    expect(meta.getAttribute('content')).toBe(PWA_CONTENT)
+    wrapper.unmount()
+  })
+
+  it('unmounting mid-takeover (route change) restores the viewport meta', async () => {
+    setUserAgent(IPHONE_UA)
+    const wrapper = mountPlayer()
+    await settle()
+
+    await tapFullscreen(wrapper)
+    expect(meta.getAttribute('content')).toContain('viewport-fit=cover')
+
+    wrapper.unmount()
+    expect(meta.getAttribute('content')).toBe(BROWSER_CONTENT)
+  })
+})
