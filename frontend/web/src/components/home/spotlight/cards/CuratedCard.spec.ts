@@ -48,8 +48,10 @@ describe('CuratedCard', () => {
     expect(mountCard({ data }).text()).toContain('"n":3')
   })
 
-  it('renders the add-to-list CTA', () => {
-    expect(mountCard({ data }).text()).toContain('spotlight.curated.addCta')
+  it('renders a single watch CTA — no dead add-to-list link (AUTO-624)', () => {
+    const w = mountCard({ data })
+    expect(w.findAllComponents(RouterLinkStub).length).toBe(1)
+    expect(w.text()).not.toContain('spotlight.curated.addCta')
   })
 
   it('renders JP subtitle and score', () => {
@@ -59,12 +61,7 @@ describe('CuratedCard', () => {
   })
 
   it('links the primary CTA to the watch route', () => {
-    const links = mountCard({ data }).findAllComponents(RouterLinkStub)
-    const watch = links.find((l) => {
-      const to = l.props('to') as string
-      return typeof to === 'string' && to.includes('/anime/a1') && to.includes('/watch')
-    })
-    expect(watch).toBeDefined()
+    expect(mountCard({ data }).findComponent(RouterLinkStub).props('to')).toBe('/anime/a1/watch')
   })
 
   it('has a single root <article> (SpotlightCardShell) — no fragment root', () => {

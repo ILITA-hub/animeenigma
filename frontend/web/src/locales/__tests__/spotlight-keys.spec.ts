@@ -107,8 +107,6 @@ describe('spotlight i18n parity', () => {
     'watchEpisode',
     'watchCta',
     'remindCta',
-    'addCta',
-    'scoreLabel',
     'episodesLabel',
   ] as const
 

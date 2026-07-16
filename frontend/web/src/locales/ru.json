@@ -1852,15 +1852,12 @@
       "watchEpisode": "Смотреть · эп. {n}",
       "watchCta": "Начать просмотр",
       "remindCta": "Напомнить о выходе",
-      "addCta": "В список",
-      "scoreLabel": "Рейтинг",
       "episodesLabel": "{n} эп.",
       "airedLabel": "эп. {n} вышел"
     },
     "curated": {
       "title": "Куратор рекомендует",
       "watchEpisode": "Смотреть · эп. {n}",
-      "addCta": "В список",
       "airedLabel": "эп. {n} вышел",
       "episodesLabel": "{n} эп."
     },

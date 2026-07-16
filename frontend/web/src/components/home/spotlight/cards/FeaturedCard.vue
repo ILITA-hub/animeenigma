@@ -17,7 +17,7 @@
       - released/other → "Featured today" + "Start watching"
 
     DS contract: SpotlightCardShell anatomy (kicker / body / CTA bottom-left),
-    Button primitive classes on the CTAs, overlay Badge pills for score /
+    Button primitive classes on the CTA, overlay Badge pills for score /
     status / genres (locked inline-vs-overlay rule), PLAIN text for year and
     episode count, amber lucide Star for the Shikimori score (DS §6),
     font-medium/semibold only.
@@ -98,12 +98,6 @@
       <router-link :to="watchTo" :class="[buttonVariants({ variant: 'default', size: 'md' }), 'text-sm']">
         <Play class="w-4 h-4" fill="currentColor" aria-hidden="true" />
         {{ primaryCta }}
-      </router-link>
-      <router-link
-        :to="`/anime/${data.anime.id}`"
-        :class="[buttonVariants({ variant: 'ghost', size: 'md' }), 'text-sm']"
-      >
-        {{ t('spotlight.featured.addCta') }}
       </router-link>
     </template>
   </SpotlightCardShell>

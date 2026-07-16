@@ -9,7 +9,7 @@
  *   3. "released" → eyebrowDefault key + watchCta key
  *   4. JP subtitle (name_jp) and score rendered
  *   5. Primary CTA links to /anime/{id}/watch for ongoing, /anime/{id} for announced
- *   6. Secondary addCta rendered
+ *   6. Exactly one CTA — the secondary addCta was removed (AUTO-624)
  *   7. Renders the localized title via getLocalizedTitle stub
  *
  * Mount pattern matches the sibling specs (RandomTailCard, NowWatchingCard):
@@ -95,25 +95,12 @@ describe('FeaturedCard', () => {
 
   it('links the primary CTA to the watch route for ongoing', () => {
     const w = mountCard({ data: mk('ongoing', 7) })
-    const links = w.findAllComponents(RouterLinkStub)
-    const watchLink = links.find((l) => {
-      const to = l.props('to') as string
-      return typeof to === 'string' && to.includes('/anime/a1') && to.includes('/watch')
-    })
-    expect(watchLink).toBeDefined()
+    expect(w.findComponent(RouterLinkStub).props('to')).toBe('/anime/a1/watch')
   })
 
   it('links announced status PRIMARY CTA to anime detail (not watch)', () => {
     const w = mountCard({ data: mk('announced') })
-    // Target the primary button specifically — secondary also links to /anime/a1
-    // so a generic link search would pass trivially. The primary CTA carries
-    // the Button-primitive default-variant classes (bg-primary).
-    const primaryLink = w
-      .findAllComponents(RouterLinkStub)
-      .find((l) => l.classes().includes('bg-primary'))
-    expect(primaryLink).toBeDefined()
-    const to = primaryLink!.props('to') as string
-    expect(to).toBe('/anime/a1')
+    expect(w.findComponent(RouterLinkStub).props('to')).toBe('/anime/a1')
   })
 
   it('renders DS pills: amber lucide star score badge + neutral genre overlay badges', () => {
@@ -134,9 +121,10 @@ describe('FeaturedCard', () => {
     expect(genreBadge!.classes().join(' ')).toContain('bg-black/[0.62]')
   })
 
-  it('renders the add-to-list secondary CTA', () => {
+  it('renders a single watch CTA — no dead add-to-list link (AUTO-624)', () => {
     const w = mountCard({ data: mk('released') })
-    expect(w.text()).toContain('spotlight.featured.addCta')
+    expect(w.findAllComponents(RouterLinkStub).length).toBe(1)
+    expect(w.text()).not.toContain('spotlight.featured.addCta')
   })
 
   it('parses Shikimori [character=ID] BBCode in the description instead of leaking raw tags', () => {

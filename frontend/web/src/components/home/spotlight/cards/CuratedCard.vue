@@ -11,7 +11,7 @@
       env-pinned, airing-gated anime. Mirrors FeaturedCard's cinematic hero
       but with a fixed curated kicker (star lead) and a single ongoing CTA —
       the resolver only ever surfaces an `ongoing` anime, so no status switch.
-      DS: SpotlightCardShell anatomy, Button-variant CTAs, overlay Badges,
+      DS: SpotlightCardShell anatomy, a Button-variant CTA, overlay Badges,
       font-medium/semibold only.
     -->
     <template #background>
@@ -81,12 +81,6 @@
       <router-link :to="watchTo" :class="[buttonVariants({ variant: 'default', size: 'md' }), 'text-sm']">
         <Play class="w-4 h-4" fill="currentColor" aria-hidden="true" />
         {{ t('spotlight.curated.watchEpisode', { n: (data.anime.episodes_aired || 0) + 1 }) }}
-      </router-link>
-      <router-link
-        :to="`/anime/${data.anime.id}`"
-        :class="[buttonVariants({ variant: 'ghost', size: 'md' }), 'text-sm']"
-      >
-        {{ t('spotlight.curated.addCta') }}
       </router-link>
     </template>
   </SpotlightCardShell>
