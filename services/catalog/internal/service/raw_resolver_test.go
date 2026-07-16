@@ -110,6 +110,7 @@ func newTestDBWithAnime(t *testing.T, anime *domain.Anime) (*gorm.DB, *repo.Anim
 			sort_priority INTEGER DEFAULT 0,
 			next_episode_at DATETIME,
 			aired_on DATETIME,
+			released_on DATETIME,
 			created_at DATETIME,
 			updated_at DATETIME,
 			deleted_at DATETIME

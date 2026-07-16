@@ -66,6 +66,7 @@ func setupAnimeUpdateTestDB(t *testing.T) *gorm.DB {
 		next_episode_at DATETIME,
 		next_episode_source TEXT DEFAULT 'shikimori',
 		aired_on DATETIME,
+		released_on DATETIME,
 		created_at DATETIME,
 		updated_at DATETIME,
 		deleted_at DATETIME
