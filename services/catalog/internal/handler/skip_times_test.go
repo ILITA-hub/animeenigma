@@ -270,6 +270,58 @@ func TestSkipTimesHandlerBlendsDetectedOpAndEd(t *testing.T) {
 	}
 }
 
+// TestSkipTimesHandlerCacheKeyEscapesCollidingProviderTeamSplits guards
+// against an unescaped ':'-delimited cache key: provider/team are free-form
+// (Kodik fansub team titles can contain ':'), so without escaping,
+// (provider="kodik", team="A:B") and (provider="kodik:A", team="B") would
+// concatenate to the identical cache key and the second lookup would
+// incorrectly be served the first lookup's cached detected result.
+func TestSkipTimesHandlerCacheKeyEscapesCollidingProviderTeamSplits(t *testing.T) {
+	c := newSkipTimesTestCache()
+	calls := 0
+	// Row matches ONLY the first (provider, team) split below.
+	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
+		{
+			Provider: "kodik", Team: "A:B", Episode: 3,
+			OpStart: 20, OpEnd: 200, OpStatus: "detected",
+		},
+	}}
+	h := &SkipTimesHandler{
+		cache: c,
+		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
+			calls++
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+		})},
+		log:  newSkipTimesTestLogger(),
+		skip: skip,
+	}
+
+	const animeID = "44444444-4444-4444-4444-444444444444"
+
+	first := serveSkipTimesQuery(t, h, "anime="+animeID+"&provider=kodik&team=A%3AB")
+	if !first.Found || first.Source != "detected" {
+		t.Fatalf("first result = %+v, want found+source=detected", first)
+	}
+	if calls != 0 {
+		t.Fatalf("aniskip upstream calls after first request = %d, want 0", calls)
+	}
+
+	// Different (provider, team) split of the same raw ':'-joined string.
+	// No row matches "kodik:A"/"B" — this must miss the detected cache
+	// (distinct key from the first request) and fall through to AniSkip,
+	// not reuse the first request's cached "detected" result.
+	second := serveSkipTimesQuery(t, h, "anime="+animeID+"&provider=kodik%3AA&team=B")
+	if second.Source != "" {
+		t.Fatalf("second result = %+v, want empty source — must not reuse the colliding cached entry", second)
+	}
+	if !second.Found {
+		t.Fatalf("second result = %+v, want the aniskip fixture result", second)
+	}
+	if calls != 1 {
+		t.Fatalf("aniskip upstream calls after second request = %d, want 1 (cache miss, fell through)", calls)
+	}
+}
+
 func TestSkipTimesHandlerBlendsDetectedOpOnlyWhenEdNoMatch(t *testing.T) {
 	c := newSkipTimesTestCache()
 	calls := 0

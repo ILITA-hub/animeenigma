@@ -106,7 +106,7 @@ type SkipTimingRow struct {
 	EdEnd      float64 `json:"ed_end"`
 	OpStatus   string  `json:"op_status"`
 	EdStatus   string  `json:"ed_status"`
-	Confidence float64 `json:"confidence,omitempty"`
+	Confidence float64 `json:"confidence"`
 }
 
 type skipTimingsWire struct {

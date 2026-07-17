@@ -226,7 +226,13 @@ func (h *SkipTimesHandler) tryDetected(r *http.Request, episode int) (SkipTimesR
 		return SkipTimesResult{}, false
 	}
 
-	cacheKey := fmt.Sprintf("skip-times:detected:%s:%s:%s:%d", animeID, provider, team, episode)
+	// provider/team are free-form (e.g. Kodik fansub team titles can contain
+	// ':'), so escape them before splicing into the ':'-delimited cache key —
+	// otherwise (provider="kodik", team="A:B") and (provider="kodik:A",
+	// team="B") collide on the same key. animeID is already regex-validated
+	// above and can't contain ':' or '%'.
+	cacheKey := fmt.Sprintf("skip-times:detected:%s:%s:%s:%d",
+		animeID, url.QueryEscape(provider), url.QueryEscape(team), episode)
 
 	var cached SkipTimesResult
 	if err := h.cache.Get(r.Context(), cacheKey, &cached); err == nil {
