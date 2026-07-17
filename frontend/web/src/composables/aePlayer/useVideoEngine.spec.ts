@@ -5,6 +5,8 @@ import {
   buildLevelLabels,
   shouldFatalOnNetworkError,
   snapshotPlayback,
+  isHighBitDepthAvc,
+  canMseDecode,
   useVideoEngine,
 } from './useVideoEngine'
 
@@ -34,7 +36,7 @@ vi.mock('hls.js', () => {
     static isSupported() {
       return true
     }
-    static Events = { MANIFEST_PARSED: 'hlsManifestParsed', LEVEL_SWITCHED: 'hlsLevelSwitched', FRAG_LOADED: 'hlsFragLoaded', ERROR: 'hlsError' }
+    static Events = { MANIFEST_PARSED: 'hlsManifestParsed', LEVEL_SWITCHED: 'hlsLevelSwitched', FRAG_LOADED: 'hlsFragLoaded', ERROR: 'hlsError', BUFFER_CODECS: 'hlsBufferCodecs' }
     static ErrorTypes = { NETWORK_ERROR: 'networkError', MEDIA_ERROR: 'mediaError', OTHER_ERROR: 'otherError' }
     static ErrorDetails = { MANIFEST_LOAD_ERROR: 'manifestLoadError', MANIFEST_LOAD_TIMEOUT: 'manifestLoadTimeOut', MANIFEST_PARSING_ERROR: 'manifestParsingError', LEVEL_LOAD_ERROR: 'levelLoadError', LEVEL_LOAD_TIMEOUT: 'levelLoadTimeOut', FRAG_LOAD_TIMEOUT: 'fragLoadTimeOut' }
     handlers: Record<string, ((...args: unknown[]) => void)[]> = {}
@@ -51,6 +53,7 @@ vi.mock('hls.js', () => {
       this.media = media
     }
     startLoad() {}
+    recoverMediaError = vi.fn()
     on(event: string, cb: (...args: unknown[]) => void) {
       (this.handlers[event] ??= []).push(cb)
     }
@@ -352,5 +355,127 @@ describe('useVideoEngine — feeds the protocol ladder', () => {
 
     hlsMockState.instances[0].trigger('hlsError', { fatal: true, type: 'networkError', details: 'manifestLoadError' })
     expect(ladderMock.reportTimeout).not.toHaveBeenCalled()
+  })
+})
+
+describe('isHighBitDepthAvc', () => {
+  it('flags High 10 / High 4:2:2 / High 4:4:4 hex codec strings', () => {
+    expect(isHighBitDepthAvc('avc1.6e0028')).toBe(true) // High 10, level 4.0
+    expect(isHighBitDepthAvc('avc1.6E001F')).toBe(true) // case-insensitive
+    expect(isHighBitDepthAvc('avc1.7a0028')).toBe(true) // High 4:2:2
+    expect(isHighBitDepthAvc('avc1.f40028')).toBe(true) // High 4:4:4 Predictive
+    expect(isHighBitDepthAvc('avc3.6e0028')).toBe(true) // avc3 form
+  })
+
+  it('passes 8-bit AVC and non-AVC codecs through', () => {
+    expect(isHighBitDepthAvc('avc1.640028')).toBe(false) // High (8-bit)
+    expect(isHighBitDepthAvc('avc1.42e01e')).toBe(false) // Baseline
+    expect(isHighBitDepthAvc('avc1.4d4028')).toBe(false) // Main
+    expect(isHighBitDepthAvc('hev1.1.6.L120.90')).toBe(false)
+    expect(isHighBitDepthAvc('av01.0.08M.08')).toBe(false)
+    expect(isHighBitDepthAvc('')).toBe(false)
+    expect(isHighBitDepthAvc(undefined)).toBe(false)
+    expect(isHighBitDepthAvc(null)).toBe(false)
+  })
+})
+
+describe('canMseDecode', () => {
+  it('asks MediaSource.isTypeSupported with a video/mp4 container wrap', () => {
+    const spy = vi.fn().mockReturnValue(false)
+    vi.stubGlobal('MediaSource', { isTypeSupported: spy })
+    expect(canMseDecode('avc1.6e0028')).toBe(false)
+    expect(spy).toHaveBeenCalledWith('video/mp4; codecs="avc1.6e0028"')
+    spy.mockReturnValue(true)
+    expect(canMseDecode('avc1.640028')).toBe(true)
+    vi.unstubAllGlobals()
+  })
+
+  it('fails open (true) when MediaSource is unavailable or throws', () => {
+    vi.stubGlobal('MediaSource', undefined)
+    expect(canMseDecode('avc1.6e0028')).toBe(true)
+    vi.stubGlobal('MediaSource', { isTypeSupported: () => { throw new Error('nope') } })
+    expect(canMseDecode('avc1.6e0028')).toBe(true)
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('useVideoEngine — undecodable codec detection (AUTO-629 Hi10P)', () => {
+  beforeEach(() => {
+    hlsMockState.instances.length = 0
+    vi.unstubAllGlobals()
+  })
+
+  it('surfaces the parsed codec string from BUFFER_CODECS', async () => {
+    const videoRef = ref({ currentTime: 0, paused: true } as any)
+    const engine = useVideoEngine(videoRef)
+    await engine.load({ url: 'https://example.test/pl.m3u8', type: 'hls' })
+    hlsMockState.instances[0].trigger('hlsBufferCodecs', { video: { codec: 'avc1.640028' } })
+    expect(engine.videoCodec.value).toBe('avc1.640028')
+    expect(engine.fatal.value).toBeNull()
+  })
+
+  it("declares fatal 'decode' when the parsed codec is high-bit-depth AVC the MSE cannot decode", async () => {
+    vi.stubGlobal('MediaSource', { isTypeSupported: vi.fn().mockReturnValue(false) })
+    const video: any = { currentTime: 12.5, paused: false }
+    const engine = useVideoEngine(ref(video))
+    await engine.load({ url: 'https://example.test/pl.m3u8', type: 'hls' })
+    hlsMockState.instances[0].trigger('hlsBufferCodecs', { video: { codec: 'avc1.6e0028' } })
+    expect(engine.videoCodec.value).toBe('avc1.6e0028')
+    expect(engine.fatal.value).toBe('decode')
+    expect(engine.lastKnownPlayback.value).toEqual({ time: 12.5, wasPlaying: true })
+  })
+
+  it('keeps playing a high-bit-depth codec the MSE claims to decode (Chrome)', async () => {
+    vi.stubGlobal('MediaSource', { isTypeSupported: vi.fn().mockReturnValue(true) })
+    const engine = useVideoEngine(ref({ currentTime: 0, paused: true } as any))
+    await engine.load({ url: 'https://example.test/pl.m3u8', type: 'hls' })
+    hlsMockState.instances[0].trigger('hlsBufferCodecs', { video: { codec: 'avc1.6e0028' } })
+    expect(engine.fatal.value).toBeNull()
+  })
+
+  it('resets videoCodec on the next load', async () => {
+    const engine = useVideoEngine(ref({ currentTime: 0, paused: true } as any))
+    await engine.load({ url: 'https://example.test/a.m3u8', type: 'hls' })
+    hlsMockState.instances[0].trigger('hlsBufferCodecs', { video: { codec: 'avc1.6e0028' } })
+    expect(engine.videoCodec.value).toBe('avc1.6e0028')
+    await engine.load({ url: 'https://example.test/b.m3u8', type: 'hls' })
+    expect(engine.videoCodec.value).toBe('')
+  })
+})
+
+describe('useVideoEngine — bounded media-error recovery (AUTO-629 decode loop)', () => {
+  beforeEach(() => {
+    hlsMockState.instances.length = 0
+  })
+
+  it("recovers twice, then declares fatal 'decode' instead of looping forever", async () => {
+    const video: any = { currentTime: 33.3, paused: false }
+    const engine = useVideoEngine(ref(video))
+    await engine.load({ url: 'https://example.test/pl.m3u8', type: 'hls' })
+    const hls = hlsMockState.instances[0]
+
+    hls.trigger('hlsError', { fatal: true, type: 'mediaError', details: 'bufferAppendError' })
+    hls.trigger('hlsError', { fatal: true, type: 'mediaError', details: 'bufferAppendError' })
+    expect(hls.recoverMediaError).toHaveBeenCalledTimes(2)
+    expect(engine.fatal.value).toBeNull()
+
+    hls.trigger('hlsError', { fatal: true, type: 'mediaError', details: 'bufferAppendError' })
+    expect(hls.recoverMediaError).toHaveBeenCalledTimes(2) // no third recovery
+    expect(engine.fatal.value).toBe('decode')
+    expect(engine.lastKnownPlayback.value).toEqual({ time: 33.3, wasPlaying: true })
+  })
+
+  it('resets the recovery budget on the next load', async () => {
+    const engine = useVideoEngine(ref({ currentTime: 0, paused: true } as any))
+    await engine.load({ url: 'https://example.test/a.m3u8', type: 'hls' })
+    const first = hlsMockState.instances[0]
+    first.trigger('hlsError', { fatal: true, type: 'mediaError', details: 'bufferAppendError' })
+    first.trigger('hlsError', { fatal: true, type: 'mediaError', details: 'bufferAppendError' })
+
+    await engine.load({ url: 'https://example.test/b.m3u8', type: 'hls' })
+    const second = hlsMockState.instances[1]
+    second.trigger('hlsError', { fatal: true, type: 'mediaError', details: 'bufferAppendError' })
+    expect(second.recoverMediaError).toHaveBeenCalledTimes(1)
+    expect(engine.fatal.value).toBeNull()
   })
 })

@@ -96,6 +96,37 @@ export function shouldFatalOnNetworkError(
   return playlistDead || netRetries >= maxRetries
 }
 
+/**
+ * High-bit-depth AVC profiles (profile_idc 110 High 10, 122 High 4:2:2,
+ * 244 High 4:4:4 Predictive). Anime raws are very often Hi10P; browser
+ * hardware/OS decoders (notably Firefox on Windows/macOS via WMF) cannot
+ * decode them, while every ffmpeg-based server probe can — so an unplayable
+ * source can carry a top playability rank (AUTO-629). Codec strings arrive
+ * from hls.js's SPS parse in hex form (`avc1.6e0028`).
+ */
+export function isHighBitDepthAvc(codec: string | null | undefined): boolean {
+  if (!codec) return false
+  const m = /^avc[13]\.([0-9a-f]{2})/i.exec(codec.trim())
+  if (!m) return false
+  const profile = parseInt(m[1], 16)
+  return profile === 110 || profile === 122 || profile === 244
+}
+
+/**
+ * Can this browser's MSE actually decode `codec`? Fails OPEN (true) when
+ * MediaSource is unavailable/throwing — the native path may still play, and
+ * a false negative here would needlessly kill a working stream.
+ */
+export function canMseDecode(codec: string): boolean {
+  try {
+    const ms = (globalThis as { MediaSource?: { isTypeSupported?: (t: string) => boolean } }).MediaSource
+    if (!ms?.isTypeSupported) return true
+    return ms.isTypeSupported(`video/mp4; codecs="${codec}"`)
+  } catch {
+    return true
+  }
+}
+
 export interface PlaybackSnapshot {
   time: number
   wasPlaying: boolean
@@ -144,6 +175,10 @@ export function useVideoEngine(
   // URL of the most recently loaded fragment — a sample segment URL for the
   // protocol-ladder probe (Task 5) to test the tier above the current one.
   const lastFragUrl = ref('')
+  // Codec string parsed from the stream's SPS by hls.js (BUFFER_CODECS), e.g.
+  // 'avc1.6e0028'. Consumers use it with isHighBitDepthAvc() to route a
+  // fatal 'decode' into the Hi10P compat path instead of plain failover.
+  const videoCodec = ref('')
   let hls: any = null
   // Monotonic load generation. `load()` awaits a dynamic import of hls.js, so two
   // calls in quick succession (e.g. a provider change immediately followed by an
@@ -167,6 +202,7 @@ export function useVideoEngine(
     edgeTrail.value = ''
     fragLoadedCount.value = 0
     lastFragUrl.value = ''
+    videoCodec.value = ''
     // C1: a stale inflight record from the PREVIOUS source (a different XHR
     // URL entirely) must never leak into this source's watchdog checks.
     ladder.clearInflight()
@@ -241,6 +277,20 @@ export function useVideoEngine(
       const lvl = levels.value.find((l) => l.index === data?.level)
       if (lvl) currentLevelLabel.value = lvl.label
     })
+    // Codec surfaced from the first fragment's SPS parse. High-bit-depth AVC
+    // that the MSE honestly reports undecodable → bail NOW with a 'decode'
+    // fatal instead of churning through append/decode failures. NOTE: Firefox
+    // never validates the profile byte in isTypeSupported (Bugzilla 1711812),
+    // so this proactive check only fires on honest browsers — the bounded
+    // media-error recovery below is the universal backstop.
+    hls.on(Hls.Events.BUFFER_CODECS, (_e: unknown, data: any) => {
+      const codec: string = data?.video?.codec ?? ''
+      if (!codec) return
+      videoCodec.value = codec
+      if (isHighBitDepthAvc(codec) && !canMseDecode(codec)) {
+        declareFatal('decode')
+      }
+    })
     hls.on(Hls.Events.FRAG_LOADED, (_e: unknown, data: any) => {
       const f = data?.frag
       const st = f?.stats
@@ -295,6 +345,14 @@ export function useVideoEngine(
     // source (the dynamic-BEST path). Transient fragment errors still get a few
     // startLoad() retries before giving up.
     let netRetries = 0
+    // Bounded media-error recovery. recoverMediaError() used to be called
+    // unconditionally forever, which turned undecodable content (Hi10P on
+    // Firefox — AUTO-629) into an infinite fetch-append-fail loop with no
+    // user-visible failure. Two recoveries is the hls.js-documented budget
+    // (recover, then recover-after-codec-swap); after that the content is
+    // undecodable for this browser → 'decode' fatal so the player can route
+    // to the compat engine or the next source.
+    let mediaRecoveries = 0
     // Snapshot the playhead BEFORE destroy() (see snapshotPlayback) and declare
     // the fatal state. Shared by both destroy()-ing branches below so the
     // salvage-then-destroy sequence can't drift out of sync between them.
@@ -323,6 +381,11 @@ export function useVideoEngine(
         netRetries++
         hls.startLoad()
       } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+        if (mediaRecoveries >= 2) {
+          declareFatal('decode')
+          return
+        }
+        mediaRecoveries++
         hls.recoverMediaError()
       } else {
         declareFatal('unrecoverable')
@@ -349,5 +412,5 @@ export function useVideoEngine(
 
   onUnmounted(destroy)
 
-  return { fatal, lastKnownPlayback, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, servedEdge, edgeTrail, fragLoadedCount, lastFragUrl }
+  return { fatal, lastKnownPlayback, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate, servedEdge, edgeTrail, fragLoadedCount, lastFragUrl, videoCodec }
 }
