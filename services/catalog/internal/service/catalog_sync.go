@@ -524,3 +524,96 @@ func (s *CatalogService) updateExistingCalendarEpisodes(ctx context.Context, exi
 
 	return updated, failed
 }
+
+// SyncAnnouncements discovers featured announced (anons) titles from
+// Shikimori and prepares them for S8/announcement matching (spec 2026-07-17):
+//
+//  1. Fetch top-`limit` anons titles by community popularity (the implicit
+//     "featured" gate) and upsert them — new titles are imported with
+//     genres; existing rows get status/metadata refreshed (this also
+//     persists announced→ongoing transitions between batch-refresh runs).
+//  2. Franchise-enrich the announced titles (S8 candidate side).
+//  3. Franchise-enrich up to `seedBackfillLimit` list-referenced anime that
+//     were never franchise-checked (S8 seed side) — converges the sparse
+//     franchise coverage (425/4942 rows as of 2026-07-17) where it matters.
+//
+// Per-title failures are logged and counted, never fatal. Mirrors
+// SyncCalendar's structure; called by the scheduler daily.
+func (s *CatalogService) SyncAnnouncements(ctx context.Context, limit, seedBackfillLimit int) (imported, refreshed, enriched, failed int, err error) {
+	s.log.Infow("starting announcements sync from Shikimori", "limit", limit, "seed_backfill", seedBackfillLimit)
+
+	announced, err := s.shikimoriClient.GetAnnouncedAnime(ctx, 1, limit)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("fetch announced: %w", err)
+	}
+
+	// 1. Upsert (import missing / refresh existing).
+	for _, anime := range announced {
+		select {
+		case <-ctx.Done():
+			return imported, refreshed, enriched, failed, ctx.Err()
+		default:
+		}
+		existing, gerr := s.animeRepo.GetByShikimoriID(ctx, anime.ShikimoriID)
+		if gerr != nil {
+			s.log.Warnw("announcements sync: existence check failed", "shikimori_id", anime.ShikimoriID, "error", gerr)
+			failed++
+			continue
+		}
+		if uerr := s.upsertAnimeFromExternal(ctx, anime); uerr != nil {
+			s.log.Warnw("announcements sync: upsert failed", "shikimori_id", anime.ShikimoriID, "error", uerr)
+			failed++
+			continue
+		}
+		if existing == nil {
+			imported++
+		} else {
+			refreshed++
+		}
+	}
+
+	// 2+3. Franchise enrichment: announced candidates + list-referenced seeds.
+	enrichPool := make([]*domain.Anime, 0, limit+seedBackfillLimit)
+	for _, anime := range announced {
+		row, gerr := s.animeRepo.GetByShikimoriID(ctx, anime.ShikimoriID)
+		if gerr != nil || row == nil {
+			continue
+		}
+		enrichPool = append(enrichPool, row)
+	}
+	if seedBackfillLimit > 0 {
+		seeds, serr := s.animeRepo.ListFranchiseUncheckedListed(ctx, seedBackfillLimit)
+		if serr != nil {
+			s.log.Warnw("announcements sync: seed backfill pool query failed", "error", serr)
+		} else {
+			enrichPool = append(enrichPool, seeds...)
+		}
+	}
+	for _, a := range enrichPool {
+		select {
+		case <-ctx.Done():
+			return imported, refreshed, enriched, failed, ctx.Err()
+		default:
+		}
+		if a.FranchiseChecked || a.Franchise != "" || a.ShikimoriID == "" {
+			continue
+		}
+		fr, ferr := s.shikimoriClient.GetAnimeFranchise(ctx, a.ShikimoriID)
+		if ferr != nil {
+			// Not marked checked — retried on the next daily run.
+			s.log.Debugw("announcements sync: franchise fetch failed", "anime_id", a.ID, "shikimori_id", a.ShikimoriID, "error", ferr)
+			failed++
+			continue
+		}
+		if serr := s.animeRepo.SetFranchise(ctx, a.ID, fr); serr != nil {
+			s.log.Warnw("announcements sync: persist franchise failed", "anime_id", a.ID, "error", serr)
+			failed++
+			continue
+		}
+		enriched++
+	}
+
+	s.log.Infow("announcements sync completed",
+		"imported", imported, "refreshed", refreshed, "enriched", enriched, "failed", failed)
+	return imported, refreshed, enriched, failed, nil
+}

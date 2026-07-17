@@ -356,6 +356,42 @@ func (h *CatalogHandler) SyncCalendar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// SyncAnnouncements triggers announcement discovery from Shikimori (called
+// by scheduler; spec 2026-07-17). Query knobs: ?limit= (default 30, max 100)
+// and ?seed_backfill= (default 40, max 200).
+func (h *CatalogHandler) SyncAnnouncements(w http.ResponseWriter, r *http.Request) {
+	limit := parseQueryInt(r, "limit", 30, 100)
+	seedBackfill := parseQueryInt(r, "seed_backfill", 40, 200)
+
+	imported, refreshed, enriched, failed, err := h.catalogService.SyncAnnouncements(r.Context(), limit, seedBackfill)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]interface{}{
+		"imported":  imported,
+		"refreshed": refreshed,
+		"enriched":  enriched,
+		"failed":    failed,
+	})
+}
+
+// parseQueryInt reads an int query param with default + upper bound.
+func parseQueryInt(r *http.Request, key string, def, max int) int {
+	v := r.URL.Query().Get(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return def
+	}
+	if n > max {
+		return max
+	}
+	return n
+}
+
 // GetSchedule handles getting anime release schedule
 func (h *CatalogHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 	animes, err := h.catalogService.GetSchedule(r.Context())

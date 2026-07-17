@@ -594,6 +594,21 @@ func (r *AnimeRepository) SetFranchise(ctx context.Context, id, franchise string
 		}).Error
 }
 
+// ListFranchiseUncheckedListed returns anime that appear in at least one
+// user's anime_list but were never franchise-checked — the S8 seed-side
+// franchise backfill pool (spec 2026-07-17). Bounded by limit; oldest rows
+// first so the backfill converges deterministically across daily runs.
+func (r *AnimeRepository) ListFranchiseUncheckedListed(ctx context.Context, limit int) ([]*domain.Anime, error) {
+	var out []*domain.Anime
+	err := r.db.WithContext(ctx).
+		Where("franchise_checked = ? AND shikimori_id <> ''", false).
+		Where("EXISTS (SELECT 1 FROM anime_list al WHERE al.anime_id = animes.id)").
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&out).Error
+	return out, err
+}
+
 // VerifyMembershipRow is the minimal projection the content-verify queue
 // needs: identity + the latest-aired counter for sample-episode selection.
 type VerifyMembershipRow struct {
