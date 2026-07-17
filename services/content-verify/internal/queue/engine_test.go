@@ -450,6 +450,36 @@ func TestClaimReturnsSkipTaskWhenVerifyLaneSettled(t *testing.T) {
 	}
 }
 
+// TestClaimSkipBlockedDoesNotSetCooldown mirrors
+// TestClaimBlockedDoesNotSetCooldown for the SKIP lane: while another worker
+// holds the candidate's only skip task, a second Claim must come back idle
+// without cooling the title down — cooldown would freeze its remaining skip
+// work for the whole CooldownTTL.
+func TestClaimSkipBlockedDoesNotSetCooldown(t *testing.T) {
+	f := newSkipEngineFixture(t, true)
+	ctx := context.Background()
+
+	_, task1, release1, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task1 == nil || release1 == nil {
+		t.Fatal("expected a leased skip task on the first claim")
+	}
+	defer release1()
+
+	u2, task2, release2, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2 != nil || task2 != nil || release2 != nil {
+		t.Fatalf("skip task is leased; second claim must be idle, got unit=%+v task=%+v release=%v", u2, task2, release2 != nil)
+	}
+	if f.sig.InCooldown(ctx, "o1") {
+		t.Fatal("a candidate whose skip task is leased by an in-flight claim must not be cooled down")
+	}
+}
+
 func TestClaimSkipDisabledFallsToCooldown(t *testing.T) {
 	f := newSkipEngineFixture(t, false)
 	ctx := context.Background()

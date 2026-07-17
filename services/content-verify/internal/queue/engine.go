@@ -73,20 +73,33 @@ func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Stor
 	}
 }
 
+// membership caches the catalog membership fetch for membershipTTL. Like
+// enumerate, the (up to 30s) HTTP call runs WITHOUT holding mu — mu also
+// guards the lease/release hot path, and holding it across a slow fetch
+// would stall every other worker's Claim and release. Two workers
+// cold-missing concurrently both fetch; the second write overwrites the
+// first with an equally-fresh result.
 func (e *Engine) membership(ctx context.Context) *catalogclient.Membership {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if e.memb != nil && e.now().Sub(e.membAt) < membershipTTL {
-		return e.memb
+		m := e.memb
+		e.mu.Unlock()
+		return m
 	}
+	e.mu.Unlock()
+
 	m, err := e.cat.Membership(ctx)
 	if err != nil {
 		if e.log != nil {
 			e.log.Warnw("membership fetch failed; reusing stale", "error", err)
 		}
+		e.mu.Lock()
+		defer e.mu.Unlock()
 		return e.memb // possibly nil — BuildCandidates tolerates it
 	}
+	e.mu.Lock()
 	e.memb, e.membAt = m, e.now()
+	e.mu.Unlock()
 	return m
 }
 
