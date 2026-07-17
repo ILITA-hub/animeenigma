@@ -663,6 +663,7 @@ func main() {
 	// non-deterministic across reboots without being predictable.
 	spotlightWebClient := client.NewWebClient("", nil)
 	spotlightPlayerClient := client.NewPlayerClient("", nil, log)
+	spotlightRecsClient := client.NewRecsClient("", nil, log)
 	spotlightFanficClient := client.NewFanficClient("", nil, log)
 	spotlightRng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	prometheusClient := prometheus.NewClient(cfg.Prometheus.URL)
@@ -676,7 +677,7 @@ func main() {
 		cards.NewLatestNewsResolver(spotlightWebClient, redisCache, spotlightRng, log),
 		cards.NewPlatformStatsResolver(prometheusClient, redisCache, log),
 		// Dynamic cards (Phase 3 — Plan 03-03)
-		cards.NewPersonalPickResolver(catalogService, spotlightPlayerClient, redisCache, spotlightRng, log),
+		cards.NewPersonalPickResolver(catalogService, spotlightRecsClient, redisCache, spotlightRng, log),
 		cards.NewTelegramNewsResolver(telegramClient, redisCache, spotlightRng, log),
 		cards.NewNowWatchingResolver(cards.NewGormNowWatchingAdapter(db.DB), redisCache, spotlightRng, log),
 		cards.NewNotTimeYetResolver(spotlightPlayerClient, redisCache, spotlightRng, log),

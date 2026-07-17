@@ -8,11 +8,13 @@
 //     (HSB-BE-30). Cache key spotlight:trending:<YYYY-MM-DD>, TTL 24h.
 //     Card payload Source = "trending".
 //
-//   - Login (userID set): HTTP fan-out to player /api/users/recs via
-//     PlayerClient.FetchUserRecs, forwarding the JWT from ctx. Player's
-//     OptionalAuth returns personalized recs.upNext. Reduced via
-//     AdaptiveSlice. Cache key spotlight:personal:<user_id>:<YYYY-MM-DD>,
-//     TTL 24h. Card payload Source = "personal".
+//   - Login (userID set): HTTP fan-out to recs /api/users/recs via
+//     RecsClient.FetchUserRecs, forwarding the JWT from ctx (moved from
+//     PlayerClient 2026-07-17, Task 9 — the route lives on recs:8094 since
+//     the 2026-06-11 extraction). Recs' OptionalAuth returns personalized
+//     recs.upNext. Reduced via AdaptiveSlice. Cache key
+//     spotlight:personal:<user_id>:<YYYY-MM-DD>, TTL 24h. Card payload
+//     Source = "personal".
 //
 // If the login path is requested but the JWT is missing from ctx (defensive
 // case — handler should always set it), the resolver falls back to the anon
@@ -42,7 +44,9 @@ type trendingFetcher interface {
 }
 
 // playerRecsFetcher is the minimal surface the login path needs. The
-// production *client.PlayerClient satisfies this implicitly.
+// production *client.RecsClient satisfies this implicitly (moved from
+// *client.PlayerClient 2026-07-17, Task 9 — the interface itself is
+// unchanged, only the concrete implementation feeding it).
 type playerRecsFetcher interface {
 	FetchUserRecs(ctx context.Context, jwt string) ([]client.UserRec, error)
 }
@@ -180,7 +184,7 @@ func (r *PersonalPickResolver) resolveAnon(ctx context.Context, cacheKey string)
 	return &spotlight.Card{Type: r.Type(), Data: data}, nil
 }
 
-// resolveLogin executes the login fan-out path: PlayerClient.FetchUserRecs →
+// resolveLogin executes the login fan-out path: RecsClient.FetchUserRecs →
 // AdaptiveSlice. cacheKey is "spotlight:personal:<user_id>:<YYYY-MM-DD>".
 func (r *PersonalPickResolver) resolveLogin(ctx context.Context, cacheKey, jwt string) (*spotlight.Card, error) {
 	recs, err := r.recs.FetchUserRecs(ctx, jwt)
