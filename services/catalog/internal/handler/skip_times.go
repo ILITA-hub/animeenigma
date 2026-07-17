@@ -3,16 +3,15 @@
 //
 // We proxy (rather than call from the browser) for three reasons:
 //   1. CORS — aniskip's endpoints are not browser-CORS-enabled.
-//   2. Cache — timestamps are crowdsourced and effectively immutable, so a
-//      7-day TTL collapses thousands of player loads down to one upstream
-//      request per (malId, episode) pair.
+//   2. Cache — real timestamps are effectively immutable, so a 7-day positive
+//      TTL collapses repeated player loads without hiding later submissions.
 //   3. Graceful degradation — aniskip returns 404 for anime not in their DB.
 //      The frontend never has to handle that; we coerce to a uniform
 //      `{ found: false, results: [] }` shape and the player overlay simply
 //      doesn't render.
 //
 // Style anchor: services/catalog/internal/handler/news.go (cached upstream
-// proxy via cache.Cache GetOrSet + a thin http.Client).
+// proxy with a thin http.Client).
 
 package handler
 
@@ -71,7 +70,10 @@ type SkipTimesResultItem struct {
 	EpisodeLength float64 `json:"episodeLength"`
 }
 
-// SkipTimesHandler proxies aniskip.com and caches responses for 7 days.
+// SkipTimesHandler proxies aniskip.com and caches usable responses for 7 days.
+// Misses and upstream failures are deliberately never cached: ongoing episodes
+// can receive community timestamps shortly after the first viewer asks for
+// them, so a negative cache would hide newly submitted data for the full TTL.
 type SkipTimesHandler struct {
 	cache      cache.Cache
 	httpClient *http.Client
@@ -118,29 +120,62 @@ func (h *SkipTimesHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	cacheKey := fmt.Sprintf("skip-times:%s:%s", malID, episode)
 
-	var result SkipTimesResult
-	err := h.cache.GetOrSet(r.Context(), cacheKey, &result, skipTimesTTL, func() (interface{}, error) {
-		return h.fetchFromUpstream(r.Context(), malID, episode), nil
-	})
-	if err != nil {
-		// fetchFromUpstream never returns an error (it coerces failures to
-		// an empty result so the cache stores them and we don't hammer
-		// aniskip on misses). Cache layer errors are still possible —
-		// degrade gracefully to the same empty shape.
-		h.log.Warnw("skip-times cache GetOrSet error, returning empty",
+	var cached SkipTimesResult
+	if err := h.cache.Get(r.Context(), cacheKey, &cached); err == nil {
+		if hasUsableSkipTimes(cached) {
+			httputil.OK(w, cached)
+			return
+		}
+		// Remove negative/invalid values written by older versions so the cache
+		// converges immediately to positive-only storage after deployment.
+		if err := h.cache.Delete(r.Context(), cacheKey); err != nil {
+			h.log.Warnw("skip-times stale cache delete error, fetching upstream",
+				"mal_id", malID, "episode", episode, "error", err)
+		}
+	} else if err != cache.ErrNotFound {
+		// Cache availability must not decide whether this soft feature can use
+		// the upstream. Fetch directly and still serve a successful response.
+		h.log.Warnw("skip-times cache get error, fetching upstream",
 			"mal_id", malID, "episode", episode, "error", err)
-		httputil.OK(w, SkipTimesResult{Found: false, Results: []SkipTimesResultItem{}})
-		return
 	}
 
+	result := h.fetchFromUpstream(r.Context(), malID, episode)
+	if hasUsableSkipTimes(result) {
+		if err := h.cache.Set(r.Context(), cacheKey, result, skipTimesTTL); err != nil {
+			// Cache writes are best-effort. The current viewer should still receive
+			// the real timestamps that were fetched successfully.
+			h.log.Warnw("skip-times cache set error, serving upstream result",
+				"mal_id", malID, "episode", episode, "error", err)
+		}
+	}
 	httputil.OK(w, result)
+}
+
+// hasUsableSkipTimes is the positive-cache gate. `found:true` alone is not
+// sufficient: only a recognized OP/ED interval with a real positive duration
+// is worth retaining. Unknown future result types still pass through to the
+// caller, but they do not create a seven-day cache entry the current player
+// cannot use.
+func hasUsableSkipTimes(result SkipTimesResult) bool {
+	if !result.Found {
+		return false
+	}
+	for _, item := range result.Results {
+		if item.Interval.StartTime < 0 || item.Interval.EndTime <= item.Interval.StartTime {
+			continue
+		}
+		switch item.SkipType {
+		case "op", "ed", "mixed-op", "mixed-ed":
+			return true
+		}
+	}
+	return false
 }
 
 // fetchFromUpstream calls aniskip and coerces all failure modes (404, non-2xx,
 // network error, malformed JSON, missing fields) to the uniform empty shape.
-// Returning a value for every code path lets cache.GetOrSet store the miss so
-// repeat lookups for the same (malId, episode) don't re-hit the upstream
-// during the 7-day TTL window.
+// The caller serves that shape without caching it, allowing newly submitted
+// timestamps for ongoing episodes to become visible on the next request.
 func (h *SkipTimesHandler) fetchFromUpstream(ctx context.Context, malID, episode string) SkipTimesResult {
 	empty := SkipTimesResult{Found: false, Results: []SkipTimesResultItem{}}
 
