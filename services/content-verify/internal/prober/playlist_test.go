@@ -98,3 +98,63 @@ func TestLocalizeHLS(t *testing.T) {
 		}
 	}
 }
+
+// TestLocalizeHLSVariantLowest covers the variant-selection hop with three
+// #EXT-X-STREAM-INF variants listed out of bandwidth order: lowest=true must
+// pick the smallest BANDWIDTH (300000) regardless of listing order, while
+// lowest=false must keep today's first-listed behavior (2000000) so existing
+// callers (LocalizeHLS) are untouched.
+func TestLocalizeHLSVariantLowest(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(strings.Join([]string{
+			"#EXTM3U",
+			"#EXT-X-STREAM-INF:BANDWIDTH=2000000",
+			"v2000.m3u8",
+			"#EXT-X-STREAM-INF:BANDWIDTH=800000",
+			"v800.m3u8",
+			"#EXT-X-STREAM-INF:BANDWIDTH=300000",
+			"v300.m3u8",
+			"",
+		}, "\n")))
+	})
+	mux.HandleFunc("/v2000.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\nseg2000.ts\n#EXT-X-ENDLIST\n"))
+	})
+	mux.HandleFunc("/v800.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\nseg800.ts\n#EXT-X-ENDLIST\n"))
+	})
+	mux.HandleFunc("/v300.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\nseg300.ts\n#EXT-X-ENDLIST\n"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	gatewayBase := "https://gw.example"
+
+	dirLowest := t.TempDir()
+	localLowest, _, err := LocalizeHLSVariant(context.Background(), srv.Client(), gatewayBase, srv.URL+"/master.m3u8", dirLowest, true)
+	if err != nil {
+		t.Fatalf("LocalizeHLSVariant(lowest=true): %v", err)
+	}
+	bLowest, err := os.ReadFile(localLowest)
+	if err != nil {
+		t.Fatalf("read localized (lowest) playlist: %v", err)
+	}
+	if !strings.Contains(string(bLowest), "seg300.ts") {
+		t.Fatalf("lowest=true did not fetch the 300000-bandwidth variant:\n%s", bLowest)
+	}
+
+	dirFirst := t.TempDir()
+	localFirst, _, err := LocalizeHLSVariant(context.Background(), srv.Client(), gatewayBase, srv.URL+"/master.m3u8", dirFirst, false)
+	if err != nil {
+		t.Fatalf("LocalizeHLSVariant(lowest=false): %v", err)
+	}
+	bFirst, err := os.ReadFile(localFirst)
+	if err != nil {
+		t.Fatalf("read localized (first) playlist: %v", err)
+	}
+	if !strings.Contains(string(bFirst), "seg2000.ts") {
+		t.Fatalf("lowest=false did not keep first-listed variant (2000000):\n%s", bFirst)
+	}
+}
