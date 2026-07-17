@@ -158,3 +158,50 @@ func TestLocalizeHLSVariantLowest(t *testing.T) {
 		t.Fatalf("lowest=false did not keep first-listed variant (2000000):\n%s", bFirst)
 	}
 }
+
+// TestLocalizeHLSVariantAverageBandwidthCollision verifies that the
+// BANDWIDTH regex does not match the substring within AVERAGE-BANDWIDTH.
+// When AVERAGE-BANDWIDTH appears before BANDWIDTH on the same #EXT-X-STREAM-INF
+// line, lowest=true must extract the correct BANDWIDTH value (not the
+// AVERAGE-BANDWIDTH value) and pick the variant with the smallest BANDWIDTH.
+func TestLocalizeHLSVariantAverageBandwidthCollision(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(strings.Join([]string{
+			"#EXTM3U",
+			// First variant: AVERAGE-BANDWIDTH=500000 (smaller), BANDWIDTH=2000000
+			"#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=500000,BANDWIDTH=2000000,RESOLUTION=1920x1080",
+			"v2000.m3u8",
+			// Second variant: AVERAGE-BANDWIDTH=900000 (larger), BANDWIDTH=300000
+			"#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=900000,BANDWIDTH=300000,RESOLUTION=1280x720",
+			"v300.m3u8",
+			"",
+		}, "\n")))
+	})
+	mux.HandleFunc("/v2000.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\nseg2000.ts\n#EXT-X-ENDLIST\n"))
+	})
+	mux.HandleFunc("/v300.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\nseg300.ts\n#EXT-X-ENDLIST\n"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	gatewayBase := "https://gw.example"
+
+	// With the anchored regex, lowest=true should pick v300.m3u8 (BANDWIDTH=300000)
+	// not v2000.m3u8 (BANDWIDTH=2000000), even though AVERAGE-BANDWIDTH=500000
+	// (from v2000) is smaller than AVERAGE-BANDWIDTH=900000 (from v300).
+	dir := t.TempDir()
+	local, _, err := LocalizeHLSVariant(context.Background(), srv.Client(), gatewayBase, srv.URL+"/master.m3u8", dir, true)
+	if err != nil {
+		t.Fatalf("LocalizeHLSVariant(lowest=true) with AVERAGE-BANDWIDTH: %v", err)
+	}
+	b, err := os.ReadFile(local)
+	if err != nil {
+		t.Fatalf("read localized playlist: %v", err)
+	}
+	if !strings.Contains(string(b), "seg300.ts") {
+		t.Fatalf("lowest=true did not pick the correct variant (smallest BANDWIDTH=300000), picked wrong one:\n%s", b)
+	}
+}

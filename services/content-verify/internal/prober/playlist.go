@@ -39,7 +39,7 @@ func ProxiedURL(gatewayBase string, rawURL, exp, sig, referer string) string {
 
 var extinfRe = regexp.MustCompile(`#EXTINF:([0-9.]+)`)
 var uriAttrRe = regexp.MustCompile(`URI="([^"]+)"`)
-var streamInfBandwidthRe = regexp.MustCompile(`BANDWIDTH=(\d+)`)
+var streamInfBandwidthRe = regexp.MustCompile(`(?:^|[,:])BANDWIDTH=(\d+)`)
 
 // LocalizeHLS downloads master → first variant → media playlist through the
 // proxy, absolutizes every URI against the gateway (segments AND EXT-X-KEY
