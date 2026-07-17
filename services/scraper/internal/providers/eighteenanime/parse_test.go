@@ -72,6 +72,17 @@ func TestBestMatch(t *testing.T) {
 	if bestMatch("totally unrelated xyzzy", hits) != nil {
 		t.Fatal("expected nil for unrelated query")
 	}
+	// AUTO-630: a CJK-only title has no ASCII-representable form, so every
+	// token normalizes to "". It must NOT false-match arbitrary unrelated
+	// slugs via strings.Contains(slug, "") — bestMatch must return nil so the
+	// caller falls through to no-content / the next alt title.
+	unrelated := []SearchHit{
+		{Slug: "1234-lamour-fou-de-lautomate", URL: "https://18anime.me/watch/1234-lamour-fou-de-lautomate"},
+		{Slug: "5678-some-other-series", URL: "https://18anime.me/watch/5678-some-other-series"},
+	}
+	if got := bestMatch("恋する乙女", unrelated); got != nil {
+		t.Fatalf("expected nil for CJK-only title against unrelated slugs, got %+v", got)
+	}
 }
 
 func TestParseEpisodeMirrors(t *testing.T) {

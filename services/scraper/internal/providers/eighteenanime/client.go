@@ -64,7 +64,8 @@ func bestMatch(title string, hits []SearchHit) *SearchHit {
 			score = len(want)
 		} else {
 			for _, tok := range strings.Fields(strings.ToLower(title)) {
-				if len(tok) > 2 && strings.Contains(slugNorm, normalize(tok)) {
+				nt := normalize(tok)
+				if len(tok) > 2 && nt != "" && strings.Contains(slugNorm, nt) {
 					score++
 				}
 			}
