@@ -17,6 +17,7 @@ type JobService struct {
 	cleanupJob                 *jobs.CleanupJob
 	topAnimeJob                *jobs.TopAnimeSyncJob
 	calendarJob                *jobs.CalendarSyncJob
+	announcementsJob           *jobs.AnnouncementsSyncJob
 	probeTriggerJob            *jobs.ProbeTriggerJob
 	readThresholdJob           *jobs.ReadThresholdJob
 	providerRankingJob         *jobs.ProviderRankingJob
@@ -32,6 +33,7 @@ type JobService struct {
 	lastCleanupRun             time.Time
 	lastTopAnimeRun            time.Time
 	lastCalendarRun            time.Time
+	lastAnnouncementsRun       time.Time
 	lastProbeRun               time.Time
 	lastReadThresholdRun       time.Time
 	lastProviderRankingRun     time.Time
@@ -46,6 +48,7 @@ func NewJobService(
 	cleanupJob *jobs.CleanupJob,
 	topAnimeJob *jobs.TopAnimeSyncJob,
 	calendarJob *jobs.CalendarSyncJob,
+	announcementsJob *jobs.AnnouncementsSyncJob,
 	probeTriggerJob *jobs.ProbeTriggerJob,
 	readThresholdJob *jobs.ReadThresholdJob,
 	providerRankingJob *jobs.ProviderRankingJob,
@@ -65,6 +68,7 @@ func NewJobService(
 		cleanupJob:             cleanupJob,
 		topAnimeJob:            topAnimeJob,
 		calendarJob:            calendarJob,
+		announcementsJob:       announcementsJob,
 		probeTriggerJob:        probeTriggerJob,
 		readThresholdJob:       readThresholdJob,
 		providerRankingJob:     providerRankingJob,
@@ -129,7 +133,7 @@ func (s *JobService) postStatus(ctx context.Context, id string, ok bool, summary
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, playbackProbeCron, readThresholdCron, providerRankingCron, subtitleProbeCron, autocacheLogicACron, autocachePredictionCron, fanficDailyCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, announcementsCron, playbackProbeCron, readThresholdCron, providerRankingCron, subtitleProbeCron, autocacheLogicACron, autocachePredictionCron, fanficDailyCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -219,6 +223,32 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 			s.recordSuccess(ctx, "calendar_sync")
 			s.lastCalendarRun = time.Now()
 			s.log.Info("calendar sync completed successfully")
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	// Schedule announcements sync job (spec 2026-07-17): daily top-popularity
+	// anons import + franchise enrichment via catalog's announcements-sync
+	// endpoint. Mirrors calendar sync's registration pattern.
+	_, err = s.cron.AddFunc(announcementsCron, func() {
+		if s.skipIfDegraded("announcements_sync") {
+			return
+		}
+		ctx := context.Background()
+		s.log.Info("starting scheduled announcements sync")
+		start := time.Now()
+		if err := s.announcementsJob.Run(ctx); err != nil {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("announcements_sync", "error").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("announcements_sync").Observe(time.Since(start).Seconds())
+			s.log.Errorw("announcements sync failed", "error", err)
+		} else {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("announcements_sync", "success").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("announcements_sync").Observe(time.Since(start).Seconds())
+			s.recordSuccess(ctx, "announcements_sync")
+			s.lastAnnouncementsRun = time.Now()
+			s.log.Info("announcements sync completed successfully")
 		}
 	})
 	if err != nil {
@@ -540,6 +570,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"calendar_sync": map[string]interface{}{
 			"last_run": s.lastCalendarRun,
+		},
+		"announcements_sync": map[string]interface{}{
+			"last_run": s.lastAnnouncementsRun,
 		},
 		"playback_probe": map[string]interface{}{
 			"last_run": s.lastProbeRun,

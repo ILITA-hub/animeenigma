@@ -18,6 +18,7 @@ var KnownJobs = []string{
 	"cleanup",
 	"top_anime_sync",
 	"calendar_sync",
+	"announcements_sync",
 	"playback_probe",
 	"read_threshold_recompute",
 	"provider_ranking_recompute",

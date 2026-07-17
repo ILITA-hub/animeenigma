@@ -137,6 +137,9 @@ func main() {
 	cleanupJob := jobs.NewCleanupJob(db.DB, redisCache, &cfg.Jobs, log)
 	topAnimeJob := jobs.NewTopAnimeSyncJob(&cfg.Jobs, log)
 	calendarJob := jobs.NewCalendarSyncJob(&cfg.Jobs, log)
+	// Daily announcements sync (spec 2026-07-17) — top-popularity anons
+	// import + franchise enrichment via catalog's announcements-sync endpoint.
+	announcementsJob := jobs.NewAnnouncementsSyncJob(&cfg.Jobs, log)
 	animeLoaderJob := jobs.NewAnimeLoaderJob(taskRepo, exportJobRepo, taskProcessor, log)
 	// Phase A — daily playback-health probe trigger.
 	probeTriggerJob := jobs.NewProbeTriggerJob(&cfg.Jobs, log)
@@ -162,7 +165,7 @@ func main() {
 	fanficDailyJob := jobs.NewFanficDailyJob(&cfg.Jobs, log)
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, probeTriggerJob, readThresholdJob, providerRankingJob, subtitleProbeJob, autocacheLogicAJob, autocachePredictionJob, fanficDailyJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, announcementsJob, probeTriggerJob, readThresholdJob, providerRankingJob, subtitleProbeJob, autocacheLogicAJob, autocachePredictionJob, fanficDailyJob, log)
 
 	// Graceful-degradation Phase 3: heavy crons skip their tick while the
 	// governor-published level is Elevated+ (Redis ae:degradation:level;
@@ -196,6 +199,7 @@ func main() {
 		cfg.Jobs.CleanupCron,
 		cfg.Jobs.TopAnimeSyncCron,
 		cfg.Jobs.CalendarSyncCron,
+		cfg.Jobs.AnnouncementsSyncCron,
 		cfg.Jobs.PlaybackProbeCron,
 		cfg.Jobs.ReadThresholdCron,
 		cfg.Jobs.ProviderRankingCron,

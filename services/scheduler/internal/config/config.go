@@ -26,18 +26,19 @@ func (s ServerConfig) Address() string {
 }
 
 type JobsConfig struct {
-	ShikimoriSyncCron   string
-	CleanupCron         string
-	TopAnimeSyncCron    string
-	CalendarSyncCron    string
-	ShikimoriAPIURL     string
-	ShikimoriAppName    string
-	CatalogServiceURL   string
-	PolicyServiceURL    string
-	DataRetentionDays   int
-	OngoingStaleHours   int
-	AnnouncedStaleHours int
-	ReleasedStaleHours  int
+	ShikimoriSyncCron     string
+	CleanupCron           string
+	TopAnimeSyncCron      string
+	CalendarSyncCron      string
+	AnnouncementsSyncCron string
+	ShikimoriAPIURL       string
+	ShikimoriAppName      string
+	CatalogServiceURL     string
+	PolicyServiceURL      string
+	DataRetentionDays     int
+	OngoingStaleHours     int
+	AnnouncedStaleHours   int
+	ReleasedStaleHours    int
 
 	// Phase A — playback-health probe trigger (replaces Phase 23 canary).
 	// PlaybackProbeCron: cron expression for the probe run.
@@ -141,18 +142,19 @@ func Load() (*Config, error) {
 			DB:       getEnvInt("REDIS_DB", 2),
 		},
 		Jobs: JobsConfig{
-			ShikimoriSyncCron:   getEnv("SHIKIMORI_SYNC_CRON", "0 2 * * *"), // Daily at 2 AM
-			CleanupCron:         getEnv("CLEANUP_CRON", "0 3 * * 0"),        // Weekly on Sunday at 3 AM
-			TopAnimeSyncCron:    getEnv("TOP_ANIME_SYNC_CRON", "0 1 * * *"), // Daily at 1 AM
-			CalendarSyncCron:    getEnv("CALENDAR_SYNC_CRON", "0 4 * * 1"),  // Weekly on Monday at 4 AM
-			ShikimoriAPIURL:     getEnv("SHIKIMORI_API_URL", "https://shikimori.one/api"),
-			ShikimoriAppName:    getEnv("SHIKIMORI_APP_NAME", "AnimeEnigma"),
-			CatalogServiceURL:   getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
-			PolicyServiceURL:    getEnv("POLICY_SERVICE_URL", "http://policy:8098"),
-			DataRetentionDays:   getEnvInt("DATA_RETENTION_DAYS", 90),
-			OngoingStaleHours:   getEnvInt("ONGOING_STALE_HOURS", 12),
-			AnnouncedStaleHours: getEnvInt("ANNOUNCED_STALE_HOURS", 72),
-			ReleasedStaleHours:  getEnvInt("RELEASED_STALE_HOURS", 168),
+			ShikimoriSyncCron:     getEnv("SHIKIMORI_SYNC_CRON", "0 2 * * *"),      // Daily at 2 AM
+			CleanupCron:           getEnv("CLEANUP_CRON", "0 3 * * 0"),             // Weekly on Sunday at 3 AM
+			TopAnimeSyncCron:      getEnv("TOP_ANIME_SYNC_CRON", "0 1 * * *"),      // Daily at 1 AM
+			CalendarSyncCron:      getEnv("CALENDAR_SYNC_CRON", "0 4 * * 1"),       // Weekly on Monday at 4 AM
+			AnnouncementsSyncCron: getEnv("ANNOUNCEMENTS_SYNC_CRON", "23 5 * * *"), // Daily at 05:23
+			ShikimoriAPIURL:       getEnv("SHIKIMORI_API_URL", "https://shikimori.one/api"),
+			ShikimoriAppName:      getEnv("SHIKIMORI_APP_NAME", "AnimeEnigma"),
+			CatalogServiceURL:     getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
+			PolicyServiceURL:      getEnv("POLICY_SERVICE_URL", "http://policy:8098"),
+			DataRetentionDays:     getEnvInt("DATA_RETENTION_DAYS", 90),
+			OngoingStaleHours:     getEnvInt("ONGOING_STALE_HOURS", 12),
+			AnnouncedStaleHours:   getEnvInt("ANNOUNCED_STALE_HOURS", 72),
+			ReleasedStaleHours:    getEnvInt("RELEASED_STALE_HOURS", 168),
 			// Phase A — playback-health probe trigger (every 6h — policy-machine base tick).
 			PlaybackProbeCron: getEnv("PLAYBACK_PROBE_CRON", "0 */6 * * *"),
 			// Phase 03 (v4.0) — daily read-threshold recompute trigger.
