@@ -211,6 +211,13 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 					if sum, ok := sums[families[fi].Providers[pi].Provider]; ok {
 						v := sum
 						families[fi].Providers[pi].Verify = &v
+						// Episodes-ready backfill: native feed-time counts (kodik/
+						// hanime/ae live lists) win; the probe-time count fills the
+						// providers the feed can't enumerate in-band (EN scrapers,
+						// animejoy legs — browser resolves take 45-90s).
+						if families[fi].Providers[pi].Episodes == 0 {
+							families[fi].Providers[pi].Episodes = v.Episodes
+						}
 					}
 				}
 			}

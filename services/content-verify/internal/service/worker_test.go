@@ -137,7 +137,7 @@ func TestTickAeSynthUnitSkipsProbe(t *testing.T) {
 func TestTickNormalUnitProbesWithPrevFailsAndPersists(t *testing.T) {
 	unit := &queue.Unit{
 		AnimeID: "a-1", Provider: "gogoanime",
-		Key: domain.UnitKey{Server: "hd-1", Category: "sub"}, Episode: 5,
+		Key: domain.UnitKey{Server: "hd-1", Category: "sub"}, Episode: 5, Episodes: 12,
 	}
 	claimer := &fakeClaimer{unit: unit, ongoing: true}
 	verdict := domain.UnitVerdict{Key: unit.Key, Episode: 5, Status: domain.StatusVerified}
@@ -165,5 +165,10 @@ func TestTickNormalUnitProbesWithPrevFailsAndPersists(t *testing.T) {
 	}
 	if len(store.upserts) != 1 || store.upserts[0].Status != domain.StatusVerified {
 		t.Fatalf("probed verdict not persisted: %+v", store.upserts)
+	}
+	// Episodes-ready is enumeration truth stamped at persist time — the prober
+	// never sees or sets it.
+	if store.upserts[0].Episodes != 12 {
+		t.Fatalf("persisted episodes = %d, want 12 (from unit)", store.upserts[0].Episodes)
 	}
 }

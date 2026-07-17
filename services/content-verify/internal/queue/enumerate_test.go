@@ -78,10 +78,16 @@ func TestEnumerateUnits(t *testing.T) {
 			if u.Episode != 28 || u.EpisodeID != "ep-28" {
 				t.Fatalf("gogo unit episode: %+v", u)
 			}
+			if u.Episodes != 2 { // episode-list LENGTH (2 entries), not the max number
+				t.Fatalf("gogo unit episodes-ready = %d, want 2: %+v", u.Episodes, u)
+			}
 		case "kodik":
 			kodik++
 			if u.Key.Team == "" {
 				t.Fatalf("kodik unit needs team key: %+v", u)
+			}
+			if u.Episodes != 28 { // per-team episodes_count from the roster
+				t.Fatalf("kodik unit episodes-ready = %d, want 28: %+v", u.Episodes, u)
 			}
 			// Kodik is synth-only (owner decision 2026-07-17): roster truth.
 			if u.Synth == nil || u.Synth.Status != domain.StatusVerified {

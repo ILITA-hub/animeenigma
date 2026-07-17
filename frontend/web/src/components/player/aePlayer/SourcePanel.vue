@@ -152,6 +152,11 @@
             v-if="s.badge"
             :class="['text-[10px] font-semibold font-mono uppercase tracking-wide', s.team ? 'ml-1.5 opacity-80' : '']"
           >{{ s.badge }}</span>
+          <span
+            v-if="s.episodes"
+            data-test="stream-episodes"
+            class="ml-1.5 text-[10px] font-semibold font-mono text-[var(--muted-foreground)]"
+          >{{ $t('player.sources.episodeCount', { n: s.episodes }) }}</span>
         </button>
       </div>
     </div>
@@ -191,7 +196,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { AudioKind, TrackLang, ProviderRow, ChipState, ServerOption } from '@/types/aePlayer'
+import type { AudioKind, TrackLang, ProviderRow, ChipState, ServerOption, TeamOption } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
 import { verifiedDubLangs, verifiedHardsubLangs, effectiveAudios, isUnverified } from '@/composables/aePlayer/verifiedCaps'
 import { streamBadgeText } from '@/composables/aePlayer/streamBadgeText'
@@ -206,7 +211,7 @@ const props = withDefaults(
     provider: string
     server: string
     servers: ServerOption[]
-    teams: string[]
+    teams: TeamOption[]
     capMap?: Map<string, ProviderCap>
     hackerMode?: boolean
     playbackError?: boolean
@@ -347,6 +352,9 @@ interface StreamEntry {
   team: string | null
   label: string
   badge: string | null
+  /** Episodes the stream has ready right now (kodik per-team count);
+   *  undefined = provider doesn't report per-stream counts. */
+  episodes?: number
   selected: boolean
 }
 
@@ -372,15 +380,16 @@ function entryBadge(kind: AudioKind): string | null {
 const streamEntries = computed<StreamEntry[]>(() => {
   // Kodik: one entry per translation team, badge from the team's category.
   if (props.teams.length > 0) {
-    return props.teams.map((name) => {
-      const kind: AudioKind = teamCategory(name) === 'sub' ? 'sub' : 'dub'
+    return props.teams.map((tm) => {
+      const kind: AudioKind = teamCategory(tm.name) === 'sub' ? 'sub' : 'dub'
       return {
-        id: 'team:' + name,
+        id: 'team:' + tm.name,
         kind,
-        team: name,
-        label: name,
+        team: tm.name,
+        label: tm.name,
         badge: entryBadge(kind),
-        selected: props.team === name,
+        episodes: tm.episodes,
+        selected: props.team === tm.name,
       }
     })
   }

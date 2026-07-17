@@ -4,7 +4,7 @@
 // feed has exactly one active provider, so it wins every pick.
 import type { ProviderResolver } from '@/composables/aePlayer/useProviderResolver'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, SubtitleTrack } from '@/types/aePlayer'
+import type { StreamResult, SubtitleTrack, TeamOption } from '@/types/aePlayer'
 import type { CapabilityReport } from '@/types/capabilities'
 import type { OfflineDownload } from './types'
 
@@ -45,7 +45,10 @@ export function makeOfflineResolver(p: OfflinePlayback): ProviderResolver {
       if (!d) throw new Error(`episode ${ep.number} is not downloaded`)
       return { url: d.playlistLocalPath, type: d.streamType, subtitles: d.subtitles }
     },
-    async listTeams(): Promise<string[]> {
+    async listTeams(): Promise<TeamOption[]> {
+      return []
+    },
+    async listTeamNames(): Promise<string[]> {
       return []
     },
   }

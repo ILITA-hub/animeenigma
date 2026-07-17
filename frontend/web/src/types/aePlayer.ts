@@ -79,6 +79,15 @@ export interface ServerOption {
   type?: string
 }
 
+/** Provider-native selectable team (kodik translation / animejoy fansub group)
+ *  for the Source panel's Stream section. `episodes` = how many episodes the
+ *  team has ready right now (kodik per-translation episodes_count); absent
+ *  when the provider doesn't report per-team counts (animejoy). */
+export interface TeamOption {
+  name: string
+  episodes?: number
+}
+
 /** Normalised stream descriptor returned by a provider adapter. */
 export interface StreamResult {
   url: string

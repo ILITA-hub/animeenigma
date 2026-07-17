@@ -559,7 +559,7 @@ import { usePlayerKeyboard } from '@/composables/aePlayer/usePlayerKeyboard'
 import { useProtocolTelemetry } from '@/composables/aePlayer/useProtocolTelemetry'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, AudioKind, ServerOption } from '@/types/aePlayer'
+import type { StreamResult, AudioKind, ServerOption, TeamOption } from '@/types/aePlayer'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 import type { VerifyReport } from '@/types/contentVerify'
 
@@ -648,7 +648,7 @@ const selectedEpisode = ref<EpisodeOption | null>(null)
 // initialEpisode re-pick so resume resolving late never yanks a deliberate pick.
 const userPickedEpisode = ref(false)
 const resolvedServers = ref<ServerOption[]>([])
-const teams = ref<string[]>([])
+const teams = ref<TeamOption[]>([])
 const currentStream = ref<StreamResult | null>(null)
 const isResolving = ref(false)
 const sourceError = ref<string | null>(null)

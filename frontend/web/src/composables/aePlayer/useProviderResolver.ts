@@ -34,7 +34,7 @@
 
 import { scraperApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, Combo, AudioKind, SubtitleTrack, ServerOption } from '@/types/aePlayer'
+import type { StreamResult, Combo, AudioKind, SubtitleTrack, ServerOption, TeamOption } from '@/types/aePlayer'
 import { hlsProxyUrl, maskedStreamUrl } from '@/utils/streaming'
 import { buildSubtitleProxyUrl, detectSubFormat, langFromTrack } from '@/utils/subtitleProxy'
 import { pickKodikTranslation } from './pickKodikTranslation'
@@ -238,7 +238,7 @@ export interface ProviderAdapter {
    * (sub vs dub) so a SUB selection doesn't surface DUB teams and vice-versa.
    * Adapters without sub-teams omit this; the resolver returns [] for them.
    */
-  listTeams?(animeId: string, audio: AudioKind): Promise<string[]>
+  listTeams?(animeId: string, audio: AudioKind): Promise<TeamOption[]>
 }
 
 // ─── Deps injected by makeResolver / useProviderResolver ────────────────────
@@ -553,7 +553,7 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
       }
     },
 
-    async listTeams(animeId: string, audio: AudioKind): Promise<string[]> {
+    async listTeams(animeId: string, audio: AudioKind): Promise<TeamOption[]> {
       const resp = await api.getTranslations(animeId)
       const translations: KodikTranslation[] = resp.data?.data ?? resp.data ?? []
       if (!Array.isArray(translations)) return []
@@ -562,10 +562,13 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
       // selection surfaces a wall of DUB teams (and vice-versa).
       const wantDub = audio === 'dub'
       const seen = new Set<string>()
-      const out: string[] = []
+      const out: TeamOption[] = []
       for (const t of translations) {
         if ((t.type === 'voice') !== wantDub) continue
-        if (t.title && !seen.has(t.title)) { seen.add(t.title); out.push(t.title) }
+        if (!t.title || seen.has(t.title)) continue
+        seen.add(t.title)
+        // episodes_count = how many episodes this team has ready right now.
+        out.push(t.episodes_count > 0 ? { name: t.title, episodes: t.episodes_count } : { name: t.title })
       }
       return out
     },
@@ -597,15 +600,16 @@ function makeAnimejoyAdapter(api: typeof animejoyApi, leg: 'sibnet' | 'allvideo'
       }
     },
 
-    async listTeams(animeId: string, audio: AudioKind): Promise<string[]> {
-      // animejoy is RU-SUB ONLY — never surfaces DUB teams.
+    async listTeams(animeId: string, audio: AudioKind): Promise<TeamOption[]> {
+      // animejoy is RU-SUB ONLY — never surfaces DUB teams. Its episode list
+      // is shared across teams, so per-team counts stay unset.
       if (audio === 'dub') return []
       const resp = await api.getEpisodes(animeId, leg)
       const data: AnimejoyEpisodesResponse = resp.data?.data ?? resp.data
       const seen = new Set<string>()
-      const out: string[] = []
+      const out: TeamOption[] = []
       for (const t of data?.teams ?? []) {
-        if (t.name && !seen.has(t.name)) { seen.add(t.name); out.push(t.name) }
+        if (t.name && !seen.has(t.name)) { seen.add(t.name); out.push({ name: t.name }) }
       }
       return out
     },
@@ -617,7 +621,11 @@ function makeAnimejoyAdapter(api: typeof animejoyApi, leg: 'sibnet' | 'allvideo'
 export interface ProviderResolver {
   listEpisodes(provider: string, animeId: string): Promise<EpisodeOption[]>
   resolveStream(provider: string, animeId: string, ep: EpisodeOption, combo: Combo): Promise<StreamResult>
-  listTeams(provider: string, animeId: string, audio: AudioKind): Promise<string[]>
+  listTeams(provider: string, animeId: string, audio: AudioKind): Promise<TeamOption[]>
+  /** listTeams reduced to bare names — for pickers that key options by team
+   *  NAME (the value doubles as combo.team) and don't render episode counts
+   *  (DownloadDialog / season downloads). */
+  listTeamNames(provider: string, animeId: string, audio: AudioKind): Promise<string[]>
 }
 
 /**
@@ -697,7 +705,7 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
     ): Promise<StreamResult> {
       return getAdapter(provider).resolveStream(animeId, ep, combo)
     },
-    async listTeams(provider: string, animeId: string, audio: AudioKind): Promise<string[]> {
+    async listTeams(provider: string, animeId: string, audio: AudioKind): Promise<TeamOption[]> {
       let adapter: ProviderAdapter
       try {
         adapter = getAdapter(provider)
@@ -705,6 +713,10 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
         return [] // unwired / dep-missing provider has no teams
       }
       return adapter.listTeams ? adapter.listTeams(animeId, audio) : []
+    },
+    async listTeamNames(provider: string, animeId: string, audio: AudioKind): Promise<string[]> {
+      const teams = await this.listTeams(provider, animeId, audio)
+      return teams.map((t) => t.name)
     },
   }
 }

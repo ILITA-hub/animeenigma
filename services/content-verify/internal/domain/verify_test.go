@@ -14,14 +14,17 @@ func TestUnitKeyString(t *testing.T) {
 
 func TestSummarize(t *testing.T) {
 	units := []UnitVerdict{
-		{Status: StatusVerified, Audio: &AudioVerdict{Lang: "ja", Confidence: 0.98, Verified: true}},
-		{Status: StatusVerified, Audio: &AudioVerdict{Lang: "en", Confidence: 0.97, Verified: true},
+		{Status: StatusVerified, Episodes: 12, Audio: &AudioVerdict{Lang: "ja", Confidence: 0.98, Verified: true}},
+		{Status: StatusVerified, Episodes: 28, Audio: &AudioVerdict{Lang: "en", Confidence: 0.97, Verified: true},
 			Hardsub: &HardsubVerdict{Present: true, Lang: "ru", Confidence: 0.96, Verified: true}},
 		{Status: StatusInconclusive},
 	}
 	s := Summarize(units)
 	if s.Status != "partial" || !s.Raw {
 		t.Fatalf("summary = %+v", s)
+	}
+	if s.Episodes != 28 { // max across units, unknown (0) units ignored
+		t.Fatalf("episodes = %d, want 28", s.Episodes)
 	}
 	if len(s.DubLangs) != 1 || s.DubLangs[0] != "en" {
 		t.Fatalf("dub_langs = %v", s.DubLangs)

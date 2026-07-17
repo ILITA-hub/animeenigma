@@ -87,12 +87,15 @@ func findVariant(vs []domain.Variant, cat string) *domain.Variant {
 func TestKodikFamily_MapsTeamsAndCategories(t *testing.T) {
 	s := &Service{db: newDB(t, domain.ScraperProvider{Name: "kodik-noads", Status: domain.StatusEnabled, Group: "ru", SupportsSub: true, SupportsDub: true}),
 		catalog: fakeCatalog{kodik: []domain.KodikTranslation{
-			{ID: 610, Title: "AniLibria", Type: "voice"},
-			{ID: 735, Title: "SovetRomantica", Type: "subtitles"},
+			{ID: 610, Title: "AniLibria", Type: "voice", EpisodesCount: 28},
+			{ID: 735, Title: "SovetRomantica", Type: "subtitles", EpisodesCount: 12},
 		}}}
 	fam, ok := s.kodikFamily(context.Background(), "uuid")
 	if !ok || fam.Family != "kodik" || len(fam.Providers) != 1 {
 		t.Fatalf("kodik family wrong: ok=%v fam=%+v", ok, fam)
+	}
+	if fam.Providers[0].Episodes != 28 { // fullest team wins
+		t.Errorf("kodik episodes = %d, want 28", fam.Providers[0].Episodes)
 	}
 	vs := fam.Providers[0].Variants
 	dub := findVariant(vs, "dub")
@@ -535,7 +538,7 @@ func TestBuildFamilies_VerifyBlend(t *testing.T) {
 		domain.ScraperProvider{Name: "nineanime", Status: domain.StatusEnabled, Group: "en", SupportsSub: true, PreferenceWeight: 40},
 	)
 	verify := fakeVerify{sums: map[string]domain.VerifySummary{
-		"gogoanime": {Status: "verified", Raw: true, DubLangs: []string{"en"}, HardsubLangs: []string{"en"}},
+		"gogoanime": {Status: "verified", Raw: true, DubLangs: []string{"en"}, HardsubLangs: []string{"en"}, Episodes: 12},
 	}}
 	s := NewService(db, nil, nil, nil, nil, nil, nil, verify)
 	report, err := s.Report(context.Background(), "anime-blend")
@@ -555,6 +558,11 @@ func TestBuildFamilies_VerifyBlend(t *testing.T) {
 	}
 	if gg == nil || gg.Verify == nil || gg.Verify.Status != "verified" || !gg.Verify.Raw || len(gg.Verify.DubLangs) != 1 {
 		t.Fatalf("gogoanime Verify not blended: %+v", gg)
+	}
+	// EN scrapers have no feed-time episode list — the probe-time count
+	// backfills ProviderCap.Episodes through the blend.
+	if gg.Episodes != 12 {
+		t.Fatalf("gogoanime episodes not backfilled from verify: %d, want 12", gg.Episodes)
 	}
 	if nn == nil || nn.Verify != nil {
 		t.Fatalf("nineanime (absent from verify summaries) must keep Verify nil: %+v", nn)

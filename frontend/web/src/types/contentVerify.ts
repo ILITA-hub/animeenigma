@@ -10,6 +10,8 @@ export interface VerifyUnit {
   status: 'verified' | 'inconclusive' | 'unreachable'
   audio?: { lang?: string; confidence: number; verified: boolean }
   hardsub?: { present: boolean; lang?: string; confidence: number; verified: boolean }
+  /** Episodes this unit had ready at enumeration time; absent = unknown. */
+  episodes?: number
   probed_at?: string
 }
 
@@ -18,6 +20,8 @@ export interface ProviderVerify {
   raw: boolean
   dub_langs: string[]
   hardsub_langs: string[]
+  /** Provider-level episodes-ready count (max across units); absent = unknown. */
+  episodes?: number
   units?: VerifyUnit[]
 }
 

@@ -106,6 +106,7 @@ func (s *Service) aeFamily(ctx context.Context, animeID string) (domain.SourceFa
 	// lone late episode instead of ep 1). Complete libraries (covers ep 1) omit
 	// this and stay the preferred default.
 	pc.PartialLibrary = info.Present && !info.CoversFirstEpisode
+	pc.Episodes = info.Episodes
 	return domain.SourceFamily{Family: "ae", Providers: []domain.ProviderCap{pc}}, true
 }
 

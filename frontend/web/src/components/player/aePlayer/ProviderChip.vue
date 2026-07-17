@@ -43,15 +43,18 @@
             class="text-[9px] font-semibold font-mono text-[var(--muted-foreground)]"
           >{{ labels.quality }}</span>
           <span
+            v-if="episodesReady"
+            data-test="cap-episodes"
+            class="text-[9px] font-semibold font-mono text-[var(--muted-foreground)]"
+          >{{ $t('player.sources.episodeCount', { n: episodesReady }) }}</span>
+          <span
             v-if="best"
             data-test="cap-best"
             class="text-[9px] font-semibold font-mono uppercase tracking-wide text-[var(--brand-cyan)]"
           >{{ $t('player.sources.best') }}</span>
-          <span
-            v-if="labels.unverified"
-            data-test="cap-unverified"
-            class="text-[9px] font-semibold font-mono uppercase tracking-wide px-1 py-px rounded border border-border text-muted-foreground"
-          >{{ $t('player.sources.unverified') }}</span>
+          <!-- Owner 2026-07-17: the "unverified" marker is hidden for now —
+               unverified providers just show no stream badges. The
+               labels.unverified flag stays wired for when/if it returns. -->
         </span>
       </span>
 
@@ -116,6 +119,12 @@ const emit = defineEmits<{
 
 const isSelected = computed(() => props.selected === true)
 const labels = computed(() => deriveCapLabels(props.cap, props.verify ?? null))
+
+// Episodes-ready count. The live verify poll refreshes faster than the
+// 10-min-cached capability feed, so its count wins; the feed's native count
+// (kodik/hanime/ae live lists, or the blend at feed-build time) is the
+// fallback. 0/absent = unknown → hidden.
+const episodesReady = computed(() => props.verify?.episodes || props.cap?.episodes || 0)
 
 const { t } = useI18n()
 function badgeText(b: StreamBadge): string {

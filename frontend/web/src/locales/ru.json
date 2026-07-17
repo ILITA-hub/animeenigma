@@ -307,6 +307,7 @@
       "noContent": "Нет серий",
       "tryAnother": "Другой источник",
       "subBurnedIn": "вшитые",
+      "episodeCount": "{n} эп.",
       "subSelectable": "отдельные",
       "providerLacksAnime": "У этого источника нет этого аниме",
       "providerCdnUnreachable": "CDN источника недоступен для этого аниме",

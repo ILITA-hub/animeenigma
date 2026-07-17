@@ -25,7 +25,7 @@ const rows: ProviderRow[] = [
 
 const baseProps = {
   rows, audio: 'sub', lang: 'en', team: null, provider: 'allanime', server: 's1',
-  servers: [{ id: 's1', label: 'Server 1' }], teams: [] as string[],
+  servers: [{ id: 's1', label: 'Server 1' }], teams: [] as { name: string; episodes?: number }[],
 }
 
 const t = { global: { mocks: { $t: (k: string) => k } } }
@@ -74,7 +74,7 @@ describe('SourcePanel collapse', () => {
   const fiveRows = [a('gogoanime'), a('allanime'), a('miruro'), a('animepahe'), a('animefever')]
   const cb = {
     audio: 'sub', lang: 'en', team: null, server: '',
-    servers: [] as { id: string; label: string }[], teams: [] as string[],
+    servers: [] as { id: string; label: string }[], teams: [] as { name: string; episodes?: number }[],
   }
 
   it('default shows the top 3 ranked active providers', () => {
@@ -180,7 +180,8 @@ describe('SourcePanel streams & servers', () => {
   }
   const kodikProps = {
     rows: [r('kodik', { group: 'ru', verify })], audio: 'dub', lang: 'ru', team: 'AniDub',
-    provider: 'kodik', server: '', servers: [], teams: ['AniDub', 'CR.Subs'],
+    provider: 'kodik', server: '', servers: [],
+    teams: [{ name: 'AniDub', episodes: 28 }, { name: 'CR.Subs' }],
     capMap: new Map([['kodik', kodikCap]]),
   }
 
@@ -194,6 +195,15 @@ describe('SourcePanel streams & servers', () => {
     // the section sits AFTER the provider list in the DOM
     const html = w.html()
     expect(html.indexOf('provider-chip')).toBeLessThan(html.indexOf('stream-section'))
+  })
+
+  // Owner 2026-07-17: teams show how many episodes they have ready; teams
+  // without a reported count (animejoy) stay count-less.
+  it('shows per-team episodes-ready counts only where reported', () => {
+    const w = mount(SourcePanel, { props: kodikProps as any, ...mountOpts })
+    const entries = w.findAll('[data-test="stream-entry"]')
+    expect(entries[0].find('[data-test="stream-episodes"]').exists()).toBe(true)
+    expect(entries[1].find('[data-test="stream-episodes"]').exists()).toBe(false)
   })
 
   it('selecting a sub-team emits update:team AND syncs audio to sub', async () => {

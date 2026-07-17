@@ -145,6 +145,7 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 		return s.noContentFamily(ctx, "kodik", "kodik", "kodik-noads", "Kodik")
 	}
 	variants := make([]domain.Variant, 0, len(trs))
+	episodes := 0 // provider-level "episodes ready" = the fullest team's count
 	for _, tr := range trs {
 		cat := categoryFromTranslationType(tr.Type)
 		variants = append(variants, domain.Variant{
@@ -154,12 +155,13 @@ func (s *Service) kodikFamily(ctx context.Context, animeID string) (domain.Sourc
 			QualitySource: "unknown",                  // iframe hides quality ladder
 			Source:        "discovered",
 		})
+		episodes = max(episodes, tr.EpisodesCount)
 	}
 	row, ok := s.providerRow(ctx, "kodik-noads")
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: "kodik", DisplayName: displayOf(row, "Kodik"), Variants: variants}
+	cap := domain.ProviderCap{Provider: "kodik", DisplayName: displayOf(row, "Kodik"), Variants: variants, Episodes: episodes}
 	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}
@@ -216,7 +218,7 @@ func (s *Service) hanimeFamily(ctx context.Context, animeID string) (domain.Sour
 	if !ok {
 		return domain.SourceFamily{}, false
 	}
-	cap := domain.ProviderCap{Provider: "hanime", DisplayName: displayOf(row, "Hanime"), Variants: []domain.Variant{variant}}
+	cap := domain.ProviderCap{Provider: "hanime", DisplayName: displayOf(row, "Hanime"), Variants: []domain.Variant{variant}, Episodes: len(eps)}
 	if !applyFeedFields(ctx, &cap, row, true) {
 		return domain.SourceFamily{}, false
 	}

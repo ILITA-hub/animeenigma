@@ -307,6 +307,7 @@
       "noContent": "エピソードなし",
       "tryAnother": "別のソースを試す",
       "subBurnedIn": "焼き込み",
+      "episodeCount": "{n}話",
       "subSelectable": "選択可能",
       "providerLacksAnime": "この配信元にこのアニメはありません",
       "providerCdnUnreachable": "この配信元のCDNにこのアニメで接続できません",

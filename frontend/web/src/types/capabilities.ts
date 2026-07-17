@@ -64,6 +64,12 @@ export interface ProviderCap {
    *  poll (useContentVerify) resolves its first live report. */
   verify?: VerifySummary | null
 
+  /** Episodes the provider has ready right now. Native where the backend holds
+   *  a live list at feed time (kodik translations / hanime / ae library);
+   *  backfilled from the content-verify blend for EN scrapers and animejoy
+   *  legs. Absent/0 = unknown — the chip hides the count. */
+  episodes?: number
+
   // ─── Decoration / variant labels (still consumed by deriveCapLabels) ────────
   variants: CapVariant[]
 }

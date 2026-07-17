@@ -90,7 +90,11 @@ type UnitVerdict struct {
 	// (donghua etc.), which is exactly why kodik synth uses it instead of
 	// asserting a language it never heard.
 	RawAudio bool      `json:"raw_audio,omitempty"`
-	ProbedAt time.Time `json:"probed_at"`
+	// Episodes: how many episodes this unit has ready on the provider right
+	// now — a free by-product of queue enumeration (kodik per-team
+	// episodes_count, scraper/animejoy episode-list length). 0 = unknown.
+	Episodes int        `json:"episodes,omitempty"`
+	ProbedAt time.Time  `json:"probed_at"`
 	Sample   SampleInfo `json:"sample"`
 	Fails    int        `json:"fails,omitempty"` // consecutive unreachable count → backoff
 }
@@ -137,6 +141,10 @@ type ProviderSummary struct {
 	Raw          bool     `json:"raw"`
 	DubLangs     []string `json:"dub_langs"`
 	HardsubLangs []string `json:"hardsub_langs"`
+	// Episodes: provider-level "episodes ready now" — max across units (units
+	// of one provider share the episode list; kodik teams differ, max = the
+	// fullest team). 0 = no unit reported a count yet.
+	Episodes int `json:"episodes,omitempty"`
 }
 
 func Summarize(units []UnitVerdict) ProviderSummary {
@@ -151,6 +159,7 @@ func Summarize(units []UnitVerdict) ProviderSummary {
 		if u.Status == StatusVerified {
 			verified++
 		}
+		s.Episodes = max(s.Episodes, u.Episodes)
 		if u.Status == StatusVerified && u.RawAudio {
 			s.Raw = true // provider-native original-audio claim (kodik subtitles teams)
 		}

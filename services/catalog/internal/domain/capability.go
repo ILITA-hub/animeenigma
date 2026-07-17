@@ -62,6 +62,12 @@ type ProviderCap struct {
 	// Verify carries the content-verify probe rollup (nil = never probed).
 	Verify *VerifySummary `json:"verify,omitempty"`
 
+	// Episodes: how many episodes this provider has ready right now. Filled
+	// natively where the family builder already holds a live list (kodik
+	// translations, hanime episodes, ae library); otherwise backfilled from
+	// the content-verify blend. 0 = unknown (FE hides the count).
+	Episodes int `json:"episodes,omitempty"`
+
 	Variants []Variant `json:"variants"`
 }
 
@@ -71,6 +77,10 @@ type VerifySummary struct {
 	Raw          bool     `json:"raw"`
 	DubLangs     []string `json:"dub_langs"`
 	HardsubLangs []string `json:"hardsub_langs"`
+	// Episodes mirrors content-verify's provider-level "episodes ready now"
+	// (max across probe units). Backfills ProviderCap.Episodes for providers
+	// without a live feed-time episode list (EN scrapers, animejoy legs).
+	Episodes int `json:"episodes,omitempty"`
 }
 
 // Variant is a watchable unit: a category (+ optional translation team for RU),

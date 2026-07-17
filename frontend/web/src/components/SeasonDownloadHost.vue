@@ -55,7 +55,7 @@ const { isMobile } = useMobilePlayer()
 const resolver = useProviderResolver()
 function loadTeams(provider: string, audio: AudioKind): Promise<string[]> {
   const req = seasonFlow.request
-  return req ? resolver.listTeams(provider, req.animeId, audio) : Promise.resolve([])
+  return req ? resolver.listTeamNames(provider, req.animeId, audio) : Promise.resolve([])
 }
 
 // ─── Content-verify (dynamic probe polling) ───────────────────────────────────

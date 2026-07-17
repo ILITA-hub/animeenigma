@@ -307,6 +307,7 @@
       "noContent": "No episodes",
       "tryAnother": "Try another source",
       "subBurnedIn": "burned-in",
+      "episodeCount": "{n} ep.",
       "subSelectable": "selectable",
       "providerLacksAnime": "This provider doesn't have this anime",
       "providerCdnUnreachable": "Provider CDN is unreachable for this anime",

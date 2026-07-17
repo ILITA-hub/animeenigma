@@ -425,14 +425,20 @@ describe('ProviderResolver.listTeams', () => {
     getStream: async () => ({ data: { data: {} } }),
   } as never
 
-  it('returns ONLY dub teams when audio is dub (unique, first-seen order)', async () => {
+  it('returns ONLY dub teams when audio is dub (unique, first-seen order, with episode counts)', async () => {
     const resolver = makeResolver({ kodikApi })
-    expect(await resolver.listTeams('kodik', 'anime-1', 'dub')).toEqual(['AniLibria', 'AniDUB'])
+    expect(await resolver.listTeams('kodik', 'anime-1', 'dub')).toEqual([
+      { name: 'AniLibria', episodes: 12 },
+      { name: 'AniDUB', episodes: 12 },
+    ])
   })
 
   it('returns ONLY sub teams when audio is sub — no DUB teams leak in', async () => {
     const resolver = makeResolver({ kodikApi })
-    expect(await resolver.listTeams('kodik', 'anime-1', 'sub')).toEqual(['SovetRomantica', 'Crunchyroll'])
+    expect(await resolver.listTeams('kodik', 'anime-1', 'sub')).toEqual([
+      { name: 'SovetRomantica', episodes: 12 },
+      { name: 'Crunchyroll', episodes: 12 },
+    ])
   })
 
   it('returns [] for providers without team support', async () => {
@@ -521,10 +527,10 @@ describe('useProviderResolver animejoy (RU-sub MP4 legs)', () => {
       ).rejects.toThrow(/no stream URL/)
     })
 
-    it(`${provider}: listTeams returns team names for 'sub' and [] for 'dub'`, async () => {
+    it(`${provider}: listTeams returns team names (no counts — shared episode list) for 'sub' and [] for 'dub'`, async () => {
       const animejoyApi = makeAnimejoyApi()
       const resolver = makeResolver({ animejoyApi } as any)
-      expect(await resolver.listTeams(provider, 'anime-uuid', 'sub')).toEqual(['AnimeJoy', 'Studio Band'])
+      expect(await resolver.listTeams(provider, 'anime-uuid', 'sub')).toEqual([{ name: 'AnimeJoy' }, { name: 'Studio Band' }])
       // RU-sub only — never surfaces DUB teams.
       expect(await resolver.listTeams(provider, 'anime-uuid', 'dub')).toEqual([])
     })

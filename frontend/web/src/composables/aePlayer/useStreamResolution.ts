@@ -6,7 +6,7 @@ import type { ProviderResolver } from '@/composables/aePlayer/useProviderResolve
 import type { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
 import type { useWatchTracking } from '@/composables/aePlayer/useWatchTracking'
 import type { useToast } from '@/composables/useToast'
-import type { StreamResult, ProviderRow, ServerOption } from '@/types/aePlayer'
+import type { StreamResult, ProviderRow, ServerOption, TeamOption } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { MenuKind } from '@/composables/aePlayer/usePlayerMenus'
 
@@ -47,7 +47,7 @@ export interface StreamResolutionDeps {
   selectedEpisode: Ref<EpisodeOption | null>
   userPickedEpisode: Ref<boolean>
   resolvedServers: Ref<ServerOption[]>
-  teams: Ref<string[]>
+  teams: Ref<TeamOption[]>
   currentStream: Ref<StreamResult | null>
   isResolving: Ref<boolean>
   sourceError: Ref<string | null>

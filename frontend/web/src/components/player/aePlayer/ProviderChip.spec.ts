@@ -92,12 +92,13 @@ describe('ProviderChip', () => {
 
   // Owner-approved gate (content-verify spec §5): a non-firstparty cap with no
   // verify data is assumed RAW-only and its asserted SUB/DUB category chips
-  // are suppressed in favour of an "unverified" marker — no claims without
-  // verification.
-  it('suppresses stream badges and shows the unverified marker when there is no verify data', () => {
+  // are suppressed — no claims without verification. The textual "unverified"
+  // marker itself is hidden for now (owner 2026-07-17): the chip just stays
+  // badge-plain.
+  it('suppresses stream badges (and renders NO unverified marker) when there is no verify data', () => {
     const w = mount(ProviderChip, { props: { row: row(), cap }, ...stub })
     expect(w.findAll('[data-test="cap-badge"]').length).toBe(0)
-    expect(w.find('[data-test="cap-unverified"]').exists()).toBe(true)
+    expect(w.find('[data-test="cap-unverified"]').exists()).toBe(false)
     // Quality/best badges are independent of the verify gate.
     expect(w.find('[data-test="cap-quality"]').text()).toContain('1080p')
   })
@@ -129,5 +130,22 @@ describe('ProviderChip', () => {
   it('shows the best pill when best=true', () => {
     const w = mount(ProviderChip, { props: { row: row(), cap, best: true }, ...stub })
     expect(w.find('[data-test="cap-best"]').exists()).toBe(true)
+  })
+
+  // Owner 2026-07-17: every provider shows how many episodes it has ready.
+  // The live verify poll's count wins over the (10-min-cached) feed count;
+  // 0/absent on both = unknown → hidden.
+  it('shows the episodes-ready count, preferring verify over the feed cap', () => {
+    const capWithEps = { ...cap, episodes: 12 }
+    let w = mount(ProviderChip, { props: { row: row(), cap: capWithEps }, ...stub })
+    expect(w.find('[data-test="cap-episodes"]').exists()).toBe(true)
+
+    const verify: ProviderVerify = { status: 'verified', raw: true, dub_langs: [], hardsub_langs: [], episodes: 28 }
+    w = mount(ProviderChip, { props: { row: row(), cap: capWithEps, verify }, ...stub })
+    const chip = w.getComponent(ProviderChip)
+    expect((chip.vm as unknown as { episodesReady: number }).episodesReady).toBe(28)
+
+    w = mount(ProviderChip, { props: { row: row(), cap }, ...stub })
+    expect(w.find('[data-test="cap-episodes"]').exists()).toBe(false)
   })
 })

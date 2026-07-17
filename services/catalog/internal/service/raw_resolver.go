@@ -131,6 +131,9 @@ type AeInfo struct {
 	// (it stays manually selectable). A complete library covers ep 1 and stays
 	// the preferred default.
 	CoversFirstEpisode bool
+	// Episodes is how many distinct episodes the library holds for the title
+	// (deduped across storages) — the capability feed's "episodes ready" count.
+	Episodes int
 }
 
 // RawStream is the resolved playable stream + subtitle tracks.
@@ -306,7 +309,7 @@ func (r *RawResolver) AeTitleInfo(ctx context.Context, animeID string) (AeInfo, 
 	if err != nil || resp == nil || !resp.Available || len(resp.Episodes) == 0 {
 		return AeInfo{}, err
 	}
-	info := AeInfo{Present: true}
+	info := AeInfo{Present: true, Episodes: len(resp.Episodes)}
 	for _, ep := range resp.Episodes {
 		if ep.Track == aeDubTrack && info.AudioLang == "" {
 			info.AudioLang, info.Track = ep.AudioLang, ep.Track

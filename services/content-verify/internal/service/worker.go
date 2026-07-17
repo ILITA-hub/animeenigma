@@ -119,6 +119,9 @@ func (w *Worker) tick(ctx context.Context) {
 }
 
 func (w *Worker) persist(ctx context.Context, unit queue.Unit, v domain.UnitVerdict, result string) {
+	// Episodes-ready count is enumeration truth, not a probe result — stamp it
+	// here so both the probe and synth paths carry it. 0 (unknown) stays 0.
+	v.Episodes = unit.Episodes
 	if err := w.store.UpsertUnit(ctx, unit.AnimeID, unit.Provider, v); err != nil {
 		cvmetrics.ProbesTotal.WithLabelValues(unit.Provider, "error").Inc()
 		if w.log != nil {

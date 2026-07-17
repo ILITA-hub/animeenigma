@@ -25,6 +25,7 @@ type Unit struct {
 	Provider  string
 	Key       domain.UnitKey
 	Episode   int    // sample episode (latest available on the provider)
+	Episodes  int    // episodes ready on the provider for this unit; 0 = unknown
 	EpisodeID string // scraper episode id; "" for kodik/animejoy
 	// Synth: non-nil → persist this verdict as-is, no probe. Used where
 	// provider-native metadata already answers with high confidence: ae
@@ -90,7 +91,7 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 				if tr.Type == "subtitles" {
 					key := domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: "sub"}
 					units = append(units, Unit{AnimeID: animeID, Provider: "kodik",
-						Key: key, Episode: ep, StateRank: rank,
+						Key: key, Episode: ep, Episodes: ep, StateRank: rank,
 						Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
 							RawAudio: true,
 							Hardsub:  &domain.HardsubVerdict{Present: true, Verified: true, Lang: "ru", Confidence: 1.0}}})
@@ -98,7 +99,7 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 				}
 				key := domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: "dub"}
 				units = append(units, Unit{AnimeID: animeID, Provider: "kodik",
-					Key: key, Episode: ep, StateRank: rank,
+					Key: key, Episode: ep, Episodes: ep, StateRank: rank,
 					Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
 						Audio: &domain.AudioVerdict{Lang: "ru", Confidence: 1.0, Verified: true}}})
 			}
@@ -131,7 +132,7 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 				}
 				units = append(units, Unit{AnimeID: animeID, Provider: pc.Provider,
 					Key:     domain.UnitKey{Server: s.ID, Category: cat},
-					Episode: latest.Number, EpisodeID: latest.ID, StateRank: rank})
+					Episode: latest.Number, Episodes: len(eps), EpisodeID: latest.ID, StateRank: rank})
 			}
 
 		case isAnimejoyLeg(pc.Provider):
@@ -151,7 +152,7 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 				}
 			}
 			units = append(units, Unit{AnimeID: animeID, Provider: pc.Provider,
-				Key: domain.UnitKey{Server: pc.Provider}, Episode: latest, StateRank: rank})
+				Key: domain.UnitKey{Server: pc.Provider}, Episode: latest, Episodes: len(eps), StateRank: rank})
 		}
 	}
 	sort.SliceStable(units, func(i, j int) bool { return units[i].StateRank < units[j].StateRank })

@@ -99,7 +99,7 @@ export function useOfflineDownloads(deps: OfflineDownloadsDeps) {
   })
 
   function dlLoadTeams(provider: string, audio: AudioKind): Promise<string[]> {
-    return resolver.listTeams(provider, deps.getAnimeId(), audio)
+    return resolver.listTeamNames(provider, deps.getAnimeId(), audio)
   }
 
   function onDownloadSeason() {
