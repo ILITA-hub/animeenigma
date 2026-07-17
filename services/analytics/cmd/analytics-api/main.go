@@ -193,6 +193,17 @@ func main() {
 				"animepahe": func() probe.ProbeTarget {
 					return probe.ProbeTarget{Provider: "animepahe", AnimeSet: spotlight, Resolver: probe.NewHTTPResolver(cfg.CatalogURL, &http.Client{Timeout: 90 * time.Second})}
 				},
+				// allanime-okru is ok.ru-only, so availability is per-title: the
+				// shared spotlight anchor (Frieren) is permanently copyright-blocked
+				// on ok.ru for this provider, which pins the anchor-gated probe down
+				// forever even though the provider serves real content for most
+				// titles. Override just the anchor slot with a title independently
+				// verified to have a working ok.ru copy — see
+				// docs/issues/provider-recovery-log.md 2026-07-07, 2026-07-15, 2026-07-17.
+				"allanime-okru": func() probe.ProbeTarget {
+					okruSet := probe.NewAllanimeOkruAnimeSet(spotlight, cfg.ProbeAllanimeOkruAnchorUUID, cfg.ProbeAllanimeOkruAnchorName)
+					return probe.ProbeTarget{Provider: "allanime-okru", AnimeSet: okruSet, Resolver: scraperRes}
+				},
 				// AnimeJoy RU-sub legs: shared spotlight set + the catalog-side animejoy
 				// resolver. Progressive mp4 (no HLS), so the validator ffprobes the file
 				// head directly. Both legs share one resolver instance (keyed on name).

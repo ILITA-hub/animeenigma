@@ -18,6 +18,12 @@ func TestLoad_ProbeDefaults(t *testing.T) {
 	if cfg.ProbeAnchorUUID != "f0b40660-6627-4a59-8dcf-7ec8596b3623" {
 		t.Errorf("ProbeAnchorUUID = %q, want f0b40660-...", cfg.ProbeAnchorUUID)
 	}
+	if cfg.ProbeAllanimeOkruAnchorUUID != "6f2bc143-71d1-47a2-902f-ead849c82d63" {
+		t.Errorf("ProbeAllanimeOkruAnchorUUID = %q, want 6f2bc143-...", cfg.ProbeAllanimeOkruAnchorUUID)
+	}
+	if cfg.ProbeAllanimeOkruAnchorName != "Кот и дракон" {
+		t.Errorf("ProbeAllanimeOkruAnchorName = %q, want Кот и дракон", cfg.ProbeAllanimeOkruAnchorName)
+	}
 	if cfg.FFprobePath != "ffprobe" {
 		t.Errorf("FFprobePath = %q, want ffprobe", cfg.FFprobePath)
 	}

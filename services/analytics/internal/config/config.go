@@ -37,6 +37,13 @@ type Config struct {
 	StreamingURL string
 	// ProbeAnchorUUID is the always-probed anchor anime UUID (Frieren).
 	ProbeAnchorUUID string
+	// ProbeAllanimeOkruAnchorUUID/Name override the shared anchor for the
+	// allanime-okru provider specifically: the shared anchor (Frieren) is
+	// permanently copyright-blocked on ok.ru for this provider, so the
+	// automated probe could never observe it as healthy without this override.
+	// See docs/issues/provider-recovery-log.md 2026-07-07, 2026-07-15, 2026-07-17.
+	ProbeAllanimeOkruAnchorUUID string
+	ProbeAllanimeOkruAnchorName string
 	// FFprobePath is the filesystem path (or bare name) of the ffprobe binary.
 	FFprobePath string
 	// ProbeProviders is an OPTIONAL comma-separated filter over the DB roster's
@@ -108,10 +115,12 @@ func Load() (*Config, error) {
 			User:     getEnv("CLICKHOUSE_USER", "analytics"),
 			Password: getEnv("CLICKHOUSE_PASSWORD", ""),
 		},
-		CatalogURL:      getEnv("CATALOG_URL", "http://catalog:8081"),
-		StreamingURL:    getEnv("STREAMING_URL", "http://streaming:8082"),
-		ProbeAnchorUUID: getEnv("PROBE_ANCHOR_UUID", "f0b40660-6627-4a59-8dcf-7ec8596b3623"),
-		FFprobePath:     getEnv("FFPROBE_PATH", "ffprobe"),
+		CatalogURL:                  getEnv("CATALOG_URL", "http://catalog:8081"),
+		StreamingURL:                getEnv("STREAMING_URL", "http://streaming:8082"),
+		ProbeAnchorUUID:             getEnv("PROBE_ANCHOR_UUID", "f0b40660-6627-4a59-8dcf-7ec8596b3623"),
+		ProbeAllanimeOkruAnchorUUID: getEnv("PROBE_ALLANIME_OKRU_ANCHOR_UUID", "6f2bc143-71d1-47a2-902f-ead849c82d63"),
+		ProbeAllanimeOkruAnchorName: getEnv("PROBE_ALLANIME_OKRU_ANCHOR_NAME", "Кот и дракон"),
+		FFprobePath:                 getEnv("FFPROBE_PATH", "ffprobe"),
 		// AUTO-608: optional filter; empty = all wirable roster rows.
 		ProbeProviders: getEnv("PROBE_PROVIDERS", ""),
 	}, nil
