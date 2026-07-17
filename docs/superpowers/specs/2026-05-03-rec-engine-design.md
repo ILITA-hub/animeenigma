@@ -84,6 +84,8 @@ Applied identically to every signal. Degenerate pools (max−min < ε) emit all 
 | S6  | Combo-watched-after        | Co-occurrence: users who completed X with score ≥ 7 also watched Y. Cascade local → Shikimori | `anime_list.completed_at`, `anime_list.score`, Shikimori `similar` API | Precomputed nightly + Shikimori fallback request-time |
 | S11 | Watched/dropped/hidden filter | Exclude anime where the user's `anime_list.status ∈ {completed, dropped}` or anime has `hidden=true` | `anime_list`, `animes` | Request-time, applied after ensemble |
 
+> **Superseded by implementation (2026-07-17):** the shipped `S11Filter.CandidatePoolForUser` (`services/recs/internal/service/recs/signals/s11_filter.go`) excludes any anime with **ANY** `anime_list` row for the user — `watching`, `planned`, `on_hold`, `completed`, or `dropped` — not just `completed`/`dropped` as scoped above. Rationale: recs are for "things not yet on your list" full stop; the ranking signals (S1/S2/S5) still read `anime_list` independently to compute affinity, so watch history continues to shape ordering without being recommended back. This note documents the delta rather than rewriting the original spec text above.
+
 ### 3.1 S5 — TF-IDF attribute affinity (math)
 
 The "powerful engine" piece. Per attribute `a` (across genres, studios, producers, tags, demographic, source, type):

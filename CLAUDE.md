@@ -204,7 +204,7 @@ Higher = higher position (`1` for a single pin; `2, 1` etc. for relative order a
 
 **Database migrations:** tables auto-created via GORM `AutoMigrate()` on startup. Schema changes: 1) update domain struct fields/tags 2) restart (new columns added automatically) 3) destructive changes (dropping columns) need manual SQL or table recreate. GORM only CREATES new tables/columns — it does NOT modify/drop existing ones (protects data).
 
-**Add a Spotlight Card Type:** `HeroSpotlightBlock` is a 9-card rotating carousel; a 10th touches 5 anchors (BE resolver + Data type + DI, FE SFC + dispatch/i18n/types) (~50 lines). Full 5-step recipe + verify commands + design/quality contract: **[`docs/spotlight-card-guidelines.md`](docs/spotlight-card-guidelines.md)**.
+**Add a Spotlight Card Type:** `HeroSpotlightBlock` is a 12-card rotating carousel; adding another touches 5 anchors (BE resolver + Data type + DI, FE SFC + dispatch/i18n/types) (~50 lines). Full 5-step recipe + verify commands + design/quality contract: **[`docs/spotlight-card-guidelines.md`](docs/spotlight-card-guidelines.md)**.
 
 ## Git & Deploy Workflow
 
