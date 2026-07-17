@@ -434,7 +434,7 @@
         :season-count="seasonCount"
         :duration-min="anime.durationMin"
         :report="report"
-        :verify="contentVerify.report.value"
+        :verify="effectiveVerify"
         :initial-combo="state.combo.value"
         :sub-options="dlSubOptions"
         :load-teams="dlLoadTeams"
@@ -533,6 +533,7 @@ import { useAutoplayGate } from '@/composables/aePlayer/useAutoplayGate'
 import { usePlaybackClock } from '@/composables/aePlayer/usePlaybackClock'
 import { useRoomSync } from '@/composables/aePlayer/useRoomSync'
 import { useContentVerify } from '@/composables/aePlayer/useContentVerify'
+import { seedVerifyFromReport } from '@/composables/aePlayer/verifiedCaps'
 import { useCapabilityFeed } from '@/composables/aePlayer/useCapabilityFeed'
 import { useSourceFailover } from '@/composables/aePlayer/useSourceFailover'
 import { useComboBootstrap } from '@/composables/aePlayer/useComboBootstrap'
@@ -560,6 +561,7 @@ import { useProtocolTelemetry } from '@/composables/aePlayer/useProtocolTelemetr
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, AudioKind } from '@/types/aePlayer'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
+import type { VerifyReport } from '@/types/contentVerify'
 
 // ─── Props / Emits ───────────────────────────────────────────────────────────
 
@@ -769,9 +771,27 @@ const feed = useCapabilityFeed({
   getOffline: () => props.offline,
   isHentai: () => !!props.isHentai,
   state,
-  getVerify: () => contentVerify.report.value,
+  // Forward reference: effectiveVerify is declared just below (it reads
+  // feed.report itself), but this getter is only ever CALLED lazily when
+  // `rows` is evaluated — by then script setup has finished running and
+  // effectiveVerify is long past its TDZ. See effectiveVerify's own comment.
+  getVerify: () => effectiveVerify.value,
 })
 const { report, capMap, rows, activeProviderName, activeProviderHue } = feed
+
+// Effective verify report = the live /content-verify poll (contentVerify.report)
+// once it has resolved at least once, else a seed built from the capability
+// feed's OWN blended `verify` summaries (ProviderCap.verify — the catalog
+// forwards services/content-verify's rollup on every /capabilities response).
+// Without this, the very first render (before the poll's first fetch lands)
+// is verify-blind: every non-firstparty row reads as unverified even though
+// the backend already had a probe verdict to hand over. Every downstream
+// consumer (capability rows, combo bootstrap, hacker-mode HUD, download
+// dialog) reads THIS, not contentVerify.report directly — the poll ref itself
+// stays reserved for useContentVerify's own bookkeeping (refresh/start/stop).
+const effectiveVerify = computed<VerifyReport | null>(
+  () => contentVerify.report.value ?? seedVerifyFromReport(report.value),
+)
 
 // ─── Source failover (dynamic BEST) ──────────────────────────────────────────
 
@@ -820,7 +840,7 @@ const bootstrap = useComboBootstrap({
   getInitialLang: () => props.initialLang,
   getInitialEpisode: () => props.initialEpisode,
   isHentai: () => !!props.isHentai,
-  verifyReport: contentVerify.report,
+  verifyReport: effectiveVerify,
   getHasStarted: () => hasStarted.value,
 })
 const { preferenceSettled, pickFacetDefault } = bootstrap
@@ -1182,7 +1202,7 @@ const { connectionState } = useConnectionHealth({
 const debug = useDebugTools({
   state, engine, videoRef, currentStream, duration, showBuffering,
   connectionState,
-  getVerify: () => contentVerify.report.value,
+  getVerify: () => effectiveVerify.value,
 })
 const {
   playbackStats,

@@ -1,5 +1,6 @@
 import type { ProviderVerify, VerifyReport } from '@/types/contentVerify'
 import type { TrackLang } from '@/types/aePlayer'
+import type { CapabilityReport } from '@/types/capabilities'
 
 /**
  * Owner-approved hard gate (spec §5): a source with no probe verdict is
@@ -22,6 +23,30 @@ export function verifiedDubLangs(v: ProviderVerify | null): TrackLang[] {
 
 export function verifiedHardsubLangs(v: ProviderVerify | null): TrackLang[] {
   return (v?.hardsub_langs ?? []).filter((l): l is TrackLang => l === 'en' || l === 'ru' || l === 'ja')
+}
+
+/**
+ * Seeds a VerifyReport straight from the capability feed's own blended
+ * `verify` summaries (ProviderCap.verify — services/content-verify's rollup,
+ * forwarded through the catalog's /capabilities wire), for the very first
+ * render, before useContentVerify's own poll has resolved. Units are always
+ * empty — per-unit detail (hacker-mode HUD, download-dialog unit picking)
+ * only ever comes from the dynamic /content-verify poll itself.
+ *
+ * Returns null when there's no report yet, or no provider row carries a
+ * verify blend — nothing to seed with, so callers fall through to treating
+ * every non-firstparty row as unverified (unchanged pre-fix behavior).
+ */
+export function seedVerifyFromReport(report: CapabilityReport | null): VerifyReport | null {
+  if (!report) return null
+  const providers: Record<string, ProviderVerify> = {}
+  for (const family of report.families) {
+    for (const cap of family.providers) {
+      if (!cap.verify) continue
+      providers[cap.provider] = { ...cap.verify, units: [] }
+    }
+  }
+  return Object.keys(providers).length ? { animeId: report.anime_id, providers } : null
 }
 
 export function effectiveAudios(

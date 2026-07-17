@@ -1,6 +1,8 @@
 // TS mirror of the Go domain.CapabilityReport (services/catalog/internal/domain/capability.go).
 // Snake_case keys match the JSON wire shape exactly.
 
+import type { VerifySummary } from '@/types/contentVerify'
+
 export interface CapabilityReport {
   anime_id: string
   families: SourceFamily[]
@@ -54,6 +56,13 @@ export interface ProviderCap {
    *  default (see `defaultPool`); ae stays manually selectable. Absent for a
    *  complete ae library and every non-ae provider. */
   partial_library?: boolean
+
+  /** Content-verify probe rollup blended in by the catalog (services/content-verify),
+   *  absent/null until the anime has been probed at least once. Lets the FE seed
+   *  a verify-aware initial render (see seedVerifyFromReport in
+   *  composables/aePlayer/verifiedCaps.ts) before the dynamic /content-verify
+   *  poll (useContentVerify) resolves its first live report. */
+  verify?: VerifySummary | null
 
   // ─── Decoration / variant labels (still consumed by deriveCapLabels) ────────
   variants: CapVariant[]

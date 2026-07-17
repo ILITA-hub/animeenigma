@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { effectiveAudios, isUnverified, verifiedDubLangs, verifiedHardsubLangs, verifyFor } from './verifiedCaps'
+import { effectiveAudios, isUnverified, seedVerifyFromReport, verifiedDubLangs, verifiedHardsubLangs, verifyFor } from './verifiedCaps'
 import type { ProviderVerify, VerifyReport } from '@/types/contentVerify'
+import type { CapabilityReport } from '@/types/capabilities'
 
 const v = (p: Partial<ProviderVerify>): ProviderVerify => ({
   status: 'unverified', raw: false, dub_langs: [], hardsub_langs: [], ...p,
@@ -49,5 +50,59 @@ describe('verifiedHardsubLangs', () => {
   })
   it('returns [] for a null verify row', () => {
     expect(verifiedHardsubLangs(null)).toEqual([])
+  })
+})
+
+describe('seedVerifyFromReport', () => {
+  const capBase = {
+    display_name: 'x', state: 'active' as const, selectable: true, hacker_only: false,
+    order: 90, group: 'en' as const, audios: ['sub', 'dub'] as ('sub' | 'dub')[], variants: [],
+  }
+
+  it('null report ⇒ null (nothing to seed)', () => {
+    expect(seedVerifyFromReport(null)).toBeNull()
+  })
+
+  it('caps without any verify blend ⇒ null (poll-blind, same as before the fix)', () => {
+    const report: CapabilityReport = {
+      anime_id: 'a1',
+      families: [{ family: 'others', providers: [{ ...capBase, provider: 'gogoanime' }] }],
+    }
+    expect(seedVerifyFromReport(report)).toBeNull()
+  })
+
+  it('caps carrying verify ⇒ a VerifyReport keyed by provider, units always []', () => {
+    const report: CapabilityReport = {
+      anime_id: 'a1',
+      families: [
+        {
+          family: 'others',
+          providers: [
+            { ...capBase, provider: 'gogoanime', verify: { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: [] } },
+            { ...capBase, provider: 'nineanime' }, // no verify blend — omitted from the seed
+          ],
+        },
+        {
+          family: 'aeProvider',
+          providers: [{ ...capBase, provider: 'kodik', group: 'ru', verify: { status: 'partial', raw: false, dub_langs: [], hardsub_langs: ['ru'] } }],
+        },
+      ],
+    }
+    expect(seedVerifyFromReport(report)).toEqual({
+      animeId: 'a1',
+      providers: {
+        gogoanime: { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: [], units: [] },
+        kodik: { status: 'partial', raw: false, dub_langs: [], hardsub_langs: ['ru'], units: [] },
+      },
+    })
+  })
+
+  it('integration-ish: effectiveAudios reads the seeded row exactly like a poll-derived one', () => {
+    const report: CapabilityReport = {
+      anime_id: 'a1',
+      families: [{ family: 'others', providers: [{ ...capBase, provider: 'gogoanime', verify: { status: 'verified', raw: false, dub_langs: ['en'], hardsub_langs: [] } }] }],
+    }
+    const seeded = seedVerifyFromReport(report)
+    expect(effectiveAudios({ group: 'en', audios: ['sub', 'dub'] }, verifyFor(seeded, 'gogoanime'))).toEqual(['dub'])
   })
 })

@@ -21,6 +21,15 @@ export interface ProviderVerify {
   units?: VerifyUnit[]
 }
 
+/**
+ * Summary-only shape of ProviderVerify (no per-unit detail) — mirrors the Go
+ * domain.VerifySummary the catalog blends into ProviderCap.verify on the
+ * /capabilities wire (services/catalog/internal/domain/capability.go). The
+ * dynamic /content-verify poll (useContentVerify) carries per-unit detail too;
+ * this trimmed shape is what's available before that poll ever resolves.
+ */
+export type VerifySummary = Omit<ProviderVerify, 'units'>
+
 export interface VerifyReport {
   animeId: string
   providers: Record<string, ProviderVerify>
