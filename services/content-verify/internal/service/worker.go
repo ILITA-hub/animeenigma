@@ -28,7 +28,22 @@ type VerdictStore interface {
 }
 
 type Claimer interface {
-	Claim(ctx context.Context) (*queue.Unit, bool, error)
+	Claim(ctx context.Context) (*queue.Unit, *queue.SkipTask, bool, error)
+}
+
+// SkipUnitProber is satisfied by *prober.SkipProber. Named to avoid
+// colliding with UnitProber above while keeping the method itself named
+// Probe (matching the concrete type) — no adapter needed at the wiring
+// site in main.go.
+type SkipUnitProber interface {
+	Probe(ctx context.Context, t queue.SkipTask, prevFails int) []domain.SkipTiming
+}
+
+// SkipStore is the skip-timing persistence surface the worker needs —
+// satisfied by *repo.Store.
+type SkipStore interface {
+	UpsertSkip(ctx context.Context, t domain.SkipTiming) error
+	SkipByAnime(ctx context.Context, animeID string) ([]domain.SkipTiming, error)
 }
 
 // Worker throttles content-verify probing to one unit at a time (one Claim +
@@ -39,17 +54,22 @@ type Claimer interface {
 // deploy/kustomize/base/services/content-verify.yaml) or units get
 // double-probed.
 type Worker struct {
-	interval time.Duration
-	budget   time.Duration
-	shed     ShedChecker
-	claimer  Claimer
-	prober   UnitProber
-	store    VerdictStore
-	log      *logger.Logger
+	interval   time.Duration
+	budget     time.Duration
+	shed       ShedChecker
+	claimer    Claimer
+	prober     UnitProber
+	store      VerdictStore
+	skipProber SkipUnitProber
+	skipStore  SkipStore
+	skipBudget time.Duration
+	log        *logger.Logger
 }
 
-func NewWorker(interval, budget time.Duration, shed ShedChecker, claimer Claimer, prober UnitProber, store VerdictStore, log *logger.Logger) *Worker {
-	return &Worker{interval: interval, budget: budget, shed: shed, claimer: claimer, prober: prober, store: store, log: log}
+func NewWorker(interval, budget time.Duration, shed ShedChecker, claimer Claimer, prober UnitProber, store VerdictStore,
+	skipProber SkipUnitProber, skipStore SkipStore, skipBudget time.Duration, log *logger.Logger) *Worker {
+	return &Worker{interval: interval, budget: budget, shed: shed, claimer: claimer, prober: prober, store: store,
+		skipProber: skipProber, skipStore: skipStore, skipBudget: skipBudget, log: log}
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -77,7 +97,7 @@ func (w *Worker) tick(ctx context.Context) {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("degraded").Inc()
 		return
 	}
-	unit, _, err := w.claimer.Claim(ctx)
+	unit, task, _, err := w.claimer.Claim(ctx)
 	if err != nil {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("claim_error").Inc()
 		if w.log != nil {
@@ -85,8 +105,12 @@ func (w *Worker) tick(ctx context.Context) {
 		}
 		return
 	}
-	if unit == nil {
+	if unit == nil && task == nil {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("idle").Inc()
+		return
+	}
+	if unit == nil {
+		w.tickSkip(ctx, *task)
 		return
 	}
 
@@ -135,4 +159,56 @@ func (w *Worker) persist(ctx context.Context, unit queue.Unit, v domain.UnitVerd
 		w.log.Infow("unit probed", "anime_id", unit.AnimeID, "provider", unit.Provider,
 			"key", v.Key.String(), "status", v.Status)
 	}
+}
+
+// tickSkip runs one skip-lane (OP/ED) probe: prevFails is read from the
+// existing row for the task's primary unit, the probe runs under
+// skipBudget, and every returned row (1 for a locate task, 2 for a pair
+// task) is upserted.
+func (w *Worker) tickSkip(ctx context.Context, t queue.SkipTask) {
+	prevFails := w.skipPrevFails(ctx, t)
+
+	bctx, cancel := context.WithTimeout(ctx, w.skipBudget)
+	rows := w.skipProber.Probe(bctx, t, prevFails)
+	cancel()
+
+	for _, row := range rows {
+		if err := w.skipStore.UpsertSkip(ctx, row); err != nil {
+			if w.log != nil {
+				w.log.Errorw("skip timing upsert failed", "anime_id", row.AnimeID, "provider", row.Provider,
+					"team", row.Team, "episode", row.Episode, "error", err)
+			}
+		}
+	}
+
+	result := ""
+	if len(rows) > 0 {
+		result = rows[0].OpStatus
+	}
+	cvmetrics.SkipProbesTotal.WithLabelValues(t.Unit.Provider, result).Inc()
+	if w.log != nil {
+		w.log.Infow("skip unit probed", "anime_id", t.Unit.AnimeID, "provider", t.Unit.Provider,
+			"episode", t.Unit.Episode, "pair", t.Pair != nil, "re_pair", t.RePair, "result", result)
+	}
+}
+
+// skipPrevFails reads the max Fails recorded across existing skip rows for
+// the task's primary unit (provider+team+episode) — at most one row can
+// match (idx_skip_unit is unique on that tuple); "max" mirrors the spec's
+// phrasing and stays correct if that ever changes.
+func (w *Worker) skipPrevFails(ctx context.Context, t queue.SkipTask) int {
+	rows, err := w.skipStore.SkipByAnime(ctx, t.Unit.AnimeID)
+	if err != nil {
+		if w.log != nil {
+			w.log.Warnw("skip rows fetch failed", "anime_id", t.Unit.AnimeID, "error", err)
+		}
+		return 0
+	}
+	prevFails := 0
+	for _, r := range rows {
+		if r.Provider == t.Unit.Provider && r.Team == t.Unit.Team && r.Episode == t.Unit.Episode && r.Fails > prevFails {
+			prevFails = r.Fails
+		}
+	}
+	return prevFails
 }

@@ -75,19 +75,28 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	}
 	store := repo.NewStore(db)
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, nil)
+	// skipEnabled=false: these fixtures/tests exercise the verify lane only;
+	// with only one gogoanime unit, its single episode's skip unit would
+	// otherwise ALSO come up "due" (no row) once the verify lane empties,
+	// changing TestClaimEmptyPendingSetsCooldownTTL's outcome from cooldown
+	// to a skip task. See TestClaimReturnsSkipTaskWhenVerifyLaneSettled for
+	// skip-lane coverage.
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
 func TestClaimHappyPath(t *testing.T) {
 	f := newEngineFixture(t, false)
 	ctx := context.Background()
-	u, ongoing, err := f.engine.Claim(ctx)
+	u, task, ongoing, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if u == nil {
 		t.Fatal("expected a claimed unit, got nil")
+	}
+	if task != nil {
+		t.Fatalf("verify claim must not also carry a skip task: %+v", task)
 	}
 	if !ongoing {
 		t.Fatal("o1 is ongoing; Claim must report ongoing=true")
@@ -101,24 +110,24 @@ func TestClaimSkipsCoolingCandidate(t *testing.T) {
 	f := newEngineFixture(t, false)
 	ctx := context.Background()
 	f.sig.SetCooldown(ctx, "o1", time.Hour)
-	u, _, err := f.engine.Claim(ctx)
+	u, task, _, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u != nil {
-		t.Fatalf("cooling candidate must not be claimed, got %+v", u)
+	if u != nil || task != nil {
+		t.Fatalf("cooling candidate must not be claimed, got unit=%+v task=%+v", u, task)
 	}
 }
 
 func TestClaimEnumerateFailureSetsOneHourCooldown(t *testing.T) {
 	f := newEngineFixture(t, true) // capabilities endpoint 500s
 	ctx := context.Background()
-	u, _, err := f.engine.Claim(ctx)
+	u, task, _, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u != nil {
-		t.Fatalf("broken enumerate must yield no claim, got %+v", u)
+	if u != nil || task != nil {
+		t.Fatalf("broken enumerate must yield no claim, got unit=%+v task=%+v", u, task)
 	}
 	if !f.sig.InCooldown(ctx, "o1") {
 		t.Fatal("enumerate failure must set a cooldown so we don't hammer a broken title")
@@ -137,15 +146,109 @@ func TestClaimEmptyPendingSetsCooldownTTL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, _, err := f.engine.Claim(ctx)
+	u, task, _, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u != nil || task != nil {
+		t.Fatalf("fully-verified title with skip lane disabled must yield no claim, got unit=%+v task=%+v", u, task)
+	}
+	if !f.sig.InCooldown(ctx, "o1") {
+		t.Fatal("idle (nothing pending) title must be cooled down (CooldownTTL)")
+	}
+}
+
+// newSkipEngineFixture wires a single-candidate world with ONE kodik
+// translation ("Kodik", 2 episodes) so NextSkipTask's family selection is
+// unambiguous: no fingerprints yet + exactly one family with >=2 due
+// episodes must pair-bootstrap episodes 1+2 (skipplan.go's bootstrapPairScan
+// rule). The verify lane is pre-seeded as already verified so Claim reaches
+// the skip lane immediately.
+func newSkipEngineFixture(t *testing.T, skipEnabled bool) *engineFixture {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":2}],"top":[]}}`))
+	})
+	mux.HandleFunc("/api/anime/o1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"families":[{"family":"others","providers":[
+			{"provider":"kodik","state":"active","group":"ru"}]}]}}`))
+	})
+	mux.HandleFunc("/api/anime/o1/kodik/translations", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":[{"id":610,"title":"Kodik","type":"voice","episodes_count":2}]}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	sig := signals.New(rdb)
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ContentVerification{}, &domain.SkipTiming{}, &domain.SkipFingerprint{}); err != nil {
+		t.Fatal(err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
+	store := repo.NewStore(db)
+
+	// Pre-verify the single kodik verify unit (voice/dub synth) so the
+	// verify lane is settled and Claim falls through to the skip lane.
+	ctx := context.Background()
+	err = store.UpsertUnit(ctx, "o1", "kodik", domain.UnitVerdict{
+		Key: domain.UnitKey{Team: "610", Category: "dub"}, Episode: 2,
+		Status: domain.StatusVerified, ProbedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewEngine(cat, sig, store, 720*time.Hour, skipEnabled, nil)
+	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
+}
+
+func TestClaimReturnsSkipTaskWhenVerifyLaneSettled(t *testing.T) {
+	f := newSkipEngineFixture(t, true)
+	ctx := context.Background()
+	u, task, ongoing, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if u != nil {
-		t.Fatalf("fully-verified title must yield no claim, got %+v", u)
+		t.Fatalf("verify lane is settled; expected no verify unit, got %+v", u)
+	}
+	if task == nil {
+		t.Fatal("expected a skip task once the verify lane is settled")
+	}
+	if !ongoing {
+		t.Fatal("o1 is ongoing; Claim must report ongoing=true")
+	}
+	if task.Unit.Provider != "kodik" || task.Unit.Episode != 1 {
+		t.Fatalf("unexpected skip unit: %+v", task.Unit)
+	}
+	if task.Pair == nil || task.Pair.Episode != 2 {
+		t.Fatalf("expected a pair-bootstrap task with episode 2 (no fingerprints yet), got pair=%+v", task.Pair)
+	}
+}
+
+func TestClaimSkipDisabledFallsToCooldown(t *testing.T) {
+	f := newSkipEngineFixture(t, false)
+	ctx := context.Background()
+	u, task, _, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u != nil || task != nil {
+		t.Fatalf("skip lane disabled: expected nil unit and nil task, got unit=%+v task=%+v", u, task)
 	}
 	if !f.sig.InCooldown(ctx, "o1") {
-		t.Fatal("idle (nothing pending) title must be cooled down (CooldownTTL)")
+		t.Fatal("settled verify lane with skip lane disabled must cooldown like idle (exactly as today)")
 	}
 }
 
@@ -179,7 +282,7 @@ func TestClaimSnapshotConcurrent(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			if i%2 == 0 {
-				_, _, _ = f.engine.Claim(ctx)
+				_, _, _, _ = f.engine.Claim(ctx)
 			} else {
 				_ = f.engine.Snapshot(ctx, 5)
 			}

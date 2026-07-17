@@ -33,6 +33,14 @@ type Config struct {
 	AnalyzersDir string
 	WorkDir      string
 	WorkerOn     bool
+
+	SkipEnabled      bool          // gate for the OP/ED skip-probe lane, once the verify lane is settled
+	SkipBudget       time.Duration // hard per-skip-task budget (locate or pair)
+	SkipHeadWindow   time.Duration // head-of-episode audio window extracted for OP matching
+	SkipTailWindow   time.Duration // tail-of-episode audio window extracted for ED matching
+	SkipMinMatch     time.Duration // shortest accepted OP/ED match length
+	SkipMaxMatch     time.Duration // longest accepted OP/ED match length
+	SkipSimThreshold float64       // opskip analyzer similarity threshold, 0..1
 }
 
 func Load() (*Config, error) {
@@ -61,6 +69,14 @@ func Load() (*Config, error) {
 		AnalyzersDir: getEnv("CV_ANALYZERS_DIR", "/app/analyzers"),
 		WorkDir:      getEnv("CV_WORKDIR", "/tmp/cv"),
 		WorkerOn:     getEnv("CV_WORKER_ENABLED", "true") != "false",
+
+		SkipEnabled:      getEnv("CV_SKIP_ENABLED", "true") != "false",
+		SkipBudget:       getEnvDuration("CV_SKIP_BUDGET", 480*time.Second),
+		SkipHeadWindow:   getEnvDuration("CV_SKIP_HEAD_WINDOW", 480*time.Second),
+		SkipTailWindow:   getEnvDuration("CV_SKIP_TAIL_WINDOW", 480*time.Second),
+		SkipMinMatch:     getEnvDuration("CV_SKIP_MIN_MATCH", 50*time.Second),
+		SkipMaxMatch:     getEnvDuration("CV_SKIP_MAX_MATCH", 150*time.Second),
+		SkipSimThreshold: getEnvFloat("CV_SKIP_SIM_THRESHOLD", 0.75),
 	}
 	if cfg.Interval < 10*time.Second {
 		return nil, fmt.Errorf("CV_INTERVAL too small: %s", cfg.Interval)
@@ -88,6 +104,15 @@ func getEnvDuration(key string, def time.Duration) time.Duration {
 	if v := os.Getenv(key); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
+		}
+	}
+	return def
+}
+
+func getEnvFloat(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
 		}
 	}
 	return def

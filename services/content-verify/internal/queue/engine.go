@@ -19,11 +19,12 @@ const (
 )
 
 type Engine struct {
-	cat        *catalogclient.Client
-	sig        *signals.Signals
-	store      *repo.Store
-	reprobeTTL time.Duration
-	log        *logger.Logger
+	cat         *catalogclient.Client
+	sig         *signals.Signals
+	store       *repo.Store
+	reprobeTTL  time.Duration
+	skipEnabled bool
+	log         *logger.Logger
 
 	// mu guards memb/membAt: Claim (worker goroutine) and Snapshot (HTTP
 	// handler) share one Engine and can race on the membership cache.
@@ -33,8 +34,8 @@ type Engine struct {
 	now    func() time.Time
 }
 
-func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, log *logger.Logger) *Engine {
-	return &Engine{cat: cat, sig: sig, store: store, reprobeTTL: reprobeTTL, log: log, now: time.Now}
+func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, skipEnabled bool, log *logger.Logger) *Engine {
+	return &Engine{cat: cat, sig: sig, store: store, reprobeTTL: reprobeTTL, skipEnabled: skipEnabled, log: log, now: time.Now}
 }
 
 func (e *Engine) membership(ctx context.Context) *catalogclient.Membership {
@@ -62,10 +63,12 @@ func (e *Engine) ranked(ctx context.Context) []Candidate {
 	return cs
 }
 
-// Claim returns the single highest-priority pending unit, or (nil, false,
-// nil) when the queue is idle. One unit per tick — hot titles preempt
-// naturally between units of a slower title.
-func (e *Engine) Claim(ctx context.Context) (*Unit, bool, error) {
+// Claim returns the single highest-priority pending verify unit or, once the
+// verify lane is settled for a candidate and the skip lane is enabled, the
+// next skip-probe task. Both nil, false, nil when the queue is idle. One
+// unit/task per tick — hot titles preempt naturally between units of a
+// slower title.
+func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, bool, error) {
 	scanned := 0
 	for _, cand := range e.ranked(ctx) {
 		if scanned >= maxScan {
@@ -75,7 +78,7 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, bool, error) {
 			continue
 		}
 		scanned++
-		units, err := EnumerateUnits(ctx, e.cat, cand.AnimeID, e.log)
+		enum, err := EnumerateAll(ctx, e.cat, cand.AnimeID, e.log)
 		if err != nil {
 			if e.log != nil {
 				e.log.Warnw("enumerate failed", "anime_id", cand.AnimeID, "error", err)
@@ -85,17 +88,29 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, bool, error) {
 		}
 		rows, err := e.store.ByAnime(ctx, cand.AnimeID)
 		if err != nil {
-			return nil, false, err
+			return nil, nil, false, err
 		}
-		pending := PendingUnits(units, rows, e.now(), e.reprobeTTL)
-		if len(pending) == 0 {
-			e.sig.SetCooldown(ctx, cand.AnimeID, CooldownTTL(cand.Ongoing))
-			continue
+		pending := PendingUnits(enum.Verify, rows, e.now(), e.reprobeTTL)
+		if len(pending) > 0 {
+			u := pending[0]
+			return &u, nil, cand.Ongoing, nil
 		}
-		u := pending[0]
-		return &u, cand.Ongoing, nil
+		if e.skipEnabled {
+			skipRows, err := e.store.SkipByAnime(ctx, cand.AnimeID)
+			if err != nil {
+				return nil, nil, false, err
+			}
+			fps, err := e.store.Fingerprints(ctx, cand.AnimeID)
+			if err != nil {
+				return nil, nil, false, err
+			}
+			if task := NextSkipTask(enum.Skip, skipRows, fps, e.now()); task != nil {
+				return nil, task, cand.Ongoing, nil
+			}
+		}
+		e.sig.SetCooldown(ctx, cand.AnimeID, CooldownTTL(cand.Ongoing))
 	}
-	return nil, false, nil
+	return nil, nil, false, nil
 }
 
 type QueueEntry struct {

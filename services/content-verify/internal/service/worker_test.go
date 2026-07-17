@@ -20,12 +20,13 @@ func (f fakeShed) ShouldShed(int) bool { return f.shed }
 
 type fakeClaimer struct {
 	unit    *queue.Unit
+	task    *queue.SkipTask
 	ongoing bool
 	err     error
 }
 
-func (f fakeClaimer) Claim(context.Context) (*queue.Unit, bool, error) {
-	return f.unit, f.ongoing, f.err
+func (f fakeClaimer) Claim(context.Context) (*queue.Unit, *queue.SkipTask, bool, error) {
+	return f.unit, f.task, f.ongoing, f.err
 }
 
 type fakeProber struct {
@@ -57,6 +58,35 @@ func (f *fakeStore) UpsertUnit(_ context.Context, _ string, _ string, v domain.U
 	return nil
 }
 
+type fakeSkipProber struct {
+	calls     int
+	gotTask   queue.SkipTask
+	prevFails int
+	rows      []domain.SkipTiming
+}
+
+func (f *fakeSkipProber) Probe(_ context.Context, t queue.SkipTask, prevFails int) []domain.SkipTiming {
+	f.calls++
+	f.gotTask = t
+	f.prevFails = prevFails
+	return f.rows
+}
+
+type fakeSkipStore struct {
+	rows    []domain.SkipTiming
+	getErr  error
+	upserts []domain.SkipTiming
+}
+
+func (f *fakeSkipStore) SkipByAnime(context.Context, string) ([]domain.SkipTiming, error) {
+	return f.rows, f.getErr
+}
+
+func (f *fakeSkipStore) UpsertSkip(_ context.Context, t domain.SkipTiming) error {
+	f.upserts = append(f.upserts, t)
+	return nil
+}
+
 // --- cases ---
 
 func TestTickShedGateSkipsProbe(t *testing.T) {
@@ -65,7 +95,7 @@ func TestTickShedGateSkipsProbe(t *testing.T) {
 	claimer := &fakeClaimer{unit: &queue.Unit{AnimeID: "a-1", Provider: "gogoanime"}}
 	prober := &fakeProber{}
 	store := &fakeStore{}
-	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: true}, claimer, prober, store, nil)
+	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: true}, claimer, prober, store, nil, nil, 0, nil)
 
 	w.tick(context.Background())
 
@@ -87,7 +117,7 @@ func TestTickIdleQueueSkipsProbe(t *testing.T) {
 	claimer := &fakeClaimer{unit: nil}
 	prober := &fakeProber{}
 	store := &fakeStore{}
-	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil)
+	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
 
 	w.tick(context.Background())
 
@@ -112,7 +142,7 @@ func TestTickAeSynthUnitSkipsProbe(t *testing.T) {
 	claimer := &fakeClaimer{unit: unit}
 	prober := &fakeProber{}
 	store := &fakeStore{}
-	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil)
+	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
 
 	w.tick(context.Background())
 
@@ -150,7 +180,7 @@ func TestTickNormalUnitProbesWithPrevFailsAndPersists(t *testing.T) {
 		Units: domain.UnitList{{Key: unit.Key, Fails: 2, Status: domain.StatusUnreachable}},
 	}
 	store := &fakeStore{getRow: prevRow}
-	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil)
+	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
 
 	w.tick(context.Background())
 
@@ -170,5 +200,95 @@ func TestTickNormalUnitProbesWithPrevFailsAndPersists(t *testing.T) {
 	// never sees or sets it.
 	if store.upserts[0].Episodes != 12 {
 		t.Fatalf("persisted episodes = %d, want 12 (from unit)", store.upserts[0].Episodes)
+	}
+}
+
+// TestTickSkipTaskProbesWithPrevFailsAndPersistsAllRows covers a pair-
+// bootstrap skip task: prevFails must be the max Fails recorded across
+// existing rows matching the task's PRIMARY unit only (provider+team+
+// episode) — a row for a different episode of the same family must not
+// leak in — both rows the skip prober returns must be persisted via
+// UpsertSkip, the verify-lane prober/store must be untouched, and
+// SkipProbesTotal must be incremented keyed by the first returned row's
+// OpStatus.
+func TestTickSkipTaskProbesWithPrevFailsAndPersistsAllRows(t *testing.T) {
+	unit := queue.SkipUnit{AnimeID: "a-1", Provider: "kodik", Team: "610", Episode: 1}
+	pair := queue.SkipUnit{AnimeID: "a-1", Provider: "kodik", Team: "610", Episode: 2}
+	task := &queue.SkipTask{Unit: unit, Pair: &pair}
+	claimer := &fakeClaimer{unit: nil, task: task, ongoing: true}
+	prober := &fakeProber{}
+	store := &fakeStore{}
+
+	skipStore := &fakeSkipStore{rows: []domain.SkipTiming{
+		{AnimeID: "a-1", Provider: "kodik", Team: "610", Episode: 1, Fails: 3,
+			OpStatus: domain.SkipUnreachable, EdStatus: domain.SkipUnreachable},
+		// Different episode of the same family — must not leak into prevFails.
+		{AnimeID: "a-1", Provider: "kodik", Team: "610", Episode: 7, Fails: 9,
+			OpStatus: domain.SkipUnreachable, EdStatus: domain.SkipUnreachable},
+	}}
+	skipProber := &fakeSkipProber{rows: []domain.SkipTiming{
+		{AnimeID: "a-1", Provider: "kodik", Team: "610", Episode: 1, OpStatus: domain.SkipDetected},
+		{AnimeID: "a-1", Provider: "kodik", Team: "610", Episode: 2, OpStatus: domain.SkipDetected},
+	}}
+	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: false}, claimer, prober, store,
+		skipProber, skipStore, 20*time.Second, nil)
+
+	before := testutil.ToFloat64(cvmetrics.SkipProbesTotal.WithLabelValues("kodik", domain.SkipDetected))
+
+	w.tick(context.Background())
+
+	if prober.calls != 0 {
+		t.Fatalf("verify prober must NOT be called for a skip claim, calls=%d", prober.calls)
+	}
+	if len(store.upserts) != 0 {
+		t.Fatalf("verify-lane store must not be touched by a skip claim, upserts=%v", store.upserts)
+	}
+	if skipProber.calls != 1 {
+		t.Fatalf("skip prober must be called exactly once, calls=%d", skipProber.calls)
+	}
+	if skipProber.prevFails != 3 {
+		t.Fatalf("prevFails passed to skip prober = %d, want 3 (max Fails from the task's own unit row)", skipProber.prevFails)
+	}
+	if skipProber.gotTask.Unit != unit || skipProber.gotTask.Pair == nil || *skipProber.gotTask.Pair != pair {
+		t.Fatalf("skip prober called with wrong task: %+v", skipProber.gotTask)
+	}
+	if len(skipStore.upserts) != 2 {
+		t.Fatalf("expected both returned rows persisted via UpsertSkip, got %d", len(skipStore.upserts))
+	}
+	after := testutil.ToFloat64(cvmetrics.SkipProbesTotal.WithLabelValues("kodik", domain.SkipDetected))
+	if after != before+1 {
+		t.Fatalf("SkipProbesTotal{kodik,detected}: before=%v after=%v, want +1", before, after)
+	}
+}
+
+// TestTickSkipTaskLocateSingleRow covers a locate skip task (no Pair): the
+// single returned row must still be persisted and prevFails defaults to 0
+// when the store has no existing row for the unit.
+func TestTickSkipTaskLocateSingleRow(t *testing.T) {
+	unit := queue.SkipUnit{AnimeID: "a-1", Provider: "gogoanime", EpisodeID: "ep-9", Episode: 9}
+	task := &queue.SkipTask{Unit: unit}
+	claimer := &fakeClaimer{unit: nil, task: task, ongoing: true}
+	prober := &fakeProber{}
+	store := &fakeStore{}
+	skipStore := &fakeSkipStore{}
+	skipProber := &fakeSkipProber{rows: []domain.SkipTiming{
+		{AnimeID: "a-1", Provider: "gogoanime", Episode: 9, OpStatus: domain.SkipNoMatch, EdStatus: domain.SkipNoMatch},
+	}}
+	w := NewWorker(time.Minute, 10*time.Second, fakeShed{shed: false}, claimer, prober, store,
+		skipProber, skipStore, 20*time.Second, nil)
+
+	w.tick(context.Background())
+
+	if prober.calls != 0 {
+		t.Fatalf("verify prober must NOT be called for a skip claim, calls=%d", prober.calls)
+	}
+	if skipProber.calls != 1 || skipProber.prevFails != 0 {
+		t.Fatalf("skip prober calls=%d prevFails=%d, want 1/0 (no existing row)", skipProber.calls, skipProber.prevFails)
+	}
+	if skipProber.gotTask.Pair != nil {
+		t.Fatalf("locate task must not carry a pair: %+v", skipProber.gotTask)
+	}
+	if len(skipStore.upserts) != 1 || skipStore.upserts[0].Episode != 9 {
+		t.Fatalf("expected the single returned row persisted via UpsertSkip, got %+v", skipStore.upserts)
 	}
 }

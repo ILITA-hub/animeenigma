@@ -27,4 +27,7 @@ var (
 	LastProbeTS = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "content_verify_last_probe_timestamp", Help: "Unix time of the last completed probe.",
 	})
+	SkipProbesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "content_verify_skip_probes_total", Help: "Skip-lane (OP/ED) probes by provider and result.",
+	}, []string{"provider", "result"}) // result: detected|no_match|pending_fp|unreachable
 )
