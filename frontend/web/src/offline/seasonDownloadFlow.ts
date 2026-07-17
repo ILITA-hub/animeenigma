@@ -2,12 +2,14 @@ import { reactive, readonly } from 'vue'
 import type { Combo, AudioKind, TrackLang, ContentKind, SubtitleTrack } from '@/types/aePlayer'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { CapabilityReport } from '@/types/capabilities'
-import { capabilitiesApi, animeApi, subtitlesApi } from '@/api/client'
+import type { VerifyReport } from '@/types/contentVerify'
+import { capabilitiesApi, animeApi, subtitlesApi, contentVerifyApi } from '@/api/client'
 import { rowsFromReport } from '@/composables/aePlayer/useProviderFeed'
 import { pickSmartDefault, pickSelectableFallback } from '@/composables/aePlayer/smartDefault'
 import { GROUP_PRIMARY_LANG } from '@/composables/aePlayer/providerGroups'
 import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
 import { flattenAggregateSubs, type AggregateSubsResponse } from '@/composables/aePlayer/useSubtitleTracks'
+import { normalizeVerify } from '@/composables/aePlayer/useContentVerify'
 import { makeExternalSubResolver } from './externalSubs'
 import { seasonTargets, enqueueSeason } from './seasonDownload'
 import { listDownloads } from './registry'
@@ -81,8 +83,14 @@ function reset(notice: SeasonFlowNotice | null): void {
 }
 
 /** Player-default parity: DUB in the UI language, then the other DUB, then RAW
- *  (which drops the lang filter); hentai content only when common yields no rows. */
-export function pickDefaultCombo(report: CapabilityReport | null, uiLang: string): Combo | null {
+ *  (which drops the lang filter); hentai content only when common yields no rows.
+ *  `verify` (content-verify probe report, Task 15 fix round 4) gates which
+ *  audios each non-firstparty row may claim — same hard gate as the player's
+ *  own Source panel and DownloadDialog (see `verifiedCaps.ts`). Without it
+ *  (null — no report, or the fetch failed) every non-firstparty provider is
+ *  unverified/RAW-only, so the DUB candidates never match and this falls
+ *  through to the RAW pick, same as before content-verify existed. */
+export function pickDefaultCombo(report: CapabilityReport | null, uiLang: string, verify: VerifyReport | null = null): Combo | null {
   const langPref: TrackLang = uiLang.startsWith('ru') ? 'ru' : 'en'
   const altLang: TrackLang = langPref === 'ru' ? 'en' : 'ru'
   const candidates: { audio: AudioKind; lang: TrackLang }[] = [
@@ -92,7 +100,7 @@ export function pickDefaultCombo(report: CapabilityReport | null, uiLang: string
   ]
   for (const content of ['common', 'hentai'] as ContentKind[]) {
     for (const c of candidates) {
-      const rows = rowsFromReport(report, { audio: c.audio, lang: c.lang, content })
+      const rows = rowsFromReport(report, { audio: c.audio, lang: c.lang, content }, verify)
       const row = pickSmartDefault(rows) ?? pickSelectableFallback(rows)
       if (row) {
         // Under RAW the served lang is derived from the provider's group,
@@ -115,9 +123,12 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
   state.phase = 'resolving'
   state.request = request
   try {
-    // Detail fetch rides along only for episode_duration (scales the size
-    // estimates); its failure must never block the download flow.
-    const [res, durationMin] = await Promise.all([
+    // Detail + content-verify fetches ride along; neither's failure may ever
+    // block the download flow. content-verify is a ONE-SHOT best-effort pick
+    // here (not a poll — this flow resolves once and moves on to 'choose';
+    // SeasonDownloadHost.vue separately polls it live once the dialog is
+    // actually open, for the dialog's own reactive DUB gating).
+    const [res, durationMin, verify] = await Promise.all([
       capabilitiesApi.get(request.animeId),
       animeApi
         .getById(request.animeId)
@@ -127,10 +138,14 @@ export async function openSeasonDownload(request: SeasonDownloadRequest, uiLang:
           return typeof d === 'number' && d > 0 ? d : null
         })
         .catch(() => null),
+      contentVerifyApi
+        .get(request.animeId)
+        .then((r) => normalizeVerify(r.data?.data ?? r.data))
+        .catch(() => null),
     ])
     if (mySeq !== seq) return
     const report = (res.data?.data ?? res.data ?? null) as CapabilityReport | null
-    const combo = pickDefaultCombo(report, uiLang)
+    const combo = pickDefaultCombo(report, uiLang, verify)
     if (!combo) {
       reset({ kind: 'no-source' })
       return

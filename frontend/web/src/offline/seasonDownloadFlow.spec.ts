@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { CapabilityReport, ProviderCap } from '@/types/capabilities'
 import type { Combo } from '@/types/aePlayer'
+import type { VerifyReport } from '@/types/contentVerify'
 import type { SubPref } from './types'
 
 const h = vi.hoisted(() => ({
@@ -13,6 +14,10 @@ const h = vi.hoisted(() => ({
   listDownloads: vi.fn(async () => [] as unknown[]),
   enqueueSeason: vi.fn(async (targets: unknown[], _ctx?: unknown) => targets.length),
   subsAll: vi.fn(async (_id: string, _ep: number) => ({ data: { data: { languages: {}, episode: 1 } } })),
+  // One-shot content-verify fetch (Task 15 fix round 4) — defaults to "nothing
+  // verified yet" so every pre-existing test keeps its pre-verify (RAW-biased)
+  // behavior unless a test explicitly overrides it.
+  verifyGet: vi.fn(async (_id: string) => ({ data: { data: { anime_id: 'a1', providers: [] as unknown[] } } })),
 }))
 
 vi.mock('./flag', () => ({
@@ -23,6 +28,7 @@ vi.mock('@/api/client', () => ({
   capabilitiesApi: { get: (id: string) => h.capGet(id) },
   animeApi: { getById: (id: string) => h.animeGet(id) },
   subtitlesApi: { all: (id: string, ep: number) => h.subsAll(id, ep) },
+  contentVerifyApi: { get: (id: string) => h.verifyGet(id) },
 }))
 vi.mock('@/composables/aePlayer/useProviderResolver', () => ({
   useProviderResolver: () => ({
@@ -91,16 +97,42 @@ beforeEach(() => {
   h.listDownloads.mockReset().mockResolvedValue([])
   h.enqueueSeason.mockReset().mockImplementation(async (targets: unknown[]) => targets.length)
   h.subsAll.mockReset().mockResolvedValue({ data: { data: { languages: {}, episode: 1 } } })
+  h.verifyGet.mockReset().mockResolvedValue({ data: { data: { anime_id: 'a1', providers: [] } } })
 })
 
+// gogoanime verified for DUB/en, kodik verified for DUB/ru — mirrors the
+// player's own gating (verifiedCaps.ts): a non-firstparty provider needs a
+// matching verified dub_langs entry before it can win a DUB pick.
+const VERIFY: VerifyReport = {
+  animeId: 'a1',
+  providers: {
+    gogoanime: { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: [] },
+    kodik: { status: 'verified', raw: true, dub_langs: ['ru'], hardsub_langs: [] },
+  },
+}
+
 describe('pickDefaultCombo', () => {
-  it('prefers DUB in the UI language', () => {
+  it('prefers DUB in the UI language when content-verify confirms the dub language', () => {
     const rep = report(cap('gogoanime', 'en', ['sub', 'dub'], 10), cap('kodik', 'ru', ['dub'], 20))
-    expect(pickDefaultCombo(rep, 'ru')).toMatchObject({ audio: 'dub', lang: 'ru', provider: 'kodik', server: '' })
-    expect(pickDefaultCombo(rep, 'en')).toMatchObject({ audio: 'dub', lang: 'en', provider: 'gogoanime' })
+    expect(pickDefaultCombo(rep, 'ru', VERIFY)).toMatchObject({ audio: 'dub', lang: 'ru', provider: 'kodik', server: '' })
+    expect(pickDefaultCombo(rep, 'en', VERIFY)).toMatchObject({ audio: 'dub', lang: 'en', provider: 'gogoanime' })
   })
 
-  it('falls back to RAW with the provider-group served lang', () => {
+  it('falls back to the RAW pick when unverified (no report, or neither provider is confirmed for dub)', () => {
+    const rep = report(cap('gogoanime', 'en', ['sub', 'dub'], 10), cap('kodik', 'ru', ['dub'], 20))
+    // Neither provider is firstparty; with no verify report DUB is fully
+    // gated (effectiveAudios forces ['sub'] regardless of the cap's claimed
+    // audios), so RAW wins outright: highest-order row, language filter
+    // dropped — kodik (order 20) beats gogoanime (order 10) either way, and
+    // its RAW lang is derived from the provider's group (GROUP_PRIMARY_LANG),
+    // not the requested uiLang.
+    expect(pickDefaultCombo(rep, 'ru')).toMatchObject({ audio: 'sub', lang: 'ru', provider: 'kodik', server: '' })
+    expect(pickDefaultCombo(rep, 'en')).toMatchObject({ audio: 'sub', lang: 'ru', provider: 'kodik' })
+    // Same outcome passing verify=null explicitly (the fetch-failure shape).
+    expect(pickDefaultCombo(rep, 'ru', null)).toMatchObject({ audio: 'sub', provider: 'kodik' })
+  })
+
+  it('falls back to RAW with the provider-group served lang (firstparty exempt from gating)', () => {
     const rep = report(cap('ae', 'firstparty', ['sub'], 10))
     expect(pickDefaultCombo(rep, 'en')).toMatchObject({ audio: 'sub', lang: 'ja', provider: 'ae' })
   })
@@ -120,6 +152,35 @@ describe('openSeasonDownload', () => {
     expect(seasonFlow.phase).toBe('choose')
     expect(seasonFlow.targets.map((e) => e.number)).toEqual([2, 3])
     expect(h.listEpisodes).toHaveBeenCalledWith('gogoanime', 'a1')
+  })
+
+  it('a verified content-verify report lets the resolved combo land on the DUB pick', async () => {
+    h.capGet.mockResolvedValue(envelope(report(cap('gogoanime', 'en', ['sub', 'dub']), cap('kodik', 'ru', ['dub']))))
+    h.listEpisodes.mockResolvedValue([ep(1), ep(2), ep(3)])
+    h.verifyGet.mockResolvedValue({
+      data: {
+        data: {
+          anime_id: 'a1',
+          providers: [
+            { provider: 'gogoanime', summary: { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: [] }, units: [] },
+          ],
+        },
+      },
+    })
+    await openSeasonDownload(REQ, 'en')
+    expect(seasonFlow.phase).toBe('choose')
+    expect(seasonFlow.combo).toMatchObject({ audio: 'dub', lang: 'en', provider: 'gogoanime' })
+    expect(h.listEpisodes).toHaveBeenCalledWith('gogoanime', 'a1')
+  })
+
+  it('a content-verify fetch failure degrades gracefully to the RAW pick (does not fail the whole flow)', async () => {
+    h.capGet.mockResolvedValue(envelope(report(cap('gogoanime', 'en', ['sub', 'dub']))))
+    h.listEpisodes.mockResolvedValue([ep(1), ep(2), ep(3)])
+    h.verifyGet.mockRejectedValue(new Error('network'))
+    await openSeasonDownload(REQ, 'en')
+    expect(seasonFlow.phase).toBe('choose')
+    expect(seasonFlow.combo).toMatchObject({ audio: 'sub', provider: 'gogoanime' })
+    expect(seasonFlow.notice).toBeNull() // no 'failed' notice — the verify fetch is best-effort only
   })
 
   it('notices no-sw without touching the network', async () => {
