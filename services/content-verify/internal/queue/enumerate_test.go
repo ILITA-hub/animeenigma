@@ -5,6 +5,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
@@ -114,5 +115,78 @@ func TestEnumerateUnits(t *testing.T) {
 	}
 	if gogo != 2 || kodik != 2 || ae != 1 || adult != 0 {
 		t.Fatalf("unit counts gogo=%d kodik=%d ae=%d adult=%d", gogo, kodik, ae, adult)
+	}
+}
+
+func TestEnumerateAll(t *testing.T) {
+	srv := buildTestCatalog(t)
+	defer srv.Close()
+	c := catalogclient.New(srv.URL, srv.URL, srv.Client())
+
+	all, err := EnumerateAll(context.Background(), c, "a1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// EnumerateUnits (the wrapper) must return the exact same verify units.
+	units, err := EnumerateUnits(context.Background(), c, "a1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != len(all.Verify) {
+		t.Fatalf("EnumerateUnits len=%d != EnumerateAll.Verify len=%d", len(units), len(all.Verify))
+	}
+	for i := range units {
+		if !reflect.DeepEqual(units[i], all.Verify[i]) {
+			t.Fatalf("EnumerateUnits[%d] = %+v != EnumerateAll.Verify[%d] = %+v", i, units[i], i, all.Verify[i])
+		}
+	}
+
+	var gogo, kodik, hanime, ae int
+	var gogoEpisodes []int
+	for _, s := range all.Skip {
+		switch s.Provider {
+		case "gogoanime":
+			gogo++
+			gogoEpisodes = append(gogoEpisodes, s.Episode)
+		case "kodik":
+			kodik++
+			if s.Team == "" {
+				t.Fatalf("kodik skip unit needs Team: %+v", s)
+			}
+			if s.TeamID == 0 {
+				t.Fatalf("kodik skip unit needs TeamID: %+v", s)
+			}
+		case "hanime":
+			hanime++
+		case "ae":
+			ae++
+		}
+	}
+	if gogo != 2 {
+		t.Fatalf("gogoanime skip units = %d, want 2: %+v", gogo, all.Skip)
+	}
+	if len(gogoEpisodes) != 2 || gogoEpisodes[0] != 1 || gogoEpisodes[1] != 28 {
+		t.Fatalf("gogoanime skip episodes not ascending [1,28]: %+v", gogoEpisodes)
+	}
+	if kodik != 56 { // 2 translations x 28 episodes
+		t.Fatalf("kodik skip units = %d, want 56", kodik)
+	}
+	if hanime != 0 {
+		t.Fatalf("hanime (adult) must have no skip units, got %d", hanime)
+	}
+	if ae != 0 {
+		t.Fatalf("ae (firstparty) must have no skip units in v1, got %d", ae)
+	}
+
+	// Verify gogoanime EpisodeIDs ep-1/ep-28, ascending.
+	var gogoIDs []string
+	for _, s := range all.Skip {
+		if s.Provider == "gogoanime" {
+			gogoIDs = append(gogoIDs, s.EpisodeID)
+		}
+	}
+	if len(gogoIDs) != 2 || gogoIDs[0] != "ep-1" || gogoIDs[1] != "ep-28" {
+		t.Fatalf("gogoanime skip EpisodeIDs not [ep-1, ep-28]: %+v", gogoIDs)
 	}
 }

@@ -47,18 +47,53 @@ func stateRank(s string) int {
 	}
 }
 
+// SkipUnit is one skip-probe target. TeamID resolves kodik streams; Team is
+// the translation TITLE persisted in rows (FE combo carries titles).
+type SkipUnit struct {
+	AnimeID   string
+	Provider  string
+	Team      string // kodik: title; "" otherwise
+	TeamID    int    // kodik: numeric id; 0 otherwise
+	Episode   int
+	EpisodeID string // scraper: per-episode opaque id; "" otherwise
+	StateRank int
+}
+
+// Enumeration is the result of one catalog pass: verify units (content
+// probing — audio lang / burned subs) AND skip units (intro/outro probing),
+// built from the SAME already-fetched provider data. No extra network calls.
+type Enumeration struct {
+	Verify []Unit
+	Skip   []SkipUnit
+}
+
 // EnumerateUnits lists every probeable unit for one anime from live catalog
 // structure. Adult providers are skipped in v1 (no membership source ranks
 // them; a visited hentai title still gets its non-adult providers probed).
 // log may be nil (e.g. in tests); when set, every best-effort provider skip
 // is recorded so a silently-crumbling provider is visible in logs rather
 // than just quietly shrinking the queue.
+//
+// It is a thin wrapper over EnumerateAll for existing callers/tests that
+// only need verify units.
 func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string, log *logger.Logger) ([]Unit, error) {
-	caps, err := c.Capabilities(ctx, animeID)
+	all, err := EnumerateAll(ctx, c, animeID, log)
 	if err != nil {
 		return nil, err
 	}
+	return all.Verify, nil
+}
+
+// EnumerateAll lists every probeable verify unit AND every skip-probe unit
+// for one anime, from a single catalog pass (capabilities + per-provider
+// translations/episodes fetched once, reused for both).
+func EnumerateAll(ctx context.Context, c *catalogclient.Client, animeID string, log *logger.Logger) (Enumeration, error) {
+	caps, err := c.Capabilities(ctx, animeID)
+	if err != nil {
+		return Enumeration{}, err
+	}
 	var units []Unit
+	var skips []SkipUnit
 	for _, pc := range caps {
 		if pc.State == "no_content" || pc.Group == "adult" {
 			continue
@@ -66,6 +101,9 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 		rank := stateRank(pc.State)
 		switch {
 		case pc.Group == "firstparty":
+			// ae has no episode list in the capabilities pass (only a single
+			// synth unit above) — v1 skips skip-unit enumeration here and
+			// relies on the AniSkip fallback instead.
 			lang := pc.Lang
 			if lang == "" {
 				lang = "ja"
@@ -95,13 +133,17 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 						Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
 							RawAudio: true,
 							Hardsub:  &domain.HardsubVerdict{Present: true, Verified: true, Lang: "ru", Confidence: 1.0}}})
-					continue
+				} else {
+					key := domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: "dub"}
+					units = append(units, Unit{AnimeID: animeID, Provider: "kodik",
+						Key: key, Episode: ep, Episodes: ep, StateRank: rank,
+						Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
+							Audio: &domain.AudioVerdict{Lang: "ru", Confidence: 1.0, Verified: true}}})
 				}
-				key := domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: "dub"}
-				units = append(units, Unit{AnimeID: animeID, Provider: "kodik",
-					Key: key, Episode: ep, Episodes: ep, StateRank: rank,
-					Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
-						Audio: &domain.AudioVerdict{Lang: "ru", Confidence: 1.0, Verified: true}}})
+				for episode := 1; episode <= ep; episode++ {
+					skips = append(skips, SkipUnit{AnimeID: animeID, Provider: "kodik",
+						Team: tr.Title, TeamID: tr.ID, Episode: episode, StateRank: rank})
+				}
 			}
 
 		case scraperProviders[pc.Provider]:
@@ -134,6 +176,13 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 					Key:     domain.UnitKey{Server: s.ID, Category: cat},
 					Episode: latest.Number, Episodes: len(eps), EpisodeID: latest.ID, StateRank: rank})
 			}
+			epsSorted := make([]catalogclient.ScraperEpisode, len(eps))
+			copy(epsSorted, eps)
+			sort.SliceStable(epsSorted, func(i, j int) bool { return epsSorted[i].Number < epsSorted[j].Number })
+			for _, e := range epsSorted {
+				skips = append(skips, SkipUnit{AnimeID: animeID, Provider: pc.Provider,
+					Episode: e.Number, EpisodeID: e.ID, StateRank: rank})
+			}
 
 		case isAnimejoyLeg(pc.Provider):
 			eps, err := c.AnimejoyEpisodes(ctx, animeID, pc.Provider)
@@ -153,10 +202,17 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 			}
 			units = append(units, Unit{AnimeID: animeID, Provider: pc.Provider,
 				Key: domain.UnitKey{Server: pc.Provider}, Episode: latest, Episodes: len(eps), StateRank: rank})
+			epsSorted := make([]int, len(eps))
+			copy(epsSorted, eps)
+			sort.Ints(epsSorted)
+			for _, n := range epsSorted {
+				skips = append(skips, SkipUnit{AnimeID: animeID, Provider: pc.Provider,
+					Episode: n, StateRank: rank})
+			}
 		}
 	}
 	sort.SliceStable(units, func(i, j int) bool { return units[i].StateRank < units[j].StateRank })
-	return units, nil
+	return Enumeration{Verify: units, Skip: skips}, nil
 }
 
 // logSkip records a best-effort provider skip during enumeration. err is nil
