@@ -70,13 +70,22 @@ export interface SubtitleTrack {
   format: string    // 'vtt' | 'srt' | 'ass'
 }
 
+/** One selectable server of the active provider. `type` is the scraper's
+ *  category claim ('sub' | 'dub') when known — the Source panel filters the
+ *  server list to the active stream kind with it. */
+export interface ServerOption {
+  id: string
+  label: string
+  type?: string
+}
+
 /** Normalised stream descriptor returned by a provider adapter. */
 export interface StreamResult {
   url: string
   type: 'hls' | 'mp4'
   headers?: Record<string, string>
   qualities?: { label: string; value: number | string }[]
-  servers?: { id: string; label: string }[]
+  servers?: ServerOption[]
   /** Quality the provider actually served (e.g. "720p") — shown next to Auto
    *  for per-URL ladders where hls.js has no level to report. */
   qualityLabel?: string

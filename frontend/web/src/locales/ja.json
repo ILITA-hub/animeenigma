@@ -310,9 +310,7 @@
       "subSelectable": "選択可能",
       "providerLacksAnime": "この配信元にこのアニメはありません",
       "providerCdnUnreachable": "この配信元のCDNにこのアニメで接続できません",
-      "unverified": "未確認",
-      "verifiedDub": "吹替 {lang} ✓",
-      "verifiedHardsub": "焼き込み字幕（{lang}）"
+      "unverified": "未確認"
     },
     "pin": "固定",
     "unpin": "固定解除",
@@ -415,7 +413,10 @@
     "skipOutro": "エンディングをスキップ",
     "adminLibrary": {
       "title": "生ライブラリ",
-      "tabs": { "torrentClient": "トレントクライアント", "fileManager": "ファイルマネージャー" },
+      "tabs": {
+        "torrentClient": "トレントクライアント",
+        "fileManager": "ファイルマネージャー"
+      },
       "stats": {
         "diskFree": "ディスク空き容量",
         "activeTorrents": "アクティブなトレント",
@@ -465,10 +466,18 @@
       },
       "files": {
         "title": "ファイル",
-        "domain": { "work": "トレント作業ディレクトリ", "minio": "MinIO", "s3": "S3 · firstvds" },
+        "domain": {
+          "work": "トレント作業ディレクトリ",
+          "minio": "MinIO",
+          "s3": "S3 · firstvds"
+        },
         "root": "ルート",
         "parent": "..",
-        "col": { "name": "名前", "size": "サイズ", "actions": "操作" },
+        "col": {
+          "name": "名前",
+          "size": "サイズ",
+          "actions": "操作"
+        },
         "empty": "空です",
         "download": "ダウンロード",
         "delete": "削除",
@@ -1623,7 +1632,10 @@
         "intro": "バックグラウンドルーチンを一時停止・再開し、安全な設定を調整します。ホストルーチンの一時停止は次回実行をスキップしますが、スケジュールは維持されます。",
         "loadError": "メンテナンスルーチンの読み込みに失敗しました。",
         "noRoutines": "登録されているメンテナンスルーチンはありません。",
-        "groups": { "host": "ホストルーチン", "cluster": "クラスター内ルーチン" },
+        "groups": {
+          "host": "ホストルーチン",
+          "cluster": "クラスター内ルーチン"
+        },
         "enabled": "有効",
         "paused": "一時停止中",
         "toggleLabel": "{name} を切り替え",
@@ -1636,7 +1648,12 @@
         "toastPauseError": "{name} を一時停止できませんでした",
         "toastSaveSuccess": "{name} の設定を保存しました",
         "toastSaveError": "{name} の設定を保存できませんでした",
-        "status": { "ok": "OK", "failed": "失敗", "stale": "古い", "never": "実行履歴なし" },
+        "status": {
+          "ok": "OK",
+          "failed": "失敗",
+          "stale": "古い",
+          "never": "実行履歴なし"
+        },
         "routines": {
           "maintenance_bot": "メンテナンスボット",
           "provider_recovery": "毎日のプロバイダ復旧",

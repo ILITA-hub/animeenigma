@@ -93,34 +93,6 @@
       </div>
     </div>
 
-    <!-- Team chips (only shown when teams.length > 0) -->
-    <div v-if="teams.length > 0" class="flex flex-col gap-2">
-      <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
-        Team
-      </span>
-      <div class="flex flex-wrap gap-1.5">
-        <button
-          v-for="t in teams"
-          :key="t"
-          :class="[
-            'px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all duration-150',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
-            team === t
-              ? 'bg-[var(--cyan-a20)] border-[var(--accent-line)] text-[var(--brand-cyan)]'
-              : 'border-transparent text-[var(--ink-2)] hover:text-white',
-          ]"
-          style="background: var(--white-a8);"
-          @click="emit('update:team', t)"
-        >
-          <span>{{ t }}</span>
-          <span
-            v-if="teamCategory(t)"
-            class="ml-[5px] text-[9px] font-semibold font-mono uppercase tracking-wide opacity-80"
-          >{{ teamCategory(t) === 'dub' ? $t('player.dub') : $t('player.sub') }}</span>
-        </button>
-      </div>
-    </div>
-
     <!-- Provider list (collapsed to the best/selected source unless hacker mode / error-expanded) -->
     <div class="flex flex-col gap-1">
       <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)] mb-0.5">
@@ -151,14 +123,48 @@
       </button>
     </div>
 
-    <!-- Server list -->
-    <div v-if="servers.length > 0" class="flex flex-col gap-2">
+    <!-- Streams of the SELECTED provider (owner fix 2026-07-17): every
+         selectable stream — kodik translation teams and scraper sub/dub
+         cuts alike — listed in ONE place between Provider and Server, each
+         carrying its consolidated taxonomy badge ("SUB BURNED-IN RU",
+         "DUB RU"). -->
+    <div v-if="streamEntries.length > 0" class="flex flex-col gap-2" data-test="stream-section">
+      <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
+        Stream
+      </span>
+      <div class="flex flex-wrap gap-1.5">
+        <button
+          v-for="s in streamEntries"
+          :key="s.id"
+          data-test="stream-entry"
+          :class="[
+            'px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all duration-150',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-cyan)]',
+            s.selected
+              ? 'bg-[var(--cyan-a20)] border-[var(--accent-line)] text-[var(--brand-cyan)]'
+              : 'border-transparent text-[var(--ink-2)] hover:text-white',
+          ]"
+          style="background: var(--white-a8);"
+          @click="selectStream(s)"
+        >
+          <span v-if="s.team">{{ s.label }}</span>
+          <span
+            v-if="s.badge"
+            :class="['text-[10px] font-semibold font-mono uppercase tracking-wide', s.team ? 'ml-1.5 opacity-80' : '']"
+          >{{ s.badge }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Server list (filtered to the active stream kind; identical labels are
+         numbered so six same-named CDN entries stop reading as spam) -->
+    <div v-if="visibleServers.length > 1" class="flex flex-col gap-2">
       <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
         Server
       </span>
       <div class="flex flex-col gap-1">
         <button
-          v-for="s in servers"
+          v-for="s in visibleServers"
           :key="s.id"
           :class="[
             'flex items-center gap-2.5 px-2.5 py-[9px] rounded-[var(--r-md)] border text-sm text-left transition-all duration-150 w-full',
@@ -184,8 +190,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AudioKind, TrackLang, ProviderRow, ChipState } from '@/types/aePlayer'
+import { useI18n } from 'vue-i18n'
+import type { AudioKind, TrackLang, ProviderRow, ChipState, ServerOption } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
+import { verifiedDubLangs, verifiedHardsubLangs, effectiveAudios, isUnverified } from '@/composables/aePlayer/verifiedCaps'
+import { streamBadgeText } from '@/composables/aePlayer/streamBadgeText'
 import ProviderChip from './ProviderChip.vue'
 
 const props = withDefaults(
@@ -196,7 +205,7 @@ const props = withDefaults(
     team: string | null
     provider: string
     server: string
-    servers: { id: string; label: string }[]
+    servers: ServerOption[]
     teams: string[]
     capMap?: Map<string, ProviderCap>
     hackerMode?: boolean
@@ -327,4 +336,87 @@ function teamCategory(name: string): 'sub' | 'dub' | null {
   if (!v) return null
   return v.category === 'dub' ? 'dub' : v.category === 'sub' ? 'sub' : null
 }
+
+// ── Stream entries (owner fix 2026-07-17) ────────────────────────────────────
+// Every selectable stream of the SELECTED provider in one list: kodik
+// translation teams and scraper sub/dub cuts alike, each with its
+// consolidated taxonomy badge. Lives between Provider and Server.
+interface StreamEntry {
+  id: string
+  kind: AudioKind
+  team: string | null
+  label: string
+  badge: string | null
+  selected: boolean
+}
+
+const { t } = useI18n()
+const selectedVerify = computed(() => props.rows.find(r => r.id === props.provider)?.verify ?? null)
+
+function entryBadge(kind: AudioKind): string | null {
+  const cap = props.capMap.get(props.provider)
+  const v = selectedVerify.value
+  const firstparty = cap?.group === 'firstparty'
+  if (!firstparty && cap && isUnverified(cap, v)) {
+    // Unverified providers carry the marker on their chip; the lone RAW
+    // stream entry stays badge-plain rather than asserting anything.
+    return kind === 'dub' ? t('player.dub') : t('player.sub')
+  }
+  const langs = kind === 'dub' ? verifiedDubLangs(v) : verifiedHardsubLangs(v)
+  return streamBadgeText(
+    { kind, langs: firstparty ? [] : langs, burnedIn: kind === 'sub' && !firstparty && langs.length > 0, soft: false },
+    t,
+  )
+}
+
+const streamEntries = computed<StreamEntry[]>(() => {
+  // Kodik: one entry per translation team, badge from the team's category.
+  if (props.teams.length > 0) {
+    return props.teams.map((name) => {
+      const kind: AudioKind = teamCategory(name) === 'sub' ? 'sub' : 'dub'
+      return {
+        id: 'team:' + name,
+        kind,
+        team: name,
+        label: name,
+        badge: entryBadge(kind),
+        selected: props.team === name,
+      }
+    })
+  }
+  // Scraper/firstparty: one entry per proven stream kind.
+  const cap = props.capMap.get(props.provider)
+  if (!cap) return []
+  return effectiveAudios(cap, selectedVerify.value).map((kind) => ({
+    id: 'cat:' + kind,
+    kind,
+    team: null,
+    label: '',
+    badge: entryBadge(kind),
+    selected: props.audio === kind,
+  }))
+})
+
+function selectStream(s: StreamEntry) {
+  if (s.team) emit('update:team', s.team)
+  if (s.kind !== props.audio) emit('update:audio', s.kind)
+}
+
+// ── Server list hygiene (owner fix 2026-07-17) ───────────────────────────────
+// Only servers of the active stream kind, and identical labels get numbered —
+// six same-named "kwik" rows stop reading as spam. A server without a type
+// claim is SUB-compatible (mirrors useProviderResolver's pick rule).
+const visibleServers = computed(() => {
+  const wantDub = props.audio === 'dub'
+  const matching = props.servers.filter(s => (wantDub ? s.type === 'dub' : s.type !== 'dub'))
+  const dupes = new Map<string, number>()
+  for (const s of matching) dupes.set(s.label, (dupes.get(s.label) ?? 0) + 1)
+  const seen = new Map<string, number>()
+  return matching.map((s) => {
+    if ((dupes.get(s.label) ?? 0) <= 1) return s
+    const n = (seen.get(s.label) ?? 0) + 1
+    seen.set(s.label, n)
+    return { ...s, label: `${s.label} ${n}` }
+  })
+})
 </script>

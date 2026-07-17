@@ -1,6 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ProviderChip from './ProviderChip.vue'
+
+// ProviderChip uses useI18n() in script setup (consolidated badge text);
+// stub vue-i18n so tests mount without a real plugin — keys come back as-is.
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k }),
+}))
+
 import type { ProviderRow } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
 import type { ProviderVerify } from '@/types/contentVerify'
@@ -87,32 +94,36 @@ describe('ProviderChip', () => {
   // verify data is assumed RAW-only and its asserted SUB/DUB category chips
   // are suppressed in favour of an "unverified" marker — no claims without
   // verification.
-  it('suppresses category chips and shows the unverified marker when there is no verify data', () => {
+  it('suppresses stream badges and shows the unverified marker when there is no verify data', () => {
     const w = mount(ProviderChip, { props: { row: row(), cap }, ...stub })
-    expect(w.findAll('[data-test="cap-cat"]').length).toBe(0)
+    expect(w.findAll('[data-test="cap-badge"]').length).toBe(0)
     expect(w.find('[data-test="cap-unverified"]').exists()).toBe(true)
     // Quality/best badges are independent of the verify gate.
     expect(w.find('[data-test="cap-quality"]').text()).toContain('1080p')
   })
 
-  it('renders category + quality tags once content-verify confirms them', () => {
-    const verify: ProviderVerify = { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: [] }
+  // Owner fix 2026-07-17: exactly ONE consolidated badge per stream kind —
+  // "SUB BURNED-IN RU · DUB RU", never five parallel per-fact chips.
+  it('renders one consolidated badge per proven stream kind with langs folded in', () => {
+    const verify: ProviderVerify = { status: 'verified', raw: true, dub_langs: ['ru'], hardsub_langs: ['ru'] }
     const w = mount(ProviderChip, { props: { row: row(), cap, verify }, ...stub })
-    expect(w.findAll('[data-test="cap-cat"]').length).toBe(2)
+    const badges = w.findAll('[data-test="cap-badge"]')
+    expect(badges.length).toBe(2)
+    expect(badges[0].text()).toContain('RU')      // sub burned-in RU
+    expect(badges[1].text()).toContain('RU')      // dub RU
     expect(w.find('[data-test="cap-quality"]').text()).toContain('1080p')
     expect(w.find('[data-test="cap-unverified"]').exists()).toBe(false)
   })
 
-  it('renders verified-dub and verified-hardsub badges from the probe verdict', () => {
-    const verify: ProviderVerify = { status: 'partial', raw: false, dub_langs: ['ru'], hardsub_langs: ['ja'] }
+  it('partial verdict keeps the RAW-assumed sub badge and the proven dub badge', () => {
+    const verify: ProviderVerify = { status: 'partial', raw: false, dub_langs: ['ru'], hardsub_langs: [] }
     const w = mount(ProviderChip, { props: { row: row(), cap, verify }, ...stub })
-    expect(w.find('[data-test="cap-verified-dub"]').exists()).toBe(true)
-    expect(w.find('[data-test="cap-verified-hardsub"]').exists()).toBe(true)
+    expect(w.findAll('[data-test="cap-badge"]').length).toBe(2)
   })
 
   it('renders no label row without cap', () => {
     const w = mount(ProviderChip, { props: { row: row() }, ...stub })
-    expect(w.find('[data-test="cap-cat"]').exists()).toBe(false)
+    expect(w.find('[data-test="cap-badge"]').exists()).toBe(false)
   })
 
   it('shows the best pill when best=true', () => {

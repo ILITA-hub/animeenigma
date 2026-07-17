@@ -34,7 +34,7 @@
 
 import { scraperApi, anime18Api, kodikApi, aeApi, hanimeApi, animejoyApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
+import type { StreamResult, Combo, AudioKind, SubtitleTrack, ServerOption } from '@/types/aePlayer'
 import { hlsProxyUrl, maskedStreamUrl } from '@/utils/streaming'
 import { buildSubtitleProxyUrl, detectSubFormat, langFromTrack } from '@/utils/subtitleProxy'
 import { pickKodikTranslation } from './pickKodikTranslation'
@@ -117,7 +117,7 @@ interface LibraryStream {
   storyboard?: { url: string; exp?: string; sig?: string; masked_url?: string }
   // Present ONLY when this episode exists in BOTH storages (e.g. [{id:'minio',
   // label:'Local'},{id:'s3',label:'Cloud'}]); absent for a single-copy episode.
-  servers?: { id: string; label: string }[]
+  servers?: ServerOption[]
 }
 
 // ─── Anime18 types (mirrored from Anime18Player) ────────────────────────────
@@ -330,7 +330,7 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
         url: buildProxyUrl(source.url, referer, type, { exp: source.exp, sig: source.sig, masked: source.masked_url }),
         type,
         headers: stream.headers,
-        servers: srvs.map((s) => ({ id: s.id, label: s.name })),
+        servers: srvs.map((s) => ({ id: s.id, label: s.name, ...(s.type ? { type: s.type } : {}) })),
         ...(subtitles.length ? { subtitles } : {}),
       }
     },

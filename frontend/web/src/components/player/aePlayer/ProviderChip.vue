@@ -30,16 +30,13 @@
       <span class="flex-1 min-w-0 flex flex-col gap-0.5">
         <span class="font-semibold truncate">{{ row.label }}</span>
         <span v-if="labels" class="flex items-center gap-[5px] flex-wrap">
-          <template v-if="!labels.unverified">
-            <span
-              v-for="c in labels.categories"
-              :key="c"
-              data-test="cap-cat"
-              class="text-[9px] font-semibold font-mono uppercase tracking-wide px-1 py-px rounded bg-white/[0.08] text-[var(--muted-foreground)]"
-            >
-              {{ c === 'sub' ? $t('player.sub') : $t('player.dub') }}<template v-if="c === 'sub' && labels.subDelivery"> · {{ labels.subDelivery === 'hard' ? $t('player.sources.subBurnedIn') : $t('player.sources.subSelectable') }}</template>
-            </span>
-          </template>
+          <!-- One consolidated badge per stream kind: "SUB BURNED-IN RU", "DUB RU" -->
+          <span
+            v-for="b in labels.badges"
+            :key="b.kind"
+            data-test="cap-badge"
+            class="text-[9px] font-semibold font-mono uppercase tracking-wide px-1 py-px rounded bg-white/[0.08] text-[var(--muted-foreground)]"
+          >{{ badgeText(b) }}</span>
           <span
             v-if="labels.quality"
             data-test="cap-quality"
@@ -50,18 +47,6 @@
             data-test="cap-best"
             class="text-[9px] font-semibold font-mono uppercase tracking-wide text-[var(--brand-cyan)]"
           >{{ $t('player.sources.best') }}</span>
-          <span
-            v-for="lang in labels.verifiedDub"
-            :key="'dub-' + lang"
-            data-test="cap-verified-dub"
-            class="text-[9px] font-semibold font-mono uppercase tracking-wide px-1 py-px rounded bg-white/[0.08] text-[var(--muted-foreground)]"
-          >{{ $t('player.sources.verifiedDub', { lang: lang.toUpperCase() }) }}</span>
-          <span
-            v-for="lang in labels.verifiedHardsub"
-            :key="'hardsub-' + lang"
-            data-test="cap-verified-hardsub"
-            class="text-[9px] font-semibold font-mono uppercase tracking-wide px-1 py-px rounded bg-white/[0.08] text-[var(--muted-foreground)]"
-          >{{ $t('player.sources.verifiedHardsub', { lang: lang.toUpperCase() }) }}</span>
           <span
             v-if="labels.unverified"
             data-test="cap-unverified"
@@ -101,11 +86,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Check } from 'lucide-vue-next'
 import type { ProviderRow, ChipState } from '@/types/aePlayer'
 import type { ProviderCap } from '@/types/capabilities'
 import type { ProviderVerify } from '@/types/contentVerify'
-import { deriveCapLabels } from '@/composables/aePlayer/capLabels'
+import { deriveCapLabels, type StreamBadge } from '@/composables/aePlayer/capLabels'
+import { streamBadgeText } from '@/composables/aePlayer/streamBadgeText'
 
 const props = defineProps<{
   row: ProviderRow
@@ -129,6 +116,11 @@ const emit = defineEmits<{
 
 const isSelected = computed(() => props.selected === true)
 const labels = computed(() => deriveCapLabels(props.cap, props.verify ?? null))
+
+const { t } = useI18n()
+function badgeText(b: StreamBadge): string {
+  return streamBadgeText(b, t)
+}
 
 // Selectability is the backend feed's `selectable`, gated by hacker mode for
 // hacker-only rows (degraded/recovering). The feed is the single source of

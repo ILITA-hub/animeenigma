@@ -14,7 +14,7 @@ import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
 import type { useToast } from '@/composables/useToast'
 import type { PlaybackStats } from '@/composables/aePlayer/usePlaybackStats'
-import type { StreamResult, ProviderRow } from '@/types/aePlayer'
+import type { StreamResult, ProviderRow, ServerOption } from '@/types/aePlayer'
 import type { CapabilityReport } from '@/types/capabilities'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 
@@ -33,7 +33,7 @@ export interface SourceFailoverDeps {
   videoRef: Ref<HTMLVideoElement | null>
   rows: ComputedRef<ProviderRow[]>
   report: ComputedRef<CapabilityReport | null>
-  resolvedServers: Ref<{ id: string; label: string }[]>
+  resolvedServers: Ref<ServerOption[]>
   currentStream: Ref<StreamResult | null>
   selectedEpisode: Ref<EpisodeOption | null>
   sourceError: Ref<string | null>

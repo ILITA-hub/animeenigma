@@ -559,7 +559,7 @@ import { usePlayerKeyboard } from '@/composables/aePlayer/usePlayerKeyboard'
 import { useProtocolTelemetry } from '@/composables/aePlayer/useProtocolTelemetry'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
-import type { StreamResult, AudioKind } from '@/types/aePlayer'
+import type { StreamResult, AudioKind, ServerOption } from '@/types/aePlayer'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 import type { VerifyReport } from '@/types/contentVerify'
 
@@ -647,7 +647,7 @@ const selectedEpisode = ref<EpisodeOption | null>(null)
 // True once the user manually switches episodes — freezes the reactive
 // initialEpisode re-pick so resume resolving late never yanks a deliberate pick.
 const userPickedEpisode = ref(false)
-const resolvedServers = ref<{ id: string; label: string }[]>([])
+const resolvedServers = ref<ServerOption[]>([])
 const teams = ref<string[]>([])
 const currentStream = ref<StreamResult | null>(null)
 const isResolving = ref(false)

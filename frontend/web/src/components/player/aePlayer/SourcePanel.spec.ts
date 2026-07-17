@@ -1,7 +1,15 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SourcePanel from './SourcePanel.vue'
 import type { ProviderRow } from '@/types/aePlayer'
+import type { ProviderCap } from '@/types/capabilities'
+import type { ProviderVerify } from '@/types/contentVerify'
+
+// SourcePanel (and its ProviderChip children) use useI18n() in script setup;
+// stub vue-i18n so tests mount without a real plugin — keys come back as-is.
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k }),
+}))
 
 // Feed-shaped row builder. `order` drives ranking (desc); degraded/no_content
 // mirror the old disabled/down buckets in the new single-source-of-truth model.
@@ -154,5 +162,86 @@ describe('SourcePanel collapse', () => {
     })
     const ids = w.findAll('[data-test="provider-chip"]').map(c => c.attributes('data-id'))
     expect(ids).toEqual(['miruro', 'allanime']) // by order desc, index ignored
+  })
+})
+
+// ── Stream section + server hygiene (owner fixes 2026-07-17) ────────────────
+describe('SourcePanel streams & servers', () => {
+  const mountOpts = { global: { mocks: { $t: (k: string) => k } } }
+  const verify: ProviderVerify = { status: 'verified', raw: true, dub_langs: ['ru'], hardsub_langs: ['ru'] }
+
+  const kodikCap: ProviderCap = {
+    provider: 'kodik', display_name: 'Kodik', state: 'active', selectable: true,
+    hacker_only: false, order: 80, group: 'ru', audios: ['sub', 'dub'],
+    variants: [
+      { category: 'dub', sub_delivery: 'none', qualities: ['720p'], quality_source: 'trait', source: 'trait', team: { name: 'AniDub' } },
+      { category: 'sub', sub_delivery: 'hard', qualities: ['720p'], quality_source: 'trait', source: 'trait', team: { name: 'CR.Subs' } },
+    ],
+  }
+  const kodikProps = {
+    rows: [r('kodik', { group: 'ru', verify })], audio: 'dub', lang: 'ru', team: 'AniDub',
+    provider: 'kodik', server: '', servers: [], teams: ['AniDub', 'CR.Subs'],
+    capMap: new Map([['kodik', kodikCap]]),
+  }
+
+  it('lists kodik teams as Stream entries with taxonomy badges, between Provider and Server', () => {
+    const w = mount(SourcePanel, { props: kodikProps as any, ...mountOpts })
+    const entries = w.findAll('[data-test="stream-entry"]')
+    expect(entries.length).toBe(2)
+    expect(entries[0].text()).toContain('AniDub')
+    expect(entries[0].text()).toContain('RU')      // DUB RU badge
+    expect(entries[1].text()).toContain('CR.Subs') // SUB BURNED-IN RU badge
+    // the section sits AFTER the provider list in the DOM
+    const html = w.html()
+    expect(html.indexOf('provider-chip')).toBeLessThan(html.indexOf('stream-section'))
+  })
+
+  it('selecting a sub-team emits update:team AND syncs audio to sub', async () => {
+    const w = mount(SourcePanel, { props: kodikProps as any, ...mountOpts })
+    await w.findAll('[data-test="stream-entry"]')[1].trigger('click')
+    expect(w.emitted('update:team')?.[0]).toEqual(['CR.Subs'])
+    expect(w.emitted('update:audio')?.[0]).toEqual(['sub'])
+  })
+
+  it('lists scraper stream kinds as entries and emits update:audio on pick', async () => {
+    const cap: ProviderCap = { ...kodikCap, provider: 'miruro', group: 'en', variants: [
+      { category: 'sub', sub_delivery: 'hard', qualities: ['1080p'], quality_source: 'trait', source: 'trait' },
+      { category: 'dub', sub_delivery: 'none', qualities: ['1080p'], quality_source: 'trait', source: 'trait' },
+    ] }
+    const props = {
+      rows: [r('miruro', { verify: { status: 'verified', raw: true, dub_langs: ['en'], hardsub_langs: ['en'] } as ProviderVerify })],
+      audio: 'sub', lang: 'en', team: null, provider: 'miruro', server: '', servers: [], teams: [],
+      capMap: new Map([['miruro', cap]]),
+    }
+    const w = mount(SourcePanel, { props: props as any, ...mountOpts })
+    const entries = w.findAll('[data-test="stream-entry"]')
+    expect(entries.length).toBe(2)
+    await entries[1].trigger('click')
+    expect(w.emitted('update:audio')?.[0]).toEqual(['dub'])
+  })
+
+  it('filters servers to the active stream kind and numbers duplicate labels', () => {
+    const props = {
+      rows: [r('animepahe')], audio: 'sub', lang: 'en', team: null, provider: 'animepahe', server: '',
+      servers: [
+        { id: 'k1', label: 'kwik', type: 'sub' }, { id: 'k2', label: 'kwik', type: 'sub' },
+        { id: 'k3', label: 'kwik', type: 'sub' }, { id: 'k4', label: 'kwik', type: 'dub' },
+        { id: 'k5', label: 'kwik', type: 'dub' }, { id: 'k6', label: 'kwik', type: 'dub' },
+      ],
+      teams: [],
+    }
+    const w = mount(SourcePanel, { props: props as any, ...mountOpts })
+    const labels = w.findAll('.flex-1.font-semibold.truncate').map(x => x.text()).filter(x => x.startsWith('kwik'))
+    expect(labels).toEqual(['kwik 1', 'kwik 2', 'kwik 3'])
+  })
+
+  it('hides the Server section when only one server matches the active kind', () => {
+    const props = {
+      rows: [r('miruro')], audio: 'dub', lang: 'ru', team: null, provider: 'miruro', server: '',
+      servers: [{ id: 'kiwi', label: 'kiwi', type: 'dub' }, { id: 'kiwi2', label: 'kiwi', type: 'sub' }],
+      teams: [],
+    }
+    const w = mount(SourcePanel, { props: props as any, ...mountOpts })
+    expect(w.text()).not.toContain('Server')
   })
 })
