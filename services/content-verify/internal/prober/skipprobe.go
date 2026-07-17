@@ -88,7 +88,7 @@ func (p *SkipProber) Probe(ctx context.Context, t queue.SkipTask, prevFails int)
 		if err != nil {
 			return p.unreachableRows(ctx, t, prevFails, err)
 		}
-		return p.probePair(ctx, t, a, b)
+		return p.probePair(ctx, dir, t, a, b)
 	}
 	return p.probeLocate(ctx, dir, t, a)
 }
@@ -101,8 +101,9 @@ func (p *SkipProber) Probe(ctx context.Context, t queue.SkipTask, prevFails int)
 // yield offsets relative to end-of-file that we have no way to turn into
 // absolute episode time without knowing the duration — so mp4 tail
 // extraction is skipped entirely in v1 (tailWav stays ""; callers must
-// treat that as EdStatus = SkipPendingFP rather than attempting ed
-// matching).
+// treat that as EdStatus = SkipNoMatch — v1 cannot absolutize mp4 tail
+// times, so this is an honest terminal no-serve rather than an endless
+// pending_fp retry; AniSkip still covers ED there).
 func (p *SkipProber) resolveUnit(ctx context.Context, dir, tag string, u queue.SkipUnit) (*resolvedSkipUnit, error) {
 	st, err := p.resolveSkipStream(ctx, u)
 	if err != nil {
@@ -219,14 +220,21 @@ func (p *SkipProber) pairSide(ctx context.Context, kind, wavA, wavB string) pair
 		similarity: res.Similarity, fp: res.Fp}
 }
 
-// probePair runs pair-bootstrap: OP on both units' head windows, ED on
-// both units' tail windows (HLS only — mp4 legs have no tailWav). A found
-// side persists a new season fingerprint and marks both rows detected with
-// per-episode absolute times; not-found marks both rows no_match. RePair
-// tasks set PairTried on both rows unconditionally — that's what lets the
-// re-pair scan (queue.NextSkipTask) move on to a different adjacent pair
-// instead of retrying this one forever.
-func (p *SkipProber) probePair(ctx context.Context, t queue.SkipTask, a, b *resolvedSkipUnit) []domain.SkipTiming {
+// probePair runs pair mode for the two given units, per-kind: a kind in
+// t.PairKinds is bootstrapped (OP on both units' head windows, ED on both
+// units' tail windows — HLS only, mp4 legs have no tailWav); a kind NOT in
+// t.PairKinds already has a stored season fingerprint (see
+// queue.NextSkipTask), so it's located independently in each of the two
+// windows instead — reusing the audio already extracted for this probe
+// rather than wasting it, and critically never calling AddFingerprint for a
+// kind that's already settled (that duplicate is what fed every later
+// locate a slower multi-fingerprint scan — see Finding 2). A bootstrapped
+// kind that's found persists a new season fingerprint and marks both rows
+// detected with per-episode absolute times; not-found marks both rows
+// no_match. RePair tasks set PairTried on both rows unconditionally —
+// that's what lets the re-pair scan (queue.NextSkipTask) move on to a
+// different adjacent pair instead of retrying this one forever.
+func (p *SkipProber) probePair(ctx context.Context, dir string, t queue.SkipTask, a, b *resolvedSkipUnit) []domain.SkipTiming {
 	now := p.now().UTC()
 	rowA := skipRowFromUnit(t.Unit, now)
 	rowB := skipRowFromUnit(*t.Pair, now)
@@ -234,25 +242,50 @@ func (p *SkipProber) probePair(ctx context.Context, t queue.SkipTask, a, b *reso
 		rowA.PairTried, rowB.PairTried = true, true
 	}
 	note := fmt.Sprintf("%s ep%d+ep%d", t.Unit.Provider, t.Unit.Episode, t.Pair.Episode)
+	mp4Leg := a.tailWav == "" || b.tailWav == ""
 
-	opOut := p.pairSide(ctx, domain.SkipKindOp, a.headWav, b.headWav)
-	rowA.OpStatus, rowB.OpStatus = opOut.status, opOut.status
-	if opOut.status == domain.SkipDetected {
-		rowA.OpStart, rowA.OpEnd = opOut.aStart, opOut.aEnd
-		rowB.OpStart, rowB.OpEnd = opOut.bStart, opOut.bEnd
-		rowA.Confidence = maxFloat(rowA.Confidence, opOut.similarity)
-		rowB.Confidence = maxFloat(rowB.Confidence, opOut.similarity)
-		if err := p.fps.AddFingerprint(ctx, domain.SkipFingerprint{
-			AnimeID: t.Unit.AnimeID, Kind: domain.SkipKindOp, Fp: opOut.fp,
-			Length: opOut.aEnd - opOut.aStart, SourceNote: note,
-		}); err != nil && p.log != nil {
-			p.log.Warnw("add op fingerprint failed", "anime_id", t.Unit.AnimeID, "error", err)
+	// Fetch the stored fingerprints once, up front, only when at least one
+	// side of this probe will need to locate (rather than bootstrap)
+	// against them.
+	var allFPs []domain.SkipFingerprint
+	needFPs := !pairKindWanted(t.PairKinds, domain.SkipKindOp) || (!mp4Leg && !pairKindWanted(t.PairKinds, domain.SkipKindEd))
+	if needFPs {
+		fps, err := p.fps.Fingerprints(ctx, t.Unit.AnimeID)
+		if err != nil {
+			if p.log != nil {
+				p.log.Warnw("skip fingerprints fetch failed", "anime_id", t.Unit.AnimeID, "error", err)
+			}
+		} else {
+			allFPs = fps
 		}
 	}
 
-	if a.tailWav == "" || b.tailWav == "" { // mp4 leg(s) — no absolute tail time available
-		rowA.EdStatus, rowB.EdStatus = domain.SkipPendingFP, domain.SkipPendingFP
+	if pairKindWanted(t.PairKinds, domain.SkipKindOp) {
+		opOut := p.pairSide(ctx, domain.SkipKindOp, a.headWav, b.headWav)
+		rowA.OpStatus, rowB.OpStatus = opOut.status, opOut.status
+		if opOut.status == domain.SkipDetected {
+			rowA.OpStart, rowA.OpEnd = opOut.aStart, opOut.aEnd
+			rowB.OpStart, rowB.OpEnd = opOut.bStart, opOut.bEnd
+			rowA.Confidence = maxFloat(rowA.Confidence, opOut.similarity)
+			rowB.Confidence = maxFloat(rowB.Confidence, opOut.similarity)
+			if err := p.fps.AddFingerprint(ctx, domain.SkipFingerprint{
+				AnimeID: t.Unit.AnimeID, Kind: domain.SkipKindOp, Fp: opOut.fp,
+				Length: opOut.aEnd - opOut.aStart, SourceNote: note,
+			}); err != nil && p.log != nil {
+				p.log.Warnw("add op fingerprint failed", "anime_id", t.Unit.AnimeID, "error", err)
+			}
+		}
 	} else {
+		p.locatePairSide(ctx, dir, domain.SkipKindOp, allFPs, a.headWav, b.headWav, 0, 0, &rowA, &rowB)
+	}
+
+	switch {
+	case mp4Leg:
+		// v1 cannot absolutize mp4 tail times (duration unknown up front) —
+		// honest terminal no-serve rather than an endless pending_fp retry;
+		// AniSkip still covers ED there (see resolveUnit).
+		rowA.EdStatus, rowB.EdStatus = domain.SkipNoMatch, domain.SkipNoMatch
+	case pairKindWanted(t.PairKinds, domain.SkipKindEd):
 		edOut := p.pairSide(ctx, domain.SkipKindEd, a.tailWav, b.tailWav)
 		rowA.EdStatus, rowB.EdStatus = edOut.status, edOut.status
 		if edOut.status == domain.SkipDetected {
@@ -267,9 +300,66 @@ func (p *SkipProber) probePair(ctx context.Context, t queue.SkipTask, a, b *reso
 				p.log.Warnw("add ed fingerprint failed", "anime_id", t.Unit.AnimeID, "error", err)
 			}
 		}
+	default:
+		p.locatePairSide(ctx, dir, domain.SkipKindEd, allFPs, a.tailWav, b.tailWav, a.tailSeek, b.tailSeek, &rowA, &rowB)
 	}
 
 	return []domain.SkipTiming{rowA, rowB}
+}
+
+// pairKindWanted reports whether kind is one of the kinds a pair task must
+// bootstrap.
+func pairKindWanted(kinds []string, kind string) bool {
+	for _, k := range kinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// locatePairSide runs LOCATE (not pair-bootstrap) for kind against both
+// units' already-extracted windows, writing fps.json once and reusing it
+// for both OpskipLocate calls — this is the "kind already has a
+// fingerprint" branch of a pair task, so no AddFingerprint call is ever
+// reachable from here.
+func (p *SkipProber) locatePairSide(ctx context.Context, dir, kind string, allFPs []domain.SkipFingerprint, wavA, wavB string, baseA, baseB float64, rowA, rowB *domain.SkipTiming) {
+	kindFPs := filterFPsByKind(allFPs, kind)
+	if len(kindFPs) == 0 {
+		applyLocateOutcome(rowA, kind, locateOutcome{status: domain.SkipPendingFP})
+		applyLocateOutcome(rowB, kind, locateOutcome{status: domain.SkipPendingFP})
+		return
+	}
+	fpsPath, err := writeFPsJSON(dir, kind+"_pair", kindFPs)
+	if err != nil {
+		if p.log != nil {
+			p.log.Warnw("write fps.json failed", "kind", kind, "error", err)
+		}
+		applyLocateOutcome(rowA, kind, locateOutcome{status: domain.SkipPendingFP})
+		applyLocateOutcome(rowB, kind, locateOutcome{status: domain.SkipPendingFP})
+		return
+	}
+	applyLocateOutcome(rowA, kind, p.runLocate(ctx, kind, wavA, fpsPath, baseA))
+	applyLocateOutcome(rowB, kind, p.runLocate(ctx, kind, wavB, fpsPath, baseB))
+}
+
+// applyLocateOutcome writes a locateOutcome into the appropriate kind's
+// fields on row.
+func applyLocateOutcome(row *domain.SkipTiming, kind string, out locateOutcome) {
+	switch kind {
+	case domain.SkipKindOp:
+		row.OpStatus = out.status
+		if out.status == domain.SkipDetected {
+			row.OpStart, row.OpEnd = out.start, out.end
+			row.Confidence = maxFloat(row.Confidence, out.similarity)
+		}
+	case domain.SkipKindEd:
+		row.EdStatus = out.status
+		if out.status == domain.SkipDetected {
+			row.EdStart, row.EdEnd = out.start, out.end
+			row.Confidence = maxFloat(row.Confidence, out.similarity)
+		}
+	}
 }
 
 // locateOutcome is one opskip "locate" call's result, normalized to the
@@ -297,6 +387,14 @@ func (p *SkipProber) locateSide(ctx context.Context, dir, tag string, allFPs []d
 		}
 		return locateOutcome{status: domain.SkipPendingFP}
 	}
+	return p.runLocate(ctx, kind, wav, fpsPath, base)
+}
+
+// runLocate runs OpskipLocate for one wav window against an already-written
+// fps.json scratch file. Shared by locateSide (single-episode locate tasks)
+// and locatePairSide (the non-bootstrapped kind of a pair task), which
+// write fps.json once and call this twice — once per episode.
+func (p *SkipProber) runLocate(ctx context.Context, kind, wav, fpsPath string, base float64) locateOutcome {
 	res, err := p.runner.OpskipLocate(ctx, wav, fpsPath, p.cfg.MinMatch.Seconds(), p.cfg.MaxMatch.Seconds(), p.cfg.SimThreshold)
 	if err != nil {
 		// Same reasoning as pairSide: a runner failure is not a confirmed
@@ -336,7 +434,10 @@ func (p *SkipProber) probeLocate(ctx context.Context, dir string, t queue.SkipTa
 	}
 
 	if a.tailWav == "" {
-		row.EdStatus = domain.SkipPendingFP // mp4: tail not extracted in v1
+		// v1 cannot absolutize mp4 tail times (duration unknown up front) —
+		// honest terminal no-serve rather than an endless pending_fp retry;
+		// AniSkip still covers ED there.
+		row.EdStatus = domain.SkipNoMatch
 	} else {
 		edOut := p.locateSide(ctx, dir, "ed", allFPs, domain.SkipKindEd, a.tailWav, a.tailSeek)
 		row.EdStatus = edOut.status

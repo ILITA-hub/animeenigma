@@ -358,6 +358,53 @@ func TestSkipTimesHandlerBlendsDetectedOpOnlyWhenEdNoMatch(t *testing.T) {
 	}
 }
 
+// TestSkipTimesHandlerFallsBackToEmptyTeamRow covers Finding 4: content-verify
+// enumerates animejoy skip units with Team="" (animejoy has no fansub/team
+// concept on the cv side), but the frontend sends the user's selected fansub
+// name as `team` for animejoy. Without the empty-team fallback in
+// matchSkipTimingRow, the exact-match lookup would always miss for animejoy
+// and a detected window would never serve. This is safe for kodik because
+// kodik rows always carry a non-empty Team, so no kodik row can ever exist
+// at Team="" for the fallback to incorrectly match against.
+func TestSkipTimesHandlerFallsBackToEmptyTeamRow(t *testing.T) {
+	c := newSkipTimesTestCache()
+	calls := 0
+	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
+		{Provider: "animejoy-sibnet", Team: "", Episode: 3, OpStatus: "detected", OpStart: 30, OpEnd: 120},
+	}}
+	h := &SkipTimesHandler{
+		cache: c,
+		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
+			calls++
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+		})},
+		log:  newSkipTimesTestLogger(),
+		skip: skip,
+	}
+
+	const animeID = "55555555-5555-5555-5555-555555555555"
+	result := serveSkipTimesQuery(t, h, "anime="+animeID+"&provider=animejoy-sibnet&team=AnimeJoy")
+
+	if !result.Found || result.Source != "detected" {
+		t.Fatalf("result = %+v, want found+source=detected (fallback to the empty-team row)", result)
+	}
+	if len(result.Results) != 1 || result.Results[0].SkipType != "op" {
+		t.Fatalf("results = %+v, want exactly one op item", result.Results)
+	}
+	if result.Results[0].Interval.StartTime != 30 || result.Results[0].Interval.EndTime != 120 {
+		t.Fatalf("op item = %+v, want 30-120", result.Results[0])
+	}
+	if calls != 0 {
+		t.Fatalf("aniskip upstream calls = %d, want 0 (empty-team fallback short-circuits)", calls)
+	}
+	// Cache key stays keyed by the REQUESTED team ("AnimeJoy"), not the
+	// matched row's actual (empty) Team.
+	const wantKey = "skip-times:detected:55555555-5555-5555-5555-555555555555:animejoy-sibnet:AnimeJoy:3"
+	if _, ok := c.store[wantKey]; !ok {
+		t.Fatalf("expected detected result cached under %q, store keys = %v", wantKey, c.store)
+	}
+}
+
 func TestSkipTimesHandlerFallsThroughToAniskipWhenNoDetectedMatch(t *testing.T) {
 	c := newSkipTimesTestCache()
 	calls := 0

@@ -266,10 +266,26 @@ func (h *SkipTimesHandler) tryDetected(r *http.Request, episode int) (SkipTimesR
 // matchSkipTimingRow finds the row for the exact (provider, team, episode)
 // unit the player is streaming from. team legitimately empty-matches for
 // scraper providers that don't have a team/fansub concept.
+//
+// Fallback: when the exact-team match misses, retry against the row with an
+// empty Team for the same (provider, episode). content-verify enumerates
+// animejoy skip units with Team="" (no fansub concept on that leg), but the
+// frontend sends the selected fansub name as `team` for animejoy when the
+// user has picked one — without this fallback, every animejoy detected
+// window would silently never serve. This is safe for kodik: kodik rows
+// always carry a non-empty Team (one per translation), so no kodik row can
+// ever exist at Team="" for the fallback to incorrectly match against.
 func matchSkipTimingRow(rows []capability.SkipTimingRow, provider, team string, episode int) (capability.SkipTimingRow, bool) {
 	for _, row := range rows {
 		if row.Provider == provider && row.Team == team && row.Episode == episode {
 			return row, true
+		}
+	}
+	if team != "" {
+		for _, row := range rows {
+			if row.Provider == provider && row.Team == "" && row.Episode == episode {
+				return row, true
+			}
 		}
 	}
 	return capability.SkipTimingRow{}, false

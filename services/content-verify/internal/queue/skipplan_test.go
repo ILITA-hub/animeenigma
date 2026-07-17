@@ -29,7 +29,8 @@ func TestNextSkipTask(t *testing.T) {
 		check func(t *testing.T, got *SkipTask)
 	}{
 		{
-			// (a) empty rows + no fps → pair of episodes 1+2.
+			// (a) empty rows + no fps → pair of episodes 1+2, bootstrapping
+			// BOTH kinds (neither has a fingerprint yet).
 			name:  "a_bootstrap_pair_no_rows_no_fps",
 			units: []SkipUnit{mkUnit("gogoanime", "", 1), mkUnit("gogoanime", "", 2), mkUnit("gogoanime", "", 3)},
 			rows:  nil,
@@ -45,16 +46,21 @@ func TestNextSkipTask(t *testing.T) {
 				if got.Unit.Episode != 1 || got.Pair == nil || got.Pair.Episode != 2 {
 					t.Fatalf("want Unit=ep1 Pair=ep2, got %+v pair=%+v", got.Unit, got.Pair)
 				}
+				assertPairKinds(t, got.PairKinds, domain.SkipKindOp, domain.SkipKindEd)
 			},
 		},
 		{
-			// (b) fps exist → locate of first missing (due) episode.
+			// (b) fps exist for BOTH kinds → locate of first missing (due)
+			// episode, not a pair task.
 			name:  "b_locate_first_due_when_fps_exist",
 			units: []SkipUnit{mkUnit("gogoanime", "", 1), mkUnit("gogoanime", "", 2), mkUnit("gogoanime", "", 3)},
 			rows: []domain.SkipTiming{
 				mkRow("gogoanime", "", 1, domain.SkipDetected, domain.SkipDetected, now.Add(-time.Hour)),
 			},
-			fps: []domain.SkipFingerprint{{AnimeID: "a1", Kind: domain.SkipKindOp}},
+			fps: []domain.SkipFingerprint{
+				{AnimeID: "a1", Kind: domain.SkipKindOp},
+				{AnimeID: "a1", Kind: domain.SkipKindEd},
+			},
 			now: now,
 			check: func(t *testing.T, got *SkipTask) {
 				if got == nil {
@@ -65,6 +71,9 @@ func TestNextSkipTask(t *testing.T) {
 				}
 				if got.Unit.Episode != 2 {
 					t.Fatalf("want first missing episode (2), got %+v", got.Unit)
+				}
+				if got.PairKinds != nil {
+					t.Fatalf("locate task must leave PairKinds nil, got %+v", got.PairKinds)
 				}
 			},
 		},
@@ -85,7 +94,8 @@ func TestNextSkipTask(t *testing.T) {
 			},
 		},
 		{
-			// (d1) adjacent no_match pair with PairTried=false → RePair task.
+			// (d1) adjacent no_match pair with PairTried=false, BOTH kinds
+			// no_match on both rows → RePair task covering both kinds.
 			name:  "d1_repair_adjacent_no_match",
 			units: []SkipUnit{mkUnit("gogoanime", "", 1), mkUnit("gogoanime", "", 2)},
 			rows: []domain.SkipTiming{
@@ -104,6 +114,33 @@ func TestNextSkipTask(t *testing.T) {
 				if got.Unit.Episode != 1 || got.Pair == nil || got.Pair.Episode != 2 {
 					t.Fatalf("want Unit=ep1 Pair=ep2, got %+v pair=%+v", got.Unit, got.Pair)
 				}
+				assertPairKinds(t, got.PairKinds, domain.SkipKindOp, domain.SkipKindEd)
+			},
+		},
+		{
+			// (d3) Finding 2 regression: OP no_match on BOTH adjacent rows but
+			// ED already detected on both — only OP qualifies for re-pair. The
+			// pre-fix rowIsNoMatch(either side) check would have fired here too
+			// and re-run/re-fingerprinted ED needlessly.
+			name:  "d3_repair_only_op_side_qualifies",
+			units: []SkipUnit{mkUnit("gogoanime", "", 1), mkUnit("gogoanime", "", 2)},
+			rows: []domain.SkipTiming{
+				{AnimeID: "a1", Provider: "gogoanime", Episode: 1, OpStatus: domain.SkipNoMatch, EdStatus: domain.SkipDetected, PairTried: false, ProbedAt: now.Add(-time.Hour)},
+				{AnimeID: "a1", Provider: "gogoanime", Episode: 2, OpStatus: domain.SkipNoMatch, EdStatus: domain.SkipDetected, PairTried: false, ProbedAt: now.Add(-time.Hour)},
+			},
+			fps: []domain.SkipFingerprint{
+				{AnimeID: "a1", Kind: domain.SkipKindOp},
+				{AnimeID: "a1", Kind: domain.SkipKindEd},
+			},
+			now: now,
+			check: func(t *testing.T, got *SkipTask) {
+				if got == nil {
+					t.Fatal("want a RePair task (OP side qualifies), got nil")
+				}
+				if !got.RePair {
+					t.Fatalf("want RePair=true: %+v", got)
+				}
+				assertPairKinds(t, got.PairKinds, domain.SkipKindOp)
 			},
 		},
 		{
@@ -230,6 +267,31 @@ func TestNextSkipTask(t *testing.T) {
 				if got.Unit.Episode != 1 || got.Pair.Episode != 2 {
 					t.Fatalf("want episodes 1+2 of PinnedTeam, got %+v pair=%+v", got.Unit, got.Pair)
 				}
+				assertPairKinds(t, got.PairKinds, domain.SkipKindOp, domain.SkipKindEd)
+			},
+		},
+		{
+			// (i) Finding 1 treadmill regression: an OP fingerprint already
+			// exists anime-wide but ED has none — NextSkipTask must bootstrap
+			// ED specifically (PairKinds=[ed]), not fall back to a plain locate
+			// task that would forever return pending_fp for ED (no ED
+			// fingerprint ever existed to locate against).
+			name:  "i_treadmill_regression_op_fp_only_bootstraps_ed",
+			units: []SkipUnit{mkUnit("gogoanime", "", 1), mkUnit("gogoanime", "", 2)},
+			rows:  nil,
+			fps:   []domain.SkipFingerprint{{AnimeID: "a1", Kind: domain.SkipKindOp}},
+			now:   now,
+			check: func(t *testing.T, got *SkipTask) {
+				if got == nil {
+					t.Fatal("want a pair-bootstrap task for ED, got nil")
+				}
+				if got.RePair {
+					t.Fatal("bootstrap pair must not be RePair")
+				}
+				if got.Pair == nil {
+					t.Fatal("want a pair task (2 due episodes), got a locate task")
+				}
+				assertPairKinds(t, got.PairKinds, domain.SkipKindEd)
 			},
 		},
 	}
@@ -239,6 +301,24 @@ func TestNextSkipTask(t *testing.T) {
 			got := NextSkipTask(tc.units, tc.rows, tc.fps, tc.now)
 			tc.check(t, got)
 		})
+	}
+}
+
+// assertPairKinds checks got contains exactly the given kinds (order-
+// insensitive) — PairKinds order isn't part of the contract, only membership.
+func assertPairKinds(t *testing.T, got []string, want ...string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("PairKinds: got %+v want %+v", got, want)
+	}
+	seen := make(map[string]bool, len(got))
+	for _, k := range got {
+		seen[k] = true
+	}
+	for _, w := range want {
+		if !seen[w] {
+			t.Fatalf("PairKinds: got %+v want %+v (missing %q)", got, want, w)
+		}
 	}
 }
 

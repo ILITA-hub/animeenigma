@@ -17,10 +17,17 @@ type SkipTask struct {
 	Unit   SkipUnit
 	Pair   *SkipUnit // non-nil => pair-bootstrap with this second episode
 	RePair bool      // true when re-pairing two adjacent no_match rows
+	// PairKinds is the set of kinds (domain.SkipKindOp / SkipKindEd) the
+	// pair probe must BOOTSTRAP — meaningful only when Pair != nil. Kinds
+	// NOT in this set already have a stored fingerprint anime-wide, so the
+	// prober locates them independently per episode instead of re-running
+	// (and re-fingerprinting) the pair for a kind that's already settled.
+	// Locate tasks (Pair == nil) leave this nil.
+	PairKinds []string
 }
 
 // NextSkipTask picks the next skip work item, or nil when the anime's skip
-// lane is settled. Rules (spec §2.3, §3):
+// lane is settled. Rules (spec §2.3, §3; per-kind bootstrap/re-pair fix):
 //   - rows keyed by (provider|team|episode); units grouped by family
 //     (provider|team) preserving first-seen order — the caller is
 //     responsible for handing units in probe-priority order (StateRank,
@@ -29,21 +36,27 @@ type SkipTask struct {
 //     after 6h from ProbedAt; either side unreachable → due after
 //     Backoff(row.Fails); otherwise (both sides detected/no_match) →
 //     terminal, not due.
-//   - hasFP := len(fps) > 0 (any stored fingerprint of either kind exists,
-//     anime-level).
+//   - hasOp/hasEd := whether any stored fingerprint of that kind exists,
+//     anime-level (derived from fps).
 //   - Re-pair scan runs FIRST, across every family in first-seen order: two
 //     ADJACENT units in a family (consecutive slice entries, not
-//     necessarily consecutive episode numbers) whose rows both have
-//     OpStatus==no_match or EdStatus==no_match, with PairTried==false on
-//     the earlier row, yield SkipTask{Unit: earlier, Pair: &later,
-//     RePair: true}. This runs before the due scan so self-heal wins.
-//   - If NO fingerprint exists (hasFP is false): take the first family (in
-//     first-seen order) with >=2 due episodes and pair-bootstrap its first
-//     two due episodes. If no family has >=2 due episodes, fall back to a
-//     locate task for the very first due unit overall (family order, then
-//     episode) — the prober records pending_fp for it.
-//   - Else (a fingerprint exists): locate task for the first due unit
-//     (family order, then episode).
+//     necessarily consecutive episode numbers) whose rows both have that
+//     KIND's status == no_match (checked independently per kind — a kind
+//     with one row detected and the other no_match does NOT qualify, so a
+//     settled kind is never re-run), with PairTried==false on the earlier
+//     row, yield SkipTask{Unit: earlier, Pair: &later, RePair: true,
+//     PairKinds: <qualifying kinds>}. This runs before the due scan so
+//     self-heal wins.
+//   - If either kind lacks a fingerprint (hasOp or hasEd is false): take
+//     the first family (in first-seen order) with >=2 due episodes and
+//     pair-bootstrap its first two due episodes, PairKinds set to the
+//     missing kind(s) only — a kind that already has a fingerprint is
+//     located, not re-bootstrapped (see SkipProber.Probe). If no family
+//     has >=2 due episodes, fall back to a locate task for the very first
+//     due unit overall (family order, then episode) — the prober records
+//     pending_fp for it.
+//   - Else (both kinds have a fingerprint): locate task for the first due
+//     unit (family order, then episode).
 func NextSkipTask(units []SkipUnit, rows []domain.SkipTiming, fps []domain.SkipFingerprint, now time.Time) *SkipTask {
 	if len(units) == 0 {
 		return nil
@@ -61,8 +74,9 @@ func NextSkipTask(units []SkipUnit, rows []domain.SkipTiming, fps []domain.SkipF
 		return task
 	}
 
-	if len(fps) == 0 {
+	if missing := missingFPKinds(fps); len(missing) > 0 {
 		if task := bootstrapPairScan(familyOrder, families, rowByKey, now); task != nil {
+			task.PairKinds = missing
 			return task
 		}
 	}
@@ -71,6 +85,31 @@ func NextSkipTask(units []SkipUnit, rows []domain.SkipTiming, fps []domain.SkipF
 		return &SkipTask{Unit: *u}
 	}
 	return nil
+}
+
+// missingFPKinds returns the kinds (op/ed, in that order) that have NO
+// stored fingerprint at all anime-wide — the kinds a pair-bootstrap task
+// still needs to seed. A kind already has a fingerprint the moment ANY unit
+// successfully bootstrapped it, regardless of which other episodes are
+// still no_match/pending for that kind.
+func missingFPKinds(fps []domain.SkipFingerprint) []string {
+	var hasOp, hasEd bool
+	for _, f := range fps {
+		switch f.Kind {
+		case domain.SkipKindOp:
+			hasOp = true
+		case domain.SkipKindEd:
+			hasEd = true
+		}
+	}
+	var missing []string
+	if !hasOp {
+		missing = append(missing, domain.SkipKindOp)
+	}
+	if !hasEd {
+		missing = append(missing, domain.SkipKindEd)
+	}
+	return missing
 }
 
 // groupSkipFamilies buckets units by (provider|team), preserving the order
@@ -113,8 +152,13 @@ func rowFor(rowByKey map[string]*domain.SkipTiming, u SkipUnit) *domain.SkipTimi
 	return rowByKey[skipRowKey(u.Provider, u.Team, u.Episode)]
 }
 
-// rePairScan finds the first pair of adjacent same-family units whose rows
-// are both no_match (on either side) with PairTried==false on the earlier.
+// rePairScan finds the first pair of adjacent same-family units with
+// PairTried==false on the earlier row where at least one KIND has no_match
+// on BOTH rows. Each kind qualifies independently — a kind detected on one
+// row and no_match on the other is NOT a re-pair candidate (that's a
+// legitimate single-episode no-OP finale/recap, not two genuinely OP-less
+// neighbors) and must not be re-run, which would both waste a probe and
+// AddFingerprint a duplicate for a kind that already has one.
 func rePairScan(familyOrder []string, families map[string][]SkipUnit, rowByKey map[string]*domain.SkipTiming) *SkipTask {
 	for _, key := range familyOrder {
 		fam := families[key]
@@ -124,21 +168,24 @@ func rePairScan(familyOrder []string, families map[string][]SkipUnit, rowByKey m
 			if r1 == nil || r2 == nil {
 				continue
 			}
-			if !rowIsNoMatch(r1) || !rowIsNoMatch(r2) {
-				continue
-			}
 			if r1.PairTried {
 				continue
 			}
+			var kinds []string
+			if r1.OpStatus == domain.SkipNoMatch && r2.OpStatus == domain.SkipNoMatch {
+				kinds = append(kinds, domain.SkipKindOp)
+			}
+			if r1.EdStatus == domain.SkipNoMatch && r2.EdStatus == domain.SkipNoMatch {
+				kinds = append(kinds, domain.SkipKindEd)
+			}
+			if len(kinds) == 0 {
+				continue
+			}
 			earlier, later := fam[i], fam[i+1]
-			return &SkipTask{Unit: earlier, Pair: &later, RePair: true}
+			return &SkipTask{Unit: earlier, Pair: &later, RePair: true, PairKinds: kinds}
 		}
 	}
 	return nil
-}
-
-func rowIsNoMatch(r *domain.SkipTiming) bool {
-	return r.OpStatus == domain.SkipNoMatch || r.EdStatus == domain.SkipNoMatch
 }
 
 // bootstrapPairScan finds the first family (in first-seen order) with at

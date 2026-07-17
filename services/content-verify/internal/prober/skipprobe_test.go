@@ -54,7 +54,9 @@ func testSkipConfig() SkipConfig {
 // the tail (ed) side: a 1440s HLS episode, 480s TailWindow => the tail
 // window starts at seek 960; a locate hit at relative start=100 must land
 // at absolute EdStart=1060. The op side has no stored fingerprint at all,
-// which must come back pending_fp rather than no_match.
+// which must come back pending_fp rather than no_match. This is a locate
+// task (Pair == nil, PairKinds == nil) — PairKinds only matters for pair
+// tasks.
 func TestSkipProbeLocateFound(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/anime/a1/kodik/stream", func(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +108,9 @@ func TestSkipProbeLocateFound(t *testing.T) {
 // same family) whose head AND tail windows both match under the fake
 // runner's canned OpskipPair result. Both rows must come back detected on
 // both sides with per-episode absolute times, and exactly 2 fingerprints
-// (op + ed) must be persisted.
+// (op + ed) must be persisted. PairKinds carries both kinds — this is the
+// "fresh anime, no fingerprint at all yet" bootstrap NextSkipTask would
+// produce.
 func TestSkipProbePairFound(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/anime/a1/kodik/stream", func(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +133,8 @@ func TestSkipProbePairFound(t *testing.T) {
 
 	unitA := queue.SkipUnit{AnimeID: "a1", Provider: "kodik", Team: "Trans1", TeamID: 7, Episode: 1}
 	unitB := queue.SkipUnit{AnimeID: "a1", Provider: "kodik", Team: "Trans1", TeamID: 7, Episode: 2}
-	rows := p.Probe(context.Background(), queue.SkipTask{Unit: unitA, Pair: &unitB}, 0)
+	task := queue.SkipTask{Unit: unitA, Pair: &unitB, PairKinds: []string{domain.SkipKindOp, domain.SkipKindEd}}
+	rows := p.Probe(context.Background(), task, 0)
 
 	if len(rows) != 2 {
 		t.Fatalf("pair mode: want 2 rows, got %d: %+v", len(rows), rows)
@@ -251,9 +256,12 @@ func TestSkipProbeBudgetExpiredPendingFP(t *testing.T) {
 	}
 }
 
-// TestSkipProbeRePairNotFoundSetsPairTried: a RePair task whose op/ed sides
-// both come back not-found must still set PairTried on BOTH rows — that's
-// what stops the re-pair scan from picking the same pair forever.
+// TestSkipProbeRePairNotFoundSetsPairTried: a RePair task whose op side
+// comes back not-found must still set PairTried on BOTH rows — that's what
+// stops the re-pair scan from picking the same pair forever. Both units are
+// animejoy (mp4), so ED is terminal no_match regardless of PairKinds — the
+// re-pair scan (queue.NextSkipTask) only sets PairKinds to the kind(s) that
+// actually qualified, here just op.
 func TestSkipProbeRePairNotFoundSetsPairTried(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/anime/a1/animejoy/stream", func(w http.ResponseWriter, r *http.Request) {
@@ -271,7 +279,8 @@ func TestSkipProbeRePairNotFoundSetsPairTried(t *testing.T) {
 
 	unitA := queue.SkipUnit{AnimeID: "a1", Provider: "animejoy", Episode: 3}
 	unitB := queue.SkipUnit{AnimeID: "a1", Provider: "animejoy", Episode: 4}
-	rows := p.Probe(context.Background(), queue.SkipTask{Unit: unitA, Pair: &unitB, RePair: true}, 0)
+	task := queue.SkipTask{Unit: unitA, Pair: &unitB, RePair: true, PairKinds: []string{domain.SkipKindOp}}
+	rows := p.Probe(context.Background(), task, 0)
 
 	if len(rows) != 2 {
 		t.Fatalf("want 2 rows, got %d: %+v", len(rows), rows)
@@ -282,8 +291,126 @@ func TestSkipProbeRePairNotFoundSetsPairTried(t *testing.T) {
 	if rows[0].OpStatus != domain.SkipNoMatch || rows[1].OpStatus != domain.SkipNoMatch {
 		t.Fatalf("op status: want no_match on both: %+v / %+v", rows[0], rows[1])
 	}
+	if rows[0].EdStatus != domain.SkipNoMatch || rows[1].EdStatus != domain.SkipNoMatch {
+		t.Fatalf("ed status: want no_match on both (mp4 leg, terminal): %+v / %+v", rows[0], rows[1])
+	}
 	if len(fps.added) != 0 {
 		t.Fatalf("no fingerprint should be added on a not-found pair: got %d", len(fps.added))
+	}
+}
+
+// TestSkipProbePairKindAlreadyHasFPLocatesNoDuplicateFingerprint covers
+// Finding 1's core fix: a pair task where OP already has a stored season
+// fingerprint (PairKinds=[ed] only, as queue.NextSkipTask would produce)
+// must LOCATE op independently against each episode's already-extracted
+// head window rather than re-bootstrapping it — critically, AddFingerprint
+// must never be called for op, or every later locate would carry a
+// growing, redundant set of op fingerprints. ED, the missing kind, is
+// bootstrapped as normal.
+func TestSkipProbePairKindAlreadyHasFPLocatesNoDuplicateFingerprint(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/anime/a1/kodik/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"stream_url":"https://cdn.example/media.m3u8","referer":"","exp":"1","sig":"s"}}`))
+	})
+	mux.HandleFunc("/api/streaming/hls-proxy", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("#EXTM3U\n#EXTINF:1440.0,\nseg1.ts\n#EXT-X-ENDLIST\n"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
+	runner := &fakeRunner{
+		opLocate: &OpskipLocate{Found: true, Start: 20, End: 110, Similarity: 0.8, FpIndex: 0},
+		opPair:   &OpskipPair{Found: true, AStart: 5, AEnd: 95, BStart: 8, BEnd: 98, Similarity: 0.9, Fp: []uint32{9, 8, 7}},
+	}
+	fps := &fakeFPStore{fps: []domain.SkipFingerprint{
+		{ID: "fp-op-1", AnimeID: "a1", Kind: domain.SkipKindOp, Fp: domain.FpInts{1, 2, 3}},
+	}}
+	p := NewSkipProber(cat, srv.URL, ffmpeg, t.TempDir(), runner, fps, testSkipConfig(), nil)
+	p.retryWait = 0
+
+	unitA := queue.SkipUnit{AnimeID: "a1", Provider: "kodik", Team: "Trans1", TeamID: 7, Episode: 1}
+	unitB := queue.SkipUnit{AnimeID: "a1", Provider: "kodik", Team: "Trans1", TeamID: 7, Episode: 2}
+	task := queue.SkipTask{Unit: unitA, Pair: &unitB, PairKinds: []string{domain.SkipKindEd}}
+	rows := p.Probe(context.Background(), task, 0)
+
+	if len(rows) != 2 {
+		t.Fatalf("want 2 rows, got %d: %+v", len(rows), rows)
+	}
+	a, b := rows[0], rows[1]
+
+	// OP: located (not bootstrapped) against the existing fingerprint. Both
+	// episodes get the same canned locate result since fakeRunner returns
+	// the same OpskipLocate regardless of input — the point here is that
+	// OpskipLocate (not OpskipPair) was the call made for op at all.
+	if a.OpStatus != domain.SkipDetected || b.OpStatus != domain.SkipDetected {
+		t.Fatalf("op status: want both detected (located, not bootstrapped): a=%+v b=%+v", a, b)
+	}
+	if a.OpStart != 20 || a.OpEnd != 110 || b.OpStart != 20 || b.OpEnd != 110 {
+		t.Fatalf("op windows: want [20,110] on both (locate base=0 on each head window): a=[%v,%v] b=[%v,%v]",
+			a.OpStart, a.OpEnd, b.OpStart, b.OpEnd)
+	}
+
+	// ED: bootstrapped (the missing kind) — per-episode absolute times from
+	// the pair result, same math as TestSkipProbePairFound.
+	if a.EdStatus != domain.SkipDetected || b.EdStatus != domain.SkipDetected {
+		t.Fatalf("ed status: want both detected (bootstrapped): a=%+v b=%+v", a, b)
+	}
+	wantTailSeek := 1440.0 - 480.0 // 960
+	if a.EdStart != wantTailSeek+5 || a.EdEnd != wantTailSeek+95 {
+		t.Fatalf("ed window a: got [%v,%v] want [%v,%v]", a.EdStart, a.EdEnd, wantTailSeek+5, wantTailSeek+95)
+	}
+	if b.EdStart != wantTailSeek+8 || b.EdEnd != wantTailSeek+98 {
+		t.Fatalf("ed window b: got [%v,%v] want [%v,%v]", b.EdStart, b.EdEnd, wantTailSeek+8, wantTailSeek+98)
+	}
+
+	// The critical assertion: exactly ONE fingerprint added (ed) — op must
+	// NEVER be re-added just because it happened to locate successfully.
+	if len(fps.added) != 1 {
+		t.Fatalf("fingerprints added: got %d want 1 (ed only — op already had one, must not be duplicated): %+v", len(fps.added), fps.added)
+	}
+	if fps.added[0].Kind != domain.SkipKindEd {
+		t.Fatalf("fingerprint kind: got %q want ed: %+v", fps.added[0].Kind, fps.added[0])
+	}
+}
+
+// TestSkipProbeLocateMP4EdTerminalNoMatch covers Finding 3: an mp4 unit
+// (animejoy) has no tail window at all in locate mode (resolveUnit skips
+// mp4 tail extraction — the episode duration isn't known up front, so an
+// absolute tail time can't be computed). This must land on the terminal
+// SkipNoMatch, not pending_fp — pending_fp would re-due every 6h forever
+// with nothing that could ever resolve it, since no mp4 unit's tail is ever
+// extracted in v1. AniSkip still covers ED for these units.
+func TestSkipProbeLocateMP4EdTerminalNoMatch(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/anime/a1/animejoy/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"url":"https://cdn.example/video.mp4","referer":"","exp":"1","sig":"s"}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
+	runner := &fakeRunner{opLocate: &OpskipLocate{Found: true, Start: 5, End: 95, Similarity: 0.88, FpIndex: 0}}
+	fps := &fakeFPStore{fps: []domain.SkipFingerprint{
+		{ID: "fp-op-1", AnimeID: "a1", Kind: domain.SkipKindOp, Fp: domain.FpInts{1, 2, 3}},
+	}}
+	p := NewSkipProber(cat, srv.URL, ffmpeg, t.TempDir(), runner, fps, testSkipConfig(), nil)
+	p.retryWait = 0
+
+	unit := queue.SkipUnit{AnimeID: "a1", Provider: "animejoy", Episode: 3}
+	rows := p.Probe(context.Background(), queue.SkipTask{Unit: unit}, 0)
+
+	if len(rows) != 1 {
+		t.Fatalf("want 1 row, got %d: %+v", len(rows), rows)
+	}
+	row := rows[0]
+	if row.EdStatus != domain.SkipNoMatch {
+		t.Fatalf("ed status: got %q want no_match (terminal — v1 cannot absolutize mp4 tail times): %+v", row.EdStatus, row)
+	}
+	if row.OpStatus != domain.SkipDetected {
+		t.Fatalf("op status: got %q want detected (head window still extracted normally): %+v", row.OpStatus, row)
 	}
 }
 
