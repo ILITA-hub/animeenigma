@@ -421,6 +421,29 @@ func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domai
 	return c.executeRawQuery(ctx, gqlQuery)
 }
 
+// GetAnnouncedAnime fetches announced (anons) titles ordered by community
+// popularity — the discovery source for announcement matching (spec
+// 2026-07-17). Popularity ordering IS the "featured" gate: only titles the
+// Shikimori community already anticipates surface here.
+func (c *Client) GetAnnouncedAnime(ctx context.Context, page, limit int) ([]*domain.Anime, error) {
+	c.rateLimiter.acquire()
+
+	gqlQuery := fmt.Sprintf(`{
+		animes(limit: %d, page: %d, order: popularity, status: "anons") {
+			id name english russian japanese description score status kind rating origin episodes episodesAired duration
+			airedOn { year month day }
+			releasedOn { year month day }
+			nextEpisodeAt
+			malId
+			poster { originalUrl }
+			genres { id name russian }
+			studios { id name }
+		}
+	}`, limit, page)
+
+	return c.executeRawQuery(ctx, gqlQuery)
+}
+
 // GetSeasonalAnime fetches anime for a specific season
 func (c *Client) GetSeasonalAnime(ctx context.Context, year int, season string, page, limit int) ([]*domain.Anime, error) {
 	c.rateLimiter.acquire()
