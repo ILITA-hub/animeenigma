@@ -45,12 +45,18 @@ export function isMaskedAnalyticsUrl(url: string): boolean {
   return maskedBase !== null && url.includes(maskedBase)
 }
 
+/** Masked endpoint whenever the base is known, independent of the blocked
+ *  flag. For callers that need the tokenized path unconditionally. */
+export function maskedEndpointFor(leaf: AnalyticsLeaf): string | null {
+  if (!maskedBase) return null
+  // maskedBase is an absolute /api/<seg> path; keep any non-default origin.
+  return `${apiBase().replace(/\/api$/, '')}${maskedBase}/${LEAF_CODE[leaf]}`
+}
+
 /** Masked override when this session is blocked, else null (callers keep
  *  their primary endpoint). */
 export function maskedOverrideFor(leaf: AnalyticsLeaf): string | null {
-  if (!blocked || !maskedBase) return null
-  // maskedBase is an absolute /api/<seg> path; keep any non-default origin.
-  return `${apiBase().replace(/\/api$/, '')}${maskedBase}/${LEAF_CODE[leaf]}`
+  return blocked ? maskedEndpointFor(leaf) : null
 }
 
 /** Resolve the endpoint for a leaf: masked when blocked, primary otherwise. */
@@ -70,6 +76,45 @@ export function markBlockedFromError(err: unknown): boolean {
     return true
   }
   return false
+}
+
+/** Ship one analytics payload to `leaf` via fetch keepalive. This is the
+ *  single transport for all three analytics clients (clickstream Transport,
+ *  playerTelemetry, feErrorLog). sendBeacon is deliberately NOT used:
+ *  EasyPrivacy-class `$ping` rules block beacon-type requests only, and a
+ *  blocker cancels the beacon AFTER `sendBeacon()` returned true — the
+ *  failure is unobservable, so the masked-path flip never engaged (AUTO-629,
+ *  @gerahertz: plain-path attempts every 5-15s for 7+ min, ~zero arrivals).
+ *  fetch keepalive survives pagehide like a beacon (same contract as
+ *  authBeacon.ts / useWatchSession.ts) AND rejects observably when blocked,
+ *  which is what lets markBlockedFromError flip the session to the tokenized
+ *  alias and retry the batch once. Never throws. */
+export function shipAnalyticsPayload(leaf: AnalyticsLeaf, payload: string): void {
+  if (typeof fetch === 'undefined') return
+  const post = (url: string) =>
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: payload,
+      keepalive: true,
+      credentials: 'include',
+    })
+  try {
+    void post(analyticsEndpoint(leaf)).catch((err) => {
+      if (markBlockedFromError(err)) {
+        const retry = maskedOverrideFor(leaf)
+        if (retry) {
+          try {
+            void post(retry).catch(() => undefined)
+          } catch {
+            // give up silently
+          }
+        }
+      }
+    })
+  } catch {
+    // telemetry must never break the app
+  }
 }
 
 /** One-shot reachability probe (fired by the axios client once the masked

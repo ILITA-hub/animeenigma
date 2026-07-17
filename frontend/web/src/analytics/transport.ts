@@ -1,21 +1,24 @@
-// Transport batches events and ships them as one envelope via sendBeacon
-// (fetch+keepalive fallback). Mirrors the useWatchSession.ts beacon pattern.
+// Transport batches events and ships them as one envelope via fetch
+// keepalive (shipAnalyticsPayload). Mirrors the useWatchSession.ts pattern —
+// keepalive survives pagehide like a beacon, and unlike sendBeacon its
+// failure is observable, which is what lets the masked-alias fallback engage
+// under $ping-class blockers (AUTO-629).
 import type { AnalyticsConfig, AnalyticsEnvelope, AnalyticsEvent } from './types'
 import { getAnonId, getUserId } from './identity'
 import { getSessionId } from './session'
-import { maskedOverrideFor, markBlockedFromError } from '../utils/analyticsTransport'
+import { shipAnalyticsPayload } from '../utils/analyticsTransport'
 
-const BEACON_LIMIT = 60 * 1024 // stay under the ~64 KB sendBeacon cap
+const BEACON_LIMIT = 60 * 1024 // stay under the ~64 KB fetch-keepalive in-flight cap
 
 export class Transport {
   private buf: AnalyticsEvent[] = []
   private timer: ReturnType<typeof setInterval> | null = null
-  private readonly endpoint: string
   private readonly maxBatch: number
   private readonly flushMs: number
 
+  // cfg.endpoint is accepted for config-shape compat but the actual URL is
+  // resolved per-send by shipAnalyticsPayload (masked alias once blocked).
   constructor(cfg: AnalyticsConfig) {
-    this.endpoint = cfg.endpoint
     this.maxBatch = cfg.maxBatch ?? 20
     this.flushMs = cfg.flushMs ?? 5000
   }
@@ -66,33 +69,6 @@ export class Transport {
     }
     // text/plain keeps it a CORS "simple" request (no preflight); the backend
     // reads the raw body regardless of content-type.
-    const endpoint = maskedOverrideFor('collect') ?? this.endpoint
-    try {
-      const blob = new Blob([payload], { type: 'text/plain' })
-      const ok = navigator.sendBeacon(endpoint, blob)
-      if (ok) return
-    } catch {
-      // fall through to fetch
-    }
-    void fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: payload,
-      keepalive: true,
-      credentials: 'include',
-    }).catch((err) => {
-      if (markBlockedFromError(err)) {
-        const retry = maskedOverrideFor('collect')
-        if (retry) {
-          void fetch(retry, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: payload,
-            keepalive: true,
-            credentials: 'include',
-          }).catch(() => undefined)
-        }
-      }
-    })
+    shipAnalyticsPayload('collect', payload)
   }
 }

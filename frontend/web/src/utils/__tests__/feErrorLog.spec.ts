@@ -24,9 +24,6 @@ describe('feErrorLog', () => {
   })
 
   it('buffers a reported error and flushes to the client-errors endpoint', () => {
-    // Force the fetch fallback so we can read the JSON body.
-    const beacon = navigator.sendBeacon as ReturnType<typeof vi.fn>
-    beacon.mockReturnValue(false)
     reportFeError({ kind: 'http', message: 'Request failed', url: '/api/anime/x/ae/stream', status: 404, provider: 'ae' })
     expect(__getFeErrorBufferForTest()).toHaveLength(1)
 
@@ -61,13 +58,14 @@ describe('feErrorLog', () => {
       reportFeError({ kind: 'js', message: `boom ${i}` })
     }
     // 20/min accepted (a size-flush fired at 20), then a cap marker; rest dropped.
-    expect((navigator.sendBeacon as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(navigator.sendBeacon as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
     const buf = __getFeErrorBufferForTest()
     expect(buf).toHaveLength(1)
     expect(buf[0].kind).toBe('cap')
   })
 
-  it('never reports failures of its own beacon/collector endpoints (loop guard)', () => {
+  it('never reports failures of its own collector endpoints (loop guard)', () => {
     reportFeError({ kind: 'http', message: 'failed', url: '/api/analytics/client-errors', status: 500 })
     reportFeError({ kind: 'http', message: 'failed', url: '/api/analytics/collect', status: 500 })
     expect(__getFeErrorBufferForTest()).toHaveLength(0)
@@ -75,6 +73,6 @@ describe('feErrorLog', () => {
 
   it('flush is a no-op when the buffer is empty', () => {
     flushFeErrors('test')
-    expect((navigator.sendBeacon as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
   })
 })

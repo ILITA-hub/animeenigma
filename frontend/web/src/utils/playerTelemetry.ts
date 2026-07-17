@@ -11,7 +11,7 @@
  * DO NOT use this for user-facing flows — telemetry must be invisible to the app.
  */
 
-import { analyticsEndpoint, markBlockedFromError } from './analyticsTransport'
+import { shipAnalyticsPayload } from './analyticsTransport'
 
 export interface PlayerEvent {
   kind: 'resolve' | 'stall' | 'playback_start_rejected' | 'playback_failed' | 'protocol_usage'
@@ -133,48 +133,13 @@ export function recordPlayerEvent(e: PlayerEvent): void {
   }
 }
 
-/** Flushes the buffer to the backend via sendBeacon (fetch keepalive fallback). */
+/** Flushes the buffer via fetch keepalive (masked-alias retry on block —
+ *  shipAnalyticsPayload owns the transport, AUTO-629). */
 export function flushPlayerTelemetry(_reason = 'manual'): void {
   if (buf.length === 0) return
   const events = buf
   buf = []
-  const payload = JSON.stringify({ events })
-  const endpoint = analyticsEndpoint('player-events')
-  try {
-    const blob = new Blob([payload], { type: 'text/plain' })
-    if (typeof navigator !== 'undefined' && navigator.sendBeacon && navigator.sendBeacon(endpoint, blob)) {
-      return
-    }
-  } catch {
-    // fall through to fetch
-  }
-  try {
-    void fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: payload,
-      keepalive: true,
-      credentials: 'include',
-    }).catch((err) => {
-      // Adblock signature → flip this session to the masked alias and
-      // retry this batch once there (Track B5).
-      if (markBlockedFromError(err)) {
-        try {
-          void fetch(analyticsEndpoint('player-events'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: payload,
-            keepalive: true,
-            credentials: 'include',
-          }).catch(() => undefined)
-        } catch {
-          // give up silently
-        }
-      }
-    })
-  } catch {
-    // give up silently — telemetry must never break the app
-  }
+  shipAnalyticsPayload('player-events', JSON.stringify({ events }))
 }
 
 /** Test-only: clears all internal state including timers. */

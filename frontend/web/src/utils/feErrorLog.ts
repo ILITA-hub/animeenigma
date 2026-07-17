@@ -13,7 +13,7 @@
  * per-session volume.
  */
 
-import { analyticsEndpoint, isMaskedAnalyticsUrl, markBlockedFromError } from './analyticsTransport'
+import { isMaskedAnalyticsUrl, shipAnalyticsPayload } from './analyticsTransport'
 
 export type FeErrorKind =
   | 'js'
@@ -216,51 +216,19 @@ export function reportFeError(partial: Partial<FeErrorEvent> & { kind: FeErrorKi
   }
 }
 
-/** Flushes the buffer to the backend via sendBeacon (fetch keepalive fallback). */
+/** Flushes the buffer via fetch keepalive (masked-alias retry on block —
+ *  shipAnalyticsPayload owns the transport, AUTO-629). */
 export function flushFeErrors(_reason = 'manual'): void {
   if (buf.length === 0) return
   const errors = buf
   buf = []
-  const payload = JSON.stringify({
-    errors,
-    ctx: { user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '' },
-  })
-  const endpoint = analyticsEndpoint('client-errors')
-  try {
-    const blob = new Blob([payload], { type: 'text/plain' })
-    if (typeof navigator !== 'undefined' && navigator.sendBeacon && navigator.sendBeacon(endpoint, blob)) {
-      return
-    }
-  } catch {
-    // fall through to fetch
-  }
-  try {
-    void fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: payload,
-      keepalive: true,
-      credentials: 'include',
-    }).catch((err) => {
-      // Adblock signature → flip this session to the masked alias and
-      // retry this batch once there (Track B5).
-      if (markBlockedFromError(err)) {
-        try {
-          void fetch(analyticsEndpoint('client-errors'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: payload,
-            keepalive: true,
-            credentials: 'include',
-          }).catch(() => undefined)
-        } catch {
-          // give up silently
-        }
-      }
-    })
-  } catch {
-    // give up silently — telemetry must never break the app
-  }
+  shipAnalyticsPayload(
+    'client-errors',
+    JSON.stringify({
+      errors,
+      ctx: { user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '' },
+    }),
+  )
 }
 
 /**
