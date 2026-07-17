@@ -1965,6 +1965,15 @@
       "epChip": "第{n}話",
       "epChipNew": "第{n}話 · NEW",
       "seasonProgress": "全{total}話中{cur}話"
+    },
+    "upcomingForYou": {
+      "title": "あなたへの新作予告",
+      "reasonFranchise": "「{name}」シリーズの新作 — あなたの評価 {score}/10",
+      "reasonTaste": "あなたの好みにマッチ",
+      "announcedBadge": "発表",
+      "addCta": "視聴予定に追加",
+      "dismissCta": "興味なし",
+      "done": "以上です — 新しい発表はここに表示されます"
     }
   },
   "watch_together": {

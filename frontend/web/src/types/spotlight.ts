@@ -260,6 +260,31 @@ export interface DailyFanficData {
   created_at: string
 }
 
+/**
+ * UpcomingForYouCard — login-only announcement matches (spec 2026-07-17).
+ * `reason.kind` is `'franchise'` (matched a title in a franchise the viewer
+ * rated) or `'taste'` (matched via the general taste model); franchise
+ * reasons carry the seed anime's names + the viewer's score for that seed.
+ */
+export interface UpcomingReasonFE {
+  kind: 'franchise' | 'taste'
+  seed_anime_id?: string
+  seed_anime_name?: string
+  seed_anime_name_ru?: string
+  user_score?: number
+}
+
+export interface UpcomingForYouItem {
+  anime: SpotlightAnime
+  match_score: number
+  reason: UpcomingReasonFE
+}
+
+/** Login-only announcement matches — `upcoming_for_you` card. */
+export interface UpcomingForYouData {
+  items: UpcomingForYouItem[]
+}
+
 /* ──────────────────────────────────────────────────────────────────────── */
 /*  Discriminated union — narrows correctly in the v-if/v-else-if dispatch  */
 /*  chain inside HeroSpotlightBlock.vue.                                    */
@@ -277,6 +302,7 @@ export type SpotlightCard = (
   | { type: 'continue_watching_new'; data: ContinueWatchingNewData }
   | { type: 'curated'; data: CuratedData }
   | { type: 'daily_fanfic'; data: DailyFanficData }
+  | { type: 'upcoming_for_you'; data: UpcomingForYouData }
 ) & { priority?: number }
 
 /* ──────────────────────────────────────────────────────────────────────── */

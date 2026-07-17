@@ -2011,6 +2011,15 @@
       "epChip": "ep. {n}",
       "epChipNew": "ep. {n} · NEW",
       "seasonProgress": "{cur} of {total} season episodes"
+    },
+    "upcomingForYou": {
+      "title": "Upcoming for you",
+      "reasonFranchise": "New in the {name} franchise — you rated it {score}/10",
+      "reasonTaste": "Matches your taste",
+      "announcedBadge": "Announced",
+      "addCta": "Plan to watch",
+      "dismissCta": "Not interested",
+      "done": "All caught up — new announcements will appear here"
     }
   },
   "gacha": {

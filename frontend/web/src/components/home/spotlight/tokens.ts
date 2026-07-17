@@ -133,6 +133,7 @@ export const cardTokens: CardTokenMap = {
   continue_watching_new: { accent: 'pink',   kickerKey: 'spotlight.continueWatchingNew.title', icon: 'play'     },
   curated:               { accent: 'cyan',   kickerKey: 'spotlight.curated.title',             icon: 'star'     },
   daily_fanfic:          { accent: 'pink',   kickerKey: 'spotlight.dailyFanfic.title',         icon: 'sparkles' },
+  upcoming_for_you:      { accent: 'cyan',   kickerKey: 'spotlight.upcomingForYou.title',      icon: 'clock'    },
 }
 
 

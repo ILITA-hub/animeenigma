@@ -144,6 +144,11 @@
             :key="`daily_fanfic:${currentIndex}`"
             :data="active.data"
           />
+          <UpcomingForYouCard
+            v-else-if="active.type === 'upcoming_for_you'"
+            :key="`upcoming_for_you:${currentIndex}`"
+            :data="active.data"
+          />
         </transition>
       </div>
       <!-- SR-only pause announcement (UI-SPEC §A11y; F1.3/F6.1 resolution).
@@ -185,6 +190,7 @@ import NotTimeYetCard from './cards/NotTimeYetCard.vue'
 import ContinueWatchingNewCard from './cards/ContinueWatchingNewCard.vue'
 import CuratedCard from './cards/CuratedCard.vue'
 import DailyFanficCard from './cards/DailyFanficCard.vue'
+import UpcomingForYouCard from './cards/UpcomingForYouCard.vue'
 import { getLocalizedTitle } from '@/utils/title'
 import { preloadImage } from '@/utils/preload-image'
 import { cardPosterUrl } from '@/composables/useImageProxy'
@@ -406,6 +412,10 @@ function cardImageUrls(card: SpotlightCard): string[] {
         : []
     case 'daily_fanfic':
       return card.data.anime_poster ? [cardPosterUrl(card.data.anime_poster, 640)] : []
+    case 'upcoming_for_you':
+      return (card.data.items ?? [])
+        .filter((it) => it.anime.poster_url)
+        .map((it) => cardPosterUrl(it.anime.poster_url!, 256))
     default:
       return []
   }
@@ -521,6 +531,12 @@ function cardTitle(card: SpotlightCard): string {
       )
     case 'daily_fanfic':
       return t('spotlight.dailyFanfic.title')
+    case 'upcoming_for_you': {
+      const first = card.data.items[0]
+      return first
+        ? getLocalizedTitle(first.anime.name, first.anime.name_ru, first.anime.name_jp)
+        : t('spotlight.upcomingForYou.title')
+    }
   }
 }
 </script>

@@ -2011,6 +2011,15 @@
       "epChip": "эп. {n}",
       "epChipNew": "эп. {n} · NEW",
       "seasonProgress": "{cur} из {total} эпизодов сезона"
+    },
+    "upcomingForYou": {
+      "title": "Скоро для вас",
+      "reasonFranchise": "Новое во франшизе {name} — вы поставили {score}/10",
+      "reasonTaste": "Совпадает с вашим вкусом",
+      "announcedBadge": "Анонс",
+      "addCta": "Буду смотреть",
+      "dismissCta": "Не интересно",
+      "done": "Пока всё — новые анонсы появятся здесь"
     }
   },
   "gacha": {
