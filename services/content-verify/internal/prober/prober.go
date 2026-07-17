@@ -75,14 +75,14 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 	v := domain.UnitVerdict{Key: u.Key, Episode: u.Episode, ProbedAt: p.now().UTC()}
 	dir, err := os.MkdirTemp(p.workDir, "unit-*")
 	if err != nil {
-		return p.unreachable(v, prevFails, err)
+		return p.unreachable(ctx, v, prevFails, err)
 	}
 	defer os.RemoveAll(dir)
 	_ = os.MkdirAll(filepath.Join(dir, "frames"), 0o755)
 
 	st, ep, err := p.resolveStream(ctx, u)
 	if err != nil {
-		return p.unreachable(v, prevFails, err)
+		return p.unreachable(ctx, v, prevFails, err)
 	}
 	v.Episode = ep
 	for _, t := range st.Tracks {
@@ -94,7 +94,7 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 	if st.Type != "mp4" { // HLS: localize + duration from EXTINF sum
 		local, dur, err := LocalizeHLS(ctx, p.hc, p.gateway, input, dir)
 		if err != nil {
-			return p.unreachable(v, prevFails, err)
+			return p.unreachable(ctx, v, prevFails, err)
 		}
 		input, duration = local, dur
 	}
@@ -105,14 +105,14 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 		wav, err := ExtractFragment(ctx, p.ffmpeg, input, seek, fragmentSeconds, i, dir)
 		if err != nil {
 			if i == 0 {
-				return p.unreachable(v, prevFails, err) // first fragment dead = stream dead
+				return p.unreachable(ctx, v, prevFails, err) // first fragment dead = stream dead
 			}
 			continue // partial extraction: analyze what we have
 		}
 		wavs = append(wavs, wav)
 	}
 	if len(wavs) == 0 {
-		return p.unreachable(v, prevFails, errors.New("no fragments extracted"))
+		return p.unreachable(ctx, v, prevFails, errors.New("no fragments extracted"))
 	}
 
 	lid, err := p.runner.LID(ctx, wavs)
@@ -151,7 +151,22 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 	return v
 }
 
-func (p *Prober) unreachable(v domain.UnitVerdict, prevFails int, err error) domain.UnitVerdict {
+// unreachable marks a probe as StatusUnreachable — UNLESS the failure is
+// explained by the budget ctx expiring (deadline exceeded) or being
+// cancelled out from under us. "Too slow for the budget" is not the same
+// claim as "stream is dead": the former is a scheduling fact that says
+// nothing about the provider, so it must not feed the exponential (up to
+// 7d) unreachable backoff. Those cases fall through to inconclusive
+// instead, leaving Fails untouched — the unit gets reprobed at the normal
+// cadence rather than getting punished.
+func (p *Prober) unreachable(ctx context.Context, v domain.UnitVerdict, prevFails int, err error) domain.UnitVerdict {
+	if ctx.Err() != nil {
+		if p.log != nil {
+			p.log.Warnw("unit probe budget exceeded", "key", v.Key.String(), "ctx_err", ctx.Err(), "error", err)
+		}
+		v.Status = domain.StatusInconclusive
+		return v
+	}
 	if p.log != nil {
 		p.log.Warnw("unit unreachable", "key", v.Key.String(), "error", err)
 	}

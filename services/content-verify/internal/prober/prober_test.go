@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
@@ -288,6 +289,43 @@ func TestProbeScraperNoEpisodeFallback(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Fatalf("scraper/stream calls: got %d want 1 (no retry)", got)
+	}
+}
+
+// TestProbeBudgetExpiredDuringResolveIsInconclusive: when the caller's ctx
+// (the per-unit probe budget) expires while resolveStream's catalog call is
+// still in flight, the unit must NOT be marked unreachable — that would
+// increment Fails and feed the exponential (up to 7d) backoff, conflating
+// "too slow for this budget round" with "stream is dead". It must come back
+// inconclusive instead, with Fails left untouched.
+func TestProbeBudgetExpiredDuringResolveIsInconclusive(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/anime/a1/animejoy/stream", func(w http.ResponseWriter, r *http.Request) {
+		// Sleeps well past the tiny ctx deadline below, but still watches
+		// the request's own ctx so the test doesn't hang past the sleep.
+		select {
+		case <-time.After(200 * time.Millisecond):
+		case <-r.Context().Done():
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cat := catalogclient.New(srv.URL, srv.Client())
+	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
+	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
+	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	u := queue.Unit{AnimeID: "a1", Provider: "animejoy", Key: domain.UnitKey{Server: "animejoy"}, Episode: 1}
+	v := p.Probe(ctx, u, 3) // prevFails=3: proves it did NOT become 4
+
+	if v.Status != domain.StatusInconclusive {
+		t.Fatalf("status: got %q want inconclusive (budget overrun, not a dead stream): %+v", v.Status, v)
+	}
+	if v.Fails != 0 {
+		t.Fatalf("fails: got %d want 0/untouched (no backoff for a budget overrun)", v.Fails)
 	}
 }
 

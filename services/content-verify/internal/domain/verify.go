@@ -166,7 +166,7 @@ func Summarize(units []UnitVerdict) ProviderSummary {
 	switch {
 	case verified == len(units):
 		s.Status = "verified"
-	case verified > 0 || s.Raw || len(s.DubLangs) > 0:
+	case verified > 0 || s.Raw || len(s.DubLangs) > 0 || len(s.HardsubLangs) > 0:
 		s.Status = "partial"
 	}
 	return s

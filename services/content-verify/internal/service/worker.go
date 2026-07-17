@@ -31,6 +31,13 @@ type Claimer interface {
 	Claim(ctx context.Context) (*queue.Unit, bool, error)
 }
 
+// Worker throttles content-verify probing to one unit at a time (one Claim +
+// Probe per tick). That throttle is enforced entirely in-process — Claimer
+// has no distributed lease/lock, so a second replica ticking concurrently
+// would happily Claim and Probe its own unit at the same time as this one.
+// The k8s deployment MUST stay at replicas: 1 (see
+// deploy/kustomize/base/services/content-verify.yaml) or units get
+// double-probed.
 type Worker struct {
 	interval time.Duration
 	budget   time.Duration

@@ -9,6 +9,9 @@ metadata:
   name: content-verify
   namespace: animeenigma
 spec:
+  # MUST stay 1: Worker's one-probe-at-a-time throttle is an in-process claim
+  # loop with no distributed lease/lock (internal/service/worker.go) — a 2nd
+  # replica would Claim + Probe units concurrently with this one.
   replicas: 1
   selector:
     matchLabels:

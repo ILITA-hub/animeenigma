@@ -37,3 +37,26 @@ func TestSummarize(t *testing.T) {
 		t.Fatal("all-verified must be verified")
 	}
 }
+
+// TestSummarizeHardsubOnlyPartial covers a unit whose audio verdict is
+// inconclusive (no verified count, no Raw, no DubLangs) but whose hardsub
+// verdict IS verified — a burned-in-subs provider the audio prober couldn't
+// pin down. Before this fix the partial condition only checked
+// verified/Raw/DubLangs, so this unit fell through to "unverified" even
+// though HardsubLangs was non-empty — the FE would then render the
+// unverified marker AND a verified hardsub badge on the same row.
+func TestSummarizeHardsubOnlyPartial(t *testing.T) {
+	units := []UnitVerdict{
+		{Status: StatusInconclusive, Hardsub: &HardsubVerdict{Present: true, Lang: "en", Confidence: 0.96, Verified: true}},
+	}
+	s := Summarize(units)
+	if s.Status != "partial" {
+		t.Fatalf("status = %q, want partial", s.Status)
+	}
+	if len(s.HardsubLangs) != 1 || s.HardsubLangs[0] != "en" {
+		t.Fatalf("hardsub_langs = %v, want [en]", s.HardsubLangs)
+	}
+	if s.Raw || len(s.DubLangs) != 0 {
+		t.Fatalf("unexpected raw/dub_langs = raw=%v dub_langs=%v", s.Raw, s.DubLangs)
+	}
+}
