@@ -22,8 +22,9 @@ import (
 )
 
 type handlerFixture struct {
-	h   *VerifyHandler
-	sig *signals.Signals
+	h     *VerifyHandler
+	sig   *signals.Signals
+	store *repo.Store
 }
 
 func newHandlerFixture(t *testing.T) *handlerFixture {
@@ -47,7 +48,7 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&domain.ContentVerification{}); err != nil {
+	if err := db.AutoMigrate(&domain.ContentVerification{}, &domain.SkipTiming{}); err != nil {
 		t.Fatal(err)
 	}
 	store := repo.NewStore(db)
@@ -64,7 +65,7 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 		t.Fatal(err)
 	}
 
-	return &handlerFixture{h: h, sig: sig}
+	return &handlerFixture{h: h, sig: sig, store: store}
 }
 
 func TestVerdictsReturnsSummaryAndUnits(t *testing.T) {
@@ -172,5 +173,100 @@ func TestQueueReturnsEntriesEnvelope(t *testing.T) {
 	}
 	if body.Data.Entries == nil {
 		t.Fatal("entries must be an (empty) array, not null")
+	}
+}
+
+type skipResponseBody struct {
+	Success bool `json:"success"`
+	Data    struct {
+		AnimeID string              `json:"anime_id"`
+		Timings []domain.SkipTiming `json:"timings"`
+	} `json:"data"`
+}
+
+func TestSkipReturnsTimingsOrdered(t *testing.T) {
+	f := newHandlerFixture(t)
+	ctx := context.Background()
+
+	// Two rows for "a-1", inserted out of order; must come back ordered by
+	// provider, team, episode.
+	if err := f.store.UpsertSkip(ctx, domain.SkipTiming{
+		AnimeID: "a-1", Provider: "gogoanime", Team: "", Episode: 2,
+		OpStart: 90, OpEnd: 180, OpStatus: domain.SkipDetected, Confidence: 0.8,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.UpsertSkip(ctx, domain.SkipTiming{
+		AnimeID: "a-1", Provider: "animepahe", Team: "610", Episode: 1,
+		OpStart: 10, OpEnd: 100, OpStatus: domain.SkipDetected, Confidence: 0.95,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A row for a different anime — must not leak into a-1's results.
+	if err := f.store.UpsertSkip(ctx, domain.SkipTiming{
+		AnimeID: "a-2", Provider: "gogoanime", Team: "", Episode: 1,
+		OpStatus: domain.SkipDetected,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/verify/skip?anime_id=a-1", nil)
+	rec := httptest.NewRecorder()
+	f.h.Skip(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body skipResponseBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v; body=%s", err, rec.Body.String())
+	}
+	if !body.Success {
+		t.Fatal("success must be true")
+	}
+	if body.Data.AnimeID != "a-1" {
+		t.Fatalf("anime_id = %q", body.Data.AnimeID)
+	}
+	if len(body.Data.Timings) != 2 {
+		t.Fatalf("timings = %+v, want 2 entries", body.Data.Timings)
+	}
+	// Ordered provider, team, episode ascending: animepahe before gogoanime.
+	if body.Data.Timings[0].Provider != "animepahe" || body.Data.Timings[0].Episode != 1 {
+		t.Fatalf("timings[0] = %+v, want animepahe ep1 first", body.Data.Timings[0])
+	}
+	if body.Data.Timings[1].Provider != "gogoanime" || body.Data.Timings[1].Episode != 2 {
+		t.Fatalf("timings[1] = %+v, want gogoanime ep2 second", body.Data.Timings[1])
+	}
+}
+
+func TestSkipUnknownAnimeReturnsEmptyList(t *testing.T) {
+	f := newHandlerFixture(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/verify/skip?anime_id=does-not-exist", nil)
+	rec := httptest.NewRecorder()
+	f.h.Skip(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body skipResponseBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v; body=%s", err, rec.Body.String())
+	}
+	if body.Data.Timings == nil {
+		t.Fatal("timings must be an (empty) array, not null")
+	}
+	if len(body.Data.Timings) != 0 {
+		t.Fatalf("timings = %+v, want empty", body.Data.Timings)
+	}
+}
+
+func TestSkipMissingAnimeIDIs400(t *testing.T) {
+	f := newHandlerFixture(t)
+	req := httptest.NewRequest(http.MethodGet, "/internal/verify/skip", nil)
+	rec := httptest.NewRecorder()
+	f.h.Skip(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }

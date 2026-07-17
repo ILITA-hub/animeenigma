@@ -56,6 +56,27 @@ func (h *VerifyHandler) Verdicts(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, resp)
 }
 
+type skipResponse struct {
+	AnimeID string              `json:"anime_id"`
+	Timings []domain.SkipTiming `json:"timings"`
+}
+
+func (h *VerifyHandler) Skip(w http.ResponseWriter, r *http.Request) {
+	animeID := r.URL.Query().Get("anime_id")
+	if animeID == "" {
+		http.Error(w, "anime_id required", http.StatusBadRequest)
+		return
+	}
+	rows, err := h.store.SkipByAnime(r.Context(), animeID)
+	if err != nil {
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+	resp := skipResponse{AnimeID: animeID, Timings: []domain.SkipTiming{}}
+	resp.Timings = append(resp.Timings, rows...)
+	httputil.OK(w, resp)
+}
+
 type hintRequest struct {
 	AnimeID string `json:"anime_id"`
 	Visitor string `json:"visitor"`

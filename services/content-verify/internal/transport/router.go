@@ -24,6 +24,7 @@ func NewRouter(h *handler.VerifyHandler, log *logger.Logger, collector *metrics.
 	r.Handle("/metrics", metrics.Handler())
 	if h != nil {
 		r.Get("/internal/verify/verdicts", h.Verdicts)
+		r.Get("/internal/verify/skip", h.Skip)
 		r.Post("/internal/verify/hint", h.Hint)
 		r.Get("/internal/verify/queue", h.Queue)
 	}
