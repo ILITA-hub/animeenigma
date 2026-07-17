@@ -93,48 +93,16 @@ export function useFullscreen(deps: FullscreenDeps) {
     exitPseudoFs(true)
   }
 
-  // Browser mode deliberately ships WITHOUT viewport-fit=cover (index.html —
-  // iOS 26 status-bar treatment), which zeroes env(safe-area-inset-*) and
-  // letterboxes the takeover away from the Dynamic Island in landscape. The
-  // takeover opts into cover for its lifetime so the video runs under the
-  // island; the overlay rows pad themselves back inside the safe area
+  // Under-island coverage: viewport-fit=cover ships STATICALLY in index.html.
+  // Runtime opt-in from here was tried twice (setAttribute, then whole-node
+  // replacement) and iOS 26 ignored both on-device — do not resurrect that
+  // mechanism; only a load-time static cover expands the layout viewport.
+  // The takeover's overlay rows pad themselves back inside the safe area
   // (AePlayer.vue — incl. a :deep(.pl-controls) rule for the control bar).
-  // The swap REPLACES the meta node instead of mutating `content`: on-device
-  // testing (2026-07-16T13-44-25 — side letterbox strips while in the
-  // takeover) showed iOS 26 ignores a setAttribute-only viewport-fit change,
-  // but reprocesses the viewport when a fresh <meta name=viewport> node is
-  // inserted. Where even that is ignored, env() stays 0 and nothing regresses.
-  // Restore the exact previous content (standalone PWA already carries cover).
-  let viewportBeforeFs: string | null = null
-
-  function swapViewportMeta(content: string) {
-    const old = document.querySelector('meta[name="viewport"]')
-    if (!old) return
-    const fresh = document.createElement('meta')
-    fresh.setAttribute('name', 'viewport')
-    fresh.setAttribute('content', content)
-    old.replaceWith(fresh)
-  }
-
-  function coverViewport() {
-    const content = document
-      .querySelector('meta[name="viewport"]')
-      ?.getAttribute('content')
-    if (!content || content.includes('viewport-fit=cover')) return
-    viewportBeforeFs = content
-    swapViewportMeta(`${content}, viewport-fit=cover`)
-  }
-
-  function restoreViewport() {
-    if (viewportBeforeFs === null) return
-    swapViewportMeta(viewportBeforeFs)
-    viewportBeforeFs = null
-  }
 
   function enterPseudoFs() {
     pseudoFs.value = true
     document.documentElement.classList.add('pl-noscroll')
-    coverViewport()
     // Merge with the existing state so vue-router's own bookkeeping
     // ({position, back, current…}) survives alongside our marker.
     history.pushState({ ...history.state, plPseudoFs: true }, '')
@@ -147,7 +115,6 @@ export function useFullscreen(deps: FullscreenDeps) {
     if (!pseudoFs.value) return false
     pseudoFs.value = false
     document.documentElement.classList.remove('pl-noscroll')
-    restoreViewport()
     window.removeEventListener('popstate', onPseudoFsPop)
     return true
   }

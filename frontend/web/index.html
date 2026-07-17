@@ -8,24 +8,26 @@
     <link id="favicon-32" rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <link id="favicon-16" rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-    <!-- NO viewport-fit=cover in browser mode ON PURPOSE. iOS 26 Safari
-         (Liquid Glass) fights the page for the status-bar zone when cover
-         is active: it composites the page there for the first frame, then
-         paints an opaque mis-sampled band over it (theme-color is ignored,
-         so the band can't be styled). Without cover Safari tints that zone
-         itself with the page's background color — seamless, same approach
-         as reference sites that look right (e.g. wanikani.com). The inline
-         script below opts back INTO cover only for the installed PWA
-         (Add to Home Screen), where no Safari chrome exists and true
-         edge-to-edge works; env(safe-area-inset-*) offsets in main.css are
-         0 in browser mode and kick in there. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script>
-      if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
-        document.querySelector('meta[name="viewport"]')
-          .setAttribute('content', 'width=device-width, initial-scale=1.0, viewport-fit=cover')
-      }
-    </script>
+    <!-- viewport-fit=cover STATIC in ALL modes (2026-07-17, third attempt at
+         under-island fullscreen). History, so nobody relitigates blind:
+         · 07-02 pulled cover from browser mode — "iOS 26 fights the page for
+           the status-bar zone" (opaque mis-sampled band). That observation
+           predates the 07-03 root cause: the band was caused by always-mounted
+           position:fixed elements at the viewport edges (navbar translate-hide,
+           closed Modal wrappers, later the fixed #ae-boot shell), NOT by cover
+           — all of those are fixed now, and the bars stayed gone.
+         · Runtime opt-in during the player takeover was tried twice and iOS
+           ignores it — setAttribute AND full node replacement (on-device
+           screenshots 2026-07-16T13-44-25 / 15-20-22: side letterbox strips).
+           Only a load-time static cover expands the layout viewport.
+         env(safe-area-inset-*) compensation is already wired: body padding
+         via --safe-* (main.css), navbar/toaster/quicknav offsets, and the
+         player takeover pads its overlay rows. REVERT = restore the plain
+         meta + standalone-only inline script from git history; on-device
+         check after any change here: (1) no black bands behind the Dynamic
+         Island on the anime page, (2) fullscreen video reaches the screen
+         edges in landscape. Only a real iPhone shows either. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <!-- Installed-PWA mode (Add to Home Screen): black-translucent makes the
          iOS status bar transparent so the page truly renders behind the
          notch/Dynamic Island; safe-area offsets in main.css keep content

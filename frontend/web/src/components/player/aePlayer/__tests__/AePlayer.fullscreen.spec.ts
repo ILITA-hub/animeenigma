@@ -202,71 +202,36 @@ describe('AePlayer — fullscreen routing', () => {
   })
 })
 
-// The pseudo-FS takeover extends the video under the Dynamic Island / notch:
-// env(safe-area-inset-*) is all zeros unless viewport-fit=cover is active, and
-// browser mode deliberately ships WITHOUT cover (index.html), so enterPseudoFs
-// opts into cover on the viewport meta for the takeover's lifetime and restores
-// the exact previous content on exit (report 2026-07-15T12-52-24, iPhone).
-describe('AePlayer — pseudo-FS viewport-fit=cover toggle', () => {
-  const BROWSER_CONTENT = 'width=device-width, initial-scale=1.0'
+// Under-island coverage is NOT toggled at runtime: viewport-fit=cover ships
+// statically in index.html. Two runtime mechanisms (setAttribute, whole-node
+// replacement) were green here yet ignored by real iOS 26 — a spec cannot see
+// Safari's viewport, so the takeover asserts the meta is left ALONE instead.
+describe('AePlayer — pseudo-FS leaves the viewport meta alone', () => {
+  const STATIC_CONTENT = 'width=device-width, initial-scale=1.0, viewport-fit=cover'
 
-  /** The toggle REPLACES the meta node (iOS ignores setAttribute-only changes),
-   *  so tests must always re-query instead of holding a node reference. */
-  function viewportContent() {
-    return document.querySelector('meta[name="viewport"]')?.getAttribute('content')
-  }
-
-  function installViewportMeta(content: string) {
+  beforeEach(() => {
     document.querySelector('meta[name="viewport"]')?.remove()
     const meta = document.createElement('meta')
     meta.setAttribute('name', 'viewport')
-    meta.setAttribute('content', content)
+    meta.setAttribute('content', STATIC_CONTENT)
     document.head.appendChild(meta)
-  }
+  })
 
-  beforeEach(() => installViewportMeta(BROWSER_CONTENT))
   afterEach(() => document.querySelector('meta[name="viewport"]')?.remove())
 
-  it('entering the takeover adds viewport-fit=cover, exiting restores the original content', async () => {
+  it('enter/exit of the takeover never touches the static viewport meta', async () => {
     setUserAgent(IPHONE_UA)
     const wrapper = mountPlayer()
     await settle()
 
-    const before = document.querySelector('meta[name="viewport"]')
+    const node = document.querySelector('meta[name="viewport"]')
     await tapFullscreen(wrapper)
-    expect(viewportContent()).toBe(`${BROWSER_CONTENT}, viewport-fit=cover`)
-    // Node swap is the mechanism iOS actually honors — assert it happened.
-    expect(document.querySelector('meta[name="viewport"]')).not.toBe(before)
+    expect(document.querySelector('meta[name="viewport"]')).toBe(node)
+    expect(node?.getAttribute('content')).toBe(STATIC_CONTENT)
 
     await tapFullscreen(wrapper)
-    expect(viewportContent()).toBe(BROWSER_CONTENT)
     wrapper.unmount()
-  })
-
-  it('leaves an already-covered meta untouched (standalone PWA) and does not mangle it on exit', async () => {
-    const PWA_CONTENT = `${BROWSER_CONTENT}, viewport-fit=cover`
-    installViewportMeta(PWA_CONTENT)
-    setUserAgent(IPHONE_UA)
-    const wrapper = mountPlayer()
-    await settle()
-
-    await tapFullscreen(wrapper)
-    expect(viewportContent()).toBe(PWA_CONTENT)
-
-    await tapFullscreen(wrapper)
-    expect(viewportContent()).toBe(PWA_CONTENT)
-    wrapper.unmount()
-  })
-
-  it('unmounting mid-takeover (route change) restores the viewport meta', async () => {
-    setUserAgent(IPHONE_UA)
-    const wrapper = mountPlayer()
-    await settle()
-
-    await tapFullscreen(wrapper)
-    expect(viewportContent()).toContain('viewport-fit=cover')
-
-    wrapper.unmount()
-    expect(viewportContent()).toBe(BROWSER_CONTENT)
+    expect(document.querySelector('meta[name="viewport"]')).toBe(node)
+    expect(node?.getAttribute('content')).toBe(STATIC_CONTENT)
   })
 })

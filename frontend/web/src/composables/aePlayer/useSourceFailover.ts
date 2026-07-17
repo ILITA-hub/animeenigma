@@ -50,6 +50,14 @@ export interface SourceFailoverDeps {
   t: (key: string) => string
 }
 
+/** Watchdog progress signal that works on NATIVE playback (iPhone HLS /
+ *  MP4 src), where hls.js counters and ladder xhr taps stay 0 forever:
+ *  parsed metadata or any buffered range proves the source is alive. */
+export function hasMediaArrived(v: HTMLVideoElement | null): boolean {
+  if (!v) return false
+  return v.readyState >= HTMLMediaElement.HAVE_METADATA || v.buffered.length > 0
+}
+
 export function useSourceFailover(deps: SourceFailoverDeps) {
   const { engine, state, videoRef, rows, report, resolvedServers, currentStream, selectedEpisode, sourceError, roomPinned, toast, t } = deps
 
@@ -315,6 +323,13 @@ export function useSourceFailover(deps: SourceFailoverDeps) {
         return
       }
       if (engine.fragLoadedCount.value > 0) return // fragments flowing — just slow
+      // Native playback (iPhone HLS via AVFoundation, plain MP4 src) never
+      // touches hls.js counters or the ladder's xhr taps — both stay 0 for a
+      // perfectly healthy stream. The element itself is the only witness
+      // there: metadata parsed or a buffered range = media arriving, NOT a
+      // dead source. Without this the watchdog churned every provider to
+      // all_exhausted while segments were flowing (2026-07-16 iPhone report).
+      if (hasMediaArrived(videoRef.value)) return
       void (async () => {
         if (await advanceToNextSource('silent stall')) {
           toast.push(t('player.aePlayer.switchNotPlaying'), 'info', 4000)
