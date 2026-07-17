@@ -251,6 +251,12 @@ func main() {
 	shikimoriSimilarClient := signals.NewHTTPShikimoriSimilarClient(cfg.CatalogURL, log)
 	s6 := signals.NewS6ComboPin(db.DB, recsRepo, shikimoriSimilarClient, log)
 	recsHandler := handler.NewRecsHandler(db.DB, recsRepo, redisCache, s6, log)
+	dismissalsRepo := repo.NewAnnouncementDismissalsRepository(db.DB)
+	upcomingHandler := handler.NewUpcomingHandler(db.DB, dismissalsRepo, redisCache, log, handler.UpcomingConfig{
+		TopK:  cfg.UpcomingTopK,
+		MinS8: cfg.UpcomingMinS8,
+		MinS2: cfg.UpcomingMinS2,
+	})
 	adminRecsHandler := handler.NewAdminRecsHandler(db.DB, recsRepo, redisCache, s6, userPrecompute, log)
 	recEventsRepo := repo.NewRecEventsRepository(db.DB)
 	recEventsHandler := handler.NewRecEventsHandler(recEventsRepo, log)
@@ -261,7 +267,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("recs")
 
 	// Router.
-	router := transport.NewRouter(recsHandler, adminRecsHandler, recEventsHandler, internalHintHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(recsHandler, upcomingHandler, adminRecsHandler, recEventsHandler, internalHintHandler, cfg.JWT, log, metricsCollector)
 
 	// HTTP server.
 	srv := &http.Server{

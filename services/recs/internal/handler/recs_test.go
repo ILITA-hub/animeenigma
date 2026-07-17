@@ -59,6 +59,15 @@ func (c *fakeRecsCache) Set(_ context.Context, key string, value interface{}, _ 
 	return nil
 }
 
+func (c *fakeRecsCache) Delete(_ context.Context, keys ...string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, k := range keys {
+		delete(c.store, k)
+	}
+	return nil
+}
+
 func (c *fakeRecsCache) ErrNotFound() error { return c.notFound }
 
 // preBakeCache puts a payload into the cache directly so the cache-hit path

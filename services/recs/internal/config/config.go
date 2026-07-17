@@ -20,6 +20,11 @@ type Config struct {
 	// CatalogURL is the catalog service base URL used by the S6 combo-pin
 	// Shikimori /similar fallback (HTTPShikimoriSimilarClient).
 	CatalogURL string
+
+	// Upcoming — announcement-matching knobs (spec 2026-07-17).
+	UpcomingTopK  int
+	UpcomingMinS8 float64
+	UpcomingMinS2 float64
 }
 
 type ServerConfig struct {
@@ -62,6 +67,10 @@ func Load() (*Config, error) {
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		CatalogURL: getEnv("CATALOG_URL", "http://catalog:8081"),
+
+		UpcomingTopK:  getEnvInt("RECS_UPCOMING_TOPK", 3),
+		UpcomingMinS8: getEnvFloat("RECS_UPCOMING_MIN_S8", 0.2),
+		UpcomingMinS2: getEnvFloat("RECS_UPCOMING_MIN_S2", 0.3),
 	}, nil
 }
 
@@ -79,6 +88,15 @@ func getEnvInt(key string, defaultVal int) int {
 		}
 	}
 	return defaultVal
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return fallback
 }
 
 func getEnvDuration(key string, defaultVal time.Duration) time.Duration {

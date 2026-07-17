@@ -15,6 +15,7 @@ import (
 
 func NewRouter(
 	recsHandler *handler.RecsHandler,
+	upcomingHandler *handler.UpcomingHandler,
 	adminRecsHandler *handler.AdminRecsHandler,
 	recEventsHandler *handler.RecEventsHandler,
 	internalHintHandler *handler.InternalHintHandler,
@@ -54,6 +55,17 @@ func NewRouter(
 		r.Route("/users/recs", func(r chi.Router) {
 			r.Use(OptionalAuthMiddleware(jwtConfig))
 			r.Get("/", recsHandler.GetRecs)
+
+			// Upcoming (spec 2026-07-17): JWT REQUIRED — announced-title
+			// matching is personal by definition. Nested r.Group so
+			// AuthMiddleware layers on top of the outer OptionalAuthMiddleware
+			// (chi disallows r.Use after routes are registered in the same
+			// group; Optional decodes, Auth enforces).
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(jwtConfig))
+				r.Get("/upcoming", upcomingHandler.GetUpcoming)
+				r.Post("/upcoming/dismiss", upcomingHandler.PostDismiss)
+			})
 		})
 
 		// Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug + force-recompute.

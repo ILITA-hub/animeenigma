@@ -29,11 +29,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// recsCache is the cache surface RecsHandler depends on. *libs/cache.RedisCache
-// satisfies this interface. Tests inject a fake.
+// recsCache is the cache surface RecsHandler (and UpcomingHandler,
+// upcoming.go, spec 2026-07-17) depend on. *libs/cache.RedisCache satisfies
+// this interface. Tests inject a fake.
+//
+// Delete was added for UpcomingHandler.PostDismiss, which busts the per-user
+// upcoming cache after a dismissal — RecsHandler itself never calls it.
 type recsCache interface {
 	Get(ctx context.Context, key string, dest interface{}) error
 	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
+	Delete(ctx context.Context, keys ...string) error
 }
 
 // PublicTrendingKey is the Redis key for the anonymous shared trending top-N.
