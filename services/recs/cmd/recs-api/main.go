@@ -95,6 +95,7 @@ func main() {
 		&domain.RecPopulationSignals{},
 		&domain.RecCompletionCoOccurrence{},
 		&domain.RecEvent{},
+		&domain.RecAnnouncementDismissal{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
@@ -139,6 +140,20 @@ func main() {
 					ALTER TABLE rec_completion_co_occurrence
 						ADD CONSTRAINT rec_co_occurrence_candidate_fkey
 						FOREIGN KEY (candidate_anime_id) REFERENCES animes(id) ON DELETE CASCADE;
+				END IF;
+			END $$;`,
+			`DO $$ BEGIN
+				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_ann_dismiss_user_fkey') THEN
+					ALTER TABLE rec_announcement_dismissals
+						ADD CONSTRAINT rec_ann_dismiss_user_fkey
+						FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+				END IF;
+			END $$;`,
+			`DO $$ BEGIN
+				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_ann_dismiss_anime_fkey') THEN
+					ALTER TABLE rec_announcement_dismissals
+						ADD CONSTRAINT rec_ann_dismiss_anime_fkey
+						FOREIGN KEY (anime_id) REFERENCES animes(id) ON DELETE CASCADE;
 				END IF;
 			END $$;`,
 			`CREATE INDEX IF NOT EXISTS idx_rec_user_signals_last_computed
