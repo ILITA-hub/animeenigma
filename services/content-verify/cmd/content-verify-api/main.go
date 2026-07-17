@@ -58,7 +58,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := db.AutoMigrate(&domain.ContentVerification{}); err != nil {
+	if err := db.AutoMigrate(&domain.ContentVerification{}, &domain.SkipTiming{}, &domain.SkipFingerprint{}); err != nil {
 		log.Fatalw("automigrate failed", "error", err)
 	}
 
