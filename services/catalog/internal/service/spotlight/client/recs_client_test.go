@@ -182,3 +182,30 @@ func TestRecsClient_FetchUpcoming_BadStatus(t *testing.T) {
 		t.Fatal("expected error on 502")
 	}
 }
+
+func TestRecsClient_FetchUpcoming_NeverLogsJWT(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	log, recorded := observingLogger()
+	c := NewRecsClient(srv.URL, srv.Client(), log)
+	_, _ = c.FetchUpcoming(context.Background(), "supersecretupcomingtoken-xyz789")
+
+	// Every recorded entry's message + fields combined MUST NOT contain the
+	// raw token. Concatenate the full structured-log payload as the test surface.
+	for _, e := range recorded.All() {
+		full := e.Message
+		for _, f := range e.Context {
+			full += " " + f.String + " "
+			if f.Interface != nil {
+				// fmt-style string fallback for non-string fields.
+				full += " "
+			}
+		}
+		if strings.Contains(full, "supersecretupcomingtoken-xyz789") {
+			t.Fatalf("secret JWT leaked into log line: %q", full)
+		}
+	}
+}

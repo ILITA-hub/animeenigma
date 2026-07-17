@@ -75,9 +75,8 @@ type RecsClient struct {
 }
 
 // NewRecsClient constructs a RecsClient. Empty baseURL → "http://recs:8094".
-// Nil hc → an http.Client with the 700ms default Timeout. log MUST be
-// non-nil (production wires the same *logger.Logger the rest of catalog
-// uses).
+// Nil hc → an http.Client with the 700ms default Timeout. log may be nil
+// — call sites are nil-guarded; production passes catalog's shared logger.
 func NewRecsClient(baseURL string, hc *http.Client, log *logger.Logger) *RecsClient {
 	if baseURL == "" {
 		baseURL = defaultRecsBaseURL
