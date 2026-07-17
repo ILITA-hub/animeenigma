@@ -589,6 +589,18 @@ func (s *CatalogService) SyncAnnouncements(ctx context.Context, limit, seedBackf
 			enrichPool = append(enrichPool, seeds...)
 		}
 	}
+
+	// Dedupe enrichPool by anime ID: announced titles may also appear in list-referenced seeds.
+	seen := make(map[string]bool)
+	deduped := make([]*domain.Anime, 0, len(enrichPool))
+	for _, a := range enrichPool {
+		if !seen[a.ID] {
+			seen[a.ID] = true
+			deduped = append(deduped, a)
+		}
+	}
+	enrichPool = deduped
+
 	for _, a := range enrichPool {
 		select {
 		case <-ctx.Done():
