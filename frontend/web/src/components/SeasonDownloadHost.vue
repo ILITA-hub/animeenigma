@@ -16,6 +16,7 @@
           :season-count="seasonFlow.targets.length"
           :duration-min="seasonFlow.durationMin ?? undefined"
           :report="(seasonFlow.report as CapabilityReport | null)"
+          :verify="contentVerify.report.value"
           :initial-combo="(seasonFlow.combo as Combo | null)"
           :sub-options="subOptions"
           :load-teams="loadTeams"
@@ -41,6 +42,7 @@ import { seasonFlow, confirmSeasonDownload, cancelSeasonDownload, consumeSeasonN
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { useToast } from '@/composables/useToast'
 import { useProviderResolver } from '@/composables/aePlayer/useProviderResolver'
+import { useContentVerify } from '@/composables/aePlayer/useContentVerify'
 import type { Combo, AudioKind, SubtitleTrack } from '@/types/aePlayer'
 import type { CapabilityReport } from '@/types/capabilities'
 import type { SubPref, SubOption } from '@/offline/types'
@@ -55,6 +57,18 @@ function loadTeams(provider: string, audio: AudioKind): Promise<string[]> {
   const req = seasonFlow.request
   return req ? resolver.listTeams(provider, req.animeId, audio) : Promise.resolve([])
 }
+
+// ─── Content-verify (dynamic probe polling) ───────────────────────────────────
+// This host is a global singleton (mounted once in App.vue, outside AePlayer's
+// tree) — it can't receive AePlayer's live contentVerify.report, so it runs its
+// own lightweight fetch-while-open poll, same composable, same "unverified →
+// RAW-only" fallback DownloadDialog already has by default. Active only while
+// the quality-chooser dialog is actually visible (phase 'choose') — matches the
+// player's own "poll while the user hasn't committed to playback yet" scope,
+// translated to "poll while the user hasn't confirmed the download yet".
+const animeIdRef = computed(() => seasonFlow.request?.animeId ?? '')
+const verifyActive = computed(() => seasonFlow.phase === 'choose')
+const contentVerify = useContentVerify(animeIdRef, verifyActive)
 
 // Labels are i18n'd here — the flow module stays translation-free.
 const subOptions = computed<SubOption[]>(() => [
