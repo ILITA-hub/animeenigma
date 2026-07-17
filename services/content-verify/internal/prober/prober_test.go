@@ -139,6 +139,7 @@ func TestProbeVerified(t *testing.T) {
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
 
 	u := queue.Unit{AnimeID: "a1", Provider: "animejoy", Key: domain.UnitKey{Server: "animejoy"}, Episode: 1}
 	v := p.Probe(context.Background(), u, 0)
@@ -164,6 +165,7 @@ func TestProbeUnreachable404(t *testing.T) {
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
 
 	u := queue.Unit{AnimeID: "missing", Provider: "animejoy", Key: domain.UnitKey{Server: "animejoy"}, Episode: 1}
 	v := p.Probe(context.Background(), u, 2)
@@ -183,6 +185,7 @@ func TestProbeUnreachableFirstFragmentFailure(t *testing.T) {
 	ffmpeg := writeFailingFFmpeg(t, t.TempDir()) // every ffmpeg invocation fails
 	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
 
 	u := queue.Unit{AnimeID: "a1", Provider: "animejoy", Key: domain.UnitKey{Server: "animejoy"}, Episode: 1}
 	v := p.Probe(context.Background(), u, 1)
@@ -202,6 +205,7 @@ func TestProbePartialExtractionTolerated(t *testing.T) {
 	ffmpeg := writeFlakyFFmpeg(t, t.TempDir()) // fragment idx 1 always fails
 	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
 
 	u := queue.Unit{AnimeID: "a1", Provider: "animejoy", Key: domain.UnitKey{Server: "animejoy"}, Episode: 1}
 	v := p.Probe(context.Background(), u, 0)
@@ -221,6 +225,7 @@ func TestProbeSoftsubsFromTracks(t *testing.T) {
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
 
 	u := queue.Unit{AnimeID: "a1", Provider: "gogoanime", Key: domain.UnitKey{Server: "hd-1", Category: "sub"}, Episode: 1, EpisodeID: "ep-1"}
 	v := p.Probe(context.Background(), u, 0)
@@ -251,6 +256,7 @@ func TestProbeEpisodeFallbackToOne(t *testing.T) {
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
 
 	u := queue.Unit{AnimeID: "a1", Provider: "animejoy", Key: domain.UnitKey{Server: "animejoy"}, Episode: 5}
 	v := p.Probe(context.Background(), u, 0)
@@ -280,6 +286,7 @@ func TestProbeScraperNoEpisodeFallback(t *testing.T) {
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
 
 	u := queue.Unit{AnimeID: "a1", Provider: "gogoanime", Key: domain.UnitKey{Server: "hd-1", Category: "sub"}, Episode: 5, EpisodeID: "ep-5"}
 	v := p.Probe(context.Background(), u, 0)
@@ -314,6 +321,7 @@ func TestProbeBudgetExpiredDuringResolveIsInconclusive(t *testing.T) {
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -368,4 +376,36 @@ func floatsEqual(a, b []float64) bool {
 		}
 	}
 	return true
+}
+
+// A cold resolve failure (transient 5xx — Camoufox session still warming)
+// must be retried and succeed once the upstream answers; only a 404 is a
+// final "no stream" answer.
+func TestProbeResolveRetriesColdFailure(t *testing.T) {
+	var calls int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/anime/a1/animejoy/stream", func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) < 3 {
+			w.WriteHeader(http.StatusBadGateway) // cold sidecar
+			return
+		}
+		_, _ = w.Write([]byte(`{"success":true,"data":{"url":"https://cdn.example/v.mp4","exp":"1","sig":"s","referer":""}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
+	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
+	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
+	p.retryWait = 0 // no warm-up waits in tests
+
+	u := queue.Unit{AnimeID: "a1", Provider: "animejoy", Key: domain.UnitKey{Server: "animejoy"}, Episode: 1}
+	v := p.Probe(context.Background(), u, 0)
+
+	if v.Status != domain.StatusVerified {
+		t.Fatalf("status: got %q want verified after retry: %+v", v.Status, v)
+	}
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Fatalf("resolve calls: got %d want 3 (2 cold failures + 1 success)", got)
+	}
 }

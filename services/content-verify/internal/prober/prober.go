@@ -25,24 +25,35 @@ const (
 	fragmentSeconds = 30
 	baseFragments   = 3
 	maxFragments    = 6
+
+	// Stream-resolve warm-up retries: engine=browser resolves routinely fail
+	// COLD (Camoufox session still warming / pool contention — catalog's own
+	// scraper client caps at ~40s) and succeed on a retry once the sidecar
+	// session is warm; the session outlives the failed request (the
+	// probe-timeout-vs-session-TTL effect), so waiting and re-asking is
+	// exactly what a user pressing play again does.
+	resolveAttempts  = 3
+	resolveRetryWait = 25 * time.Second
 )
 
 type Prober struct {
-	cat     *catalogclient.Client
-	gateway string
-	ffmpeg  string
-	workDir string
-	runner  AnalyzerRunner
-	hc      *http.Client
-	log     *logger.Logger
-	now     func() time.Time
+	cat       *catalogclient.Client
+	gateway   string
+	ffmpeg    string
+	workDir   string
+	runner    AnalyzerRunner
+	hc        *http.Client
+	log       *logger.Logger
+	now       func() time.Time
+	retryWait time.Duration // between resolve attempts; tests zero it
 }
 
 func New(cat *catalogclient.Client, gatewayURL, ffmpegPath, workDir string, runner AnalyzerRunner, log *logger.Logger) *Prober {
 	// 60s playlist-fetch timeout: Kodik/solodcdn edges cold-start in up to
 	// 45s (documented edge-failover patience) — 15s misread that as dead.
 	return &Prober{cat: cat, gateway: gatewayURL, ffmpeg: ffmpegPath, workDir: workDir,
-		runner: runner, hc: &http.Client{Timeout: 60 * time.Second}, log: log, now: time.Now}
+		runner: runner, hc: &http.Client{Timeout: 60 * time.Second}, log: log, now: time.Now,
+		retryWait: resolveRetryWait}
 }
 
 // resolveStream fetches the unit's stream, falling back to episode 1 when
@@ -59,12 +70,35 @@ func (p *Prober) resolveStream(ctx context.Context, u queue.Unit) (*catalogclien
 			return p.cat.AnimejoyStream(ctx, u.AnimeID, u.Provider, ep)
 		}
 	}
-	st, err := try(u.Episode)
+	// attempt retries cold failures (see resolveAttempts) but never a 404 —
+	// "no stream exists" is an answer, only transport/5xx failures warm up.
+	attempt := func(ep int) (*catalogclient.Stream, error) {
+		var lastErr error
+		for i := 0; i < resolveAttempts; i++ {
+			if i > 0 {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(p.retryWait):
+				}
+			}
+			st, err := try(ep)
+			if err == nil {
+				return st, nil
+			}
+			if errors.Is(err, catalogclient.ErrNotFound) || ctx.Err() != nil {
+				return nil, err
+			}
+			lastErr = err
+		}
+		return nil, lastErr
+	}
+	st, err := attempt(u.Episode)
 	if err == nil {
 		return st, u.Episode, nil
 	}
 	if u.Episode > 1 && u.EpisodeID == "" { // ep-numbered providers only
-		if st, err2 := try(1); err2 == nil {
+		if st, err2 := attempt(1); err2 == nil {
 			return st, 1, nil
 		}
 	}
