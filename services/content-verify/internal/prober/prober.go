@@ -160,6 +160,7 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 	// unanimous looks to clear the threshold)? Pull extra fragments (up to
 	// maxFragments total) and re-assemble.
 	if needsMoreFragments(v.Audio, lid.Fragments) && len(offsets) > baseFragments {
+		nBase := len(wavs)
 		for i, seek := range offsets[baseFragments:] {
 			idx := baseFragments + i
 			if idx >= maxFragments {
@@ -169,9 +170,14 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 				wavs = append(wavs, wav)
 			}
 		}
-		if extra, err := p.runner.LID(ctx, wavs); err == nil {
-			lid = extra
-			v.Audio = AssembleAudio(lid.Fragments)
+		// LID only the NEW wavs and merge — lid.py analyzes each wav
+		// independently, so re-transcribing the base fragments buys nothing,
+		// and this branch is hot now (every borderline dub takes it).
+		if len(wavs) > nBase {
+			if extra, err := p.runner.LID(ctx, wavs[nBase:]); err == nil {
+				lid.Fragments = append(lid.Fragments, extra.Fragments...)
+				v.Audio = AssembleAudio(lid.Fragments)
+			}
 		}
 	}
 	v.Sample = domain.SampleInfo{Fragments: len(wavs), SpeechSeconds: totalSpeech(lid.Fragments)}
