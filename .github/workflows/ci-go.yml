@@ -89,6 +89,14 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      # fpcalc (libchromaprint-tools) lets content-verify's opskip.py
+      # --selftest run its real-fpcalc rate guard — the regression test for
+      # the fpcalc default -length 120 window-truncation bug. Without the
+      # binary the selftest silently skips that guard and TestOpskipPySelftest
+      # green means nothing for it.
+      - name: Install fpcalc for the opskip selftest rate guard
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libchromaprint-tools python3-numpy
+
       - name: Run tests
         run: ./scripts/test-go.sh -cover -race
         env:

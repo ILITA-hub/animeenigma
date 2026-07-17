@@ -223,10 +223,12 @@ def selftest():
     assert best_common_segment(dup, dup.copy(), rate, A) == "duplicate", \
         "identical inputs must report duplicate"
 
-    # real-fpcalc guard: fingerprint a synthesized wav and require the FULL
-    # duration to be covered at chromaprint's ~8fps. Catches the fpcalc
-    # default -length 120 cap (which silently truncated 480s windows to
-    # 120s and skewed every rate-derived boundary by ~4x).
+    # real-fpcalc guard: fingerprint a synthesized wav as long as the
+    # production extraction window (480s) and require the FULL duration to
+    # be covered at chromaprint's ~8fps. Catches the fpcalc default
+    # -length 120 cap (which silently truncated 480s windows to 120s and
+    # skewed every rate-derived boundary by ~4x) — and, because the file
+    # matches the real window length, any partial cap below 480s too.
     import shutil
     if shutil.which("fpcalc"):
         import tempfile
@@ -237,12 +239,12 @@ def selftest():
                 w.setsampwidth(2)
                 w.setframerate(16000)
                 w.writeframes(
-                    (rng.normal(0, 3000, size=16000 * 200).astype(np.int16)).tobytes())
+                    (rng.normal(0, 3000, size=16000 * 480).astype(np.int16)).tobytes())
             wav_path = tmp.name
         try:
             fp, fp_rate = fpcalc(wav_path)
             assert 6 <= fp_rate <= 10, f"fpcalc rate {fp_rate:.2f} (window truncated? -length regression)"
-            assert len(fp) >= 190 * 6, f"fpcalc frames {len(fp)} do not cover 200s"
+            assert len(fp) >= 470 * 6, f"fpcalc frames {len(fp)} do not cover 480s"
         finally:
             import os
             os.unlink(wav_path)

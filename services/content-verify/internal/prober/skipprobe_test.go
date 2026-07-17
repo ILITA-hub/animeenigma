@@ -459,9 +459,15 @@ func TestSkipProbeLocateMP4EdTerminalNoMatch(t *testing.T) {
 }
 
 // TestOpskipPySelftest runs the real analyzer's built-in self-check
-// (synthetic fingerprints, no fpcalc/ffmpeg dependency) end-to-end. Skipped
-// when python3 isn't on PATH — this is an environment smoke test, not a
-// substitute for the fake-runner unit tests above.
+// end-to-end. The matching/tie-break/duplicate asserts use synthetic
+// fingerprints (no external tools); the fpcalc -length regression guard
+// inside the selftest additionally needs the fpcalc binary and SILENTLY
+// SKIPS when it's absent — "selftest OK" without fpcalc proves nothing
+// about window truncation. CI installs libchromaprint-tools for exactly
+// this reason (see .github/workflows/ci-go.yml); locally, install it or
+// rely on the Docker image. Skipped entirely when python3 isn't on PATH —
+// this is an environment smoke test, not a substitute for the fake-runner
+// unit tests above.
 func TestOpskipPySelftest(t *testing.T) {
 	python3, err := exec.LookPath("python3")
 	if err != nil {
