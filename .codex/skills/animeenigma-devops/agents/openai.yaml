@@ -1,0 +1,4 @@
+interface:
+  display_name: "AnimeEnigma DevOps"
+  short_description: "Guarded AnimeEnigma git release workflow"
+  default_prompt: "Use $animeenigma-devops to run the guarded AnimeEnigma worktree, land, deploy, and cleanup workflow."

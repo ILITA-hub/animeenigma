@@ -1,0 +1,4 @@
+interface:
+  display_name: "AnimeEnigma Todos"
+  short_description: "Safely manage AnimeEnigma todo entries"
+  default_prompt: "Use $animeenigma-todos to safely create, extend, list, or triage an AnimeEnigma todo."

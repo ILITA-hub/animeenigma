@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# Guarded Codex git workflow for AnimeEnigma.
+#
+# Commands:
+#   start <slug>
+#   land <conventional-subject> <path> [<path> ...]
+#   stage <path> [<path> ...]
+#   continue
+#   sync-push
+#   changelog-conflict <fix|feature|perf> <message>
+#   cleanup <worktree-path>
+#   status
+set -euo pipefail
+
+SHARED="/data/animeenigma"
+
+die() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
+
+usage() {
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+current_root() {
+  git rev-parse --show-toplevel 2>/dev/null || die "not inside a git worktree"
+}
+
+require_animeenigma_repo() {
+  local root shared_remote current_remote
+  root="$(current_root)"
+  shared_remote="$(git -C "$SHARED" remote get-url origin)"
+  current_remote="$(git -C "$root" remote get-url origin)"
+  [ "$current_remote" = "$shared_remote" ] || die "origin is not AnimeEnigma"
+}
+
+require_codex_worktree() {
+  local root branch
+  require_animeenigma_repo
+  root="$(current_root)"
+  [ "$root" != "$SHARED" ] || die "refusing to mutate the shared main mirror"
+  branch="$(git -C "$root" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  [[ "$branch" == codex/* ]] || die "branch must be namespaced under codex/"
+}
+
+require_paths() {
+  [ "$#" -gt 0 ] || die "pass explicit repository paths"
+  local path
+  for path in "$@"; do
+    [ -n "$path" ] || die "empty path"
+    [[ "$path" != /* ]] || die "absolute paths are not allowed: $path"
+    [[ "/$path/" != *"/../"* ]] || die "parent traversal is not allowed: $path"
+    [[ "$path" != -* ]] || die "option-like paths are not allowed: $path"
+  done
+}
+
+rebase_latest() {
+  echo "== fetch + rebase origin/main =="
+  git fetch origin main
+  if ! GIT_EDITOR=true git rebase origin/main; then
+    echo "STOP: resolve the rebase conflict with ae-codex-git stage/continue." >&2
+    exit 2
+  fi
+}
+
+push_main() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if git push origin HEAD:main; then
+      echo "LANDED: $(git log --oneline -1)"
+      return 0
+    fi
+    echo "push race ($attempt/5): refreshing origin/main" >&2
+    git fetch origin main
+    if git merge-base --is-ancestor HEAD origin/main; then
+      echo "LANDED: commit is already on origin/main"
+      return 0
+    fi
+    if ! GIT_EDITOR=true git rebase origin/main; then
+      echo "STOP: push-race rebase conflicted; resolve then run ae-codex-git continue." >&2
+      exit 2
+    fi
+  done
+  die "push failed after 5 attempts"
+}
+
+cmd_start() {
+  [ "$#" -eq 1 ] || die "usage: ae-codex-git start <slug>"
+  local slug="$1" stamp branch path
+  [[ "$slug" =~ ^[a-z0-9][a-z0-9-]{0,47}$ ]] || die "slug must match [a-z0-9][a-z0-9-]{0,47}"
+  [ -z "$(git -C "$SHARED" status --porcelain)" ] || die "shared main mirror is dirty"
+  [ "$(git -C "$SHARED" symbolic-ref --quiet --short HEAD)" = "main" ] || die "shared mirror is not on main"
+
+  git -C "$SHARED" fetch origin main
+  stamp="$(date -u +%Y%m%d%H%M%S)-$$"
+  branch="codex/${slug}-${stamp}"
+  path="/tmp/ae-${slug}-${stamp}"
+  git -C "$SHARED" worktree add -b "$branch" "$path" origin/main
+  echo "WORKTREE=$path"
+  echo "BRANCH=$branch"
+}
+
+cmd_land() {
+  [ "$#" -ge 2 ] || die "usage: ae-codex-git land <conventional-subject> <path> [<path> ...]"
+  local subject="$1" root
+  shift
+  require_codex_worktree
+  require_paths "$@"
+  [[ "$subject" =~ ^(feat|fix|refactor|perf|test|docs|chore|build|ci)(\([^\)]+\))?!?:[[:space:]].+ ]] ||
+    die "commit subject must use conventional-commit form"
+  root="$(current_root)"
+  cd "$root"
+  git diff --cached --quiet || die "index already contains staged changes"
+  git add -- "$@"
+  git diff --cached --quiet && die "nothing staged"
+  echo "== staged =="
+  git diff --cached --name-only | sed 's/^/  /'
+  git commit -m "$subject" -m $'Co-Authored-By: 0neymik0 <0neymik0@gmail.com>\nCo-Authored-By: Codex <noreply@openai.com>'
+  rebase_latest
+  push_main
+}
+
+cmd_stage() {
+  require_codex_worktree
+  require_paths "$@"
+  git add -- "$@"
+  git diff --cached --name-only
+}
+
+cmd_continue() {
+  require_codex_worktree
+  local rebase_merge rebase_apply
+  rebase_merge="$(git rev-parse --git-path rebase-merge)"
+  rebase_apply="$(git rev-parse --git-path rebase-apply)"
+  [ -d "$rebase_merge" ] || [ -d "$rebase_apply" ] || die "no rebase is in progress"
+  GIT_EDITOR=true git rebase --continue
+  rebase_latest
+  push_main
+}
+
+cmd_sync_push() {
+  require_codex_worktree
+  [ -z "$(git status --porcelain)" ] || die "worktree must be clean before sync-push"
+  rebase_latest
+  push_main
+}
+
+cmd_changelog_conflict() {
+  [ "$#" -eq 2 ] || die "usage: ae-codex-git changelog-conflict <fix|feature|perf> <message>"
+  local type="$1" message="$2" root conflicts unexpected
+  [[ "$type" =~ ^(fix|feature|perf)$ ]] || die "invalid changelog type"
+  [ -n "${message//[[:space:]]/}" ] || die "empty changelog message"
+  require_codex_worktree
+  root="$(current_root)"
+  cd "$root"
+  conflicts="$(git diff --name-only --diff-filter=U)"
+  [ -n "$conflicts" ] || die "no conflicted files"
+  unexpected="$(printf '%s\n' "$conflicts" | grep -Ev '^frontend/web/(changelog\.full|public/changelog)\.json$' || true)"
+  [ -z "$unexpected" ] || die "non-changelog conflicts require manual resolution: $unexpected"
+  git restore --source=origin/main -- frontend/web/changelog.full.json frontend/web/public/changelog.json
+  bin/ae-changelog-add.sh "$type" "$message"
+  git add -- frontend/web/changelog.full.json frontend/web/public/changelog.json
+  echo "changelog conflicts resolved and staged; run ae-codex-git continue"
+}
+
+cmd_cleanup() {
+  [ "$#" -eq 1 ] || die "usage: ae-codex-git cleanup <worktree-path>"
+  local path branch head
+  require_animeenigma_repo
+  path="$(realpath -e "$1")"
+  [[ "$path" == /tmp/ae-* ]] || die "only /tmp/ae-* worktrees can be removed"
+  git -C "$SHARED" worktree list --porcelain | grep -Fxq "worktree $path" || die "unknown worktree: $path"
+  branch="$(git -C "$path" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  [[ "$branch" == codex/* ]] || die "refusing to remove non-Codex branch"
+  [ -z "$(git -C "$path" status --porcelain)" ] || die "worktree has uncommitted changes"
+  git -C "$SHARED" fetch origin main
+  head="$(git -C "$path" rev-parse HEAD)"
+  git -C "$SHARED" merge-base --is-ancestor "$head" origin/main || die "worktree HEAD is not on origin/main"
+  git -C "$SHARED" worktree remove "$path"
+  git -C "$SHARED" worktree prune
+  git -C "$SHARED" update-ref -d "refs/heads/$branch" "$head"
+  echo "CLEANED: $path ($branch)"
+}
+
+cmd_status() {
+  require_animeenigma_repo
+  git -C "$SHARED" worktree list --porcelain | awk '
+    /^worktree / { wt=$2 }
+    /^branch refs\/heads\/codex\// { print wt "\t" substr($2,12) }
+  '
+}
+
+command="${1:-}"
+[ -n "$command" ] || { usage; exit 2; }
+shift
+case "$command" in
+  start) cmd_start "$@" ;;
+  land) cmd_land "$@" ;;
+  stage) cmd_stage "$@" ;;
+  continue) cmd_continue "$@" ;;
+  sync-push) cmd_sync_push "$@" ;;
+  changelog-conflict) cmd_changelog_conflict "$@" ;;
+  cleanup) cmd_cleanup "$@" ;;
+  status) cmd_status "$@" ;;
+  help|-h|--help) usage ;;
+  *) die "unknown command: $command" ;;
+esac

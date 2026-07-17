@@ -1,0 +1,49 @@
+# Automatically allow AnimeEnigma's guarded Codex workflows. The scripts own
+# validation: fixed repository/volume roots, explicit paths, status allowlists,
+# non-force pushes, Codex-only worktrees, and clean ancestor-only cleanup.
+
+prefix_rule(
+    pattern=["bin/ae-codex-git"],
+    decision="allow",
+    justification="Run the guarded AnimeEnigma Codex worktree, commit, rebase, push, conflict, and cleanup workflow",
+    match=[
+        "bin/ae-codex-git start skip-intro",
+        "bin/ae-codex-git land fix(catalog): cache only real timings services/catalog/internal/handler/skip_times.go",
+        "bin/ae-codex-git cleanup /tmp/ae-skip-intro-20260717010101-123",
+    ],
+)
+
+prefix_rule(
+    pattern=["/data/animeenigma/bin/ae-codex-git"],
+    decision="allow",
+    justification="Run the guarded AnimeEnigma Codex git workflow from any completed worktree",
+)
+
+prefix_rule(
+    pattern=["bin/feedback-todo"],
+    decision="allow",
+    justification="Create, extend, list, and triage manual AnimeEnigma todos through the guarded helper",
+    match=[
+        "bin/feedback-todo list --limit 20",
+        "bin/feedback-todo exists 2026-07-08T14-46-10_tNeymik_manual",
+        "bin/feedback-todo status 2026-07-08T14-46-10_tNeymik_manual in_progress",
+    ],
+)
+
+prefix_rule(
+    pattern=["/data/animeenigma/bin/feedback-todo"],
+    decision="allow",
+    justification="Use the guarded AnimeEnigma todo helper from any worktree",
+)
+
+prefix_rule(
+    pattern=["bin/feedback-status"],
+    decision="allow",
+    justification="Set only AI-authorized AnimeEnigma feedback statuses through the guarded helper",
+)
+
+prefix_rule(
+    pattern=["/data/animeenigma/bin/feedback-status"],
+    decision="allow",
+    justification="Set only AI-authorized AnimeEnigma feedback statuses from any worktree",
+)

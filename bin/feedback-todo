@@ -1,0 +1,303 @@
+#!/usr/bin/env python3
+"""Guarded host helper for AnimeEnigma manual todo entries.
+
+Commands intentionally never print report descriptions or diagnostics:
+  list [--limit N] [--status STATUS]
+  exists REPORT_ID
+  create --category CATEGORY --text TEXT [--updated-by ACTOR]
+  upsert REPORT_ID --marker NAME --text TEXT [--updated-by ACTOR]
+  status REPORT_ID STATUS [--updated-by ACTOR]
+
+`resolved` remains human-only and is refused by both this helper and the
+existing feedback-status helper.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import NoReturn
+
+
+REPORTS_DIR = Path("/var/lib/docker/volumes/docker_player_reports/_data")
+STATUS_FILE = REPORTS_DIR / "_status.json"
+ROOT = Path(__file__).resolve().parent.parent
+ID_RE = re.compile(r"^[0-9A-Za-z:_\-]+$")
+MARKER_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+ACTOR_RE = re.compile(r"^[0-9A-Za-z_-]{1,64}$")
+ALLOWED_CATEGORIES = {"", "bug", "issue", "feature"}
+AI_STATUSES = {"new", "in_progress", "ai_done", "not_relevant"}
+MAX_TEXT_CHARS = 20_000
+
+
+def fail(message: str) -> NoReturn:
+    print(f"FAIL: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def validate_id(report_id: str) -> None:
+    if (
+        not ID_RE.fullmatch(report_id)
+        or report_id.startswith("_")
+        or ".." in report_id
+    ):
+        fail("invalid report id")
+
+
+def report_path(report_id: str) -> Path:
+    validate_id(report_id)
+    path = REPORTS_DIR / f"{report_id}.json"
+    if not path.is_file():
+        fail(f"todo not found: {report_id}")
+    return path
+
+
+def load_json(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"cannot read {path.name}: {exc}")
+    if not isinstance(value, dict):
+        fail(f"invalid object in {path.name}")
+    return value
+
+
+def load_todo(report_id: str) -> tuple[Path, dict]:
+    path = report_path(report_id)
+    report = load_json(path)
+    if report.get("source") != "manual":
+        fail("refusing to edit a non-manual user report")
+    if report.get("player_type") not in (None, "", "feedback"):
+        fail("refusing to edit a player diagnostic report")
+    if not isinstance(report.get("description"), str):
+        fail("todo description is missing or invalid")
+    return path, report
+
+
+def atomic_write(path: Path, value: dict) -> None:
+    data = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.stem}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp_path, 0o600)
+        os.replace(temp_path, path)
+    except OSError as exc:
+        try:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        fail(f"cannot persist {path.name}: {exc}")
+
+
+def validate_text(text: str) -> str:
+    text = text.strip()
+    if not text:
+        fail("text must not be empty")
+    if len(text) > MAX_TEXT_CHARS:
+        fail(f"text exceeds {MAX_TEXT_CHARS} characters")
+    return text
+
+
+def validate_actor(actor: str) -> None:
+    if not ACTOR_RE.fullmatch(actor):
+        fail("updated-by must match [0-9A-Za-z_-]{1,64}")
+
+
+class StoreLock:
+    def __enter__(self) -> None:
+        if not REPORTS_DIR.is_dir():
+            fail("feedback store is not available")
+        self.handle = (REPORTS_DIR / "_todo.lock").open("a+", encoding="utf-8")
+        fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
+
+    def __exit__(self, *_: object) -> None:
+        fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
+        self.handle.close()
+
+
+def load_statuses() -> dict:
+    if not STATUS_FILE.is_file():
+        return {}
+    return load_json(STATUS_FILE)
+
+
+def cmd_list(args: argparse.Namespace) -> None:
+    statuses = load_statuses()
+    rows: list[tuple[str, str, str, str]] = []
+    for path in sorted(REPORTS_DIR.glob("*.json"), reverse=True):
+        if path.name.startswith("_"):
+            continue
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(report, dict) or report.get("source") != "manual":
+            continue
+        report_id = path.stem
+        status_entry = statuses.get(report_id, {})
+        status = status_entry.get("status", "new") if isinstance(status_entry, dict) else "new"
+        if args.status and status != args.status:
+            continue
+        category = str(report.get("category", ""))
+        timestamp = str(report.get("timestamp", ""))
+        rows.append((report_id, status, category, timestamp))
+        if len(rows) >= args.limit:
+            break
+    print("id\tstatus\tcategory\ttimestamp")
+    for row in rows:
+        print("\t".join(row))
+
+
+def cmd_exists(args: argparse.Namespace) -> None:
+    _, report = load_todo(args.report_id)
+    statuses = load_statuses()
+    status_entry = statuses.get(args.report_id, {})
+    status = status_entry.get("status", "new") if isinstance(status_entry, dict) else "new"
+    print(
+        f"{args.report_id}: exists status={status} "
+        f"category={report.get('category', '')} description_chars={len(report['description'])}"
+    )
+
+
+def cmd_create(args: argparse.Namespace) -> None:
+    text = validate_text(args.text)
+    validate_actor(args.updated_by)
+    if args.category not in ALLOWED_CATEGORIES:
+        fail("invalid category")
+    with StoreLock():
+        now = datetime.now(timezone.utc)
+        base = f"{now.strftime('%Y-%m-%dT%H-%M-%S')}_{args.updated_by}_manual"
+        report_id = base
+        for suffix in range(2, 52):
+            if not (REPORTS_DIR / f"{report_id}.json").exists():
+                break
+            report_id = f"{base}-{suffix}"
+        else:
+            fail("could not allocate todo id")
+        report = {
+            "user_id": "",
+            "username": args.updated_by,
+            "player_type": "feedback",
+            "kind": "todo",
+            "source": "manual",
+            "category": args.category,
+            "description": text,
+            "timestamp": now.isoformat().replace("+00:00", "Z"),
+            "console_logs": [],
+            "network_logs": [],
+            "page_html": "",
+            "attachments": [],
+            "todo_updated_at": now.isoformat().replace("+00:00", "Z"),
+            "todo_updated_by": args.updated_by,
+        }
+        atomic_write(REPORTS_DIR / f"{report_id}.json", report)
+    print(f"CREATED: {report_id}")
+
+
+def cmd_upsert(args: argparse.Namespace) -> None:
+    if not MARKER_RE.fullmatch(args.marker):
+        fail("marker must match [a-z0-9][a-z0-9-]{0,63}")
+    text = validate_text(args.text)
+    validate_actor(args.updated_by)
+    with StoreLock():
+        path, report = load_todo(args.report_id)
+        start = f"<!-- ae-todo:{args.marker}:start -->"
+        end = f"<!-- ae-todo:{args.marker}:end -->"
+        block = f"{start}\n{text}\n{end}"
+        description = report["description"].rstrip()
+        pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.DOTALL)
+        if pattern.search(description):
+            description = pattern.sub(lambda _: block, description, count=1)
+            action = "UPDATED"
+        else:
+            description = f"{description}\n\n{block}" if description else block
+            action = "ADDED"
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        report["description"] = description
+        report["todo_updated_at"] = now
+        report["todo_updated_by"] = args.updated_by
+        atomic_write(path, report)
+    print(f"{action}: {args.report_id} section={args.marker}")
+
+
+def cmd_status(args: argparse.Namespace) -> None:
+    load_todo(args.report_id)
+    validate_actor(args.updated_by)
+    if args.status == "resolved":
+        fail("resolved is human-only")
+    if args.status not in AI_STATUSES:
+        fail("invalid AI status")
+    completed = subprocess.run(
+        [
+            str(ROOT / "bin" / "feedback-status"),
+            args.report_id,
+            args.status,
+            args.updated_by,
+        ],
+        check=False,
+    )
+    raise SystemExit(completed.returncode)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    list_parser = sub.add_parser("list")
+    list_parser.add_argument("--limit", type=int, default=50, choices=range(1, 201))
+    list_parser.add_argument("--status", choices=sorted(AI_STATUSES | {"resolved"}))
+    list_parser.set_defaults(func=cmd_list)
+
+    exists_parser = sub.add_parser("exists")
+    exists_parser.add_argument("report_id")
+    exists_parser.set_defaults(func=cmd_exists)
+
+    create_parser = sub.add_parser("create")
+    create_parser.add_argument("--category", default="", choices=sorted(ALLOWED_CATEGORIES))
+    create_parser.add_argument("--text", required=True)
+    create_parser.add_argument("--updated-by", default="codex")
+    create_parser.set_defaults(func=cmd_create)
+
+    upsert_parser = sub.add_parser("upsert")
+    upsert_parser.add_argument("report_id")
+    upsert_parser.add_argument("--marker", required=True)
+    upsert_parser.add_argument("--text", required=True)
+    upsert_parser.add_argument("--updated-by", default="codex")
+    upsert_parser.set_defaults(func=cmd_upsert)
+
+    status_parser = sub.add_parser("status")
+    status_parser.add_argument("report_id")
+    status_parser.add_argument("status")
+    status_parser.add_argument("--updated-by", default="codex")
+    status_parser.set_defaults(func=cmd_status)
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    args.func(args)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
