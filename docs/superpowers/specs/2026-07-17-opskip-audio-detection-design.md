@@ -86,6 +86,7 @@ Per (episode, side): ~480s of lowest-quality audio ≈ 15–40 MB traffic, ffmpe
 - **mp4 (animejoy) EDs are terminal `no_match` in v1** — without a known duration the tail window's absolute times can't be computed; AniSkip covers EDs there.
 - **ae (firstparty) has no skip lane in v1** (no episode list in the capability pass); AniSkip fallback holds.
 - Residual accepted: a title where one kind never bootstraps keeps its last un-paired episode on the 6h `pending_fp` cycle (bounded to ~1 episode; the movie/single-episode case from §8).
+- **Live-found deltas (2026-07-17 evening, `ea065073`):** fpcalc runs with `-length 0` — its default `-length 120` silently fingerprinted only the first 2 minutes of each 480s window while reporting the full duration, skewing the frame rate (and every boundary time) ~4×; fpcalc with an uncapped length exits non-zero after printing complete JSON (decoder EOF), so the analyzer judges success by parseable output. Pair mode reports `duplicate` (common run ≥300s at mean sim ≥0.95) when a provider serves the same file for both episodes (seen live: nineanime/Frieren) — the prober maps it to `pending_fp` and never stores a fingerprint. Equal-length capped runs tie-break on higher mean similarity (first-lag-wins picked arbitrary musically-self-similar alignments).
 
 ## 10. Verification
 
