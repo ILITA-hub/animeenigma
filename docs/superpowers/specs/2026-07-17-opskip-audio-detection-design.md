@@ -80,7 +80,14 @@ Per (episode, side): ~480s of lowest-quality audio ≈ 15–40 MB traffic, ffmpe
 - Submitting timings to AniSkip (the feedback's admin-marking annex) — unchanged, deferred.
 - Classic Kodik iframe — no player control there.
 
-## 9. Verification
+## 9. Implementation deltas (v1, 2026-07-17 — post final review)
+
+- **Per-kind bootstrap:** the pair task carries `PairKinds` — only the kinds with no stored fingerprint are pair-bootstrapped; kinds that already have fingerprints are located on both pair episodes instead (no duplicate fingerprints, no OP-blocks-ED asymmetry). Re-pair triggers per kind too (both adjacent rows `no_match` on that kind).
+- **mp4 (animejoy) EDs are terminal `no_match` in v1** — without a known duration the tail window's absolute times can't be computed; AniSkip covers EDs there.
+- **ae (firstparty) has no skip lane in v1** (no episode list in the capability pass); AniSkip fallback holds.
+- Residual accepted: a title where one kind never bootstraps keeps its last un-paired episode on the 6h `pending_fp` cycle (bounded to ~1 episode; the movie/single-episode case from §8).
+
+## 10. Verification
 
 - Unit tests: opskip.py pair/locate on synthetic fingerprints; enumeration ordering; blending precedence in the catalog handler.
 - Live: pick an ongoing with no AniSkip data (roster/queue evidence), let the queue bootstrap, verify the skip chip appears in aePlayer at the right seconds vs. manual scrub.
