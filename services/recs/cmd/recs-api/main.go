@@ -12,7 +12,8 @@
 //  4. gormtrace.InstrumentGORM — no-op unless TRACING_ENABLED=true.
 //  5. metrics.StartDBPoolCollector — pool stats to Prometheus.
 //  6. db.AutoMigrate — service-owned tables ONLY (rec_user_signals,
-//     rec_population_signals, rec_completion_co_occurrence, rec_events).
+//     rec_population_signals, rec_completion_co_occurrence, rec_events,
+//     rec_announcement_dismissals).
 //     anime_list / watch_history / animes stay owned by player + catalog;
 //     recs reads them without migrating them.
 //  7. FK + index backfill (idempotent raw SQL — Postgres 16 has no
