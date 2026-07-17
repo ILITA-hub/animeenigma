@@ -86,9 +86,9 @@ func main() {
 			MinMatch: cfg.SkipMinMatch, MaxMatch: cfg.SkipMaxMatch, SimThreshold: cfg.SkipSimThreshold,
 		}
 		skipPb := prober.NewSkipProber(catClient, cfg.GatewayURL, cfg.FFmpegPath, cfg.WorkDir, runner, store, skipCfg, log)
-		worker := service.NewWorker(cfg.Interval, cfg.UnitBudget, shedWatcher, engine, pb, store, skipPb, store, cfg.SkipBudget, log)
+		worker := service.NewWorker(cfg.Interval, cfg.Workers, cfg.UnitBudget, shedWatcher, engine, pb, store, skipPb, store, cfg.SkipBudget, log)
 		worker.Start(ctx)
-		log.Infow("content-verify worker started", "interval", cfg.Interval, "budget", cfg.UnitBudget)
+		log.Infow("content-verify worker started", "interval", cfg.Interval, "workers", cfg.Workers, "budget", cfg.UnitBudget)
 	}
 
 	router := transport.NewRouter(h, log, collector)

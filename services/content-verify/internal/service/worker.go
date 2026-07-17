@@ -28,7 +28,7 @@ type VerdictStore interface {
 }
 
 type Claimer interface {
-	Claim(ctx context.Context) (*queue.Unit, *queue.SkipTask, bool, error)
+	Claim(ctx context.Context) (*queue.Unit, *queue.SkipTask, func(), error)
 }
 
 // SkipUnitProber is satisfied by *prober.SkipProber. Named to avoid
@@ -46,15 +46,20 @@ type SkipStore interface {
 	SkipByAnime(ctx context.Context, animeID string) ([]domain.SkipTiming, error)
 }
 
-// Worker throttles content-verify probing to one unit at a time (one Claim +
-// Probe per tick). That throttle is enforced entirely in-process — Claimer
-// has no distributed lease/lock, so a second replica ticking concurrently
-// would happily Claim and Probe its own unit at the same time as this one.
-// The k8s deployment MUST stay at replicas: 1 (see
+// Worker throttles content-verify probing via N in-process goroutines (see
+// workers/NewWorker), each running its own staggered timer loop and claiming
+// independently. The throttle — one probe per (unit, provider) at a time —
+// is enforced entirely by the Engine's in-flight leases (see
+// queue.Engine.Claim), which are in-process-only state: there is no
+// distributed lease/lock, so a second REPLICA ticking concurrently would
+// happily Claim and Probe its own unit at the same time as this one. The
+// k8s deployment MUST stay at replicas: 1 (see
 // deploy/kustomize/base/services/content-verify.yaml) or units get
-// double-probed.
+// double-probed — CV_WORKERS is how this service scales concurrency, NOT
+// the replica count.
 type Worker struct {
 	interval   time.Duration
+	workers    int
 	budget     time.Duration
 	shed       ShedChecker
 	claimer    Claimer
@@ -66,38 +71,63 @@ type Worker struct {
 	log        *logger.Logger
 }
 
-func NewWorker(interval, budget time.Duration, shed ShedChecker, claimer Claimer, prober UnitProber, store VerdictStore,
+func NewWorker(interval time.Duration, workers int, budget time.Duration, shed ShedChecker, claimer Claimer, prober UnitProber, store VerdictStore,
 	skipProber SkipUnitProber, skipStore SkipStore, skipBudget time.Duration, log *logger.Logger) *Worker {
-	return &Worker{interval: interval, budget: budget, shed: shed, claimer: claimer, prober: prober, store: store,
+	if workers < 1 {
+		workers = 1
+	}
+	return &Worker{interval: interval, workers: workers, budget: budget, shed: shed, claimer: claimer, prober: prober, store: store,
 		skipProber: skipProber, skipStore: skipStore, skipBudget: skipBudget, log: log}
 }
 
+// Start launches w.workers in-process probe loops.
 func (w *Worker) Start(ctx context.Context) {
-	go func() {
-		// Timer (not ticker): the interval pause runs AFTER each probe
-		// completes — spec: "перерыв между пробами - 1 минута". This lets
-		// the unit budget exceed the interval (browser-engine resolves alone
-		// take 45-90s) without ticks stacking up behind a slow probe.
-		timer := time.NewTimer(w.interval)
-		defer timer.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				w.tick(ctx)
-				timer.Reset(w.interval)
-			}
-		}
-	}()
+	for i := 0; i < w.workers; i++ {
+		go w.runLoop(ctx, i)
+	}
 }
 
-func (w *Worker) tick(ctx context.Context) {
-	if w.shed != nil && w.shed.ShouldShed(1) {
+// runLoop is one probe loop. i (0-based) sets two things: the initial-tick
+// stagger, so w.workers loops don't all fire in lockstep, and shedMin =
+// w.workers-i, the governor level at which THIS loop stops claiming —
+// higher-indexed loops shed first as pressure rises, so degradation removes
+// workers one at a time rather than all-or-nothing. With workers=1, i=0
+// gives shedMin=1: today's single-loop semantics, unchanged.
+func (w *Worker) runLoop(ctx context.Context, i int) {
+	shedMin := w.workers - i
+	// Timer (not ticker): the interval pause runs AFTER each probe
+	// completes — spec: "перерыв между пробами - 1 минута". This lets
+	// the unit budget exceed the interval (browser-engine resolves alone
+	// take 45-90s) without ticks stacking up behind a slow probe.
+	initial := w.interval * time.Duration(i+1) / time.Duration(w.workers)
+	timer := time.NewTimer(initial)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			w.tick(ctx, shedMin)
+			timer.Reset(w.interval)
+		}
+	}
+}
+
+// tick runs one claim+probe cycle for a single worker loop. shedMin is that
+// loop's graduated-shedding floor (see runLoop) — the loop sits out this
+// tick when the governor-reported degradation level is at or above it.
+func (w *Worker) tick(ctx context.Context, shedMin int) {
+	if w.shed != nil && w.shed.ShouldShed(shedMin) {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("degraded").Inc()
 		return
 	}
-	unit, task, _, err := w.claimer.Claim(ctx)
+	unit, task, release, err := w.claimer.Claim(ctx)
+	// release runs AFTER this tick's persist (deferred to function return,
+	// past every branch below) — required so another worker can't re-claim
+	// the same unit/provider before its verdict row is actually written.
+	if release != nil {
+		defer release()
+	}
 	if err != nil {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("claim_error").Inc()
 		if w.log != nil {

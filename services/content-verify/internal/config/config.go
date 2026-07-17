@@ -25,6 +25,7 @@ type Config struct {
 	CatalogURL   string        // internal catalog base (membership, structure, streams)
 	GatewayURL   string        // public gateway base — ffmpeg reads hls-proxy through it
 	Interval     time.Duration // pause between probes (after each probe completes)
+	Workers      int           // concurrent in-process probe loops (clamped 1..4)
 	UnitBudget   time.Duration // hard per-unit budget; may exceed Interval (pause runs after the probe)
 	ReprobeTTL   time.Duration // verified/inconclusive re-probe age
 	TopLimit     int           // top-N membership
@@ -57,7 +58,8 @@ func Load() (*Config, error) {
 		},
 		CatalogURL: getEnv("CV_CATALOG_URL", "http://catalog:8081"),
 		GatewayURL: getEnv("CV_GATEWAY_URL", "http://gateway:8000"),
-		Interval:   getEnvDuration("CV_INTERVAL", time.Minute),
+		Interval:   getEnvDuration("CV_INTERVAL", 10*time.Second),
+		Workers:    clampWorkers(getEnvInt("CV_WORKERS", 2)),
 		// 240s: 120s browser-engine stream resolve + fragment pulls + whisper.
 		// Live-E2E measured 2026-07-17 (spec §2 revisit): 50s starved every
 		// real (non-synth) unit — resolve alone exceeded it.
@@ -82,6 +84,21 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("CV_INTERVAL too small: %s", cfg.Interval)
 	}
 	return cfg, nil
+}
+
+// clampWorkers silently clamps CV_WORKERS to [1,4] — the in-process probe
+// pool has no supervisor to report a misconfiguration to, so out-of-range
+// values are corrected rather than rejected (unlike the Interval floor,
+// which errors: a too-small interval is a resource-exhaustion risk, an
+// out-of-range worker count is not).
+func clampWorkers(n int) int {
+	if n < 1 {
+		return 1
+	}
+	if n > 4 {
+		return 4
+	}
+	return n
 }
 
 func getEnv(key, def string) string {

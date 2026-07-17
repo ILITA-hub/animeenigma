@@ -1122,7 +1122,7 @@ services:
       context: ..
       dockerfile: services/content-verify/Dockerfile
     container_name: animeenigma-content-verify
-    mem_limit: 1g
+    mem_limit: 2g # 2 concurrent CV_WORKERS probe loops => up to 2 whisper runs at once, don't fit in 1g
     restart: unless-stopped
     environment:
       SERVER_PORT: 8101

@@ -13,8 +13,11 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Server.Port != 8101 {
 		t.Fatalf("port = %d, want 8101", cfg.Server.Port)
 	}
-	if cfg.Interval != time.Minute || cfg.UnitBudget != 240*time.Second {
+	if cfg.Interval != 10*time.Second || cfg.UnitBudget != 240*time.Second {
 		t.Fatalf("throttle defaults wrong: %s / %s", cfg.Interval, cfg.UnitBudget)
+	}
+	if cfg.Workers != 2 {
+		t.Fatalf("Workers default = %d, want 2", cfg.Workers)
 	}
 	if !cfg.SkipEnabled {
 		t.Fatal("SkipEnabled default = false, want true")
@@ -54,5 +57,50 @@ func TestLoadAllowsBudgetOverInterval(t *testing.T) {
 	}
 	if cfg.UnitBudget != 10*time.Minute {
 		t.Fatalf("UnitBudget = %s, want 10m", cfg.UnitBudget)
+	}
+}
+
+func TestLoadIntervalTooSmallErrors(t *testing.T) {
+	t.Setenv("CV_INTERVAL", "5s")
+	if _, err := Load(); err == nil {
+		t.Fatal("CV_INTERVAL below 10s must error")
+	}
+}
+
+func TestLoadIntervalAtFloorAccepted(t *testing.T) {
+	t.Setenv("CV_INTERVAL", "10s")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("CV_INTERVAL at the 10s floor must be accepted: %v", err)
+	}
+	if cfg.Interval != 10*time.Second {
+		t.Fatalf("Interval = %s, want 10s", cfg.Interval)
+	}
+}
+
+func TestLoadWorkersClamped(t *testing.T) {
+	tests := []struct {
+		env  string
+		want int
+	}{
+		{"0", 1},
+		{"-3", 1},
+		{"1", 1},
+		{"3", 3},
+		{"4", 4},
+		{"5", 4},
+		{"99", 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			t.Setenv("CV_WORKERS", tt.env)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Workers != tt.want {
+				t.Fatalf("CV_WORKERS=%s => Workers = %d, want %d", tt.env, cfg.Workers, tt.want)
+			}
+		})
 	}
 }

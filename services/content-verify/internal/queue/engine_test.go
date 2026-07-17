@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,20 +23,27 @@ import (
 // engineFixture wires a single-candidate world: one ongoing anime "o1" with
 // exactly one probeable unit (gogoanime / hd-1 / sub). capsHandler lets each
 // test override the /capabilities response to simulate enumerate failure.
+// capsHits counts requests to the /capabilities endpoint (atomically, so it
+// stays correct under TestClaimSnapshotConcurrent's concurrent goroutines) —
+// used by the enum-cache test to assert the cache actually serves repeat
+// Claims instead of re-fetching.
 type engineFixture struct {
-	engine *Engine
-	sig    *signals.Signals
-	store  *repo.Store
-	srv    *httptest.Server
+	engine   *Engine
+	sig      *signals.Signals
+	store    *repo.Store
+	srv      *httptest.Server
+	capsHits *int64
 }
 
 func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	t.Helper()
+	capsHits := new(int64)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":1}],"top":[]}}`))
 	})
 	mux.HandleFunc("/api/anime/o1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt64(capsHits, 1)
 		if capsFail {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -82,13 +90,60 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	// to a skip task. See TestClaimReturnsSkipTaskWhenVerifyLaneSettled for
 	// skip-lane coverage.
 	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil)
+	return &engineFixture{engine: e, sig: sig, store: store, srv: srv, capsHits: capsHits}
+}
+
+// newTwoAnimeGogoanimeFixture wires a two-candidate world: ongoing anime
+// "o1" and "o2", each with exactly one probeable unit on the SAME provider
+// (gogoanime / hd-1 / sub) — used to test provider exclusivity ACROSS
+// anime, not just within one title's pending units.
+func newTwoAnimeGogoanimeFixture(t *testing.T) *engineFixture {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F1","episodes_aired":1},{"id":"o2","name":"F2","episodes_aired":1}],"top":[]}}`))
+	})
+	for _, id := range []string{"o1", "o2"} {
+		mux.HandleFunc("/api/anime/"+id+"/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte(`{"success":true,"data":{"families":[{"family":"others","providers":[
+				{"provider":"gogoanime","state":"active","group":"en"}]}]}}`))
+		})
+		mux.HandleFunc("/api/anime/"+id+"/scraper/episodes", func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte(`{"success":true,"data":{"episodes":[{"id":"ep-1","number":1}]}}`))
+		})
+		mux.HandleFunc("/api/anime/"+id+"/scraper/servers", func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte(`{"success":true,"data":{"servers":[{"id":"hd-1","name":"HD-1","type":"sub"}]}}`))
+		})
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	sig := signals.New(rdb)
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ContentVerification{}); err != nil {
+		t.Fatal(err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
+	store := repo.NewStore(db)
+
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
 func TestClaimHappyPath(t *testing.T) {
 	f := newEngineFixture(t, false)
 	ctx := context.Background()
-	u, task, ongoing, err := f.engine.Claim(ctx)
+	u, task, release, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,36 +153,37 @@ func TestClaimHappyPath(t *testing.T) {
 	if task != nil {
 		t.Fatalf("verify claim must not also carry a skip task: %+v", task)
 	}
-	if !ongoing {
-		t.Fatal("o1 is ongoing; Claim must report ongoing=true")
+	if release == nil {
+		t.Fatal("expected a non-nil release func when a unit is claimed")
 	}
 	if u.AnimeID != "o1" || u.Provider != "gogoanime" || u.Key.Server != "hd-1" {
 		t.Fatalf("unexpected unit: %+v", u)
 	}
+	release()
 }
 
 func TestClaimSkipsCoolingCandidate(t *testing.T) {
 	f := newEngineFixture(t, false)
 	ctx := context.Background()
 	f.sig.SetCooldown(ctx, "o1", time.Hour)
-	u, task, _, err := f.engine.Claim(ctx)
+	u, task, release, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u != nil || task != nil {
-		t.Fatalf("cooling candidate must not be claimed, got unit=%+v task=%+v", u, task)
+	if u != nil || task != nil || release != nil {
+		t.Fatalf("cooling candidate must not be claimed, got unit=%+v task=%+v release=%v", u, task, release != nil)
 	}
 }
 
 func TestClaimEnumerateFailureSetsOneHourCooldown(t *testing.T) {
 	f := newEngineFixture(t, true) // capabilities endpoint 500s
 	ctx := context.Background()
-	u, task, _, err := f.engine.Claim(ctx)
+	u, task, release, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u != nil || task != nil {
-		t.Fatalf("broken enumerate must yield no claim, got unit=%+v task=%+v", u, task)
+	if u != nil || task != nil || release != nil {
+		t.Fatalf("broken enumerate must yield no claim, got unit=%+v task=%+v release=%v", u, task, release != nil)
 	}
 	if !f.sig.InCooldown(ctx, "o1") {
 		t.Fatal("enumerate failure must set a cooldown so we don't hammer a broken title")
@@ -146,15 +202,171 @@ func TestClaimEmptyPendingSetsCooldownTTL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, task, _, err := f.engine.Claim(ctx)
+	u, task, release, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u != nil || task != nil {
-		t.Fatalf("fully-verified title with skip lane disabled must yield no claim, got unit=%+v task=%+v", u, task)
+	if u != nil || task != nil || release != nil {
+		t.Fatalf("fully-verified title with skip lane disabled must yield no claim, got unit=%+v task=%+v release=%v", u, task, release != nil)
 	}
 	if !f.sig.InCooldown(ctx, "o1") {
 		t.Fatal("idle (nothing pending) title must be cooled down (CooldownTTL)")
+	}
+}
+
+// TestClaimLeaseExcludesSecondClaimUntilReleased covers the in-flight unit
+// lease: a claim held (not yet released) must exclude a second Claim from
+// re-offering the SAME unit, and releasing it must make the unit claimable
+// again.
+func TestClaimLeaseExcludesSecondClaimUntilReleased(t *testing.T) {
+	f := newEngineFixture(t, false)
+	ctx := context.Background()
+
+	u1, _, release1, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1 == nil || release1 == nil {
+		t.Fatal("expected a claimed unit with a non-nil release func")
+	}
+
+	// Single-unit fixture: with the only unit already leased, a second Claim
+	// must find the candidate blocked (not idle-from-emptiness) and move on
+	// to nothing — idle overall.
+	u2, task2, release2, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2 != nil || task2 != nil || release2 != nil {
+		t.Fatalf("second claim while the only unit is in-flight must be idle, got unit=%+v task=%+v release=%v", u2, task2, release2 != nil)
+	}
+
+	release1()
+
+	u3, _, release3, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u3 == nil || release3 == nil {
+		t.Fatal("expected the unit to be claimable again after release")
+	}
+	if u3.Key != u1.Key || u3.Provider != u1.Provider {
+		t.Fatalf("expected the same unit reclaimed: %+v vs %+v", u3, u1)
+	}
+	release3()
+}
+
+// TestClaimReleaseIsIdempotentAndDoesNotFreeAnotherLease covers double-
+// release safety: calling a stale release a second time — after its lease
+// was already freed and reclaimed by someone else — must not panic and must
+// not free that OTHER claimant's still-active lease.
+func TestClaimReleaseIsIdempotentAndDoesNotFreeAnotherLease(t *testing.T) {
+	f := newEngineFixture(t, false)
+	ctx := context.Background()
+
+	_, _, release1, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if release1 == nil {
+		t.Fatal("expected a lease on the first claim")
+	}
+	release1() // frees the lease
+
+	u2, _, release2, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2 == nil || release2 == nil {
+		t.Fatal("expected the unit reclaimable after the first release")
+	}
+
+	release1() // stale re-invocation: must be a no-op, not a panic
+
+	u3, task3, release3, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u3 != nil || task3 != nil || release3 != nil {
+		t.Fatalf("release1's stale second call must not free release2's active lease, got unit=%+v task=%+v release=%v", u3, task3, release3 != nil)
+	}
+
+	release2()
+}
+
+// TestClaimBlockedDoesNotSetCooldown covers the "blocked ≠ settled" rule: a
+// candidate whose only pending unit is currently leased by another in-flight
+// claim must NOT be cooled down — it still has real work, just held
+// elsewhere — unlike a genuinely idle (nothing pending) candidate.
+func TestClaimBlockedDoesNotSetCooldown(t *testing.T) {
+	f := newEngineFixture(t, false)
+	ctx := context.Background()
+
+	_, _, release1, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if release1 == nil {
+		t.Fatal("expected a lease on the first claim")
+	}
+	defer release1()
+
+	if _, _, _, err := f.engine.Claim(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if f.sig.InCooldown(ctx, "o1") {
+		t.Fatal("a candidate blocked by an in-flight lease must not be cooled down")
+	}
+}
+
+// TestClaimProviderExclusivityAcrossAnime covers cross-anime provider
+// exclusivity: two DIFFERENT anime whose only pending unit both use
+// "gogoanime" must not both be claimable at once — one probe per provider,
+// globally, regardless of which title it belongs to.
+func TestClaimProviderExclusivityAcrossAnime(t *testing.T) {
+	f := newTwoAnimeGogoanimeFixture(t)
+	ctx := context.Background()
+
+	u1, task1, release1, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1 == nil || task1 != nil || release1 == nil {
+		t.Fatalf("expected a claimed unit with a release func, got unit=%+v task=%+v release=%v", u1, task1, release1 != nil)
+	}
+	defer release1()
+
+	u2, task2, release2, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u2 != nil || task2 != nil || release2 != nil {
+		t.Fatalf("o1 and o2 both use gogoanime; the second claim must be blocked by provider exclusivity, got unit=%+v task=%+v release=%v", u2, task2, release2 != nil)
+	}
+}
+
+// TestClaimEnumerationCachedAcrossClaims covers the enumeration cache: two
+// sequential Claims within enumCacheTTL for the same candidate must hit the
+// catalog /capabilities endpoint only once.
+func TestClaimEnumerationCachedAcrossClaims(t *testing.T) {
+	f := newEngineFixture(t, false)
+	ctx := context.Background()
+
+	_, _, release1, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if release1 == nil {
+		t.Fatal("expected a lease on the first claim")
+	}
+	defer release1()
+
+	if _, _, _, err := f.engine.Claim(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := atomic.LoadInt64(f.capsHits); got != 1 {
+		t.Fatalf("capabilities endpoint hit %d times across 2 claims, want 1 (enum cache should serve the second)", got)
 	}
 }
 
@@ -216,7 +428,7 @@ func newSkipEngineFixture(t *testing.T, skipEnabled bool) *engineFixture {
 func TestClaimReturnsSkipTaskWhenVerifyLaneSettled(t *testing.T) {
 	f := newSkipEngineFixture(t, true)
 	ctx := context.Background()
-	u, task, ongoing, err := f.engine.Claim(ctx)
+	u, task, release, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,9 +438,10 @@ func TestClaimReturnsSkipTaskWhenVerifyLaneSettled(t *testing.T) {
 	if task == nil {
 		t.Fatal("expected a skip task once the verify lane is settled")
 	}
-	if !ongoing {
-		t.Fatal("o1 is ongoing; Claim must report ongoing=true")
+	if release == nil {
+		t.Fatal("expected a non-nil release func when a skip task is claimed")
 	}
+	defer release()
 	if task.Unit.Provider != "kodik" || task.Unit.Episode != 1 {
 		t.Fatalf("unexpected skip unit: %+v", task.Unit)
 	}
@@ -240,12 +453,12 @@ func TestClaimReturnsSkipTaskWhenVerifyLaneSettled(t *testing.T) {
 func TestClaimSkipDisabledFallsToCooldown(t *testing.T) {
 	f := newSkipEngineFixture(t, false)
 	ctx := context.Background()
-	u, task, _, err := f.engine.Claim(ctx)
+	u, task, release, err := f.engine.Claim(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u != nil || task != nil {
-		t.Fatalf("skip lane disabled: expected nil unit and nil task, got unit=%+v task=%+v", u, task)
+	if u != nil || task != nil || release != nil {
+		t.Fatalf("skip lane disabled: expected nil unit and nil task, got unit=%+v task=%+v release=%v", u, task, release != nil)
 	}
 	if !f.sig.InCooldown(ctx, "o1") {
 		t.Fatal("settled verify lane with skip lane disabled must cooldown like idle (exactly as today)")
