@@ -51,6 +51,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
+  // Raw-library operator surface (/admin/raw-library): admins plus the
+  // dedicated `librarian` role. Librarian grants nothing else admin-gated —
+  // mirrors the gateway's LibraryRoleMiddleware on /api/library/*.
+  const canAccessLibrary = computed(
+    () => isAdmin.value || user.value?.role === 'librarian',
+  )
 
   // ── Watch Together guest identity ──
   // DELIBERATELY separate from `token` / isAuthenticated: a guest holds a
@@ -388,6 +394,7 @@ export const useAuthStore = defineStore('auth', () => {
     error,
     isAuthenticated,
     isAdmin,
+    canAccessLibrary,
     isRefreshing,
     wtGuestToken,
     wtGuestUser,

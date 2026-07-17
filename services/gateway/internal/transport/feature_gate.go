@@ -14,6 +14,10 @@ func canAccess(a audience, userID, role string) bool {
 	if role == "guest" {
 		return false
 	}
+	// Librarian = user for feature access (mirrors policy domain.CanAccess).
+	if role == "librarian" {
+		role = "user"
+	}
 	if userID != "" && audienceContains(a.DenyUsers, userID) {
 		return false
 	}

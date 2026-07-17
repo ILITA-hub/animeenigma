@@ -17,8 +17,8 @@ import (
 // jobs group (POST/GET/GET-by-id/DELETE) under the existing
 // /api/library route group; auth is enforced at the gateway (see
 // services/gateway/internal/transport/router.go — the /api/library/*
-// prefix has JWTValidationMiddleware + AdminRoleMiddleware applied
-// for all routes except /health).
+// prefix has JWTValidationMiddleware + LibraryRoleMiddleware (admin OR
+// librarian) applied for all routes except /health).
 //
 // The jwtConfig argument is retained for forward compat — Phase 4+
 // may want server-side enforcement on a subset of routes.

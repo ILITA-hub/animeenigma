@@ -265,7 +265,7 @@ After ANY implementation work (features, bug fixes, refactoring), **always invok
 | rooms | 8084 | /metrics | Game rooms, WebSocket |
 | scheduler | 8085 | /metrics | Background jobs |
 | themes | 8086 | /metrics | Anime OP/ED ratings |
-| library | 8089 | /metrics | Library service (BitTorrent → HLS → MinIO, admin-only) |
+| library | 8089 | /metrics | Library service (BitTorrent → HLS → MinIO, admin/librarian-only) |
 | notifications | 8090 | /metrics | Generic notification engine (new episodes, future types) |
 | watch-together | 8091 | /metrics | Co-watch service (Redis-only; rooms + sync + chat) |
 | recs | 8094 | /metrics | Recommendation engine (extracted from player, spec 2026-06-11) |
@@ -276,7 +276,7 @@ After ANY implementation work (features, bug fixes, refactoring), **always invok
 
 ### Gateway Routing
 All API requests go through the gateway:
-- `/api/auth/*`→auth:8080 · `/api/anime/*`, `/api/genres`, `/api/kodik/*`→catalog:8081 · `/api/admin/*`→catalog:8081 (protected) · `/api/streaming/*`→streaming:8082 · `/api/users/*`→player:8083 · `/api/rooms/*`, `/api/game/*`→rooms:8084 · `/api/themes/*`→themes:8086 (public+protected+admin) · `/api/library/*`→library:8089 (admin-only; routes added incrementally in v0.2 Phases 2–5)
+- `/api/auth/*`→auth:8080 · `/api/anime/*`, `/api/genres`, `/api/kodik/*`→catalog:8081 · `/api/admin/*`→catalog:8081 (protected) · `/api/streaming/*`→streaming:8082 · `/api/users/*`→player:8083 · `/api/rooms/*`, `/api/game/*`→rooms:8084 · `/api/themes/*`→themes:8086 (public+protected+admin) · `/api/library/*`→library:8089 (admin OR `librarian` role; routes added incrementally in v0.2 Phases 2–5)
 - `/api/notifications/*`→notifications:8090 (JWT required; internal `/internal/notifications` NOT exposed — Docker-network-only)
 - `/api/users/recs`, `/api/events/rec`→recs:8094 (optional JWT); `/api/admin/recs/*`→recs:8094 (admin); internal `/internal/recs/recompute-hint` NOT exposed — Docker-network-only, player fires it on watch activity
 - `/api/watch-together/*`→watch-together:8091 (JWT for HTTP; WS uses `?token=` query param since browsers can't set custom headers on WS upgrade)

@@ -295,6 +295,47 @@ func TestAdminRoleMiddleware_NoClaims(t *testing.T) {
 	}
 }
 
+// LibraryRoleMiddleware: admin and librarian pass; regular user, guest, and
+// missing claims are 403. Librarian grants ONLY the /api/library/* group.
+func TestLibraryRoleMiddleware(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := LibraryRoleMiddleware(inner)
+
+	cases := []struct {
+		name string
+		role authz.Role
+		want int
+	}{
+		{"admin allowed", authz.RoleAdmin, http.StatusOK},
+		{"librarian allowed", authz.RoleLibrarian, http.StatusOK},
+		{"regular user blocked", authz.RoleUser, http.StatusForbidden},
+		{"guest blocked", authz.RoleGuest, http.StatusForbidden},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/library/jobs", nil)
+			claims := &authz.Claims{UserID: "u1", Username: "u", Role: c.role}
+			req = req.WithContext(authz.ContextWithClaims(req.Context(), claims))
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			if w.Code != c.want {
+				t.Errorf("role %q: got status %d, want %d", c.role, w.Code, c.want)
+			}
+		})
+	}
+
+	t.Run("no claims blocked", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/library/jobs", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusForbidden {
+			t.Errorf("request without claims should be blocked with 403, got status %d", w.Code)
+		}
+	})
+}
+
 // TestRouter_AdminScraperProxy_AdminJWT_Returns200 — valid admin JWT routes
 // /api/admin/scraper/health through to the scraper backend with the path
 // rewritten to /scraper/health/admin (Plan 17-03 acceptance).

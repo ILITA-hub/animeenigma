@@ -35,6 +35,13 @@ func TestCanAccess_order(t *testing.T) {
 	if canAccess(audience{Roles: []string{"everyone"}}, "g1", "guest") {
 		t.Fatal("guest is never granted")
 	}
+	// Librarian normalizes to user (mirrors policy domain.CanAccess).
+	if !canAccess(audience{Roles: []string{"user"}}, "u1", "librarian") {
+		t.Fatal("librarian should access user-tier flags")
+	}
+	if canAccess(adminFlag, "u1", "librarian") {
+		t.Fatal("librarian should NOT access admin-only flags")
+	}
 }
 
 func TestFeatureAllowed_coldStart_failsafe(t *testing.T) {

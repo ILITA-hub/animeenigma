@@ -14,7 +14,13 @@ const (
 	RoleEveryone = "everyone"
 	RoleUser     = "user"
 	RoleAdmin    = "admin"
-	RoleGuest    = "guest"
+	// RoleLibrarian = user + the raw-library surface (gated at the gateway by
+	// LibraryRoleMiddleware, NOT by feature flags). For flag evaluation it is
+	// normalized to RoleUser so librarians never lose user-tier features and
+	// never gain admin-tier ones. Flags therefore keep targeting exactly
+	// user/admin/everyone — librarian is not a targetable audience.
+	RoleLibrarian = "librarian"
+	RoleGuest     = "guest"
 )
 
 // RouletteMasterKey is the reserved flag key holding the global on/off switch for
@@ -89,6 +95,10 @@ func (f FeatureFlag) Audience() Audience {
 func (f FeatureFlag) CanAccess(userID, role string) bool {
 	if role == RoleGuest {
 		return false
+	}
+	// Librarian = user for feature access (see the role constant's doc).
+	if role == RoleLibrarian {
+		role = RoleUser
 	}
 	if userID != "" && contains(f.DenyUsers, userID) {
 		return false

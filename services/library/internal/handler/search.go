@@ -20,10 +20,10 @@ type Searcher interface {
 	FetchAll(ctx context.Context, p service.SearchParams) (service.Result, error)
 }
 
-// SearchHandler serves GET /api/library/search, the admin-only search
-// endpoint that fans out across Nyaa + AnimeTosho via the
-// SearchAggregator. Auth is enforced by the gateway's
-// JWTValidationMiddleware + AdminRoleMiddleware on the /api/library/*
+// SearchHandler serves GET /api/library/search, the operator-only search
+// endpoint (admin OR librarian role) that fans out across Nyaa + AnimeTosho
+// via the SearchAggregator. Auth is enforced by the gateway's
+// JWTValidationMiddleware + LibraryRoleMiddleware on the /api/library/*
 // prefix (services/gateway/internal/transport/router.go); the library
 // service itself trusts what the gateway forwards.
 type SearchHandler struct {

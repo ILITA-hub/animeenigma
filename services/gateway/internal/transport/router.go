@@ -841,7 +841,7 @@ func NewRouterWithCleanup(
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 				r.Use(userRateLimit)
-				r.Use(AdminRoleMiddleware)
+				r.Use(LibraryRoleMiddleware) // admin OR librarian
 				r.HandleFunc("/*", proxyHandler.ProxyToLibrary)
 			})
 		})
@@ -1218,6 +1218,20 @@ func MaxBodySizeMiddleware(maxBytes int64, exemptPrefixes ...string) func(http.H
 func AdminRoleMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !authz.IsAdmin(r.Context()) {
+			httputil.Forbidden(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// LibraryRoleMiddleware gates the raw-library surface (/api/library/*): admins
+// plus the dedicated librarian role. Librarian grants ONLY this group — every
+// other admin-gated group stays on AdminRoleMiddleware.
+func LibraryRoleMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		role := authz.RoleFromContext(r.Context())
+		if role != authz.RoleAdmin && role != authz.RoleLibrarian {
 			httputil.Forbidden(w)
 			return
 		}

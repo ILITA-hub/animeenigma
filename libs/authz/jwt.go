@@ -15,6 +15,11 @@ type Role string
 const (
 	RoleUser  Role = "user"
 	RoleAdmin Role = "admin"
+	// RoleLibrarian is a regular user who additionally operates the raw-library
+	// admin surface (/admin/raw-library + gateway /api/library/*). It grants
+	// NOTHING else admin-gated; policy-service feature flags treat it as
+	// RoleUser (see services/policy domain.CanAccess + the gateway mirror).
+	RoleLibrarian Role = "librarian"
 	// RoleGuest is an ephemeral, login-less identity used only to JOIN Watch
 	// Together rooms via an invite link. Guest tokens are access-only (no
 	// refresh token, no DB user row) and MUST be rejected by every protected

@@ -23,6 +23,11 @@ func TestCanAccess(t *testing.T) {
 		{"empty audience denies", flag(nil, nil, nil), "u1", RoleUser, false},
 		{"user flag, user role", flag([]string{RoleUser}, nil, nil), "u1", RoleUser, true},
 		{"user flag, anonymous denied", flag([]string{RoleUser}, nil, nil), "", "", false},
+		// Librarian normalizes to user for flag evaluation: keeps user-tier
+		// features, gains no admin-tier ones.
+		{"user flag, librarian treated as user", flag([]string{RoleUser}, nil, nil), "u1", RoleLibrarian, true},
+		{"admin flag, librarian denied", flag([]string{RoleAdmin}, nil, nil), "u1", RoleLibrarian, false},
+		{"deny-list beats librarian normalization", flag([]string{RoleUser}, nil, []string{"u1"}), "u1", RoleLibrarian, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -261,7 +261,8 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/raw-library',
     name: 'admin-raw-library',
     component: () => import('@/views/admin/RawLibrary.vue'),
-    meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresAdmin: true }
+    // requiresLibraryAccess (NOT requiresAdmin): admin OR librarian role.
+    meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresLibraryAccess: true }
   },
   {
     // ① File Manager deep-link: backend (work|minio|s3) + catch-all folder path.
@@ -270,7 +271,7 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/raw-library/file-manager/:backend/:filepath(.*)*',
     name: 'admin-raw-library-files',
     component: () => import('@/views/admin/RawLibrary.vue'),
-    meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresAdmin: true },
+    meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresLibraryAccess: true },
   },
   {
     // User-facing "my feedback" page — own messages + triage status.
@@ -408,7 +409,12 @@ router.beforeEach(async (to, _from, next) => {
   // redirect. The router runs outside any component tree, so we hand off
   // via sessionStorage; App.vue picks it up on the next mount and shows a
   // dismissible red banner. Cleared after one read.
-  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+  // requiresLibraryAccess = raw-library operator gate: admin OR librarian
+  // (mirrors the gateway's LibraryRoleMiddleware on /api/library/*).
+  if (
+    (to.meta.requiresAdmin && !authStore.isAdmin) ||
+    (to.meta.requiresLibraryAccess && !authStore.canAccessLibrary)
+  ) {
     try {
       sessionStorage.setItem('admin_redirect_reason', 'admin.errors.notAdmin')
     } catch {

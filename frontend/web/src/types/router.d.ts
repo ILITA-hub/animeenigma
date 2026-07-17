@@ -12,6 +12,11 @@ declare module 'vue-router' {
     /** Route requires an admin user (router guard). */
     requiresAdmin?: boolean
     /**
+     * Raw-library operator surface: admin OR librarian role (router guard;
+     * mirrors the gateway's LibraryRoleMiddleware on /api/library/*).
+     */
+    requiresLibraryAccess?: boolean
+    /**
      * Page design runs behind the transparent fixed header (full-bleed
      * hero) — App.vue's <main> skips the default --header-offset padding
      * and the page owns its own top clearance.

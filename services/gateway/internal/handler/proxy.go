@@ -176,8 +176,8 @@ func (h *ProxyHandler) ProxyToFanficStream(w http.ResponseWriter, r *http.Reques
 
 // ProxyToLibrary proxies requests to the library service (workstream raw-jp / v0.2).
 // Phase 1 only exposes /health passthrough; Phases 2-5 add search + jobs + episodes
-// endpoints. Admin-protected routes (POST /jobs, DELETE /jobs/:id, etc.) are added
-// in later phases with JWTValidationMiddleware + AdminRoleMiddleware at the
+// endpoints. Protected routes (POST /jobs, DELETE /jobs/:id, etc.) are gated by
+// JWTValidationMiddleware + LibraryRoleMiddleware (admin OR librarian) at the
 // gateway router level.
 func (h *ProxyHandler) ProxyToLibrary(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "library")
