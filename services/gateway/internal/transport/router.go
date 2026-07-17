@@ -567,6 +567,7 @@ func NewRouterWithCleanup(
 			r.Use(userRateLimit)
 			r.HandleFunc("/users/recs", proxyHandler.ProxyToRecs)
 			r.HandleFunc("/users/recs/", proxyHandler.ProxyToRecs)
+			r.HandleFunc("/users/recs/*", proxyHandler.ProxyToRecs)
 		})
 
 		// Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug + force-recompute
