@@ -11,7 +11,7 @@
 // both stay null and the player overlay simply doesn't render the button.
 // The composable never throws to the caller.
 
-import { ref, watch, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { animeApi } from '@/api/client'
 
 // One skip segment as returned by aniskip v2 (camelCase passthrough from
@@ -62,6 +62,18 @@ export function useSkipTimes(
   // one — keeps the watch() array shape uniform below regardless of whether
   // combo-awareness is in play.
   const comboRef = combo ?? ref<SkipTimesComboContext | null>(null)
+
+  // Callers (useSkipIntro's getCombo) rebuild a fresh combo object on every
+  // recompute, including for fields that don't affect skip timings (server,
+  // audio, lang all live on the same PlayerState.combo the caller reads
+  // from). Watching comboRef directly would refire — and issue a real
+  // network request — on every one of those irrelevant changes. Collapse to
+  // a primitive key of only the fields that matter (animeId/provider/team)
+  // so the watch only trips on an actual per-encode-relevant change.
+  const comboKey = computed(() => {
+    const c = comboRef.value
+    return c?.animeId && c?.provider ? `${c.animeId}|${c.provider}|${c.team ?? ''}` : ''
+  })
 
   // Track the in-flight request so a fast scrub (ep 1 → ep 2 → ep 3) doesn't
   // race — only the latest fetch's result is allowed to update the refs.
@@ -133,11 +145,13 @@ export function useSkipTimes(
     }
   }
 
-  // Re-fetch whenever malId, episode, OR the combo (provider/team switch —
-  // per-encode timings differ) changes. `immediate: true` so the first
+  // Re-fetch whenever malId, episode, OR comboKey (provider/team switch —
+  // per-encode timings differ) changes. comboKey — not the raw combo object
+  // — so a server/audio/lang-only change (new object, same animeId/provider/
+  // team) does NOT trigger a redundant fetch. `immediate: true` so the first
   // render of the player triggers a fetch (the watcher otherwise only fires
   // on subsequent changes).
-  watch([malId, episode, comboRef], fetchSkipTimes, { immediate: true })
+  watch([malId, episode, comboKey], fetchSkipTimes, { immediate: true })
 
   return { opening, ending, loading, error, refresh: fetchSkipTimes }
 }

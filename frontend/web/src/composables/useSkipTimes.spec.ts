@@ -127,4 +127,36 @@ describe('useSkipTimes combo-awareness', () => {
     expect(getSkipTimes).toHaveBeenCalledTimes(2) // no extra fetch triggered by the late resolution
     expect(opening.value).toEqual({ start: 1, end: 2 }) // unchanged — stale response discarded
   })
+
+  it('does NOT refetch when the combo ref gets a new object with the same animeId/provider/team (e.g. a server-only switch), but DOES refetch on a real provider change', async () => {
+    // Regression: useSkipIntro's getCombo() computed rebuilds a fresh combo
+    // object literal on every recompute of PlayerState.combo, including for
+    // fields (server/audio/lang) that don't affect skip timings. Watching
+    // the raw combo object by identity would refire — and issue a real
+    // network request — on every one of those irrelevant changes.
+    getSkipTimes.mockResolvedValue(okResult())
+    const malId = ref<string | number | null>('123')
+    const episode = ref<number | null>(1)
+    const combo = ref<SkipTimesComboContext | null>({
+      animeId: 'anime-uuid', provider: 'gogoanime', team: 'TeamA',
+    })
+
+    useSkipTimes(malId, episode, combo)
+    await flushPromises()
+    expect(getSkipTimes).toHaveBeenCalledTimes(1)
+
+    // New object, identical animeId/provider/team — simulates a server-only
+    // switch (PlayerState.setServer spreads combo.value wholesale).
+    combo.value = { animeId: 'anime-uuid', provider: 'gogoanime', team: 'TeamA' }
+    await flushPromises()
+    expect(getSkipTimes).toHaveBeenCalledTimes(1) // unchanged — no redundant fetch
+
+    // A real provider change must still refetch.
+    combo.value = { animeId: 'anime-uuid', provider: 'animepahe', team: 'TeamA' }
+    await flushPromises()
+    expect(getSkipTimes).toHaveBeenCalledTimes(2)
+    expect(getSkipTimes).toHaveBeenLastCalledWith('123', 1, {
+      anime: 'anime-uuid', provider: 'animepahe', team: 'TeamA',
+    })
+  })
 })
