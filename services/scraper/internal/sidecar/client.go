@@ -127,6 +127,12 @@ type subtitle struct {
 	URL     string `json:"url"`
 	Label   string `json:"label"`
 	Default bool   `json:"default"`
+	// ProxyPath is the session-scoped sidecar /hls path ("/hls?sid=...&url=...")
+	// that fetches this subtitle through the resolving browser session, same as
+	// PlaylistProxyPath does for the master URL. Present from sidecar builds
+	// that proxy subtitles (2026-07-17); older builds omit it and toStream
+	// falls back to the raw URL for compatibility during a rolling redeploy.
+	ProxyPath string `json:"proxy_path,omitempty"`
 }
 
 type timeRange struct {
@@ -324,8 +330,17 @@ func (c *Client) toStream(d sessionData) *domain.Stream {
 		if s.URL == "" {
 			continue
 		}
+		// The raw subtitle URL lives on the same fingerprint-gated CDN family
+		// as the playlist (verified 2026-07-17: direct fetch 403s identically),
+		// so route it through the sidecar's own session /hls proxy exactly
+		// like the Source above — a bare ProxyPath-less entry (older sidecar)
+		// falls back to the raw URL unchanged.
+		file := s.URL
+		if s.ProxyPath != "" {
+			file = c.baseURL + s.ProxyPath
+		}
 		tracks = append(tracks, domain.Track{
-			File: s.URL, Label: s.Label, Kind: "captions", Default: s.Default,
+			File: file, Label: s.Label, Kind: "captions", Default: s.Default,
 		})
 	}
 	st := &domain.Stream{

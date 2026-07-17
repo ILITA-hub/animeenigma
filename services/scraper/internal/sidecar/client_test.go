@@ -19,6 +19,16 @@ const okBody = `{"success":true,"data":{
   "master_url":"https://s2.cinewave2.site/a/b/master.m3u8",
   "playlist_proxy_path":"/hls?sid=abc123&url=enc",
   "referer":"https://megaplay.buzz/",
+  "subtitles":[{"url":"https://x/eng.vtt","label":"English","default":true,"proxy_path":"/hls?sid=abc123&url=subenc"}],
+  "intro":{"start":0,"end":130},
+  "outro":{"start":1400,"end":1440}
+}}`
+
+const okBodyNoSubtitleProxyPath = `{"success":true,"data":{
+  "session_id":"abc123",
+  "master_url":"https://s2.cinewave2.site/a/b/master.m3u8",
+  "playlist_proxy_path":"/hls?sid=abc123&url=enc",
+  "referer":"https://megaplay.buzz/",
   "subtitles":[{"url":"https://x/eng.vtt","label":"English","default":true}],
   "intro":{"start":0,"end":130},
   "outro":{"start":1400,"end":1440}
@@ -61,8 +71,34 @@ func TestResolveEmbed_MapsSession(t *testing.T) {
 	if len(st.Tracks) != 1 || !st.Tracks[0].Default || st.Tracks[0].Kind != "captions" {
 		t.Errorf("tracks = %v", st.Tracks)
 	}
+	// The subtitle file is on the same fingerprint-gated CDN family as the
+	// playlist (2026-07-17 fix) — it must route through the sidecar's own
+	// /hls session proxy, NOT the raw upstream CDN URL (which 403s a direct
+	// fetch identically to the raw master URL).
+	if st.Tracks[0].File != srv.URL+"/hls?sid=abc123&url=subenc" {
+		t.Errorf("track file = %q; want sidecar /hls path", st.Tracks[0].File)
+	}
 	if st.Intro == nil || st.Intro.End != 130 || st.Outro == nil || st.Outro.Start != 1400 {
 		t.Errorf("intro/outro = %v %v", st.Intro, st.Outro)
+	}
+}
+
+func TestResolveEmbed_SubtitleFallsBackToRawURL_WhenSidecarOmitsProxyPath(t *testing.T) {
+	// Rolling-redeploy safety: an older sidecar build (Go redeployed first)
+	// won't send proxy_path yet — toStream must not crash or emit an empty
+	// File, it should fall back to the raw subtitle URL unchanged.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(okBodyNoSubtitleProxyPath))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 5*time.Second)
+	st, err := c.ResolveEmbed(context.Background(), "gogoanime", "https://gogoanime.me.uk/x", domain.CategorySub, "https://gogoanimes.fi")
+	if err != nil {
+		t.Fatalf("ResolveEmbed: %v", err)
+	}
+	if len(st.Tracks) != 1 || st.Tracks[0].File != "https://x/eng.vtt" {
+		t.Errorf("track file = %v; want raw URL fallback", st.Tracks)
 	}
 }
 

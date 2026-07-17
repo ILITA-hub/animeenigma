@@ -756,7 +756,16 @@ class CamoufoxEngine:
             # Path the caller proxies the stream through (host-prefixed by caller).
             "playlist_proxy_path": f"/hls?sid={session.id}&url={_q(session.master_url)}",
             "referer": session.referer,
-            "subtitles": partial.get("subtitles", []),
+            # Subtitle files live on the SAME Cloudflare-fingerprint-gated CDN
+            # family as the playlist/segments (verified 2026-07-17: a direct
+            # fetch of the raw subtitle URL 403s exactly like the raw master
+            # URL does) — proxy_path routes them through this session's /hls
+            # browser fetch too, mirroring playlist_proxy_path above.
+            "subtitles": [
+                {**s, "proxy_path": f"/hls?sid={session.id}&url={_q(s['url'])}"}
+                for s in partial.get("subtitles", [])
+                if s.get("url")
+            ],
             "intro": partial.get("intro"),
             "outro": partial.get("outro"),
             "cdn_probe_status": partial.get("cdn_probe_status"),
