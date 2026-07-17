@@ -1,6 +1,7 @@
 package prober
 
 import (
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 	"testing"
 )
 
@@ -49,5 +50,58 @@ func TestAssembleHardsub(t *testing.T) {
 	weak := AssembleHardsub(&HardsubResult{Frames: 15, Tier1Hits: 3, OCRReal: 1, Script: "latin"})
 	if !weak.Present || weak.Verified {
 		t.Fatalf("1 OCR hit → present but NOT verified: %+v", weak)
+	}
+}
+
+// Live 2026-07-17 case (kodik team 1978, Dream Cast RU dub): whisper-tiny
+// caps clean RU speech at ≈0.92 raw — three unanimous fragments must
+// compound past the 0.95 verified threshold.
+func TestAssembleAudioUnanimousCompounding(t *testing.T) {
+	frs := []LIDFragment{
+		{Lang: "ru", Prob: 0.92, Speech: true, SpeechSeconds: 24},
+		{Lang: "ru", Prob: 0.92, Speech: true, SpeechSeconds: 23},
+		{Lang: "ru", Prob: 0.92, Speech: true, SpeechSeconds: 24},
+	}
+	v := AssembleAudio(frs)
+	if v == nil || !v.Verified || v.Lang != "ru" {
+		t.Fatalf("unanimous ru@0.92 must verify via compounding: %+v", v)
+	}
+	if v.Confidence < 0.95 || v.Confidence > 1.0 {
+		t.Fatalf("compounded confidence out of range: %f", v.Confidence)
+	}
+}
+
+// Weak evidence must NOT be laundered by compounding: unanimous but below
+// the compounding floor stays at its raw mean, unverified.
+func TestAssembleAudioWeakUnanimousStaysRaw(t *testing.T) {
+	frs := []LIDFragment{
+		{Lang: "ru", Prob: 0.70, Speech: true}, {Lang: "ru", Prob: 0.70, Speech: true}, {Lang: "ru", Prob: 0.70, Speech: true},
+	}
+	v := AssembleAudio(frs)
+	if v == nil || v.Verified {
+		t.Fatalf("weak unanimous must stay unverified: %+v", v)
+	}
+	if v.Confidence < 0.699 || v.Confidence > 0.701 {
+		t.Fatalf("weak evidence must keep its raw mean (~0.70), got %f", v.Confidence)
+	}
+}
+
+func TestNeedsMoreFragments(t *testing.T) {
+	speech3 := []LIDFragment{{Speech: true, Lang: "ru"}, {Speech: true, Lang: "ru"}, {Speech: true, Lang: "ru"}}
+	// borderline band: unanimous, compounded but < threshold
+	if !needsMoreFragments(&domain.AudioVerdict{Confidence: 0.90}, speech3) {
+		t.Fatal("borderline unanimous verdict must request more fragments")
+	}
+	// already verified: no extension
+	if needsMoreFragments(&domain.AudioVerdict{Confidence: 0.97, Verified: true}, speech3) {
+		t.Fatal("verified verdict must not request more fragments")
+	}
+	// weak / conflicting (< floor): answered, no extension
+	if needsMoreFragments(&domain.AudioVerdict{Confidence: 0.49}, speech3) {
+		t.Fatal("sub-floor verdict must not request more fragments")
+	}
+	// speech shortage always extends
+	if !needsMoreFragments(nil, speech3[:1]) {
+		t.Fatal("speech shortage must request more fragments")
 	}
 }

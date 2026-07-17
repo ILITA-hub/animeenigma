@@ -155,8 +155,11 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 	if err != nil {
 		return p.inconclusive(v, err)
 	}
-	// Not enough speech? Pull extra fragments (up to maxFragments total).
-	if speechCount(lid.Fragments) < baseFragments && len(offsets) > baseFragments {
+	v.Audio = AssembleAudio(lid.Fragments)
+	// Not enough speech, or unanimous-but-borderline (compounding needs more
+	// unanimous looks to clear the threshold)? Pull extra fragments (up to
+	// maxFragments total) and re-assemble.
+	if needsMoreFragments(v.Audio, lid.Fragments) && len(offsets) > baseFragments {
 		for i, seek := range offsets[baseFragments:] {
 			idx := baseFragments + i
 			if idx >= maxFragments {
@@ -168,9 +171,9 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 		}
 		if extra, err := p.runner.LID(ctx, wavs); err == nil {
 			lid = extra
+			v.Audio = AssembleAudio(lid.Fragments)
 		}
 	}
-	v.Audio = AssembleAudio(lid.Fragments)
 	v.Sample = domain.SampleInfo{Fragments: len(wavs), SpeechSeconds: totalSpeech(lid.Fragments)}
 
 	if hs, err := p.runner.Hardsub(ctx, filepath.Join(dir, "frames")); err == nil {
@@ -245,6 +248,18 @@ func sampleOffsets(duration float64, intro, outro *catalogclient.TimeRange) []fl
 		out = append(out, s)
 	}
 	return out
+}
+
+// needsMoreFragments: extend sampling when the base fragments were speech-
+// poor, or when the verdict is unanimous but sits in the compounding band
+// below the verified threshold — extra unanimous fragments can still lift
+// it, whereas genuinely weak (< compoundFloor) or conflicting audio is
+// already answered and extra pulls would just burn budget.
+func needsMoreFragments(a *domain.AudioVerdict, frs []LIDFragment) bool {
+	if speechCount(frs) < baseFragments {
+		return true
+	}
+	return a != nil && !a.Verified && a.Confidence >= compoundFloor
 }
 
 func speechCount(frs []LIDFragment) int {

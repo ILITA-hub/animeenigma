@@ -1,6 +1,10 @@
 package prober
 
-import "github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
+import (
+	"math"
+
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
+)
 
 // LID / Hardsub result types — the JSON contracts of analyzers/lid.py and
 // analyzers/hardsub.py.
@@ -22,10 +26,27 @@ type HardsubResult struct {
 	TextStrokeP75 float64 `json:"text_stroke_p75"`
 }
 
-const minSpeechFragments = 3
+const (
+	minSpeechFragments = 3
 
-// AssembleAudio: all speech fragments agree AND mean prob ≥ threshold →
-// verified (spec §3). Whisper returns ISO-639-1 codes (en/ru/ja) directly.
+	// Unanimity compounding. Whisper-tiny's raw per-fragment LID prob is a
+	// conservative floor on some languages — clean unambiguous RU dialogue
+	// sits ≈0.92 (live finding 2026-07-17, kodik team 1978), so demanding a
+	// raw mean ≥ 0.95 made honest RU dubs structurally unverifiable. But N
+	// unanimous fragments are N near-independent looks at the same track:
+	// each additional agreeing fragment shrinks the residual doubt by
+	// corrDiscount (deliberately far from full independence — whisper errors
+	// correlate on music/effects-heavy audio). 3 × ru@0.92 → 0.971 ✓;
+	// 3 × 0.80 → 0.928 ✗ (stays honest); 6 × 0.80 → 0.984 ✓.
+	// Compounding only applies above compoundFloor — weak evidence is
+	// reported raw, never laundered.
+	corrDiscount  = 0.6
+	compoundFloor = 0.75
+)
+
+// AssembleAudio: all speech fragments agree AND the compounded confidence ≥
+// threshold → verified (spec §3, unanimity-compounded 2026-07-17). Whisper
+// returns ISO-639-1 codes (en/ru/ja) directly.
 func AssembleAudio(frs []LIDFragment) *domain.AudioVerdict {
 	var speech []LIDFragment
 	for _, f := range frs {
@@ -52,7 +73,10 @@ func AssembleAudio(frs []LIDFragment) *domain.AudioVerdict {
 		v.Confidence = mean * 0.5
 		return v
 	}
-	v.Verified = len(speech) >= minSpeechFragments && mean >= domain.VerifiedThreshold
+	if mean >= compoundFloor {
+		v.Confidence = 1 - (1-mean)*math.Pow(corrDiscount, float64(len(speech)-1))
+	}
+	v.Verified = len(speech) >= minSpeechFragments && v.Confidence >= domain.VerifiedThreshold
 	return v
 }
 
