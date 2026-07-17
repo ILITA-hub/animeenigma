@@ -55,9 +55,9 @@ func Load() (*Config, error) {
 			User: getEnv("DB_USER", "postgres"), Password: getEnv("DB_PASSWORD", "postgres"),
 			Database: getEnv("DB_NAME", "animeenigma"), SSLMode: getEnv("DB_SSLMODE", "disable"),
 		},
-		CatalogURL:   getEnv("CV_CATALOG_URL", "http://catalog:8081"),
-		GatewayURL:   getEnv("CV_GATEWAY_URL", "http://gateway:8000"),
-		Interval:     getEnvDuration("CV_INTERVAL", time.Minute),
+		CatalogURL: getEnv("CV_CATALOG_URL", "http://catalog:8081"),
+		GatewayURL: getEnv("CV_GATEWAY_URL", "http://gateway:8000"),
+		Interval:   getEnvDuration("CV_INTERVAL", time.Minute),
 		// 240s: 120s browser-engine stream resolve + fragment pulls + whisper.
 		// Live-E2E measured 2026-07-17 (spec §2 revisit): 50s starved every
 		// real (non-synth) unit — resolve alone exceeded it.

@@ -89,7 +89,7 @@ type UnitVerdict struct {
 	// Unlike Audio.Lang=="ja" it stays correct for non-Japanese originals
 	// (donghua etc.), which is exactly why kodik synth uses it instead of
 	// asserting a language it never heard.
-	RawAudio bool      `json:"raw_audio,omitempty"`
+	RawAudio bool `json:"raw_audio,omitempty"`
 	// Episodes: how many episodes this unit has ready on the provider right
 	// now — a free by-product of queue enumeration (kodik per-team
 	// episodes_count, scraper/animejoy episode-list length). 0 = unknown.
