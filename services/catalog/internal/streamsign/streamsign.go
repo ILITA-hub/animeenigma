@@ -78,9 +78,10 @@ func SignScraperStreamBody(status int, body []byte) []byte {
 		return body
 	}
 
-	// The upstream Referer applies to every source fetch; subtitle tracks are
-	// fetched WITHOUT a referer today (buildSubtitleProxyUrl passes none), so
-	// their masked tokens keep referer "" for behavior parity.
+	// The upstream Referer applies to sources AND subtitle tracks: megaplay-
+	// family CDNs Referer-gate .vtt files exactly like their playlists (403
+	// without it — AUTO-627), and a real browser fetching subs from inside the
+	// player iframe sends the player origin as Referer anyway.
 	referer := ""
 	if h, ok := stream["headers"].(map[string]any); ok {
 		if v, ok := h["Referer"].(string); ok {
@@ -91,7 +92,7 @@ func SignScraperStreamBody(status int, body []byte) []byte {
 	}
 
 	changed := signArrayField(stream["sources"], "url", referer, true)
-	changed = signArrayField(stream["tracks"], "file", "", false) || changed
+	changed = signArrayField(stream["tracks"], "file", referer, false) || changed
 
 	if !changed {
 		return body

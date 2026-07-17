@@ -6,6 +6,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 )
 
 func TestMain(m *testing.M) {
@@ -125,5 +128,49 @@ func TestSignScraperStreamBody_StampsMaskedURL(t *testing.T) {
 	// exp/sig legacy pair still stamped (dual-accept).
 	if hls["exp"] == nil || hls["sig"] == nil {
 		t.Fatal("legacy exp/sig missing — dual-accept broken")
+	}
+}
+
+// AUTO-627: megaplay-family CDNs Referer-gate subtitle .vtt files exactly like
+// their video playlists — a masked track token minted WITHOUT the stream's
+// Referer makes the proxy fetch 403 upstream and the player show blank subs.
+// Both sources[] and tracks[] tokens must carry the stream headers' Referer.
+func TestSignScraperStreamBody_MaskedTokensCarryReferer(t *testing.T) {
+	const referer = "https://megaplay.buzz/"
+	body := []byte(`{"success":true,"data":{"stream":{` +
+		`"sources":[{"url":"https://cdn.example.com/master.m3u8","type":"hls"}],` +
+		`"tracks":[{"file":"https://subs.example.com/track_0_eng.vtt","kind":"captions"}],` +
+		`"headers":{"Referer":"` + referer + `"}},` +
+		`"meta":{"provider":"gogoanime"}}}`)
+
+	out := SignScraperStreamBody(http.StatusOK, body)
+
+	var env map[string]any
+	if err := json.Unmarshal(out, &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	stream := env["data"].(map[string]any)["stream"].(map[string]any)
+
+	decode := func(field string, m map[string]any) *videoutils.StreamTokenPayload {
+		t.Helper()
+		masked, _ := m["masked_url"].(string)
+		tok := strings.TrimPrefix(masked, "/api/streaming/m/")
+		if i := strings.IndexByte(tok, '/'); i >= 0 {
+			tok = tok[:i]
+		}
+		p, err := videoutils.DecodeStreamToken(tok, time.Now())
+		if err != nil {
+			t.Fatalf("%s: decode masked token: %v", field, err)
+		}
+		return p
+	}
+
+	src := decode("source", stream["sources"].([]any)[0].(map[string]any))
+	if src.Referer != referer {
+		t.Errorf("source token referer = %q; want %q", src.Referer, referer)
+	}
+	trk := decode("track", stream["tracks"].([]any)[0].(map[string]any))
+	if trk.Referer != referer {
+		t.Errorf("track token referer = %q; want %q", trk.Referer, referer)
 	}
 }
