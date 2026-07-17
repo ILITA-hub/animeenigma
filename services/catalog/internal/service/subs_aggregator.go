@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -358,6 +359,10 @@ func (s *SubsAggregator) fetchOpenSubtitles(ctx context.Context, anime *domain.A
 	params := opensubtitles.SearchParams{
 		Languages: canonicalLangs(langs),
 	}
+	name := anime.Name
+	if anime.NameEN != "" {
+		name = anime.NameEN
+	}
 	if anime.IMDbID != nil {
 		params.IMDbID = *anime.IMDbID
 	}
@@ -366,10 +371,6 @@ func (s *SubsAggregator) fetchOpenSubtitles(ctx context.Context, anime *domain.A
 	}
 	if params.IMDbID == "" && params.TMDBID == "" {
 		// Last resort: query by name.
-		name := anime.Name
-		if anime.NameEN != "" {
-			name = anime.NameEN
-		}
 		params.Query = name
 	}
 	if !strings.EqualFold(anime.Kind, "movie") {
@@ -382,10 +383,26 @@ func (s *SubsAggregator) fetchOpenSubtitles(ctx context.Context, anime *domain.A
 		return nil, err
 	}
 
+	// The free-text query fallback (no verified IMDb/TMDB ID) is only a
+	// title-similarity match on OpenSubtitles' side — their own
+	// season_number=1 filter does NOT disambiguate a sequel/season-2+ entry
+	// from its original-season parent show, because OpenSubtitles indexes
+	// many sequels as their own show with their own "season 1". A catalog
+	// title that itself carries an explicit sequel marker ("Season 2",
+	// roman numeral "II", a trailing cour number, ...) must see that same
+	// marker on the candidate release name, or the match is a different
+	// show entirely wearing the same episode/season numbers (confirmed
+	// live: "Clevatess Season 2" ep3 free-text-matched the original 2025
+	// "Clevatess" show's real episode 3 — report 2026-07-17T05-20-24_tNeymik).
+	ambiguous := params.Query != ""
+
 	tracks := make([]SubtitleTrack, 0, len(entries))
 	for _, e := range entries {
 		if e.FileID == 0 {
 			continue // can't resolve without a numeric file id
+		}
+		if ambiguous && !titleLikelyMatches(name, e.Release) {
+			continue
 		}
 		tracks = append(tracks, SubtitleTrack{
 			URL:      fmt.Sprintf("/api/anime/%s/subtitles/opensubtitles/file/%d", anime.ID, e.FileID),
@@ -397,6 +414,63 @@ func (s *SubsAggregator) fetchOpenSubtitles(ctx context.Context, anime *domain.A
 		})
 	}
 	return tracks, nil
+}
+
+// titleTokenSplit breaks a free-form title or release name into lowercase
+// alphanumeric tokens, matching how release-name conventions delimit fields
+// with dots/hyphens/brackets rather than spaces.
+var titleTokenSplit = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+
+// romanNumeralIndex maps a lowercase roman numeral token (as used in anime
+// sequel titles, e.g. "Overlord IV") to its integer value. Only II-X are
+// covered — sequel counts rarely run higher and a false match past that is
+// vanishingly unlikely to matter.
+var romanNumeralIndex = map[string]int{
+	"ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7, "viii": 8, "ix": 9, "x": 10,
+}
+
+// seasonMarkerIndex extracts an explicit sequel/season marker from a title,
+// returning 1 (no marker — "first/only entry") when none is found. Only two
+// conventions are treated as load-bearing, chosen to minimize false
+// positives from titles that merely contain an incidental number:
+//   - a roman numeral token (anywhere): "Sword Art Online II" -> 2
+//   - a bare digit 2-20 immediately preceded by "season"/"part"/"cour", or
+//     as the LAST token of the title: "Clevatess Season 2" -> 2,
+//     "Kaguya-sama 3" -> 3. A mid-title number like "07-Ghost" or "91 Days"
+//     is NOT flagged (not last token, no season/part/cour prefix).
+func seasonMarkerIndex(title string) int {
+	tokens := titleTokenSplit.Split(strings.ToLower(title), -1)
+	for i, tok := range tokens {
+		if tok == "" {
+			continue
+		}
+		if n, ok := romanNumeralIndex[tok]; ok {
+			return n
+		}
+		n, err := strconv.Atoi(tok)
+		if err != nil || n < 2 || n > 20 {
+			continue
+		}
+		last := i == len(tokens)-1
+		precededBySeasonWord := i > 0 && (tokens[i-1] == "season" || tokens[i-1] == "part" || tokens[i-1] == "cour")
+		if last || precededBySeasonWord {
+			return n
+		}
+	}
+	return 1
+}
+
+// titleLikelyMatches guards the OpenSubtitles free-text query fallback.
+// When our own catalog title carries no sequel marker, there's nothing to
+// disambiguate and every candidate passes (the common case — most anime
+// are single-season). When it does, the candidate release name must carry
+// a matching marker.
+func titleLikelyMatches(ourTitle, candidateRelease string) bool {
+	want := seasonMarkerIndex(ourTitle)
+	if want <= 1 {
+		return true
+	}
+	return seasonMarkerIndex(candidateRelease) == want
 }
 
 func (s *SubsAggregator) fetchAnime365(ctx context.Context, anime *domain.Anime, episode int) ([]SubtitleTrack, error) {
