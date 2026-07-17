@@ -24,8 +24,8 @@ type Config struct {
 
 	CatalogURL   string        // internal catalog base (membership, structure, streams)
 	GatewayURL   string        // public gateway base — ffmpeg reads hls-proxy through it
-	Interval     time.Duration // pause between probes (1 unit per tick)
-	UnitBudget   time.Duration // hard per-unit budget; REVISIT AFTER TESTS (spec §2)
+	Interval     time.Duration // pause between probes (after each probe completes)
+	UnitBudget   time.Duration // hard per-unit budget; may exceed Interval (pause runs after the probe)
 	ReprobeTTL   time.Duration // verified/inconclusive re-probe age
 	TopLimit     int           // top-N membership
 	FFmpegPath   string
@@ -50,7 +50,10 @@ func Load() (*Config, error) {
 		CatalogURL:   getEnv("CV_CATALOG_URL", "http://catalog:8081"),
 		GatewayURL:   getEnv("CV_GATEWAY_URL", "http://gateway:8000"),
 		Interval:     getEnvDuration("CV_INTERVAL", time.Minute),
-		UnitBudget:   getEnvDuration("CV_UNIT_BUDGET", 50*time.Second),
+		// 240s: 120s browser-engine stream resolve + fragment pulls + whisper.
+		// Live-E2E measured 2026-07-17 (spec §2 revisit): 50s starved every
+		// real (non-synth) unit — resolve alone exceeded it.
+		UnitBudget:   getEnvDuration("CV_UNIT_BUDGET", 240*time.Second),
 		ReprobeTTL:   getEnvDuration("CV_REPROBE_TTL", 720*time.Hour),
 		TopLimit:     getEnvInt("CV_TOP_LIMIT", 100),
 		FFmpegPath:   getEnv("CV_FFMPEG_PATH", "ffmpeg"),
@@ -61,9 +64,6 @@ func Load() (*Config, error) {
 	}
 	if cfg.Interval < 10*time.Second {
 		return nil, fmt.Errorf("CV_INTERVAL too small: %s", cfg.Interval)
-	}
-	if cfg.UnitBudget >= cfg.Interval {
-		return nil, fmt.Errorf("CV_UNIT_BUDGET (%s) must be < CV_INTERVAL (%s)", cfg.UnitBudget, cfg.Interval)
 	}
 	return cfg, nil
 }

@@ -57,7 +57,7 @@ func server(t *testing.T) *httptest.Server {
 func TestClientDecodes(t *testing.T) {
 	srv := server(t)
 	defer srv.Close()
-	c := New(srv.URL, srv.Client())
+	c := New(srv.URL, srv.URL, srv.Client())
 	ctx := context.Background()
 
 	m, err := c.Membership(ctx)

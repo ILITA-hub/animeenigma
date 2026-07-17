@@ -69,7 +69,7 @@ func main() {
 
 	store := repo.NewStore(db.DB)
 	sig := signals.New(redisCache.Client())
-	catClient := catalogclient.New(cfg.CatalogURL, nil)
+	catClient := catalogclient.New(cfg.CatalogURL, cfg.GatewayURL, nil)
 	engine := queue.NewEngine(catClient, sig, store, cfg.ReprobeTTL, log)
 	h := handler.NewVerifyHandler(store, sig, engine, log)
 

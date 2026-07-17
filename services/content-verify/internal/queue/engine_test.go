@@ -52,7 +52,7 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})

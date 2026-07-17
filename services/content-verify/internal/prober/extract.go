@@ -7,7 +7,30 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
+
+var (
+	pickyOnce sync.Once
+	pickyOpts []string
+)
+
+// hlsPickyOpts returns the extra hls-demuxer flags needed on ffmpeg builds
+// that enforce per-SEGMENT extension checks (`extension_picky`, upstream 7.1
+// but security-backported into distro builds — Debian 12's 5.1.9 has it,
+// Ubuntu's 6.1.1 does not). Kiwi-style CDNs disguise MPEG-TS segments as
+// .jpg, which those builds reject even under -allowed_extensions ALL.
+// Passing the flag unconditionally breaks builds without it ("Option
+// extension_picky not found", exit 8) — hence the one-time capability probe.
+func hlsPickyOpts(ffmpegPath string) []string {
+	pickyOnce.Do(func() {
+		out, err := exec.Command(ffmpegPath, "-hide_banner", "-h", "demuxer=hls").CombinedOutput()
+		if err == nil && bytes.Contains(out, []byte("extension_picky")) {
+			pickyOpts = []string{"-extension_picky", "0"}
+		}
+	})
+	return pickyOpts
+}
 
 // ExtractFragment pulls one ~30s fragment at seek: mono 16k wav (whisper)
 // + 5 frames (1/6 fps) for the hardsub band scan, in a single ffmpeg run.
@@ -24,6 +47,7 @@ func ExtractFragment(ctx context.Context, ffmpegPath, input string, seek float64
 		// the generic (mp4) demuxer breaks input opening entirely
 		// ("Option allowed_extensions not found", exit 8).
 		args = append(args, "-allowed_extensions", "ALL")
+		args = append(args, hlsPickyOpts(ffmpegPath)...)
 	}
 	args = append(args,
 		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",

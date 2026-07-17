@@ -54,14 +54,19 @@ func NewWorker(interval, budget time.Duration, shed ShedChecker, claimer Claimer
 
 func (w *Worker) Start(ctx context.Context) {
 	go func() {
-		ticker := time.NewTicker(w.interval)
-		defer ticker.Stop()
+		// Timer (not ticker): the interval pause runs AFTER each probe
+		// completes — spec: "перерыв между пробами - 1 минута". This lets
+		// the unit budget exceed the interval (browser-engine resolves alone
+		// take 45-90s) without ticks stacking up behind a slow probe.
+		timer := time.NewTimer(w.interval)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-timer.C:
 				w.tick(ctx)
+				timer.Reset(w.interval)
 			}
 		}
 	}()

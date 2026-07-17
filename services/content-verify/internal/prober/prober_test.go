@@ -135,7 +135,7 @@ func buildCatalog(t *testing.T) *httptest.Server {
 func TestProbeVerified(t *testing.T) {
 	srv := buildCatalog(t)
 	defer srv.Close()
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
@@ -160,7 +160,7 @@ func TestProbeVerified(t *testing.T) {
 func TestProbeUnreachable404(t *testing.T) {
 	srv := buildCatalog(t)
 	defer srv.Close()
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
@@ -179,7 +179,7 @@ func TestProbeUnreachable404(t *testing.T) {
 func TestProbeUnreachableFirstFragmentFailure(t *testing.T) {
 	srv := buildCatalog(t)
 	defer srv.Close()
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	ffmpeg := writeFailingFFmpeg(t, t.TempDir()) // every ffmpeg invocation fails
 	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
@@ -198,7 +198,7 @@ func TestProbeUnreachableFirstFragmentFailure(t *testing.T) {
 func TestProbePartialExtractionTolerated(t *testing.T) {
 	srv := buildCatalog(t)
 	defer srv.Close()
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	ffmpeg := writeFlakyFFmpeg(t, t.TempDir()) // fragment idx 1 always fails
 	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
@@ -217,7 +217,7 @@ func TestProbePartialExtractionTolerated(t *testing.T) {
 func TestProbeSoftsubsFromTracks(t *testing.T) {
 	srv := buildCatalog(t)
 	defer srv.Close()
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
@@ -247,7 +247,7 @@ func TestProbeEpisodeFallbackToOne(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments(), hardsub: &HardsubResult{Frames: 0}}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
@@ -276,7 +276,7 @@ func TestProbeScraperNoEpisodeFallback(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)
@@ -310,7 +310,7 @@ func TestProbeBudgetExpiredDuringResolveIsInconclusive(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cat := catalogclient.New(srv.URL, srv.Client())
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
 	runner := &fakeRunner{lid: threeAgreeingEnFragments()}
 	p := New(cat, "https://gw.example", ffmpeg, t.TempDir(), runner, nil)

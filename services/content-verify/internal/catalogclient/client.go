@@ -1,7 +1,11 @@
-// Package catalogclient talks to catalog: queue membership, capability
-// structure, and per-provider stream resolution (scraper / kodik / animejoy
-// legs). All scraper calls pass prefer=<provider>&exclusive=true so the
-// probe result is attributable to exactly one provider.
+// Package catalogclient resolves queue membership, capability structure, and
+// per-provider streams. Public routes (/api/anime/*) go through the GATEWAY —
+// the exact end-to-end path aePlayer uses — so a probe verdict can never
+// diverge from what a real player request would get. Only the internal
+// membership route talks to catalog directly (it has no gateway exposure).
+// Scraper calls still pass prefer=<provider>&exclusive=true: same chain, but
+// failover must not silently answer for a different provider than the unit
+// being attributed.
 package catalogclient
 
 import (
@@ -17,16 +21,29 @@ import (
 
 var ErrNotFound = errors.New("catalogclient: not found")
 
+// Per-call deadlines. Metadata calls are cheap catalog lookups; stream
+// resolution for engine=browser providers (gogoanime/animepahe/miruro/
+// nineanime) runs a Camoufox session end-to-end and routinely needs 45-90s —
+// a short client timeout here reports healthy providers as unreachable
+// (2026-07-17 live-E2E finding: 20s cancelled resolves the player completes).
+const (
+	metaTimeout   = 30 * time.Second
+	streamTimeout = 120 * time.Second
+)
+
 type Client struct {
-	base string
-	hc   *http.Client
+	catalog string // internal catalog base (membership only)
+	public  string // gateway base — same routes aePlayer calls
+	hc      *http.Client
 }
 
-func New(catalogURL string, hc *http.Client) *Client {
+func New(catalogURL, publicURL string, hc *http.Client) *Client {
 	if hc == nil {
-		hc = &http.Client{Timeout: 20 * time.Second}
+		// Ceiling only — the per-call ctx deadlines above are the real bound.
+		hc = &http.Client{Timeout: streamTimeout + 30*time.Second}
 	}
-	return &Client{base: strings.TrimRight(catalogURL, "/"), hc: hc}
+	return &Client{catalog: strings.TrimRight(catalogURL, "/"),
+		public: strings.TrimRight(publicURL, "/"), hc: hc}
 }
 
 type MembershipRow struct {
@@ -85,8 +102,11 @@ type Stream struct {
 }
 
 // getJSON fetches u and decodes the {"success","data"} envelope into dst
-// (dst receives the "data" value). 404 → ErrNotFound.
-func (c *Client) getJSON(ctx context.Context, u string, dst any) error {
+// (dst receives the "data" value). 404 → ErrNotFound. timeout bounds this
+// call even when the caller ctx is unbounded (the claim path's root ctx).
+func (c *Client) getJSON(ctx context.Context, u string, timeout time.Duration, dst any) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err
@@ -113,7 +133,7 @@ func (c *Client) getJSON(ctx context.Context, u string, dst any) error {
 
 func (c *Client) Membership(ctx context.Context) (*Membership, error) {
 	var m Membership
-	if err := c.getJSON(ctx, c.base+"/internal/verify/membership", &m); err != nil {
+	if err := c.getJSON(ctx, c.catalog+"/internal/verify/membership", metaTimeout, &m); err != nil {
 		return nil, err
 	}
 	return &m, nil
@@ -125,7 +145,7 @@ func (c *Client) Capabilities(ctx context.Context, animeID string) ([]Cap, error
 			Providers []Cap `json:"providers"`
 		} `json:"families"`
 	}
-	if err := c.getJSON(ctx, c.base+"/api/anime/"+url.PathEscape(animeID)+"/capabilities", &data); err != nil {
+	if err := c.getJSON(ctx, c.public+"/api/anime/"+url.PathEscape(animeID)+"/capabilities", metaTimeout, &data); err != nil {
 		return nil, err
 	}
 	var caps []Cap
@@ -137,7 +157,7 @@ func (c *Client) Capabilities(ctx context.Context, animeID string) ([]Cap, error
 
 func (c *Client) KodikTranslations(ctx context.Context, animeID string) ([]KodikTranslation, error) {
 	var tr []KodikTranslation
-	if err := c.getJSON(ctx, c.base+"/api/anime/"+url.PathEscape(animeID)+"/kodik/translations", &tr); err != nil {
+	if err := c.getJSON(ctx, c.public+"/api/anime/"+url.PathEscape(animeID)+"/kodik/translations", metaTimeout, &tr); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, nil
 		}
@@ -150,8 +170,8 @@ func (c *Client) ScraperEpisodes(ctx context.Context, animeID, provider string) 
 	var data struct {
 		Episodes []ScraperEpisode `json:"episodes"`
 	}
-	u := fmt.Sprintf("%s/api/anime/%s/scraper/episodes?prefer=%s&exclusive=true", c.base, url.PathEscape(animeID), url.QueryEscape(provider))
-	if err := c.getJSON(ctx, u, &data); err != nil {
+	u := fmt.Sprintf("%s/api/anime/%s/scraper/episodes?prefer=%s&exclusive=true", c.public, url.PathEscape(animeID), url.QueryEscape(provider))
+	if err := c.getJSON(ctx, u, metaTimeout, &data); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, nil // provider has no match — not an error
 		}
@@ -165,8 +185,8 @@ func (c *Client) ScraperServers(ctx context.Context, animeID, episodeID, provide
 		Servers []ScraperServer `json:"servers"`
 	}
 	u := fmt.Sprintf("%s/api/anime/%s/scraper/servers?episode=%s&prefer=%s&exclusive=true",
-		c.base, url.PathEscape(animeID), url.QueryEscape(episodeID), url.QueryEscape(provider))
-	if err := c.getJSON(ctx, u, &data); err != nil {
+		c.public, url.PathEscape(animeID), url.QueryEscape(episodeID), url.QueryEscape(provider))
+	if err := c.getJSON(ctx, u, metaTimeout, &data); err != nil {
 		return nil, err
 	}
 	return data.Servers, nil
@@ -188,8 +208,8 @@ func (c *Client) ScraperStream(ctx context.Context, animeID, episodeID, serverID
 		} `json:"stream"`
 	}
 	u := fmt.Sprintf("%s/api/anime/%s/scraper/stream?episode=%s&server=%s&category=%s&prefer=%s&exclusive=true",
-		c.base, url.PathEscape(animeID), url.QueryEscape(episodeID), url.QueryEscape(serverID), url.QueryEscape(category), url.QueryEscape(provider))
-	if err := c.getJSON(ctx, u, &data); err != nil {
+		c.public, url.PathEscape(animeID), url.QueryEscape(episodeID), url.QueryEscape(serverID), url.QueryEscape(category), url.QueryEscape(provider))
+	if err := c.getJSON(ctx, u, streamTimeout, &data); err != nil {
 		return nil, err
 	}
 	if len(data.Stream.Sources) == 0 {
@@ -208,8 +228,8 @@ func (c *Client) KodikStream(ctx context.Context, animeID string, episode, trans
 		Exp       string `json:"exp"`
 		Sig       string `json:"sig"`
 	}
-	u := fmt.Sprintf("%s/api/anime/%s/kodik/stream?episode=%d&translation=%d", c.base, url.PathEscape(animeID), episode, translation)
-	if err := c.getJSON(ctx, u, &data); err != nil {
+	u := fmt.Sprintf("%s/api/anime/%s/kodik/stream?episode=%d&translation=%d", c.public, url.PathEscape(animeID), episode, translation)
+	if err := c.getJSON(ctx, u, streamTimeout, &data); err != nil {
 		return nil, err
 	}
 	if data.StreamURL == "" {
@@ -222,8 +242,8 @@ func (c *Client) AnimejoyEpisodes(ctx context.Context, animeID, provider string)
 	var data struct {
 		Episodes []int `json:"episodes"`
 	}
-	u := fmt.Sprintf("%s/api/anime/%s/%s/episodes", c.base, url.PathEscape(animeID), url.PathEscape(provider))
-	if err := c.getJSON(ctx, u, &data); err != nil {
+	u := fmt.Sprintf("%s/api/anime/%s/%s/episodes", c.public, url.PathEscape(animeID), url.PathEscape(provider))
+	if err := c.getJSON(ctx, u, metaTimeout, &data); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, nil
 		}
@@ -239,8 +259,8 @@ func (c *Client) AnimejoyStream(ctx context.Context, animeID, provider string, e
 		Exp     string `json:"exp"`
 		Sig     string `json:"sig"`
 	}
-	u := fmt.Sprintf("%s/api/anime/%s/%s/stream?episode=%d", c.base, url.PathEscape(animeID), url.PathEscape(provider), episode)
-	if err := c.getJSON(ctx, u, &data); err != nil {
+	u := fmt.Sprintf("%s/api/anime/%s/%s/stream?episode=%d", c.public, url.PathEscape(animeID), url.PathEscape(provider), episode)
+	if err := c.getJSON(ctx, u, streamTimeout, &data); err != nil {
 		return nil, err
 	}
 	if data.URL == "" {

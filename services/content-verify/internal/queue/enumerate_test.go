@@ -62,7 +62,7 @@ func buildTestCatalog(t *testing.T) *httptest.Server {
 func TestEnumerateUnits(t *testing.T) {
 	srv := buildTestCatalog(t)
 	defer srv.Close()
-	c := catalogclient.New(srv.URL, srv.Client())
+	c := catalogclient.New(srv.URL, srv.URL, srv.Client())
 	units, err := EnumerateUnits(context.Background(), c, "a1", nil)
 	if err != nil {
 		t.Fatal(err)

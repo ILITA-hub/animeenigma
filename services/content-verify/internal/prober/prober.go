@@ -39,8 +39,10 @@ type Prober struct {
 }
 
 func New(cat *catalogclient.Client, gatewayURL, ffmpegPath, workDir string, runner AnalyzerRunner, log *logger.Logger) *Prober {
+	// 60s playlist-fetch timeout: Kodik/solodcdn edges cold-start in up to
+	// 45s (documented edge-failover patience) — 15s misread that as dead.
 	return &Prober{cat: cat, gateway: gatewayURL, ffmpeg: ffmpegPath, workDir: workDir,
-		runner: runner, hc: &http.Client{Timeout: 15 * time.Second}, log: log, now: time.Now}
+		runner: runner, hc: &http.Client{Timeout: 60 * time.Second}, log: log, now: time.Now}
 }
 
 // resolveStream fetches the unit's stream, falling back to episode 1 when
