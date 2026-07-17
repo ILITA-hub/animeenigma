@@ -20,7 +20,12 @@ func buildTestCatalog(t *testing.T) *httptest.Server {
 		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":28}],"top":[{"id":"t1","name":"N","episodes_aired":47}]}}`))
 	})
 	mux.HandleFunc("/api/anime/a1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		// animepahe is deliberately listed BEFORE gogoanime and marked
+		// "degraded" (StateRank=2, vs active's 0): this lets tests assert
+		// Skip units are StateRank-sorted, not just appended in enumeration
+		// (capabilities array) order.
 		w.Write([]byte(`{"success":true,"data":{"anime_id":"a1","families":[{"family":"others","providers":[
+			{"provider":"animepahe","state":"degraded","group":"en","audios":["sub","dub"]},
 			{"provider":"gogoanime","state":"active","group":"en","audios":["sub","dub"]},
 			{"provider":"kodik","state":"active","group":"ru","audios":["sub","dub"]},
 			{"provider":"hanime","state":"active","group":"adult","audios":["sub"]}]},
@@ -188,5 +193,32 @@ func TestEnumerateAll(t *testing.T) {
 	}
 	if len(gogoIDs) != 2 || gogoIDs[0] != "ep-1" || gogoIDs[1] != "ep-28" {
 		t.Fatalf("gogoanime skip EpisodeIDs not [ep-1, ep-28]: %+v", gogoIDs)
+	}
+
+	// animepahe is "degraded" (StateRank=2) and listed BEFORE the "active"
+	// (StateRank=0) gogoanime/kodik in the capabilities fixture. The Skip
+	// slice must still be StateRank-sorted like Verify — the active
+	// providers' skip units must sort ahead of the degraded one's, not just
+	// mirror capabilities-array (enumeration) order. This is what NextSkipTask
+	// (skipplan.go) relies on.
+	firstActiveIdx, firstDegradedIdx := -1, -1
+	for i, s := range all.Skip {
+		if (s.Provider == "gogoanime" || s.Provider == "kodik") && firstActiveIdx == -1 {
+			firstActiveIdx = i
+		}
+		if s.Provider == "animepahe" && firstDegradedIdx == -1 {
+			firstDegradedIdx = i
+		}
+	}
+	if firstActiveIdx == -1 || firstDegradedIdx == -1 {
+		t.Fatalf("expected both an active-provider and animepahe (degraded) skip unit: %+v", all.Skip)
+	}
+	if firstActiveIdx > firstDegradedIdx {
+		t.Fatalf("active-provider skip units must sort before degraded animepahe's: active_idx=%d degraded_idx=%d", firstActiveIdx, firstDegradedIdx)
+	}
+	for i := 1; i < len(all.Skip); i++ {
+		if all.Skip[i-1].StateRank > all.Skip[i].StateRank {
+			t.Fatalf("Skip not StateRank-sorted ascending at index %d: %+v -> %+v", i, all.Skip[i-1], all.Skip[i])
+		}
 	}
 }

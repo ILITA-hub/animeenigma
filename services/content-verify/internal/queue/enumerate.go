@@ -212,6 +212,7 @@ func EnumerateAll(ctx context.Context, c *catalogclient.Client, animeID string, 
 		}
 	}
 	sort.SliceStable(units, func(i, j int) bool { return units[i].StateRank < units[j].StateRank })
+	sort.SliceStable(skips, func(i, j int) bool { return skips[i].StateRank < skips[j].StateRank })
 	return Enumeration{Verify: units, Skip: skips}, nil
 }
 
