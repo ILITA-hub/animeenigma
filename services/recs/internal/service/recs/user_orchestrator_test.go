@@ -212,10 +212,10 @@ func TestUserOrchestrator_RunOnceDeletesCacheForSucceededUsersOnly(t *testing.T)
 	_ = o.RunOnce(context.Background())
 
 	// user-B succeeded -> cache key must be Deleted (so next request recomputes).
-	assert.True(t, cache.deletesContains("recs:user:user-B:topN:v4"),
+	assert.True(t, cache.deletesContains("recs:user:user-B:topN:v5"),
 		"Delete must be called for users whose precompute succeeded")
 	// user-A failed -> cache key must NOT be Deleted (stale-serves contract).
-	assert.False(t, cache.deletesContains("recs:user:user-A:topN:v4"),
+	assert.False(t, cache.deletesContains("recs:user:user-A:topN:v5"),
 		"Delete must NOT be called for users whose precompute failed")
 }
 
@@ -300,12 +300,12 @@ func TestUserOrchestrator_TriggerForUser_AcquiresAndSpawns(t *testing.T) {
 	// Also assert that the per-user topN cache key was Deleted on success.
 	deadline = time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
-		if cache.deletesContains("recs:user:user-A:topN:v4") {
+		if cache.deletesContains("recs:user:user-A:topN:v5") {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	assert.True(t, cache.deletesContains("recs:user:user-A:topN:v4"),
+	assert.True(t, cache.deletesContains("recs:user:user-A:topN:v5"),
 		"successful trigger must Delete the per-user topN cache")
 }
 
@@ -484,9 +484,9 @@ func TestUserOrchestrator_RunOncePerUserTimeoutDoesNotStarveOthers(t *testing.T)
 	// the slow user did not starve it.
 	assert.Equal(t, int64(1), atomic.LoadInt64(&block.sawDeadline),
 		"the blocked (slow) precompute must have carried a deadline")
-	assert.True(t, cache.deletesContains("recs:user:fast:topN:v4"),
+	assert.True(t, cache.deletesContains("recs:user:fast:topN:v5"),
 		"fast user must still get its cache.Delete despite the slow user hanging")
-	assert.False(t, cache.deletesContains("recs:user:slow:topN:v4"),
+	assert.False(t, cache.deletesContains("recs:user:slow:topN:v5"),
 		"slow user failed (timed out) -> stale-serves, no cache delete")
 
 	seen := block.seenUsers()

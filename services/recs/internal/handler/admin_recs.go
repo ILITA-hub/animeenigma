@@ -184,6 +184,7 @@ type AdminRecsHandler struct {
 	s5  *signals.S5Attribute
 	s6  *signals.S6ComboPin       // optional; nil-guarded
 	s7  *signals.S7DroppedPenalty // spec 2026-06-11 Phase 3 — demotes dropped-similar
+	s8  *signals.S8Franchise      // spec 2026-07-17 — franchise/sequel proximity
 
 	// diversifier — S12 post-rank greedy MMR re-rank (spec 2026-06-11 Phase 4).
 	// Mirrors the public handler so admin ordering equals the served order.
@@ -217,6 +218,7 @@ func NewAdminRecsHandler(
 		s5:          signals.NewS5Attribute(db, recsRepo),
 		s6:          s6,
 		s7:          signals.NewS7DroppedPenalty(db),                 // spec 2026-06-11 Phase 3
+		s8:          signals.NewS8Franchise(db),                      // spec 2026-07-17
 		diversifier: recs.NewDiversifier(recs.NewGormAttrLoader(db)), // Phase 4 (S12)
 	}
 }
@@ -224,13 +226,15 @@ func NewAdminRecsHandler(
 // adminEnsembleWeights is the weight registry mirrored from computeFreshForUser
 // at services/recs/internal/handler/recs.go. Matched here so admin breakdown
 // columns reflect the exact weights production uses.
-// Phase-12 + S7 dropped-penalty (spec 2026-06-11 Phase 3).
+// Phase-12 + S7 dropped-penalty (spec 2026-06-11 Phase 3) + S8 franchise
+// proximity (spec 2026-07-17).
 var adminEnsembleWeights = map[recs.SignalID]float64{
-	recs.SignalID("s1"): 0.30,
-	recs.SignalID("s2"): 0.20,
-	recs.SignalID("s3"): 0.20,
-	recs.SignalID("s4"): 0.10,
-	recs.SignalID("s5"): 0.20,
+	recs.SignalID("s1"): 0.27,
+	recs.SignalID("s2"): 0.17,
+	recs.SignalID("s3"): 0.17,
+	recs.SignalID("s4"): 0.09,
+	recs.SignalID("s5"): 0.17,
+	recs.SignalID("s8"): 0.13,
 	recs.SignalID("s7"): -0.15,
 }
 
@@ -245,6 +249,7 @@ var adminSignalVersions = map[string]string{
 	"s5": "v1.0",
 	"s6": "v1.0",
 	"s7": "v1.0",
+	"s8": "v1.0",
 }
 
 // resolveAdminUserID reads the {user_id} URL param, resolves it to a canonical
@@ -325,14 +330,16 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// 4. Build the full ensemble + RankWithBreakdown.
-	// Phase-12 + S7 dropped-penalty (spec 2026-06-11 Phase 3). S7 appended LAST
-	// so it cannot steal top_contributor via tie-breaking in the all-zero case.
+	// Phase-12 + S7 dropped-penalty (spec 2026-06-11 Phase 3) + S8 franchise
+	// proximity (spec 2026-07-17). S7 appended LAST so it cannot steal
+	// top_contributor via tie-breaking in the all-zero case.
 	ensemble := recs.NewEnsemble([]recs.WeightedSignal{
 		{Module: h.s1, Weight: adminEnsembleWeights[recs.SignalID("s1")]},
 		{Module: h.s2, Weight: adminEnsembleWeights[recs.SignalID("s2")]},
 		{Module: h.s3, Weight: adminEnsembleWeights[recs.SignalID("s3")]},
 		{Module: h.s4, Weight: adminEnsembleWeights[recs.SignalID("s4")]},
 		{Module: h.s5, Weight: adminEnsembleWeights[recs.SignalID("s5")]},
+		{Module: h.s8, Weight: adminEnsembleWeights[recs.SignalID("s8")]},
 		{Module: h.s7, Weight: adminEnsembleWeights[recs.SignalID("s7")]},
 	})
 	ranked, err := ensemble.RankWithBreakdown(ctx, recs.UserID(userID), pool)

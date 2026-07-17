@@ -4,11 +4,12 @@
 // state: anonymous callers still get the single shared trending top-N
 // (row_label_key=recs.trending), while logged-in callers get a personalized
 // "Up Next for you" row (row_label_key=recs.upNext) computed from the full
-// 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5 − 0.15·S7 ensemble
-// (Phase-12 + S7 dropped-penalty, spec 2026-06-11 Phase 3), with
-// any anime already in the user's anime_list (any status) excluded by
-// S11.CandidatePoolForUser — signals still read the list to score affinity,
-// they just don't recommend it back at the user.
+// 0.27·S1 + 0.17·S2 + 0.17·S3 + 0.09·S4 + 0.17·S5 + 0.13·S8 − 0.15·S7 ensemble
+// (Phase-12 + S7 dropped-penalty, spec 2026-06-11 Phase 3; S8 franchise
+// proximity, spec 2026-07-17), with any anime already in the user's
+// anime_list (any status) excluded by S11.CandidatePoolForUser — signals
+// still read the list to score affinity, they just don't recommend it back
+// at the user.
 package handler
 
 import (
@@ -143,6 +144,7 @@ type RecsHandler struct {
 	s5  *signals.S5Attribute      // Phase 12 (REC-SIG-05) — TF-IDF attribute affinity
 	s6  *signals.S6ComboPin       // Phase 13 (REC-SIG-06) — combo-watched-after pin resolver; may be nil
 	s7  *signals.S7DroppedPenalty // spec 2026-06-11 Phase 3 — demotes dropped-similar; logged-in only
+	s8  *signals.S8Franchise      // spec 2026-07-17 — franchise/sequel proximity
 
 	// diversifier — S12 post-rank greedy MMR re-rank (spec 2026-06-11 Phase 4).
 	// Reorders the top slice for variety; never adds/drops items.
@@ -169,6 +171,7 @@ func NewRecsHandler(db *gorm.DB, recsRepo *repo.RecsRepository, cache recsCache,
 		s5:          signals.NewS5Attribute(db, recsRepo),            // Phase 12 (REC-SIG-05)
 		s6:          s6,                                              // Phase 13 (REC-SIG-06)
 		s7:          signals.NewS7DroppedPenalty(db),                 // spec 2026-06-11 Phase 3
+		s8:          signals.NewS8Franchise(db),                      // spec 2026-07-17
 		diversifier: recs.NewDiversifier(recs.NewGormAttrLoader(db)), // Phase 4 (S12)
 	}
 }
@@ -438,9 +441,9 @@ func deriveTopContributor(breakdown map[recs.SignalID]recs.NormalizedScore, weig
 
 // computeFreshForUser runs the personalized ensemble for a logged-in user:
 // S11.CandidatePoolForUser (excludes any anime already in the user's list) ->
-// full ensemble 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5 − 0.15·S7
-// (Phase-12 + S7 dropped-penalty, spec 2026-06-11 Phase 3) ->
-// stable sort -> top-50 server slice.
+// full ensemble 0.27·S1 + 0.17·S2 + 0.17·S3 + 0.09·S4 + 0.17·S5 + 0.13·S8 − 0.15·S7
+// (Phase-12 + S7 dropped-penalty, spec 2026-06-11 Phase 3; S8 franchise
+// proximity, spec 2026-07-17) -> stable sort -> top-50 server slice.
 //
 // Ordering (spec 2026-06-11 Phase 4): the S6 pin is resolved BEFORE the S12
 // MMR diversification re-rank so the pin SEEDS the similarity computation —
@@ -466,12 +469,13 @@ func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (R
 	}
 
 	ensemble := recs.NewEnsemble([]recs.WeightedSignal{
-		{Module: h.s1, Weight: 0.30},
-		{Module: h.s2, Weight: 0.20},
-		{Module: h.s3, Weight: 0.20},
-		{Module: h.s4, Weight: 0.10},
-		{Module: h.s5, Weight: 0.20},  // Phase 12 (REC-SIG-05)
-		{Module: h.s7, Weight: -0.15}, // S7 dropped-penalty (spec 2026-06-11 Phase 3): demotes, never buries
+		{Module: h.s1, Weight: 0.27},
+		{Module: h.s2, Weight: 0.17},
+		{Module: h.s3, Weight: 0.17},
+		{Module: h.s4, Weight: 0.09},
+		{Module: h.s5, Weight: 0.17},  // Phase 12 (REC-SIG-05)
+		{Module: h.s8, Weight: 0.13},  // spec 2026-07-17 — franchise proximity
+		{Module: h.s7, Weight: -0.15}, // S7 dropped-penalty: demotes, never buries — MUST stay last
 	})
 	ranked, err := ensemble.Rank(ctx, recs.UserID(userID), pool)
 	if err != nil {
@@ -543,11 +547,12 @@ func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (R
 	// Phase 14 (REC-EVAL-01): derive top_contributor per item so the
 	// frontend can tag rec_click events without a separate fetch.
 	upNextWeights := []recs.WeightedSignal{
-		{Module: h.s1, Weight: 0.30},
-		{Module: h.s2, Weight: 0.20},
-		{Module: h.s3, Weight: 0.20},
-		{Module: h.s4, Weight: 0.10},
-		{Module: h.s5, Weight: 0.20},
+		{Module: h.s1, Weight: 0.27},
+		{Module: h.s2, Weight: 0.17},
+		{Module: h.s3, Weight: 0.17},
+		{Module: h.s4, Weight: 0.09},
+		{Module: h.s5, Weight: 0.17},
+		{Module: h.s8, Weight: 0.13}, // spec 2026-07-17 — franchise proximity
 		{Module: h.s7, Weight: -0.15}, // S7 dropped-penalty (spec 2026-06-11 Phase 3): demotes, never buries
 	}
 	for i, r := range top {

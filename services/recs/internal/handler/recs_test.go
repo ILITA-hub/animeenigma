@@ -82,6 +82,8 @@ func (c *fakeRecsCache) preBake(t *testing.T, key string, payload interface{}) [
 // and the studios / anime_studios / tags / anime_tags tables. The watch_history
 // table is Phase-5; S5 reads from it. All Phase-12 schema is created here so
 // the personalized-branch tests can exercise the full 5-signal ensemble.
+// The franchise column (2026-07-17) supports S8 — every personalized-branch
+// test now runs the full ensemble including S8, so it must always be present.
 func setupRecsTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -101,6 +103,7 @@ func setupRecsTestDB(t *testing.T) *gorm.DB {
 		kind TEXT DEFAULT '',
 		rating TEXT DEFAULT '',
 		material_source TEXT DEFAULT '',
+		franchise TEXT NOT NULL DEFAULT '',
 		hidden INTEGER DEFAULT 0,
 		deleted_at DATETIME
 	)`).Error)
@@ -480,7 +483,7 @@ func TestRecsHandler_PersonalizedBranch_CacheMissComputesAndCaches(t *testing.T)
 
 	// Cache must now contain the per-user key.
 	var cached interface{}
-	require.NoError(t, cache.Get(context.Background(), "recs:user:user-1:topN:v4", &cached),
+	require.NoError(t, cache.Get(context.Background(), "recs:user:user-1:topN:v5", &cached),
 		"per-user cache key must be populated after fresh compute")
 }
 
@@ -500,7 +503,7 @@ func TestRecsHandler_PersonalizedBranch_CacheHitReturnsCachedPayload(t *testing.
 		Total:       1,
 		RowLabelKey: "recs.upNext",
 	}
-	cache.preBake(t, "recs:user:user-1:topN:v4", prebaked)
+	cache.preBake(t, "recs:user:user-1:topN:v5", prebaked)
 
 	recsRepo := repo.NewRecsRepository(db)
 	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
@@ -630,10 +633,10 @@ func TestRecsHandler_PersonalizedBranch_PerUserCacheIsolation(t *testing.T) {
 
 	// Pre-bake distinct payloads for two users — verifies the cache key is
 	// per-user.
-	cache.preBake(t, "recs:user:user-A:topN:v4", RecsEnvelope{
+	cache.preBake(t, "recs:user:user-A:topN:v5", RecsEnvelope{
 		Recs: []RecItem{{Anime: RecAnimePayload{ID: "for-A"}, Rank: 1}}, Total: 1, RowLabelKey: "recs.upNext",
 	})
-	cache.preBake(t, "recs:user:user-B:topN:v4", RecsEnvelope{
+	cache.preBake(t, "recs:user:user-B:topN:v5", RecsEnvelope{
 		Recs: []RecItem{{Anime: RecAnimePayload{ID: "for-B"}, Rank: 1}}, Total: 1, RowLabelKey: "recs.upNext",
 	})
 
