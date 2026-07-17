@@ -66,7 +66,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus tesseract-ocr-jpn \
-    python3 python3-pip \
+    python3 python3-pip libchromaprint-tools \
     ca-certificates wget tzdata \
  && rm -rf /var/lib/apt/lists/*
 COPY services/content-verify/analyzers/requirements.txt /app/analyzers/requirements.txt
