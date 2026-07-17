@@ -90,6 +90,61 @@ func (c *VerifyClient) Summaries(ctx context.Context, animeID string) map[string
 	return out
 }
 
+// SkipTimingRow mirrors one row of content-verify's GET /internal/verify/skip
+// response (services/content-verify/internal/domain.SkipTiming's wire shape).
+// We can't import that type directly — it lives under content-verify's
+// internal/ tree, which Go's internal-import rule restricts to code rooted
+// at services/content-verify/ — so this is an independent struct kept in
+// sync by hand with the snake_case JSON tags on the source type.
+type SkipTimingRow struct {
+	Provider   string  `json:"provider"`
+	Team       string  `json:"team,omitempty"`
+	Episode    int     `json:"episode"`
+	OpStart    float64 `json:"op_start"`
+	OpEnd      float64 `json:"op_end"`
+	EdStart    float64 `json:"ed_start"`
+	EdEnd      float64 `json:"ed_end"`
+	OpStatus   string  `json:"op_status"`
+	EdStatus   string  `json:"ed_status"`
+	Confidence float64 `json:"confidence,omitempty"`
+}
+
+type skipTimingsWire struct {
+	AnimeID string          `json:"anime_id"`
+	Timings []SkipTimingRow `json:"timings"`
+}
+
+// SkipTimings fetches the detected skip-window rows content-verify has
+// probed for an anime. Best-effort, mirroring Summaries: any failure
+// (disabled, transport error, non-200, bad JSON) degrades to a nil slice so
+// the catalog skip-times handler simply falls through to its existing
+// AniSkip proxy path — content-verify availability never blocks that route.
+func (c *VerifyClient) SkipTimings(ctx context.Context, animeID string) []SkipTimingRow {
+	if c == nil || !c.enabled {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.base+"/internal/verify/skip?anime_id="+url.QueryEscape(animeID), nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var env struct {
+		Data skipTimingsWire `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		return nil
+	}
+	return env.Data.Timings
+}
+
 // Hint fires a fire-and-forget visit signal (own ctx — the caller's request
 // context ends before the POST would finish).
 func (c *VerifyClient) Hint(animeID, visitor, source string) {

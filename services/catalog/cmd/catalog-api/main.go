@@ -501,9 +501,6 @@ func main() {
 	// Providers facade (spec 2026-07-07-rbac-roulette-p5-providers-facade-design.md
 	// §A1) — admin read/write over stream_providers.Policy.
 	adminScraperProvidersHandler := handler.NewAdminScraperProvidersHandler(db.DB, log)
-	// Phase 18 (UX-34) — skip-intro/skip-outro proxy of aniskip.com.
-	// Stateless handler with embedded http.Client + shared redis cache.
-	skipTimesHandler := handler.NewSkipTimesHandler(redisCache, log)
 
 	// First-party ("ae") provider — serves JP/EN/RU strictly from the self-hosted
 	// library (MinIO HLS ladder); nil-safe — an unreachable / unconfigured library
@@ -716,6 +713,13 @@ func main() {
 	}
 	verifyClient := capability.NewVerifyClient(verifyURL, verifyEnabled)
 	contentVerifyHandler := handler.NewContentVerifyHandler(verifyClient, redisCache, log)
+
+	// Phase 18 (UX-34) — skip-intro/skip-outro proxy of aniskip.com.
+	// Stateless handler with embedded http.Client + shared redis cache.
+	// Task 9 (content-verify probing) — verifyClient doubles as the optional
+	// detected-skip-window blend source; its own `enabled` flag (above) is
+	// the single kill switch for both the capability blend and this one.
+	skipTimesHandler := handler.NewSkipTimesHandler(redisCache, log, verifyClient)
 
 	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: libraryResolver}, playabilityClient, verifyClient)
 	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)

@@ -11,7 +11,10 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/capability"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 type skipTimesTestCache struct {
@@ -161,6 +164,217 @@ func TestSkipTimesHandlerIgnoresLegacyNegativeCacheEntry(t *testing.T) {
 	}
 	if c.deleteCalls != 1 {
 		t.Fatalf("legacy miss delete calls = %d, want 1", c.deleteCalls)
+	}
+}
+
+// fakeSkipSource is the test double for SkipSource. calls tracks invocation
+// count so tests can assert the detected-blend cache actually short-circuits
+// repeat content-verify lookups.
+type fakeSkipSource struct {
+	rows  []capability.SkipTimingRow
+	calls int
+}
+
+func (f *fakeSkipSource) SkipTimings(_ context.Context, _ string) []capability.SkipTimingRow {
+	f.calls++
+	return f.rows
+}
+
+func newSkipTimesTestLogger() *logger.Logger {
+	return &logger.Logger{SugaredLogger: zap.NewNop().Sugar()}
+}
+
+// serveSkipTimesQuery is serveSkipTimes with an optional raw query string
+// appended, so detected-blend tests can exercise the anime/provider/team
+// params without disturbing the existing malId/episode-only callers above.
+func serveSkipTimesQuery(t *testing.T, h *SkipTimesHandler, query string) SkipTimesResult {
+	t.Helper()
+	router := chi.NewRouter()
+	router.Get("/api/skip-times/{malId}/{episode}", h.Get)
+	recorder := httptest.NewRecorder()
+	target := "/api/skip-times/59193/3"
+	if query != "" {
+		target += "?" + query
+	}
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var envelope struct {
+		Data SkipTimesResult `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return envelope.Data
+}
+
+// aniskipUpstreamFound is the shared fixture: a decodable "positive" aniskip
+// response, used whenever a test asserts the AniSkip path was reached.
+const aniskipUpstreamFound = `{
+	"found": true,
+	"results": [{"interval":{"startTime":90,"endTime":180},"skipType":"op","skipId":"id","episodeLength":1440}]
+}`
+
+func TestSkipTimesHandlerBlendsDetectedOpAndEd(t *testing.T) {
+	c := newSkipTimesTestCache()
+	calls := 0
+	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
+		{
+			Provider: "gogoanime", Team: "", Episode: 3,
+			OpStart: 10, OpEnd: 100, OpStatus: "detected",
+			EdStart: 1300, EdEnd: 1390, EdStatus: "detected",
+		},
+	}}
+	h := &SkipTimesHandler{
+		cache: c,
+		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
+			calls++
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+		})},
+		log:  newSkipTimesTestLogger(),
+		skip: skip,
+	}
+
+	query := "anime=11111111-1111-1111-1111-111111111111&provider=gogoanime&team="
+	first := serveSkipTimesQuery(t, h, query)
+	second := serveSkipTimesQuery(t, h, query)
+
+	for _, result := range []SkipTimesResult{first, second} {
+		if !result.Found || result.Source != "detected" {
+			t.Fatalf("result = %+v, want found+source=detected", result)
+		}
+		if len(result.Results) != 2 {
+			t.Fatalf("results = %+v, want 2 items (op+ed)", result.Results)
+		}
+	}
+	byType := map[string]SkipTimesResultItem{}
+	for _, item := range first.Results {
+		byType[item.SkipType] = item
+	}
+	if op := byType["op"]; op.Interval.StartTime != 10 || op.Interval.EndTime != 100 {
+		t.Fatalf("op item = %+v, want 10-100", op)
+	}
+	if ed := byType["ed"]; ed.Interval.StartTime != 1300 || ed.Interval.EndTime != 1390 {
+		t.Fatalf("ed item = %+v, want 1300-1390", ed)
+	}
+	if calls != 0 {
+		t.Fatalf("aniskip upstream calls = %d, want 0 (detected blend short-circuits)", calls)
+	}
+	if skip.calls != 1 {
+		t.Fatalf("SkipTimings calls = %d, want 1 (second request must hit the detected cache)", skip.calls)
+	}
+	const wantKey = "skip-times:detected:11111111-1111-1111-1111-111111111111:gogoanime::3"
+	if _, ok := c.store[wantKey]; !ok {
+		t.Fatalf("expected detected result cached under %q, store keys = %v", wantKey, c.store)
+	}
+}
+
+func TestSkipTimesHandlerBlendsDetectedOpOnlyWhenEdNoMatch(t *testing.T) {
+	c := newSkipTimesTestCache()
+	calls := 0
+	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
+		{
+			Provider: "animepahe", Team: "610", Episode: 3,
+			OpStart: 5, OpEnd: 95, OpStatus: "detected",
+			EdStatus: "no_match",
+		},
+	}}
+	h := &SkipTimesHandler{
+		cache: c,
+		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
+			calls++
+			return &http.Response{StatusCode: http.StatusNotFound, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"found":false,"results":[]}`))}, nil
+		})},
+		log:  newSkipTimesTestLogger(),
+		skip: skip,
+	}
+
+	result := serveSkipTimesQuery(t, h, "anime=22222222-2222-2222-2222-222222222222&provider=animepahe&team=610")
+
+	if !result.Found || result.Source != "detected" {
+		t.Fatalf("result = %+v, want found+source=detected", result)
+	}
+	if len(result.Results) != 1 || result.Results[0].SkipType != "op" {
+		t.Fatalf("results = %+v, want exactly one op item", result.Results)
+	}
+	if result.Results[0].Interval.StartTime != 5 || result.Results[0].Interval.EndTime != 95 {
+		t.Fatalf("op item = %+v, want 5-95", result.Results[0])
+	}
+	if calls != 0 {
+		t.Fatalf("aniskip upstream calls = %d, want 0 (detected op alone still short-circuits)", calls)
+	}
+}
+
+func TestSkipTimesHandlerFallsThroughToAniskipWhenNoDetectedMatch(t *testing.T) {
+	c := newSkipTimesTestCache()
+	calls := 0
+	// Row exists but for a different episode than the request (path episode
+	// is "3") — must not match, so the handler falls through to AniSkip.
+	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
+		{Provider: "gogoanime", Team: "", Episode: 99, OpStatus: "detected", OpStart: 1, OpEnd: 2},
+	}}
+	h := &SkipTimesHandler{
+		cache: c,
+		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
+			calls++
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+		})},
+		log:  newSkipTimesTestLogger(),
+		skip: skip,
+	}
+
+	result := serveSkipTimesQuery(t, h, "anime=33333333-3333-3333-3333-333333333333&provider=gogoanime&team=")
+
+	if result.Source != "" {
+		t.Fatalf("source = %q, want empty (aniskip path, no detected match)", result.Source)
+	}
+	if !result.Found {
+		t.Fatalf("expected aniskip result to be served, got %+v", result)
+	}
+	if calls != 1 {
+		t.Fatalf("aniskip upstream calls = %d, want 1 (fallback path)", calls)
+	}
+	if skip.calls != 1 {
+		t.Fatalf("SkipTimings calls = %d, want 1", skip.calls)
+	}
+}
+
+func TestSkipTimesHandlerParamsAbsentUsesAniskipUnchanged(t *testing.T) {
+	c := newSkipTimesTestCache()
+	calls := 0
+	var gotURL string
+	// skip is non-nil (feature enabled) but the request carries no
+	// anime/provider params — the detected blend must never engage, and the
+	// upstream aniskip URL must be byte-identical to the pre-existing path.
+	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
+		{Provider: "gogoanime", Team: "", Episode: 3, OpStatus: "detected", OpStart: 1, OpEnd: 2},
+	}}
+	h := &SkipTimesHandler{
+		cache: c,
+		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(req *http.Request) (*http.Response, error) {
+			calls++
+			gotURL = req.URL.String()
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+		})},
+		log:  newSkipTimesTestLogger(),
+		skip: skip,
+	}
+
+	result := serveSkipTimesQuery(t, h, "")
+
+	if result.Source != "" {
+		t.Fatalf("source = %q, want empty (pure aniskip path)", result.Source)
+	}
+	if !result.Found || calls != 1 {
+		t.Fatalf("expected aniskip result with 1 upstream call, result=%+v calls=%d", result, calls)
+	}
+	if skip.calls != 0 {
+		t.Fatalf("SkipTimings calls = %d, want 0 (params absent must never query content-verify)", skip.calls)
+	}
+	const wantSuffix = "/v2/skip-times/59193/3?episodeLength=0&types=op&types=ed"
+	if !strings.HasSuffix(gotURL, wantSuffix) {
+		t.Fatalf("upstream URL = %q, want suffix %q (unchanged from pre-blend behavior)", gotURL, wantSuffix)
 	}
 }
 
