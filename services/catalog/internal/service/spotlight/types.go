@@ -15,6 +15,7 @@ package spotlight
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
@@ -216,6 +217,22 @@ type DailyFanficData struct {
 	AIGenerated    bool   `json:"ai_generated"`
 	PartCount      int    `json:"part_count"`
 	CreatedAt      string `json:"created_at"`
+}
+
+// UpcomingForYouItem is one matched announced title. Anime and Reason are
+// forwarded VERBATIM from the recs service wire format (spec 2026-07-17) —
+// catalog does not re-shape recs payloads (personal_pick precedent).
+type UpcomingForYouItem struct {
+	Anime      json.RawMessage `json:"anime"`
+	MatchScore float64         `json:"match_score"`
+	Reason     json.RawMessage `json:"reason"`
+}
+
+// UpcomingForYouData is the payload for `Card{Type: "upcoming_for_you"}` —
+// login-only announcement matches. Items MUST be initialized as
+// `[]UpcomingForYouItem{}` (never nil) so it marshals as `[]` not `null`.
+type UpcomingForYouData struct {
+	Items []UpcomingForYouItem `json:"items"`
 }
 
 // Response is the top-level envelope returned by `GET /api/home/spotlight`.

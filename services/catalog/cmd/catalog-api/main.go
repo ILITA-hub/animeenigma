@@ -686,6 +686,9 @@ func main() {
 		cards.NewCuratedResolver(animeRepo, redisCache, log, cfg.SpotlightCuratedShikimoriID),
 		// Daily fanfic spotlight — bot-authored fanfic teaser via fanfic-engine.
 		cards.NewDailyFanficResolver(spotlightFanficClient, redisCache, log),
+		// Upcoming-for-you — announced titles matched to the user's taste
+		// via recs (spec 2026-07-17). Login-only.
+		cards.NewUpcomingForYouResolver(spotlightRecsClient, redisCache, log),
 	}
 	spotlightAggregator := spotlight.NewAggregator(redisCache, log, spotlightResolvers)
 	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)
