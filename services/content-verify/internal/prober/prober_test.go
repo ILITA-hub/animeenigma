@@ -15,13 +15,20 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/queue"
 )
 
-// fakeRunner returns canned LID/Hardsub results regardless of input, so
-// tests can drive Probe's control flow without real analyzers.
+// fakeRunner returns canned LID/Hardsub/Opskip results regardless of input,
+// so tests can drive Probe's (and SkipProber's) control flow without real
+// analyzers.
 type fakeRunner struct {
 	lid     *LIDResult
 	lidErr  error
 	hardsub *HardsubResult
 	hsErr   error
+
+	opPair    *OpskipPair
+	opPairErr error
+
+	opLocate    *OpskipLocate
+	opLocateErr error
 }
 
 func (f *fakeRunner) LID(ctx context.Context, wavs []string) (*LIDResult, error) {
@@ -36,6 +43,20 @@ func (f *fakeRunner) Hardsub(ctx context.Context, framesDir string) (*HardsubRes
 		return nil, f.hsErr
 	}
 	return f.hardsub, nil
+}
+
+func (f *fakeRunner) OpskipPair(ctx context.Context, a, b string, minS, maxS, sim float64) (*OpskipPair, error) {
+	if f.opPairErr != nil {
+		return nil, f.opPairErr
+	}
+	return f.opPair, nil
+}
+
+func (f *fakeRunner) OpskipLocate(ctx context.Context, wav, fpsJSON string, minS, maxS, sim float64) (*OpskipLocate, error) {
+	if f.opLocateErr != nil {
+		return nil, f.opLocateErr
+	}
+	return f.opLocate, nil
 }
 
 func threeAgreeingEnFragments() *LIDResult {
