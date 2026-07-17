@@ -93,12 +93,13 @@ export function useFullscreen(deps: FullscreenDeps) {
     exitPseudoFs(true)
   }
 
-  // Under-island coverage: viewport-fit=cover ships STATICALLY in index.html.
-  // Runtime opt-in from here was tried twice (setAttribute, then whole-node
-  // replacement) and iOS 26 ignored both on-device — do not resurrect that
-  // mechanism; only a load-time static cover expands the layout viewport.
-  // The takeover's overlay rows pad themselves back inside the safe area
-  // (AePlayer.vue — incl. a :deep(.pl-controls) rule for the control bar).
+  // Under-island coverage: viewport-fit=cover is managed by index.html
+  // (landscape + installed-PWA only — portrait browser cover paints a black
+  // band on iOS 26, proven on-device). Runtime opt-in from HERE was tried
+  // twice (setAttribute, then whole-node replacement) and iOS ignored both
+  // without a rotation — do not resurrect that mechanism. The takeover's
+  // overlay rows pad themselves back inside the safe area (AePlayer.vue —
+  // incl. a :deep(.pl-controls) rule for the control bar).
 
   function enterPseudoFs() {
     pseudoFs.value = true

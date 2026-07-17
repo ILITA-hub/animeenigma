@@ -705,19 +705,40 @@ onUnmounted(() => {
   .navbar-root {
     top: calc(var(--safe-top) + 0.5rem);
     inset-inline: calc(var(--safe-left) + 1rem) calc(var(--safe-right) + 1rem);
+  }
+}
+
+/* Phone-landscape / small-tablet full-width bar (md:inset-x-0 spans the
+   physical screen edges under viewport-fit=cover): without cutout insets
+   the brand logo (left end) and the last action button (right end) land
+   half-under the Dynamic Island / rounded corners (photo
+   2026-07-17T02-42-27). Pad the inner nav by the insets; on cutout-less
+   devices --safe-* are 0px and max() degrades to the px-4 utility exactly.
+   ≥1024px keeps lg:px-8 untouched — no phone is that wide in landscape. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .navbar-root nav {
+    padding-inline: max(1rem, var(--safe-left)) max(1rem, var(--safe-right));
+  }
+}
+
+/* Hide by fading IN PLACE — never translate the fixed capsule up past the
+   viewport top edge. iOS 26 Safari treats a fixed element at/above the top
+   edge as a fixed header and permanently swaps the status-bar zone from
+   "composite live page pixels behind the island" to an opaque root-color
+   band (proven on-device by the /edge-m.html bisection: identical page
+   minus the translate-up hide shows content behind the island; with it —
+   black band). Parked in place and visibility:hidden the capsule is
+   paint-free, unfocusable and outside hit-testing, matching the state
+   iOS 26 proved harmless. visibility transitions 0s AFTER the 0.3s fade
+   out, and instantly on fade-in. Applies to the WHOLE phone range — since
+   viewport-fit=cover ships in landscape (768–1023 = every iPhone rotated),
+   the translate-hide hazard exists there too; only ≥1024 desktop keeps the
+   plain -translate-y-full slide (no cutouts, no iOS). */
+@media (max-width: 1023px) {
+  .navbar-root {
     transition: opacity 0.3s, visibility 0s;
   }
 
-  /* Hide by fading IN PLACE — never translate the fixed capsule up past the
-     viewport top edge. iOS 26 Safari treats a fixed element at/above the top
-     edge as a fixed header and permanently swaps the status-bar zone from
-     "composite live page pixels behind the island" to an opaque root-color
-     band (proven on-device by the /edge-m.html bisection: identical page
-     minus the translate-up hide shows content behind the island; with it —
-     black band). Parked at top+8px and visibility:hidden the capsule is
-     paint-free, unfocusable and outside hit-testing, matching the state
-     iOS 26 proved harmless. visibility transitions 0s AFTER the 0.3s fade
-     out, and instantly on fade-in. */
   .navbar-root--hidden {
     translate: 0 0;
     opacity: 0;

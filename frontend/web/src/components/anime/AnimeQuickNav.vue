@@ -7,7 +7,7 @@
 
   <!-- Desktop: floating right sticky pill column -->
   <nav
-    class="hidden md:flex md:flex-col md:fixed md:top-24 md:right-4 md:z-30 gap-2"
+    class="hidden md:flex md:flex-col md:fixed md:top-24 md:right-4 md:z-30 gap-2 quicknav-rail-safe"
     :aria-label="$t('anime.nav.heading')"
   >
     <a
@@ -104,5 +104,12 @@ onBeforeUnmount(() => {
    offset must too. 0px everywhere else — identical to plain top-16. */
 .quicknav-safe {
   top: calc(var(--safe-top) + 4rem);
+}
+
+/* The ≥md fixed rail hugs the right edge; in landscape under
+   viewport-fit=cover that edge is the cutout / rounded-corner zone, so it
+   must clear --safe-right. 0px on cutout-less devices = plain right-4. */
+.quicknav-rail-safe {
+  right: calc(var(--safe-right) + 1rem);
 }
 </style>

@@ -8,26 +8,47 @@
     <link id="favicon-32" rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <link id="favicon-16" rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-    <!-- viewport-fit=cover STATIC in ALL modes (2026-07-17, third attempt at
-         under-island fullscreen). History, so nobody relitigates blind:
-         · 07-02 pulled cover from browser mode — "iOS 26 fights the page for
-           the status-bar zone" (opaque mis-sampled band). That observation
-           predates the 07-03 root cause: the band was caused by always-mounted
-           position:fixed elements at the viewport edges (navbar translate-hide,
-           closed Modal wrappers, later the fixed #ae-boot shell), NOT by cover
-           — all of those are fixed now, and the bars stayed gone.
-         · Runtime opt-in during the player takeover was tried twice and iOS
-           ignores it — setAttribute AND full node replacement (on-device
-           screenshots 2026-07-16T13-44-25 / 15-20-22: side letterbox strips).
-           Only a load-time static cover expands the layout viewport.
-         env(safe-area-inset-*) compensation is already wired: body padding
-         via --safe-* (main.css), navbar/toaster/quicknav offsets, and the
-         player takeover pads its overlay rows. REVERT = restore the plain
-         meta + standalone-only inline script from git history; on-device
-         check after any change here: (1) no black bands behind the Dynamic
-         Island on the anime page, (2) fullscreen video reaches the screen
-         edges in landscape. Only a real iPhone shows either. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- viewport-fit=cover is ORIENTATION-CONDITIONAL (2026-07-17, fourth
+         round of under-island work — full history so nobody relitigates
+         blind; every line below is an on-device iPhone verdict):
+         · PORTRAIT browser + cover = black band in the status-bar/island
+           zone. First seen 07-02, blamed on fixed elements 07-03 (those were
+           real, independent bugs), re-confirmed 07-17 with all fixed-element
+           causes eliminated — the portrait cover fight is REAL on iOS 26.
+           Without cover, Safari tints the zone with the page background —
+           seamless (wanikani-style). So portrait ships WITHOUT cover.
+         · LANDSCAPE + cover = clean edge-to-edge (photo 2026-07-17T02-42-27:
+           fullscreen video reaches the physical edges, no band). Without
+           cover, landscape letterboxes the player takeover away from the
+           island (photos 2026-07-16). So landscape ships WITH cover.
+         · Mid-session runtime swaps WITHOUT rotation are ignored by iOS
+           (setAttribute AND node replacement, both disproven on-device) —
+           but rotation forces a viewport re-evaluation, so flipping the
+           content on the orientation MQ change is applied at the moment it
+           matters. Installed PWA (no Safari chrome) keeps cover always.
+         env(safe-area-inset-*) compensation is wired throughout: body
+         padding via --safe-* (main.css), navbar/toaster/quicknav offsets,
+         and the player takeover pads its overlay rows; all of it is inert
+         (env()=0) whenever cover is off. Only a real iPhone can verify
+         changes here — check BOTH portrait island zone and landscape
+         fullscreen. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+      (function () {
+        var meta = document.querySelector('meta[name="viewport"]')
+        var base = 'width=device-width, initial-scale=1.0'
+        var standalone = window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true
+        var landscape = window.matchMedia('(orientation: landscape)')
+        function apply () {
+          meta.setAttribute('content', standalone || landscape.matches
+            ? base + ', viewport-fit=cover'
+            : base)
+        }
+        apply()
+        if (!standalone) landscape.addEventListener('change', apply)
+      })()
+    </script>
     <!-- Installed-PWA mode (Add to Home Screen): black-translucent makes the
          iOS status bar transparent so the page truly renders behind the
          notch/Dynamic Island; safe-area offsets in main.css keep content

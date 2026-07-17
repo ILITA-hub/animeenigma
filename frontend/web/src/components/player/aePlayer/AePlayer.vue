@@ -1573,11 +1573,12 @@ onUnmounted(() => {
 }
 
 /* The takeover runs the VIDEO under the Dynamic Island / notch / home
-   indicator (viewport-fit=cover ships statically in index.html — runtime
-   opt-in was proven ignored by iOS), while the overlay rows pad themselves
-   back inside the safe area so the episode trigger and control buttons stay
-   visible and tappable. env() is all zeros whenever cover is not in effect —
-   these rules are inert then. */
+   indicator (viewport-fit=cover comes from index.html in landscape and
+   installed-PWA — runtime opt-in from the player was proven ignored by
+   iOS), while the overlay rows pad themselves back inside the safe area so
+   the episode trigger and control buttons stay visible and tappable. env()
+   is all zeros whenever cover is not in effect — these rules are inert
+   then. */
 .pl--pseudo-fs .pl-top {
   padding-top: max(16px, var(--safe-top));
   padding-left: max(18px, var(--safe-left));
