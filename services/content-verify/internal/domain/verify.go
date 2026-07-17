@@ -83,9 +83,16 @@ type UnitVerdict struct {
 	Audio    *AudioVerdict   `json:"audio,omitempty"`
 	Hardsub  *HardsubVerdict `json:"hardsub,omitempty"`
 	Softsubs []SoftTrack     `json:"softsubs,omitempty"`
-	ProbedAt time.Time       `json:"probed_at"`
-	Sample   SampleInfo      `json:"sample"`
-	Fails    int             `json:"fails,omitempty"` // consecutive unreachable count → backoff
+	// RawAudio: the unit carries the ORIGINAL-language audio track, whatever
+	// that language is — a synthesized claim from provider-native metadata
+	// (kodik `subtitles` translations = original audio + burned RU subs).
+	// Unlike Audio.Lang=="ja" it stays correct for non-Japanese originals
+	// (donghua etc.), which is exactly why kodik synth uses it instead of
+	// asserting a language it never heard.
+	RawAudio bool      `json:"raw_audio,omitempty"`
+	ProbedAt time.Time `json:"probed_at"`
+	Sample   SampleInfo `json:"sample"`
+	Fails    int        `json:"fails,omitempty"` // consecutive unreachable count → backoff
 }
 
 // UnitList serializes as JSON for the jsonb column (works on postgres and
@@ -144,6 +151,9 @@ func Summarize(units []UnitVerdict) ProviderSummary {
 		if u.Status == StatusVerified {
 			verified++
 		}
+		if u.Status == StatusVerified && u.RawAudio {
+			s.Raw = true // provider-native original-audio claim (kodik subtitles teams)
+		}
 		if u.Audio != nil && u.Audio.Verified {
 			if u.Audio.Lang == "ja" {
 				s.Raw = true
@@ -151,7 +161,12 @@ func Summarize(units []UnitVerdict) ProviderSummary {
 				dub[u.Audio.Lang] = true
 			}
 		}
-		if u.Hardsub != nil && u.Hardsub.Verified && u.Hardsub.Present && u.Hardsub.Lang != "" {
+		// Hardsub rollup counts RAW-track units ONLY (owner taxonomy 2026-07-17:
+		// the badge is "SUB BURNED-IN <lang>" on the original-audio option).
+		// Dub units routinely inherit burned subs from the raw source they were
+		// voiced over — real, but noise as a provider-level claim; the detail
+		// stays visible per-unit for hacker mode.
+		if u.Key.Category != "dub" && u.Hardsub != nil && u.Hardsub.Verified && u.Hardsub.Present && u.Hardsub.Lang != "" {
 			hs[u.Hardsub.Lang] = true
 		}
 	}

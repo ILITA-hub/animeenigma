@@ -82,7 +82,11 @@ func AssembleAudio(frs []LIDFragment) *domain.AudioVerdict {
 
 // AssembleHardsub applies tools/subprobe's decision rule (verify_verdict.py):
 // burned = tier1_hits >= max(2, frames/5) AND ocr_real >= 1. Verified
-// (badge-grade) additionally needs ≥2 OCR confirmations + a known script.
+// (badge-grade) needs MOST frames texty: real dialogue subs sit on screen for
+// nearly every sampled frame (tier1_hits >= max(4, frames/3)) with >=3 OCR
+// confirmations — episode typography/title cards/credits hit only a few
+// frames and must never earn the badge (live FP 2026-07-17: kodik AniRise
+// "en" verified off scene text while the actual stream carries no subs).
 func AssembleHardsub(h *HardsubResult) *domain.HardsubVerdict {
 	if h == nil || h.Frames == 0 {
 		return nil
@@ -105,7 +109,11 @@ func AssembleHardsub(h *HardsubResult) *domain.HardsubVerdict {
 	case "cjk":
 		v.Lang = "ja"
 	}
-	if h.OCRReal >= 2 && v.Lang != "" {
+	verifyHits := h.Frames / 3
+	if verifyHits < 4 {
+		verifyHits = 4
+	}
+	if h.Tier1Hits >= verifyHits && h.OCRReal >= 3 && v.Lang != "" {
 		v.Confidence = 0.96
 		v.Verified = true
 	} else {

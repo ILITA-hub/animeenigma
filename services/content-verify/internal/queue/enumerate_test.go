@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -82,9 +83,23 @@ func TestEnumerateUnits(t *testing.T) {
 			if u.Key.Team == "" {
 				t.Fatalf("kodik unit needs team key: %+v", u)
 			}
+			// Kodik is synth-only (owner decision 2026-07-17): roster truth.
+			if u.Synth == nil || u.Synth.Status != domain.StatusVerified {
+				t.Fatalf("kodik unit must carry a verified synth verdict: %+v", u)
+			}
+			switch u.Key.Category {
+			case "dub":
+				if u.Synth.Audio == nil || u.Synth.Audio.Lang != "ru" || !u.Synth.Audio.Verified {
+					t.Fatalf("kodik voice synth must claim verified ru dub: %+v", u.Synth)
+				}
+			case "sub":
+				if !u.Synth.RawAudio || u.Synth.Hardsub == nil || u.Synth.Hardsub.Lang != "ru" || !u.Synth.Hardsub.Verified {
+					t.Fatalf("kodik subtitles synth must claim raw audio + burned ru: %+v", u.Synth)
+				}
+			}
 		case "ae":
 			ae++
-			if u.AeLang != "en" {
+			if u.Synth == nil || u.Synth.Audio == nil || u.Synth.Audio.Lang != "en" {
 				t.Fatalf("ae synth lang: %+v", u)
 			}
 		case "hanime":

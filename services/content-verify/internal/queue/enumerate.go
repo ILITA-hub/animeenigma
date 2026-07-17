@@ -26,8 +26,13 @@ type Unit struct {
 	Key       domain.UnitKey
 	Episode   int    // sample episode (latest available on the provider)
 	EpisodeID string // scraper episode id; "" for kodik/animejoy
-	AeLang    string // non-empty → synthesize verified verdict, no probe
-	StateRank int    // active=0 recovering=1 degraded=2 — probe order
+	// Synth: non-nil → persist this verdict as-is, no probe. Used where
+	// provider-native metadata already answers with high confidence: ae
+	// (library-ingest audio lang) and kodik (its own translation roster —
+	// voice = RU dub, subtitles = original audio + burned RU subs), so the
+	// throttled probe budget is spent only where the answer is unknown.
+	Synth     *domain.UnitVerdict
+	StateRank int // active=0 recovering=1 degraded=2 — probe order
 }
 
 func stateRank(s string) int {
@@ -64,23 +69,38 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 			if lang == "" {
 				lang = "ja"
 			}
+			key := domain.UnitKey{Track: "default"}
 			units = append(units, Unit{AnimeID: animeID, Provider: pc.Provider,
-				Key: domain.UnitKey{Track: "default"}, AeLang: lang, StateRank: rank})
+				Key: key, StateRank: rank,
+				Synth: &domain.UnitVerdict{Key: key, Status: domain.StatusVerified,
+					Audio: &domain.AudioVerdict{Lang: lang, Confidence: 1.0, Verified: true}}})
 
 		case pc.Provider == "kodik":
+			// Kodik is never probed (owner decision 2026-07-17): its own
+			// translation roster is the high-confidence truth. voice = RU dub;
+			// subtitles = original audio + burned-in RU subs (RawAudio, not a
+			// language guess — stays correct for non-JA originals).
 			translations, err := c.KodikTranslations(ctx, animeID)
 			if err != nil {
 				logSkip(log, animeID, pc.Provider, "kodik translations fetch failed", err)
 				continue // enumeration is best-effort per provider
 			}
 			for _, tr := range translations {
-				cat := "dub"
+				ep := maxInt(tr.EpisodesCount, 1)
 				if tr.Type == "subtitles" {
-					cat = "sub"
+					key := domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: "sub"}
+					units = append(units, Unit{AnimeID: animeID, Provider: "kodik",
+						Key: key, Episode: ep, StateRank: rank,
+						Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
+							RawAudio: true,
+							Hardsub:  &domain.HardsubVerdict{Present: true, Verified: true, Lang: "ru", Confidence: 1.0}}})
+					continue
 				}
+				key := domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: "dub"}
 				units = append(units, Unit{AnimeID: animeID, Provider: "kodik",
-					Key:     domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: cat},
-					Episode: maxInt(tr.EpisodesCount, 1), StateRank: rank})
+					Key: key, Episode: ep, StateRank: rank,
+					Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
+						Audio: &domain.AudioVerdict{Lang: "ru", Confidence: 1.0, Verified: true}}})
 			}
 
 		case scraperProviders[pc.Provider]:

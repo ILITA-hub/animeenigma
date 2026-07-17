@@ -90,11 +90,11 @@ func (w *Worker) tick(ctx context.Context) {
 		return
 	}
 
-	// ae first-party: synthesize from library-ingest truth (Phase C), no probe.
-	if unit.AeLang != "" {
-		v := domain.UnitVerdict{Key: unit.Key, Episode: unit.Episode, Status: domain.StatusVerified,
-			Audio:    &domain.AudioVerdict{Lang: unit.AeLang, Confidence: 1.0, Verified: true},
-			ProbedAt: time.Now().UTC()}
+	// Synth units (ae library truth, kodik translation roster): persist the
+	// pre-built verdict as-is, no probe.
+	if unit.Synth != nil {
+		v := *unit.Synth
+		v.ProbedAt = time.Now().UTC()
 		w.persist(ctx, *unit, v, "synth")
 		return
 	}

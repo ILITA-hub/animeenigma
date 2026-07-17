@@ -102,8 +102,12 @@ func TestTickIdleQueueSkipsProbe(t *testing.T) {
 
 func TestTickAeSynthUnitSkipsProbe(t *testing.T) {
 	unit := &queue.Unit{
-		AnimeID: "a-1", Provider: "ae-firstparty", AeLang: "en", Episode: 3,
+		AnimeID: "a-1", Provider: "ae-firstparty", Episode: 3,
 		Key: domain.UnitKey{Track: "default"},
+		Synth: &domain.UnitVerdict{
+			Key: domain.UnitKey{Track: "default"}, Episode: 3, Status: domain.StatusVerified,
+			Audio: &domain.AudioVerdict{Lang: "en", Confidence: 1.0, Verified: true},
+		},
 	}
 	claimer := &fakeClaimer{unit: unit}
 	prober := &fakeProber{}

@@ -105,3 +105,13 @@ func TestNeedsMoreFragments(t *testing.T) {
 		t.Fatal("speech shortage must request more fragments")
 	}
 }
+
+// Live FP 2026-07-17 (kodik AniRise): episode typography / title cards hit a
+// few frames and can OCR "real" — that must stay below the verified bar,
+// which demands MOST frames texty (real dialogue subs) — tier1 >= frames/3.
+func TestAssembleHardsubTypographyNotVerified(t *testing.T) {
+	fp := AssembleHardsub(&HardsubResult{Frames: 15, Tier1Hits: 4, OCRReal: 3, Script: "latin"})
+	if !fp.Present || fp.Verified {
+		t.Fatalf("sparse texty frames (typography) must be present but NOT verified: %+v", fp)
+	}
+}
