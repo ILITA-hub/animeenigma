@@ -123,13 +123,16 @@ export async function parseASS(content: string): Promise<SubtitleCue[]> {
   return cues
 }
 
-// Parse timestamp "HH:MM:SS,mmm" or "HH:MM:SS.mmm" to seconds
+// Parse an SRT/WebVTT timestamp to seconds. WebVTT permits the hour component
+// to be omitted for cues below one hour ("MM:SS.mmm"), which is the shape
+// emitted by GogoAnime's bundled VTT tracks.
 function parseTimestamp(ts: string): number {
   const parts = ts.trim().replace(',', '.').split(':')
-  if (parts.length !== 3) return 0
-  const hours = parseInt(parts[0]) || 0
-  const minutes = parseInt(parts[1]) || 0
-  const seconds = parseFloat(parts[2]) || 0
+  if (parts.length !== 2 && parts.length !== 3) return 0
+  const hasHours = parts.length === 3
+  const hours = hasHours ? (parseInt(parts[0]) || 0) : 0
+  const minutes = parseInt(parts[hasHours ? 1 : 0]) || 0
+  const seconds = parseFloat(parts[hasHours ? 2 : 1]) || 0
   return hours * 3600 + minutes * 60 + seconds
 }
 

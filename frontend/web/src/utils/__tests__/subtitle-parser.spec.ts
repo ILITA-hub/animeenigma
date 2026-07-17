@@ -9,9 +9,19 @@ vi.mock('@/utils/protocolLadder', () => ({
   ladder: { currentBase, ownsUrl },
 }))
 
-import { fetchAndParseCues } from '../subtitle-parser'
+import { fetchAndParseCues, parseVTT } from '../subtitle-parser'
 
 const SRT = `1\n00:00:08,000 --> 00:00:10,000\nhello\n\n2\n00:00:18,000 --> 00:00:21,000\nworld\n`
+const HOURLESS_VTT = `WEBVTT\n\n00:20.240 --> 00:29.210\nhello\n\n01:00:01.500 --> 01:00:03.000\nworld\n`
+
+describe('parseVTT', () => {
+  it('parses valid hourless timestamps used by GogoAnime tracks', () => {
+    const cues = parseVTT(HOURLESS_VTT)
+    expect(cues).toHaveLength(2)
+    expect(cues[0]).toMatchObject({ start: 20.24, end: 29.21 })
+    expect(cues[1]).toMatchObject({ start: 3601.5, end: 3603 })
+  })
+})
 
 describe('fetchAndParseCues', () => {
   beforeEach(() => {
