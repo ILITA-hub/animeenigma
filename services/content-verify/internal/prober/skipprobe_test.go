@@ -185,6 +185,50 @@ func TestSkipProbePairFound(t *testing.T) {
 	}
 }
 
+// TestSkipProbePairDuplicateContent: the analyzer reporting the two inputs
+// as the SAME content (provider episode-mapping bug) must come back as
+// pending_fp on the bootstrapped kinds — never no_match (a wrong terminal
+// verdict that also feeds the re-pair scan) and never a stored fingerprint
+// (which would poison every later locate).
+func TestSkipProbePairDuplicateContent(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/anime/a1/kodik/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"stream_url":"https://cdn.example/media.m3u8","referer":"","exp":"1","sig":"s"}}`))
+	})
+	mux.HandleFunc("/api/streaming/hls-proxy", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("#EXTM3U\n#EXTINF:1440.0,\nseg1.ts\n#EXT-X-ENDLIST\n"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
+	runner := &fakeRunner{opPair: &OpskipPair{Found: false, Duplicate: true}}
+	fps := &fakeFPStore{}
+	p := NewSkipProber(cat, srv.URL, ffmpeg, t.TempDir(), runner, fps, testSkipConfig(), nil)
+	p.retryWait = 0
+
+	unitA := queue.SkipUnit{AnimeID: "a1", Provider: "kodik", Team: "Trans1", TeamID: 7, Episode: 1}
+	unitB := queue.SkipUnit{AnimeID: "a1", Provider: "kodik", Team: "Trans1", TeamID: 7, Episode: 2}
+	task := queue.SkipTask{Unit: unitA, Pair: &unitB, PairKinds: []string{domain.SkipKindOp, domain.SkipKindEd}}
+	rows := p.Probe(context.Background(), task, 0)
+
+	if len(rows) != 2 {
+		t.Fatalf("pair mode: want 2 rows, got %d: %+v", len(rows), rows)
+	}
+	for _, r := range rows {
+		if r.OpStatus != domain.SkipPendingFP || r.EdStatus != domain.SkipPendingFP {
+			t.Fatalf("duplicate content must yield pending_fp on both kinds: %+v", r)
+		}
+		if r.Fails != 0 {
+			t.Fatalf("duplicate content is not an unreachable failure, Fails must stay 0: %+v", r)
+		}
+	}
+	if len(fps.added) != 0 {
+		t.Fatalf("duplicate content must never persist a fingerprint: %+v", fps.added)
+	}
+}
+
 // TestSkipProbeResolveFailureUnreachable: a 404 on the only leg of a locate
 // task must come back as a single unreachable row with Fails bumped.
 func TestSkipProbeResolveFailureUnreachable(t *testing.T) {

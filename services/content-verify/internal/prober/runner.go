@@ -24,7 +24,11 @@ type AnalyzerRunner interface {
 
 // OpskipPair mirrors opskip.py's `pair` mode JSON output.
 type OpskipPair struct {
-	Found      bool     `json:"found"`
+	Found bool `json:"found"`
+	// Duplicate marks a not-found whose cause is the two inputs being the
+	// SAME content (provider episode-mapping bug) — not a fingerprint-worthy
+	// comparison and not evidence the episodes lack an OP/ED.
+	Duplicate  bool     `json:"duplicate"`
 	AStart     float64  `json:"a_start"`
 	AEnd       float64  `json:"a_end"`
 	BStart     float64  `json:"b_start"`

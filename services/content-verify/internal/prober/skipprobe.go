@@ -212,6 +212,19 @@ func (p *SkipProber) pairSide(ctx context.Context, kind, wavA, wavB string) pair
 		}
 		return pairOutcome{status: domain.SkipPendingFP}
 	}
+	if res.Duplicate {
+		// The two "episodes" carried the same content (provider
+		// episode-mapping bug — the gogoanime fake-content pattern). That is
+		// neither a shared-OP detection nor evidence the episodes lack one:
+		// no_match would be a wrong terminal verdict AND feed the re-pair
+		// scan, while detected would store a poisoned season fingerprint.
+		// pending_fp re-dues the unit after its TTL — the provider may serve
+		// real per-episode content by then.
+		if p.log != nil {
+			p.log.Warnw("opskip pair duplicate content", "kind", kind)
+		}
+		return pairOutcome{status: domain.SkipPendingFP}
+	}
 	if !res.Found {
 		return pairOutcome{status: domain.SkipNoMatch}
 	}
