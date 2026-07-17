@@ -128,7 +128,7 @@ will fail the build).
 
 ## Recipe: add a Spotlight card type (5 anchors, ~50 lines)
 
-`HeroSpotlightBlock` (workstream `hero-spotlight`) is a 9-card rotating carousel; a 10th touches 5 anchors. Read the guidelines above alongside this recipe.
+`HeroSpotlightBlock` (workstream `hero-spotlight`) is a 12-card rotating carousel; adding another touches 5 anchors. Read the guidelines above alongside this recipe.
 
 1. **BE resolver** — create `services/catalog/internal/service/spotlight/cards/{new_type}.go` implementing `spotlight.Resolver` (`Type()` + `Resolve(ctx, userID *string) (*spotlight.Card, error)`). Mirror `featured.go` («Рекомендуем сегодня»): manual `cache.Get`/`cache.Set` with `errors.Is(err, cache.ErrNotFound)`; return `(nil,nil)` ineligible, `(nil,err)` failure, `(*Card,nil)` success. Multi-item resolvers MUST apply `spotlight.AdaptiveSlice` (1-2-3 layout rule). Login-only resolvers return `(nil,nil)` when `userID==nil`. Carry the `spotlight:` Redis key prefix for new keys (HSB-NF-03). Co-locate a `_test.go` with handwritten fakes (no testify/mock).
 2. **BE Data type** — add the JSON-shaped `{NewType}Data` struct to `services/catalog/internal/service/spotlight/types.go` (extends the Card union). Add a round-trip marshal/unmarshal test to `types_test.go`.
