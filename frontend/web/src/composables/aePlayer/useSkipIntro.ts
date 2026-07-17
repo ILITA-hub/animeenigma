@@ -1,5 +1,5 @@
 import { computed, watch, type Ref } from 'vue'
-import { useSkipTimes } from '@/composables/useSkipTimes'
+import { useSkipTimes, type SkipTimesComboContext } from '@/composables/useSkipTimes'
 import { segmentsToChapters, activeSkipSegment } from '@/composables/aePlayer/skipSegments'
 import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
@@ -15,6 +15,12 @@ export interface SkipIntroDeps {
   currentTime: Ref<number>
   duration: Ref<number>
   writeProgress: () => void
+  // Task 10 (combo-aware skip times) — the current source selection, so a
+  // provider/team switch fetches THIS encode's detected OP/ED window instead
+  // of the crowdsourced (provider-agnostic) AniSkip fallback. Optional so
+  // callers that don't care about per-encode timing (tests, future embeds)
+  // can omit it and fall back to the plain malId+episode lookup.
+  getCombo?: () => SkipTimesComboContext | null
 }
 
 export function useSkipIntro(deps: SkipIntroDeps) {
@@ -22,7 +28,8 @@ export function useSkipIntro(deps: SkipIntroDeps) {
 
   const epNumber = computed(() => selectedEpisode.value?.number ?? null)
   const malIdRef = computed(() => deps.getMalId() ?? null)
-  const { opening, ending } = useSkipTimes(malIdRef, epNumber)
+  const comboRef = computed(() => deps.getCombo?.() ?? null)
+  const { opening, ending } = useSkipTimes(malIdRef, epNumber, comboRef)
 
   const chapters = computed(() =>
     segmentsToChapters(opening.value, ending.value, duration.value),

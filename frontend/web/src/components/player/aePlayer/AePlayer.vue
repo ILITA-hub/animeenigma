@@ -1040,6 +1040,14 @@ const skip = useSkipIntro({
   currentTime,
   duration,
   writeProgress,
+  // Task 10 (combo-aware skip times) — provider/team switches fetch this
+  // encode's detected OP/ED window (content-verify) ahead of the
+  // crowdsourced AniSkip fallback.
+  getCombo: () => ({
+    animeId: props.animeId,
+    provider: state.combo.value.provider,
+    team: state.combo.value.team,
+  }),
 })
 const { chapters, skipTarget, onSkipSegment } = skip
 

@@ -36,14 +36,32 @@ export interface SkipSegment {
   end: number
 }
 
+// Task 10 (combo-aware skip times) — the caller's current source selection.
+// When animeId+provider are both present, the fetch asks the catalog's
+// content-verify detected-window blend for THIS encode's timings instead of
+// (or ahead of) the crowdsourced AniSkip fallback — different providers/teams
+// can have different OP/ED cuts for the same episode. `team` is optional
+// (scraper providers don't have a fansub-team concept).
+export interface SkipTimesComboContext {
+  animeId?: string
+  provider?: string
+  team?: string | null
+}
+
 export function useSkipTimes(
   malId: Ref<string | number | null | undefined>,
   episode: Ref<number | null | undefined>,
+  combo?: Ref<SkipTimesComboContext | null>,
 ) {
   const opening = ref<SkipSegment | null>(null)
   const ending = ref<SkipSegment | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  // Default to a static, never-changing ref when the caller doesn't supply
+  // one — keeps the watch() array shape uniform below regardless of whether
+  // combo-awareness is in play.
+  const comboRef = combo ?? ref<SkipTimesComboContext | null>(null)
 
   // Track the in-flight request so a fast scrub (ep 1 → ep 2 → ep 3) doesn't
   // race — only the latest fetch's result is allowed to update the refs.
@@ -70,7 +88,12 @@ export function useSkipTimes(
 
     loading.value = true
     try {
-      const res = await animeApi.getSkipTimes(String(id), ep)
+      const c = comboRef.value
+      const opts =
+        c?.animeId && c?.provider
+          ? { anime: c.animeId, provider: c.provider, ...(c.team ? { team: c.team } : {}) }
+          : undefined
+      const res = await animeApi.getSkipTimes(String(id), ep, opts)
       // Defend against stale in-flight: a newer fetch may have started
       // while we were awaiting the response.
       if (token !== inFlightToken) return
@@ -110,10 +133,11 @@ export function useSkipTimes(
     }
   }
 
-  // Re-fetch whenever malId OR episode changes. `immediate: true` so the
-  // first render of the player triggers a fetch (the watcher otherwise
-  // only fires on subsequent changes).
-  watch([malId, episode], fetchSkipTimes, { immediate: true })
+  // Re-fetch whenever malId, episode, OR the combo (provider/team switch —
+  // per-encode timings differ) changes. `immediate: true` so the first
+  // render of the player triggers a fetch (the watcher otherwise only fires
+  // on subsequent changes).
+  watch([malId, episode, comboRef], fetchSkipTimes, { immediate: true })
 
   return { opening, ending, loading, error, refresh: fetchSkipTimes }
 }

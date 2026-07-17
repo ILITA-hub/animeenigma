@@ -417,8 +417,17 @@ export const animeApi = {
   // Backend proxies api.aniskip.com with a 7d cache. Empty response shape
   // when MAL ID is missing from aniskip's crowdsourced DB:
   //   { found: false, results: [] }
-  getSkipTimes: (malId: string, episode: number) =>
-    apiClient.get(`/skip-times/${encodeURIComponent(malId)}/${episode}`),
+  // opts (Task 10 — combo-aware skip times): when `anime`+`provider` are
+  // present, the catalog handler first tries content-verify's per-encode
+  // detected skip windows before falling back to the AniSkip proxy above.
+  // `team` is optional (fansub team scoping); omit entirely when absent so
+  // we don't send an empty `team=` param.
+  getSkipTimes: (malId: string, episode: number, opts?: { anime?: string; provider?: string; team?: string }) =>
+    apiClient.get(`/skip-times/${encodeURIComponent(malId)}/${episode}`, {
+      params: opts?.anime && opts?.provider
+        ? { anime: opts.anime, provider: opts.provider, ...(opts.team ? { team: opts.team } : {}) }
+        : undefined,
+    }),
 }
 
 export const episodeApi = {
