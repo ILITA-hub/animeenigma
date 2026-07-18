@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"sync"
 	"time"
@@ -25,6 +26,12 @@ const (
 	oidcStateKeyPrefix = "auth:tgoidc:"
 	oidcStateTTL       = 5 * time.Minute
 )
+
+// oidcHTTPClient bounds every outbound call to the IdP (discovery, JWKS,
+// token exchange). Without it a hung oauth.telegram.org would block logins
+// indefinitely — and ensureProvider holds t.mu, so one hang would queue
+// every concurrent login behind it.
+var oidcHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // ErrOIDCStateExpired distinguishes an expired/replayed/unknown state (user
 // retries) from infrastructure failures (logged as errors).
@@ -64,6 +71,7 @@ func (t *TelegramOIDC) ensureProvider(ctx context.Context) error {
 	if t.provider != nil {
 		return nil
 	}
+	ctx = oidc.ClientContext(ctx, oidcHTTPClient)
 	p, err := oidc.NewProvider(ctx, t.cfg.IssuerURL)
 	if err != nil {
 		return fmt.Errorf("oidc discovery: %w", err)
@@ -114,6 +122,7 @@ func (t *TelegramOIDC) Complete(ctx context.Context, state, code string) (*domai
 	if err := t.ensureProvider(ctx); err != nil {
 		return nil, "", err
 	}
+	ctx = oidc.ClientContext(ctx, oidcHTTPClient)
 	tok, err := t.oauth.Exchange(ctx, code, oauth2.VerifierOption(st.Verifier))
 	if err != nil {
 		return nil, "", fmt.Errorf("code exchange: %w", err)
