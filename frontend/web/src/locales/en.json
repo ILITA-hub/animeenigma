@@ -537,6 +537,8 @@
       "switchNotPlaying": "That source won't play — switching to the next best…",
       "switchNotAvailable": "That source isn't available — switching to the next best…",
       "switchFailed": "That source failed — switching to the next best…",
+      "compatBadge": "10-bit · compatibility mode",
+      "compatEngaged": "Your browser cannot decode this 10-bit video natively — switched to the built-in software decoder.",
       "subtitleLoadFailed": "This subtitle track failed to load — try a different one from the Subtitles menu",
       "selected": "Selected",
       "seek": "Seek",

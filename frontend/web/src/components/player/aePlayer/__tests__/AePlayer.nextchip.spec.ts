@@ -39,7 +39,7 @@ vi.mock('@/composables/aePlayer/useVideoEngine', () => ({
   useVideoEngine: () => ({
     fatal: ref(null), load: vi.fn().mockResolvedValue(undefined), destroy: vi.fn(),
     levels: ref([]), currentLevelLabel: ref('Auto'), setLevel: vi.fn(),
-    fragStats: ref([]), bandwidthEstimate: ref(0), fragLoadedCount: ref(0), lastKnownPlayback: ref(null),
+    fragStats: ref([]), bandwidthEstimate: ref(0), fragLoadedCount: ref(0), videoCodec: ref(''), lastKnownPlayback: ref(null),
   }),
 }))
 vi.mock('@/composables/useWatchPreferences', () => ({

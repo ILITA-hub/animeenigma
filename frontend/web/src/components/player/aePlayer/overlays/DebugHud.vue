@@ -43,6 +43,7 @@
     <div class="pl-hud-row">
       RES  {{ stats.resolution || '—' }} · drop {{ stats.droppedFrames }}/{{ stats.totalFrames }}
     </div>
+    <div v-if="compat" class="pl-hud-row" data-test="hud-compat">WASM {{ compat }}</div>
 
     <!-- Seek pipeline trace — only the latest 3 steps -->
     <template v-if="seek">
@@ -157,6 +158,9 @@ const props = defineProps<{
   pinned?: boolean
   /** linger fade-out in progress */
   fading?: boolean
+  /** Hi10P wasm compat engine live stats — null when the native pipeline
+   *  is playing (metrics + the decision, per the hacker-mode contract) */
+  compat?: string | null
 }>()
 
 const emit = defineEmits<{

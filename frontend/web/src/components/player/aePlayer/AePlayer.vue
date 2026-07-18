@@ -37,6 +37,7 @@
          depend on this — the tap is non-interruptive — so its absence would only
          degrade VAD accuracy, never silence sound. -->
     <video
+      v-show="!compat.active.value"
       ref="videoRef"
       class="absolute inset-0 w-full h-full object-contain z-[1]"
       playsinline
@@ -56,9 +57,25 @@
       @error="onVideoError"
     />
 
+    <!-- Hi10P wasm compat surface (AUTO-629): libmedia mounts its canvas
+         here when the native decoder can't do High 10. Kept in the DOM
+         (v-show) so the mount ref exists the moment the fatal fires. -->
+    <div
+      v-show="compat.active.value"
+      ref="compatMountRef"
+      class="pl-compat-host absolute inset-0 z-[1]"
+      @click="onVideoClick"
+    />
+    <div
+      v-if="compat.active.value"
+      class="pl-compat-badge absolute top-3 left-3 z-[2] px-2 py-1 rounded-md text-xs font-medium"
+    >
+      {{ t('player.aePlayer.compatBadge') }}
+    </div>
+
     <!-- Subtitle overlay -->
     <SubtitleOverlay
-      :video-element="videoRef"
+      :video-element="subtitleVideoElement"
       :subtitle-url="chosenSubUrl"
       :format="chosenSubFormat"
       :visible="state.subLang.value !== 'off' && !!chosenSubUrl"
@@ -208,6 +225,7 @@
       :intents="sourceFallbackDebug.intents"
       :pinned="state.hudPinned.value"
       :fading="hudFading"
+      :compat="compatHudLine"
       @update:pinned="v => { state.hudPinned.value = v }"
     />
 
@@ -270,8 +288,8 @@
       :still-url="anime.still"
       :open-menu="openMenu"
       :fragments="fragOverlay"
-      :preview-url="currentStream?.url ?? null"
-      :preview-type="currentStream?.type ?? null"
+      :preview-url="compat.active.value ? null : (currentStream?.url ?? null)"
+      :preview-type="compat.active.value ? null : (currentStream?.type ?? null)"
       :preview-storyboard-url="currentStream?.storyboardUrl ?? null"
       :fullscreen-active="fullscreenActive"
       :theater-active="theater"
@@ -531,6 +549,8 @@ import { makeOfflineResolver } from '@/offline/offlineAdapter'
 // the composition root that wires them together (and keeps the template/styles).
 import { useAutoplayGate } from '@/composables/aePlayer/useAutoplayGate'
 import { usePlaybackClock } from '@/composables/aePlayer/usePlaybackClock'
+import { useCompatEngine } from '@/composables/aePlayer/useCompatEngine'
+import { isHighBitDepthAvc } from '@/composables/aePlayer/useVideoEngine'
 import { useRoomSync } from '@/composables/aePlayer/useRoomSync'
 import { useContentVerify } from '@/composables/aePlayer/useContentVerify'
 import { seedVerifyFromReport } from '@/composables/aePlayer/verifiedCaps'
@@ -630,6 +650,89 @@ const state = usePlayerState()
 // for the ~99% of sessions with hacker mode off (the watchdog uses the cheap
 // always-on fragLoadedCount instead).
 const engine = useVideoEngine(videoRef, state.hackerMode)
+
+// ─── Hi10P wasm compat engine (AUTO-629) ─────────────────────────────────────
+// Browsers whose native decoders cannot do H.264 High 10 (Firefox everywhere —
+// Bugzilla 1711812; Safari) get a lazy-loaded libmedia wasm pipeline instead
+// of failing over away from the ae source. The compat surface replaces the
+// <video> box; the rest of the player keeps working through playbackMediaRef —
+// a switching ref that hands the playback-facing clusters (clock, gestures,
+// keyboard, autoplay, resume, skip) a media-API duck-type driving the wasm
+// engine. Element-coupled extras (VAD tap, shadow scrub previews, PiP)
+// degrade to no-ops while compat is active.
+const compat = useCompatEngine()
+const compatMountRef = ref<HTMLDivElement | null>(null)
+const compatMediaShim = {
+  get paused() {
+    return compat.paused.value
+  },
+  get ended() {
+    return compat.ended.value
+  },
+  get duration() {
+    return compat.duration.value
+  },
+  get currentTime() {
+    return compat.currentTime.value
+  },
+  set currentTime(t: number) {
+    compat.seekTo(t)
+  },
+  get volume() {
+    return state.volume.value / 100
+  },
+  set volume(v: number) {
+    compat.setVolume(Math.round(v * 100))
+  },
+  get muted() {
+    return state.muted.value
+  },
+  set muted(m: boolean) {
+    compat.setMuted(m)
+  },
+  get playbackRate() {
+    return state.speed.value
+  },
+  set playbackRate(r: number) {
+    compat.setRate(r)
+  },
+  readyState: 4,
+  seeking: false,
+  buffered: { length: 0 } as unknown as TimeRanges,
+  get videoWidth() {
+    return compat.clockElement.videoWidth
+  },
+  get videoHeight() {
+    return compat.clockElement.videoHeight
+  },
+  get clientHeight() {
+    return compat.clockElement.clientHeight
+  },
+  play(): Promise<void> {
+    compat.play()
+    return Promise.resolve()
+  },
+  pause(): void {
+    compat.pause()
+  },
+}
+const playbackMediaRef = computed<HTMLVideoElement | null>(() =>
+  compat.active.value ? (compatMediaShim as unknown as HTMLVideoElement) : videoRef.value,
+)
+// Hacker-mode HUD line for the wasm engine — live decode/render rates and the
+// decoded resolution (metrics + the decision, not just "compat on").
+const compatHudLine = computed<string | null>(() => {
+  if (!compat.active.value) return null
+  const s = compat.stats.value
+  if (!s) return 'engaging…'
+  return `${s.decodeFps}/${s.renderFps} fps · ${s.width}×${s.height}`
+})
+// SubtitleOverlay reads only currentTime/videoWidth/videoHeight/clientHeight —
+// the compat clock satisfies that contract.
+const subtitleVideoElement = computed<HTMLVideoElement | null>(() =>
+  compat.active.value ? (compat.clockElement as unknown as HTMLVideoElement) : videoRef.value,
+)
+
 // Guard point 1 — resolver. Offline: a ProviderResolver that reads local
 // downloads instead of hitting any network API (episodes + stream URLs resolve
 // to /__offline/… paths). Live: the real multi-provider resolver, unchanged.
@@ -694,7 +797,7 @@ function recordDecision(reason: string) {
 // No watchers — safe to compose early; the room bridge below needs its
 // handlePlayRejection.
 const autoplay = useAutoplayGate({
-  videoRef,
+  videoRef: playbackMediaRef,
   state,
   getAnimeId: () => props.animeId,
   getEpisodeNumber: () => selectedEpisode.value?.number,
@@ -706,7 +809,7 @@ const { playbackBlocked, playbackBlockedHint, attemptPlay } = autoplay
 // clock directly. Tracking + UI-idle hooks are late-bound thunks (those
 // clusters compose further down, at their original watcher positions).
 const clock = usePlaybackClock({
-  videoRef,
+  videoRef: playbackMediaRef,
   state,
   engine,
   reachedEpisodeEnd,
@@ -910,7 +1013,7 @@ function onMarkWatched() {
 // ─── Resume-from-saved-position chip + shared-link `?t=` seek ────────────────
 
 const resume = useResumeChip({
-  videoRef,
+  videoRef: playbackMediaRef,
   auth,
   getAnimeId: () => props.animeId,
   initialTimestamp: props.initialTimestamp,
@@ -1036,7 +1139,7 @@ const skip = useSkipIntro({
   getMalId: () => props.malId,
   selectedEpisode,
   state,
-  videoRef,
+  videoRef: playbackMediaRef,
   currentTime,
   duration,
   writeProgress,
@@ -1168,9 +1271,52 @@ function onVideoError() {
 
 // hls.js fatal (dead playlist / unrecoverable). Dynamic BEST: try the next
 // candidate source so a blocked CDN host auto-recovers to a working one.
+// Route an undecodable high-bit-depth source (Hi10P on Firefox/Safari) into
+// the wasm compat engine instead of abandoning the source. Returns whether
+// the compat surface took over playback.
+async function tryEngageCompatEngine(): Promise<boolean> {
+  const stream = currentStream.value
+  const mount = compatMountRef.value
+  if (!stream || !mount || compat.active.value) return false
+  const startAt = engine.lastKnownPlayback.value?.time ?? 0
+  const ok = await compat.activate({
+    container: mount,
+    url: stream.url,
+    startAt,
+    volume: state.volume.value,
+    muted: state.muted.value,
+    rate: state.speed.value,
+  })
+  if (!ok) return false
+  clearPlaybackWatchdog()
+  setBuffering(false)
+  sourceError.value = null
+  hasStarted.value = true
+  onVideoPlay() // start the shared clock rAF against the compat shim
+  toast.push(t('player.aePlayer.compatEngaged'), 'info', 5000)
+  // Telemetry: the NATIVE pipeline failed on this stream (that part is true
+  // even though the wasm engine saved the session) — record it with a
+  // distinctive kind so the Hi10P fleet impact is countable.
+  recordPlayerEvent({
+    kind: 'playback_failed',
+    provider: state.combo.value.provider,
+    anime_id: props.animeId,
+    episode: selectedEpisode.value?.number,
+    error_kind: 'hi10p_compat_engaged',
+    detail: { reason: 'hi10p_compat', codec: engine.videoCodec.value },
+  })
+  return true
+}
+
 watch(engine.fatal, async (f) => {
   if (!f) return
   setBuffering(false)
+  // Undecodable high-bit-depth AVC → wasm compat engine (AUTO-629). Only the
+  // 'decode' fatal with a parsed Hi10P-class codec qualifies; everything else
+  // stays on the failover path.
+  if (f === 'decode' && isHighBitDepthAvc(engine.videoCodec.value) && (await tryEngageCompatEngine())) {
+    return
+  }
   // Telemetry: HLS fatal (best-effort, never throws)
   recordPlayerEvent({
     kind: 'resolve',
@@ -1193,6 +1339,31 @@ watch(engine.fatal, async (f) => {
     return
   }
   if (!sourceError.value) sourceError.value = t('player.aePlayer.streamUnavailable')
+})
+
+// Compat lifecycle bridges: play state drives the shared clock (which owns
+// state.playing, the rAF progress loop, and the tracking heartbeat); a wasm
+// engine failure falls back to the ordinary failover chain; any stream swap
+// or unmount tears the wasm pipeline down.
+watch(compat.paused, (p) => {
+  if (!compat.active.value) return
+  if (p) onVideoPause()
+  else onVideoPlay()
+})
+watch(compat.ended, (e) => {
+  if (e && compat.active.value) reachedEpisodeEnd.value = true
+})
+watch(compat.error, async (err) => {
+  if (!err || !compat.active.value) return
+  await compat.destroy()
+  if (await advanceToNextSource('compat engine failed')) {
+    toast.push(t('player.aePlayer.switchFailed'), 'info', 4000)
+    return
+  }
+  if (!sourceError.value) sourceError.value = t('player.aePlayer.streamUnavailable')
+})
+watch(currentStream, () => {
+  if (compat.active.value) void compat.destroy()
 })
 
 // ─── Connection health (corner "bad internet" indicator) ─────────────────────
@@ -1348,7 +1519,7 @@ const upcomingEpisode = computed<{ number: number; etaLabel?: string } | null>((
 // ─── Playback helpers (tap gestures, volume/speed/PiP, seeking) ──────────────
 
 const gestures = useGestureControls({
-  videoRef,
+  videoRef: playbackMediaRef,
   rootRef,
   state,
   isCoarse,
@@ -1384,7 +1555,7 @@ const { fullscreenActive, onToggleFullscreen } = fs
 
 const keyboard = usePlayerKeyboard({
   rootRef,
-  videoRef,
+  videoRef: playbackMediaRef,
   isPointerInside,
   state,
   openMenu,
@@ -1455,6 +1626,7 @@ const protoTel = useProtocolTelemetry({
 onUnmounted(() => {
   stopRaf()
   tracking.saveNow() // persist position when navigating away in-app
+  void compat.destroy() // wasm pipeline teardown (no-op when inactive)
   clearNextEpTimer()
   clearUiIdleTimer()
   debug.clearHudTimers()
@@ -1482,6 +1654,20 @@ onUnmounted(() => {
   background: #000;
   border: 1px solid var(--border);
   user-select: none;
+}
+
+/* Hi10P wasm compat surface — libmedia renders into its own canvas inside
+   the mount div; stretch it to the video box like the <video> it replaces. */
+.pl-compat-host :deep(canvas) {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+}
+.pl-compat-badge {
+  background: var(--black-a80);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  pointer-events: none;
 }
 
 /* Resume-from-saved-position chip — bottom-left mirror of the skip chip. */

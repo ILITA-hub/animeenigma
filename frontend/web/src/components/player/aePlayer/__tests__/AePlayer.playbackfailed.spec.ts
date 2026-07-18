@@ -50,7 +50,7 @@ vi.mock('@/composables/aePlayer/useVideoEngine', () => ({
     load: vi.fn().mockResolvedValue(undefined), destroy: vi.fn(),
     levels: ref([]), currentLevelLabel: ref('Auto'), setLevel: vi.fn(),
     fragStats: ref([]), bandwidthEstimate: ref(0),
-    servedEdge: ref(''), edgeTrail: ref(''), fragLoadedCount: ref(0),
+    servedEdge: ref(''), edgeTrail: ref(''), fragLoadedCount: ref(0), videoCodec: ref(''),
   }),
 }))
 const resolveSpy = vi.fn().mockResolvedValue(undefined)
