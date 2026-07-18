@@ -347,6 +347,12 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 		if c, err := r.Cookie("refresh_token"); err == nil {
 			req.AddCookie(c)
 		}
+		// ae_oidc_bind: Telegram OIDC browser-binding cookie — auth's oidc
+		// callback fails closed without it (handler/telegram_oidc.go
+		// oidcBindCookie).
+		if c, err := r.Cookie("ae_oidc_bind"); err == nil {
+			req.AddCookie(c)
+		}
 	}
 
 	// Forward request. On a transport error Go's client returns resp==nil —
