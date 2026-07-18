@@ -4,6 +4,15 @@ Required for all services: `DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME`, `R
 
 Secrets live in `docker/.env` (host-only, git-ignored). Non-secret service-discovery URLs carry sensible in-cluster defaults (below).
 
+**Auth** (Telegram OIDC login, spec 2026-07-17 — BotFather → Bot Settings → Web Login; `TELEGRAM_BOT_TOKEN` remains, used for webhook teardown):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `TELEGRAM_OIDC_CLIENT_ID` | — | OIDC Client ID from BotFather (Bot Settings → Web Login). Empty ⇒ Telegram login disabled. |
+| `TELEGRAM_OIDC_CLIENT_SECRET` | — | OIDC Client Secret from BotFather. |
+| `TELEGRAM_OIDC_REDIRECT_URL` | `https://animeenigma.org/api/auth/telegram/oidc/callback` | Must exactly match a BotFather Allowed URL. |
+| `TELEGRAM_OIDC_ISSUER` | `https://oauth.telegram.org` | Test override only. |
+
 **BE egress recorder** (catalog/scraper/streaming — Activity Register v4.0 Phase 2): `ANALYTICS_INTERNAL_URL` (default `http://analytics:8092`) — ship recorded outbound egress effects (host/provider/bytes, one aggregated row per HLS watch session) to analytics `POST /internal/effects` over the Docker network. Non-secret service-discovery URL; producer is non-blocking + drop-on-full (analytics outage never affects requests). `/internal/effects` NOT gateway-proxied (Docker-network-only).
 
 **Catalog:** `SHIKIMORI_CLIENT_ID`, `SHIKIMORI_CLIENT_SECRET`, `KODIK_API_KEY` (if using), `JIMAKU_API_KEY` (if using JP subtitles). `SPOTLIGHT_CURATED_SHIKIMORI_ID` (Shikimori ID featured by the `curated` spotlight card ("Куратор рекомендует" / "Curator Recommends"); unset ⇒ defaults to `63403`; explicitly set to an empty string ⇒ the curated card is disabled. Card shows only while the anime is `ongoing`.)
