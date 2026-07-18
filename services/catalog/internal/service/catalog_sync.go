@@ -573,12 +573,15 @@ func (s *CatalogService) SyncAnnouncements(ctx context.Context, limit, seedBackf
 	}
 
 	// 2+3. Franchise enrichment: announced candidates + list-referenced seeds.
+	// announcedRows are captured separately for the MAL-popularity pass (4).
+	announcedRows := make([]*domain.Anime, 0, limit)
 	enrichPool := make([]*domain.Anime, 0, limit+seedBackfillLimit)
 	for _, anime := range announced {
 		row, gerr := s.animeRepo.GetByShikimoriID(ctx, anime.ShikimoriID)
 		if gerr != nil || row == nil {
 			continue
 		}
+		announcedRows = append(announcedRows, row)
 		enrichPool = append(enrichPool, row)
 	}
 	if seedBackfillLimit > 0 {
@@ -623,6 +626,31 @@ func (s *CatalogService) SyncAnnouncements(ctx context.Context, limit, seedBackf
 			continue
 		}
 		enriched++
+	}
+
+	// 4. MAL popularity refresh (relative-popularity signal, spec 2026-07-18).
+	// Best-effort: a Jikan failure NEVER fails the sync or blocks other titles;
+	// the card simply degrades to relevance-only ranking for that row. Always
+	// refreshes (popularity drifts and the daily cron makes it cheap).
+	for _, a := range announcedRows {
+		select {
+		case <-ctx.Done():
+			return imported, refreshed, enriched, failed, ctx.Err()
+		default:
+		}
+		if a.MALID == "" {
+			continue
+		}
+		info, jerr := s.jikanClient.GetAnimeByID(ctx, a.MALID)
+		if jerr != nil {
+			s.log.Debugw("announcements sync: jikan popularity fetch failed",
+				"anime_id", a.ID, "mal_id", a.MALID, "error", jerr)
+			continue
+		}
+		if uerr := s.animeRepo.SetMALPopularity(ctx, a.ID, info.Members, info.Favorites); uerr != nil {
+			s.log.Warnw("announcements sync: persist MAL popularity failed", "anime_id", a.ID, "error", uerr)
+			continue
+		}
 	}
 
 	s.log.Infow("announcements sync completed",

@@ -43,6 +43,12 @@ type Anime struct {
 	ShikimoriID string  `gorm:"size:50;index" json:"shikimori_id,omitempty"`
 	MALID       string  `gorm:"size:50" json:"mal_id,omitempty"`
 	AniListID   string  `gorm:"size:50" json:"anilist_id,omitempty"`
+	// MalMembers / MalFavorites — MAL popularity/anticipation counts sourced
+	// from Jikan, refreshed for announced titles by SyncAnnouncements. For an
+	// unaired title Members is mostly plan-to-watch = anticipation. Power the
+	// recs relative-MAL-popularity signal (S9). Zero for never-enriched rows.
+	MalMembers   int `gorm:"default:0" json:"mal_members,omitempty"`
+	MalFavorites int `gorm:"default:0" json:"mal_favorites,omitempty"`
 	// IMDbID / TMDBID — workstream raw-jp, Phase 02. Resolved lazily via
 	// Kitsu mappings on the first OpenSubtitles query for this anime.
 	// Nullable: not every title has either mapping.

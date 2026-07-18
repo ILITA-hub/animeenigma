@@ -594,6 +594,19 @@ func (r *AnimeRepository) SetFranchise(ctx context.Context, id, franchise string
 		}).Error
 }
 
+// SetMALPopularity persists the Jikan-sourced MAL anticipation counts for one
+// anime (targeted update — leaves every other column untouched). Feeds the recs
+// relative-MAL-popularity signal for announced titles.
+func (r *AnimeRepository) SetMALPopularity(ctx context.Context, id string, members, favorites int) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Anime{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"mal_members":   members,
+			"mal_favorites": favorites,
+		}).Error
+}
+
 // ListFranchiseUncheckedListed returns anime that appear in at least one
 // user's anime_list but were never franchise-checked — the S8 seed-side
 // franchise backfill pool (spec 2026-07-17). Bounded by limit; oldest rows
