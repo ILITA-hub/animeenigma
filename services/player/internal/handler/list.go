@@ -88,6 +88,7 @@ func (h *ListHandler) GetWatchlistStatuses(w http.ResponseWriter, r *http.Reques
 func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AnimeID string `json:"anime_id"`
+		Status  string `json:"status"`
 	}
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -100,10 +101,16 @@ func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add with default status "plan_to_watch"
+	// Honor a caller-supplied status (e.g. picking "watching" directly for an
+	// anime not yet on the list); default to "plan_to_watch" when absent or
+	// not a recognized status.
+	status := "plan_to_watch"
+	if domain.ValidListStatuses[req.Status] {
+		status = req.Status
+	}
 	listReq := &domain.UpdateListRequest{
 		AnimeID: req.AnimeID,
-		Status:  "plan_to_watch",
+		Status:  status,
 	}
 
 	entry, err := h.listService.UpdateListEntry(r.Context(), claims.UserID, claims.Username, listReq)
