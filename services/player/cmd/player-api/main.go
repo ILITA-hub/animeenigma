@@ -98,6 +98,7 @@ func main() {
 		&domain.ReviewReaction{},
 		&domain.SyncJob{},
 		&domain.ActivityEvent{},
+		&domain.UserFollow{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
@@ -321,6 +322,7 @@ func main() {
 	// ReviewService.
 	syncRepo := repo.NewSyncRepository(db.DB)
 	activityRepo := repo.NewActivityRepository(db.DB)
+	followRepo := repo.NewFollowRepository(db.DB)
 
 	// Mark stale sync jobs as failed on startup
 	if err := syncRepo.MarkStaleJobsFailed(context.Background(), 1*time.Hour); err != nil {
@@ -441,7 +443,7 @@ func main() {
 	// Admin feedback browser reads the same on-disk report archive (REPORTS_DIR).
 	adminReportsHandler := handler.NewAdminReportsHandler(log, cfg.Reports.Dir, feedbackNotifier)
 	syncHandler := handler.NewSyncHandler(syncRepo, log)
-	activityHandler := handler.NewActivityHandler(activityRepo, log)
+	activityHandler := handler.NewActivityHandler(activityRepo, followRepo, log)
 
 	// The recs HTTP surface (anonymous trending row, admin debug/force-recompute,
 	// public events telemetry) moved out of player to services/recs — extraction

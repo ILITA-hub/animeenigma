@@ -33,10 +33,11 @@ func TestSeedDefaults_isIdempotent_andMasterOn(t *testing.T) {
 	require.Equal(t, "admin", rs.FailSafe["fanfic"])
 	require.False(t, rs.Roulette["gacha"]) // seeded roulette-OFF
 	require.True(t, rs.Roulette["anidle"])
-	require.True(t, rs.Roulette["fanfic"])          // D2 parity: admins rolled fanfic in the old roster
+	require.True(t, rs.Roulette["fanfic"]) // D2 parity: admins rolled fanfic in the old roster
 	require.Equal(t, "admin", rs.FailSafe["showcase-editor"])
 	require.True(t, rs.Roulette["showcase-editor"])
 	require.True(t, rs.Roulette["my-feedback"])
+	require.True(t, rs.Roulette["following"])
 }
 
 func TestResolveForUser_visibleAndRoulette(t *testing.T) {
@@ -51,6 +52,8 @@ func TestResolveForUser_visibleAndRoulette(t *testing.T) {
 	require.NotContains(t, mine.Visible, "fanfic")
 	require.NotContains(t, mine.Visible, "showcase-editor")
 	require.Contains(t, mine.Visible, "my-feedback") // any-authenticated, not admin-only
+	require.Contains(t, mine.Visible, "following")
+	require.Contains(t, mine.Roulette, "following")
 	require.Contains(t, mine.Roulette, "anidle")
 	require.NotContains(t, mine.Roulette, "gacha") // roulette-OFF
 	require.True(t, mine.RouletteEnabled)
@@ -69,6 +72,7 @@ func TestResolveForUser_visibleAndRoulette(t *testing.T) {
 	anonMine, err := s.ResolveForUser(ctx, "", "")
 	require.NoError(t, err)
 	require.NotContains(t, anonMine.Visible, "my-feedback")
+	require.NotContains(t, anonMine.Visible, "following")
 	require.NotContains(t, anonMine.Visible, "showcase-editor")
 	require.NotContains(t, anonMine.Visible, "fanfic")
 	require.Contains(t, anonMine.Visible, "anidle")

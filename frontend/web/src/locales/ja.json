@@ -860,6 +860,11 @@
     },
     "copied": "コピーしました！",
     "share": "共有",
+    "follow": "Follow",
+    "following": "Following",
+    "followed": "このユーザーをフォローしました",
+    "unfollowed": "このユーザーのフォローを解除しました",
+    "followError": "フォロー状態を更新できませんでした",
     "addShowcase": "ショーケースを追加",
     "editShowcase": "ショーケースを編集",
     "userProfile": "ユーザープロフィール",
@@ -993,6 +998,17 @@
       "on_hold": "一時停止",
       "rewatching": "再視聴中"
     }
+  },
+  "following": {
+    "eyebrow": "シークレット機能",
+    "title": "フォロー中",
+    "subtitle": "フォローしているユーザーのアクティビティを確認できます。",
+    "filterLabel": "ユーザーでアクティビティを絞り込む",
+    "all": "すべて",
+    "feedTitle": "フォロー中のアクティビティ",
+    "emptyTitle": "まだ誰もフォローしていません",
+    "emptyDescription": "他のユーザーのプロフィールを開いて Follow を押してください。",
+    "noActivity": "表示できるアクティビティはまだありません"
   },
   "schedule": {
     "title": "放送スケジュール",
@@ -1499,7 +1515,8 @@
         "showcaseEditor": "ショーケースエディター",
         "myFeedback": "マイフィードバック",
         "fanfic": "ファンフィックエンジン",
-        "tips": "ヒント＆ショートカット"
+        "tips": "ヒント＆ショートカット",
+        "following": "フォロー中"
       }
     },
     "collections": {

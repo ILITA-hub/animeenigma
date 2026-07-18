@@ -30,6 +30,8 @@ func setupActivityTestDB(t *testing.T) *ActivityRepository {
 	// (LEFT JOIN users; hentai predicate joins anime_genres/genres).
 	err = db.Exec(`CREATE TABLE users (
 		id TEXT PRIMARY KEY,
+		username TEXT,
+		public_id TEXT,
 		avatar TEXT,
 		activity_visibility TEXT
 	)`).Error
@@ -37,6 +39,13 @@ func setupActivityTestDB(t *testing.T) *ActivityRepository {
 	err = db.Exec(`CREATE TABLE genres (id TEXT PRIMARY KEY, name TEXT)`).Error
 	require.NoError(t, err)
 	err = db.Exec(`CREATE TABLE anime_genres (anime_id TEXT, genre_id TEXT)`).Error
+	require.NoError(t, err)
+	err = db.Exec(`CREATE TABLE user_follows (
+		follower_id TEXT,
+		followed_id TEXT,
+		created_at DATETIME,
+		PRIMARY KEY (follower_id, followed_id)
+	)`).Error
 	require.NoError(t, err)
 
 	// Create activity_events table for SQLite (no gen_random_uuid())
@@ -284,4 +293,49 @@ func TestActivityRepository_GetFeed_MissingUsersRow_DefaultsToVisible(t *testing
 	seedVisibilityEvent(t, r, "evt-orphan", "ghost-user", "anime-rx", time.Now())
 
 	assert.Equal(t, []string{"evt-orphan"}, feedIDs(t, r))
+}
+
+func TestActivityRepository_GetFollowingFeed_OnlyFollowedUsers(t *testing.T) {
+	r := setupActivityTestDB(t)
+	seedVisibilityFixtures(t, r)
+	require.NoError(t, r.db.Exec(`INSERT INTO users (id, username, public_id, activity_visibility) VALUES
+		('followed', 'alice', 'alice-public', 'all'),
+		('other', 'bob', 'bob-public', 'all')`).Error)
+	require.NoError(t, r.db.Exec(`INSERT INTO user_follows (follower_id, followed_id, created_at)
+		VALUES ('viewer', 'followed', CURRENT_TIMESTAMP)`).Error)
+
+	now := time.Now()
+	seedVisibilityEvent(t, r, "evt-followed", "followed", "anime-sfw", now)
+	seedVisibilityEvent(t, r, "evt-other", "other", "anime-sfw", now.Add(time.Second))
+
+	events, hasMore, err := r.GetFollowingFeed(context.Background(), "viewer", "", 10, "")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.False(t, hasMore)
+	assert.Equal(t, "evt-followed", events[0].ID)
+	assert.Equal(t, "alice-public", events[0].PublicID)
+}
+
+func TestActivityRepository_GetFollowingFeed_TargetMustStillBeFollowed(t *testing.T) {
+	r := setupActivityTestDB(t)
+	seedVisibilityFixtures(t, r)
+	require.NoError(t, r.db.Exec(`INSERT INTO users (id, activity_visibility) VALUES ('other', 'all')`).Error)
+	seedVisibilityEvent(t, r, "evt-other", "other", "anime-sfw", time.Now())
+
+	events, _, err := r.GetFollowingFeed(context.Background(), "viewer", "other", 10, "")
+	require.NoError(t, err)
+	assert.Empty(t, events)
+}
+
+func TestActivityRepository_GetFollowingFeed_RespectsActivityVisibility(t *testing.T) {
+	r := setupActivityTestDB(t)
+	seedVisibilityFixtures(t, r)
+	require.NoError(t, r.db.Exec(`INSERT INTO users (id, activity_visibility) VALUES ('hidden', 'none')`).Error)
+	require.NoError(t, r.db.Exec(`INSERT INTO user_follows (follower_id, followed_id, created_at)
+		VALUES ('viewer', 'hidden', CURRENT_TIMESTAMP)`).Error)
+	seedVisibilityEvent(t, r, "evt-hidden", "hidden", "anime-sfw", time.Now())
+
+	events, _, err := r.GetFollowingFeed(context.Background(), "viewer", "", 10, "")
+	require.NoError(t, err)
+	assert.Empty(t, events)
 }

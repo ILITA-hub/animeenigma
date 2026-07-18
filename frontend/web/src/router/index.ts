@@ -178,6 +178,14 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'nav.profile', fullBleed: true }
   },
   {
+    // Hidden from normal navigation; surfaced through the secret-feature
+    // roulette. Every signed-in user can reach it directly.
+    path: '/following',
+    name: 'following',
+    component: () => import('@/views/Following.vue'),
+    meta: { titleKey: 'following.title', requiresAuth: true }
+  },
+  {
     path: '/status',
     name: 'status',
     component: () => import('@/views/StatusPage.vue'),

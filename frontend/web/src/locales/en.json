@@ -850,6 +850,11 @@
     },
     "copied": "Copied!",
     "share": "Share",
+    "follow": "Follow",
+    "following": "Following",
+    "followed": "You are now following this user",
+    "unfollowed": "You unfollowed this user",
+    "followError": "Couldn't update the subscription",
     "addShowcase": "Add Showcase",
     "editShowcase": "Edit Showcase",
     "userProfile": "User profile",
@@ -993,6 +998,17 @@
       "on_hold": "put on hold",
       "rewatching": "is rewatching"
     }
+  },
+  "following": {
+    "eyebrow": "Secret feature",
+    "title": "Following",
+    "subtitle": "Keep up with the activity of users you follow.",
+    "filterLabel": "Filter activity by user",
+    "all": "All",
+    "feedTitle": "Following activity",
+    "emptyTitle": "You aren't following anyone yet",
+    "emptyDescription": "Open another user's profile and press Follow.",
+    "noActivity": "No visible activity from these users yet"
   },
   "schedule": {
     "title": "Episode Schedule",
@@ -1499,7 +1515,8 @@
         "showcaseEditor": "Showcase editor",
         "myFeedback": "My feedback",
         "fanfic": "Fanfic engine",
-        "tips": "Tips & hotkeys"
+        "tips": "Tips & hotkeys",
+        "following": "Following"
       }
     },
     "collections": {

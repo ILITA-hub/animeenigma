@@ -101,6 +101,7 @@ func TestMine_anonymousSeesEveryoneOnly(t *testing.T) {
 	require.NotContains(t, body, "fanfic")          // admin-only
 	require.NotContains(t, body, "showcase-editor") // admin-only
 	require.NotContains(t, body, "my-feedback")     // any-authenticated, not anon
+	require.NotContains(t, body, "following")       // any-authenticated, not anon
 }
 
 func TestAdminFlags_requiresAdmin(t *testing.T) {

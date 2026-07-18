@@ -78,6 +78,11 @@ vi.mock('@/api/client', () => ({
     getShowcase: vi.fn().mockResolvedValue({ data: { blocks: [], enabled: false } }),
     saveShowcase: vi.fn().mockResolvedValue({ data: { blocks: [], enabled: false } }),
   },
+  followingApi: {
+    getStatus: vi.fn().mockResolvedValue({ data: { following: false } }),
+    follow: vi.fn().mockResolvedValue({ data: { following: true } }),
+    unfollow: vi.fn().mockResolvedValue({ data: { following: false } }),
+  },
 }))
 
 vi.mock('@/composables/useToast', () => ({ useToast: () => ({ show: vi.fn(), push: vi.fn() }) }))

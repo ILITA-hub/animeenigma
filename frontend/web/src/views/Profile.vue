@@ -55,6 +55,17 @@
 
             <!-- Action Buttons -->
             <div class="flex gap-2">
+              <Button
+                v-if="!isOwnProfile"
+                :variant="isFollowing ? 'ghost' : 'default'"
+                size="sm"
+                :loading="followBusy"
+                @click="toggleFollow"
+              >
+                <UserCheck v-if="isFollowing" class="size-5" />
+                <UserPlus v-else class="size-5" />
+                <span>{{ isFollowing ? $t('profile.following') : $t('profile.follow') }}</span>
+              </Button>
               <!-- Showcase entry (owner, showcase not visible). Add / Edit by state. -->
               <button
                 v-if="showcaseEntryButton"
@@ -866,7 +877,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Archive, Download, Link, Copy, Check, Image as ImageIcon, SlidersHorizontal, ChevronDown, CheckSquare } from 'lucide-vue-next'
+import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Archive, Download, Link, Copy, Check, Image as ImageIcon, SlidersHorizontal, ChevronDown, CheckSquare, UserPlus, UserCheck } from 'lucide-vue-next'
 import { useDebounceFn } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -887,7 +898,7 @@ import WatchlistBulkBar from '@/components/profile/WatchlistBulkBar.vue'
 import type { WatchlistFacets, WatchlistFilterState } from '@/types/watchlist-facets'
 import { EMPTY_FILTER_STATE, filterParams, filterKey, activeFilterCount } from '@/types/watchlist-facets'
 import { fromWatchlistEntry } from '@/utils/toCardModel'
-import { userApi, publicApi } from '@/api/client'
+import { userApi, publicApi, followingApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { getLocalizedTitle } from '@/utils/title'
@@ -1001,12 +1012,15 @@ const profileUser = ref<ProfileUser | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const copied = ref(false)
+const isFollowing = ref(false)
+const followBusy = ref(false)
 
 // Check if viewing own profile
 const isOwnProfile = computed(() => {
   if (!authStore.user) return false
   const publicId = route.params.publicId as string
-  return publicId && authStore.user.public_id === publicId
+  const sameUserId = Boolean(authStore.user.id && profileUser.value?.id && authStore.user.id === profileUser.value.id)
+  return sameUserId || Boolean(publicId && authStore.user.public_id === publicId)
 })
 
 // Member since year
@@ -1480,6 +1494,7 @@ const apiKeyRevoked = ref(false)
 const fetchProfile = async () => {
   loading.value = true
   error.value = null
+  isFollowing.value = false
 
   try {
     const publicIdParam = route.params.publicId as string
@@ -1534,6 +1549,7 @@ const fetchProfile = async () => {
     }
 
     await fetchWatchlist(isOwn)
+    await loadFollowStatus()
   } catch (err: unknown) {
     console.error('Failed to load profile:', err)
     if ((err as ApiError).response?.status === 404) {
@@ -1543,6 +1559,44 @@ const fetchProfile = async () => {
     }
   } finally {
     loading.value = false
+  }
+}
+
+const loadFollowStatus = async () => {
+  if (!authStore.isAuthenticated || isOwnProfile.value || !profileUser.value?.id) return
+  try {
+    const response = await followingApi.getStatus(profileUser.value.id)
+    const data = response.data?.data || response.data
+    isFollowing.value = Boolean(data?.following)
+  } catch (err) {
+    console.error('Failed to load follow status:', err)
+  }
+}
+
+const toggleFollow = async () => {
+  if (!authStore.isAuthenticated) {
+    sessionStorage.setItem('returnUrl', route.fullPath)
+    await router.push('/auth')
+    return
+  }
+  if (!profileUser.value?.id || followBusy.value || isOwnProfile.value) return
+
+  followBusy.value = true
+  try {
+    if (isFollowing.value) {
+      await followingApi.unfollow(profileUser.value.id)
+      isFollowing.value = false
+      toast.push(t('profile.unfollowed'), 'success')
+    } else {
+      await followingApi.follow(profileUser.value.id)
+      isFollowing.value = true
+      toast.push(t('profile.followed'), 'success')
+    }
+  } catch (err) {
+    console.error('Failed to update follow status:', err)
+    toast.push(t('profile.followError'))
+  } finally {
+    followBusy.value = false
   }
 }
 

@@ -899,6 +899,17 @@ export const activityApi = {
     apiClient.get('/activity/feed', {
       params: { limit, ...(before && { before }) }
     }),
+  getFollowingFeed: (limit: number = 10, before?: string, userId?: string) =>
+    apiClient.get('/users/following/feed', {
+      params: { limit, ...(before && { before }), ...(userId && { user_id: userId }) },
+    }),
+}
+
+export const followingApi = {
+  list: () => apiClient.get('/users/following'),
+  getStatus: (userId: string) => apiClient.get(`/users/${userId}/follow`),
+  follow: (userId: string) => apiClient.post(`/users/${userId}/follow`),
+  unfollow: (userId: string) => apiClient.delete(`/users/${userId}/follow`),
 }
 
 export const gameApi = {

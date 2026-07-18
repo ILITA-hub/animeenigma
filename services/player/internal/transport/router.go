@@ -131,6 +131,13 @@ func NewRouter(
 			// User's reviews
 			r.Get("/reviews", reviewHandler.GetUserReviews)
 
+			// Directional user subscriptions + their private aggregate feed.
+			r.Get("/following", activityHandler.ListFollowing)
+			r.Get("/following/feed", activityHandler.GetFollowingFeed)
+			r.Get("/{userId}/follow", activityHandler.GetFollowStatus)
+			r.Post("/{userId}/follow", activityHandler.Follow)
+			r.Delete("/{userId}/follow", activityHandler.Unfollow)
+
 			// MAL Import (async - background goroutine)
 			r.Post("/import/mal", malImportHandler.ImportMALList)
 

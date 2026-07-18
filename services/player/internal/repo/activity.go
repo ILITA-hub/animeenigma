@@ -59,14 +59,34 @@ func (r *ActivityRepository) Update(ctx context.Context, event *domain.ActivityE
 // COALESCE keep events visible when the users row is missing or predates the
 // column (pre-feature behaviour).
 func (r *ActivityRepository) GetFeed(ctx context.Context, limit int, before string) ([]*domain.ActivityEvent, bool, error) {
-	query := r.db.WithContext(ctx).
+	query := r.baseFeedQuery(ctx)
+	return r.runFeedQuery(ctx, query, limit, before)
+}
+
+// GetFollowingFeed returns activity only from users followed by followerID.
+// followedID optionally narrows the feed to one subscribed user. The EXISTS
+// predicate remains in place for the narrowed case, preventing arbitrary user
+// activity reads through this authenticated endpoint.
+func (r *ActivityRepository) GetFollowingFeed(ctx context.Context, followerID, followedID string, limit int, before string) ([]*domain.ActivityEvent, bool, error) {
+	query := r.baseFeedQuery(ctx).
+		Where("EXISTS (SELECT 1 FROM user_follows uf WHERE uf.follower_id = ? AND uf.followed_id = activity_events.user_id)", followerID)
+	if followedID != "" {
+		query = query.Where("activity_events.user_id = ?", followedID)
+	}
+	return r.runFeedQuery(ctx, query, limit, before)
+}
+
+func (r *ActivityRepository) baseFeedQuery(ctx context.Context) *gorm.DB {
+	return r.db.WithContext(ctx).
 		Preload("Anime").
 		Joins("LEFT JOIN users ON users.id = activity_events.user_id").
 		Where("COALESCE(users.activity_visibility, 'all') <> 'none'").
-		Where("NOT (COALESCE(users.activity_visibility, 'all') = 'non_hentai' AND "+
-			fmt.Sprintf(hentaiAnimeExistsFmt, "activity_events.anime_id")+")").
+		Where("NOT (COALESCE(users.activity_visibility, 'all') = 'non_hentai' AND " +
+			fmt.Sprintf(hentaiAnimeExistsFmt, "activity_events.anime_id") + ")").
 		Order("activity_events.created_at DESC, activity_events.id DESC")
+}
 
+func (r *ActivityRepository) runFeedQuery(ctx context.Context, query *gorm.DB, limit int, before string) ([]*domain.ActivityEvent, bool, error) {
 	if before != "" {
 		// Get the created_at of the cursor event
 		var cursor domain.ActivityEvent
@@ -91,16 +111,14 @@ func (r *ActivityRepository) GetFeed(ctx context.Context, limit int, before stri
 		events = events[:limit]
 	}
 
-	r.attachUserAvatars(ctx, events)
+	r.attachUserProfiles(ctx, events)
 
 	return events, hasMore, nil
 }
 
-// attachUserAvatars populates UserAvatar on each event from the users table in
-// a single batched query (shared fetchUserAvatars helper, also used by the
-// reviews and comments read paths). Best-effort: on error the feed still
-// renders (the frontend falls back to the username initial).
-func (r *ActivityRepository) attachUserAvatars(ctx context.Context, events []*domain.ActivityEvent) {
+// attachUserProfiles populates current avatar + public profile slug in one
+// batched query. Best-effort: the frontend falls back to initials and UUID.
+func (r *ActivityRepository) attachUserProfiles(ctx context.Context, events []*domain.ActivityEvent) {
 	if len(events) == 0 {
 		return
 	}
@@ -108,8 +126,21 @@ func (r *ActivityRepository) attachUserAvatars(ctx context.Context, events []*do
 	for _, e := range events {
 		ids = append(ids, e.UserID)
 	}
-	avatars := fetchUserAvatars(ctx, r.db, ids)
+	var rows []struct {
+		ID       string
+		Avatar   string
+		PublicID string
+	}
+	if err := r.db.WithContext(ctx).Table("users").Select("id, avatar, public_id").Where("id IN ?", ids).Scan(&rows).Error; err != nil {
+		return
+	}
+	profiles := make(map[string]struct{ avatar, publicID string }, len(rows))
+	for _, row := range rows {
+		profiles[row.ID] = struct{ avatar, publicID string }{row.Avatar, row.PublicID}
+	}
 	for _, e := range events {
-		e.UserAvatar = avatars[e.UserID]
+		profile := profiles[e.UserID]
+		e.UserAvatar = profile.avatar
+		e.PublicID = profile.publicID
 	}
 }

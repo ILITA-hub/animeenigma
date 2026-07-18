@@ -3,7 +3,7 @@
   <div class="activity-shell">
     <!-- Section header -->
     <div class="section-head">
-      <h2 class="section-title">{{ $t('activity.title') }}</h2>
+      <h2 class="section-title">{{ $t(titleKey) }}</h2>
     </div>
 
     <!-- Loading skeleton -->
@@ -79,7 +79,7 @@
 
       <!-- Empty state -->
       <div v-if="events.length === 0 && !loading" class="feed-empty">
-        {{ $t('activity.empty') }}
+        {{ $t(emptyKey) }}
       </div>
 
       <!-- Load more -->
@@ -145,6 +145,20 @@ import PosterImage from '@/components/anime/PosterImage.vue'
 import { activityApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 
+interface Props {
+  source?: 'global' | 'following'
+  userId?: string
+  titleKey?: string
+  emptyKey?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  source: 'global',
+  userId: '',
+  titleKey: 'activity.title',
+  emptyKey: 'activity.empty',
+})
+
 const { t, locale } = useI18n()
 const events = ref<ActivityEvent[]>([])
 const hasMore = ref(false)
@@ -154,7 +168,8 @@ const loadFeed = async (before?: string) => {
   // First-page cache hit: render instantly, skip the request. Stale/empty
   // first pages coalesce through feedGuard.share so concurrent mounts
   // don't race duplicate requests.
-  if (!before && feedCache.events.length > 0 && feedGuard.isFresh()) {
+  const cacheable = props.source === 'global' && !props.userId
+  if (!before && cacheable && feedCache.events.length > 0 && feedGuard.isFresh()) {
     events.value = feedCache.events
     hasMore.value = feedCache.hasMore
     loading.value = false
@@ -163,16 +178,20 @@ const loadFeed = async (before?: string) => {
   const fetchPage = async () => {
     loading.value = true
     try {
-      const response = await activityApi.getFeed(10, before)
+      const response = props.source === 'following'
+        ? await activityApi.getFollowingFeed(10, before, props.userId || undefined)
+        : await activityApi.getFeed(10, before)
       const data = response.data?.data || response.data
       const newEvents: ActivityEvent[] = data?.events || []
       if (before) {
         events.value.push(...newEvents)
       } else {
         events.value = newEvents
-        feedCache.events = newEvents
-        feedCache.hasMore = data?.has_more || false
-        feedGuard.markFresh()
+        if (cacheable) {
+          feedCache.events = newEvents
+          feedCache.hasMore = data?.has_more || false
+          feedGuard.markFresh()
+        }
       }
       hasMore.value = data?.has_more || false
     } catch (err) {
@@ -181,7 +200,7 @@ const loadFeed = async (before?: string) => {
       loading.value = false
     }
   }
-  return before ? fetchPage() : feedGuard.share(fetchPage)
+  return before || !cacheable ? fetchPage() : feedGuard.share(fetchPage)
 }
 
 const loadMore = () => {

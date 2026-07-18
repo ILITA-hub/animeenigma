@@ -83,6 +83,11 @@ describe('pickSecretFeature — pool is store.roulette (server-resolved), not cl
     expect(pick).not.toBeNull()
     expect(pick!.to).toEqual({ path: '/profile', query: { showcase: 'edit' } })
   })
+
+  it('routes the following secret feature to its hidden page', () => {
+    store.roulette = ['following']
+    expect(pickSecretFeature('/')?.to).toBe('/following')
+  })
 })
 
 describe('roulettePoolAvailable — footer button dead-affordance guard (P4 Task 3 review fix)', () => {
