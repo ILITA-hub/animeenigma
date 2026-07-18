@@ -21,21 +21,24 @@ import (
 	"strings"
 )
 
-// sequelPatterns match names that denote a later entry in a series. All are
-// case-insensitive; Unicode case folding covers the Cyrillic markers.
+// sequelPatterns match names that denote a LATER entry in a series. All are
+// case-insensitive; Unicode case folding covers the Cyrillic markers. The
+// numeric markers deliberately exclude "1" (`(?:[2-9]|[1-9]\d+)` = 2..9 or
+// 10+): a first season explicitly titled "Season 1" / "Part 1" / "1st Season"
+// is NOT a continuation and must stay eligible for the taste path.
 var sequelPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(2nd|3rd|4th|5th|second|third|fourth|fifth|final)\s+season\b`),
-	regexp.MustCompile(`(?i)\bseason\s+\d+\b`),
-	regexp.MustCompile(`(?i)\bpart\s+(\d+|ii|iii|iv|v)\b`),
-	regexp.MustCompile(`(?i)\b\d+(st|nd|rd|th)\s+(season|part|cour)\b`),
-	regexp.MustCompile(`(?i)\bcour\s+\d+\b`),
+	regexp.MustCompile(`(?i)\bseason\s+(?:[2-9]|[1-9]\d+)\b`),
+	regexp.MustCompile(`(?i)\bpart\s+(?:[2-9]|[1-9]\d+|ii|iii|iv|v)\b`),
+	regexp.MustCompile(`(?i)\b(?:[2-9]|[1-9]\d+)(?:st|nd|rd|th)\s+(?:season|part|cour)\b`),
+	regexp.MustCompile(`(?i)\bcour\s+(?:[2-9]|[1-9]\d+)\b`),
 	// Trailing standalone roman numeral (e.g. "Overlord IV"). Anchored to end
-	// with a leading space so mid-name numerals don't trip it.
+	// with a leading space so mid-name numerals don't trip it. "I" is excluded.
 	regexp.MustCompile(`(?i)\s(ii|iii|iv|v|vi|vii|viii)$`),
-	// Russian: "2 сезон" / "2-й сезон" / "сезон 2" / "часть 2".
-	regexp.MustCompile(`(?i)\d+\s*[\p{Cyrillic}-]*\s*сезон`),
-	regexp.MustCompile(`(?i)сезон\s*\d+`),
-	regexp.MustCompile(`(?i)часть\s+\d+`),
+	// Russian: "2 сезон" / "2-й сезон" / "сезон 2" / "часть 2" (never "1").
+	regexp.MustCompile(`(?i)(?:[2-9]|[1-9]\d+)\s*[\p{Cyrillic}-]*\s*сезон`),
+	regexp.MustCompile(`(?i)сезон\s*(?:[2-9]|[1-9]\d+)`),
+	regexp.MustCompile(`(?i)часть\s+(?:[2-9]|[1-9]\d+)`),
 }
 
 // nameRow holds the two titles the sequel heuristic inspects.

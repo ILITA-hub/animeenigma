@@ -23,6 +23,10 @@ const (
 	// upcomingSourceMinWatched is how many of the user's watched titles must
 	// share a candidate's source material before it's a citeable reason.
 	upcomingSourceMinWatched = 3
+	// upcomingStudioMinWatched is how many DISTINCT watched titles must share a
+	// candidate's studio before "same studio as your favorites" (plural) is
+	// honest.
+	upcomingStudioMinWatched = 2
 )
 
 // resolveReason picks the most honest reason for one matched title.
@@ -58,7 +62,8 @@ func (h *UpcomingHandler) resolveReason(ctx context.Context, userID, animeID str
 // taste match, or nil when none is citeable. Studio first (S5's heaviest
 // non-tag dimension and the one with clean display names), then source.
 func (h *UpcomingHandler) attributeReason(ctx context.Context, userID, animeID string) (*UpcomingReason, error) {
-	// 1. Most-watched studio the candidate also has.
+	// 1. Studio the candidate shares with the MOST DISTINCT titles the user has
+	//    watched (COUNT(DISTINCT), so a long/rewatched series can't skew it).
 	type studioRow struct {
 		Name string
 		Cnt  int
@@ -66,7 +71,7 @@ func (h *UpcomingHandler) attributeReason(ctx context.Context, userID, animeID s
 	var studios []studioRow
 	if err := h.db.WithContext(ctx).
 		Table("watch_history AS wh").
-		Select("s.name AS name, COUNT(*) AS cnt").
+		Select("s.name AS name, COUNT(DISTINCT wh.anime_id) AS cnt").
 		Joins("JOIN anime_studios uas ON uas.anime_id = wh.anime_id").
 		Joins("JOIN anime_studios cas ON cas.studio_id = uas.studio_id AND cas.anime_id = ?", animeID).
 		Joins("JOIN studios s ON s.id = uas.studio_id").
@@ -77,7 +82,7 @@ func (h *UpcomingHandler) attributeReason(ctx context.Context, userID, animeID s
 		Scan(&studios).Error; err != nil {
 		return nil, err
 	}
-	if len(studios) > 0 && studios[0].Name != "" {
+	if len(studios) > 0 && studios[0].Name != "" && studios[0].Cnt >= upcomingStudioMinWatched {
 		return &UpcomingReason{Kind: "attribute", Attribute: "studio", AttributeName: studios[0].Name}, nil
 	}
 

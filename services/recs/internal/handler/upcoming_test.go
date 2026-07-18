@@ -241,6 +241,40 @@ func TestUpcoming_ContinuationExcludedDespiteStrongTaste(t *testing.T) {
 		"a 2nd-season with no franchise affinity must be gated out even with strong S2/S5")
 }
 
+// TestUpcoming_ContinuationScored6GetsFranchiseReason pins the low S8 band:
+// a user who rated a prior franchise entry exactly 6/10 yields rawS8=0.2 (== the
+// gate). The admitted continuation must carry the FRANCHISE reason, not "taste",
+// and must sort as a franchise pick — even though rawS8 is below the 0.4 label
+// bar used for standalones.
+func TestUpcoming_ContinuationScored6GetsFranchiseReason(t *testing.T) {
+	db := newUpcomingTestDB(t)
+	// Aired S1 (released) + announced S2 in the same enriched franchise.
+	require.NoError(t, db.Exec(`INSERT INTO animes (id, name, franchise, status) VALUES
+		('foo1', 'Foo', 'foo', 'released'),
+		('foo2', 'Foo Continued', 'foo', 'announced')`).Error)
+	// Rated S1 exactly 6/10 → S8 raw = (6-5)/5 = 0.2.
+	require.NoError(t, db.Exec(`INSERT INTO anime_list (id, user_id, anime_id, status, score)
+		VALUES ('l1','u1','foo1','completed',6)`).Error)
+
+	h := NewUpcomingHandler(db, repo.NewAnnouncementDismissalsRepository(db), newFakeRecsCache(), logger.Default(),
+		UpcomingConfig{TopK: 3, MinS8: 0.2, MinS2: 0.3, MinS5: 0.01})
+	rec := upcomingRequest(t, h, "u1")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var env struct {
+		Data struct {
+			Items []UpcomingItem `json:"items"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &env))
+	require.Len(t, env.Data.Items, 1)
+	it := env.Data.Items[0]
+	assert.Equal(t, "foo2", it.Anime.ID)
+	assert.Equal(t, "franchise", it.Reason.Kind, "a continuation admitted via S8 is franchise-driven even at rawS8=0.2")
+	assert.Equal(t, "foo1", it.Reason.SeedAnimeID)
+	assert.Equal(t, 6, it.Reason.UserScore)
+}
+
 // TestUpcoming_StandaloneAdmittedByAttributeAffinity: a brand-new original
 // (non-sequel name, empty franchise) is admitted on S5 attribute affinity
 // alone and gets an attribute reason naming the shared studio.
@@ -248,13 +282,15 @@ func TestUpcoming_StandaloneAdmittedByAttributeAffinity(t *testing.T) {
 	db := newUpcomingTestDB(t)
 	require.NoError(t, db.Exec(`INSERT INTO animes (id, name, franchise, status) VALUES
 		('watched1', 'Some Wit Show', '', 'released'),
+		('watched2', 'Another Wit Show', '', 'released'),
 		('orig1', 'Brand New Original', '', 'announced')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO studios (id, name) VALUES ('st1','Studio Wit')`).Error)
-	// Candidate + a title the user watched both carry studio st1.
+	// Candidate + TWO titles the user watched all carry studio st1 (>= the
+	// distinct-title threshold so "your favorites" is honest).
 	require.NoError(t, db.Exec(`INSERT INTO anime_studios (anime_id, studio_id) VALUES
-		('orig1','st1'), ('watched1','st1')`).Error)
+		('orig1','st1'), ('watched1','st1'), ('watched2','st1')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO watch_history (id, user_id, anime_id) VALUES
-		('wh1','u1','watched1')`).Error)
+		('wh1','u1','watched1'), ('wh2','u1','watched2')`).Error)
 	// S5 affinity gives orig1 raw = 0.25*1.0 = 0.25 >= MinS5.
 	require.NoError(t, db.Exec(`INSERT INTO rec_user_signals (user_id, s1_vector, s5_affinity)
 		VALUES ('u1','{}','{"studio:st1":1.0}')`).Error)

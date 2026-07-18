@@ -131,11 +131,14 @@ func NewUpcomingHandler(db *gorm.DB, dismissals *repo.AnnouncementDismissalsRepo
 	if cfg.TopK <= 0 {
 		cfg.TopK = 3
 	}
-	// Guard the standalone gate: MinS5 <= 0 would make `rawS5 < MinS5` never
-	// fire, admitting every rawS5 >= 0 title (i.e. the whole pool). A positive
-	// floor is required for the gate to mean anything.
+	// Guard the gates: a non-positive floor makes `raw < floor` never fire,
+	// admitting the whole pool (MinS5) or reopening the continuation gate so a
+	// sequel with rawS8=0 slips in (MinS8). Positive floors are required.
 	if cfg.MinS5 <= 0 {
 		cfg.MinS5 = 0.01
+	}
+	if cfg.MinS8 <= 0 {
+		cfg.MinS8 = 0.2
 	}
 	return &UpcomingHandler{
 		db:         db,
@@ -314,10 +317,14 @@ func (h *UpcomingHandler) computeUpcoming(ctx context.Context, userID string) (U
 		if rawS9 > maxS9 {
 			maxS9 = rawS9
 		}
+		// An admitted continuation got in ONLY because rawS8 >= MinS8 (the user
+		// scored a prior franchise entry — and S8 only fires for franchise<>''),
+		// so it is franchise-driven by definition regardless of the higher
+		// reason bar. A standalone is franchise-driven only above that bar.
 		picks = append(picks, pick{
 			id:        r.AnimeID,
 			final:     r.Final,
-			franchise: rawS8 >= upcomingFranchiseReasonMinS8,
+			franchise: continuation || rawS8 >= upcomingFranchiseReasonMinS8,
 			rawS9:     rawS9,
 		})
 	}

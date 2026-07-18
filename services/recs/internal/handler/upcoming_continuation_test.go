@@ -26,6 +26,7 @@ func TestLooksLikeSequel(t *testing.T) {
 		{"Overlord IV", "", true},
 		{"Bocchi the Rock! 2nd Season", "", true},
 		{"Some Show 2nd Cour", "", true},
+		{"Long Runner Season 12", "", true},
 		{"", "Ван-Пис 2 сезон", true},
 		{"", "Клинок 3-й сезон", true},
 		{"", "Атака титанов часть 2", true},
@@ -37,6 +38,11 @@ func TestLooksLikeSequel(t *testing.T) {
 		{"5-toubun no Hanayome", "", false},
 		{"Kimetsu Academy", "", false},
 		{"Steins;Gate", "", false},
+		// Explicit first-entry naming — "1" must NOT be read as a continuation.
+		{"Some Show Season 1", "", false},
+		{"Some Show Part 1", "", false},
+		{"Some Show 1st Season", "", false},
+		{"", "Некое Шоу 1 сезон", false},
 	}
 	for _, c := range cases {
 		got := looksLikeSequel(c.name, c.nameRU)
