@@ -87,66 +87,55 @@ func withListClaims(r *http.Request, userID, username string) *http.Request {
 	return r.WithContext(authz.ContextWithClaims(r.Context(), claims))
 }
 
-// TestAddToList_HonorsCallerSuppliedStatus is the regression case: posting
-// status "watching" for a brand-new entry must persist "watching", not
-// silently downgrade to "plan_to_watch".
-func TestAddToList_HonorsCallerSuppliedStatus(t *testing.T) {
-	router, db := setupListAddHandlerTest(t)
+// TestAddToList covers the three status-handling paths on first watchlist
+// add: honoring a caller-supplied status (the regression case), defaulting
+// when status is omitted, and falling back to the default for an
+// unrecognized status rather than persisting it verbatim.
+func TestAddToList(t *testing.T) {
+	tests := []struct {
+		name       string
+		animeID    string
+		reqBody    map[string]string
+		wantStatus string
+	}{
+		{
+			name:       "honors caller-supplied status",
+			animeID:    "anime-1",
+			reqBody:    map[string]string{"anime_id": "anime-1", "status": "watching"},
+			wantStatus: "watching",
+		},
+		{
+			name:       "defaults to plan_to_watch when status is omitted",
+			animeID:    "anime-2",
+			reqBody:    map[string]string{"anime_id": "anime-2"},
+			wantStatus: "plan_to_watch",
+		},
+		{
+			name:       "falls back to plan_to_watch for an unrecognized status",
+			animeID:    "anime-3",
+			reqBody:    map[string]string{"anime_id": "anime-3", "status": "bogus"},
+			wantStatus: "plan_to_watch",
+		},
+	}
 
-	body, _ := json.Marshal(map[string]string{"anime_id": "anime-1", "status": "watching"})
-	req := httptest.NewRequest(http.MethodPost, "/api/users/watchlist/", bytes.NewReader(body))
-	req = withListClaims(req, "user-1", "alice")
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router, db := setupListAddHandlerTest(t)
 
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusCreated, w.Code, "response: %s", w.Body.String())
+			body, _ := json.Marshal(tt.reqBody)
+			req := httptest.NewRequest(http.MethodPost, "/api/users/watchlist/", bytes.NewReader(body))
+			req = withListClaims(req, "user-1", "alice")
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
 
-	var status string
-	require.NoError(t, db.Table("anime_list").
-		Where("user_id = ? AND anime_id = ?", "user-1", "anime-1").
-		Select("status").Scan(&status).Error)
-	assert.Equal(t, "watching", status, "must persist the caller-supplied status, not fall back to plan_to_watch")
-}
+			router.ServeHTTP(w, req)
+			require.Equal(t, http.StatusCreated, w.Code, "response: %s", w.Body.String())
 
-// TestAddToList_DefaultsToPlanToWatch preserves the original default for
-// callers that omit status entirely.
-func TestAddToList_DefaultsToPlanToWatch(t *testing.T) {
-	router, db := setupListAddHandlerTest(t)
-
-	body, _ := json.Marshal(map[string]string{"anime_id": "anime-2"})
-	req := httptest.NewRequest(http.MethodPost, "/api/users/watchlist/", bytes.NewReader(body))
-	req = withListClaims(req, "user-1", "alice")
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusCreated, w.Code, "response: %s", w.Body.String())
-
-	var status string
-	require.NoError(t, db.Table("anime_list").
-		Where("user_id = ? AND anime_id = ?", "user-1", "anime-2").
-		Select("status").Scan(&status).Error)
-	assert.Equal(t, "plan_to_watch", status)
-}
-
-// TestAddToList_RejectsInvalidStatus guards against an unrecognized status
-// value silently being persisted (falls back to the plan_to_watch default).
-func TestAddToList_RejectsInvalidStatus(t *testing.T) {
-	router, db := setupListAddHandlerTest(t)
-
-	body, _ := json.Marshal(map[string]string{"anime_id": "anime-3", "status": "bogus"})
-	req := httptest.NewRequest(http.MethodPost, "/api/users/watchlist/", bytes.NewReader(body))
-	req = withListClaims(req, "user-1", "alice")
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusCreated, w.Code, "response: %s", w.Body.String())
-
-	var status string
-	require.NoError(t, db.Table("anime_list").
-		Where("user_id = ? AND anime_id = ?", "user-1", "anime-3").
-		Select("status").Scan(&status).Error)
-	assert.Equal(t, "plan_to_watch", status)
+			var status string
+			require.NoError(t, db.Table("anime_list").
+				Where("user_id = ? AND anime_id = ?", "user-1", tt.animeID).
+				Select("status").Scan(&status).Error)
+			assert.Equal(t, tt.wantStatus, status)
+		})
+	}
 }
