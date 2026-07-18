@@ -1143,6 +1143,20 @@ class CamoufoxEngine:
                     pass
                 last_reload = now
             await asyncio.sleep(1.2)
+        if self._log:
+            try:
+                final_title = await page.title()
+            except Exception:  # noqa: BLE001
+                final_title = ""
+            self._log.warning(
+                "challenge solve timed out",
+                extra={
+                    "host": host_of(origin),
+                    "clicks": clicks,
+                    "clearance_obtained": clearance_since != 0.0,
+                    "final_title": final_title[:80],
+                },
+            )
         return False
 
     def _fetch_lock(self, key: str) -> asyncio.Lock:

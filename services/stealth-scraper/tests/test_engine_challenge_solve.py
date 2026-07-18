@@ -176,6 +176,71 @@ class TestSolveCfChallenge(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class _FakeLog:
+    """Captures warning() calls to assert on the diagnostic timeout log."""
+
+    def __init__(self):
+        self.warnings = []
+
+    def warning(self, msg, *args, **kwargs):
+        self.warnings.append((msg, kwargs.get("extra", {})))
+
+
+class TestSolveCfChallengeDiagnosticLog(unittest.TestCase):
+    """The failure path used to be completely silent (every exception inside
+    the poll loop is swallowed, and a timed-out solve just returns False with
+    no log line) — a live incident (2026-07-18) went undiagnosed for 12+
+    hours/600+ attempts per provider because there was nothing to grep for,
+    only a Prometheus counter nobody was cross-referencing. On a genuine
+    timeout, log a WARNING with enough to tell apart "iframe never found"
+    (clicks=0) vs "clicked but CF never issued clearance" vs "clearance
+    obtained but the page never left the interstitial" (clearance_obtained
+    True, still False overall)."""
+
+    def test_logs_diagnostic_warning_on_timeout(self):
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                     challenge_solve_timeout_ms=40))
+        log = _FakeLog()
+        eng.set_logger(log)
+        mouse = _Mouse()
+        page = _Page([_Frame("https://animepahe.pw/")], mouse)  # no turnstile frame
+        ctx = _Ctx(mouse)
+        with _no_sleep():
+            ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
+        self.assertFalse(ok)
+        self.assertEqual(len(log.warnings), 1)
+        msg, extra = log.warnings[0]
+        self.assertIn("timed out", msg)
+        self.assertEqual(extra["host"], "animepahe.pw")
+        self.assertEqual(extra["clicks"], 0)
+        self.assertFalse(extra["clearance_obtained"])
+
+    def test_no_warning_logged_on_success(self):
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                     challenge_solve_timeout_ms=5000))
+        log = _FakeLog()
+        eng.set_logger(log)
+        mouse = _Mouse()
+        page = _Page([_Frame(TURNSTILE_URL)], mouse)
+        ctx = _Ctx(mouse)
+        with _no_sleep():
+            ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
+        self.assertTrue(ok)
+        self.assertEqual(log.warnings, [])
+
+    def test_no_logger_set_does_not_crash(self):
+        # set_logger() is never called in production until app startup wires
+        # it — the diagnostic log must not assume self._log is present.
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                     challenge_solve_timeout_ms=40))
+        mouse = _Mouse()
+        page = _Page([_Frame("https://animepahe.pw/")], mouse)
+        ctx = _Ctx(mouse)
+        with _no_sleep():
+            ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
+        self.assertFalse(ok)
+
+
 class TestRecipeFlags(unittest.TestCase):
     def test_animepahe_opts_into_solve_others_do_not(self):
         eng = CamoufoxEngine(Config(pool_size=1))
