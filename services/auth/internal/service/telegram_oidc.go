@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/subtle"
 	stderrors "errors"
 	"fmt"
 	"net/http"
@@ -41,6 +42,11 @@ var ErrOIDCStateExpired = stderrors.New("oidc state expired or already used")
 type oidcState struct {
 	Verifier   string `json:"verifier"`
 	ReturnPath string `json:"return_path"`
+	// BindNonce ties this state to the browser that started the flow (via an
+	// HttpOnly cookie the handler sets on Start and checks on Callback) so a
+	// callback URL handed to a victim can't mint a session in their browser
+	// using the attacker's own login attempt (login CSRF / session fixation).
+	BindNonce string `json:"bind_nonce"`
 }
 
 // TelegramOIDC drives the OAuth2 authorization-code + PKCE login against
@@ -91,8 +97,10 @@ func (t *TelegramOIDC) ensureProvider(ctx context.Context) error {
 }
 
 // Begin creates the state + PKCE verifier for one login attempt and returns
-// the authorization URL to redirect the browser to.
-func (t *TelegramOIDC) Begin(ctx context.Context, returnPath string) (string, error) {
+// the authorization URL to redirect the browser to. bindNonce is the random
+// value the handler also stashes in an HttpOnly cookie on the initiating
+// browser; Complete refuses to proceed unless the callback carries a match.
+func (t *TelegramOIDC) Begin(ctx context.Context, returnPath, bindNonce string) (string, error) {
 	if t.cfg.ClientID == "" || t.cfg.ClientSecret == "" {
 		return "", fmt.Errorf("telegram oidc not configured (TELEGRAM_OIDC_CLIENT_ID/SECRET)")
 	}
@@ -101,7 +109,8 @@ func (t *TelegramOIDC) Begin(ctx context.Context, returnPath string) (string, er
 	}
 	state := uuid.New().String()
 	verifier := oauth2.GenerateVerifier()
-	if err := t.cache.Set(ctx, oidcStateKeyPrefix+state, &oidcState{Verifier: verifier, ReturnPath: returnPath}, oidcStateTTL); err != nil {
+	payload := &oidcState{Verifier: verifier, ReturnPath: returnPath, BindNonce: bindNonce}
+	if err := t.cache.Set(ctx, oidcStateKeyPrefix+state, payload, oidcStateTTL); err != nil {
 		return "", fmt.Errorf("store oidc state: %w", err)
 	}
 	return t.oauth.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier)), nil
@@ -110,7 +119,11 @@ func (t *TelegramOIDC) Begin(ctx context.Context, returnPath string) (string, er
 // Complete consumes the state (single-use), exchanges the code, verifies the
 // id_token, and maps its claims onto the TelegramWebhookUser shape consumed
 // by AuthService.LoginWithTelegram. Also returns the stored return path.
-func (t *TelegramOIDC) Complete(ctx context.Context, state, code string) (*domain.TelegramWebhookUser, string, error) {
+// bindNonce must match the value Begin stored (the handler's HttpOnly
+// cookie) or the callback is treated as expired — this is what stops a
+// callback URL replayed in a different browser from adopting someone else's
+// login attempt.
+func (t *TelegramOIDC) Complete(ctx context.Context, state, code, bindNonce string) (*domain.TelegramWebhookUser, string, error) {
 	var st oidcState
 	if err := t.cache.Get(ctx, oidcStateKeyPrefix+state, &st); err != nil {
 		return nil, "", ErrOIDCStateExpired
@@ -118,6 +131,10 @@ func (t *TelegramOIDC) Complete(ctx context.Context, state, code string) (*domai
 	// Single-use: delete before the exchange so a replayed callback cannot
 	// race a second exchange with the same verifier.
 	_ = t.cache.Delete(ctx, oidcStateKeyPrefix+state)
+
+	if subtle.ConstantTimeCompare([]byte(st.BindNonce), []byte(bindNonce)) != 1 {
+		return nil, "", ErrOIDCStateExpired
+	}
 
 	if err := t.ensureProvider(ctx); err != nil {
 		return nil, "", err

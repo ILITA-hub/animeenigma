@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	stderrors "errors"
 	"net/http"
 
@@ -8,6 +10,24 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/service"
 )
+
+const (
+	// oidcBindCookie ties the callback to the browser that ran Start — a
+	// callback URL replayed in another browser must not mint a session
+	// there (login-CSRF / session fixation).
+	oidcBindCookie = "ae_oidc_bind"
+	oidcBindPath   = "/api/auth/telegram/oidc"
+)
+
+// newBindNonce returns a fresh random value for the bind cookie, same recipe
+// as generateRefreshToken (service/auth.go): 32 random bytes, base64url.
+func newBindNonce() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
 
 // TelegramOIDCHandler serves the browser-facing Telegram OIDC login
 // endpoints. Both answer with 302s (never JSON): the browser is mid full-page
@@ -31,7 +51,26 @@ func NewTelegramOIDCHandler(o *service.TelegramOIDC, a *service.AuthService, coo
 // the OIDC state, sanitized exactly like the magic-link oldurl.
 func (h *TelegramOIDCHandler) Start(w http.ResponseWriter, r *http.Request) {
 	returnPath := service.SanitizeOldURL(r.URL.Query().Get("return"))
-	authURL, err := h.oidc.Begin(r.Context(), returnPath)
+	nonce, err := newBindNonce()
+	if err != nil {
+		h.log.Errorw("telegram oidc begin failed", "error", err)
+		metrics.AuthEventsTotal.WithLabelValues("telegram_login", "begin_error").Inc()
+		http.Redirect(w, r, "/auth?error=telegram", http.StatusFound)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     oidcBindCookie,
+		Value:    nonce,
+		Path:     oidcBindPath,
+		MaxAge:   300,
+		HttpOnly: true,
+		Secure:   true,
+		// Lax: the callback arrives as a top-level cross-site GET navigation
+		// from oauth.telegram.org — Lax still sends the cookie there, Strict
+		// would not.
+		SameSite: http.SameSiteLaxMode,
+	})
+	authURL, err := h.oidc.Begin(r.Context(), returnPath, nonce)
 	if err != nil {
 		h.log.Errorw("telegram oidc begin failed", "error", err)
 		metrics.AuthEventsTotal.WithLabelValues("telegram_login", "begin_error").Inc()
@@ -59,7 +98,18 @@ func (h *TelegramOIDCHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tgUser, returnPath, err := h.oidc.Complete(r.Context(), state, code)
+	// Bind check: the initiating browser set this HttpOnly cookie in Start.
+	// No cookie (different browser, expired, or blocked) is indistinguishable
+	// from an expired attempt from the user's point of view — same retryable
+	// error page.
+	bindCookie, err := r.Cookie(oidcBindCookie)
+	if err != nil {
+		metrics.AuthEventsTotal.WithLabelValues("telegram_login", "state_expired").Inc()
+		http.Redirect(w, r, "/auth?error=expired", http.StatusFound)
+		return
+	}
+
+	tgUser, returnPath, err := h.oidc.Complete(r.Context(), state, code, bindCookie.Value)
 	if err != nil {
 		if stderrors.Is(err, service.ErrOIDCStateExpired) {
 			metrics.AuthEventsTotal.WithLabelValues("telegram_login", "state_expired").Inc()
@@ -93,6 +143,17 @@ func (h *TelegramOIDCHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		Value:    "1",
 		Path:     "/",
 		MaxAge:   60,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	// Bind nonce is single-use like the state it was checked against — clear
+	// it now that login succeeded.
+	http.SetCookie(w, &http.Cookie{
+		Name:     oidcBindCookie,
+		Value:    "",
+		Path:     oidcBindPath,
+		MaxAge:   -1,
+		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})

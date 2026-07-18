@@ -103,20 +103,24 @@ func newTestOIDC(t *testing.T, idp *fakeIdP) *TelegramOIDC {
 }
 
 // beginAndExtractState runs Begin and pulls the state param out of the auth URL.
-func beginAndExtractState(t *testing.T, o *TelegramOIDC, returnPath string) (authURL *url.URL, state string) {
+func beginAndExtractState(t *testing.T, o *TelegramOIDC, returnPath, bindNonce string) (authURL *url.URL, state string) {
 	t.Helper()
-	raw, err := o.Begin(context.Background(), returnPath)
+	raw, err := o.Begin(context.Background(), returnPath, bindNonce)
 	require.NoError(t, err)
 	u, err := url.Parse(raw)
 	require.NoError(t, err)
 	return u, u.Query().Get("state")
 }
 
+// testBindNonce stands in for the handler's HttpOnly cookie value in tests
+// that don't specifically exercise the bind-nonce mismatch path.
+const testBindNonce = "test-bind-nonce"
+
 func TestTelegramOIDC_BeginBuildsAuthURL(t *testing.T) {
 	idp := newFakeIdP(t, "12345")
 	o := newTestOIDC(t, idp)
 
-	u, state := beginAndExtractState(t, o, "/anime/xyz")
+	u, state := beginAndExtractState(t, o, "/anime/xyz", testBindNonce)
 
 	require.Equal(t, idp.srv.URL+"/auth", u.Scheme+"://"+u.Host+u.Path)
 	q := u.Query()
@@ -135,9 +139,9 @@ func TestTelegramOIDC_BeginBuildsAuthURL(t *testing.T) {
 func TestTelegramOIDC_CompleteHappyPath(t *testing.T) {
 	idp := newFakeIdP(t, "12345")
 	o := newTestOIDC(t, idp)
-	_, state := beginAndExtractState(t, o, "/anime/xyz")
+	_, state := beginAndExtractState(t, o, "/anime/xyz", testBindNonce)
 
-	tgUser, returnPath, err := o.Complete(context.Background(), state, "any-code")
+	tgUser, returnPath, err := o.Complete(context.Background(), state, "any-code", testBindNonce)
 	require.NoError(t, err)
 	require.Equal(t, int64(777), tgUser.ID)
 	require.Equal(t, "Tester", tgUser.FirstName)
@@ -149,18 +153,18 @@ func TestTelegramOIDC_CompleteUnknownState(t *testing.T) {
 	idp := newFakeIdP(t, "12345")
 	o := newTestOIDC(t, idp)
 
-	_, _, err := o.Complete(context.Background(), "nope", "code")
+	_, _, err := o.Complete(context.Background(), "nope", "code", testBindNonce)
 	require.ErrorIs(t, err, ErrOIDCStateExpired)
 }
 
 func TestTelegramOIDC_CompleteStateReplay(t *testing.T) {
 	idp := newFakeIdP(t, "12345")
 	o := newTestOIDC(t, idp)
-	_, state := beginAndExtractState(t, o, "/")
+	_, state := beginAndExtractState(t, o, "/", testBindNonce)
 
-	_, _, err := o.Complete(context.Background(), state, "code")
+	_, _, err := o.Complete(context.Background(), state, "code", testBindNonce)
 	require.NoError(t, err)
-	_, _, err = o.Complete(context.Background(), state, "code")
+	_, _, err = o.Complete(context.Background(), state, "code", testBindNonce)
 	require.ErrorIs(t, err, ErrOIDCStateExpired, "state must be single-use")
 }
 
@@ -168,9 +172,9 @@ func TestTelegramOIDC_CompleteBadSignature(t *testing.T) {
 	idp := newFakeIdP(t, "12345")
 	idp.signWrong = true
 	o := newTestOIDC(t, idp)
-	_, state := beginAndExtractState(t, o, "/")
+	_, state := beginAndExtractState(t, o, "/", testBindNonce)
 
-	_, _, err := o.Complete(context.Background(), state, "code")
+	_, _, err := o.Complete(context.Background(), state, "code", testBindNonce)
 	require.Error(t, err)
 	require.False(t, errors.Is(err, ErrOIDCStateExpired))
 	require.Contains(t, err.Error(), "verify id_token")
@@ -180,17 +184,30 @@ func TestTelegramOIDC_CompleteNonNumericSub(t *testing.T) {
 	idp := newFakeIdP(t, "12345")
 	idp.sub = "not-a-number"
 	o := newTestOIDC(t, idp)
-	_, state := beginAndExtractState(t, o, "/")
+	_, state := beginAndExtractState(t, o, "/", testBindNonce)
 
-	_, _, err := o.Complete(context.Background(), state, "code")
+	_, _, err := o.Complete(context.Background(), state, "code", testBindNonce)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "sub claim")
 }
 
 func TestTelegramOIDC_BeginNotConfigured(t *testing.T) {
 	o := NewTelegramOIDC(config.TelegramOIDCConfig{}, newFakeCache(), logger.Default())
-	_, err := o.Begin(context.Background(), "/")
+	_, err := o.Begin(context.Background(), "/", testBindNonce)
 	require.Error(t, err)
+}
+
+// TestTelegramOIDC_CompleteWrongBindNonce: Begin's cookie nonce must match
+// what Complete receives, or the callback is treated as expired — this is
+// what stops a callback URL replayed in a different browser (login-CSRF /
+// session fixation) from adopting someone else's login attempt.
+func TestTelegramOIDC_CompleteWrongBindNonce(t *testing.T) {
+	idp := newFakeIdP(t, "12345")
+	o := newTestOIDC(t, idp)
+	_, state := beginAndExtractState(t, o, "/", "nonce-a")
+
+	_, _, err := o.Complete(context.Background(), state, "code", "nonce-b")
+	require.ErrorIs(t, err, ErrOIDCStateExpired)
 }
 
 // Interface guard so strings stay in sync with the fake IdP.
