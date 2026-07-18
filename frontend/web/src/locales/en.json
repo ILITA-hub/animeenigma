@@ -1109,23 +1109,15 @@
   },
   "auth": {
     "heading": "Sign in to AnimeEnigma",
-    "qrAlt": "Telegram login QR code",
     "telegramLogin": "Login via Telegram",
-    "loading": "Loading...",
     "backHome": "Back to Home",
     "loginError": "Login error",
     "registerError": "Registration error",
-    "telegramLoginError": "Telegram login error",
-    "openInTelegram": "Open in Telegram",
-    "expiresIn": "Expires in {seconds}s",
-    "sessionExpired": "Session expired",
-    "tryAgain": "Try again",
-    "troubleshootingHint": "Having trouble? Make sure you haven't blocked {'@'}animeenigma_auth_bot in Telegram.",
-    "openInBrowser": "Don't have the app? Open in browser",
-    "tgWebToggle": "Using Telegram Web?",
-    "tgWebInstructions": "Open {'@'}animeenigma_auth_bot in Telegram and send this message:",
-    "tgWebCopy": "Copy",
-    "tgWebCopied": "Copied"
+    "continueWithTelegram": "Continue with Telegram",
+    "oidcHint": "You'll be redirected to Telegram to confirm — one tap, then straight back.",
+    "errorTelegram": "Telegram login failed. Please try again.",
+    "errorExpired": "That login attempt expired — try again.",
+    "errorDenied": "Login was cancelled in Telegram."
   },
   "notFound": {
     "code": "404",
