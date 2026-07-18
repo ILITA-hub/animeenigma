@@ -102,24 +102,29 @@ func splitTrimLower(s string) []string {
 	return out
 }
 
-// GetAnime365File — GET /api/anime/{animeId}/subtitles/anime365/file/{transId}.
+// GetKageFile — GET /api/anime/{animeId}/subtitles/kage/file/{srtId}?episode=N.
 //
-// Resolves an anime365 translation id to the subtitle text (ASS preferred, VTT
-// fallback), caching 24h. Returns text/plain so the frontend SubtitleOverlay
-// parses ASS/VTT directly.
-func (h *SubtitlesHandler) GetAnime365File(w http.ResponseWriter, r *http.Request) {
-	transID, err := strconv.Atoi(chi.URLParam(r, "transId"))
-	if err != nil || transID <= 0 {
-		httputil.BadRequest(w, "transId must be a positive integer")
+// Downloads the Kage release archive (RAR/ZIP), extracts the requested
+// episode's subtitle, and returns UTF-8 text (caching 24h). Returns
+// text/plain so the frontend SubtitleOverlay parses ASS/SRT/VTT directly.
+func (h *SubtitlesHandler) GetKageFile(w http.ResponseWriter, r *http.Request) {
+	srtID, err := strconv.Atoi(chi.URLParam(r, "srtId"))
+	if err != nil || srtID <= 0 {
+		httputil.BadRequest(w, "srtId must be a positive integer")
 		return
 	}
+	episode, ok := parseEpisode(r.URL.Query().Get("episode"))
+	if !ok {
+		episode = 1 // movies/single releases; the extractor's single-entry rule applies
+	}
 
-	body, _, err := h.aggregator.ResolveAnime365File(r.Context(), transID)
+	body, _, err := h.aggregator.ResolveKageFile(r.Context(), srtID, episode)
 	if err != nil {
-		// anime365 has no auth/quota; any failure here is an upstream availability
-		// problem (timeout, 404, paywall), so return 503 rather than a 500 that
-		// would page as an internal error. Mirrors GetOpenSubtitlesFile's intent.
-		h.log.Warnw("anime365 file resolve failed", "trans_id", transID, "error", err)
+		// Kage has no auth/quota; any failure here is an upstream availability
+		// problem (timeout, dead archive, episode missing from the pack), so
+		// return 503 rather than a 500 that would page as an internal error.
+		// Mirrors GetOpenSubtitlesFile's intent.
+		h.log.Warnw("kage file resolve failed", "srt_id", srtID, "episode", episode, "error", err)
 		httputil.Error(w, liberrors.ServiceUnavailable("Russian subtitles are temporarily unavailable."))
 		return
 	}

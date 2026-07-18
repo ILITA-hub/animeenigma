@@ -1,7 +1,7 @@
 # anime365 Russian-Subtitle Provider — Design
 
 **Date:** 2026-06-24
-**Status:** Approved design, pending implementation plan
+**Status:** RETIRED 2026-07-18 — anime365 went fully paywalled; the integration was deleted and replaced by the Kage Project (fansubs.ru) adapter (`docs/superpowers/plans/2026-07-18-anime365-retire-kage.md`). Kept for historical context only.
 **Origin:** Feedback `2026-06-09T12-04-35_notebook_feedback` — *"Добавить субтитры для аниме из AniJoy"* — reported live against Witch Hat Atelier (*Tongari Boushi no Atelier*, MAL `51553`) ep 12, which has no RU subtitles today.
 
 ---

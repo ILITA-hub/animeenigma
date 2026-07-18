@@ -304,7 +304,7 @@ function trackRowClass(active: boolean): string[] {
 const PROVIDER_BADGES: Record<string, string> = {
   jimaku: 'bg-[var(--accent-line)] text-[var(--brand-cyan)]',
   opensubtitles: 'bg-[var(--line-strong)] text-[var(--ink-2)]',
-  anime365: 'bg-[var(--accent-line)] text-[var(--brand-violet)]',
+  kage: 'bg-[var(--accent-line)] text-[var(--brand-violet)]',
 }
 function providerBadgeClass(provider: string): string {
   return PROVIDER_BADGES[provider.toLowerCase()] ?? 'bg-[var(--border)] text-[var(--ink-2)]'

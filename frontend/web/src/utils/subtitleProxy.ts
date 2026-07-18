@@ -19,7 +19,7 @@ export function buildSubtitleProxyUrl(file: string, exp?: string, sig?: string, 
 /** Pre-wrap a catalog-signed aggregated subtitle track URL in the proxy.
  *  The catalog stamps exp/sig ONLY on external URLs (today jimaku.cc), so a
  *  signed track becomes a first-party proxy URL (fetched directly downstream —
- *  see fetchAndParseCues) while same-origin tracks (OpenSubtitles/anime365
+ *  see fetchAndParseCues) while same-origin tracks (OpenSubtitles/Kage
  *  /api/... routes) pass through untouched. The signature MUST ride as
  *  top-level exp/sig query params on the proxy request — that is what the
  *  proxy's trust gate reads (buildSubtitleProxyUrl does exactly this). */

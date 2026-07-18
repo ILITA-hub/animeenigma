@@ -16,8 +16,8 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/anime365"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kage"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/subprobe"
@@ -47,7 +47,7 @@ var errProviderUnconfigured = errors.New("subtitle provider not configured")
 type SubsAggregator struct {
 	jimaku    *jimaku.Client
 	opensubs  *opensubtitles.Client
-	anime365  *anime365.Client
+	kage      *kage.Client
 	idmap     *idmapping.Client
 	animeRepo animeRepoForSubs
 	cache     *cache.RedisCache
@@ -59,7 +59,7 @@ type SubsAggregator struct {
 func NewSubsAggregator(
 	jimakuClient *jimaku.Client,
 	openSubsClient *opensubtitles.Client,
-	anime365Client *anime365.Client,
+	kageClient *kage.Client,
 	idMapClient *idmapping.Client,
 	animeRepo *repo.AnimeRepository,
 	redisCache *cache.RedisCache,
@@ -69,7 +69,7 @@ func NewSubsAggregator(
 	return &SubsAggregator{
 		jimaku:    jimakuClient,
 		opensubs:  openSubsClient,
-		anime365:  anime365Client,
+		kage:      kageClient,
 		idmap:     idMapClient,
 		animeRepo: animeRepo,
 		cache:     redisCache,
@@ -99,7 +99,7 @@ type SubtitleTrack struct {
 	Lang     string `json:"lang"`
 	Label    string `json:"label"`
 	Format   string `json:"format,omitempty"`
-	Provider string `json:"provider"` // "jimaku", "opensubtitles", or "anime365"
+	Provider string `json:"provider"` // "jimaku", "opensubtitles", or "kage"
 	Release  string `json:"release,omitempty"`
 	// Provenance signature (streamsign) for EXTERNAL track URLs (today only
 	// jimaku.cc), authorizing them through the HLS proxy without a static
@@ -222,12 +222,12 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		resultsCh <- providerResult{name: "opensubtitles", tracks: tracks, err: err}
 	}()
 
-	// anime365 — Russian fansubs, keyed by MAL id.
+	// Kage Project — Russian fansubs, resolved by title search.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		tracks, err := s.fetchAnime365(ctx, anime, episode)
-		resultsCh <- providerResult{name: "anime365", tracks: tracks, err: err}
+		tracks, err := s.fetchKage(ctx, anime, episode)
+		resultsCh <- providerResult{name: "kage", tracks: tracks, err: err}
 	}()
 
 	go func() {
@@ -279,7 +279,7 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 
 // signExternalTracks stamps provenance signatures on EXTERNAL (absolute
 // http(s)) track URLs — today only jimaku.cc emits those; OpenSubtitles and
-// anime365 return same-origin /api/... routes, which streamsign.Sign no-ops
+// Kage return same-origin /api/... routes, which streamsign.Sign no-ops
 // on. Called AFTER the Redis cache get/set (like overlayHealth) so signatures
 // are minted at response time and never frozen into a cached body — the full
 // cache TTL (6h) could otherwise eat half the 12h provenance window.
@@ -473,91 +473,117 @@ func titleLikelyMatches(ourTitle, candidateRelease string) bool {
 	return seasonMarkerIndex(candidateRelease) == want
 }
 
-func (s *SubsAggregator) fetchAnime365(ctx context.Context, anime *domain.Anime, episode int) ([]SubtitleTrack, error) {
-	if s.anime365 == nil || !s.anime365.IsConfigured() {
+// fetchKage lists Russian fansub releases for the episode from the Kage
+// Project archive. Kage has no external-ID mapping, so the series page is
+// resolved by exact-normalized title search (conservative on purpose: subs
+// for the wrong show are worse than none).
+func (s *SubsAggregator) fetchKage(ctx context.Context, anime *domain.Anime, episode int) ([]SubtitleTrack, error) {
+	if s.kage == nil || !s.kage.IsConfigured() {
 		return nil, errProviderUnconfigured
 	}
-	mal := anime.MALID
-	if mal == "" {
-		mal = anime.ShikimoriID // Shikimori IDs are MAL-aligned for most TV titles
-	}
-	if mal == "" {
-		return nil, nil
-	}
-	title := anime.NameEN
-	if title == "" {
-		title = anime.Name
-	}
-
-	seriesID, err := s.resolveAnime365Series(ctx, mal, title)
+	seriesID, err := s.resolveKageSeries(ctx, anime)
 	if err != nil {
 		return nil, err
 	}
 	if seriesID == 0 {
-		return nil, nil // not on anime365
+		return nil, nil // not on Kage
 	}
 
-	episodes, err := s.anime365.ListEpisodes(ctx, seriesID)
+	releases, err := s.kage.GetReleases(ctx, seriesID)
 	if err != nil {
 		return nil, err
 	}
-	// anime365 episodeInt is a string; we match exact integer episodes only.
-	// Decimal/recap episodes (e.g. "6.5") won't match and yield nil,nil
-	// (fail-soft) — an accepted v1 limitation matching the integer-episode scope.
-	target := strconv.Itoa(episode)
+	target := episode
 	if strings.EqualFold(anime.Kind, "movie") {
-		target = "1"
-	}
-	epID := 0
-	for _, e := range episodes {
-		if e.Active() && !strings.EqualFold(e.EpisodeType, "preview") && e.EpisodeInt == target {
-			epID = e.ID
-			break
-		}
-	}
-	if epID == 0 {
-		return nil, nil
-	}
-
-	translations, err := s.anime365.ListTranslations(ctx, epID)
-	if err != nil {
-		return nil, err
+		target = 1
 	}
 	tracks := []SubtitleTrack{}
-	for _, t := range translations {
-		if !strings.EqualFold(t.TypeKind, "sub") || !strings.EqualFold(t.TypeLang, "ru") {
+	for _, r := range releases {
+		if !r.ContainsEpisode(target) {
 			continue
 		}
+		label := r.Author
+		if r.Team != "" {
+			if label != "" {
+				label += " · "
+			}
+			label += r.Team
+		}
+		if label == "" {
+			label = r.Label
+		}
+		format := r.Format
+		if format == "" {
+			format = "ass" // Kage's dominant format; the file resolve re-sniffs anyway
+		}
 		tracks = append(tracks, SubtitleTrack{
-			URL:      fmt.Sprintf("/api/anime/%s/subtitles/anime365/file/%d", anime.ID, t.ID),
+			URL:      fmt.Sprintf("/api/anime/%s/subtitles/kage/file/%d?episode=%d", anime.ID, r.SrtID, target),
 			Lang:     "ru",
-			Label:    t.AuthorsSummary,
-			Format:   "ass",
-			Provider: "anime365",
-			Release:  t.AuthorsSummary,
+			Label:    label,
+			Format:   format,
+			Provider: "kage",
+			Release:  r.Label,
 		})
 	}
 	return tracks, nil
 }
 
-// resolveAnime365Series maps a MAL id to an anime365 series id, caching the
-// result (hits long, misses shorter so a newly-added title self-heals).
-func (s *SubsAggregator) resolveAnime365Series(ctx context.Context, malID, title string) (int, error) {
-	cacheKey := fmt.Sprintf("subs:anime365:series:%s", malID)
+// resolveKageSeries maps an anime to a Kage series id by title search,
+// caching the result (hits long, misses shorter so a newly-subbed title
+// self-heals). Only an exact normalized-title match is accepted.
+func (s *SubsAggregator) resolveKageSeries(ctx context.Context, anime *domain.Anime) (int, error) {
+	cacheKey := fmt.Sprintf("subs:kage:series:%s", anime.ID)
 	var cached int
 	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
 		return cached, nil
 	}
-	seriesID, err := s.anime365.SearchSeriesByMAL(ctx, malID, title)
-	if err != nil {
-		return 0, err
+
+	seriesID := 0
+	for _, title := range dedupeTitles(anime.Name, anime.NameEN, anime.NameRU) {
+		refs, err := s.kage.SearchSeries(ctx, title)
+		if err != nil {
+			return 0, err
+		}
+		want := normalizeKageTitle(title)
+		for _, ref := range refs {
+			if normalizeKageTitle(ref.Title) == want {
+				seriesID = ref.ID
+				break
+			}
+		}
+		if seriesID != 0 {
+			break
+		}
 	}
+
 	ttl := 7 * 24 * time.Hour
 	if seriesID == 0 {
 		ttl = 6 * time.Hour
 	}
 	_ = s.cache.Set(ctx, cacheKey, seriesID, ttl)
 	return seriesID, nil
+}
+
+// normalizeKageTitleStrip collapses everything that is not a letter or digit
+// (Latin or Cyrillic) so punctuation/spacing variants compare equal.
+var normalizeKageTitleStrip = regexp.MustCompile(`[^\p{L}\p{N}]+`)
+
+func normalizeKageTitle(t string) string {
+	return strings.TrimSpace(normalizeKageTitleStrip.ReplaceAllString(strings.ToLower(t), " "))
+}
+
+func dedupeTitles(titles ...string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(titles))
+	for _, t := range titles {
+		t = strings.TrimSpace(t)
+		if t == "" || seen[strings.ToLower(t)] {
+			continue
+		}
+		seen[strings.ToLower(t)] = true
+		out = append(out, t)
+	}
+	return out
 }
 
 // ensureExternalIDs runs the Kitsu mapping lookup and persists results.
@@ -691,20 +717,38 @@ type cachedSubFile struct {
 	Format string `json:"format"`
 }
 
-// ResolveAnime365File turns an anime365 translation id into the subtitle bytes,
-// caching the result for 24h so re-watches cost no upstream fetch.
-func (s *SubsAggregator) ResolveAnime365File(ctx context.Context, transID int) ([]byte, string, error) {
-	if s.anime365 == nil || !s.anime365.IsConfigured() {
+// maxKageArchiveCacheBytes bounds the raw-archive Redis cache — season packs
+// with embedded fonts can be large; anything bigger is re-fetched per miss.
+const maxKageArchiveCacheBytes = 8 << 20
+
+// ResolveKageFile turns a Kage srt id + episode into the subtitle bytes,
+// caching the extracted result for 24h. The raw archive is also cached
+// briefly so a season binge doesn't re-download the same pack per episode.
+func (s *SubsAggregator) ResolveKageFile(ctx context.Context, srtID, episode int) ([]byte, string, error) {
+	if s.kage == nil || !s.kage.IsConfigured() {
 		return nil, "", errProviderUnconfigured
 	}
-	cacheKey := fmt.Sprintf("subsfile:anime365:%d", transID)
+	cacheKey := fmt.Sprintf("subsfile:kage:%d:%d", srtID, episode)
 
 	var hit cachedSubFile
 	if err := s.cache.Get(ctx, cacheKey, &hit); err == nil && len(hit.Body) > 0 {
 		return hit.Body, hit.Format, nil
 	}
 
-	body, format, err := s.anime365.DownloadSubtitle(ctx, transID)
+	archiveKey := fmt.Sprintf("subsarchive:kage:%d", srtID)
+	var archive cachedSubFile // Body = raw archive bytes, Format = upstream filename
+	if err := s.cache.Get(ctx, archiveKey, &archive); err != nil || len(archive.Body) == 0 {
+		body, filename, err := s.kage.DownloadArchive(ctx, srtID)
+		if err != nil {
+			return nil, "", err
+		}
+		archive = cachedSubFile{Body: body, Format: filename}
+		if len(body) <= maxKageArchiveCacheBytes {
+			_ = s.cache.Set(ctx, archiveKey, archive, time.Hour)
+		}
+	}
+
+	body, format, err := kage.ExtractEpisode(archive.Body, archive.Format, episode)
 	if err != nil {
 		return nil, "", err
 	}

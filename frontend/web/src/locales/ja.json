@@ -366,7 +366,8 @@
       },
       "providerChip": {
         "jimaku": "Jimaku",
-        "opensubtitles": "OpenSubtitles"
+        "opensubtitles": "OpenSubtitles",
+        "kage": "Kage"
       },
       "filter": {
         "provider": "ソース",

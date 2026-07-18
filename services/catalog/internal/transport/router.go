@@ -231,9 +231,9 @@ func NewRouter(
 			// Lazy OpenSubtitles file resolve — spends 1 download quota unit
 			// per cache miss, then cached 24h (workstream raw-jp follow-on).
 			r.Get("/{animeId}/subtitles/opensubtitles/file/{fileID}", subtitlesHandler.GetOpenSubtitlesFile)
-			// Lazy anime365 file resolve — fetches RU subtitle bytes (ASS→VTT),
-			// proxied + cached 24h (spec 2026-06-24).
-			r.Get("/{animeId}/subtitles/anime365/file/{transId}", subtitlesHandler.GetAnime365File)
+			// Lazy Kage file resolve — downloads the release archive (RAR/ZIP),
+			// extracts the requested episode's RU subtitle, cached 24h.
+			r.Get("/{animeId}/subtitles/kage/file/{srtId}", subtitlesHandler.GetKageFile)
 			// Hanime video sources
 			r.Get("/{animeId}/hanime/episodes", catalogHandler.GetHanimeEpisodes)
 			r.Get("/{animeId}/hanime/stream", catalogHandler.GetHanimeStream)

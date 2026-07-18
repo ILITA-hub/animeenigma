@@ -5,27 +5,28 @@ feedback pair `2026-07-17T14-04-39_gerahertz_feedback` / `14-08-09`.
 
 ## Part 1 — RU subtitles for Yani Neko (ヤニねこ, Shikimori 63403)
 
-**Key correction:** anime365 is NOT dead for this title. `GET smotret-anime.org/api/series?myAnimeListId=63403`
-→ series 41893, and `api/translations?episodeId=…` lists the "dead" RU subs as `isActive:1`
-(ep2: Sanae `5858218`, Neifur `5851441`; ep1 has three RU subs). What broke: the subtitle **file**
-endpoint (`/api/translations/embed/<id>`) now returns `403 {"You should login first."}` —
-**anime365 moved file delivery behind auth.** Our proxy surfaces that as the 503s users see.
+**RESOLVED 2026-07-18: anime365 went fully PAYWALLED (owner-confirmed) and is RETIRED;
+replaced by a Kage Project adapter.** The earlier "auth-gated, free registration fixes it"
+reading was too optimistic — access now requires a paid subscription, and even the anonymous
+metadata API degraded (`api/translations?episodeId=…` returns `{"data":[]}`; file endpoint
+403 `"You should login first."`). The whole integration (parser `anime365/`, aggregator
+provider, `/subtitles/anime365/file/` route, `ANIME365_*` config) was deleted — precedent:
+`raw`-provider deletion, not the AniLib keep.
 
-Ranked:
-1. **anime365 (fix the incumbent)** — (a) resolve translation IDs dynamically per `episodeId`
-   (filter `typeLang=ru, typeKind=sub`, rank by `priority`/`activeDateTime`) instead of caching
-   file IDs; (b) attach an anime365 `access_token` (free registration) so file fetches stop 403-ing.
-   Metadata API is public; no Cloudflare. **Owner action needed: create the anime365 account/token.**
-2. **Kage Project / fansubs.ru** — no Yani Neko yet, but actively fed with summer-2026 seasonals
-   (RSS `?l=rss`, new subs dated 16.07.26). Plain HTTP (https refused), `POST /search.php` in
-   **cp1251**, ZIP downloads, no anti-bot. Trivial adapter; good permanent RU fallback.
-3. **AniLibria** — has the title as an empty stub (release 10263, `anilibria.top/api/v1`); it is a
-   RU **voiceover** group → future RU-DUB video source, not subs. NOTE: legacy `api.anilibria.tv/v3`
-   is retired (HTTP 410) — anything still pointing there is dead.
+**Replacement (shipped): Kage Project / fansubs.ru** — the canonical RU anime fansub archive,
+actively fed with summer-2026 seasonals. Plain HTTP (site refuses TLS), `POST /search.php`
+in **cp1251**, `GET base.php?id=N` release rows, `POST base.php` (`srt=N`) → RAR/ZIP archive
+with per-episode ASS/SRT (live-verified: Frieren id 7120 → srt 13364 → RAR v4 solid,
+28 per-episode ASS; `rardecode` extracts fine). Adapter: `services/catalog/internal/parser/kage/`,
+provider `kage`, route `/api/anime/{id}/subtitles/kage/file/{srtId}?episode=N`.
+Caveats: no MAL/Shikimori ID mapping (exact-normalized-title match only, conservative by
+design) and **no Yani Neko release yet** — if a team subs it, it surfaces automatically.
 
-Dead ends: subs.com.ru (now a news blog) · SovetRomantica (403 without browser sidecar) ·
-OpenSubtitles web (401; the REST API we already use is the way, RU coverage unlikely for this title) ·
-anidub (dub site, no files).
+Other candidates (unchanged): **AniLibria** — empty stub for this title (release 10263,
+`anilibria.top/api/v1`); RU **voiceover** group → future RU-DUB video source, not subs
+(legacy `api.anilibria.tv/v3` is HTTP 410). Dead ends: subs.com.ru (now a news blog) ·
+SovetRomantica (403 without browser sidecar) · OpenSubtitles web (401; the REST API we
+already use is the way, RU coverage unlikely for this title) · anidub (dub site, no files).
 
 ## Part 2 — Shoujo Ramune (小女ラムネ, Shikimori 32587) 18+ episode coverage
 

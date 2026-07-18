@@ -27,8 +27,8 @@ type Config struct {
 	// OpenSubtitles — workstream raw-jp, Phase 02. Multi-language
 	// subtitle source merged with Jimaku by the subs aggregator.
 	OpenSubtitles OpenSubtitlesConfig
-	// Anime365 — RU fansub aggregator (smotret-anime). Spec 2026-06-24.
-	Anime365 Anime365Config
+	// Kage — RU fansub archive (fansubs.ru). Replaced anime365 2026-07-18.
+	Kage KageConfig
 	// Library — self-hosted MinIO HLS source for the first-party ("ae")
 	// provider and the raw JP provider (library-only since 2026-06-22).
 	Library LibraryConfig
@@ -109,9 +109,10 @@ type OpenSubtitlesConfig struct {
 	Timeout   time.Duration
 }
 
-// Anime365Config — Russian subtitle source (smotret-anime / anime365).
-// No API key; only a base URL + enable flag.
-type Anime365Config struct {
+// KageConfig — Russian subtitle source (Kage Project / fansubs.ru).
+// Replaced anime365, which went paywalled (2026-07). No API key; only a
+// base URL + enable flag. Plain HTTP: the site refuses TLS.
+type KageConfig struct {
 	BaseURL string
 	Enabled bool
 }
@@ -206,9 +207,9 @@ func Load() (*Config, error) {
 			UserAgent: getEnv("OPENSUBTITLES_USER_AGENT", "AnimeEnigma/1.0"),
 			Timeout:   getEnvDuration("OPENSUBTITLES_TIMEOUT", 10*time.Second),
 		},
-		Anime365: Anime365Config{
-			BaseURL: getEnv("ANIME365_BASE_URL", "https://smotret-anime.org"),
-			Enabled: getEnvBool("ANIME365_ENABLED", true),
+		Kage: KageConfig{
+			BaseURL: getEnv("KAGE_BASE_URL", "http://www.fansubs.ru"),
+			Enabled: getEnvBool("KAGE_ENABLED", true),
 		},
 		Library: LibraryConfig{
 			APIURL:  getEnv("LIBRARY_API_URL", "http://library:8089"),
