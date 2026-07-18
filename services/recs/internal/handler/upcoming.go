@@ -36,6 +36,14 @@ const (
 	UpcomingKeyPrefix = "recs:user:"
 	UpcomingKeySuffix = ":upcoming:v1"
 	upcomingTTL       = 6 * time.Hour
+
+	// upcomingFranchiseReasonMinS8 is the bar for CLAIMING franchise causation
+	// in the reason line (spec §3). The eligibility gate (h.cfg.MinS8,
+	// default 0.2) only decides whether an item is LET IN; this higher,
+	// fixed bar decides whether the reason says "franchise" or "taste" — an
+	// item that passed mainly on genre (S2) with a weak S8 in
+	// [MinS8, upcomingFranchiseReasonMinS8) gets the taste reason instead.
+	upcomingFranchiseReasonMinS8 = 0.4
 )
 
 // UpcomingConfig carries the env-tunable knobs (config.Load wires them).
@@ -243,18 +251,18 @@ func (h *UpcomingHandler) computeUpcoming(ctx context.Context, userID string) (U
 	type pick struct {
 		id        string
 		final     float64
-		rawS8     float64
 		franchise bool
 	}
 	picks := make([]pick, 0, h.cfg.TopK)
 	for _, r := range ranked {
 		rawS8 := float64(r.Raw[recs.SignalID("s8")])
 		rawS2 := float64(r.Raw[recs.SignalID("s2")])
-		byFranchise := rawS8 >= h.cfg.MinS8
-		if !byFranchise && rawS2 < h.cfg.MinS2 {
+		gatePassed := rawS8 >= h.cfg.MinS8
+		if !gatePassed && rawS2 < h.cfg.MinS2 {
 			continue
 		}
-		picks = append(picks, pick{id: r.AnimeID, final: r.Final, rawS8: rawS8, franchise: byFranchise})
+		franchiseReason := rawS8 >= upcomingFranchiseReasonMinS8
+		picks = append(picks, pick{id: r.AnimeID, final: r.Final, franchise: franchiseReason})
 		if len(picks) == h.cfg.TopK {
 			break
 		}
