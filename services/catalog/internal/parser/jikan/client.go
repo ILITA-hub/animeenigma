@@ -16,13 +16,22 @@ type Client struct {
 	rateLimiter *rateLimiter
 }
 
-// AnimeInfo contains the title and image information from MAL
+// AnimeInfo contains the title, image, and popularity information from MAL.
+//
+// Members/Favorites/Popularity power the recs "relative MAL popularity" signal
+// for announced titles (spec 2026-07-18): Members is the anticipation proxy
+// (how many MAL users have the title on a list — mostly plan-to-watch while it
+// is unaired), Popularity is MAL's global popularity RANK (lower = more
+// popular). These are zero-valued for older callers that don't need them.
 type AnimeInfo struct {
 	MalID         int         `json:"mal_id"`
 	Title         string      `json:"title"`
 	TitleEnglish  string      `json:"title_english"`
 	TitleJapanese string      `json:"title_japanese"`
 	Images        AnimeImages `json:"images"`
+	Members       int         `json:"members"`
+	Favorites     int         `json:"favorites"`
+	Popularity    int         `json:"popularity"`
 }
 
 // AnimeImages contains image URLs from MAL
