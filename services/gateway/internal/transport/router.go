@@ -375,6 +375,14 @@ func NewRouterWithCleanup(
 		// /api response (see handler/masked_analytics.go).
 		r.Use(handler.MaskedPathHintMiddleware([]byte(cfg.JWT.Secret)))
 
+		// Telegram OIDC login — the auth service answers with 302s (to
+		// oauth.telegram.org and back into the SPA). Like the magic-link
+		// bridge, these must be proxied WITHOUT following redirects so the
+		// Location + Set-Cookie headers reach the browser verbatim. chi
+		// prefers these static routes over the /auth/* wildcard below.
+		r.Get("/auth/telegram/oidc/start", proxyHandler.ProxyToAuthNoRedirect)
+		r.Get("/auth/telegram/oidc/callback", proxyHandler.ProxyToAuthNoRedirect)
+
 		// Auth service routes (public)
 		r.HandleFunc("/auth/*", proxyHandler.ProxyToAuth)
 
