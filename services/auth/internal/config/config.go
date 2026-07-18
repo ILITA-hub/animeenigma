@@ -35,10 +35,7 @@ type Config struct {
 }
 
 type TelegramConfig struct {
-	BotToken      string
-	BotName       string
-	WebhookSecret string
-	WebhookURL    string
+	BotToken string
 }
 
 // TelegramOIDCConfig configures the OIDC login against oauth.telegram.org.
@@ -102,10 +99,7 @@ func Load() (*Config, error) {
 			SameSite: getEnv("COOKIE_SAMESITE", "Lax"),
 		},
 		Telegram: TelegramConfig{
-			BotToken:      getEnv("TELEGRAM_BOT_TOKEN", ""),
-			BotName:       getEnv("TELEGRAM_BOT_NAME", ""),
-			WebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
-			WebhookURL:    getEnv("TELEGRAM_WEBHOOK_URL", ""),
+			BotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
 		},
 		TelegramOIDC: TelegramOIDCConfig{
 			ClientID:     getEnv("TELEGRAM_OIDC_CLIENT_ID", ""),

@@ -34,13 +34,12 @@ type userByIDGetter interface {
 }
 
 type AuthService struct {
-	userRepo         *repo.UserRepository
-	sessionRepo      *repo.SessionRepository
-	cache            cache.Cache
-	jwtManager       *authz.JWTManager
-	telegramBotToken string
-	guestTokenTTL    time.Duration
-	log              *logger.Logger
+	userRepo      *repo.UserRepository
+	sessionRepo   *repo.SessionRepository
+	cache         cache.Cache
+	jwtManager    *authz.JWTManager
+	guestTokenTTL time.Duration
+	log           *logger.Logger
 
 	// Login brute-force throttle (audit medium #6). Defaults set in
 	// NewAuthService; overridable in tests.
@@ -59,7 +58,6 @@ func NewAuthService(
 	sessionRepo *repo.SessionRepository,
 	c cache.Cache,
 	jwtConfig authz.JWTConfig,
-	telegramBotToken string,
 	guestTokenTTL time.Duration,
 	log *logger.Logger,
 ) *AuthService {
@@ -68,7 +66,6 @@ func NewAuthService(
 		sessionRepo:        sessionRepo,
 		cache:              c,
 		jwtManager:         authz.NewJWTManager(jwtConfig),
-		telegramBotToken:   telegramBotToken,
 		guestTokenTTL:      guestTokenTTL,
 		log:                log,
 		magicSessionFinder: sessionRepo,
@@ -311,122 +308,6 @@ func (s *AuthService) LoginWithTelegram(ctx context.Context, tgUser *domain.Tele
 	}
 
 	return s.createSessionAndAuthResponse(ctx, user, sc)
-}
-
-// CreateDeepLinkToken generates a unique token and stores an empty auth session in Redis.
-// The returned deep link URL opens the Telegram bot with /start <token>.
-func (s *AuthService) CreateDeepLinkToken(ctx context.Context, botName string) (*domain.DeepLinkResponse, error) {
-	token := uuid.New().String()
-
-	session := &domain.TelegramAuthSession{
-		Status: "pending",
-	}
-
-	if err := s.cache.Set(ctx, cache.KeyTelegramAuth(token), session, cache.TTLTelegramAuth); err != nil {
-		return nil, fmt.Errorf("store telegram auth session: %w", err)
-	}
-
-	deepLinkURL := fmt.Sprintf("https://t.me/%s?start=%s", botName, token)
-
-	return &domain.DeepLinkResponse{
-		Token:       token,
-		DeepLinkURL: deepLinkURL,
-		ExpiresIn:   int(cache.TTLTelegramAuth.Seconds()),
-	}, nil
-}
-
-// CheckDeepLinkToken polls the status of a deep link auth session.
-// Returns the session status and, if confirmed, completes login and returns auth tokens.
-func (s *AuthService) CheckDeepLinkToken(ctx context.Context, token string, sc SessionContext) (*domain.DeepLinkCheckResponse, *domain.AuthResponse, error) {
-	var session domain.TelegramAuthSession
-	err := s.cache.Get(ctx, cache.KeyTelegramAuth(token), &session)
-	if err != nil {
-		return nil, nil, errors.NotFound("token not found or expired")
-	}
-
-	if session.Status != "confirmed" {
-		return &domain.DeepLinkCheckResponse{
-			Status: session.Status,
-		}, nil, nil
-	}
-
-	// Session is confirmed — complete login
-	tgUser := &domain.TelegramWebhookUser{
-		ID:        session.TelegramID,
-		FirstName: session.FirstName,
-		LastName:  session.LastName,
-		Username:  session.Username,
-	}
-
-	authResp, err := s.LoginWithTelegram(ctx, tgUser, sc)
-	if err != nil {
-		return nil, nil, fmt.Errorf("telegram login: %w", err)
-	}
-
-	// Delete the used token
-	_ = s.cache.Delete(ctx, cache.KeyTelegramAuth(token))
-
-	expiresAt := authResp.ExpiresAt
-	checkResp := &domain.DeepLinkCheckResponse{
-		Status:      "confirmed",
-		AccessToken: authResp.AccessToken,
-		ExpiresAt:   &expiresAt,
-		User:        authResp.User,
-	}
-
-	return checkResp, authResp, nil
-}
-
-// HandleTelegramStart is called when a user sends /start <token> to the bot.
-// It validates the token exists in Redis and records the Telegram user who started the flow.
-func (s *AuthService) HandleTelegramStart(ctx context.Context, token string, tgUser *domain.TelegramWebhookUser) error {
-	var session domain.TelegramAuthSession
-	err := s.cache.Get(ctx, cache.KeyTelegramAuth(token), &session)
-	if err != nil {
-		return errors.NotFound("token not found or expired")
-	}
-
-	if session.Status != "pending" {
-		return errors.InvalidInput("token already used")
-	}
-
-	session.Status = "started"
-	session.TelegramID = tgUser.ID
-
-	if err := s.cache.Set(ctx, cache.KeyTelegramAuth(token), &session, cache.TTLTelegramAuth); err != nil {
-		return fmt.Errorf("update telegram auth session: %w", err)
-	}
-
-	return nil
-}
-
-// HandleTelegramCallback is called when the user clicks the "Confirm" button in the bot.
-// It verifies the sender matches the user who started the flow and stores the confirmed session.
-func (s *AuthService) HandleTelegramCallback(ctx context.Context, token string, tgUser *domain.TelegramWebhookUser) error {
-	var session domain.TelegramAuthSession
-	err := s.cache.Get(ctx, cache.KeyTelegramAuth(token), &session)
-	if err != nil {
-		return errors.NotFound("token not found or expired")
-	}
-
-	if session.Status != "started" {
-		return errors.InvalidInput("token not in started state")
-	}
-
-	if session.TelegramID != tgUser.ID {
-		return errors.Unauthorized("telegram user mismatch")
-	}
-
-	session.Status = "confirmed"
-	session.FirstName = tgUser.FirstName
-	session.LastName = tgUser.LastName
-	session.Username = tgUser.Username
-
-	if err := s.cache.Set(ctx, cache.KeyTelegramAuth(token), &session, cache.TTLTelegramAuth); err != nil {
-		return fmt.Errorf("update telegram auth session: %w", err)
-	}
-
-	return nil
 }
 
 // GenerateApiKey generates a new API key for the user, replacing any existing one.

@@ -105,12 +105,11 @@ func main() {
 	sessionRepo := repo.NewSessionRepository(db.DB)
 
 	// Initialize services
-	authService := service.NewAuthService(userRepo, sessionRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, cfg.GuestTokenTTL, log)
+	authService := service.NewAuthService(userRepo, sessionRepo, redisCache, cfg.JWT, cfg.GuestTokenTTL, log)
 	userService := service.NewUserService(userRepo, log)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, cfg.Telegram, log)
-	telegramBotHandler := handler.NewTelegramBotHandler(authService, cfg.Telegram.BotToken, cfg.Telegram.WebhookSecret, log)
+	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, log)
 	telegramOIDC := service.NewTelegramOIDC(cfg.TelegramOIDC, redisCache, log)
 	telegramOIDCHandler := handler.NewTelegramOIDCHandler(telegramOIDC, authService, authHandler, log)
 	userHandler := handler.NewUserHandler(userService, log)
@@ -122,15 +121,13 @@ func main() {
 	metricsCollector := metrics.NewCollector("auth")
 
 	// Initialize router
-	router := transport.NewRouter(authHandler, telegramBotHandler, telegramOIDCHandler, userHandler, sessionsHandler, magicLinkHandler, userResolveHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(authHandler, telegramOIDCHandler, userHandler, sessionsHandler, magicLinkHandler, userResolveHandler, cfg.JWT, log, metricsCollector)
 
-	// Register Telegram webhook (warn on failure, don't block startup)
-	if cfg.Telegram.BotToken != "" && cfg.Telegram.WebhookURL != "" {
-		if err := telegramBotHandler.SetWebhook(cfg.Telegram.WebhookURL); err != nil {
-			log.Warnw("failed to register telegram webhook", "error", err)
-		} else {
-			log.Infow("telegram webhook registered", "url", cfg.Telegram.WebhookURL)
-		}
+	// One-time webhook teardown: the deep-link login flow is gone, so tell
+	// Telegram to stop POSTing /start updates at the removed route.
+	// Idempotent; warn-only — login no longer depends on the bot.
+	if cfg.Telegram.BotToken != "" {
+		go deleteTelegramWebhook(cfg.Telegram.BotToken, log)
 	}
 
 	// Create HTTP server
@@ -193,4 +190,16 @@ func main() {
 	}
 
 	log.Info("server stopped")
+}
+
+// deleteTelegramWebhook tears down the legacy bot-webhook registration.
+func deleteTelegramWebhook(botToken string, log *logger.Logger) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post("https://api.telegram.org/bot"+botToken+"/deleteWebhook", "application/json", nil)
+	if err != nil {
+		log.Warnw("telegram deleteWebhook failed", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+	log.Infow("telegram webhook deleted", "status", resp.StatusCode)
 }
