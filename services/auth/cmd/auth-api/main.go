@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -192,12 +194,22 @@ func main() {
 	log.Info("server stopped")
 }
 
+// redactWebhookErr strips the request URL from transport errors before they
+// reach logs — the deleteWebhook URL embeds the bot token.
+func redactWebhookErr(err error) error {
+	var uerr *url.Error
+	if errors.As(err, &uerr) {
+		return uerr.Err
+	}
+	return err
+}
+
 // deleteTelegramWebhook tears down the legacy bot-webhook registration.
 func deleteTelegramWebhook(botToken string, log *logger.Logger) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post("https://api.telegram.org/bot"+botToken+"/deleteWebhook", "application/json", nil)
 	if err != nil {
-		log.Warnw("telegram deleteWebhook failed", "error", err)
+		log.Warnw("telegram deleteWebhook failed", "error", redactWebhookErr(err))
 		return
 	}
 	defer resp.Body.Close()
