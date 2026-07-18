@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/cvmetrics"
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/signals"
 )
@@ -27,6 +29,14 @@ const (
 	// the enumeration itself — a stale enum can only under- or over-offer
 	// candidate units, not misreport what's already verified.
 	enumCacheTTL = 5 * time.Minute
+
+	// aniskipCoverageTTL bounds how often the AniSkip probe gate re-checks
+	// one anime's per-episode coverage through the catalog proxy. AniSkip
+	// data only grows (crowdsourced submissions), so staleness here means at
+	// worst one redundant probe of an episode that just got covered. Kept
+	// well above the claim cadence because uncovered episodes bypass the
+	// catalog's positive cache and hit aniskip.com upstream every sweep.
+	aniskipCoverageTTL = 6 * time.Hour
 )
 
 // enumEntry is one cached EnumerateAll result.
@@ -35,24 +45,39 @@ type enumEntry struct {
 	at   time.Time
 }
 
+// aniskipEntry is one anime's cached AniSkip coverage. Episodes are fetched
+// lazily (only ones with probeable work), so the map can grow within the
+// entry's TTL — `at` is set on first fetch and the whole entry expires
+// together.
+type aniskipEntry struct {
+	cov AniskipCoverage
+	at  time.Time
+}
+
 type Engine struct {
 	cat         *catalogclient.Client
 	sig         *signals.Signals
 	store       *repo.Store
 	reprobeTTL  time.Duration
 	skipEnabled bool
-	log         *logger.Logger
+	// pins is the parsed CV_PIN_ANIME operator directive: animeID → preferred
+	// provider ("" = whole-title pin). Pinned titles rank above everything,
+	// bypass cooldowns, and plan the preferred provider's skip family first.
+	pins map[string]string
+	log  *logger.Logger
 
-	// mu guards memb/membAt, enumCache, inflightUnits, and inflightProv: Claim
-	// (potentially several worker goroutines) and Snapshot (HTTP handler)
-	// share one Engine and can race on this state.
+	// mu guards memb/membAt, enumCache, aniskipCache, malIDs, inflightUnits,
+	// and inflightProv: Claim (potentially several worker goroutines) and
+	// Snapshot (HTTP handler) share one Engine and can race on this state.
 	mu   sync.Mutex
 	memb *catalogclient.Membership
 
 	membAt time.Time
 	now    func() time.Time
 
-	enumCache map[string]enumEntry // animeID → cached Enumeration
+	enumCache    map[string]enumEntry    // animeID → cached Enumeration
+	aniskipCache map[string]aniskipEntry // animeID → cached AniSkip coverage
+	malIDs       map[string]string       // animeID → MAL id (immutable, cached forever)
 
 	// inflightUnits/inflightProv are the in-process claim leases that let
 	// several workers Claim concurrently without double-probing the same
@@ -64,10 +89,15 @@ type Engine struct {
 	inflightProv  map[string]struct{}
 }
 
-func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, skipEnabled bool, log *logger.Logger) *Engine {
+func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, skipEnabled bool, pins map[string]string, log *logger.Logger) *Engine {
+	if pins == nil {
+		pins = map[string]string{}
+	}
 	return &Engine{
-		cat: cat, sig: sig, store: store, reprobeTTL: reprobeTTL, skipEnabled: skipEnabled, log: log, now: time.Now,
+		cat: cat, sig: sig, store: store, reprobeTTL: reprobeTTL, skipEnabled: skipEnabled, pins: pins, log: log, now: time.Now,
 		enumCache:     map[string]enumEntry{},
+		aniskipCache:  map[string]aniskipEntry{},
+		malIDs:        map[string]string{},
 		inflightUnits: map[string]struct{}{},
 		inflightProv:  map[string]struct{}{},
 	}
@@ -106,7 +136,7 @@ func (e *Engine) membership(ctx context.Context) *catalogclient.Membership {
 func (e *Engine) ranked(ctx context.Context) []Candidate {
 	m := e.membership(ctx)
 	visited := e.sig.VisitedAnime(ctx)
-	cs := Rank(BuildCandidates(m, visited, func(id string) int { return e.sig.UniqueVisitors(ctx, id) }))
+	cs := Rank(BuildCandidates(m, visited, e.pins, func(id string) int { return e.sig.UniqueVisitors(ctx, id) }))
 	cvmetrics.QueueDepth.Set(float64(len(cs)))
 	return cs
 }
@@ -133,6 +163,126 @@ func (e *Engine) enumerate(ctx context.Context, animeID string) (Enumeration, er
 	e.enumCache[animeID] = enumEntry{enum: enum, at: e.now()}
 	e.mu.Unlock()
 	return enum, nil
+}
+
+// malID resolves an anime's MAL id via the catalog, behind a forever cache
+// (the mapping is immutable; an empty id from a successful response means
+// "no MAL mapping" and is cached too). "" on fetch error — not cached, so
+// the next sweep retries.
+func (e *Engine) malID(ctx context.Context, animeID string) string {
+	e.mu.Lock()
+	if id, ok := e.malIDs[animeID]; ok {
+		e.mu.Unlock()
+		return id
+	}
+	e.mu.Unlock()
+
+	id, err := e.cat.AnimeMalID(ctx, animeID)
+	if err != nil {
+		if e.log != nil {
+			e.log.Warnw("mal id fetch failed", "anime_id", animeID, "error", err)
+		}
+		return ""
+	}
+	e.mu.Lock()
+	e.malIDs[animeID] = id
+	e.mu.Unlock()
+	return id
+}
+
+// aniskipSweepCap bounds per-episode coverage fetches per Claim so a
+// 1000-episode title can't stall one worker's tick on a cold cache — the
+// remainder stays "missing" and the next Claims finish the sweep.
+const aniskipSweepCap = 50
+
+// aniskipCoverage returns the AniSkip probe-gate coverage for animeID (see
+// aniskipgate.go), fetching — through the catalog's pure-AniSkip proxy —
+// only episodes that still have probeable work. The cached coverage map is
+// copy-on-write: entries returned to callers are never mutated afterwards,
+// so reads outside mu are safe. nil (gate off, probe everything) when there
+// is nothing due, no MAL mapping, or nothing could be fetched.
+func (e *Engine) aniskipCoverage(ctx context.Context, animeID string, units []SkipUnit, rows []domain.SkipTiming) AniskipCoverage {
+	rowByKey := skipRowIndex(rows)
+	needed := map[int]bool{}
+	for _, u := range units {
+		// Episodes with only terminal rows need no coverage: the planner
+		// won't probe them regardless.
+		if rowDue(rowFor(rowByKey, u), e.now()) {
+			needed[u.Episode] = true
+		}
+	}
+	if len(needed) == 0 {
+		return nil
+	}
+
+	e.mu.Lock()
+	entry, fresh := e.aniskipCache[animeID]
+	if fresh && e.now().Sub(entry.at) >= aniskipCoverageTTL {
+		fresh = false
+	}
+	known := AniskipCoverage(nil)
+	if fresh {
+		known = entry.cov
+	}
+	var missing []int
+	for ep := range needed {
+		if _, fetched := known[ep]; !fetched {
+			missing = append(missing, ep)
+		}
+	}
+	e.mu.Unlock()
+
+	if len(missing) == 0 {
+		return known
+	}
+	sort.Ints(missing)
+	if len(missing) > aniskipSweepCap {
+		missing = missing[:aniskipSweepCap]
+	}
+
+	malID := e.malID(ctx, animeID)
+	if malID == "" {
+		return known
+	}
+
+	fetched := map[int][]string{}
+	for _, ep := range missing {
+		kinds, err := e.cat.AniskipKinds(ctx, malID, ep)
+		if err != nil {
+			// Not recorded → retried next sweep. ctx errors abort the rest.
+			if e.log != nil {
+				e.log.Warnw("aniskip coverage fetch failed",
+					"anime_id", animeID, "mal_id", malID, "episode", ep, "error", err)
+			}
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		if kinds == nil {
+			kinds = []string{} // "checked, uncovered" — see AniskipCoverage
+		}
+		fetched[ep] = kinds
+	}
+	if len(fetched) == 0 {
+		return known
+	}
+
+	e.mu.Lock()
+	cur, ok := e.aniskipCache[animeID]
+	if !ok || e.now().Sub(cur.at) >= aniskipCoverageTTL {
+		cur = aniskipEntry{cov: AniskipCoverage{}, at: e.now()}
+	}
+	merged := make(AniskipCoverage, len(cur.cov)+len(fetched))
+	for k, v := range cur.cov {
+		merged[k] = v
+	}
+	for k, v := range fetched {
+		merged[k] = v
+	}
+	e.aniskipCache[animeID] = aniskipEntry{cov: merged, at: cur.at}
+	e.mu.Unlock()
+	return merged
 }
 
 // verifyClaimKey/skipClaimKey are the in-flight lease keys — see the
@@ -199,7 +349,9 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 		if scanned >= maxScan {
 			break
 		}
-		if e.sig.InCooldown(ctx, cand.AnimeID) {
+		// Pinned titles bypass cooldowns — an operator pin means "look at
+		// this NOW", and a stale settled-cooldown must not mute it.
+		if !cand.Pinned && e.sig.InCooldown(ctx, cand.AnimeID) {
 			continue
 		}
 		scanned++
@@ -235,7 +387,18 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			if task := NextSkipTask(enum.Skip, skipRows, fps, e.now()); task != nil {
+			skipUnits := enum.Skip
+			if pref := e.pins[cand.AnimeID]; pref != "" {
+				skipUnits = PreferProvider(skipUnits, pref)
+			}
+			// AniSkip probe gate: don't spend probes on sides AniSkip
+			// already covers (owner directive 2026-07-18) — see aniskipgate.go.
+			cov := e.aniskipCoverage(ctx, cand.AnimeID, skipUnits, skipRows)
+			skipUnits = FilterAniskipCovered(skipUnits, cov)
+			if task := NextSkipTask(skipUnits, skipRows, fps, e.now()); task != nil {
+				if task.Pair == nil {
+					task.CoveredKinds = cov.CoveredKinds(task.Unit.Episode)
+				}
 				release, ok := e.lease(task.Unit.Provider, skipClaimKey(task.Unit))
 				if !ok {
 					// Blocked by another in-flight claim — same "don't cool a

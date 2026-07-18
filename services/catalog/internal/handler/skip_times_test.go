@@ -15,19 +15,28 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/capability"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type skipTimesTestCache struct {
 	store       map[string]SkipTimesResult
+	flags       map[string]bool // divergence-log guard keys (bool values)
 	setCalls    int
 	deleteCalls int
 }
 
 func newSkipTimesTestCache() *skipTimesTestCache {
-	return &skipTimesTestCache{store: make(map[string]SkipTimesResult)}
+	return &skipTimesTestCache{store: make(map[string]SkipTimesResult), flags: make(map[string]bool)}
 }
 
 func (c *skipTimesTestCache) Get(_ context.Context, key string, dest interface{}) error {
+	if flag, ok := c.flags[key]; ok {
+		data, err := json.Marshal(flag)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(data, dest)
+	}
 	value, ok := c.store[key]
 	if !ok {
 		return cache.ErrNotFound
@@ -40,12 +49,15 @@ func (c *skipTimesTestCache) Get(_ context.Context, key string, dest interface{}
 }
 
 func (c *skipTimesTestCache) Set(_ context.Context, key string, value interface{}, _ time.Duration) error {
-	result, ok := value.(SkipTimesResult)
-	if !ok {
+	switch v := value.(type) {
+	case SkipTimesResult:
+		c.setCalls++
+		c.store[key] = v
+	case bool:
+		c.flags[key] = v
+	default:
 		panic("unexpected skip-times cache value type")
 	}
-	c.setCalls++
-	c.store[key] = result
 	return nil
 }
 
@@ -216,7 +228,12 @@ const aniskipUpstreamFound = `{
 	"results": [{"interval":{"startTime":90,"endTime":180},"skipType":"op","skipId":"id","episodeLength":1440}]
 }`
 
-func TestSkipTimesHandlerBlendsDetectedOpAndEd(t *testing.T) {
+// TestSkipTimesHandlerAniskipWinsPerSideDetectedFillsGap is the core of the
+// 2026-07-18 priority flip: AniSkip has an op (90-180), content-verify has
+// detected op AND ed — the served result must carry AniSkip's op and only
+// the detected ED (the side AniSkip lacks), with per-item sources and the
+// "mixed" roll-up.
+func TestSkipTimesHandlerAniskipWinsPerSideDetectedFillsGap(t *testing.T) {
 	c := newSkipTimesTestCache()
 	calls := 0
 	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
@@ -241,25 +258,25 @@ func TestSkipTimesHandlerBlendsDetectedOpAndEd(t *testing.T) {
 	second := serveSkipTimesQuery(t, h, query)
 
 	for _, result := range []SkipTimesResult{first, second} {
-		if !result.Found || result.Source != "detected" {
-			t.Fatalf("result = %+v, want found+source=detected", result)
+		if !result.Found || result.Source != "mixed" {
+			t.Fatalf("result = %+v, want found+source=mixed", result)
 		}
 		if len(result.Results) != 2 {
-			t.Fatalf("results = %+v, want 2 items (op+ed)", result.Results)
+			t.Fatalf("results = %+v, want 2 items (aniskip op + detected ed)", result.Results)
 		}
 	}
 	byType := map[string]SkipTimesResultItem{}
 	for _, item := range first.Results {
 		byType[item.SkipType] = item
 	}
-	if op := byType["op"]; op.Interval.StartTime != 10 || op.Interval.EndTime != 100 {
-		t.Fatalf("op item = %+v, want 10-100", op)
+	if op := byType["op"]; op.Interval.StartTime != 90 || op.Interval.EndTime != 180 || op.Source != "aniskip" {
+		t.Fatalf("op item = %+v, want aniskip 90-180 (aniskip wins the op side)", op)
 	}
-	if ed := byType["ed"]; ed.Interval.StartTime != 1300 || ed.Interval.EndTime != 1390 {
-		t.Fatalf("ed item = %+v, want 1300-1390", ed)
+	if ed := byType["ed"]; ed.Interval.StartTime != 1300 || ed.Interval.EndTime != 1390 || ed.Source != "detected" {
+		t.Fatalf("ed item = %+v, want detected 1300-1390", ed)
 	}
-	if calls != 0 {
-		t.Fatalf("aniskip upstream calls = %d, want 0 (detected blend short-circuits)", calls)
+	if calls != 1 {
+		t.Fatalf("aniskip upstream calls = %d, want 1 (positive cache serves the second request)", calls)
 	}
 	if skip.calls != 1 {
 		t.Fatalf("SkipTimings calls = %d, want 1 (second request must hit the detected cache)", skip.calls)
@@ -267,6 +284,74 @@ func TestSkipTimesHandlerBlendsDetectedOpAndEd(t *testing.T) {
 	const wantKey = "skip-times:detected:11111111-1111-1111-1111-111111111111:gogoanime::3"
 	if _, ok := c.store[wantKey]; !ok {
 		t.Fatalf("expected detected result cached under %q, store keys = %v", wantKey, c.store)
+	}
+}
+
+// TestSkipTimesHandlerWarnsOnDivergence: our detected op (10-100) disagrees
+// with AniSkip's (90-180) by far more than the threshold — exactly one
+// distinct "skip divergence" WARN must be logged, and the cache guard must
+// suppress a repeat on the next request.
+func TestSkipTimesHandlerWarnsOnDivergence(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	c := newSkipTimesTestCache()
+	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
+		{
+			Provider: "gogoanime", Team: "", Episode: 3,
+			OpStart: 10, OpEnd: 100, OpStatus: "detected",
+		},
+	}}
+	h := &SkipTimesHandler{
+		cache: c,
+		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+		})},
+		log:  &logger.Logger{SugaredLogger: zap.New(core).Sugar()},
+		skip: skip,
+	}
+
+	query := "anime=11111111-1111-1111-1111-111111111111&provider=gogoanime&team="
+	serveSkipTimesQuery(t, h, query)
+
+	entries := logs.FilterMessage("skip divergence: detected vs aniskip").All()
+	if len(entries) != 1 {
+		t.Fatalf("divergence warns = %d, want exactly 1; all logs: %+v", len(entries), logs.All())
+	}
+	fields := entries[0].ContextMap()
+	if fields["side"] != "op" || fields["provider"] != "gogoanime" {
+		t.Fatalf("divergence fields = %+v, want side=op provider=gogoanime", fields)
+	}
+
+	serveSkipTimesQuery(t, h, query)
+	if n := len(logs.FilterMessage("skip divergence: detected vs aniskip").All()); n != 1 {
+		t.Fatalf("divergence warns after second request = %d, want still 1 (guard key dedupes)", n)
+	}
+}
+
+// TestSkipTimesHandlerNoWarnWithinThreshold: boundaries within the 10s
+// threshold (aniskip 90-180 vs detected 92-181) are the normal
+// cross-source jitter — no divergence WARN.
+func TestSkipTimesHandlerNoWarnWithinThreshold(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	c := newSkipTimesTestCache()
+	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
+		{
+			Provider: "gogoanime", Team: "", Episode: 3,
+			OpStart: 92, OpEnd: 181, OpStatus: "detected",
+		},
+	}}
+	h := &SkipTimesHandler{
+		cache: c,
+		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+		})},
+		log:  &logger.Logger{SugaredLogger: zap.New(core).Sugar()},
+		skip: skip,
+	}
+
+	serveSkipTimesQuery(t, h, "anime=11111111-1111-1111-1111-111111111111&provider=gogoanime&team=")
+
+	if n := len(logs.FilterMessage("skip divergence: detected vs aniskip").All()); n != 0 {
+		t.Fatalf("divergence warns = %d, want 0 within threshold", n)
 	}
 }
 
@@ -279,7 +364,9 @@ func TestSkipTimesHandlerBlendsDetectedOpAndEd(t *testing.T) {
 func TestSkipTimesHandlerCacheKeyEscapesCollidingProviderTeamSplits(t *testing.T) {
 	c := newSkipTimesTestCache()
 	calls := 0
-	// Row matches ONLY the first (provider, team) split below.
+	// Row matches ONLY the first (provider, team) split below. AniSkip has
+	// nothing (404) so the detected window is what serves — which is what
+	// makes the cache-key collision observable.
 	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
 		{
 			Provider: "kodik", Team: "A:B", Episode: 3,
@@ -290,7 +377,7 @@ func TestSkipTimesHandlerCacheKeyEscapesCollidingProviderTeamSplits(t *testing.T
 		cache: c,
 		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
 			calls++
-			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+			return &http.Response{StatusCode: http.StatusNotFound, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"found":false,"results":[]}`))}, nil
 		})},
 		log:  newSkipTimesTestLogger(),
 		skip: skip,
@@ -302,23 +389,18 @@ func TestSkipTimesHandlerCacheKeyEscapesCollidingProviderTeamSplits(t *testing.T
 	if !first.Found || first.Source != "detected" {
 		t.Fatalf("first result = %+v, want found+source=detected", first)
 	}
-	if calls != 0 {
-		t.Fatalf("aniskip upstream calls after first request = %d, want 0", calls)
-	}
 
 	// Different (provider, team) split of the same raw ':'-joined string.
 	// No row matches "kodik:A"/"B" — this must miss the detected cache
-	// (distinct key from the first request) and fall through to AniSkip,
-	// not reuse the first request's cached "detected" result.
+	// (distinct key from the first request) and come back empty (the
+	// AniSkip side has nothing either), not reuse the first request's
+	// cached "detected" result.
 	second := serveSkipTimesQuery(t, h, "anime="+animeID+"&provider=kodik%3AA&team=B")
-	if second.Source != "" {
-		t.Fatalf("second result = %+v, want empty source — must not reuse the colliding cached entry", second)
+	if second.Found || second.Source != "" {
+		t.Fatalf("second result = %+v, want empty — must not reuse the colliding cached entry", second)
 	}
-	if !second.Found {
-		t.Fatalf("second result = %+v, want the aniskip fixture result", second)
-	}
-	if calls != 1 {
-		t.Fatalf("aniskip upstream calls after second request = %d, want 1 (cache miss, fell through)", calls)
+	if calls != 2 {
+		t.Fatalf("aniskip upstream calls = %d, want 2 (negative aniskip results are never cached)", calls)
 	}
 }
 
@@ -353,8 +435,11 @@ func TestSkipTimesHandlerBlendsDetectedOpOnlyWhenEdNoMatch(t *testing.T) {
 	if result.Results[0].Interval.StartTime != 5 || result.Results[0].Interval.EndTime != 95 {
 		t.Fatalf("op item = %+v, want 5-95", result.Results[0])
 	}
-	if calls != 0 {
-		t.Fatalf("aniskip upstream calls = %d, want 0 (detected op alone still short-circuits)", calls)
+	if result.Results[0].Source != "detected" {
+		t.Fatalf("op item source = %q, want detected", result.Results[0].Source)
+	}
+	if calls != 1 {
+		t.Fatalf("aniskip upstream calls = %d, want 1 (AniSkip is always consulted first now)", calls)
 	}
 }
 
@@ -372,11 +457,13 @@ func TestSkipTimesHandlerFallsBackToEmptyTeamRow(t *testing.T) {
 	skip := &fakeSkipSource{rows: []capability.SkipTimingRow{
 		{Provider: "animejoy-sibnet", Team: "", Episode: 3, OpStatus: "detected", OpStart: 30, OpEnd: 120},
 	}}
+	// AniSkip has nothing (404) so the empty-team-fallback detected window
+	// is what serves.
 	h := &SkipTimesHandler{
 		cache: c,
 		httpClient: &http.Client{Transport: skipTimesRoundTripper(func(*http.Request) (*http.Response, error) {
 			calls++
-			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(aniskipUpstreamFound))}, nil
+			return &http.Response{StatusCode: http.StatusNotFound, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"found":false,"results":[]}`))}, nil
 		})},
 		log:  newSkipTimesTestLogger(),
 		skip: skip,
@@ -394,8 +481,8 @@ func TestSkipTimesHandlerFallsBackToEmptyTeamRow(t *testing.T) {
 	if result.Results[0].Interval.StartTime != 30 || result.Results[0].Interval.EndTime != 120 {
 		t.Fatalf("op item = %+v, want 30-120", result.Results[0])
 	}
-	if calls != 0 {
-		t.Fatalf("aniskip upstream calls = %d, want 0 (empty-team fallback short-circuits)", calls)
+	if calls != 1 {
+		t.Fatalf("aniskip upstream calls = %d, want 1 (AniSkip is always consulted first now)", calls)
 	}
 	// Cache key stays keyed by the REQUESTED team ("AnimeJoy"), not the
 	// matched row's actual (empty) Team.

@@ -8,6 +8,7 @@ import type { useVideoEngine } from '@/composables/aePlayer/useVideoEngine'
 import type { ConnectionState } from '@/components/player/aePlayer/connectionHealth'
 import type { SeekTrace, StreamResult } from '@/types/aePlayer'
 import type { VerifyReport } from '@/types/contentVerify'
+import type { SkipSegment } from '@/composables/useSkipTimes'
 
 // ── Hacker mode (debug HUD) ───────────────────────────────────────────────────
 // Per-fragment playback stats, the seek pipeline trace, HUD visibility
@@ -26,6 +27,10 @@ export interface DebugToolsDeps {
   /** Content-verify probe report (Task 13/14) — surfaced as a debugStats line
    *  for the CURRENT provider only ("new datum → debugStats" rule). */
   getVerify?: () => VerifyReport | null
+  /** Active skip windows with their source ("aniskip" | "detected") — the
+   *  SKIP debugStats line, so a human verifying skip timings can see which
+   *  source produced the window (owner directive 2026-07-18). */
+  getSkipSegments?: () => { opening: SkipSegment | null; ending: SkipSegment | null }
 }
 
 export function useDebugTools(deps: DebugToolsDeps) {
@@ -188,6 +193,14 @@ export function useDebugTools(deps: DebugToolsDeps) {
       const v = rep.providers[prov]
       verify = `${v.status} raw:${v.raw ? '✓' : '–'} dub:[${v.dub_langs.join(',')}] hs:[${v.hardsub_langs.join(',')}] units:${v.units?.length ?? 0}`
     }
+    // Skip-window provenance — which source (aniskip / detected) produced
+    // the active OP/ED windows. Empty string hides the SKIP line entirely.
+    const segs = deps.getSkipSegments?.()
+    const fmtSkipSeg = (label: string, s: SkipSegment | null | undefined) =>
+      s ? `${label}:${s.source ?? 'aniskip'} ${s.start.toFixed(1)}–${s.end.toFixed(1)}` : null
+    const skip = segs
+      ? [fmtSkipSeg('op', segs.opening), fmtSkipSeg('ed', segs.ending)].filter(Boolean).join(' · ')
+      : ''
     return {
       bw: bwv > 0 ? `${(bwv / 1_000_000).toFixed(1)} Mbit/s` : '—',
       conn,
@@ -203,6 +216,8 @@ export function useDebugTools(deps: DebugToolsDeps) {
       edgeRot: edge && trail ? trail.split(',').length - 1 : 0,
       // Content-verify verdict for the active provider (Task 15).
       verify,
+      // Skip-window provenance (aniskip vs detected) + the active windows.
+      skip,
       // Protocol-ladder telemetry (multi-tier prod only; null snapshot in dev).
       // I4: tier display is 1-based ("tier 2/3") via formatLadderRows — the
       // underlying debugSnapshot().tierIndex contract stays 0-based.

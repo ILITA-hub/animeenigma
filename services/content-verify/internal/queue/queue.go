@@ -13,6 +13,10 @@ const (
 	weightVisitor = 15
 	weightOngoing = 10
 	weightTop     = 5
+	// weightPinned puts a CV_PIN_ANIME title above any organic score (the
+	// busiest realistic titles sit around visitors*15 ≈ a few thousand) —
+	// operator pins exist to drag one title to the queue head NOW.
+	weightPinned = 100000
 
 	backoffBase = 6 * time.Hour
 	backoffCap  = 168 * time.Hour
@@ -23,6 +27,7 @@ type Candidate struct {
 	Name          string
 	Ongoing       bool
 	Top           bool
+	Pinned        bool // CV_PIN_ANIME operator pin
 	Visitors      int
 	EpisodesAired int
 }
@@ -35,12 +40,17 @@ func (c Candidate) Score() int {
 	if c.Top {
 		s += weightTop
 	}
+	if c.Pinned {
+		s += weightPinned
+	}
 	return s
 }
 
-// BuildCandidates merges membership (ongoing ∪ top ∪ visited) and attaches
-// the unique-visitor count to every candidate.
-func BuildCandidates(m *catalogclient.Membership, visited []string, visitors func(string) int) []Candidate {
+// BuildCandidates merges membership (ongoing ∪ top ∪ visited ∪ pinned) and
+// attaches the unique-visitor count to every candidate. Pinned titles are
+// injected even when they're in no membership bucket — an operator pin must
+// always be a candidate.
+func BuildCandidates(m *catalogclient.Membership, visited []string, pins map[string]string, visitors func(string) int) []Candidate {
 	byID := map[string]*Candidate{}
 	add := func(id, name string, aired int) *Candidate {
 		if c, ok := byID[id]; ok {
@@ -66,6 +76,9 @@ func BuildCandidates(m *catalogclient.Membership, visited []string, visitors fun
 	}
 	for _, id := range visited {
 		add(id, "", 0)
+	}
+	for id := range pins {
+		add(id, "", 0).Pinned = true
 	}
 	out := make([]Candidate, 0, len(byID))
 	for _, c := range byID {

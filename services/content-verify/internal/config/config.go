@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
@@ -34,6 +35,13 @@ type Config struct {
 	AnalyzersDir string
 	WorkDir      string
 	WorkerOn     bool
+
+	// Pins is the parsed CV_PIN_ANIME operator directive: anime UUID →
+	// preferred provider ("" = whole-title pin). Format:
+	// "uuid[:provider],uuid2[:provider2]". Pinned titles rank above any
+	// organic score, bypass cooldowns, and plan the preferred provider's
+	// skip family first — a temporary lever for "probe THIS now".
+	Pins map[string]string
 
 	SkipEnabled      bool          // gate for the OP/ED skip-probe lane, once the verify lane is settled
 	SkipBudget       time.Duration // hard per-skip-task budget (locate or pair)
@@ -71,6 +79,7 @@ func Load() (*Config, error) {
 		AnalyzersDir: getEnv("CV_ANALYZERS_DIR", "/app/analyzers"),
 		WorkDir:      getEnv("CV_WORKDIR", "/tmp/cv"),
 		WorkerOn:     getEnv("CV_WORKER_ENABLED", "true") != "false",
+		Pins:         parsePins(getEnv("CV_PIN_ANIME", "")),
 
 		SkipEnabled:      getEnv("CV_SKIP_ENABLED", "true") != "false",
 		SkipBudget:       getEnvDuration("CV_SKIP_BUDGET", 480*time.Second),
@@ -99,6 +108,24 @@ func clampWorkers(n int) int {
 		return 4
 	}
 	return n
+}
+
+// parsePins parses CV_PIN_ANIME ("uuid[:provider],uuid2") into the
+// animeID → preferred-provider map. Malformed pieces (empty after trim) are
+// dropped silently — an operator env, not user input.
+func parsePins(s string) map[string]string {
+	pins := map[string]string{}
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, provider, _ := strings.Cut(part, ":")
+		if id = strings.TrimSpace(id); id != "" {
+			pins[id] = strings.TrimSpace(provider)
+		}
+	}
+	return pins
 }
 
 func getEnv(key, def string) string {

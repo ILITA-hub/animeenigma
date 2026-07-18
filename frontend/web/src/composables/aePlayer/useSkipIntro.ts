@@ -69,5 +69,8 @@ export function useSkipIntro(deps: SkipIntroDeps) {
     }
   })
 
-  return { chapters, skipTarget, onSkipSegment }
+  // opening/ending are exposed for the hacker-mode debug stats — each
+  // segment carries its `source` ("aniskip" | "detected") so the HUD can
+  // show where the skip windows came from.
+  return { chapters, skipTarget, onSkipSegment, opening, ending }
 }

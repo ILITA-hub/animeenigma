@@ -150,6 +150,7 @@
           <div>LVL  {{ debugStats.level }}</div>
           <div>FRAG {{ debugStats.frag }}</div>
           <div v-if="debugStats.verify">VER  {{ debugStats.verify }}</div>
+          <div v-if="debugStats.skip" data-test="debug-skip">SKIP {{ debugStats.skip }}</div>
           <div v-if="debugStats.conn">CONN {{ debugStats.conn }}</div>
           <!-- Kodik/solodcdn edge telemetry — metrics + logic, not just the
                served edge. Only present for Kodik sources (edge non-empty). -->
@@ -198,6 +199,9 @@ defineProps<{
     /** Content-verify verdict for the CURRENT provider (Task 15) —
      *  "unverified" until a probe report names it. */
     verify?: string
+    /** Skip-window provenance: "op:aniskip 90.0–180.0 · ed:detected …" —
+     *  which source produced the active OP/ED windows. Empty hides the line. */
+    skip?: string
     /** Connection-health datum. */
     conn?: ConnectionState
     edge?: string

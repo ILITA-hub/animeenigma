@@ -268,3 +268,66 @@ func (c *Client) AnimejoyStream(ctx context.Context, animeID, provider string, e
 	}
 	return &Stream{URL: data.URL, Exp: data.Exp, Sig: data.Sig, Referer: data.Referer, Type: "mp4"}, nil
 }
+
+// AnimeMalID resolves an anime UUID to its MAL id (the key AniSkip uses) via
+// the public anime-details route. Empty string (no error) when the anime has
+// no MAL mapping — the caller treats that as "no AniSkip coverage possible".
+func (c *Client) AnimeMalID(ctx context.Context, animeID string) (string, error) {
+	var data struct {
+		MalID string `json:"mal_id"`
+	}
+	if err := c.getJSON(ctx, c.public+"/api/anime/"+url.PathEscape(animeID), metaTimeout, &data); err != nil {
+		return "", err
+	}
+	return data.MalID, nil
+}
+
+// AniskipKinds returns which sides ("op"/"ed", normalized from AniSkip's
+// mixed-op/mixed-ed variants) crowdsourced AniSkip data already covers for
+// one episode, via the catalog's public skip-times proxy. Called WITHOUT the
+// anime/provider query params on purpose: that keeps the response the pure
+// AniSkip passthrough, never contaminated by our own detected windows (which
+// would turn the probe gate into a self-fulfilling loop). The skipType→side
+// mapping below mirrors catalog handler's skipSideOf (separate module, no
+// shared lib owns the AniSkip wire shape) — a new mixed-* type must land in
+// both.
+func (c *Client) AniskipKinds(ctx context.Context, malID string, episode int) ([]string, error) {
+	var data struct {
+		Found   bool `json:"found"`
+		Results []struct {
+			SkipType string `json:"skipType"`
+			Interval struct {
+				StartTime float64 `json:"startTime"`
+				EndTime   float64 `json:"endTime"`
+			} `json:"interval"`
+		} `json:"results"`
+	}
+	u := fmt.Sprintf("%s/api/skip-times/%s/%d", c.public, url.PathEscape(malID), episode)
+	if err := c.getJSON(ctx, u, metaTimeout, &data); err != nil {
+		return nil, err
+	}
+	if !data.Found {
+		return nil, nil
+	}
+	var kinds []string
+	seen := map[string]bool{}
+	for _, r := range data.Results {
+		if r.Interval.StartTime < 0 || r.Interval.EndTime <= r.Interval.StartTime {
+			continue
+		}
+		var kind string
+		switch r.SkipType {
+		case "op", "mixed-op":
+			kind = "op"
+		case "ed", "mixed-ed":
+			kind = "ed"
+		default:
+			continue
+		}
+		if !seen[kind] {
+			seen[kind] = true
+			kinds = append(kinds, kind)
+		}
+	}
+	return kinds, nil
+}

@@ -61,6 +61,25 @@ const (
 	// practice (provider names, numeric team IDs); this just stops an
 	// abusive caller from writing arbitrarily large cache keys.
 	maxProviderTeamLen = 128
+
+	// skipDivergenceThreshold flags a detected window that disagrees with
+	// AniSkip's on the same side by more than this many seconds on either
+	// boundary. Owner directive 2026-07-18: when our probe stored a window
+	// FIRST and AniSkip data appeared later with materially different times,
+	// that's investigation material — logged with a distinct message so
+	// `grep "skip divergence"` finds every case. NOTE: a positional shift is
+	// often a legitimately different encode (cold opens / intro cards), so a
+	// hit here is a lead, not automatically a detector bug.
+	skipDivergenceThreshold = 10.0
+
+	// skipDivergenceLogTTL dedupes the divergence WARN per (anime, provider,
+	// team, episode, side) — the check runs on every uncached serve, and one
+	// line a day per case is plenty for investigation.
+	skipDivergenceLogTTL = 24 * time.Hour
+
+	// Wire values for the per-item Source field.
+	skipSourceAniskip  = "aniskip"
+	skipSourceDetected = "detected"
 )
 
 // animeIDPattern is a defensive shape check on the optional `anime` query
@@ -76,9 +95,11 @@ var animeIDPattern = regexp.MustCompile(`^[0-9a-f-]{36}$`)
 type SkipTimesResult struct {
 	Found   bool                  `json:"found"`
 	Results []SkipTimesResultItem `json:"results"`
-	// Source distinguishes a content-verify detected-window blend from the
-	// AniSkip proxy path. Empty on the (default, pre-existing) AniSkip path;
-	// "detected" when served from content-verify's probed skip windows.
+	// Source summarizes where the served windows came from: empty on the
+	// pure-AniSkip path (pre-existing wire shape), "detected" when every
+	// item is a content-verify probed window, "mixed" when the two sources
+	// each contributed a side. Per-item provenance is on each result's own
+	// Source field — this is just the roll-up.
 	Source string `json:"source,omitempty"`
 }
 
@@ -98,6 +119,11 @@ type SkipTimesResultItem struct {
 	SkipType      string  `json:"skipType"` // "op" | "ed" | "mixed-op" | "mixed-ed" | "recap"
 	SkipID        string  `json:"skipId"`   // Aniskip submission UUID — unused frontend-side
 	EpisodeLength float64 `json:"episodeLength"`
+	// Source is per-item provenance: "aniskip" (crowdsourced) or "detected"
+	// (content-verify audio probe). Stamped at merge time; the player's
+	// hacker-mode HUD surfaces it so a human can tell which source produced
+	// the window they're looking at.
+	Source string `json:"source,omitempty"`
 }
 
 // SkipSource is the optional content-verify blend source for detected skip
@@ -113,11 +139,14 @@ type SkipSource interface {
 // can receive community timestamps shortly after the first viewer asks for
 // them, so a negative cache would hide newly submitted data for the full TTL.
 //
-// When skip is non-nil and the request carries `anime`+`provider` query
-// params, Get first tries content-verify's own detected skip windows (higher
-// signal than crowdsourced AniSkip data, since they're probed directly
-// against the same provider/team the player is about to stream from) before
-// falling back to the AniSkip proxy path below.
+// Blend order (owner directive 2026-07-18, REVERSES the original
+// detected-first order): AniSkip wins per SIDE (op/ed independently);
+// content-verify's detected windows fill only the sides AniSkip lacks. When
+// both sources have the same side and disagree by more than
+// skipDivergenceThreshold, a distinct "skip divergence" WARN is logged (see
+// warnDivergences) — that's the case where our probe stored a window before
+// AniSkip data appeared. The skip source is consulted only when skip is
+// non-nil and the request carries `anime`+`provider` query params.
 type SkipTimesHandler struct {
 	cache      cache.Cache
 	httpClient *http.Client
@@ -165,24 +194,34 @@ func (h *SkipTimesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var detected SkipTimesResult
+	var animeID, provider, team string
 	if h.skip != nil {
-		if result, ok := h.tryDetected(r, ep); ok {
-			httputil.OK(w, result)
-			return
-		}
+		detected, animeID, provider, team = h.tryDetected(r, ep)
 	}
 
+	aniskip := h.aniskipResult(r.Context(), malID, episode)
+
+	if aniskip.Found && detected.Found {
+		h.warnDivergences(r.Context(), malID, animeID, provider, team, ep, aniskip, detected)
+	}
+
+	httputil.OK(w, mergeSkipSources(aniskip, detected))
+}
+
+// aniskipResult serves the AniSkip side: 7-day positive cache, then the
+// upstream proxy. Misses/failures are never cached (see the handler comment).
+func (h *SkipTimesHandler) aniskipResult(ctx context.Context, malID, episode string) SkipTimesResult {
 	cacheKey := fmt.Sprintf("skip-times:%s:%s", malID, episode)
 
 	var cached SkipTimesResult
-	if err := h.cache.Get(r.Context(), cacheKey, &cached); err == nil {
+	if err := h.cache.Get(ctx, cacheKey, &cached); err == nil {
 		if hasUsableSkipTimes(cached) {
-			httputil.OK(w, cached)
-			return
+			return cached
 		}
 		// Remove negative/invalid values written by older versions so the cache
 		// converges immediately to positive-only storage after deployment.
-		if err := h.cache.Delete(r.Context(), cacheKey); err != nil {
+		if err := h.cache.Delete(ctx, cacheKey); err != nil {
 			h.log.Warnw("skip-times stale cache delete error, fetching upstream",
 				"mal_id", malID, "episode", episode, "error", err)
 		}
@@ -193,37 +232,131 @@ func (h *SkipTimesHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"mal_id", malID, "episode", episode, "error", err)
 	}
 
-	result := h.fetchFromUpstream(r.Context(), malID, episode)
+	result := h.fetchFromUpstream(ctx, malID, episode)
 	if hasUsableSkipTimes(result) {
-		if err := h.cache.Set(r.Context(), cacheKey, result, skipTimesTTL); err != nil {
+		if err := h.cache.Set(ctx, cacheKey, result, skipTimesTTL); err != nil {
 			// Cache writes are best-effort. The current viewer should still receive
 			// the real timestamps that were fetched successfully.
 			h.log.Warnw("skip-times cache set error, serving upstream result",
 				"mal_id", malID, "episode", episode, "error", err)
 		}
 	}
-	httputil.OK(w, result)
+	return result
 }
 
-// tryDetected attempts the content-verify detected-window blend for the
-// optional `anime`/`provider`/`team` query params. ok=false whenever the
-// blend doesn't apply for any reason (params absent/invalid, no matching
-// row, matching row with no detected side) — callers must always fall
-// through to the existing AniSkip path when ok is false.
-func (h *SkipTimesHandler) tryDetected(r *http.Request, episode int) (SkipTimesResult, bool) {
+// skipSideOf buckets a skipType into the two mergeable sides. Unknown types
+// (e.g. recap) return "" — they pass through from AniSkip untouched and
+// never participate in merging or divergence checks. Mirrored by
+// content-verify's catalogclient.AniskipKinds (separate module, no shared
+// lib owns the AniSkip wire shape) — a new mixed-* type must land in both.
+func skipSideOf(skipType string) string {
+	switch skipType {
+	case "op", "mixed-op":
+		return "op"
+	case "ed", "mixed-ed":
+		return "ed"
+	}
+	return ""
+}
+
+// firstOfSide returns the first item of the given side, or nil.
+func firstOfSide(r SkipTimesResult, side string) *SkipTimesResultItem {
+	for i := range r.Results {
+		if skipSideOf(r.Results[i].SkipType) == side {
+			return &r.Results[i]
+		}
+	}
+	return nil
+}
+
+// mergeSkipSources implements the AniSkip-first per-side blend: every AniSkip
+// item is served as-is; a detected item is appended only for a side AniSkip
+// has nothing for. Items are stamped with per-item Source here (not earlier)
+// so cached entries written by any older version still come out labeled.
+func mergeSkipSources(aniskip, detected SkipTimesResult) SkipTimesResult {
+	out := SkipTimesResult{Results: []SkipTimesResultItem{}}
+	var nAniskip, nDetected int
+
+	for _, item := range aniskip.Results {
+		item.Source = skipSourceAniskip
+		out.Results = append(out.Results, item)
+		nAniskip++
+	}
+	for _, side := range []string{"op", "ed"} {
+		if firstOfSide(aniskip, side) != nil {
+			continue
+		}
+		if d := firstOfSide(detected, side); d != nil {
+			item := *d
+			item.Source = skipSourceDetected
+			out.Results = append(out.Results, item)
+			nDetected++
+		}
+	}
+
+	out.Found = len(out.Results) > 0
+	switch {
+	case nDetected > 0 && nAniskip > 0:
+		out.Source = "mixed"
+	case nDetected > 0:
+		out.Source = skipSourceDetected
+	}
+	return out
+}
+
+// warnDivergences logs the distinct "skip divergence" WARN for every side
+// both sources cover with materially different times (either boundary off by
+// more than skipDivergenceThreshold seconds). Deduped per unit+side for
+// skipDivergenceLogTTL via a cache guard key — the comparison itself is
+// cheap, but one WARN per player load would drown the signal.
+func (h *SkipTimesHandler) warnDivergences(ctx context.Context, malID, animeID, provider, team string, episode int, aniskip, detected SkipTimesResult) {
+	for _, side := range []string{"op", "ed"} {
+		a := firstOfSide(aniskip, side)
+		d := firstOfSide(detected, side)
+		if a == nil || d == nil {
+			continue
+		}
+		dStart := d.Interval.StartTime - a.Interval.StartTime
+		dEnd := d.Interval.EndTime - a.Interval.EndTime
+		if dStart < skipDivergenceThreshold && dStart > -skipDivergenceThreshold &&
+			dEnd < skipDivergenceThreshold && dEnd > -skipDivergenceThreshold {
+			continue
+		}
+		guardKey := fmt.Sprintf("skip-div:%s:%s:%s:%d:%s",
+			animeID, url.QueryEscape(provider), url.QueryEscape(team), episode, side)
+		var seen bool
+		if err := h.cache.Get(ctx, guardKey, &seen); err == nil {
+			continue
+		}
+		h.log.Warnw("skip divergence: detected vs aniskip",
+			"mal_id", malID, "anime_id", animeID, "provider", provider, "team", team,
+			"episode", episode, "side", side,
+			"detected_start", d.Interval.StartTime, "detected_end", d.Interval.EndTime,
+			"aniskip_start", a.Interval.StartTime, "aniskip_end", a.Interval.EndTime)
+		_ = h.cache.Set(ctx, guardKey, true, skipDivergenceLogTTL)
+	}
+}
+
+// tryDetected fetches content-verify's detected windows for the optional
+// `anime`/`provider`/`team` query params. The returned result is the zero
+// value (Found=false) whenever the lookup doesn't apply for any reason
+// (params absent/invalid, no matching row, matching row with no detected
+// side) — the caller merges it with the AniSkip side either way. The parsed
+// animeID/provider/team come back too, for the divergence log's identity.
+func (h *SkipTimesHandler) tryDetected(r *http.Request, episode int) (result SkipTimesResult, animeID, provider, team string) {
 	q := r.URL.Query()
-	animeID := q.Get("anime")
-	provider := q.Get("provider")
-	team := q.Get("team")
+	animeID = q.Get("anime")
+	provider = q.Get("provider")
+	team = q.Get("team")
 
 	if animeID == "" || provider == "" {
-		return SkipTimesResult{}, false
+		return SkipTimesResult{}, animeID, provider, team
 	}
 	if !animeIDPattern.MatchString(animeID) {
-		return SkipTimesResult{}, false
+		return SkipTimesResult{}, animeID, provider, team
 	}
 	if len(provider) > maxProviderTeamLen || len(team) > maxProviderTeamLen {
-		return SkipTimesResult{}, false
+		return SkipTimesResult{}, animeID, provider, team
 	}
 
 	// provider/team are free-form (e.g. Kodik fansub team titles can contain
@@ -236,9 +369,9 @@ func (h *SkipTimesHandler) tryDetected(r *http.Request, episode int) (SkipTimesR
 
 	var cached SkipTimesResult
 	if err := h.cache.Get(r.Context(), cacheKey, &cached); err == nil {
-		return cached, true
+		return cached, animeID, provider, team
 	} else if err != cache.ErrNotFound && h.log != nil {
-		// Cache availability must not decide whether this blend can run —
+		// Cache availability must not decide whether this lookup can run —
 		// fall through to a fresh content-verify lookup below.
 		h.log.Warnw("skip-times detected cache get error, querying content-verify",
 			"anime_id", animeID, "provider", provider, "episode", episode, "error", err)
@@ -246,21 +379,21 @@ func (h *SkipTimesHandler) tryDetected(r *http.Request, episode int) (SkipTimesR
 
 	row, found := matchSkipTimingRow(h.skip.SkipTimings(r.Context(), animeID), provider, team, episode)
 	if !found {
-		return SkipTimesResult{}, false
+		return SkipTimesResult{}, animeID, provider, team
 	}
 
-	result, ok := buildDetectedResult(row)
+	built, ok := buildDetectedResult(row)
 	if !ok {
-		return SkipTimesResult{}, false
+		return SkipTimesResult{}, animeID, provider, team
 	}
 
-	if err := h.cache.Set(r.Context(), cacheKey, result, detectedSkipTimesTTL); err != nil && h.log != nil {
+	if err := h.cache.Set(r.Context(), cacheKey, built, detectedSkipTimesTTL); err != nil && h.log != nil {
 		// Best-effort cache write — the current request already has the
 		// result, only the next lookup pays the content-verify round trip.
 		h.log.Warnw("skip-times detected cache set error, serving result",
 			"anime_id", animeID, "provider", provider, "episode", episode, "error", err)
 	}
-	return result, true
+	return built, animeID, provider, team
 }
 
 // matchSkipTimingRow finds the row for the exact (provider, team, episode)
@@ -293,8 +426,8 @@ func matchSkipTimingRow(rows []capability.SkipTimingRow, provider, team string, 
 
 // buildDetectedResult builds one SkipTimesResultItem per detected side
 // (op/ed independently — a row can have one detected and the other
-// no_match/pending_fp/unreachable). ok=false when neither side is detected,
-// so the caller falls through to AniSkip instead of caching an empty result.
+// no_match/pending_fp/unreachable/aniskip). ok=false when neither side is
+// detected, so the caller doesn't cache an empty result.
 func buildDetectedResult(row capability.SkipTimingRow) (SkipTimesResult, bool) {
 	result := SkipTimesResult{Found: true, Source: "detected", Results: []SkipTimesResultItem{}}
 	if row.OpStatus == skipStatusDetected {

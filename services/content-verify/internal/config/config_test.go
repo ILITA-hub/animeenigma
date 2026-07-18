@@ -104,3 +104,33 @@ func TestLoadWorkersClamped(t *testing.T) {
 		})
 	}
 }
+
+func TestParsePins(t *testing.T) {
+	tests := []struct {
+		env  string
+		want map[string]string
+	}{
+		{"", map[string]string{}},
+		{"uuid-1", map[string]string{"uuid-1": ""}},
+		{"uuid-1:animejoy-allvideo", map[string]string{"uuid-1": "animejoy-allvideo"}},
+		{" uuid-1 : kodik , uuid-2 ", map[string]string{"uuid-1": "kodik", "uuid-2": ""}},
+		{",,:", map[string]string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			t.Setenv("CV_PIN_ANIME", tt.env)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(cfg.Pins) != len(tt.want) {
+				t.Fatalf("Pins = %+v, want %+v", cfg.Pins, tt.want)
+			}
+			for id, provider := range tt.want {
+				if got, ok := cfg.Pins[id]; !ok || got != provider {
+					t.Fatalf("Pins[%q] = %q (present=%v), want %q", id, got, ok, provider)
+				}
+			}
+		})
+	}
+}

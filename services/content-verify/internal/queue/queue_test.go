@@ -14,7 +14,7 @@ func TestScoreAndRank(t *testing.T) {
 		Top:     []catalogclient.MembershipRow{{ID: "t1", Name: "N"}, {ID: "o1", Name: "F"}},
 	}
 	visitors := map[string]int{"v1": 2, "o1": 1}
-	cs := BuildCandidates(m, []string{"v1"}, func(id string) int { return visitors[id] })
+	cs := BuildCandidates(m, []string{"v1"}, nil, func(id string) int { return visitors[id] })
 	ranked := Rank(cs)
 	// o1: ongoing(10)+top(5)+15*1=30 ; v1: 15*2=30 ; t1: 5.
 	// Tie 30/30 → ongoing first.

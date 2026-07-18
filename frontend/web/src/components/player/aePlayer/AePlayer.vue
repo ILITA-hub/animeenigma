@@ -1383,6 +1383,8 @@ const debug = useDebugTools({
   state, engine, videoRef, currentStream, duration, showBuffering,
   connectionState,
   getVerify: () => effectiveVerify.value,
+  // Skip-window provenance (aniskip vs detected) for the SKIP debug line.
+  getSkipSegments: () => ({ opening: skip.opening.value, ending: skip.ending.value }),
 })
 const {
   playbackStats,

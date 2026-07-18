@@ -12,6 +12,7 @@ func TestSkipStatusConstsSanity(t *testing.T) {
 		SkipNoMatch:     "no_match",
 		SkipPendingFP:   "pending_fp",
 		SkipUnreachable: "unreachable",
+		SkipAniskip:     "aniskip",
 		SkipKindOp:      "op",
 		SkipKindEd:      "ed",
 	}

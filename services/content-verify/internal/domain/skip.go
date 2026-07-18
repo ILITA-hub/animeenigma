@@ -15,6 +15,11 @@ const (
 	SkipNoMatch     = "no_match"
 	SkipPendingFP   = "pending_fp"
 	SkipUnreachable = "unreachable"
+	// SkipAniskip: this side wasn't probed because crowdsourced AniSkip data
+	// already covers it (owner directive 2026-07-18 — don't spend probe
+	// budget re-verifying what AniSkip has; catalog serves AniSkip for it).
+	// Terminal like no_match: never served from here, never re-dued.
+	SkipAniskip = "aniskip"
 
 	SkipKindOp = "op"
 	SkipKindEd = "ed"

@@ -118,14 +118,14 @@ describe('useSkipTimes combo-awareness', () => {
     await flushPromises()
     expect(getSkipTimes).toHaveBeenCalledTimes(2)
     expect(getSkipTimes).toHaveBeenLastCalledWith('123', 1, { anime: 'anime-uuid', provider: 'animepahe' })
-    expect(opening.value).toEqual({ start: 1, end: 2 }) // resolved from the second (current) request
+    expect(opening.value).toEqual({ start: 1, end: 2, source: 'aniskip' }) // resolved from the second (current) request
 
     // The stale first request finally resolves — its result must be dropped
     // (latest-wins token), not overwrite the second request's segment.
     resolveFirst(okResult(999, 999))
     await flushPromises()
     expect(getSkipTimes).toHaveBeenCalledTimes(2) // no extra fetch triggered by the late resolution
-    expect(opening.value).toEqual({ start: 1, end: 2 }) // unchanged — stale response discarded
+    expect(opening.value).toEqual({ start: 1, end: 2, source: 'aniskip' }) // unchanged — stale response discarded
   })
 
   it('does NOT refetch when the combo ref gets a new object with the same animeId/provider/team (e.g. a server-only switch), but DOES refetch on a real provider change', async () => {
@@ -158,5 +158,32 @@ describe('useSkipTimes combo-awareness', () => {
     expect(getSkipTimes).toHaveBeenLastCalledWith('123', 1, {
       anime: 'anime-uuid', provider: 'animepahe', team: 'TeamA',
     })
+  })
+})
+
+describe('useSkipTimes source provenance', () => {
+  it('carries per-item source onto the segments, defaulting absent to aniskip', async () => {
+    getSkipTimes.mockResolvedValue({
+      data: {
+        found: true,
+        results: [
+          { interval: { startTime: 90, endTime: 180 }, skipType: 'op', skipId: '', episodeLength: 0, source: 'aniskip' },
+          { interval: { startTime: 1300, endTime: 1390 }, skipType: 'ed', skipId: '', episodeLength: 0, source: 'detected' },
+        ],
+      },
+    })
+    const { opening, ending } = useSkipTimes(ref('123'), ref(1))
+    await flushPromises()
+
+    expect(opening.value).toEqual({ start: 90, end: 180, source: 'aniskip' })
+    expect(ending.value).toEqual({ start: 1300, end: 1390, source: 'detected' })
+  })
+
+  it('defaults source to aniskip for pre-blend cached responses without the field', async () => {
+    getSkipTimes.mockResolvedValue(okResult())
+    const { opening } = useSkipTimes(ref('123'), ref(1))
+    await flushPromises()
+
+    expect(opening.value?.source).toBe('aniskip')
   })
 })

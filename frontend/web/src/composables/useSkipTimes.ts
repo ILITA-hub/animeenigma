@@ -21,6 +21,11 @@ interface SkipTimesResultItem {
   skipType: string // "op" | "ed" | "mixed-op" | "mixed-ed" | "recap"
   skipId: string
   episodeLength: number
+  // Per-item provenance stamped by the catalog blend: "aniskip"
+  // (crowdsourced, wins per side) or "detected" (content-verify audio
+  // probe, fills the sides AniSkip lacks). Absent on responses cached
+  // before the blend shipped — treated as aniskip.
+  source?: string
 }
 
 interface SkipTimesResult {
@@ -34,6 +39,10 @@ interface SkipTimesResult {
 export interface SkipSegment {
   start: number
   end: number
+  // Where the window came from ("aniskip" | "detected") — surfaced in the
+  // hacker-mode debug stats so a human can tell which source produced the
+  // skip window they're verifying.
+  source?: string
 }
 
 // Task 10 (combo-aware skip times) — the caller's current source selection.
@@ -120,6 +129,7 @@ export function useSkipTimes(
         const seg: SkipSegment = {
           start: item.interval.startTime,
           end: item.interval.endTime,
+          source: item.source || 'aniskip',
         }
         // Aniskip returns 'op'/'ed' for plain openings/endings and
         // 'mixed-op'/'mixed-ed' for combined segments. We treat both as

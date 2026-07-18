@@ -24,6 +24,13 @@ type SkipTask struct {
 	// (and re-fingerprinting) the pair for a kind that's already settled.
 	// Locate tasks (Pair == nil) leave this nil.
 	PairKinds []string
+	// CoveredKinds is the set of kinds AniSkip already covers for the
+	// unit's episode (see aniskipgate.go). Set by Engine.Claim on LOCATE
+	// tasks only — the prober skips a covered kind's window extraction and
+	// records the terminal "aniskip" status for it. Pair tasks ignore
+	// coverage (fully-covered units were filtered before planning; a pair's
+	// bootstrap semantics stay untouched).
+	CoveredKinds []string
 }
 
 // NextSkipTask picks the next skip work item, or nil when the anime's skip
@@ -62,11 +69,7 @@ func NextSkipTask(units []SkipUnit, rows []domain.SkipTiming, fps []domain.SkipF
 		return nil
 	}
 
-	rowByKey := make(map[string]*domain.SkipTiming, len(rows))
-	for i := range rows {
-		r := &rows[i]
-		rowByKey[skipRowKey(r.Provider, r.Team, r.Episode)] = r
-	}
+	rowByKey := skipRowIndex(rows)
 
 	familyOrder, families := groupSkipFamilies(units)
 
@@ -131,6 +134,17 @@ func skipFamilyKey(u SkipUnit) string { return u.Provider + "|" + u.Team }
 
 func skipRowKey(provider, team string, episode int) string {
 	return provider + "|" + team + "|" + strconv.Itoa(episode)
+}
+
+// skipRowIndex builds the (provider|team|episode) → row lookup shared by
+// NextSkipTask and Engine.aniskipCoverage.
+func skipRowIndex(rows []domain.SkipTiming) map[string]*domain.SkipTiming {
+	rowByKey := make(map[string]*domain.SkipTiming, len(rows))
+	for i := range rows {
+		r := &rows[i]
+		rowByKey[skipRowKey(r.Provider, r.Team, r.Episode)] = r
+	}
+	return rowByKey
 }
 
 // rowDue implements the due(row) rule described on NextSkipTask.

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -72,39 +73,58 @@ type resolvedSkipUnit struct {
 // Probe never errors; it returns the rows to upsert (1 for a locate task,
 // 2 for a pair task).
 func (p *SkipProber) Probe(ctx context.Context, t queue.SkipTask, prevFails int) []domain.SkipTiming {
+	// AniSkip probe gate (locate tasks): a covered kind's window is neither
+	// extracted nor analyzed — its side records the terminal "aniskip"
+	// status instead. Fully-covered units are filtered before planning, so
+	// the both-covered branch is defensive only.
+	opCovered := t.Pair == nil && kindCovered(t.CoveredKinds, domain.SkipKindOp)
+	edCovered := t.Pair == nil && kindCovered(t.CoveredKinds, domain.SkipKindEd)
+	if opCovered && edCovered {
+		row := skipRowFromUnit(t.Unit, p.now().UTC())
+		row.OpStatus, row.EdStatus = domain.SkipAniskip, domain.SkipAniskip
+		return []domain.SkipTiming{row}
+	}
+
 	dir, err := os.MkdirTemp(p.workDir, "skip-*")
 	if err != nil {
 		return p.unreachableRows(ctx, t, prevFails, err)
 	}
 	defer os.RemoveAll(dir)
 
-	a, err := p.resolveUnit(ctx, dir, "a", t.Unit)
+	a, err := p.resolveUnit(ctx, dir, "a", t.Unit, !opCovered, !edCovered)
 	if err != nil {
 		return p.unreachableRows(ctx, t, prevFails, err)
 	}
 
 	if t.Pair != nil {
-		b, err := p.resolveUnit(ctx, dir, "b", *t.Pair)
+		b, err := p.resolveUnit(ctx, dir, "b", *t.Pair, true, true)
 		if err != nil {
 			return p.unreachableRows(ctx, t, prevFails, err)
 		}
 		return p.probePair(ctx, dir, t, a, b)
 	}
-	return p.probeLocate(ctx, dir, t, a)
+	return p.probeLocate(ctx, dir, t, a, opCovered, edCovered)
 }
 
-// resolveUnit resolves u's stream and extracts its head window always, plus
-// its tail window when the input is HLS (duration is known from the
-// playlist's summed EXTINF). mp4 units (animejoy, or scraper legs served as
-// mp4) are proxied straight through with an unknown total duration: the
-// head window (seek 0) is still valid, but a tail pulled via -sseof would
-// yield offsets relative to end-of-file that we have no way to turn into
-// absolute episode time without knowing the duration — so mp4 tail
-// extraction is skipped entirely in v1 (tailWav stays ""; callers must
+// kindCovered reports whether kind is in the task's AniSkip-covered set.
+func kindCovered(kinds []string, kind string) bool {
+	return slices.Contains(kinds, kind)
+}
+
+// resolveUnit resolves u's stream and extracts its head window (when
+// needHead), plus its tail window when the input is HLS (duration is known
+// from the playlist's summed EXTINF) and needTail. needHead/needTail are
+// false only for a locate task's AniSkip-covered side — the window would be
+// extracted just to be thrown away. mp4 units (animejoy, or scraper legs
+// served as mp4) are proxied straight through with an unknown total
+// duration: the head window (seek 0) is still valid, but a tail pulled via
+// -sseof would yield offsets relative to end-of-file that we have no way to
+// turn into absolute episode time without knowing the duration — so mp4
+// tail extraction is skipped entirely in v1 (tailWav stays ""; callers must
 // treat that as EdStatus = SkipNoMatch — v1 cannot absolutize mp4 tail
 // times, so this is an honest terminal no-serve rather than an endless
 // pending_fp retry; AniSkip still covers ED there).
-func (p *SkipProber) resolveUnit(ctx context.Context, dir, tag string, u queue.SkipUnit) (*resolvedSkipUnit, error) {
+func (p *SkipProber) resolveUnit(ctx context.Context, dir, tag string, u queue.SkipUnit, needHead, needTail bool) (*resolvedSkipUnit, error) {
 	st, err := p.resolveSkipStream(ctx, u)
 	if err != nil {
 		return nil, err
@@ -122,17 +142,21 @@ func (p *SkipProber) resolveUnit(ctx context.Context, dir, tag string, u queue.S
 		if out.tailSeek < 0 {
 			out.tailSeek = 0
 		}
-		tailWav, err := ExtractWindow(ctx, p.ffmpeg, input, out.tailSeek, p.cfg.TailWindow.Seconds(), tag+"_tail", dir)
+		if needTail {
+			tailWav, err := ExtractWindow(ctx, p.ffmpeg, input, out.tailSeek, p.cfg.TailWindow.Seconds(), tag+"_tail", dir)
+			if err != nil {
+				return nil, err
+			}
+			out.tailWav = tailWav
+		}
+	}
+	if needHead {
+		headWav, err := ExtractWindow(ctx, p.ffmpeg, input, 0, p.cfg.HeadWindow.Seconds(), tag+"_head", dir)
 		if err != nil {
 			return nil, err
 		}
-		out.tailWav = tailWav
+		out.headWav = headWav
 	}
-	headWav, err := ExtractWindow(ctx, p.ffmpeg, input, 0, p.cfg.HeadWindow.Seconds(), tag+"_head", dir)
-	if err != nil {
-		return nil, err
-	}
-	out.headWav = headWav
 	return out, nil
 }
 
@@ -425,8 +449,10 @@ func (p *SkipProber) runLocate(ctx context.Context, kind, wav, fpsPath string, b
 }
 
 // probeLocate runs locate mode: OP against the head window, ED against the
-// tail window (mp4 units skip ED entirely — see resolveUnit).
-func (p *SkipProber) probeLocate(ctx context.Context, dir string, t queue.SkipTask, a *resolvedSkipUnit) []domain.SkipTiming {
+// tail window (mp4 units skip ED entirely — see resolveUnit). An
+// AniSkip-covered side records the terminal "aniskip" status without any
+// analysis — its window was never extracted (see Probe).
+func (p *SkipProber) probeLocate(ctx context.Context, dir string, t queue.SkipTask, a *resolvedSkipUnit, opCovered, edCovered bool) []domain.SkipTiming {
 	now := p.now().UTC()
 	row := skipRowFromUnit(t.Unit, now)
 
@@ -436,22 +462,35 @@ func (p *SkipProber) probeLocate(ctx context.Context, dir string, t queue.SkipTa
 			p.log.Warnw("skip fingerprints fetch failed", "anime_id", t.Unit.AnimeID, "error", err)
 		}
 		row.OpStatus, row.EdStatus = domain.SkipPendingFP, domain.SkipPendingFP
+		if opCovered {
+			row.OpStatus = domain.SkipAniskip
+		}
+		if edCovered {
+			row.EdStatus = domain.SkipAniskip
+		}
 		return []domain.SkipTiming{row}
 	}
 
-	opOut := p.locateSide(ctx, dir, "op", allFPs, domain.SkipKindOp, a.headWav, 0)
-	row.OpStatus = opOut.status
-	if opOut.status == domain.SkipDetected {
-		row.OpStart, row.OpEnd = opOut.start, opOut.end
-		row.Confidence = maxFloat(row.Confidence, opOut.similarity)
+	if opCovered {
+		row.OpStatus = domain.SkipAniskip
+	} else {
+		opOut := p.locateSide(ctx, dir, "op", allFPs, domain.SkipKindOp, a.headWav, 0)
+		row.OpStatus = opOut.status
+		if opOut.status == domain.SkipDetected {
+			row.OpStart, row.OpEnd = opOut.start, opOut.end
+			row.Confidence = maxFloat(row.Confidence, opOut.similarity)
+		}
 	}
 
-	if a.tailWav == "" {
+	switch {
+	case edCovered:
+		row.EdStatus = domain.SkipAniskip
+	case a.tailWav == "":
 		// v1 cannot absolutize mp4 tail times (duration unknown up front) —
 		// honest terminal no-serve rather than an endless pending_fp retry;
 		// AniSkip still covers ED there.
 		row.EdStatus = domain.SkipNoMatch
-	} else {
+	default:
 		edOut := p.locateSide(ctx, dir, "ed", allFPs, domain.SkipKindEd, a.tailWav, a.tailSeek)
 		row.EdStatus = edOut.status
 		if edOut.status == domain.SkipDetected {

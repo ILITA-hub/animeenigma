@@ -489,3 +489,80 @@ func TestOpskipPySelftest(t *testing.T) {
 		t.Fatalf("opskip.py --selftest did not report OK:\n%s", out)
 	}
 }
+
+// TestSkipProbeLocateAniskipCoveredOp: a locate task whose op side AniSkip
+// already covers must record the terminal "aniskip" status for op WITHOUT
+// running the analyzer for it (an op fingerprint exists and the canned
+// locate result is a hit — if the analyzer HAD run, op would be detected),
+// while the uncovered ed side still locates normally.
+func TestSkipProbeLocateAniskipCoveredOp(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/anime/a1/kodik/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"stream_url":"https://cdn.example/media.m3u8","referer":"","exp":"1","sig":"s"}}`))
+	})
+	mux.HandleFunc("/api/streaming/hls-proxy", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("#EXTM3U\n#EXTINF:1440.0,\nseg1.ts\n#EXT-X-ENDLIST\n"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+	ffmpeg := writeFakeFFmpeg(t, t.TempDir())
+	runner := &fakeRunner{
+		opLocate: &OpskipLocate{Found: true, Start: 100, End: 190, Similarity: 0.9, FpIndex: 0},
+	}
+	fps := &fakeFPStore{fps: []domain.SkipFingerprint{
+		{ID: "fp-op-1", AnimeID: "a1", Kind: domain.SkipKindOp, Fp: domain.FpInts{1, 2, 3}},
+		{ID: "fp-ed-1", AnimeID: "a1", Kind: domain.SkipKindEd, Fp: domain.FpInts{4, 5, 6}},
+	}}
+	p := NewSkipProber(cat, srv.URL, ffmpeg, t.TempDir(), runner, fps, testSkipConfig(), nil)
+	p.retryWait = 0
+
+	unit := queue.SkipUnit{AnimeID: "a1", Provider: "kodik", Team: "Trans1", TeamID: 7, Episode: 3}
+	rows := p.Probe(context.Background(), queue.SkipTask{
+		Unit: unit, CoveredKinds: []string{domain.SkipKindOp},
+	}, 0)
+
+	if len(rows) != 1 {
+		t.Fatalf("want 1 row, got %d: %+v", len(rows), rows)
+	}
+	row := rows[0]
+	if row.OpStatus != domain.SkipAniskip {
+		t.Fatalf("op status = %q, want aniskip (covered side must not be analyzed)", row.OpStatus)
+	}
+	if row.OpStart != 0 || row.OpEnd != 0 {
+		t.Fatalf("op window = [%v,%v], want zeroed for the aniskip-covered side", row.OpStart, row.OpEnd)
+	}
+	if row.EdStatus != domain.SkipDetected {
+		t.Fatalf("ed status = %q, want detected (uncovered side still probes)", row.EdStatus)
+	}
+	if wantStart := 1440.0 - 480.0 + 100.0; row.EdStart != wantStart {
+		t.Fatalf("ed start = %v, want %v", row.EdStart, wantStart)
+	}
+}
+
+// TestSkipProbeLocateFullyCoveredNoResolve: the defensive both-covered
+// branch — no stream resolve, no extraction, both sides terminal "aniskip".
+// The test proves no resolve happened by providing NO catalog routes at all:
+// any resolve attempt would fail and produce unreachable statuses instead.
+func TestSkipProbeLocateFullyCoveredNoResolve(t *testing.T) {
+	srv := httptest.NewServer(http.NewServeMux()) // 404 everything
+	defer srv.Close()
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+	p := NewSkipProber(cat, srv.URL, "ffmpeg-not-called", t.TempDir(), &fakeRunner{}, &fakeFPStore{}, testSkipConfig(), nil)
+	p.retryWait = 0
+
+	unit := queue.SkipUnit{AnimeID: "a1", Provider: "kodik", Team: "Trans1", TeamID: 7, Episode: 3}
+	rows := p.Probe(context.Background(), queue.SkipTask{
+		Unit: unit, CoveredKinds: []string{domain.SkipKindOp, domain.SkipKindEd},
+	}, 0)
+
+	if len(rows) != 1 {
+		t.Fatalf("want 1 row, got %d: %+v", len(rows), rows)
+	}
+	if rows[0].OpStatus != domain.SkipAniskip || rows[0].EdStatus != domain.SkipAniskip {
+		t.Fatalf("statuses = op:%q ed:%q, want aniskip/aniskip without any resolve",
+			rows[0].OpStatus, rows[0].EdStatus)
+	}
+}

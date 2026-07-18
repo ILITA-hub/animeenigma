@@ -89,7 +89,7 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	// changing TestClaimEmptyPendingSetsCooldownTTL's outcome from cooldown
 	// to a skip task. See TestClaimReturnsSkipTaskWhenVerifyLaneSettled for
 	// skip-lane coverage.
-	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv, capsHits: capsHits}
 }
 
@@ -136,7 +136,7 @@ func newTwoAnimeGogoanimeFixture(t *testing.T) *engineFixture {
 	}
 	store := repo.NewStore(db)
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
@@ -421,7 +421,7 @@ func newSkipEngineFixture(t *testing.T, skipEnabled bool) *engineFixture {
 		t.Fatal(err)
 	}
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, skipEnabled, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, skipEnabled, nil, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
@@ -532,4 +532,107 @@ func TestClaimSnapshotConcurrent(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+// TestClaimSkipFullyCoveredByAniskipSettles: both skip episodes carry full
+// AniSkip coverage (op+ed) → the gate filters every unit, the skip lane is
+// settled without a single probe, and the title cools down exactly like an
+// idle one.
+func TestClaimSkipFullyCoveredByAniskipSettles(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":2}],"top":[]}}`))
+	})
+	mux.HandleFunc("/api/anime/o1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"families":[{"family":"others","providers":[
+			{"provider":"kodik","state":"active","group":"ru"}]}]}}`))
+	})
+	mux.HandleFunc("/api/anime/o1/kodik/translations", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":[{"id":610,"title":"Kodik","type":"voice","episodes_count":2}]}`))
+	})
+	mux.HandleFunc("/api/anime/o1", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"id":"o1","mal_id":"59970"}}`))
+	})
+	aniskipHits := new(int64)
+	mux.HandleFunc("/api/skip-times/59970/", func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt64(aniskipHits, 1)
+		w.Write([]byte(`{"success":true,"data":{"found":true,"results":[
+			{"interval":{"startTime":90,"endTime":180},"skipType":"op"},
+			{"interval":{"startTime":1300,"endTime":1390},"skipType":"ed"}]}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	sig := signals.New(rdb)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ContentVerification{}, &domain.SkipTiming{}, &domain.SkipFingerprint{}); err != nil {
+		t.Fatal(err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
+	store := repo.NewStore(db)
+	ctx := context.Background()
+	if err := store.UpsertUnit(ctx, "o1", "kodik", domain.UnitVerdict{
+		Key: domain.UnitKey{Team: "610", Category: "dub"}, Episode: 2,
+		Status: domain.StatusVerified, ProbedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewEngine(cat, sig, store, 720*time.Hour, true, nil, nil)
+
+	u, task, release, err := e.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u != nil || task != nil || release != nil {
+		t.Fatalf("fully AniSkip-covered title must be idle, got unit=%+v task=%+v", u, task)
+	}
+	if !sig.InCooldown(ctx, "o1") {
+		t.Fatal("fully covered title must cool down like a settled one")
+	}
+	if hits := atomic.LoadInt64(aniskipHits); hits != 2 {
+		t.Fatalf("aniskip coverage fetches = %d, want 2 (one per episode)", hits)
+	}
+
+	// Second claim within the coverage TTL: the cached coverage must serve —
+	// no new skip-times fetches. (Cooldown is bypassed via a pin to force the
+	// engine to actually re-plan the skip lane.)
+	e.pins = map[string]string{"o1": ""}
+	if _, task, _, err := e.Claim(ctx); err != nil || task != nil {
+		t.Fatalf("second claim: err=%v task=%+v, want idle", err, task)
+	}
+	if hits := atomic.LoadInt64(aniskipHits); hits != 2 {
+		t.Fatalf("aniskip coverage fetches after cached re-plan = %d, want still 2", hits)
+	}
+}
+
+// TestClaimPinBypassesCooldown: a cooled-down title is invisible to Claim —
+// unless it's pinned, in which case its pending verify unit must be claimed
+// anyway.
+func TestClaimPinBypassesCooldown(t *testing.T) {
+	f := newEngineFixture(t, false)
+	ctx := context.Background()
+	f.sig.SetCooldown(ctx, "o1", time.Hour)
+
+	if u, _, _, err := f.engine.Claim(ctx); err != nil || u != nil {
+		t.Fatalf("unpinned cooled-down title must be idle, got unit=%+v err=%v", u, err)
+	}
+
+	f.engine.pins = map[string]string{"o1": ""}
+	u, _, release, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u == nil {
+		t.Fatal("pinned title must bypass its cooldown and claim the pending verify unit")
+	}
+	release()
 }

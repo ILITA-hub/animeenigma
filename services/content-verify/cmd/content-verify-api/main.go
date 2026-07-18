@@ -70,7 +70,7 @@ func main() {
 	store := repo.NewStore(db.DB)
 	sig := signals.New(redisCache.Client())
 	catClient := catalogclient.New(cfg.CatalogURL, cfg.GatewayURL, nil)
-	engine := queue.NewEngine(catClient, sig, store, cfg.ReprobeTTL, cfg.SkipEnabled, log)
+	engine := queue.NewEngine(catClient, sig, store, cfg.ReprobeTTL, cfg.SkipEnabled, cfg.Pins, log)
 	h := handler.NewVerifyHandler(store, sig, engine, log)
 
 	if cfg.WorkerOn {

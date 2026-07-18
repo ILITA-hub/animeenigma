@@ -1134,6 +1134,10 @@ services:
       REDIS_HOST: redis
       CV_CATALOG_URL: http://catalog:8081
       CV_GATEWAY_URL: http://gateway:8000
+      # Operator pin: "uuid[:provider],..." — pinned titles jump the probe
+      # queue, bypass cooldowns, and plan the named provider's skip family
+      # first. Set in docker/.env when needed; empty = no pins.
+      CV_PIN_ANIME: ${CV_PIN_ANIME:-}
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8101:8101"
