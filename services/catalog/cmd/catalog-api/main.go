@@ -705,7 +705,7 @@ func main() {
 		cards.NewDailyFanficResolver(spotlightFanficClient, redisCache, log),
 		// Upcoming-for-you — announced titles matched to the user's taste
 		// via recs (spec 2026-07-17). Login-only.
-		cards.NewUpcomingForYouResolver(spotlightRecsClient, redisCache, log),
+		cards.NewUpcomingForYouResolver(spotlightRecsClient, cards.NewGormListedFilter(db.DB), redisCache, log),
 	}
 	spotlightAggregator := spotlight.NewAggregator(redisCache, log, spotlightResolvers)
 	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)
