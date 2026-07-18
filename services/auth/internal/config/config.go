@@ -13,12 +13,13 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database database.Config
-	Redis    cache.Config
-	JWT      authz.JWTConfig
-	Cookie   CookieConfig
-	Telegram TelegramConfig
+	Server       ServerConfig
+	Database     database.Config
+	Redis        cache.Config
+	JWT          authz.JWTConfig
+	Cookie       CookieConfig
+	Telegram     TelegramConfig
+	TelegramOIDC TelegramOIDCConfig
 
 	// GuestTokenTTL is the lifetime of an ephemeral Watch Together guest
 	// JWT minted by POST /api/auth/guest (AUTH_GUEST_TOKEN_TTL, default 6h).
@@ -38,6 +39,16 @@ type TelegramConfig struct {
 	BotName       string
 	WebhookSecret string
 	WebhookURL    string
+}
+
+// TelegramOIDCConfig configures the OIDC login against oauth.telegram.org.
+// ClientID/ClientSecret come from BotFather (Bot Settings > Web Login).
+// IssuerURL is overridable only so tests can point at a fake IdP.
+type TelegramOIDCConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	IssuerURL    string
 }
 
 type CookieConfig struct {
@@ -95,6 +106,12 @@ func Load() (*Config, error) {
 			BotName:       getEnv("TELEGRAM_BOT_NAME", ""),
 			WebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 			WebhookURL:    getEnv("TELEGRAM_WEBHOOK_URL", ""),
+		},
+		TelegramOIDC: TelegramOIDCConfig{
+			ClientID:     getEnv("TELEGRAM_OIDC_CLIENT_ID", ""),
+			ClientSecret: getEnv("TELEGRAM_OIDC_CLIENT_SECRET", ""),
+			RedirectURL:  getEnv("TELEGRAM_OIDC_REDIRECT_URL", "https://animeenigma.org/api/auth/telegram/oidc/callback"),
+			IssuerURL:    getEnv("TELEGRAM_OIDC_ISSUER", "https://oauth.telegram.org"),
 		},
 		GuestTokenTTL:       getEnvDuration("AUTH_GUEST_TOKEN_TTL", 6*time.Hour),
 		MagicLinkTargetBase: strings.TrimRight(getEnv("MAGIC_LINK_TARGET_BASE", "https://animeenigma.org"), "/"),
