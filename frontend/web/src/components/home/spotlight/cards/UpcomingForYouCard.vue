@@ -109,6 +109,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import SpotlightCardShell from '../SpotlightCardShell.vue'
 import SpotlightPoster from '../ui/SpotlightPoster.vue'
 import { getLocalizedTitle } from '@/utils/title'
+import { sourceLabelKey } from '@/utils/animeMeta'
 import { apiClient } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import type { UpcomingForYouData } from '@/types/spotlight'
@@ -140,15 +141,29 @@ const title = computed<string>(() =>
 const reasonLine = computed<string>(() => {
   const c = current.value
   if (!c) return ''
-  if (c.reason.kind === 'franchise' && c.reason.seed_anime_name) {
+  const r = c.reason
+  if (r.kind === 'franchise' && r.seed_anime_name) {
     const seed =
       locale.value === 'ru'
-        ? c.reason.seed_anime_name_ru || c.reason.seed_anime_name
-        : c.reason.seed_anime_name
+        ? r.seed_anime_name_ru || r.seed_anime_name
+        : r.seed_anime_name
     return t('spotlight.upcomingForYou.reasonFranchise', {
       name: seed,
-      score: c.reason.user_score ?? '?',
+      score: r.user_score ?? '?',
     })
+  }
+  if (r.kind === 'attribute' && r.attribute_name) {
+    if (r.attribute === 'studio') {
+      return t('spotlight.upcomingForYou.reasonStudio', { name: r.attribute_name })
+    }
+    if (r.attribute === 'source') {
+      const key = sourceLabelKey(r.attribute_name)
+      const name = key ? t('anime.sources.' + key) : r.attribute_name
+      return t('spotlight.upcomingForYou.reasonSource', { name })
+    }
+  }
+  if (r.kind === 'anticipated') {
+    return t('spotlight.upcomingForYou.reasonAnticipated')
   }
   return t('spotlight.upcomingForYou.reasonTaste')
 })

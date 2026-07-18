@@ -261,17 +261,25 @@ export interface DailyFanficData {
 }
 
 /**
- * UpcomingForYouCard — login-only announcement matches (spec 2026-07-17).
- * `reason.kind` is `'franchise'` (matched a title in a franchise the viewer
- * rated) or `'taste'` (matched via the general taste model); franchise
- * reasons carry the seed anime's names + the viewer's score for that seed.
+ * UpcomingForYouCard — login-only announcement matches (spec 2026-07-17,
+ * relevance-hardened 2026-07-18). `reason.kind`:
+ *   - `'franchise'`   — matched a title in a franchise the viewer rated;
+ *                       carries the seed anime's names + the viewer's score.
+ *   - `'attribute'`   — matched on a shared attribute; `attribute` is the
+ *                       dimension (`'studio' | 'source'`) and `attribute_name`
+ *                       its value (studio display name, or a source code that
+ *                       maps through `anime.sources.*`).
+ *   - `'anticipated'` — pool-relative MAL popularity is high.
+ *   - `'taste'`       — generic attribute-affinity fallback.
  */
 export interface UpcomingReasonFE {
-  kind: 'franchise' | 'taste'
+  kind: 'franchise' | 'attribute' | 'anticipated' | 'taste'
   seed_anime_id?: string
   seed_anime_name?: string
   seed_anime_name_ru?: string
   user_score?: number
+  attribute?: string
+  attribute_name?: string
 }
 
 export interface UpcomingForYouItem {
