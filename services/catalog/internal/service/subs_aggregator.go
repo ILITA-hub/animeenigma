@@ -16,10 +16,10 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animetosho"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kage"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/subprobe"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
 )
@@ -48,6 +48,7 @@ type SubsAggregator struct {
 	jimaku    *jimaku.Client
 	opensubs  *opensubtitles.Client
 	kage      *kage.Client
+	tosho     *animetosho.Client
 	idmap     *idmapping.Client
 	animeRepo animeRepoForSubs
 	cache     *cache.RedisCache
@@ -55,26 +56,34 @@ type SubsAggregator struct {
 	log       *logger.Logger
 }
 
+// SubsAggregatorDeps names the aggregator's dependencies so call sites (and
+// especially tests, which wire only a slice of them) stay readable as the
+// provider list grows — 9 positional params of which half are nil transpose
+// silently; named fields don't.
+type SubsAggregatorDeps struct {
+	Jimaku    *jimaku.Client
+	OpenSubs  *opensubtitles.Client
+	Kage      *kage.Client
+	Tosho     *animetosho.Client
+	IDMap     *idmapping.Client
+	AnimeRepo animeRepoForSubs
+	Cache     *cache.RedisCache
+	Health    HealthSnapshotter
+	Log       *logger.Logger
+}
+
 // NewSubsAggregator wires the dependencies.
-func NewSubsAggregator(
-	jimakuClient *jimaku.Client,
-	openSubsClient *opensubtitles.Client,
-	kageClient *kage.Client,
-	idMapClient *idmapping.Client,
-	animeRepo *repo.AnimeRepository,
-	redisCache *cache.RedisCache,
-	health HealthSnapshotter,
-	log *logger.Logger,
-) *SubsAggregator {
+func NewSubsAggregator(deps SubsAggregatorDeps) *SubsAggregator {
 	return &SubsAggregator{
-		jimaku:    jimakuClient,
-		opensubs:  openSubsClient,
-		kage:      kageClient,
-		idmap:     idMapClient,
-		animeRepo: animeRepo,
-		cache:     redisCache,
-		health:    health,
-		log:       log,
+		jimaku:    deps.Jimaku,
+		opensubs:  deps.OpenSubs,
+		kage:      deps.Kage,
+		tosho:     deps.Tosho,
+		idmap:     deps.IDMap,
+		animeRepo: deps.AnimeRepo,
+		cache:     deps.Cache,
+		health:    deps.Health,
+		log:       deps.Log,
 	}
 }
 
@@ -99,7 +108,7 @@ type SubtitleTrack struct {
 	Lang     string `json:"lang"`
 	Label    string `json:"label"`
 	Format   string `json:"format,omitempty"`
-	Provider string `json:"provider"` // "jimaku", "opensubtitles", or "kage"
+	Provider string `json:"provider"` // "jimaku", "opensubtitles", "kage", or "animetosho"
 	Release  string `json:"release,omitempty"`
 	// Provenance signature (streamsign) for EXTERNAL track URLs (today only
 	// jimaku.cc), authorizing them through the HLS proxy without a static
@@ -201,7 +210,7 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		tracks []SubtitleTrack
 		err    error
 	}
-	resultsCh := make(chan providerResult, 3)
+	resultsCh := make(chan providerResult, 4)
 	var wg sync.WaitGroup
 
 	start := time.Now()
@@ -230,6 +239,15 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		resultsCh <- providerResult{name: "kage", tracks: tracks, err: err}
 	}()
 
+	// AnimeTosho — official simulcast subs (CR rips, multi-language),
+	// keyed by AniDB id.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tracks, err := s.fetchAnimeTosho(ctx, anime, episode)
+		resultsCh <- providerResult{name: "animetosho", tracks: tracks, err: err}
+	}()
+
 	go func() {
 		wg.Wait()
 		close(resultsCh)
@@ -240,7 +258,7 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		Episode:   episode,
 	}
 
-	outcomes := make([]metrics.SubtitleProviderOutcome, 0, 3)
+	outcomes := make([]metrics.SubtitleProviderOutcome, 0, 4)
 	for r := range resultsCh {
 		if r.err != nil {
 			if errors.Is(r.err, errProviderUnconfigured) {

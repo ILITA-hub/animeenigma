@@ -81,7 +81,7 @@ func TestFetchKage_ReturnsRussianSubTracks(t *testing.T) {
 	defer srv.Close()
 
 	kc := kage.NewClient(kage.Config{BaseURL: srv.URL, Enabled: true})
-	agg := NewSubsAggregator(nil, nil, kc, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{Kage: kc, Cache: resolveTestRedis(t), Log: logger.Default()})
 
 	anime := &domain.Anime{ID: "uuid-1", Name: "Sousou no Frieren", Kind: "tv"}
 	tracks, err := agg.fetchKage(context.Background(), anime, 12)
@@ -108,7 +108,7 @@ func TestFetchKage_EpisodeOutsideRangeYieldsNoTracks(t *testing.T) {
 	defer srv.Close()
 
 	kc := kage.NewClient(kage.Config{BaseURL: srv.URL, Enabled: true})
-	agg := NewSubsAggregator(nil, nil, kc, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{Kage: kc, Cache: resolveTestRedis(t), Log: logger.Default()})
 
 	anime := &domain.Anime{ID: "uuid-1", Name: "Sousou no Frieren", Kind: "tv"}
 	tracks, err := agg.fetchKage(context.Background(), anime, 99)
@@ -125,7 +125,7 @@ func TestFetchKage_UnknownTitleReturnsEmptyNoError(t *testing.T) {
 	defer srv.Close()
 
 	kc := kage.NewClient(kage.Config{BaseURL: srv.URL, Enabled: true})
-	agg := NewSubsAggregator(nil, nil, kc, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{Kage: kc, Cache: resolveTestRedis(t), Log: logger.Default()})
 
 	// Search returns Frieren refs; no exact title match → not on Kage.
 	anime := &domain.Anime{ID: "uuid-2", Name: "Yani Neko", Kind: "tv"}
@@ -143,7 +143,7 @@ func TestFetchKage_ExactMatchDoesNotPickSequelPage(t *testing.T) {
 	defer srv.Close()
 
 	kc := kage.NewClient(kage.Config{BaseURL: srv.URL, Enabled: true})
-	agg := NewSubsAggregator(nil, nil, kc, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{Kage: kc, Cache: resolveTestRedis(t), Log: logger.Default()})
 
 	id, err := agg.resolveKageSeries(context.Background(), &domain.Anime{ID: "uuid-3", Name: "Sousou no Frieren"})
 	if err != nil {
@@ -156,7 +156,7 @@ func TestFetchKage_ExactMatchDoesNotPickSequelPage(t *testing.T) {
 
 func TestFetchKage_DisabledIsUnconfigured(t *testing.T) {
 	kc := kage.NewClient(kage.Config{Enabled: false})
-	agg := NewSubsAggregator(nil, nil, kc, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{Kage: kc, Cache: resolveTestRedis(t), Log: logger.Default()})
 	_, err := agg.fetchKage(context.Background(), &domain.Anime{ID: "x", Name: "y"}, 1)
 	if err != errProviderUnconfigured {
 		t.Fatalf("err = %v, want errProviderUnconfigured", err)
@@ -168,7 +168,7 @@ func TestResolveKageFile_ExtractsEpisodeAndCachesArchive(t *testing.T) {
 	defer srv.Close()
 
 	kc := kage.NewClient(kage.Config{BaseURL: srv.URL, Enabled: true})
-	agg := NewSubsAggregator(nil, nil, kc, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{Kage: kc, Cache: resolveTestRedis(t), Log: logger.Default()})
 
 	body, format, err := agg.ResolveKageFile(context.Background(), 13364, 12)
 	if err != nil {
@@ -204,7 +204,7 @@ func TestResolveKageFile_MissingEpisodeErrors(t *testing.T) {
 	defer srv.Close()
 
 	kc := kage.NewClient(kage.Config{BaseURL: srv.URL, Enabled: true})
-	agg := NewSubsAggregator(nil, nil, kc, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{Kage: kc, Cache: resolveTestRedis(t), Log: logger.Default()})
 
 	if _, _, err := agg.ResolveKageFile(context.Background(), 13364, 7); err == nil {
 		t.Fatal("expected error: episode 7 is not in the pack")

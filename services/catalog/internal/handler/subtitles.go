@@ -102,6 +102,16 @@ func splitTrimLower(s string) []string {
 	return out
 }
 
+// writeSubtitleText serves resolved subtitle bytes as text/plain (the
+// frontend SubtitleOverlay parses ASS/SRT/VTT directly), browser-cacheable
+// for 24h — matching the server-side resolve cache TTL.
+func writeSubtitleText(w http.ResponseWriter, body []byte) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
 // GetKageFile — GET /api/anime/{animeId}/subtitles/kage/file/{srtId}?episode=N.
 //
 // Downloads the Kage release archive (RAR/ZIP), extracts the requested
@@ -129,10 +139,31 @@ func (h *SubtitlesHandler) GetKageFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
+	writeSubtitleText(w, body)
+}
+
+// GetAnimeToshoFile — GET /api/anime/{animeId}/subtitles/animetosho/file/{attachID}.
+//
+// Downloads one AnimeTosho-extracted subtitle attachment (xz-decompressed by
+// the client), cached 24h. Returns text/plain so the frontend SubtitleOverlay
+// parses ASS/SRT/VTT directly.
+func (h *SubtitlesHandler) GetAnimeToshoFile(w http.ResponseWriter, r *http.Request) {
+	attachID, err := strconv.Atoi(chi.URLParam(r, "attachID"))
+	if err != nil || attachID <= 0 {
+		httputil.BadRequest(w, "attachID must be a positive integer")
+		return
+	}
+
+	body, err := h.aggregator.ResolveAnimeToshoFile(r.Context(), attachID)
+	if err != nil {
+		// AnimeTosho has no auth/quota; any failure is upstream availability,
+		// so 503 rather than a paging 500 (mirrors GetKageFile).
+		h.log.Warnw("animetosho file resolve failed", "attach_id", attachID, "error", err)
+		httputil.Error(w, liberrors.ServiceUnavailable("Subtitles are temporarily unavailable."))
+		return
+	}
+
+	writeSubtitleText(w, body)
 }
 
 // GetOpenSubtitlesFile — GET /api/anime/{animeId}/subtitles/opensubtitles/file/{fileID}.
@@ -165,8 +196,5 @@ func (h *SubtitlesHandler) GetOpenSubtitlesFile(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
+	writeSubtitleText(w, body)
 }

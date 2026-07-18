@@ -46,7 +46,7 @@ func TestResolveOpenSubtitlesFile_CachesAfterFirstHit(t *testing.T) {
 	defer srv.Close()
 
 	osc := opensubtitles.NewClient(opensubtitles.Config{APIKey: "k", BaseURL: srv.URL})
-	agg := NewSubsAggregator(nil, osc, nil, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{OpenSubs: osc, Cache: resolveTestRedis(t), Log: logger.Default()})
 
 	body, format, err := agg.ResolveOpenSubtitlesFile(context.Background(), 42)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestResolveOpenSubtitlesFile_QuotaPropagates(t *testing.T) {
 	}))
 	defer srv.Close()
 	osc := opensubtitles.NewClient(opensubtitles.Config{APIKey: "k", BaseURL: srv.URL})
-	agg := NewSubsAggregator(nil, osc, nil, nil, nil, resolveTestRedis(t), nil, logger.Default())
+	agg := NewSubsAggregator(SubsAggregatorDeps{OpenSubs: osc, Cache: resolveTestRedis(t), Log: logger.Default()})
 	_, _, err := agg.ResolveOpenSubtitlesFile(context.Background(), 7)
 	if err == nil {
 		t.Fatal("want quota error, got nil")

@@ -19,6 +19,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animetosho"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kage"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
@@ -613,6 +614,15 @@ func main() {
 		Timeout:   12 * time.Second,
 		Transport: tracing.WrapTransport(nil),
 	})
+	// AnimeTosho — extracted official simulcast subs (Erai-raws Multi-Sub =
+	// CR rips, EN+RU+more), keyed by AniDB id. No key. Added 2026-07-18.
+	toshoClient := animetosho.NewClient(animetosho.Config{
+		FeedBaseURL:    cfg.AnimeTosho.FeedBaseURL,
+		StorageBaseURL: cfg.AnimeTosho.StorageBaseURL,
+		Enabled:        cfg.AnimeTosho.Enabled,
+		Timeout:        cfg.AnimeTosho.Timeout,
+		Transport:      tracing.WrapTransport(nil),
+	})
 	// Wrap idmapping's IPv4-forced transport (preserve the dialer; add recording).
 	idMapClient := idmapping.NewClient(
 		idmapping.WithTransport(tracing.WrapTransport(idmapping.NewIPv4Transport())),
@@ -632,9 +642,15 @@ func main() {
 	if kageClient.IsConfigured() {
 		subPingers["kage"] = kageClient
 	}
+	if toshoClient.IsConfigured() {
+		subPingers["animetosho"] = toshoClient
+	}
 	subtitleProbe := subprobe.New(subHealthStore, subPingers, 2*time.Second, 8*time.Second, log)
 	internalSubtitleProbeHandler := handler.NewInternalSubtitleProbeHandler(subtitleProbe, log)
-	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, kageClient, idMapClient, animeRepo, redisCache, subHealthStore, log)
+	subsAggregator := service.NewSubsAggregator(service.SubsAggregatorDeps{
+		Jimaku: jimakuClient, OpenSubs: openSubsClient, Kage: kageClient, Tosho: toshoClient,
+		IDMap: idMapClient, AnimeRepo: animeRepo, Cache: redisCache, Health: subHealthStore, Log: log,
+	})
 	subtitlesHandler := handler.NewSubtitlesHandler(subsAggregator, log)
 
 	// Workstream hero-spotlight, v1.0 Phase 3 (Plan 03-04) — hero spotlight

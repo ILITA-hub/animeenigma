@@ -29,6 +29,8 @@ type Config struct {
 	OpenSubtitles OpenSubtitlesConfig
 	// Kage — RU fansub archive (fansubs.ru). Replaced anime365 2026-07-18.
 	Kage KageConfig
+	// AnimeTosho — extracted official simulcast subs (added 2026-07-18).
+	AnimeTosho AnimeToshoConfig
 	// Library — self-hosted MinIO HLS source for the first-party ("ae")
 	// provider and the raw JP provider (library-only since 2026-06-22).
 	Library LibraryConfig
@@ -115,6 +117,16 @@ type OpenSubtitlesConfig struct {
 type KageConfig struct {
 	BaseURL string
 	Enabled bool
+}
+
+// AnimeToshoConfig — official simulcast subtitle source (extracted softsub
+// tracks, primarily Erai-raws Multi-Sub = Crunchyroll rips, EN+RU+more).
+// No API key; keyed by AniDB id via ARM.
+type AnimeToshoConfig struct {
+	FeedBaseURL    string
+	StorageBaseURL string
+	Enabled        bool
+	Timeout        time.Duration
 }
 
 // LibraryConfig configures the catalog → library HTTP client used by
@@ -210,6 +222,14 @@ func Load() (*Config, error) {
 		Kage: KageConfig{
 			BaseURL: getEnv("KAGE_BASE_URL", "http://www.fansubs.ru"),
 			Enabled: getEnvBool("KAGE_ENABLED", true),
+		},
+		AnimeTosho: AnimeToshoConfig{
+			// ANIMETOSHO_BASE_URL is shared with the library service's
+			// Jackett-tier animetosho client (same host, same knob).
+			FeedBaseURL:    getEnv("ANIMETOSHO_BASE_URL", "https://feed.animetosho.org"),
+			StorageBaseURL: getEnv("ANIMETOSHO_STORAGE_URL", "https://animetosho.org"),
+			Enabled:        getEnvBool("ANIMETOSHO_ENABLED", true),
+			Timeout:        getEnvDuration("ANIMETOSHO_TIMEOUT", 12*time.Second),
 		},
 		Library: LibraryConfig{
 			APIURL:  getEnv("LIBRARY_API_URL", "http://library:8089"),

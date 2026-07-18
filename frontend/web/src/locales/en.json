@@ -367,7 +367,8 @@
       "providerChip": {
         "jimaku": "Jimaku",
         "opensubtitles": "OpenSubtitles",
-        "kage": "Kage"
+        "kage": "Kage",
+        "animetosho": "AnimeTosho"
       },
       "lang": {
         "ja": "日本語",

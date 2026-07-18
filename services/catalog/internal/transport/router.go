@@ -234,6 +234,9 @@ func NewRouter(
 			// Lazy Kage file resolve — downloads the release archive (RAR/ZIP),
 			// extracts the requested episode's RU subtitle, cached 24h.
 			r.Get("/{animeId}/subtitles/kage/file/{srtId}", subtitlesHandler.GetKageFile)
+			// Lazy AnimeTosho file resolve — one extracted softsub attachment
+			// (official CR simulcast subs via Erai-raws Multi-Sub), cached 24h.
+			r.Get("/{animeId}/subtitles/animetosho/file/{attachID}", subtitlesHandler.GetAnimeToshoFile)
 			// Hanime video sources
 			r.Get("/{animeId}/hanime/episodes", catalogHandler.GetHanimeEpisodes)
 			r.Get("/{animeId}/hanime/stream", catalogHandler.GetHanimeStream)
