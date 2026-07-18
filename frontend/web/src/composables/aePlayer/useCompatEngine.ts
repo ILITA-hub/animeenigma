@@ -30,7 +30,6 @@ export interface AVPlayerLike {
   play(): Promise<void>
   pause(): Promise<void>
   seek(ms: bigint): Promise<void>
-  stop(): Promise<void>
   destroy(): Promise<void>
   setVolume(v: number): void
   setPlaybackRate(r: number): void
@@ -89,6 +88,7 @@ export function useCompatEngine() {
   let gen = 0
   let lastVolume = 100
   let muted = false
+  let lastStatsAt = 0
 
   function applyVolume(): void {
     // AVPlayer volume is a GainNode factor (1 = 100%); no mute API, so mute
@@ -96,22 +96,29 @@ export function useCompatEngine() {
     player.value?.setVolume(muted ? 0 : lastVolume / 100)
   }
 
-  function tick(): void {
+  function tick(now = performance.now()): void {
     const p = player.value
     if (p) {
       // 4 Hz snap, same rationale as usePlaybackClock's PROGRESS_SYNC_HZ.
       const t = Math.floor(toSec(p.currentTime) * 4) / 4
       if (t !== currentTime.value) currentTime.value = t
-      try {
-        const s = p.getStats()
-        stats.value = {
-          decodeFps: Math.round(s.videoDecodeFramerate ?? 0),
-          renderFps: Math.round(s.videoRenderFramerate ?? 0),
-          width: s.width ?? 0,
-          height: s.height ?? 0,
+      // Stats at the same 4 Hz cadence: they only feed the debug HUD and the
+      // clockElement dimensions, and a per-frame reactive write would rebuild
+      // the HUD line at 60 fps on a path where every CPU cycle belongs to the
+      // software decoder.
+      if (now - lastStatsAt >= 250) {
+        lastStatsAt = now
+        try {
+          const s = p.getStats()
+          stats.value = {
+            decodeFps: Math.round(s.videoDecodeFramerate ?? 0),
+            renderFps: Math.round(s.videoRenderFramerate ?? 0),
+            width: s.width ?? 0,
+            height: s.height ?? 0,
+          }
+        } catch {
+          // stats are advisory
         }
-      } catch {
-        // stats are advisory
       }
     }
     raf = requestAnimationFrame(tick)
@@ -186,10 +193,12 @@ export function useCompatEngine() {
       if (opts.rate !== 1) p.setPlaybackRate(opts.rate)
       await p.play()
       if (myGen !== gen) return false
-      if ((opts.startAt ?? 0) >= 1) await p.seek(toMs(opts.startAt!))
+      const startAt = opts.startAt ?? 0
+      if (startAt >= 1) await p.seek(toMs(startAt))
       active.value = true
       paused.value = false
       cancelAnimationFrame(raf)
+      lastStatsAt = 0 // sample stats on the first tick
       raf = requestAnimationFrame(tick)
       return true
     } catch (e) {

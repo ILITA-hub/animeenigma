@@ -75,7 +75,7 @@
 
     <!-- Subtitle overlay -->
     <SubtitleOverlay
-      :video-element="subtitleVideoElement"
+      :video-element="playbackMediaRef"
       :subtitle-url="chosenSubUrl"
       :format="chosenSubFormat"
       :visible="state.subLang.value !== 'off' && !!chosenSubUrl"
@@ -716,6 +716,9 @@ const compatMediaShim = {
     compat.pause()
   },
 }
+// The one switching media ref. SubtitleOverlay binds to it too — it reads
+// only currentTime/videoWidth/videoHeight/clientHeight, all satisfied by the
+// shim (delegating to the compat clock).
 const playbackMediaRef = computed<HTMLVideoElement | null>(() =>
   compat.active.value ? (compatMediaShim as unknown as HTMLVideoElement) : videoRef.value,
 )
@@ -727,11 +730,6 @@ const compatHudLine = computed<string | null>(() => {
   if (!s) return 'engaging…'
   return `${s.decodeFps}/${s.renderFps} fps · ${s.width}×${s.height}`
 })
-// SubtitleOverlay reads only currentTime/videoWidth/videoHeight/clientHeight —
-// the compat clock satisfies that contract.
-const subtitleVideoElement = computed<HTMLVideoElement | null>(() =>
-  compat.active.value ? (compat.clockElement as unknown as HTMLVideoElement) : videoRef.value,
-)
 
 // Guard point 1 — resolver. Offline: a ProviderResolver that reads local
 // downloads instead of hitting any network API (episodes + stream URLs resolve
@@ -1308,6 +1306,17 @@ async function tryEngageCompatEngine(): Promise<boolean> {
   return true
 }
 
+// Shared failover tail: advance to the next candidate source; when none is
+// left, surface the terminal stream-unavailable error. Used by the hls fatal
+// path and the wasm compat engine's failure path.
+async function failoverOrSurfaceError(reason: string): Promise<void> {
+  if (await advanceToNextSource(reason)) {
+    toast.push(t('player.aePlayer.switchFailed'), 'info', 4000)
+    return
+  }
+  if (!sourceError.value) sourceError.value = t('player.aePlayer.streamUnavailable')
+}
+
 watch(engine.fatal, async (f) => {
   if (!f) return
   setBuffering(false)
@@ -1334,11 +1343,7 @@ watch(engine.fatal, async (f) => {
   // recovers to a working one. In hacker mode advanceToNextSource only records
   // the intent and returns false — "BEST" is only meaningful if it lands on a
   // source that plays, but in hacker mode we let you verify that manually.
-  if (await advanceToNextSource('playback fatal')) {
-    toast.push(t('player.aePlayer.switchFailed'), 'info', 4000)
-    return
-  }
-  if (!sourceError.value) sourceError.value = t('player.aePlayer.streamUnavailable')
+  await failoverOrSurfaceError('playback fatal')
 })
 
 // Compat lifecycle bridges: play state drives the shared clock (which owns
@@ -1356,11 +1361,7 @@ watch(compat.ended, (e) => {
 watch(compat.error, async (err) => {
   if (!err || !compat.active.value) return
   await compat.destroy()
-  if (await advanceToNextSource('compat engine failed')) {
-    toast.push(t('player.aePlayer.switchFailed'), 'info', 4000)
-    return
-  }
-  if (!sourceError.value) sourceError.value = t('player.aePlayer.streamUnavailable')
+  await failoverOrSurfaceError('compat engine failed')
 })
 watch(currentStream, () => {
   if (compat.active.value) void compat.destroy()
