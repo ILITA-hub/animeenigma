@@ -64,15 +64,30 @@ vi.mock('@/api/fanfic', () => ({
 
 // route.query is mutated per-test via routeQueryRef.value before mounting —
 // FanficsView only reads route.query.daily once, in onMounted.
-const { routeQueryRef } = vi.hoisted(() => ({
+const { routeQueryRef, routerReplaceMock } = vi.hoisted(() => ({
   routeQueryRef: { value: {} as Record<string, string> },
+  routerReplaceMock: vi.fn(),
 }))
 vi.mock('vue-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-router')>()
   return {
     ...actual,
     useRoute: () => ({ query: routeQueryRef.value }),
+    useRouter: () => ({ replace: routerReplaceMock }),
   }
+})
+
+// Fanfic feature visibility (utils/fanficGate -> policy feed + pinia). Mocked
+// to a mutable holder so tests can flip between a full authoring viewer
+// (true, the default) and a daily-reader-only viewer (false) without booting
+// pinia. Wrapped in a real ComputedRef inside the factory so the template's
+// `v-if="fanficVisible"` unwraps it like the real composable's return.
+const { fanficVisibleHolder } = vi.hoisted(() => ({
+  fanficVisibleHolder: { value: true },
+}))
+vi.mock('@/utils/fanficGate', async () => {
+  const { computed } = await import('vue')
+  return { useFanficVisible: () => computed(() => fanficVisibleHolder.value) }
 })
 
 const pushToastMock = vi.fn()
@@ -193,6 +208,8 @@ describe('FanficsView daily-fanfic deep link (?daily=1)', () => {
     routeQueryRef.value = {}
     getDailyMock.mockReset()
     pushToastMock.mockReset()
+    routerReplaceMock.mockReset()
+    fanficVisibleHolder.value = true
   })
 
   const dailyFanfic = {
@@ -303,5 +320,54 @@ describe('FanficsView daily-fanfic deep link (?daily=1)', () => {
     expect(vm.readerOpen).toBe(true)
     expect(vm.readerFanfic?.id).toBe('lib-1')
     expect(vm.readerIsDaily).toBe(false)
+  })
+
+  // ── Reader-only viewers (fanfic feature NOT visible) ──────────────────────
+  // The ?daily=1 deep link bypasses the route guard's fanfic gate, so users
+  // without the feature can land here. They must get ONLY the daily reader:
+  // no authoring tabs, and any exit (closing the dialog / a failed load)
+  // routes them home instead of stranding them on an empty shell.
+
+  it('reader-only viewer: authoring tabs are hidden, the daily reader opens, and closing it routes home', async () => {
+    fanficVisibleHolder.value = false
+    routeQueryRef.value = { daily: '1' }
+    getDailyMock.mockResolvedValueOnce({ ...dailyFanfic, gated: false })
+
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as FanficsViewVm
+
+    expect(wrapper.find('[data-testid="generate-form-stub"]').exists()).toBe(false)
+    expect(vm.readerOpen).toBe(true)
+
+    vm.readerOpen = false
+    await flushPromises()
+    expect(routerReplaceMock).toHaveBeenCalledWith({ name: 'home' })
+  })
+
+  it('reader-only viewer: a failed daily load toasts and routes home', async () => {
+    fanficVisibleHolder.value = false
+    routeQueryRef.value = { daily: '1' }
+    getDailyMock.mockRejectedValueOnce(new Error('network down'))
+
+    mountView()
+    await flushPromises()
+
+    expect(pushToastMock).toHaveBeenCalledWith('Couldn\'t load today\'s fanfic.', 'error')
+    expect(routerReplaceMock).toHaveBeenCalledWith({ name: 'home' })
+  })
+
+  it('full-feature viewer: closing the daily reader stays on /fanfics (no redirect)', async () => {
+    routeQueryRef.value = { daily: '1' }
+    getDailyMock.mockResolvedValueOnce({ ...dailyFanfic, gated: false })
+
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as FanficsViewVm
+
+    expect(wrapper.find('[data-testid="generate-form-stub"]').exists()).toBe(true)
+    vm.readerOpen = false
+    await flushPromises()
+    expect(routerReplaceMock).not.toHaveBeenCalled()
   })
 })

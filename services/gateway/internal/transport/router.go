@@ -811,16 +811,27 @@ func NewRouterWithCleanup(
 		// the flushing stream proxy (proxyStreamFlush) so token deltas reach
 		// the browser live.
 		r.Route("/fanfic", func(r chi.Router) {
-			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
-			r.Use(userRateLimit)
-			r.Use(BlockGuestRoleMiddleware)
-			r.Use(FeatureGate("fanfic", featureRuleset))
-			r.Post("/generate", proxyHandler.ProxyToFanficStream)
-			r.Post("/{id}/continue", proxyHandler.ProxyToFanficStream)
-			r.Get("/", proxyHandler.ProxyToFanfic)
-			r.Get("/tags", proxyHandler.ProxyToFanfic)
-			r.Get("/{id}", proxyHandler.ProxyToFanfic)
-			r.Delete("/{id}", proxyHandler.ProxyToFanfic)
+			// Public daily reader («Фанфик дня» spotlight click-through). No
+			// JWT / feature gate: the spotlight card is served to everyone,
+			// and the fanfic service applies its own OptionalAuth +
+			// explicit-content gating on this route. The global per-IP
+			// limiter covers anon traffic. Mirrors the /themes
+			// public-routes-then-Group layout; the static /daily segment
+			// wins over the gated /{id} below in chi's routing.
+			r.Get("/daily", proxyHandler.ProxyToFanfic)
+
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
+				r.Use(BlockGuestRoleMiddleware)
+				r.Use(FeatureGate("fanfic", featureRuleset))
+				r.Post("/generate", proxyHandler.ProxyToFanficStream)
+				r.Post("/{id}/continue", proxyHandler.ProxyToFanficStream)
+				r.Get("/", proxyHandler.ProxyToFanfic)
+				r.Get("/tags", proxyHandler.ProxyToFanfic)
+				r.Get("/{id}", proxyHandler.ProxyToFanfic)
+				r.Delete("/{id}", proxyHandler.ProxyToFanfic)
+			})
 		})
 
 		// Upscaler service routes (admin-gated, port 8096). All /api/upscale/*

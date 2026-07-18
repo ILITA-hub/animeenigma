@@ -11,11 +11,12 @@
       Fanfic and opens it in a FanficReader dialog.
 -->
 <script setup lang="ts">
-import { ref, onBeforeUnmount, onMounted } from 'vue'
+import { ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fanficApi } from '@/api/fanfic'
 import { useToast } from '@/composables/useToast'
+import { useFanficVisible } from '@/utils/fanficGate'
 import { Tabs, Modal, Button, Alert } from '@/components/ui'
 import GenerateForm from '@/components/fanfic/GenerateForm.vue'
 import FanficReader from '@/components/fanfic/FanficReader.vue'
@@ -25,6 +26,14 @@ import type { GenerateInput, Fanfic } from '@/types/fanfic'
 const { t } = useI18n()
 const { push: pushToast } = useToast()
 const route = useRoute()
+const router = useRouter()
+
+// The daily-fanfic deep link (?daily=1) bypasses the route guard's fanfic
+// gate — the daily reader is public. Viewers WITHOUT the fanfic feature get
+// only the reader dialog: the authoring tabs stay hidden, and leaving the
+// dialog (or failing to open it) routes them home instead of stranding them
+// on an empty authoring shell.
+const fanficVisible = useFanficVisible()
 
 const activeTab = ref<'generate' | 'library'>('generate')
 
@@ -126,6 +135,7 @@ async function openDailyFanfic(): Promise<void> {
         daily.gate_reason === 'login' ? t('fanfic.daily.loginRequired') : t('fanfic.daily.gated'),
         'info',
       )
+      leaveIfReaderOnly()
       return
     }
     readerFanfic.value = daily
@@ -133,8 +143,20 @@ async function openDailyFanfic(): Promise<void> {
     readerOpen.value = true
   } catch {
     pushToast(t('fanfic.daily.loadError'), 'error')
+    leaveIfReaderOnly()
   }
 }
+
+// Reader-only viewers (no fanfic feature) have nothing else on this page —
+// send them home once the daily dialog is gone. Toasts are app-level, so a
+// nudge pushed just before still shows after the navigation.
+function leaveIfReaderOnly(): void {
+  if (!fanficVisible.value) void router.replace({ name: 'home' })
+}
+
+watch(readerOpen, (open) => {
+  if (!open) leaveIfReaderOnly()
+})
 
 onMounted(() => {
   if (route.query.daily === '1') {
@@ -206,6 +228,7 @@ defineExpose({
       <h1 class="text-3xl font-semibold text-white mb-1">{{ t('fanfic.title') }}</h1>
 
       <Tabs
+        v-if="fanficVisible"
         v-model="activeTab"
         class="mt-6"
         :tabs="[

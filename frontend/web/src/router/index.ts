@@ -394,8 +394,16 @@ router.beforeEach(async (to, _from, next) => {
   // Tab favicon: brand-mark on the main site, legacy cat seal on /admin/*.
   setFaviconVariant(faviconVariantForPath(to.path))
 
+  // Daily-fanfic deep link (/fanfics?daily=1 — DailyFanficCard's "Читать"
+  // CTA): the daily reader is public by design (the spotlight card is served
+  // to everyone; the gateway exposes GET /api/fanfic/daily anonymously and
+  // the fanfic service gates explicit picks itself), so it bypasses both
+  // requiresAuth and the fanfic feature gate below. FanficsView hides the
+  // authoring tabs for viewers without the fanfic feature.
+  const isDailyFanficDeepLink = to.name === 'fanfics' && to.query.daily === '1'
+
   // Check authentication
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+  if (to.meta.requiresAuth && !authStore.isAuthenticated && !isDailyFanficDeepLink) {
     sessionStorage.setItem('returnUrl', to.fullPath)
     next({ name: 'auth' })
     return
@@ -452,7 +460,11 @@ router.beforeEach(async (to, _from, next) => {
       return
     }
 
-    if (to.meta.fanficGated && !resolveVisible('fanfic', feed, authStore.isAdmin)) {
+    if (
+      to.meta.fanficGated &&
+      !isDailyFanficDeepLink &&
+      !resolveVisible('fanfic', feed, authStore.isAdmin)
+    ) {
       next({ name: 'home' })
       return
     }

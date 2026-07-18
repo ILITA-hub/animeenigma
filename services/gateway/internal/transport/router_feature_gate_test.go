@@ -170,6 +170,33 @@ func TestRouter_FeatureGate_Fanfic_AdminJWT_ProxiesToFanfic(t *testing.T) {
 	}
 }
 
+func TestRouter_Fanfic_DailyReader_PublicNoToken_ProxiesToFanfic(t *testing.T) {
+	// GET /api/fanfic/daily is the «Фанфик дня» spotlight click-through — the
+	// card is served to everyone, so the reader must bypass JWT + the fanfic
+	// FeatureGate (the fanfic service does OptionalAuth + explicit gating).
+	// Regression: the route was missing entirely, so anon users got 401 and
+	// non-admins 403 while the spotlight advertised the story to them.
+	gw := buildFeatureGateGatewayRouter(t)
+	defer gw.teardown()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/fanfic/daily", nil)
+	req.RemoteAddr = "10.0.1.13:1234"
+	rec := httptest.NewRecorder()
+	gw.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	select {
+	case got := <-gw.fanficGotURL:
+		if got != "/api/fanfic/daily" {
+			t.Errorf("fanfic backend received path = %q; want /api/fanfic/daily", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("fanfic backend never received the anon /daily request")
+	}
+}
+
 // --- /api/gacha/wallet -------------------------------------------------
 
 func TestRouter_FeatureGate_GachaWallet_NoToken_Returns401(t *testing.T) {
