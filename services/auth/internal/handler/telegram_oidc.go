@@ -83,5 +83,18 @@ func (h *TelegramOIDCHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	metrics.AuthEventsTotal.WithLabelValues("telegram_login", "success").Inc()
 	h.cookie.setRefreshTokenCookie(w, resp.RefreshToken)
 	h.cookie.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
+	// One-shot SPA bootstrap marker (same contract as the magic-link bridge,
+	// magiclink.go): the JS-visible ae_sso=1 tells main.ts to mint an access
+	// token into localStorage via /auth/refresh — without it the SPA renders
+	// logged-out despite valid httpOnly cookies, because this login happened
+	// outside any XHR the store could observe.
+	http.SetCookie(w, &http.Cookie{
+		Name:     "ae_sso",
+		Value:    "1",
+		Path:     "/",
+		MaxAge:   60,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
 	http.Redirect(w, r, returnPath, http.StatusFound)
 }
