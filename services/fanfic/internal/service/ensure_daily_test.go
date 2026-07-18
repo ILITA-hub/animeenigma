@@ -50,28 +50,32 @@ type fakeAlerter struct{ sent []string }
 
 func (a *fakeAlerter) Send(_ context.Context, s string) error { a.sent = append(a.sent, s); return nil }
 
+// testNow = 2023-11-14 22:13:20 UTC — the fixed clock every EnsureDaily test
+// runs under; CreatedAt values below are chosen relative to this instant.
+var testNow = time.Unix(1700000000, 0).UTC()
+
 func newDaily(repo dailyRepo, stream streamer, al *fakeAlerter) *DailyService {
-	return NewDailyService(stream, repo, fakeMeta{}, al, "m", []string{"20"}, "ru", func() time.Time { return time.Unix(1700000000, 0) }, nil)
+	return NewDailyService(stream, repo, fakeMeta{}, al, "m", []string{"20"}, "ru", func() time.Time { return testNow }, nil)
 }
 
-func TestEnsureDaily_UserFanficExists_NoOp(t *testing.T) {
-	repo := &fakeRepo{eligible: []domain.Fanfic{{ID: "u", AIGenerated: false, Status: domain.StatusComplete}}}
+func TestEnsureDaily_UserFanficExists_StillGeneratesDailyBot(t *testing.T) {
+	// A user fanfic must NOT suppress bot generation: the bot is the guaranteed
+	// fallback for the day the user fanfic ages out, and the Groq call is the
+	// daily API-key health probe. PickDaily still prefers the user fanfic.
+	repo := &fakeRepo{eligible: []domain.Fanfic{{ID: "u", AIGenerated: false, Status: domain.StatusComplete, CreatedAt: testNow.Add(-2 * time.Hour)}}}
 	al := &fakeAlerter{}
 	stream := &fakeStream{text: "# T\n\nBody"}
 	res, err := newDaily(repo, stream, al).EnsureDaily(context.Background())
-	if err != nil || res.Generated || res.Reason != "user_exists" {
+	if err != nil || !res.Generated || res.Reason != "generated" {
 		t.Fatalf("res=%+v err=%v", res, err)
 	}
-	if repo.created != nil {
-		t.Fatal("must not generate when a user fanfic exists")
-	}
-	if stream.calls != 0 {
-		t.Fatalf("must not call groq on the user_exists no-op path; calls=%d", stream.calls)
+	if repo.created == nil || stream.calls != 1 {
+		t.Fatalf("user fanfic must not suppress the daily bot; created=%v calls=%d", repo.created, stream.calls)
 	}
 }
 
-func TestEnsureDaily_BotFanficExists_NoOp(t *testing.T) {
-	repo := &fakeRepo{eligible: []domain.Fanfic{{ID: "b", AIGenerated: true, Status: domain.StatusComplete}}}
+func TestEnsureDaily_BotFanficExistsToday_NoOp(t *testing.T) {
+	repo := &fakeRepo{eligible: []domain.Fanfic{{ID: "b", AIGenerated: true, Status: domain.StatusComplete, CreatedAt: testNow.Add(-2 * time.Hour)}}}
 	al := &fakeAlerter{}
 	stream := &fakeStream{text: "# T\n\nBody"}
 	res, err := newDaily(repo, stream, al).EnsureDaily(context.Background())
@@ -83,6 +87,24 @@ func TestEnsureDaily_BotFanficExists_NoOp(t *testing.T) {
 	}
 	if stream.calls != 0 {
 		t.Fatalf("must not call groq on the bot_exists no-op path; calls=%d", stream.calls)
+	}
+}
+
+func TestEnsureDaily_YesterdaysBotInWindow_Generates(t *testing.T) {
+	// Regression (2026-07-17 outage): a bot generated shortly AFTER yesterday's
+	// cron tick is still inside the eligibility window when today's cron runs.
+	// Counting it as "bot_exists" skips generation — then it ages out and the
+	// site serves 404 for the rest of the day. Only a bot created on the
+	// CURRENT UTC day may satisfy the idempotence check.
+	repo := &fakeRepo{eligible: []domain.Fanfic{{ID: "b-yday", AIGenerated: true, Status: domain.StatusComplete, CreatedAt: testNow.Add(-23 * time.Hour)}}}
+	al := &fakeAlerter{}
+	stream := &fakeStream{text: "# T\n\nBody"}
+	res, err := newDaily(repo, stream, al).EnsureDaily(context.Background())
+	if err != nil || !res.Generated || res.Reason != "generated" {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	if repo.created == nil || stream.calls != 1 {
+		t.Fatalf("yesterday's bot must not satisfy today's idempotence check; created=%v calls=%d", repo.created, stream.calls)
 	}
 }
 

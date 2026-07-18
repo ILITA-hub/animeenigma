@@ -17,7 +17,6 @@ import (
 const (
 	FanficBotUserID   = "00000000-0000-0000-0000-0000000000b0"
 	FanficBotUsername = "AnimeEnigma"
-	eligibleWindow    = 24 * time.Hour
 )
 
 type dailyRepo interface {
@@ -61,33 +60,31 @@ func NewDailyService(groq streamer, repo dailyRepo, meta animeMetaFetcher, alert
 
 // DailyPick returns the day's fanfic (or nil). Shared by both daily handlers.
 func (s *DailyService) DailyPick(ctx context.Context) (*domain.Fanfic, error) {
-	eligible, err := s.repo.ListEligibleSince(ctx, s.now().Add(-eligibleWindow))
+	eligible, err := s.repo.ListEligibleSince(ctx, EligibleWindowStart(s.now()))
 	if err != nil {
 		return nil, err
 	}
 	return PickDaily(eligible, DailySeed(s.now())), nil
 }
 
-// EnsureDaily generates a bot fanfic when no eligible user fanfic exists in the
-// window. The Groq call doubles as the daily key-health probe: a 401/403 fires a
-// Telegram alert. Idempotent — skips if a bot fanfic already exists today.
+// EnsureDaily generates today's bot fanfic. It runs unconditionally of user
+// fanfics: the bot is the guaranteed fallback for the day any user fanfic ages
+// out of the window (PickDaily still prefers user fanfics, so an unneeded bot
+// simply stays invisible), and the Groq call doubles as the daily key-health
+// probe — a 401/403 fires a Telegram alert. Idempotent — skips only when a bot
+// fanfic was already created on the CURRENT UTC day; a bot from yesterday
+// still sitting in the eligibility window must NOT satisfy the check (it
+// expires at the next midnight rollover, which would leave the day empty).
 func (s *DailyService) EnsureDaily(ctx context.Context) (EnsureResult, error) {
-	since := s.now().Add(-eligibleWindow)
-	eligible, err := s.repo.ListEligibleSince(ctx, since)
+	now := s.now()
+	eligible, err := s.repo.ListEligibleSince(ctx, EligibleWindowStart(now))
 	if err != nil {
 		return EnsureResult{}, err
 	}
 	for _, f := range eligible {
-		if !f.AIGenerated {
-			return EnsureResult{Generated: false, Reason: "user_exists"}, nil
+		if f.AIGenerated && DailySeed(f.CreatedAt) == DailySeed(now) {
+			return EnsureResult{Generated: false, Reason: "bot_exists"}, nil
 		}
-	}
-	// Past the loop, every eligible entry is AI-generated (the loop returns on
-	// any user fanfic), so a non-empty slice means a bot fanfic already exists
-	// today. Deriving this from the slice in hand avoids a redundant query whose
-	// swallowed error could otherwise let a second bot fanfic be generated.
-	if len(eligible) > 0 {
-		return EnsureResult{Generated: false, Reason: "bot_exists"}, nil
 	}
 
 	req := s.randomRequest(ctx)

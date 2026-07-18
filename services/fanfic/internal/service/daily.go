@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/ILITA-hub/animeenigma/services/fanfic/internal/domain"
@@ -15,9 +16,23 @@ func DailySeed(t time.Time) int {
 	return u.Year()*100*32 + int(u.Month())*32 + u.Day()
 }
 
+// EligibleWindowStart returns the pick-eligibility window start: UTC midnight
+// of the PREVIOUS day. Day-aligned (vs a rolling now-24h) so an in-window
+// fanfic never ages out mid-day — the pool only shrinks at the UTC midnight
+// rollover, the same instant DailySeed and the spotlight cache key change.
+// (Regression 2026-07-17: the rolling window let the day's only pick expire
+// at 04:41, 404-ing the reader while the cached card still advertised it.)
+func EligibleWindowStart(t time.Time) time.Time {
+	u := t.UTC()
+	return time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, time.UTC).Add(-24 * time.Hour)
+}
+
 // PickDaily deterministically selects one fanfic for the day. User-authored
-// fanfics are preferred; AI-generated ones are the fallback pool. Returns nil
-// when nothing is eligible. `eligible` is assumed pre-sorted (created_at,id).
+// fanfics are preferred (date-seeded pick); AI-generated ones are the
+// fallback pool, from which the OLDEST in-window bot wins — that is
+// yesterday's generation, and it stays the winner for the whole UTC day even
+// after the cron inserts today's bot. Returns nil when nothing is eligible.
+// `eligible` is assumed pre-sorted (created_at,id).
 func PickDaily(eligible []domain.Fanfic, seed int) *domain.Fanfic {
 	var users, bots []domain.Fanfic
 	for _, f := range eligible {
@@ -27,18 +42,17 @@ func PickDaily(eligible []domain.Fanfic, seed int) *domain.Fanfic {
 			users = append(users, f)
 		}
 	}
-	pool := users
-	if len(pool) == 0 {
-		pool = bots
+	if len(users) == 0 {
+		if len(bots) == 0 {
+			return nil
+		}
+		return &bots[0]
 	}
-	if len(pool) == 0 {
-		return nil
-	}
-	idx := seed % len(pool)
+	idx := seed % len(users)
 	if idx < 0 {
-		idx += len(pool)
+		idx += len(users)
 	}
-	return &pool[idx]
+	return &users[idx]
 }
 
 // DailyDTO is the wire shape shared by GET /internal/fanfic/daily (spotlight,
@@ -90,13 +104,14 @@ func ToDTO(f *domain.Fanfic) DailyDTO {
 	return d
 }
 
-// BuildExcerpt returns a clean plain-text teaser: drops leading markdown
-// headings / horizontal rules, takes the first non-empty paragraph, and clamps
-// to maxRunes on a word boundary.
+// BuildExcerpt returns a clean plain-text teaser: drops markdown headings and
+// decoration-only paragraphs (horizontal rules, "-_-_-…" dividers — anything
+// without a letter or digit), takes the first prose paragraph, and clamps to
+// maxRunes on a word boundary.
 func BuildExcerpt(content string, maxRunes int) string {
 	for _, para := range strings.Split(content, "\n\n") {
 		p := strings.TrimSpace(para)
-		if p == "" || strings.HasPrefix(p, "#") || p == "---" {
+		if strings.HasPrefix(p, "#") || !hasProse(p) {
 			continue
 		}
 		p = strings.ReplaceAll(p, "\n", " ")
@@ -111,4 +126,14 @@ func BuildExcerpt(content string, maxRunes int) string {
 		return strings.TrimSpace(cut) + "…"
 	}
 	return ""
+}
+
+// hasProse reports whether s contains at least one letter or digit.
+func hasProse(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			return true
+		}
+	}
+	return false
 }
