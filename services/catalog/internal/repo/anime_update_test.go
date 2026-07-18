@@ -53,6 +53,8 @@ func setupAnimeUpdateTestDB(t *testing.T) *gorm.DB {
 		shikimori_id TEXT,
 		mal_id TEXT,
 		ani_list_id TEXT,
+		mal_members INTEGER DEFAULT 0,
+		mal_favorites INTEGER DEFAULT 0,
 		im_db_id TEXT,
 		tmdb_id TEXT,
 		has_video INTEGER DEFAULT 0,
