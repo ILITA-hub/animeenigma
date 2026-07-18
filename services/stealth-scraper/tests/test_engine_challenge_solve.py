@@ -177,13 +177,17 @@ class TestSolveCfChallenge(unittest.TestCase):
 
 
 class _FakeLog:
-    """Captures warning() calls to assert on the diagnostic timeout log."""
+    """Captures warning() calls and renders the % message the way stdlib
+    logging.Logger.warning(msg, *args) actually does — so a test asserting on
+    ``rendered`` catches a regression to `extra=`-only fields (which the
+    app's plain "%(message)s" formatter silently drops, see the fixed bug)."""
 
     def __init__(self):
         self.warnings = []
 
     def warning(self, msg, *args, **kwargs):
-        self.warnings.append((msg, kwargs.get("extra", {})))
+        rendered = msg % args if args else msg
+        self.warnings.append(rendered)
 
 
 class TestSolveCfChallengeDiagnosticLog(unittest.TestCase):
@@ -209,11 +213,11 @@ class TestSolveCfChallengeDiagnosticLog(unittest.TestCase):
             ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
         self.assertFalse(ok)
         self.assertEqual(len(log.warnings), 1)
-        msg, extra = log.warnings[0]
-        self.assertIn("timed out", msg)
-        self.assertEqual(extra["host"], "animepahe.pw")
-        self.assertEqual(extra["clicks"], 0)
-        self.assertFalse(extra["clearance_obtained"])
+        rendered = log.warnings[0]
+        self.assertIn("timed out", rendered)
+        self.assertIn("host=animepahe.pw", rendered)
+        self.assertIn("clicks=0", rendered)
+        self.assertIn("clearance_obtained=False", rendered)
 
     def test_no_warning_logged_on_success(self):
         eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,

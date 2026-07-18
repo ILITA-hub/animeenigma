@@ -1148,14 +1148,16 @@ class CamoufoxEngine:
                 final_title = await page.title()
             except Exception:  # noqa: BLE001
                 final_title = ""
+            # The values MUST be interpolated into the message itself (not just
+            # passed via `extra=`) — main.py's logging.basicConfig format string
+            # is "%(asctime)s %(levelname)s %(message)s", which silently drops
+            # any `extra` keys the formatter doesn't reference. A prior version
+            # of this fix relied on `extra=` alone and the diagnostic fields
+            # never actually reached stdout/docker logs.
             self._log.warning(
-                "challenge solve timed out",
-                extra={
-                    "host": host_of(origin),
-                    "clicks": clicks,
-                    "clearance_obtained": clearance_since != 0.0,
-                    "final_title": final_title[:80],
-                },
+                "challenge solve timed out host=%s clicks=%d clearance_obtained=%s "
+                "final_title=%r",
+                host_of(origin), clicks, clearance_since != 0.0, final_title[:80],
             )
         return False
 
