@@ -14,7 +14,7 @@ import (
 // case-insensitively. (audit medium #6)
 func TestLoginThrottle(t *testing.T) {
 	c := newFakeCache()
-	s := NewAuthService(nil, nil, c, authz.JWTConfig{}, time.Hour, logger.Default())
+	s := NewAuthService(nil, nil, c, authz.JWTConfig{}, "", time.Hour, logger.Default())
 	s.loginMaxFails = 3
 	s.loginFailWindow = time.Minute
 	ctx := context.Background()
@@ -45,7 +45,7 @@ func TestLoginThrottle(t *testing.T) {
 // A zero/negative threshold disables the throttle (never locks).
 func TestLoginThrottle_Disabled(t *testing.T) {
 	c := newFakeCache()
-	s := NewAuthService(nil, nil, c, authz.JWTConfig{}, time.Hour, logger.Default())
+	s := NewAuthService(nil, nil, c, authz.JWTConfig{}, "", time.Hour, logger.Default())
 	s.loginMaxFails = 0
 	ctx := context.Background()
 	for i := 0; i < 50; i++ {

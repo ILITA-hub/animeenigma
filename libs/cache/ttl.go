@@ -11,6 +11,7 @@ var (
 	TTLSession     = 24 * time.Hour
 	TTLRateLimit   = 1 * time.Minute
 	TTLUserOnline    = 5 * time.Minute
+	TTLTelegramAuth  = 5 * time.Minute
 	// One-time cross-domain SSO handoff token. Deliberately tiny — the token
 	// rides in a URL during a single redirect chain.
 	TTLXDomainMagic = 60 * time.Second
@@ -100,6 +101,10 @@ func KeyRateLimit(identifier, action string) string {
 
 func KeyRoom(roomID string) string {
 	return PrefixRoom + roomID
+}
+
+func KeyTelegramAuth(token string) string {
+	return PrefixTelegramAuth + token
 }
 
 func KeyTopAnime() string {

@@ -14,7 +14,7 @@ import (
 
 func NewRouter(
 	authHandler *handler.AuthHandler,
-	telegramOIDCHandler *handler.TelegramOIDCHandler,
+	telegramBotHandler *handler.TelegramBotHandler,
 	userHandler *handler.UserHandler,
 	sessionsHandler *handler.SessionsHandler,
 	magicLinkHandler *handler.MagicLinkHandler,
@@ -61,10 +61,9 @@ func NewRouter(
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
 			r.Post("/guest", authHandler.GuestSession)
-			// Telegram OIDC login (2026 flow). Browser-facing 302 endpoints —
-			// the gateway forwards them redirect-transparently.
-			r.Get("/telegram/oidc/start", telegramOIDCHandler.Start)
-			r.Get("/telegram/oidc/callback", telegramOIDCHandler.Callback)
+			r.Post("/telegram/deeplink", authHandler.DeepLink)
+			r.Get("/telegram/check", authHandler.CheckDeepLink)
+			r.Post("/telegram/webhook", telegramBotHandler.HandleWebhook)
 			r.Post("/refresh", authHandler.RefreshToken)
 			r.Post("/logout", authHandler.Logout)
 		})

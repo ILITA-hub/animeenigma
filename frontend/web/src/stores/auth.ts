@@ -247,6 +247,32 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const requestDeepLink = async (): Promise<{ token: string; deeplink_url: string; expires_in: number } | null> => {
+    error.value = null
+    try {
+      const response = await apiClient.post('/auth/telegram/deeplink')
+      return response.data?.data || response.data
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+      error.value = e.response?.data?.error?.message || e.response?.data?.message || i18n.global.t('auth.telegramLoginError')
+      return null
+    }
+  }
+
+  const checkDeepLink = async (token: string): Promise<{ status: string; access_token?: string; user?: User } | null> => {
+    try {
+      const response = await apiClient.get(`/auth/telegram/check?token=${token}`)
+      const data = response.data?.data || response.data
+      if (data.status === 'confirmed' && data.access_token) {
+        setToken(data.access_token)
+        setUser(data.user)
+      }
+      return data
+    } catch {
+      return { status: 'expired' }
+    }
+  }
+
   const logout = async () => {
     // Call logout endpoint to clear the httpOnly cookie
     try {
@@ -375,6 +401,8 @@ export const useAuthStore = defineStore('auth', () => {
     ensureGuestToken,
     login,
     register,
+    requestDeepLink,
+    checkDeepLink,
     logout,
     fetchUser,
     setUser,

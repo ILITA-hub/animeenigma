@@ -1110,15 +1110,23 @@
   },
   "auth": {
     "heading": "AnimeEnigmaにサインイン",
+    "qrAlt": "TelegramログインのQRコード",
     "telegramLogin": "Telegramでログイン",
+    "loading": "読み込み中...",
     "backHome": "ホームに戻る",
     "loginError": "ログインエラー",
     "registerError": "登録エラー",
-    "continueWithTelegram": "Telegramで続行",
-    "oidcHint": "確認のためTelegramにリダイレクトされます。ワンタップで戻ります。",
-    "errorTelegram": "Telegramログインに失敗しました。もう一度お試しください。",
-    "errorExpired": "ログイン試行の有効期限が切れました。もう一度お試しください。",
-    "errorDenied": "Telegramでログインがキャンセルされました。"
+    "telegramLoginError": "Telegramログインエラー",
+    "openInTelegram": "Telegramで開く",
+    "expiresIn": "{seconds}秒後に期限切れ",
+    "sessionExpired": "セッションが期限切れです",
+    "tryAgain": "もう一度試す",
+    "troubleshootingHint": "問題がありますか？Telegramで {'@'}animeenigma_auth_bot をブロックしていないか確認してください。",
+    "openInBrowser": "アプリがない場合：ブラウザで開く",
+    "tgWebToggle": "Telegram Webを使用中ですか？",
+    "tgWebInstructions": "Telegramで {'@'}animeenigma_auth_bot を開き、次のメッセージを送信してください：",
+    "tgWebCopy": "コピー",
+    "tgWebCopied": "コピー済み"
   },
   "notFound": {
     "code": "404",

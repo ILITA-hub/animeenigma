@@ -44,16 +44,18 @@ func sessionContextFromReq(r *http.Request) service.SessionContext {
 }
 
 type AuthHandler struct {
-	authService  *service.AuthService
-	cookieConfig config.CookieConfig
-	log          *logger.Logger
+	authService    *service.AuthService
+	cookieConfig   config.CookieConfig
+	telegramConfig config.TelegramConfig
+	log            *logger.Logger
 }
 
-func NewAuthHandler(authService *service.AuthService, cookieConfig config.CookieConfig, log *logger.Logger) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, cookieConfig config.CookieConfig, telegramConfig config.TelegramConfig, log *logger.Logger) *AuthHandler {
 	return &AuthHandler{
-		authService:  authService,
-		cookieConfig: cookieConfig,
-		log:          log,
+		authService:    authService,
+		cookieConfig:   cookieConfig,
+		telegramConfig: telegramConfig,
+		log:            log,
 	}
 }
 
@@ -278,6 +280,42 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	h.clearRefreshTokenCookie(w)
 	h.clearAccessTokenCookie(w)
 	httputil.NoContent(w)
+}
+
+// DeepLink creates a new deep link auth token and returns the Telegram bot URL.
+func (h *AuthHandler) DeepLink(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.authService.CreateDeepLinkToken(r.Context(), h.telegramConfig.BotName)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, resp)
+}
+
+// CheckDeepLink polls the status of a deep link auth token.
+func (h *AuthHandler) CheckDeepLink(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		httputil.Error(w, errors.InvalidInput("token is required"))
+		return
+	}
+
+	sc := sessionContextFromReq(r)
+	checkResp, authResp, err := h.authService.CheckDeepLinkToken(r.Context(), token, sc)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	// If confirmed, set auth cookies
+	if authResp != nil {
+		metrics.AuthEventsTotal.WithLabelValues("telegram_login", "success").Inc()
+		h.setRefreshTokenCookie(w, authResp.RefreshToken)
+		h.setAccessTokenCookie(w, authResp.AccessToken, authResp.ExpiresAt)
+	}
+
+	httputil.OK(w, checkResp)
 }
 
 // GenerateApiKey creates a new API key for the authenticated user

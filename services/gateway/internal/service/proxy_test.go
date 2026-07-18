@@ -145,50 +145,6 @@ func newTestProxy(scraperURL string) *ProxyService {
 	}, logger.Default())
 }
 
-// TestProxyService_Forward_ReforwardsAuthOIDCBindCookie — regression for the
-// gateway silently swallowing the Telegram OIDC browser-binding cookie. The
-// hopByHopHeaders table strips Cookie from every proxied request (BLK-02),
-// and the "auth" carve-out in forwardWith only re-forwarded refresh_token —
-// so /api/auth/telegram/oidc/callback never saw ae_oidc_bind and failed
-// closed with /auth?error=expired on every real login. Both cookies must
-// reach the backend; anything else must not.
-func TestProxyService_Forward_ReforwardsAuthOIDCBindCookie(t *testing.T) {
-	t.Parallel()
-	gotCookies := make(chan []*http.Cookie, 1)
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotCookies <- r.Cookies()
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer backend.Close()
-
-	p := NewProxyService(config.ServiceURLs{
-		AuthService: backend.URL,
-	}, logger.Default())
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/telegram/oidc/callback", nil)
-	req.Header.Set("Cookie", "ae_oidc_bind=nonce123; refresh_token=rt456; some_other=x")
-
-	resp, err := p.Forward(req, "auth")
-	if err != nil {
-		t.Fatalf("Forward: %v", err)
-	}
-	defer resp.Body.Close()
-
-	cookies := <-gotCookies
-	got := make(map[string]string, len(cookies))
-	for _, c := range cookies {
-		got[c.Name] = c.Value
-	}
-	if got["ae_oidc_bind"] != "nonce123" {
-		t.Errorf("backend ae_oidc_bind = %q; want %q", got["ae_oidc_bind"], "nonce123")
-	}
-	if got["refresh_token"] != "rt456" {
-		t.Errorf("backend refresh_token = %q; want %q", got["refresh_token"], "rt456")
-	}
-	if _, ok := got["some_other"]; ok {
-		t.Errorf("backend received unexpected cookie some_other = %q; must be stripped", got["some_other"])
-	}
-}
-
 // TestProxyService_GetServiceURL_Scraper asserts the "scraper" case routes to
 // ServiceURLs.ScraperService.
 func TestProxyService_GetServiceURL_Scraper(t *testing.T) {

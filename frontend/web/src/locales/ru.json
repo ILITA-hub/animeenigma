@@ -1110,15 +1110,23 @@
   },
   "auth": {
     "heading": "Войти в AnimeEnigma",
+    "qrAlt": "QR-код входа через Telegram",
     "telegramLogin": "Войти через Telegram",
+    "loading": "Загрузка...",
     "backHome": "Вернуться на главную",
     "loginError": "Ошибка входа",
     "registerError": "Ошибка регистрации",
-    "continueWithTelegram": "Продолжить через Telegram",
-    "oidcHint": "Вас перенаправит в Telegram для подтверждения — один тап, и сразу обратно.",
-    "errorTelegram": "Не удалось войти через Telegram. Попробуйте ещё раз.",
-    "errorExpired": "Попытка входа истекла — попробуйте ещё раз.",
-    "errorDenied": "Вход отменён в Telegram."
+    "telegramLoginError": "Ошибка входа через Telegram",
+    "openInTelegram": "Открыть в Telegram",
+    "expiresIn": "Истекает через {seconds} сек",
+    "sessionExpired": "Сессия истекла",
+    "tryAgain": "Попробовать снова",
+    "troubleshootingHint": "Не получается? Убедитесь, что вы не заблокировали {'@'}animeenigma_auth_bot в Telegram.",
+    "openInBrowser": "Нет приложения? Открыть в браузере",
+    "tgWebToggle": "Используете Telegram Web?",
+    "tgWebInstructions": "Откройте {'@'}animeenigma_auth_bot в Telegram и отправьте это сообщение:",
+    "tgWebCopy": "Копировать",
+    "tgWebCopied": "Скопировано"
   },
   "notFound": {
     "code": "404",
