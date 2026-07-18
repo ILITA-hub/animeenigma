@@ -256,6 +256,7 @@ func main() {
 		TopK:  cfg.UpcomingTopK,
 		MinS8: cfg.UpcomingMinS8,
 		MinS2: cfg.UpcomingMinS2,
+		MinS5: cfg.UpcomingMinS5,
 	})
 	adminRecsHandler := handler.NewAdminRecsHandler(db.DB, recsRepo, redisCache, s6, userPrecompute, log)
 	recEventsRepo := repo.NewRecEventsRepository(db.DB)

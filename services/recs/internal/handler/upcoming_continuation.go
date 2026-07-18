@@ -38,6 +38,38 @@ var sequelPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)часть\s+\d+`),
 }
 
+// nameRow holds the two titles the sequel heuristic inspects.
+type nameRow struct {
+	Name   string
+	NameRU string
+}
+
+// loadNames fetches name + name_ru for the given ids (for continuation
+// detection). Missing ids simply map to the zero nameRow.
+func (h *UpcomingHandler) loadNames(ctx context.Context, ids []string) (map[string]nameRow, error) {
+	out := make(map[string]nameRow, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	type row struct {
+		ID     string
+		Name   string
+		NameRU string
+	}
+	var rows []row
+	if err := h.db.WithContext(ctx).
+		Table("animes").
+		Select("id, name, name_ru").
+		Where("id IN ?", ids).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.ID] = nameRow{Name: r.Name, NameRU: r.NameRU}
+	}
+	return out, nil
+}
+
 // looksLikeSequel reports whether either title reads as a continuation.
 func looksLikeSequel(name, nameRU string) bool {
 	for _, s := range []string{strings.TrimSpace(name), strings.TrimSpace(nameRU)} {

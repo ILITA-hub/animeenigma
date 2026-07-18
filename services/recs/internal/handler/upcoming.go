@@ -1,23 +1,30 @@
 // Package handler — upcoming.go: GET /api/users/recs/upcoming +
-// POST /api/users/recs/upcoming/dismiss (spec 2026-07-17).
+// POST /api/users/recs/upcoming/dismiss (spec 2026-07-17, relevance-hardened
+// 2026-07-18).
 //
-// "Announce recs": scores status='announced' titles for a logged-in user
-// with the signals that work for unaired content — S8 franchise (dominant),
-// S5 attribute affinity, S2 genre similarity. Behavioral signals (S1/S3/S4)
-// are structurally ~0 for unaired titles and are not consulted.
+// "Announce recs": scores status='announced' titles for a logged-in user with
+// the signals that work for unaired content — S8 franchise (dominant), S5 rich
+// attribute affinity (tags/studio/genre/demographic/source/format), S9 relative
+// MAL popularity, S2 genre, and S7 dropped-penalty (negative). Behavioral
+// signals (S1/S3/S4) are structurally ~0 for unaired titles and not consulted.
 //
-// Eligibility gate runs on RAW scores, not normalized ones: per-pool min-max
+// Admission gate runs on RAW scores, not normalized ones: per-pool min-max
 // normalization inflates the best of a garbage pool to 1.0, so a normalized
-// floor would pass junk. Raw gates are absolute: raw_s8 >= MinS8 (user
-// scored a franchise entry above neutral) OR raw_s2 >= MinS2 (genre Jaccard
-// vs a loved seed). S5 raw operates on a tiny scale (~0..0.05) and is used
-// for ORDERING only, never gating.
+// floor would pass junk. The gate is CONTINUATION-AWARE (spec 2026-07-18 §2):
+//   - Continuation (a later franchise entry — 2nd Season etc.): admitted ONLY
+//     if raw_s8 >= MinS8 (the user scored a prior franchise entry). Never via
+//     taste — recommending "Season 2" to someone who never watched S1 is the
+//     defect this replaces.
+//   - Standalone / first entry: admitted if raw_s8 >= MinS8 OR raw_s5 >= MinS5
+//     (rich attribute affinity). Genre alone (S2) no longer admits.
+// S9 popularity boosts RANKING only, never gates.
 package handler
 
 import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -34,7 +41,7 @@ import (
 // recs:user:<uid>:upcoming:v1. Bump the suffix on any ranking/gate change.
 const (
 	UpcomingKeyPrefix = "recs:user:"
-	UpcomingKeySuffix = ":upcoming:v1"
+	UpcomingKeySuffix = ":upcoming:v2"
 	upcomingTTL       = 6 * time.Hour
 
 	// upcomingFranchiseReasonMinS8 is the bar for CLAIMING franchise causation
@@ -50,7 +57,8 @@ const (
 type UpcomingConfig struct {
 	TopK  int     // RECS_UPCOMING_TOPK, default 3
 	MinS8 float64 // RECS_UPCOMING_MIN_S8, default 0.2
-	MinS2 float64 // RECS_UPCOMING_MIN_S2, default 0.3
+	MinS2 float64 // RECS_UPCOMING_MIN_S2, default 0.3 (retained; no longer gates)
+	MinS5 float64 // RECS_UPCOMING_MIN_S5, default 0.01 (standalone taste gate)
 }
 
 // UpcomingAnimePayload is the hydrated anime shape for one upcoming item.
@@ -69,14 +77,21 @@ type UpcomingAnimePayload struct {
 	Franchise string  `json:"franchise,omitempty"`
 }
 
-// UpcomingReason explains WHY a title matched. Kind is "franchise" (seed
-// fields populated) or "taste" (genre/attribute similarity, no seed).
+// UpcomingReason explains WHY a title matched. Kind is one of:
+//   - "franchise"   — seed fields populated ("you rated X 9/10")
+//   - "attribute"   — Attribute/AttributeName populated (shared studio/source)
+//   - "anticipated" — pool-relative MAL popularity is high
+//   - "taste"       — generic attribute-affinity fallback
 type UpcomingReason struct {
 	Kind            string `json:"kind"`
 	SeedAnimeID     string `json:"seed_anime_id,omitempty"`
 	SeedAnimeName   string `json:"seed_anime_name,omitempty"`
 	SeedAnimeNameRU string `json:"seed_anime_name_ru,omitempty"`
 	UserScore       int    `json:"user_score,omitempty"`
+	// Attribute is the shared S5 dimension driving an "attribute" reason
+	// ("studio" | "source"); AttributeName is its human/display value.
+	Attribute     string `json:"attribute,omitempty"`
+	AttributeName string `json:"attribute_name,omitempty"`
 }
 
 // UpcomingItem is one matched announcement.
@@ -104,7 +119,9 @@ type UpcomingHandler struct {
 
 	s2 *signals.S2Metadata
 	s5 *signals.S5Attribute
+	s7 *signals.S7DroppedPenalty
 	s8 *signals.S8Franchise
+	s9 *signals.S9MalPopularity
 }
 
 // NewUpcomingHandler wires the handler. Signals are constructed here (cheap
@@ -114,6 +131,12 @@ func NewUpcomingHandler(db *gorm.DB, dismissals *repo.AnnouncementDismissalsRepo
 	if cfg.TopK <= 0 {
 		cfg.TopK = 3
 	}
+	// Guard the standalone gate: MinS5 <= 0 would make `rawS5 < MinS5` never
+	// fire, admitting every rawS5 >= 0 title (i.e. the whole pool). A positive
+	// floor is required for the gate to mean anything.
+	if cfg.MinS5 <= 0 {
+		cfg.MinS5 = 0.01
+	}
 	return &UpcomingHandler{
 		db:         db,
 		dismissals: dismissals,
@@ -122,7 +145,9 @@ func NewUpcomingHandler(db *gorm.DB, dismissals *repo.AnnouncementDismissalsRepo
 		cfg:        cfg,
 		s2:         signals.NewS2Metadata(db),
 		s5:         signals.NewS5Attribute(db, repo.NewRecsRepository(db)),
+		s7:         signals.NewS7DroppedPenalty(db),
 		s8:         signals.NewS8Franchise(db),
+		s9:         signals.NewS9MalPopularity(db),
 	}
 }
 
@@ -235,43 +260,84 @@ func (h *UpcomingHandler) computeUpcoming(ctx context.Context, userID string) (U
 		return env, nil
 	}
 
-	// 2. Score with the announcement ensemble. RankWithBreakdown so the raw
-	//    per-signal scores are available for gating + reason derivation.
+	// 2. Score with the announcement ensemble. RankWithBreakdown exposes the
+	//    raw per-signal scores for gating + reason derivation. S8 dominant, S5
+	//    rich attribute affinity, S9 relative popularity, S2 genre, S7 negative.
 	ensemble := recs.NewEnsemble([]recs.WeightedSignal{
-		{Module: h.s8, Weight: 0.50},
+		{Module: h.s8, Weight: 0.40},
 		{Module: h.s5, Weight: 0.30},
-		{Module: h.s2, Weight: 0.20},
+		{Module: h.s9, Weight: 0.15},
+		{Module: h.s2, Weight: 0.10},
+		{Module: h.s7, Weight: -0.05},
 	})
 	ranked, err := ensemble.RankWithBreakdown(ctx, recs.UserID(userID), pool)
 	if err != nil {
 		return env, err
 	}
 
-	// 3. Raw-score gate + top-K.
+	// 3. Continuation detection over the ranked pool (name + franchise-structural).
+	rankedIDs := make([]string, len(ranked))
+	for i, r := range ranked {
+		rankedIDs[i] = r.AnimeID
+	}
+	names, err := h.loadNames(ctx, rankedIDs)
+	if err != nil {
+		return env, err
+	}
+	airedSibling, err := h.franchiseHasAiredSibling(ctx, rankedIDs)
+	if err != nil {
+		return env, err
+	}
+
+	// 4. Continuation-aware raw-score gate.
 	type pick struct {
 		id        string
 		final     float64
 		franchise bool
+		rawS9     float64
 	}
-	picks := make([]pick, 0, h.cfg.TopK)
+	picks := make([]pick, 0, len(ranked))
+	var maxS9 float64
 	for _, r := range ranked {
 		rawS8 := float64(r.Raw[recs.SignalID("s8")])
-		rawS2 := float64(r.Raw[recs.SignalID("s2")])
-		gatePassed := rawS8 >= h.cfg.MinS8
-		if !gatePassed && rawS2 < h.cfg.MinS2 {
-			continue
+		rawS5 := float64(r.Raw[recs.SignalID("s5")])
+		rawS9 := float64(r.Raw[recs.SignalID("s9")])
+		nm := names[r.AnimeID]
+		continuation := looksLikeSequel(nm.Name, nm.NameRU) || airedSibling[r.AnimeID]
+		if continuation {
+			if rawS8 < h.cfg.MinS8 {
+				continue // sequels only via franchise affinity, never taste
+			}
+		} else if rawS8 < h.cfg.MinS8 && rawS5 < h.cfg.MinS5 {
+			continue // standalone needs rich attribute affinity (or franchise)
 		}
-		franchiseReason := rawS8 >= upcomingFranchiseReasonMinS8
-		picks = append(picks, pick{id: r.AnimeID, final: r.Final, franchise: franchiseReason})
-		if len(picks) == h.cfg.TopK {
-			break
+		if rawS9 > maxS9 {
+			maxS9 = rawS9
 		}
+		picks = append(picks, pick{
+			id:        r.AnimeID,
+			final:     r.Final,
+			franchise: rawS8 >= upcomingFranchiseReasonMinS8,
+			rawS9:     rawS9,
+		})
 	}
 	if len(picks) == 0 {
 		return env, nil
 	}
 
-	// 4. Hydrate.
+	// 5. Franchise-fired items sort strictly ahead of taste items (S8 is the
+	//    most valuable signal), then by Final desc. Take TopK.
+	sort.SliceStable(picks, func(i, j int) bool {
+		if picks[i].franchise != picks[j].franchise {
+			return picks[i].franchise
+		}
+		return picks[i].final > picks[j].final
+	})
+	if len(picks) > h.cfg.TopK {
+		picks = picks[:h.cfg.TopK]
+	}
+
+	// 6. Hydrate + resolve reasons.
 	ids := make([]string, len(picks))
 	for i, p := range picks {
 		ids[i] = p.id
@@ -280,22 +346,16 @@ func (h *UpcomingHandler) computeUpcoming(ctx context.Context, userID string) (U
 	if err != nil {
 		return env, err
 	}
-
 	for _, p := range picks {
 		anime, ok := hydrated[p.id]
 		if !ok {
 			continue
 		}
-		item := UpcomingItem{Anime: anime, MatchScore: p.final, Reason: UpcomingReason{Kind: "taste"}}
-		if p.franchise && anime.Franchise != "" {
-			if seed, serr := h.franchiseSeed(ctx, userID, anime.Franchise); serr != nil {
-				h.log.Warnw("upcoming franchise seed lookup failed; falling back to taste reason",
-					"user_id", userID, "franchise", anime.Franchise, "error", serr)
-			} else if seed != nil {
-				item.Reason = *seed
-			}
-		}
-		env.Items = append(env.Items, item)
+		env.Items = append(env.Items, UpcomingItem{
+			Anime:      anime,
+			MatchScore: p.final,
+			Reason:     h.resolveReason(ctx, userID, p.id, anime, p.franchise, p.rawS9, maxS9),
+		})
 	}
 	return env, nil
 }

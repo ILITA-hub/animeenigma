@@ -34,7 +34,9 @@ func newUpcomingTestDB(t *testing.T) *gorm.DB {
 			score REAL DEFAULT 0, episodes_count INTEGER DEFAULT 0,
 			status TEXT DEFAULT 'released', year INTEGER DEFAULT 0,
 			season TEXT DEFAULT '', kind TEXT DEFAULT '',
+			rating TEXT DEFAULT '', material_source TEXT DEFAULT '',
 			franchise TEXT DEFAULT '', hidden INTEGER DEFAULT 0,
+			mal_members INTEGER DEFAULT 0, mal_favorites INTEGER DEFAULT 0,
 			deleted_at DATETIME
 		)`,
 		`CREATE TABLE anime_list (
@@ -44,7 +46,8 @@ func newUpcomingTestDB(t *testing.T) *gorm.DB {
 		`CREATE TABLE anime_genres (anime_id TEXT, genre_id TEXT)`,
 		`CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT)`,
 		`CREATE TABLE anime_tags (anime_id TEXT, tag_id TEXT, rank INTEGER DEFAULT 0)`,
-		`CREATE TABLE anime_studios (anime_id TEXT, studio_id TEXT)`, // S5 loadM2M touches it
+		`CREATE TABLE anime_studios (anime_id TEXT, studio_id TEXT)`, // S5 loadM2M + attribute reason
+		`CREATE TABLE studios (id TEXT PRIMARY KEY, name TEXT)`,      // attribute reason display name
 		`CREATE TABLE watch_history (
 			id TEXT PRIMARY KEY, user_id TEXT, anime_id TEXT,
 			episode_number INTEGER, watched_at DATETIME
@@ -207,6 +210,72 @@ func TestUpcomingDismiss_PersistsAndBustsCache(t *testing.T) {
 	rec2 := upcomingRequest(t, h, "u1")
 	require.Equal(t, http.StatusOK, rec2.Code)
 	assert.Contains(t, rec2.Body.String(), `"items":[]`)
+}
+
+// TestUpcoming_ContinuationExcludedDespiteStrongTaste is the Witch Watch
+// regression: an announced 2nd Season with an EMPTY franchise (so S8 can't
+// fire) but strong genre (S2) AND attribute (S5) affinity must NOT surface —
+// a continuation only qualifies through the franchise signal.
+func TestUpcoming_ContinuationExcludedDespiteStrongTaste(t *testing.T) {
+	db := newUpcomingTestDB(t)
+	// Announced sequel by NAME, empty franchise → no S8, no aired sibling.
+	require.NoError(t, db.Exec(`INSERT INTO animes (id, name, name_ru, franchise, status) VALUES
+		('ww1', 'Witch Watch', '', '', 'released'),
+		('ww2', 'Witch Watch 2nd Season', '', '', 'announced')`).Error)
+	// Strong genre overlap (S2) between a loved title and ww2.
+	require.NoError(t, db.Exec(`INSERT INTO anime_genres (anime_id, genre_id) VALUES
+		('ww1','g1'),('ww1','g2'),('ww1','g3'),('ww1','g4'),
+		('ww2','g1'),('ww2','g2'),('ww2','g3'),('ww2','g4')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO anime_list (id, user_id, anime_id, status, score)
+		VALUES ('l1','u1','ww1','completed',9)`).Error)
+	// Strong attribute affinity (S5): user loves studio st1, ww2 has st1.
+	require.NoError(t, db.Exec(`INSERT INTO anime_studios (anime_id, studio_id) VALUES ('ww2','st1')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO rec_user_signals (user_id, s1_vector, s5_affinity)
+		VALUES ('u1','{}','{"studio:st1":1.0}')`).Error)
+
+	h := NewUpcomingHandler(db, repo.NewAnnouncementDismissalsRepository(db), newFakeRecsCache(), logger.Default(),
+		UpcomingConfig{TopK: 3, MinS8: 0.2, MinS2: 0.3, MinS5: 0.01})
+	rec := upcomingRequest(t, h, "u1")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"items":[]`,
+		"a 2nd-season with no franchise affinity must be gated out even with strong S2/S5")
+}
+
+// TestUpcoming_StandaloneAdmittedByAttributeAffinity: a brand-new original
+// (non-sequel name, empty franchise) is admitted on S5 attribute affinity
+// alone and gets an attribute reason naming the shared studio.
+func TestUpcoming_StandaloneAdmittedByAttributeAffinity(t *testing.T) {
+	db := newUpcomingTestDB(t)
+	require.NoError(t, db.Exec(`INSERT INTO animes (id, name, franchise, status) VALUES
+		('watched1', 'Some Wit Show', '', 'released'),
+		('orig1', 'Brand New Original', '', 'announced')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO studios (id, name) VALUES ('st1','Studio Wit')`).Error)
+	// Candidate + a title the user watched both carry studio st1.
+	require.NoError(t, db.Exec(`INSERT INTO anime_studios (anime_id, studio_id) VALUES
+		('orig1','st1'), ('watched1','st1')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO watch_history (id, user_id, anime_id) VALUES
+		('wh1','u1','watched1')`).Error)
+	// S5 affinity gives orig1 raw = 0.25*1.0 = 0.25 >= MinS5.
+	require.NoError(t, db.Exec(`INSERT INTO rec_user_signals (user_id, s1_vector, s5_affinity)
+		VALUES ('u1','{}','{"studio:st1":1.0}')`).Error)
+
+	h := NewUpcomingHandler(db, repo.NewAnnouncementDismissalsRepository(db), newFakeRecsCache(), logger.Default(),
+		UpcomingConfig{TopK: 3, MinS8: 0.2, MinS2: 0.3, MinS5: 0.01})
+	rec := upcomingRequest(t, h, "u1")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var env struct {
+		Data struct {
+			Items []UpcomingItem `json:"items"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &env))
+	require.Len(t, env.Data.Items, 1, "standalone with rich attribute affinity is admitted")
+	it := env.Data.Items[0]
+	assert.Equal(t, "orig1", it.Anime.ID)
+	assert.Equal(t, "attribute", it.Reason.Kind)
+	assert.Equal(t, "studio", it.Reason.Attribute)
+	assert.Equal(t, "Studio Wit", it.Reason.AttributeName)
 }
 
 func TestUpcomingDismiss_BadBody(t *testing.T) {

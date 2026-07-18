@@ -21,10 +21,14 @@ type Config struct {
 	// Shikimori /similar fallback (HTTPShikimoriSimilarClient).
 	CatalogURL string
 
-	// Upcoming — announcement-matching knobs (spec 2026-07-17).
+	// Upcoming — announcement-matching knobs (spec 2026-07-17, extended
+	// 2026-07-18). MinS5 is the standalone (non-continuation) admission bar on
+	// rich attribute affinity; MinS2 is retained for compatibility but genre no
+	// longer gates admission.
 	UpcomingTopK  int
 	UpcomingMinS8 float64
 	UpcomingMinS2 float64
+	UpcomingMinS5 float64
 }
 
 type ServerConfig struct {
@@ -71,6 +75,9 @@ func Load() (*Config, error) {
 		UpcomingTopK:  getEnvInt("RECS_UPCOMING_TOPK", 3),
 		UpcomingMinS8: getEnvFloat("RECS_UPCOMING_MIN_S8", 0.2),
 		UpcomingMinS2: getEnvFloat("RECS_UPCOMING_MIN_S2", 0.3),
+		// Conservative default — calibrated against live S5 raw spread at
+		// verification (S5 raw is a small TF-IDF sum, typically ~0..0.05).
+		UpcomingMinS5: getEnvFloat("RECS_UPCOMING_MIN_S5", 0.01),
 	}, nil
 }
 
