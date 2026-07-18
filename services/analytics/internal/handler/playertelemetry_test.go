@@ -393,3 +393,39 @@ func TestPlayerTelemetry_RosterDrivenWhitelist(t *testing.T) {
 		t.Errorf("Target = %q, want animejoy-new (roster-known provider)", got)
 	}
 }
+
+// TestPlayerTelemetry_SkipUsed: a skip_used event (manual/auto OP-ED skip
+// taken in the player) lands as effect_kind player_skip with its usage
+// dimensions (action/side/source/team/start/end) merged into Properties —
+// the month-out skip-usage review reads these.
+func TestPlayerTelemetry_SkipUsed(t *testing.T) {
+	sink := &effectSink{}
+	h := NewPlayerTelemetryHandler(sink, oldStaticRoster())
+
+	body := `{"events":[{
+		"kind":"skip_used","provider":"kodik","anime_id":"a1","episode":11,
+		"detail":{"action":"auto","side":"op","source":"detected","team":"AniLibria.TV","start":236.0,"end":296.7}
+	}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/analytics/player-events", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if sink.count() != 1 {
+		t.Fatalf("got %d events, want 1", sink.count())
+	}
+	ev := sink.at(0)
+	if ev.EffectKind != "player_skip" {
+		t.Errorf("effect_kind = %q, want player_skip", ev.EffectKind)
+	}
+	if ev.Target != "kodik" {
+		t.Errorf("target = %q, want kodik", ev.Target)
+	}
+	if !strings.Contains(ev.Properties, `"action":"auto"`) ||
+		!strings.Contains(ev.Properties, `"source":"detected"`) ||
+		!strings.Contains(ev.Properties, `"side":"op"`) {
+		t.Errorf("properties missing skip usage dimensions: %s", ev.Properties)
+	}
+}

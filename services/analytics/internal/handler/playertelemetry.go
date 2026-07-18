@@ -37,8 +37,8 @@ func NewPlayerTelemetryHandler(sink Sink, roster providerRoster) *PlayerTelemetr
 // wirePlayerEvent is one player telemetry event in the wire batch.
 type wirePlayerEvent struct {
 	// Kind must be "resolve", "stall", "playback_start_rejected",
-	// "playback_failed", or "protocol_usage"; other values are silently
-	// dropped.
+	// "playback_failed", "protocol_usage", or "skip_used"; other values are
+	// silently dropped.
 	Kind     string `json:"kind"`
 	Provider string `json:"provider"`
 
@@ -126,6 +126,13 @@ func (h *PlayerTelemetryHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			// Per-(session×tier) protocol-ladder usage summary. No duration
 			// dimension; all metrics ride in Detail → Properties.
 			effectKind = "player_protocol"
+		case "skip_used":
+			// One OP/ED skip actually taken (manual chip click or auto-skip).
+			// Dimensions ride in Detail → Properties: action (manual|auto),
+			// side (op|ed), source (aniskip|detected), team, start, end —
+			// the month-out usage review before AniSkip submission reads
+			// these (owner directive 2026-07-18).
+			effectKind = "player_skip"
 		default:
 			continue // skip unknown kinds
 		}

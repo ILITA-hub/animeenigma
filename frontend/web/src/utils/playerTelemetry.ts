@@ -14,7 +14,7 @@
 import { shipAnalyticsPayload } from './analyticsTransport'
 
 export interface PlayerEvent {
-  kind: 'resolve' | 'stall' | 'playback_start_rejected' | 'playback_failed' | 'protocol_usage'
+  kind: 'resolve' | 'stall' | 'playback_start_rejected' | 'playback_failed' | 'protocol_usage' | 'skip_used'
   provider: string
   anime_id: string
   episode?: number
@@ -119,7 +119,8 @@ export function recordPlayerEvent(e: PlayerEvent): void {
       e.kind !== 'stall' &&
       e.kind !== 'playback_start_rejected' &&
       e.kind !== 'playback_failed' &&
-      e.kind !== 'protocol_usage'
+      e.kind !== 'protocol_usage' &&
+      e.kind !== 'skip_used'
     )
       return
 
