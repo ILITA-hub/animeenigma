@@ -449,7 +449,11 @@ func (r *AnimeRepository) UpdateShikimoriID(ctx context.Context, animeID string,
 func (r *AnimeRepository) GetSchedule(ctx context.Context) ([]*domain.Anime, error) {
 	var animes []*domain.Anime
 	err := r.db.WithContext(ctx).
-		Where("status = ? AND next_episode_at IS NOT NULL AND next_episode_at > NOW() AND (hidden = ? OR hidden IS NULL)",
+		// A 7-day grace window (matching the weekly calendar_sync cadence) keeps anime
+		// whose anchor has merely gone stale between syncs: the frontend occurrence
+		// projection re-derives the correct future airing from a past anchor via weekly
+		// k-offsets. Genuinely stalled/abandoned series still fall out past 7 days.
+		Where("status = ? AND next_episode_at IS NOT NULL AND next_episode_at > NOW() - INTERVAL '7 days' AND (hidden = ? OR hidden IS NULL)",
 			"ongoing", false).
 		Order("next_episode_at ASC").
 		Find(&animes).Error
