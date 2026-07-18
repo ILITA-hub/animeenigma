@@ -85,9 +85,10 @@ vi.mock('vue-router', async (importOriginal) => {
 const { fanficVisibleHolder } = vi.hoisted(() => ({
   fanficVisibleHolder: { value: true },
 }))
-vi.mock('@/utils/fanficGate', async () => {
+vi.mock('@/utils/fanficGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/fanficGate')>()
   const { computed } = await import('vue')
-  return { useFanficVisible: () => computed(() => fanficVisibleHolder.value) }
+  return { ...actual, useFanficVisible: () => computed(() => fanficVisibleHolder.value) }
 })
 
 const pushToastMock = vi.fn()

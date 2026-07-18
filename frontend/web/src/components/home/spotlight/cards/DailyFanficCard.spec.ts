@@ -19,7 +19,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, RouterLinkStub } from '@vue/test-utils'
 import { ref } from 'vue'
 
-vi.mock('vue-i18n', () => ({
+// importOriginal spread: the card's @/utils/fanficGate import transitively
+// reaches src/i18n.ts (fanficGate → useFeatureVisible → stores → router →
+// i18n), whose module-scope createI18n() crashes under a bare partial mock
+// (see project memory: vue-i18n mock + barrel trap).
+vi.mock('vue-i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-i18n')>()),
   useI18n: () => ({
     t: (key: string, params?: Record<string, unknown>) =>
       params ? `${key}::${JSON.stringify(params)}` : key,

@@ -5,6 +5,7 @@ import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { shouldFullReloadOnNav, setLiveSessionProbe } from '@/pwa/registerPwa'
 import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
 import { resolveVisible } from '@/composables/useFeatureVisible'
+import { isDailyFanficQuery } from '@/utils/fanficGate'
 import { stashPrefetch } from '@/utils/pagePrefetch'
 import { setFaviconVariant, faviconVariantForPath } from '@/utils/favicon'
 import { offlineDownloadsEnabled } from '@/offline/flag'
@@ -400,7 +401,7 @@ router.beforeEach(async (to, _from, next) => {
   // the fanfic service gates explicit picks itself), so it bypasses both
   // requiresAuth and the fanfic feature gate below. FanficsView hides the
   // authoring tabs for viewers without the fanfic feature.
-  const isDailyFanficDeepLink = to.name === 'fanfics' && to.query.daily === '1'
+  const isDailyFanficDeepLink = to.name === 'fanfics' && isDailyFanficQuery(to.query)
 
   // Check authentication
   if (to.meta.requiresAuth && !authStore.isAuthenticated && !isDailyFanficDeepLink) {

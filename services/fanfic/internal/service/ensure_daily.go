@@ -60,11 +60,12 @@ func NewDailyService(groq streamer, repo dailyRepo, meta animeMetaFetcher, alert
 
 // DailyPick returns the day's fanfic (or nil). Shared by both daily handlers.
 func (s *DailyService) DailyPick(ctx context.Context) (*domain.Fanfic, error) {
-	eligible, err := s.repo.ListEligibleSince(ctx, EligibleWindowStart(s.now()))
+	now := s.now()
+	eligible, err := s.repo.ListEligibleSince(ctx, EligibleWindowStart(now))
 	if err != nil {
 		return nil, err
 	}
-	return PickDaily(eligible, DailySeed(s.now())), nil
+	return PickDaily(eligible, DailySeed(now)), nil
 }
 
 // EnsureDaily generates today's bot fanfic. It runs unconditionally of user
@@ -81,8 +82,9 @@ func (s *DailyService) EnsureDaily(ctx context.Context) (EnsureResult, error) {
 	if err != nil {
 		return EnsureResult{}, err
 	}
+	today := DailySeed(now)
 	for _, f := range eligible {
-		if f.AIGenerated && DailySeed(f.CreatedAt) == DailySeed(now) {
+		if f.AIGenerated && DailySeed(f.CreatedAt) == today {
 			return EnsureResult{Generated: false, Reason: "bot_exists"}, nil
 		}
 	}

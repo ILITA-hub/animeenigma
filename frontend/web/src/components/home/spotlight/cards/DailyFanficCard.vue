@@ -78,7 +78,7 @@
 
     <template #cta>
       <router-link
-        to="/fanfics?daily=1"
+        :to="DAILY_FANFIC_LINK"
         :class="[buttonVariants({ variant: 'default', size: 'md' }), 'text-sm']"
       >
         <BookOpen class="w-4 h-4" aria-hidden="true" />
@@ -98,6 +98,7 @@ import { BookOpen } from 'lucide-vue-next'
 import { cardPosterUrl } from '@/composables/useImageProxy'
 import { isImageWarm, markImageWarm } from '@/utils/preload-image'
 import { useAuthStore } from '@/stores/auth'
+import { DAILY_FANFIC_LINK } from '@/utils/fanficGate'
 import type { DailyFanficData } from '@/types/spotlight'
 import Badge from '@/components/ui/Badge.vue'
 import { buttonVariants } from '@/components/ui/button-variants'

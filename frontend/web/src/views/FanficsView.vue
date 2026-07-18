@@ -16,7 +16,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { fanficApi } from '@/api/fanfic'
 import { useToast } from '@/composables/useToast'
-import { useFanficVisible } from '@/utils/fanficGate'
+import { useFanficVisible, isDailyFanficQuery } from '@/utils/fanficGate'
 import { Tabs, Modal, Button, Alert } from '@/components/ui'
 import GenerateForm from '@/components/fanfic/GenerateForm.vue'
 import FanficReader from '@/components/fanfic/FanficReader.vue'
@@ -159,7 +159,7 @@ watch(readerOpen, (open) => {
 })
 
 onMounted(() => {
-  if (route.query.daily === '1') {
+  if (isDailyFanficQuery(route.query)) {
     void openDailyFanfic()
   }
 })

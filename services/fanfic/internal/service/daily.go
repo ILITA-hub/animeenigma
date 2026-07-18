@@ -130,10 +130,7 @@ func BuildExcerpt(content string, maxRunes int) string {
 
 // hasProse reports whether s contains at least one letter or digit.
 func hasProse(s string) bool {
-	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsNumber(r) {
-			return true
-		}
-	}
-	return false
+	return strings.ContainsFunc(s, func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsNumber(r)
+	})
 }
