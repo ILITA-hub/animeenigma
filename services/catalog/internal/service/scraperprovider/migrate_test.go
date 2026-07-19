@@ -1298,6 +1298,58 @@ func TestAllanimeOkruCryptoGateLifted_NoRowNoGuard(t *testing.T) {
 	}
 }
 
+func TestAllanimeOkruCryptoGateRegressed_RefreshesDescriptionOnce(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Create(&domain.ScraperProvider{
+		Name:        "allanime-okru",
+		Policy:      domain.PolicyManual,
+		Health:      domain.HealthDown,
+		Status:      domain.StatusDegraded,
+		Reason:      "cdn_unreachable on ",
+		Description: "stale LIFTED description",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraperprovider.AllanimeOkruCryptoGateRegressed(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	var got domain.ScraperProvider
+	db.First(&got, "name = ?", "allanime-okru")
+	if !strings.Contains(got.Description, "AA_CRYPTO_MISSING") || !strings.Contains(got.Description, "2026-07-19") {
+		t.Errorf("description not refreshed: %q", got.Description)
+	}
+	// reason/status/policy/health untouched (machine/admin-owned).
+	if got.Reason != "cdn_unreachable on " || got.Policy != domain.PolicyManual || got.Health != domain.HealthDown {
+		t.Errorf("touched a machine/admin field: %+v", got)
+	}
+
+	// Idempotent: a later operator edit is not clobbered on a second run.
+	db.Model(&domain.ScraperProvider{}).Where("name = ?", "allanime-okru").Update("description", "operator note")
+	if err := scraperprovider.AllanimeOkruCryptoGateRegressed(db); err != nil {
+		t.Fatalf("2nd run: %v", err)
+	}
+	db.First(&got, "name = ?", "allanime-okru")
+	if got.Description != "operator note" {
+		t.Errorf("guarded re-run clobbered operator edit: %q", got.Description)
+	}
+}
+
+func TestAllanimeOkruCryptoGateRegressed_NoRowNoGuard(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// No allanime-okru row → migration must error and NOT write its guard, so a
+	// later boot (after the row exists) retries.
+	if err := scraperprovider.AllanimeOkruCryptoGateRegressed(db); err == nil {
+		t.Fatal("expected error when row absent")
+	}
+}
+
 func TestBackfillProviderIdentityV1(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err := db.AutoMigrate(&domain.ScraperProvider{}); err != nil {

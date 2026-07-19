@@ -384,6 +384,13 @@ func main() {
 		log.Errorw("allanime-okru crypto-lifted migration failed (continuing)", "error", err)
 	}
 
+	// Refresh allanime-okru's description again: the 2026-07-13 "gate lifted"
+	// claim above has itself regressed as of 2026-07-19 (AA_CRYPTO_MISSING is
+	// back, 100% failure rate, independent of title). Supersedes the line above.
+	if err := scraperprovider.AllanimeOkruCryptoGateRegressed(db.DB); err != nil {
+		log.Errorw("allanime-okru crypto-regressed migration failed (continuing)", "error", err)
+	}
+
 	// Reflect the catalog-owned provider rows (scraper_operated=false) into the
 	// provider_info/provider_enabled management metrics. Runs after the roster is
 	// fully migrated/seeded/backfilled so names + flags are authoritative. The

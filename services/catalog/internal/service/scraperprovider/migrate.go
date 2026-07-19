@@ -218,6 +218,9 @@ const reconcilePolicyFromHealthGuardKey = "reconcile_policy_from_health_v1_2026_
 // allanimeOkruCryptoLiftedGuardKey marks AllanimeOkruCryptoGateLifted as applied.
 const allanimeOkruCryptoLiftedGuardKey = "allanime_okru_crypto_lifted_2026_07_13"
 
+// allanimeOkruCryptoRegressedGuardKey marks AllanimeOkruCryptoGateRegressed as applied.
+const allanimeOkruCryptoRegressedGuardKey = "allanime_okru_crypto_regressed_2026_07_19"
+
 // backfillProviderIdentityGuardKey marks BackfillProviderIdentityV1 as applied.
 const backfillProviderIdentityGuardKey = "backfill_provider_identity_v1_2026_07_14"
 
@@ -1011,6 +1014,51 @@ func AllanimeOkruCryptoGateLifted(db *gorm.DB) error {
 	}
 	if err := db.Create(&migrationGuard{Key: allanimeOkruCryptoLiftedGuardKey}).Error; err != nil {
 		return fmt.Errorf("write allanime-okru-crypto-lifted guard: %w", err)
+	}
+	return nil
+}
+
+// AllanimeOkruCryptoGateRegressed refreshes ONLY allanime-okru's description
+// once, superseding the now-stale 2026-07-13 AllanimeOkruCryptoGateLifted
+// claim: as of 2026-07-19 the daily-recovery-run found the AA_CRYPTO_MISSING
+// gate is back, and unlike 2026-07-07 it is not merely "the anchor title is
+// per-title copyright-blocked" — every allanime-okru extract attempt in this
+// container's full 36h uptime failed (3214 AA_CRYPTO_MISSING rejections, 0
+// successes across 1670 failovers), regardless of which title was requested,
+// including the 2026-07-17 anchor-override title ("Кот и дракон") that had
+// been verified working two days prior. A real fix still needs
+// reverse-engineering AllAnime's client-side crypto/signature scheme (same
+// "needs a real browser render" conclusion as the original 2026-07-07
+// AllanimeOkruCryptoBlock finding) — flagged for human review, not attempted
+// in an automated recovery run. Mirrors AllanimeOkruCryptoGateLifted exactly —
+// touches only `description` (never reason/status/policy/health, which are
+// machine/admin owned). A NEW guard key so it applies once on top of the
+// earlier "lifted" entry.
+func AllanimeOkruCryptoGateRegressed(db *gorm.DB) error {
+	if err := db.AutoMigrate(&migrationGuard{}); err != nil {
+		return fmt.Errorf("migrate catalog_migration_guards: %w", err)
+	}
+	var guards int64
+	if err := db.Model(&migrationGuard{}).
+		Where("key = ?", allanimeOkruCryptoRegressedGuardKey).Count(&guards).Error; err != nil {
+		return fmt.Errorf("check allanime-okru-crypto-regressed guard: %w", err)
+	}
+	if guards > 0 {
+		return nil // already applied — never clobber a later operator edit
+	}
+	result := db.Model(&domain.ScraperProvider{}).
+		Where("name = ?", "allanime-okru").
+		Update("description", "AllAnime GraphQL discovery + ok.ru ('Ok') CDN streams (clock-free). As of 2026-07-19 the AA_CRYPTO_MISSING gate is BACK — api.allanime.day's `episode`/sourceUrls resolver rejects every query again (100% failure across this container's full 36h uptime: 3214 AA_CRYPTO_MISSING rejections, 0 successes), regressing the 2026-07-13 'gate lifted' finding. This is NOT the 2026-07-15/07-17 per-title ok.ru copyright-block issue — even the 2026-07-17 anchor-override title ('Кот и дракон', verified working then) now fails identically, so the resolver-level gate itself is blocking everything again, independent of title. A real fix needs reverse-engineering AllAnime's client-side crypto/signature scheme (same conclusion as the original 2026-07-07 finding) — flagged for human review, not attempted in an automated recovery run. Supersedes the stale 'GATE LIFTED' description.")
+	if result.Error != nil {
+		return fmt.Errorf("allanime-okru crypto-regressed: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		// No allanime-okru row to update. Do NOT write the guard, so a later boot
+		// (after the row exists) retries.
+		return fmt.Errorf("allanime-okru crypto-regressed: no row found for name=allanime-okru")
+	}
+	if err := db.Create(&migrationGuard{Key: allanimeOkruCryptoRegressedGuardKey}).Error; err != nil {
+		return fmt.Errorf("write allanime-okru-crypto-regressed guard: %w", err)
 	}
 	return nil
 }
