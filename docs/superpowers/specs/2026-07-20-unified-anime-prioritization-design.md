@@ -29,7 +29,7 @@ Every anime is assigned, from catalog data, a **band** (priority class) and carr
 | Band | Definition | Who uses it |
 |------|-----------|-------------|
 | **P — Pinned** | operator pin (`CV_PIN_ANIME`) | content-verify only |
-| **1 — Hot ongoing** | `status='ongoing'` AND visible | content-verify, notifications (sub-tiered), probe (opt) |
+| **1 — Hot ongoing** | `status='ongoing'` AND visible | content-verify, notifications (sub-tiered) |
 | **2 — Watched + Top** | non-ongoing AND (`visitors > 0` OR in browse-order top-100) | content-verify |
 | **3 — Idle backfill** | everything else visible, surfaced round-robin | content-verify only |
 
@@ -155,26 +155,18 @@ Config knob: `AUTOCACHE_HOT_SHARE=0.70`.
 
 ---
 
-## 6. Projection D (optional, Phase 4) — playability probe
-
-**File anchor:** `services/analytics/internal/probe/animeset.go:103-193`.
-
-The probe's random slots (`SlotSpotlightRandom`, `SlotRandom`) currently sample the spotlight pool. Point them at the interest endpoint's Band-1 list instead, so provider-health probes preferentially exercise titles users are actually watching. Anchor slots (Frieren / "Кот и дракон") and health-driven cadence stay exactly as-is. Small, isolated, no correctness impact — genuinely optional.
-
----
-
-## 7. Data flow
+## 6. Data flow
 
 ```
                          ┌───────────────────────────┐
    catalog animes / anime_list ─▶│ /internal/interest/bands  │  (bands + raw signals, DB-derived)
                          └───────────────────────────┘
-                             │            │            │
-             ┌───────────────┘            │            └──────────────┐
-             ▼                            ▼                           ▼
-   content-verify (:8101)        notifications (:8090)        probe (analytics :8092, opt)
-   weighted band claim           proximity cadence tiers      Band-1 random slots
-   + Redis visitors 7d           + notif:checked floor
+                             │                         │
+             ┌───────────────┘                         └──────────────┐
+             ▼                                                        ▼
+   content-verify (:8101)                              notifications (:8090)
+   weighted band claim                                 proximity cadence tiers
+   + Redis visitors 7d                                 + notif:checked floor
    + cv:idle:cursor
 
    autocache (library :8089): reason-class already on demand row → DrainWeighted (no endpoint call; foreign DB)
@@ -182,7 +174,7 @@ The probe's random slots (`SlotSpotlightRandom`, `SlotRandom`) currently sample 
 
 ---
 
-## 8. Error handling / fail-open
+## 7. Error handling / fail-open
 
 - Endpoint unreachable → content-verify uses last cached bands (existing 10m membership cache `engine.go:112-134`); notifications falls back to "all combos hot" (today's behavior — safe, just chattier).
 - Redis cursor/checked-timestamp errors → start-of-catalog / treat-as-due (never skip a title silently).
@@ -191,7 +183,7 @@ The probe's random slots (`SlotSpotlightRandom`, `SlotRandom`) currently sample 
 
 ---
 
-## 9. Testing
+## 8. Testing
 
 - **content-verify:** table tests for `BandOf` / `IntraScore` (each band's tie-breaks, freshBoost window edges); weighted-claim distribution test (seeded RNG → proportions hold, fall-through when higher bands empty); idle-cursor advance+wrap test; `CooldownTTL(band)` per-band values.
 - **catalog:** endpoint test — ongoing/top/planned/idle_window shapes, `idle_offset` paging, `idle_total` count, non-ongoing/non-top exclusion in idle window. Reuse existing `internal_verify` test harness (DDL for `anime_list`).
@@ -201,31 +193,31 @@ The probe's random slots (`SlotSpotlightRandom`, `SlotRandom`) currently sample 
 
 ---
 
-## 10. Phasing (each phase ships working software)
+## 9. Phasing (each phase ships working software)
 
 1. **Phase 1 — shared endpoint + content-verify bands.** Catalog `/internal/interest/bands` (+ old alias); content-verify band model, weighted claim, idle round-robin, per-band cooldown, env knobs. The core; delivers the owner's headline (ongoing focus + idle tail sweep).
 2. **Phase 2 — autocache weighted drain.** Planner-only `DrainWeighted`. Small, isolated.
 3. **Phase 3 — notifications cadence tiers.** Proximity tiers + delivery floor. Careful (must not break delivery guarantee).
-4. **Phase 4 — probe Band-1 sampling (optional).** Tiny; ship only if desired.
 
 Each phase = its own `/animeenigma-after-update` (deploy + changelog + push).
 
 ---
 
-## 11. Non-goals
+## 10. Non-goals
 
 - No change to the visitor-signal source, cv:visit writers, or the 7d/8d windows.
 - No merge of notifications/autocache into content-verify's literal queue (structurally impossible: ongoing-only / foreign DB).
 - No AI subtitle work (separate TODO already filed).
+- No change to the playability probe (analytics :8092) — its anime-set / anchors / health cadence stay exactly as-is.
 - No change to eviction ranking, provider health/cadence state machine, or spotlight logic.
 - No new persisted queue table — cv stays a virtual queue.
 
 ---
 
-## 12. Open decisions — resolved (owner approved direction 2026-07-20)
+## 11. Open decisions — resolved (owner approved direction 2026-07-20)
 
 1. **Weighted band claim** (not strict top-down hierarchy) — chosen. Keeps "просто смотрят" from starving under an all-ongoing flood; proportions env-tunable.
 2. **Band 2 = top-100 + watched merged** (not separate bands) — chosen. Signals compose; a watched top-100 title sorts highest naturally.
 3. **Idle tier sweeps the whole catalog tail by windows** (not capped at top-300) — chosen, matching "топ200 – топ300 и так далее". Bounded by a 7d idle cooldown + round-robin cursor so the tail never spins hot.
 
-**Metrics:** UXΔ = +3 (Better) (fresh ongoing episodes verified/notified/prefetched faster; catalog tail no longer never-probed) · CDI = 0.04 * 21 · MVQ = Kraken 87%/85%.
+**Metrics:** UXΔ = +3 (Better) (fresh ongoing episodes verified/notified/prefetched faster; catalog tail no longer never-probed) · CDI = 0.04 * 13 · MVQ = Kraken 87%/85%.
