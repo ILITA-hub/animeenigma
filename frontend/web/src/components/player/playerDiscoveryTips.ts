@@ -6,6 +6,7 @@ export const PLAYER_DISCOVERY_TIP_KEYS = [
   'player.discoveryTips.items.rawDub',
   'player.discoveryTips.items.watchTogether',
   'player.discoveryTips.items.streamReport',
+  'player.discoveryTips.items.languageLearning',
   'player.discoveryTips.items.help',
 ] as const
 

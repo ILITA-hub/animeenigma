@@ -333,6 +333,7 @@
         "rawDub": "RAW keeps the original Japanese audio; DUB uses a localized voice track.",
         "watchTogether": "Create a private Watch Together room to keep playback and chat in sync for everyone.",
         "streamReport": "Stream broken? The report button in the player sends the admins useful logs automatically.",
+        "languageLearning": "Turn anime into a language lesson: enable our selectable subtitles and install a popup dictionary — Yomitan or 10ten for Japanese, Definer for English. Pause the episode and select an unfamiliar word to see its meaning instantly.",
         "help": "Press F1 almost anywhere to open the full list of secret tips and hotkeys in a new tab."
       }
     },
