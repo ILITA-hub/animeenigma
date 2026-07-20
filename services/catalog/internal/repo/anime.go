@@ -652,3 +652,86 @@ func (r *AnimeRepository) ListVerifyMembership(ctx context.Context, ongoingLimit
 		Scan(&top).Error
 	return ongoing, top, err
 }
+
+// InterestRow is the richer projection the unified interest endpoint returns:
+// identity + the raw signals each content-verify band ranks on.
+type InterestRow struct {
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	EpisodesAired int        `json:"episodes_aired"`
+	Score         float64    `json:"score"`
+	NextEpisodeAt *time.Time `json:"next_episode_at,omitempty"`
+	TopRank       int        `json:"top_rank,omitempty"` // 1-based browse rank in the top window
+	Planners      int        `json:"planners,omitempty"` // count of plan_to_watch rows
+}
+
+// InterestBands is the full interest snapshot for the content-verify queue.
+type InterestBands struct {
+	Ongoing    []InterestRow `json:"ongoing"`
+	Top        []InterestRow `json:"top"`
+	Planned    []InterestRow `json:"planned"`
+	IdleWindow []InterestRow `json:"idle_window"`
+	IdleTotal  int           `json:"idle_total"`
+}
+
+// ListInterestBands returns the banded interest snapshot. `idleOffset` pages the
+// non-ongoing browse tail so content-verify can round-robin through top-200/300/…;
+// the caller seeds idleOffset at topLimit so the idle window never overlaps `Top`.
+func (r *AnimeRepository) ListInterestBands(ctx context.Context, ongoingLimit, topLimit, idleWindow, idleOffset int) (InterestBands, error) {
+	var b InterestBands
+	db := r.db.WithContext(ctx)
+
+	// Band 1 — visible ongoings, score DESC.
+	if err := db.Model(&domain.Anime{}).
+		Select("id, name, episodes_aired, score, next_episode_at").
+		Where("status = ? AND (hidden = ? OR hidden IS NULL)", "ongoing", false).
+		Order("score DESC").Limit(ongoingLimit).
+		Scan(&b.Ongoing).Error; err != nil {
+		return b, err
+	}
+
+	// Band 2 slice — browse-order top window.
+	if err := db.Model(&domain.Anime{}).
+		Select("id, name, episodes_aired, score").
+		Where("hidden = ? OR hidden IS NULL", false).
+		Order("sort_priority DESC, score DESC").Limit(topLimit).
+		Scan(&b.Top).Error; err != nil {
+		return b, err
+	}
+	for i := range b.Top {
+		b.Top[i].TopRank = i + 1
+	}
+
+	// Band 3 sub-source (a) — planned (non-ongoing), planners DESC.
+	if err := db.Table("animes a").
+		Select("a.id AS id, a.name AS name, a.episodes_aired AS episodes_aired, a.score AS score, COUNT(al.anime_id) AS planners").
+		Joins("JOIN anime_list al ON al.anime_id = a.id AND al.status = ?", "plan_to_watch").
+		Where("a.status <> ? AND (a.hidden = ? OR a.hidden IS NULL)", "ongoing", false).
+		Group("a.id, a.name, a.episodes_aired, a.score").
+		Order("planners DESC, a.score DESC").Limit(idleWindow).
+		Scan(&b.Planned).Error; err != nil {
+		return b, err
+	}
+
+	// Band 3 sub-source (b) — non-ongoing browse tail at the cursor offset.
+	if err := db.Model(&domain.Anime{}).
+		Select("id, name, episodes_aired, score").
+		Where("status <> ? AND (hidden = ? OR hidden IS NULL)", "ongoing", false).
+		Order("sort_priority DESC, score DESC").Offset(idleOffset).Limit(idleWindow).
+		Scan(&b.IdleWindow).Error; err != nil {
+		return b, err
+	}
+	for i := range b.IdleWindow {
+		b.IdleWindow[i].TopRank = idleOffset + i + 1
+	}
+
+	// idle_total — visible non-ongoing count, so the caller wraps the cursor.
+	var total int64
+	if err := db.Model(&domain.Anime{}).
+		Where("status <> ? AND (hidden = ? OR hidden IS NULL)", "ongoing", false).
+		Count(&total).Error; err != nil {
+		return b, err
+	}
+	b.IdleTotal = int(total)
+	return b, nil
+}
