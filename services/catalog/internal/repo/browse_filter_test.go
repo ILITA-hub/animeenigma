@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -145,4 +146,23 @@ func TestAnimeRepository_ListStudios_OrderedByCount(t *testing.T) {
 	require.Len(t, got, 2) // Empty excluded (no anime)
 	require.Equal(t, "s-big", got[0].ID)   // count 2 first
 	require.Equal(t, "s-small", got[1].ID) // count 1 second
+}
+
+// The endub provider key selects has_english_dub and nothing else — in
+// particular it must NOT alias has_dub, which is Kodik RU voiceover.
+func TestSearch_ProviderEndubSelectsEnglishDubOnly(t *testing.T) {
+	db := setupBrowseFilterTestDB(t)
+	r := &AnimeRepository{db: db}
+	seedBrowseAnime(t, db, "endub", "Has English Dub")
+	seedBrowseAnime(t, db, "rudub", "Has Kodik RU Dub")
+	require.NoError(t, db.Exec(`UPDATE animes SET has_english_dub=1 WHERE id='endub'`).Error)
+	require.NoError(t, db.Exec(`UPDATE animes SET has_dub=1 WHERE id='rudub'`).Error)
+
+	got, total, err := r.Search(context.Background(), domain.SearchFilters{
+		Providers: []string{"endub"}, Page: 1, PageSize: 10,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, got, 1)
+	assert.Equal(t, "endub", got[0].ID)
 }

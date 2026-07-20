@@ -729,7 +729,7 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		for _, p := range raw {
 			p = strings.TrimSpace(strings.ToLower(p))
 			switch p {
-			case "kodik", "dub", "ae":
+			case "kodik", "dub", "ae", "endub":
 				if !seen[p] {
 					filters.Providers = append(filters.Providers, p)
 					seen[p] = true

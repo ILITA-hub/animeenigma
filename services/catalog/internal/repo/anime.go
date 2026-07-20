@@ -237,6 +237,7 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 			"kodik": "has_kodik",
 			"dub":   "has_dub",
 			"ae":    "has_video",
+			"endub": "has_english_dub",
 		}
 		var orParts []string
 		for _, p := range filters.Providers {
