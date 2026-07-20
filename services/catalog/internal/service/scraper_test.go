@@ -23,6 +23,8 @@ type fakeAnimeFetcher struct {
 	calls           int32
 	hasEnglishCalls int32
 	hasEnglishVal   bool
+	hasEnglish      bool
+	englishDub      *bool
 }
 
 func (f *fakeAnimeFetcher) GetByID(ctx context.Context, id string) (*domain.Anime, error) {
@@ -33,6 +35,12 @@ func (f *fakeAnimeFetcher) GetByID(ctx context.Context, id string) (*domain.Anim
 func (f *fakeAnimeFetcher) SetHasEnglish(ctx context.Context, animeID string, has bool) error {
 	atomic.AddInt32(&f.hasEnglishCalls, 1)
 	f.hasEnglishVal = has
+	f.hasEnglish = has
+	return nil
+}
+
+func (f *fakeAnimeFetcher) SetEnglishDub(ctx context.Context, animeID string, has bool) error {
+	f.englishDub = &has
 	return nil
 }
 

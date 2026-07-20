@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ var ErrMalIDUnavailable = errors.New("mal_id unavailable for this anime")
 type animeFetcher interface {
 	GetByID(ctx context.Context, id string) (*domain.Anime, error)
 	SetHasEnglish(ctx context.Context, animeID string, has bool) error
+	SetEnglishDub(ctx context.Context, animeID string, has bool) error
 }
 
 // scraperForwarder is the minimal interface scraperOps needs from the
@@ -122,13 +124,64 @@ func altTitleForms(primary string, forms ...string) []string {
 	return out
 }
 
+// parseScraperEpisodes reads the episode list out of a scraper-episodes
+// response. Returns the episode count, whether ANY episode carries a dub
+// track, and ok=false when the body is undecodable or the list is empty —
+// neither is a verdict. Mirrors the envelope parsed by
+// animeLevelResolver.latestEnglish; shared with the EN-dub backfiller.
+func parseScraperEpisodes(body []byte) (int, bool, bool) {
+	var env struct {
+		Data struct {
+			Episodes []struct {
+				Number int  `json:"number"`
+				HasDub bool `json:"has_dub"`
+			} `json:"episodes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return 0, false, false
+	}
+	eps := env.Data.Episodes
+	if len(eps) == 0 {
+		return 0, false, false
+	}
+	for _, e := range eps {
+		if e.HasDub {
+			return len(eps), true, true
+		}
+	}
+	return len(eps), false, true
+}
+
+// backfillEnglishFlags opportunistically flips animes.has_english and
+// animes.has_english_dub from a successful scraper-episodes response.
+// Best-effort throughout: the caller already has its episodes, so decode and
+// write failures are swallowed.
+//
+// Honesty rule: a NEGATIVE dub verdict is written only for an unpinned call
+// (prefer == ""), which consulted the whole failover chain. A call pinned to
+// one provider may only promote to true — otherwise a sub-only gogoanime
+// answer would erase a true verdict from miruro, which is DUB-only.
+func (o *scraperOps) backfillEnglishFlags(ctx context.Context, animeID, prefer string, body []byte) {
+	_, hasDub, ok := parseScraperEpisodes(body)
+	if !ok {
+		return
+	}
+	_ = o.animeRepo.SetHasEnglish(ctx, animeID, true)
+	if !hasDub && prefer != "" {
+		return
+	}
+	_ = o.animeRepo.SetEnglishDub(ctx, animeID, hasDub)
+}
+
 // GetScraperEpisodes resolves animeID -> MAL ID and forwards to the
 // scraper service. Returns the scraper's status + body verbatim so the
 // handler can passthrough 503s (Phase 15 not-yet-implemented contract).
 //
 // Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5): on a 200 response with
 // non-empty episodes payload, opportunistically flips animes.has_english
-// to true via SetHasEnglish. Best-effort — failures are logged but never
+// and animes.has_english_dub from the decoded episode list; see
+// backfillEnglishFlags. Best-effort — failures are logged but never
 // surface to the caller. Mirrors the SetHasKodik / SetHasAnimeLib lazy-
 // backfill pattern from Phase 15 (UX-31).
 func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer string, exclusive bool) (int, []byte, error) {
@@ -137,19 +190,8 @@ func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer str
 		return 0, nil, err
 	}
 	status, body, gErr := o.scraperClient.GetEpisodes(ctx, malID, title, altTitles, prefer, exclusive)
-	// Best-effort backfill on confirmed success. Detect non-empty
-	// episodes by a simple substring scan — the response envelope is
-	// `{"success":true,"data":{"episodes":[...]}}` and an empty
-	// episodes array reads `"episodes":[]`. Use `"episodes":[{` as the
-	// marker for "at least one element".
-	if gErr == nil && status == 200 && len(body) > 0 &&
-		strings.Contains(string(body), `"episodes":[{`) {
-		if uerr := o.animeRepo.SetHasEnglish(ctx, animeID, true); uerr != nil {
-			// Log only — never propagate. The user got their episodes;
-			// the column will backfill on the next hit if this one
-			// transiently failed.
-			_ = uerr
-		}
+	if gErr == nil && status == 200 && len(body) > 0 {
+		o.backfillEnglishFlags(ctx, animeID, prefer, body)
 	}
 	return status, body, gErr
 }
