@@ -38,6 +38,10 @@ class MiruroRecipe(Recipe):
     # nav rather than rotating the exit (see module docstring + engine
     # _solve_cf_challenge).
     solve_challenge = True
+    # CF's silent __cf_chl_rt_tk managed challenge on www.miruro.tv is unpassable
+    # from our datacenter IP (2026-07-20) — pin the warm solve to the Cloudflare
+    # WARP exit, which clears it cleanly. Fail-open to direct if warp is unset.
+    preferred_proxy_type = "warp"
     # The secure-pipe response marks its transport codec (gzip vs xor+gzip) in the
     # x-obfuscated RESPONSE header; the Go decoder needs it, so surface it back.
     response_header_allowlist = ("x-obfuscated",)

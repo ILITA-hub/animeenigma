@@ -91,7 +91,18 @@ class ProxyPool:
         if sticky_key and sticky_key in self._sticky:
             sid = self._sticky[sticky_key]
             e = self._entries.get(sid)
-            if e is not None and sid not in exclude and not self._cooling(e, now):
+            # A mismatched sticky binding must NOT defeat an explicit
+            # preferred_type: a warp-preferring provider (miruro/animepahe) whose
+            # profile was previously bound to `direct` (by warming or another
+            # provider) must re-pin to the warp exit, not stay on direct. When
+            # preferred_type is None or already matches, keep the sticky exit for
+            # CDN affinity (unchanged behavior for every other caller).
+            if (
+                e is not None
+                and sid not in exclude
+                and not self._cooling(e, now)
+                and (preferred_type is None or e.type == preferred_type)
+            ):
                 return e
 
         candidates = [

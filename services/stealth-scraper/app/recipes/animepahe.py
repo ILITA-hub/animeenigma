@@ -36,3 +36,8 @@ class AnimePaheRecipe(Recipe):
     # nav rather than rotating the exit (see module docstring + engine
     # _solve_cf_challenge).
     solve_challenge = True
+    # 2026-07-20: CF escalated animepahe.pw to the same SILENT __cf_chl_rt_tk
+    # managed challenge as miruro — unpassable from our datacenter IP (the
+    # interactive-Turnstile click the docstring describes is gone). Pin the warm
+    # solve to the Cloudflare WARP exit; fail-open to direct if warp is unset.
+    preferred_proxy_type = "warp"

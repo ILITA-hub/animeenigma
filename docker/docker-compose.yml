@@ -198,6 +198,29 @@ services:
       retries: 3
       start_period: 40s
 
+  # Cloudflare WARP egress (PROXY mode) — a non-datacenter exit for the
+  # solve_challenge providers (miruro/animepahe) whose CF managed __cf_chl_rt_tk
+  # challenge is unpassable from our server IP (proven 2026-07-20). Exposes
+  # SOCKS5 on :1080 to the docker network; stealth-scraper pins those two
+  # providers to it via recipe preferred_proxy_type='warp' + STEALTH_WARP_PROXY_URL.
+  # Fail-open: if this container is down, those providers fall back to the direct
+  # exit (today's behavior) and gogoanime/nineanime are unaffected — so it is
+  # intentionally NOT a stealth-scraper depends_on.
+  warp-proxy:
+    logging: *default-logging
+    build: ./warp-proxy
+    container_name: animeenigma-warp-proxy
+    restart: unless-stopped
+    mem_limit: 256m
+    volumes:
+      - warp_reg:/var/lib/cloudflare-warp
+    healthcheck:
+      test: ["CMD", "bash", "-c", "warp-cli --accept-tos status 2>/dev/null | grep -q Connected && (exec 3<>/dev/tcp/127.0.0.1/1080)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
   scraper:
     logging: *default-logging
     build:
@@ -1602,6 +1625,8 @@ volumes:
   jackett_config:
   # Persistent Camoufox browser profiles (cookies/history → aged sessions).
   stealth_profiles:
+  # Cloudflare WARP account registration (persists across warp-proxy restarts).
+  warp_reg:
   postgres_data:
   redis_data:
   minio_data:

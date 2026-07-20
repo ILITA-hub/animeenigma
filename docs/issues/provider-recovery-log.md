@@ -5,6 +5,31 @@ Newest entry first. Used by the recovery operator to avoid repeating yesterday's
 
 ---
 
+## 2026-07-20 (afternoon) — miruro + animepahe (WARP recovery, both ✅)
+
+**State before:** both `policy=manual, health=down/degraded` — the silent Cloudflare `__cf_chl_rt_tk` managed-JS challenge diagnosed in the earlier 07-20 entry (below), which reclassified the root cause from "Camoufox click-target bug" to "CF escalated to a silent managed challenge our datacenter IP cannot pass" and left three owner options. The owner picked **WARP** (Cloudflare's own consumer egress) — NOT the residential ostapLase proxy (test-only), NOT accepting it as unrecoverable.
+
+**Root cause confirmed = IP reputation, not a Camoufox wall.** Isolated Camoufox tests (throwaway `docker-stealth-scraper` container — no direct curl to providers) through two non-datacenter exits, ostapLase residential (`212.124.23.244`) and **Cloudflare WARP** (`104.28.x`), both obtained `cf_clearance` on `www.miruro.tv` and loaded the real 350 KB SPA with NO challenge, while our datacenter IP stays stuck at "Just a moment…".
+
+**Fix shipped (worktree → main, TDD):**
+1. **`warp-proxy` container** (`docker/warp-proxy/`, self-built from the official `cloudflare-warp` apt package + `socat`): WARP in userspace **proxy mode** (no TUN/NET_ADMIN, host routing untouched), republishing its loopback SOCKS5 on `0.0.0.0:1080` so siblings reach it as `socks5://warp-proxy:1080`. Registration persists in a `warp_reg` volume; healthcheck gates on `Connected` + relay port.
+2. **Config**: `STEALTH_WARP_PROXY_URL=socks5://warp-proxy:1080` in `docker/.env` (canonical, host-only) → `build_pool_from_config` adds a `warp` pool exit.
+3. **Provider pin**: `Recipe.preferred_proxy_type` (base default `None`); miruro + animepahe set `"warp"`; `_warm_fetch_session` forwards it to `pool.select`. Fail-open: with warp absent/down, `select` falls back to `direct` (today's behavior); gogoanime/nineanime untouched.
+4. **Sticky-vs-preferred bug found + fixed during E2E**: `ProxyPool.select`'s sticky binding overrode `preferred_type` — a profile pre-bound to `direct` (by warming/another provider) pinned miruro to `direct` despite `preferred_proxy_type="warp"`, so the first live attempt still challenged (metrics: 2 direct selects, 0 warp). Fix: an explicit `preferred_type` now wins over a *mismatched* sticky binding and re-pins to warp (stable thereafter); non-pinned callers keep sticky affinity. Full `services/stealth-scraper` suite: **191 passed**.
+
+**Verification (E2E, live, compose host):**
+- warp-proxy healthy; Camoufox via `warp-proxy:1080` → exit IP `104.28.225.122` (Cloudflare AS13335), miruro `cf_clearance` obtained, real SPA.
+- Real scraper path, the pinned repro (Azur Lane: Bisoku Zenshin! Ni!!, `0f3b6eb7-4847-4386-969b-7c2bdbd8288c`, ep 3): `episodes?prefer=miruro` → 200 real episodes; `servers` → `kiwi`; `stream` → real **1080p** masked-proxy `uwu.m3u8`. `animepahe episodes?prefer=animepahe` → 200 real episodes.
+- Proof of exit: `stealth_challenge_total{host="animepahe.pw",kind="warm_solved"}=1` (vs 0 solves in 2000+ direct attempts per the earlier entry) + warp-svc tunnel stats **27.7 MB received** through the MASQUE tunnel (Colo FRA). Video segments ride the *streaming* service's masked path (kwik.cx/uwu), NOT WARP — so WARP carries only small discovery traffic (low bandwidth).
+
+**Action taken:** honest `probe-result pass` for both → `health: recovering, policy: auto` (reconciler un-parked them from manual). Disconnected the host `warp-svc` daemon used only for the isolated test (prod uses the container).
+
+**Outcome:** ✅ **Recovered** — miruro + animepahe both resolve real streams through Cloudflare WARP, verified end-to-end. First functional recovery for these two since 07-18.
+
+**Next step:** confirm both climb `recovering → up` over the next probe cycles. Watch WARP throughput (trivial today — discovery only). If a future operator finds them down again, FIRST check `docker exec animeenigma-warp-proxy warp-cli --accept-tos status` (Connected?) + the warp-proxy healthcheck before re-diagnosing. ostapLase stays test-only; WARP is the standing production exit for `solve_challenge` providers.
+
+---
+
 ## 2026-07-20 — miruro
 
 **State before:** `policy=manual, health=down, status=degraded` — reason: stale `cdn_unreachable on ` text (health_since 2026-07-18T06:02:24Z, last_probed_at 2026-07-19T02:32:43Z). Selection: no "Failing" (auto+down) or stuck "Recovering" candidate existed — `gogoanime` (`auto/degraded`, health_since today 00:00) is the only auto-policy non-`up` provider, but it doesn't cleanly fit tier (c) and tier (c) itself had genuine non-repeat candidates today (unlike 07-16, when it didn't). `allanime-okru` was **yesterday's literal pick** (skip, no-repeat rule). That left `animepahe` and `miruro`, both `manual/down` since 07-18 (demoted well over 24h ago) — both diagnosed together in the 07-18 entry as sharing the exact same root cause (`_solve_cf_challenge`/`_click_turnstile`, 0/1200+ solves in 12h+ at the time). Picked `miruro`; the 07-18 entry's own "Next step" explicitly proposed a one-time diagnostic DOM capture (screenshot/`page.content()` behind a debug flag) as the fastest way to close the open loop — that capability didn't exist yet, so building and using it was this run's actionable target, not a blind re-attempt of the same click-logic guess.

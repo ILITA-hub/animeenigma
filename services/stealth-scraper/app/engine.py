@@ -1271,12 +1271,18 @@ class CamoufoxEngine:
             if profile is None:
                 metrics.POOL_EXHAUSTED_TOTAL.inc()
                 raise PoolExhausted("no free browser profile (pool/sessions exhausted)")
-            proxy = self.pool.select(sticky_key=profile.id)
+            recipe = self._recipes.get(provider)
+            # solve_challenge providers whose CF gate is unpassable from our
+            # datacenter IP (miruro/animepahe) pin to the `warp` exit; the pool
+            # fail-opens to direct when warp isn't configured. sticky_key keeps
+            # the stream + subsequent fetches for this profile on the same exit.
+            proxy = self.pool.select(
+                sticky_key=profile.id,
+                preferred_type=getattr(recipe, "preferred_proxy_type", None),
+            )
             if proxy is None:
                 self.profiles.release(profile, ok=False)
                 raise RecipeError("no proxy available for fetch warm")
-
-            recipe = self._recipes.get(provider)
 
             try:
                 # solve_challenge providers (Cloudflare Turnstile, e.g. animepahe) need

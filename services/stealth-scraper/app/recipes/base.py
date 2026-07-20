@@ -108,6 +108,14 @@ class Recipe:
     # origin nav instead of rotating the exit IP on the first "Just a moment…"
     # interstitial. Default False ⇒ unchanged rotate-on-challenge behavior.
     solve_challenge: bool = False
+    # Pin this provider to a specific proxy-pool exit TYPE (direct|warp|
+    # residential|mobile) instead of the default direct-first selection. Set to
+    # "warp" for providers whose Cloudflare challenge is unpassable from our
+    # datacenter IP (miruro/animepahe) so their warm fetch routes through the
+    # Cloudflare WARP exit. Fail-open: if that type isn't in the pool
+    # (STEALTH_WARP_PROXY_URL unset) select() falls back to direct. None ⇒
+    # unchanged direct-first selection.
+    preferred_proxy_type: str | None = None
     # Response headers this recipe needs surfaced back to the Go caller from a
     # browser /fetch (lowercase names). Default () ⇒ none. Kept per-recipe (not a
     # global) so the exfiltration surface is least-privilege — only a provider that
