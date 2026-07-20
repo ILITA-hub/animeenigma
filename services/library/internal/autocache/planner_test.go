@@ -18,12 +18,17 @@ func promValue(t *testing.T, c prometheus.Counter) float64 {
 	return testutil.ToFloat64(c)
 }
 
-// fakeDrainer is an in-memory demandDrainer. drained is returned by Drain;
-// deletes records each Delete(malID, episode).
+// fakeDrainer is an in-memory demandDrainer. drained is returned by Drain (and,
+// split by reason class, by DrainWeighted); deletes records each Delete(malID,
+// episode). gotHotN/gotColdN record the (hotN, coldN) DrainWeighted was called
+// with; if drainWeightedErr is set, DrainWeighted returns it (to exercise the
+// planner's fallback to Drain).
 type fakeDrainer struct {
-	drained       []domain.AutocacheDemand
-	deletes       [][2]any // {malID, episode}
-	expireCutoffs []time.Time
+	drained           []domain.AutocacheDemand
+	deletes           [][2]any // {malID, episode}
+	expireCutoffs     []time.Time
+	gotHotN, gotColdN int
+	drainWeightedErr  error
 }
 
 func (f *fakeDrainer) Drain(_ context.Context, limit int) ([]domain.AutocacheDemand, error) {
@@ -34,6 +39,27 @@ func (f *fakeDrainer) Drain(_ context.Context, limit int) ([]domain.AutocacheDem
 		return f.drained[:limit], nil
 	}
 	return f.drained, nil
+}
+
+// DrainWeighted emulates the real split over f.drained (already class-tagged
+// in the test) so callers can assert both the requested (hotN, coldN) and the
+// resulting row set without a real DB.
+func (f *fakeDrainer) DrainWeighted(_ context.Context, hotN, coldN int) ([]domain.AutocacheDemand, error) {
+	f.gotHotN, f.gotColdN = hotN, coldN
+	if f.drainWeightedErr != nil {
+		return nil, f.drainWeightedErr
+	}
+	var hot, cold []domain.AutocacheDemand
+	for _, r := range f.drained {
+		if r.Reason == domain.DemandReasonBackfill {
+			cold = append(cold, r)
+		} else {
+			hot = append(hot, r)
+		}
+	}
+	out := append([]domain.AutocacheDemand{}, hot[:min(hotN, len(hot))]...)
+	out = append(out, cold[:min(coldN, len(cold))]...)
+	return out, nil
 }
 
 func (f *fakeDrainer) Delete(_ context.Context, malID string, episode int) error {
@@ -467,5 +493,52 @@ func TestPlannerBudgetFallbackEstimate(t *testing.T) {
 	}
 	if ev.calls[0] != AvgRawEpSize {
 		t.Fatalf("EnsureRoom estBytes = %d, want AvgRawEpSize=%d (fallback)", ev.calls[0], AvgRawEpSize)
+	}
+}
+
+// TestPlannerUsesWeightedDrainShare asserts the default hotShare (0.70) splits
+// drainBatchLimit=50 into hotN=35/coldN=15 when the Planner calls DrainWeighted
+// — the weighted-drain analogue of the reason-trigger-mapping assertions above.
+func TestPlannerUsesWeightedDrainShare(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	d := &fakeDrainer{drained: []domain.AutocacheDemand{
+		{MALID: "1", Episode: 5, Reason: domain.DemandReasonOngoing, Titles: "Anime"},
+	}}
+	p := &fakePresence{present: map[string]bool{}}
+	e := &fakeEnqueuer{active: map[string]bool{}}
+	s := &fakeSearcher{releases: winningRelease()}
+	c := &fakeConfig{cfg: enabledCfg()}
+
+	pl := newPlannerForTest(d, p, e, s, c, m)
+	pl.runOnce(context.Background())
+
+	if d.gotHotN != 35 || d.gotColdN != 15 {
+		t.Fatalf("weighted split = (%d,%d), want (35,15)", d.gotHotN, d.gotColdN)
+	}
+}
+
+// TestPlannerWeightedDrainFallsBackToFIFOOnError asserts that when DrainWeighted
+// errors, the planner falls back to the existing Drain FIFO path and still
+// processes the drained rows — here, a present episode still deletes its demand
+// row (mirrors TestPlannerPresentDeletesAndCounts), proving the sweep didn't
+// just bail out on the weighted-drain error.
+func TestPlannerWeightedDrainFallsBackToFIFOOnError(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := libmetrics.NewLibraryMetricsWithRegisterer(reg)
+	d := &fakeDrainer{
+		drained:          []domain.AutocacheDemand{{MALID: "1", Episode: 5, Reason: domain.DemandReasonBackfill, Titles: "Anime"}},
+		drainWeightedErr: liberrors.Internal("weighted drain unavailable"),
+	}
+	p := &fakePresence{present: map[string]bool{"1:5": true}}
+	e := &fakeEnqueuer{active: map[string]bool{}}
+	s := &fakeSearcher{releases: winningRelease()}
+	c := &fakeConfig{cfg: enabledCfg()}
+
+	pl := newPlannerForTest(d, p, e, s, c, m)
+	pl.runOnce(context.Background())
+
+	if len(d.deletes) != 1 {
+		t.Fatalf("weighted-drain-error fallback must still process the drained row (present-delete), got %d deletes", len(d.deletes))
 	}
 }

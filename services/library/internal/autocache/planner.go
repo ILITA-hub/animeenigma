@@ -2,6 +2,7 @@ package autocache
 
 import (
 	"context"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 // demandDrainer is the slice of *repo.DemandRepository the Planner needs.
 type demandDrainer interface {
 	Drain(ctx context.Context, limit int) ([]domain.AutocacheDemand, error)
+	DrainWeighted(ctx context.Context, hotN, coldN int) ([]domain.AutocacheDemand, error)
 	Delete(ctx context.Context, malID string, episode int) error
 	DeleteExpired(ctx context.Context, cutoff time.Time) (int64, error)
 }
@@ -116,6 +118,19 @@ const (
 	// Planner uses, keeping both pre-admit paths symmetric on the unknown-size case.
 	AvgRawEpSize int64 = 1288490188 // ~1.2 GiB
 )
+
+// hotShare is the fraction of each drain batch reserved for hot-reason demand
+// (next_ep, ongoing) over backfill (spec §5). Env-overridable; clamped to [0,1].
+var hotShare = envHotShare()
+
+func envHotShare() float64 {
+	if v := os.Getenv("AUTOCACHE_HOT_SHARE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			return f
+		}
+	}
+	return 0.70
+}
 
 // Planner drains autocache_demand → RAW download jobs on a config-gated ticker.
 type Planner struct {
@@ -234,12 +249,20 @@ func (p *Planner) runOnce(ctx context.Context) time.Duration {
 		p.log.Infow("autocache planner: expired stale demand rows", "count", n, "max_age", maxDemandAge.String())
 	}
 
-	rows, err := p.demand.Drain(ctx, drainBatchLimit)
+	hotN := int(float64(drainBatchLimit) * hotShare)
+	coldN := drainBatchLimit - hotN
+	rows, err := p.demand.DrainWeighted(ctx, hotN, coldN)
 	if err != nil {
 		if p.log != nil {
-			p.log.Warnw("autocache planner: drain failed", "error", err)
+			p.log.Warnw("autocache planner: weighted drain failed; falling back to FIFO", "error", err)
 		}
-		return cadence
+		rows, err = p.demand.Drain(ctx, drainBatchLimit)
+		if err != nil {
+			if p.log != nil {
+				p.log.Warnw("autocache planner: drain failed", "error", err)
+			}
+			return cadence
+		}
 	}
 
 	searches := 0
