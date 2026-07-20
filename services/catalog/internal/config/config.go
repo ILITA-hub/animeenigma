@@ -23,6 +23,7 @@ type Config struct {
 	Hanime      HanimeConfig
 	Telegram    TelegramConfig
 	HealthCheck HealthCheckConfig
+	EnglishDub  EnglishDubConfig
 	Scraper     ScraperConfig
 	// OpenSubtitles — workstream raw-jp, Phase 02. Multi-language
 	// subtitle source merged with Jimaku by the subs aggregator.
@@ -86,6 +87,15 @@ type HanimeConfig struct {
 
 type HealthCheckConfig struct {
 	Interval time.Duration
+}
+
+// EnglishDubConfig tunes the background EN-dub backfiller goroutine (catalog
+// internal/service.EnglishDubBackfiller).
+type EnglishDubConfig struct {
+	Interval     time.Duration
+	OngoingAge   time.Duration
+	StaleAge     time.Duration
+	PromoteEvery time.Duration
 }
 
 type TelegramConfig struct {
@@ -209,6 +219,12 @@ func Load() (*Config, error) {
 		},
 		HealthCheck: HealthCheckConfig{
 			Interval: getEnvDuration("PLAYER_HEALTH_CHECK_INTERVAL", 5*time.Minute),
+		},
+		EnglishDub: EnglishDubConfig{
+			Interval:     getEnvDuration("CATALOG_ENDUB_BACKFILL_INTERVAL", time.Minute),
+			OngoingAge:   getEnvDuration("CATALOG_ENDUB_ONGOING_AGE", 7*24*time.Hour),
+			StaleAge:     getEnvDuration("CATALOG_ENDUB_STALE_AGE", 30*24*time.Hour),
+			PromoteEvery: getEnvDuration("CATALOG_ENDUB_PROMOTE_INTERVAL", time.Hour),
 		},
 		Scraper: ScraperConfig{
 			APIURL:  getEnv("SCRAPER_API_URL", "http://scraper:8088"),

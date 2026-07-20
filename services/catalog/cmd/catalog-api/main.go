@@ -535,6 +535,26 @@ func main() {
 	defer healthCancel()
 	go healthChecker.Start(healthCtx)
 
+	// EN-dub backfill. The lazy hook on the scraper-episodes path covers
+	// titles users open; this loop reaches the long tail at one title per
+	// minute. It pauses entirely while the governor reports Elevated+ —
+	// every probe fans out to real upstream providers.
+	endubShed := cache.NewDegradationWatcher(redisCache, 5*time.Second)
+	endubShed.Start(healthCtx)
+	endubBackfiller := service.NewEnglishDubBackfiller(
+		animeRepo,
+		catalogService,
+		endubShed,
+		service.EnglishDubBackfillConfig{
+			Interval:     cfg.EnglishDub.Interval,
+			OngoingAge:   cfg.EnglishDub.OngoingAge,
+			StaleAge:     cfg.EnglishDub.StaleAge,
+			PromoteEvery: cfg.EnglishDub.PromoteEvery,
+		},
+		log,
+	)
+	go endubBackfiller.Start(healthCtx)
+
 	// Workstream raw-jp, Phase 06 — internal cache-invalidation
 	// endpoint POSTed by the library encoder after every successful
 	// encode. Mounted OUTSIDE /api (no AuthMiddleware) — reachable
