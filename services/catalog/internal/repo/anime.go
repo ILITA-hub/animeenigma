@@ -66,7 +66,8 @@ func (r *AnimeRepository) GetByMALID(ctx context.Context, malID string) (*domain
 // owns. Update force-writes exactly these (Select includes zero values, so a
 // finished anime's next_episode_at is correctly cleared) and never touches the
 // lazily-maintained or admin-controlled columns: the provider-availability
-// flags (has_dub/has_kodik/has_animelib/has_raw/has_english), the local
+// flags (has_dub/has_kodik/has_animelib/has_raw/has_english/has_english_dub
+// and its english_dub_checked_at stamp), the local
 // has_video flag, the admin pin (sort_priority), hidden, franchise /
 // franchise_checked, or the externally-resolved IDs (mal_id, ani_list_id,
 // im_db_id, tmdb_id). Those are maintained by their dedicated Set*/Update*
@@ -369,6 +370,18 @@ func (r *AnimeRepository) SetHasRaw(ctx context.Context, animeID string, has boo
 func (r *AnimeRepository) SetHasEnglish(ctx context.Context, animeID string, has bool) error {
 	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
 		Update("has_english", has).Error
+}
+
+// SetEnglishDub writes the EN-dub verdict for one anime and stamps
+// english_dub_checked_at, so the background backfiller can tell "probed, no
+// dub" apart from "never probed". Both columns move together — a verdict
+// without a timestamp would be re-probed forever. Best-effort at every caller.
+func (r *AnimeRepository) SetEnglishDub(ctx context.Context, animeID string, has bool) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Updates(map[string]any{
+			"has_english_dub":        has,
+			"english_dub_checked_at": time.Now().UTC(),
+		}).Error
 }
 
 // UpdateExternalIDs sets animes.imdb_id and/or animes.tmdb_id when present.

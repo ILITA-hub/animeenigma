@@ -23,6 +23,7 @@ func setupBrowseFilterTestDB(t *testing.T) *gorm.DB {
 		has_video INTEGER DEFAULT 0, has_dub INTEGER DEFAULT 0,
 		has_kodik INTEGER DEFAULT 0, has_animelib INTEGER DEFAULT 0,
 		has_raw INTEGER DEFAULT 0, has_english INTEGER DEFAULT 0,
+		has_english_dub INTEGER DEFAULT 0, english_dub_checked_at DATETIME,
 		hidden INTEGER DEFAULT 0, sort_priority INTEGER DEFAULT 0,
 		created_at DATETIME, updated_at DATETIME, deleted_at DATETIME
 	)`).Error)

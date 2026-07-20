@@ -79,7 +79,16 @@ type Anime struct {
 	// HasKodik / HasAnimeLib / HasRaw lazy-backfill pattern.
 	// Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5).
 	HasEnglish   bool `gorm:"default:false;index;column:has_english" json:"has_english"`
-	Hidden       bool `gorm:"default:false" json:"hidden"`
+	// HasEnglishDub — the EN scraper chain reported at least one episode
+	// carrying a dub track for this anime. Distinct from HasDub, which is
+	// Kodik RU voiceover: the browse chip labelled "English (Dub)" read
+	// has_dub until 2026-07-20 and was simply mislabelled.
+	HasEnglishDub bool `gorm:"default:false;index;column:has_english_dub" json:"has_english_dub"`
+	// EnglishDubCheckedAt — when the EN-dub verdict was last established.
+	// NULL = never probed. Drives the background backfiller's re-check
+	// cadence; internal bookkeeping, so not serialized.
+	EnglishDubCheckedAt *time.Time `gorm:"index;column:english_dub_checked_at" json:"-"`
+	Hidden              bool       `gorm:"default:false" json:"hidden"`
 	SortPriority int  `gorm:"default:0;index:idx_animes_sort_score,priority:1" json:"sort_priority,omitempty"`
 	// NextEpisodeAt is filtered + ordered in the next-episode query;
 	// AiredOn is filtered + ordered in GetOngoingAnime / ListGuessPoolCandidates.

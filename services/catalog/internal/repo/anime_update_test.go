@@ -63,6 +63,7 @@ func setupAnimeUpdateTestDB(t *testing.T) *gorm.DB {
 		has_animelib INTEGER DEFAULT 0,
 		has_raw INTEGER DEFAULT 0,
 		has_english INTEGER DEFAULT 0,
+		has_english_dub INTEGER DEFAULT 0, english_dub_checked_at DATETIME,
 		hidden INTEGER DEFAULT 0,
 		sort_priority INTEGER DEFAULT 0,
 		next_episode_at DATETIME,
