@@ -29,7 +29,6 @@ type Config struct {
 	Workers      int           // concurrent in-process probe loops (clamped 1..4)
 	UnitBudget   time.Duration // hard per-unit budget; may exceed Interval (pause runs after the probe)
 	ReprobeTTL   time.Duration // verified/inconclusive re-probe age
-	TopLimit     int           // top-N membership
 	FFmpegPath   string
 	PythonPath   string
 	AnalyzersDir string
@@ -42,6 +41,15 @@ type Config struct {
 	// organic score, bypass cooldowns, and plan the preferred provider's
 	// skip family first — a temporary lever for "probe THIS now".
 	Pins map[string]string
+
+	// Banded prioritization (spec §3). BandWeights is the per-claim lottery
+	// [Band1, Band2, Band3]; FreshWindow is the ± window on next_episode_at that
+	// floats a just-aired ongoing to the front of Band 1; IdleCooldown is the
+	// long cooldown a settled idle-backfill title gets; IdleWindow pages the tail.
+	BandWeights  [3]int
+	FreshWindow  time.Duration
+	IdleCooldown time.Duration
+	IdleWindow   int
 
 	SkipEnabled      bool          // gate for the OP/ED skip-probe lane, once the verify lane is settled
 	SkipBudget       time.Duration // hard per-skip-task budget (locate or pair)
@@ -73,13 +81,17 @@ func Load() (*Config, error) {
 		// real (non-synth) unit — resolve alone exceeded it.
 		UnitBudget:   getEnvDuration("CV_UNIT_BUDGET", 240*time.Second),
 		ReprobeTTL:   getEnvDuration("CV_REPROBE_TTL", 720*time.Hour),
-		TopLimit:     getEnvInt("CV_TOP_LIMIT", 100),
 		FFmpegPath:   getEnv("CV_FFMPEG_PATH", "ffmpeg"),
 		PythonPath:   getEnv("CV_PYTHON", "python3"),
 		AnalyzersDir: getEnv("CV_ANALYZERS_DIR", "/app/analyzers"),
 		WorkDir:      getEnv("CV_WORKDIR", "/tmp/cv"),
 		WorkerOn:     getEnv("CV_WORKER_ENABLED", "true") != "false",
 		Pins:         parsePins(getEnv("CV_PIN_ANIME", "")),
+
+		BandWeights:  parseBandWeights(getEnv("CV_BAND_WEIGHTS", "")),
+		FreshWindow:  getEnvDuration("CV_FRESH_WINDOW", 48*time.Hour),
+		IdleCooldown: getEnvDuration("CV_IDLE_COOLDOWN", 168*time.Hour),
+		IdleWindow:   getEnvInt("CV_IDLE_WINDOW", 100),
 
 		SkipEnabled:      getEnv("CV_SKIP_ENABLED", "true") != "false",
 		SkipBudget:       getEnvDuration("CV_SKIP_BUDGET", 480*time.Second),
@@ -126,6 +138,29 @@ func parsePins(s string) map[string]string {
 		}
 	}
 	return pins
+}
+
+// parseBandWeights parses CV_BAND_WEIGHTS ("60,30,10") into the Band1/2/3 claim
+// lottery weights. Malformed input, wrong arity, or an all-zero (meaningless)
+// total falls back to the 60/30/10 default — an operator env, not user input.
+func parseBandWeights(s string) [3]int {
+	def := [3]int{60, 30, 10}
+	parts := strings.Split(s, ",")
+	if len(parts) != 3 {
+		return def
+	}
+	var w [3]int
+	for i, p := range parts {
+		n, err := strconv.Atoi(strings.TrimSpace(p))
+		if err != nil || n < 0 {
+			return def
+		}
+		w[i] = n
+	}
+	if w[0]+w[1]+w[2] == 0 {
+		return def
+	}
+	return w
 }
 
 func getEnv(key, def string) string {
