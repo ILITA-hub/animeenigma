@@ -139,6 +139,35 @@ func (c *Client) Membership(ctx context.Context) (*Membership, error) {
 	return &m, nil
 }
 
+type InterestRow struct {
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	EpisodesAired int        `json:"episodes_aired"`
+	Score         float64    `json:"score"`
+	NextEpisodeAt *time.Time `json:"next_episode_at"`
+	TopRank       int        `json:"top_rank"`
+	Planners      int        `json:"planners"`
+}
+
+type Interest struct {
+	Ongoing    []InterestRow `json:"ongoing"`
+	Top        []InterestRow `json:"top"`
+	Planned    []InterestRow `json:"planned"`
+	IdleWindow []InterestRow `json:"idle_window"`
+	IdleTotal  int           `json:"idle_total"`
+}
+
+// InterestBands fetches the banded interest snapshot at the given idle cursor
+// offset. Docker-network-only catalog route (no gateway exposure).
+func (c *Client) InterestBands(ctx context.Context, idleOffset, idleWindow int) (*Interest, error) {
+	var it Interest
+	u := fmt.Sprintf("%s/internal/interest/bands?idle_offset=%d&idle_window=%d", c.catalog, idleOffset, idleWindow)
+	if err := c.getJSON(ctx, u, metaTimeout, &it); err != nil {
+		return nil, err
+	}
+	return &it, nil
+}
+
 func (c *Client) Capabilities(ctx context.Context, animeID string) ([]Cap, error) {
 	var data struct {
 		Families []struct {

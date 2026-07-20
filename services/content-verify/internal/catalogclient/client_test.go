@@ -88,3 +88,29 @@ func TestClientDecodes(t *testing.T) {
 		t.Fatalf("stream: %+v %v", st, err)
 	}
 }
+
+func TestInterestBands(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/interest/bands" {
+			t.Errorf("path %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("idle_offset") != "100" || r.URL.Query().Get("idle_window") != "100" {
+			t.Errorf("params %s", r.URL.RawQuery)
+		}
+		w.Write([]byte(`{"success":true,"data":{
+			"ongoing":[{"id":"o1","episodes_aired":12,"score":8.5}],
+			"top":[{"id":"t1","top_rank":1}],
+			"planned":[{"id":"p1","planners":3}],
+			"idle_window":[{"id":"i1","top_rank":101}],
+			"idle_total":4824}}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL, srv.URL, srv.Client())
+	got, err := c.InterestBands(context.Background(), 100, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IdleTotal != 4824 || got.Ongoing[0].Score != 8.5 || got.IdleWindow[0].TopRank != 101 {
+		t.Fatalf("got %+v", got)
+	}
+}
