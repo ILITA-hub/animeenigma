@@ -30,6 +30,7 @@ func NewRouter(
 	internalScraperProvidersHandler *handler.InternalScraperProvidersHandler,
 	internalProbeHandler *handler.InternalProbeHandler,
 	internalVerifyHandler *handler.InternalVerifyHandler,
+	internalInterestHandler *handler.InternalInterestHandler,
 	internalSubtitleProbeHandler *handler.InternalSubtitleProbeHandler,
 	spotlightHandler *handler.SpotlightHandler,
 	internalGuessPoolHandler *handler.InternalGuessPoolHandler,
@@ -119,6 +120,14 @@ func NewRouter(
 	// gateway-non-routing security model as the endpoints above.
 	if internalVerifyHandler != nil {
 		r.Get("/internal/verify/membership", internalVerifyHandler.Membership)
+	}
+
+	// Unified interest bands (superset of /internal/verify/membership: adds
+	// planned + idle-window backfill sub-sources) — consumed by the
+	// content-verify service (:8101). Same gateway-non-routing security
+	// model as the endpoints above.
+	if internalInterestHandler != nil {
+		r.Get("/internal/interest/bands", internalInterestHandler.Bands)
 	}
 
 	if internalSubtitleProbeHandler != nil {

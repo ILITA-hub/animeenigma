@@ -592,6 +592,11 @@ func main() {
 	// top-100 — consumed by the content-verify service (:8101).
 	internalVerifyHandler := handler.NewInternalVerifyHandler(animeRepo, log)
 
+	// Unified interest bands: superset of the membership endpoint above,
+	// adding planned + idle-window backfill sub-sources — consumed by the
+	// content-verify service (:8101).
+	interestHandler := handler.NewInternalInterestHandler(animeRepo, log)
+
 	// Anidle guess-game pool (spec 2026-06-15) — Docker-network only.
 	// Serves GET /internal/guessgame/pool for the anidle guessing-game service.
 	guessPoolService := service.NewGuessPoolService(animeRepo, shikimoriClient, log)
@@ -756,7 +761,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, characterHandler, staffHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalVerifyHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, contentVerifyHandler, internalProviderPolicyHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, characterHandler, staffHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, aeHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, internalScraperProvidersHandler, internalProbeHandler, internalVerifyHandler, interestHandler, internalSubtitleProbeHandler, spotlightHandler, internalGuessPoolHandler, capabilitiesHandler, contentVerifyHandler, internalProviderPolicyHandler, adminScraperProvidersHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
