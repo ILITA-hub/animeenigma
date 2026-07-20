@@ -156,7 +156,7 @@ func NewCatalogService(
 		animejoyClient:         animejoy.NewClient(),
 		idMappingClient:        idMapClient,
 		aniListAiring:          idMapClient,
-		aniListReconcilePacing: 500 * time.Millisecond,
+		aniListReconcilePacing: defaultAniListReconcilePacing,
 		scraperClient:          scraper.NewClient(scraperAPIURL, scraperTimeout),
 		cache:                  cache,
 		log:                    log,

@@ -13,6 +13,12 @@ import (
 const (
 	sourceShikimori = "shikimori"
 	sourceAniList   = "anilist"
+
+	// AniList currently permits 30 requests per minute. Keep a small margin
+	// above the exact two-second interval so a rolling rate-limit window cannot
+	// reject the tail of a calendar sync. The scheduler allows ten minutes for
+	// this job, so reconciling the roughly 100 weekly entries remains safe.
+	defaultAniListReconcilePacing = 2100 * time.Millisecond
 )
 
 // AniListAiringFetcher is the slice of *idmapping.Client the calendar reconciler
@@ -41,8 +47,8 @@ func laterWins(shikimori, anilist *time.Time) (chosen *time.Time, fromAniList bo
 // next-episode time against AniList's broadcaster schedule, adopting AniList's
 // date only when it is strictly later (later-wins). It mutates seen in place
 // (nextEpisodeAt + source) and never returns an error — any AniList failure
-// leaves the Shikimori value untouched. Calls are paced (~2 req/s) and abort
-// promptly on context cancellation.
+// leaves the Shikimori value untouched. Calls are paced below AniList's public
+// 30 req/min limit and abort promptly on context cancellation.
 func (s *CatalogService) reconcileCalendarWithAniList(ctx context.Context, seen map[string]*calendarInfo) {
 	if s.aniListAiring == nil {
 		return

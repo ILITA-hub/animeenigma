@@ -79,6 +79,15 @@ func TestReconcileCalendarWithAniList(t *testing.T) {
 	}
 }
 
+func TestDefaultAniListReconcilePacingRespectsRateLimit(t *testing.T) {
+	const aniListRequestsPerMinute = 30
+	minimumSpacing := time.Minute / aniListRequestsPerMinute
+	if defaultAniListReconcilePacing <= minimumSpacing {
+		t.Fatalf("pacing %s must include a safety margin above AniList's %s minimum spacing",
+			defaultAniListReconcilePacing, minimumSpacing)
+	}
+}
+
 func TestDefendAniListNextEpisode(t *testing.T) {
 	ani := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
 	shikiEarlier := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
