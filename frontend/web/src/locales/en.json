@@ -1201,7 +1201,7 @@
         "status": "Status",
         "season": "Season",
         "year": "Year",
-        "provider": "Available on",
+        "provider": "Dub and sources",
         "sort": "Sort",
         "score": "Score",
         "studios": "Studios"
@@ -1225,7 +1225,8 @@
       },
       "provider": {
         "kodik": "Kodik (RU)",
-        "dub": "English (Dub)",
+        "dub": "Russian dub (Kodik)",
+        "endub": "English dub",
         "ae": "AnimeEnigma"
       },
       "score": {

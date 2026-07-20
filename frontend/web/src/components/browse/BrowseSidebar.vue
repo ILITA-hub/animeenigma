@@ -217,17 +217,27 @@ function localizedGenre(g: Genre) {
 const genreItems = computed(() => props.genres.map(g => ({ id: g.id, label: localizedGenre(g) })))
 
 // Per-provider brand/identity accents (DS brand-exempt hues + a semantic token).
+// Ordered by what users actually filter on: dub language first, then source.
 const providerOptions = computed<{ value: Provider; label: string; accent: string }[]>(() => [
+  {
+    value: 'dub',
+    // Kodik RU voiceover (has_dub). Labelled "English (Dub)" until 2026-07-20,
+    // which was simply wrong — has_dub is written only from Kodik translations
+    // with type=="voice", and Kodik is the RU family.
+    label: t('browse.filters.provider.dub'),
+    accent: 'text-success focus:ring-success',
+  },
+  {
+    value: 'endub',
+    // Real English dub (has_english_dub), from the EN scraper chain's
+    // per-episode has_dub plus verified content-verify audio.
+    label: t('browse.filters.provider.endub'),
+    accent: 'text-teal-400 focus:ring-teal-400',
+  },
   {
     value: 'kodik',
     label: t('browse.filters.provider.kodik'),
     accent: 'text-cyan-500 focus:ring-cyan-500',
-  },
-  {
-    value: 'dub',
-    // English-dub availability (has_dub) — semantic success token (EN surface).
-    label: t('browse.filters.provider.dub'),
-    accent: 'text-success focus:ring-success',
   },
   {
     value: 'ae',

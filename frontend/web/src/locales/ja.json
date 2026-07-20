@@ -1201,7 +1201,7 @@
         "status": "状態",
         "season": "シーズン",
         "year": "年",
-        "provider": "配信元",
+        "provider": "吹替とソース",
         "sort": "並び替え",
         "score": "評価",
         "studios": "スタジオ"
@@ -1225,7 +1225,8 @@
       },
       "provider": {
         "kodik": "Kodik (RU)",
-        "dub": "英語（吹替）",
+        "dub": "ロシア語吹替（Kodik）",
+        "endub": "英語吹替",
         "ae": "AnimeEnigma"
       },
       "score": {

@@ -115,3 +115,21 @@ describe('useBrowseFilters — kinds', () => {
     expect(api.kinds.value).toEqual([])
   })
 })
+
+describe('useBrowseFilters — providers (endub)', () => {
+  it('round-trips the endub provider through the URL', () => {
+    const { api } = harness()
+    api.providers.value = ['endub']
+    api.writeUrl()
+    expect(mockReplace).toHaveBeenCalledWith({
+      query: expect.objectContaining({ providers: 'endub' }),
+    })
+  })
+
+  it('accepts endub when reading the URL', () => {
+    mockState.query = { providers: 'endub' }
+    const { api } = harness()
+    api.readUrl()
+    expect(api.providers.value).toEqual(['endub'])
+  })
+})
