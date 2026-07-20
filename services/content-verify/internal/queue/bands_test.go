@@ -3,6 +3,8 @@ package queue
 import (
 	"testing"
 	"time"
+
+	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
 )
 
 func TestBandOf(t *testing.T) {
@@ -89,5 +91,66 @@ func TestCooldownTTLByBand(t *testing.T) {
 	}
 	if CooldownTTL(BandIdle, idle) != idle {
 		t.Error("idle = CV_IDLE_COOLDOWN")
+	}
+}
+
+// TestBuildCandidatesCrossBucketMergeAndPins covers three BuildCandidates
+// merge behaviors reviewers flagged as unverified:
+//
+//  1. an anime present in BOTH Interest.Ongoing and Interest.Top merges into
+//     ONE candidate carrying both flags and the signals from each bucket
+//     (NextEpisodeAt from Ongoing, TopRank from Top);
+//  2. a CV_PIN_ANIME pin for an anime absent from every interest bucket
+//     still produces a Pinned candidate;
+//  3. the MalScore zero-guard — a Top row with Score 0 (catalog omits score
+//     on that projection) must not clobber a MalScore already set from the
+//     Ongoing row.
+func TestBuildCandidatesCrossBucketMergeAndPins(t *testing.T) {
+	soon := time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC)
+	it := &catalogclient.Interest{
+		Ongoing: []catalogclient.InterestRow{
+			{ID: "dual1", Name: "Dual", EpisodesAired: 5, Score: 7.5, NextEpisodeAt: &soon},
+		},
+		Top: []catalogclient.InterestRow{
+			// Score: 0 deliberately — must NOT overwrite the 7.5 set above.
+			{ID: "dual1", Name: "Dual", TopRank: 3, Score: 0},
+		},
+	}
+	pins := map[string]string{"pinned1": ""}
+	visitors := func(string) int { return 0 }
+
+	cands := BuildCandidates(it, nil, pins, visitors)
+
+	byID := map[string]Candidate{}
+	for _, c := range cands {
+		byID[c.AnimeID] = c
+	}
+
+	dual, ok := byID["dual1"]
+	if !ok {
+		t.Fatal("dual1 candidate missing")
+	}
+	if !dual.Ongoing || !dual.Top {
+		t.Fatalf("dual1 should merge into one candidate with Ongoing && Top: %+v", dual)
+	}
+	if dual.NextEpisodeAt == nil || !dual.NextEpisodeAt.Equal(soon) {
+		t.Fatalf("dual1 NextEpisodeAt should come from the Ongoing row: %+v", dual)
+	}
+	if dual.TopRank != 3 {
+		t.Fatalf("dual1 TopRank should come from the Top row: %+v", dual)
+	}
+	if dual.MalScore != 7.5 {
+		t.Fatalf("dual1 MalScore should stay 7.5 from Ongoing; Top's zero Score must not clobber it: got %v", dual.MalScore)
+	}
+
+	pinned, ok := byID["pinned1"]
+	if !ok {
+		t.Fatal("pinned1 candidate missing (pin for an anime in no bucket must still surface)")
+	}
+	if !pinned.Pinned {
+		t.Fatalf("pinned1 should be Pinned: %+v", pinned)
+	}
+	if pinned.Ongoing || pinned.Top {
+		t.Fatalf("pinned1 should not be Ongoing/Top: %+v", pinned)
 	}
 }

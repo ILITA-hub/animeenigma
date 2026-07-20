@@ -53,7 +53,11 @@ func newHandlerFixture(t *testing.T) *handlerFixture {
 	}
 	store := repo.NewStore(db)
 
-	engine := queue.NewEngine(cat, sig, store, 720*time.Hour, false, nil, nil)
+	weights := [3]int{60, 30, 10}
+	freshWindow := 48 * time.Hour
+	idleCooldown := 168 * time.Hour
+	idleWindow := 100
+	engine := queue.NewEngine(cat, sig, store, 720*time.Hour, false, nil, weights, freshWindow, idleCooldown, idleWindow, nil)
 	h := NewVerifyHandler(store, sig, engine, nil)
 
 	// Seed one row so Verdicts has something to summarize.

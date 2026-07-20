@@ -123,6 +123,11 @@ func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Stor
 // fresh fetch it advances the idle sweep cursor by idleWindow (wrapping at
 // idle_total) so successive refreshes walk the catalog tail. The HTTP call
 // runs WITHOUT holding mu (same reasoning as the old membership()).
+//
+// AdvanceIdleCursor also runs outside mu, so two concurrent cold-miss
+// fetches can race and double- or lost-advance the idle cursor; this is
+// fail-open and bounded (the modulo wrap self-corrects on the next sweep),
+// the same tolerance the old membership cache accepted.
 func (e *Engine) interest(ctx context.Context) *catalogclient.Interest {
 	e.mu.Lock()
 	if e.interestCache != nil && e.now().Sub(e.interestAt) < membershipTTL {

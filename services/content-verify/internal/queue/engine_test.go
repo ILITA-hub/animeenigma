@@ -510,11 +510,11 @@ func TestSnapshot(t *testing.T) {
 	}
 }
 
-// TestClaimSnapshotConcurrent is a smoke test for the membership cache's
+// TestClaimSnapshotConcurrent is a smoke test for the interest cache's
 // mutex: in production, Claim runs on a worker goroutine while Snapshot
 // serves an admin/debug HTTP handler against the same *Engine — both read
-// and write e.memb/e.membAt via membership(). The assertion is simply "no
-// data race, no panic" under `go test -race`.
+// and write e.interestCache/e.interestAt via interest(). The assertion is
+// simply "no data race, no panic" under `go test -race`.
 func TestClaimSnapshotConcurrent(t *testing.T) {
 	f := newEngineFixture(t, false)
 	ctx := context.Background()
