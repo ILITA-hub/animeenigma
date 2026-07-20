@@ -454,7 +454,8 @@ func (r *AnimeRepository) PromoteVerifiedEnglishDubs(ctx context.Context) (int64
 			SELECT cv.anime_id
 			FROM content_verifications cv,
 			     LATERAL jsonb_array_elements(cv.units) u
-			WHERE u->>'status' = 'verified'
+			WHERE jsonb_typeof(cv.units) = 'array'
+			  AND u->>'status' = 'verified'
 			  AND u->'audio'->>'lang' = 'en'
 			  AND (u->'audio'->>'verified')::boolean
 		  )`)

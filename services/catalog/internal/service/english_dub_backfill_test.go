@@ -102,14 +102,50 @@ func TestBackfiller_StampsOnEmptyEpisodeList(t *testing.T) {
 }
 
 // On a good verdict the hook inside GetScraperEpisodes owns the write, so the
-// backfiller must NOT stamp on top of it.
+// backfiller must NOT stamp on top of it. The winner must be a dub-tagging
+// provider (gogoanime) for a negative verdict to be trustworthy — see
+// dubTaggingProviders.
 func TestBackfiller_DoesNotTouchOnGoodVerdict(t *testing.T) {
+	r := &fakeEnglishDubRepo{candidates: []domain.EnglishDubCandidate{{ID: "a1", Name: "X"}}}
+	p := &fakeEnglishDubProbe{status: 200, body: `{"data":{"episodes":[{"number":1,"has_dub":false}],"meta":{"provider":"gogoanime"}}}`}
+
+	newTestBackfiller(r, p, &fakeShed{}).tick(context.Background())
+
+	assert.Empty(t, r.touched, "the lazy hook already wrote the verdict")
+}
+
+// A positive verdict is trustworthy from any winner, so the hook always
+// writes it — the backfiller must not stamp on top.
+func TestBackfiller_DoesNotTouchOnPositiveVerdictFromAnyWinner(t *testing.T) {
+	r := &fakeEnglishDubRepo{candidates: []domain.EnglishDubCandidate{{ID: "a1", Name: "X"}}}
+	p := &fakeEnglishDubProbe{status: 200, body: `{"data":{"episodes":[{"number":1,"has_dub":true}],"meta":{"provider":"miruro"}}}`}
+
+	newTestBackfiller(r, p, &fakeShed{}).tick(context.Background())
+
+	assert.Empty(t, r.touched, "the lazy hook already wrote the positive verdict")
+}
+
+// When the winning provider can't tag dub (e.g. miruro) or meta.provider is
+// missing entirely, backfillEnglishFlags withholds the negative write — it
+// only wrote has_english, not has_english_dub/english_dub_checked_at. The
+// backfiller must stamp itself so the title still rotates out of the
+// candidate list instead of being re-probed every tick.
+func TestBackfiller_StampsWhenWinnerCantTagDub(t *testing.T) {
+	r := &fakeEnglishDubRepo{candidates: []domain.EnglishDubCandidate{{ID: "a1", Name: "X"}}}
+	p := &fakeEnglishDubProbe{status: 200, body: `{"data":{"episodes":[{"number":1,"has_dub":false}],"meta":{"provider":"miruro"}}}`}
+
+	newTestBackfiller(r, p, &fakeShed{}).tick(context.Background())
+
+	assert.Equal(t, []string{"a1"}, r.touched, "an untrustworthy negative must still rotate the candidate")
+}
+
+func TestBackfiller_StampsWhenMetaProviderMissing(t *testing.T) {
 	r := &fakeEnglishDubRepo{candidates: []domain.EnglishDubCandidate{{ID: "a1", Name: "X"}}}
 	p := &fakeEnglishDubProbe{status: 200, body: `{"data":{"episodes":[{"number":1,"has_dub":false}]}}`}
 
 	newTestBackfiller(r, p, &fakeShed{}).tick(context.Background())
 
-	assert.Empty(t, r.touched, "the lazy hook already wrote the verdict")
+	assert.Equal(t, []string{"a1"}, r.touched, "a missing meta.provider must still rotate the candidate")
 }
 
 func TestBackfiller_ShedsUnderPressure(t *testing.T) {

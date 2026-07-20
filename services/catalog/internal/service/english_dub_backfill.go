@@ -140,9 +140,19 @@ func (b *EnglishDubBackfiller) tick(ctx context.Context) {
 		b.stamp(ctx, c, "probe unreachable", err, status)
 		return
 	}
-	_, hasDub, ok := parseScraperEpisodes(body)
+	_, hasDub, winner, ok := parseScraperEpisodes(body)
 	if !ok {
 		b.stamp(ctx, c, "no episodes in response", nil, status)
+		return
+	}
+
+	// A negative answer the hook didn't trust enough to write (winner isn't
+	// a dub-tagging provider, see dubTaggingProviders) leaves
+	// english_dub_checked_at untouched — the hook only wrote has_english in
+	// that case. Stamp it ourselves so the title still rotates out of the
+	// candidate list instead of being re-probed every tick.
+	if !hasDub && !negativeDubVerdictTrustworthy("", winner) {
+		b.stamp(ctx, c, "winner can't tag dub", nil, status)
 		return
 	}
 

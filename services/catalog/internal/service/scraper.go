@@ -124,33 +124,60 @@ func altTitleForms(primary string, forms ...string) []string {
 	return out
 }
 
+// dubTaggingProviders is the set of scraper providers whose per-episode
+// has_dub tag is trustworthy enough to ground a NEGATIVE has_english_dub
+// verdict. Today only gogoanime actually sets has_dub per episode
+// (services/scraper/internal/providers/gogoanime/client.go); every other
+// provider leaves it at the orchestrator's zero-value default
+// (services/scraper/internal/service/orchestrator.go), so a "no dub" answer
+// from one of them is absence of evidence, not evidence of absence — e.g.
+// miruro is a DUB-only provider that simply doesn't tag the field.
+var dubTaggingProviders = map[string]bool{
+	"gogoanime": true,
+}
+
 // parseScraperEpisodes reads the episode list out of a scraper-episodes
 // response. Returns the episode count, whether ANY episode carries a dub
-// track, and ok=false when the body is undecodable or the list is empty —
-// neither is a verdict. Mirrors the envelope parsed by
+// track, the winning provider (data.meta.provider — empty when the envelope
+// omits it), and ok=false when the body is undecodable or the list is empty
+// — neither is a verdict. Mirrors the envelope parsed by
 // animeLevelResolver.latestEnglish; shared with the EN-dub backfiller.
-func parseScraperEpisodes(body []byte) (int, bool, bool) {
+func parseScraperEpisodes(body []byte) (count int, hasDub bool, provider string, ok bool) {
 	var env struct {
 		Data struct {
 			Episodes []struct {
 				Number int  `json:"number"`
 				HasDub bool `json:"has_dub"`
 			} `json:"episodes"`
+			Meta struct {
+				Provider string `json:"provider"`
+			} `json:"meta"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
-		return 0, false, false
+		return 0, false, "", false
 	}
 	eps := env.Data.Episodes
 	if len(eps) == 0 {
-		return 0, false, false
+		return 0, false, "", false
 	}
 	for _, e := range eps {
 		if e.HasDub {
-			return len(eps), true, true
+			hasDub = true
+			break
 		}
 	}
-	return len(eps), false, true
+	return len(eps), hasDub, env.Data.Meta.Provider, true
+}
+
+// negativeDubVerdictTrustworthy reports whether a "no dub" answer from the
+// scraper-episodes chain is solid enough to write as a NEGATIVE
+// has_english_dub verdict. Requires BOTH: the call was unpinned (prefer ==
+// "", so the whole failover chain was consulted, not one provider's
+// opinion) AND the winning provider actually tags has_dub (dubTaggingProviders)
+// — a missing/empty winner (e.g. an error envelope) is never trustworthy.
+func negativeDubVerdictTrustworthy(prefer, winner string) bool {
+	return prefer == "" && dubTaggingProviders[winner]
 }
 
 // backfillEnglishFlags opportunistically flips animes.has_english and
@@ -158,17 +185,20 @@ func parseScraperEpisodes(body []byte) (int, bool, bool) {
 // Best-effort throughout: the caller already has its episodes, so decode and
 // write failures are swallowed.
 //
-// Honesty rule: a NEGATIVE dub verdict is written only for an unpinned call
-// (prefer == ""), which consulted the whole failover chain. A call pinned to
-// one provider may only promote to true — otherwise a sub-only gogoanime
-// answer would erase a true verdict from miruro, which is DUB-only.
+// Honesty rule: a POSITIVE dub verdict (hasDub) is written unconditionally —
+// any provider, pinned or not, actually tagging a dub track is trustworthy.
+// A NEGATIVE verdict is written only when negativeDubVerdictTrustworthy
+// holds: an unpinned call whose winning provider is known to tag has_dub. A
+// pinned sub-only answer, or an unpinned answer won by a provider that
+// doesn't tag dub at all (e.g. miruro), must not erase — or plant — a false
+// negative.
 func (o *scraperOps) backfillEnglishFlags(ctx context.Context, animeID, prefer string, body []byte) {
-	_, hasDub, ok := parseScraperEpisodes(body)
+	_, hasDub, winner, ok := parseScraperEpisodes(body)
 	if !ok {
 		return
 	}
 	_ = o.animeRepo.SetHasEnglish(ctx, animeID, true)
-	if !hasDub && prefer != "" {
+	if !hasDub && !negativeDubVerdictTrustworthy(prefer, winner) {
 		return
 	}
 	_ = o.animeRepo.SetEnglishDub(ctx, animeID, hasDub)
