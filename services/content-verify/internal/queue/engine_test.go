@@ -39,8 +39,8 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	t.Helper()
 	capsHits := new(int64)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":1}],"top":[]}}`))
+	mux.HandleFunc("/internal/interest/bands", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":1}],"top":[],"planned":[],"idle_window":[],"idle_total":0}}`))
 	})
 	mux.HandleFunc("/api/anime/o1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt64(capsHits, 1)
@@ -89,7 +89,7 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	// changing TestClaimEmptyPendingSetsCooldownTTL's outcome from cooldown
 	// to a skip task. See TestClaimReturnsSkipTaskWhenVerifyLaneSettled for
 	// skip-lane coverage.
-	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv, capsHits: capsHits}
 }
 
@@ -100,8 +100,8 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 func newTwoAnimeGogoanimeFixture(t *testing.T) *engineFixture {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F1","episodes_aired":1},{"id":"o2","name":"F2","episodes_aired":1}],"top":[]}}`))
+	mux.HandleFunc("/internal/interest/bands", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F1","episodes_aired":1},{"id":"o2","name":"F2","episodes_aired":1}],"top":[],"planned":[],"idle_window":[],"idle_total":0}}`))
 	})
 	for _, id := range []string{"o1", "o2"} {
 		mux.HandleFunc("/api/anime/"+id+"/capabilities", func(w http.ResponseWriter, _ *http.Request) {
@@ -136,7 +136,7 @@ func newTwoAnimeGogoanimeFixture(t *testing.T) *engineFixture {
 	}
 	store := repo.NewStore(db)
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
@@ -379,8 +379,8 @@ func TestClaimEnumerationCachedAcrossClaims(t *testing.T) {
 func newSkipEngineFixture(t *testing.T, skipEnabled bool) *engineFixture {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":2}],"top":[]}}`))
+	mux.HandleFunc("/internal/interest/bands", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":2}],"top":[],"planned":[],"idle_window":[],"idle_total":0}}`))
 	})
 	mux.HandleFunc("/api/anime/o1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"success":true,"data":{"families":[{"family":"others","providers":[
@@ -421,7 +421,7 @@ func newSkipEngineFixture(t *testing.T, skipEnabled bool) *engineFixture {
 		t.Fatal(err)
 	}
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, skipEnabled, nil, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, skipEnabled, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
@@ -502,8 +502,8 @@ func TestSnapshot(t *testing.T) {
 	if len(entries) != 1 || entries[0].AnimeID != "o1" {
 		t.Fatalf("snapshot: %+v", entries)
 	}
-	if entries[0].Score != 10 { // ongoing only, no visitors/top
-		t.Fatalf("snapshot score = %d, want 10", entries[0].Score)
+	if entries[0].Band != int(BandOngoing) { // ongoing only, no visitors/top
+		t.Fatalf("snapshot band = %d, want %d (BandOngoing)", entries[0].Band, int(BandOngoing))
 	}
 	if entries[0].Cooling {
 		t.Fatal("fresh candidate must not be cooling in snapshot")
@@ -540,8 +540,8 @@ func TestClaimSnapshotConcurrent(t *testing.T) {
 // idle one.
 func TestClaimSkipFullyCoveredByAniskipSettles(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/internal/verify/membership", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":2}],"top":[]}}`))
+	mux.HandleFunc("/internal/interest/bands", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F","episodes_aired":2}],"top":[],"planned":[],"idle_window":[],"idle_total":0}}`))
 	})
 	mux.HandleFunc("/api/anime/o1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"success":true,"data":{"families":[{"family":"others","providers":[
@@ -586,7 +586,7 @@ func TestClaimSkipFullyCoveredByAniskipSettles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, true, nil, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, true, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
 
 	u, task, release, err := e.Claim(ctx)
 	if err != nil {
@@ -635,4 +635,167 @@ func TestClaimPinBypassesCooldown(t *testing.T) {
 		t.Fatal("pinned title must bypass its cooldown and claim the pending verify unit")
 	}
 	release()
+}
+
+// newBandedTwoAnimeFixture wires a two-candidate world: ongoing "o1" (Band
+// Ongoing, via the interest ongoing bucket) and non-ongoing "o2" (Band
+// WatchedTop, made a candidate purely via a recorded visit — see
+// signals.RecordVisit). Both expose exactly one pending unit on the SAME
+// provider (gogoanime/hd-1/sub), so provider exclusivity makes "whichever
+// band's candidate Claim reaches first" observable: only the winner can be
+// claimed on this Claim call.
+func newBandedTwoAnimeFixture(t *testing.T) *engineFixture {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/interest/bands", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[{"id":"o1","name":"F1","episodes_aired":1}],"top":[],"planned":[],"idle_window":[],"idle_total":0}}`))
+	})
+	for _, id := range []string{"o1", "o2"} {
+		mux.HandleFunc("/api/anime/"+id+"/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte(`{"success":true,"data":{"families":[{"family":"others","providers":[
+				{"provider":"gogoanime","state":"active","group":"en"}]}]}}`))
+		})
+		mux.HandleFunc("/api/anime/"+id+"/scraper/episodes", func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte(`{"success":true,"data":{"episodes":[{"id":"ep-1","number":1}]}}`))
+		})
+		mux.HandleFunc("/api/anime/"+id+"/scraper/servers", func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte(`{"success":true,"data":{"servers":[{"id":"hd-1","name":"HD-1","type":"sub"}]}}`))
+		})
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	sig := signals.New(rdb)
+	// o2 has no interest-bands membership at all — it becomes a candidate
+	// (Band WatchedTop, Visitors=1) purely through a recorded visit.
+	if err := sig.RecordVisit(context.Background(), "o2", "u1"); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ContentVerification{}); err != nil {
+		t.Fatal(err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
+	store := repo.NewStore(db)
+
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
+}
+
+// TestBandedClaimPrefersOngoing: with the lottery's primary band forced to
+// Band 1 (rng=0.0 → weightedPick picks BandOngoing under the default 60/30/10
+// weights), Claim must reach and claim the ongoing candidate's unit even
+// though a watched (visited) candidate shares the same exclusive provider.
+func TestBandedClaimPrefersOngoing(t *testing.T) {
+	f := newBandedTwoAnimeFixture(t)
+	ctx := context.Background()
+	f.engine.rng = func() float64 { return 0 } // primary = BandOngoing
+
+	u, task, release, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task != nil {
+		t.Fatalf("expected a verify claim, not a skip task: %+v", task)
+	}
+	if u == nil || u.AnimeID != "o1" {
+		t.Fatalf("expected the ongoing candidate (o1) claimed first, got %+v", u)
+	}
+	release()
+}
+
+// TestBandedClaimWatchedTopPrimaryClaimsBeforeOngoing proves bandOrder's
+// weighting actually reaches Claim: when the lottery's primary band is Band 2
+// (rng inside the WatchedTop slice of the 60/30/10 weights), bandOrder puts
+// BandWatchedTop ahead of BandOngoing, so the watched (visited) candidate
+// wins the shared provider instead of the ongoing one — the inverse of
+// TestBandedClaimPrefersOngoing.
+func TestBandedClaimWatchedTopPrimaryClaimsBeforeOngoing(t *testing.T) {
+	f := newBandedTwoAnimeFixture(t)
+	ctx := context.Background()
+	f.engine.rng = func() float64 { return 0.7 } // 70 of 100 → BandWatchedTop (60..90)
+
+	u, task, release, err := f.engine.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task != nil {
+		t.Fatalf("expected a verify claim, not a skip task: %+v", task)
+	}
+	if u == nil || u.AnimeID != "o2" {
+		t.Fatalf("expected the watched candidate (o2) claimed first when its band is the lottery primary, got %+v", u)
+	}
+	release()
+}
+
+// TestClaimAdvancesIdleCursorOnFreshInterestFetch covers the idle
+// round-robin sweep (spec §3.3): interest()'s fresh (cache-miss) fetch reads
+// the current idle cursor as idle_offset, then advances it by idleWindow
+// (wrapping at the interest response's idle_total) — regardless of which
+// band ends up primary, every fresh fetch sweeps the cursor forward so the
+// catalog tail is walked over successive claims.
+func TestClaimAdvancesIdleCursorOnFreshInterestFetch(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/interest/bands", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"ongoing":[],"top":[],"planned":[],
+			"idle_window":[{"id":"i1","name":"Idle1","top_rank":1}],"idle_total":250}}`))
+	})
+	mux.HandleFunc("/api/anime/i1/capabilities", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"families":[{"family":"others","providers":[
+			{"provider":"gogoanime","state":"active","group":"en"}]}]}}`))
+	})
+	mux.HandleFunc("/api/anime/i1/scraper/episodes", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"episodes":[{"id":"ep-1","number":1}]}}`))
+	})
+	mux.HandleFunc("/api/anime/i1/scraper/servers", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"success":true,"data":{"servers":[{"id":"hd-1","name":"HD-1","type":"sub"}]}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	sig := signals.New(rdb)
+	ctx := context.Background()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&domain.ContentVerification{}); err != nil {
+		t.Fatal(err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
+	store := repo.NewStore(db)
+
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e.rng = func() float64 { return 0.99 } // primary = BandIdle
+
+	if got := sig.IdleCursor(ctx); got != 0 {
+		t.Fatalf("cold cursor = %d, want 0", got)
+	}
+	u, _, release, err := e.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u == nil || u.AnimeID != "i1" {
+		t.Fatalf("expected the idle-window candidate claimed, got %+v", u)
+	}
+	release()
+	if got := sig.IdleCursor(ctx); got != 100 {
+		t.Fatalf("idle cursor after fresh interest fetch = %d, want 100 (idleWindow), got %d", got, got)
+	}
 }

@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"strconv"
 	"sync"
@@ -66,14 +67,27 @@ type Engine struct {
 	pins map[string]string
 	log  *logger.Logger
 
-	// mu guards memb/membAt, enumCache, aniskipCache, malIDs, inflightUnits,
-	// and inflightProv: Claim (potentially several worker goroutines) and
-	// Snapshot (HTTP handler) share one Engine and can race on this state.
-	mu   sync.Mutex
-	memb *catalogclient.Membership
+	// weights/freshWindow/idleCooldown/idleWindow are the banded-prioritization
+	// knobs (spec §3): weights is the per-claim [Band1,Band2,Band3] lottery,
+	// freshWindow floats a just-aired ongoing to the front of Band 1,
+	// idleCooldown is the settled cooldown for Band 3, idleWindow pages the
+	// idle-sweep tail. rng is injectable so tests can force a deterministic
+	// primary band; production uses rand.Float64.
+	weights      [3]int
+	freshWindow  time.Duration
+	idleCooldown time.Duration
+	idleWindow   int
+	rng          func() float64
 
-	membAt time.Time
-	now    func() time.Time
+	// mu guards interestCache/interestAt, enumCache, aniskipCache, malIDs,
+	// inflightUnits, and inflightProv: Claim (potentially several worker
+	// goroutines) and Snapshot (HTTP handler) share one Engine and can race
+	// on this state.
+	mu            sync.Mutex
+	interestCache *catalogclient.Interest
+	interestAt    time.Time
+
+	now func() time.Time
 
 	enumCache    map[string]enumEntry    // animeID → cached Enumeration
 	aniskipCache map[string]aniskipEntry // animeID → cached AniSkip coverage
@@ -89,12 +103,14 @@ type Engine struct {
 	inflightProv  map[string]struct{}
 }
 
-func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, skipEnabled bool, pins map[string]string, log *logger.Logger) *Engine {
+func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, skipEnabled bool, pins map[string]string, weights [3]int, freshWindow, idleCooldown time.Duration, idleWindow int, log *logger.Logger) *Engine {
 	if pins == nil {
 		pins = map[string]string{}
 	}
 	return &Engine{
-		cat: cat, sig: sig, store: store, reprobeTTL: reprobeTTL, skipEnabled: skipEnabled, pins: pins, log: log, now: time.Now,
+		cat: cat, sig: sig, store: store, reprobeTTL: reprobeTTL, skipEnabled: skipEnabled, pins: pins,
+		weights: weights, freshWindow: freshWindow, idleCooldown: idleCooldown, idleWindow: idleWindow,
+		rng: rand.Float64, log: log, now: time.Now,
 		enumCache:     map[string]enumEntry{},
 		aniskipCache:  map[string]aniskipEntry{},
 		malIDs:        map[string]string{},
@@ -103,42 +119,63 @@ func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Stor
 	}
 }
 
-// membership caches the catalog membership fetch for membershipTTL. Like
-// enumerate, the (up to 30s) HTTP call runs WITHOUT holding mu — mu also
-// guards the lease/release hot path, and holding it across a slow fetch
-// would stall every other worker's Claim and release. Two workers
-// cold-missing concurrently both fetch; the second write overwrites the
-// first with an equally-fresh result.
-func (e *Engine) membership(ctx context.Context) *catalogclient.Membership {
+// interest fetches the banded interest snapshot behind membershipTTL. On a
+// fresh fetch it advances the idle sweep cursor by idleWindow (wrapping at
+// idle_total) so successive refreshes walk the catalog tail. The HTTP call
+// runs WITHOUT holding mu (same reasoning as the old membership()).
+func (e *Engine) interest(ctx context.Context) *catalogclient.Interest {
 	e.mu.Lock()
-	if e.memb != nil && e.now().Sub(e.membAt) < membershipTTL {
-		m := e.memb
+	if e.interestCache != nil && e.now().Sub(e.interestAt) < membershipTTL {
+		it := e.interestCache
 		e.mu.Unlock()
-		return m
+		return it
 	}
 	e.mu.Unlock()
 
-	m, err := e.cat.Membership(ctx)
+	offset := e.sig.IdleCursor(ctx)
+	it, err := e.cat.InterestBands(ctx, offset, e.idleWindow)
 	if err != nil {
 		if e.log != nil {
-			e.log.Warnw("membership fetch failed; reusing stale", "error", err)
+			e.log.Warnw("interest fetch failed; reusing stale", "error", err)
 		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
-		return e.memb // possibly nil — BuildCandidates tolerates it
+		return e.interestCache // possibly nil — BuildCandidates tolerates it
 	}
+	e.sig.AdvanceIdleCursor(ctx, e.idleWindow, it.IdleTotal)
 	e.mu.Lock()
-	e.memb, e.membAt = m, e.now()
+	e.interestCache, e.interestAt = it, e.now()
 	e.mu.Unlock()
-	return m
+	return it
 }
 
-func (e *Engine) ranked(ctx context.Context) []Candidate {
-	m := e.membership(ctx)
+// bandedCandidates returns candidates concatenated in this claim's band
+// try-order (pins, lottery-primary band, then the rest), each band's slice
+// intra-sorted. The lottery gives the weighting; fall-through means an empty
+// higher band never wastes the tick.
+func (e *Engine) bandedCandidates(ctx context.Context) []Candidate {
+	it := e.interest(ctx)
 	visited := e.sig.VisitedAnime(ctx)
-	cs := Rank(BuildCandidates(m, visited, e.pins, func(id string) int { return e.sig.UniqueVisitors(ctx, id) }))
-	cvmetrics.QueueDepth.Set(float64(len(cs)))
-	return cs
+	all := BuildCandidates(it, visited, e.pins, func(id string) int { return e.sig.UniqueVisitors(ctx, id) })
+	cvmetrics.QueueDepth.Set(float64(len(all)))
+
+	groups := map[Band][]Candidate{}
+	for _, c := range all {
+		b := BandOf(c)
+		groups[b] = append(groups[b], c)
+	}
+	now := e.now()
+	for b := range groups {
+		g := groups[b]
+		sort.SliceStable(g, func(i, j int) bool { return IntraLess(g[i], g[j], now, e.freshWindow) })
+		groups[b] = g
+	}
+	order := bandOrder(e.weights, e.rng())
+	out := make([]Candidate, 0, len(all))
+	for _, b := range order {
+		out = append(out, groups[b]...)
+	}
+	return out
 }
 
 // enumerate is EnumerateAll behind a per-anime TTL cache (see enumCacheTTL).
@@ -345,7 +382,7 @@ func (e *Engine) claimVerifyUnit(pending []Unit) (unit *Unit, release func(), ok
 // through to that candidate's skip lane.
 func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 	scanned := 0
-	for _, cand := range e.ranked(ctx) {
+	for _, cand := range e.bandedCandidates(ctx) {
 		if scanned >= maxScan {
 			break
 		}
@@ -409,7 +446,7 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 				return nil, task, release, nil
 			}
 		}
-		e.sig.SetCooldown(ctx, cand.AnimeID, CooldownTTL(cand.Ongoing))
+		e.sig.SetCooldown(ctx, cand.AnimeID, CooldownTTL(BandOf(cand), e.idleCooldown))
 	}
 	return nil, nil, nil, nil
 }
@@ -417,7 +454,7 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 type QueueEntry struct {
 	AnimeID  string `json:"anime_id"`
 	Name     string `json:"name"`
-	Score    int    `json:"score"`
+	Band     int    `json:"band"`
 	Ongoing  bool   `json:"ongoing"`
 	Top      bool   `json:"top"`
 	Visitors int    `json:"visitors"`
@@ -427,11 +464,11 @@ type QueueEntry struct {
 // Snapshot renders the computed queue for the admin/debug endpoint.
 func (e *Engine) Snapshot(ctx context.Context, limit int) []QueueEntry {
 	out := []QueueEntry{}
-	for i, c := range e.ranked(ctx) {
+	for i, c := range e.bandedCandidates(ctx) {
 		if i >= limit {
 			break
 		}
-		out = append(out, QueueEntry{AnimeID: c.AnimeID, Name: c.Name, Score: c.Score(),
+		out = append(out, QueueEntry{AnimeID: c.AnimeID, Name: c.Name, Band: int(BandOf(c)),
 			Ongoing: c.Ongoing, Top: c.Top, Visitors: c.Visitors,
 			Cooling: e.sig.InCooldown(ctx, c.AnimeID)})
 	}

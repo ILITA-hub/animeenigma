@@ -4,27 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 )
-
-func TestScoreAndRank(t *testing.T) {
-	m := &catalogclient.Membership{
-		Ongoing: []catalogclient.MembershipRow{{ID: "o1", Name: "F", EpisodesAired: 28}},
-		Top:     []catalogclient.MembershipRow{{ID: "t1", Name: "N"}, {ID: "o1", Name: "F"}},
-	}
-	visitors := map[string]int{"v1": 2, "o1": 1}
-	cs := BuildCandidates(m, []string{"v1"}, nil, func(id string) int { return visitors[id] })
-	ranked := Rank(cs)
-	// o1: ongoing(10)+top(5)+15*1=30 ; v1: 15*2=30 ; t1: 5.
-	// Tie 30/30 → ongoing first.
-	if ranked[0].AnimeID != "o1" || ranked[0].Score() != 30 {
-		t.Fatalf("ranked[0]=%+v score=%d", ranked[0], ranked[0].Score())
-	}
-	if ranked[1].AnimeID != "v1" || ranked[2].AnimeID != "t1" {
-		t.Fatalf("order: %+v", ranked)
-	}
-}
 
 func TestBackoff(t *testing.T) {
 	if Backoff(1) != 6*time.Hour || Backoff(2) != 12*time.Hour {
@@ -77,14 +58,5 @@ func TestPendingUnitsKeyedByProviderAndKey(t *testing.T) {
 	pending := PendingUnits(units, rows, now, 720*time.Hour)
 	if len(pending) != 1 || pending[0].Provider != "kodik" {
 		t.Fatalf("pending should only contain the never-probed kodik unit (provider-scoped key): %+v", pending)
-	}
-}
-
-func TestCooldownTTL(t *testing.T) {
-	if CooldownTTL(true) != 6*time.Hour {
-		t.Fatalf("ongoing cooldown = %s, want 6h", CooldownTTL(true))
-	}
-	if CooldownTTL(false) != 24*time.Hour {
-		t.Fatalf("non-ongoing cooldown = %s, want 24h", CooldownTTL(false))
 	}
 }
