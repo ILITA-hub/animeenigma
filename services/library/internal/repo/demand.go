@@ -104,6 +104,50 @@ func (r *DemandRepository) Drain(ctx context.Context, limit int) ([]domain.Autoc
 	return rows, nil
 }
 
+// DrainWeighted returns up to hotN hot-reason rows (next_ep, ongoing) and up to
+// coldN backfill rows, each ordered requested_at ASC (FIFO within class). If one
+// class has fewer than its quota, the remainder is filled from the other class
+// so the batch is never under-filled while rows remain — the weighted analogue
+// of Drain that makes WR-01 anti-starvation an explicit share rather than a FIFO
+// side effect. Non-positive total returns no rows. Errors wrap CodeInternal.
+func (r *DemandRepository) DrainWeighted(ctx context.Context, hotN, coldN int) ([]domain.AutocacheDemand, error) {
+	total := hotN + coldN
+	if total <= 0 {
+		return nil, nil
+	}
+	drainClass := func(where string, args ...any) ([]domain.AutocacheDemand, error) {
+		var rows []domain.AutocacheDemand
+		err := r.db.WithContext(ctx).
+			Where(where, args...).
+			Order("requested_at ASC").
+			Limit(total). // fetch up to the whole batch so a short sibling can borrow
+			Find(&rows).Error
+		return rows, err
+	}
+	hot, err := drainClass("reason IN ?", []domain.DemandReason{domain.DemandReasonNextEp, domain.DemandReasonOngoing})
+	if err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "drain weighted hot")
+	}
+	cold, err := drainClass("reason = ?", domain.DemandReasonBackfill)
+	if err != nil {
+		return nil, liberrors.Wrap(err, liberrors.CodeInternal, "drain weighted cold")
+	}
+
+	out := make([]domain.AutocacheDemand, 0, total)
+	takeHot := min(hotN, len(hot))
+	takeCold := min(coldN, len(cold))
+	out = append(out, hot[:takeHot]...)
+	out = append(out, cold[:takeCold]...)
+	// Fill the remaining slots from whichever class still has rows (hot first).
+	for i := takeHot; i < len(hot) && len(out) < total; i++ {
+		out = append(out, hot[i])
+	}
+	for i := takeCold; i < len(cold) && len(out) < total; i++ {
+		out = append(out, cold[i])
+	}
+	return out, nil
+}
+
 // Delete removes the (mal_id, episode) demand row. Deleting an absent row is a
 // no-op (returns nil) — the Planner calls this once an episode is confirmed
 // present in the pool so the demand stops being re-drained. Errors wrap
