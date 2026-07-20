@@ -385,6 +385,85 @@ func (r *AnimeRepository) SetEnglishDub(ctx context.Context, animeID string, has
 		}).Error
 }
 
+// ListEnglishDubCandidates returns up to limit titles whose EN-dub verdict is
+// missing or stale, most-deserving first:
+//
+//	1. never probed (english_dub_checked_at IS NULL)
+//	2. ongoing and last probed more than ongoingAge ago — dubs ship after subs
+//	3. anything last probed more than staleAge ago
+//
+// Only has_english = true rows are ever returned: no EN source means no EN
+// dub, and the restriction keeps thousands of pointless provider calls off
+// the wire.
+func (r *AnimeRepository) ListEnglishDubCandidates(ctx context.Context, limit int, ongoingAge, staleAge time.Duration) ([]domain.EnglishDubCandidate, error) {
+	now := time.Now().UTC()
+	var out []domain.EnglishDubCandidate
+	err := r.db.WithContext(ctx).Model(&domain.Anime{}).
+		Select("id, name, status").
+		Where("has_english = ?", true).
+		Where(`english_dub_checked_at IS NULL
+			OR (status = ? AND english_dub_checked_at < ?)
+			OR english_dub_checked_at < ?`,
+			"ongoing", now.Add(-ongoingAge), now.Add(-staleAge)).
+		// Portable NULLS FIRST: `IS NULL` is 1/true for unprobed rows on both
+		// sqlite (tests) and postgres (production), so DESC floats them up.
+		Order("english_dub_checked_at IS NULL DESC, english_dub_checked_at ASC").
+		Limit(limit).
+		Find(&out).Error
+	if err != nil {
+		return nil, fmt.Errorf("list english dub candidates: %w", err)
+	}
+	return out, nil
+}
+
+// TouchEnglishDubChecked stamps english_dub_checked_at without touching the
+// verdict. The backfiller calls it when a probe was inconclusive (provider
+// unreachable, non-200): without the stamp the same title would be re-picked
+// on every tick and the loop would never rotate.
+func (r *AnimeRepository) TouchEnglishDubChecked(ctx context.Context, animeID string) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("english_dub_checked_at", time.Now().UTC()).Error
+}
+
+// CountEnglishDubUnchecked reports how many EN-sourced titles have never had
+// an EN-dub verdict established. Exported as a gauge so the backfill's
+// catch-up progress is visible.
+func (r *AnimeRepository) CountEnglishDubUnchecked(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&domain.Anime{}).
+		Where("has_english = ? AND english_dub_checked_at IS NULL", true).
+		Count(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("count english dub unchecked: %w", err)
+	}
+	return n, nil
+}
+
+// PromoteVerifiedEnglishDubs flips has_english_dub for every anime with an
+// audio-verified English unit in content_verifications. That table belongs to
+// the content-verify service; this is a read-only join into it. Verified audio
+// outranks a provider's has_dub metadata claim, so this may promote a title
+// the scraper pass concluded false on. Postgres-only (jsonb) — callers treat
+// an error as non-fatal so the sqlite-backed tests and any pre-content-verify
+// deployment keep working. Returns the number of rows promoted.
+func (r *AnimeRepository) PromoteVerifiedEnglishDubs(ctx context.Context) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(`
+		UPDATE animes SET has_english_dub = true, english_dub_checked_at = NOW()
+		WHERE has_english_dub = false
+		  AND id IN (
+			SELECT cv.anime_id
+			FROM content_verifications cv,
+			     LATERAL jsonb_array_elements(cv.units) u
+			WHERE u->>'status' = 'verified'
+			  AND u->'audio'->>'lang' = 'en'
+			  AND (u->'audio'->>'verified')::boolean
+		  )`)
+	if res.Error != nil {
+		return 0, fmt.Errorf("promote verified english dubs: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
 // UpdateExternalIDs sets animes.imdb_id and/or animes.tmdb_id when present.
 // Nil values are not written (existing values preserved). Workstream raw-jp,
 // Phase 02 — populated lazily on the first OpenSubtitles query via the

@@ -444,6 +444,15 @@ type SearchFilters struct {
 	ScoreMin *float64
 }
 
+// EnglishDubCandidate is one title the EN-dub backfiller may probe. A
+// projection, not a full Anime — the loop only needs an identity and the
+// status that decides the re-check cadence.
+type EnglishDubCandidate struct {
+	ID     string
+	Name   string
+	Status string
+}
+
 // CreateAnimeRequest for admin anime creation
 type CreateAnimeRequest struct {
 	Name          string   `json:"name" validate:"required"`
