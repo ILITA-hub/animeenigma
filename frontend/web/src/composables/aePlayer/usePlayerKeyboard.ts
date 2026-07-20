@@ -4,9 +4,11 @@ import type { PlayerState } from '@/composables/aePlayer/usePlayerState'
 import type { MenuKind } from '@/composables/aePlayer/usePlayerMenus'
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
-// Listen on window but only act when the pointer is over the player or focus is
-// inside it — so space/arrows control THIS player without hijacking the page.
-// (The window listener itself is registered by the component's lifecycle hooks.)
+// Listen on window but only act after this player has become the keyboard owner.
+// Pointer/focus/fullscreen activity claims ownership; an explicit interaction
+// elsewhere releases it. Keeping that ownership across a transient body focus is
+// important on Safari, which can reset activeElement while media keeps playing.
+// (The window/document listeners are registered by the component lifecycle.)
 
 export interface PlayerKeyboardDeps {
   rootRef: Ref<HTMLElement | null>
@@ -33,11 +35,44 @@ export interface PlayerKeyboardDeps {
 
 export function usePlayerKeyboard(deps: PlayerKeyboardDeps) {
   const { rootRef, videoRef, isPointerInside, state, openMenu, browseOpen } = deps
+  let ownsKeyboard = false
+
+  function fullscreenContains(root: HTMLElement): boolean {
+    const fullscreenElement =
+      document.fullscreenElement ||
+      (document as Document & { webkitFullscreenElement?: Element | null }).webkitFullscreenElement
+    return !!(fullscreenElement && (fullscreenElement === root || root.contains(fullscreenElement)))
+  }
 
   function playerIsActive(): boolean {
-    if (isPointerInside.value) return true
     const root = rootRef.value
-    return !!(root && document.activeElement && root.contains(document.activeElement))
+    if (!root) return false
+
+    const activeElement = document.activeElement
+    const activeNow =
+      isPointerInside.value ||
+      !!(activeElement && root.contains(activeElement)) ||
+      fullscreenContains(root)
+
+    if (activeNow) ownsKeyboard = true
+    return activeNow || ownsKeyboard
+  }
+
+  function onDocumentPointerDown(e: PointerEvent) {
+    const root = rootRef.value
+    const target = e.target
+    if (root && target instanceof Node && !root.contains(target)) ownsKeyboard = false
+  }
+
+  function onDocumentFocusIn(e: FocusEvent) {
+    const root = rootRef.value
+    const target = e.target
+    if (!root || !(target instanceof Node) || root.contains(target)) return
+
+    // WebKit may fall back to body/html when its media UI changes. That is not
+    // a real user choice of another control, so it must not revoke ownership.
+    if (target === document.body || target === document.documentElement) return
+    ownsKeyboard = false
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -107,5 +142,5 @@ export function usePlayerKeyboard(deps: PlayerKeyboardDeps) {
     }
   }
 
-  return { onKeydown }
+  return { onKeydown, onDocumentPointerDown, onDocumentFocusIn }
 }
