@@ -6,6 +6,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
@@ -84,10 +85,42 @@ func EnumerateUnits(ctx context.Context, c *catalogclient.Client, animeID string
 	return all.Verify, nil
 }
 
+// EnumOpts are the optional availability hooks for one enumeration pass
+// (owner directive 2026-07-20 — content-verify must not keep asking for
+// providers that are down or negative-cached).
+type EnumOpts struct {
+	// SkipProvider gates each provider BEFORE its per-provider fetches run —
+	// return true to skip it this pass (deferred by an earlier 503, or the
+	// roster says its health is down). Nil = no gating.
+	SkipProvider func(provider string) bool
+	// OnUnavailable fires when a per-provider fetch fails with a typed 503
+	// (catalogclient.UnavailableError) so the engine can defer that
+	// (anime, provider) until the upstream negative-cache entry expires.
+	OnUnavailable func(provider string, retryAfter time.Duration)
+}
+
+func (o EnumOpts) skip(provider string) bool {
+	return o.SkipProvider != nil && o.SkipProvider(provider)
+}
+
+func (o EnumOpts) noteUnavailable(provider string, err error) {
+	if o.OnUnavailable == nil {
+		return
+	}
+	if ue, ok := catalogclient.AsUnavailable(err); ok {
+		o.OnUnavailable(provider, ue.RetryAfter)
+	}
+}
+
 // EnumerateAll lists every probeable verify unit AND every skip-probe unit
 // for one anime, from a single catalog pass (capabilities + per-provider
 // translations/episodes fetched once, reused for both).
 func EnumerateAll(ctx context.Context, c *catalogclient.Client, animeID string, log *logger.Logger) (Enumeration, error) {
+	return EnumerateAllWith(ctx, c, animeID, log, EnumOpts{})
+}
+
+// EnumerateAllWith is EnumerateAll with availability hooks (see EnumOpts).
+func EnumerateAllWith(ctx context.Context, c *catalogclient.Client, animeID string, log *logger.Logger, opts EnumOpts) (Enumeration, error) {
 	caps, err := c.Capabilities(ctx, animeID)
 	if err != nil {
 		return Enumeration{}, err
@@ -147,8 +180,13 @@ func EnumerateAll(ctx context.Context, c *catalogclient.Client, animeID string, 
 			}
 
 		case scraperProviders[pc.Provider]:
+			if opts.skip(pc.Provider) {
+				logSkip(log, animeID, pc.Provider, "provider unavailable (deferred/down)", nil)
+				continue
+			}
 			eps, err := c.ScraperEpisodes(ctx, animeID, pc.Provider)
 			if err != nil {
+				opts.noteUnavailable(pc.Provider, err)
 				logSkip(log, animeID, pc.Provider, "scraper episodes fetch failed", err)
 				continue
 			}
@@ -164,6 +202,7 @@ func EnumerateAll(ctx context.Context, c *catalogclient.Client, animeID string, 
 			}
 			servers, err := c.ScraperServers(ctx, animeID, latest.ID, pc.Provider)
 			if err != nil {
+				opts.noteUnavailable(pc.Provider, err)
 				logSkip(log, animeID, pc.Provider, "scraper servers fetch failed", err)
 				continue
 			}

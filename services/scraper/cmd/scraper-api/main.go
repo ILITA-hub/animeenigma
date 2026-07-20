@@ -557,8 +557,14 @@ func main() {
 
 	scraperHandler := handler.NewScraperHandler(orchestrator, cache, log)
 	scraperHandler.WithProvidersConfig(&cfg.Providers)
+	// 1h negative-result cache (owner directive 2026-07-20): failed chain
+	// results are replayed from Redis so drivers (aePlayer, content-verify,
+	// probes) can't re-hammer a down provider. Namespaced per handler chain —
+	// EN and adult share Redis but must never collide on the same mal_id.
+	scraperHandler.WithNegCache(handler.NewNegCache(redisCache, "en", log))
 	anime18Handler := handler.NewScraperHandler(adultOrch, cache, log)
 	anime18Handler.WithProvidersConfig(&cfg.Providers)
+	anime18Handler.WithNegCache(handler.NewNegCache(redisCache, "adult", log))
 
 	// Hot-reload the complete DB-owned runtime roster. Both enable and disable
 	// transitions replace the live orchestrator sets without a process restart.

@@ -30,4 +30,8 @@ var (
 	SkipProbesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "content_verify_skip_probes_total", Help: "Skip-lane (OP/ED) probes by provider and result.",
 	}, []string{"provider", "result"}) // result: detected|no_match|pending_fp|unreachable
+	ProviderDeferralsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "content_verify_provider_deferrals_total",
+		Help: "Deferrals recorded after an upstream 503 (provider down / negative-cached).",
+	}, []string{"provider"})
 )

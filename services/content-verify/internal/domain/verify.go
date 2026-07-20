@@ -19,6 +19,11 @@ const (
 	StatusVerified     = "verified"
 	StatusInconclusive = "inconclusive"
 	StatusUnreachable  = "unreachable"
+	// StatusDeferred is an in-flight sentinel, never persisted: the resolve
+	// got a 503 (provider down / negative-cached upstream), so the worker
+	// defers the (anime, provider) pair instead of recording a failure —
+	// a down provider is not a failing episode. See RetryAfter.
+	StatusDeferred = "deferred"
 
 	// VerifiedThreshold is the owner-specified confidence gate (spec §3).
 	VerifiedThreshold = 0.95
@@ -97,6 +102,10 @@ type UnitVerdict struct {
 	ProbedAt time.Time  `json:"probed_at"`
 	Sample   SampleInfo `json:"sample"`
 	Fails    int        `json:"fails,omitempty"` // consecutive unreachable count → backoff
+	// RetryAfter accompanies StatusDeferred only (in-flight sentinel — the
+	// worker turns it into an engine deferral and drops the verdict, so it
+	// is never serialized into the store).
+	RetryAfter time.Duration `json:"-"`
 }
 
 // UnitList serializes as JSON for the jsonb column (works on postgres and

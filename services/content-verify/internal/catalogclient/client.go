@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,6 +21,34 @@ import (
 )
 
 var ErrNotFound = errors.New("catalogclient: not found")
+
+// UnavailableError is a 503 from a scraper endpoint: the provider chain for
+// that request is down or negative-cached upstream (scraper negcache.go,
+// 2026-07-20). RetryAfter carries the server's error.retry_after_seconds —
+// the remaining life of the upstream negative-cache entry — so callers can
+// defer exactly until the cache entry is gone instead of re-asking blindly.
+type UnavailableError struct {
+	URL        string
+	RetryAfter time.Duration
+}
+
+func (e *UnavailableError) Error() string {
+	return fmt.Sprintf("catalogclient: %s -> 503 (retry after %s)", e.URL, e.RetryAfter)
+}
+
+// unavailableDefaultRetry is used when a 503 arrives without a parseable
+// retry_after_seconds (older scraper build, proxy-generated 503). It mirrors
+// the scraper's NegTTL so both sides agree on the deferral window.
+const unavailableDefaultRetry = time.Hour
+
+// AsUnavailable unwraps err to an *UnavailableError, if it is one.
+func AsUnavailable(err error) (*UnavailableError, bool) {
+	var ue *UnavailableError
+	if errors.As(err, &ue) {
+		return ue, true
+	}
+	return nil, false
+}
 
 // Per-call deadlines. Metadata calls are cheap catalog lookups; stream
 // resolution for engine=browser providers (gogoanime/animepahe/miruro/
@@ -101,6 +130,44 @@ type Stream struct {
 	Tracks  []TrackInfo
 }
 
+// unavailableFrom builds the typed 503 error, mining retry_after_seconds
+// from the scraper's error envelope when present. Body read is bounded — a
+// 503 body is a small JSON error, never a payload.
+func unavailableFrom(u string, resp *http.Response) *UnavailableError {
+	ue := &UnavailableError{URL: u, RetryAfter: unavailableDefaultRetry}
+	var body struct {
+		Error struct {
+			RetryAfterSeconds int `json:"retry_after_seconds"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&body); err == nil && body.Error.RetryAfterSeconds > 0 {
+		ue.RetryAfter = time.Duration(body.Error.RetryAfterSeconds) * time.Second
+	}
+	return ue
+}
+
+// RosterProvider is one row of the catalog's authoritative stream-provider
+// roster (GET /internal/scraper/providers — Docker-network-only). Health is
+// the probe-driven lifecycle ("up"/"degraded"/"recovering"/"down");
+// ScraperOperated marks rows whose health that probe actually maintains.
+type RosterProvider struct {
+	Name            string `json:"name"`
+	Health          string `json:"health"`
+	Policy          string `json:"policy"`
+	ScraperOperated bool   `json:"scraper_operated"`
+}
+
+// ScraperRoster fetches the provider roster from the internal catalog route.
+func (c *Client) ScraperRoster(ctx context.Context) ([]RosterProvider, error) {
+	var data struct {
+		Providers []RosterProvider `json:"providers"`
+	}
+	if err := c.getJSON(ctx, c.catalog+"/internal/scraper/providers", metaTimeout, &data); err != nil {
+		return nil, err
+	}
+	return data.Providers, nil
+}
+
 // getJSON fetches u and decodes the {"success","data"} envelope into dst
 // (dst receives the "data" value). 404 → ErrNotFound. timeout bounds this
 // call even when the caller ctx is unbounded (the claim path's root ctx).
@@ -118,6 +185,9 @@ func (c *Client) getJSON(ctx context.Context, u string, timeout time.Duration, d
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		return ErrNotFound
+	}
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return unavailableFrom(u, resp)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("catalogclient: %s -> %d", u, resp.StatusCode)

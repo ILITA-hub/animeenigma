@@ -326,7 +326,9 @@ func TestScraperHandler_GetEpisodes_PinsToFindIDWinner(t *testing.T) {
 	}
 }
 
-// TestScraperHandler_GetEpisodes_ProviderDown — ErrProviderDown → 502.
+// TestScraperHandler_GetEpisodes_ProviderDown — ErrProviderDown → 503
+// (502→503: chain failures carry retry semantics since the negative cache,
+// 2026-07-20; content-verify keys its deferral off the 503).
 func TestScraperHandler_GetEpisodes_ProviderDown(t *testing.T) {
 	t.Parallel()
 	fp := &fakeProvider{
@@ -341,8 +343,8 @@ func TestScraperHandler_GetEpisodes_ProviderDown(t *testing.T) {
 	resp := rec.Result()
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Errorf("status = %d; want 502", resp.StatusCode)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d; want 503", resp.StatusCode)
 	}
 	body := requireJSON(t, resp)
 	tried := metaTried(t, body)

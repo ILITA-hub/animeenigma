@@ -7,8 +7,9 @@
 //     FindID resolution from the incoming `mal_id` query parameter. Success
 //     returns 200 with the result wrapped in {success, data:{<list>,
 //     meta:{tried:[...]}}}. ErrNotFound → 404; ErrProviderDown /
-//     ErrExtractFailed → 502; unexpected errors → 500. Every error body
-//     STILL includes meta.tried so SCRAPER-NF-05 (provider-chain
+//     ErrExtractFailed → 503 (+error.retry_after_seconds when the negative
+//     cache is active — see negcache.go); unexpected errors → 500. Every
+//     error body STILL includes meta.tried so SCRAPER-NF-05 (provider-chain
 //     attribution in every response) holds.
 //   - GetHealth: unchanged — 200 with the orchestrator's live HealthSnapshot.
 //   - When zero providers are registered we short-circuit with 503
@@ -28,6 +29,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,6 +61,7 @@ type ScraperHandler struct {
 	svc          *service.Orchestrator
 	cache        *health.InMemoryHealthCache
 	providersCfg *config.ProvidersConfig
+	neg          *NegCache
 	log          *logger.Logger
 	now          func() time.Time
 }
@@ -86,6 +89,13 @@ func (h *ScraperHandler) SetNow(now func() time.Time) {
 // Production callers should call this once during startup (see main.go).
 func (h *ScraperHandler) WithProvidersConfig(cfg *config.ProvidersConfig) {
 	h.providersCfg = cfg
+}
+
+// WithNegCache attaches the 1h negative-result cache (see negcache.go).
+// Passing nil is safe — the handlers skip both the pre-check and the store,
+// preserving the cache-less behavior tests rely on.
+func (h *ScraperHandler) WithNegCache(nc *NegCache) {
+	h.neg = nc
 }
 
 // errorCode constants surface in `error.code` for every non-2xx response.
@@ -233,9 +243,14 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	negKey := h.negKeyFor("episodes", qp)
+	if h.serveNegCached(r.Context(), w, "episodes", negKey) {
+		return
+	}
+
 	providerID, idWinner, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer, qp.exclusive)
 	if err != nil {
-		h.writeOrchestratorError(w, err, tried)
+		h.writeOrchestratorErrorNeg(w, err, tried, "episodes", negKey)
 		return
 	}
 
@@ -243,7 +258,7 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 	// is opaque and only that provider can parse it (see resolveProviderID).
 	eps, winner, err := h.svc.ListEpisodesNamed(r.Context(), providerID, pinPrefer(idWinner, qp.prefer), qp.exclusive)
 	if err != nil {
-		h.writeOrchestratorError(w, err, tried)
+		h.writeOrchestratorErrorNeg(w, err, tried, "episodes", negKey)
 		return
 	}
 	if eps == nil {
@@ -275,15 +290,20 @@ func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	negKey := h.negKeyFor("servers", qp)
+	if h.serveNegCached(r.Context(), w, "servers", negKey) {
+		return
+	}
+
 	providerID, idWinner, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer, qp.exclusive)
 	if err != nil {
-		h.writeOrchestratorError(w, err, tried)
+		h.writeOrchestratorErrorNeg(w, err, tried, "servers", negKey)
 		return
 	}
 
 	srvs, err := h.svc.ListServers(r.Context(), providerID, qp.episode, pinPrefer(idWinner, qp.prefer), qp.exclusive)
 	if err != nil {
-		h.writeOrchestratorError(w, err, tried)
+		h.writeOrchestratorErrorNeg(w, err, tried, "servers", negKey)
 		return
 	}
 	if srvs == nil {
@@ -322,15 +342,20 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 		cat = domain.CategorySub
 	}
 
+	negKey := h.negKeyFor("stream", qp)
+	if h.serveNegCached(r.Context(), w, "stream", negKey) {
+		return
+	}
+
 	providerID, idWinner, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer, qp.exclusive)
 	if err != nil {
-		h.writeOrchestratorError(w, err, tried)
+		h.writeOrchestratorErrorNeg(w, err, tried, "stream", negKey)
 		return
 	}
 
 	stream, gated, err := h.svc.GetStreamGated(r.Context(), providerID, qp.episode, qp.server, cat, pinPrefer(idWinner, qp.prefer), qp.exclusive)
 	if err != nil {
-		h.writeOrchestratorError(w, err, tried)
+		h.writeOrchestratorErrorNeg(w, err, tried, "stream", negKey)
 		return
 	}
 	// Phase 21 SCRAPER-HEAL-04 / HEAL-07: gated is true on the cold path
@@ -602,16 +627,29 @@ func (h *ScraperHandler) writeSuccess(w http.ResponseWriter, data map[string]any
 // because it does not surface the meta field and SCRAPER-NF-05 demands
 // meta.tried on every response including failures.
 func (h *ScraperHandler) writeError(w http.ResponseWriter, status int, code, msg string, tried []string) {
+	h.writeErrorRetry(w, status, code, msg, tried, 0, false)
+}
+
+// writeErrorRetry is writeError with the negative-cache decorations: a
+// retry_after_seconds hint inside error (and a Retry-After header) when
+// retryAfter > 0, and meta.neg_cached=true when the response replays a
+// stored negative rather than a live chain failure.
+func (h *ScraperHandler) writeErrorRetry(w http.ResponseWriter, status int, code, msg string, tried []string, retryAfter int, negCached bool) {
 	if tried == nil {
 		tried = []string{}
 	}
+	errObj := map[string]any{"code": code, "message": msg}
+	meta := map[string]any{"tried": tried}
+	if retryAfter > 0 {
+		errObj["retry_after_seconds"] = retryAfter
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	}
+	if negCached {
+		meta["neg_cached"] = true
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	body := map[string]any{
-		"success": false,
-		"error":   map[string]any{"code": code, "message": msg},
-		"meta":    map[string]any{"tried": tried},
-	}
+	body := map[string]any{"success": false, "error": errObj, "meta": meta}
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		log := h.log
 		if log == nil {
@@ -621,24 +659,67 @@ func (h *ScraperHandler) writeError(w http.ResponseWriter, status int, code, msg
 	}
 }
 
-// writeOrchestratorError classifies a domain error and writes the
-// appropriate status code with the meta.tried envelope intact.
+// serveNegCached answers the request from a live negative-cache entry.
+// Returns true when the response was written (callers must return). A miss,
+// an expired entry, or a nil/keyless cache all return false — the live
+// chain runs as before.
+func (h *ScraperHandler) serveNegCached(ctx context.Context, w http.ResponseWriter, op, negKey string) bool {
+	if negKey == "" {
+		return false
+	}
+	e, ok := h.neg.Get(ctx, negKey)
+	if !ok {
+		return false
+	}
+	negCacheTotal.WithLabelValues(op, "hit").Inc()
+	// h.neg.now, not h.now: entry liveness (Get) and remaining-life math must
+	// read the same clock.
+	h.writeErrorRetry(w, e.Status, e.Code, e.Message, e.Tried, e.retryAfterSeconds(h.neg.now()), true)
+	return true
+}
+
+// writeOrchestratorErrorNeg classifies a domain error and writes the
+// appropriate status code with the meta.tried envelope intact:
 //
 //	context.Canceled / DeadlineExceeded → 499 (per Nginx convention)
 //	ErrNotFound      → 404 NOT_FOUND
-//	ErrProviderDown  → 502 PROVIDER_DOWN  (upstream unavailable)
-//	ErrExtractFailed → 502 EXTRACT_FAILED (upstream shape change)
+//	ErrProviderDown  → 503 PROVIDER_DOWN  (upstream unavailable)
+//	ErrExtractFailed → 503 EXTRACT_FAILED (upstream shape change)
 //	anything else    → 500 INTERNAL
-func (h *ScraperHandler) writeOrchestratorError(w http.ResponseWriter, err error, tried []string) {
+//
+// 502→503 (2026-07-20): chain failures are Service-Unavailable-with-retry
+// semantics now that the negative cache advertises retry_after_seconds —
+// content-verify keys its deferral off the 503.
+//
+// Cacheable outcomes (404, 503) are recorded in the negative cache under
+// negKey so the next identical request inside NegTTL is served without
+// touching any provider. 499/500 are never cached: a canceled request
+// proves nothing about the chain and a 500 may be our own transient bug.
+func (h *ScraperHandler) writeOrchestratorErrorNeg(w http.ResponseWriter, err error, tried []string, op, negKey string) {
+	// retry_after_seconds is only advertised when the failure was actually
+	// recorded — without a cache there is no "won't retry for 1h" promise,
+	// and cache-less responses stay byte-identical to the old shape (modulo
+	// the 502→503 status change).
+	ra := 0
+	if negKey != "" {
+		ra = int(NegTTL.Seconds())
+	}
+	fail := func(status int, code, msg string) {
+		if negKey != "" {
+			negCacheTotal.WithLabelValues(op, "store").Inc()
+			h.neg.Store(negKey, status, code, msg, tried)
+		}
+		h.writeErrorRetry(w, status, code, msg, tried, ra, false)
+	}
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		h.writeError(w, 499, codeInternal, "request canceled", tried)
 	case errors.Is(err, domain.ErrNotFound):
-		h.writeError(w, http.StatusNotFound, codeNotFound, err.Error(), tried)
+		fail(http.StatusNotFound, codeNotFound, err.Error())
 	case errors.Is(err, domain.ErrProviderDown):
-		h.writeError(w, http.StatusBadGateway, codeProviderDown, err.Error(), tried)
+		fail(http.StatusServiceUnavailable, codeProviderDown, err.Error())
 	case errors.Is(err, domain.ErrExtractFailed):
-		h.writeError(w, http.StatusBadGateway, codeExtractFailed, err.Error(), tried)
+		fail(http.StatusServiceUnavailable, codeExtractFailed, err.Error())
 	default:
 		h.writeError(w, http.StatusInternalServerError, codeInternal, err.Error(), tried)
 	}

@@ -93,6 +93,12 @@ type Engine struct {
 	aniskipCache map[string]aniskipEntry // animeID → cached AniSkip coverage
 	malIDs       map[string]string       // animeID → MAL id (immutable, cached forever)
 
+	// deferUntil/rosterDown/rosterAt back the provider-availability gate —
+	// see availability.go. Guarded by mu like the caches above.
+	deferUntil map[string]time.Time // "provider|anime" → deferral deadline (upstream 503)
+	rosterDown map[string]bool      // scraper-operated providers with health="down"
+	rosterAt   time.Time
+
 	// inflightUnits/inflightProv are the in-process claim leases that let
 	// several workers Claim concurrently without double-probing the same
 	// unit or hitting the same upstream provider at once. Claim keys: verify
@@ -114,6 +120,7 @@ func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Stor
 		enumCache:     map[string]enumEntry{},
 		aniskipCache:  map[string]aniskipEntry{},
 		malIDs:        map[string]string{},
+		deferUntil:    map[string]time.Time{},
 		inflightUnits: map[string]struct{}{},
 		inflightProv:  map[string]struct{}{},
 	}
@@ -197,7 +204,13 @@ func (e *Engine) enumerate(ctx context.Context, animeID string) (Enumeration, er
 	}
 	e.mu.Unlock()
 
-	enum, err := EnumerateAll(ctx, e.cat, animeID, e.log)
+	// Availability hooks (availability.go): don't fetch episodes/servers for
+	// a provider that is deferred or roster-down, and turn any 503 seen
+	// during the fan-out into a deferral for exactly the advertised window.
+	enum, err := EnumerateAllWith(ctx, e.cat, animeID, e.log, EnumOpts{
+		SkipProvider:  func(p string) bool { return e.unavailable(ctx, animeID, p) },
+		OnUnavailable: func(p string, ra time.Duration) { e.Defer(animeID, p, ra) },
+	})
 	if err != nil {
 		return Enumeration{}, err
 	}
@@ -410,6 +423,9 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 			return nil, nil, nil, err
 		}
 		pending := PendingUnits(enum.Verify, rows, e.now(), e.reprobeTTL)
+		// Deferrals recorded AFTER the enum was cached (e.g. by a probe's
+		// 503) must gate claims immediately, not on the next enum refresh.
+		pending = e.filterAvailableUnits(ctx, pending)
 		if len(pending) > 0 {
 			if u, release, ok := e.claimVerifyUnit(pending); ok {
 				return u, nil, release, nil
@@ -429,7 +445,7 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			skipUnits := enum.Skip
+			skipUnits := e.filterAvailableSkips(ctx, enum.Skip)
 			if pref := e.pins[cand.AnimeID]; pref != "" {
 				skipUnits = PreferProvider(skipUnits, pref)
 			}

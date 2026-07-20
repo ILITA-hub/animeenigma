@@ -31,6 +31,13 @@ type Claimer interface {
 	Claim(ctx context.Context) (*queue.Unit, *queue.SkipTask, func(), error)
 }
 
+// ProviderDeferrer is the optional Claimer extension the worker uses to
+// report an upstream 503 (see queue.Engine.Defer). Asserted dynamically so
+// test fakes that only implement Claim keep compiling.
+type ProviderDeferrer interface {
+	Defer(animeID, provider string, retryAfter time.Duration)
+}
+
 // SkipUnitProber is satisfied by *prober.SkipProber. Named to avoid
 // colliding with UnitProber above while keeping the method itself named
 // Probe (matching the concrete type) — no adapter needed at the wiring
@@ -169,6 +176,17 @@ func (w *Worker) tick(ctx context.Context, shedMin int) {
 	v := w.prober.Probe(bctx, *unit, prevFails)
 	cancel()
 	cvmetrics.ProbeDuration.Observe(time.Since(start).Seconds())
+	// Deferred sentinel (upstream 503 — provider down / negative-cached): the
+	// verdict is dropped, no Fails++ (a down provider is not a failing
+	// episode), and the engine defers the (anime, provider) pair until the
+	// upstream negative-cache entry expires.
+	if v.Status == domain.StatusDeferred {
+		if d, ok := w.claimer.(ProviderDeferrer); ok {
+			d.Defer(unit.AnimeID, unit.Provider, v.RetryAfter)
+		}
+		cvmetrics.TicksSkippedTotal.WithLabelValues("provider_unavailable").Inc()
+		return
+	}
 	w.persist(ctx, *unit, v, v.Status)
 }
 

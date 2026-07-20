@@ -89,6 +89,12 @@ func (p *Prober) resolveStream(ctx context.Context, u queue.Unit) (*catalogclien
 			if errors.Is(err, catalogclient.ErrNotFound) || ctx.Err() != nil {
 				return nil, err
 			}
+			// A typed 503 is an answer, not a cold start: the chain is down or
+			// negative-cached upstream and every retry inside the window gets
+			// the same cached 503 — warm-up waiting buys nothing.
+			if _, unavailable := catalogclient.AsUnavailable(err); unavailable {
+				return nil, err
+			}
 			lastErr = err
 		}
 		return nil, lastErr
@@ -102,7 +108,9 @@ func (p *Prober) resolveStream(ctx context.Context, u queue.Unit) (*catalogclien
 			return st, 1, nil
 		}
 	}
-	return nil, 0, fmt.Errorf("%w: %v", ErrResolve, err)
+	// %w on BOTH verbs: the inner error's type must survive (the worker
+	// dispatches on catalogclient.UnavailableError via errors.As).
+	return nil, 0, fmt.Errorf("%w: %w", ErrResolve, err)
 }
 
 // Probe never returns an error — failures become StatusUnreachable verdicts
@@ -118,6 +126,15 @@ func (p *Prober) Probe(ctx context.Context, u queue.Unit, prevFails int) domain.
 
 	st, ep, err := p.resolveStream(ctx, u)
 	if err != nil {
+		// Typed 503 → deferred sentinel, NOT an unreachable verdict: the
+		// provider chain is down/negative-cached upstream, which says nothing
+		// about this unit. The worker defers the (anime, provider) pair for
+		// the advertised window and drops the verdict (no Fails++).
+		if ue, ok := catalogclient.AsUnavailable(err); ok {
+			v.Status = domain.StatusDeferred
+			v.RetryAfter = ue.RetryAfter
+			return v
+		}
 		return p.unreachable(ctx, v, prevFails, err)
 	}
 	v.Episode = ep
