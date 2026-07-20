@@ -55,6 +55,32 @@ func TestCooldown(t *testing.T) {
 	}
 }
 
+func TestIdleCursorAdvanceAndWrap(t *testing.T) {
+	s, _ := testSignals(t)
+	ctx := context.Background()
+
+	if got := s.IdleCursor(ctx); got != 0 {
+		t.Fatalf("cold cursor = %d, want 0", got)
+	}
+	if got := s.AdvanceIdleCursor(ctx, 100, 250); got != 100 {
+		t.Fatalf("advance = %d, want 100", got)
+	}
+	if got := s.AdvanceIdleCursor(ctx, 100, 250); got != 200 {
+		t.Fatalf("advance = %d, want 200", got)
+	}
+	// 200+100 = 300 wraps past total 250 → 300 % 250 = 50.
+	if got := s.AdvanceIdleCursor(ctx, 100, 250); got != 50 {
+		t.Fatalf("wrap = %d, want 50", got)
+	}
+	if got := s.IdleCursor(ctx); got != 50 {
+		t.Fatalf("read back = %d, want 50", got)
+	}
+	// total 0 (empty tail) → cursor pinned at 0, no divide-by-zero.
+	if got := s.AdvanceIdleCursor(ctx, 100, 0); got != 0 {
+		t.Fatalf("total 0 = %d, want 0", got)
+	}
+}
+
 // TestFailOpenOnRedisDown pins the "reads fail open" contract: when Redis is
 // unreachable, every read must degrade to a zero signal rather than error out
 // or panic — the queue keeps working through a Redis blip.

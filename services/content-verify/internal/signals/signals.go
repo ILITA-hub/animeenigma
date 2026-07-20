@@ -77,3 +77,34 @@ func (s *Signals) SetCooldown(ctx context.Context, animeID string, ttl time.Dura
 	}
 	_ = s.rdb.Set(ctx, cooldownKey(animeID), "1", ttl).Err()
 }
+
+func idleCursorKey() string { return "cv:idle:cursor" }
+
+// IdleCursor returns the current idle-window offset (0 on miss or error).
+func (s *Signals) IdleCursor(ctx context.Context) int {
+	v, err := s.rdb.Get(ctx, idleCursorKey()).Int()
+	if err != nil {
+		return 0
+	}
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
+// AdvanceIdleCursor moves the idle window cursor forward by `by`, wrapping at
+// `total` (the visible non-ongoing count), and persists+returns the new value.
+// total<=0 pins the cursor at 0 (nothing to sweep). No TTL — the cursor is a
+// long-lived sweep position, not a signal.
+func (s *Signals) AdvanceIdleCursor(ctx context.Context, by, total int) int {
+	if total <= 0 {
+		_ = s.rdb.Set(ctx, idleCursorKey(), 0, 0).Err()
+		return 0
+	}
+	next := (s.IdleCursor(ctx) + by) % total
+	if next < 0 {
+		next = 0
+	}
+	_ = s.rdb.Set(ctx, idleCursorKey(), next, 0).Err()
+	return next
+}
